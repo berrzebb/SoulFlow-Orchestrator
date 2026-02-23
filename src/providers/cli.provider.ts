@@ -7,6 +7,8 @@ import { LlmResponse, type ChatMessage, type ChatOptions, type ProviderId } from
 
 const OUTPUT_BLOCK_START = "<<ORCH_FINAL>>";
 const OUTPUT_BLOCK_END = "<<ORCH_FINAL_END>>";
+const DEFAULT_CAPTURE_MAX_CHARS = 500_000;
+const DEFAULT_STREAM_STATE_MAX_CHARS = 200_000;
 
 function messages_to_prompt(messages: ChatMessage[]): string {
   const base = messages
@@ -63,6 +65,13 @@ function split_args(raw: string): string[] {
     .filter(Boolean);
 }
 
+function append_limited(base: string, incoming: string, max_chars: number): string {
+  const max = Math.max(1_000, Number(max_chars || DEFAULT_CAPTURE_MAX_CHARS));
+  const merged = `${base}${incoming}`;
+  if (merged.length <= max) return merged;
+  return merged.slice(merged.length - max);
+}
+
 function count_replacement_chars(text: string): number {
   return (text.match(/�/g) || []).length;
 }
@@ -81,6 +90,115 @@ function decode_chunk(chunk: unknown): string {
   }
 }
 
+function as_string(v: unknown): string {
+  if (typeof v === "string") return v;
+  if (typeof v === "number" || typeof v === "boolean") return String(v);
+  return "";
+}
+
+function collect_text_deep(value: unknown, depth = 0): string {
+  if (depth > 4) return "";
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) {
+    return value
+      .slice(0, 16)
+      .map((v) => collect_text_deep(v, depth + 1))
+      .filter(Boolean)
+      .join("");
+  }
+  if (!value || typeof value !== "object") return "";
+  const rec = value as Record<string, unknown>;
+  const direct = as_string(rec.text) || as_string(rec.value);
+  if (direct) return direct;
+  if (rec.delta && typeof rec.delta === "object") {
+    const d = rec.delta as Record<string, unknown>;
+    const delta_text = as_string(d.text) || as_string(d.value);
+    if (delta_text) return delta_text;
+  }
+  if (rec.message && typeof rec.message === "object") {
+    const message = rec.message as Record<string, unknown>;
+    const from_message = collect_text_deep(message.content, depth + 1) || as_string(message.text);
+    if (from_message) return from_message;
+  }
+  if (rec.content) {
+    const from_content = collect_text_deep(rec.content, depth + 1);
+    if (from_content) return from_content;
+  }
+  return "";
+}
+
+function parse_json_line(line: string): Record<string, unknown> | null {
+  const raw = String(line || "").trim();
+  if (!raw.startsWith("{") || !raw.endsWith("}")) return null;
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+    return parsed as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+function extract_json_event_text(
+  event: Record<string, unknown>,
+  state: { last_full_text: string },
+): { delta?: string; final?: string } {
+  const type = as_string(event.type).toLowerCase();
+  if (!type) return {};
+
+  if (type === "item.completed" && event.item && typeof event.item === "object") {
+    const item = event.item as Record<string, unknown>;
+    const item_type = as_string(item.type).toLowerCase();
+    const text = collect_text_deep(item);
+    if (!text) return {};
+    if (item_type === "agent_message" || item_type === "assistant_message" || item_type === "message") {
+      const full = text.trim();
+      if (!full) return {};
+      let delta = full;
+      if (state.last_full_text && full.startsWith(state.last_full_text)) {
+        delta = full.slice(state.last_full_text.length);
+      }
+      state.last_full_text = full;
+      return { delta, final: full };
+    }
+    if (item_type === "reasoning") {
+      return { delta: `… ${text.trim()}` };
+    }
+  }
+
+  if (type.includes("delta")) {
+    const delta = collect_text_deep(event);
+    if (delta && delta.trim()) return { delta };
+    return {};
+  }
+
+  if (type.includes("message.completed") || type === "assistant") {
+    const full = collect_text_deep(event).trim();
+    if (!full) return {};
+    let delta = full;
+    if (state.last_full_text && full.startsWith(state.last_full_text)) {
+      delta = full.slice(state.last_full_text.length);
+    }
+    state.last_full_text = full;
+    return { delta, final: full };
+  }
+
+  return {};
+}
+
+function extract_final_from_json_output(raw: string): string {
+  const state = { last_full_text: "" };
+  let out = "";
+  const lines = String(raw || "").split(/\r?\n/g);
+  for (const line of lines) {
+    const parsed = parse_json_line(line);
+    if (!parsed) continue;
+    const extracted = extract_json_event_text(parsed, state);
+    if (extracted.final && extracted.final.trim()) out = extracted.final.trim();
+  }
+  return out;
+}
+
 async function run_cli(
   command: string,
   args: string[],
@@ -88,6 +206,7 @@ async function run_cli(
   timeout_ms: number,
   abort_signal?: AbortSignal,
   on_chunk?: (chunk: string) => void | Promise<void>,
+  capture_max_chars = DEFAULT_CAPTURE_MAX_CHARS,
 ): Promise<{ ok: boolean; stdout: string; stderr: string; code: number | null }> {
   const resolved = resolve_command_for_windows(command);
   const use_cmd_wrapper = process.platform === "win32" && /\.(cmd|bat)$/i.test(resolved);
@@ -127,12 +246,12 @@ async function run_cli(
 
     child.stdout.on("data", (chunk) => {
       const text = decode_chunk(chunk);
-      stdout += text;
+      stdout = append_limited(stdout, text, capture_max_chars);
       if (on_chunk) void Promise.resolve(on_chunk(text)).catch(() => {});
     });
     child.stderr.on("data", (chunk) => {
       const text = decode_chunk(chunk);
-      stderr += text;
+      stderr = append_limited(stderr, text, capture_max_chars);
       if (on_chunk) void Promise.resolve(on_chunk(text)).catch(() => {});
     });
     child.on("error", (error) => {
@@ -243,10 +362,23 @@ export class CliHeadlessProvider extends BaseLlmProvider {
       args = ["-p", "--output-format", "text", "--permission-mode", "dontAsk", "-"];
     }
     const timeout_ms = Math.max(1000, Number(process.env[this.timeout_env] || this.default_timeout_ms));
+    const capture_max_chars = Math.max(
+      10_000,
+      Number(process.env.CLI_PROVIDER_MAX_CAPTURE_CHARS || DEFAULT_CAPTURE_MAX_CHARS),
+    );
+    const stream_state_max_chars = Math.max(
+      8_000,
+      Number(process.env.CLI_PROVIDER_MAX_STREAM_STATE_CHARS || DEFAULT_STREAM_STATE_MAX_CHARS),
+    );
+    const json_mode = args.includes("--json") || raw_args.includes("stream-json");
     let streamed_partial = "";
     let raw_stream = "";
     let preprotocol_buffer = "";
     let last_preprotocol_emit_at = 0;
+    let json_line_buffer = "";
+    let final_from_json = "";
+    let saw_json_event = false;
+    const json_state = { last_full_text: "" };
     const result = await run_cli(
       command,
       args,
@@ -255,10 +387,40 @@ export class CliHeadlessProvider extends BaseLlmProvider {
       options.abort_signal,
       options.on_stream
         ? async (chunk) => {
-            raw_stream += String(chunk || "");
+            const incoming = String(chunk || "");
+            if (!incoming) return;
+
+            if (json_mode || saw_json_event) {
+              json_line_buffer = append_limited(json_line_buffer, incoming, stream_state_max_chars);
+              while (true) {
+                const idx = json_line_buffer.indexOf("\n");
+                if (idx < 0) break;
+                const line = json_line_buffer.slice(0, idx).trim();
+                json_line_buffer = json_line_buffer.slice(idx + 1);
+                if (!line) continue;
+                const parsed = parse_json_line(line);
+                if (!parsed) {
+                  if (!saw_json_event && line.trim()) {
+                    await options.on_stream?.(line);
+                  }
+                  continue;
+                }
+                saw_json_event = true;
+                const extracted = extract_json_event_text(parsed, json_state);
+                if (extracted.final && extracted.final.trim()) {
+                  final_from_json = extracted.final.trim();
+                }
+                if (extracted.delta && extracted.delta.trim()) {
+                  await options.on_stream?.(extracted.delta);
+                }
+              }
+              return;
+            }
+
+            raw_stream = append_limited(raw_stream, incoming, stream_state_max_chars);
             const partial = extract_protocol_partial(raw_stream);
             if (!partial) {
-              preprotocol_buffer += String(chunk || "");
+              preprotocol_buffer = append_limited(preprotocol_buffer, incoming, stream_state_max_chars);
               const now = Date.now();
               if (preprotocol_buffer.length < 120 && now - last_preprotocol_emit_at < 1200) return;
               const out = preprotocol_buffer;
@@ -276,6 +438,7 @@ export class CliHeadlessProvider extends BaseLlmProvider {
             await options.on_stream?.(delta);
           }
         : undefined,
+      capture_max_chars,
     );
     if (!result.ok) {
       const stderr = result.stderr.trim();
@@ -287,8 +450,9 @@ export class CliHeadlessProvider extends BaseLlmProvider {
         finish_reason: "error",
       });
     }
+    const jsonText = extract_final_from_json_output(`${result.stdout}\n${result.stderr}`) || final_from_json;
     const protocolText = extract_protocol_output(result.stdout) || extract_protocol_output(result.stderr);
-    const text = String(protocolText || result.stdout || result.stderr || "").trim();
+    const text = String(jsonText || protocolText || result.stdout || result.stderr || "").trim();
     if (!text) {
       return new LlmResponse({
         content: `Error calling ${this.id}: no_protocol_output`,

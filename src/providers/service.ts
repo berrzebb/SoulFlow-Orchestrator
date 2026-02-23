@@ -15,30 +15,30 @@ export class ProviderRegistry {
   }) {
     this.providers.set(
       "chatgpt",
-      new CliHeadlessProvider({
-        id: "chatgpt",
-        default_model: "chatgpt-cli-headless",
-        command_env: "CHATGPT_HEADLESS_COMMAND",
-        args_env: "CHATGPT_HEADLESS_ARGS",
-        timeout_env: "CHATGPT_HEADLESS_TIMEOUT_MS",
-        default_command: "codex",
-        default_args: "exec --sandbox workspace-write --skip-git-repo-check -",
-        default_timeout_ms: 180000,
-      }),
-    );
+        new CliHeadlessProvider({
+          id: "chatgpt",
+          default_model: "chatgpt-cli-headless",
+          command_env: "CHATGPT_HEADLESS_COMMAND",
+          args_env: "CHATGPT_HEADLESS_ARGS",
+          timeout_env: "CHATGPT_HEADLESS_TIMEOUT_MS",
+          default_command: "codex",
+          default_args: "exec --json --sandbox workspace-write --skip-git-repo-check -",
+          default_timeout_ms: 180000,
+        }),
+      );
     this.providers.set(
       "claude_code",
-      new CliHeadlessProvider({
-        id: "claude_code",
-        default_model: "claude-cli-headless",
-        command_env: "CLAUDE_HEADLESS_COMMAND",
-        args_env: "CLAUDE_HEADLESS_ARGS",
-        timeout_env: "CLAUDE_HEADLESS_TIMEOUT_MS",
-        default_command: "claude",
-        default_args: "-p --output-format text --permission-mode dontAsk -",
-        default_timeout_ms: 180000,
-      }),
-    );
+        new CliHeadlessProvider({
+          id: "claude_code",
+          default_model: "claude-cli-headless",
+          command_env: "CLAUDE_HEADLESS_COMMAND",
+          args_env: "CLAUDE_HEADLESS_ARGS",
+          timeout_env: "CLAUDE_HEADLESS_TIMEOUT_MS",
+          default_command: "claude",
+          default_args: "-p --output-format stream-json --include-partial-messages --permission-mode dontAsk -",
+          default_timeout_ms: 180000,
+        }),
+      );
     this.providers.set(
       "openrouter",
       new OpenRouterProvider({

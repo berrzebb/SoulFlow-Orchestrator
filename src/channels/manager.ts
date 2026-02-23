@@ -43,9 +43,12 @@ export class ChannelManager {
   private readonly stream_emit_enabled: boolean;
   private readonly stream_emit_interval_ms: number;
   private readonly stream_emit_min_chars: number;
+  private readonly status_notice_enabled: boolean;
   private readonly grouping_enabled: boolean;
   private readonly grouping_window_ms: number;
   private readonly grouping_max_messages: number;
+  private readonly seen_ttl_ms: number;
+  private readonly seen_max_size: number;
   private readonly workspace_dir: string;
 
   constructor(args: {
@@ -74,11 +77,14 @@ export class ChannelManager {
     this.workspace_dir = resolve(String(process.env.WORKSPACE_DIR || process.cwd()));
     this.progress_pulse_enabled = String(process.env.CHANNEL_PROGRESS_PULSE || "0").trim() === "1";
     this.stream_emit_enabled = String(process.env.CHANNEL_STREAMING_ENABLED || "1").trim() !== "0";
-    this.stream_emit_interval_ms = Math.max(800, Number(process.env.CHANNEL_STREAMING_INTERVAL_MS || 2500));
-    this.stream_emit_min_chars = Math.max(24, Number(process.env.CHANNEL_STREAMING_MIN_CHARS || 120));
+    this.stream_emit_interval_ms = Math.max(500, Number(process.env.CHANNEL_STREAMING_INTERVAL_MS || 1400));
+    this.stream_emit_min_chars = Math.max(16, Number(process.env.CHANNEL_STREAMING_MIN_CHARS || 48));
+    this.status_notice_enabled = String(process.env.CHANNEL_STATUS_NOTICE || "0").trim() === "1";
     this.grouping_enabled = String(process.env.CHANNEL_GROUPING_ENABLED || "1").trim() !== "0";
     this.grouping_window_ms = Math.max(500, Number(process.env.CHANNEL_GROUPING_WINDOW_MS || 3500));
     this.grouping_max_messages = Math.max(2, Number(process.env.CHANNEL_GROUPING_MAX_MESSAGES || 8));
+    this.seen_ttl_ms = Math.max(60_000, Number(process.env.CHANNEL_SEEN_TTL_MS || 86_400_000));
+    this.seen_max_size = Math.max(2_000, Number(process.env.CHANNEL_SEEN_MAX_SIZE || 50_000));
   }
 
   async start(): Promise<void> {
@@ -150,6 +156,7 @@ export class ChannelManager {
       const providers = this.registry.list_channels().map((c) => c.provider);
       for (const provider of providers) {
         if (signal.aborted) return;
+        this.prune_seen_cache(false);
         const target = this.resolve_target(provider);
         if (!target) continue;
         try {
@@ -1482,6 +1489,7 @@ export class ChannelManager {
     alias: string,
     detail?: string,
   ): Promise<void> {
+    if (!this.status_notice_enabled) return;
     const content = this.format_status_message(provider, message.sender_id, kind, alias, detail);
     if (!content) return;
     const sent = await this.registry.send(provider, {
@@ -1673,7 +1681,32 @@ export class ChannelManager {
 
   private mark_seen(message: InboundMessage): void {
     const key = this.dedupe_key(message);
-    if (!key.endsWith(":")) this.seen.set(key, Date.now());
+    if (key.endsWith(":")) return;
+    this.seen.set(key, Date.now());
+    if (this.seen.size > this.seen_max_size + 1_000) {
+      this.prune_seen_cache(true);
+    }
+  }
+
+  private prune_seen_cache(force_size_trim: boolean): void {
+    if (this.seen.size === 0) return;
+    const now = Date.now();
+    if (this.seen_ttl_ms > 0) {
+      for (const [key, ts] of this.seen.entries()) {
+        if (now - ts > this.seen_ttl_ms) {
+          this.seen.delete(key);
+        }
+      }
+    }
+    if (!force_size_trim && this.seen.size <= this.seen_max_size) return;
+    const overflow = this.seen.size - this.seen_max_size;
+    if (overflow <= 0) return;
+    let removed = 0;
+    for (const key of this.seen.keys()) {
+      this.seen.delete(key);
+      removed += 1;
+      if (removed >= overflow) break;
+    }
   }
 
   private extract_timestamp_ms(message: InboundMessage): number {
