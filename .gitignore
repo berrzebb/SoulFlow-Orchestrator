@@ -1,0 +1,39 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+*.tsbuildinfo
+
+# Environment files
+.env
+.env.local
+.env.*.local
+!.env.example
+workspace/.env
+workspace/.env.local
+
+# Runtime/generated state
+runtime/
+workspace/runtime/
+workspace/memory/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9].md
+workspace/memory/archive/
+workspace/.dotnet/
+workspace/.templateengine/
+
+# Local build/test artifacts
+workspace/tetris-cli-csharp/bin/
+workspace/tetris-cli-csharp/obj/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp

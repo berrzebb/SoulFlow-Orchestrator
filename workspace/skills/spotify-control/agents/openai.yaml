@@ -1,0 +1,4 @@
+interface:
+  display_name: "Spotify Control"
+  short_description: "Windows Spotify playback control commands"
+  default_prompt: "Use $spotify-control to launch local Spotify, control playback, play a specific track from query text, and start recommendations."

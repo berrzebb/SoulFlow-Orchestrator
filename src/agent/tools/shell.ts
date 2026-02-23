@@ -1,0 +1,167 @@
+import { exec } from "node:child_process";
+import { resolve } from "node:path";
+import { promisify } from "node:util";
+import { Tool } from "./base.js";
+import type { JsonSchema, ToolExecutionContext } from "./types.js";
+
+const exec_async = promisify(exec);
+
+type ShellToolOptions = {
+  working_dir?: string;
+  timeout_seconds?: number;
+  deny_patterns?: string[];
+  allow_patterns?: string[];
+  restrict_to_working_dir?: boolean;
+};
+
+const DEFAULT_DENY_PATTERNS = [
+  "\\brm\\s+-[rf]{1,2}\\b",
+  "\\bdel\\s+/[fq]\\b",
+  "\\brmdir\\s+/s\\b",
+  "(?:^|[;&|]\\s*)format\\b",
+  "\\b(mkfs|diskpart)\\b",
+  "\\bdd\\s+if=",
+  ">\\s*/dev/sd",
+  "\\b(shutdown|reboot|poweroff)\\b",
+  ":\\(\\)\\s*\\{.*\\};\\s*:",
+];
+
+const WRITE_APPROVAL_PATTERNS = [
+  "\\becho\\b.*>",
+  ">>",
+  "\\btee\\b",
+  "\\bset-content\\b",
+  "\\badd-content\\b",
+  "\\bout-file\\b",
+  "\\bcopy-item\\b",
+  "\\bmove-item\\b",
+  "\\bnew-item\\b",
+  "\\bremove-item\\b",
+  "\\bmkdir\\b",
+  "\\bmd\\b",
+  "\\btouch\\b",
+  "\\bcp\\b",
+  "\\bmv\\b",
+  "\\brm\\b",
+  "\\bsed\\b.*-i",
+  "\\bperl\\b.*-i",
+  "\\bnpm\\s+(install|update|uninstall)\\b",
+  "\\bcargo\\s+(add|remove)\\b",
+  "\\bgit\\s+(commit|push|merge|rebase|cherry-pick|tag)\\b",
+];
+
+export class ExecTool extends Tool {
+  readonly name = "exec";
+  readonly description = "Execute a shell command and return stdout/stderr.";
+  readonly parameters: JsonSchema = {
+    type: "object",
+    properties: {
+      command: { type: "string", description: "Shell command to run" },
+      working_dir: { type: "string", description: "Optional working directory" },
+      timeout_seconds: { type: "integer", minimum: 1, maximum: 3600, description: "Timeout in seconds" },
+    },
+    required: ["command"],
+    additionalProperties: false,
+  };
+  private readonly default_working_dir: string;
+  private readonly timeout_seconds: number;
+  private readonly deny_patterns: RegExp[];
+  private readonly write_approval_patterns: RegExp[];
+  private readonly allow_patterns: RegExp[];
+  private readonly restrict_to_working_dir: boolean;
+
+  constructor(options?: ShellToolOptions) {
+    super();
+    this.default_working_dir = options?.working_dir || process.cwd();
+    this.timeout_seconds = Math.max(1, Number(options?.timeout_seconds || 60));
+    this.deny_patterns = (options?.deny_patterns || DEFAULT_DENY_PATTERNS).map((p) => new RegExp(p, "i"));
+    this.write_approval_patterns = WRITE_APPROVAL_PATTERNS.map((p) => new RegExp(p, "i"));
+    this.allow_patterns = (options?.allow_patterns || []).map((p) => new RegExp(p, "i"));
+    this.restrict_to_working_dir = Boolean(options?.restrict_to_working_dir);
+  }
+
+  protected async run(params: Record<string, unknown>, context?: ToolExecutionContext): Promise<string> {
+    const command = String(params.command || "").trim();
+    const cwd = resolve(String(params.working_dir || this.default_working_dir));
+    const timeout_seconds = Math.max(1, Number(params.timeout_seconds || this.timeout_seconds));
+    const guard = this._guard_command(command, cwd);
+    if (guard) {
+      if (guard.kind === "approval_required") {
+        return [
+          "Error: approval_required",
+          `reason: ${guard.reason}`,
+          `requested_path: ${guard.requested_path || "(unknown)"}`,
+          "action: Ask leader/user for approval before re-running this command.",
+          `command: ${command}`,
+        ].join("\n");
+      }
+      return `Error: ${guard.reason}`;
+    }
+
+    if (context?.signal?.aborted) return "Error: cancelled";
+    try {
+      const { stdout, stderr } = await exec_async(command, {
+        cwd,
+        timeout: timeout_seconds * 1000,
+        maxBuffer: 1024 * 1024 * 8,
+        signal: context?.signal,
+      });
+      const output = [stdout || "", stderr ? `STDERR:\n${stderr}` : ""].filter(Boolean).join("\n");
+      const text = output.trim() || "(no output)";
+      return text.length > 20000 ? `${text.slice(0, 20000)}\n... (truncated)` : text;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return `Error: ${message}`;
+    }
+  }
+
+  private _guard_command(command: string, cwd: string): { kind: "blocked" | "approval_required"; reason: string; requested_path?: string } | null {
+    const lower = command.toLowerCase();
+    for (const pattern of this.deny_patterns) {
+      if (pattern.test(lower)) return { kind: "blocked", reason: "blocked by safety deny-pattern" };
+    }
+    for (const pattern of this.write_approval_patterns) {
+      if (pattern.test(lower)) {
+        return {
+          kind: "approval_required",
+          reason: "write-related command requires approval",
+        };
+      }
+    }
+    if (this.allow_patterns.length > 0 && !this.allow_patterns.some((p) => p.test(lower))) {
+      return { kind: "blocked", reason: "blocked by safety allowlist" };
+    }
+    if (this.restrict_to_working_dir) {
+      if (lower.includes("../") || lower.includes("..\\")) return { kind: "blocked", reason: "path traversal is not allowed" };
+      const win_paths = command.match(/[A-Za-z]:\\[^\s"'`]+/g) || [];
+      const unix_abs_paths = command.match(/(?:^|[\s"'`])\/[A-Za-z0-9._\-\/]+/g) || [];
+      for (const raw of win_paths) {
+        const abs = resolve(raw);
+        const cwd_norm = cwd.toLowerCase();
+        const abs_norm = abs.toLowerCase();
+        if (abs_norm !== cwd_norm && !abs_norm.startsWith(`${cwd_norm}\\`) && !abs_norm.startsWith(`${cwd_norm}/`)) {
+          return {
+            kind: "approval_required",
+            reason: "absolute path outside workspace",
+            requested_path: abs,
+          };
+        }
+      }
+      for (const raw of unix_abs_paths) {
+        const candidate = raw.trim().replace(/^["'`\s]+/, "");
+        if (!candidate.startsWith("/")) continue;
+        const abs = resolve(candidate);
+        const cwd_norm = cwd.toLowerCase();
+        const abs_norm = abs.toLowerCase();
+        if (abs_norm !== cwd_norm && !abs_norm.startsWith(`${cwd_norm}\\`) && !abs_norm.startsWith(`${cwd_norm}/`)) {
+          return {
+            kind: "approval_required",
+            reason: "absolute path outside workspace",
+            requested_path: abs,
+          };
+        }
+      }
+    }
+    return null;
+  }
+}
