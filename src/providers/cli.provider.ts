@@ -65,6 +65,32 @@ function split_args(raw: string): string[] {
     .filter(Boolean);
 }
 
+function strip_protocol_markers(raw: string): string {
+  return String(raw || "")
+    .replace(new RegExp(OUTPUT_BLOCK_START.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"), "")
+    .replace(new RegExp(OUTPUT_BLOCK_END.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"), "")
+    .trim();
+}
+
+function strip_protocol_scaffold(raw: string): string {
+  const text = strip_protocol_markers(raw).replace(/\r/g, "");
+  if (!text) return "";
+  const lines = text
+    .split("\n")
+    .map((l) => l.trimEnd())
+    .filter((l) => {
+      const t = l.trim();
+      if (!t) return false;
+      if (/^\[SYSTEM\]$/i.test(t)) return false;
+      if (/^Return only the final user-facing answer wrapped in the exact block below\.?$/i.test(t)) return false;
+      if (/^Start your response with the start marker immediately/i.test(t)) return false;
+      if (/^Do not include execution logs, shell commands, env vars, or debug info\.?$/i.test(t)) return false;
+      if (/^<final answer>$/i.test(t)) return false;
+      return true;
+    });
+  return lines.join("\n").trim();
+}
+
 function append_limited(base: string, incoming: string, max_chars: number): string {
   const max = Math.max(1_000, Number(max_chars || DEFAULT_CAPTURE_MAX_CHARS));
   const merged = `${base}${incoming}`;
@@ -152,7 +178,7 @@ function extract_json_event_text(
     const text = collect_text_deep(item);
     if (!text) return {};
     if (item_type === "agent_message" || item_type === "assistant_message" || item_type === "message") {
-      const full = text.trim();
+      const full = strip_protocol_markers(text);
       if (!full) return {};
       let delta = full;
       if (state.last_full_text && full.startsWith(state.last_full_text)) {
@@ -173,7 +199,7 @@ function extract_json_event_text(
   }
 
   if (type.includes("message.completed") || type === "assistant") {
-    const full = collect_text_deep(event).trim();
+    const full = strip_protocol_markers(collect_text_deep(event));
     if (!full) return {};
     let delta = full;
     if (state.last_full_text && full.startsWith(state.last_full_text)) {
@@ -401,17 +427,19 @@ export class CliHeadlessProvider extends BaseLlmProvider {
                 const parsed = parse_json_line(line);
                 if (!parsed) {
                   if (!saw_json_event && line.trim()) {
-                    await options.on_stream?.(line);
+                    const clean_line = strip_protocol_scaffold(line);
+                    if (clean_line) await options.on_stream?.(clean_line);
                   }
                   continue;
                 }
                 saw_json_event = true;
                 const extracted = extract_json_event_text(parsed, json_state);
                 if (extracted.final && extracted.final.trim()) {
-                  final_from_json = extracted.final.trim();
+                  final_from_json = strip_protocol_scaffold(extracted.final);
                 }
                 if (extracted.delta && extracted.delta.trim()) {
-                  await options.on_stream?.(extracted.delta);
+                  const clean_delta = strip_protocol_scaffold(extracted.delta);
+                  if (clean_delta) await options.on_stream?.(clean_delta);
                 }
               }
               return;
@@ -426,16 +454,18 @@ export class CliHeadlessProvider extends BaseLlmProvider {
               const out = preprotocol_buffer;
               preprotocol_buffer = "";
               last_preprotocol_emit_at = now;
-              if (out.trim().length === 0) return;
-              await options.on_stream?.(out);
+              const clean_out = strip_protocol_scaffold(out);
+              if (clean_out.trim().length === 0) return;
+              await options.on_stream?.(clean_out);
               return;
             }
             preprotocol_buffer = "";
             if (partial.length <= streamed_partial.length) return;
             const delta = partial.slice(streamed_partial.length);
             streamed_partial = partial;
-            if (delta.trim().length === 0) return;
-            await options.on_stream?.(delta);
+            const clean_delta = strip_protocol_scaffold(delta);
+            if (clean_delta.trim().length === 0) return;
+            await options.on_stream?.(clean_delta);
           }
         : undefined,
       capture_max_chars,
@@ -452,7 +482,7 @@ export class CliHeadlessProvider extends BaseLlmProvider {
     }
     const jsonText = extract_final_from_json_output(`${result.stdout}\n${result.stderr}`) || final_from_json;
     const protocolText = extract_protocol_output(result.stdout) || extract_protocol_output(result.stderr);
-    const text = String(jsonText || protocolText || result.stdout || result.stderr || "").trim();
+    const text = strip_protocol_scaffold(String(jsonText || protocolText || result.stdout || result.stderr || ""));
     if (!text) {
       return new LlmResponse({
         content: `Error calling ${this.id}: no_protocol_output`,
