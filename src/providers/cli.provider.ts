@@ -187,9 +187,7 @@ function extract_json_event_text(
       state.last_full_text = full;
       return { delta, final: full };
     }
-    if (item_type === "reasoning") {
-      return { delta: `… ${text.trim()}` };
-    }
+    if (item_type === "reasoning") return {};
   }
 
   if (type.includes("delta")) {
@@ -405,6 +403,19 @@ export class CliHeadlessProvider extends BaseLlmProvider {
     let final_from_json = "";
     let saw_json_event = false;
     const json_state = { last_full_text: "" };
+    let last_emitted_chunk_key = "";
+    let last_emitted_chunk_at = 0;
+    const emit_stream = async (raw: string): Promise<void> => {
+      const clean = strip_protocol_scaffold(raw);
+      if (!clean) return;
+      const key = clean.replace(/\s+/g, " ").trim().toLowerCase();
+      if (!key) return;
+      const now = Date.now();
+      if (key === last_emitted_chunk_key && now - last_emitted_chunk_at < 30_000) return;
+      last_emitted_chunk_key = key;
+      last_emitted_chunk_at = now;
+      await options.on_stream?.(clean);
+    };
     const result = await run_cli(
       command,
       args,
@@ -427,8 +438,7 @@ export class CliHeadlessProvider extends BaseLlmProvider {
                 const parsed = parse_json_line(line);
                 if (!parsed) {
                   if (!saw_json_event && line.trim()) {
-                    const clean_line = strip_protocol_scaffold(line);
-                    if (clean_line) await options.on_stream?.(clean_line);
+                    await emit_stream(line);
                   }
                   continue;
                 }
@@ -438,8 +448,7 @@ export class CliHeadlessProvider extends BaseLlmProvider {
                   final_from_json = strip_protocol_scaffold(extracted.final);
                 }
                 if (extracted.delta && extracted.delta.trim()) {
-                  const clean_delta = strip_protocol_scaffold(extracted.delta);
-                  if (clean_delta) await options.on_stream?.(clean_delta);
+                  await emit_stream(extracted.delta);
                 }
               }
               return;
@@ -454,18 +463,14 @@ export class CliHeadlessProvider extends BaseLlmProvider {
               const out = preprotocol_buffer;
               preprotocol_buffer = "";
               last_preprotocol_emit_at = now;
-              const clean_out = strip_protocol_scaffold(out);
-              if (clean_out.trim().length === 0) return;
-              await options.on_stream?.(clean_out);
+              await emit_stream(out);
               return;
             }
             preprotocol_buffer = "";
             if (partial.length <= streamed_partial.length) return;
             const delta = partial.slice(streamed_partial.length);
             streamed_partial = partial;
-            const clean_delta = strip_protocol_scaffold(delta);
-            if (clean_delta.trim().length === 0) return;
-            await options.on_stream?.(clean_delta);
+            await emit_stream(delta);
           }
         : undefined,
       capture_max_chars,

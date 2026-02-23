@@ -572,6 +572,17 @@ export class ChannelManager {
     let stream_buffer = "";
     let last_stream_emit_at = 0;
     let stream_emitted_count = 0;
+    let last_stream_sent_key = "";
+    let last_stream_sent_at = 0;
+    const should_skip_duplicate_stream = (content: string): boolean => {
+      const key = String(content || "").replace(/\s+/g, " ").trim().toLowerCase();
+      if (!key) return true;
+      const now = Date.now();
+      if (key === last_stream_sent_key && now - last_stream_sent_at < 30_000) return true;
+      last_stream_sent_key = key;
+      last_stream_sent_at = now;
+      return false;
+    };
     const started_at_ms = Date.now();
     const typingTicker = setInterval(() => {
       void this.registry.set_typing(channel_provider, message.chat_id, true);
@@ -660,6 +671,7 @@ export class ChannelManager {
             stream_buffer = "";
             last_stream_emit_at = now;
             if (!content) return;
+            if (should_skip_duplicate_stream(content)) return;
             stream_emitted_count += 1;
             const sent = await this.registry.send(channel_provider, {
               id: `stream-${Date.now()}`,
@@ -701,22 +713,24 @@ export class ChannelManager {
           const tail = this.format_stream_content(channel_provider, stream_buffer);
           stream_buffer = "";
           if (tail) {
-            stream_emitted_count += 1;
-            const sent = await this.registry.send(channel_provider, {
-              id: `stream-${Date.now()}`,
-              provider: channel_provider,
-              channel: channel_provider,
-              sender_id: alias,
-              chat_id: message.chat_id,
-              content: tail,
-              at: new Date().toISOString(),
-              reply_to: this.resolve_reply_to(channel_provider, message),
-              thread_id: message.thread_id,
-              metadata: { kind: "agent_stream", agent_alias: alias },
-            });
-            if (!sent.ok && this.debug) {
-              // eslint-disable-next-line no-console
-              console.log(`[channel-manager] stream tail send failed provider=${channel_provider} alias=${alias} err=${sent.error || "unknown_error"}`);
+            if (!should_skip_duplicate_stream(tail)) {
+              stream_emitted_count += 1;
+              const sent = await this.registry.send(channel_provider, {
+                id: `stream-${Date.now()}`,
+                provider: channel_provider,
+                channel: channel_provider,
+                sender_id: alias,
+                chat_id: message.chat_id,
+                content: tail,
+                at: new Date().toISOString(),
+                reply_to: this.resolve_reply_to(channel_provider, message),
+                thread_id: message.thread_id,
+                metadata: { kind: "agent_stream", agent_alias: alias },
+              });
+              if (!sent.ok && this.debug) {
+                // eslint-disable-next-line no-console
+                console.log(`[channel-manager] stream tail send failed provider=${channel_provider} alias=${alias} err=${sent.error || "unknown_error"}`);
+              }
             }
           }
         }
@@ -779,6 +793,17 @@ export class ChannelManager {
   }): Promise<{ reply: string | null; error?: string }> {
     const always_skills = args.agent_domain.context.skills_loader.get_always_skills();
     const task_id = `task:${args.channel_provider}:${args.message.chat_id}:${args.alias}`.toLowerCase();
+    let last_task_stream_key = "";
+    let last_task_stream_at = 0;
+    const should_skip_duplicate_task_stream = (content: string): boolean => {
+      const key = String(content || "").replace(/\s+/g, " ").trim().toLowerCase();
+      if (!key) return true;
+      const now = Date.now();
+      if (key === last_task_stream_key && now - last_task_stream_at < 30_000) return true;
+      last_task_stream_key = key;
+      last_task_stream_at = now;
+      return false;
+    };
     const seed = [
       ...args.session_history.map((r) => `[${r.role}] ${r.content}`),
       args.task_with_media,
@@ -829,6 +854,7 @@ export class ChannelManager {
               if (!part) return;
               const content = this.format_stream_content(args.channel_provider, part);
               if (!content) return;
+              if (should_skip_duplicate_task_stream(content)) return;
               const sent = await this.registry.send(args.channel_provider, {
                 id: `stream-${Date.now()}`,
                 provider: args.channel_provider,
