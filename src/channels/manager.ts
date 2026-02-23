@@ -576,7 +576,7 @@ export class ChannelManager {
     const typingTicker = setInterval(() => {
       void this.registry.set_typing(channel_provider, message.chat_id, true);
     }, 4000);
-    const pulse_enabled = this.progress_pulse_enabled || channel_provider === "telegram";
+    const pulse_enabled = this.progress_pulse_enabled;
     const pulseTicker = pulse_enabled
       ? setInterval(() => {
           const elapsed_sec = Math.max(1, Math.floor((Date.now() - started_at_ms) / 1000));
