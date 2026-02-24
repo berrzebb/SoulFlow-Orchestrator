@@ -694,10 +694,11 @@ export class ChannelManager {
           on_tool_calls: async ({ tool_calls }) => {
             const outputs: string[] = [];
             for (const tool_call of tool_calls) {
-              const result = await agent_domain.tools.execute(
+                const result = await agent_domain.tools.execute(
                 tool_call.name,
                 tool_call.arguments || {},
                 {
+                  task_id: `adhoc:${channel_provider}:${message.chat_id}:${alias}`,
                   signal: abort.signal,
                   channel: channel_provider,
                   chat_id: message.chat_id,
@@ -876,13 +877,14 @@ export class ChannelManager {
             on_tool_calls: async ({ tool_calls }) => {
               const outputs: string[] = [];
               for (const tool_call of tool_calls) {
-                const result = await args.agent_domain.tools.execute(
-                  tool_call.name,
-                  tool_call.arguments || {},
-                  {
-                    signal: args.abort.signal,
-                    channel: args.channel_provider,
-                    chat_id: args.message.chat_id,
+                    const result = await args.agent_domain.tools.execute(
+                    tool_call.name,
+                    tool_call.arguments || {},
+                    {
+                      task_id,
+                      signal: args.abort.signal,
+                      channel: args.channel_provider,
+                      chat_id: args.message.chat_id,
                     sender_id: args.message.sender_id,
                   },
                 );

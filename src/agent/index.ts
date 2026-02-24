@@ -16,6 +16,7 @@ import {
   ToolRegistry,
   create_default_tool_registry,
 } from "./tools/index.js";
+import type { WorkflowEventService } from "../events/index.js";
 
 export class AgentDomain {
   private readonly profiles = new Map<string, AgentProfile>();
@@ -35,6 +36,7 @@ export class AgentDomain {
       providers?: ProviderRegistry | null;
       bus?: MessageBus | null;
       data_dir?: string;
+      events?: WorkflowEventService | null;
     },
   ) {
     this.context = new ContextBuilder(workspace);
@@ -52,6 +54,9 @@ export class AgentDomain {
     this.tools = create_default_tool_registry({
       workspace,
       bus: args?.bus || null,
+      event_recorder: args?.events
+        ? async (event) => args.events!.append(event)
+        : null,
       spawn_callback: async (request) => {
         const spawned = await this.subagents.spawn({
           task: request.task,

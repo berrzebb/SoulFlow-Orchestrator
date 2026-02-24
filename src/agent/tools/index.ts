@@ -12,6 +12,7 @@ import { WebFetchTool, WebSearchTool } from "./web.js";
 import { DynamicToolRuntimeLoader, ToolRuntimeReloader } from "./runtime-loader.js";
 import { ToolInstallerService } from "./installer.js";
 import { ToolSelfTestService } from "./self-test.js";
+import type { AppendWorkflowEventInput, AppendWorkflowEventResult } from "../../events/types.js";
 
 export {
   ToolRegistry,
@@ -52,6 +53,7 @@ export function create_default_tool_registry(args?: {
   cron?: CronService | null;
   bus?: MessageBus | null;
   spawn_callback?: ((request: SpawnRequest) => Promise<{ subagent_id: string; status: string; message?: string }>) | null;
+  event_recorder?: ((event: AppendWorkflowEventInput) => Promise<AppendWorkflowEventResult>) | null;
 }): ToolRegistry {
   const registry = new ToolRegistry({
     on_approval_request: args?.bus
@@ -80,12 +82,47 @@ export function create_default_tool_registry(args?: {
             ].join("\n"),
             metadata: {
               kind: "approval_request",
+              orchestrator_event: {
+                event_id: request.request_id,
+                run_id: String(request.context?.task_id || `run-${Date.now()}`),
+                task_id: String(request.context?.task_id || "task-unspecified"),
+                agent_id: String(request.context?.sender_id || "agent"),
+                phase: "approval",
+                summary: `${request.tool_name} approval required`,
+                payload: { tool: request.tool_name, params: request.params },
+                provider: channel,
+                channel,
+                chat_id,
+                source: "outbound",
+                at: now_iso(),
+              },
               request_id: request.request_id,
               tool_name: request.tool_name,
               params: request.params,
               created_at: request.created_at,
             },
           };
+          if (args?.event_recorder) {
+            try {
+              await args.event_recorder({
+                event_id: request.request_id,
+                run_id: String(request.context?.task_id || `run-${Date.now()}`),
+                task_id: String(request.context?.task_id || "task-unspecified"),
+                agent_id: String(request.context?.sender_id || "agent"),
+                phase: "approval",
+                summary: `${request.tool_name} approval required`,
+                payload: { tool: request.tool_name, params: request.params },
+                provider: channel,
+                channel,
+                chat_id,
+                source: "outbound",
+                at: now_iso(),
+                detail: request.detail,
+              });
+            } catch {
+              // keep approval flow non-blocking even if event storage fails
+            }
+          }
           await args.bus!.publish_outbound(message);
         }
       : undefined,
@@ -106,7 +143,7 @@ export function create_default_tool_registry(args?: {
     sender = async (message: OutboundMessage): Promise<void> => {
       await args.bus!.publish_outbound(message);
     };
-    registry.register(new MessageTool({ send_callback: sender }));
+    registry.register(new MessageTool({ send_callback: sender, event_recorder: args?.event_recorder || null }));
     registry.register(new FileRequestTool({ send_callback: sender }));
   }
   if (args?.spawn_callback) {

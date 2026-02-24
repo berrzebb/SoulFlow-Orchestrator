@@ -6,6 +6,7 @@ import type { AgentDomain } from "../agent/index.js";
 import type { MessageBus } from "../bus/index.js";
 import type { ChannelManager } from "../channels/index.js";
 import type { DecisionService } from "../decision/index.js";
+import type { WorkflowEventService } from "../events/index.js";
 import type { HeartbeatService } from "../heartbeat/index.js";
 import type { OpsRuntimeService } from "../ops/index.js";
 import { now_iso } from "../utils/common.js";
@@ -21,6 +22,7 @@ type DashboardOptions = {
   heartbeat: HeartbeatService;
   ops: OpsRuntimeService;
   decisions: DecisionService;
+  events: WorkflowEventService;
 };
 
 type SseClient = {
@@ -141,6 +143,7 @@ export class DashboardService {
       last_message: lastBySender.get(`subagent:${a.id}`) || "",
     }));
     const decisions = await this.options.decisions.get_effective_decisions({ include_p2: true });
+    const workflow_events = await this.options.events.list({ limit: 40 });
 
     return {
       now: new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul", hour12: false }).replace(" ", "T") + "+09:00",
@@ -159,6 +162,15 @@ export class DashboardService {
         canonical_key: d.canonical_key,
         value: d.value,
         priority: d.priority,
+      })),
+      workflow_events: workflow_events.map((e) => ({
+        event_id: e.event_id,
+        task_id: e.task_id,
+        run_id: e.run_id,
+        agent_id: e.agent_id,
+        phase: e.phase,
+        summary: e.summary,
+        at: e.at,
       })),
     };
   }

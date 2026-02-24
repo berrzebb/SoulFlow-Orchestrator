@@ -1,4 +1,5 @@
 export type LoopType = "agent" | "task";
+export type WorkflowPhase = "assign" | "progress" | "blocked" | "done" | "approval";
 
 export interface Soul {
   identity: string;
@@ -60,4 +61,19 @@ export interface BusEvent {
   type: string;
   at: string;
   payload: Record<string, unknown>;
+}
+
+export interface WorkflowEventContract {
+  event_id: string;
+  run_id: string;
+  task_id: string;
+  agent_id: string;
+  phase: WorkflowPhase;
+  summary: string;
+  payload: Record<string, unknown>;
+  channel: string;
+  chat_id: string;
+  thread_id?: string;
+  source: "outbound" | "inbound" | "system";
+  at: string;
 }

@@ -4,6 +4,7 @@ const runtimeInfo = document.getElementById("runtimeInfo");
 const officeGrid = document.getElementById("officeGrid");
 const taskList = document.getElementById("taskList");
 const messageList = document.getElementById("messageList");
+const workflowEventList = document.getElementById("workflowEventList");
 const decisionList = document.getElementById("decisionList");
 
 function text(v) {
@@ -63,6 +64,7 @@ function render(state) {
 
   setList(taskList, state.tasks || [], (t) => `${text(t.taskId)} | ${text(t.status)} | step=${text(t.currentStep)}`);
   setList(messageList, state.messages || [], (m) => `${text(m.sender_id)}: ${text(m.content)}`);
+  setList(workflowEventList, state.workflow_events || [], (e) => `[${text(e.phase)}] ${text(e.task_id)} · ${text(e.agent_id)} · ${text(e.summary)}`);
   setList(decisionList, state.decisions || [], (d) => `[p${text(d.priority)}] ${text(d.canonical_key)} = ${text(d.value)}`);
 }
 

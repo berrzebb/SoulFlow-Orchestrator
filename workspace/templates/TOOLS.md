@@ -21,6 +21,13 @@
 - 사용자 메시지 수신 시 읽음 반응/typing 상태를 갱신한다.
 - 파일 첨부 메시지 수신 시, 파일 경로를 분석 입력에 자동 포함한다.
 
+## Workflow Event Contract
+- 상태 보고는 반드시 `message` 도구를 사용해 phase 이벤트로 보낸다.
+- phase는 `assign | progress | blocked | done | approval` 중 하나만 사용한다.
+- `task_id`는 필수로 유지하며, 상세 내용은 `detail`에 넣어 `runtime/tasks/details/<task_id>.md`에 누적한다.
+- 짧은 본문은 `content`(요약), 구조화 데이터는 `payload`에 넣는다.
+- 같은 이벤트 재전송이 필요하면 동일 `event_id`를 재사용해 중복 기록을 방지한다.
+
 ## File Request Workflow
 1. 필요한 입력이 파일일 때 `request_file` 도구로 업로드를 요청한다.
 2. 사용자가 파일을 첨부하면 본문과 첨부를 함께 해석한다.

@@ -8,6 +8,7 @@ import { loadConfig } from "./config/index.js";
 import { CronService } from "./cron/index.js";
 import { DashboardService } from "./dashboard/service.js";
 import { DecisionService } from "./decision/index.js";
+import { WorkflowEventService } from "./events/index.js";
 import { HeartbeatService } from "./heartbeat/index.js";
 import { OpsRuntimeService } from "./ops/index.js";
 import { Phi4RuntimeManager, ProviderRegistry } from "./providers/index.js";
@@ -28,6 +29,7 @@ export interface RuntimeApp {
   templates: TemplateEngine;
   dashboard: DashboardService | null;
   decisions: DecisionService;
+  events: WorkflowEventService;
   ops: OpsRuntimeService;
 }
 
@@ -205,13 +207,16 @@ export function createRuntime(): RuntimeApp {
   ensure_default_markdown_files(workspace, config.templateSourceDir);
   const data_dir = resolve_from_workspace(workspace, config.dataDir, join(workspace, "runtime"));
   const decisions_dir = join(data_dir, "decisions");
+  const events_dir = join(data_dir, "events");
+  const task_details_dir = join(data_dir, "tasks", "details");
   const sessions_dir = join(data_dir, "sessions");
   const dashboard_assets_dir = resolve_from_workspace(workspace, config.dashboardAssetsDir, join(workspace, "dashboard"));
 
   const bus = new MessageBus();
   const decisions = new DecisionService(workspace, decisions_dir);
+  const events = new WorkflowEventService(workspace, events_dir, task_details_dir);
   const providers = new ProviderRegistry();
-  const agent = new AgentDomain(workspace, { providers, bus, data_dir });
+  const agent = new AgentDomain(workspace, { providers, bus, data_dir, events });
   const channels = create_channels_from_config({
     provider_hint: config.provider,
     channels: config.channels,
@@ -259,6 +264,7 @@ export function createRuntime(): RuntimeApp {
     templates: new TemplateEngine(workspace),
     dashboard: null,
     decisions,
+    events,
     ops: {} as OpsRuntimeService,
   };
   app.ops = new OpsRuntimeService({
@@ -281,6 +287,7 @@ export function createRuntime(): RuntimeApp {
       heartbeat: app.heartbeat,
       ops: app.ops,
       decisions: app.decisions,
+      events: app.events,
     });
   }
   // eslint-disable-next-line no-console
