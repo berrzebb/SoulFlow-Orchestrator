@@ -116,12 +116,23 @@ export class DashboardService {
     const channel_status = this.options.channels.get_status();
     const ops = this.options.ops.status();
     const heartbeat = this.options.heartbeat.status();
-    const tasks = this.options.agent.loop.list_tasks().map((t) => ({
-      taskId: t.taskId,
-      status: t.status,
-      currentStep: t.currentStep,
-      updatedAt: t.memory?.__updated_at_seoul || "",
-    }));
+    const loop_tasks = this.options.agent.loop.list_tasks();
+    const stored_tasks = await this.options.agent.task_store.list();
+    const task_map = new Map<string, (typeof stored_tasks)[number]>();
+    for (const row of stored_tasks) task_map.set(row.taskId, row);
+    for (const row of loop_tasks) task_map.set(row.taskId, row);
+    const tasks = [...task_map.values()].map((t) => {
+      const memory = (t.memory || {}) as Record<string, unknown>;
+      const workflow = (memory.workflow && typeof memory.workflow === "object")
+        ? (memory.workflow as Record<string, unknown>)
+        : {};
+      return {
+        taskId: t.taskId,
+        status: t.status,
+        currentStep: t.currentStep,
+        updatedAt: String(memory.__updated_at_seoul || workflow.at || ""),
+      };
+    });
     const subagents = this.options.agent.subagents.list();
     const messages = this.options.bus.peek(40).slice(0, 20).map((m) => ({
       sender_id: m.sender_id,

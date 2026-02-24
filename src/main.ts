@@ -217,6 +217,7 @@ export function createRuntime(): RuntimeApp {
   const events = new WorkflowEventService(workspace, events_dir, task_details_dir);
   const providers = new ProviderRegistry();
   const agent = new AgentDomain(workspace, { providers, bus, data_dir, events });
+  events.bind_task_store(agent.task_store);
   const channels = create_channels_from_config({
     provider_hint: config.provider,
     channels: config.channels,

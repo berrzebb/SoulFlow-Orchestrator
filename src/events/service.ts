@@ -2,6 +2,8 @@ import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { file_exists, now_iso, safe_filename } from "../utils/common.js";
+import type { TaskState } from "../contracts.js";
+import type { TaskStore } from "../agent/task-store.js";
 import type {
   AppendWorkflowEventInput,
   AppendWorkflowEventResult,
@@ -59,6 +61,7 @@ export class WorkflowEventService {
   private index_cache: EventIndex | null = null;
   private records_cache: WorkflowEvent[] | null = null;
   private write_queue: Promise<void> = Promise.resolve();
+  private task_store: TaskStore | null = null;
 
   constructor(root = process.cwd(), events_dir_override?: string, task_details_dir_override?: string) {
     this.root = root;
@@ -66,6 +69,10 @@ export class WorkflowEventService {
     this.events_path = join(this.events_dir, "events.jsonl");
     this.index_path = join(this.events_dir, "index.json");
     this.task_details_dir = task_details_dir_override || join(root, "runtime", "tasks", "details");
+  }
+
+  bind_task_store(store: TaskStore | null): void {
+    this.task_store = store;
   }
 
   private async enqueue_write<T>(job: () => Promise<T>): Promise<T> {
@@ -212,6 +219,7 @@ export class WorkflowEventService {
       index.updated_at = now_iso();
       this.index_cache = index;
       await this.write_index(index);
+      await this.sync_task_state_from_event(event);
 
       return { deduped: false, event };
     });
@@ -243,5 +251,63 @@ export class WorkflowEventService {
       return "";
     }
   }
-}
 
+  private map_phase_to_status(event: WorkflowEvent): TaskState["status"] {
+    if (event.phase === "done") return "completed";
+    if (event.phase === "approval") return "waiting_approval";
+    if (event.phase === "blocked") {
+      const summary = String(event.summary || "").toLowerCase();
+      const approval_like = /approve|approval|승인|허용|대기/.test(summary);
+      return approval_like ? "waiting_approval" : "failed";
+    }
+    return "running";
+  }
+
+  private async sync_task_state_from_event(event: WorkflowEvent): Promise<void> {
+    if (!this.task_store) return;
+    const task_id = normalize_text(event.task_id);
+    if (!task_id) return;
+    const existing = await this.task_store.get(task_id);
+    const next_status = this.map_phase_to_status(event);
+    const base: TaskState = existing || {
+      taskId: task_id,
+      title: normalize_text(event.summary).slice(0, 120) || `Workflow:${task_id}`,
+      currentTurn: 0,
+      maxTurns: Math.max(1, Number(process.env.TASK_LOOP_MAX_TURNS || 40)),
+      status: "running",
+      currentStep: "assign",
+      memory: {},
+    };
+    const memory = {
+      ...(base.memory || {}),
+      workflow: {
+        event_id: event.event_id,
+        run_id: event.run_id,
+        phase: event.phase,
+        summary: event.summary,
+        at: event.at,
+        agent_id: event.agent_id,
+        provider: event.provider || "",
+        channel: event.channel || "",
+        chat_id: event.chat_id,
+        thread_id: event.thread_id || "",
+      },
+    };
+    const next: TaskState = {
+      ...base,
+      title: base.title || (normalize_text(event.summary).slice(0, 120) || `Workflow:${task_id}`),
+      currentTurn: Math.max(0, Number(base.currentTurn || 0)) + 1,
+      status: next_status,
+      currentStep: event.phase,
+      memory,
+      exitReason: next_status === "completed"
+        ? "workflow_done_event"
+        : next_status === "waiting_approval"
+          ? "approval_wait_event"
+          : next_status === "failed"
+            ? "workflow_blocked_event"
+            : undefined,
+    };
+    await this.task_store.upsert(next);
+  }
+}

@@ -4,8 +4,8 @@ import type { ProviderRegistry } from "../providers/index.js";
 import type { AgentDomain } from "../agent/index.js";
 import type { SessionStore } from "../session/index.js";
 import { create_default_channels, type ChannelProvider, type ChannelRegistry } from "./index.js";
-import { mkdir, writeFile } from "node:fs/promises";
-import { basename, extname, join, resolve } from "node:path";
+import { appendFile, mkdir, writeFile } from "node:fs/promises";
+import { basename, dirname, extname, join, resolve } from "node:path";
 import type { TaskNode } from "../agent/loop.js";
 
 export type ChannelManagerStatus = {
@@ -50,6 +50,18 @@ export class ChannelManager {
   private readonly seen_ttl_ms: number;
   private readonly seen_max_size: number;
   private readonly workspace_dir: string;
+  private readonly send_inline_retries: number;
+  private readonly dispatch_retry_max: number;
+  private readonly dispatch_retry_base_ms: number;
+  private readonly dispatch_retry_max_ms: number;
+  private readonly dispatch_retry_jitter_ms: number;
+  private readonly dispatch_dlq_enabled: boolean;
+  private readonly dispatch_dlq_path: string;
+  private dlq_write_queue: Promise<void> = Promise.resolve();
+  private readonly approval_reaction_enabled: boolean;
+  private readonly control_reaction_enabled: boolean;
+  private readonly reaction_action_ttl_ms: number;
+  private readonly reaction_actions_seen = new Map<string, number>();
 
   constructor(args: {
     bus: MessageBus;
@@ -85,6 +97,21 @@ export class ChannelManager {
     this.grouping_max_messages = Math.max(2, Number(process.env.CHANNEL_GROUPING_MAX_MESSAGES || 8));
     this.seen_ttl_ms = Math.max(60_000, Number(process.env.CHANNEL_SEEN_TTL_MS || 86_400_000));
     this.seen_max_size = Math.max(2_000, Number(process.env.CHANNEL_SEEN_MAX_SIZE || 50_000));
+    this.send_inline_retries = Math.max(0, Number(process.env.CHANNEL_MANAGER_INLINE_RETRIES || 0));
+    this.dispatch_retry_max = Math.max(0, Number(process.env.CHANNEL_DISPATCH_RETRY_MAX || 3));
+    this.dispatch_retry_base_ms = Math.max(100, Number(process.env.CHANNEL_DISPATCH_RETRY_BASE_MS || 700));
+    this.dispatch_retry_max_ms = Math.max(this.dispatch_retry_base_ms, Number(process.env.CHANNEL_DISPATCH_RETRY_MAX_MS || 25_000));
+    this.dispatch_retry_jitter_ms = Math.max(0, Number(process.env.CHANNEL_DISPATCH_RETRY_JITTER_MS || 250));
+    this.dispatch_dlq_enabled = String(process.env.CHANNEL_DISPATCH_DLQ_ENABLED || "1").trim() !== "0";
+    this.dispatch_dlq_path = resolve(
+      String(
+        process.env.CHANNEL_DISPATCH_DLQ_PATH
+        || join(this.workspace_dir, "runtime", "dlq", "outbound.jsonl"),
+      ),
+    );
+    this.approval_reaction_enabled = String(process.env.APPROVAL_REACTION_ENABLED || "1").trim() !== "0";
+    this.control_reaction_enabled = String(process.env.CONTROL_REACTION_ENABLED || "1").trim() !== "0";
+    this.reaction_action_ttl_ms = Math.max(60_000, Number(process.env.REACTION_ACTION_TTL_MS || 86_400_000));
   }
 
   async start(): Promise<void> {
@@ -157,10 +184,12 @@ export class ChannelManager {
       for (const provider of providers) {
         if (signal.aborted) return;
         this.prune_seen_cache(false);
+        this.prune_reaction_actions_seen(false);
         const target = this.resolve_target(provider);
         if (!target) continue;
         try {
           const rows = await this.registry.read(provider, target, this.read_limit);
+          await this.try_handle_reaction_controls(provider, rows);
           const target_key = `${provider}:${target}`;
           if (!this.primed_targets.has(target_key)) {
             for (const row of rows) this.mark_seen(row);
@@ -197,7 +226,14 @@ export class ChannelManager {
   async dispatch_outbound(message: OutboundMessage): Promise<void> {
     const provider = this.resolve_provider(message);
     if (!provider) return;
-    await this.registry.send(provider, message);
+    const sent = await this.send_with_retry(provider, message, {
+      allow_requeue: true,
+      source: "dispatch",
+    });
+    if (!sent.ok && this.debug) {
+      // eslint-disable-next-line no-console
+      console.log(`[channel-manager] dispatch send failed provider=${provider} err=${sent.error || "unknown_error"}`);
+    }
   }
 
   async read_channel(provider: ChannelProvider, chat_id: string, limit?: number): Promise<InboundMessage[]> {
@@ -383,6 +419,136 @@ export class ChannelManager {
       mention_loop_running: Boolean(this.mention_task),
       enabled_channels: this.registry.list_channels().map((c) => c.provider),
     };
+  }
+
+  private async sleep(ms: number): Promise<void> {
+    const delay = Math.max(0, Number(ms || 0));
+    if (delay <= 0) return;
+    await new Promise<void>((resolve) => setTimeout(resolve, delay));
+  }
+
+  private compute_retry_delay_ms(retry_count: number): number {
+    const count = Math.max(1, Number(retry_count || 1));
+    const exp = this.dispatch_retry_base_ms * (2 ** (count - 1));
+    const capped = Math.min(this.dispatch_retry_max_ms, exp);
+    const jitter = this.dispatch_retry_jitter_ms > 0
+      ? Math.floor(Math.random() * this.dispatch_retry_jitter_ms)
+      : 0;
+    return capped + jitter;
+  }
+
+  private is_retryable_send_error(error: string): boolean {
+    const raw = String(error || "").trim().toLowerCase();
+    if (!raw) return true;
+    if (raw.includes("invalid_auth")) return false;
+    if (raw.includes("not_authed")) return false;
+    if (raw.includes("channel_not_found")) return false;
+    if (raw.includes("chat_id_required")) return false;
+    if (raw.includes("bot_token_missing")) return false;
+    if (raw.includes("permission_denied")) return false;
+    if (raw.includes("invalid_arguments")) return false;
+    return true;
+  }
+
+  private get_dispatch_retry_count(message: OutboundMessage): number {
+    const meta = (message.metadata || {}) as Record<string, unknown>;
+    return Math.max(0, Number(meta.dispatch_retry || 0));
+  }
+
+  private clone_outbound_message(message: OutboundMessage): OutboundMessage {
+    return {
+      ...message,
+      media: Array.isArray(message.media) ? [...message.media] : [],
+      metadata: { ...(message.metadata || {}) },
+    };
+  }
+
+  private async schedule_dispatch_retry(
+    provider: ChannelProvider,
+    message: OutboundMessage,
+    retry_count: number,
+    error: string,
+  ): Promise<void> {
+    const delay_ms = this.compute_retry_delay_ms(retry_count);
+    const retry_message = this.clone_outbound_message(message);
+    retry_message.metadata = {
+      ...(retry_message.metadata || {}),
+      dispatch_retry: retry_count,
+      dispatch_error: error,
+      dispatch_retry_at: new Date(Date.now() + delay_ms).toISOString(),
+    };
+    setTimeout(() => {
+      void this.bus.publish_outbound(retry_message);
+    }, delay_ms);
+    if (this.debug) {
+      // eslint-disable-next-line no-console
+      console.log(
+        `[channel-manager] dispatch requeue provider=${provider} retry=${retry_count}/${this.dispatch_retry_max} delay_ms=${delay_ms} err=${error || "unknown_error"}`,
+      );
+    }
+  }
+
+  private async append_dispatch_dlq(
+    provider: ChannelProvider,
+    message: OutboundMessage,
+    error: string,
+    retry_count: number,
+  ): Promise<void> {
+    if (!this.dispatch_dlq_enabled) return;
+    const record = {
+      at: new Date().toISOString(),
+      provider,
+      chat_id: String(message.chat_id || ""),
+      message_id: String(message.id || ""),
+      sender_id: String(message.sender_id || ""),
+      reply_to: String(message.reply_to || ""),
+      thread_id: String(message.thread_id || ""),
+      retry_count,
+      error: String(error || "unknown_error"),
+      content: String(message.content || "").slice(0, 4000),
+      metadata: message.metadata || {},
+    };
+    const path = this.dispatch_dlq_path;
+    const write_job = this.dlq_write_queue.then(async () => {
+      await mkdir(dirname(path), { recursive: true });
+      await appendFile(path, `${JSON.stringify(record)}\n`, "utf-8");
+    });
+    this.dlq_write_queue = write_job.then(() => undefined, () => undefined);
+    try {
+      await write_job;
+    } catch (error2) {
+      // eslint-disable-next-line no-console
+      console.error(`[channel-manager] dlq append failed path=${path} err=${error2 instanceof Error ? error2.message : String(error2)}`);
+    }
+  }
+
+  private async send_with_retry(
+    provider: ChannelProvider,
+    message: OutboundMessage,
+    options?: { allow_requeue?: boolean; source?: string },
+  ): Promise<{ ok: boolean; message_id?: string; error?: string }> {
+    const inline_attempts = Math.max(1, this.send_inline_retries + 1);
+    let last_error = "";
+    for (let attempt = 1; attempt <= inline_attempts; attempt += 1) {
+      const sent = await this.registry.send(provider, message);
+      if (sent.ok) return sent;
+      last_error = String(sent.error || "unknown_error");
+      if (!this.is_retryable_send_error(last_error)) break;
+      if (attempt < inline_attempts) {
+        await this.sleep(this.compute_retry_delay_ms(attempt));
+      }
+    }
+
+    const dispatch_retry = this.get_dispatch_retry_count(message);
+    if (options?.allow_requeue && dispatch_retry < this.dispatch_retry_max && this.is_retryable_send_error(last_error)) {
+      await this.schedule_dispatch_retry(provider, message, dispatch_retry + 1, last_error);
+      return { ok: false, error: `requeued_retry_${dispatch_retry + 1}:${last_error}` };
+    }
+
+    if (options?.allow_requeue && dispatch_retry >= this.dispatch_retry_max) {
+      await this.append_dispatch_dlq(provider, message, last_error || "send_failed", dispatch_retry);
+    }
+    return { ok: false, error: last_error || "send_failed" };
   }
 
   private extract_mentions(channel: { parse_agent_mentions: (content: string) => Array<{ alias: string }> }, message: InboundMessage): string[] {
@@ -616,6 +782,8 @@ export class ChannelManager {
       const task_with_media = this.compose_task_with_media(task, media_inputs);
       const provider_hint = default_executor;
       const session_history = await this.get_session_history(channel_provider, message.chat_id, alias, 24);
+      const thread_nearby = await this.get_thread_nearby_context(channel_provider, message, 12);
+      const thread_nearby_block = this.format_thread_nearby_block(thread_nearby);
       const mode = this.pick_loop_mode(task_with_media);
       this.apply_tool_runtime_context(agent_domain, channel_provider, message);
 
@@ -632,6 +800,7 @@ export class ChannelManager {
             task_with_media,
             media_inputs,
             session_history,
+            thread_nearby_block,
             abort,
           });
         }
@@ -645,6 +814,7 @@ export class ChannelManager {
           provider_id,
           current_message: [
             ...session_history.map((r) => `[${r.role}] ${r.content}`),
+            thread_nearby_block,
             task_with_media,
           ].filter(Boolean).join("\n\n"),
           history_days: [],
@@ -790,6 +960,7 @@ export class ChannelManager {
     task_with_media: string;
     media_inputs: string[];
     session_history: Array<{ role: "system" | "user" | "assistant" | "tool"; content: string }>;
+    thread_nearby_block: string;
     abort: AbortController;
   }): Promise<{ reply: string | null; error?: string }> {
     const always_skills = args.agent_domain.context.skills_loader.get_always_skills();
@@ -807,6 +978,7 @@ export class ChannelManager {
     };
     const seed = [
       ...args.session_history.map((r) => `[${r.role}] ${r.content}`),
+      args.thread_nearby_block,
       args.task_with_media,
     ].filter(Boolean).join("\n\n");
     const prev = args.agent_domain.loop.get_task(task_id);
@@ -1021,6 +1193,51 @@ export class ChannelManager {
     } catch {
       return [];
     }
+  }
+
+  private async get_thread_nearby_context(
+    provider: ChannelProvider,
+    message: InboundMessage,
+    limit: number,
+  ): Promise<Array<{ sender_id: string; content: string; at: string }>> {
+    const meta = (message.metadata || {}) as Record<string, unknown>;
+    const thread_key = String(message.thread_id || "").trim();
+    const current_message_id = String(meta.message_id || message.id || "").trim();
+    if (!thread_key && provider !== "slack") return [];
+    const key = thread_key || current_message_id;
+    if (!key) return [];
+    try {
+      const rows = await this.registry.read(provider, message.chat_id, Math.max(this.read_limit, 80));
+      const scoped = rows
+        .filter((row) => {
+          const row_meta = (row.metadata || {}) as Record<string, unknown>;
+          const row_id = String(row_meta.message_id || row.id || "").trim();
+          const row_thread = String(row.thread_id || "").trim();
+          if (!row_id && !row_thread) return false;
+          return row_thread === key || row_id === key;
+        })
+        .sort((a, b) => this.extract_timestamp_ms(a) - this.extract_timestamp_ms(b))
+        .map((row) => {
+          const text = this.sanitize_provider_output(String(row.content || "")).trim();
+          return {
+            sender_id: String(row.sender_id || "unknown"),
+            content: text.slice(0, 260),
+            at: String(row.at || ""),
+          };
+        })
+        .filter((row) => Boolean(row.content));
+      if (scoped.length <= 0) return [];
+      const n = Math.max(1, Math.min(24, Number(limit || 12)));
+      return scoped.slice(-n);
+    } catch {
+      return [];
+    }
+  }
+
+  private format_thread_nearby_block(rows: Array<{ sender_id: string; content: string; at: string }>): string {
+    if (!Array.isArray(rows) || rows.length === 0) return "";
+    const lines = rows.map((row) => `- [${row.sender_id}] ${row.content}`);
+    return ["[THREAD_NEARBY_CONTEXT]", ...lines].join("\n");
   }
 
   private async record_user_message(provider: ChannelProvider, message: InboundMessage, alias: string): Promise<void> {
@@ -1520,7 +1737,7 @@ export class ChannelManager {
     if (!this.status_notice_enabled) return;
     const content = this.format_status_message(provider, message.sender_id, kind, alias, detail);
     if (!content) return;
-    const sent = await this.registry.send(provider, {
+    const sent = await this.send_with_retry(provider, {
       id: `${provider}-${Date.now()}`,
       provider,
       channel: provider,
@@ -1535,7 +1752,7 @@ export class ChannelManager {
         phase: kind,
         agent_alias: alias,
       },
-    });
+    }, { source: "status_notice" });
     if (!sent.ok) {
       // eslint-disable-next-line no-console
       console.error(`[channel-manager] status notice failed phase=${kind} alias=${alias} err=${sent.error || "unknown_error"}`);
@@ -1627,16 +1844,30 @@ export class ChannelManager {
       ? pending.find((r) => r.request_id === explicit_id)
       : same_chat[0]) || null;
     if (!selected) return false;
+    return this.apply_approval_decision(provider, message, selected.request_id, text, "text");
+  }
 
-    const resolved = tools.resolve_approval_request(selected.request_id, text);
+  private async apply_approval_decision(
+    provider: ChannelProvider,
+    message: InboundMessage,
+    request_id: string,
+    decision_input: string,
+    source: "text" | "reaction",
+  ): Promise<boolean> {
+    if (!this.agent) return false;
+    const tools = this.agent.tools;
+    const selected = tools.get_approval_request(request_id);
+    if (!selected) return false;
+
+    const resolved = tools.resolve_approval_request(selected.request_id, decision_input);
     if (!resolved.ok) return false;
 
     if (resolved.status === "approved") {
       const executed = await tools.execute_approved_request(selected.request_id);
       const summary = executed.ok
-        ? `✅ 승인 반영 완료 · tool=${executed.tool_name}\n${String(executed.result || "").slice(0, 700)}`
-        : `🔴 승인 반영 실패 · tool=${executed.tool_name || selected.tool_name}\n${String(executed.error || "unknown_error").slice(0, 220)}`;
-      await this.registry.send(provider, {
+        ? `✅ 승인 반영 완료(${source}) · tool=${executed.tool_name}\n${String(executed.result || "").slice(0, 700)}`
+        : `🔴 승인 반영 실패(${source}) · tool=${executed.tool_name || selected.tool_name}\n${String(executed.error || "unknown_error").slice(0, 220)}`;
+      await this.send_with_retry(provider, {
         id: `${provider}-${Date.now()}`,
         provider,
         channel: provider,
@@ -1652,7 +1883,7 @@ export class ChannelManager {
           tool_name: selected.tool_name,
           decision: resolved.decision,
         },
-      });
+      }, { source: "approval_result" });
       return true;
     }
 
@@ -1660,16 +1891,16 @@ export class ChannelManager {
       ? "❌ 승인 거부됨"
       : resolved.status === "deferred"
         ? "⏸️ 승인 보류됨"
-        : resolved.status === "cancelled"
+      : resolved.status === "cancelled"
           ? "⛔ 승인 취소됨"
           : "ℹ️ 승인 판단 보류";
-    await this.registry.send(provider, {
+    await this.send_with_retry(provider, {
       id: `${provider}-${Date.now()}`,
       provider,
       channel: provider,
       sender_id: "approval-bot",
       chat_id: message.chat_id,
-      content: `${status_text} · request_id=${selected.request_id} · tool=${selected.tool_name}`,
+      content: `${status_text}(${source}) · request_id=${selected.request_id} · tool=${selected.tool_name}`,
       at: new Date().toISOString(),
       reply_to: this.resolve_reply_to(provider, message),
       thread_id: message.thread_id,
@@ -1679,8 +1910,140 @@ export class ChannelManager {
         tool_name: selected.tool_name,
         decision: resolved.decision,
       },
-    });
+    }, { source: "approval_result" });
     return true;
+  }
+
+  private extract_reaction_names(message: InboundMessage): string[] {
+    const meta = (message.metadata || {}) as Record<string, unknown>;
+    const slack = (meta.slack && typeof meta.slack === "object") ? (meta.slack as Record<string, unknown>) : null;
+    if (!slack) return [];
+    const reactions = Array.isArray(slack.reactions) ? (slack.reactions as Array<Record<string, unknown>>) : [];
+    return reactions
+      .map((row) => String(row.name || "").trim().toLowerCase())
+      .filter(Boolean);
+  }
+
+  private reaction_decision_from_names(names: string[]): "approve" | "deny" | "defer" | "cancel" | null {
+    const set = new Set(names.map((n) => n.toLowerCase()));
+    const approve = ["white_check_mark", "heavy_check_mark", "thumbsup", "+1", "green_heart", "large_green_circle", "ok_hand"];
+    const deny = ["x", "thumbsdown", "-1", "no_entry", "no_entry_sign", "red_circle"];
+    const defer = ["hourglass_flowing_sand", "hourglass", "pause_button", "thinking_face"];
+    const cancel = ["octagonal_sign", "stop_sign"];
+    if (approve.some((n) => set.has(n))) return "approve";
+    if (deny.some((n) => set.has(n))) return "deny";
+    if (defer.some((n) => set.has(n))) return "defer";
+    if (cancel.some((n) => set.has(n))) return "cancel";
+    return null;
+  }
+
+  private mark_reaction_action_seen(key: string): void {
+    this.reaction_actions_seen.set(key, Date.now());
+    if (this.reaction_actions_seen.size > this.seen_max_size + 1_000) {
+      this.prune_reaction_actions_seen(true);
+    }
+  }
+
+  private has_reaction_action_seen(key: string): boolean {
+    return this.reaction_actions_seen.has(key);
+  }
+
+  private prune_reaction_actions_seen(force_size_trim: boolean): void {
+    if (this.reaction_actions_seen.size === 0) return;
+    const now = Date.now();
+    for (const [key, ts] of this.reaction_actions_seen.entries()) {
+      if (now - ts > this.reaction_action_ttl_ms) {
+        this.reaction_actions_seen.delete(key);
+      }
+    }
+    if (!force_size_trim && this.reaction_actions_seen.size <= this.seen_max_size) return;
+    const overflow = this.reaction_actions_seen.size - this.seen_max_size;
+    if (overflow <= 0) return;
+    let removed = 0;
+    for (const key of this.reaction_actions_seen.keys()) {
+      this.reaction_actions_seen.delete(key);
+      removed += 1;
+      if (removed >= overflow) break;
+    }
+  }
+
+  private async try_handle_reaction_controls(provider: ChannelProvider, rows: InboundMessage[]): Promise<void> {
+    if (provider !== "slack") return;
+    if (!this.agent) return;
+    if (!Array.isArray(rows) || rows.length === 0) return;
+    if (this.approval_reaction_enabled) {
+      await this.try_handle_approval_reactions(provider, rows);
+    }
+    if (this.control_reaction_enabled) {
+      await this.try_handle_stop_reactions(provider, rows);
+    }
+  }
+
+  private async try_handle_approval_reactions(provider: ChannelProvider, rows: InboundMessage[]): Promise<void> {
+    if (!this.agent) return;
+    const pending = this.agent.tools.list_approval_requests("pending");
+    if (pending.length <= 0) return;
+    const sorted = [...rows].sort((a, b) => this.extract_timestamp_ms(b) - this.extract_timestamp_ms(a));
+    for (const row of sorted.slice(0, 80)) {
+      const request_id = this.extract_approval_request_id(String(row.content || ""));
+      if (!request_id) continue;
+      const request = pending.find((p) => p.request_id === request_id);
+      if (!request) continue;
+      const names = this.extract_reaction_names(row);
+      if (names.length === 0) continue;
+      const decision = this.reaction_decision_from_names(names);
+      if (!decision) continue;
+      const signature = `${provider}:${row.chat_id}:${request_id}:${decision}:${names.sort().join(",")}`;
+      if (this.has_reaction_action_seen(signature)) continue;
+      this.mark_reaction_action_seen(signature);
+      const decision_input = decision === "approve"
+        ? "✅"
+        : decision === "deny"
+          ? "❌"
+          : decision === "defer"
+            ? "⏸️"
+            : "⛔";
+      await this.apply_approval_decision(provider, row, request_id, decision_input, "reaction");
+      return;
+    }
+  }
+
+  private async try_handle_stop_reactions(provider: ChannelProvider, rows: InboundMessage[]): Promise<void> {
+    if (this.active_runs.size <= 0) return;
+    const stop_tokens = new Set(["stop_sign", "octagonal_sign", "no_entry", "no_entry_sign"]);
+    const now = Date.now();
+    const sorted = [...rows].sort((a, b) => this.extract_timestamp_ms(b) - this.extract_timestamp_ms(a));
+    for (const row of sorted.slice(0, 50)) {
+      const ts = this.extract_timestamp_ms(row);
+      if (ts > 0 && (now - ts) > 10 * 60_000) continue;
+      const names = this.extract_reaction_names(row);
+      const has_stop = names.some((name) => stop_tokens.has(name));
+      if (!has_stop) continue;
+      const row_id = String(row.metadata?.message_id || row.id || "").trim();
+      if (!row_id) continue;
+      const signature = `${provider}:${row.chat_id}:${row_id}:stop:${names.sort().join(",")}`;
+      if (this.has_reaction_action_seen(signature)) continue;
+      this.mark_reaction_action_seen(signature);
+      const cancelled = await this.cancel_active_runs(provider, row.chat_id);
+      if (cancelled <= 0) continue;
+      await this.send_with_retry(provider, {
+        id: `${provider}-${Date.now()}`,
+        provider,
+        channel: provider,
+        sender_id: this.default_agent_alias,
+        chat_id: row.chat_id,
+        content: `⛔ 반응 기반 중지 처리: 실행 중 작업 ${cancelled}건을 중지했습니다.`,
+        at: new Date().toISOString(),
+        reply_to: this.resolve_reply_to(provider, row),
+        thread_id: row.thread_id,
+        metadata: {
+          kind: "reaction_control",
+          action: "stop",
+          source_message_id: row_id,
+        },
+      }, { source: "reaction_control" });
+      return;
+    }
   }
 
   private resolve_provider(message: OutboundMessage): ChannelProvider | null {

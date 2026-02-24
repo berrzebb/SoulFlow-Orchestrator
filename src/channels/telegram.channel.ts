@@ -112,7 +112,10 @@ export class TelegramChannel extends BaseChannel {
     if (!this.bot_token) return { ok: false, error: "telegram_bot_token_missing" };
     try {
       await this.set_typing(chat_id, true);
-      let response: Response;
+      const text = as_string(message.content || "");
+      const chunk_size = Math.max(500, Number(process.env.TELEGRAM_TEXT_CHUNK_SIZE || 3500));
+      const file_fallback_threshold = Math.max(8_000, Number(process.env.TELEGRAM_TEXT_FILE_FALLBACK_THRESHOLD || 14_000));
+      let first_message_id = "";
       if (Array.isArray(message.media) && message.media.length > 0) {
         const media = message.media[0];
         const filePath = String(media.url || "");
@@ -124,31 +127,52 @@ export class TelegramChannel extends BaseChannel {
         const form = new FormData();
         form.set("chat_id", chat_id);
         form.set(isPhoto ? "photo" : "document", new Blob([bytes]), media.name || basename(filePath));
-        if (message.content) form.set("caption", as_string(message.content));
+        if (text) form.set("caption", as_string(text).slice(0, 900));
         if (message.reply_to) form.set("reply_to_message_id", as_string(message.reply_to));
-        response = await fetch(url, {
+        const response = await fetch(url, {
           method: "POST",
           body: form,
         });
-      } else {
-        const url = `${this.api_base}/bot${this.bot_token}/sendMessage`;
-        const payload: Record<string, unknown> = {
-          chat_id,
-          text: as_string(message.content || ""),
-        };
-        if (message.reply_to) payload.reply_to_message_id = message.reply_to;
-        response = await fetch(url, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
+        const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+        if (!response.ok || data.ok !== true) {
+          return { ok: false, error: as_string(data.description || `http_${response.status}`) };
+        }
+        const result = (data.result && typeof data.result === "object") ? (data.result as Record<string, unknown>) : {};
+        first_message_id = as_string(result.message_id || "");
+      } else if (text) {
+        if (text.length >= file_fallback_threshold) {
+          const doc = await this.send_text_document(
+            chat_id,
+            text,
+            `long-message-${Date.now()}.txt`,
+            as_string(message.reply_to || ""),
+          );
+          if (!doc.ok) return doc;
+          first_message_id = as_string(doc.message_id || "");
+        } else {
+          const chunks = this.split_text_chunks(text, chunk_size);
+          for (let idx = 0; idx < chunks.length; idx += 1) {
+            const url = `${this.api_base}/bot${this.bot_token}/sendMessage`;
+            const payload: Record<string, unknown> = {
+              chat_id,
+              text: chunks.length > 1 ? `[${idx + 1}/${chunks.length}]\n${chunks[idx]}` : chunks[idx],
+            };
+            if (idx === 0 && message.reply_to) payload.reply_to_message_id = message.reply_to;
+            const response = await fetch(url, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(payload),
+            });
+            const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+            if (!response.ok || data.ok !== true) {
+              return { ok: false, error: as_string(data.description || `http_${response.status}`) };
+            }
+            const result = (data.result && typeof data.result === "object") ? (data.result as Record<string, unknown>) : {};
+            if (!first_message_id) first_message_id = as_string(result.message_id || "");
+          }
+        }
       }
-      const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
-      if (!response.ok || data.ok !== true) {
-        return { ok: false, error: as_string(data.description || `http_${response.status}`) };
-      }
-      const result = (data.result && typeof data.result === "object") ? (data.result as Record<string, unknown>) : {};
-      return { ok: true, message_id: as_string(result.message_id || "") };
+      return { ok: true, message_id: first_message_id || as_string(message.reply_to || "") };
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : String(error) };
     } finally {
@@ -204,5 +228,54 @@ export class TelegramChannel extends BaseChannel {
         action: "typing",
       }),
     });
+  }
+
+  private split_text_chunks(raw: string, max_chars: number): string[] {
+    const text = String(raw || "");
+    const max = Math.max(500, Number(max_chars || 3500));
+    if (text.length <= max) return [text];
+    const out: string[] = [];
+    let cursor = 0;
+    while (cursor < text.length) {
+      const remain = text.length - cursor;
+      if (remain <= max) {
+        out.push(text.slice(cursor));
+        break;
+      }
+      const probe = text.slice(cursor, cursor + max);
+      const hard_break = Math.max(probe.lastIndexOf("\n\n"), probe.lastIndexOf("\n"), probe.lastIndexOf(" "));
+      const take = hard_break > Math.floor(max * 0.55) ? hard_break : max;
+      out.push(text.slice(cursor, cursor + take).trim());
+      cursor += take;
+    }
+    return out.filter((v) => Boolean(String(v || "").trim()));
+  }
+
+  private async send_text_document(
+    chat_id: string,
+    text: string,
+    filename: string,
+    reply_to_message_id?: string,
+  ): Promise<{ ok: boolean; message_id?: string; error?: string }> {
+    const url = `${this.api_base}/bot${this.bot_token}/sendDocument`;
+    const form = new FormData();
+    form.set("chat_id", chat_id);
+    if (reply_to_message_id) form.set("reply_to_message_id", reply_to_message_id);
+    form.set("caption", `본문이 길어 파일로 전송했습니다. (chars=${text.length})`);
+    form.set(
+      "document",
+      new Blob([String(text || "")], { type: "text/plain;charset=utf-8" }),
+      filename,
+    );
+    const response = await fetch(url, {
+      method: "POST",
+      body: form,
+    });
+    const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+    if (!response.ok || data.ok !== true) {
+      return { ok: false, error: as_string(data.description || `http_${response.status}`) };
+    }
+    const result = (data.result && typeof data.result === "object") ? (data.result as Record<string, unknown>) : {};
+    return { ok: true, message_id: as_string(result.message_id || "") };
   }
 }

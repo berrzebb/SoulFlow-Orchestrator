@@ -4,6 +4,25 @@ import { SlackChannel } from "./slack.channel.js";
 import { TelegramChannel } from "./telegram.channel.js";
 import type { ChannelHealth, ChannelProvider, ChannelRef, ChannelTypingState, ChatChannel } from "./types.js";
 
+async function sleep(ms: number): Promise<void> {
+  const delay = Math.max(0, Number(ms || 0));
+  if (delay <= 0) return;
+  await new Promise<void>((resolve) => setTimeout(resolve, delay));
+}
+
+function is_retryable_send_error(error: string): boolean {
+  const raw = String(error || "").trim().toLowerCase();
+  if (!raw) return true;
+  if (raw.includes("invalid_auth")) return false;
+  if (raw.includes("not_authed")) return false;
+  if (raw.includes("channel_not_found")) return false;
+  if (raw.includes("chat_id_required")) return false;
+  if (raw.includes("bot_token_missing")) return false;
+  if (raw.includes("permission_denied")) return false;
+  if (raw.includes("invalid_arguments")) return false;
+  return true;
+}
+
 export type {
   ChannelConfig,
   ChannelHealth,
@@ -58,7 +77,16 @@ export class ChannelRegistry {
   async send(provider: ChannelProvider, message: OutboundMessage): Promise<{ ok: boolean; message_id?: string; error?: string }> {
     const channel = this.channels.get(provider);
     if (!channel) return { ok: false, error: `channel_not_registered:${provider}` };
-    return channel.send(message);
+    const retries = Math.max(0, Number(process.env.CHANNEL_SEND_INLINE_RETRIES || 1));
+    const base_delay = Math.max(100, Number(process.env.CHANNEL_SEND_INLINE_RETRY_MS || 350));
+    let last = await channel.send(message);
+    if (last.ok || retries <= 0 || !is_retryable_send_error(String(last.error || ""))) return last;
+    for (let attempt = 1; attempt <= retries; attempt += 1) {
+      await sleep(base_delay * attempt);
+      last = await channel.send(message);
+      if (last.ok || !is_retryable_send_error(String(last.error || ""))) return last;
+    }
+    return last;
   }
 
   async read(provider: ChannelProvider, chat_id: string, limit?: number): Promise<InboundMessage[]> {

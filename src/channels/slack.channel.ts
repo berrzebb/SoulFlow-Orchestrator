@@ -78,23 +78,44 @@ export class SlackChannel extends BaseChannel {
     if (!this.bot_token) return { ok: false, error: "slack_bot_token_missing" };
     try {
       await this.set_typing(channel, true);
-      const payload: Record<string, unknown> = {
-        channel,
-        text: String(message.content || ""),
-      };
-      if (message.reply_to) payload.thread_ts = message.reply_to;
-      const response = await fetch("https://slack.com/api/chat.postMessage", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${this.bot_token}`,
-          "Content-Type": "application/json; charset=utf-8",
-        },
-        body: JSON.stringify(payload),
-      });
-      const data = (await response.json()) as Record<string, unknown>;
-      if (!response.ok || data.ok !== true) {
-        return { ok: false, error: String(data.error || `http_${response.status}`) };
+      const text = String(message.content || "");
+      const thread_ts = String(message.reply_to || "").trim() || undefined;
+      const chunk_size = Math.max(500, Number(process.env.SLACK_TEXT_CHUNK_SIZE || 3200));
+      const file_fallback_threshold = Math.max(8_000, Number(process.env.SLACK_TEXT_FILE_FALLBACK_THRESHOLD || 14_000));
+      let root_message_ts = "";
+
+      if (text.trim()) {
+        if (text.length >= file_fallback_threshold) {
+          const notice = await this.post_text_message(
+            channel,
+            `본문이 길어 첨부 파일로 전송했습니다. (chars=${text.length})`,
+            thread_ts,
+          );
+          if (!notice.ok) return notice;
+          root_message_ts = String(notice.message_id || "");
+          const upload = await this.upload_text_file(
+            channel,
+            text,
+            `long-message-${Date.now()}.txt`,
+            thread_ts || root_message_ts || undefined,
+          );
+          if (!upload.ok) return upload;
+        } else {
+          const chunks = this.split_text_chunks(text, chunk_size);
+          for (let idx = 0; idx < chunks.length; idx += 1) {
+            const part = chunks[idx];
+            const prefix = chunks.length > 1 ? `[${idx + 1}/${chunks.length}]\n` : "";
+            const posted = await this.post_text_message(
+              channel,
+              `${prefix}${part}`,
+              thread_ts || root_message_ts || undefined,
+            );
+            if (!posted.ok) return posted;
+            if (!root_message_ts) root_message_ts = String(posted.message_id || "");
+          }
+        }
       }
+
       if (Array.isArray(message.media) && message.media.length > 0) {
         for (const media of message.media) {
           if (!media?.url) continue;
@@ -105,16 +126,21 @@ export class SlackChannel extends BaseChannel {
           form.set("filename", media.name || basename(filePath));
           form.set("filetype", media.mime || "auto");
           form.set("file", new Blob([bytes]), media.name || basename(filePath));
-          await fetch("https://slack.com/api/files.upload", {
+          if (thread_ts || root_message_ts) form.set("thread_ts", thread_ts || root_message_ts);
+          const upload = await fetch("https://slack.com/api/files.upload", {
             method: "POST",
             headers: {
               Authorization: `Bearer ${this.bot_token}`,
             },
             body: form,
           });
+          const data = (await upload.json().catch(() => ({}))) as Record<string, unknown>;
+          if (!upload.ok || data.ok !== true) {
+            return { ok: false, error: String(data.error || `http_${upload.status}`) };
+          }
         }
       }
-      return { ok: true, message_id: String(data.ts || "") };
+      return { ok: true, message_id: root_message_ts || String(message.reply_to || "") };
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : String(error) };
     } finally {
@@ -231,5 +257,77 @@ export class SlackChannel extends BaseChannel {
       };
     }
     return data;
+  }
+
+  private split_text_chunks(raw: string, max_chars: number): string[] {
+    const text = String(raw || "");
+    const max = Math.max(500, Number(max_chars || 3200));
+    if (text.length <= max) return [text];
+    const out: string[] = [];
+    let cursor = 0;
+    while (cursor < text.length) {
+      const remain = text.length - cursor;
+      if (remain <= max) {
+        out.push(text.slice(cursor));
+        break;
+      }
+      const probe = text.slice(cursor, cursor + max);
+      const hard_break = Math.max(probe.lastIndexOf("\n\n"), probe.lastIndexOf("\n"), probe.lastIndexOf(" "));
+      const take = hard_break > Math.floor(max * 0.55) ? hard_break : max;
+      out.push(text.slice(cursor, cursor + take).trim());
+      cursor += take;
+    }
+    return out.filter((v) => Boolean(String(v || "").trim()));
+  }
+
+  private async post_text_message(
+    channel: string,
+    text: string,
+    thread_ts?: string,
+  ): Promise<{ ok: boolean; message_id?: string; error?: string }> {
+    const payload: Record<string, unknown> = {
+      channel,
+      text: String(text || ""),
+    };
+    if (thread_ts) payload.thread_ts = thread_ts;
+    const response = await fetch("https://slack.com/api/chat.postMessage", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${this.bot_token}`,
+        "Content-Type": "application/json; charset=utf-8",
+      },
+      body: JSON.stringify(payload),
+    });
+    const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+    if (!response.ok || data.ok !== true) {
+      return { ok: false, error: String(data.error || `http_${response.status}`) };
+    }
+    return { ok: true, message_id: String(data.ts || "") };
+  }
+
+  private async upload_text_file(
+    channel: string,
+    text: string,
+    filename: string,
+    thread_ts?: string,
+  ): Promise<{ ok: boolean; error?: string }> {
+    const form = new FormData();
+    form.set("channels", channel);
+    form.set("filename", filename);
+    form.set("filetype", "text");
+    form.set("file", new Blob([String(text || "")], { type: "text/plain;charset=utf-8" }), filename);
+    if (thread_ts) form.set("thread_ts", thread_ts);
+    const upload = await fetch("https://slack.com/api/files.upload", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${this.bot_token}`,
+      },
+      body: form,
+    });
+    const data = (await upload.json().catch(() => ({}))) as Record<string, unknown>;
+    if (!upload.ok || data.ok !== true) {
+      return { ok: false, error: String(data.error || `http_${upload.status}`) };
+    }
+    return { ok: true };
   }
 }
