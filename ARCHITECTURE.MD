@@ -57,11 +57,19 @@ Project: `SoulFlow Orchestrator`
 
 4. Inbound 처리
 - 승인 텍스트 응답 처리
-- `/stop|/cancel|/중지` 명령 처리
+- `/stop|/cancel|/중지`, `/help`, `/render`, `/secret`, `/cron` 공통 명령 처리
 - read-ack reaction + typing 갱신
 - 에이전트 멘션 처리 또는 plain auto reply
 
-5. 컨텍스트 구성
+5. 민감정보 선차단 (오케스트레이터 레벨)
+- 채널 수신 텍스트/스레드 문맥/미디어 경로에 대해 즉시 sealing 수행:
+  - `seal_inbound_sensitive_text` (`src/security/inbound-seal.ts`)
+  - 키 규칙: `inbound.<provider>.c<chatHash>.<type>.v<valueHash>`
+- Secret reference/ciphertext 무결성 검사:
+  - `inspect_secret_references_for_orchestration`
+  - missing key / invalid ciphertext 발견 시 에이전트 실행 없이 `secret_resolution_required` 템플릿 응답
+
+6. 컨텍스트 구성
 - 세션 history + 첨부 파일 + thread nearby context 결합
 - `ContextBuilder`로 시스템 프롬프트 생성 후 provider 실행
 
@@ -136,11 +144,18 @@ Project: `SoulFlow Orchestrator`
 ## 9. Tools 및 승인 흐름
 - Registry: `src/agent/tools/registry.ts`
 - 기본 툴: 파일/쉘/웹/메시지/파일요청/spawn/cron + 동적 툴
+- `diagram_render` 툴: Mermaid -> SVG/ASCII 렌더 (`src/agent/tools/diagram.ts`)
 - 승인 흐름:
   - 툴이 `approval_required` 반환
   - approval request 발행
   - 텍스트 또는 reaction으로 결정
   - 승인 시 재실행
+
+### Tool 레벨 비밀값 해석
+- 모든 Tool 실행은 `Tool.execute` 공통 경로에서 secret 해석 수행 (`src/agent/tools/base.ts`)
+- `resolve_inline_secrets_with_report` 결과에 따라:
+  - 정상: 도구 내부 실행
+  - 실패: `Error: secret_resolution_required` 템플릿 반환 (복호화 금지)
 
 ## 10. Provider 구조
 `ProviderRegistry` 라우팅 대상:
@@ -187,6 +202,9 @@ Project: `SoulFlow Orchestrator`
 - `memory/`
   - `MEMORY.md`
   - `yyyy-mm-dd.md`
+- `runtime/security/`
+  - `master.key`
+  - `secrets.json`
 - `runtime/sessions/*.jsonl`
 - `runtime/tasks/store.json`
 - `runtime/tasks/details/*.md`
@@ -196,6 +214,15 @@ Project: `SoulFlow Orchestrator`
 - `runtime/cron/cron-store.json`
 - `runtime/dlq/outbound.jsonl`
 - `runtime/inbound-files/*`
+
+## 16. 채널 파일 입출력 경로
+- 수신 첨부/파일 URL은 `runtime/inbound-files/<provider>/`에 저장
+- 저장된 로컬 파일 경로만 분석 컨텍스트에 주입
+- 원격 URL은 직접 media attach 하지 않고 다운로드 후 로컬 경로로 표준화
+
+## 17. 다이어그램 (diagram tool 생성물)
+- `docs/diagrams/orchestrator-flow.svg`
+- `docs/diagrams/sensitive-seal-flow.svg`
 
 ## 15. 실패/복구 전략
 - 루프는 기본 논블로킹

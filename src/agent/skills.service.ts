@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
-import { join, relative, sep } from "node:path";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import type { SkillMetadata, SkillSource } from "./skills.types.js";
 
 function walk_skill_files(root: string): string[] {
@@ -18,6 +18,25 @@ function walk_skill_files(root: string): string[] {
   return out;
 }
 
+function collect_builtin_skill_roots(start: string): string[] {
+  const roots: string[] = [];
+  const seen = new Set<string>();
+  let current = resolve(start);
+  while (true) {
+    const candidates = [join(current, "src", "skills"), join(current, "builtin_skills")];
+    for (const candidate of candidates) {
+      const key = resolve(candidate).toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      if (existsSync(candidate)) roots.push(candidate);
+    }
+    const parent = dirname(current);
+    if (parent === current) break;
+    current = parent;
+  }
+  return roots;
+}
+
 export class SkillsLoader {
   private readonly workspace: string;
   private readonly workspace_skills_root: string;
@@ -31,11 +50,23 @@ export class SkillsLoader {
   constructor(workspace: string) {
     this.workspace = workspace;
     this.workspace_skills_root = join(workspace, "skills");
-    this.builtin_skills_roots = [
-      join(workspace, "src", "skills"),
-      join(workspace, "builtin_skills"),
-    ];
+    this.builtin_skills_roots = collect_builtin_skill_roots(workspace);
     this._scan_all();
+  }
+
+  private _refresh(): void {
+    this._scan_all();
+  }
+
+  private _resolve_skill_name(name: string): string | null {
+    const raw = String(name || "").trim();
+    if (!raw) return null;
+    if (this.merged.has(raw)) return raw;
+    const lowered = raw.toLowerCase();
+    for (const key of this.merged.keys()) {
+      if (key.toLowerCase() === lowered) return key;
+    }
+    return null;
   }
 
   private _scan_all(): void {
@@ -59,7 +90,7 @@ export class SkillsLoader {
       const body = this._strip_formatter(raw);
       const rel = relative(root, skillPath).split(sep).join("/");
       const name = String(meta.name || meta.id || rel.replace(/\/SKILL\.md$/i, "").replace(/\//g, "."));
-      const summary = String(meta.summary || this._extract_summary(body));
+      const summary = String(meta.summary || meta.description || this._extract_summary(body));
       const always = Boolean(meta.always === true || meta.autoload === true || String(meta.load || "").toLowerCase() === "always");
       const requirements = Array.isArray(meta.requires) ? meta.requires.map((v) => String(v)) : [];
 
@@ -87,6 +118,7 @@ export class SkillsLoader {
   }
 
   list_skills(filter_unavailable = false): Array<Record<string, string>> {
+    this._refresh();
     const out: Array<Record<string, string>> = [];
     for (const meta of this.merged.values()) {
       if (filter_unavailable && !this._check_requirements(meta.frontmatter)) continue;
@@ -101,15 +133,33 @@ export class SkillsLoader {
   }
 
   load_skills(name: string): string | null {
-    const raw = this.raw_by_name.get(name);
+    this._refresh();
+    const resolved = this._resolve_skill_name(name);
+    if (!resolved) return null;
+    const raw = this.raw_by_name.get(resolved);
     if (!raw) return null;
     return this._strip_formatter(raw);
   }
 
   load_skills_for_context(skill_names: string[]): string {
-    const parts: string[] = [];
+    this._refresh();
+    const selected = new Set<string>();
+    // Always skills are pinned in context only when requirements are satisfied.
+    for (const meta of this.merged.values()) {
+      if (meta.always && this._check_requirements(meta.frontmatter)) selected.add(meta.name);
+    }
     for (const name of skill_names) {
-      const content = this.load_skills(name);
+      const resolved = this._resolve_skill_name(name);
+      if (!resolved) continue;
+      const meta = this.merged.get(resolved);
+      if (!meta) continue;
+      if (!this._check_requirements(meta.frontmatter)) continue;
+      selected.add(resolved);
+    }
+    const parts: string[] = [];
+    for (const name of selected) {
+      const raw = this.raw_by_name.get(name);
+      const content = raw ? this._strip_formatter(raw) : null;
       if (!content) continue;
       parts.push(`# skill:${name}\n${content}`.trim());
     }
@@ -117,7 +167,7 @@ export class SkillsLoader {
   }
 
   build_skill_summary(): string {
-    const rows = this.list_skills(false);
+    const rows = this.list_skills(true);
     return rows.map((r) => `- ${r.name} [${r.source}]${r.always === "true" ? " [always]" : ""}: ${r.summary}`).join("\n");
   }
 
@@ -128,7 +178,10 @@ export class SkillsLoader {
   }
 
   get_skill_meta(name: string): Record<string, unknown> | null {
-    const meta = this.merged.get(name);
+    this._refresh();
+    const resolved = this._resolve_skill_name(name);
+    if (!resolved) return null;
+    const meta = this.merged.get(resolved);
     return meta ? { ...meta.frontmatter } : null;
   }
 
@@ -194,15 +247,19 @@ export class SkillsLoader {
   }
 
   get_always_skills(): string[] {
+    this._refresh();
     const out: string[] = [];
     for (const meta of this.merged.values()) {
-      if (meta.always) out.push(meta.name);
+      if (meta.always && this._check_requirements(meta.frontmatter)) out.push(meta.name);
     }
     return out;
   }
 
   get_skill_metadata(name: string): Record<string, unknown> | null {
-    const meta = this.merged.get(name);
+    this._refresh();
+    const resolved = this._resolve_skill_name(name);
+    if (!resolved) return null;
+    const meta = this.merged.get(resolved);
     if (!meta) return null;
     return {
       name: meta.name,

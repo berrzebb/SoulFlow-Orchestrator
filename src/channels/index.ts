@@ -123,6 +123,7 @@ export class ChannelRegistry {
       sender_alias?: string;
       limit?: number;
       media?: OutboundMessage["media"];
+      metadata?: Record<string, unknown>;
     },
   ): Promise<{ ok: boolean; message_id?: string; error?: string }> {
     const channel = this.channels.get(provider);
@@ -145,6 +146,7 @@ export class ChannelRegistry {
         kind: "agent_reply",
         agent_alias,
         trigger_message_id: String(trigger?.metadata?.message_id || trigger?.id || ""),
+        ...(options?.metadata || {}),
       },
     };
     return channel.send(message);

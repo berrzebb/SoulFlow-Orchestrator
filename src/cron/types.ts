@@ -25,6 +25,8 @@ export type CronJobState = {
   last_run_at_ms?: number | null;
   last_status?: CronJobStatus | null;
   last_error?: string | null;
+  running?: boolean;
+  running_started_at_ms?: number | null;
 };
 
 export type CronJob = {
@@ -48,6 +50,7 @@ export type CronOnJob = (job: CronJob) => Promise<string | null>;
 
 export type CronServiceOptions = {
   default_tick_ms?: number;
+  running_lease_ms?: number;
 };
 
 export type CronServiceStatus = {

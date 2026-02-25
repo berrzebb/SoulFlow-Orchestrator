@@ -9,6 +9,8 @@ import type {
   MemoryKind,
 } from "./memory.types.js";
 import { file_exists, today_key } from "../utils/common.js";
+import { redact_sensitive_text } from "../security/sensitive.js";
+import { SecretVaultService } from "../security/secret-vault.js";
 
 const SAVE_MEMORY_TOOL = [
   {
@@ -232,6 +234,7 @@ export class MemoryStore {
     model: string,
     options?: { archive_all?: boolean; memory_window?: number },
   ): Promise<boolean> {
+    const secret_vault = new SecretVaultService(this.root);
     const archiveAll = !!options?.archive_all;
     const memoryWindow = Math.max(4, Number(options?.memory_window || 50));
 
@@ -255,11 +258,12 @@ export class MemoryStore {
         ? ` [tools: ${m.tools_used.join(", ")}]`
         : "";
       const ts = String(m.timestamp || "?").slice(0, 16);
-      lines.push(`[${ts}] ${String(m.role || "unknown").toUpperCase()}${tools}: ${String(m.content)}`);
+      const content_masked = redact_sensitive_text(await secret_vault.mask_known_secrets(String(m.content))).text;
+      lines.push(`[${ts}] ${String(m.role || "unknown").toUpperCase()}${tools}: ${content_masked}`);
     }
     if (lines.length === 0) return true;
 
-    const currentMemory = await this.read_longterm();
+    const currentMemory = redact_sensitive_text(await secret_vault.mask_known_secrets(await this.read_longterm())).text;
     const prompt = [
       "Process this conversation and call the save_memory tool with your consolidation.",
       "",

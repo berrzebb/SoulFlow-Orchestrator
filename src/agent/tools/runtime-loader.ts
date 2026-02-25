@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ToolRegistry } from "./registry.js";
@@ -51,7 +52,8 @@ export class ToolRuntimeReloader {
   private signature(): string {
     try {
       const raw = readFileSync(this.loader.manifest_path, "utf-8");
-      return `${raw.length}:${raw.slice(0, 128)}`;
+      const hash = createHash("sha1").update(raw).digest("hex");
+      return `${raw.length}:${hash}`;
     } catch {
       return "missing";
     }

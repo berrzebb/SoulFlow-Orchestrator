@@ -22,6 +22,7 @@ export type AgentLoopRunOptions = {
   objective: string;
   context_builder: ContextBuilder;
   providers: ProviderRegistry;
+  tools?: Record<string, unknown>[];
   provider_id?: ProviderId;
   current_message?: string;
   history_days?: string[];

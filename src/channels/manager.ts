@@ -2,11 +2,27 @@ import type { MessageBus } from "../bus/index.js";
 import type { InboundMessage, OutboundMessage, MediaItem } from "../bus/types.js";
 import type { ProviderRegistry } from "../providers/index.js";
 import type { AgentDomain } from "../agent/index.js";
+import type { CronService } from "../cron/index.js";
+import type { CronSchedule } from "../cron/types.js";
 import type { SessionStore } from "../session/index.js";
+import { parse_executor_preference, resolve_executor_provider } from "../providers/executor.js";
 import { create_default_channels, type ChannelProvider, type ChannelRegistry } from "./index.js";
+import { parse_slash_command_from_message, slash_name_in, slash_token_in, type ParsedSlashCommand } from "./slash-command.js";
+import {
+  default_render_profile,
+  normalize_block_policy,
+  normalize_render_mode,
+  render_agent_output,
+  type BlockPolicy,
+  type RenderMode,
+  type RenderProfile,
+} from "./rendering.js";
 import { appendFile, mkdir, writeFile } from "node:fs/promises";
 import { basename, dirname, extname, join, resolve } from "node:path";
 import type { TaskNode } from "../agent/loop.js";
+import { redact_sensitive_text } from "../security/sensitive.js";
+import { SecretVaultService } from "../security/secret-vault.js";
+import { seal_inbound_sensitive_text } from "../security/inbound-seal.js";
 
 export type ChannelManagerStatus = {
   running: boolean;
@@ -15,11 +31,59 @@ export type ChannelManagerStatus = {
   enabled_channels: ChannelProvider[];
 };
 
+type AgentRunResult = {
+  reply: string | null;
+  error?: string;
+  stream_emitted_count?: number;
+  stream_last_content?: string;
+  stream_full_content?: string;
+};
+
+type StreamEmitState = {
+  buffer: string;
+  last_emit_at: number;
+  emitted_count: number;
+  last_content: string;
+  full_content: string;
+  last_sent_key: string;
+  last_sent_at: number;
+  last_source_chunk: string;
+};
+
+type CronQuickAction = "status" | "list" | "add" | "remove";
+
+const STOP_COMMAND_ALIASES = ["stop", "cancel", "중지"] as const;
+const HELP_COMMAND_ALIASES = ["help", "commands", "cmd", "도움말", "명령어"] as const;
+const RENDER_ROOT_COMMAND_ALIASES = ["render", "format", "fmt", "렌더", "포맷"] as const;
+const RENDER_STATUS_ARG_ALIASES = ["status", "show", "상태"] as const;
+const RENDER_RESET_ARG_ALIASES = ["reset", "기본", "초기화"] as const;
+const RENDER_LINK_ARG_ALIASES = ["link", "links", "링크"] as const;
+const RENDER_IMAGE_ARG_ALIASES = ["image", "images", "img", "이미지"] as const;
+const SECRET_ROOT_COMMAND_ALIASES = ["secret", "secrets", "vault", "비밀"] as const;
+const SECRET_LIST_ARG_ALIASES = ["list", "ls", "목록"] as const;
+const SECRET_STATUS_ARG_ALIASES = ["status", "show", "상태"] as const;
+const SECRET_SET_ARG_ALIASES = ["set", "put", "저장"] as const;
+const SECRET_GET_ARG_ALIASES = ["get", "cipher", "암호문"] as const;
+const SECRET_REVEAL_ARG_ALIASES = ["reveal", "decrypt-name", "평문", "복호화"] as const;
+const SECRET_REMOVE_ARG_ALIASES = ["remove", "rm", "delete", "삭제"] as const;
+const SECRET_ENCRYPT_ARG_ALIASES = ["encrypt", "enc", "암호화"] as const;
+const SECRET_DECRYPT_ARG_ALIASES = ["decrypt", "dec", "복호화문"] as const;
+const CRON_ROOT_COMMAND_ALIASES = ["cron", "크론"] as const;
+const CRON_STATUS_COMMAND_ALIASES = ["cron-status", "cron_status", "크론상태", "크론-상태"] as const;
+const CRON_LIST_COMMAND_ALIASES = ["cron-list", "cron_list", "크론목록", "크론-목록"] as const;
+const CRON_ADD_COMMAND_ALIASES = ["cron-add", "cron_add", "크론추가", "크론-추가"] as const;
+const CRON_REMOVE_COMMAND_ALIASES = ["cron-remove", "cron_remove", "cron-delete", "cron_delete", "크론삭제", "크론-삭제"] as const;
+const CRON_STATUS_ARG_ALIASES = ["status", "상태", "확인", "조회"] as const;
+const CRON_LIST_ARG_ALIASES = ["jobs", "list", "목록", "리스트"] as const;
+const CRON_ADD_ARG_ALIASES = ["add", "추가", "등록", "create"] as const;
+const CRON_REMOVE_ARG_ALIASES = ["remove", "delete", "삭제", "제거"] as const;
+
 export class ChannelManager {
   readonly bus: MessageBus;
   readonly registry: ChannelRegistry;
   readonly providers: ProviderRegistry | null;
   readonly agent: AgentDomain | null;
+  readonly cron: CronService | null;
   readonly sessions: SessionStore | null;
 
   private running = false;
@@ -62,6 +126,10 @@ export class ChannelManager {
   private readonly control_reaction_enabled: boolean;
   private readonly reaction_action_ttl_ms: number;
   private readonly reaction_actions_seen = new Map<string, number>();
+  private readonly session_history_max_age_ms: number;
+  private readonly suppress_final_after_stream: boolean;
+  private readonly render_profiles = new Map<string, RenderProfile>();
+  private readonly secret_vault: SecretVaultService;
 
   constructor(args: {
     bus: MessageBus;
@@ -69,6 +137,7 @@ export class ChannelManager {
     provider_hint?: string;
     providers?: ProviderRegistry | null;
     agent?: AgentDomain | null;
+    cron?: CronService | null;
     sessions?: SessionStore | null;
     auto_reply_on_plain_message?: boolean;
     default_agent_alias?: string;
@@ -80,6 +149,7 @@ export class ChannelManager {
     this.registry = args.registry || create_default_channels(args.provider_hint);
     this.providers = args.providers || null;
     this.agent = args.agent || null;
+    this.cron = args.cron || null;
     this.sessions = args.sessions || null;
     this.auto_reply_on_plain_message = args.auto_reply_on_plain_message ?? (String(process.env.CHANNEL_AUTO_REPLY || "1") !== "0");
     this.default_agent_alias = args.default_agent_alias || String(process.env.DEFAULT_AGENT_ALIAS || "assistant");
@@ -92,7 +162,7 @@ export class ChannelManager {
     this.stream_emit_interval_ms = Math.max(500, Number(process.env.CHANNEL_STREAMING_INTERVAL_MS || 1400));
     this.stream_emit_min_chars = Math.max(16, Number(process.env.CHANNEL_STREAMING_MIN_CHARS || 48));
     this.status_notice_enabled = String(process.env.CHANNEL_STATUS_NOTICE || "0").trim() === "1";
-    this.grouping_enabled = String(process.env.CHANNEL_GROUPING_ENABLED || "1").trim() !== "0";
+    this.grouping_enabled = String(process.env.CHANNEL_GROUPING_ENABLED || "0").trim() !== "0";
     this.grouping_window_ms = Math.max(500, Number(process.env.CHANNEL_GROUPING_WINDOW_MS || 3500));
     this.grouping_max_messages = Math.max(2, Number(process.env.CHANNEL_GROUPING_MAX_MESSAGES || 8));
     this.seen_ttl_ms = Math.max(60_000, Number(process.env.CHANNEL_SEEN_TTL_MS || 86_400_000));
@@ -112,6 +182,9 @@ export class ChannelManager {
     this.approval_reaction_enabled = String(process.env.APPROVAL_REACTION_ENABLED || "1").trim() !== "0";
     this.control_reaction_enabled = String(process.env.CONTROL_REACTION_ENABLED || "1").trim() !== "0";
     this.reaction_action_ttl_ms = Math.max(60_000, Number(process.env.REACTION_ACTION_TTL_MS || 86_400_000));
+    this.session_history_max_age_ms = Math.max(0, Number(process.env.CHANNEL_SESSION_HISTORY_MAX_AGE_MS || 1_800_000));
+    this.suppress_final_after_stream = String(process.env.CHANNEL_SUPPRESS_FINAL_AFTER_STREAM || "1").trim() !== "0";
+    this.secret_vault = new SecretVaultService(this.workspace_dir);
   }
 
   async start(): Promise<void> {
@@ -249,6 +322,7 @@ export class ChannelManager {
     mention_sender?: boolean;
     sender_alias?: string;
     limit?: number;
+    metadata?: Record<string, unknown>;
   }): Promise<{ ok: boolean; message_id?: string; error?: string }> {
     return this.registry.reply_as_agent(
       args.provider,
@@ -260,6 +334,7 @@ export class ChannelManager {
         sender_alias: args.sender_alias,
         limit: args.limit,
         media: args.media,
+        metadata: args.metadata,
       },
     );
   }
@@ -277,24 +352,9 @@ export class ChannelManager {
     if (!provider) return;
     const approval_handled = await this.try_handle_approval_reply(provider, message);
     if (approval_handled) return;
-    const cmd = this.extract_command_name(message);
-    if (cmd === "stop" || cmd === "cancel" || cmd === "중지") {
-      const cancelled = await this.cancel_active_runs(provider, message.chat_id);
-      await this.registry.send(provider, {
-        id: `${provider}-${Date.now()}`,
-        provider,
-        channel: provider,
-        sender_id: this.default_agent_alias,
-        chat_id: message.chat_id,
-        content: cancelled > 0
-          ? `@${message.sender_id} ⛔ 실행 중 작업 ${cancelled}건을 중지했습니다.`
-          : `@${message.sender_id} 중지할 실행 작업이 없습니다.`,
-        at: new Date().toISOString(),
-        reply_to: this.resolve_reply_to(provider, message),
-        thread_id: message.thread_id,
-      });
-      return;
-    }
+    const slash_command = parse_slash_command_from_message(message);
+    const slash_handled = await this.try_handle_common_slash_command(provider, message, slash_command);
+    if (slash_handled) return;
     await this.try_read_ack(provider, message);
     if (this.debug) {
       // eslint-disable-next-line no-console
@@ -316,7 +376,17 @@ export class ChannelManager {
         await this.send_status_notice(provider, message, "failed", this.default_agent_alias, result.error);
         return;
       }
-      const rendered = this.build_user_render_payload(result.reply, provider);
+      const rendered = this.build_user_render_payload(result.reply, provider, message.chat_id);
+      if (this.should_suppress_final_after_stream_send(provider, result)) {
+        await this.record_assistant_message(
+          provider,
+          message,
+          this.default_agent_alias,
+          rendered.content || String(result.reply || ""),
+        );
+        await this.send_status_notice(provider, message, "done", this.default_agent_alias);
+        return;
+      }
       const plainContent = provider === "telegram"
         ? rendered.content
         : `@${message.sender_id} ${rendered.content}`.trim();
@@ -335,6 +405,8 @@ export class ChannelManager {
           kind: "agent_reply",
           agent_alias: this.default_agent_alias,
           trigger_message_id: String(message.metadata?.message_id || message.id || ""),
+          render_mode: rendered.render_mode,
+          render_parse_mode: rendered.parse_mode || null,
         },
       });
       if (!sent.ok) {
@@ -384,7 +456,18 @@ export class ChannelManager {
         await this.send_status_notice(provider, message, "failed", alias, result.error);
         continue;
       }
-      const rendered = this.build_user_render_payload(result.reply, provider);
+      const rendered = this.build_user_render_payload(result.reply, provider, message.chat_id);
+      if (this.should_suppress_final_after_stream_send(provider, result)) {
+        await this.record_assistant_message(
+          provider,
+          message,
+          alias,
+          rendered.content || String(result.reply || ""),
+        );
+        await this.send_status_notice(provider, message, "done", alias);
+        handled += 1;
+        continue;
+      }
       const routed = await this.route_agent_reply({
         provider,
         chat_id: message.chat_id,
@@ -394,6 +477,10 @@ export class ChannelManager {
         mention_sender: true,
         sender_alias: message.sender_id,
         limit: 50,
+        metadata: {
+          render_mode: rendered.render_mode,
+          render_parse_mode: rendered.parse_mode || null,
+        },
       });
       if (!routed.ok) {
         // eslint-disable-next-line no-console
@@ -661,10 +748,11 @@ export class ChannelManager {
   }
 
   private is_grouping_boundary_message(message: InboundMessage): boolean {
-    const cmd = this.extract_command_name(message);
-    if (cmd) return true;
+    if (parse_slash_command_from_message(message)) return true;
     const text = String(message.content || "").trim();
     if (!text) return false;
+    // Treat normal sentences as standalone requests to prevent accidental multi-task merges.
+    if (/\s/.test(text)) return true;
     if (/^\//.test(text)) return true;
     if (/^(?:✅|❌|👍|👎|⏸️)\s*$/.test(text)) return true;
     if (/^(yes|no|승인|거절|보류|later|stop)$/i.test(text)) return true;
@@ -699,10 +787,28 @@ export class ChannelManager {
   }
 
   private should_ignore_inbound(message: InboundMessage): boolean {
+    const provider = this.resolve_channel_provider(message);
     const sender = String(message.sender_id || "").trim().toLowerCase();
     if (!sender || sender === "unknown" || sender.startsWith("subagent:") || sender === "approval-bot") return true;
 
     const meta = (message.metadata || {}) as Record<string, unknown>;
+    if (meta.from_is_bot === true) return true;
+
+    const slack_bot_user_id = String(process.env.SLACK_BOT_USER_ID || "").trim().toLowerCase();
+    const telegram_bot_user_id = String(
+      process.env.TELEGRAM_BOT_USER_ID
+      || process.env.TELEGRAM_BOT_SELF_ID
+      || "",
+    ).trim().toLowerCase();
+    const discord_bot_user_id = String(
+      process.env.DISCORD_BOT_USER_ID
+      || process.env.DISCORD_BOT_SELF_ID
+      || "",
+    ).trim().toLowerCase();
+    if (provider === "slack" && slack_bot_user_id && sender === slack_bot_user_id) return true;
+    if (provider === "telegram" && telegram_bot_user_id && sender === telegram_bot_user_id) return true;
+    if (provider === "discord" && discord_bot_user_id && sender === discord_bot_user_id) return true;
+
     const slack = (meta.slack && typeof meta.slack === "object") ? (meta.slack as Record<string, unknown>) : null;
     if (!slack) return false;
 
@@ -713,10 +819,116 @@ export class ChannelManager {
     return false;
   }
 
+  private create_stream_emit_state(): StreamEmitState {
+    return {
+      buffer: "",
+      last_emit_at: 0,
+      emitted_count: 0,
+      last_content: "",
+      full_content: "",
+      last_sent_key: "",
+      last_sent_at: 0,
+      last_source_chunk: "",
+    };
+  }
+
+  private overlap_suffix_prefix(a: string, b: string, max_scan = 280): number {
+    const left = String(a || "");
+    const right = String(b || "");
+    if (!left || !right) return 0;
+    const limit = Math.max(1, Math.min(max_scan, left.length, right.length));
+    for (let n = limit; n >= 1; n -= 1) {
+      if (left.slice(left.length - n) === right.slice(0, n)) return n;
+    }
+    return 0;
+  }
+
+  private normalize_stream_delta(state: StreamEmitState, raw: string): string {
+    const incoming = String(raw || "").trim();
+    if (!incoming) return "";
+    const prev = String(state.last_source_chunk || "");
+    const remember = (v: string): void => {
+      state.last_source_chunk = String(v || "").slice(-4000);
+    };
+    if (!prev) {
+      remember(incoming);
+      return incoming;
+    }
+    if (incoming === prev) return "";
+    if (incoming.startsWith(prev)) {
+      remember(incoming);
+      return incoming.slice(prev.length).trimStart();
+    }
+    if (prev.startsWith(incoming)) return "";
+    const overlap = this.overlap_suffix_prefix(prev, incoming);
+    remember(incoming);
+    if (overlap > 0) return incoming.slice(overlap).trimStart();
+    return incoming;
+  }
+
+  private append_stream_history(base: string, chunk: string): string {
+    const merged = `${String(base || "")}\n${String(chunk || "")}`.trim();
+    return merged.slice(Math.max(0, merged.length - 8000));
+  }
+
+  private should_skip_stream_emit(state: StreamEmitState, content: string): boolean {
+    const key = String(content || "").replace(/\s+/g, " ").trim().toLowerCase();
+    if (!key) return true;
+    const now = Date.now();
+    if (key === state.last_sent_key && now - state.last_sent_at < 30_000) return true;
+    state.last_sent_key = key;
+    state.last_sent_at = now;
+    return false;
+  }
+
+  private mark_stream_emitted(state: StreamEmitState, content: string): void {
+    state.emitted_count += 1;
+    state.last_content = content;
+    state.full_content = this.append_stream_history(state.full_content, content);
+  }
+
+  private async send_stream_content(
+    provider: ChannelProvider,
+    message: InboundMessage,
+    alias: string,
+    rendered: { content: string; parse_mode?: "HTML"; render_mode: RenderMode },
+    log_tag: string,
+  ): Promise<void> {
+    const sent = await this.registry.send(provider, {
+      id: `stream-${Date.now()}`,
+      provider,
+      channel: provider,
+      sender_id: alias,
+      chat_id: message.chat_id,
+      content: rendered.content,
+      at: new Date().toISOString(),
+      reply_to: this.resolve_reply_to(provider, message),
+      thread_id: message.thread_id,
+      metadata: {
+        kind: "agent_stream",
+        agent_alias: alias,
+        render_mode: rendered.render_mode,
+        render_parse_mode: rendered.parse_mode || null,
+      },
+    });
+    if (!sent.ok && this.debug) {
+      // eslint-disable-next-line no-console
+      console.log(`[channel-manager] ${log_tag} provider=${provider} alias=${alias} err=${sent.error || "unknown_error"}`);
+    }
+  }
+
+  private stream_result(state: StreamEmitState): Pick<AgentRunResult, "stream_emitted_count" | "stream_last_content" | "stream_full_content"> {
+    return {
+      stream_emitted_count: state.emitted_count,
+      stream_last_content: state.last_content,
+      stream_full_content: state.full_content,
+    };
+  }
+
   private async invoke_headless_agent(
     message: InboundMessage,
     alias: string,
-  ): Promise<{ reply: string | null; error?: string }> {
+  ): Promise<AgentRunResult> {
     const channel_provider = this.resolve_channel_provider(message);
     if (!channel_provider) return { reply: null, error: "unknown_channel_provider" };
     const orchestrator = this.providers!;
@@ -727,28 +939,14 @@ export class ChannelManager {
       return { reply: null, error: "agent_domain_not_configured" };
     }
     const preferred_executor = (
-      String(process.env.ORCH_EXECUTOR_PROVIDER || "chatgpt").trim() as
-      "claude_code" | "chatgpt" | "openrouter"
+      parse_executor_preference(String(process.env.ORCH_EXECUTOR_PROVIDER || "chatgpt"))
     );
-    const default_executor = this.resolve_executor_provider(preferred_executor);
+    const default_executor = resolve_executor_provider(preferred_executor);
     const run_key = `${channel_provider}:${message.chat_id}:${alias}`.toLowerCase();
     const abort = new AbortController();
     this.active_runs.set(run_key, { abort, provider: channel_provider, chat_id: message.chat_id, alias });
     let live_preview = "";
-    let stream_buffer = "";
-    let last_stream_emit_at = 0;
-    let stream_emitted_count = 0;
-    let last_stream_sent_key = "";
-    let last_stream_sent_at = 0;
-    const should_skip_duplicate_stream = (content: string): boolean => {
-      const key = String(content || "").replace(/\s+/g, " ").trim().toLowerCase();
-      if (!key) return true;
-      const now = Date.now();
-      if (key === last_stream_sent_key && now - last_stream_sent_at < 30_000) return true;
-      last_stream_sent_key = key;
-      last_stream_sent_at = now;
-      return false;
-    };
+    const stream_state = this.create_stream_emit_state();
     const started_at_ms = Date.now();
     const typingTicker = setInterval(() => {
       void this.registry.set_typing(channel_provider, message.chat_id, true);
@@ -758,7 +956,7 @@ export class ChannelManager {
       ? setInterval(() => {
           const elapsed_sec = Math.max(1, Math.floor((Date.now() - started_at_ms) / 1000));
           const preview = live_preview ? ` | ${live_preview}` : "";
-          const fallback = !preview && stream_emitted_count === 0
+          const fallback = !preview && stream_state.emitted_count === 0
             ? ` | 응답 생성 중 ${elapsed_sec}s`
             : "";
           void this.registry.send(channel_provider, {
@@ -776,20 +974,46 @@ export class ChannelManager {
         }, 8000)
       : null;
     try {
-      const always_skills = agent_domain.context.skills_loader.get_always_skills();
-      const task = String(message.content || "").trim();
-      const media_inputs = await this.collect_inbound_media_inputs(channel_provider, message);
+      const task_raw = String(message.content || "").trim();
+      const task = await this.seal_sensitive_text_for_agent(channel_provider, message.chat_id, task_raw);
+      const media_inputs_raw = await this.collect_inbound_media_inputs(channel_provider, message);
+      const media_inputs = await this.seal_sensitive_list_for_agent(channel_provider, message.chat_id, media_inputs_raw);
       const task_with_media = this.compose_task_with_media(task, media_inputs);
+      const always_skills = agent_domain.context.skills_loader.get_always_skills();
+      const context_skills = this.resolve_context_skills(task_with_media, always_skills);
       const provider_hint = default_executor;
-      const session_history = await this.get_session_history(channel_provider, message.chat_id, alias, 24);
+      const session_history = await this.get_session_history(
+        channel_provider,
+        message.chat_id,
+        alias,
+        message.thread_id,
+        12,
+      );
       const thread_nearby = await this.get_thread_nearby_context(channel_provider, message, 12);
-      const thread_nearby_block = this.format_thread_nearby_block(thread_nearby);
+      const sealed_thread_nearby = await this.seal_thread_context_for_agent(channel_provider, message.chat_id, thread_nearby);
+      const thread_nearby_block = this.format_thread_nearby_block(sealed_thread_nearby);
+      const secret_guard = await this.inspect_secret_references_for_orchestration([
+        task_with_media,
+        thread_nearby_block,
+        ...media_inputs,
+      ]);
+      if (!secret_guard.ok) {
+        return {
+          reply: this.format_secret_resolution_notice(secret_guard),
+          error: "secret_resolution_required",
+        };
+      }
       const mode = this.pick_loop_mode(task_with_media);
       this.apply_tool_runtime_context(agent_domain, channel_provider, message);
+      const tool_definitions = agent_domain.tools.get_definitions();
+
+      const recent_history_lines = session_history
+        .slice(-8)
+        .map((r) => `[${r.role}] ${r.content}`);
 
       const run_once = async (
         provider_id: "claude_code" | "chatgpt" | "openrouter",
-      ): Promise<{ reply: string | null; error?: string }> => {
+      ): Promise<AgentRunResult> => {
         if (mode === "task") {
           return this.run_task_loop_for_message({
             agent_domain,
@@ -801,6 +1025,7 @@ export class ChannelManager {
             media_inputs,
             session_history,
             thread_nearby_block,
+            skill_names: context_skills,
             abort,
           });
         }
@@ -811,14 +1036,18 @@ export class ChannelManager {
           objective: task_with_media || task || "handle inbound request",
           context_builder: agent_domain.context,
           providers: orchestrator,
+          tools: tool_definitions,
           provider_id,
           current_message: [
-            ...session_history.map((r) => `[${r.role}] ${r.content}`),
+            `[CURRENT_REQUEST]\n${task_with_media}`,
+            recent_history_lines.length > 0
+              ? ["[REFERENCE_RECENT_CONTEXT]", ...recent_history_lines].join("\n")
+              : "",
             thread_nearby_block,
-            task_with_media,
+            "중요: 실행 대상은 CURRENT_REQUEST 하나입니다. REFERENCE 문맥은 참고용이며 재실행 지시가 아닙니다.",
           ].filter(Boolean).join("\n\n"),
           history_days: [],
-          skill_names: always_skills,
+          skill_names: context_skills,
           media: media_inputs,
           channel: channel_provider,
           chat_id: message.chat_id,
@@ -828,37 +1057,24 @@ export class ChannelManager {
           temperature: 0.3,
           abort_signal: abort.signal,
           on_stream: async (chunk) => {
-            const part = this.sanitize_stream_chunk(String(chunk || ""));
+            const raw_part = this.sanitize_stream_chunk(String(chunk || ""));
+            if (!raw_part) return;
+            const part = this.normalize_stream_delta(stream_state, raw_part);
             if (!part) return;
             live_preview = this.squash_for_preview(`${live_preview} ${part}`);
             if (!this.stream_emit_enabled) return;
-            stream_buffer += part;
+            stream_state.buffer += stream_state.buffer ? `\n${part}` : part;
             const now = Date.now();
-            const due_by_size = stream_buffer.length >= this.stream_emit_min_chars;
-            const due_by_time = stream_buffer.length > 0 && (now - last_stream_emit_at >= this.stream_emit_interval_ms);
+            const due_by_size = stream_state.buffer.length >= this.stream_emit_min_chars;
+            const due_by_time = stream_state.buffer.length > 0 && (now - stream_state.last_emit_at >= this.stream_emit_interval_ms);
             if (!due_by_size && !due_by_time) return;
-            const content = this.format_stream_content(channel_provider, stream_buffer);
-            stream_buffer = "";
-            last_stream_emit_at = now;
-            if (!content) return;
-            if (should_skip_duplicate_stream(content)) return;
-            stream_emitted_count += 1;
-            const sent = await this.registry.send(channel_provider, {
-              id: `stream-${Date.now()}`,
-              provider: channel_provider,
-              channel: channel_provider,
-              sender_id: alias,
-              chat_id: message.chat_id,
-              content,
-              at: new Date().toISOString(),
-              reply_to: this.resolve_reply_to(channel_provider, message),
-              thread_id: message.thread_id,
-              metadata: { kind: "agent_stream", agent_alias: alias },
-            });
-            if (!sent.ok && this.debug) {
-              // eslint-disable-next-line no-console
-              console.log(`[channel-manager] stream send failed provider=${channel_provider} alias=${alias} err=${sent.error || "unknown_error"}`);
-            }
+            const rendered = this.format_stream_content(channel_provider, message.chat_id, stream_state.buffer);
+            stream_state.buffer = "";
+            stream_state.last_emit_at = now;
+            if (!rendered.content) return;
+            if (this.should_skip_stream_emit(stream_state, rendered.content)) return;
+            this.mark_stream_emitted(stream_state, rendered.content);
+            await this.send_stream_content(channel_provider, message, alias, rendered, "stream send failed");
           },
           check_should_continue: async () => false,
           on_tool_calls: async ({ tool_calls }) => {
@@ -880,28 +1096,13 @@ export class ChannelManager {
             return outputs.join("\n");
           },
         });
-        if (this.stream_emit_enabled && stream_buffer.trim()) {
-          const tail = this.format_stream_content(channel_provider, stream_buffer);
-          stream_buffer = "";
-          if (tail) {
-            if (!should_skip_duplicate_stream(tail)) {
-              stream_emitted_count += 1;
-              const sent = await this.registry.send(channel_provider, {
-                id: `stream-${Date.now()}`,
-                provider: channel_provider,
-                channel: channel_provider,
-                sender_id: alias,
-                chat_id: message.chat_id,
-                content: tail,
-                at: new Date().toISOString(),
-                reply_to: this.resolve_reply_to(channel_provider, message),
-                thread_id: message.thread_id,
-                metadata: { kind: "agent_stream", agent_alias: alias },
-              });
-              if (!sent.ok && this.debug) {
-                // eslint-disable-next-line no-console
-                console.log(`[channel-manager] stream tail send failed provider=${channel_provider} alias=${alias} err=${sent.error || "unknown_error"}`);
-              }
+        if (this.stream_emit_enabled && stream_state.buffer.trim()) {
+          const tail = this.format_stream_content(channel_provider, message.chat_id, stream_state.buffer);
+          stream_state.buffer = "";
+          if (tail.content) {
+            if (!this.should_skip_stream_emit(stream_state, tail.content)) {
+              this.mark_stream_emitted(stream_state, tail.content);
+              await this.send_stream_content(channel_provider, message, alias, tail, "stream tail send failed");
             }
           }
         }
@@ -909,16 +1110,19 @@ export class ChannelManager {
         if (!content) return { reply: null, error: "empty_provider_response" };
         const providerError = this.extract_provider_error(content);
         if (providerError) return { reply: null, error: providerError };
-        return { reply: this.normalize_agent_reply(content, alias, message.sender_id) };
+        return {
+          reply: this.normalize_agent_reply(content, alias, message.sender_id),
+          ...this.stream_result(stream_state),
+        };
       };
 
-      const primary_provider = this.resolve_executor_provider(provider_hint);
+      const primary_provider = resolve_executor_provider(provider_hint);
       const first = await run_once(primary_provider);
       if (first.reply) return first;
 
       // One-shot fallback for CLI executor startup failures.
       if (primary_provider === "claude_code") {
-        const fallback_provider = this.resolve_executor_provider("chatgpt");
+        const fallback_provider = resolve_executor_provider("chatgpt");
         if (fallback_provider !== primary_provider) {
           // eslint-disable-next-line no-console
           console.error(
@@ -951,6 +1155,18 @@ export class ChannelManager {
     return "agent";
   }
 
+  private resolve_context_skills(task: string, base_skills: string[]): string[] {
+    const out = new Set<string>((base_skills || []).map((v) => String(v || "").trim()).filter(Boolean));
+    const text = String(task || "").toLowerCase();
+    if (!text) return [...out];
+    if (
+      /(cron|크론|스케줄|예약|알림|리마인드|notify|remind|every\s+\d+|at\s+\d{4}-\d{2}-\d{2})/i.test(text)
+    ) {
+      out.add("cron");
+    }
+    return [...out];
+  }
+
   private async run_task_loop_for_message(args: {
     agent_domain: AgentDomain;
     provider_id: "claude_code" | "chatgpt" | "openrouter";
@@ -961,25 +1177,22 @@ export class ChannelManager {
     media_inputs: string[];
     session_history: Array<{ role: "system" | "user" | "assistant" | "tool"; content: string }>;
     thread_nearby_block: string;
+    skill_names: string[];
     abort: AbortController;
-  }): Promise<{ reply: string | null; error?: string }> {
-    const always_skills = args.agent_domain.context.skills_loader.get_always_skills();
+  }): Promise<AgentRunResult> {
     const task_id = `task:${args.channel_provider}:${args.message.chat_id}:${args.alias}`.toLowerCase();
-    let last_task_stream_key = "";
-    let last_task_stream_at = 0;
-    const should_skip_duplicate_task_stream = (content: string): boolean => {
-      const key = String(content || "").replace(/\s+/g, " ").trim().toLowerCase();
-      if (!key) return true;
-      const now = Date.now();
-      if (key === last_task_stream_key && now - last_task_stream_at < 30_000) return true;
-      last_task_stream_key = key;
-      last_task_stream_at = now;
-      return false;
-    };
+    const task_stream_state = this.create_stream_emit_state();
+    const tool_definitions = args.agent_domain.tools.get_definitions();
+    const recent_history_lines = args.session_history
+      .slice(-8)
+      .map((r) => `[${r.role}] ${r.content}`);
     const seed = [
-      ...args.session_history.map((r) => `[${r.role}] ${r.content}`),
+      `[CURRENT_REQUEST]\n${args.task_with_media}`,
+      recent_history_lines.length > 0
+        ? ["[REFERENCE_RECENT_CONTEXT]", ...recent_history_lines].join("\n")
+        : "",
       args.thread_nearby_block,
-      args.task_with_media,
+      "중요: 실행 대상은 CURRENT_REQUEST 하나입니다. REFERENCE 문맥은 참고용이며 재실행 지시가 아닙니다.",
     ].filter(Boolean).join("\n\n");
     const prev = args.agent_domain.loop.get_task(task_id);
     if (prev && prev.status !== "running") {
@@ -1009,10 +1222,11 @@ export class ChannelManager {
             objective: String(memory.objective || args.task_with_media),
             context_builder: args.agent_domain.context,
             providers: this.providers!,
+            tools: tool_definitions,
             provider_id: args.provider_id,
             current_message: String(memory.seed_prompt || seed),
             history_days: [],
-            skill_names: always_skills,
+            skill_names: args.skill_names,
             media: args.media_inputs,
             channel: args.channel_provider,
             chat_id: args.message.chat_id,
@@ -1023,27 +1237,22 @@ export class ChannelManager {
             abort_signal: args.abort.signal,
             on_stream: async (chunk) => {
               if (!this.stream_emit_enabled) return;
-              const part = this.sanitize_stream_chunk(String(chunk || ""));
+              const raw_part = this.sanitize_stream_chunk(String(chunk || ""));
+              if (!raw_part) return;
+              const part = this.normalize_stream_delta(task_stream_state, raw_part);
               if (!part) return;
-              const content = this.format_stream_content(args.channel_provider, part);
-              if (!content) return;
-              if (should_skip_duplicate_task_stream(content)) return;
-              const sent = await this.registry.send(args.channel_provider, {
-                id: `stream-${Date.now()}`,
-                provider: args.channel_provider,
-                channel: args.channel_provider,
-                sender_id: args.alias,
-                chat_id: args.message.chat_id,
-                content,
-                at: new Date().toISOString(),
-                reply_to: this.resolve_reply_to(args.channel_provider, args.message),
-                thread_id: args.message.thread_id,
-                metadata: { kind: "agent_stream", agent_alias: args.alias },
-              });
-              if (!sent.ok && this.debug) {
-                // eslint-disable-next-line no-console
-                console.log(`[channel-manager] task stream send failed provider=${args.channel_provider} alias=${args.alias} err=${sent.error || "unknown_error"}`);
-              }
+              task_stream_state.buffer += task_stream_state.buffer ? `\n${part}` : part;
+              const now = Date.now();
+              const due_by_size = task_stream_state.buffer.length >= this.stream_emit_min_chars;
+              const due_by_time = task_stream_state.buffer.length > 0 && (now - task_stream_state.last_emit_at >= this.stream_emit_interval_ms);
+              if (!due_by_size && !due_by_time) return;
+              const rendered = this.format_stream_content(args.channel_provider, args.message.chat_id, task_stream_state.buffer);
+              task_stream_state.buffer = "";
+              task_stream_state.last_emit_at = now;
+              if (!rendered.content) return;
+              if (this.should_skip_stream_emit(task_stream_state, rendered.content)) return;
+              this.mark_stream_emitted(task_stream_state, rendered.content);
+              await this.send_stream_content(args.channel_provider, args.message, args.alias, rendered, "task stream send failed");
             },
             check_should_continue: async () => false,
             on_tool_calls: async ({ tool_calls }) => {
@@ -1065,6 +1274,14 @@ export class ChannelManager {
               return outputs.join("\n");
             },
           });
+          if (this.stream_emit_enabled && task_stream_state.buffer.trim()) {
+            const tail = this.format_stream_content(args.channel_provider, args.message.chat_id, task_stream_state.buffer);
+            task_stream_state.buffer = "";
+            if (tail.content && !this.should_skip_stream_emit(task_stream_state, tail.content)) {
+              this.mark_stream_emitted(task_stream_state, tail.content);
+              await this.send_stream_content(args.channel_provider, args.message, args.alias, tail, "task stream tail send failed");
+            }
+          }
           const final = String(response.final_content || "").trim();
           if (final.includes("approval_required")) {
             return {
@@ -1106,39 +1323,30 @@ export class ChannelManager {
 
     const output = String(task_result.state.memory?.last_output || "").trim();
     if (task_result.state.status === "waiting_approval") {
-      return { reply: "승인 대기 상태입니다. 승인 응답 후 같은 작업을 재개합니다." };
+      return {
+        reply: "승인 대기 상태입니다. 승인 응답 후 같은 작업을 재개합니다.",
+        ...this.stream_result(task_stream_state),
+      };
     }
     if (!output) {
-      return { reply: null, error: `task_loop_no_output:${task_result.state.status}` };
+      return {
+        reply: null,
+        error: `task_loop_no_output:${task_result.state.status}`,
+        ...this.stream_result(task_stream_state),
+      };
     }
     const providerError = this.extract_provider_error(output);
-    if (providerError) return { reply: null, error: providerError };
-    return { reply: this.normalize_agent_reply(output, args.alias, args.message.sender_id) };
-  }
-
-  private resolve_executor_provider(
-    preferred: "claude_code" | "chatgpt" | "openrouter",
-  ): "claude_code" | "chatgpt" | "openrouter" {
-    const chatgptHeadless = String(process.env.CHATGPT_HEADLESS_COMMAND || "").trim();
-    const claudeHeadless = String(process.env.CLAUDE_HEADLESS_COMMAND || "").trim();
-    const allowClaude = String(process.env.ALLOW_CLAUDE_CODE_EXECUTOR || "0").trim() === "1";
-    const openrouterApiKey = String(process.env.OPENROUTER_API_KEY || "").trim();
-    if (preferred === "openrouter") {
-      if (openrouterApiKey) return "openrouter";
-      if (chatgptHeadless) return "chatgpt";
-      if (allowClaude && claudeHeadless) return "claude_code";
-      return "openrouter";
+    if (providerError) {
+      return {
+        reply: null,
+        error: providerError,
+        ...this.stream_result(task_stream_state),
+      };
     }
-    if (preferred === "claude_code") {
-      if (chatgptHeadless) return "chatgpt";
-      if (openrouterApiKey) return "openrouter";
-      if (allowClaude && claudeHeadless) return "claude_code";
-      return "chatgpt";
-    }
-    if (chatgptHeadless) return "chatgpt";
-    if (allowClaude && claudeHeadless) return "claude_code";
-    if (openrouterApiKey) return "openrouter";
-    return "chatgpt";
+    return {
+      reply: this.normalize_agent_reply(output, args.alias, args.message.sender_id),
+      ...this.stream_result(task_stream_state),
+    };
   }
 
   private apply_tool_runtime_context(agent_domain: AgentDomain, provider: ChannelProvider, message: InboundMessage): void {
@@ -1156,34 +1364,78 @@ export class ChannelManager {
     cron_tool?.set_context?.(channel, chat_id);
   }
 
-  private format_stream_content(provider: ChannelProvider, raw: string): string {
+  private format_stream_content(
+    provider: ChannelProvider,
+    chat_id: string,
+    raw: string,
+  ): { content: string; parse_mode?: "HTML"; render_mode: RenderMode } {
     const cleaned = this.sanitize_provider_output(String(raw || "")).trim();
-    if (!cleaned) return "";
+    if (!cleaned) return { content: "", render_mode: "markdown" };
     const clipped = cleaned
       .split("\n")
       .slice(-12)
       .join("\n")
       .trim()
       .slice(0, 700);
-    if (!clipped) return "";
-    return this.apply_channel_codeblock_format(provider, clipped);
+    if (!clipped) return { content: "", render_mode: "markdown" };
+    const profile = this.effective_render_profile(provider, chat_id);
+    const source = provider === "telegram" && profile.mode === "html"
+      ? clipped
+      : this.apply_channel_codeblock_format(provider, clipped);
+    const rendered = render_agent_output(source, profile);
+    return {
+      content: String(rendered.content || "").trim().slice(0, 700),
+      parse_mode: rendered.parse_mode,
+      render_mode: profile.mode,
+    };
   }
 
-  private session_key(provider: ChannelProvider, chat_id: string, alias: string): string {
-    return `${provider}:${chat_id}:${alias}`.toLowerCase();
+  private should_suppress_final_after_stream_send(
+    provider: ChannelProvider,
+    result: { reply: string | null; stream_emitted_count?: number; stream_last_content?: string; stream_full_content?: string },
+  ): boolean {
+    void provider;
+    if (!this.suppress_final_after_stream) return false;
+    if (!result.reply) return false;
+    return Number(result.stream_emitted_count || 0) > 0;
+  }
+
+  private session_key(provider: ChannelProvider, chat_id: string, alias: string, thread_id?: string): string {
+    const thread_scope = this.session_thread_scope(provider, thread_id);
+    return `${provider}:${chat_id}:${thread_scope}:${alias}`.toLowerCase();
+  }
+
+  private session_thread_scope(provider: ChannelProvider, thread_id?: string): string {
+    const t = String(thread_id || "").trim();
+    if (t) return `thread:${t}`;
+    if (provider === "slack") return "thread:root";
+    return "thread:default";
   }
 
   private async get_session_history(
     provider: ChannelProvider,
     chat_id: string,
     alias: string,
+    thread_id: string | undefined,
     max_messages: number,
   ): Promise<Array<{ role: "system" | "user" | "assistant" | "tool"; content: string }>> {
     if (!this.sessions) return [];
     try {
-      const key = this.session_key(provider, chat_id, alias);
+      const key = this.session_key(provider, chat_id, alias, thread_id);
       const session = await this.sessions.get_or_create(key);
-      const rows = session.get_history(max_messages);
+      const now = Date.now();
+      const rows = session.messages
+        .filter((row) => {
+          if (this.session_history_max_age_ms <= 0) return true;
+          if (!row || typeof row !== "object") return true;
+          const rec = row as Record<string, unknown>;
+          const ts_raw = String(rec.timestamp || rec.at || "").trim();
+          if (!ts_raw) return true;
+          const ts = Date.parse(ts_raw);
+          if (!Number.isFinite(ts)) return true;
+          return now - ts <= this.session_history_max_age_ms;
+        })
+        .slice(-Math.max(1, Number(max_messages || 1)));
       return rows
         .map((r) => ({
           role: String(r.role || "user") as "system" | "user" | "assistant" | "tool",
@@ -1243,13 +1495,23 @@ export class ChannelManager {
   private async record_user_message(provider: ChannelProvider, message: InboundMessage, alias: string): Promise<void> {
     if (!this.sessions) return;
     try {
-      const key = this.session_key(provider, message.chat_id, alias);
+      const key = this.session_key(provider, message.chat_id, alias, message.thread_id);
       const session = await this.sessions.get_or_create(key);
-      session.add_message("user", String(message.content || ""), {
+      const safe_content = this.sanitize_sensitive_text_for_storage(String(message.content || ""));
+      session.add_message("user", safe_content, {
         sender_id: message.sender_id,
         at: message.at,
+        thread_id: message.thread_id,
       });
       await this.sessions.save(session);
+      await this.append_daily_memory_line(
+        "user",
+        provider,
+        message.chat_id,
+        message.thread_id,
+        message.sender_id,
+        safe_content,
+      );
     } catch {
       // no-op
     }
@@ -1263,16 +1525,155 @@ export class ChannelManager {
   ): Promise<void> {
     if (!this.sessions) return;
     try {
-      const key = this.session_key(provider, message.chat_id, alias);
+      const key = this.session_key(provider, message.chat_id, alias, message.thread_id);
       const session = await this.sessions.get_or_create(key);
-      session.add_message("assistant", String(content || ""), {
+      const safe_content = this.sanitize_sensitive_text_for_storage(String(content || ""));
+      session.add_message("assistant", safe_content, {
         sender_id: alias,
         at: new Date().toISOString(),
+        thread_id: message.thread_id,
       });
       await this.sessions.save(session);
+      await this.append_daily_memory_line(
+        "assistant",
+        provider,
+        message.chat_id,
+        message.thread_id,
+        alias,
+        safe_content,
+      );
     } catch {
       // no-op
     }
+  }
+
+  private async append_daily_memory_line(
+    role: "user" | "assistant",
+    provider: ChannelProvider,
+    chat_id: string,
+    thread_id: string | undefined,
+    sender_id: string,
+    content: string,
+  ): Promise<void> {
+    const store = this.agent?.context.memory_store;
+    if (!store) return;
+    const text = this
+      .sanitize_sensitive_text_for_storage(String(content || ""))
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 1600);
+    if (!text) return;
+    const thread = String(thread_id || "").trim() || "-";
+    const sender = String(sender_id || "unknown").trim() || "unknown";
+    const line = `- [${new Date().toISOString()}] [${provider}:${chat_id}:${thread}] ${role.toUpperCase()}(${sender}): ${text}\n`;
+    try {
+      await store.append_daily(line);
+    } catch {
+      // no-op
+    }
+  }
+
+  private sanitize_sensitive_text_for_storage(raw: string): string {
+    const redacted = redact_sensitive_text(String(raw || ""));
+    return this.strip_secret_reference_tokens(String(redacted.text || ""));
+  }
+
+  private async seal_sensitive_text_for_agent(provider: ChannelProvider, chat_id: string, raw: string): Promise<string> {
+    const text = String(raw || "");
+    if (!text.trim()) return "";
+    try {
+      const sealed = await seal_inbound_sensitive_text(text, {
+        provider,
+        chat_id,
+        vault: this.secret_vault,
+      });
+      return sealed.text;
+    } catch {
+      return redact_sensitive_text(text).text;
+    }
+  }
+
+  private async seal_sensitive_list_for_agent(provider: ChannelProvider, chat_id: string, values: string[]): Promise<string[]> {
+    const out: string[] = [];
+    for (const row of values || []) {
+      const sealed = await this.seal_sensitive_text_for_agent(provider, chat_id, String(row || ""));
+      if (!sealed.trim()) continue;
+      out.push(sealed);
+    }
+    return out;
+  }
+
+  private async seal_thread_context_for_agent(
+    provider: ChannelProvider,
+    chat_id: string,
+    rows: Array<{ sender_id: string; content: string; at: string }>,
+  ): Promise<Array<{ sender_id: string; content: string; at: string }>> {
+    const out: Array<{ sender_id: string; content: string; at: string }> = [];
+    for (const row of rows || []) {
+      const sealed_content = await this.seal_sensitive_text_for_agent(provider, chat_id, String(row.content || ""));
+      out.push({
+        sender_id: String(row.sender_id || "unknown"),
+        at: String(row.at || ""),
+        content: sealed_content,
+      });
+    }
+    return out;
+  }
+
+  private strip_secret_reference_tokens(raw: string): string {
+    return String(raw || "")
+      .replace(/\{\{\s*secret:[^}]+\}\}/gi, "[REDACTED:SECRET_REF]")
+      .replace(/\bsv1\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g, "[REDACTED:CIPHERTEXT]");
+  }
+
+  private async inspect_secret_references_for_orchestration(inputs: string[]): Promise<{
+    ok: boolean;
+    missing_keys: string[];
+    invalid_ciphertexts: string[];
+  }> {
+    const missing = new Set<string>();
+    const invalid = new Set<string>();
+    for (const row of inputs || []) {
+      const text = String(row || "");
+      if (!text.trim()) continue;
+      const report = await this.secret_vault.inspect_secret_references(text);
+      for (const key of report.missing_keys || []) {
+        const name = String(key || "").trim();
+        if (name) missing.add(name);
+      }
+      for (const token of report.invalid_ciphertexts || []) {
+        const value = String(token || "").trim();
+        if (value) invalid.add(value);
+      }
+    }
+    return {
+      ok: missing.size === 0 && invalid.size === 0,
+      missing_keys: [...missing.values()],
+      invalid_ciphertexts: [...invalid.values()],
+    };
+  }
+
+  private format_secret_resolution_notice(args: { missing_keys: string[]; invalid_ciphertexts: string[] }): string {
+    const missing = (args.missing_keys || []).filter(Boolean).slice(0, 8);
+    const invalid = (args.invalid_ciphertexts || []).filter(Boolean).slice(0, 4);
+    return [
+      "## 요약",
+      "민감정보 보안 규칙에 따라 복호화를 중단했습니다. (오케스트레이터 선차단)",
+      "",
+      "## 핵심",
+      "- 상태: secret_resolution_required",
+      missing.length > 0 ? `- 누락 키: ${missing.join(", ")}` : "- 누락 키: (없음)",
+      invalid.length > 0 ? `- 무효 암호문: ${invalid.join(", ")}` : "- 무효 암호문: (없음)",
+      "- 보안 규칙은 모든 다른 규칙보다 우선 적용됩니다.",
+      "",
+      "## 코드/명령",
+      "- /secret list",
+      "- /secret set <name> <value>",
+      "- 요청 본문에는 {{secret:<name>}} 형태로만 전달",
+      "",
+      "## 미디어",
+      "(없음)",
+    ].join("\n");
   }
 
   private normalize_agent_reply(raw: string, alias: string, sender_id: string): string | null {
@@ -1312,7 +1713,9 @@ export class ChannelManager {
   }
 
   private sanitize_stream_chunk(raw: string): string {
-    const clean = this.strip_ansi(String(raw || ""))
+    const clean = this.strip_secret_reference_tokens(
+      this.strip_ansi(String(raw || ""))
+    )
       .replace(/\r/g, "")
       .replace(/<<ORCH_FINAL>>/g, "")
       .replace(/<<ORCH_FINAL_END>>/g, "");
@@ -1321,6 +1724,7 @@ export class ChannelManager {
       .split("\n")
       .map((l) => l.trimEnd())
       .filter((l) => !this.is_provider_noise_line(l))
+      .filter((l) => !this.is_persona_leak_line(l))
       .filter((l) => !/^\s*(?:\$\s*env:|export\s+[A-Za-z_]|set\s+[A-Za-z_])/i.test(l));
     return lines.join("\n").slice(0, 800).trim();
   }
@@ -1357,13 +1761,16 @@ export class ChannelManager {
       out.push(s);
     };
     for (const m of Array.isArray(message.media) ? message.media : []) {
-      if (m?.url) push(String(m.url));
+      if (!m?.url) continue;
+      const url = String(m.url || "").trim();
+      if (!url) continue;
+      if (this.is_local_media_reference(url)) push(url);
     }
     if (provider === "slack") {
       const files = this.extract_slack_files(message);
       for (const f of files) {
         const saved = await this.download_slack_file(f.url, f.name);
-        push(saved || f.url);
+        if (saved) push(saved);
       }
     }
     if (provider === "telegram") {
@@ -1372,6 +1779,18 @@ export class ChannelManager {
         const saved = await this.download_telegram_file(id);
         if (saved) push(saved);
       }
+    }
+    if (provider === "discord") {
+      const files = this.extract_discord_files(message);
+      for (const f of files) {
+        const saved = await this.download_discord_file(f.url, f.name);
+        if (saved) push(saved);
+      }
+    }
+    const linked_files = this.extract_file_links_from_text(String(message.content || ""));
+    for (const url of linked_files) {
+      const saved = await this.download_remote_file(provider, url);
+      if (saved) push(saved);
     }
     return out.slice(0, 8);
   }
@@ -1408,6 +1827,19 @@ export class ChannelManager {
     push(audio?.file_id);
     if (photo.length > 0) push(photo[photo.length - 1]?.file_id);
     return [...new Set(out)];
+  }
+
+  private extract_discord_files(message: InboundMessage): Array<{ url: string; name?: string }> {
+    const meta = (message.metadata || {}) as Record<string, unknown>;
+    const discord = (meta.discord && typeof meta.discord === "object") ? (meta.discord as Record<string, unknown>) : null;
+    if (!discord) return [];
+    const attachments = Array.isArray(discord.attachments) ? (discord.attachments as Array<Record<string, unknown>>) : [];
+    return attachments
+      .map((a) => ({
+        url: String(a.url || a.proxy_url || "").trim(),
+        name: String(a.filename || "").trim() || undefined,
+      }))
+      .filter((f) => Boolean(f.url));
   }
 
   private async download_slack_file(url: string, hint_name?: string): Promise<string | null> {
@@ -1460,6 +1892,66 @@ export class ChannelManager {
     }
   }
 
+  private async download_discord_file(url: string, hint_name?: string): Promise<string | null> {
+    const target = String(url || "").trim();
+    if (!target) return null;
+    try {
+      const res = await fetch(target);
+      if (!res.ok) return null;
+      const bytes = new Uint8Array(await res.arrayBuffer());
+      const safeName = this.make_safe_filename(hint_name || basename(new URL(target).pathname) || "discord-file.bin");
+      const dir = await this.ensure_inbound_files_dir("discord");
+      const path = join(dir, `${Date.now()}-${safeName}`);
+      await writeFile(path, bytes);
+      return path;
+    } catch {
+      return null;
+    }
+  }
+
+  private extract_file_links_from_text(text: string): string[] {
+    const source = String(text || "");
+    if (!source) return [];
+    const matches = source.match(/https?:\/\/[^\s<>()]+/gi) || [];
+    const out: string[] = [];
+    const seen = new Set<string>();
+    for (const raw of matches) {
+      const url = String(raw || "").trim();
+      if (!url || seen.has(url)) continue;
+      let pathname = "";
+      try {
+        pathname = new URL(url).pathname.toLowerCase();
+      } catch {
+        continue;
+      }
+      if (!/\.(txt|md|csv|json|xml|yaml|yml|pdf|log|zip|tar|gz|png|jpg|jpeg|webp|gif|mp3|wav|ogg|mp4|mov|webm)(?:$|\?)/i.test(pathname)) continue;
+      seen.add(url);
+      out.push(url);
+      if (out.length >= 6) break;
+    }
+    return out;
+  }
+
+  private async download_remote_file(provider: ChannelProvider, url: string): Promise<string | null> {
+    const target = String(url || "").trim();
+    if (!target) return null;
+    try {
+      const res = await fetch(target);
+      if (!res.ok) return null;
+      const bytes = new Uint8Array(await res.arrayBuffer());
+      if (bytes.byteLength <= 0 || bytes.byteLength > 20 * 1024 * 1024) return null;
+      const pathname = new URL(target).pathname || "";
+      const guessed = basename(pathname) || `remote-${Date.now()}.bin`;
+      const safeName = this.make_safe_filename(guessed);
+      const dir = await this.ensure_inbound_files_dir(provider);
+      const path = join(dir, `${Date.now()}-${safeName}`);
+      await writeFile(path, bytes);
+      return path;
+    } catch {
+      return null;
+    }
+  }
+
   private make_safe_filename(name: string): string {
     const raw = String(name || "").trim() || "file.bin";
     return raw.replace(/[<>:"/\\|?*\x00-\x1F]/g, "_").slice(0, 120);
@@ -1471,17 +1963,30 @@ export class ChannelManager {
     return dir;
   }
 
-  private build_user_render_payload(raw: string, provider: ChannelProvider): { content: string; media: MediaItem[] } {
-    const pretty = this.prettify_user_output(raw, provider);
-    const extracted = this.extract_media_items(pretty);
-    const content = extracted.content || (extracted.media.length > 0 ? "첨부 파일을 확인해주세요." : "");
+  private build_user_render_payload(
+    raw: string,
+    provider: ChannelProvider,
+    chat_id: string,
+  ): { content: string; media: MediaItem[]; parse_mode?: "HTML"; render_mode: RenderMode } {
+    const profile = this.effective_render_profile(provider, chat_id);
+    const pretty = this.prettify_user_output(raw, provider, profile.mode);
+    const sanitized = render_agent_output(pretty, profile).markdown;
+    const extracted = this.extract_media_items(sanitized);
+    const fallback = extracted.content || (extracted.media.length > 0 ? "첨부 파일을 확인해주세요." : "");
+    const rendered = render_agent_output(fallback, profile);
     return {
-      content: content.slice(0, 1600),
+      content: String(rendered.content || "").slice(0, 1600),
       media: extracted.media.slice(0, 4),
+      parse_mode: rendered.parse_mode,
+      render_mode: profile.mode,
     };
   }
 
-  private prettify_user_output(raw: string, provider: ChannelProvider): string {
+  private prettify_user_output(raw: string, provider: ChannelProvider, render_mode: RenderMode): string {
+    const format_for_channel = (text: string): string => {
+      if (provider === "telegram" && render_mode === "html") return text;
+      return this.apply_channel_codeblock_format(provider, text);
+    };
     const clean = this.strip_sensitive_command_blocks(this.sanitize_provider_output(raw));
     if (!clean) return "";
 
@@ -1495,12 +2000,12 @@ export class ChannelManager {
       .slice(0, 120);
 
     if (this.has_markdown_table(lines)) {
-      return this.apply_channel_codeblock_format(provider, lines.join("\n")).slice(0, 1600);
+      return format_for_channel(lines.join("\n")).slice(0, 1600);
     }
 
     const hasBullet = lines.some((l) => /^(\-|\*|\d+\.)\s+/.test(l.trim()));
     if (hasBullet) {
-      return this.apply_channel_codeblock_format(provider, lines.join("\n")).slice(0, 1600);
+      return format_for_channel(lines.join("\n")).slice(0, 1600);
     }
 
     const one = lines.join(" ").replace(/\s+/g, " ").trim();
@@ -1511,9 +2016,9 @@ export class ChannelManager {
     if (chunks.length >= 2) {
       const head = chunks[0];
       const tail = chunks.slice(1, 5).map((s) => `- ${s}`);
-      return this.apply_channel_codeblock_format(provider, [`${head}`, ...tail].join("\n")).slice(0, 1600);
+      return format_for_channel([`${head}`, ...tail].join("\n")).slice(0, 1600);
     }
-    return this.apply_channel_codeblock_format(provider, one).slice(0, 1600);
+    return format_for_channel(one).slice(0, 1600);
   }
 
   private try_prettify_json(raw: string): string | null {
@@ -1568,20 +2073,30 @@ export class ChannelManager {
   }
 
   private sanitize_provider_output(raw: string): string {
-    const text = this.strip_ansi(String(raw || "")).replace(/\r/g, "");
+    const text = this.strip_secret_reference_tokens(
+      this.strip_ansi(String(raw || "")).replace(/\r/g, ""),
+    );
     if (!text) return "";
     const lines = text
       .split("\n")
       .map((l) => l.trimEnd())
       .filter((l) => !this.is_provider_noise_line(l))
+      .filter((l) => !this.is_persona_leak_line(l))
       .filter((l) => !this.is_sensitive_command_line(l));
-    return lines.join("\n").trim();
+    return this.strip_persona_leak_blocks(lines.join("\n").trim());
   }
 
   private strip_sensitive_command_blocks(raw: string): string {
     let out = String(raw || "");
     out = out.replace(/```(?:bash|sh|zsh|powershell|pwsh|cmd|shell)[\s\S]*?```/gi, "");
     out = out.replace(/```(?:ps1|bat)[\s\S]*?```/gi, "");
+    return this.strip_persona_leak_blocks(out).trim();
+  }
+
+  private strip_persona_leak_blocks(raw: string): string {
+    let out = String(raw || "");
+    out = out.replace(/```[\s\S]*?(?:AGENTS\.md|SOUL\.md|HEART\.md|TOOLS\.md|USER\.md)[\s\S]*?```/gi, "");
+    out = out.replace(/```[\s\S]*?\bYou are Codex\b[\s\S]*?```/gi, "");
     return out.trim();
   }
 
@@ -1604,6 +2119,13 @@ export class ChannelManager {
     if (/^mcp startup:\s*/i.test(l)) return true;
     if (/^Reconnecting\.\.\./i.test(l)) return true;
     if (/^\d{4}-\d{2}-\d{2}T.*codex_core::/i.test(l)) return true;
+    if (/^<<ORCH_TOOL_CALLS>>$/i.test(l)) return true;
+    if (/^<<ORCH_TOOL_CALLS_END>>$/i.test(l)) return true;
+    if (/unexpected argument ['"]-a['"] found/i.test(l)) return true;
+    if (/^error:\s+unexpected argument ['"][^'"]+['"] found$/i.test(l)) return true;
+    if (/^tip:\s+to pass ['"][^'"]+['"] as a value, use ['"]--\s+[^'"]+['"]$/i.test(l)) return true;
+    if (/^for more information, try ['"]--help['"]\.?$/i.test(l)) return true;
+    if (/^usage:\s+codex\b/i.test(l)) return true;
     if (/^-{3,}$/.test(l)) return true;
     if (/^user$/i.test(l)) return true;
     return false;
@@ -1630,6 +2152,19 @@ export class ChannelManager {
     return false;
   }
 
+  private is_persona_leak_line(line: string): boolean {
+    const l = String(line || "").trim();
+    if (!l) return false;
+    if (/^<\s*\/?\s*instructions?\s*>$/i.test(l)) return true;
+    if (/^you are (?:codex|chatgpt|an ai assistant|a coding agent)\b/i.test(l)) return true;
+    if (/^(?:developer|system)\s+(?:message|instruction|instructions)\b/i.test(l)) return true;
+    if (/\b(?:agents|soul|heart|tools|user)\.md\b/i.test(l)) return true;
+    if (/^(?:#\s*)?role:\s*/i.test(l)) return true;
+    if (/^(?:#\s*)?(?:identity|mission|responsibilities|constraints|execution ethos|communication rules)\b/i.test(l)) return true;
+    if (/\b(?:collaboration mode|approved command prefixes|sandbox_permissions)\b/i.test(l)) return true;
+    return false;
+  }
+
   private has_markdown_table(lines: string[]): boolean {
     const body = lines.filter((l) => /\|/.test(l));
     if (body.length < 2) return false;
@@ -1640,38 +2175,41 @@ export class ChannelManager {
     let content = String(text || "");
     const media: MediaItem[] = [];
     const seen = new Set<string>();
-    const push_media = (urlRaw: string, alt?: string): void => {
+    const push_media = (urlRaw: string, alt?: string): boolean => {
       const url = String(urlRaw || "").trim();
-      if (!url || seen.has(url)) return;
+      if (!url || seen.has(url)) return false;
+      if (!this.is_local_media_reference(url)) return false;
       const type = this.detect_media_type(url);
-      if (!type) return;
+      if (!type) return false;
       seen.add(url);
       media.push({
         type,
         url,
         name: alt ? alt.slice(0, 120) : undefined,
       });
+      return true;
     };
 
-    content = content.replace(/!\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g, (_m, alt, url) => {
-      push_media(String(url || ""), String(alt || ""));
-      return "";
+    content = content.replace(/!\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g, (m, alt, url) => {
+      const pushed = push_media(String(url || ""), String(alt || ""));
+      return pushed ? "" : m;
     });
-    content = content.replace(/<(?:img|video)[^>]*src=["']([^"']+)["'][^>]*>/gi, (_m, url) => {
-      push_media(String(url || ""));
-      return "";
+    content = content.replace(/<(?:img|video)[^>]*src=["']([^"']+)["'][^>]*>/gi, (m, url) => {
+      const pushed = push_media(String(url || ""));
+      return pushed ? "" : m;
     });
-    content = content.replace(/\[(IMAGE|VIDEO|FILE)\s*:\s*([^\]]+)\]/gi, (_m, _kind, url) => {
-      push_media(String(url || ""));
-      return "";
+    content = content.replace(/\[(IMAGE|VIDEO|FILE)\s*:\s*([^\]]+)\]/gi, (m, _kind, url) => {
+      const pushed = push_media(String(url || ""));
+      return pushed ? "" : m;
     });
 
     const plain_urls = content.match(/https?:\/\/[^\s)]+/gi) || [];
     for (const url of plain_urls) {
       const type = this.detect_media_type(url);
       if (!type) continue;
-      push_media(url);
-      content = content.replace(url, "");
+      if (push_media(url)) {
+        content = content.replace(url, "");
+      }
     }
 
     content = content
@@ -1695,6 +2233,17 @@ export class ChannelManager {
     if (/\.(mp3|wav|ogg|m4a)(\?.*)?$/.test(lower)) return "audio";
     if (/\.(pdf|txt|md|csv|json|zip|tar|gz)(\?.*)?$/.test(lower)) return "file";
     return null;
+  }
+
+  private is_local_media_reference(url: string): boolean {
+    const value = String(url || "").trim();
+    if (!value) return false;
+    if (/^https?:\/\//i.test(value)) return false;
+    if (/^[a-z][a-z0-9+.-]*:\/\//i.test(value)) return false;
+    if (/^[A-Za-z]:\\/.test(value)) return true;
+    if (/^\\\\/.test(value)) return true;
+    if (value.startsWith("/") || value.startsWith("./") || value.startsWith("../")) return true;
+    return false;
   }
 
   private is_provider_error_reply(text: string): boolean {
@@ -1784,6 +2333,8 @@ export class ChannelManager {
   private normalize_error_detail(raw: string): string {
     const text = String(raw || "").replace(/\s+/g, " ").trim();
     if (!text) return "unknown_error";
+    if (/unexpected argument ['"]-a['"] found/i.test(text)) return "executor_args_invalid";
+    if (/unexpected argument ['"][^'"]+['"] found/i.test(text)) return "executor_args_invalid";
     const m = text.match(/^Error calling ([A-Za-z0-9_-]+):\s*(.*)$/i);
     if (m) {
       const provider = String(m[1] || "provider").toLowerCase();
@@ -1793,18 +2344,814 @@ export class ChannelManager {
     return text.slice(0, 180);
   }
 
-  private extract_command_name(message: InboundMessage): string {
-    const meta = (message.metadata || {}) as Record<string, unknown>;
-    const command = (meta.command && typeof meta.command === "object")
-      ? (meta.command as Record<string, unknown>)
-      : null;
-    if (command && typeof command.name === "string") {
-      return String(command.name || "").trim().toLowerCase();
+  private render_profile_key(provider: ChannelProvider, chat_id: string): string {
+    return `${provider}:${String(chat_id || "").trim()}`.toLowerCase();
+  }
+
+  private get_render_profile(provider: ChannelProvider, chat_id: string): RenderProfile {
+    const key = this.render_profile_key(provider, chat_id);
+    const saved = this.render_profiles.get(key);
+    if (saved) return { ...saved };
+    return default_render_profile(provider);
+  }
+
+  private effective_render_profile(provider: ChannelProvider, chat_id: string): RenderProfile {
+    const profile = this.get_render_profile(provider, chat_id);
+    if (provider !== "telegram" && profile.mode === "html") {
+      return { ...profile, mode: "markdown" };
     }
-    const raw = String(message.content || "").trim();
-    if (!raw.startsWith("/")) return "";
-    const first = raw.slice(1).split(/\s+/)[0] || "";
-    return first.toLowerCase();
+    return profile;
+  }
+
+  private set_render_profile(
+    provider: ChannelProvider,
+    chat_id: string,
+    patch: Partial<RenderProfile>,
+  ): RenderProfile {
+    const key = this.render_profile_key(provider, chat_id);
+    const prev = this.get_render_profile(provider, chat_id);
+    const next: RenderProfile = {
+      mode: patch.mode || prev.mode,
+      blocked_link_policy: patch.blocked_link_policy || prev.blocked_link_policy,
+      blocked_image_policy: patch.blocked_image_policy || prev.blocked_image_policy,
+    };
+    this.render_profiles.set(key, next);
+    return next;
+  }
+
+  private reset_render_profile(provider: ChannelProvider, chat_id: string): RenderProfile {
+    const key = this.render_profile_key(provider, chat_id);
+    this.render_profiles.delete(key);
+    return this.get_render_profile(provider, chat_id);
+  }
+
+  private format_render_profile_status(
+    provider: ChannelProvider,
+    sender_id: string,
+    profile: RenderProfile,
+  ): string {
+    const mention = provider === "telegram" ? "" : `@${sender_id} `;
+    const effective = provider !== "telegram" && profile.mode === "html" ? "markdown" : profile.mode;
+    return [
+      `${mention}render 설정`,
+      `- mode: ${profile.mode}`,
+      `- effective_mode: ${effective}`,
+      `- blocked_link_policy: ${profile.blocked_link_policy}`,
+      `- blocked_image_policy: ${profile.blocked_image_policy}`,
+      "- usage: /render <markdown|html|plain|status|reset>",
+      "- usage: /render link <indicator|text|remove>",
+      "- usage: /render image <indicator|text|remove>",
+    ].join("\n").trim();
+  }
+
+  private format_common_help(provider: ChannelProvider, sender_id: string): string {
+    const mention = provider === "telegram" ? "" : `@${sender_id} `;
+    return [
+      `${mention}사용 가능한 공통 명령`,
+      "- /help",
+      "- /stop | /cancel | /중지",
+      "- /render <markdown|html|plain|status|reset>",
+      "- /render link <indicator|text|remove>",
+      "- /render image <indicator|text|remove>",
+      "- /secret status|list|set|get|reveal|remove",
+      "- /secret encrypt <text> | /secret decrypt <cipher>",
+      "- /cron status | /cron list",
+      "- /cron add every <duration> <message>",
+      "- /cron add at <iso-time> <message>",
+      "- /cron remove <job_id>",
+    ].join("\n").trim();
+  }
+
+  private async send_command_reply(
+    provider: ChannelProvider,
+    message: InboundMessage,
+    content: string,
+    metadata: Record<string, unknown>,
+  ): Promise<void> {
+    const profile = this.effective_render_profile(provider, message.chat_id);
+    const rendered = render_agent_output(content, profile);
+    const sent = await this.registry.send(provider, {
+      id: `${provider}-${Date.now()}`,
+      provider,
+      channel: provider,
+      sender_id: this.default_agent_alias,
+      chat_id: message.chat_id,
+      content: String(rendered.content || "").slice(0, 1600),
+      at: new Date().toISOString(),
+      reply_to: this.resolve_reply_to(provider, message),
+      thread_id: message.thread_id,
+      metadata: {
+        ...metadata,
+        render_mode: profile.mode,
+        render_parse_mode: rendered.parse_mode || null,
+      },
+    });
+    if (!sent.ok) {
+      // eslint-disable-next-line no-console
+      console.error(`[channel-manager] command reply failed provider=${provider} err=${sent.error || "unknown_error"}`);
+    }
+  }
+
+  private async try_handle_help_command(
+    provider: ChannelProvider,
+    message: InboundMessage,
+    command: ParsedSlashCommand | null,
+  ): Promise<boolean> {
+    if (!slash_name_in(command?.name || "", HELP_COMMAND_ALIASES)) return false;
+    await this.send_command_reply(
+      provider,
+      message,
+      this.format_common_help(provider, message.sender_id),
+      { kind: "command_help" },
+    );
+    return true;
+  }
+
+  private async try_handle_render_command(
+    provider: ChannelProvider,
+    message: InboundMessage,
+    command: ParsedSlashCommand | null,
+  ): Promise<boolean> {
+    if (!slash_name_in(command?.name || "", RENDER_ROOT_COMMAND_ALIASES)) return false;
+    const args = command?.args_lower || [];
+    const arg0 = String(args[0] || "");
+    const arg1 = String(args[1] || "");
+    const mention = provider === "telegram" ? "" : `@${message.sender_id} `;
+
+    if (!arg0 || slash_token_in(arg0, RENDER_STATUS_ARG_ALIASES)) {
+      const profile = this.get_render_profile(provider, message.chat_id);
+      await this.send_command_reply(
+        provider,
+        message,
+        this.format_render_profile_status(provider, message.sender_id, profile),
+        { kind: "command_render", action: "status" },
+      );
+      return true;
+    }
+
+    if (slash_token_in(arg0, RENDER_RESET_ARG_ALIASES)) {
+      const profile = this.reset_render_profile(provider, message.chat_id);
+      await this.send_command_reply(
+        provider,
+        message,
+        [
+          `${mention}render 설정을 기본값으로 초기화했습니다.`,
+          this.format_render_profile_status(provider, message.sender_id, profile),
+        ].join("\n"),
+        { kind: "command_render", action: "reset" },
+      );
+      return true;
+    }
+
+    const mode = normalize_render_mode(arg0);
+    if (mode) {
+      const profile = this.set_render_profile(provider, message.chat_id, { mode });
+      await this.send_command_reply(
+        provider,
+        message,
+        [
+          `${mention}render mode를 '${profile.mode}'로 설정했습니다.`,
+          this.format_render_profile_status(provider, message.sender_id, profile),
+        ].join("\n"),
+        { kind: "command_render", action: "set_mode" },
+      );
+      return true;
+    }
+
+    const target: "link" | "image" | null = slash_token_in(arg0, RENDER_LINK_ARG_ALIASES)
+      ? "link"
+      : (slash_token_in(arg0, RENDER_IMAGE_ARG_ALIASES) ? "image" : null);
+    if (!target) {
+      await this.send_command_reply(
+        provider,
+        message,
+        `${mention}render 명령을 이해하지 못했습니다. /render status 로 현재 설정을 확인하세요.`,
+        { kind: "command_render", action: "invalid" },
+      );
+      return true;
+    }
+
+    const policy = normalize_block_policy(arg1);
+    if (!policy) {
+      await this.send_command_reply(
+        provider,
+        message,
+        `${mention}policy 값이 필요합니다. indicator | text | remove 중 하나를 입력하세요.`,
+        { kind: "command_render", action: "invalid_policy", target },
+      );
+      return true;
+    }
+
+    const patch: Partial<RenderProfile> = target === "link"
+      ? { blocked_link_policy: policy as BlockPolicy }
+      : { blocked_image_policy: policy as BlockPolicy };
+    const profile = this.set_render_profile(provider, message.chat_id, patch);
+    await this.send_command_reply(
+      provider,
+      message,
+      [
+        `${mention}${target} blocked policy를 '${policy}'로 설정했습니다.`,
+        this.format_render_profile_status(provider, message.sender_id, profile),
+      ].join("\n"),
+      { kind: "command_render", action: "set_policy", target },
+    );
+    return true;
+  }
+
+  private format_secret_usage(provider: ChannelProvider, sender_id: string): string {
+    const mention = provider === "telegram" ? "" : `@${sender_id} `;
+    return [
+      `${mention}secret 명령 사용법`,
+      "- /secret status",
+      "- /secret list",
+      "- /secret set <name> <value>",
+      "- /secret get <name>",
+      "- /secret reveal <name>",
+      "- /secret remove <name>",
+      "- /secret encrypt <plaintext>",
+      "- /secret decrypt <ciphertext>",
+      "- exec/dynamic command에서 {{secret:name}} 형태로 참조 가능",
+      "- 자동 키 규칙: inbound.<provider>.c<chatHash>.<type>.v<valueHash>",
+    ].join("\n").trim();
+  }
+
+  private async try_handle_secret_command(
+    provider: ChannelProvider,
+    message: InboundMessage,
+    command: ParsedSlashCommand | null,
+  ): Promise<boolean> {
+    if (!slash_name_in(command?.name || "", SECRET_ROOT_COMMAND_ALIASES)) return false;
+    const args = (command?.args || []).map((v) => String(v || "").trim()).filter(Boolean);
+    const args_lower = args.map((v) => v.toLowerCase());
+    const mention = provider === "telegram" ? "" : `@${message.sender_id} `;
+
+    if (args.length === 0 || slash_token_in(args_lower[0], SECRET_STATUS_ARG_ALIASES)) {
+      await this.secret_vault.ensure_ready();
+      const names = await this.secret_vault.list_names();
+      const paths = this.secret_vault.get_paths();
+      await this.send_command_reply(
+        provider,
+        message,
+        [
+          `${mention}secret vault 상태`,
+          `- names: ${names.length}`,
+          `- key_path: ${paths.key_path}`,
+          `- store_path: ${paths.store_path}`,
+        ].join("\n"),
+        { kind: "command_secret", action: "status" },
+      );
+      return true;
+    }
+
+    if (slash_token_in(args_lower[0], SECRET_LIST_ARG_ALIASES)) {
+      await this.secret_vault.ensure_ready();
+      const names = await this.secret_vault.list_names();
+      await this.send_command_reply(
+        provider,
+        message,
+        names.length > 0
+          ? `${mention}secret 목록\n${names.map((v, i) => `${i + 1}. ${v}`).join("\n")}`.trim()
+          : `${mention}등록된 secret이 없습니다.`.trim(),
+        { kind: "command_secret", action: "list" },
+      );
+      return true;
+    }
+
+    if (slash_token_in(args_lower[0], SECRET_SET_ARG_ALIASES)) {
+      const name = String(args[1] || "").trim();
+      const value = String(args.slice(2).join(" ") || "").trim();
+      if (!name || !value) {
+        await this.send_command_reply(provider, message, this.format_secret_usage(provider, message.sender_id), {
+          kind: "command_secret",
+          action: "usage_set",
+        });
+        return true;
+      }
+      const saved = await this.secret_vault.put_secret(name, value);
+      if (!saved.ok) {
+        await this.send_command_reply(
+          provider,
+          message,
+          `${mention}secret 저장 실패: 유효한 name이 필요합니다.`,
+          { kind: "command_secret", action: "set_failed" },
+        );
+        return true;
+      }
+      await this.send_command_reply(
+        provider,
+        message,
+        `${mention}secret 저장 완료: ${saved.name} (AES-256-GCM)`,
+        { kind: "command_secret", action: "set", name: saved.name },
+      );
+      return true;
+    }
+
+    if (slash_token_in(args_lower[0], SECRET_GET_ARG_ALIASES)) {
+      const name = String(args[1] || "").trim();
+      if (!name) {
+        await this.send_command_reply(provider, message, this.format_secret_usage(provider, message.sender_id), {
+          kind: "command_secret",
+          action: "usage_get",
+        });
+        return true;
+      }
+      const cipher = await this.secret_vault.get_secret_cipher(name);
+      await this.send_command_reply(
+        provider,
+        message,
+        cipher
+          ? `${mention}${name} ciphertext\n${cipher}`.trim()
+          : `${mention}secret을 찾지 못했습니다: ${name}`.trim(),
+        { kind: "command_secret", action: "get_cipher", name },
+      );
+      return true;
+    }
+
+    if (slash_token_in(args_lower[0], SECRET_REVEAL_ARG_ALIASES)) {
+      const name = String(args[1] || "").trim();
+      if (!name) {
+        await this.send_command_reply(provider, message, this.format_secret_usage(provider, message.sender_id), {
+          kind: "command_secret",
+          action: "usage_reveal",
+        });
+        return true;
+      }
+      const plain = await this.secret_vault.reveal_secret(name);
+      await this.send_command_reply(
+        provider,
+        message,
+        plain !== null
+          ? `${mention}${name} plaintext\n${plain}`.trim()
+          : `${mention}secret을 찾지 못했습니다: ${name}`.trim(),
+        { kind: "command_secret", action: "reveal", name },
+      );
+      return true;
+    }
+
+    if (slash_token_in(args_lower[0], SECRET_REMOVE_ARG_ALIASES)) {
+      const name = String(args[1] || "").trim();
+      if (!name) {
+        await this.send_command_reply(provider, message, this.format_secret_usage(provider, message.sender_id), {
+          kind: "command_secret",
+          action: "usage_remove",
+        });
+        return true;
+      }
+      const removed = await this.secret_vault.remove_secret(name);
+      await this.send_command_reply(
+        provider,
+        message,
+        removed
+          ? `${mention}secret 삭제 완료: ${name}`.trim()
+          : `${mention}secret을 찾지 못했습니다: ${name}`.trim(),
+        { kind: "command_secret", action: "remove", name },
+      );
+      return true;
+    }
+
+    if (slash_token_in(args_lower[0], SECRET_ENCRYPT_ARG_ALIASES)) {
+      const plain = String(args.slice(1).join(" ") || "").trim();
+      if (!plain) {
+        await this.send_command_reply(provider, message, this.format_secret_usage(provider, message.sender_id), {
+          kind: "command_secret",
+          action: "usage_encrypt",
+        });
+        return true;
+      }
+      const cipher = await this.secret_vault.encrypt_text(plain, "adhoc:secret");
+      await this.send_command_reply(
+        provider,
+        message,
+        `${mention}encrypt 완료\n${cipher}`.trim(),
+        { kind: "command_secret", action: "encrypt" },
+      );
+      return true;
+    }
+
+    if (slash_token_in(args_lower[0], SECRET_DECRYPT_ARG_ALIASES)) {
+      const cipher = String(args.slice(1).join(" ") || "").trim();
+      if (!cipher) {
+        await this.send_command_reply(provider, message, this.format_secret_usage(provider, message.sender_id), {
+          kind: "command_secret",
+          action: "usage_decrypt",
+        });
+        return true;
+      }
+      try {
+        const plain = await this.secret_vault.decrypt_text(cipher, "adhoc:secret");
+        await this.send_command_reply(
+          provider,
+          message,
+          `${mention}decrypt 결과\n${plain}`.trim(),
+          { kind: "command_secret", action: "decrypt" },
+        );
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error);
+        await this.send_command_reply(
+          provider,
+          message,
+          `${mention}decrypt 실패: ${reason}`.trim(),
+          { kind: "command_secret", action: "decrypt_failed" },
+        );
+      }
+      return true;
+    }
+
+    await this.send_command_reply(provider, message, this.format_secret_usage(provider, message.sender_id), {
+      kind: "command_secret",
+      action: "usage",
+    });
+    return true;
+  }
+
+  private async try_handle_common_slash_command(
+    provider: ChannelProvider,
+    message: InboundMessage,
+    command: ParsedSlashCommand | null,
+  ): Promise<boolean> {
+    if (await this.try_handle_help_command(provider, message, command)) return true;
+    if (await this.try_handle_render_command(provider, message, command)) return true;
+    if (await this.try_handle_secret_command(provider, message, command)) return true;
+    if (await this.try_handle_stop_command(provider, message, command)) return true;
+    if (await this.try_handle_cron_quick_command(provider, message, command)) return true;
+    return false;
+  }
+
+  private async try_handle_stop_command(
+    provider: ChannelProvider,
+    message: InboundMessage,
+    command: ParsedSlashCommand | null,
+  ): Promise<boolean> {
+    if (!slash_name_in(command?.name || "", STOP_COMMAND_ALIASES)) return false;
+    const cancelled = await this.cancel_active_runs(provider, message.chat_id);
+    const mention = provider === "telegram" ? "" : `@${message.sender_id} `;
+    await this.send_command_reply(
+      provider,
+      message,
+      cancelled > 0
+        ? `${mention}⛔ 실행 중 작업 ${cancelled}건을 중지했습니다.`.trim()
+        : `${mention}중지할 실행 작업이 없습니다.`.trim(),
+      { kind: "command_stop" },
+    );
+    return true;
+  }
+
+  private parse_cron_quick_action(message: InboundMessage, command: ParsedSlashCommand | null): CronQuickAction | null {
+    const command_name = String(command?.name || "").trim();
+    const args = command?.args_lower || [];
+    const arg0 = String(args[0] || "");
+    if (slash_name_in(command_name, CRON_ROOT_COMMAND_ALIASES)) {
+      if (slash_token_in(arg0, CRON_LIST_ARG_ALIASES)) return "list";
+      if (!arg0 || slash_token_in(arg0, CRON_STATUS_ARG_ALIASES)) return "status";
+      if (slash_token_in(arg0, CRON_ADD_ARG_ALIASES)) return "add";
+      if (slash_token_in(arg0, CRON_REMOVE_ARG_ALIASES)) return "remove";
+    }
+    if (slash_name_in(command_name, CRON_STATUS_COMMAND_ALIASES)) return "status";
+    if (slash_name_in(command_name, CRON_LIST_COMMAND_ALIASES)) return "list";
+    if (slash_name_in(command_name, CRON_ADD_COMMAND_ALIASES)) return "add";
+    if (slash_name_in(command_name, CRON_REMOVE_COMMAND_ALIASES)) return "remove";
+
+    const text = String(message.content || "").trim().toLowerCase();
+    if (!text) return null;
+    if (/^(?:cron|크론)\s*(?:status|상태|확인|조회)$/.test(text)) return "status";
+    if (/^(?:cron|크론)\s*(?:jobs|list|목록|리스트)$/.test(text)) return "list";
+    if (/^(?:cron|크론)\s*(?:add|추가|등록)\b/.test(text)) return "add";
+    if (/^(?:cron|크론)\s*(?:remove|delete|삭제|제거)\b/.test(text)) return "remove";
+    if (/^크론\s*작업\s*(?:확인|조회|상태)$/.test(text)) return "status";
+    if (/^크론\s*작업\s*(?:목록|리스트)$/.test(text)) return "list";
+    if (/^크론\s*작업\s*(?:삭제|제거)\b/.test(text)) return "remove";
+    return null;
+  }
+
+  private parse_duration_ms(token: string): number | null {
+    const raw = String(token || "").trim().toLowerCase();
+    const m = raw.match(/^(\d+)(s|sec|secs|second|seconds|초|m|min|mins|minute|minutes|분|h|hr|hrs|hour|hours|시간)?$/i);
+    if (!m) return null;
+    const value = Number(m[1]);
+    if (!Number.isFinite(value) || value <= 0) return null;
+    const unit = String(m[2] || "s").toLowerCase();
+    if (unit === "m" || unit === "min" || unit === "mins" || unit === "minute" || unit === "minutes" || unit === "분") {
+      return value * 60_000;
+    }
+    if (unit === "h" || unit === "hr" || unit === "hrs" || unit === "hour" || unit === "hours" || unit === "시간") {
+      return value * 3_600_000;
+    }
+    return value * 1_000;
+  }
+
+  private parse_cron_add_tokens(message: InboundMessage, command: ParsedSlashCommand | null): string[] {
+    const cmd = String(command?.name || "").trim();
+    const args = (command?.args || []).map((v) => String(v || "").trim()).filter(Boolean);
+    if (slash_name_in(cmd, CRON_ROOT_COMMAND_ALIASES) && args.length > 0) {
+      if (slash_token_in(args[0], CRON_ADD_ARG_ALIASES)) return args.slice(1);
+    }
+    if (slash_name_in(cmd, CRON_ADD_COMMAND_ALIASES)) return args;
+    const text = String(message.content || "").trim();
+    const m = text.match(/^(?:cron|크론)\s*(?:add|추가|등록)\s+(.+)$/i);
+    if (!m) return [];
+    return String(m[1] || "").split(/\s+/).map((v) => v.trim()).filter(Boolean);
+  }
+
+  private parse_cron_remove_job_id(message: InboundMessage, command: ParsedSlashCommand | null): string {
+    const cmd = String(command?.name || "").trim();
+    const args = (command?.args || []).map((v) => String(v || "").trim()).filter(Boolean);
+    if (slash_name_in(cmd, CRON_ROOT_COMMAND_ALIASES) && args.length >= 2) {
+      if (slash_token_in(args[0], CRON_REMOVE_ARG_ALIASES)) return String(args[1] || "").trim();
+    }
+    if (slash_name_in(cmd, CRON_REMOVE_COMMAND_ALIASES)) return String(args[0] || "").trim();
+    const text = String(message.content || "").trim();
+    const m = text.match(/^(?:cron|크론)\s*(?:remove|delete|삭제|제거)\s+([A-Za-z0-9_-]{4,64})\b/i)
+      || text.match(/^크론\s*작업\s*(?:삭제|제거)\s+([A-Za-z0-9_-]{4,64})\b/i);
+    if (!m) return "";
+    return String(m[1] || "").trim();
+  }
+
+  private parse_cron_quick_add_spec(message: InboundMessage, command: ParsedSlashCommand | null): {
+    schedule: CronSchedule;
+    message: string;
+    name: string;
+    deliver: boolean;
+    delete_after_run: boolean;
+  } | null {
+    const tokens = this.parse_cron_add_tokens(message, command);
+    if (tokens.length < 3) return null;
+    const mode = String(tokens[0] || "").toLowerCase();
+    let schedule: CronSchedule | null = null;
+    let message_start_idx = -1;
+    if (mode === "every") {
+      const every_ms = this.parse_duration_ms(String(tokens[1] || ""));
+      if (!every_ms) return null;
+      schedule = { kind: "every", every_ms };
+      message_start_idx = 2;
+    } else if (mode === "at") {
+      const at_ms = Date.parse(String(tokens[1] || ""));
+      if (!Number.isFinite(at_ms) || at_ms <= 0) return null;
+      schedule = { kind: "at", at_ms };
+      message_start_idx = 2;
+    } else if (mode === "cron") {
+      if (tokens.length < 7) return null;
+      const expr = tokens.slice(1, 6).join(" ");
+      let tz: string | null = null;
+      let idx = 6;
+      if (String(tokens[idx] || "").toLowerCase() === "tz" && tokens[idx + 1]) {
+        tz = String(tokens[idx + 1] || "").trim();
+        idx += 2;
+      } else if (/^tz=/i.test(String(tokens[idx] || ""))) {
+        tz = String(tokens[idx] || "").slice(3).trim();
+        idx += 1;
+      }
+      schedule = { kind: "cron", expr, tz: tz || null };
+      message_start_idx = idx;
+    } else {
+      return null;
+    }
+    const body = tokens.slice(message_start_idx).join(" ").trim();
+    if (!schedule || !body) return null;
+    const name = body.slice(0, 40);
+    const deliver = /(remind|reminder|알림|리마인드|알려줘|깨워)/i.test(body);
+    const delete_after_run = schedule.kind === "at";
+    return { schedule, message: body, name, deliver, delete_after_run };
+  }
+
+  private has_natural_schedule_intent(body: string): boolean {
+    const text = String(body || "").trim();
+    if (!text) return false;
+    return /(알림|리마인드|알려|깨워|예약|등록|재생|실행|전송|보내|켜|끄|체크|확인|notify|remind|run)/i.test(text);
+  }
+
+  private parse_natural_cron_add_spec(message: InboundMessage): {
+    schedule: CronSchedule;
+    message: string;
+    name: string;
+    deliver: boolean;
+    delete_after_run: boolean;
+  } | null {
+    const text = String(message.content || "").trim();
+    if (!text || text.startsWith("/")) return null;
+
+    const rel = text.match(/^(\d+)\s*(초|분|시간|s|sec|secs|m|min|mins|h|hr|hrs)\s*(?:후|뒤)\s+(.+)$/i);
+    if (rel) {
+      const duration = this.parse_duration_ms(`${rel[1]}${rel[2]}`);
+      const body = String(rel[3] || "").trim();
+      if (!duration || !body || !this.has_natural_schedule_intent(body)) return null;
+      const at_ms = Date.now() + duration;
+      return {
+        schedule: { kind: "at", at_ms },
+        message: body,
+        name: body.slice(0, 40),
+        deliver: /(remind|reminder|알림|리마인드|알려줘|깨워)/i.test(body),
+        delete_after_run: true,
+      };
+    }
+
+    const abs = text.match(/^(?:(오늘|내일|모레)\s+)?(?:(새벽|오전|오후|저녁|밤)\s*)?(\d{1,2})시(?:\s*(\d{1,2})분?)?(?:\s*(\d{1,2})초?)?\s*(?:에|쯤|부터)?\s+(.+)$/i);
+    if (!abs) return null;
+    const day_word = String(abs[1] || "").trim();
+    const meridiem = String(abs[2] || "").trim();
+    const hour_raw = Number(abs[3] || 0);
+    const minute_raw = Number(abs[4] || 0);
+    const second_raw = Number(abs[5] || 0);
+    const body = String(abs[6] || "").trim();
+    if (!body || !this.has_natural_schedule_intent(body)) return null;
+    if (!Number.isFinite(hour_raw) || hour_raw < 0 || hour_raw > 24) return null;
+    if (!Number.isFinite(minute_raw) || minute_raw < 0 || minute_raw > 59) return null;
+    if (!Number.isFinite(second_raw) || second_raw < 0 || second_raw > 59) return null;
+
+    let hour = hour_raw;
+    const mer = meridiem.toLowerCase();
+    if (mer === "오전" || mer === "새벽") {
+      if (hour === 12) hour = 0;
+    } else if (mer === "오후" || mer === "저녁" || mer === "밤") {
+      if (hour >= 1 && hour <= 11) hour += 12;
+    }
+    if (hour === 24) hour = 0;
+    if (hour < 0 || hour > 23) return null;
+
+    const target = new Date();
+    target.setMilliseconds(0);
+    target.setSeconds(second_raw, 0);
+    target.setMinutes(minute_raw);
+    target.setHours(hour);
+    if (day_word === "내일") target.setDate(target.getDate() + 1);
+    if (day_word === "모레") target.setDate(target.getDate() + 2);
+    if (!day_word && target.getTime() <= Date.now() + 1_000) {
+      target.setDate(target.getDate() + 1);
+    }
+    const at_ms = target.getTime();
+    if (!Number.isFinite(at_ms) || at_ms <= Date.now()) return null;
+
+    return {
+      schedule: { kind: "at", at_ms },
+      message: body,
+      name: body.slice(0, 40),
+      deliver: /(remind|reminder|알림|리마인드|알려줘|깨워)/i.test(body),
+      delete_after_run: true,
+    };
+  }
+
+  private format_cron_time_kr(ms: unknown): string {
+    const n = Number(ms || 0);
+    if (!Number.isFinite(n) || n <= 0) return "n/a";
+    return new Date(n).toLocaleString("sv-SE", { timeZone: "Asia/Seoul", hour12: false }).replace(" ", "T") + "+09:00";
+  }
+
+  private render_cron_schedule(schedule_raw: unknown): string {
+    if (!schedule_raw || typeof schedule_raw !== "object") return "unknown";
+    const schedule = schedule_raw as Record<string, unknown>;
+    const kind = String(schedule.kind || "").toLowerCase();
+    if (kind === "every") {
+      const sec = Math.max(1, Math.floor(Number(schedule.every_ms || 0) / 1000));
+      return `every ${sec}s`;
+    }
+    if (kind === "at") {
+      return `at ${this.format_cron_time_kr(schedule.at_ms)}`;
+    }
+    if (kind === "cron") {
+      const expr = String(schedule.expr || "").trim() || "(empty)";
+      const tz = String(schedule.tz || "").trim();
+      return tz ? `cron ${expr} tz=${tz}` : `cron ${expr}`;
+    }
+    return kind || "unknown";
+  }
+
+  private format_cron_status_response(
+    provider: ChannelProvider,
+    sender_id: string,
+    status: { enabled: boolean; paused?: boolean; jobs: number; next_wake_at_ms: number | null },
+  ): string {
+    const mention = provider === "telegram" ? "" : `@${sender_id} `;
+    const enabled = Boolean(status.enabled);
+    const paused = Boolean(status.paused);
+    const jobs = Math.max(0, Number(status.jobs || 0));
+    const next = this.format_cron_time_kr(status.next_wake_at_ms);
+    return [
+      `${mention}⏱ cron 상태`,
+      `- enabled: ${enabled ? "yes" : "no"}`,
+      `- paused: ${paused ? "yes" : "no"}`,
+      `- jobs: ${jobs}`,
+      `- next_wake: ${next}`,
+    ].join("\n").trim();
+  }
+
+  private format_cron_list_response(
+    provider: ChannelProvider,
+    sender_id: string,
+    rows: Array<Record<string, unknown>>,
+  ): string {
+    const mention = provider === "telegram" ? "" : `@${sender_id} `;
+    if (rows.length === 0) return `${mention}⏱ 등록된 cron 작업이 없습니다.`.trim();
+    const head = `${mention}⏱ cron 작업 목록 (${rows.length})`;
+    const body = rows.slice(0, 10).map((row, idx) => {
+      const id = String(row.id || "").trim() || `job-${idx + 1}`;
+      const name = String(row.name || "").trim() || "(no-name)";
+      const enabled = row.enabled === true ? "on" : "off";
+      const state = (row.state && typeof row.state === "object") ? (row.state as Record<string, unknown>) : {};
+      const next = this.format_cron_time_kr(state.next_run_at_ms);
+      const schedule = this.render_cron_schedule(row.schedule);
+      return `${idx + 1}. ${id} | ${name} | ${enabled} | ${schedule} | next=${next}`;
+    });
+    const tail = rows.length > 10 ? [`... and ${rows.length - 10} more`] : [];
+    return [head, ...body, ...tail].join("\n").trim();
+  }
+
+  private format_cron_add_usage(provider: ChannelProvider, sender_id: string): string {
+    const mention = provider === "telegram" ? "" : `@${sender_id} `;
+    return [
+      `${mention}cron add 형식`,
+      "- /cron add every 10m <message>",
+      "- /cron add at 2026-02-26T01:40:00+09:00 <message>",
+      "- /cron add cron 40 1 * * * tz Asia/Seoul <message>",
+      "- 자연어: '10분 후 알림 ...', '새벽 1시 40분 ...'",
+    ].join("\n").trim();
+  }
+
+  private format_cron_remove_usage(provider: ChannelProvider, sender_id: string): string {
+    const mention = provider === "telegram" ? "" : `@${sender_id} `;
+    return `${mention}cron remove 형식: /cron remove <job_id>`.trim();
+  }
+
+  private format_cron_add_response(
+    provider: ChannelProvider,
+    sender_id: string,
+    job_raw: unknown,
+  ): string {
+    const mention = provider === "telegram" ? "" : `@${sender_id} `;
+    const job = (job_raw && typeof job_raw === "object") ? (job_raw as Record<string, unknown>) : {};
+    const id = String(job.id || "").trim() || "(unknown)";
+    const name = String(job.name || "").trim() || "(no-name)";
+    const schedule_text = this.render_cron_schedule(job.schedule);
+    const state = (job.state && typeof job.state === "object") ? (job.state as Record<string, unknown>) : {};
+    const next = this.format_cron_time_kr(state.next_run_at_ms);
+    const auto_remove = job.delete_after_run === true ? "yes" : "no";
+    return [
+      `${mention}⏱ cron 등록 완료`,
+      `- id: ${id}`,
+      `- name: ${name}`,
+      `- schedule: ${schedule_text}`,
+      `- next_run: ${next}`,
+      `- auto_remove_after_run: ${auto_remove}`,
+    ].join("\n").trim();
+  }
+
+  private async try_handle_cron_quick_command(
+    provider: ChannelProvider,
+    message: InboundMessage,
+    command: ParsedSlashCommand | null,
+  ): Promise<boolean> {
+    if (!this.cron) return false;
+    const action = this.parse_cron_quick_action(message, command);
+    const natural_add = action ? null : this.parse_natural_cron_add_spec(message);
+    if (!action && !natural_add) return false;
+    let content = "";
+    try {
+      if (action === "status") {
+        const status = await this.cron.status();
+        content = this.format_cron_status_response(provider, message.sender_id, status);
+      } else if (action === "list") {
+        const rows = await this.cron.list_jobs(true);
+        content = this.format_cron_list_response(
+          provider,
+          message.sender_id,
+          rows as unknown as Array<Record<string, unknown>>,
+        );
+      } else if (action === "remove") {
+        const job_id = this.parse_cron_remove_job_id(message, command);
+        if (!job_id) {
+          content = this.format_cron_remove_usage(provider, message.sender_id);
+        } else {
+          const removed = await this.cron.remove_job(job_id);
+          const mention = provider === "telegram" ? "" : `@${message.sender_id} `;
+          content = removed
+            ? `${mention}⏱ cron 작업 삭제 완료: ${job_id}`.trim()
+            : `${mention}⏱ cron 작업을 찾지 못했습니다: ${job_id}`.trim();
+        }
+      } else {
+        const spec = natural_add || this.parse_cron_quick_add_spec(message, command);
+        if (!spec) {
+          content = this.format_cron_add_usage(provider, message.sender_id);
+        } else {
+          const job = await this.cron.add_job(
+            spec.name,
+            spec.schedule,
+            spec.message,
+            spec.deliver,
+            provider,
+            message.chat_id,
+            spec.delete_after_run,
+          );
+          content = this.format_cron_add_response(provider, message.sender_id, job);
+        }
+      }
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      const mention = provider === "telegram" ? "" : `@${message.sender_id} `;
+      content = `${mention}cron ${action || "add"} 처리 실패: ${reason}`.trim();
+    }
+    await this.send_command_reply(provider, message, content, {
+      kind: "cron_quick",
+      action: action || "add",
+    });
+    return true;
   }
 
   private async cancel_active_runs(provider: ChannelProvider, chat_id: string): Promise<number> {

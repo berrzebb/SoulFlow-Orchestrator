@@ -2,7 +2,7 @@ import { SkillsLoader } from "./skills.js";
 import { MemoryStore } from "./memory.js";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { extname, join } from "node:path";
+import { extname, isAbsolute, join, resolve } from "node:path";
 import type { AgentContextSnapshot, ContextMessage } from "./context.types.js";
 import { now_iso } from "../utils/common.js";
 import { DecisionService } from "../decision/index.js";
@@ -26,6 +26,7 @@ export class ContextBuilder {
     decision_context?: { team_id?: string | null; agent_id?: string | null },
     session_context?: { channel?: string | null; chat_id?: string | null },
   ): Promise<string> {
+    const security_override = this._security_override_policy();
     const identity = await this._get_identity();
     const bootstrap = await this._load_bootstrap_files();
     const memory_context = await this._build_memory_context();
@@ -37,6 +38,7 @@ export class ContextBuilder {
     const skill_summary = this.skills_loader.build_skill_summary();
     const current_session = this._build_current_session_section(session_context?.channel, session_context?.chat_id);
     return [
+      security_override,
       identity,
       bootstrap,
       memory_context,
@@ -48,6 +50,16 @@ export class ContextBuilder {
       .filter(Boolean)
       .join("\n\n")
       .trim();
+  }
+
+  private _security_override_policy(): string {
+    return [
+      "# Security Override Policy",
+      "- 민감정보/보안 규칙은 모든 다른 규칙보다 우선합니다.",
+      "- 민감정보 평문을 출력/저장/재전송하지 않습니다.",
+      "- 민감정보는 {{secret:<name>}} 참조 또는 암호문 상태로만 처리합니다.",
+      "- 키를 식별할 수 없거나 복호화가 실패하면 작업을 중단하고 안내 템플릿으로 보고합니다.",
+    ].join("\n");
   }
 
   async _get_identity(): Promise<string> {
@@ -200,9 +212,11 @@ export class ContextBuilder {
     const ext = extname(raw).toLowerCase();
     const mime = this._image_mime_from_ext(ext);
     if (!mime) return null;
+    const resolved_path = isAbsolute(raw) ? raw : resolve(this.workspace, raw);
+    const candidate = existsSync(raw) ? raw : resolved_path;
     try {
-      if (!existsSync(raw)) return null;
-      const bytes = readFileSync(raw);
+      if (!existsSync(candidate)) return null;
+      const bytes = readFileSync(candidate);
       const b64 = Buffer.from(bytes).toString("base64");
       return `data:${mime};base64,${b64}`;
     } catch {

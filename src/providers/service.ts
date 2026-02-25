@@ -3,16 +3,29 @@ import { OpenRouterProvider } from "./openrouter.provider.js";
 import { Phi4LocalProvider } from "./phi4.provider.js";
 import type { ChatMessage, ChatOptions, LlmProvider, LlmResponse, ProviderId } from "./types.js";
 import type { ContextBuilder } from "../agent/context.js";
+import { redact_sensitive_text, redact_sensitive_unknown } from "../security/sensitive.js";
+import { SecretVaultService } from "../security/secret-vault.js";
+
+function parse_provider_id(raw: string): ProviderId | null {
+  const v = String(raw || "").trim().toLowerCase();
+  if (v === "chatgpt") return "chatgpt";
+  if (v === "claude_code") return "claude_code";
+  if (v === "openrouter") return "openrouter";
+  if (v === "phi4_local") return "phi4_local";
+  return null;
+}
 
 export class ProviderRegistry {
   private readonly providers = new Map<ProviderId, LlmProvider>();
   private active_provider_id: ProviderId = "chatgpt";
   private orchestrator_provider_id: ProviderId = "phi4_local";
+  private readonly secret_vault: SecretVaultService;
 
   constructor(options?: {
     openrouter_api_base?: string;
     openrouter_model?: string;
   }) {
+    this.secret_vault = new SecretVaultService(process.cwd());
     this.providers.set(
       "chatgpt",
         new CliHeadlessProvider({
@@ -47,6 +60,65 @@ export class ProviderRegistry {
       }),
     );
     this.providers.set("phi4_local", new Phi4LocalProvider());
+    this.orchestrator_provider_id = this.resolve_default_orchestrator_provider();
+  }
+
+  get_secret_vault(): SecretVaultService {
+    return this.secret_vault;
+  }
+
+  private async redact_prompt_content(content: unknown): Promise<unknown> {
+    if (typeof content === "string") {
+      const masked = await this.secret_vault.mask_known_secrets(content);
+      return redact_sensitive_text(masked).text;
+    }
+    if (!Array.isArray(content)) {
+      return redact_sensitive_unknown(content);
+    }
+    const out: unknown[] = [];
+    for (const item of content) {
+      if (!item || typeof item !== "object") {
+        out.push(item);
+        continue;
+      }
+      const rec = { ...(item as Record<string, unknown>) };
+      if (typeof rec.text === "string") {
+        const masked = await this.secret_vault.mask_known_secrets(rec.text);
+        rec.text = redact_sensitive_text(masked).text;
+      }
+      if (typeof rec.media_url === "string") {
+        const masked = await this.secret_vault.mask_known_secrets(rec.media_url);
+        rec.media_url = redact_sensitive_text(masked).text;
+      }
+      if (rec.image_url && typeof rec.image_url === "object") {
+        const img = { ...(rec.image_url as Record<string, unknown>) };
+        if (typeof img.url === "string") {
+          const masked = await this.secret_vault.mask_known_secrets(img.url);
+          img.url = redact_sensitive_text(masked).text;
+        }
+        rec.image_url = img;
+      }
+      out.push(rec);
+    }
+    return out;
+  }
+
+  private async sanitize_prompt_messages(messages: ChatMessage[]): Promise<ChatMessage[]> {
+    const out: ChatMessage[] = [];
+    for (const msg of messages || []) {
+      const next: ChatMessage = {
+        ...msg,
+        content: await this.redact_prompt_content(msg.content),
+      };
+      if (Array.isArray(msg.tool_calls)) {
+        next.tool_calls = msg.tool_calls.map((row) => {
+          if (!row || typeof row !== "object") return row;
+          return redact_sensitive_unknown(row) as Record<string, unknown>;
+        });
+      }
+      out.push(next);
+    }
+    return out;
   }
 
   list_providers(): ProviderId[] {
@@ -71,6 +143,12 @@ export class ProviderRegistry {
     return this.orchestrator_provider_id;
   }
 
+  private resolve_default_orchestrator_provider(): ProviderId {
+    const preferred = parse_provider_id(String(process.env.ORCH_ORCHESTRATOR_PROVIDER || ""));
+    if (preferred && this.providers.has(preferred)) return preferred;
+    return "phi4_local";
+  }
+
   private get_provider(provider_id?: ProviderId): LlmProvider {
     const id = provider_id || this.active_provider_id;
     const provider = this.providers.get(id);
@@ -89,8 +167,9 @@ export class ProviderRegistry {
     abort_signal?: AbortSignal;
   }): Promise<LlmResponse> {
     const provider = this.get_provider(args.provider_id);
+    const sanitized_messages = await this.sanitize_prompt_messages(args.messages || []);
     const options: ChatOptions = {
-      messages: args.messages,
+      messages: sanitized_messages,
       tools: args.tools,
       model: args.model,
       max_tokens: args.max_tokens,

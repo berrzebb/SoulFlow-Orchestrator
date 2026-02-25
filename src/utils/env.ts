@@ -24,7 +24,6 @@ function load_one(path: string): number {
   for (const line of raw.split(/\r?\n/)) {
     const parsed = parse_line(line);
     if (!parsed) continue;
-    if (process.env[parsed.key] !== undefined) continue;
     process.env[parsed.key] = parsed.value;
     loaded += 1;
   }
@@ -34,10 +33,10 @@ function load_one(path: string): number {
 export function load_env_files(workspace: string): { loaded: number; files: string[] } {
   const base = resolve(workspace);
   const candidates = [
-    join(base, ".env"),
-    join(base, ".env.local"),
     join(base, "..", ".env"),
     join(base, "..", ".env.local"),
+    join(base, ".env"),
+    join(base, ".env.local"),
   ];
   let loaded = 0;
   const files: string[] = [];

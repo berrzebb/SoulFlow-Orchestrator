@@ -23,3 +23,8 @@ The skill format and metadata structure follow OpenClaw's conventions to maintai
 | `tmux` | Remote-control tmux sessions |
 | `clawhub` | Search and install skills from ClawHub registry |
 | `skill-creator` | Create new skills |
+| `agent-browser` | Browser automation and web research using web_search/web_fetch/web_browser |
+| `just-bash` | Efficient shell workflow through exec with automatic just-bash runtime |
+| `python-sandbox` | Temporary podman/docker Python execution with in-container virtual environment |
+| `temp-db` | Ephemeral DB workflow (default PostgreSQL) with container start/query/cleanup |
+| `diagram` | Mermaid diagram rendering using builtin diagram_render tool (@vercel/beautiful-mermaid) |

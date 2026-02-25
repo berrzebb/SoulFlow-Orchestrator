@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, open, readFile, stat, unlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -28,6 +28,8 @@ type CronStoreFileJob = {
     lastRunAtMs: number | null;
     lastStatus: CronJob["state"]["last_status"];
     lastError: string | null;
+    running: boolean;
+    runningStartedAtMs: number | null;
   };
   createdAtMs: number;
   updatedAtMs: number;
@@ -85,28 +87,112 @@ function _parse_field(value: string, min: number, max: number): Set<number> | nu
   return out;
 }
 
-function _match_cron(expr: string, t: Date): boolean {
+type ParsedCronExpr = {
+  minute: Set<number>;
+  hour: Set<number>;
+  day: Set<number>;
+  month: Set<number>;
+  weekday: Set<number>;
+};
+
+type CronDateParts = {
+  minute: number;
+  hour: number;
+  day: number;
+  month: number;
+  weekday: number;
+};
+
+const WEEKDAY_SHORT_MAP: Record<string, number> = {
+  sun: 0,
+  mon: 1,
+  tue: 2,
+  wed: 3,
+  thu: 4,
+  fri: 5,
+  sat: 6,
+};
+
+function _parse_cron(expr: string): ParsedCronExpr | null {
   const fields = expr.trim().split(/\s+/);
-  if (fields.length !== 5) return false;
+  if (fields.length !== 5) return null;
   const minute = _parse_field(fields[0], 0, 59);
   const hour = _parse_field(fields[1], 0, 23);
   const day = _parse_field(fields[2], 1, 31);
   const month = _parse_field(fields[3], 1, 12);
-  const weekday = _parse_field(fields[4], 0, 6);
-  if (!minute || !hour || !day || !month || !weekday) return false;
+  const weekday = _parse_field(fields[4], 0, 7);
+  if (!minute || !hour || !day || !month || !weekday) return null;
+  if (weekday.has(7)) {
+    weekday.add(0);
+    weekday.delete(7);
+  }
+  return { minute, hour, day, month, weekday };
+}
+
+function _get_local_parts(ms: number): CronDateParts {
+  const t = new Date(ms);
+  return {
+    minute: t.getMinutes(),
+    hour: t.getHours(),
+    day: t.getDate(),
+    month: t.getMonth() + 1,
+    weekday: t.getDay(),
+  };
+}
+
+function _get_tz_parts(ms: number, tz: string): CronDateParts | null {
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: tz,
+      month: "numeric",
+      day: "numeric",
+      hour: "numeric",
+      minute: "numeric",
+      weekday: "short",
+      hour12: false,
+    }).formatToParts(new Date(ms));
+    const num = (type: "month" | "day" | "hour" | "minute"): number | null => {
+      const raw = parts.find((p) => p.type === type)?.value || "";
+      const n = Number(raw);
+      return Number.isFinite(n) ? n : null;
+    };
+    const weekday_token = String(parts.find((p) => p.type === "weekday")?.value || "").slice(0, 3).toLowerCase();
+    const weekday = WEEKDAY_SHORT_MAP[weekday_token];
+    const month = num("month");
+    const day = num("day");
+    const hour = num("hour");
+    const minute = num("minute");
+    if (
+      month === null ||
+      day === null ||
+      hour === null ||
+      minute === null ||
+      !Number.isFinite(weekday)
+    ) {
+      return null;
+    }
+    return { minute, hour, day, month, weekday };
+  } catch {
+    return null;
+  }
+}
+
+function _match_parsed_cron(parsed: ParsedCronExpr, parts: CronDateParts): boolean {
   return (
-    minute.has(t.getMinutes()) &&
-    hour.has(t.getHours()) &&
-    day.has(t.getDate()) &&
-    month.has(t.getMonth() + 1) &&
-    weekday.has(t.getDay())
+    parsed.minute.has(parts.minute) &&
+    parsed.hour.has(parts.hour) &&
+    parsed.day.has(parts.day) &&
+    parsed.month.has(parts.month) &&
+    parsed.weekday.has(parts.weekday)
   );
 }
 
 function _compute_next_run(schedule: CronSchedule, now_ms: number): number | null {
   if (schedule.kind === "at") {
     const at = Number(schedule.at_ms || 0);
-    return at > now_ms ? at : null;
+    // Keep one-shot target time even when already overdue so missed runs can execute on next tick after restart.
+    if (!Number.isFinite(at) || at <= 0) return null;
+    return at;
   }
 
   if (schedule.kind === "every") {
@@ -116,13 +202,18 @@ function _compute_next_run(schedule: CronSchedule, now_ms: number): number | nul
   }
 
   if (schedule.kind === "cron" && schedule.expr) {
+    const parsed = _parse_cron(schedule.expr);
+    if (!parsed) return null;
+    const tz = String(schedule.tz || "").trim();
     const start = new Date(now_ms);
     start.setSeconds(0, 0);
     // Search up to 366 days, minute resolution.
     for (let i = 0; i < 60 * 24 * 366; i++) {
-      const candidate = new Date(start.getTime() + i * 60_000);
-      if (candidate.getTime() <= now_ms) continue;
-      if (_match_cron(schedule.expr, candidate)) return candidate.getTime();
+      const candidate_ms = start.getTime() + i * 60_000;
+      if (candidate_ms <= now_ms) continue;
+      const parts = tz ? _get_tz_parts(candidate_ms, tz) : _get_local_parts(candidate_ms);
+      if (!parts) return null;
+      if (_match_parsed_cron(parsed, parts)) return candidate_ms;
     }
   }
 
@@ -164,6 +255,8 @@ function _to_file(store: CronStore): CronStoreFile {
         lastRunAtMs: j.state.last_run_at_ms ?? null,
         lastStatus: j.state.last_status ?? null,
         lastError: j.state.last_error ?? null,
+        running: j.state.running === true,
+        runningStartedAtMs: j.state.running_started_at_ms ?? null,
       },
       createdAtMs: j.created_at_ms,
       updatedAtMs: j.updated_at_ms,
@@ -199,6 +292,8 @@ function _from_file(raw: CronStoreFile): CronStore {
         last_run_at_ms: j.state?.lastRunAtMs ?? null,
         last_status: j.state?.lastStatus ?? null,
         last_error: j.state?.lastError ?? null,
+        running: j.state?.running === true,
+        running_started_at_ms: j.state?.runningStartedAtMs ?? null,
       },
       created_at_ms: Number(j.createdAtMs || 0),
       updated_at_ms: Number(j.updatedAtMs || 0),
@@ -212,7 +307,9 @@ export class CronService {
   readonly on_job: CronOnJob | null;
 
   private readonly store_file_path: string;
+  private readonly lock_dir_path: string;
   private readonly default_tick_ms: number;
+  private readonly running_lease_ms: number;
   private _store: CronStore | null = null;
   private _timer_abort: AbortController | null = null;
   private _timer_task: Promise<void> | null = null;
@@ -230,7 +327,9 @@ export class CronService {
     this.store_file_path = store_path.toLowerCase().endsWith(".json")
       ? store_path
       : join(store_path, "cron-store.json");
+    this.lock_dir_path = join(dirname(this.store_file_path), ".locks");
     this.default_tick_ms = Math.max(1_000, Number(options?.default_tick_ms || 5_000));
+    this.running_lease_ms = Math.max(5_000, Number(options?.running_lease_ms || 120_000));
     this.on_job = on_job;
   }
 
@@ -260,6 +359,11 @@ export class CronService {
     const store = await this._load_store();
     const now = now_ms();
     for (const job of store.jobs) {
+      if (this._is_running_fresh(job, now)) continue;
+      if (job.state.running) {
+        job.state.running = false;
+        job.state.running_started_at_ms = null;
+      }
       if (job.enabled) job.state.next_run_at_ms = _compute_next_run(job.schedule, now);
     }
   }
@@ -268,6 +372,7 @@ export class CronService {
     const store = await this._load_store();
     const times = store.jobs
       .filter((j) => j.enabled && j.state.next_run_at_ms)
+      .filter((j) => !this._is_running_fresh(j))
       .map((j) => Number(j.state.next_run_at_ms || 0))
       .filter((n) => Number.isFinite(n) && n > 0);
     if (times.length === 0) return null;
@@ -301,7 +406,12 @@ export class CronService {
       const store = await this._load_store();
       const now = now_ms();
       const due_jobs = store.jobs.filter(
-        (j) => j.enabled && j.state.next_run_at_ms && now >= Number(j.state.next_run_at_ms),
+        (j) => (
+          j.enabled
+          && j.state.next_run_at_ms
+          && now >= Number(j.state.next_run_at_ms)
+          && !this._is_running_fresh(j, now)
+        ),
       );
       for (const job of due_jobs) {
         await this._execute_job(job);
@@ -314,31 +424,93 @@ export class CronService {
   }
 
   private async _execute_job(job: CronJob): Promise<void> {
+    const lock_path = await this._acquire_job_lock(job.id);
+    if (!lock_path) return;
     const store = await this._load_store();
     const start_ms = now_ms();
+    job.state.running = true;
+    job.state.running_started_at_ms = start_ms;
+    job.updated_at_ms = start_ms;
     try {
-      if (this.on_job) {
-        await this.on_job(job);
+      await this._save_store();
+      try {
+        if (this.on_job) {
+          await this.on_job(job);
+        }
+        job.state.last_status = "ok";
+        job.state.last_error = null;
+      } catch (error) {
+        job.state.last_status = "error";
+        job.state.last_error = error instanceof Error ? error.message : String(error);
       }
-      job.state.last_status = "ok";
-      job.state.last_error = null;
-    } catch (error) {
-      job.state.last_status = "error";
-      job.state.last_error = error instanceof Error ? error.message : String(error);
-    }
 
-    job.state.last_run_at_ms = start_ms;
-    job.updated_at_ms = now_ms();
+      job.state.last_run_at_ms = start_ms;
+      job.state.running = false;
+      job.state.running_started_at_ms = null;
+      job.updated_at_ms = now_ms();
 
-    if (job.schedule.kind === "at") {
-      if (job.delete_after_run) {
-        store.jobs = store.jobs.filter((j) => j.id !== job.id);
+      if (job.schedule.kind === "at") {
+        if (job.delete_after_run) {
+          store.jobs = store.jobs.filter((j) => j.id !== job.id);
+        } else {
+          job.enabled = false;
+          job.state.next_run_at_ms = null;
+        }
       } else {
-        job.enabled = false;
-        job.state.next_run_at_ms = null;
+        job.state.next_run_at_ms = _compute_next_run(job.schedule, now_ms());
       }
-    } else {
-      job.state.next_run_at_ms = _compute_next_run(job.schedule, now_ms());
+    } finally {
+      await this._release_job_lock(lock_path);
+    }
+  }
+
+  private _is_running_fresh(job: CronJob, now = now_ms()): boolean {
+    if (!job.state.running) return false;
+    const started = Number(job.state.running_started_at_ms || 0);
+    if (!Number.isFinite(started) || started <= 0) return false;
+    return (now - started) < this.running_lease_ms;
+  }
+
+  private async _acquire_job_lock(job_id: string): Promise<string | null> {
+    await mkdir(this.lock_dir_path, { recursive: true });
+    const lock_path = join(this.lock_dir_path, `${job_id}.lock`);
+    for (let i = 0; i < 2; i += 1) {
+      try {
+        const handle = await open(lock_path, "wx");
+        await handle.writeFile(String(now_ms()), "utf-8");
+        await handle.close();
+        return lock_path;
+      } catch (error) {
+        const code = (error as { code?: string } | null)?.code || "";
+        if (code !== "EEXIST") return null;
+        const stale = await this._is_job_lock_stale(lock_path);
+        if (!stale) return null;
+        try {
+          await unlink(lock_path);
+        } catch {
+          return null;
+        }
+      }
+    }
+    return null;
+  }
+
+  private async _is_job_lock_stale(lock_path: string): Promise<boolean> {
+    try {
+      const info = await stat(lock_path);
+      const mtime = Number(info.mtimeMs || 0);
+      if (!Number.isFinite(mtime) || mtime <= 0) return true;
+      return (now_ms() - mtime) > this.running_lease_ms;
+    } catch {
+      return true;
+    }
+  }
+
+  private async _release_job_lock(lock_path: string): Promise<void> {
+    try {
+      await unlink(lock_path);
+    } catch {
+      // ignore lock cleanup errors
     }
   }
 
@@ -409,11 +581,14 @@ export class CronService {
     deliver = false,
     channel: string | null = null,
     to: string | null = null,
-    delete_after_run = false,
+    delete_after_run?: boolean,
   ): Promise<CronJob> {
     const store = await this._load_store();
     _validate_schedule_for_add(schedule);
     const now = now_ms();
+    const should_delete_after_run = typeof delete_after_run === "boolean"
+      ? delete_after_run
+      : schedule.kind === "at";
     const job: CronJob = {
       id: randomUUID().slice(0, 8),
       name,
@@ -431,10 +606,12 @@ export class CronService {
         last_run_at_ms: null,
         last_status: null,
         last_error: null,
+        running: false,
+        running_started_at_ms: null,
       },
       created_at_ms: now,
       updated_at_ms: now,
-      delete_after_run,
+      delete_after_run: should_delete_after_run,
     };
     store.jobs.push(job);
     await this._save_store();

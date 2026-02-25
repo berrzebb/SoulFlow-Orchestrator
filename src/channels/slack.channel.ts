@@ -16,6 +16,9 @@ function to_inbound_message(channel: SlackChannel, raw: Record<string, unknown>,
   const content = String((raw.text as string) || "");
   const command = channel.parse_command(content);
   const mentions = channel.parse_agent_mentions(content);
+  const subtype = String(raw.subtype || "").toLowerCase();
+  const from_is_bot = (typeof raw.bot_id === "string" && String(raw.bot_id).trim().length > 0)
+    || subtype === "bot_message";
   const sender_id = String((raw.user as string) || (raw.username as string) || (raw.bot_id as string) || "unknown");
   const files_raw = Array.isArray(raw.files) ? (raw.files as Array<Record<string, unknown>>) : [];
   const media: MediaItem[] = files_raw
@@ -49,7 +52,7 @@ function to_inbound_message(channel: SlackChannel, raw: Record<string, unknown>,
     at: now_iso(),
     thread_id: typeof raw.thread_ts === "string" ? raw.thread_ts : undefined,
     media,
-    metadata: { slack: raw, command, mentions, message_id: String(raw.ts || "") },
+    metadata: { slack: raw, command, mentions, from_is_bot, message_id: String(raw.ts || "") },
   };
 }
 

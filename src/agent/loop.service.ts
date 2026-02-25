@@ -78,6 +78,11 @@ export class AgentLoopStore {
   async resume_task(task_id: string, reason = "resumed"): Promise<TaskState | null> {
     const state = this.tasks.get(task_id);
     if (!state) return null;
+    if (state.status === "completed" || state.status === "cancelled") return state;
+    if (state.currentTurn >= state.maxTurns) {
+      const extend_by = Math.max(1, Math.ceil(Math.max(1, state.maxTurns) * 0.25));
+      state.maxTurns = state.currentTurn + extend_by;
+    }
     state.status = "running";
     state.exitReason = reason;
     this.tasks.set(task_id, state);
@@ -105,6 +110,7 @@ export class AgentLoopStore {
       state.currentTurn += 1;
       const response = await options.providers.run_headless_with_context({
         context_builder: options.context_builder,
+        tools: options.tools,
         provider_id: options.provider_id,
         history_days: options.history_days || [],
         current_message,

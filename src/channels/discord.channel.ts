@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { basename } from "node:path";
-import type { InboundMessage, OutboundMessage } from "../bus/types.js";
+import type { InboundMessage, MediaItem, OutboundMessage } from "../bus/types.js";
 import { now_iso } from "../utils/common.js";
 import { BaseChannel } from "./base.js";
 
@@ -13,9 +13,32 @@ type DiscordChannelOptions = {
 
 function to_inbound_message(channel: DiscordChannel, raw: Record<string, unknown>, chat_id: string): InboundMessage {
   const author = (raw.author && typeof raw.author === "object") ? (raw.author as Record<string, unknown>) : {};
+  const from_is_bot = author.bot === true;
   const content = String(raw.content || "");
   const command = channel.parse_command(content);
   const mentions = channel.parse_agent_mentions(content);
+  const attachments = Array.isArray(raw.attachments) ? (raw.attachments as Array<Record<string, unknown>>) : [];
+  const media: MediaItem[] = attachments
+    .map((a) => {
+      const url = String(a.url || a.proxy_url || "").trim();
+      if (!url) return null;
+      const mime = String(a.content_type || "").trim();
+      const type: MediaItem["type"] = mime.startsWith("image/")
+        ? "image"
+        : mime.startsWith("video/")
+          ? "video"
+          : mime.startsWith("audio/")
+            ? "audio"
+            : "file";
+      return {
+        type,
+        url,
+        mime: mime || undefined,
+        name: String(a.filename || "").trim() || undefined,
+        size: Number(a.size || 0) || undefined,
+      } as MediaItem;
+    })
+    .filter((v): v is MediaItem => Boolean(v));
   return {
     id: String(raw.id || randomUUID().slice(0, 12)),
     provider: "discord",
@@ -25,7 +48,8 @@ function to_inbound_message(channel: DiscordChannel, raw: Record<string, unknown
     content,
     at: now_iso(),
     thread_id: typeof raw.channel_id === "string" ? raw.channel_id : undefined,
-    metadata: { discord: raw, command, mentions, message_id: String(raw.id || "") },
+    media,
+    metadata: { discord: raw, command, mentions, from_is_bot, message_id: String(raw.id || "") },
   };
 }
 

@@ -1,11 +1,9 @@
 export { MessageBus } from "./service.js";
 export type {
-  BaseMessage,
-  BusDrainResult,
-  BusDirection,
-  BusSizes,
-  ConsumeOptions,
+  ConsumeMessageOptions,
   InboundMessage,
   MediaItem,
+  MediaItemType,
+  MessageProvider,
   OutboundMessage,
 } from "./types.js";

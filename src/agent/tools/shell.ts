@@ -1,10 +1,9 @@
-import { exec } from "node:child_process";
 import { resolve } from "node:path";
-import { promisify } from "node:util";
 import { Tool } from "./base.js";
+import { run_shell_command } from "./shell-runtime.js";
 import type { JsonSchema, ToolExecutionContext } from "./types.js";
-
-const exec_async = promisify(exec);
+import { SecretVaultService } from "../../security/secret-vault.js";
+import { redact_sensitive_text } from "../../security/sensitive.js";
 
 type ShellToolOptions = {
   working_dir?: string;
@@ -69,6 +68,7 @@ export class ExecTool extends Tool {
   private readonly write_approval_patterns: RegExp[];
   private readonly allow_patterns: RegExp[];
   private readonly restrict_to_working_dir: boolean;
+  private readonly secret_vault: SecretVaultService;
 
   constructor(options?: ShellToolOptions) {
     super();
@@ -78,21 +78,25 @@ export class ExecTool extends Tool {
     this.write_approval_patterns = WRITE_APPROVAL_PATTERNS.map((p) => new RegExp(p, "i"));
     this.allow_patterns = (options?.allow_patterns || []).map((p) => new RegExp(p, "i"));
     this.restrict_to_working_dir = Boolean(options?.restrict_to_working_dir);
+    this.secret_vault = new SecretVaultService(this.default_working_dir);
   }
 
   protected async run(params: Record<string, unknown>, context?: ToolExecutionContext): Promise<string> {
-    const command = String(params.command || "").trim();
+    const command_raw = String(params.command || "").trim();
+    const command = await this.secret_vault.resolve_placeholders(command_raw);
     const cwd = resolve(String(params.working_dir || this.default_working_dir));
     const timeout_seconds = Math.max(1, Number(params.timeout_seconds || this.timeout_seconds));
     const guard = this._guard_command(command, cwd);
     if (guard) {
+      const safe_command = await this.secret_vault.mask_known_secrets(command);
+      const compact_command = redact_sensitive_text(safe_command).text;
       if (guard.kind === "approval_required") {
         return [
           "Error: approval_required",
           `reason: ${guard.reason}`,
           `requested_path: ${guard.requested_path || "(unknown)"}`,
           "action: Ask leader/user for approval before re-running this command.",
-          `command: ${command}`,
+          `command: ${compact_command}`,
         ].join("\n");
       }
       return `Error: ${guard.reason}`;
@@ -100,18 +104,21 @@ export class ExecTool extends Tool {
 
     if (context?.signal?.aborted) return "Error: cancelled";
     try {
-      const { stdout, stderr } = await exec_async(command, {
+      const { stdout, stderr } = await run_shell_command(command, {
         cwd,
-        timeout: timeout_seconds * 1000,
-        maxBuffer: 1024 * 1024 * 8,
+        timeout_ms: timeout_seconds * 1000,
+        max_buffer_bytes: 1024 * 1024 * 8,
         signal: context?.signal,
       });
-      const output = [stdout || "", stderr ? `STDERR:\n${stderr}` : ""].filter(Boolean).join("\n");
+      const output_raw = [stdout || "", stderr ? `STDERR:\n${stderr}` : ""].filter(Boolean).join("\n");
+      const output_masked = await this.secret_vault.mask_known_secrets(output_raw);
+      const output = redact_sensitive_text(output_masked).text;
       const text = output.trim() || "(no output)";
       return text.length > 20000 ? `${text.slice(0, 20000)}\n... (truncated)` : text;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      return `Error: ${message}`;
+      const safe = redact_sensitive_text(await this.secret_vault.mask_known_secrets(message)).text;
+      return `Error: ${safe}`;
     }
   }
 

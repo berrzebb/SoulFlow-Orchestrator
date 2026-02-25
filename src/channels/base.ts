@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { InboundMessage, OutboundMessage } from "../bus/types.js";
 import { now_iso } from "../utils/common.js";
 import type { AgentMention, ChannelCommand, ChannelHealth, ChannelProvider, ChannelTypingState, ChatChannel, FileRequestResult } from "./types.js";
+import { parse_slash_command } from "./slash-command.js";
 
 export abstract class BaseChannel implements ChatChannel {
   readonly provider: ChannelProvider;
@@ -118,16 +119,7 @@ export abstract class BaseChannel implements ChatChannel {
   }
 
   parse_command(content: string): ChannelCommand | null {
-    const trimmed = String(content || "").trim();
-    if (!trimmed.startsWith("/")) return null;
-    const parts = trimmed.split(/\s+/);
-    const command = parts[0].replace(/^\//, "").trim();
-    if (!command) return null;
-    return {
-      raw: trimmed,
-      name: command,
-      args: parts.slice(1),
-    };
+    return parse_slash_command(content);
   }
 
   parse_agent_mentions(content: string): AgentMention[] {

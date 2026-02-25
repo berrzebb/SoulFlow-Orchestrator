@@ -1,9 +1,8 @@
-import { exec } from "node:child_process";
-import { promisify } from "node:util";
 import { Tool } from "./base.js";
+import { run_shell_command } from "./shell-runtime.js";
 import type { JsonSchema, ToolExecutionContext } from "./types.js";
-
-const exec_async = promisify(exec);
+import { SecretVaultService } from "../../security/secret-vault.js";
+import { redact_sensitive_text } from "../../security/sensitive.js";
 
 export type DynamicToolManifestEntry = {
   name: string;
@@ -32,6 +31,7 @@ export class DynamicShellTool extends Tool {
   private readonly command_template: string;
   private readonly working_dir: string;
   private readonly requires_approval: boolean;
+  private readonly secret_vault: SecretVaultService;
 
   constructor(entry: DynamicToolManifestEntry, default_working_dir: string) {
     super();
@@ -41,6 +41,7 @@ export class DynamicShellTool extends Tool {
     this.command_template = entry.command_template;
     this.working_dir = entry.working_dir || default_working_dir;
     this.requires_approval = entry.requires_approval === true;
+    this.secret_vault = new SecretVaultService(this.working_dir);
   }
 
   protected async run(params: Record<string, unknown>, context?: ToolExecutionContext): Promise<string> {
@@ -52,14 +53,17 @@ export class DynamicShellTool extends Tool {
       ].join("\n");
     }
     if (context?.signal?.aborted) return "Error: aborted";
-    const command = interpolate(this.command_template, params);
-    const { stdout, stderr } = await exec_async(command, {
+    const command = await this.secret_vault.resolve_placeholders(interpolate(this.command_template, params));
+    const { stdout, stderr } = await run_shell_command(command, {
       cwd: this.working_dir,
-      windowsHide: true,
-      maxBuffer: 10 * 1024 * 1024,
+      timeout_ms: 0,
+      max_buffer_bytes: 10 * 1024 * 1024,
+      signal: context?.signal,
     });
-    const out = String(stdout || "").trim();
-    const err = String(stderr || "").trim();
+    const out_raw = String(stdout || "").trim();
+    const err_raw = String(stderr || "").trim();
+    const out = redact_sensitive_text(await this.secret_vault.mask_known_secrets(out_raw)).text.trim();
+    const err = redact_sensitive_text(await this.secret_vault.mask_known_secrets(err_raw)).text.trim();
     if (err && !out) return `stderr:\n${err}`;
     if (err && out) return `${out}\n\nstderr:\n${err}`;
     return out || "ok";

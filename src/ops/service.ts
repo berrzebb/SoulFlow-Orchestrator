@@ -1,10 +1,33 @@
 import { now_iso } from "../utils/common.js";
+import type { InboundMessage } from "../bus/types.js";
 import type { OpsRuntimeDeps, OpsRuntimeStatus } from "./types.js";
+
+type RecoveryTarget = {
+  provider: "slack" | "discord" | "telegram";
+  chat_id: string;
+  alias: string;
+};
+
+function parse_recovery_target(task_id: string): RecoveryTarget | null {
+  const raw = String(task_id || "").trim().toLowerCase();
+  // Expected format: task:{provider}:{chat_id}:{alias}
+  const m = raw.match(/^task:(slack|discord|telegram):([^:]+):(.+)$/i);
+  if (!m) return null;
+  const provider = String(m[1] || "").toLowerCase() as RecoveryTarget["provider"];
+  const chat_id = String(m[2] || "").trim();
+  const alias = String(m[3] || "").trim() || "assistant";
+  if (!chat_id) return null;
+  return { provider, chat_id, alias };
+}
 
 export class OpsRuntimeService {
   private readonly deps: OpsRuntimeDeps;
   private readonly health_log_enabled: boolean;
   private readonly health_log_on_change: boolean;
+  private readonly recovery_interval_ms: number;
+  private readonly recovery_batch_size: number;
+  private readonly recovery_enabled: boolean;
+  private readonly recovery_last_attempt = new Map<string, number>();
   private last_health_signature = "";
   private readonly status_state: OpsRuntimeStatus = {
     running: false,
@@ -15,6 +38,9 @@ export class OpsRuntimeService {
     this.deps = deps;
     this.health_log_enabled = String(process.env.OPS_HEALTH_LOG_ENABLED || "0").trim() === "1";
     this.health_log_on_change = String(process.env.OPS_HEALTH_LOG_ON_CHANGE || "1").trim() !== "0";
+    this.recovery_enabled = String(process.env.TASK_RECOVERY_ENABLED || "1").trim() !== "0";
+    this.recovery_interval_ms = Math.max(30_000, Number(process.env.TASK_RECOVERY_RETRY_MS || 120_000));
+    this.recovery_batch_size = Math.max(1, Number(process.env.TASK_RECOVERY_BATCH || 2));
   }
 
   async start(): Promise<void> {
@@ -68,7 +94,51 @@ export class OpsRuntimeService {
       // eslint-disable-next-line no-console
       console.log(`[ops] watchdog resumable_tasks=${resumable.length}`);
     }
+    if (this.recovery_enabled && resumable.length > 0) {
+      await this.try_resume_resumable_tasks();
+    }
     this.status_state.last_watchdog_at = now_iso();
+  }
+
+  private async try_resume_resumable_tasks(): Promise<void> {
+    const rows = await this.deps.agent.task_recovery.list_resumable();
+    if (rows.length === 0) return;
+    let attempted = 0;
+    for (const task of rows) {
+      if (attempted >= this.recovery_batch_size) break;
+      // waiting_approval should be resumed by explicit approval response.
+      if (task.status === "waiting_approval") continue;
+      const target = parse_recovery_target(task.taskId);
+      if (!target) continue;
+      const now = Date.now();
+      const last = Number(this.recovery_last_attempt.get(task.taskId) || 0);
+      if (now - last < this.recovery_interval_ms) continue;
+      this.recovery_last_attempt.set(task.taskId, now);
+      attempted += 1;
+      const objective = String(task.memory?.objective || task.title || "resume task").trim();
+      const inbound: InboundMessage = {
+        id: `recovery-${task.taskId}-${now}`,
+        provider: target.provider,
+        channel: target.provider,
+        sender_id: "recovery",
+        chat_id: target.chat_id,
+        content: `[workflow resume]\n${objective}`,
+        at: new Date().toISOString(),
+        metadata: {
+          kind: "task_recovery",
+          recovery_task_id: task.taskId,
+          message_id: `recovery-${task.taskId}-${now}`,
+        },
+      };
+      try {
+        await this.deps.channels.handle_inbound_message(inbound);
+      } catch (error) {
+        // eslint-disable-next-line no-console
+        console.error(
+          `[ops] recovery failed task=${task.taskId} err=${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
   }
 
   private async bridge_pump_tick(): Promise<void> {

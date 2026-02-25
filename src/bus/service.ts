@@ -1,12 +1,12 @@
-import type { BusDirection, BusDrainResult, BusSizes, ConsumeOptions, InboundMessage, OutboundMessage } from "./types.js";
+import type { ConsumeMessageOptions, InboundMessage, OutboundMessage } from "./types.js";
 
 type Waiter<T> = (message: T | null) => void;
 
 export class MessageBus {
   private readonly inbound_queue: InboundMessage[] = [];
   private readonly outbound_queue: OutboundMessage[] = [];
-  private readonly inbound_waiters: Waiter<InboundMessage>[] = [];
-  private readonly outbound_waiters: Waiter<OutboundMessage>[] = [];
+  private readonly inbound_waiters: Array<Waiter<InboundMessage>> = [];
+  private readonly outbound_waiters: Array<Waiter<OutboundMessage>> = [];
   private _closed = false;
 
   async publish_inbound(message: InboundMessage): Promise<void> {
@@ -19,32 +19,32 @@ export class MessageBus {
     this.publish(message, this.outbound_queue, this.outbound_waiters);
   }
 
-  async consume_inbound(options?: ConsumeOptions): Promise<InboundMessage | null> {
+  async consume_inbound(options?: ConsumeMessageOptions): Promise<InboundMessage | null> {
     return this.consume(this.inbound_queue, this.inbound_waiters, options);
   }
 
-  async consume_outbound(options?: ConsumeOptions): Promise<OutboundMessage | null> {
+  async consume_outbound(options?: ConsumeMessageOptions): Promise<OutboundMessage | null> {
     return this.consume(this.outbound_queue, this.outbound_waiters, options);
   }
 
   peek(limit = 20): Array<InboundMessage | OutboundMessage> {
-    const n = Math.max(1, limit);
+    const n = Math.max(1, Number(limit || 20));
     return [...this.inbound_queue.slice(0, n), ...this.outbound_queue.slice(0, n)];
   }
 
-  get_size(direction?: BusDirection): number {
+  get_size(direction?: "inbound" | "outbound"): number {
     if (direction === "inbound") return this.inbound_queue.length;
     if (direction === "outbound") return this.outbound_queue.length;
     return this.inbound_queue.length + this.outbound_queue.length;
   }
 
-  get_sizes(): BusSizes {
+  get_sizes(): { inbound: number; outbound: number; total: number } {
     const inbound = this.inbound_queue.length;
     const outbound = this.outbound_queue.length;
     return { inbound, outbound, total: inbound + outbound };
   }
 
-  async drain(limit = 5000): Promise<BusDrainResult> {
+  async drain(limit = 5000): Promise<{ drained_inbound: number; drained_outbound: number }> {
     const max = Math.max(1, Number(limit || 5000));
     let drained_inbound = 0;
     let drained_outbound = 0;
@@ -74,7 +74,7 @@ export class MessageBus {
     return this._closed;
   }
 
-  private publish<T>(message: T, queue: T[], waiters: Waiter<T>[]): void {
+  private publish<T>(message: T, queue: T[], waiters: Array<Waiter<T>>): void {
     const waiter = waiters.shift();
     if (waiter) {
       waiter(message);
@@ -83,14 +83,17 @@ export class MessageBus {
     queue.push(message);
   }
 
-  private async consume<T>(queue: T[], waiters: Waiter<T>[], options?: ConsumeOptions): Promise<T | null> {
+  private async consume<T>(
+    queue: T[],
+    waiters: Array<Waiter<T>>,
+    options?: ConsumeMessageOptions,
+  ): Promise<T | null> {
     const immediate = queue.shift() ?? null;
     if (immediate) return immediate;
-
-    return new Promise<T | null>((resolve) => {
+    return new Promise((resolve) => {
       let done = false;
       let timer: NodeJS.Timeout | null = null;
-      const on_done = (message: T | null) => {
+      const on_done = (message: T | null): void => {
         if (done) return;
         done = true;
         if (timer) clearTimeout(timer);

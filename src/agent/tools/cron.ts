@@ -106,16 +106,19 @@ export class CronTool extends Tool {
     const message = String(params.message || "");
     if (!message) return "Error: message is required";
     const name = String(params.name || message.slice(0, 40));
+    const deliver = this.resolve_deliver_mode(params, message);
+    const channel = this.resolve_target_channel(params, context);
+    const to = this.resolve_target_chat_id(params, context);
+    const delete_after_run = this.resolve_delete_after_run(params, schedule);
     const job = await this.cron.add_job(
       name,
       schedule,
       message,
-      Boolean(params.deliver),
-      params.channel ? String(params.channel) : null,
-      params.to ? String(params.to) : null,
-      Boolean(params.delete_after_run),
+      deliver,
+      channel,
+      to,
+      delete_after_run,
     );
-    await this.notify_job_registered(job, context);
     return JSON.stringify(job);
   }
 
@@ -177,5 +180,36 @@ export class CronTool extends Tool {
       return { kind: "at", at_ms };
     }
     return "one of every_seconds, cron_expr, at is required";
+  }
+
+  private resolve_target_channel(params: Record<string, unknown>, context?: ToolExecutionContext): string | null {
+    const explicit = String(params.channel || "").trim();
+    if (explicit) return explicit;
+    const from_context = String(context?.channel || "").trim();
+    if (from_context) return from_context;
+    const fallback = String(this.default_channel || "").trim();
+    return fallback || null;
+  }
+
+  private resolve_target_chat_id(params: Record<string, unknown>, context?: ToolExecutionContext): string | null {
+    const explicit = String(params.to || "").trim();
+    if (explicit) return explicit;
+    const from_context = String(context?.chat_id || "").trim();
+    if (from_context) return from_context;
+    const fallback = String(this.default_chat_id || "").trim();
+    return fallback || null;
+  }
+
+  private resolve_delete_after_run(params: Record<string, unknown>, schedule: CronSchedule): boolean {
+    if (typeof params.delete_after_run === "boolean") return Boolean(params.delete_after_run);
+    // One-shot jobs are auto-cleaned by default unless explicitly overridden.
+    return schedule.kind === "at";
+  }
+
+  private resolve_deliver_mode(params: Record<string, unknown>, message: string): boolean {
+    if (typeof params.deliver === "boolean") return Boolean(params.deliver);
+    const text = String(message || "").toLowerCase();
+    if (!text) return false;
+    return /(remind|reminder|알림|리마인드|알려줘|깨워)/i.test(text);
   }
 }

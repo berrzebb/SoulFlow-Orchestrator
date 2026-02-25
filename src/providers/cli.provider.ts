@@ -1,16 +1,59 @@
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { TextDecoder } from "node:util";
 import { BaseLlmProvider } from "./base.js";
-import { LlmResponse, type ChatMessage, type ChatOptions, type ProviderId } from "./types.js";
+import { LlmResponse, type ChatMessage, type ChatOptions, type ProviderId, type ToolCallRequest } from "./types.js";
 
 const OUTPUT_BLOCK_START = "<<ORCH_FINAL>>";
 const OUTPUT_BLOCK_END = "<<ORCH_FINAL_END>>";
+const TOOL_BLOCK_START = "<<ORCH_TOOL_CALLS>>";
+const TOOL_BLOCK_END = "<<ORCH_TOOL_CALLS_END>>";
 const DEFAULT_CAPTURE_MAX_CHARS = 500_000;
 const DEFAULT_STREAM_STATE_MAX_CHARS = 200_000;
 
-function messages_to_prompt(messages: ChatMessage[]): string {
+type McpServerConfig = {
+  command?: string;
+  args?: string[];
+  env?: Record<string, string>;
+  cwd?: string;
+  url?: string;
+  startup_timeout_sec?: number;
+};
+
+function compact_tool_catalog(tools: Record<string, unknown>[]): string {
+  return tools
+    .slice(0, 32)
+    .map((row) => {
+      const rec = (row && typeof row === "object") ? (row as Record<string, unknown>) : {};
+      const fn = (rec.function && typeof rec.function === "object")
+        ? (rec.function as Record<string, unknown>)
+        : {};
+      const name = String(fn.name || "").trim();
+      if (!name) return "";
+      const description = String(fn.description || "").trim();
+      const parameters = (fn.parameters && typeof fn.parameters === "object")
+        ? (fn.parameters as Record<string, unknown>)
+        : {};
+      const props_obj = (parameters.properties && typeof parameters.properties === "object")
+        ? (parameters.properties as Record<string, unknown>)
+        : {};
+      const properties = Object.keys(props_obj).slice(0, 20);
+      const required = Array.isArray(parameters.required)
+        ? parameters.required.map((v) => String(v)).slice(0, 20)
+        : [];
+      return JSON.stringify({
+        name,
+        description: description || "",
+        properties,
+        required,
+      });
+    })
+    .filter(Boolean)
+    .join("\n");
+}
+
+function messages_to_prompt(messages: ChatMessage[], tools?: Record<string, unknown>[] | null): string {
   const base = messages
     .map((m) => {
       const role = String(m.role || "user").toUpperCase();
@@ -18,17 +61,33 @@ function messages_to_prompt(messages: ChatMessage[]): string {
       return `[${role}] ${content}`;
     })
     .join("\n\n");
+  const has_tools = Array.isArray(tools) && tools.length > 0;
+  const tool_protocol = has_tools
+    ? [
+      "",
+      "[TOOLS]",
+      "If a tool is required, return only this exact block with valid JSON:",
+      TOOL_BLOCK_START,
+      '{"tool_calls":[{"id":"call_1","name":"tool_name","arguments":{"key":"value"}}]}',
+      TOOL_BLOCK_END,
+      "Otherwise, return the final answer block.",
+      "Available tools (compact):",
+      compact_tool_catalog(tools || []) || "(none)",
+    ].join("\n")
+    : "";
   const protocol = [
     "",
     "[SYSTEM]",
-    "Return only the final user-facing answer wrapped in the exact block below.",
+    has_tools
+      ? "Return either a TOOL block or FINAL block. Never return both in one response."
+      : "Return only the final user-facing answer wrapped in the exact block below.",
     "Start your response with the start marker immediately, stream the answer body, then close with end marker.",
     "Do not include execution logs, shell commands, env vars, or debug info.",
     OUTPUT_BLOCK_START,
     "<final answer>",
     OUTPUT_BLOCK_END,
   ].join("\n");
-  return `${base}\n${protocol}`.trim();
+  return `${base}${tool_protocol}\n${protocol}`.trim();
 }
 
 function extract_protocol_output(raw: string): string {
@@ -65,10 +124,400 @@ function split_args(raw: string): string[] {
     .filter(Boolean);
 }
 
+function extract_last_block(raw: string, start_marker: string, end_marker: string): string {
+  const text = String(raw || "");
+  if (!text) return "";
+  const escapedStart = start_marker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const escapedEnd = end_marker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const re = new RegExp(`${escapedStart}([\\s\\S]*?)${escapedEnd}`, "g");
+  let match: RegExpExecArray | null = null;
+  let last = "";
+  while (true) {
+    match = re.exec(text);
+    if (!match) break;
+    last = String(match[1] || "").trim();
+  }
+  return last;
+}
+
+function as_tool_arguments(raw: unknown): Record<string, unknown> {
+  if (raw && typeof raw === "object" && !Array.isArray(raw)) return raw as Record<string, unknown>;
+  if (typeof raw !== "string") return {};
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return parsed as Record<string, unknown>;
+    return {};
+  } catch {
+    return {};
+  }
+}
+
+function parse_tool_calls_from_output(raw: string): ToolCallRequest[] {
+  const block = extract_last_block(raw, TOOL_BLOCK_START, TOOL_BLOCK_END);
+  if (!block) return [];
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(block);
+  } catch {
+    return [];
+  }
+  const list = Array.isArray(parsed)
+    ? parsed
+    : (parsed && typeof parsed === "object" && Array.isArray((parsed as Record<string, unknown>).tool_calls))
+      ? (parsed as Record<string, unknown>).tool_calls as unknown[]
+      : [];
+  const out: ToolCallRequest[] = [];
+  for (let i = 0; i < list.length; i += 1) {
+    const rec = (list[i] && typeof list[i] === "object")
+      ? (list[i] as Record<string, unknown>)
+      : {};
+    const name = String(rec.name || "").trim();
+    if (!name) continue;
+    const id = String(rec.id || "").trim() || `call_${i + 1}`;
+    out.push({
+      id,
+      name,
+      arguments: as_tool_arguments(rec.arguments),
+    });
+  }
+  return out;
+}
+
+function split_command_with_embedded_args(raw: string): { command: string; args: string[] } {
+  const text = String(raw || "").trim();
+  if (!text) return { command: "", args: [] };
+
+  const quoted = text.match(/^"([^"]+)"(?:\s+([\s\S]*))?$/) || text.match(/^'([^']+)'(?:\s+([\s\S]*))?$/);
+  if (quoted) {
+    const command = String(quoted[1] || "").trim();
+    const rest = String(quoted[2] || "").trim();
+    return { command, args: rest ? split_args(rest) : [] };
+  }
+
+  const parts = split_args(text);
+  if (parts.length <= 1) return { command: text, args: [] };
+  return { command: parts[0], args: parts.slice(1) };
+}
+
+function strip_approval_flags(args: string[]): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < args.length; i += 1) {
+    const token = String(args[i] || "").trim();
+    if (!token) continue;
+    const low = token.toLowerCase();
+    if (low.startsWith("--ask-for-approval=")) continue;
+    if (low === "-a" || low === "--ask-for-approval") {
+      const next = String(args[i + 1] || "").trim();
+      if (next && !next.startsWith("-")) i += 1;
+      continue;
+    }
+    out.push(token);
+  }
+  return out;
+}
+
+function parse_json_object(raw: string): Record<string, unknown> | null {
+  try {
+    const parsed = JSON.parse(String(raw || "")) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+    return parsed as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+function read_json_file(path: string): Record<string, unknown> | null {
+  try {
+    const raw = readFileSync(path, "utf-8");
+    return parse_json_object(raw);
+  } catch {
+    return null;
+  }
+}
+
+function find_file_upward(start_dir: string, rel_path: string): string | null {
+  let current = resolve(start_dir);
+  while (true) {
+    const candidate = join(current, rel_path);
+    if (existsSync(candidate)) return candidate;
+    const parent = dirname(current);
+    if (parent === current) break;
+    current = parent;
+  }
+  return null;
+}
+
+function normalize_mcp_server_name(raw: string): string | null {
+  const name = String(raw || "").trim();
+  if (!name) return null;
+  if (!/^[a-zA-Z0-9_-]+$/.test(name)) return null;
+  return name;
+}
+
+function looks_like_path_token(v: string): boolean {
+  const s = String(v || "").trim();
+  if (!s) return false;
+  if (s.startsWith("-")) return false;
+  if (/^https?:\/\//i.test(s)) return false;
+  if (isAbsolute(s)) return true;
+  if (/^[.]{1,2}[\\/]/.test(s)) return true;
+  if (/[\\/]/.test(s)) return true;
+  if (/\.(?:js|mjs|cjs|ts|tsx|py|cmd|bat|exe|ps1|sh)$/i.test(s)) return true;
+  return false;
+}
+
+function resolve_path_token_if_exists(raw: string, base_dirs: string[]): string {
+  const v = String(raw || "").trim();
+  if (!looks_like_path_token(v)) return v;
+  if (isAbsolute(v)) return v;
+  for (const base of base_dirs) {
+    const candidate = resolve(base, v);
+    if (existsSync(candidate)) return candidate;
+  }
+  return v;
+}
+
+function pick_mcp_server_object(root: Record<string, unknown>): Record<string, unknown> {
+  const direct = root.mcpServers;
+  if (direct && typeof direct === "object" && !Array.isArray(direct)) {
+    return direct as Record<string, unknown>;
+  }
+  const snake = root.mcp_servers;
+  if (snake && typeof snake === "object" && !Array.isArray(snake)) {
+    return snake as Record<string, unknown>;
+  }
+  return {};
+}
+
+function coerce_mcp_server_config(
+  raw: unknown,
+  base_dirs: string[],
+  default_timeout_sec: number,
+): McpServerConfig | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const rec = raw as Record<string, unknown>;
+  if (rec.enabled === false || rec.disabled === true) return null;
+
+  const command_raw = typeof rec.command === "string" ? String(rec.command).trim() : "";
+  const url_raw = typeof rec.url === "string" ? String(rec.url).trim() : "";
+  if (!command_raw && !url_raw) return null;
+
+  const out: McpServerConfig = {};
+  if (command_raw) out.command = resolve_path_token_if_exists(command_raw, base_dirs);
+  if (url_raw) out.url = url_raw;
+
+  if (Array.isArray(rec.args)) {
+    out.args = rec.args
+      .map((v) => resolve_path_token_if_exists(String(v ?? ""), base_dirs))
+      .filter((v) => Boolean(String(v || "").trim()));
+  }
+
+  if (rec.cwd && typeof rec.cwd === "string") {
+    out.cwd = resolve_path_token_if_exists(String(rec.cwd), base_dirs);
+  }
+
+  if (rec.env && typeof rec.env === "object" && !Array.isArray(rec.env)) {
+    const env_rec = rec.env as Record<string, unknown>;
+    const env: Record<string, string> = {};
+    for (const [k, v] of Object.entries(env_rec)) {
+      const key = String(k || "").trim();
+      if (!key) continue;
+      env[key] = String(v ?? "");
+    }
+    if (Object.keys(env).length > 0) out.env = env;
+  }
+
+  const timeout_num = Number(rec.startup_timeout_sec || rec.startupTimeoutSec || default_timeout_sec || 0);
+  if (Number.isFinite(timeout_num) && timeout_num > 0) {
+    out.startup_timeout_sec = Math.max(1, Math.round(timeout_num));
+  }
+
+  return out;
+}
+
+function extract_mcp_servers_from_object(
+  root: Record<string, unknown>,
+  base_dirs: string[],
+  default_timeout_sec: number,
+): Record<string, McpServerConfig> {
+  const picked = pick_mcp_server_object(root);
+  const out: Record<string, McpServerConfig> = {};
+  for (const [name_raw, spec] of Object.entries(picked)) {
+    const name = normalize_mcp_server_name(name_raw);
+    if (!name) continue;
+    const normalized = coerce_mcp_server_config(spec, base_dirs, default_timeout_sec);
+    if (!normalized) continue;
+    out[name] = normalized;
+  }
+  return out;
+}
+
+function merge_mcp_servers(
+  base: Record<string, McpServerConfig>,
+  incoming: Record<string, McpServerConfig>,
+): Record<string, McpServerConfig> {
+  const out: Record<string, McpServerConfig> = { ...base };
+  for (const [k, v] of Object.entries(incoming)) out[k] = v;
+  return out;
+}
+
+function parse_server_name_allowlist(raw: string): Set<string> {
+  const out = new Set<string>();
+  for (const token of String(raw || "").split(",")) {
+    const normalized = normalize_mcp_server_name(token);
+    if (!normalized) continue;
+    out.add(normalized);
+  }
+  return out;
+}
+
+function parse_bool_like(raw: string | undefined, fallback: boolean): boolean {
+  const v = String(raw || "").trim().toLowerCase();
+  if (!v) return fallback;
+  if (v === "1" || v === "true" || v === "yes" || v === "on") return true;
+  if (v === "0" || v === "false" || v === "no" || v === "off") return false;
+  return fallback;
+}
+
+function should_enable_all_project_mcp_servers(cwd: string): boolean {
+  if (String(process.env.ORCH_MCP_ENABLE_ALL_PROJECT || "").trim()) {
+    return parse_bool_like(process.env.ORCH_MCP_ENABLE_ALL_PROJECT, true);
+  }
+  const settings_path = find_file_upward(cwd, join(".claude", "settings.json"));
+  if (!settings_path) return false;
+  const parsed = read_json_file(settings_path);
+  if (!parsed) return false;
+  return parsed.enableAllProjectMcpServers === true;
+}
+
+function load_mcp_servers_for_codex(cwd: string): Record<string, McpServerConfig> {
+  const default_timeout_sec = Math.max(0, Number(process.env.ORCH_MCP_STARTUP_TIMEOUT_SEC || 0));
+  let merged: Record<string, McpServerConfig> = {};
+  const base_dirs = [cwd];
+
+  const settings_path = find_file_upward(cwd, join(".claude", "settings.json"));
+  if (settings_path) {
+    const parsed = read_json_file(settings_path);
+    if (parsed) {
+      const project_root = dirname(dirname(settings_path));
+      merged = merge_mcp_servers(
+        merged,
+        extract_mcp_servers_from_object(parsed, [project_root, dirname(settings_path), ...base_dirs], default_timeout_sec),
+      );
+    }
+  }
+
+  const mcp_json_path = find_file_upward(cwd, ".mcp.json");
+  if (mcp_json_path) {
+    const parsed = read_json_file(mcp_json_path);
+    if (parsed) {
+      merged = merge_mcp_servers(
+        merged,
+        extract_mcp_servers_from_object(parsed, [dirname(mcp_json_path), ...base_dirs], default_timeout_sec),
+      );
+    }
+  }
+
+  const env_file = String(process.env.ORCH_MCP_SERVERS_FILE || "").trim();
+  if (env_file) {
+    const abs = resolve(cwd, env_file);
+    const parsed = read_json_file(abs);
+    if (parsed) {
+      merged = merge_mcp_servers(
+        merged,
+        extract_mcp_servers_from_object(parsed, [dirname(abs), ...base_dirs], default_timeout_sec),
+      );
+    }
+  }
+
+  const env_json = String(process.env.ORCH_MCP_SERVERS_JSON || "").trim();
+  if (env_json) {
+    const parsed = parse_json_object(env_json);
+    if (parsed) {
+      merged = merge_mcp_servers(
+        merged,
+        extract_mcp_servers_from_object(parsed, base_dirs, default_timeout_sec),
+      );
+    }
+  }
+
+  const allow = parse_server_name_allowlist(String(process.env.ORCH_MCP_SERVER_NAMES || ""));
+  if (allow.size > 0) {
+    const filtered: Record<string, McpServerConfig> = {};
+    for (const [name, spec] of Object.entries(merged)) {
+      if (!allow.has(name)) continue;
+      filtered[name] = spec;
+    }
+    return filtered;
+  }
+
+  return merged;
+}
+
+function toml_string(v: string): string {
+  return JSON.stringify(String(v ?? ""));
+}
+
+function toml_array_of_strings(values: string[]): string {
+  return `[${values.map((v) => toml_string(v)).join(", ")}]`;
+}
+
+function toml_key(k: string): string {
+  const key = String(k || "").trim();
+  if (/^[A-Za-z0-9_-]+$/.test(key)) return key;
+  return JSON.stringify(key);
+}
+
+function toml_inline_table(table: Record<string, string>): string {
+  const entries = Object.entries(table).map(([k, v]) => `${toml_key(k)} = ${toml_string(v)}`);
+  return `{ ${entries.join(", ")} }`;
+}
+
+function build_codex_mcp_overrides(servers: Record<string, McpServerConfig>): string[] {
+  const out: string[] = [];
+  for (const [name, spec] of Object.entries(servers)) {
+    if (spec.command) out.push(`mcp_servers.${name}.command=${toml_string(spec.command)}`);
+    if (spec.url) out.push(`mcp_servers.${name}.url=${toml_string(spec.url)}`);
+    if (Array.isArray(spec.args) && spec.args.length > 0) {
+      out.push(`mcp_servers.${name}.args=${toml_array_of_strings(spec.args)}`);
+    }
+    if (spec.cwd) out.push(`mcp_servers.${name}.cwd=${toml_string(spec.cwd)}`);
+    if (spec.env && Object.keys(spec.env).length > 0) {
+      out.push(`mcp_servers.${name}.env=${toml_inline_table(spec.env)}`);
+    }
+    if (Number.isFinite(spec.startup_timeout_sec) && Number(spec.startup_timeout_sec) > 0) {
+      out.push(`mcp_servers.${name}.startup_timeout_sec=${Math.max(1, Math.round(Number(spec.startup_timeout_sec)))}`);
+    }
+  }
+  return out;
+}
+
+function with_codex_mcp_overrides(command: string, args: string[]): string[] {
+  const enabled = String(process.env.ORCH_MCP_ENABLED || "1").trim() !== "0";
+  if (!enabled) return args;
+  if (!is_codex_invocation(command, args)) return args;
+  if (args.some((v) => /mcp_servers\./i.test(String(v || "")))) return args;
+  const cwd = resolve(String(process.env.WORKSPACE_DIR || process.cwd()));
+  const enable_all_project = should_enable_all_project_mcp_servers(cwd);
+  const servers = load_mcp_servers_for_codex(cwd);
+  const overrides = build_codex_mcp_overrides(servers);
+  if (!enable_all_project && overrides.length === 0) return args;
+  let out = [...args];
+  if (enable_all_project) {
+    out = with_codex_global_option(out, "-c", "enable_all_project_mcp_servers=true");
+  }
+  for (const override of overrides) {
+    out = with_codex_global_option(out, "-c", override);
+  }
+  return out;
+}
+
 function strip_protocol_markers(raw: string): string {
   return String(raw || "")
     .replace(new RegExp(OUTPUT_BLOCK_START.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"), "")
     .replace(new RegExp(OUTPUT_BLOCK_END.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"), "")
+    .replace(new RegExp(TOOL_BLOCK_START.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"), "")
+    .replace(new RegExp(TOOL_BLOCK_END.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"), "")
     .trim();
 }
 
@@ -85,6 +534,10 @@ function strip_protocol_scaffold(raw: string): string {
       if (/^Return only the final user-facing answer wrapped in the exact block below\.?$/i.test(t)) return false;
       if (/^Start your response with the start marker immediately/i.test(t)) return false;
       if (/^Do not include execution logs, shell commands, env vars, or debug info\.?$/i.test(t)) return false;
+      if (/^Return either a TOOL block or FINAL block/i.test(t)) return false;
+      if (/^If a tool is required, return only this exact block/i.test(t)) return false;
+      if (/^Otherwise, return the final answer block\.?$/i.test(t)) return false;
+      if (/^Available tools \(compact\):$/i.test(t)) return false;
       if (/^<final answer>$/i.test(t)) return false;
       return true;
     });
@@ -333,6 +786,135 @@ function resolve_command_for_windows(command: string): string {
   return cmd;
 }
 
+function command_basename(command: string): string {
+  const raw = strip_surrounding_quotes(String(command || "").trim()).toLowerCase();
+  if (!raw) return "";
+  const idx = Math.max(raw.lastIndexOf("/"), raw.lastIndexOf("\\"));
+  return idx >= 0 ? raw.slice(idx + 1) : raw;
+}
+
+function is_codex_command(command: string): boolean {
+  const base = command_basename(command);
+  return base === "codex" || base === "codex.exe" || base === "codex.cmd" || base === "codex.ps1";
+}
+
+function is_claude_command(command: string): boolean {
+  const base = command_basename(command);
+  return base === "claude" || base === "claude.exe" || base === "claude.cmd";
+}
+
+function first_non_flag_token(args: string[]): string {
+  const idx = first_non_flag_index(args);
+  if (idx < 0) return "";
+  return String(args[idx] || "").trim();
+}
+
+function is_codex_invocation(command: string, args: string[]): boolean {
+  if (is_codex_command(command)) return true;
+  return is_codex_command(first_non_flag_token(args));
+}
+
+function is_claude_invocation(command: string, args: string[]): boolean {
+  if (is_claude_command(command)) return true;
+  return is_claude_command(first_non_flag_token(args));
+}
+
+function has_any_flag(args: string[], flags: string[]): boolean {
+  const set = new Set(flags.map((f) => String(f || "").trim().toLowerCase()));
+  for (const token of args) {
+    const normalized = String(token || "").trim().toLowerCase();
+    if (!normalized) continue;
+    if (set.has(normalized)) return true;
+    const eq_idx = normalized.indexOf("=");
+    if (eq_idx > 0) {
+      const head = normalized.slice(0, eq_idx);
+      if (set.has(head)) return true;
+    }
+  }
+  return false;
+}
+
+function first_non_flag_index(args: string[]): number {
+  for (let i = 0; i < args.length; i += 1) {
+    const token = String(args[i] || "").trim();
+    if (!token) continue;
+    if (!token.startsWith("-")) return i;
+  }
+  return -1;
+}
+
+function with_codex_global_option(args: string[], flag: string, value?: string): string[] {
+  const out = [...args];
+  const first_non_flag = first_non_flag_index(out);
+  const insert_at = first_non_flag >= 0 ? first_non_flag : out.length;
+  if (value === undefined) {
+    out.splice(insert_at, 0, flag);
+  } else {
+    out.splice(insert_at, 0, flag, value);
+  }
+  return out;
+}
+
+function split_path_list(raw: string): string[] {
+  const text = String(raw || "").trim();
+  if (!text) return [];
+  const sep = text.includes(";") ? ";" : ",";
+  return text
+    .split(sep)
+    .map((v) => v.trim())
+    .filter(Boolean);
+}
+
+function with_codex_permission_overrides(command: string, args: string[]): string[] {
+  if (!is_codex_invocation(command, args)) return args;
+  let out = strip_approval_flags(args);
+  if (has_any_flag(out, ["--dangerously-bypass-approvals-and-sandbox"])) return out;
+  const bypass_all = parse_bool_like(process.env.ORCH_CODEX_BYPASS_SANDBOX, false);
+  if (bypass_all) {
+    if (!has_any_flag(out, ["--dangerously-bypass-approvals-and-sandbox"])) {
+      out = with_codex_global_option(out, "--dangerously-bypass-approvals-and-sandbox");
+    }
+    return out;
+  }
+
+  const sandbox_mode = String(process.env.ORCH_CODEX_SANDBOX_MODE || "workspace-write").trim();
+  const has_sandbox = has_any_flag(out, ["-s", "--sandbox", "--full-auto"]);
+
+  if (sandbox_mode && !has_sandbox) {
+    out = with_codex_global_option(out, "--sandbox", sandbox_mode);
+  }
+
+  const add_dirs = split_path_list(String(process.env.ORCH_CODEX_ADD_DIRS || ""))
+    .map((d) => resolve(String(process.env.WORKSPACE_DIR || process.cwd()), d));
+  const existing_dirs = new Set<string>();
+  for (let i = 0; i < out.length; i += 1) {
+    const token = String(out[i] || "").trim().toLowerCase();
+    if (token !== "--add-dir") continue;
+    const dir = String(out[i + 1] || "").trim();
+    if (!dir) continue;
+    existing_dirs.add(resolve(dir).toLowerCase());
+  }
+  for (const dir of add_dirs) {
+    const key = resolve(dir).toLowerCase();
+    if (existing_dirs.has(key)) continue;
+    out = with_codex_global_option(out, "--add-dir", dir);
+    existing_dirs.add(key);
+  }
+
+  return out;
+}
+
+function with_claude_permission_overrides(command: string, args: string[]): string[] {
+  if (!is_claude_invocation(command, args)) return args;
+  const out = [...args];
+  const mode = String(process.env.ORCH_CLAUDE_PERMISSION_MODE || "dontAsk").trim();
+  if (!mode) return out;
+  if (!has_any_flag(out, ["--permission-mode"])) {
+    out.push("--permission-mode", mode);
+  }
+  return out;
+}
+
 export class CliHeadlessProvider extends BaseLlmProvider {
   private readonly command_env: string;
   private readonly args_env: string;
@@ -366,8 +948,12 @@ export class CliHeadlessProvider extends BaseLlmProvider {
   }
 
   async chat(options: ChatOptions): Promise<LlmResponse> {
-    const prompt = messages_to_prompt(this.sanitize_messages(options.messages));
-    const command = String(process.env[this.command_env] || this.default_command).trim();
+    const tools = Array.isArray(options.tools) ? options.tools : [];
+    const tool_mode = tools.length > 0;
+    const prompt = messages_to_prompt(this.sanitize_messages(options.messages), tools);
+    const command_env_value = String(process.env[this.command_env] || this.default_command).trim();
+    const normalized = split_command_with_embedded_args(command_env_value);
+    const command = normalized.command;
     if (!command) {
       return new LlmResponse({
         content: `Error calling ${this.id}: env_missing:${this.command_env}`,
@@ -376,15 +962,18 @@ export class CliHeadlessProvider extends BaseLlmProvider {
     }
 
     const raw_args = String(process.env[this.args_env] || this.default_args).trim();
-    let args = split_args(raw_args);
+    let args = strip_approval_flags([...normalized.args, ...split_args(raw_args)]);
     // Safe default for codex headless: force non-interactive exec mode.
-    if (/^codex(\.exe)?$/i.test(command) && args.length === 0) {
+    if (is_codex_command(command) && args.length === 0) {
       args = ["exec", "--sandbox", "workspace-write", "--skip-git-repo-check", "-"];
     }
     // Safe default for claude headless: force print mode from stdin.
-    if (/^claude(\.exe)?$/i.test(command) && args.length === 0) {
+    if (is_claude_command(command) && args.length === 0) {
       args = ["-p", "--output-format", "text", "--permission-mode", "dontAsk", "-"];
     }
+    args = with_codex_permission_overrides(command, args);
+    args = with_claude_permission_overrides(command, args);
+    args = with_codex_mcp_overrides(command, args);
     const timeout_ms = Math.max(1000, Number(process.env[this.timeout_env] || this.default_timeout_ms));
     const capture_max_chars = Math.max(
       10_000,
@@ -397,8 +986,6 @@ export class CliHeadlessProvider extends BaseLlmProvider {
     const json_mode = args.includes("--json") || raw_args.includes("stream-json");
     let streamed_partial = "";
     let raw_stream = "";
-    let preprotocol_buffer = "";
-    let last_preprotocol_emit_at = 0;
     let json_line_buffer = "";
     let final_from_json = "";
     let saw_json_event = false;
@@ -416,63 +1003,50 @@ export class CliHeadlessProvider extends BaseLlmProvider {
       last_emitted_chunk_at = now;
       await options.on_stream?.(clean);
     };
+    const on_chunk = options.on_stream && !tool_mode
+      ? async (chunk: string) => {
+          const incoming = String(chunk || "");
+          if (!incoming) return;
+
+          if (json_mode || saw_json_event) {
+            json_line_buffer = append_limited(json_line_buffer, incoming, stream_state_max_chars);
+            while (true) {
+              const idx = json_line_buffer.indexOf("\n");
+              if (idx < 0) break;
+              const line = json_line_buffer.slice(0, idx).trim();
+              json_line_buffer = json_line_buffer.slice(idx + 1);
+              if (!line) continue;
+              const parsed = parse_json_line(line);
+              if (!parsed) continue;
+              saw_json_event = true;
+              const extracted = extract_json_event_text(parsed, json_state);
+              if (extracted.final && extracted.final.trim()) {
+                final_from_json = strip_protocol_scaffold(extracted.final);
+              }
+              if (extracted.delta && extracted.delta.trim()) {
+                await emit_stream(extracted.delta);
+              }
+            }
+            return;
+          }
+
+          raw_stream = append_limited(raw_stream, incoming, stream_state_max_chars);
+          const partial = extract_protocol_partial(raw_stream);
+          if (!partial) return;
+          if (partial.length <= streamed_partial.length) return;
+          const delta = partial.slice(streamed_partial.length);
+          streamed_partial = partial;
+          await emit_stream(delta);
+        }
+      : undefined;
+
     const result = await run_cli(
       command,
       args,
       prompt,
       timeout_ms,
       options.abort_signal,
-      options.on_stream
-        ? async (chunk) => {
-            const incoming = String(chunk || "");
-            if (!incoming) return;
-
-            if (json_mode || saw_json_event) {
-              json_line_buffer = append_limited(json_line_buffer, incoming, stream_state_max_chars);
-              while (true) {
-                const idx = json_line_buffer.indexOf("\n");
-                if (idx < 0) break;
-                const line = json_line_buffer.slice(0, idx).trim();
-                json_line_buffer = json_line_buffer.slice(idx + 1);
-                if (!line) continue;
-                const parsed = parse_json_line(line);
-                if (!parsed) {
-                  if (!saw_json_event && line.trim()) {
-                    await emit_stream(line);
-                  }
-                  continue;
-                }
-                saw_json_event = true;
-                const extracted = extract_json_event_text(parsed, json_state);
-                if (extracted.final && extracted.final.trim()) {
-                  final_from_json = strip_protocol_scaffold(extracted.final);
-                }
-                if (extracted.delta && extracted.delta.trim()) {
-                  await emit_stream(extracted.delta);
-                }
-              }
-              return;
-            }
-
-            raw_stream = append_limited(raw_stream, incoming, stream_state_max_chars);
-            const partial = extract_protocol_partial(raw_stream);
-            if (!partial) {
-              preprotocol_buffer = append_limited(preprotocol_buffer, incoming, stream_state_max_chars);
-              const now = Date.now();
-              if (preprotocol_buffer.length < 120 && now - last_preprotocol_emit_at < 1200) return;
-              const out = preprotocol_buffer;
-              preprotocol_buffer = "";
-              last_preprotocol_emit_at = now;
-              await emit_stream(out);
-              return;
-            }
-            preprotocol_buffer = "";
-            if (partial.length <= streamed_partial.length) return;
-            const delta = partial.slice(streamed_partial.length);
-            streamed_partial = partial;
-            await emit_stream(delta);
-          }
-        : undefined,
+      on_chunk,
       capture_max_chars,
     );
     if (!result.ok) {
@@ -485,7 +1059,16 @@ export class CliHeadlessProvider extends BaseLlmProvider {
         finish_reason: "error",
       });
     }
-    const jsonText = extract_final_from_json_output(`${result.stdout}\n${result.stderr}`) || final_from_json;
+    const merged_output = `${result.stdout}\n${result.stderr}`;
+    const tool_calls = parse_tool_calls_from_output(merged_output);
+    if (tool_calls.length > 0) {
+      return new LlmResponse({
+        content: null,
+        tool_calls,
+        finish_reason: "tool_calls",
+      });
+    }
+    const jsonText = extract_final_from_json_output(merged_output) || final_from_json;
     const protocolText = extract_protocol_output(result.stdout) || extract_protocol_output(result.stderr);
     const text = strip_protocol_scaffold(String(jsonText || protocolText || result.stdout || result.stderr || ""));
     if (!text) {

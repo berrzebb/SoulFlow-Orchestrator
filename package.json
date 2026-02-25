@@ -5,12 +5,17 @@
   "type": "module",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "dev": "tsx src/main.ts",
+    "dev": "cd workspace && tsx watch --clear-screen=false ../src/main.ts",
+    "dev:once": "cd workspace && tsx ../src/main.ts",
     "health:phi4": "tsx src/phi4-health.ts"
   },
   "devDependencies": {
     "@types/node": "^22.15.0",
     "tsx": "^4.19.4",
     "typescript": "^5.8.3"
+  },
+  "dependencies": {
+    "@vercel/beautiful-mermaid": "^0.1.5",
+    "markdown-to-markdown-sanitizer": "^1.1.3"
   }
 }

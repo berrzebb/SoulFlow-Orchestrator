@@ -23,6 +23,7 @@ function to_inbound_message(
   update_id: number,
 ): InboundMessage {
   const from = (raw.from && typeof raw.from === "object") ? (raw.from as Record<string, unknown>) : {};
+  const from_is_bot = from.is_bot === true;
   const content = as_string(raw.text || raw.caption || "");
   const command = channel.parse_command(content);
   const mentions = channel.parse_agent_mentions(content);
@@ -80,7 +81,14 @@ function to_inbound_message(
     content,
     at: now_iso(),
     media,
-    metadata: { telegram: raw, command, mentions, message_id: dedupe_id, telegram_message_id: as_string(raw.message_id || "") },
+    metadata: {
+      telegram: raw,
+      command,
+      mentions,
+      from_is_bot,
+      message_id: dedupe_id,
+      telegram_message_id: as_string(raw.message_id || ""),
+    },
   };
 }
 
@@ -113,33 +121,73 @@ export class TelegramChannel extends BaseChannel {
     try {
       await this.set_typing(chat_id, true);
       const text = as_string(message.content || "");
+      const meta = (message.metadata && typeof message.metadata === "object")
+        ? (message.metadata as Record<string, unknown>)
+        : {};
+      const parse_mode = this.resolve_parse_mode(meta.render_parse_mode || meta.parse_mode);
       const chunk_size = Math.max(500, Number(process.env.TELEGRAM_TEXT_CHUNK_SIZE || 3500));
       const file_fallback_threshold = Math.max(8_000, Number(process.env.TELEGRAM_TEXT_FILE_FALLBACK_THRESHOLD || 14_000));
       let first_message_id = "";
       if (Array.isArray(message.media) && message.media.length > 0) {
-        const media = message.media[0];
-        const filePath = String(media.url || "");
-        const bytes = await readFile(filePath);
-        const extension = extname(filePath).toLowerCase();
-        const isPhoto = [".jpg", ".jpeg", ".png", ".webp", ".gif"].includes(extension);
-        const method = isPhoto ? "sendPhoto" : "sendDocument";
-        const url = `${this.api_base}/bot${this.bot_token}/${method}`;
-        const form = new FormData();
-        form.set("chat_id", chat_id);
-        form.set(isPhoto ? "photo" : "document", new Blob([bytes]), media.name || basename(filePath));
-        if (text) form.set("caption", as_string(text).slice(0, 900));
-        if (message.reply_to) form.set("reply_to_message_id", as_string(message.reply_to));
-        const response = await fetch(url, {
-          method: "POST",
-          body: form,
-        });
-        const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
-        if (!response.ok || data.ok !== true) {
-          return { ok: false, error: as_string(data.description || `http_${response.status}`) };
+        for (let idx = 0; idx < message.media.length; idx += 1) {
+          const media = message.media[idx];
+          const filePath = String(media?.url || "");
+          if (!filePath) continue;
+          const bytes = await readFile(filePath);
+          const extension = extname(filePath).toLowerCase();
+          const isPhoto = [".jpg", ".jpeg", ".png", ".webp", ".gif"].includes(extension);
+          const method = isPhoto ? "sendPhoto" : "sendDocument";
+          const url = `${this.api_base}/bot${this.bot_token}/${method}`;
+          const form = new FormData();
+          form.set("chat_id", chat_id);
+          form.set(isPhoto ? "photo" : "document", new Blob([bytes]), media.name || basename(filePath));
+          if (idx === 0 && text) form.set("caption", as_string(text).slice(0, 900));
+          if (idx === 0 && parse_mode && text) form.set("parse_mode", parse_mode);
+          if (idx === 0 && message.reply_to) form.set("reply_to_message_id", as_string(message.reply_to));
+          const response = await fetch(url, {
+            method: "POST",
+            body: form,
+          });
+          const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+          if (!response.ok || data.ok !== true) {
+            return { ok: false, error: as_string(data.description || `http_${response.status}`) };
+          }
+          const result = (data.result && typeof data.result === "object") ? (data.result as Record<string, unknown>) : {};
+          if (!first_message_id) first_message_id = as_string(result.message_id || "");
         }
-        const result = (data.result && typeof data.result === "object") ? (data.result as Record<string, unknown>) : {};
-        first_message_id = as_string(result.message_id || "");
       } else if (text) {
+        if (parse_mode) {
+          if (text.length > chunk_size || text.length >= file_fallback_threshold) {
+            const doc = await this.send_text_document(
+              chat_id,
+              text,
+              `long-message-${Date.now()}.txt`,
+              as_string(message.reply_to || ""),
+            );
+            if (!doc.ok) return doc;
+            first_message_id = as_string(doc.message_id || "");
+            return { ok: true, message_id: first_message_id || as_string(message.reply_to || "") };
+          }
+          const url = `${this.api_base}/bot${this.bot_token}/sendMessage`;
+          const payload: Record<string, unknown> = {
+            chat_id,
+            text,
+            parse_mode,
+          };
+          if (message.reply_to) payload.reply_to_message_id = message.reply_to;
+          const response = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+          if (!response.ok || data.ok !== true) {
+            return { ok: false, error: as_string(data.description || `http_${response.status}`) };
+          }
+          const result = (data.result && typeof data.result === "object") ? (data.result as Record<string, unknown>) : {};
+          first_message_id = as_string(result.message_id || "");
+          return { ok: true, message_id: first_message_id || as_string(message.reply_to || "") };
+        }
         if (text.length >= file_fallback_threshold) {
           const doc = await this.send_text_document(
             chat_id,
@@ -178,6 +226,12 @@ export class TelegramChannel extends BaseChannel {
     } finally {
       await this.set_typing(chat_id, false);
     }
+  }
+
+  private resolve_parse_mode(value: unknown): "HTML" | null {
+    const mode = String(value || "").trim().toUpperCase();
+    if (mode === "HTML") return "HTML";
+    return null;
   }
 
   async read(chat_id: string, limit = 20): Promise<InboundMessage[]> {

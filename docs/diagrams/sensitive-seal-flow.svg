@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 999.024 602" width="999.024" height="602" style="--bg:#0A0A0A;--fg:#EDEDED;--line:#EDEDED;--accent:#EDEDED;--muted:#888888;--surface:#0A0A0A;--border:#454545;background:var(--bg)">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;display=swap');
+  text { font-family: 'Geist', system-ui, sans-serif; }
+  svg {
+    /* Derived from --bg and --fg (overridable via --line, --accent, etc.) */
+    --_text:          var(--fg);
+    --_text-sec:      var(--muted, color-mix(in srgb, var(--fg) 60%, var(--bg)));
+    --_text-muted:    var(--muted, color-mix(in srgb, var(--fg) 40%, var(--bg)));
+    --_text-faint:    color-mix(in srgb, var(--fg) 25%, var(--bg));
+    --_line:          var(--line, color-mix(in srgb, var(--fg) 30%, var(--bg)));
+    --_arrow:         var(--accent, color-mix(in srgb, var(--fg) 50%, var(--bg)));
+    --_node-fill:     var(--surface, color-mix(in srgb, var(--fg) 3%, var(--bg)));
+    --_node-stroke:   var(--border, color-mix(in srgb, var(--fg) 20%, var(--bg)));
+    --_group-fill:    var(--bg);
+    --_group-hdr:     color-mix(in srgb, var(--fg) 5%, var(--bg));
+    --_inner-stroke:  color-mix(in srgb, var(--fg) 12%, var(--bg));
+    --_key-badge:     color-mix(in srgb, var(--fg) 10%, var(--bg));
+  }
+</style>
+<defs>
+  <marker id="seq-arrow" markerWidth="7" markerHeight="7" refX="7" refY="3.5" orient="auto-start-reverse">
+    <polygon points="0 0, 7 3.5, 0 7" fill="var(--_arrow)" />
+  </marker>
+  <marker id="seq-arrow-open" markerWidth="7" markerHeight="7" refX="7" refY="3.5" orient="auto-start-reverse">
+    <polyline points="0 0, 7 3.5, 0 7" fill="none" stroke="var(--_arrow)" stroke-width="1" />
+  </marker>
+</defs>
+<rect x="605.408" y="348" width="363.616" height="124" rx="0" ry="0" fill="none" stroke="var(--_node-stroke)" stroke-width="1" />
+<rect x="605.408" y="348" width="219" height="18" fill="var(--_group-hdr)" stroke="var(--_node-stroke)" stroke-width="1" />
+<text x="611.408" y="357" dy="0.35em" font-size="10" font-weight="600" fill="var(--_text-sec)">alt [missing key or invalid cipher]</text>
+<line x1="605.408" y1="424" x2="969.024" y2="424" stroke="var(--_line)" stroke-width="0.75" stroke-dasharray="6 4" />
+<text x="613.408" y="438" font-size="10" font-weight="400" fill="var(--_text-muted)">[resolved]</text>
+<line x1="105.904" y1="70" x2="105.904" y2="572" stroke="var(--_line)" stroke-width="0.75" stroke-dasharray="6 4" />
+<line x1="307.696" y1="70" x2="307.696" y2="572" stroke="var(--_line)" stroke-width="0.75" stroke-dasharray="6 4" />
+<line x1="504.49600000000004" y1="70" x2="504.49600000000004" y2="572" stroke="var(--_line)" stroke-width="0.75" stroke-dasharray="6 4" />
+<line x1="701.296" y1="70" x2="701.296" y2="572" stroke="var(--_line)" stroke-width="0.75" stroke-dasharray="6 4" />
+<line x1="893.104" y1="70" x2="893.104" y2="572" stroke="var(--_line)" stroke-width="0.75" stroke-dasharray="6 4" />
+<line x1="105.904" y1="90" x2="307.696" y2="90" stroke="var(--_line)" stroke-width="1.5" marker-end="url(#seq-arrow)" />
+<text x="206.8" y="84" text-anchor="middle" font-size="10" font-weight="400" fill="var(--_text-muted)">message with card/account/password</text>
+<polyline points="307.696,130 337.696,130 337.696,150 307.696,150" fill="none" stroke="var(--_line)" stroke-width="1.5" marker-end="url(#seq-arrow)" />
+<text x="343.696" y="140" dy="0.35em" font-size="10" font-weight="400" fill="var(--_text-muted)">seal_inbound_sensitive_text</text>
+<line x1="307.696" y1="200" x2="504.49600000000004" y2="200" stroke="var(--_line)" stroke-width="1.5" marker-end="url(#seq-arrow)" />
+<text x="406.096" y="194" text-anchor="middle" font-size="10" font-weight="400" fill="var(--_text-muted)">put_secret(inbound.&lt;provider&gt;.c&lt;chat&gt;.&lt;type&gt;.v&lt;hash&gt;)</text>
+<line x1="307.696" y1="240" x2="701.296" y2="240" stroke="var(--_line)" stroke-width="1.5" marker-end="url(#seq-arrow)" />
+<text x="504.49600000000004" y="234" text-anchor="middle" font-size="10" font-weight="400" fill="var(--_text-muted)">pass secret-ref only (&lt;secret:key&gt;)</text>
+<line x1="701.296" y1="280" x2="893.104" y2="280" stroke="var(--_line)" stroke-width="1.5" marker-end="url(#seq-arrow)" />
+<text x="797.2" y="274" text-anchor="middle" font-size="10" font-weight="400" fill="var(--_text-muted)">tool call with secret-ref/cipher</text>
+<line x1="893.104" y1="320" x2="504.49600000000004" y2="320" stroke="var(--_line)" stroke-width="1.5" marker-end="url(#seq-arrow)" />
+<text x="698.8000000000001" y="314" text-anchor="middle" font-size="10" font-weight="400" fill="var(--_text-muted)">resolve_inline_secrets_with_report</text>
+<line x1="893.104" y1="388" x2="701.296" y2="388" stroke="var(--_line)" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#seq-arrow)" />
+<text x="797.2" y="382" text-anchor="middle" font-size="10" font-weight="400" fill="var(--_text-muted)">Error: secret_resolution_required</text>
+<line x1="893.104" y1="452" x2="701.296" y2="452" stroke="var(--_line)" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#seq-arrow)" />
+<text x="797.2" y="446" text-anchor="middle" font-size="10" font-weight="400" fill="var(--_text-muted)">execute with plaintext in-memory only</text>
+<line x1="701.296" y1="492" x2="307.696" y2="492" stroke="var(--_line)" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#seq-arrow)" />
+<text x="504.49600000000004" y="486" text-anchor="middle" font-size="10" font-weight="400" fill="var(--_text-muted)">result</text>
+<line x1="307.696" y1="532" x2="105.904" y2="532" stroke="var(--_line)" stroke-width="1.5" stroke-dasharray="6 4" marker-end="url(#seq-arrow)" />
+<text x="206.8" y="526" text-anchor="middle" font-size="10" font-weight="400" fill="var(--_text-muted)">normalized rendered response</text>
+<rect x="30" y="30" width="151.808" height="40" rx="4" ry="4" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+<text x="105.904" y="50" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" fill="var(--_text)">Channel User</text>
+<rect x="221.80800000000002" y="30" width="171.776" height="40" rx="4" ry="4" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+<text x="307.696" y="50" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" fill="var(--_text)">ChannelManager</text>
+<rect x="433.58400000000006" y="30" width="141.824" height="40" rx="4" ry="4" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+<text x="504.49600000000004" y="50" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" fill="var(--_text)">SecretVault</text>
+<rect x="615.408" y="30" width="171.776" height="40" rx="4" ry="4" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+<text x="701.296" y="50" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" fill="var(--_text)">Headless Agent</text>
+<rect x="827.1840000000001" y="30" width="131.84" height="40" rx="4" ry="4" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="1" />
+<text x="893.104" y="50" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" fill="var(--_text)">Tool(Base)</text>
+</svg>

@@ -8,10 +8,12 @@ import { MessageTool } from "./message.js";
 import { SpawnTool, type SpawnRequest } from "./spawn.js";
 import { ToolRegistry } from "./registry.js";
 import { ExecTool } from "./shell.js";
-import { WebFetchTool, WebSearchTool } from "./web.js";
+import { WebBrowserTool, WebFetchTool, WebSearchTool } from "./web.js";
+import { DiagramRenderTool } from "./diagram.js";
 import { DynamicToolRuntimeLoader, ToolRuntimeReloader } from "./runtime-loader.js";
 import { ToolInstallerService } from "./installer.js";
 import { ToolSelfTestService } from "./self-test.js";
+import { RuntimeAdminTool } from "./runtime-admin.js";
 import type { AppendWorkflowEventInput, AppendWorkflowEventResult } from "../../events/types.js";
 
 export {
@@ -23,6 +25,8 @@ export {
   ExecTool,
   WebSearchTool,
   WebFetchTool,
+  WebBrowserTool,
+  DiagramRenderTool,
   MessageTool,
   FileRequestTool,
   SpawnTool,
@@ -31,6 +35,7 @@ export {
   ToolRuntimeReloader,
   ToolInstallerService,
   ToolSelfTestService,
+  RuntimeAdminTool,
 };
 export { Tool } from "./base.js";
 export type {
@@ -138,6 +143,8 @@ export function create_default_tool_registry(args?: {
   registry.register(new ExecTool({ working_dir: workspace, restrict_to_working_dir: true }));
   registry.register(new WebSearchTool());
   registry.register(new WebFetchTool());
+  registry.register(new WebBrowserTool());
+  registry.register(new DiagramRenderTool());
 
   if (args?.bus) {
     sender = async (message: OutboundMessage): Promise<void> => {
@@ -155,6 +162,17 @@ export function create_default_tool_registry(args?: {
 
   const dynamic_loader = new DynamicToolRuntimeLoader(workspace, args?.dynamic_manifest_path);
   registry.set_dynamic_tools(dynamic_loader.load_tools());
+  const installer = new ToolInstallerService(workspace, args?.dynamic_manifest_path);
+  registry.register(new RuntimeAdminTool({
+    workspace,
+    installer,
+    list_registered_tool_names: () => registry.tool_names(),
+    refresh_dynamic_tools: () => {
+      const tools = dynamic_loader.load_tools();
+      registry.set_dynamic_tools(tools);
+      return tools.length;
+    },
+  }));
 
   return registry;
 }
