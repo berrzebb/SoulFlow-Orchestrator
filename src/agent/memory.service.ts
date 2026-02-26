@@ -11,6 +11,7 @@ import type {
 import { file_exists, today_key } from "../utils/common.js";
 import { redact_sensitive_text } from "../security/sensitive.js";
 import { SecretVaultService } from "../security/secret-vault.js";
+import { parse_tool_calls_from_text } from "./tool-call-parser.js";
 
 const SAVE_MEMORY_TOOL = [
   {
@@ -286,10 +287,16 @@ export class MemoryStore {
       model,
     });
 
-    if (!response?.has_tool_calls || !Array.isArray(response.tool_calls) || response.tool_calls.length === 0) {
+    const implicit_tool_calls = response?.has_tool_calls
+      ? []
+      : parse_tool_calls_from_text(String(response?.content || ""));
+    const effective_tool_calls = response?.has_tool_calls
+      ? (Array.isArray(response.tool_calls) ? response.tool_calls : [])
+      : implicit_tool_calls;
+    if (!Array.isArray(effective_tool_calls) || effective_tool_calls.length === 0) {
       return false;
     }
-    const args = response.tool_calls[0]?.arguments || {};
+    const args = effective_tool_calls[0]?.arguments || {};
 
     const historyEntry = args.history_entry;
     if (historyEntry !== undefined && historyEntry !== null) {

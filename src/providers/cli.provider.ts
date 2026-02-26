@@ -4,6 +4,7 @@ import { dirname, isAbsolute, join, resolve } from "node:path";
 import { TextDecoder } from "node:util";
 import { BaseLlmProvider } from "./base.js";
 import { LlmResponse, type ChatMessage, type ChatOptions, type ProviderId, type ToolCallRequest } from "./types.js";
+import { dedupe_tool_calls, parse_tool_calls_from_text, parse_tool_calls_from_unknown } from "../agent/tool-call-parser.js";
 
 const OUTPUT_BLOCK_START = "<<ORCH_FINAL>>";
 const OUTPUT_BLOCK_END = "<<ORCH_FINAL_END>>";
@@ -140,48 +141,62 @@ function extract_last_block(raw: string, start_marker: string, end_marker: strin
   return last;
 }
 
-function as_tool_arguments(raw: unknown): Record<string, unknown> {
-  if (raw && typeof raw === "object" && !Array.isArray(raw)) return raw as Record<string, unknown>;
-  if (typeof raw !== "string") return {};
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return parsed as Record<string, unknown>;
-    return {};
-  } catch {
-    return {};
+function parse_tool_calls_from_json_events(raw: string): ToolCallRequest[] {
+  const out: ToolCallRequest[] = [];
+  const lines = String(raw || "").split(/\r?\n/g);
+  for (const line of lines) {
+    const parsed = parse_json_line(line);
+    if (!parsed) continue;
+    const from_line = parse_tool_calls_from_unknown(parsed);
+    for (const row of from_line) out.push(row);
   }
+  return dedupe_tool_calls(out).slice(0, 32);
+}
+
+function parse_tool_calls_from_json_text(raw: string): ToolCallRequest[] {
+  return parse_tool_calls_from_text(raw);
 }
 
 function parse_tool_calls_from_output(raw: string): ToolCallRequest[] {
   const block = extract_last_block(raw, TOOL_BLOCK_START, TOOL_BLOCK_END);
-  if (!block) return [];
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(block);
-  } catch {
-    return [];
-  }
-  const list = Array.isArray(parsed)
-    ? parsed
-    : (parsed && typeof parsed === "object" && Array.isArray((parsed as Record<string, unknown>).tool_calls))
-      ? (parsed as Record<string, unknown>).tool_calls as unknown[]
-      : [];
   const out: ToolCallRequest[] = [];
-  for (let i = 0; i < list.length; i += 1) {
-    const rec = (list[i] && typeof list[i] === "object")
-      ? (list[i] as Record<string, unknown>)
-      : {};
-    const name = String(rec.name || "").trim();
-    if (!name) continue;
-    const id = String(rec.id || "").trim() || `call_${i + 1}`;
-    out.push({
-      id,
-      name,
-      arguments: as_tool_arguments(rec.arguments),
-    });
+  if (block) {
+    const from_block = parse_tool_calls_from_json_text(block);
+    for (const row of from_block) out.push(row);
   }
-  return out;
+  if (out.length > 0) return dedupe_tool_calls(out).slice(0, 32);
+
+  const from_events = parse_tool_calls_from_json_events(raw);
+  if (from_events.length > 0) return from_events;
+
+  const final_from_json = extract_final_from_json_output(raw);
+  if (final_from_json) {
+    const final_block = extract_last_block(final_from_json, TOOL_BLOCK_START, TOOL_BLOCK_END);
+    if (final_block) {
+      const parsed = parse_tool_calls_from_json_text(final_block);
+      if (parsed.length > 0) return parsed;
+    }
+    const parsed = parse_tool_calls_from_json_text(final_from_json);
+    if (parsed.length > 0) return parsed;
+  }
+
+  const final_from_protocol = extract_protocol_output(raw);
+  if (final_from_protocol) {
+    const protocol_block = extract_last_block(final_from_protocol, TOOL_BLOCK_START, TOOL_BLOCK_END);
+    if (protocol_block) {
+      const parsed = parse_tool_calls_from_json_text(protocol_block);
+      if (parsed.length > 0) return parsed;
+    }
+    const parsed = parse_tool_calls_from_json_text(final_from_protocol);
+    if (parsed.length > 0) return parsed;
+  }
+
+  return [];
 }
+
+export const __cli_provider_test__ = {
+  parse_tool_calls_from_output,
+};
 
 function split_command_with_embedded_args(raw: string): { command: string; args: string[] } {
   const text = String(raw || "").trim();
@@ -390,7 +405,7 @@ function should_enable_all_project_mcp_servers(cwd: string): boolean {
   return parsed.enableAllProjectMcpServers === true;
 }
 
-function load_mcp_servers_for_codex(cwd: string): Record<string, McpServerConfig> {
+function load_mcp_servers_for_codex(cwd: string, runtime_allowlist?: Set<string> | null): Record<string, McpServerConfig> {
   const default_timeout_sec = Math.max(0, Number(process.env.ORCH_MCP_STARTUP_TIMEOUT_SEC || 0));
   let merged: Record<string, McpServerConfig> = {};
   const base_dirs = [cwd];
@@ -441,8 +456,11 @@ function load_mcp_servers_for_codex(cwd: string): Record<string, McpServerConfig
     }
   }
 
-  const allow = parse_server_name_allowlist(String(process.env.ORCH_MCP_SERVER_NAMES || ""));
-  if (allow.size > 0) {
+  const env_allow = parse_server_name_allowlist(String(process.env.ORCH_MCP_SERVER_NAMES || ""));
+  const allow = runtime_allowlist && runtime_allowlist.size > 0
+    ? runtime_allowlist
+    : (env_allow.size > 0 ? env_allow : null);
+  if (allow) {
     const filtered: Record<string, McpServerConfig> = {};
     for (const [name, spec] of Object.entries(merged)) {
       if (!allow.has(name)) continue;
@@ -492,22 +510,20 @@ function build_codex_mcp_overrides(servers: Record<string, McpServerConfig>): st
   return out;
 }
 
-function with_codex_mcp_overrides(command: string, args: string[]): string[] {
-  const enabled = String(process.env.ORCH_MCP_ENABLED || "1").trim() !== "0";
-  if (!enabled) return args;
-  if (!is_codex_invocation(command, args)) return args;
-  if (args.some((v) => /mcp_servers\./i.test(String(v || "")))) return args;
-  const cwd = resolve(String(process.env.WORKSPACE_DIR || process.cwd()));
-  const enable_all_project = should_enable_all_project_mcp_servers(cwd);
-  const servers = load_mcp_servers_for_codex(cwd);
-  const overrides = build_codex_mcp_overrides(servers);
-  if (!enable_all_project && overrides.length === 0) return args;
-  let out = [...args];
-  if (enable_all_project) {
-    out = with_codex_global_option(out, "-c", "enable_all_project_mcp_servers=true");
-  }
-  for (const override of overrides) {
-    out = with_codex_global_option(out, "-c", override);
+function normalize_permission_profile(raw: unknown): "strict" | "workspace-write" | "full-auto" | null {
+  const v = String(raw || "").trim().toLowerCase();
+  if (v === "strict") return "strict";
+  if (v === "workspace-write" || v === "workspace_write") return "workspace-write";
+  if (v === "full-auto" || v === "full_auto" || v === "bypass") return "full-auto";
+  return null;
+}
+
+function runtime_mcp_allowlist(runtime_policy: ChatOptions["runtime_policy"]): Set<string> | null {
+  if (!runtime_policy || !Array.isArray(runtime_policy.mcp_servers)) return null;
+  const out = new Set<string>();
+  for (const row of runtime_policy.mcp_servers) {
+    const name = normalize_mcp_server_name(String(row || ""));
+    if (name) out.add(name);
   }
   return out;
 }
@@ -865,11 +881,21 @@ function split_path_list(raw: string): string[] {
     .filter(Boolean);
 }
 
-function with_codex_permission_overrides(command: string, args: string[]): string[] {
+function with_codex_permission_overrides(
+  command: string,
+  args: string[],
+  runtime_policy?: ChatOptions["runtime_policy"],
+): string[] {
   if (!is_codex_invocation(command, args)) return args;
   let out = strip_approval_flags(args);
   if (has_any_flag(out, ["--dangerously-bypass-approvals-and-sandbox"])) return out;
-  const bypass_all = parse_bool_like(process.env.ORCH_CODEX_BYPASS_SANDBOX, false);
+  const command_profile = String(runtime_policy?.command_profile || "").trim().toLowerCase();
+  const requested_profile = normalize_permission_profile(runtime_policy?.permission_profile);
+  const profile = requested_profile
+    || (command_profile === "safe" ? "strict" : command_profile === "extended" ? "full-auto" : null);
+  const bypass_all = profile === "full-auto"
+    ? true
+    : parse_bool_like(process.env.ORCH_CODEX_BYPASS_SANDBOX, false);
   if (bypass_all) {
     if (!has_any_flag(out, ["--dangerously-bypass-approvals-and-sandbox"])) {
       out = with_codex_global_option(out, "--dangerously-bypass-approvals-and-sandbox");
@@ -877,7 +903,11 @@ function with_codex_permission_overrides(command: string, args: string[]): strin
     return out;
   }
 
-  const sandbox_mode = String(process.env.ORCH_CODEX_SANDBOX_MODE || "workspace-write").trim();
+  const sandbox_mode = profile === "strict"
+    ? "read-only"
+    : profile === "workspace-write"
+      ? "workspace-write"
+      : String(process.env.ORCH_CODEX_SANDBOX_MODE || "workspace-write").trim();
   const has_sandbox = has_any_flag(out, ["-s", "--sandbox", "--full-auto"]);
 
   if (sandbox_mode && !has_sandbox) {
@@ -904,13 +934,50 @@ function with_codex_permission_overrides(command: string, args: string[]): strin
   return out;
 }
 
-function with_claude_permission_overrides(command: string, args: string[]): string[] {
+function with_claude_permission_overrides(
+  command: string,
+  args: string[],
+  runtime_policy?: ChatOptions["runtime_policy"],
+): string[] {
   if (!is_claude_invocation(command, args)) return args;
   const out = [...args];
-  const mode = String(process.env.ORCH_CLAUDE_PERMISSION_MODE || "dontAsk").trim();
+  const command_profile = String(runtime_policy?.command_profile || "").trim().toLowerCase();
+  const requested_profile = normalize_permission_profile(runtime_policy?.permission_profile);
+  const profile = requested_profile
+    || (command_profile === "safe" ? "strict" : command_profile === "extended" ? "full-auto" : null);
+  const mode = profile === "strict"
+    ? "default"
+    : String(process.env.ORCH_CLAUDE_PERMISSION_MODE || "dontAsk").trim();
   if (!mode) return out;
   if (!has_any_flag(out, ["--permission-mode"])) {
     out.push("--permission-mode", mode);
+  }
+  return out;
+}
+
+function with_codex_mcp_runtime_overrides(
+  command: string,
+  args: string[],
+  runtime_policy?: ChatOptions["runtime_policy"],
+): string[] {
+  const enabled = String(process.env.ORCH_MCP_ENABLED || "1").trim() !== "0";
+  if (!enabled) return args;
+  if (!is_codex_invocation(command, args)) return args;
+  if (args.some((v) => /mcp_servers\./i.test(String(v || "")))) return args;
+  const cwd = resolve(String(process.env.WORKSPACE_DIR || process.cwd()));
+  const runtime_allow = runtime_mcp_allowlist(runtime_policy);
+  const enable_all_project = typeof runtime_policy?.mcp_enable_all_project === "boolean"
+    ? runtime_policy.mcp_enable_all_project
+    : should_enable_all_project_mcp_servers(cwd);
+  const servers = load_mcp_servers_for_codex(cwd, runtime_allow);
+  const overrides = build_codex_mcp_overrides(servers);
+  if (!enable_all_project && overrides.length === 0) return args;
+  let out = [...args];
+  if (enable_all_project) {
+    out = with_codex_global_option(out, "-c", "enable_all_project_mcp_servers=true");
+  }
+  for (const override of overrides) {
+    out = with_codex_global_option(out, "-c", override);
   }
   return out;
 }
@@ -949,7 +1016,6 @@ export class CliHeadlessProvider extends BaseLlmProvider {
 
   async chat(options: ChatOptions): Promise<LlmResponse> {
     const tools = Array.isArray(options.tools) ? options.tools : [];
-    const tool_mode = tools.length > 0;
     const prompt = messages_to_prompt(this.sanitize_messages(options.messages), tools);
     const command_env_value = String(process.env[this.command_env] || this.default_command).trim();
     const normalized = split_command_with_embedded_args(command_env_value);
@@ -971,9 +1037,9 @@ export class CliHeadlessProvider extends BaseLlmProvider {
     if (is_claude_command(command) && args.length === 0) {
       args = ["-p", "--output-format", "text", "--permission-mode", "dontAsk", "-"];
     }
-    args = with_codex_permission_overrides(command, args);
-    args = with_claude_permission_overrides(command, args);
-    args = with_codex_mcp_overrides(command, args);
+    args = with_codex_permission_overrides(command, args, options.runtime_policy);
+    args = with_claude_permission_overrides(command, args, options.runtime_policy);
+    args = with_codex_mcp_runtime_overrides(command, args, options.runtime_policy);
     const timeout_ms = Math.max(1000, Number(process.env[this.timeout_env] || this.default_timeout_ms));
     const capture_max_chars = Math.max(
       10_000,
@@ -1003,7 +1069,7 @@ export class CliHeadlessProvider extends BaseLlmProvider {
       last_emitted_chunk_at = now;
       await options.on_stream?.(clean);
     };
-    const on_chunk = options.on_stream && !tool_mode
+    const on_chunk = options.on_stream
       ? async (chunk: string) => {
           const incoming = String(chunk || "");
           if (!incoming) return;

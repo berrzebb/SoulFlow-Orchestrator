@@ -8,19 +8,53 @@ type FsToolOptions = {
   allowed_dir?: string | null;
 };
 
-function resolve_path(path: string, workspace?: string, allowed_dir?: string | null): string {
+function is_approved(params: Record<string, unknown>): boolean {
+  return params.__approved === true || String(params.__approved || "").trim().toLowerCase() === "true";
+}
+
+function resolve_path(path: string, workspace?: string): string {
   const base = workspace || process.cwd();
   const raw = isAbsolute(path) ? path : join(base, path);
-  const resolved = resolve(raw);
-  if (allowed_dir) {
-    const guard = resolve(allowed_dir);
-    const normalized = resolved.toLowerCase();
-    const guardNorm = guard.toLowerCase();
-    if (normalized !== guardNorm && !normalized.startsWith(`${guardNorm}\\`) && !normalized.startsWith(`${guardNorm}/`)) {
-      throw new Error(`path_outside_allowed_dir:${path}`);
-    }
+  return resolve(raw);
+}
+
+function is_outside_allowed_dir(resolved_path: string, allowed_dir?: string | null): boolean {
+  if (!allowed_dir) return false;
+  const guard = resolve(allowed_dir);
+  const normalized = resolved_path.toLowerCase();
+  const guardNorm = guard.toLowerCase();
+  return normalized !== guardNorm
+    && !normalized.startsWith(`${guardNorm}\\`)
+    && !normalized.startsWith(`${guardNorm}/`);
+}
+
+function approval_required_for_path(original_path: string, resolved_path: string): string {
+  return [
+    "Error: approval_required",
+    "reason: path_outside_allowed_dir",
+    `requested_path: ${resolved_path}`,
+    "action: Ask leader/user approval and re-run with __approved=true",
+    `path: ${original_path}`,
+  ].join("\n");
+}
+
+function resolve_path_with_approval(
+  original_path: string,
+  params: Record<string, unknown>,
+  workspace?: string,
+  allowed_dir?: string | null,
+): { path: string | null; error?: string } {
+  const resolved_path = resolve_path(original_path, workspace);
+  if (!is_outside_allowed_dir(resolved_path, allowed_dir)) {
+    return { path: resolved_path };
   }
-  return resolved;
+  if (is_approved(params)) {
+    return { path: resolved_path };
+  }
+  return {
+    path: null,
+    error: approval_required_for_path(original_path, resolved_path),
+  };
 }
 
 export class ReadFileTool extends Tool {
@@ -44,7 +78,10 @@ export class ReadFileTool extends Tool {
   }
 
   protected async run(params: Record<string, unknown>, _context?: ToolExecutionContext): Promise<string> {
-    const file_path = resolve_path(String(params.path || ""), this.workspace, this.allowed_dir);
+    const original_path = String(params.path || "");
+    const resolved = resolve_path_with_approval(original_path, params, this.workspace, this.allowed_dir);
+    if (!resolved.path) return resolved.error || "Error: invalid_path";
+    const file_path = resolved.path;
     const file_stat = await stat(file_path);
     if (!file_stat.isFile()) return `Error: Not a file: ${file_path}`;
     return readFile(file_path, "utf-8");
@@ -74,7 +111,10 @@ export class WriteFileTool extends Tool {
   }
 
   protected async run(params: Record<string, unknown>, _context?: ToolExecutionContext): Promise<string> {
-    const file_path = resolve_path(String(params.path || ""), this.workspace, this.allowed_dir);
+    const original_path = String(params.path || "");
+    const resolved = resolve_path_with_approval(original_path, params, this.workspace, this.allowed_dir);
+    if (!resolved.path) return resolved.error || "Error: invalid_path";
+    const file_path = resolved.path;
     await mkdir(dirname(file_path), { recursive: true });
     const content = String(params.content || "");
     const append = Boolean(params.append);
@@ -111,7 +151,10 @@ export class EditFileTool extends Tool {
   }
 
   protected async run(params: Record<string, unknown>, _context?: ToolExecutionContext): Promise<string> {
-    const file_path = resolve_path(String(params.path || ""), this.workspace, this.allowed_dir);
+    const original_path = String(params.path || "");
+    const resolved = resolve_path_with_approval(original_path, params, this.workspace, this.allowed_dir);
+    if (!resolved.path) return resolved.error || "Error: invalid_path";
+    const file_path = resolved.path;
     const old_text = String(params.old_text || "");
     const new_text = String(params.new_text || "");
     const content = await readFile(file_path, "utf-8");
@@ -146,7 +189,10 @@ export class ListDirTool extends Tool {
   }
 
   protected async run(params: Record<string, unknown>, _context?: ToolExecutionContext): Promise<string> {
-    const dir_path = resolve_path(String(params.path || ""), this.workspace, this.allowed_dir);
+    const original_path = String(params.path || "");
+    const resolved = resolve_path_with_approval(original_path, params, this.workspace, this.allowed_dir);
+    if (!resolved.path) return resolved.error || "Error: invalid_path";
+    const dir_path = resolved.path;
     const dir_stat = await stat(dir_path);
     if (!dir_stat.isDirectory()) return `Error: Not a directory: ${dir_path}`;
     const entries = await readdir(dir_path, { withFileTypes: true });

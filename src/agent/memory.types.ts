@@ -36,6 +36,7 @@ export type LlmToolCall = {
 export type LlmConsolidationResponse = {
   has_tool_calls: boolean;
   tool_calls: LlmToolCall[];
+  content?: string | null;
 };
 
 export type LlmProviderLike = {

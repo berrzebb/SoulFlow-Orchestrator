@@ -160,6 +160,7 @@ export class ProviderRegistry {
     provider_id?: ProviderId;
     messages: ChatMessage[];
     tools?: Record<string, unknown>[];
+    runtime_policy?: ChatOptions["runtime_policy"];
     model?: string;
     max_tokens?: number;
     temperature?: number;
@@ -171,6 +172,7 @@ export class ProviderRegistry {
     const options: ChatOptions = {
       messages: sanitized_messages,
       tools: args.tools,
+      runtime_policy: args.runtime_policy,
       model: args.model,
       max_tokens: args.max_tokens,
       temperature: args.temperature,
@@ -184,6 +186,7 @@ export class ProviderRegistry {
     provider_id?: ProviderId;
     prompt: string;
     system?: string;
+    runtime_policy?: ChatOptions["runtime_policy"];
     model?: string;
     max_tokens?: number;
     temperature?: number;
@@ -198,6 +201,7 @@ export class ProviderRegistry {
     return this.run_headless({
       provider_id: args.provider_id,
       messages,
+      runtime_policy: args.runtime_policy,
       model: args.model,
       max_tokens: args.max_tokens,
       temperature: args.temperature,
@@ -216,6 +220,7 @@ export class ProviderRegistry {
     channel?: string | null;
     chat_id?: string | null;
     tools?: Record<string, unknown>[];
+    runtime_policy?: ChatOptions["runtime_policy"];
     model?: string;
     max_tokens?: number;
     temperature?: number;
@@ -234,6 +239,7 @@ export class ProviderRegistry {
       provider_id: args.provider_id,
       messages: messages as ChatMessage[],
       tools: args.tools,
+      runtime_policy: args.runtime_policy,
       model: args.model,
       max_tokens: args.max_tokens,
       temperature: args.temperature,

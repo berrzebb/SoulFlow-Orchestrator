@@ -117,20 +117,27 @@ function normalize_response_template(raw: string): string {
   const media_section = media_refs.length > 0
     ? media_refs.map((v) => `- ${v}`).join("\n")
     : "(없음)";
+  const should_use_section_template = has_code || media_refs.length > 0 || body_lines.length >= 6;
+  if (!should_use_section_template) {
+    const compact = [
+      summary,
+      ...keypoints.slice(0, 3).map((v) => `- ${v}`),
+    ].filter(Boolean);
+    return compact.join("\n").trim();
+  }
 
-  return [
-    "## 요약",
-    summary,
-    "",
-    "## 핵심",
-    ...(keypoints.length > 0 ? keypoints.map((v) => `- ${v}`) : ["- (핵심 없음)"]),
-    "",
-    "## 코드/명령",
-    code_section,
-    "",
-    "## 미디어",
-    media_section,
-  ].join("\n").trim();
+  const sections: string[] = [];
+  sections.push("## 요약", summary);
+  if (keypoints.length > 0) {
+    sections.push("", "## 핵심", ...keypoints.map((v) => `- ${v}`));
+  }
+  if (code_blocks.length > 0) {
+    sections.push("", "## 코드/명령", code_section);
+  }
+  if (media_refs.length > 0) {
+    sections.push("", "## 미디어", media_section);
+  }
+  return sections.join("\n").trim();
 }
 
 function normalize_secret_resolution_template(raw: string): string | null {

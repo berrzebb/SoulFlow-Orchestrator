@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "test": "tsx --test tests/**/*.test.ts",
     "dev": "cd workspace && tsx watch --clear-screen=false ../src/main.ts",
     "dev:once": "cd workspace && tsx ../src/main.ts",
     "health:phi4": "tsx src/phi4-health.ts"
@@ -16,6 +17,7 @@
   },
   "dependencies": {
     "@vercel/beautiful-mermaid": "^0.1.5",
-    "markdown-to-markdown-sanitizer": "^1.1.3"
+    "markdown-to-markdown-sanitizer": "^1.1.3",
+    "pdf-lib": "^1.17.1"
   }
 }

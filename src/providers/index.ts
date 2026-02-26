@@ -15,5 +15,6 @@ export type {
   LlmProvider,
   LlmUsage,
   ProviderId,
+  RuntimeExecutionPolicy,
   ToolCallRequest,
 } from "./types.js";

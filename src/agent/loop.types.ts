@@ -1,6 +1,6 @@
 import type { AgentLoopState, TaskState } from "../contracts.js";
 import type { ContextBuilder } from "./context.js";
-import type { LlmResponse, ProviderId, ProviderRegistry, ToolCallRequest } from "../providers/index.js";
+import type { LlmResponse, ProviderId, ProviderRegistry, RuntimeExecutionPolicy, ToolCallRequest } from "../providers/index.js";
 
 export type LoopTimestampProvider = () => string;
 
@@ -23,6 +23,7 @@ export type AgentLoopRunOptions = {
   context_builder: ContextBuilder;
   providers: ProviderRegistry;
   tools?: Record<string, unknown>[];
+  runtime_policy?: RuntimeExecutionPolicy;
   provider_id?: ProviderId;
   current_message?: string;
   history_days?: string[];

@@ -1,6 +1,7 @@
 import type { AgentLoopState, TaskState } from "../contracts.js";
 import type { AgentLoopRunOptions, AgentLoopRunResult, TaskLoopRunOptions, TaskLoopRunResult } from "./loop.types.js";
 import type { TaskStore } from "./task-store.js";
+import { parse_tool_calls_from_text } from "./tool-call-parser.js";
 
 const SEOUL_TZ = "Asia/Seoul";
 
@@ -111,6 +112,7 @@ export class AgentLoopStore {
       const response = await options.providers.run_headless_with_context({
         context_builder: options.context_builder,
         tools: options.tools,
+        runtime_policy: options.runtime_policy,
         provider_id: options.provider_id,
         history_days: options.history_days || [],
         current_message,
@@ -130,7 +132,12 @@ export class AgentLoopStore {
         await options.on_turn({ state, response, last_content: final_content });
       }
 
-      if (response.has_tool_calls) {
+      const implicit_tool_calls = response.has_tool_calls
+        ? []
+        : parse_tool_calls_from_text(final_content);
+      const effective_tool_calls = response.has_tool_calls ? response.tool_calls : implicit_tool_calls;
+
+      if (effective_tool_calls.length > 0) {
         if (!options.on_tool_calls) {
           state.status = "failed";
           state.terminationReason = "tool_calls_requested_but_handler_missing";
@@ -139,7 +146,7 @@ export class AgentLoopStore {
         }
         const followup = await options.on_tool_calls({
           state,
-          tool_calls: response.tool_calls,
+          tool_calls: effective_tool_calls,
           response,
         });
         current_message = followup || "(tool execution completed; continue)";

@@ -63,6 +63,8 @@ export class FileRequestTool extends Tool {
       `[FILE_REQUEST id=${request_id}]`,
       prompt,
       accept.length > 0 ? `accepted_types: ${accept.join(", ")}` : "",
+      "파일을 이 채널에 첨부해서 보내면 자동으로 분석을 시작합니다.",
+      "분석 결과는 가능하면 PDF 리포트 파일로 함께 전달됩니다.",
     ].filter(Boolean).join("\n");
 
     const message: OutboundMessage = {

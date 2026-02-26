@@ -86,8 +86,9 @@ export class ExecTool extends Tool {
     const command = await this.secret_vault.resolve_placeholders(command_raw);
     const cwd = resolve(String(params.working_dir || this.default_working_dir));
     const timeout_seconds = Math.max(1, Number(params.timeout_seconds || this.timeout_seconds));
+    const approved = params.__approved === true || String(params.__approved || "").trim().toLowerCase() === "true";
     const guard = this._guard_command(command, cwd);
-    if (guard) {
+    if (guard && !(guard.kind === "approval_required" && approved)) {
       const safe_command = await this.secret_vault.mask_known_secrets(command);
       const compact_command = redact_sensitive_text(safe_command).text;
       if (guard.kind === "approval_required") {

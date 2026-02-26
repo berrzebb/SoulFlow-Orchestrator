@@ -17,6 +17,7 @@ import {
   type RenderMode,
   type RenderProfile,
 } from "./rendering.js";
+import { existsSync, statSync } from "node:fs";
 import { appendFile, mkdir, writeFile } from "node:fs/promises";
 import { basename, dirname, extname, join, resolve } from "node:path";
 import type { TaskNode } from "../agent/loop.js";
@@ -1596,7 +1597,13 @@ export class ChannelManager {
   private async seal_sensitive_list_for_agent(provider: ChannelProvider, chat_id: string, values: string[]): Promise<string[]> {
     const out: string[] = [];
     for (const row of values || []) {
-      const sealed = await this.seal_sensitive_text_for_agent(provider, chat_id, String(row || ""));
+      const raw = String(row || "").trim();
+      if (!raw) continue;
+      if (this.is_local_media_reference(raw)) {
+        out.push(raw);
+        continue;
+      }
+      const sealed = await this.seal_sensitive_text_for_agent(provider, chat_id, raw);
       if (!sealed.trim()) continue;
       out.push(sealed);
     }
@@ -2179,6 +2186,7 @@ export class ChannelManager {
       const url = String(urlRaw || "").trim();
       if (!url || seen.has(url)) return false;
       if (!this.is_local_media_reference(url)) return false;
+      if (!this.is_existing_local_file_reference(url)) return false;
       const type = this.detect_media_type(url);
       if (!type) return false;
       seen.add(url);
@@ -2211,6 +2219,14 @@ export class ChannelManager {
         content = content.replace(url, "");
       }
     }
+    const local_paths = this.extract_local_file_paths_from_text(content);
+    for (const path of local_paths) {
+      const type = this.detect_media_type(path);
+      if (!type) continue;
+      if (push_media(path)) {
+        content = content.replace(path, "");
+      }
+    }
 
     content = content
       .split("\n")
@@ -2233,6 +2249,49 @@ export class ChannelManager {
     if (/\.(mp3|wav|ogg|m4a)(\?.*)?$/.test(lower)) return "audio";
     if (/\.(pdf|txt|md|csv|json|zip|tar|gz)(\?.*)?$/.test(lower)) return "file";
     return null;
+  }
+
+  private extract_local_file_paths_from_text(text: string): string[] {
+    const source = String(text || "");
+    if (!source) return [];
+    const out: string[] = [];
+    const seen = new Set<string>();
+    const push = (raw: string): void => {
+      const candidate = String(raw || "")
+        .trim()
+        .replace(/^[("'`]+/, "")
+        .replace(/[)"'`,.;:!?]+$/, "");
+      if (!candidate) return;
+      if (!this.is_local_media_reference(candidate)) return;
+      if (seen.has(candidate)) return;
+      seen.add(candidate);
+      out.push(candidate);
+    };
+
+    const win = source.match(/[A-Za-z]:\\[^\s"'`<>|]+/g) || [];
+    for (const row of win) push(row);
+
+    const unc = source.match(/\\\\[^\s"'`<>|]+/g) || [];
+    for (const row of unc) push(row);
+
+    const rel = source.match(/(?:^|[\s(])(?:\.{1,2}[\\/][^\s"'`<>|]+)/g) || [];
+    for (const row of rel) push(row.replace(/^(?:\s|\()+/, ""));
+
+    const abs = source.match(/(?:^|[\s(])(\/[^\s"'`<>|]+)/g) || [];
+    for (const row of abs) push(row.replace(/^(?:\s|\()+/, ""));
+
+    return out.slice(0, 12);
+  }
+
+  private is_existing_local_file_reference(path_value: string): boolean {
+    const value = String(path_value || "").trim();
+    if (!value) return false;
+    try {
+      if (!existsSync(value)) return false;
+      return statSync(value).isFile();
+    } catch {
+      return false;
+    }
   }
 
   private is_local_media_reference(url: string): boolean {

@@ -13,23 +13,56 @@ type ShellRunOptions = {
 
 type JsonRecord = Record<string, unknown>;
 
-let cached_just_bash_binary: string | null | undefined;
-const JUST_BASH_BINARY = "just-bash";
+type JustBashRunner = {
+  command: string;
+  prefix_args: string[];
+};
 
-function find_just_bash_binary(): string | null {
-  if (cached_just_bash_binary !== undefined) return cached_just_bash_binary;
+const JUST_BASH_BINARY = "just-bash";
+const JUST_BASH_CACHE_TTL_MS = 60_000;
+let cached_just_bash_runner: { checked_at: number; runner: JustBashRunner | null } | null = null;
+
+function command_exists(command: string): boolean {
   const checker = process.platform === "win32" ? "where" : "which";
-  const check = spawnSync(checker, [JUST_BASH_BINARY], {
+  const check = spawnSync(checker, [command], {
     stdio: "ignore",
     windowsHide: true,
     shell: false,
   });
-  cached_just_bash_binary = check.status === 0 ? JUST_BASH_BINARY : null;
-  return cached_just_bash_binary;
+  return check.status === 0;
+}
+
+function can_run_runner(candidate: JustBashRunner): boolean {
+  if (!command_exists(candidate.command)) return false;
+  const probe = spawnSync(candidate.command, [...candidate.prefix_args, "--help"], {
+    stdio: "ignore",
+    windowsHide: true,
+    shell: false,
+  });
+  return probe.status === 0;
+}
+
+function find_just_bash_runner(): JustBashRunner | null {
+  const now = Date.now();
+  if (cached_just_bash_runner && now - cached_just_bash_runner.checked_at < JUST_BASH_CACHE_TTL_MS) {
+    return cached_just_bash_runner.runner;
+  }
+  const candidates: JustBashRunner[] = [
+    { command: JUST_BASH_BINARY, prefix_args: [] },
+    { command: process.platform === "win32" ? "npx.cmd" : "npx", prefix_args: ["--yes", JUST_BASH_BINARY] },
+  ];
+  for (const candidate of candidates) {
+    if (can_run_runner(candidate)) {
+      cached_just_bash_runner = { checked_at: now, runner: candidate };
+      return candidate;
+    }
+  }
+  cached_just_bash_runner = { checked_at: now, runner: null };
+  return null;
 }
 
 function should_use_just_bash(): boolean {
-  return Boolean(find_just_bash_binary());
+  return Boolean(find_just_bash_runner());
 }
 
 function as_record(raw: unknown): JsonRecord | null {
@@ -64,10 +97,10 @@ function parse_just_bash_output(stdout: string): { stdout: string; stderr: strin
 
 export async function run_shell_command(command: string, options: ShellRunOptions): Promise<{ stdout: string; stderr: string }> {
   if (should_use_just_bash()) {
-    const just_bash = find_just_bash_binary() || JUST_BASH_BINARY;
+    const runner = find_just_bash_runner() || { command: JUST_BASH_BINARY, prefix_args: [] };
     const result = await exec_file_async(
-      just_bash,
-      ["-c", command, "--root", options.cwd, "--json"],
+      runner.command,
+      [...runner.prefix_args, "-c", command, "--root", options.cwd, "--json"],
       {
         cwd: options.cwd,
         timeout: options.timeout_ms,

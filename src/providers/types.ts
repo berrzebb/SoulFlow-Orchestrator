@@ -2,6 +2,13 @@ export type ProviderId = "chatgpt" | "claude_code" | "openrouter" | "phi4_local"
 
 export type ChatRole = "system" | "user" | "assistant" | "tool";
 
+export type RuntimeExecutionPolicy = {
+  permission_profile?: "strict" | "workspace-write" | "full-auto";
+  command_profile?: "safe" | "balanced" | "extended";
+  mcp_servers?: string[] | null;
+  mcp_enable_all_project?: boolean;
+};
+
 export type ChatMessage = {
   role: ChatRole;
   content?: unknown;
@@ -51,6 +58,7 @@ export class LlmResponse {
 export type ChatOptions = {
   messages: ChatMessage[];
   tools?: Record<string, unknown>[];
+  runtime_policy?: RuntimeExecutionPolicy;
   model?: string;
   max_tokens?: number;
   temperature?: number;

@@ -4,6 +4,7 @@ import type { ChatMessage, ProviderId, ProviderRegistry, ToolCallRequest } from 
 import { create_default_tool_registry, type ToolRegistry } from "./tools.js";
 import type { MessageBus, InboundMessage } from "../bus/index.js";
 import type { ContextBuilder } from "./context.js";
+import { parse_tool_calls_from_text } from "./tool-call-parser.js";
 
 export type SubagentStatus = "idle" | "running" | "completed" | "failed" | "cancelled" | "offline";
 
@@ -296,13 +297,17 @@ export class SubagentRegistry {
           stream_buffer_ref: () => stream_buffer,
           clear_stream_buffer: () => { stream_buffer = ""; },
         });
-        if (response.has_tool_calls) {
+        const implicit_tool_calls = response.has_tool_calls
+          ? []
+          : parse_tool_calls_from_text(response.content || "");
+        const effective_tool_calls = response.has_tool_calls ? response.tool_calls : implicit_tool_calls;
+        if (effective_tool_calls.length > 0) {
           const followup_messages: ChatMessage[] = [
             { role: "system", content: this._build_executor_prompt(options, id, contextual_system) },
             { role: "user", content: plan.executor_prompt },
-            this._assistant_tool_call_message(response.content, response.tool_calls),
+            this._assistant_tool_call_message(response.content, effective_tool_calls),
           ];
-          for (const tool_call of response.tool_calls) {
+          for (const tool_call of effective_tool_calls) {
             if (abort.signal.aborted) {
               this._update_status(id, "cancelled");
               return;
