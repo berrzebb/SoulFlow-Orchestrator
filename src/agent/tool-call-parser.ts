@@ -104,13 +104,96 @@ function extract_json_fenced_block(raw: string): string | null {
   return fenced[1].trim() || null;
 }
 
+function extract_last_between_markers(text: string, start_marker: string, end_marker: string): string | null {
+  const start = text.lastIndexOf(start_marker);
+  if (start < 0) return null;
+  const body_start = start + start_marker.length;
+  const end = text.indexOf(end_marker, body_start);
+  if (end < 0) return null;
+  const body = text.slice(body_start, end).trim();
+  return body || null;
+}
+
+function extract_balanced_json_from(text: string, start_index: number): string | null {
+  if (start_index < 0 || start_index >= text.length) return null;
+  const opener = text[start_index];
+  if (opener !== "{" && opener !== "[") return null;
+  const closer = opener === "{" ? "}" : "]";
+  let depth = 0;
+  let in_string = false;
+  let escaping = false;
+  for (let i = start_index; i < text.length; i += 1) {
+    const ch = text[i];
+    if (in_string) {
+      if (escaping) {
+        escaping = false;
+      } else if (ch === "\\") {
+        escaping = true;
+      } else if (ch === "\"") {
+        in_string = false;
+      }
+      continue;
+    }
+    if (ch === "\"") {
+      in_string = true;
+      continue;
+    }
+    if (ch === opener) {
+      depth += 1;
+      continue;
+    }
+    if (ch === closer) {
+      depth -= 1;
+      if (depth === 0) {
+        return text.slice(start_index, i + 1);
+      }
+    }
+  }
+  return null;
+}
+
+function extract_balanced_candidates_around_keyword(text: string, keyword: string, max_scan = 10): string[] {
+  const out: string[] = [];
+  let cursor = 0;
+  while (cursor < text.length) {
+    const idx = text.indexOf(keyword, cursor);
+    if (idx < 0) break;
+    cursor = idx + keyword.length;
+
+    let scan_count = 0;
+    let start = idx;
+    while (scan_count < max_scan) {
+      const brace = text.lastIndexOf("{", start);
+      const bracket = text.lastIndexOf("[", start);
+      const candidate_start = Math.max(brace, bracket);
+      if (candidate_start < 0) break;
+      const candidate = extract_balanced_json_from(text, candidate_start);
+      if (candidate && candidate.includes(keyword)) {
+        out.push(candidate.trim());
+        break;
+      }
+      start = candidate_start - 1;
+      scan_count += 1;
+    }
+  }
+  return out;
+}
+
 export function parse_tool_calls_from_text(raw: string | null | undefined): ToolCallRequest[] {
   const text = String(raw || "").trim();
   if (!text) return [];
   const candidates: string[] = [];
+  const marker_block = extract_last_between_markers(text, "<<ORCH_TOOL_CALLS>>", "<<ORCH_TOOL_CALLS_END>>");
+  if (marker_block) candidates.push(marker_block);
   const fenced = extract_json_fenced_block(text);
   if (fenced) candidates.push(fenced);
   if (text.startsWith("{") || text.startsWith("[")) candidates.push(text);
+  for (const candidate of extract_balanced_candidates_around_keyword(text, "\"tool_calls\"")) {
+    candidates.push(candidate);
+  }
+  for (const candidate of extract_balanced_candidates_around_keyword(text, "\"id\":\"call_")) {
+    candidates.push(candidate);
+  }
   for (const candidate of candidates) {
     try {
       const parsed = JSON.parse(candidate) as unknown;

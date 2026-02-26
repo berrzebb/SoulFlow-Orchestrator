@@ -3,7 +3,7 @@
 Project: `SoulFlow Orchestrator`
 
 ## 1. 목적
-채널 메시지를 비동기 오케스트레이션 파이프라인으로 처리하고, 실행 상태를 파일 기반 저장소에 유지해 재시작 후에도 복구 가능한 런타임을 제공합니다.
+채널 메시지를 비동기 오케스트레이션 파이프라인으로 처리하고, 실행 상태를 SQLite 중심 저장소에 유지해 재시작 후에도 복구 가능한 런타임을 제공합니다.
 
 핵심 원칙:
 - 논블로킹 루프 유지
@@ -24,8 +24,8 @@ Project: `SoulFlow Orchestrator`
 ## 3. 부트 시퀀스
 `createRuntime()` 초기화 순서:
 1. `.env` 로드 (`src/utils/env.ts`)
-2. 기본 템플릿/메모리 파일 보장 (`ensure_default_markdown_files`)
-3. 핵심 서비스 생성:
+1.5. 단일 인스턴스 락 획득 (`src/runtime/instance-lock.ts`)
+2. 핵심 서비스 생성:
    - `MessageBus`
    - `DecisionService`
    - `WorkflowEventService`
@@ -35,10 +35,11 @@ Project: `SoulFlow Orchestrator`
    - `CronService`, `HeartbeatService`
    - `OpsRuntimeService`, `DashboardService`
    - `Phi4RuntimeManager` (옵션)
-4. 바인딩:
+3. 바인딩:
    - `events.bind_task_store(agent.task_store)`
-5. start:
-   - `agent.start()` -> `cron.start()` -> `channel_manager.start()` -> `ops.start()` -> `dashboard.start()`
+4. start:
+   - `agent.start()` -> `channel_manager.start()` -> `cron.start()` -> `ops.start()` -> `dashboard.start()`
+   - `cron.start()`는 `channel_manager.start()` 완료 이후에만 시작되어 크론 결과 전송 누락을 방지
 
 ## 4. 인바운드 파이프라인
 구현 중심: `src/channels/manager.ts`
@@ -57,7 +58,8 @@ Project: `SoulFlow Orchestrator`
 
 4. Inbound 처리
 - 승인 텍스트 응답 처리
-- `/stop|/cancel|/중지`, `/help`, `/render`, `/secret`, `/cron` 공통 명령 처리
+- `/stop|/cancel|/중지`, `/help`, `/render`, `/secret`, `/cron`, `/memory`, `/decision` 공통 명령 처리
+- `/memory`, `/decision`, `/cron`은 오케스트레이터 서비스 직접 호출(에이전트 bypass) 우선
 - read-ack reaction + typing 갱신
 - 에이전트 멘션 처리 또는 plain auto reply
 
@@ -88,14 +90,14 @@ Project: `SoulFlow Orchestrator`
 - 상태:
   - `running`, `waiting_approval`, `completed`, `failed`, `cancelled`, `max_turns_reached`
 - 저장소:
-  - `TaskStore` (`runtime/tasks/store.json`)
+  - `TaskStore` (`runtime/tasks/tasks.db`)
 
 ## 6. 아웃바운드 파이프라인
 ### 공통 전송
 - `ChannelRegistry.send()` 인라인 재시도
 - `ChannelManager.dispatch_outbound()` 재큐잉(backoff)
 - 최대 재시도 초과 시 DLQ 기록
-  - `runtime/dlq/outbound.jsonl`
+  - `runtime/dlq/dlq.db`
 
 ### 채널별 장문 처리
 - Slack (`src/channels/slack.channel.ts`)
@@ -109,7 +111,7 @@ Project: `SoulFlow Orchestrator`
 - export alias: `src/agent/context.ts`
 - 입력:
   - `templates/*.md`, `agents/*.md`
-  - `memory/MEMORY.md`, `memory/yyyy-mm-dd.md`
+  - `memory/memory.db` (longterm/daily)
   - Skills + compact decisions
 - 출력:
   - provider용 `messages[]`
@@ -125,7 +127,7 @@ Project: `SoulFlow Orchestrator`
 ### SessionStore
 - 구현: `src/session/service.ts`
 - 저장:
-  - `runtime/sessions/*.jsonl`
+  - `runtime/sessions/sessions.db`
 - 기능:
   - 최근 N개
   - N~M 범위 조회
@@ -133,9 +135,8 @@ Project: `SoulFlow Orchestrator`
 ## 8. Workflow Events + Task 동기화
 - 구현: `src/events/service.ts`
 - 저장:
-  - `runtime/events/events.jsonl`
-  - `runtime/events/index.json`
-  - `runtime/tasks/details/<task_id>.md`
+  - `runtime/events/events.db`
+  - `workflow_task_details` (same DB table)
 - 이벤트 append 시:
   - dedupe
   - detail append
@@ -182,7 +183,9 @@ Project: `SoulFlow Orchestrator`
 ### Cron
 - 구현: `src/cron/service.ts`
 - schedule type: `at`, `every`, `cron`
-- 저장: `runtime/cron/cron-store.json`
+- `every`는 선택적으로 `at_ms` 시작 시점을 가질 수 있음 (지연 시작 반복)
+- `at` 1회성 잡은 실행 후 auto-remove(`delete_after_run=true`) 기본
+- 저장: `runtime/cron/cron.db`
 
 ### Heartbeat
 - 구현: `src/heartbeat/service.ts`
@@ -192,6 +195,8 @@ Project: `SoulFlow Orchestrator`
 ### Dashboard (`src/dashboard/service.ts`)
 - API: `/api/state`, `/api/events`, `/healthz`
 - state 구성 시 `loop task + task_store`를 병합해 표시
+- watcher 권한(EPERM/EACCES) 실패 시 watcher만 비활성화하고 대시보드는 계속 동작
+- 포트 바인딩 `EACCES`/`EADDRINUSE` 시 가용 포트 fallback(`DASHBOARD_PORT_FALLBACK=1` 기본)
 
 ### Ops (`src/ops/service.ts`)
 - health tick
@@ -200,19 +205,17 @@ Project: `SoulFlow Orchestrator`
 
 ## 14. 데이터 저장소 맵
 - `memory/`
-  - `MEMORY.md`
-  - `yyyy-mm-dd.md`
+  - `memory.db`
 - `runtime/security/`
   - `master.key`
-  - `secrets.json`
-- `runtime/sessions/*.jsonl`
-- `runtime/tasks/store.json`
-- `runtime/tasks/details/*.md`
-- `runtime/events/events.jsonl`
-- `runtime/events/index.json`
-- `runtime/decisions/index.json`
-- `runtime/cron/cron-store.json`
-- `runtime/dlq/outbound.jsonl`
+  - `secrets.db`
+- `runtime/sessions/sessions.db`
+- `runtime/tasks/tasks.db`
+- `runtime/events/events.db`
+- `runtime/decisions/decisions.db`
+- `runtime/cron/cron.db`
+- `runtime/dlq/dlq.db`
+- `runtime/custom-tools/tools.db`
 - `runtime/inbound-files/*`
 
 ## 16. 채널 파일 입출력 경로
@@ -228,4 +231,4 @@ Project: `SoulFlow Orchestrator`
 - 루프는 기본 논블로킹
 - graceful shutdown (`SIGINT`, `SIGTERM`)
 - 전송 실패는 재시도 후 DLQ로 보존
-- 메모리/세션/이벤트/태스크 상태는 파일 기반 복구 가능
+- 메모리/세션/이벤트/태스크 상태는 SQLite 기반 복구 가능

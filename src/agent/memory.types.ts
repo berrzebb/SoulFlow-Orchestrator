@@ -1,5 +1,19 @@
 export type MemoryKind = "longterm" | "daily";
 
+export interface MemoryStoreLike {
+  list_daily(): Promise<string[]>;
+  read_longterm(): Promise<string>;
+  write_longterm(content: string): Promise<void>;
+  append_longterm(content: string): Promise<void>;
+  read_daily(day?: string): Promise<string>;
+  write_daily(content: string, day?: string): Promise<void>;
+  append_daily(content: string, day?: string): Promise<void>;
+  search(
+    query: string,
+    args?: { kind?: "all" | MemoryKind; day?: string; limit?: number; case_sensitive?: boolean },
+  ): Promise<Array<{ file: string; line: number; text: string }>>;
+}
+
 export type MemoryConsolidateOptions = {
   session?: string;
   provider?: string;

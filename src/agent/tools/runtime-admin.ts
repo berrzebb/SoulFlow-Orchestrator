@@ -3,17 +3,14 @@ import { dirname, join, resolve } from "node:path";
 import type { JsonSchema, ToolExecutionContext } from "./types.js";
 import { Tool } from "./base.js";
 import { ToolInstallerService } from "./installer.js";
+import { FileMcpServerStore, type McpServerEntry, type McpServerStoreLike } from "./mcp-store.js";
 
 type RuntimeAdminArgs = {
   workspace: string;
   installer: ToolInstallerService;
   refresh_dynamic_tools?: () => number;
   list_registered_tool_names?: () => string[];
-};
-
-type McpRoot = Record<string, unknown> & {
-  mcpServers?: Record<string, unknown>;
-  mcp_servers?: Record<string, unknown>;
+  mcp_store?: McpServerStoreLike;
 };
 
 function ensure_json_object(v: unknown): Record<string, unknown> | null {
@@ -111,6 +108,7 @@ export class RuntimeAdminTool extends Tool {
   private readonly installer: ToolInstallerService;
   private readonly refresh_dynamic_tools: (() => number) | null;
   private readonly list_registered_tool_names: (() => string[]) | null;
+  private readonly mcp_store: McpServerStoreLike;
 
   constructor(args: RuntimeAdminArgs) {
     super();
@@ -118,6 +116,7 @@ export class RuntimeAdminTool extends Tool {
     this.installer = args.installer;
     this.refresh_dynamic_tools = args.refresh_dynamic_tools || null;
     this.list_registered_tool_names = args.list_registered_tool_names || null;
+    this.mcp_store = args.mcp_store || new FileMcpServerStore(this.workspace);
   }
 
   protected async run(params: Record<string, unknown>, _context?: ToolExecutionContext): Promise<string> {
@@ -248,39 +247,8 @@ export class RuntimeAdminTool extends Tool {
     return JSON.stringify(rows);
   }
 
-  private mcp_file(): string {
-    return join(this.workspace, ".mcp.json");
-  }
-
-  private async read_mcp_root(): Promise<McpRoot> {
-    const file = this.mcp_file();
-    const raw = await readFile(file, "utf-8").catch(() => "");
-    if (!raw.trim()) return {};
-    try {
-      const parsed = JSON.parse(raw) as unknown;
-      const obj = ensure_json_object(parsed);
-      if (!obj) throw new Error("not_json_object");
-      return obj as McpRoot;
-    } catch {
-      throw new Error(`invalid_mcp_json:${file}`);
-    }
-  }
-
-  private async write_mcp_root(root: McpRoot): Promise<void> {
-    const file = this.mcp_file();
-    await mkdir(dirname(file), { recursive: true });
-    await writeFile(file, `${JSON.stringify(root, null, 2)}\n`, "utf-8");
-  }
-
-  private list_mcp_servers_from_root(root: McpRoot): Record<string, unknown> {
-    const direct = ensure_json_object(root.mcpServers) || {};
-    const snake = ensure_json_object(root.mcp_servers) || {};
-    return { ...snake, ...direct };
-  }
-
   private async mcp_list(): Promise<string> {
-    const root = await this.read_mcp_root();
-    const servers = this.list_mcp_servers_from_root(root);
+    const servers = await this.mcp_store.list_servers();
     return JSON.stringify(servers);
   }
 
@@ -298,9 +266,7 @@ export class RuntimeAdminTool extends Tool {
       if (mcp_env && Object.keys(mcp_env).length > 0) return "Error: mcp_env not allowed with mcp_url";
     }
 
-    const root = await this.read_mcp_root();
-    const direct = ensure_json_object(root.mcpServers) || {};
-    const entry: Record<string, unknown> = {};
+    const entry: McpServerEntry = {};
     if (mcp_command) entry.command = mcp_command;
     if (mcp_url) entry.url = mcp_url;
     if (Array.isArray(params.mcp_args)) {
@@ -317,40 +283,24 @@ export class RuntimeAdminTool extends Tool {
     const timeout = Number(params.mcp_startup_timeout_sec || 0);
     if (Number.isFinite(timeout) && timeout > 0) entry.startup_timeout_sec = Math.round(timeout);
 
-    direct[mcp_server_name] = entry;
-    root.mcpServers = direct;
-    const snake = ensure_json_object(root.mcp_servers);
-    if (snake && Object.prototype.hasOwnProperty.call(snake, mcp_server_name)) {
-      delete snake[mcp_server_name];
-      root.mcp_servers = snake;
-    }
-    await this.write_mcp_root(root);
+    await this.mcp_store.upsert_server(mcp_server_name, entry);
     return JSON.stringify({
       ok: true,
       action: "mcp_upsert_server",
       mcp_server_name,
-      file: this.mcp_file(),
+      file: this.mcp_store.get_path(),
     });
   }
 
   private async mcp_remove_server(params: Record<string, unknown>): Promise<string> {
     const mcp_server_name = String(params.mcp_server_name || "").trim();
     if (!/^[A-Za-z0-9_-]+$/.test(mcp_server_name)) return "Error: invalid mcp_server_name";
-    const root = await this.read_mcp_root();
-    const direct = ensure_json_object(root.mcpServers) || {};
-    const snake = ensure_json_object(root.mcp_servers) || {};
-    const existed = Object.prototype.hasOwnProperty.call(direct, mcp_server_name)
-      || Object.prototype.hasOwnProperty.call(snake, mcp_server_name);
-    delete direct[mcp_server_name];
-    delete snake[mcp_server_name];
-    root.mcpServers = direct;
-    root.mcp_servers = snake;
-    await this.write_mcp_root(root);
+    const existed = await this.mcp_store.remove_server(mcp_server_name);
     return JSON.stringify({
       ok: existed,
       action: "mcp_remove_server",
       mcp_server_name,
-      file: this.mcp_file(),
+      file: this.mcp_store.get_path(),
     });
   }
 }

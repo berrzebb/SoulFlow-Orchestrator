@@ -1,5 +1,6 @@
-import { appendFile, mkdir, readFile, readdir, rename, stat, writeFile } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
+import Database from "better-sqlite3";
 import type {
   ConsolidationMessage,
   ConsolidationSession,
@@ -7,11 +8,14 @@ import type {
   MemoryConsolidateOptions,
   MemoryConsolidateResult,
   MemoryKind,
+  MemoryStoreLike,
 } from "./memory.types.js";
-import { file_exists, today_key } from "../utils/common.js";
+import { today_key } from "../utils/common.js";
 import { redact_sensitive_text } from "../security/sensitive.js";
 import { SecretVaultService } from "../security/secret-vault.js";
 import { parse_tool_calls_from_text } from "./tool-call-parser.js";
+
+type DatabaseSync = Database.Database;
 
 const SAVE_MEMORY_TOOL = [
   {
@@ -21,90 +25,244 @@ const SAVE_MEMORY_TOOL = [
       type: "object",
       properties: {
         history_entry: { type: "string", description: "Append-only history summary entry" },
-        memory_update: { type: "string", description: "Full replacement content for MEMORY.md" },
+        memory_update: { type: "string", description: "Full replacement content for long-term memory stored in memory.db" },
       },
       required: [],
     },
   },
 ];
 
-function is_daily_file(name: string): boolean {
-  return /^\d{4}-\d{2}-\d{2}\.md$/.test(name);
+function is_day_key(day: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(String(day || "").trim());
 }
 
-export class MemoryStore {
+type MemoryDocRow = {
+  path: string;
+  content: string;
+};
+
+export class MemoryStore implements MemoryStoreLike {
   private readonly root: string;
-  private readonly memoryDir: string;
-  private readonly longtermPath: string;
+  private readonly memory_dir: string;
+  private readonly sqlite_path: string;
   private readonly initialized: Promise<void>;
 
-  constructor(workspaceRoot = process.cwd()) {
-    this.root = workspaceRoot;
-    this.memoryDir = join(this.root, "memory");
-    this.longtermPath = join(this.memoryDir, "MEMORY.md");
+  constructor(workspace_root = process.cwd()) {
+    this.root = workspace_root;
+    this.memory_dir = join(this.root, "memory");
+    this.sqlite_path = join(this.memory_dir, "memory.db");
     this.initialized = this.ensure_initialized();
   }
 
   private async ensure_initialized(): Promise<void> {
-    await mkdir(this.memoryDir, { recursive: true });
-    if (!(await file_exists(this.longtermPath))) await writeFile(this.longtermPath, "# MEMORY\n\n", "utf-8");
+    await mkdir(this.memory_dir, { recursive: true });
+    this.with_sqlite((db) => {
+      db.exec(`
+        PRAGMA journal_mode=WAL;
+        CREATE TABLE IF NOT EXISTS memory_documents (
+          doc_key TEXT PRIMARY KEY,
+          kind TEXT NOT NULL,
+          day TEXT NOT NULL,
+          path TEXT NOT NULL,
+          content TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_memory_documents_kind_day
+          ON memory_documents(kind, day, updated_at DESC);
+        CREATE VIRTUAL TABLE IF NOT EXISTS memory_documents_fts USING fts5(
+          content,
+          kind UNINDEXED,
+          day UNINDEXED,
+          path UNINDEXED,
+          content='memory_documents',
+          content_rowid='rowid'
+        );
+        CREATE TRIGGER IF NOT EXISTS memory_documents_ai AFTER INSERT ON memory_documents BEGIN
+          INSERT INTO memory_documents_fts(rowid, content, kind, day, path)
+          VALUES (new.rowid, new.content, new.kind, new.day, new.path);
+        END;
+        CREATE TRIGGER IF NOT EXISTS memory_documents_ad AFTER DELETE ON memory_documents BEGIN
+          INSERT INTO memory_documents_fts(memory_documents_fts, rowid, content, kind, day, path)
+          VALUES ('delete', old.rowid, old.content, old.kind, old.day, old.path);
+        END;
+        CREATE TRIGGER IF NOT EXISTS memory_documents_au AFTER UPDATE ON memory_documents BEGIN
+          INSERT INTO memory_documents_fts(memory_documents_fts, rowid, content, kind, day, path)
+          VALUES ('delete', old.rowid, old.content, old.kind, old.day, old.path);
+          INSERT INTO memory_documents_fts(rowid, content, kind, day, path)
+          VALUES (new.rowid, new.content, new.kind, new.day, new.path);
+        END;
+      `);
+      return true;
+    });
+    this.ensure_longterm_document();
   }
 
-  async get_paths(): Promise<{ workspace: string; memoryDir: string; longtermPath: string }> {
+  private with_sqlite<T>(run: (db: DatabaseSync) => T): T | null {
+    let db: DatabaseSync | null = null;
+    try {
+      db = new Database(this.sqlite_path);
+      return run(db);
+    } catch {
+      return null;
+    } finally {
+      try {
+        db?.close();
+      } catch {
+        // no-op
+      }
+    }
+  }
+
+  private normalize_day_key(day?: string): string {
+    const raw = String(day || "").trim();
+    return is_day_key(raw) ? raw : today_key();
+  }
+
+  private longterm_doc_key(): string {
+    return "longterm:MEMORY";
+  }
+
+  private daily_doc_key(day: string): string {
+    return `daily:${day}`;
+  }
+
+  private longterm_uri(): string {
+    return "sqlite://memory/longterm";
+  }
+
+  private daily_uri(day: string): string {
+    return `sqlite://memory/daily/${day}`;
+  }
+
+  private ensure_longterm_document(): void {
+    const row = this.with_sqlite((db) => db.prepare(`
+      SELECT doc_key
+      FROM memory_documents
+      WHERE doc_key = ?
+      LIMIT 1
+    `).get(this.longterm_doc_key()) as { doc_key: string } | undefined) || undefined;
+    if (row) return;
+    this.sqlite_upsert_document("longterm", "__longterm__", this.longterm_uri(), "");
+  }
+
+  private sqlite_upsert_document(kind: "longterm" | "daily", day: string, path: string, content: string): void {
+    this.with_sqlite((db) => {
+      db.prepare(`
+        INSERT INTO memory_documents (doc_key, kind, day, path, content, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(doc_key) DO UPDATE SET
+          kind = excluded.kind,
+          day = excluded.day,
+          path = excluded.path,
+          content = excluded.content,
+          updated_at = excluded.updated_at
+      `).run(
+        kind === "longterm" ? this.longterm_doc_key() : this.daily_doc_key(day),
+        kind,
+        day,
+        path,
+        String(content || ""),
+        new Date().toISOString(),
+      );
+      return true;
+    });
+  }
+
+  private sqlite_read_document(kind: "longterm" | "daily", day: string): MemoryDocRow | null {
+    const doc_key = kind === "longterm" ? this.longterm_doc_key() : this.daily_doc_key(day);
+    const row = this.with_sqlite((db) => db.prepare(`
+      SELECT path, content
+      FROM memory_documents
+      WHERE doc_key = ?
+      LIMIT 1
+    `).get(doc_key) as MemoryDocRow | undefined) || undefined;
+    if (!row) return null;
+    return {
+      path: String(row.path || ""),
+      content: String(row.content || ""),
+    };
+  }
+
+  private sqlite_delete_daily(day: string): boolean {
+    const removed = this.with_sqlite((db) => {
+      const result = db.prepare("DELETE FROM memory_documents WHERE doc_key = ?").run(this.daily_doc_key(day));
+      return Number(result.changes || 0);
+    }) || 0;
+    return removed > 0;
+  }
+
+  private build_fts_query(query: string): string {
+    const terms = String(query || "")
+      .split(/\s+/)
+      .map((v) => v.trim())
+      .filter(Boolean);
+    if (terms.length === 0) return "";
+    return terms.map((v) => `"${v.replace(/"/g, "\"\"")}"`).join(" ");
+  }
+
+  async get_paths(): Promise<{ workspace: string; memoryDir: string; sqlitePath: string }> {
     await this.initialized;
-    return { workspace: this.root, memoryDir: this.memoryDir, longtermPath: this.longtermPath };
+    return {
+      workspace: this.root,
+      memoryDir: this.memory_dir,
+      sqlitePath: this.sqlite_path,
+    };
   }
 
   async resolve_daily_path(day?: string): Promise<string> {
     await this.initialized;
-    const key = day && /^\d{4}-\d{2}-\d{2}$/.test(day) ? day : today_key();
-    return join(this.memoryDir, `${key}.md`);
+    return this.daily_uri(this.normalize_day_key(day));
   }
 
   async list_daily(): Promise<string[]> {
     await this.initialized;
-    return (await readdir(this.memoryDir))
-      .filter(is_daily_file)
-      .sort((a, b) => a.localeCompare(b));
+    const rows = this.with_sqlite((db) => db.prepare(`
+      SELECT day
+      FROM memory_documents
+      WHERE kind = 'daily'
+      ORDER BY day ASC
+    `).all() as Array<{ day: string }>) || [];
+    return rows
+      .map((row) => String(row.day || ""))
+      .filter((day) => is_day_key(day))
+      .map((day) => `${day}.md`);
   }
 
   async read_longterm(): Promise<string> {
     await this.initialized;
-    return (await file_exists(this.longtermPath)) ? await readFile(this.longtermPath, "utf-8") : "";
+    const row = this.sqlite_read_document("longterm", "__longterm__");
+    return row?.content || "";
   }
 
   async write_longterm(content: string): Promise<void> {
     await this.initialized;
-    await writeFile(this.longtermPath, String(content || ""), "utf-8");
+    this.sqlite_upsert_document("longterm", "__longterm__", this.longterm_uri(), String(content || ""));
   }
 
   async append_longterm(content: string): Promise<void> {
     await this.initialized;
-    await appendFile(this.longtermPath, String(content || ""), "utf-8");
-  }
-
-  async read_history(day?: string): Promise<string> {
-    return this.read_daily(day);
-  }
-
-  async append_history(content: string, day?: string): Promise<void> {
-    await this.append_daily(String(content || ""), day);
+    const prev = await this.read_longterm();
+    this.sqlite_upsert_document("longterm", "__longterm__", this.longterm_uri(), `${prev}${String(content || "")}`);
   }
 
   async read_daily(day?: string): Promise<string> {
-    const p = await this.resolve_daily_path(day);
-    return (await file_exists(p)) ? await readFile(p, "utf-8") : "";
+    await this.initialized;
+    const day_key = this.normalize_day_key(day);
+    const row = this.sqlite_read_document("daily", day_key);
+    return row?.content || "";
   }
 
   async write_daily(content: string, day?: string): Promise<void> {
-    const p = await this.resolve_daily_path(day);
-    await writeFile(p, String(content || ""), "utf-8");
+    await this.initialized;
+    const day_key = this.normalize_day_key(day);
+    this.sqlite_upsert_document("daily", day_key, this.daily_uri(day_key), String(content || ""));
   }
 
   async append_daily(content: string, day?: string): Promise<void> {
-    const p = await this.resolve_daily_path(day);
-    if (!(await file_exists(p))) await writeFile(p, `# ${day || today_key()} Memory\n\n`, "utf-8");
-    await appendFile(p, String(content || ""), "utf-8");
+    await this.initialized;
+    const day_key = this.normalize_day_key(day);
+    const prev = await this.read_daily(day_key);
+    this.sqlite_upsert_document("daily", day_key, this.daily_uri(day_key), `${prev}${String(content || "")}`);
   }
 
   async save_memory(args: {
@@ -117,80 +275,110 @@ export class MemoryStore {
     if (args.kind === "longterm") {
       if (mode === "overwrite") await this.write_longterm(args.content);
       else await this.append_longterm(args.content);
-      return { ok: true, target: this.longtermPath };
+      return { ok: true, target: this.longterm_uri() };
     }
-    const p = await this.resolve_daily_path(args.day);
-    if (mode === "overwrite") await this.write_daily(args.content, args.day);
-    else await this.append_daily(args.content, args.day);
-    return { ok: true, target: p };
+    const day_key = this.normalize_day_key(args.day);
+    if (mode === "overwrite") await this.write_daily(args.content, day_key);
+    else await this.append_daily(args.content, day_key);
+    return { ok: true, target: this.daily_uri(day_key) };
   }
 
-  async search(query: string, args?: { kind?: "all" | MemoryKind; day?: string; limit?: number; case_sensitive?: boolean }): Promise<Array<{ file: string; line: number; text: string }>> {
+  async search(
+    query: string,
+    args?: { kind?: "all" | MemoryKind; day?: string; limit?: number; case_sensitive?: boolean },
+  ): Promise<Array<{ file: string; line: number; text: string }>> {
+    await this.initialized;
     const limit = Math.max(1, Number(args?.limit || 80));
-    const cs = !!args?.case_sensitive;
-    const needle = cs ? query : query.toLowerCase();
-    const rows: Array<{ file: string; line: number; text: string }> = [];
-    const targets: string[] = [];
+    const case_sensitive = !!args?.case_sensitive;
+    const raw_query = String(query || "").trim();
+    if (!raw_query) return [];
+    const fts_query = this.build_fts_query(raw_query);
+    if (!fts_query) return [];
+
     const kind = args?.kind || "all";
-    if (kind === "all" || kind === "longterm") targets.push(this.longtermPath);
-    if (kind === "all" || kind === "daily") {
-      if (args?.day) targets.push(await this.resolve_daily_path(args.day));
-      else for (const f of await this.list_daily()) targets.push(join(this.memoryDir, f));
+    const day = String(args?.day || "").trim();
+    const where: string[] = ["memory_documents_fts MATCH ?"];
+    const bind: Array<string | number> = [fts_query];
+    if (kind === "longterm") {
+      where.push("d.kind = ?");
+      bind.push("longterm");
+    } else if (kind === "daily") {
+      where.push("d.kind = ?");
+      bind.push("daily");
+      if (is_day_key(day)) {
+        where.push("d.day = ?");
+        bind.push(day);
+      }
+    } else if (is_day_key(day)) {
+      where.push("d.day = ?");
+      bind.push(day);
     }
-    for (const file of targets) {
-      if (!(await file_exists(file))) continue;
-      const lines = (await readFile(file, "utf-8")).split(/\r?\n/);
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
-        const hay = cs ? line : line.toLowerCase();
-        if (hay.includes(needle)) {
-          rows.push({ file, line: i + 1, text: line });
-          if (rows.length >= limit) return rows;
-        }
+    bind.push(Math.max(limit * 6, 24));
+
+    const docs = this.with_sqlite((db) => db.prepare(`
+      SELECT d.path AS path, d.content AS content
+      FROM memory_documents_fts f
+      JOIN memory_documents d ON d.rowid = f.rowid
+      WHERE ${where.join(" AND ")}
+      ORDER BY bm25(memory_documents_fts), d.updated_at DESC
+      LIMIT ?
+    `).all(...bind) as MemoryDocRow[]) || [];
+
+    const needle = case_sensitive ? raw_query : raw_query.toLowerCase();
+    const out: Array<{ file: string; line: number; text: string }> = [];
+    for (const doc of docs) {
+      const lines = String(doc.content || "").split(/\r?\n/);
+      for (let i = 0; i < lines.length; i += 1) {
+        const text = String(lines[i] || "");
+        const hay = case_sensitive ? text : text.toLowerCase();
+        if (!hay.includes(needle)) continue;
+        out.push({ file: String(doc.path || ""), line: i + 1, text });
+        if (out.length >= limit) return out;
       }
     }
-    return rows;
+    return out;
   }
 
   async consolidate(options?: MemoryConsolidateOptions): Promise<MemoryConsolidateResult> {
-    const windowDays = Math.max(1, Math.min(365, Number(options?.memory_window || 7)));
+    await this.initialized;
+    const window_days = Math.max(1, Math.min(365, Number(options?.memory_window || 7)));
     const now = new Date();
     const files = await this.list_daily();
     const used: string[] = [];
     const archived: string[] = [];
     const chunks: string[] = [];
-    for (const f of files) {
-      const day = f.slice(0, 10);
+
+    for (const file of files) {
+      const day = String(file || "").slice(0, 10);
+      if (!is_day_key(day)) continue;
       const d = new Date(`${day}T00:00:00Z`);
       if (!Number.isFinite(d.getTime())) continue;
       const age = Math.floor((now.getTime() - d.getTime()) / (1000 * 60 * 60 * 24));
-      if (age > windowDays) continue;
-      const full = join(this.memoryDir, f);
-      if (!(await file_exists(full)) || !(await stat(full)).isFile()) continue;
-      const content = (await readFile(full, "utf-8")).trim();
+      if (age > window_days) continue;
+      const content = (await this.read_daily(day)).trim();
       if (!content) continue;
-      used.push(f);
+      used.push(`${day}.md`);
       chunks.push(`## Daily ${day}\n${content}`);
     }
 
-    const longtermRaw = (await this.read_longterm()).trim();
+    const longterm_raw = (await this.read_longterm()).trim();
     const header = [
       `\n## Consolidated ${today_key()}`,
       `- session: ${options?.session || "n/a"}`,
       `- provider: ${options?.provider || "n/a"}`,
       `- model: ${options?.model || "n/a"}`,
-      `- memory_window_days: ${windowDays}`,
+      `- memory_window_days: ${window_days}`,
       "",
     ].join("\n");
     const body = chunks.join("\n\n");
     const block = body ? `${header}${body}\n` : `${header}- no daily content in window\n`;
     await this.append_longterm(block);
 
-    const compressedPrompt = [
+    const compressed_prompt = [
       "# COMPRESSED MEMORY PROMPT",
       "",
       "## Longterm",
-      longtermRaw || "(empty)",
+      longterm_raw || "(empty)",
       "",
       "## Recent Daily",
       body || "(no daily content in window)",
@@ -199,7 +387,7 @@ export class MemoryStore {
       `session=${options?.session || "n/a"}`,
       `provider=${options?.provider || "n/a"}`,
       `model=${options?.model || "n/a"}`,
-      `memory_window_days=${windowDays}`,
+      `memory_window_days=${window_days}`,
       "",
       "## Injection Rule",
       "- Use this prompt as the primary bootstrap context.",
@@ -207,15 +395,11 @@ export class MemoryStore {
     ].join("\n");
 
     if (options?.archive) {
-      const archiveDir = join(this.memoryDir, "archive");
-      await mkdir(archiveDir, { recursive: true });
-      for (const f of used) {
-        const src = join(this.memoryDir, f);
-        const dst = join(archiveDir, f);
-        if (await file_exists(src)) {
-          await rename(src, dst);
-          archived.push(dst);
-        }
+      for (const file of used) {
+        const day = file.slice(0, 10);
+        if (!is_day_key(day)) continue;
+        if (!this.sqlite_delete_daily(day)) continue;
+        archived.push(`sqlite://memory/archive/daily/${day}`);
       }
     }
 
@@ -225,7 +409,7 @@ export class MemoryStore {
       daily_files_used: used,
       archived_files: archived,
       summary: body ? `consolidated ${used.length} daily files` : "no daily files consolidated",
-      compressed_prompt: compressedPrompt,
+      compressed_prompt,
     };
   }
 
@@ -236,40 +420,43 @@ export class MemoryStore {
     options?: { archive_all?: boolean; memory_window?: number },
   ): Promise<boolean> {
     const secret_vault = new SecretVaultService(this.root);
-    const archiveAll = !!options?.archive_all;
-    const memoryWindow = Math.max(4, Number(options?.memory_window || 50));
+    const archive_all = !!options?.archive_all;
+    const memory_window = Math.max(4, Number(options?.memory_window || 50));
 
-    let oldMessages: ConsolidationMessage[] = [];
-    let keepCount = 0;
-    if (archiveAll) {
-      oldMessages = session.messages;
-      keepCount = 0;
+    let old_messages: ConsolidationMessage[] = [];
+    let keep_count = 0;
+    if (archive_all) {
+      old_messages = session.messages;
+      keep_count = 0;
     } else {
-      keepCount = Math.floor(memoryWindow / 2);
-      if (session.messages.length <= keepCount) return true;
+      keep_count = Math.floor(memory_window / 2);
+      if (session.messages.length <= keep_count) return true;
       if (session.messages.length - Number(session.last_consolidated || 0) <= 0) return true;
-      oldMessages = session.messages.slice(Number(session.last_consolidated || 0), Math.max(0, session.messages.length - keepCount));
-      if (oldMessages.length === 0) return true;
+      old_messages = session.messages.slice(
+        Number(session.last_consolidated || 0),
+        Math.max(0, session.messages.length - keep_count),
+      );
+      if (old_messages.length === 0) return true;
     }
 
     const lines: string[] = [];
-    for (const m of oldMessages) {
+    for (const m of old_messages) {
       if (!m?.content) continue;
       const tools = Array.isArray(m.tools_used) && m.tools_used.length > 0
         ? ` [tools: ${m.tools_used.join(", ")}]`
         : "";
       const ts = String(m.timestamp || "?").slice(0, 16);
-      const content_masked = redact_sensitive_text(await secret_vault.mask_known_secrets(String(m.content))).text;
-      lines.push(`[${ts}] ${String(m.role || "unknown").toUpperCase()}${tools}: ${content_masked}`);
+      const masked = redact_sensitive_text(await secret_vault.mask_known_secrets(String(m.content))).text;
+      lines.push(`[${ts}] ${String(m.role || "unknown").toUpperCase()}${tools}: ${masked}`);
     }
     if (lines.length === 0) return true;
 
-    const currentMemory = redact_sensitive_text(await secret_vault.mask_known_secrets(await this.read_longterm())).text;
+    const current_memory = redact_sensitive_text(await secret_vault.mask_known_secrets(await this.read_longterm())).text;
     const prompt = [
       "Process this conversation and call the save_memory tool with your consolidation.",
       "",
       "## Current Long-term Memory",
-      currentMemory || "(empty)",
+      current_memory || "(empty)",
       "",
       "## Conversation to Process",
       lines.join("\n"),
@@ -298,19 +485,19 @@ export class MemoryStore {
     }
     const args = effective_tool_calls[0]?.arguments || {};
 
-    const historyEntry = args.history_entry;
-    if (historyEntry !== undefined && historyEntry !== null) {
-      const text = typeof historyEntry === "string" ? historyEntry : JSON.stringify(historyEntry);
-      if (text.trim()) await this.append_history(`${text}\n`);
+    const history_entry = args.history_entry;
+    if (history_entry !== undefined && history_entry !== null) {
+      const text = typeof history_entry === "string" ? history_entry : JSON.stringify(history_entry);
+      if (text.trim()) await this.append_daily(`${text}\n`);
     }
 
-    const memoryUpdate = args.memory_update;
-    if (memoryUpdate !== undefined && memoryUpdate !== null) {
-      const text = typeof memoryUpdate === "string" ? memoryUpdate : JSON.stringify(memoryUpdate);
-      if (text !== currentMemory) await this.write_longterm(text);
+    const memory_update = args.memory_update;
+    if (memory_update !== undefined && memory_update !== null) {
+      const text = typeof memory_update === "string" ? memory_update : JSON.stringify(memory_update);
+      if (text !== current_memory) await this.write_longterm(text);
     }
 
-    session.last_consolidated = archiveAll ? 0 : Math.max(0, session.messages.length - keepCount);
+    session.last_consolidated = archive_all ? 0 : Math.max(0, session.messages.length - keep_count);
     return true;
   }
 }

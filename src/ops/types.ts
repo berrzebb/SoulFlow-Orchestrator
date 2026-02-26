@@ -1,16 +1,14 @@
-import type { AgentDomain } from "../agent/index.js";
 import type { MessageBus } from "../bus/index.js";
 import type { ChannelManager } from "../channels/index.js";
-import type { CronService } from "../cron/index.js";
+import type { CronScheduler } from "../cron/contracts.js";
 import type { HeartbeatService } from "../heartbeat/index.js";
 import type { DecisionService } from "../decision/index.js";
 
 export type OpsRuntimeDeps = {
   bus: MessageBus;
   channels: ChannelManager;
-  cron: CronService;
+  cron: CronScheduler;
   heartbeat: HeartbeatService;
-  agent: AgentDomain;
   decisions: DecisionService;
 };
 

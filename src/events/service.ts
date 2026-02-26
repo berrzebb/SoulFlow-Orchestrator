@@ -1,25 +1,22 @@
-import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { mkdir } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
-import { file_exists, now_iso, safe_filename } from "../utils/common.js";
+import { join } from "node:path";
+import Database from "better-sqlite3";
 import type { TaskState } from "../contracts.js";
-import type { TaskStore } from "../agent/task-store.js";
+import type { TaskStoreLike } from "../agent/task-store.js";
+import { now_iso } from "../utils/common.js";
 import type {
   AppendWorkflowEventInput,
   AppendWorkflowEventResult,
   ListWorkflowEventsFilter,
   WorkflowEvent,
+  WorkflowEventSource,
   WorkflowPhase,
 } from "./types.js";
 
-type EventIndex = {
-  version: number;
-  event_ids: Record<string, string>;
-  updated_at: string;
-};
-
-const INDEX_VERSION = 1;
 const PHASES = new Set<WorkflowPhase>(["assign", "progress", "blocked", "done", "approval"]);
+const SOURCES = new Set<WorkflowEventSource>(["outbound", "inbound", "system"]);
+type DatabaseSync = Database.Database;
 
 function normalize_text(value: unknown): string {
   return String(value || "").replace(/\s+/g, " ").trim();
@@ -31,47 +28,46 @@ function normalize_phase(value: unknown): WorkflowPhase {
   return "progress";
 }
 
-function default_index(): EventIndex {
-  return {
-    version: INDEX_VERSION,
-    event_ids: {},
-    updated_at: now_iso(),
-  };
+function normalize_source(value: unknown): WorkflowEventSource {
+  const source = String(value || "").trim().toLowerCase();
+  if (SOURCES.has(source as WorkflowEventSource)) return source as WorkflowEventSource;
+  return "system";
 }
 
-function line_to_event(line: string): WorkflowEvent | null {
-  const raw = String(line || "").trim();
-  if (!raw) return null;
-  try {
-    const parsed = JSON.parse(raw) as WorkflowEvent;
-    if (!parsed || typeof parsed !== "object" || !parsed.event_id) return null;
-    return parsed;
-  } catch {
-    return null;
-  }
-}
+type DbEventRow = {
+  event_id: string;
+  run_id: string;
+  task_id: string;
+  agent_id: string;
+  phase: string;
+  summary: string;
+  payload_json: string;
+  provider: string | null;
+  channel: string | null;
+  chat_id: string;
+  thread_id: string | null;
+  source: string;
+  detail_file: string | null;
+  at: string;
+};
 
 export class WorkflowEventService {
   readonly root: string;
   readonly events_dir: string;
-  readonly events_path: string;
-  readonly index_path: string;
-  readonly task_details_dir: string;
+  readonly sqlite_path: string;
 
-  private index_cache: EventIndex | null = null;
-  private records_cache: WorkflowEvent[] | null = null;
+  private readonly initialized: Promise<void>;
   private write_queue: Promise<void> = Promise.resolve();
-  private task_store: TaskStore | null = null;
+  private task_store: TaskStoreLike | null = null;
 
-  constructor(root = process.cwd(), events_dir_override?: string, task_details_dir_override?: string) {
+  constructor(root = process.cwd(), events_dir_override?: string) {
     this.root = root;
     this.events_dir = events_dir_override || join(root, "runtime", "events");
-    this.events_path = join(this.events_dir, "events.jsonl");
-    this.index_path = join(this.events_dir, "index.json");
-    this.task_details_dir = task_details_dir_override || join(root, "runtime", "tasks", "details");
+    this.sqlite_path = join(this.events_dir, "events.db");
+    this.initialized = this.ensure_initialized();
   }
 
-  bind_task_store(store: TaskStore | null): void {
+  bind_task_store(store: TaskStoreLike | null): void {
     this.task_store = store;
   }
 
@@ -81,79 +77,162 @@ export class WorkflowEventService {
     return run;
   }
 
+  private with_sqlite<T>(run: (db: DatabaseSync) => T): T | null {
+    let db: DatabaseSync | null = null;
+    try {
+      db = new Database(this.sqlite_path);
+      db.exec("PRAGMA foreign_keys=ON;");
+      return run(db);
+    } catch {
+      return null;
+    } finally {
+      try {
+        db?.close();
+      } catch {
+        // no-op
+      }
+    }
+  }
+
   private async ensure_dirs(): Promise<void> {
     await mkdir(this.events_dir, { recursive: true });
-    await mkdir(this.task_details_dir, { recursive: true });
   }
 
-  private async load_records(): Promise<WorkflowEvent[]> {
-    if (this.records_cache) return this.records_cache;
+  private async ensure_initialized(): Promise<void> {
     await this.ensure_dirs();
-    if (!(await file_exists(this.events_path))) {
-      this.records_cache = [];
-      return this.records_cache;
-    }
-    const raw = await readFile(this.events_path, "utf-8");
-    const rows = raw
-      .split(/\r?\n/g)
-      .map((line) => line_to_event(line))
-      .filter((v): v is WorkflowEvent => Boolean(v));
-    this.records_cache = rows;
-    return rows;
+    this.with_sqlite((db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS workflow_events (
+          event_id TEXT PRIMARY KEY,
+          run_id TEXT NOT NULL,
+          task_id TEXT NOT NULL,
+          agent_id TEXT NOT NULL,
+          phase TEXT NOT NULL,
+          summary TEXT NOT NULL,
+          payload_json TEXT NOT NULL,
+          provider TEXT,
+          channel TEXT,
+          chat_id TEXT NOT NULL,
+          thread_id TEXT,
+          source TEXT NOT NULL,
+          detail_file TEXT,
+          at TEXT NOT NULL,
+          created_ms INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS workflow_task_details (
+          task_id TEXT PRIMARY KEY,
+          content TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_workflow_events_at ON workflow_events(at DESC);
+        CREATE INDEX IF NOT EXISTS idx_workflow_events_task ON workflow_events(task_id, at DESC);
+        CREATE INDEX IF NOT EXISTS idx_workflow_events_run ON workflow_events(run_id, at DESC);
+        CREATE INDEX IF NOT EXISTS idx_workflow_events_chat ON workflow_events(chat_id, at DESC);
+        CREATE VIRTUAL TABLE IF NOT EXISTS workflow_events_fts USING fts5(
+          content,
+          event_id UNINDEXED,
+          run_id UNINDEXED,
+          task_id UNINDEXED,
+          agent_id UNINDEXED,
+          phase UNINDEXED,
+          source UNINDEXED,
+          chat_id UNINDEXED,
+          content='workflow_events',
+          content_rowid='rowid'
+        );
+        CREATE TRIGGER IF NOT EXISTS workflow_events_ai AFTER INSERT ON workflow_events BEGIN
+          INSERT INTO workflow_events_fts(rowid, content, event_id, run_id, task_id, agent_id, phase, source, chat_id)
+          VALUES (
+            new.rowid,
+            COALESCE(new.summary, '') || ' ' || COALESCE(new.payload_json, ''),
+            new.event_id,
+            new.run_id,
+            new.task_id,
+            new.agent_id,
+            new.phase,
+            new.source,
+            new.chat_id
+          );
+        END;
+        CREATE TRIGGER IF NOT EXISTS workflow_events_ad AFTER DELETE ON workflow_events BEGIN
+          INSERT INTO workflow_events_fts(workflow_events_fts, rowid, content, event_id, run_id, task_id, agent_id, phase, source, chat_id)
+          VALUES (
+            'delete',
+            old.rowid,
+            COALESCE(old.summary, '') || ' ' || COALESCE(old.payload_json, ''),
+            old.event_id,
+            old.run_id,
+            old.task_id,
+            old.agent_id,
+            old.phase,
+            old.source,
+            old.chat_id
+          );
+        END;
+        CREATE TRIGGER IF NOT EXISTS workflow_events_au AFTER UPDATE ON workflow_events BEGIN
+          INSERT INTO workflow_events_fts(workflow_events_fts, rowid, content, event_id, run_id, task_id, agent_id, phase, source, chat_id)
+          VALUES (
+            'delete',
+            old.rowid,
+            COALESCE(old.summary, '') || ' ' || COALESCE(old.payload_json, ''),
+            old.event_id,
+            old.run_id,
+            old.task_id,
+            old.agent_id,
+            old.phase,
+            old.source,
+            old.chat_id
+          );
+          INSERT INTO workflow_events_fts(rowid, content, event_id, run_id, task_id, agent_id, phase, source, chat_id)
+          VALUES (
+            new.rowid,
+            COALESCE(new.summary, '') || ' ' || COALESCE(new.payload_json, ''),
+            new.event_id,
+            new.run_id,
+            new.task_id,
+            new.agent_id,
+            new.phase,
+            new.source,
+            new.chat_id
+          );
+        END;
+      `);
+      return true;
+    });
   }
 
-  private async load_index(): Promise<EventIndex> {
-    if (this.index_cache) return this.index_cache;
-    await this.ensure_dirs();
-    if (!(await file_exists(this.index_path))) {
-      const rebuilt = await this.rebuild_index_from_records();
-      this.index_cache = rebuilt;
-      await this.write_index(rebuilt);
-      return rebuilt;
-    }
+  private row_to_event(row: DbEventRow): WorkflowEvent | null {
     try {
-      const raw = await readFile(this.index_path, "utf-8");
-      const parsed = JSON.parse(raw) as EventIndex;
-      this.index_cache = {
-        version: Number(parsed.version || INDEX_VERSION),
-        event_ids: parsed.event_ids || {},
-        updated_at: parsed.updated_at || now_iso(),
+      const payload = JSON.parse(String(row.payload_json || "{}")) as Record<string, unknown>;
+      return {
+        event_id: String(row.event_id || ""),
+        run_id: String(row.run_id || ""),
+        task_id: String(row.task_id || ""),
+        agent_id: String(row.agent_id || ""),
+        phase: normalize_phase(row.phase),
+        summary: String(row.summary || ""),
+        payload: (payload && typeof payload === "object" && !Array.isArray(payload)) ? payload : {},
+        provider: row.provider || undefined,
+        channel: row.channel || undefined,
+        chat_id: String(row.chat_id || ""),
+        thread_id: row.thread_id || undefined,
+        source: normalize_source(row.source),
+        detail_file: row.detail_file || null,
+        at: String(row.at || ""),
       };
-      return this.index_cache;
     } catch {
-      const rebuilt = await this.rebuild_index_from_records();
-      this.index_cache = rebuilt;
-      await this.write_index(rebuilt);
-      return rebuilt;
+      return null;
     }
   }
 
-  private async rebuild_index_from_records(): Promise<EventIndex> {
-    const rows = await this.load_records();
-    const out = default_index();
-    for (const row of rows) {
-      out.event_ids[row.event_id] = row.at;
-    }
-    out.updated_at = now_iso();
-    return out;
-  }
-
-  private async write_index(index: EventIndex): Promise<void> {
-    await this.ensure_dirs();
-    await writeFile(this.index_path, JSON.stringify(index, null, 2), "utf-8");
-  }
-
-  private task_detail_path(task_id: string): string {
-    const safe = safe_filename(String(task_id || "").trim() || "task-unknown");
-    return join(this.task_details_dir, `${safe}.md`);
+  private task_detail_uri(task_id: string): string {
+    return `sqlite://events/task_details/${encodeURIComponent(task_id)}`;
   }
 
   private async append_task_detail(event: WorkflowEvent, detail: string): Promise<string | null> {
-    const task_id = String(event.task_id || "").trim();
+    const task_id = normalize_text(event.task_id);
     const body = String(detail || "").trim();
     if (!task_id || !body) return null;
-    await this.ensure_dirs();
-    const path = this.task_detail_path(task_id);
     const section = [
       `## ${event.at} [${event.phase}] run=${event.run_id} agent=${event.agent_id}`,
       "",
@@ -162,22 +241,40 @@ export class WorkflowEventService {
       "---",
       "",
     ].join("\n");
-    await appendFile(path, section, "utf-8");
-    return path;
+    const ok = this.with_sqlite((db) => {
+      const existing = db.prepare(`
+        SELECT content
+        FROM workflow_task_details
+        WHERE task_id = ?
+        LIMIT 1
+      `).get(task_id) as { content: string } | undefined;
+      const next = `${String(existing?.content || "")}${section}`;
+      db.prepare(`
+        INSERT INTO workflow_task_details(task_id, content, updated_at)
+        VALUES (?, ?, ?)
+        ON CONFLICT(task_id) DO UPDATE SET
+          content = excluded.content,
+          updated_at = excluded.updated_at
+      `).run(task_id, next, now_iso());
+      return true;
+    });
+    if (!ok) return null;
+    return this.task_detail_uri(task_id);
   }
 
   async append(input: AppendWorkflowEventInput): Promise<AppendWorkflowEventResult> {
+    await this.initialized;
     return this.enqueue_write(async () => {
-      const index = await this.load_index();
-      const records = await this.load_records();
       const event_id = normalize_text(input.event_id) || randomUUID().slice(0, 12);
-      const existing = records.find((r) => r.event_id === event_id);
+      const existing = this.with_sqlite((db) => db.prepare(`
+        SELECT event_id, run_id, task_id, agent_id, phase, summary, payload_json, provider, channel, chat_id, thread_id, source, detail_file, at
+        FROM workflow_events
+        WHERE event_id = ?
+        LIMIT 1
+      `).get(event_id) as DbEventRow | undefined) || null;
       if (existing) {
-        return { deduped: true, event: existing };
-      }
-      if (index.event_ids[event_id]) {
-        const by_index = records.find((r) => r.event_id === event_id);
-        if (by_index) return { deduped: true, event: by_index };
+        const event = this.row_to_event(existing);
+        if (event) return { deduped: true, event };
       }
 
       const at = String(input.at || now_iso());
@@ -203,7 +300,7 @@ export class WorkflowEventService {
         channel: normalize_text(input.channel) || undefined,
         chat_id,
         thread_id: normalize_text(input.thread_id) || undefined,
-        source: input.source || "system",
+        source: normalize_source(input.source),
         detail_file: null,
         at,
       };
@@ -211,45 +308,94 @@ export class WorkflowEventService {
       const detail_file = await this.append_task_detail(event, String(input.detail || ""));
       if (detail_file) event.detail_file = detail_file;
 
-      await this.ensure_dirs();
-      await appendFile(this.events_path, `${JSON.stringify(event)}\n`, "utf-8");
-      records.push(event);
-      this.records_cache = records;
-      index.event_ids[event.event_id] = event.at;
-      index.updated_at = now_iso();
-      this.index_cache = index;
-      await this.write_index(index);
-      await this.sync_task_state_from_event(event);
+      this.with_sqlite((db) => {
+        db.prepare(`
+          INSERT OR IGNORE INTO workflow_events (
+            event_id, run_id, task_id, agent_id, phase, summary, payload_json,
+            provider, channel, chat_id, thread_id, source, detail_file, at, created_ms
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          event.event_id,
+          event.run_id,
+          event.task_id,
+          event.agent_id,
+          event.phase,
+          event.summary,
+          JSON.stringify(event.payload || {}),
+          event.provider || null,
+          event.channel || null,
+          event.chat_id,
+          event.thread_id || null,
+          event.source,
+          event.detail_file || null,
+          event.at,
+          Date.now(),
+        );
+        return true;
+      });
 
+      await this.sync_task_state_from_event(event);
       return { deduped: false, event };
     });
   }
 
   async list(filter?: ListWorkflowEventsFilter): Promise<WorkflowEvent[]> {
-    const rows = await this.load_records();
+    await this.initialized;
     const limit = Math.max(1, Number(filter?.limit || 200));
     const offset = Math.max(0, Number(filter?.offset || 0));
-    const out = rows
-      .filter((r) => (filter?.phase ? r.phase === filter.phase : true))
-      .filter((r) => (filter?.task_id ? r.task_id === filter.task_id : true))
-      .filter((r) => (filter?.run_id ? r.run_id === filter.run_id : true))
-      .filter((r) => (filter?.agent_id ? r.agent_id === filter.agent_id : true))
-      .filter((r) => (filter?.chat_id ? r.chat_id === filter.chat_id : true))
-      .filter((r) => (filter?.source ? r.source === filter.source : true))
-      .sort((a, b) => String(b.at).localeCompare(String(a.at)));
-    return out.slice(offset, offset + limit);
+    const where: string[] = [];
+    const params: Array<string | number | null> = [];
+    if (filter?.phase) {
+      where.push("phase = ?");
+      params.push(normalize_phase(filter.phase));
+    }
+    if (filter?.task_id) {
+      where.push("task_id = ?");
+      params.push(String(filter.task_id));
+    }
+    if (filter?.run_id) {
+      where.push("run_id = ?");
+      params.push(String(filter.run_id));
+    }
+    if (filter?.agent_id) {
+      where.push("agent_id = ?");
+      params.push(String(filter.agent_id));
+    }
+    if (filter?.chat_id) {
+      where.push("chat_id = ?");
+      params.push(String(filter.chat_id));
+    }
+    if (filter?.source) {
+      where.push("source = ?");
+      params.push(normalize_source(filter.source));
+    }
+    const sql = [
+      "SELECT event_id, run_id, task_id, agent_id, phase, summary, payload_json, provider, channel, chat_id, thread_id, source, detail_file, at",
+      "FROM workflow_events",
+      where.length > 0 ? `WHERE ${where.join(" AND ")}` : "",
+      "ORDER BY at DESC",
+      "LIMIT ? OFFSET ?",
+    ].filter(Boolean).join(" ");
+    params.push(limit, offset);
+    const rows = this.with_sqlite((db) => db.prepare(sql).all(...params) as DbEventRow[]) || [];
+    const out: WorkflowEvent[] = [];
+    for (const row of rows) {
+      const event = this.row_to_event(row);
+      if (event) out.push(event);
+    }
+    return out;
   }
 
   async read_task_detail(task_id: string): Promise<string> {
     const id = normalize_text(task_id);
     if (!id) return "";
-    const path = this.task_detail_path(id);
-    if (!(await file_exists(path))) return "";
-    try {
-      return await readFile(path, "utf-8");
-    } catch {
-      return "";
-    }
+    const row = this.with_sqlite((db) => db.prepare(`
+      SELECT content
+      FROM workflow_task_details
+      WHERE task_id = ?
+      LIMIT 1
+    `).get(id) as { content: string } | undefined) || null;
+    return String(row?.content || "");
   }
 
   private map_phase_to_status(event: WorkflowEvent): TaskState["status"] {

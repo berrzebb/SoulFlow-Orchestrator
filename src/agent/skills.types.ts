@@ -6,6 +6,8 @@ export type SkillMetadata = {
   source: SkillSource;
   always: boolean;
   summary: string;
+  aliases: string[];
+  triggers: string[];
   requirements: string[];
   frontmatter: Record<string, unknown>;
 };

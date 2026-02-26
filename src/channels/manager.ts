@@ -1,12 +1,15 @@
 import type { MessageBus } from "../bus/index.js";
 import type { InboundMessage, OutboundMessage, MediaItem } from "../bus/types.js";
-import type { ProviderRegistry } from "../providers/index.js";
+import type { ProviderRegistry, RuntimeExecutionPolicy } from "../providers/index.js";
 import type { AgentDomain } from "../agent/index.js";
-import type { CronService } from "../cron/index.js";
+import { create_agent_runtime } from "../agent/runtime.service.js";
+import type { AgentRuntimeLike } from "../agent/runtime.types.js";
+import type { CronScheduler } from "../cron/contracts.js";
 import type { CronSchedule } from "../cron/types.js";
-import type { SessionStore } from "../session/index.js";
+import type { SessionStoreLike } from "../session/index.js";
 import { parse_executor_preference, resolve_executor_provider } from "../providers/executor.js";
-import { create_default_channels, type ChannelProvider, type ChannelRegistry } from "./index.js";
+import { create_default_channels, type ChannelProvider } from "./index.js";
+import type { ChannelRegistryLike } from "./types.js";
 import { parse_slash_command_from_message, slash_name_in, slash_token_in, type ParsedSlashCommand } from "./slash-command.js";
 import {
   default_render_profile,
@@ -17,9 +20,13 @@ import {
   type RenderMode,
   type RenderProfile,
 } from "./rendering.js";
+import { DefaultOutboundDedupePolicy, type OutboundDedupePolicy } from "./outbound-dedupe.js";
+import { DefaultRuntimePolicyResolver, type RuntimePolicyResolver } from "./runtime-policy.js";
+import { SqliteDispatchDlqStore, type DispatchDlqStoreLike } from "./dlq-store.js";
+import { is_local_reference, normalize_local_candidate_path, resolve_local_reference } from "../utils/local-ref.js";
 import { existsSync, statSync } from "node:fs";
-import { appendFile, mkdir, writeFile } from "node:fs/promises";
-import { basename, dirname, extname, join, resolve } from "node:path";
+import { mkdir, writeFile } from "node:fs/promises";
+import { basename, extname, join, resolve } from "node:path";
 import type { TaskNode } from "../agent/loop.js";
 import { redact_sensitive_text } from "../security/sensitive.js";
 import { SecretVaultService } from "../security/secret-vault.js";
@@ -35,6 +42,7 @@ export type ChannelManagerStatus = {
 type AgentRunResult = {
   reply: string | null;
   error?: string;
+  suppress_reply?: boolean;
   stream_emitted_count?: number;
   stream_last_content?: string;
   stream_full_content?: string;
@@ -51,7 +59,14 @@ type StreamEmitState = {
   last_source_chunk: string;
 };
 
+type RecentOutboundRecord = {
+  at_ms: number;
+  message_id: string;
+};
+
 type CronQuickAction = "status" | "list" | "add" | "remove";
+type MemoryQuickAction = "status" | "list" | "today" | "longterm" | "search";
+type DecisionQuickAction = "status" | "list" | "set";
 
 const STOP_COMMAND_ALIASES = ["stop", "cancel", "중지"] as const;
 const HELP_COMMAND_ALIASES = ["help", "commands", "cmd", "도움말", "명령어"] as const;
@@ -78,14 +93,24 @@ const CRON_STATUS_ARG_ALIASES = ["status", "상태", "확인", "조회"] as cons
 const CRON_LIST_ARG_ALIASES = ["jobs", "list", "목록", "리스트"] as const;
 const CRON_ADD_ARG_ALIASES = ["add", "추가", "등록", "create"] as const;
 const CRON_REMOVE_ARG_ALIASES = ["remove", "delete", "삭제", "제거"] as const;
+const MEMORY_ROOT_COMMAND_ALIASES = ["memory", "mem", "메모리"] as const;
+const MEMORY_STATUS_ARG_ALIASES = ["status", "state", "상태", "확인", "조회"] as const;
+const MEMORY_LIST_ARG_ALIASES = ["list", "목록", "리스트"] as const;
+const MEMORY_TODAY_ARG_ALIASES = ["today", "오늘"] as const;
+const MEMORY_LONGTERM_ARG_ALIASES = ["longterm", "lt", "장기"] as const;
+const MEMORY_SEARCH_ARG_ALIASES = ["search", "find", "검색"] as const;
+const DECISION_ROOT_COMMAND_ALIASES = ["decision", "decisions", "policy", "정책", "지침", "결정"] as const;
+const DECISION_STATUS_ARG_ALIASES = ["status", "state", "상태", "확인", "조회"] as const;
+const DECISION_LIST_ARG_ALIASES = ["list", "show", "목록", "리스트"] as const;
+const DECISION_SET_ARG_ALIASES = ["set", "update", "upsert", "설정", "수정", "변경"] as const;
 
 export class ChannelManager {
   readonly bus: MessageBus;
-  readonly registry: ChannelRegistry;
+  readonly registry: ChannelRegistryLike;
   readonly providers: ProviderRegistry | null;
-  readonly agent: AgentDomain | null;
-  readonly cron: CronService | null;
-  readonly sessions: SessionStore | null;
+  readonly agent_runtime: AgentRuntimeLike | null;
+  readonly cron: CronScheduler | null;
+  readonly sessions: SessionStoreLike | null;
 
   private running = false;
   private dispatch_abort: AbortController | null = null;
@@ -121,25 +146,29 @@ export class ChannelManager {
   private readonly dispatch_retry_max_ms: number;
   private readonly dispatch_retry_jitter_ms: number;
   private readonly dispatch_dlq_enabled: boolean;
-  private readonly dispatch_dlq_path: string;
-  private dlq_write_queue: Promise<void> = Promise.resolve();
+  private readonly dispatch_dlq_store: DispatchDlqStoreLike | null;
   private readonly approval_reaction_enabled: boolean;
   private readonly control_reaction_enabled: boolean;
   private readonly reaction_action_ttl_ms: number;
   private readonly reaction_actions_seen = new Map<string, number>();
   private readonly session_history_max_age_ms: number;
   private readonly suppress_final_after_stream: boolean;
+  private readonly outbound_dedupe_ttl_ms: number;
+  private readonly outbound_dedupe_max_size: number;
+  private readonly recent_outbound = new Map<string, RecentOutboundRecord>();
+  private readonly outbound_dedupe_policy: OutboundDedupePolicy;
+  private readonly runtime_policy_resolver: RuntimePolicyResolver;
   private readonly render_profiles = new Map<string, RenderProfile>();
   private readonly secret_vault: SecretVaultService;
 
   constructor(args: {
     bus: MessageBus;
-    registry?: ChannelRegistry;
-    provider_hint?: string;
+    registry?: ChannelRegistryLike;
     providers?: ProviderRegistry | null;
     agent?: AgentDomain | null;
-    cron?: CronService | null;
-    sessions?: SessionStore | null;
+    agent_runtime?: AgentRuntimeLike | null;
+    cron?: CronScheduler | null;
+    sessions?: SessionStoreLike | null;
     auto_reply_on_plain_message?: boolean;
     default_agent_alias?: string;
     poll_interval_ms?: number;
@@ -147,9 +176,10 @@ export class ChannelManager {
     targets?: Partial<Record<ChannelProvider, string>>;
   }) {
     this.bus = args.bus;
-    this.registry = args.registry || create_default_channels(args.provider_hint);
+    this.registry = args.registry || create_default_channels();
     this.providers = args.providers || null;
-    this.agent = args.agent || null;
+    const domain = args.agent || null;
+    this.agent_runtime = args.agent_runtime || (domain ? create_agent_runtime(domain) : null);
     this.cron = args.cron || null;
     this.sessions = args.sessions || null;
     this.auto_reply_on_plain_message = args.auto_reply_on_plain_message ?? (String(process.env.CHANNEL_AUTO_REPLY || "1") !== "0");
@@ -174,17 +204,25 @@ export class ChannelManager {
     this.dispatch_retry_max_ms = Math.max(this.dispatch_retry_base_ms, Number(process.env.CHANNEL_DISPATCH_RETRY_MAX_MS || 25_000));
     this.dispatch_retry_jitter_ms = Math.max(0, Number(process.env.CHANNEL_DISPATCH_RETRY_JITTER_MS || 250));
     this.dispatch_dlq_enabled = String(process.env.CHANNEL_DISPATCH_DLQ_ENABLED || "1").trim() !== "0";
-    this.dispatch_dlq_path = resolve(
-      String(
-        process.env.CHANNEL_DISPATCH_DLQ_PATH
-        || join(this.workspace_dir, "runtime", "dlq", "outbound.jsonl"),
-      ),
-    );
+    this.dispatch_dlq_store = this.dispatch_dlq_enabled
+      ? new SqliteDispatchDlqStore(
+          resolve(
+            String(
+              process.env.CHANNEL_DISPATCH_DLQ_PATH
+              || join(this.workspace_dir, "runtime", "dlq", "dlq.db"),
+            ),
+          ),
+        )
+      : null;
     this.approval_reaction_enabled = String(process.env.APPROVAL_REACTION_ENABLED || "1").trim() !== "0";
     this.control_reaction_enabled = String(process.env.CONTROL_REACTION_ENABLED || "1").trim() !== "0";
     this.reaction_action_ttl_ms = Math.max(60_000, Number(process.env.REACTION_ACTION_TTL_MS || 86_400_000));
     this.session_history_max_age_ms = Math.max(0, Number(process.env.CHANNEL_SESSION_HISTORY_MAX_AGE_MS || 1_800_000));
     this.suppress_final_after_stream = String(process.env.CHANNEL_SUPPRESS_FINAL_AFTER_STREAM || "1").trim() !== "0";
+    this.outbound_dedupe_ttl_ms = Math.max(1_000, Number(process.env.CHANNEL_OUTBOUND_DEDUPE_TTL_MS || 25_000));
+    this.outbound_dedupe_max_size = Math.max(500, Number(process.env.CHANNEL_OUTBOUND_DEDUPE_MAX_SIZE || 20_000));
+    this.outbound_dedupe_policy = new DefaultOutboundDedupePolicy();
+    this.runtime_policy_resolver = new DefaultRuntimePolicyResolver();
     this.secret_vault = new SecretVaultService(this.workspace_dir);
   }
 
@@ -325,19 +363,41 @@ export class ChannelManager {
     limit?: number;
     metadata?: Record<string, unknown>;
   }): Promise<{ ok: boolean; message_id?: string; error?: string }> {
-    return this.registry.reply_as_agent(
+    const trigger = await this.registry.find_latest_agent_mention(
       args.provider,
       args.chat_id,
       args.agent_alias,
-      args.content,
-      {
-        mention_sender: args.mention_sender,
-        sender_alias: args.sender_alias,
-        limit: args.limit,
-        media: args.media,
-        metadata: args.metadata,
-      },
+      args.limit || 50,
     );
+    const sender_alias = String(args.sender_alias || trigger?.sender_id || "").trim();
+    const mention_prefix = args.mention_sender && sender_alias ? `@${sender_alias} ` : "";
+    const extra = (args.metadata && typeof args.metadata === "object")
+      ? { ...(args.metadata as Record<string, unknown>) }
+      : {};
+    const trigger_message_id = String(
+      extra.trigger_message_id
+      || trigger?.metadata?.message_id
+      || trigger?.id
+      || "",
+    ).trim();
+    return this.send_with_retry(args.provider, {
+      id: `${args.provider}-${Date.now()}`,
+      provider: args.provider,
+      channel: args.provider,
+      sender_id: args.agent_alias,
+      chat_id: args.chat_id,
+      content: `${mention_prefix}${String(args.content || "")}`.trim(),
+      at: new Date().toISOString(),
+      reply_to: trigger ? this.resolve_reply_to(args.provider, trigger) : "",
+      thread_id: trigger?.thread_id,
+      media: args.media || [],
+      metadata: {
+        ...extra,
+        kind: "agent_reply",
+        agent_alias: args.agent_alias,
+        trigger_message_id: trigger_message_id || undefined,
+      },
+    }, { source: "mention_reply" });
   }
 
   async handle_inbound_message(message: InboundMessage): Promise<void> {
@@ -373,7 +433,30 @@ export class ChannelManager {
 
       await this.send_status_notice(provider, message, "start", this.default_agent_alias);
       const result = await this.invoke_headless_agent(message, this.default_agent_alias);
+      if (result.suppress_reply) {
+        await this.send_status_notice(provider, message, "done", this.default_agent_alias);
+        return;
+      }
       if (!result.reply) {
+        const fallback = this.build_failure_reply(provider, message.sender_id, this.default_agent_alias, result.error);
+        if (fallback) {
+          await this.send_with_retry(provider, {
+            id: `${provider}-${Date.now()}`,
+            provider,
+            channel: provider,
+            sender_id: this.default_agent_alias,
+            chat_id: message.chat_id,
+            content: fallback,
+            at: new Date().toISOString(),
+            reply_to: this.resolve_reply_to(provider, message),
+            thread_id: message.thread_id,
+            metadata: {
+              kind: "agent_error",
+              agent_alias: this.default_agent_alias,
+              trigger_message_id: String(message.metadata?.message_id || message.id || ""),
+            },
+          }, { source: "agent_error" });
+        }
         await this.send_status_notice(provider, message, "failed", this.default_agent_alias, result.error);
         return;
       }
@@ -391,7 +474,7 @@ export class ChannelManager {
       const plainContent = provider === "telegram"
         ? rendered.content
         : `@${message.sender_id} ${rendered.content}`.trim();
-      const sent = await this.registry.send(provider, {
+      const sent = await this.send_with_retry(provider, {
         id: `${provider}-${Date.now()}`,
         provider,
         channel: provider,
@@ -409,7 +492,7 @@ export class ChannelManager {
           render_mode: rendered.render_mode,
           render_parse_mode: rendered.parse_mode || null,
         },
-      });
+      }, { source: "auto_reply" });
       if (!sent.ok) {
         // eslint-disable-next-line no-console
         console.error(`[channel-manager] plain auto reply failed: ${sent.error || "unknown_error"}`);
@@ -453,7 +536,31 @@ export class ChannelManager {
       this.mention_cooldowns.set(cooldown_key, now);
       await this.send_status_notice(provider, message, "start", alias);
       const result = await this.invoke_headless_agent(message, alias);
+      if (result.suppress_reply) {
+        await this.send_status_notice(provider, message, "done", alias);
+        handled += 1;
+        continue;
+      }
       if (!result.reply) {
+        const fallback = this.build_failure_reply(provider, message.sender_id, alias, result.error);
+        if (fallback) {
+          await this.send_with_retry(provider, {
+            id: `${provider}-${Date.now()}`,
+            provider,
+            channel: provider,
+            sender_id: alias,
+            chat_id: message.chat_id,
+            content: fallback,
+            at: new Date().toISOString(),
+            reply_to: this.resolve_reply_to(provider, message),
+            thread_id: message.thread_id,
+            metadata: {
+              kind: "agent_error",
+              agent_alias: alias,
+              trigger_message_id: String(message.metadata?.message_id || message.id || ""),
+            },
+          }, { source: "agent_error" });
+        }
         await this.send_status_notice(provider, message, "failed", alias, result.error);
         continue;
       }
@@ -582,7 +689,7 @@ export class ChannelManager {
     error: string,
     retry_count: number,
   ): Promise<void> {
-    if (!this.dispatch_dlq_enabled) return;
+    if (!this.dispatch_dlq_enabled || !this.dispatch_dlq_store) return;
     const record = {
       at: new Date().toISOString(),
       provider,
@@ -596,17 +703,11 @@ export class ChannelManager {
       content: String(message.content || "").slice(0, 4000),
       metadata: message.metadata || {},
     };
-    const path = this.dispatch_dlq_path;
-    const write_job = this.dlq_write_queue.then(async () => {
-      await mkdir(dirname(path), { recursive: true });
-      await appendFile(path, `${JSON.stringify(record)}\n`, "utf-8");
-    });
-    this.dlq_write_queue = write_job.then(() => undefined, () => undefined);
     try {
-      await write_job;
+      await this.dispatch_dlq_store.append(record);
     } catch (error2) {
       // eslint-disable-next-line no-console
-      console.error(`[channel-manager] dlq append failed path=${path} err=${error2 instanceof Error ? error2.message : String(error2)}`);
+      console.error(`[channel-manager] dlq append failed path=${this.dispatch_dlq_store.get_path()} err=${error2 instanceof Error ? error2.message : String(error2)}`);
     }
   }
 
@@ -615,11 +716,26 @@ export class ChannelManager {
     message: OutboundMessage,
     options?: { allow_requeue?: boolean; source?: string },
   ): Promise<{ ok: boolean; message_id?: string; error?: string }> {
+    this.prune_recent_outbound_cache(false);
+    const dedupe_key = this.outbound_dedupe_policy.key(provider, message);
+    const recent = this.recent_outbound.get(dedupe_key);
+    if (recent && (Date.now() - recent.at_ms) <= this.outbound_dedupe_ttl_ms) {
+      return { ok: true, message_id: recent.message_id || String(message.id || "") };
+    }
     const inline_attempts = Math.max(1, this.send_inline_retries + 1);
     let last_error = "";
     for (let attempt = 1; attempt <= inline_attempts; attempt += 1) {
-      const sent = await this.registry.send(provider, message);
-      if (sent.ok) return sent;
+      const sent = await this.registry.send(message);
+      if (sent.ok) {
+        this.recent_outbound.set(dedupe_key, {
+          at_ms: Date.now(),
+          message_id: String(sent.message_id || message.id || ""),
+        });
+        if (this.recent_outbound.size > this.outbound_dedupe_max_size + 500) {
+          this.prune_recent_outbound_cache(true);
+        }
+        return sent;
+      }
       last_error = String(sent.error || "unknown_error");
       if (!this.is_retryable_send_error(last_error)) break;
       if (attempt < inline_attempts) {
@@ -637,6 +753,25 @@ export class ChannelManager {
       await this.append_dispatch_dlq(provider, message, last_error || "send_failed", dispatch_retry);
     }
     return { ok: false, error: last_error || "send_failed" };
+  }
+
+  private prune_recent_outbound_cache(force_size_trim: boolean): void {
+    if (this.recent_outbound.size === 0) return;
+    const now = Date.now();
+    for (const [key, rec] of this.recent_outbound.entries()) {
+      if (!rec || (now - Number(rec.at_ms || 0)) > this.outbound_dedupe_ttl_ms) {
+        this.recent_outbound.delete(key);
+      }
+    }
+    if (!force_size_trim && this.recent_outbound.size <= this.outbound_dedupe_max_size) return;
+    const overflow = this.recent_outbound.size - this.outbound_dedupe_max_size;
+    if (overflow <= 0) return;
+    let removed = 0;
+    for (const key of this.recent_outbound.keys()) {
+      this.recent_outbound.delete(key);
+      removed += 1;
+      if (removed >= overflow) break;
+    }
   }
 
   private extract_mentions(channel: { parse_agent_mentions: (content: string) => Array<{ alias: string }> }, message: InboundMessage): string[] {
@@ -790,9 +925,17 @@ export class ChannelManager {
   private should_ignore_inbound(message: InboundMessage): boolean {
     const provider = this.resolve_channel_provider(message);
     const sender = String(message.sender_id || "").trim().toLowerCase();
-    if (!sender || sender === "unknown" || sender.startsWith("subagent:") || sender === "approval-bot") return true;
+    if (
+      !sender
+      || sender === "unknown"
+      || sender.startsWith("subagent:")
+      || sender === "approval-bot"
+      || sender === "recovery"
+    ) return true;
 
     const meta = (message.metadata || {}) as Record<string, unknown>;
+    const meta_kind = String(meta.kind || "").trim().toLowerCase();
+    if (meta_kind === "task_recovery") return true;
     if (meta.from_is_bot === true) return true;
 
     const slack_bot_user_id = String(process.env.SLACK_BOT_USER_ID || "").trim().toLowerCase();
@@ -895,7 +1038,7 @@ export class ChannelManager {
     rendered: { content: string; parse_mode?: "HTML"; render_mode: RenderMode },
     log_tag: string,
   ): Promise<void> {
-    const sent = await this.registry.send(provider, {
+    const sent = await this.send_with_retry(provider, {
       id: `stream-${Date.now()}`,
       provider,
       channel: provider,
@@ -908,10 +1051,11 @@ export class ChannelManager {
       metadata: {
         kind: "agent_stream",
         agent_alias: alias,
+        trigger_message_id: String(message.metadata?.message_id || message.id || ""),
         render_mode: rendered.render_mode,
         render_parse_mode: rendered.parse_mode || null,
       },
-    });
+    }, { source: "stream" });
     if (!sent.ok && this.debug) {
       // eslint-disable-next-line no-console
       console.log(`[channel-manager] ${log_tag} provider=${provider} alias=${alias} err=${sent.error || "unknown_error"}`);
@@ -933,8 +1077,8 @@ export class ChannelManager {
     const channel_provider = this.resolve_channel_provider(message);
     if (!channel_provider) return { reply: null, error: "unknown_channel_provider" };
     const orchestrator = this.providers!;
-    const agent_domain = this.agent;
-    if (!agent_domain) {
+    const agent_runtime = this.agent_runtime;
+    if (!agent_runtime) {
       // eslint-disable-next-line no-console
       console.error("[channel-manager] invoke failed: agent_domain_not_configured");
       return { reply: null, error: "agent_domain_not_configured" };
@@ -944,6 +1088,12 @@ export class ChannelManager {
     );
     const default_executor = resolve_executor_provider(preferred_executor);
     const run_key = `${channel_provider}:${message.chat_id}:${alias}`.toLowerCase();
+    const request_scope = this.inbound_request_scope_id(message);
+    const request_task_id = `adhoc:${channel_provider}:${message.chat_id}:${alias}:${request_scope}`.toLowerCase();
+    const previous_run = this.active_runs.get(run_key);
+    if (previous_run && !previous_run.abort.signal.aborted) {
+      previous_run.abort.abort();
+    }
     const abort = new AbortController();
     this.active_runs.set(run_key, { abort, provider: channel_provider, chat_id: message.chat_id, alias });
     let live_preview = "";
@@ -960,7 +1110,7 @@ export class ChannelManager {
           const fallback = !preview && stream_state.emitted_count === 0
             ? ` | 응답 생성 중 ${elapsed_sec}s`
             : "";
-          void this.registry.send(channel_provider, {
+          void this.registry.send({
             id: `pulse-${Date.now()}`,
             provider: channel_provider,
             channel: channel_provider,
@@ -980,17 +1130,22 @@ export class ChannelManager {
       const media_inputs_raw = await this.collect_inbound_media_inputs(channel_provider, message);
       const media_inputs = await this.seal_sensitive_list_for_agent(channel_provider, message.chat_id, media_inputs_raw);
       const task_with_media = this.compose_task_with_media(task, media_inputs);
-      const always_skills = agent_domain.context.skills_loader.get_always_skills();
-      const context_skills = this.resolve_context_skills(task_with_media, always_skills);
+      const always_skills = agent_runtime.get_always_skills();
+      const context_skills = this.resolve_context_skills(task_with_media, always_skills, agent_runtime);
       const provider_hint = default_executor;
-      const session_history = await this.get_session_history(
-        channel_provider,
-        message.chat_id,
-        alias,
-        message.thread_id,
-        12,
-      );
-      const thread_nearby = await this.get_thread_nearby_context(channel_provider, message, 12);
+      const use_reference_context = this.should_include_reference_context(task_with_media);
+      const session_history = use_reference_context
+        ? await this.get_session_history(
+            channel_provider,
+            message.chat_id,
+            alias,
+            message.thread_id,
+            12,
+          )
+        : [];
+      const thread_nearby = use_reference_context
+        ? await this.get_thread_nearby_context(channel_provider, message, 12)
+        : [];
       const sealed_thread_nearby = await this.seal_thread_context_for_agent(channel_provider, message.chat_id, thread_nearby);
       const thread_nearby_block = this.format_thread_nearby_block(sealed_thread_nearby);
       const secret_guard = await this.inspect_secret_references_for_orchestration([
@@ -1005,8 +1160,13 @@ export class ChannelManager {
         };
       }
       const mode = this.pick_loop_mode(task_with_media);
-      this.apply_tool_runtime_context(agent_domain, channel_provider, message);
-      const tool_definitions = agent_domain.tools.get_definitions();
+      const runtime_policy = this.runtime_policy_resolver.resolve(task_with_media, media_inputs);
+      agent_runtime.apply_tool_runtime_context({
+        channel: channel_provider,
+        chat_id: message.chat_id,
+        reply_to: this.resolve_reply_to(channel_provider, message),
+      });
+      const tool_definitions = agent_runtime.get_tool_definitions();
 
       const recent_history_lines = session_history
         .slice(-8)
@@ -1017,7 +1177,7 @@ export class ChannelManager {
       ): Promise<AgentRunResult> => {
         if (mode === "task") {
           return this.run_task_loop_for_message({
-            agent_domain,
+            agent_runtime,
             provider_id,
             alias,
             channel_provider,
@@ -1027,18 +1187,22 @@ export class ChannelManager {
             session_history,
             thread_nearby_block,
             skill_names: context_skills,
+            runtime_policy,
             abort,
           });
         }
 
-        const response = await agent_domain.loop.run_agent_loop({
+        let request_file_invoked = false;
+        let message_done_invoked = false;
+        const response = await agent_runtime.run_agent_loop({
           loop_id: `loop-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
           agent_id: alias,
           objective: task_with_media || task || "handle inbound request",
-          context_builder: agent_domain.context,
+          context_builder: agent_runtime.get_context_builder(),
           providers: orchestrator,
           tools: tool_definitions,
           provider_id,
+          runtime_policy,
           current_message: [
             `[CURRENT_REQUEST]\n${task_with_media}`,
             recent_history_lines.length > 0
@@ -1081,11 +1245,21 @@ export class ChannelManager {
           on_tool_calls: async ({ tool_calls }) => {
             const outputs: string[] = [];
             for (const tool_call of tool_calls) {
-                const result = await agent_domain.tools.execute(
+              if (tool_call.name === "request_file") {
+                request_file_invoked = true;
+              }
+              if (tool_call.name === "message") {
+                const args = (tool_call.arguments && typeof tool_call.arguments === "object")
+                  ? (tool_call.arguments as Record<string, unknown>)
+                  : {};
+                const phase = String(args.phase || "").trim().toLowerCase();
+                if (phase === "done") message_done_invoked = true;
+              }
+              const result = await agent_runtime.execute_tool(
                 tool_call.name,
                 tool_call.arguments || {},
                 {
-                  task_id: `adhoc:${channel_provider}:${message.chat_id}:${alias}`,
+                  task_id: request_task_id,
                   signal: abort.signal,
                   channel: channel_provider,
                   chat_id: message.chat_id,
@@ -1106,6 +1280,20 @@ export class ChannelManager {
               await this.send_stream_content(channel_provider, message, alias, tail, "stream tail send failed");
             }
           }
+        }
+        if (request_file_invoked) {
+          return {
+            reply: null,
+            suppress_reply: true,
+            ...this.stream_result(stream_state),
+          };
+        }
+        if (message_done_invoked) {
+          return {
+            reply: null,
+            suppress_reply: true,
+            ...this.stream_result(stream_state),
+          };
         }
         const content = this.sanitize_provider_output(String(response.final_content || ""));
         if (!content) return { reply: null, error: "empty_provider_response" };
@@ -1142,7 +1330,10 @@ export class ChannelManager {
     } finally {
       clearInterval(typingTicker);
       if (pulseTicker) clearInterval(pulseTicker);
-      this.active_runs.delete(run_key);
+      const current = this.active_runs.get(run_key);
+      if (current && current.abort === abort) {
+        this.active_runs.delete(run_key);
+      }
     }
   }
 
@@ -1156,10 +1347,16 @@ export class ChannelManager {
     return "agent";
   }
 
-  private resolve_context_skills(task: string, base_skills: string[]): string[] {
+  private resolve_context_skills(task: string, base_skills: string[], agent_runtime?: AgentRuntimeLike): string[] {
     const out = new Set<string>((base_skills || []).map((v) => String(v || "").trim()).filter(Boolean));
     const text = String(task || "").toLowerCase();
     if (!text) return [...out];
+    if (agent_runtime) {
+      for (const skill of agent_runtime.recommend_skills(task, 8)) {
+        const name = String(skill || "").trim();
+        if (name) out.add(name);
+      }
+    }
     if (
       /(cron|크론|스케줄|예약|알림|리마인드|notify|remind|every\s+\d+|at\s+\d{4}-\d{2}-\d{2})/i.test(text)
     ) {
@@ -1168,8 +1365,17 @@ export class ChannelManager {
     return [...out];
   }
 
+  private should_include_reference_context(task: string): boolean {
+    const text = String(task || "").trim().toLowerCase();
+    if (!text) return false;
+    if (/^(?:계속|이어서|재개|다시\s*이어|앞서\s*내용\s*기준|이전\s*답변\s*기준)\b/i.test(text)) return true;
+    if (/\b(?:continue|resume|pick up|continue from previous|resume previous)\b/i.test(text)) return true;
+    if (/\b(?:이전\s*(?:내용|대화|답변|작업)|앞서\s*(?:말한|작성한)|as above|from previous answer)\b/i.test(text)) return true;
+    return false;
+  }
+
   private async run_task_loop_for_message(args: {
-    agent_domain: AgentDomain;
+    agent_runtime: AgentRuntimeLike;
     provider_id: "claude_code" | "chatgpt" | "openrouter";
     alias: string;
     channel_provider: ChannelProvider;
@@ -1179,11 +1385,14 @@ export class ChannelManager {
     session_history: Array<{ role: "system" | "user" | "assistant" | "tool"; content: string }>;
     thread_nearby_block: string;
     skill_names: string[];
+    runtime_policy?: RuntimeExecutionPolicy;
     abort: AbortController;
   }): Promise<AgentRunResult> {
-    const task_id = `task:${args.channel_provider}:${args.message.chat_id}:${args.alias}`.toLowerCase();
+    const request_scope = this.inbound_request_scope_id(args.message);
+    const task_id = `task:${args.channel_provider}:${args.message.chat_id}:${args.alias}:${request_scope}`.toLowerCase();
     const task_stream_state = this.create_stream_emit_state();
-    const tool_definitions = args.agent_domain.tools.get_definitions();
+    const tool_definitions = args.agent_runtime.get_tool_definitions();
+    const file_request_wait_marker = "__file_request_waiting__";
     const recent_history_lines = args.session_history
       .slice(-8)
       .map((r) => `[${r.role}] ${r.content}`);
@@ -1195,11 +1404,11 @@ export class ChannelManager {
       args.thread_nearby_block,
       "중요: 실행 대상은 CURRENT_REQUEST 하나입니다. REFERENCE 문맥은 참고용이며 재실행 지시가 아닙니다.",
     ].filter(Boolean).join("\n\n");
-    const prev = args.agent_domain.loop.get_task(task_id);
-    if (prev && prev.status !== "running") {
-      await args.agent_domain.loop.resume_task(task_id, "channel_reentry");
-    }
-    this.apply_tool_runtime_context(args.agent_domain, args.channel_provider, args.message);
+    args.agent_runtime.apply_tool_runtime_context({
+      channel: args.channel_provider,
+      chat_id: args.message.chat_id,
+      reply_to: this.resolve_reply_to(args.channel_provider, args.message),
+    });
     const nodes: TaskNode[] = [
       {
         id: "plan",
@@ -1217,14 +1426,17 @@ export class ChannelManager {
       {
         id: "execute",
         run: async ({ memory }) => {
-          const response = await args.agent_domain.loop.run_agent_loop({
+          let request_file_invoked = false;
+          let message_done_invoked = false;
+          const response = await args.agent_runtime.run_agent_loop({
             loop_id: `nested-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
             agent_id: args.alias,
             objective: String(memory.objective || args.task_with_media),
-            context_builder: args.agent_domain.context,
+            context_builder: args.agent_runtime.get_context_builder(),
             providers: this.providers!,
             tools: tool_definitions,
             provider_id: args.provider_id,
+            runtime_policy: args.runtime_policy,
             current_message: String(memory.seed_prompt || seed),
             history_days: [],
             skill_names: args.skill_names,
@@ -1259,14 +1471,24 @@ export class ChannelManager {
             on_tool_calls: async ({ tool_calls }) => {
               const outputs: string[] = [];
               for (const tool_call of tool_calls) {
-                    const result = await args.agent_domain.tools.execute(
-                    tool_call.name,
-                    tool_call.arguments || {},
-                    {
-                      task_id,
-                      signal: args.abort.signal,
-                      channel: args.channel_provider,
-                      chat_id: args.message.chat_id,
+                if (tool_call.name === "request_file") {
+                  request_file_invoked = true;
+                }
+                if (tool_call.name === "message") {
+                  const call_args = (tool_call.arguments && typeof tool_call.arguments === "object")
+                    ? (tool_call.arguments as Record<string, unknown>)
+                    : {};
+                  const phase = String(call_args.phase || "").trim().toLowerCase();
+                  if (phase === "done") message_done_invoked = true;
+                }
+                const result = await args.agent_runtime.execute_tool(
+                  tool_call.name,
+                  tool_call.arguments || {},
+                  {
+                    task_id,
+                    signal: args.abort.signal,
+                    channel: args.channel_provider,
+                    chat_id: args.message.chat_id,
                     sender_id: args.message.sender_id,
                   },
                 );
@@ -1283,7 +1505,31 @@ export class ChannelManager {
               await this.send_stream_content(args.channel_provider, args.message, args.alias, tail, "task stream tail send failed");
             }
           }
-          const final = String(response.final_content || "").trim();
+          const final = this.sanitize_provider_output(String(response.final_content || "")).trim();
+          if (request_file_invoked) {
+            return {
+              status: "completed",
+              memory_patch: {
+                ...memory,
+                file_request_waiting: true,
+                last_output: file_request_wait_marker,
+              },
+              current_step: "execute",
+              exit_reason: "file_request_waiting",
+            };
+          }
+          if (message_done_invoked) {
+            return {
+              status: "completed",
+              memory_patch: {
+                ...memory,
+                suppress_final_reply: true,
+                last_output: final,
+              },
+              current_step: "execute",
+              exit_reason: "message_done_sent",
+            };
+          }
           if (final.includes("approval_required")) {
             return {
               status: "waiting_approval",
@@ -1310,7 +1556,7 @@ export class ChannelManager {
       },
     ];
 
-    const task_result = await args.agent_domain.loop.run_task_loop({
+    const task_result = await args.agent_runtime.run_task_loop({
       task_id,
       title: `ChannelTask:${args.alias}`,
       nodes,
@@ -1322,13 +1568,30 @@ export class ChannelManager {
       },
     });
 
-    const output = String(task_result.state.memory?.last_output || "").trim();
+    const output_raw = String(task_result.state.memory?.last_output || "").trim();
+    const waiting_file = task_result.state.memory?.file_request_waiting === true
+      || output_raw === file_request_wait_marker;
+    if (waiting_file) {
+      return {
+        reply: null,
+        suppress_reply: true,
+        ...this.stream_result(task_stream_state),
+      };
+    }
+    if (task_result.state.memory?.suppress_final_reply === true) {
+      return {
+        reply: null,
+        suppress_reply: true,
+        ...this.stream_result(task_stream_state),
+      };
+    }
     if (task_result.state.status === "waiting_approval") {
       return {
         reply: "승인 대기 상태입니다. 승인 응답 후 같은 작업을 재개합니다.",
         ...this.stream_result(task_stream_state),
       };
     }
+    const output = this.sanitize_provider_output(output_raw).trim();
     if (!output) {
       return {
         reply: null,
@@ -1348,21 +1611,6 @@ export class ChannelManager {
       reply: this.normalize_agent_reply(output, args.alias, args.message.sender_id),
       ...this.stream_result(task_stream_state),
     };
-  }
-
-  private apply_tool_runtime_context(agent_domain: AgentDomain, provider: ChannelProvider, message: InboundMessage): void {
-    const channel = provider;
-    const chat_id = String(message.chat_id || "");
-    const reply_to = this.resolve_reply_to(provider, message);
-    if (!chat_id) return;
-    const message_tool = agent_domain.tools.get("message") as { set_context?: (c: string, id: string, reply?: string | null) => void } | null;
-    message_tool?.set_context?.(channel, chat_id, reply_to);
-    const spawn_tool = agent_domain.tools.get("spawn") as { set_context?: (c: string, id: string) => void } | null;
-    spawn_tool?.set_context?.(channel, chat_id);
-    const file_request_tool = agent_domain.tools.get("request_file") as { set_context?: (c: string, id: string) => void } | null;
-    file_request_tool?.set_context?.(channel, chat_id);
-    const cron_tool = agent_domain.tools.get("cron") as { set_context?: (c: string, id: string) => void } | null;
-    cron_tool?.set_context?.(channel, chat_id);
   }
 
   private format_stream_content(
@@ -1556,8 +1804,7 @@ export class ChannelManager {
     sender_id: string,
     content: string,
   ): Promise<void> {
-    const store = this.agent?.context.memory_store;
-    if (!store) return;
+    if (!this.agent_runtime) return;
     const text = this
       .sanitize_sensitive_text_for_storage(String(content || ""))
       .replace(/\s+/g, " ")
@@ -1568,7 +1815,7 @@ export class ChannelManager {
     const sender = String(sender_id || "unknown").trim() || "unknown";
     const line = `- [${new Date().toISOString()}] [${provider}:${chat_id}:${thread}] ${role.toUpperCase()}(${sender}): ${text}\n`;
     try {
-      await store.append_daily(line);
+      await this.agent_runtime.append_daily_memory(line);
     } catch {
       // no-op
     }
@@ -1599,7 +1846,7 @@ export class ChannelManager {
     for (const row of values || []) {
       const raw = String(row || "").trim();
       if (!raw) continue;
-      if (this.is_local_media_reference(raw)) {
+      if (is_local_reference(raw)) {
         out.push(raw);
         continue;
       }
@@ -1733,7 +1980,7 @@ export class ChannelManager {
       .filter((l) => !this.is_provider_noise_line(l))
       .filter((l) => !this.is_persona_leak_line(l))
       .filter((l) => !/^\s*(?:\$\s*env:|export\s+[A-Za-z_]|set\s+[A-Za-z_])/i.test(l));
-    return lines.join("\n").slice(0, 800).trim();
+    return this.strip_tool_protocol_leaks(lines.join("\n")).slice(0, 800).trim();
   }
 
   private squash_for_preview(raw: string): string {
@@ -1771,7 +2018,9 @@ export class ChannelManager {
       if (!m?.url) continue;
       const url = String(m.url || "").trim();
       if (!url) continue;
-      if (this.is_local_media_reference(url)) push(url);
+      if (is_local_reference(url)) {
+        push(resolve_local_reference(this.workspace_dir, url));
+      }
     }
     if (provider === "slack") {
       const files = this.extract_slack_files(message);
@@ -1977,8 +2226,7 @@ export class ChannelManager {
   ): { content: string; media: MediaItem[]; parse_mode?: "HTML"; render_mode: RenderMode } {
     const profile = this.effective_render_profile(provider, chat_id);
     const pretty = this.prettify_user_output(raw, provider, profile.mode);
-    const sanitized = render_agent_output(pretty, profile).markdown;
-    const extracted = this.extract_media_items(sanitized);
+    const extracted = this.extract_media_items(pretty);
     const fallback = extracted.content || (extracted.media.length > 0 ? "첨부 파일을 확인해주세요." : "");
     const rendered = render_agent_output(fallback, profile);
     return {
@@ -2090,7 +2338,32 @@ export class ChannelManager {
       .filter((l) => !this.is_provider_noise_line(l))
       .filter((l) => !this.is_persona_leak_line(l))
       .filter((l) => !this.is_sensitive_command_line(l));
-    return this.strip_persona_leak_blocks(lines.join("\n").trim());
+    return this.strip_persona_leak_blocks(this.strip_tool_protocol_leaks(lines.join("\n")).trim());
+  }
+
+  private strip_tool_protocol_leaks(raw: string): string {
+    let out = String(raw || "");
+    if (!out) return "";
+    out = out.replace(/<<ORCH_TOOL_CALLS>>[\s\S]*?<<ORCH_TOOL_CALLS_END>>/gi, "");
+    out = out
+      .split("\n")
+      .map((l) => l.trimEnd())
+      .filter((l) => !this.is_tool_protocol_leak_line(l))
+      .join("\n")
+      .trim();
+    return out;
+  }
+
+  private is_tool_protocol_leak_line(line: string): boolean {
+    const l = String(line || "").trim();
+    if (!l) return false;
+    if (/^tool_calls:\s*\[\d+\s*items?\]/i.test(l)) return true;
+    if (/"tool_calls"\s*:/i.test(l)) return true;
+    if (/"tool_call_id"\s*:/i.test(l)) return true;
+    if (/"id"\s*:\s*"call_[^"]+"/i.test(l)) return true;
+    if (/^\{"id":"call_[^"]+"/i.test(l)) return true;
+    if (/^\{"tool_calls":\[/i.test(l)) return true;
+    return false;
   }
 
   private strip_sensitive_command_blocks(raw: string): string {
@@ -2114,6 +2387,8 @@ export class ChannelManager {
   private is_provider_noise_line(line: string): boolean {
     const l = String(line || "").trim();
     if (!l) return true;
+    if (this.is_tool_protocol_leak_line(l)) return true;
+    if (/^[\[\]{}(),;:]+$/.test(l)) return true;
     if (/^OpenAI Codex v/i.test(l)) return true;
     if (/^WARNING: proceeding, even though we could not update PATH:/i.test(l)) return true;
     if (/^workdir:\s*/i.test(l)) return true;
@@ -2183,16 +2458,18 @@ export class ChannelManager {
     const media: MediaItem[] = [];
     const seen = new Set<string>();
     const push_media = (urlRaw: string, alt?: string): boolean => {
-      const url = String(urlRaw || "").trim();
-      if (!url || seen.has(url)) return false;
-      if (!this.is_local_media_reference(url)) return false;
-      if (!this.is_existing_local_file_reference(url)) return false;
-      const type = this.detect_media_type(url);
+      const local_ref = normalize_local_candidate_path(String(urlRaw || "").trim());
+      if (!local_ref) return false;
+      if (!is_local_reference(local_ref)) return false;
+      const file_path = resolve_local_reference(this.workspace_dir, local_ref);
+      if (!file_path || seen.has(file_path)) return false;
+      if (!this.is_existing_local_file_reference(file_path)) return false;
+      const type = this.detect_media_type(file_path);
       if (!type) return false;
-      seen.add(url);
+      seen.add(file_path);
       media.push({
         type,
-        url,
+        url: file_path,
         name: alt ? alt.slice(0, 120) : undefined,
       });
       return true;
@@ -2204,6 +2481,10 @@ export class ChannelManager {
     });
     content = content.replace(/<(?:img|video)[^>]*src=["']([^"']+)["'][^>]*>/gi, (m, url) => {
       const pushed = push_media(String(url || ""));
+      return pushed ? "" : m;
+    });
+    content = content.replace(/\[([^\]]+)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g, (m, label, url) => {
+      const pushed = push_media(String(url || ""), String(label || ""));
       return pushed ? "" : m;
     });
     content = content.replace(/\[(IMAGE|VIDEO|FILE)\s*:\s*([^\]]+)\]/gi, (m, _kind, url) => {
@@ -2257,25 +2538,45 @@ export class ChannelManager {
     const out: string[] = [];
     const seen = new Set<string>();
     const push = (raw: string): void => {
-      const candidate = String(raw || "")
+      const candidate = normalize_local_candidate_path(
+        String(raw || "")
         .trim()
         .replace(/^[("'`]+/, "")
-        .replace(/[)"'`,.;:!?]+$/, "");
+        .replace(/[)"'`,.;:!?]+$/, ""),
+      );
       if (!candidate) return;
-      if (!this.is_local_media_reference(candidate)) return;
+      if (!is_local_reference(candidate)) return;
       if (seen.has(candidate)) return;
       seen.add(candidate);
       out.push(candidate);
     };
 
+    const quoted_drive_dq = source.match(/"[A-Za-z]:[\\/][^"\r\n]+"/g) || [];
+    for (const row of quoted_drive_dq) push(row);
+    const quoted_drive_sq = source.match(/'[A-Za-z]:[\\/][^'\r\n]+'/g) || [];
+    for (const row of quoted_drive_sq) push(row);
+    const quoted_drive_bt = source.match(/`[A-Za-z]:[\\/][^`\r\n]+`/g) || [];
+    for (const row of quoted_drive_bt) push(row);
+    const quoted_unc_dq = source.match(/"\\\\[^"\r\n]+"/g) || [];
+    for (const row of quoted_unc_dq) push(row);
+    const quoted_unc_sq = source.match(/'\\\\[^'\r\n]+'/g) || [];
+    for (const row of quoted_unc_sq) push(row);
+    const quoted_unc_bt = source.match(/`\\\\[^`\r\n]+`/g) || [];
+    for (const row of quoted_unc_bt) push(row);
+
     const win = source.match(/[A-Za-z]:\\[^\s"'`<>|]+/g) || [];
     for (const row of win) push(row);
+    const win_forward = source.match(/[A-Za-z]:\/[^\s"'`<>|]+/g) || [];
+    for (const row of win_forward) push(row);
 
     const unc = source.match(/\\\\[^\s"'`<>|]+/g) || [];
     for (const row of unc) push(row);
 
     const rel = source.match(/(?:^|[\s(])(?:\.{1,2}[\\/][^\s"'`<>|]+)/g) || [];
     for (const row of rel) push(row.replace(/^(?:\s|\()+/, ""));
+
+    const rel_bare = source.match(/(?:^|[\s(])(?:[A-Za-z0-9._-]+[\\/][^\s"'`<>|]+)/g) || [];
+    for (const row of rel_bare) push(row.replace(/^(?:\s|\()+/, ""));
 
     const abs = source.match(/(?:^|[\s(])(\/[^\s"'`<>|]+)/g) || [];
     for (const row of abs) push(row.replace(/^(?:\s|\()+/, ""));
@@ -2284,7 +2585,7 @@ export class ChannelManager {
   }
 
   private is_existing_local_file_reference(path_value: string): boolean {
-    const value = String(path_value || "").trim();
+    const value = resolve_local_reference(this.workspace_dir, path_value);
     if (!value) return false;
     try {
       if (!existsSync(value)) return false;
@@ -2292,17 +2593,6 @@ export class ChannelManager {
     } catch {
       return false;
     }
-  }
-
-  private is_local_media_reference(url: string): boolean {
-    const value = String(url || "").trim();
-    if (!value) return false;
-    if (/^https?:\/\//i.test(value)) return false;
-    if (/^[a-z][a-z0-9+.-]*:\/\//i.test(value)) return false;
-    if (/^[A-Za-z]:\\/.test(value)) return true;
-    if (/^\\\\/.test(value)) return true;
-    if (value.startsWith("/") || value.startsWith("./") || value.startsWith("../")) return true;
-    return false;
   }
 
   private is_provider_error_reply(text: string): boolean {
@@ -2333,6 +2623,13 @@ export class ChannelManager {
       return "";
     }
     return String(meta.message_id || message.id || "").trim();
+  }
+
+  private inbound_request_scope_id(message: InboundMessage): string {
+    const meta = (message.metadata || {}) as Record<string, unknown>;
+    const raw = String(meta.message_id || message.id || "").trim();
+    if (!raw) return `msg-${Date.now()}`;
+    return raw.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/-+/g, "-").slice(0, 96) || `msg-${Date.now()}`;
   }
 
   private async send_status_notice(
@@ -2401,6 +2698,17 @@ export class ChannelManager {
       return `${provider}:${body}`.slice(0, 180);
     }
     return text.slice(0, 180);
+  }
+
+  private build_failure_reply(
+    provider: ChannelProvider,
+    sender_id: string,
+    alias: string,
+    error?: string,
+  ): string {
+    const mention = provider === "telegram" ? "" : `@${sender_id} `;
+    const reason = this.normalize_error_detail(String(error || "unknown_error"));
+    return `${mention}${alias} 작업 처리에 실패했습니다. (${reason})`.trim();
   }
 
   private render_profile_key(provider: ChannelProvider, chat_id: string): string {
@@ -2474,6 +2782,8 @@ export class ChannelManager {
       "- /render image <indicator|text|remove>",
       "- /secret status|list|set|get|reveal|remove",
       "- /secret encrypt <text> | /secret decrypt <cipher>",
+      "- /memory status|list|today|longterm|search <query>",
+      "- /decision status|list|set <key> <value>",
       "- /cron status | /cron list",
       "- /cron add every <duration> <message>",
       "- /cron add at <iso-time> <message>",
@@ -2489,7 +2799,7 @@ export class ChannelManager {
   ): Promise<void> {
     const profile = this.effective_render_profile(provider, message.chat_id);
     const rendered = render_agent_output(content, profile);
-    const sent = await this.registry.send(provider, {
+    const sent = await this.send_with_retry(provider, {
       id: `${provider}-${Date.now()}`,
       provider,
       channel: provider,
@@ -2503,8 +2813,9 @@ export class ChannelManager {
         ...metadata,
         render_mode: profile.mode,
         render_parse_mode: rendered.parse_mode || null,
+        trigger_message_id: String(message.metadata?.message_id || message.id || ""),
       },
-    });
+    }, { source: "command_reply" });
     if (!sent.ok) {
       // eslint-disable-next-line no-console
       console.error(`[channel-manager] command reply failed provider=${provider} err=${sent.error || "unknown_error"}`);
@@ -2823,6 +3134,268 @@ export class ChannelManager {
     return true;
   }
 
+  private format_memory_usage(provider: ChannelProvider, sender_id: string): string {
+    const mention = provider === "telegram" ? "" : `@${sender_id} `;
+    return [
+      `${mention}memory 명령 사용법`,
+      "- /memory status",
+      "- /memory list",
+      "- /memory today",
+      "- /memory longterm",
+      "- /memory search <query>",
+      "- 자연어: '메모리 상태 확인', '메모리 검색 <질의>'",
+    ].join("\n").trim();
+  }
+
+  private has_explicit_memory_intent(message: InboundMessage): boolean {
+    const text = this.normalize_common_command_text(message).toLowerCase();
+    if (!text || text.startsWith("/")) return false;
+    return /(메모리\s*(상태|확인|조회|검색|목록)|현재\s*메모리|memory\s*(status|state|search|list))/i.test(text);
+  }
+
+  private parse_memory_quick_action(message: InboundMessage, command: ParsedSlashCommand | null): MemoryQuickAction | null {
+    const name = String(command?.name || "").trim();
+    const arg0 = String(command?.args_lower?.[0] || "");
+    if (slash_name_in(name, MEMORY_ROOT_COMMAND_ALIASES)) {
+      if (!arg0 || slash_token_in(arg0, MEMORY_STATUS_ARG_ALIASES)) return "status";
+      if (slash_token_in(arg0, MEMORY_LIST_ARG_ALIASES)) return "list";
+      if (slash_token_in(arg0, MEMORY_TODAY_ARG_ALIASES)) return "today";
+      if (slash_token_in(arg0, MEMORY_LONGTERM_ARG_ALIASES)) return "longterm";
+      if (slash_token_in(arg0, MEMORY_SEARCH_ARG_ALIASES)) return "search";
+    }
+    const text = this.normalize_common_command_text(message).toLowerCase();
+    if (!text || text.startsWith("/")) return null;
+    if (/^(?:메모리|memory)\s*(?:상태|status|state|확인|조회)?$/.test(text)) return "status";
+    if (/^(?:메모리|memory)\s*(?:목록|list|리스트)$/.test(text)) return "list";
+    if (/^(?:오늘\s*메모리|메모리\s*오늘|memory\s*today)$/.test(text)) return "today";
+    if (/^(?:장기\s*메모리|메모리\s*장기|memory\s*longterm|longterm\s*memory)$/.test(text)) return "longterm";
+    if (/^(?:메모리|memory)\s*(?:검색|search)\b/.test(text)) return "search";
+    return null;
+  }
+
+  private extract_memory_search_query(message: InboundMessage, command: ParsedSlashCommand | null): string {
+    const name = String(command?.name || "").trim();
+    const args = (command?.args || []).map((v) => String(v || "").trim()).filter(Boolean);
+    const args_lower = args.map((v) => v.toLowerCase());
+    if (slash_name_in(name, MEMORY_ROOT_COMMAND_ALIASES) && args.length > 1 && slash_token_in(args_lower[0], MEMORY_SEARCH_ARG_ALIASES)) {
+      return args.slice(1).join(" ").trim();
+    }
+    const text = this.normalize_common_command_text(message);
+    const m = text.match(/^(?:메모리|memory)\s*(?:검색|search)\s+(.+)$/i);
+    if (!m) return "";
+    return String(m[1] || "").trim();
+  }
+
+  private kst_today_key(now = Date.now()): string {
+    const shifted = new Date(now + (9 * 3_600_000));
+    const y = shifted.getUTCFullYear();
+    const m = String(shifted.getUTCMonth() + 1).padStart(2, "0");
+    const d = String(shifted.getUTCDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }
+
+  private format_decision_usage(provider: ChannelProvider, sender_id: string): string {
+    const mention = provider === "telegram" ? "" : `@${sender_id} `;
+    return [
+      `${mention}decision 명령 사용법`,
+      "- /decision status",
+      "- /decision list",
+      "- /decision set <key> <value>",
+      "- /decision set <key>=<value>",
+      "- 자연어: '현재 지침은?', '정책 수정 key=value'",
+    ].join("\n").trim();
+  }
+
+  private has_explicit_decision_intent(message: InboundMessage): boolean {
+    const text = this.normalize_common_command_text(message).toLowerCase();
+    if (!text || text.startsWith("/")) return false;
+    return /(현재\s*(지침|정책)|결정\s*사항\s*(확인|조회|목록|리스트)|정책\s*(확인|조회|목록|수정|변경)|decision\s*(status|list|show|set)|policy\s*(status|list|show|set))/i.test(text);
+  }
+
+  private parse_decision_quick_action(message: InboundMessage, command: ParsedSlashCommand | null): DecisionQuickAction | null {
+    const name = String(command?.name || "").trim();
+    const arg0 = String(command?.args_lower?.[0] || "");
+    if (slash_name_in(name, DECISION_ROOT_COMMAND_ALIASES)) {
+      if (!arg0 || slash_token_in(arg0, DECISION_STATUS_ARG_ALIASES)) return "status";
+      if (slash_token_in(arg0, DECISION_LIST_ARG_ALIASES)) return "list";
+      if (slash_token_in(arg0, DECISION_SET_ARG_ALIASES)) return "set";
+    }
+    const text = this.normalize_common_command_text(message).toLowerCase();
+    if (!text || text.startsWith("/")) return null;
+    if (/^(?:현재\s*)?(?:지침|정책)(?:은|는|이|가)?\s*\??$/.test(text)) return "status";
+    if (/(?:결정\s*사항|지침|정책)\s*(?:상태|확인|조회|목록|리스트)/.test(text)) return "list";
+    if (/^(?:decision|policy)\s*(?:status|state|list|show)\b/.test(text)) return "list";
+    if (/(?:지침|정책|결정\s*사항)\s*(?:수정|변경|업데이트)/.test(text)) return "set";
+    if (/^(?:decision|policy)\s*set\b/.test(text)) return "set";
+    return null;
+  }
+
+  private parse_decision_set_pair(raw: string): { key: string; value: string } | null {
+    const text = String(raw || "").trim();
+    if (!text) return null;
+    const eq = text.match(/^([^=:=]{1,120})\s*[:=]\s*(.+)$/);
+    if (eq) {
+      const key = String(eq[1] || "").trim();
+      const value = String(eq[2] || "").trim();
+      if (!key || !value) return null;
+      return { key, value };
+    }
+    const tokens = text.split(/\s+/).filter(Boolean);
+    if (tokens.length < 2) return null;
+    return {
+      key: tokens[0],
+      value: tokens.slice(1).join(" "),
+    };
+  }
+
+  private extract_decision_set_pair(message: InboundMessage, command: ParsedSlashCommand | null): { key: string; value: string } | null {
+    const name = String(command?.name || "").trim();
+    const args = (command?.args || []).map((v) => String(v || "").trim()).filter(Boolean);
+    const args_lower = args.map((v) => v.toLowerCase());
+    if (slash_name_in(name, DECISION_ROOT_COMMAND_ALIASES) && args.length > 1 && slash_token_in(args_lower[0], DECISION_SET_ARG_ALIASES)) {
+      return this.parse_decision_set_pair(args.slice(1).join(" "));
+    }
+    const text = this.normalize_common_command_text(message);
+    const m = text.match(/^(?:지침|정책|결정\s*사항)\s*(?:수정|변경|업데이트)\s*[:：]?\s*(.+)$/i)
+      || text.match(/^(?:decision|policy)\s*set\s+(.+)$/i);
+    if (!m) return null;
+    return this.parse_decision_set_pair(String(m[1] || ""));
+  }
+
+  private async try_handle_memory_command(
+    provider: ChannelProvider,
+    message: InboundMessage,
+    command: ParsedSlashCommand | null,
+  ): Promise<boolean> {
+    const action = this.parse_memory_quick_action(message, command);
+    const explicit = this.has_explicit_memory_intent(message);
+    if (!action && !explicit) return false;
+    const context_builder = this.agent_runtime?.get_context_builder();
+    if (!context_builder) {
+      await this.send_command_reply(provider, message, "memory service unavailable", {
+        kind: "command_memory",
+        action: action || "status",
+      });
+      return true;
+    }
+
+    const memory = context_builder.memory_store;
+    const mention = provider === "telegram" ? "" : `@${message.sender_id} `;
+    const effective_action = action || "status";
+    let content = "";
+    if (effective_action === "search") {
+      const query = this.extract_memory_search_query(message, command);
+      if (!query) {
+        content = this.format_memory_usage(provider, message.sender_id);
+      } else {
+        const rows = await memory.search(query, { limit: 10 });
+        content = rows.length <= 0
+          ? `${mention}메모리 검색 결과가 없습니다. query='${query}'`.trim()
+          : [
+              `${mention}메모리 검색 결과 (${Math.min(rows.length, 10)})`,
+              ...rows.slice(0, 10).map((row, i) => `${i + 1}. ${row.file}:${row.line} ${String(row.text || "").slice(0, 120)}`),
+            ].join("\n").trim();
+      }
+    } else if (effective_action === "today") {
+      const day = this.kst_today_key();
+      const body = String(await memory.read_daily(day) || "").trim();
+      content = body
+        ? `${mention}오늘 메모리(${day})\n${body.slice(0, 1400)}`.trim()
+        : `${mention}오늘 메모리(${day})는 비어 있습니다.`.trim();
+    } else if (effective_action === "longterm") {
+      const body = String(await memory.read_longterm() || "").trim();
+      content = body
+        ? `${mention}장기 메모리\n${body.slice(0, 1400)}`.trim()
+        : `${mention}장기 메모리가 비어 있습니다.`.trim();
+    } else if (effective_action === "list") {
+      const files = await memory.list_daily();
+      const rows = [...files].slice(-20).reverse();
+      content = rows.length <= 0
+        ? `${mention}등록된 daily memory가 없습니다.`.trim()
+        : `${mention}daily memory 목록 (${files.length})\n${rows.map((v, i) => `${i + 1}. ${v}`).join("\n")}`.trim();
+    } else {
+      const files = await memory.list_daily();
+      const longterm = await memory.read_longterm();
+      const today = this.kst_today_key();
+      const today_body = String(await memory.read_daily(today) || "");
+      const today_lines = today_body.split(/\r?\n/).map((v) => v.trim()).filter(Boolean).length;
+      const recent = [...files].slice(-3).reverse().join(", ") || "(none)";
+      content = [
+        `${mention}메모리 상태`,
+        `- daily_files: ${files.length}`,
+        `- recent_daily: ${recent}`,
+        `- today_key: ${today}`,
+        `- today_entries: ${today_lines}`,
+        `- longterm_chars: ${String(longterm || "").length}`,
+      ].join("\n").trim();
+    }
+    await this.send_command_reply(provider, message, content, {
+      kind: "command_memory",
+      action: effective_action,
+    });
+    return true;
+  }
+
+  private async try_handle_decision_command(
+    provider: ChannelProvider,
+    message: InboundMessage,
+    command: ParsedSlashCommand | null,
+  ): Promise<boolean> {
+    const action = this.parse_decision_quick_action(message, command);
+    const explicit = this.has_explicit_decision_intent(message);
+    if (!action && !explicit) return false;
+    const context_builder = this.agent_runtime?.get_context_builder();
+    if (!context_builder) {
+      await this.send_command_reply(provider, message, "decision service unavailable", {
+        kind: "command_decision",
+        action: action || "status",
+      });
+      return true;
+    }
+
+    const decisions = context_builder.decision_service;
+    const mention = provider === "telegram" ? "" : `@${message.sender_id} `;
+    const effective_action = action || "status";
+    let content = "";
+    if (effective_action === "set") {
+      const pair = this.extract_decision_set_pair(message, command);
+      if (!pair) {
+        content = this.format_decision_usage(provider, message.sender_id);
+      } else {
+        const result = await decisions.append_decision({
+          scope: "global",
+          key: pair.key,
+          value: pair.value,
+          source: "user",
+          priority: 1,
+        });
+        content = [
+          `${mention}결정사항 저장 완료`,
+          `- action: ${result.action}`,
+          `- key: ${result.record.canonical_key}`,
+          `- value: ${result.record.value}`,
+          `- updated_at: ${result.record.updated_at}`,
+        ].join("\n").trim();
+      }
+    } else {
+      const active = await decisions.list_decisions({ status: "active", limit: 50 });
+      const effective = await decisions.get_effective_decisions({ include_p2: true, p1_limit: 8, p2_limit: 6 });
+      const lines = effective.slice(0, 12).map((r) => `- [P${r.priority}] ${r.canonical_key}: ${r.value}`);
+      content = [
+        `${mention}현재 지침/결정사항`,
+        `- active: ${active.length}`,
+        `- effective: ${effective.length}`,
+        lines.length > 0 ? "## 목록" : "## 목록\n- (empty)",
+        ...(lines.length > 0 ? lines : []),
+      ].join("\n").trim();
+    }
+    await this.send_command_reply(provider, message, content, {
+      kind: "command_decision",
+      action: effective_action,
+    });
+    return true;
+  }
+
   private async try_handle_common_slash_command(
     provider: ChannelProvider,
     message: InboundMessage,
@@ -2831,6 +3404,8 @@ export class ChannelManager {
     if (await this.try_handle_help_command(provider, message, command)) return true;
     if (await this.try_handle_render_command(provider, message, command)) return true;
     if (await this.try_handle_secret_command(provider, message, command)) return true;
+    if (await this.try_handle_memory_command(provider, message, command)) return true;
+    if (await this.try_handle_decision_command(provider, message, command)) return true;
     if (await this.try_handle_stop_command(provider, message, command)) return true;
     if (await this.try_handle_cron_quick_command(provider, message, command)) return true;
     return false;
@@ -2855,6 +3430,37 @@ export class ChannelManager {
     return true;
   }
 
+  private strip_leading_mentions_and_aliases(text: string): string {
+    let out = String(text || "").trim();
+    if (!out) return "";
+    for (let i = 0; i < 3; i += 1) {
+      const next = out
+        .replace(/^<@!?[A-Za-z0-9]+>\s*/i, "")
+        .replace(/^[@＠][A-Za-z0-9._-]+\s*/i, "")
+        .replace(/^(?:assistant|sebastian|bot|오케스트레이터|에이전트)\s*[:,]?\s*/i, "")
+        .trim();
+      if (next === out) break;
+      out = next;
+    }
+    return out;
+  }
+
+  private normalize_common_command_text(message: InboundMessage): string {
+    const stripped = this.strip_leading_mentions_and_aliases(String(message.content || ""));
+    return stripped.replace(/\s+/g, " ").trim();
+  }
+
+  private normalize_cron_command_text(message: InboundMessage): string {
+    return this.normalize_common_command_text(message);
+  }
+
+  private has_explicit_cron_intent(message: InboundMessage): boolean {
+    const text = this.normalize_cron_command_text(message).toLowerCase();
+    if (!text) return false;
+    if (text.startsWith("/")) return false;
+    return /(cron|크론|스케줄|예약|리마인드|remind|알림)/i.test(text);
+  }
+
   private parse_cron_quick_action(message: InboundMessage, command: ParsedSlashCommand | null): CronQuickAction | null {
     const command_name = String(command?.name || "").trim();
     const args = command?.args_lower || [];
@@ -2870,14 +3476,14 @@ export class ChannelManager {
     if (slash_name_in(command_name, CRON_ADD_COMMAND_ALIASES)) return "add";
     if (slash_name_in(command_name, CRON_REMOVE_COMMAND_ALIASES)) return "remove";
 
-    const text = String(message.content || "").trim().toLowerCase();
+    const text = this.normalize_cron_command_text(message).toLowerCase();
     if (!text) return null;
-    if (/^(?:cron|크론)\s*(?:status|상태|확인|조회)$/.test(text)) return "status";
-    if (/^(?:cron|크론)\s*(?:jobs|list|목록|리스트)$/.test(text)) return "list";
-    if (/^(?:cron|크론)\s*(?:add|추가|등록)\b/.test(text)) return "add";
-    if (/^(?:cron|크론)\s*(?:remove|delete|삭제|제거)\b/.test(text)) return "remove";
-    if (/^크론\s*작업\s*(?:확인|조회|상태)$/.test(text)) return "status";
-    if (/^크론\s*작업\s*(?:목록|리스트)$/.test(text)) return "list";
+    if (/^(?:cron|크론)(?:\s*작업)?\s*(?:status|상태|확인|조회)(?:해줘|해주세요|요)?$/.test(text)) return "status";
+    if (/^(?:cron|크론)(?:\s*작업)?\s*(?:jobs|list|목록|리스트)(?:알려줘|보여줘|해주세요|요)?$/.test(text)) return "list";
+    if (/^(?:cron|크론)(?:\s*작업)?\s*(?:add|추가|등록)\b/.test(text)) return "add";
+    if (/^(?:cron|크론)(?:\s*작업)?\s*(?:remove|delete|삭제|제거)\b/.test(text)) return "remove";
+    if (/^크론\s*작업\s*(?:확인|조회|상태)(?:해줘|해주세요|요)?$/.test(text)) return "status";
+    if (/^크론\s*작업\s*(?:목록|리스트)(?:알려줘|보여줘|해주세요|요)?$/.test(text)) return "list";
     if (/^크론\s*작업\s*(?:삭제|제거)\b/.test(text)) return "remove";
     return null;
   }
@@ -2905,7 +3511,7 @@ export class ChannelManager {
       if (slash_token_in(args[0], CRON_ADD_ARG_ALIASES)) return args.slice(1);
     }
     if (slash_name_in(cmd, CRON_ADD_COMMAND_ALIASES)) return args;
-    const text = String(message.content || "").trim();
+    const text = this.normalize_cron_command_text(message);
     const m = text.match(/^(?:cron|크론)\s*(?:add|추가|등록)\s+(.+)$/i);
     if (!m) return [];
     return String(m[1] || "").split(/\s+/).map((v) => v.trim()).filter(Boolean);
@@ -2918,7 +3524,7 @@ export class ChannelManager {
       if (slash_token_in(args[0], CRON_REMOVE_ARG_ALIASES)) return String(args[1] || "").trim();
     }
     if (slash_name_in(cmd, CRON_REMOVE_COMMAND_ALIASES)) return String(args[0] || "").trim();
-    const text = String(message.content || "").trim();
+    const text = this.normalize_cron_command_text(message);
     const m = text.match(/^(?:cron|크론)\s*(?:remove|delete|삭제|제거)\s+([A-Za-z0-9_-]{4,64})\b/i)
       || text.match(/^크론\s*작업\s*(?:삭제|제거)\s+([A-Za-z0-9_-]{4,64})\b/i);
     if (!m) return "";
@@ -2975,7 +3581,20 @@ export class ChannelManager {
   private has_natural_schedule_intent(body: string): boolean {
     const text = String(body || "").trim();
     if (!text) return false;
-    return /(알림|리마인드|알려|깨워|예약|등록|재생|실행|전송|보내|켜|끄|체크|확인|notify|remind|run)/i.test(text);
+    return /(알림|리마인드|알려|깨워|예약|등록|재생|실행|수행|전송|보내|켜|끄|체크|확인|notify|remind|run)/i.test(text);
+  }
+
+  private kst_date_parts_from_epoch(ms: number): { year: number; month: number; day: number } {
+    const shifted = new Date(Number(ms || 0) + (9 * 3_600_000));
+    return {
+      year: shifted.getUTCFullYear(),
+      month: shifted.getUTCMonth() + 1,
+      day: shifted.getUTCDate(),
+    };
+  }
+
+  private to_kst_epoch_ms(year: number, month: number, day: number, hour: number, minute: number, second: number): number {
+    return Date.UTC(year, month - 1, day, hour - 9, minute, second, 0);
   }
 
   private parse_natural_cron_add_spec(message: InboundMessage): {
@@ -2985,10 +3604,25 @@ export class ChannelManager {
     deliver: boolean;
     delete_after_run: boolean;
   } | null {
-    const text = String(message.content || "").trim();
+    const text = this.normalize_cron_command_text(message);
     if (!text || text.startsWith("/")) return null;
 
-    const rel = text.match(/^(\d+)\s*(초|분|시간|s|sec|secs|m|min|mins|h|hr|hrs)\s*(?:후|뒤)\s+(.+)$/i);
+    const delayed_every = text.match(/^(\d+)\s*(초|분|시간|s|sec|secs|m|min|mins|h|hr|hrs)\s*(?:후|뒤)(?:에)?\s*(\d+)\s*(초|분|시간|s|sec|secs|m|min|mins|h|hr|hrs)\s*(?:간격(?:으로)?|마다)\s*(.+)$/i);
+    if (delayed_every) {
+      const start_delay_ms = this.parse_duration_ms(`${delayed_every[1]}${delayed_every[2]}`);
+      const every_ms = this.parse_duration_ms(`${delayed_every[3]}${delayed_every[4]}`);
+      const body = String(delayed_every[5] || "").trim();
+      if (!start_delay_ms || !every_ms || !body || !this.has_natural_schedule_intent(body)) return null;
+      return {
+        schedule: { kind: "every", every_ms, at_ms: Date.now() + start_delay_ms },
+        message: body,
+        name: body.slice(0, 40),
+        deliver: /(remind|reminder|알림|리마인드|알려줘|깨워)/i.test(body),
+        delete_after_run: false,
+      };
+    }
+
+    const rel = text.match(/^(\d+)\s*(초|분|시간|s|sec|secs|m|min|mins|h|hr|hrs)\s*(?:후|뒤)(?:에)?\s*(.+)$/i);
     if (rel) {
       const duration = this.parse_duration_ms(`${rel[1]}${rel[2]}`);
       const body = String(rel[3] || "").trim();
@@ -3026,18 +3660,25 @@ export class ChannelManager {
     if (hour === 24) hour = 0;
     if (hour < 0 || hour > 23) return null;
 
-    const target = new Date();
-    target.setMilliseconds(0);
-    target.setSeconds(second_raw, 0);
-    target.setMinutes(minute_raw);
-    target.setHours(hour);
-    if (day_word === "내일") target.setDate(target.getDate() + 1);
-    if (day_word === "모레") target.setDate(target.getDate() + 2);
-    if (!day_word && target.getTime() <= Date.now() + 1_000) {
-      target.setDate(target.getDate() + 1);
+    const now = Date.now();
+    const today = this.kst_date_parts_from_epoch(now);
+    const day_offset = day_word === "내일"
+      ? 1
+      : day_word === "모레"
+        ? 2
+        : 0;
+    let at_ms = this.to_kst_epoch_ms(
+      today.year,
+      today.month,
+      today.day,
+      hour,
+      minute_raw,
+      second_raw,
+    ) + (day_offset * 86_400_000);
+    if (!day_word && at_ms <= now + 1_000) {
+      at_ms += 86_400_000;
     }
-    const at_ms = target.getTime();
-    if (!Number.isFinite(at_ms) || at_ms <= Date.now()) return null;
+    if (!Number.isFinite(at_ms) || at_ms <= now) return null;
 
     return {
       schedule: { kind: "at", at_ms },
@@ -3060,6 +3701,10 @@ export class ChannelManager {
     const kind = String(schedule.kind || "").toLowerCase();
     if (kind === "every") {
       const sec = Math.max(1, Math.floor(Number(schedule.every_ms || 0) / 1000));
+      const start_ms = Number(schedule.at_ms || 0);
+      if (Number.isFinite(start_ms) && start_ms > 0) {
+        return `every ${sec}s (start ${this.format_cron_time_kr(start_ms)})`;
+      }
       return `every ${sec}s`;
     }
     if (kind === "at") {
@@ -3160,7 +3805,8 @@ export class ChannelManager {
     if (!this.cron) return false;
     const action = this.parse_cron_quick_action(message, command);
     const natural_add = action ? null : this.parse_natural_cron_add_spec(message);
-    if (!action && !natural_add) return false;
+    const explicit_intent = this.has_explicit_cron_intent(message);
+    if (!action && !natural_add && !explicit_intent) return false;
     let content = "";
     try {
       if (action === "status") {
@@ -3187,7 +3833,15 @@ export class ChannelManager {
       } else {
         const spec = natural_add || this.parse_cron_quick_add_spec(message, command);
         if (!spec) {
-          content = this.format_cron_add_usage(provider, message.sender_id);
+          content = explicit_intent
+            ? [
+                this.format_cron_add_usage(provider, message.sender_id),
+                "",
+                "빠른 확인:",
+                "- /cron status",
+                "- /cron list",
+              ].join("\n").trim()
+            : this.format_cron_add_usage(provider, message.sender_id);
         } else {
           const job = await this.cron.add_job(
             spec.name,
@@ -3234,11 +3888,10 @@ export class ChannelManager {
   }
 
   private async try_handle_approval_reply(provider: ChannelProvider, message: InboundMessage): Promise<boolean> {
-    if (!this.agent) return false;
+    if (!this.agent_runtime) return false;
     const text = String(message.content || "").trim();
     if (!text) return false;
-    const tools = this.agent.tools;
-    const pending = tools.list_approval_requests("pending");
+    const pending = this.agent_runtime.list_approval_requests("pending");
     if (pending.length === 0) return false;
 
     const explicit_id = this.extract_approval_request_id(text);
@@ -3260,16 +3913,15 @@ export class ChannelManager {
     decision_input: string,
     source: "text" | "reaction",
   ): Promise<boolean> {
-    if (!this.agent) return false;
-    const tools = this.agent.tools;
-    const selected = tools.get_approval_request(request_id);
+    if (!this.agent_runtime) return false;
+    const selected = this.agent_runtime.get_approval_request(request_id);
     if (!selected) return false;
 
-    const resolved = tools.resolve_approval_request(selected.request_id, decision_input);
+    const resolved = this.agent_runtime.resolve_approval_request(selected.request_id, decision_input);
     if (!resolved.ok) return false;
 
     if (resolved.status === "approved") {
-      const executed = await tools.execute_approved_request(selected.request_id);
+      const executed = await this.agent_runtime.execute_approved_request(selected.request_id);
       const summary = executed.ok
         ? `✅ 승인 반영 완료(${source}) · tool=${executed.tool_name}\n${String(executed.result || "").slice(0, 700)}`
         : `🔴 승인 반영 실패(${source}) · tool=${executed.tool_name || selected.tool_name}\n${String(executed.error || "unknown_error").slice(0, 220)}`;
@@ -3375,7 +4027,7 @@ export class ChannelManager {
 
   private async try_handle_reaction_controls(provider: ChannelProvider, rows: InboundMessage[]): Promise<void> {
     if (provider !== "slack") return;
-    if (!this.agent) return;
+    if (!this.agent_runtime) return;
     if (!Array.isArray(rows) || rows.length === 0) return;
     if (this.approval_reaction_enabled) {
       await this.try_handle_approval_reactions(provider, rows);
@@ -3386,8 +4038,8 @@ export class ChannelManager {
   }
 
   private async try_handle_approval_reactions(provider: ChannelProvider, rows: InboundMessage[]): Promise<void> {
-    if (!this.agent) return;
-    const pending = this.agent.tools.list_approval_requests("pending");
+    if (!this.agent_runtime) return;
+    const pending = this.agent_runtime.list_approval_requests("pending");
     if (pending.length <= 0) return;
     const sorted = [...rows].sort((a, b) => this.extract_timestamp_ms(b) - this.extract_timestamp_ms(a));
     for (const row of sorted.slice(0, 80)) {

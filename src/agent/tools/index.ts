@@ -1,5 +1,5 @@
 import type { MessageBus, OutboundMessage } from "../../bus/index.js";
-import { CronService } from "../../cron/index.js";
+import type { CronScheduler } from "../../cron/contracts.js";
 import { now_iso } from "../../utils/common.js";
 import { CronTool } from "./cron.js";
 import { EditFileTool, ListDirTool, ReadFileTool, WriteFileTool } from "./filesystem.js";
@@ -12,6 +12,8 @@ import { WebBrowserTool, WebFetchTool, WebSearchTool } from "./web.js";
 import { DiagramRenderTool } from "./diagram.js";
 import { DynamicToolRuntimeLoader, ToolRuntimeReloader } from "./runtime-loader.js";
 import { ToolInstallerService } from "./installer.js";
+import { SqliteDynamicToolStore, type DynamicToolStoreLike } from "./store.js";
+import { FileMcpServerStore, type McpServerStoreLike, type McpServerEntry } from "./mcp-store.js";
 import { ToolSelfTestService } from "./self-test.js";
 import { RuntimeAdminTool } from "./runtime-admin.js";
 import type { AppendWorkflowEventInput, AppendWorkflowEventResult } from "../../events/types.js";
@@ -34,6 +36,8 @@ export {
   DynamicToolRuntimeLoader,
   ToolRuntimeReloader,
   ToolInstallerService,
+  SqliteDynamicToolStore,
+  FileMcpServerStore,
   ToolSelfTestService,
   RuntimeAdminTool,
 };
@@ -50,12 +54,16 @@ export type {
 } from "./types.js";
 export type { DynamicToolManifestEntry } from "./dynamic.js";
 export type { InstallShellToolInput } from "./installer.js";
+export type { DynamicToolStoreLike } from "./store.js";
+export type { McpServerStoreLike, McpServerEntry } from "./mcp-store.js";
 
 export function create_default_tool_registry(args?: {
   workspace?: string;
   allowed_dir?: string | null;
   dynamic_manifest_path?: string;
-  cron?: CronService | null;
+  dynamic_store_path?: string;
+  dynamic_store?: DynamicToolStoreLike;
+  cron?: CronScheduler | null;
   bus?: MessageBus | null;
   spawn_callback?: ((request: SpawnRequest) => Promise<{ subagent_id: string; status: string; message?: string }>) | null;
   event_recorder?: ((event: AppendWorkflowEventInput) => Promise<AppendWorkflowEventResult>) | null;
@@ -150,19 +158,25 @@ export function create_default_tool_registry(args?: {
     sender = async (message: OutboundMessage): Promise<void> => {
       await args.bus!.publish_outbound(message);
     };
-    registry.register(new MessageTool({ send_callback: sender, event_recorder: args?.event_recorder || null }));
+    registry.register(new MessageTool({
+      send_callback: sender,
+      event_recorder: args?.event_recorder || null,
+      workspace,
+    }));
     registry.register(new FileRequestTool({ send_callback: sender }));
   }
   if (args?.spawn_callback) {
     registry.register(new SpawnTool(args.spawn_callback));
   }
   if (args?.cron) {
-    registry.register(new CronTool(args.cron, { send_callback: sender }));
+    registry.register(new CronTool(args.cron));
   }
 
-  const dynamic_loader = new DynamicToolRuntimeLoader(workspace, args?.dynamic_manifest_path);
+  const dynamic_store_path = args?.dynamic_store_path || args?.dynamic_manifest_path;
+  const dynamic_store = args?.dynamic_store || new SqliteDynamicToolStore(workspace, dynamic_store_path);
+  const dynamic_loader = new DynamicToolRuntimeLoader(workspace, dynamic_store_path, dynamic_store);
   registry.set_dynamic_tools(dynamic_loader.load_tools());
-  const installer = new ToolInstallerService(workspace, args?.dynamic_manifest_path);
+  const installer = new ToolInstallerService(workspace, dynamic_store_path, dynamic_store);
   registry.register(new RuntimeAdminTool({
     workspace,
     installer,

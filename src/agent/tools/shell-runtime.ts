@@ -9,6 +9,7 @@ type ShellRunOptions = {
   timeout_ms: number;
   max_buffer_bytes: number;
   signal?: AbortSignal;
+  force_native_shell?: boolean;
 };
 
 type JsonRecord = Record<string, unknown>;
@@ -96,7 +97,7 @@ function parse_just_bash_output(stdout: string): { stdout: string; stderr: strin
 }
 
 export async function run_shell_command(command: string, options: ShellRunOptions): Promise<{ stdout: string; stderr: string }> {
-  if (should_use_just_bash()) {
+  if (!options.force_native_shell && should_use_just_bash()) {
     const runner = find_just_bash_runner() || { command: JUST_BASH_BINARY, prefix_args: [] };
     const result = await exec_file_async(
       runner.command,

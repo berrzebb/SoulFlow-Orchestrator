@@ -1,40 +1,26 @@
-import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ToolRegistry } from "./registry.js";
 import { DynamicShellTool, type DynamicToolManifestEntry } from "./dynamic.js";
-
-type DynamicToolManifest = {
-  version: number;
-  tools: DynamicToolManifestEntry[];
-};
-
-function read_manifest(path: string): DynamicToolManifest {
-  try {
-    const raw = readFileSync(path, "utf-8");
-    const parsed = JSON.parse(raw) as DynamicToolManifest;
-    return {
-      version: Number(parsed.version || 1),
-      tools: Array.isArray(parsed.tools) ? parsed.tools : [],
-    };
-  } catch {
-    return { version: 1, tools: [] };
-  }
-}
+import { SqliteDynamicToolStore, type DynamicToolStoreLike } from "./store.js";
 
 export class DynamicToolRuntimeLoader {
   readonly workspace: string;
-  readonly manifest_path: string;
+  readonly store_path: string;
+  readonly store: DynamicToolStoreLike;
 
-  constructor(workspace = process.cwd(), manifest_path_override?: string) {
+  constructor(workspace = process.cwd(), store_path_override?: string, store_override?: DynamicToolStoreLike) {
     this.workspace = workspace;
-    this.manifest_path = manifest_path_override || join(workspace, "runtime", "custom-tools", "manifest.json");
+    this.store_path = store_path_override || join(workspace, "runtime", "custom-tools", "tools.db");
+    this.store = store_override || new SqliteDynamicToolStore(workspace, this.store_path);
   }
 
   load_tools(): DynamicShellTool[] {
-    const manifest = read_manifest(this.manifest_path);
-    const enabled = manifest.tools.filter((t) => t.enabled !== false && t.kind === "shell");
+    const enabled = this.store.list_tools().filter((t) => t.enabled !== false && t.kind === "shell");
     return enabled.map((entry) => new DynamicShellTool(entry, this.workspace));
+  }
+
+  signature(): string {
+    return this.store.signature();
   }
 }
 
@@ -49,20 +35,10 @@ export class ToolRuntimeReloader {
     this.registry = registry;
   }
 
-  private signature(): string {
-    try {
-      const raw = readFileSync(this.loader.manifest_path, "utf-8");
-      const hash = createHash("sha1").update(raw).digest("hex");
-      return `${raw.length}:${hash}`;
-    } catch {
-      return "missing";
-    }
-  }
-
   reload_now(): number {
     const tools = this.loader.load_tools();
     this.registry.set_dynamic_tools(tools);
-    this.last_signature = this.signature();
+    this.last_signature = this.loader.signature();
     return tools.length;
   }
 
@@ -70,7 +46,7 @@ export class ToolRuntimeReloader {
     if (this.timer) return;
     this.reload_now();
     this.timer = setInterval(() => {
-      const sig = this.signature();
+      const sig = this.loader.signature();
       if (sig === this.last_signature) return;
       this.reload_now();
     }, Math.max(500, interval_ms));

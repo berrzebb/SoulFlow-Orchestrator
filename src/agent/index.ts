@@ -41,7 +41,7 @@ export class AgentDomain {
   ) {
     this.context = new ContextBuilder(workspace);
     const data_dir = args?.data_dir || join(workspace, "runtime");
-    this.task_store = new TaskStore(join(data_dir, "tasks", "store.json"));
+    this.task_store = new TaskStore(join(data_dir, "tasks"));
     this.loop = new AgentLoopStore({ task_store: this.task_store });
     this.task_recovery = new TaskRecoveryService(this.task_store);
     this.subagents = new SubagentRegistry({
@@ -50,7 +50,7 @@ export class AgentDomain {
       bus: args?.bus || null,
       context_builder: this.context,
     });
-    const manifest_path = join(data_dir, "custom-tools", "manifest.json");
+    const dynamic_store_path = join(data_dir, "custom-tools", "tools.db");
     this.tools = create_default_tool_registry({
       workspace,
       bus: args?.bus || null,
@@ -70,10 +70,10 @@ export class AgentDomain {
         });
         return spawned;
       },
-      dynamic_manifest_path: manifest_path,
+      dynamic_store_path,
     });
-    this.tool_installer = new ToolInstallerService(workspace, manifest_path);
-    this.tool_reloader = new ToolRuntimeReloader(new DynamicToolRuntimeLoader(workspace, manifest_path), this.tools);
+    this.tool_installer = new ToolInstallerService(workspace, dynamic_store_path);
+    this.tool_reloader = new ToolRuntimeReloader(new DynamicToolRuntimeLoader(workspace, dynamic_store_path), this.tools);
     this.tool_self_test = new ToolSelfTestService(this.tools);
   }
 

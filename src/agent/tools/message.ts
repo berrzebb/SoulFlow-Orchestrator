@@ -1,9 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { Tool } from "./base.js";
-import type { OutboundMessage } from "../../bus/types.js";
+import type { MediaItem, OutboundMessage } from "../../bus/types.js";
 import { now_iso } from "../../utils/common.js";
+import { is_local_reference, normalize_local_candidate_path, resolve_local_reference } from "../../utils/local-ref.js";
 import type { JsonSchema, ToolExecutionContext } from "./types.js";
 import type { AppendWorkflowEventInput, AppendWorkflowEventResult, WorkflowPhase } from "../../events/types.js";
+import { existsSync, statSync } from "node:fs";
+import { basename, extname } from "node:path";
 
 export type MessageSendCallback = (message: OutboundMessage) => Promise<void>;
 export type MessageEventRecordCallback = (event: AppendWorkflowEventInput) => Promise<AppendWorkflowEventResult>;
@@ -20,6 +23,35 @@ function normalize_phase(value: unknown): WorkflowPhase {
   return "progress";
 }
 
+function detect_media_type(path_value: string): MediaItem["type"] {
+  const lower = String(path_value || "").toLowerCase();
+  if (/\.(png|jpg|jpeg|gif|webp|svg)$/.test(lower)) return "image";
+  if (/\.(mp4|mov|webm|mkv|avi)$/.test(lower)) return "video";
+  if (/\.(mp3|wav|ogg|m4a)$/.test(lower)) return "audio";
+  if (/\.(pdf|txt|md|csv|json|zip|tar|gz)$/.test(lower)) return "file";
+  const ext = extname(lower);
+  if (!ext) return "file";
+  return "file";
+}
+
+function to_local_media_item(value: string, workspace: string): MediaItem | null {
+  const candidate = normalize_local_candidate_path(value);
+  if (!candidate) return null;
+  if (!is_local_reference(candidate)) return null;
+  const local_path = resolve_local_reference(workspace, candidate);
+  if (!existsSync(local_path)) return null;
+  try {
+    if (!statSync(local_path).isFile()) return null;
+  } catch {
+    return null;
+  }
+  return {
+    type: detect_media_type(local_path),
+    url: local_path,
+    name: basename(local_path),
+  };
+}
+
 export class MessageTool extends Tool {
   readonly name = "message";
   readonly description = "Send a phase event message (`assign/progress/blocked/done/approval`) through channel callback.";
@@ -32,11 +64,11 @@ export class MessageTool extends Tool {
         enum: ["assign", "progress", "blocked", "done", "approval"],
         description: "Workflow phase",
       },
-      task_id: { type: "string", description: "Task id (used for fixed detail file name)" },
+      task_id: { type: "string", description: "Task id (used for workflow detail key)" },
       run_id: { type: "string", description: "Run id for correlated events" },
       event_id: { type: "string", description: "Idempotent event id (optional)" },
       agent_id: { type: "string", description: "Agent id/alias for the event producer" },
-      detail: { type: "string", description: "Detailed body to append to task detail file (<task_id>.md)" },
+      detail: { type: "string", description: "Detailed body to append to workflow detail store (sqlite://events/task_details/<task_id>)" },
       payload: { type: "object", description: "Structured event payload" },
       channel: { type: "string", description: "Target channel id" },
       chat_id: { type: "string", description: "Target chat id" },
@@ -55,6 +87,7 @@ export class MessageTool extends Tool {
   private default_channel: string;
   private default_chat_id: string;
   private default_reply_to: string | null;
+  private readonly workspace_dir: string;
   private sent_in_turn = false;
 
   constructor(args?: {
@@ -63,6 +96,7 @@ export class MessageTool extends Tool {
     default_channel?: string;
     default_chat_id?: string;
     default_reply_to?: string | null;
+    workspace?: string;
   }) {
     super();
     this.send_callback = args?.send_callback || null;
@@ -70,6 +104,7 @@ export class MessageTool extends Tool {
     this.default_channel = args?.default_channel || "";
     this.default_chat_id = args?.default_chat_id || "";
     this.default_reply_to = args?.default_reply_to || null;
+    this.workspace_dir = args?.workspace || process.cwd();
   }
 
   set_context(channel: string, chat_id: string, reply_to?: string | null): void {
@@ -138,7 +173,15 @@ export class MessageTool extends Tool {
     }
 
     const media_raw = Array.isArray(params.media) ? params.media : [];
-    const media_urls = media_raw.map((m) => String(m)).filter(Boolean);
+    const media_items: MediaItem[] = [];
+    const media_seen = new Set<string>();
+    for (const row of media_raw) {
+      const item = to_local_media_item(String(row || ""), this.workspace_dir);
+      if (!item) continue;
+      if (media_seen.has(item.url)) continue;
+      media_seen.add(item.url);
+      media_items.push(item);
+    }
     const normalized_event = event_result?.event || {
       event_id,
       run_id,
@@ -164,7 +207,7 @@ export class MessageTool extends Tool {
       content,
       at: now_iso(),
       reply_to: params.reply_to ? String(params.reply_to) : this.default_reply_to || undefined,
-      media: media_urls.map((url) => ({ type: "link", url })),
+      media: media_items,
       metadata: {
         kind: "workflow_event",
         orchestrator_event: normalized_event,

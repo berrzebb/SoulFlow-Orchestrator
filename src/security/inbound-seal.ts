@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { SecretVaultService } from "./secret-vault.js";
+import type { SecretVaultLike } from "./secret-vault.js";
 
 export type SensitiveKind =
   | "password"
@@ -60,7 +60,7 @@ const SENSITIVE_KEYWORDS: Array<{ token: string; kind: SensitiveKind }> = [
 type SealContext = {
   provider: string;
   chat_id: string;
-  vault: SecretVaultService;
+  vault: SecretVaultLike;
 };
 
 function normalize_part(value: string, fallback: string): string {
@@ -173,7 +173,7 @@ export async function seal_inbound_sensitive_text(
   args: {
     provider: string;
     chat_id: string;
-    vault: SecretVaultService;
+    vault: SecretVaultLike;
   },
 ): Promise<SensitiveSealResult> {
   const ctx: SealContext = {

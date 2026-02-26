@@ -1,6 +1,7 @@
 ---
 name: just-bash
 description: Efficient shell execution workflow using the exec tool with automatic just-bash runtime.
+always: true
 ---
 
 # just-bash
@@ -27,4 +28,3 @@ No extra environment variable is required.
 - Avoid long interactive commands in `exec`.
 - Avoid destructive commands unless explicitly requested.
 - Keep commands scoped to the workspace path whenever possible.
-

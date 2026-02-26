@@ -1,5 +1,5 @@
 import { SkillsLoader } from "./skills.js";
-import { MemoryStore } from "./memory.js";
+import { MemoryStore, type MemoryStoreLike } from "./memory.js";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { extname, isAbsolute, join, resolve } from "node:path";
@@ -10,14 +10,14 @@ import { DecisionService } from "../decision/index.js";
 export class ContextBuilder {
   private readonly snapshots = new Map<string, AgentContextSnapshot>();
   readonly skills_loader: SkillsLoader;
-  readonly memory_store: MemoryStore;
+  readonly memory_store: MemoryStoreLike;
   readonly decision_service: DecisionService;
   private readonly workspace: string;
 
-  constructor(workspace: string) {
+  constructor(workspace: string, args?: { memory_store?: MemoryStoreLike }) {
     this.workspace = workspace;
     this.skills_loader = new SkillsLoader(workspace);
-    this.memory_store = new MemoryStore(workspace);
+    this.memory_store = args?.memory_store || new MemoryStore(workspace);
     this.decision_service = new DecisionService(workspace);
   }
 
@@ -179,12 +179,11 @@ export class ContextBuilder {
 
   private async _build_memory_context(): Promise<string> {
     const longterm = (await this.memory_store.read_longterm()).trim();
-    const recent_daily = await this._load_recent_daily_history(3);
-    if (!longterm && !recent_daily) return "";
+    if (!longterm) return "";
     return [
       "# Memory",
-      longterm ? `## Longterm\n${longterm}` : "",
-      recent_daily ? `## Recent Daily\n${recent_daily}` : "",
+      "source: memory.db",
+      `## Longterm\n${longterm}`,
     ].filter(Boolean).join("\n\n");
   }
 
@@ -197,7 +196,7 @@ export class ContextBuilder {
     if (files.length === 0) return "";
     const chunks: string[] = [];
     for (const day of files) {
-      const raw = (await this.memory_store.read_history(day)).trim();
+      const raw = (await this.memory_store.read_daily(day)).trim();
       if (!raw) continue;
       chunks.push(`### ${day}\n${raw}`);
     }
@@ -238,12 +237,12 @@ export class ContextBuilder {
     const chunks: string[] = [];
     for (const day of history_days) {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) continue;
-      const raw = (await this.memory_store.read_history(day)).trim();
+      const raw = (await this.memory_store.read_daily(day)).trim();
       if (!raw) continue;
       chunks.push(`## ${day}\n${raw}`);
     }
     if (chunks.length === 0) return "";
-    return `# Daily History Context\n${chunks.join("\n\n")}`;
+    return `# Daily Memory Context\nsource: memory.db\n\n${chunks.join("\n\n")}`;
   }
 
   add_tool_result(

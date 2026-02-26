@@ -9,11 +9,12 @@
   - `Agent Loop`: 단일 목표를 최대 턴까지 연속 해결
   - `Task Loop`: 단계형 노드 실행/재개/승인 대기
 - 컨텍스트 빌더:
-  - `templates/*.md`, `agents/*.md`, `memory/MEMORY.md`, `memory/yyyy-mm-dd.md`, `skills/`
+  - `templates/*.md`, `agents/*.md`, `memory/memory.db`, `skills/`
 - 논블로킹 채널 처리:
   - 메시지 그룹핑, 스트리밍, typing, `/stop|/cancel|/중지`, `/help`, `/render`
+  - `/memory`, `/decision`, `/cron`은 오케스트레이터 서비스 직접 처리(에이전트 bypass)
 - 전송 안정화:
-  - 인라인 재시도 + 디스패치 재큐잉(backoff) + DLQ(`runtime/dlq/outbound.jsonl`)
+  - 인라인 재시도 + 디스패치 재큐잉(backoff) + DLQ(`runtime/dlq/dlq.db`)
 - 긴 메시지 처리:
   - 채널별 분할 전송 + 파일 첨부 폴백
 - 승인/제어 자동화:
@@ -119,6 +120,8 @@ node ../dist/main.js
 ### 5) 대시보드
 - 기본 URL: `http://127.0.0.1:3789`
 - `DASHBOARD_ENABLED=true`일 때 활성화
+- 포트 바인딩이 `EACCES` 또는 `EADDRINUSE`로 실패하면 자동으로 가용 포트로 fallback
+- 실제 바인딩 URL은 런타임 로그의 `[runtime] dashboard ...` 라인에서 확인
 
 ### 6) 공통 슬래시 명령
 - `/help`
@@ -139,14 +142,26 @@ node ../dist/main.js
   - AES-256-GCM 기반 secret vault 조회/저장/삭제
 - `/secret encrypt <text>` / `/secret decrypt <cipher>`
   - 즉시 암복호화
+- `/memory status|list|today|longterm|search <query>`
+  - 메모리 상태/목록/당일/장기/검색 (오케스트레이터 직처리)
+- `/decision status|list|set <key> <value>`
+  - 현재 지침/결정사항 조회 및 수정 (오케스트레이터 직처리)
 - `/cron status|list|add|remove`
   - 크론 상태/목록/등록/삭제
+  - 자연어 등록: `N분후`, `N시간후`, `N후 M간격으로 ...`
 
 ## 주요 환경 변수
 ### 채널/폴링
 - `CHANNEL_PROVIDER`
 - `CHANNEL_POLL_INTERVAL_MS`
 - `CHANNEL_READ_LIMIT`
+
+### 대시보드
+- `DASHBOARD_ENABLED`
+- `DASHBOARD_HOST`
+- `DASHBOARD_PORT`
+- `DASHBOARD_ASSETS_DIR`
+- `DASHBOARD_PORT_FALLBACK`
 
 ### 그룹핑/스트리밍
 - `CHANNEL_GROUPING_ENABLED`
@@ -218,32 +233,40 @@ next/
     templates/
     agents/
     memory/
-      MEMORY.md
-      yyyy-mm-dd.md
+      memory.db
     runtime/
       security/
         master.key
-        secrets.json
+        secrets.db
       sessions/
+        sessions.db
       tasks/
-        store.json
-        details/
+        tasks.db
       events/
-        events.jsonl
-        index.json
+        events.db
       decisions/
+        decisions.db
       cron/
+        cron.db
       dlq/
-        outbound.jsonl
+        dlq.db
+      custom-tools/
+        tools.db
       inbound-files/
 ```
 
 ## 트러블슈팅
+- 시작 직후 `another instance is active`가 뜰 때
+  - 동일 Bot Token 조합으로 이미 다른 런타임이 실행 중입니다.
+  - 같은 토큰을 사용하는 중복 프로세스(다른 폴더/이전 세션 포함)를 정리한 뒤 다시 실행하세요.
 - 응답이 없을 때
   - 토큰/채널 ID 확인
   - 로그에서 `channel manager start failed` 확인
+- 대시보드 시작 실패(`listen EACCES`, `EADDRINUSE`)가 뜰 때
+  - 기본 동작은 자동 fallback입니다. 로그의 `[runtime] dashboard http://...` 최종 주소를 사용하세요.
+  - fallback을 끄려면 `DASHBOARD_PORT_FALLBACK=0`
 - 전송 실패가 반복될 때
-  - `runtime/dlq/outbound.jsonl` 확인
+  - `runtime/dlq/dlq.db` 확인
   - 재시도 관련 env 조정
 - 스트리밍이 약할 때
   - `CHANNEL_STREAMING_ENABLED=1`

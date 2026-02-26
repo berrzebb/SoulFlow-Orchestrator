@@ -8,5 +8,6 @@ export type {
   MemoryConsolidateOptions,
   MemoryConsolidateResult,
   MemoryKind,
+  MemoryStoreLike,
 } from "./memory.types.js";
 

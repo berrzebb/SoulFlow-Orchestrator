@@ -61,8 +61,21 @@ export interface ChatChannel {
   get_health(): ChannelHealth;
 }
 
-export interface ChannelRef {
-  provider: ChannelProvider;
-  channelId: string;
-  threadId?: string;
+export interface ChannelRegistryLike {
+  start_all(): Promise<void>;
+  stop_all(): Promise<void>;
+  get_channel(provider: ChannelProvider): ChatChannel | null;
+  list_channels(): Array<{ provider: ChannelProvider }>;
+  send(message: OutboundMessage): Promise<{ ok: boolean; message_id?: string; error?: string }>;
+  read(provider: ChannelProvider, chat_id: string, limit?: number): Promise<InboundMessage[]>;
+  find_latest_agent_mention(
+    provider: ChannelProvider,
+    chat_id: string,
+    agent_alias: string,
+    limit?: number,
+  ): Promise<InboundMessage | null>;
+  set_typing(provider: ChannelProvider, chat_id: string, typing: boolean): Promise<void>;
+  get_typing_state(provider: ChannelProvider, chat_id: string): ChannelTypingState | null;
+  get_health(): ChannelHealth[];
 }
+

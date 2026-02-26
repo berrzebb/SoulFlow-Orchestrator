@@ -1,11 +1,14 @@
-import { readFile, readdir, writeFile } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import type { SessionHistoryEntry, SessionHistoryRange, SessionInfo, SessionMessage, SessionMetadataLine } from "./types.js";
-import { ensure_dir, now_iso, safe_filename } from "../utils/common.js";
+import Database from "better-sqlite3";
+import type { SessionHistoryEntry, SessionHistoryRange, SessionInfo, SessionMessage } from "./types.js";
+import { now_iso } from "../utils/common.js";
 
-async function read_lines(path: string): Promise<string[]> {
-  const raw = await readFile(path, "utf-8");
-  return raw.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+type DatabaseSync = Database.Database;
+
+export interface SessionStoreLike {
+  get_or_create(key: string): Promise<Session>;
+  save(session: Session): Promise<void>;
 }
 
 export class Session {
@@ -89,21 +92,85 @@ export class Session {
   }
 }
 
-export class SessionStore {
+export class SessionStore implements SessionStoreLike {
   private readonly workspace: string;
   private readonly sessions_dir: string;
+  private readonly sqlite_path: string;
   private readonly cache = new Map<string, Session>();
   private readonly initialized: Promise<void>;
 
   constructor(workspace = process.cwd(), sessions_dir_override?: string) {
     this.workspace = workspace;
     this.sessions_dir = sessions_dir_override || join(this.workspace, "sessions");
-    this.initialized = ensure_dir(this.sessions_dir).then(() => undefined);
+    this.sqlite_path = join(this.sessions_dir, "sessions.db");
+    this.initialized = this.ensure_initialized();
   }
 
-  private session_path(key: string): string {
-    const safe_key = safe_filename(key.replace(/:/g, "_"));
-    return join(this.sessions_dir, `${safe_key}.jsonl`);
+  private with_sqlite<T>(run: (db: DatabaseSync) => T): T | null {
+    let db: DatabaseSync | null = null;
+    try {
+      db = new Database(this.sqlite_path);
+      db.exec("PRAGMA foreign_keys=ON;");
+      return run(db);
+    } catch {
+      return null;
+    } finally {
+      try {
+        db?.close();
+      } catch {
+        // no-op
+      }
+    }
+  }
+
+  private async ensure_initialized(): Promise<void> {
+    await mkdir(this.sessions_dir, { recursive: true });
+    this.with_sqlite((db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS sessions (
+          key TEXT PRIMARY KEY,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          metadata_json TEXT NOT NULL,
+          last_consolidated INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE TABLE IF NOT EXISTS session_messages (
+          session_key TEXT NOT NULL,
+          idx INTEGER NOT NULL,
+          role TEXT NOT NULL,
+          content TEXT,
+          timestamp TEXT,
+          message_json TEXT NOT NULL,
+          PRIMARY KEY(session_key, idx),
+          FOREIGN KEY(session_key) REFERENCES sessions(key) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_session_updated_at ON sessions(updated_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_session_messages_key_idx ON session_messages(session_key, idx);
+        CREATE VIRTUAL TABLE IF NOT EXISTS session_messages_fts USING fts5(
+          content,
+          session_key UNINDEXED,
+          idx UNINDEXED,
+          role UNINDEXED,
+          content='session_messages',
+          content_rowid='rowid'
+        );
+        CREATE TRIGGER IF NOT EXISTS session_messages_ai AFTER INSERT ON session_messages BEGIN
+          INSERT INTO session_messages_fts(rowid, content, session_key, idx, role)
+          VALUES (new.rowid, COALESCE(new.content, ''), new.session_key, new.idx, new.role);
+        END;
+        CREATE TRIGGER IF NOT EXISTS session_messages_ad AFTER DELETE ON session_messages BEGIN
+          INSERT INTO session_messages_fts(session_messages_fts, rowid, content, session_key, idx, role)
+          VALUES ('delete', old.rowid, COALESCE(old.content, ''), old.session_key, old.idx, old.role);
+        END;
+        CREATE TRIGGER IF NOT EXISTS session_messages_au AFTER UPDATE ON session_messages BEGIN
+          INSERT INTO session_messages_fts(session_messages_fts, rowid, content, session_key, idx, role)
+          VALUES ('delete', old.rowid, COALESCE(old.content, ''), old.session_key, old.idx, old.role);
+          INSERT INTO session_messages_fts(rowid, content, session_key, idx, role)
+          VALUES (new.rowid, COALESCE(new.content, ''), new.session_key, new.idx, new.role);
+        END;
+      `);
+      return true;
+    });
   }
 
   async get_or_create(key: string): Promise<Session> {
@@ -117,59 +184,99 @@ export class SessionStore {
   }
 
   private async load(key: string): Promise<Session | null> {
-    const path = this.session_path(key);
-    try {
-      await readFile(path, "utf-8");
-    } catch {
-      return null;
-    }
+    const header = this.with_sqlite((db) => db.prepare(`
+      SELECT key, created_at, updated_at, metadata_json, last_consolidated
+      FROM sessions
+      WHERE key = ?
+      LIMIT 1
+    `).get(key) as {
+      key: string;
+      created_at: string;
+      updated_at: string;
+      metadata_json: string;
+      last_consolidated: number;
+    } | undefined) || undefined;
+    if (!header) return null;
 
-    try {
-      const lines = await read_lines(path);
-      const messages: SessionMessage[] = [];
-      let metadata: Record<string, unknown> = {};
-      let created_at = now_iso();
-      let updated_at = created_at;
-      let last_consolidated = 0;
+    const rows = this.with_sqlite((db) => db.prepare(`
+      SELECT message_json
+      FROM session_messages
+      WHERE session_key = ?
+      ORDER BY idx ASC
+    `).all(key) as Array<{ message_json: string }>) || [];
 
-      for (const line of lines) {
-        const row = JSON.parse(line) as Record<string, unknown>;
-        if (row._type === "metadata") {
-          metadata = (row.metadata as Record<string, unknown>) || {};
-          if (typeof row.created_at === "string") created_at = row.created_at;
-          if (typeof row.updated_at === "string") updated_at = row.updated_at;
-          last_consolidated = Number(row.last_consolidated || 0);
-          continue;
-        }
-        messages.push(row as SessionMessage);
+    const messages: SessionMessage[] = [];
+    for (const row of rows) {
+      try {
+        messages.push(JSON.parse(String(row.message_json || "{}")) as SessionMessage);
+      } catch {
+        // skip broken row
       }
-
-      return new Session({
-        key,
-        messages,
-        created_at,
-        updated_at,
-        metadata,
-        last_consolidated,
-      });
-    } catch {
-      return null;
     }
+
+    let metadata: Record<string, unknown> = {};
+    try {
+      metadata = JSON.parse(String(header.metadata_json || "{}")) as Record<string, unknown>;
+    } catch {
+      metadata = {};
+    }
+    return new Session({
+      key: header.key,
+      messages,
+      created_at: header.created_at,
+      updated_at: header.updated_at,
+      metadata,
+      last_consolidated: Number(header.last_consolidated || 0),
+    });
   }
 
   async save(session: Session): Promise<void> {
     await this.initialized;
-    const path = this.session_path(session.key);
-    const metadata_line: SessionMetadataLine = {
-      _type: "metadata",
-      key: session.key,
-      created_at: session.created_at,
-      updated_at: session.updated_at,
-      metadata: session.metadata,
-      last_consolidated: session.last_consolidated,
-    };
-    const lines = [JSON.stringify(metadata_line), ...session.messages.map((m) => JSON.stringify(m))];
-    await writeFile(path, `${lines.join("\n")}\n`, "utf-8");
+    this.with_sqlite((db) => {
+      db.exec("BEGIN IMMEDIATE");
+      try {
+        db.prepare(`
+          INSERT INTO sessions (key, created_at, updated_at, metadata_json, last_consolidated)
+          VALUES (?, ?, ?, ?, ?)
+          ON CONFLICT(key) DO UPDATE SET
+            created_at = excluded.created_at,
+            updated_at = excluded.updated_at,
+            metadata_json = excluded.metadata_json,
+            last_consolidated = excluded.last_consolidated
+        `).run(
+          session.key,
+          session.created_at,
+          session.updated_at,
+          JSON.stringify(session.metadata || {}),
+          Number(session.last_consolidated || 0),
+        );
+        db.prepare("DELETE FROM session_messages WHERE session_key = ?").run(session.key);
+        const insert = db.prepare(`
+          INSERT INTO session_messages (session_key, idx, role, content, timestamp, message_json)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `);
+        for (let i = 0; i < session.messages.length; i += 1) {
+          const row = session.messages[i];
+          insert.run(
+            session.key,
+            i,
+            String(row.role || ""),
+            typeof row.content === "string" ? row.content : "",
+            typeof row.timestamp === "string" ? row.timestamp : "",
+            JSON.stringify(row),
+          );
+        }
+        db.exec("COMMIT");
+      } catch (error) {
+        try {
+          db.exec("ROLLBACK");
+        } catch {
+          // no-op
+        }
+        throw error;
+      }
+      return true;
+    });
     this.cache.set(session.key, session);
   }
 
@@ -187,27 +294,17 @@ export class SessionStore {
 
   async list_sessions(): Promise<SessionInfo[]> {
     await this.initialized;
-    const files = (await readdir(this.sessions_dir)).filter((f) => f.endsWith(".jsonl"));
-    const out: SessionInfo[] = [];
-    for (const name of files) {
-      const path = join(this.sessions_dir, name);
-      try {
-        const lines = await read_lines(path);
-        if (lines.length === 0) continue;
-        const first = JSON.parse(lines[0]) as Record<string, unknown>;
-        if (first._type !== "metadata") continue;
-        const key = typeof first.key === "string" ? first.key : name.replace(/\.jsonl$/i, "").replace("_", ":");
-        out.push({
-          key,
-          created_at: typeof first.created_at === "string" ? first.created_at : undefined,
-          updated_at: typeof first.updated_at === "string" ? first.updated_at : undefined,
-          path,
-        });
-      } catch {
-        // skip broken session files
-      }
-    }
-    return out.sort((a, b) => String(b.updated_at || "").localeCompare(String(a.updated_at || "")));
+    const rows = this.with_sqlite((db) => db.prepare(`
+      SELECT key, created_at, updated_at
+      FROM sessions
+      ORDER BY updated_at DESC
+    `).all() as Array<{ key: string; created_at: string; updated_at: string }>) || [];
+    return rows.map((row) => ({
+      key: String(row.key || ""),
+      created_at: String(row.created_at || ""),
+      updated_at: String(row.updated_at || ""),
+      path: `sqlite://sessions/${encodeURIComponent(String(row.key || ""))}`,
+    }));
   }
 
   async get_history_range(key: string, start_offset: number, end_offset: number): Promise<SessionHistoryRange> {

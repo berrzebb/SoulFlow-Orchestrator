@@ -1,16 +1,20 @@
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import Database from "better-sqlite3";
 import { redact_sensitive_text } from "./sensitive.js";
+
+type DatabaseSync = Database.Database;
 
 type SecretEntry = {
   ciphertext: string;
   updated_at: string;
 };
 
-type SecretFile = {
-  version: number;
-  secrets: Record<string, SecretEntry>;
+type SecretRow = {
+  name: string;
+  ciphertext: string;
+  updated_at: string;
 };
 
 export type SecretResolveReport = {
@@ -19,8 +23,27 @@ export type SecretResolveReport = {
   invalid_ciphertexts: string[];
 };
 
+export interface SecretVaultLike {
+  get_paths(): { root_dir: string; key_path: string; store_path: string };
+  ensure_ready(): Promise<void>;
+  get_or_create_key(): Promise<Buffer>;
+  encrypt_text(plaintext: string, aad?: string): Promise<string>;
+  decrypt_text(token: string, aad?: string): Promise<string>;
+  list_names(): Promise<string[]>;
+  put_secret(nameRaw: string, plaintext: string): Promise<{ ok: boolean; name: string }>;
+  remove_secret(nameRaw: string): Promise<boolean>;
+  get_secret_cipher(nameRaw: string): Promise<string | null>;
+  reveal_secret(nameRaw: string): Promise<string | null>;
+  resolve_placeholders(input: string): Promise<string>;
+  resolve_placeholders_with_report(input: string): Promise<SecretResolveReport>;
+  resolve_inline_secrets(input: string): Promise<string>;
+  resolve_inline_secrets_with_report(input: string): Promise<SecretResolveReport>;
+  inspect_secret_references(input: string): Promise<{ missing_keys: string[]; invalid_ciphertexts: string[] }>;
+  mask_known_secrets(input: string): Promise<string>;
+}
+
 const KEY_FILE = "master.key";
-const STORE_FILE = "secrets.json";
+const STORE_FILE = "secrets.db";
 const CIPHERTEXT_TOKEN_RE = /\bsv1\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g;
 
 function b64url_encode(buffer: Buffer): string {
@@ -61,16 +84,13 @@ function is_valid_ciphertext_shape(token: string): boolean {
   }
 }
 
-export class SecretVaultService {
-  private readonly workspace: string;
+export class SecretVaultService implements SecretVaultLike {
   private readonly root_dir: string;
   private readonly key_path: string;
   private readonly store_path: string;
   private key_cache: Buffer | null = null;
-  private write_queue: Promise<void> = Promise.resolve();
 
   constructor(workspace: string) {
-    this.workspace = workspace;
     this.root_dir = join(workspace, "runtime", "security");
     this.key_path = join(this.root_dir, KEY_FILE);
     this.store_path = join(this.root_dir, STORE_FILE);
@@ -84,19 +104,42 @@ export class SecretVaultService {
     };
   }
 
+  private with_sqlite<T>(run: (db: DatabaseSync) => T): T | null {
+    let db: DatabaseSync | null = null;
+    try {
+      db = new Database(this.store_path);
+      return run(db);
+    } catch {
+      return null;
+    } finally {
+      try {
+        db?.close();
+      } catch {
+        // no-op
+      }
+    }
+  }
+
+  private ensure_store_db(): void {
+    this.with_sqlite((db) => {
+      db.exec(`
+        PRAGMA journal_mode=WAL;
+        CREATE TABLE IF NOT EXISTS secrets (
+          name TEXT PRIMARY KEY,
+          ciphertext TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_secrets_updated_at
+          ON secrets(updated_at DESC);
+      `);
+      return true;
+    });
+  }
+
   async ensure_ready(): Promise<void> {
     await mkdir(this.root_dir, { recursive: true });
     await this.get_or_create_key();
-    await this.ensure_store_file();
-  }
-
-  private async ensure_store_file(): Promise<void> {
-    try {
-      await readFile(this.store_path, "utf-8");
-    } catch {
-      const initial: SecretFile = { version: 1, secrets: {} };
-      await writeFile(this.store_path, JSON.stringify(initial, null, 2), "utf-8");
-    }
+    this.ensure_store_db();
   }
 
   async get_or_create_key(): Promise<Buffer> {
@@ -142,63 +185,76 @@ export class SecretVaultService {
     return plain.toString("utf-8");
   }
 
-  private async read_store(): Promise<SecretFile> {
+  private async read_store_map(): Promise<Record<string, SecretEntry>> {
     await this.ensure_ready();
-    try {
-      const raw = await readFile(this.store_path, "utf-8");
-      const parsed = JSON.parse(raw) as SecretFile;
-      const secrets = (parsed.secrets && typeof parsed.secrets === "object")
-        ? (parsed.secrets as Record<string, SecretEntry>)
-        : {};
-      return {
-        version: Number(parsed.version || 1),
-        secrets,
+    const rows = this.with_sqlite((db) => db.prepare(`
+      SELECT name, ciphertext, updated_at
+      FROM secrets
+      ORDER BY name ASC
+    `).all() as SecretRow[]) || [];
+    const out: Record<string, SecretEntry> = {};
+    for (const row of rows) {
+      const name = normalize_secret_name(row.name);
+      if (!name) continue;
+      out[name] = {
+        ciphertext: String(row.ciphertext || ""),
+        updated_at: String(row.updated_at || now_iso()),
       };
-    } catch {
-      return { version: 1, secrets: {} };
     }
-  }
-
-  private async write_store(next: SecretFile): Promise<void> {
-    this.write_queue = this.write_queue.then(async () => {
-      await writeFile(this.store_path, JSON.stringify(next, null, 2), "utf-8");
-    });
-    await this.write_queue;
+    return out;
   }
 
   async list_names(): Promise<string[]> {
-    const store = await this.read_store();
-    return Object.keys(store.secrets).sort((a, b) => a.localeCompare(b));
+    await this.ensure_ready();
+    const rows = this.with_sqlite((db) => db.prepare(`
+      SELECT name
+      FROM secrets
+      ORDER BY name ASC
+    `).all() as Array<{ name: string }>) || [];
+    return rows
+      .map((row) => normalize_secret_name(row.name))
+      .filter(Boolean);
   }
 
   async put_secret(nameRaw: string, plaintext: string): Promise<{ ok: boolean; name: string }> {
     const name = normalize_secret_name(nameRaw);
     if (!name) return { ok: false, name: "" };
-    const store = await this.read_store();
+    await this.ensure_ready();
     const ciphertext = await this.encrypt_text(plaintext, `secret:${name}`);
-    store.secrets[name] = {
-      ciphertext,
-      updated_at: now_iso(),
-    };
-    await this.write_store(store);
-    return { ok: true, name };
+    const ok = this.with_sqlite((db) => {
+      db.prepare(`
+        INSERT INTO secrets(name, ciphertext, updated_at)
+        VALUES (?, ?, ?)
+        ON CONFLICT(name) DO UPDATE SET
+          ciphertext = excluded.ciphertext,
+          updated_at = excluded.updated_at
+      `).run(name, ciphertext, now_iso());
+      return true;
+    });
+    return { ok: Boolean(ok), name };
   }
 
   async remove_secret(nameRaw: string): Promise<boolean> {
     const name = normalize_secret_name(nameRaw);
     if (!name) return false;
-    const store = await this.read_store();
-    if (!store.secrets[name]) return false;
-    delete store.secrets[name];
-    await this.write_store(store);
-    return true;
+    await this.ensure_ready();
+    const removed = this.with_sqlite((db) => {
+      const r = db.prepare("DELETE FROM secrets WHERE name = ?").run(name);
+      return Number(r.changes || 0) > 0;
+    });
+    return Boolean(removed);
   }
 
   async get_secret_cipher(nameRaw: string): Promise<string | null> {
     const name = normalize_secret_name(nameRaw);
     if (!name) return null;
-    const store = await this.read_store();
-    const row = store.secrets[name];
+    await this.ensure_ready();
+    const row = this.with_sqlite((db) => db.prepare(`
+      SELECT ciphertext
+      FROM secrets
+      WHERE name = ?
+      LIMIT 1
+    `).get(name) as { ciphertext: string } | undefined) || null;
     if (!row) return null;
     return String(row.ciphertext || "").trim() || null;
   }
@@ -206,11 +262,10 @@ export class SecretVaultService {
   async reveal_secret(nameRaw: string): Promise<string | null> {
     const name = normalize_secret_name(nameRaw);
     if (!name) return null;
-    const store = await this.read_store();
-    const row = store.secrets[name];
-    if (!row?.ciphertext) return null;
+    const cipher = await this.get_secret_cipher(name);
+    if (!cipher) return null;
     try {
-      return await this.decrypt_text(row.ciphertext, `secret:${name}`);
+      return await this.decrypt_text(cipher, `secret:${name}`);
     } catch {
       return null;
     }
@@ -230,7 +285,7 @@ export class SecretVaultService {
         invalid_ciphertexts: [],
       };
     }
-    const store = await this.read_store();
+    const store = await this.read_store_map();
     const cache = new Map<string, string>();
     const missing = new Set<string>();
     const replaced = text.replace(/\{\{\s*secret:([a-zA-Z0-9_.-]+)\s*\}\}/g, (_m, nameRaw) => {
@@ -241,7 +296,7 @@ export class SecretVaultService {
       }
       const cached = cache.get(name);
       if (cached !== undefined) return cached;
-      const row = store.secrets[name];
+      const row = store[name];
       if (!row?.ciphertext) {
         cache.set(name, "");
         missing.add(name);
@@ -308,7 +363,7 @@ export class SecretVaultService {
     if (!text) return { missing_keys: [], invalid_ciphertexts: [] };
     const missing_keys = new Set<string>();
     const invalid_ciphertexts = new Set<string>();
-    const store = await this.read_store();
+    const store = await this.read_store_map();
 
     const placeholder_re = /\{\{\s*secret:([a-zA-Z0-9_.-]+)\s*\}\}/g;
     let pm: RegExpExecArray | null = null;
@@ -316,7 +371,7 @@ export class SecretVaultService {
       pm = placeholder_re.exec(text);
       if (!pm) break;
       const name = normalize_secret_name(pm[1]);
-      if (!name || !store.secrets[name]?.ciphertext) {
+      if (!name || !store[name]?.ciphertext) {
         missing_keys.add(name || String(pm[1] || "").trim());
       }
       if (pm[0].length <= 0) placeholder_re.lastIndex += 1;
@@ -335,9 +390,9 @@ export class SecretVaultService {
   async mask_known_secrets(input: string): Promise<string> {
     const text = String(input || "");
     if (!text) return "";
-    const store = await this.read_store();
+    const store = await this.read_store_map();
     let out = text;
-    for (const [name, row] of Object.entries(store.secrets)) {
+    for (const [name, row] of Object.entries(store)) {
       const cipher = String(row?.ciphertext || "").trim();
       if (!cipher) continue;
       const plain = await this.decrypt_text(cipher, `secret:${name}`).catch(() => "");
@@ -352,3 +407,4 @@ export class SecretVaultService {
 function escape_regexp(value: string): string {
   return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
+

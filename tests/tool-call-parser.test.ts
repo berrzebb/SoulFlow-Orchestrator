@@ -64,3 +64,15 @@ test("parse_tool_calls_from_text ignores non-json text", () => {
   assert.equal(calls.length, 0);
 });
 
+test("parse_tool_calls_from_text extracts embedded tool_calls JSON from mixed text", () => {
+  const raw = [
+    "확인 중입니다.",
+    "{\"tool_calls\":[{\"id\":\"call_3\",\"name\":\"message\",\"arguments\":{\"phase\":\"done\",\"content\":\"ok\"}}]}",
+    "}",
+    "진행합니다.",
+  ].join("\n");
+  const calls = parse_tool_calls_from_text(raw);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].name, "message");
+  assert.equal(String(calls[0].arguments.phase), "done");
+});

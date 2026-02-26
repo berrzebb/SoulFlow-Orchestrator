@@ -2,6 +2,7 @@ import type { AgentLoopState, TaskState } from "../contracts.js";
 import type { AgentLoopRunOptions, AgentLoopRunResult, TaskLoopRunOptions, TaskLoopRunResult } from "./loop.types.js";
 import type { TaskStore } from "./task-store.js";
 import { parse_tool_calls_from_text } from "./tool-call-parser.js";
+import { ConsecutiveToolCallGuard, type ToolCallGuard } from "./tool-call-guard.js";
 
 const SEOUL_TZ = "Asia/Seoul";
 
@@ -106,6 +107,7 @@ export class AgentLoopStore {
 
     let current_message = options.current_message || options.objective;
     let final_content: string | null = null;
+    const tool_call_guard: ToolCallGuard = new ConsecutiveToolCallGuard(2);
 
     while (state.currentTurn < state.maxTurns && state.checkShouldContinue) {
       state.currentTurn += 1;
@@ -138,6 +140,17 @@ export class AgentLoopStore {
       const effective_tool_calls = response.has_tool_calls ? response.tool_calls : implicit_tool_calls;
 
       if (effective_tool_calls.length > 0) {
+        const guard = tool_call_guard.observe(effective_tool_calls);
+        if (guard.blocked) {
+          state.status = "failed";
+          state.terminationReason = guard.reason || "tool_calls_guard_blocked";
+          state.checkShouldContinue = false;
+          final_content = [
+            "동일한 도구 호출이 반복되어 작업을 중단했습니다.",
+            "요청을 더 구체화하거나 필요한 도구/입력을 명시한 뒤 다시 시도해주세요.",
+          ].join("\n");
+          break;
+        }
         if (!options.on_tool_calls) {
           state.status = "failed";
           state.terminationReason = "tool_calls_requested_but_handler_missing";
@@ -153,6 +166,7 @@ export class AgentLoopStore {
         this.loops.set(state.loopId, { ...state });
         continue;
       }
+      tool_call_guard.reset();
 
       const should_continue = options.check_should_continue
         ? Boolean(await options.check_should_continue({ state, response, last_content: final_content }))

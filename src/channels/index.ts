@@ -2,32 +2,13 @@ import type { InboundMessage, OutboundMessage } from "../bus/types.js";
 import { DiscordChannel } from "./discord.channel.js";
 import { SlackChannel } from "./slack.channel.js";
 import { TelegramChannel } from "./telegram.channel.js";
-import type { ChannelHealth, ChannelProvider, ChannelRef, ChannelTypingState, ChatChannel } from "./types.js";
-
-async function sleep(ms: number): Promise<void> {
-  const delay = Math.max(0, Number(ms || 0));
-  if (delay <= 0) return;
-  await new Promise<void>((resolve) => setTimeout(resolve, delay));
-}
-
-function is_retryable_send_error(error: string): boolean {
-  const raw = String(error || "").trim().toLowerCase();
-  if (!raw) return true;
-  if (raw.includes("invalid_auth")) return false;
-  if (raw.includes("not_authed")) return false;
-  if (raw.includes("channel_not_found")) return false;
-  if (raw.includes("chat_id_required")) return false;
-  if (raw.includes("bot_token_missing")) return false;
-  if (raw.includes("permission_denied")) return false;
-  if (raw.includes("invalid_arguments")) return false;
-  return true;
-}
+import type { ChannelHealth, ChannelProvider, ChannelRegistryLike, ChannelTypingState, ChatChannel } from "./types.js";
 
 export type {
   ChannelConfig,
   ChannelHealth,
   ChannelProvider,
-  ChannelRef,
+  ChannelRegistryLike,
   ChannelTypingState,
   ChatChannel,
 } from "./types.js";
@@ -36,19 +17,11 @@ export { SlackChannel } from "./slack.channel.js";
 export { DiscordChannel } from "./discord.channel.js";
 export { TelegramChannel } from "./telegram.channel.js";
 export { ChannelManager } from "./manager.js";
+export { SqliteDispatchDlqStore, type DispatchDlqStoreLike, type DispatchDlqRecord } from "./dlq-store.js";
 export type { ChannelManagerStatus } from "./manager.js";
 
-export class ChannelRegistry {
-  private readonly refs = new Map<string, ChannelRef>();
+export class ChannelRegistry implements ChannelRegistryLike {
   private readonly channels = new Map<ChannelProvider, ChatChannel>();
-
-  set(key: string, ref: ChannelRef): void {
-    this.refs.set(key, ref);
-  }
-
-  get(key: string): ChannelRef | null {
-    return this.refs.get(key) || null;
-  }
 
   register(channel: ChatChannel): void {
     this.channels.set(channel.provider, channel);
@@ -74,19 +47,11 @@ export class ChannelRegistry {
     }
   }
 
-  async send(provider: ChannelProvider, message: OutboundMessage): Promise<{ ok: boolean; message_id?: string; error?: string }> {
+  async send(message: OutboundMessage): Promise<{ ok: boolean; message_id?: string; error?: string }> {
+    const provider = String(message.provider || message.channel || "").toLowerCase() as ChannelProvider;
     const channel = this.channels.get(provider);
     if (!channel) return { ok: false, error: `channel_not_registered:${provider}` };
-    const retries = Math.max(0, Number(process.env.CHANNEL_SEND_INLINE_RETRIES || 1));
-    const base_delay = Math.max(100, Number(process.env.CHANNEL_SEND_INLINE_RETRY_MS || 350));
-    let last = await channel.send(message);
-    if (last.ok || retries <= 0 || !is_retryable_send_error(String(last.error || ""))) return last;
-    for (let attempt = 1; attempt <= retries; attempt += 1) {
-      await sleep(base_delay * attempt);
-      last = await channel.send(message);
-      if (last.ok || !is_retryable_send_error(String(last.error || ""))) return last;
-    }
-    return last;
+    return channel.send(message);
   }
 
   async read(provider: ChannelProvider, chat_id: string, limit?: number): Promise<InboundMessage[]> {
@@ -113,61 +78,6 @@ export class ChannelRegistry {
     return null;
   }
 
-  async reply_as_agent(
-    provider: ChannelProvider,
-    chat_id: string,
-    agent_alias: string,
-    content: string,
-    options?: {
-      mention_sender?: boolean;
-      sender_alias?: string;
-      limit?: number;
-      media?: OutboundMessage["media"];
-      metadata?: Record<string, unknown>;
-    },
-  ): Promise<{ ok: boolean; message_id?: string; error?: string }> {
-    const channel = this.channels.get(provider);
-    if (!channel) return { ok: false, error: `channel_not_registered:${provider}` };
-    const trigger = await this.find_latest_agent_mention(provider, chat_id, agent_alias, options?.limit || 50);
-    const sender_alias = options?.sender_alias || (trigger?.sender_id || "");
-    const mention_prefix = options?.mention_sender && sender_alias ? `@${sender_alias} ` : "";
-    const message: OutboundMessage = {
-      id: `${provider}-${Date.now()}`,
-      provider,
-      channel: provider,
-      sender_id: agent_alias,
-      chat_id,
-      content: `${mention_prefix}${content}`.trim(),
-      at: new Date().toISOString(),
-      reply_to: this.resolve_reply_to(provider, trigger),
-      thread_id: trigger?.thread_id,
-      media: options?.media || [],
-      metadata: {
-        kind: "agent_reply",
-        agent_alias,
-        trigger_message_id: String(trigger?.metadata?.message_id || trigger?.id || ""),
-        ...(options?.metadata || {}),
-      },
-    };
-    return channel.send(message);
-  }
-
-  private resolve_reply_to(provider: ChannelProvider, trigger: InboundMessage | null): string {
-    if (!trigger) return "";
-    const meta = (trigger.metadata || {}) as Record<string, unknown>;
-    if (provider === "slack") {
-      const thread_ts = String(trigger.thread_id || "").trim();
-      if (thread_ts) return thread_ts;
-      return String(meta.message_id || trigger.id || "").trim();
-    }
-    if (provider === "telegram") {
-      const telegram_message_id = String(meta.telegram_message_id || "").trim();
-      if (telegram_message_id) return telegram_message_id;
-      return String(meta.message_id || trigger.id || "").trim();
-    }
-    return String(meta.message_id || trigger.id || "").trim();
-  }
-
   async set_typing(provider: ChannelProvider, chat_id: string, typing: boolean): Promise<void> {
     const channel = this.channels.get(provider);
     if (!channel) return;
@@ -185,9 +95,8 @@ export class ChannelRegistry {
   }
 }
 
-export function create_default_channels(provider_hint?: string): ChannelRegistry {
+export function create_default_channels(): ChannelRegistry {
   return create_channels_from_config({
-    provider_hint,
     channels: {
       slack: {
         enabled: true,
@@ -211,7 +120,6 @@ export function create_default_channels(provider_hint?: string): ChannelRegistry
 }
 
 export function create_channels_from_config(args: {
-  provider_hint?: string;
   channels: {
     slack: { enabled: boolean; bot_token: string; default_channel: string };
     discord: { enabled: boolean; bot_token: string; default_channel: string; api_base: string };
@@ -219,7 +127,6 @@ export function create_channels_from_config(args: {
   };
 }): ChannelRegistry {
   const registry = new ChannelRegistry();
-  const hint = String(args.provider_hint || process.env.CHANNEL_PROVIDER || "").toLowerCase();
   const slack = new SlackChannel({
     bot_token: args.channels.slack.bot_token,
     default_channel: args.channels.slack.default_channel,
@@ -240,11 +147,6 @@ export function create_channels_from_config(args: {
     if (provider === "discord" && args.channels.discord.enabled) registry.register(discord);
     if (provider === "telegram" && args.channels.telegram.enabled) registry.register(telegram);
   };
-  // Multi-channel is the default behavior.
-  // provider_hint is kept for compatibility but no longer limits channel registration.
-  if (hint === "slack" || hint === "discord" || hint === "telegram") {
-    register_if_enabled(hint);
-  }
   register_if_enabled("slack");
   register_if_enabled("discord");
   register_if_enabled("telegram");

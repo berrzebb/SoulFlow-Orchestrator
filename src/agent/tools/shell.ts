@@ -88,6 +88,7 @@ export class ExecTool extends Tool {
     const timeout_seconds = Math.max(1, Number(params.timeout_seconds || this.timeout_seconds));
     const approved = params.__approved === true || String(params.__approved || "").trim().toLowerCase() === "true";
     const guard = this._guard_command(command, cwd);
+    const approved_outside_workspace = Boolean(approved && guard && guard.kind === "approval_required");
     if (guard && !(guard.kind === "approval_required" && approved)) {
       const safe_command = await this.secret_vault.mask_known_secrets(command);
       const compact_command = redact_sensitive_text(safe_command).text;
@@ -110,6 +111,7 @@ export class ExecTool extends Tool {
         timeout_ms: timeout_seconds * 1000,
         max_buffer_bytes: 1024 * 1024 * 8,
         signal: context?.signal,
+        force_native_shell: approved_outside_workspace,
       });
       const output_raw = [stdout || "", stderr ? `STDERR:\n${stderr}` : ""].filter(Boolean).join("\n");
       const output_masked = await this.secret_vault.mask_known_secrets(output_raw);

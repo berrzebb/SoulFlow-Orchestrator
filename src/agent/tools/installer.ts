@@ -1,17 +1,7 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import type { JsonSchema } from "./types.js";
 import type { DynamicToolManifestEntry } from "./dynamic.js";
-import { file_exists } from "../../utils/common.js";
-
-type DynamicToolManifest = {
-  version: number;
-  tools: DynamicToolManifestEntry[];
-};
-
-function default_manifest(): DynamicToolManifest {
-  return { version: 1, tools: [] };
-}
+import { SqliteDynamicToolStore, type DynamicToolStoreLike } from "./store.js";
 
 export type InstallShellToolInput = {
   name: string;
@@ -53,35 +43,18 @@ function has_write_risk(command_template: string): boolean {
 
 export class ToolInstallerService {
   readonly workspace: string;
-  readonly manifest_path: string;
+  readonly store_path: string;
+  readonly store: DynamicToolStoreLike;
 
-  constructor(workspace = process.cwd(), manifest_path_override?: string) {
+  constructor(workspace = process.cwd(), store_path_override?: string, store_override?: DynamicToolStoreLike) {
     this.workspace = workspace;
-    this.manifest_path = manifest_path_override || join(workspace, "runtime", "custom-tools", "manifest.json");
-  }
-
-  private async load_manifest(): Promise<DynamicToolManifest> {
-    if (!(await file_exists(this.manifest_path))) return default_manifest();
-    try {
-      const raw = await readFile(this.manifest_path, "utf-8");
-      const parsed = JSON.parse(raw) as DynamicToolManifest;
-      return {
-        version: Number(parsed.version || 1),
-        tools: Array.isArray(parsed.tools) ? parsed.tools : [],
-      };
-    } catch {
-      return default_manifest();
-    }
-  }
-
-  private async save_manifest(manifest: DynamicToolManifest): Promise<void> {
-    await mkdir(dirname(this.manifest_path), { recursive: true });
-    await writeFile(this.manifest_path, JSON.stringify(manifest, null, 2), "utf-8");
+    this.store_path = store_path_override || join(workspace, "runtime", "custom-tools", "tools.db");
+    this.store = store_override || new SqliteDynamicToolStore(workspace, this.store_path);
   }
 
   async install_shell_tool(input: InstallShellToolInput): Promise<{ installed: boolean; reason?: string }> {
-    const manifest = await this.load_manifest();
-    const exists = manifest.tools.find((t) => t.name === input.name);
+    const existing = this.store.list_tools();
+    const exists = existing.find((t) => t.name === input.name);
     if (exists && !input.overwrite) return { installed: false, reason: "tool_already_exists" };
     const entry: DynamicToolManifestEntry = {
       name: input.name,
@@ -93,23 +66,15 @@ export class ToolInstallerService {
       working_dir: input.working_dir,
       requires_approval: input.requires_approval === true || has_write_risk(input.command_template),
     };
-    manifest.tools = manifest.tools.filter((t) => t.name !== input.name);
-    manifest.tools.push(entry);
-    await this.save_manifest(manifest);
-    return { installed: true };
+    const installed = this.store.upsert_tool(entry);
+    return { installed };
   }
 
   async uninstall_tool(name: string): Promise<boolean> {
-    const manifest = await this.load_manifest();
-    const before = manifest.tools.length;
-    manifest.tools = manifest.tools.filter((t) => t.name !== name);
-    if (manifest.tools.length === before) return false;
-    await this.save_manifest(manifest);
-    return true;
+    return this.store.remove_tool(name);
   }
 
   async list_tools(): Promise<DynamicToolManifestEntry[]> {
-    const manifest = await this.load_manifest();
-    return manifest.tools;
+    return this.store.list_tools();
   }
 }

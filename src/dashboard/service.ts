@@ -1,8 +1,9 @@
 import { createReadStream, existsSync, watch, type FSWatcher } from "node:fs";
 import { createServer, type IncomingMessage, type ServerResponse, type Server } from "node:http";
+import type { AddressInfo } from "node:net";
 import { dirname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { AgentDomain } from "../agent/index.js";
+import type { AgentInspectorLike } from "../agent/inspector.types.js";
 import type { MessageBus } from "../bus/index.js";
 import type { ChannelManager } from "../channels/index.js";
 import type { DecisionService } from "../decision/index.js";
@@ -16,7 +17,7 @@ type DashboardOptions = {
   port: number;
   workspace: string;
   assets_dir?: string;
-  agent: AgentDomain;
+  agent: AgentInspectorLike;
   bus: MessageBus;
   channels: ChannelManager;
   heartbeat: HeartbeatService;
@@ -57,6 +58,7 @@ export class DashboardService {
   private readonly root_dir: string;
   private server: Server | null = null;
   private watcher: FSWatcher | null = null;
+  private bound_port: number | null = null;
   private readonly sse_clients = new Map<string, SseClient>();
 
   constructor(options: DashboardOptions) {
@@ -69,13 +71,19 @@ export class DashboardService {
     this.server = createServer((req, res) => {
       void this.handle(req, res);
     });
-    await new Promise<void>((resolve, reject) => {
-      this.server!.once("error", reject);
-      this.server!.listen(this.options.port, this.options.host, () => {
-        this.server!.off("error", reject);
-        resolve();
-      });
-    });
+    try {
+      await this.listen_on_port(this.options.port);
+    } catch (error) {
+      const code = String((error as { code?: string } | null)?.code || "");
+      const allow_fallback = String(process.env.DASHBOARD_PORT_FALLBACK || "1").trim() !== "0";
+      if (!allow_fallback || (code !== "EACCES" && code !== "EADDRINUSE")) {
+        this.server = null;
+        throw error;
+      }
+      // eslint-disable-next-line no-console
+      console.warn(`[dashboard] listen failed ${this.options.host}:${this.options.port} code=${code}; retry on ephemeral port`);
+      await this.listen_on_port(0);
+    }
     this.start_watcher();
   }
 
@@ -88,14 +96,47 @@ export class DashboardService {
     if (!this.server) return;
     const s = this.server;
     this.server = null;
+    this.bound_port = null;
     await new Promise<void>((resolve) => s.close(() => resolve()));
+  }
+
+  get_url(): string {
+    const port = this.bound_port ?? this.options.port;
+    return `http://${this.options.host}:${port}`;
+  }
+
+  private async listen_on_port(port: number): Promise<void> {
+    await new Promise<void>((resolve, reject) => {
+      this.server!.once("error", reject);
+      this.server!.listen(port, this.options.host, () => {
+        this.server!.off("error", reject);
+        resolve();
+      });
+    });
+    const addr = this.server?.address();
+    if (addr && typeof addr === "object") {
+      this.bound_port = Number((addr as AddressInfo).port || 0) || port;
+    } else {
+      this.bound_port = port;
+    }
   }
 
   private start_watcher(): void {
     if (this.watcher || !existsSync(this.root_dir)) return;
-    this.watcher = watch(this.root_dir, { recursive: true }, (_event, file) => {
-      this.broadcast_reload(file ? String(file) : "");
-    });
+    try {
+      this.watcher = watch(this.root_dir, { recursive: true }, (_event, file) => {
+        this.broadcast_reload(file ? String(file) : "");
+      });
+      this.watcher.on("error", (error) => {
+        // eslint-disable-next-line no-console
+        console.warn(`[dashboard] file watcher disabled: ${error instanceof Error ? error.message : String(error)}`);
+        this.stop_watcher();
+      });
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.warn(`[dashboard] file watcher unavailable: ${error instanceof Error ? error.message : String(error)}`);
+      this.watcher = null;
+    }
   }
 
   private stop_watcher(): void {
@@ -116,8 +157,8 @@ export class DashboardService {
     const channel_status = this.options.channels.get_status();
     const ops = this.options.ops.status();
     const heartbeat = this.options.heartbeat.status();
-    const loop_tasks = this.options.agent.loop.list_tasks();
-    const stored_tasks = await this.options.agent.task_store.list();
+    const loop_tasks = this.options.agent.list_runtime_tasks();
+    const stored_tasks = await this.options.agent.list_stored_tasks();
     const task_map = new Map<string, (typeof stored_tasks)[number]>();
     for (const row of stored_tasks) task_map.set(row.taskId, row);
     for (const row of loop_tasks) task_map.set(row.taskId, row);
@@ -133,7 +174,7 @@ export class DashboardService {
         updatedAt: String(memory.__updated_at_seoul || workflow.at || ""),
       };
     });
-    const subagents = this.options.agent.subagents.list();
+    const subagents = this.options.agent.list_subagents();
     const messages = this.options.bus.peek(40).slice(0, 20).map((m) => ({
       sender_id: m.sender_id,
       content: String(m.content || "").slice(0, 200),
@@ -235,7 +276,8 @@ export class DashboardService {
   }
 
   private async handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
-    const url = new URL(req.url || "/", `http://${this.options.host}:${this.options.port}`);
+    const base_port = this.bound_port ?? this.options.port;
+    const url = new URL(req.url || "/", `http://${this.options.host}:${base_port}`);
     if (url.pathname === "/api/state") {
       set_no_cache(res);
       const state = await this.build_state();
