@@ -32,8 +32,8 @@ const TOKEN_PATTERNS: Array<{ kind: SensitiveKind; re: RegExp }> = [
   { kind: "token", re: /\bsk-ant-[A-Za-z0-9_-]{20,}\b/g },
   { kind: "token", re: /\bgh[pousr]_[A-Za-z0-9_]{20,}\b/g },
   { kind: "token", re: /\bxox[baprs]-[A-Za-z0-9-]{10,}\b/g },
-  { kind: "token", re: /\bBearer\s+[A-Za-z0-9._~+\/=-]{16,}\b/gi },
-  { kind: "token", re: /\bBasic\s+[A-Za-z0-9+\/=]{16,}\b/gi },
+  { kind: "token", re: /\bBearer\s+[A-Za-z0-9._~+/=-]{16,}\b/gi },
+  { kind: "token", re: /\bBasic\s+[A-Za-z0-9+/=]{16,}\b/gi },
   { kind: "token", re: /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9._-]{8,}\.[A-Za-z0-9._-]{8,}\b/g },
 ];
 

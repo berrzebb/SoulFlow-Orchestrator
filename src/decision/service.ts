@@ -14,7 +14,7 @@ function normalize_space(value: string): string {
 }
 
 function normalize_key(value: string): string {
-  return normalize_space(value).toLowerCase().replace(/[\s\-]+/g, "_");
+  return normalize_space(value).toLowerCase().replace(/[\s-]+/g, "_");
 }
 
 function normalize_value(value: string): string {

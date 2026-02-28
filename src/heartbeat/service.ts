@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
+import type { ServiceLike } from "../runtime/service.types.js";
 import {
   DEFAULT_HEARTBEAT_INTERVAL_S,
   HEARTBEAT_OK_TOKEN,
@@ -24,7 +25,8 @@ export function is_heartbeat_empty(content: string | null): boolean {
   return true;
 }
 
-export class HeartbeatService {
+export class HeartbeatService implements ServiceLike {
+  readonly name = "heartbeat";
   readonly workspace: string;
   readonly heartbeat_file: string;
   readonly on_heartbeat: OnHeartbeat | null;
@@ -137,6 +139,10 @@ export class HeartbeatService {
   async trigger_now(): Promise<string | null> {
     if (!this.on_heartbeat) return null;
     return this.on_heartbeat(HEARTBEAT_PROMPT);
+  }
+
+  health_check(): { ok: boolean; details?: Record<string, unknown> } {
+    return { ok: this._running && this._enabled, details: { paused: this._paused, interval_s: this.interval_s } };
   }
 
   status(): HeartbeatStatus {

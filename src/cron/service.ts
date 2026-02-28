@@ -2,7 +2,7 @@ import { mkdir, open, stat, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
-import Database from "better-sqlite3";
+import { with_sqlite } from "../utils/sqlite-helper.js";
 import type {
   CronJob,
   CronOnJob,
@@ -13,9 +13,9 @@ import type {
   CronStore,
 } from "./types.js";
 import type { CronScheduler } from "./contracts.js";
+import type { ServiceLike } from "../runtime/service.types.js";
+import type { Logger } from "../logger.js";
 import { now_ms } from "../utils/common.js";
-
-type DatabaseSync = Database.Database;
 
 type CronDbRow = {
   id: string;
@@ -41,10 +41,6 @@ type CronDbRow = {
   updated_at_ms: number;
   delete_after_run: number;
 };
-
-function _default_store(): CronStore {
-  return { version: 1, jobs: [] };
-}
 
 function _is_valid_timezone(tz: string): boolean {
   try {
@@ -181,7 +177,7 @@ function _match_parsed_cron(parsed: ParsedCronExpr, parts: CronDateParts): boole
   );
 }
 
-function _compute_next_run(schedule: CronSchedule, now: number): number | null {
+function _compute_next_run(schedule: CronSchedule, now: number, on_warn?: (msg: string) => void): number | null {
   if (schedule.kind === "at") {
     const at = Number(schedule.at_ms || 0);
     if (!Number.isFinite(at) || at <= 0) return null;
@@ -206,7 +202,10 @@ function _compute_next_run(schedule: CronSchedule, now: number): number | null {
       const candidate_ms = start.getTime() + i * 60_000;
       if (candidate_ms <= now) continue;
       const parts = tz ? _get_tz_parts(candidate_ms, tz) : _get_local_parts(candidate_ms);
-      if (!parts) return null;
+      if (!parts) {
+        on_warn?.(`timezone parsing failed for tz=${tz}, aborting next-run computation`);
+        return null;
+      }
       if (_match_parsed_cron(parsed, parts)) return candidate_ms;
     }
   }
@@ -281,7 +280,8 @@ function _row_to_job(row: CronDbRow): CronJob {
   };
 }
 
-export class CronService implements CronScheduler {
+export class CronService implements CronScheduler, ServiceLike {
+  readonly name = "cron";
   readonly store_path: string;
   readonly on_job: CronOnJob | null;
 
@@ -296,6 +296,7 @@ export class CronService implements CronScheduler {
   private _tick_running = false;
   private _running = false;
   private _paused = false;
+  private readonly logger: Logger | null;
 
   constructor(store_path: string, on_job: CronOnJob | null = null, options?: CronServiceOptions) {
     this.store_path = store_path;
@@ -303,28 +304,13 @@ export class CronService implements CronScheduler {
     this.lock_dir_path = join(store_path, ".locks");
     this.running_lease_ms = Math.max(5_000, Number(options?.running_lease_ms || 120_000));
     this.on_job = on_job;
+    this.logger = options?.logger ?? null;
     this.initialized = this.ensure_initialized();
-  }
-
-  private with_sqlite<T>(run: (db: DatabaseSync) => T): T | null {
-    let db: DatabaseSync | null = null;
-    try {
-      db = new Database(this.sqlite_path);
-      return run(db);
-    } catch {
-      return null;
-    } finally {
-      try {
-        db?.close();
-      } catch {
-        // no-op
-      }
-    }
   }
 
   private async ensure_initialized(): Promise<void> {
     await mkdir(this.store_path, { recursive: true });
-    this.with_sqlite((db) => {
+    with_sqlite(this.sqlite_path,(db) => {
       db.exec(`
         CREATE TABLE IF NOT EXISTS cron_jobs (
           id TEXT PRIMARY KEY,
@@ -408,7 +394,7 @@ export class CronService implements CronScheduler {
   }
 
   private async persist_store_to_sqlite(store: CronStore): Promise<void> {
-    this.with_sqlite((db) => {
+    with_sqlite(this.sqlite_path,(db) => {
       db.exec("BEGIN IMMEDIATE");
       try {
         db.prepare("DELETE FROM cron_jobs").run();
@@ -462,7 +448,7 @@ export class CronService implements CronScheduler {
   async _load_store(): Promise<CronStore> {
     await this.initialized;
     if (this._store) return this._store;
-    const rows = this.with_sqlite((db) => db.prepare(`
+    const rows = with_sqlite(this.sqlite_path,(db) => db.prepare(`
       SELECT
         id, name, enabled, schedule_kind, schedule_at_ms, schedule_every_ms, schedule_expr, schedule_tz,
         payload_kind, payload_message, payload_deliver, payload_channel, payload_to,
@@ -492,7 +478,7 @@ export class CronService implements CronScheduler {
         job.state.running = false;
         job.state.running_started_at_ms = null;
       }
-      if (job.enabled) job.state.next_run_at_ms = _compute_next_run(job.schedule, now);
+      if (job.enabled) job.state.next_run_at_ms = _compute_next_run(job.schedule, now, (m) => this.logger?.warn(m));
     }
   }
 
@@ -507,10 +493,22 @@ export class CronService implements CronScheduler {
     return Math.min(...times);
   }
 
-  private async _arm_timer(): Promise<void> {
+  private async _save_and_rearm(): Promise<void> {
+    await this._save_store();
+    await this._arm_timer();
+  }
+
+  private async _cancel_timer(): Promise<void> {
     this._timer_abort?.abort();
     this._timer_abort = null;
+    if (this._timer_task) {
+      try { await this._timer_task; } catch { /* aborted */ }
+    }
     this._timer_task = null;
+  }
+
+  private async _arm_timer(): Promise<void> {
+    await this._cancel_timer();
     const next_wake = await this._get_next_wake_ms();
     if (!this._running || this._paused || !next_wake) return;
     const delay_ms = Math.max(0, next_wake - now_ms());
@@ -540,7 +538,12 @@ export class CronService implements CronScheduler {
         && !this._is_running_fresh(j, now)
       );
       for (const job of due_jobs) {
-        await this._execute_job(job);
+        try {
+          await this._execute_job(job);
+        } catch (e) {
+          job.state.last_status = "error";
+          job.state.last_error = e instanceof Error ? e.message : String(e);
+        }
       }
       await this._save_store();
     } finally {
@@ -581,7 +584,7 @@ export class CronService implements CronScheduler {
           job.state.next_run_at_ms = null;
         }
       } else {
-        job.state.next_run_at_ms = _compute_next_run(job.schedule, now_ms());
+        job.state.next_run_at_ms = _compute_next_run(job.schedule, now_ms(), (m) => this.logger?.warn(m));
       }
     } finally {
       await this._release_job_lock(lock_path);
@@ -652,32 +655,18 @@ export class CronService implements CronScheduler {
   async stop(): Promise<void> {
     this._running = false;
     this._paused = false;
-    this._timer_abort?.abort();
-    this._timer_abort = null;
-    if (this._timer_task) {
-      try {
-        await this._timer_task;
-      } catch {
-        // ignore abort/timer errors during shutdown
-      }
-    }
-    this._timer_task = null;
+    await this._cancel_timer();
     for (const t of this._interval_timers) clearInterval(t);
     this._interval_timers.clear();
   }
 
+  health_check(): { ok: boolean; details?: Record<string, unknown> } {
+    return { ok: this._running, details: { paused: this._paused } };
+  }
+
   async pause(): Promise<void> {
     this._paused = true;
-    this._timer_abort?.abort();
-    this._timer_abort = null;
-    if (this._timer_task) {
-      try {
-        await this._timer_task;
-      } catch {
-        // ignore abort/timer errors during pause
-      }
-    }
-    this._timer_task = null;
+    await this._cancel_timer();
   }
 
   async resume(): Promise<void> {
@@ -727,7 +716,7 @@ export class CronService implements CronScheduler {
         to,
       },
       state: {
-        next_run_at_ms: _compute_next_run(schedule, now),
+        next_run_at_ms: _compute_next_run(schedule, now, (m) => this.logger?.warn(m)),
         last_run_at_ms: null,
         last_status: null,
         last_error: null,
@@ -739,8 +728,7 @@ export class CronService implements CronScheduler {
       delete_after_run: should_delete_after_run,
     };
     store.jobs.push(job);
-    await this._save_store();
-    await this._arm_timer();
+    await this._save_and_rearm();
     return job;
   }
 
@@ -749,10 +737,7 @@ export class CronService implements CronScheduler {
     const before = store.jobs.length;
     store.jobs = store.jobs.filter((j) => j.id !== job_id);
     const removed = store.jobs.length < before;
-    if (removed) {
-      await this._save_store();
-      await this._arm_timer();
-    }
+    if (removed) await this._save_and_rearm();
     return removed;
   }
 
@@ -762,10 +747,9 @@ export class CronService implements CronScheduler {
       if (job.id !== job_id) continue;
       job.enabled = enabled;
       job.updated_at_ms = now_ms();
-      if (enabled) job.state.next_run_at_ms = _compute_next_run(job.schedule, now_ms());
+      if (enabled) job.state.next_run_at_ms = _compute_next_run(job.schedule, now_ms(), (m) => this.logger?.warn(m));
       else job.state.next_run_at_ms = null;
-      await this._save_store();
-      await this._arm_timer();
+      await this._save_and_rearm();
       return job;
     }
     return null;
@@ -777,8 +761,7 @@ export class CronService implements CronScheduler {
       if (job.id !== job_id) continue;
       if (!force && !job.enabled) return false;
       await this._execute_job(job);
-      await this._save_store();
-      await this._arm_timer();
+      await this._save_and_rearm();
       return true;
     }
     return false;
@@ -796,7 +779,7 @@ export class CronService implements CronScheduler {
 
   every(ms: number, fn: () => Promise<void>): void {
     const t = setInterval(() => {
-      void fn();
+      fn().catch((e) => this.logger?.error("interval callback failed", { error: e instanceof Error ? e.message : String(e) }));
     }, Math.max(1_000, ms));
     this._interval_timers.add(t);
   }

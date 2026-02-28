@@ -2,6 +2,7 @@ import type { ChatMessage, ChatOptions, LlmProvider, LlmResponse, ProviderId } f
 
 export abstract class BaseLlmProvider implements LlmProvider {
   readonly id: ProviderId;
+  readonly supports_tool_loop: boolean;
   protected readonly api_base: string;
   protected readonly default_model: string;
 
@@ -9,10 +10,12 @@ export abstract class BaseLlmProvider implements LlmProvider {
     id: ProviderId;
     api_base: string;
     default_model: string;
+    supports_tool_loop?: boolean;
   }) {
     this.id = args.id;
     this.api_base = args.api_base;
     this.default_model = args.default_model;
+    this.supports_tool_loop = args.supports_tool_loop ?? false;
   }
 
   get_default_model(): string {

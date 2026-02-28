@@ -19,6 +19,8 @@ export { TelegramChannel } from "./telegram.channel.js";
 export { ChannelManager } from "./manager.js";
 export { SqliteDispatchDlqStore, type DispatchDlqStoreLike, type DispatchDlqRecord } from "./dlq-store.js";
 export type { ChannelManagerStatus } from "./manager.js";
+export { render_content_blocks, render_bar, render_line, render_pie } from "./content-renderer.js";
+export type { ContentBlock, ChartDataPoint, ContentRendererOptions } from "./content-renderer.js";
 
 export class ChannelRegistry implements ChannelRegistryLike {
   private readonly channels = new Map<ChannelProvider, ChatChannel>();
@@ -54,6 +56,24 @@ export class ChannelRegistry implements ChannelRegistryLike {
     return channel.send(message);
   }
 
+  async edit_message(provider: ChannelProvider, chat_id: string, message_id: string, content: string): Promise<{ ok: boolean; error?: string }> {
+    const channel = this.channels.get(provider);
+    if (!channel) return { ok: false, error: `channel_not_registered:${provider}` };
+    return channel.edit_message(chat_id, message_id, content);
+  }
+
+  async add_reaction(provider: ChannelProvider, chat_id: string, message_id: string, reaction: string): Promise<{ ok: boolean; error?: string }> {
+    const channel = this.channels.get(provider);
+    if (!channel) return { ok: false, error: `channel_not_registered:${provider}` };
+    return channel.add_reaction(chat_id, message_id, reaction);
+  }
+
+  async remove_reaction(provider: ChannelProvider, chat_id: string, message_id: string, reaction: string): Promise<{ ok: boolean; error?: string }> {
+    const channel = this.channels.get(provider);
+    if (!channel) return { ok: false, error: `channel_not_registered:${provider}` };
+    return channel.remove_reaction(chat_id, message_id, reaction);
+  }
+
   async read(provider: ChannelProvider, chat_id: string, limit?: number): Promise<InboundMessage[]> {
     const channel = this.channels.get(provider);
     if (!channel) return [];
@@ -78,10 +98,10 @@ export class ChannelRegistry implements ChannelRegistryLike {
     return null;
   }
 
-  async set_typing(provider: ChannelProvider, chat_id: string, typing: boolean): Promise<void> {
+  async set_typing(provider: ChannelProvider, chat_id: string, typing: boolean, anchor_message_id?: string): Promise<void> {
     const channel = this.channels.get(provider);
     if (!channel) return;
-    await channel.set_typing(chat_id, typing);
+    await channel.set_typing(chat_id, typing, anchor_message_id);
   }
 
   get_typing_state(provider: ChannelProvider, chat_id: string): ChannelTypingState | null {

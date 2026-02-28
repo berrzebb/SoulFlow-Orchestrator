@@ -96,8 +96,15 @@ function parse_just_bash_output(stdout: string): { stdout: string; stderr: strin
   }
 }
 
+/** Windows에서 PowerShell/pwsh 명령은 just-bash(Unix bash 샌드박스)로 실행 불가. */
+export function needs_native_shell(command: string): boolean {
+  if (process.platform !== "win32") return false;
+  const first_token = command.trimStart().split(/[\s\\/]/)[0]?.toLowerCase() || "";
+  return first_token === "powershell" || first_token === "powershell.exe" || first_token === "pwsh" || first_token === "pwsh.exe";
+}
+
 export async function run_shell_command(command: string, options: ShellRunOptions): Promise<{ stdout: string; stderr: string }> {
-  if (!options.force_native_shell && should_use_just_bash()) {
+  if (!options.force_native_shell && !needs_native_shell(command) && should_use_just_bash()) {
     const runner = find_just_bash_runner() || { command: JUST_BASH_BINARY, prefix_args: [] };
     const result = await exec_file_async(
       runner.command,

@@ -1,6 +1,6 @@
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import Database from "better-sqlite3";
+import { with_sqlite } from "../utils/sqlite-helper.js";
 import type {
   ConsolidationMessage,
   ConsolidationSession,
@@ -12,10 +12,8 @@ import type {
 } from "./memory.types.js";
 import { today_key } from "../utils/common.js";
 import { redact_sensitive_text } from "../security/sensitive.js";
-import { SecretVaultService } from "../security/secret-vault.js";
+import { get_shared_secret_vault } from "../security/secret-vault-factory.js";
 import { parse_tool_calls_from_text } from "./tool-call-parser.js";
-
-type DatabaseSync = Database.Database;
 
 const SAVE_MEMORY_TOOL = [
   {
@@ -56,7 +54,7 @@ export class MemoryStore implements MemoryStoreLike {
 
   private async ensure_initialized(): Promise<void> {
     await mkdir(this.memory_dir, { recursive: true });
-    this.with_sqlite((db) => {
+    with_sqlite(this.sqlite_path,(db) => {
       db.exec(`
         PRAGMA journal_mode=WAL;
         CREATE TABLE IF NOT EXISTS memory_documents (
@@ -97,22 +95,6 @@ export class MemoryStore implements MemoryStoreLike {
     this.ensure_longterm_document();
   }
 
-  private with_sqlite<T>(run: (db: DatabaseSync) => T): T | null {
-    let db: DatabaseSync | null = null;
-    try {
-      db = new Database(this.sqlite_path);
-      return run(db);
-    } catch {
-      return null;
-    } finally {
-      try {
-        db?.close();
-      } catch {
-        // no-op
-      }
-    }
-  }
-
   private normalize_day_key(day?: string): string {
     const raw = String(day || "").trim();
     return is_day_key(raw) ? raw : today_key();
@@ -135,7 +117,7 @@ export class MemoryStore implements MemoryStoreLike {
   }
 
   private ensure_longterm_document(): void {
-    const row = this.with_sqlite((db) => db.prepare(`
+    const row = with_sqlite(this.sqlite_path,(db) => db.prepare(`
       SELECT doc_key
       FROM memory_documents
       WHERE doc_key = ?
@@ -146,7 +128,7 @@ export class MemoryStore implements MemoryStoreLike {
   }
 
   private sqlite_upsert_document(kind: "longterm" | "daily", day: string, path: string, content: string): void {
-    this.with_sqlite((db) => {
+    with_sqlite(this.sqlite_path,(db) => {
       db.prepare(`
         INSERT INTO memory_documents (doc_key, kind, day, path, content, updated_at)
         VALUES (?, ?, ?, ?, ?, ?)
@@ -168,9 +150,30 @@ export class MemoryStore implements MemoryStoreLike {
     });
   }
 
+  /** SQL-level atomic append — TOCTOU 방지. */
+  private sqlite_append_document(kind: "longterm" | "daily", day: string, path: string, content: string): void {
+    with_sqlite(this.sqlite_path,(db) => {
+      db.prepare(`
+        INSERT INTO memory_documents (doc_key, kind, day, path, content, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(doc_key) DO UPDATE SET
+          content = memory_documents.content || excluded.content,
+          updated_at = excluded.updated_at
+      `).run(
+        kind === "longterm" ? this.longterm_doc_key() : this.daily_doc_key(day),
+        kind,
+        day,
+        path,
+        String(content || ""),
+        new Date().toISOString(),
+      );
+      return true;
+    });
+  }
+
   private sqlite_read_document(kind: "longterm" | "daily", day: string): MemoryDocRow | null {
     const doc_key = kind === "longterm" ? this.longterm_doc_key() : this.daily_doc_key(day);
-    const row = this.with_sqlite((db) => db.prepare(`
+    const row = with_sqlite(this.sqlite_path,(db) => db.prepare(`
       SELECT path, content
       FROM memory_documents
       WHERE doc_key = ?
@@ -184,7 +187,7 @@ export class MemoryStore implements MemoryStoreLike {
   }
 
   private sqlite_delete_daily(day: string): boolean {
-    const removed = this.with_sqlite((db) => {
+    const removed = with_sqlite(this.sqlite_path,(db) => {
       const result = db.prepare("DELETE FROM memory_documents WHERE doc_key = ?").run(this.daily_doc_key(day));
       return Number(result.changes || 0);
     }) || 0;
@@ -216,7 +219,7 @@ export class MemoryStore implements MemoryStoreLike {
 
   async list_daily(): Promise<string[]> {
     await this.initialized;
-    const rows = this.with_sqlite((db) => db.prepare(`
+    const rows = with_sqlite(this.sqlite_path,(db) => db.prepare(`
       SELECT day
       FROM memory_documents
       WHERE kind = 'daily'
@@ -241,8 +244,7 @@ export class MemoryStore implements MemoryStoreLike {
 
   async append_longterm(content: string): Promise<void> {
     await this.initialized;
-    const prev = await this.read_longterm();
-    this.sqlite_upsert_document("longterm", "__longterm__", this.longterm_uri(), `${prev}${String(content || "")}`);
+    this.sqlite_append_document("longterm", "__longterm__", this.longterm_uri(), String(content || ""));
   }
 
   async read_daily(day?: string): Promise<string> {
@@ -261,8 +263,7 @@ export class MemoryStore implements MemoryStoreLike {
   async append_daily(content: string, day?: string): Promise<void> {
     await this.initialized;
     const day_key = this.normalize_day_key(day);
-    const prev = await this.read_daily(day_key);
-    this.sqlite_upsert_document("daily", day_key, this.daily_uri(day_key), `${prev}${String(content || "")}`);
+    this.sqlite_append_document("daily", day_key, this.daily_uri(day_key), String(content || ""));
   }
 
   async save_memory(args: {
@@ -315,7 +316,7 @@ export class MemoryStore implements MemoryStoreLike {
     }
     bind.push(Math.max(limit * 6, 24));
 
-    const docs = this.with_sqlite((db) => db.prepare(`
+    const docs = with_sqlite(this.sqlite_path,(db) => db.prepare(`
       SELECT d.path AS path, d.content AS content
       FROM memory_documents_fts f
       JOIN memory_documents d ON d.rowid = f.rowid
@@ -419,7 +420,7 @@ export class MemoryStore implements MemoryStoreLike {
     model: string,
     options?: { archive_all?: boolean; memory_window?: number },
   ): Promise<boolean> {
-    const secret_vault = new SecretVaultService(this.root);
+    const secret_vault = get_shared_secret_vault(this.root);
     const archive_all = !!options?.archive_all;
     const memory_window = Math.max(4, Number(options?.memory_window || 50));
 

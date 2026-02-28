@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Tool } from "./base.js";
 import type { MediaItem, OutboundMessage } from "../../bus/types.js";
-import { now_iso } from "../../utils/common.js";
+import { now_iso, normalize_text } from "../../utils/common.js";
 import { is_local_reference, normalize_local_candidate_path, resolve_local_reference } from "../../utils/local-ref.js";
 import type { JsonSchema, ToolExecutionContext } from "./types.js";
 import type { AppendWorkflowEventInput, AppendWorkflowEventResult, WorkflowPhase } from "../../events/types.js";
@@ -12,10 +12,6 @@ export type MessageSendCallback = (message: OutboundMessage) => Promise<void>;
 export type MessageEventRecordCallback = (event: AppendWorkflowEventInput) => Promise<AppendWorkflowEventResult>;
 
 const PHASE_SET = new Set<WorkflowPhase>(["assign", "progress", "blocked", "done", "approval"]);
-
-function normalize_text(value: unknown): string {
-  return String(value || "").replace(/\s+/g, " ").trim();
-}
 
 function normalize_phase(value: unknown): WorkflowPhase {
   const v = String(value || "").trim().toLowerCase();
@@ -131,8 +127,9 @@ export class MessageTool extends Tool {
 
   protected async run(params: Record<string, unknown>, _context?: ToolExecutionContext): Promise<string> {
     if (!this.send_callback) return "Error: send callback is not configured";
-    const channel = String(params.channel || this.default_channel || "");
-    const chat_id = String(params.chat_id || this.default_chat_id || "");
+    const context = _context || {};
+    const channel = String(params.channel || context.channel || this.default_channel || "");
+    const chat_id = String(params.chat_id || context.chat_id || this.default_chat_id || "");
     if (!channel || !chat_id) return "Error: channel and chat_id are required";
     const phase = normalize_phase(params.phase);
     const detail = String(params.detail || "").trim();

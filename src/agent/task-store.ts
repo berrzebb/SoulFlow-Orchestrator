@@ -1,8 +1,6 @@
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import Database from "better-sqlite3";
-
-type DatabaseSync = Database.Database;
+import { with_sqlite } from "../utils/sqlite-helper.js";
 import type { TaskState } from "../contracts.js";
 
 export interface TaskStoreLike {
@@ -21,25 +19,9 @@ export class TaskStore implements TaskStoreLike {
     this.initialized = this.ensure_initialized();
   }
 
-  private with_sqlite<T>(run: (db: DatabaseSync) => T): T | null {
-    let db: DatabaseSync | null = null;
-    try {
-      db = new Database(this.sqlite_path);
-      return run(db);
-    } catch {
-      return null;
-    } finally {
-      try {
-        db?.close();
-      } catch {
-        // no-op
-      }
-    }
-  }
-
   private async ensure_initialized(): Promise<void> {
     await mkdir(this.tasks_dir, { recursive: true });
-    this.with_sqlite((db) => {
+    with_sqlite(this.sqlite_path,(db) => {
       db.exec(`
         CREATE TABLE IF NOT EXISTS tasks (
           task_id TEXT PRIMARY KEY,
@@ -92,7 +74,7 @@ export class TaskStore implements TaskStoreLike {
   async upsert(task: TaskState): Promise<void> {
     await this.initialized;
     const normalized = this.normalize_task(task);
-    this.with_sqlite((db) => {
+    with_sqlite(this.sqlite_path,(db) => {
       db.prepare(`
         INSERT INTO tasks (task_id, status, updated_at, payload_json)
         VALUES (?, ?, ?, ?)
@@ -112,7 +94,7 @@ export class TaskStore implements TaskStoreLike {
 
   async get(task_id: string): Promise<TaskState | null> {
     await this.initialized;
-    const row = this.with_sqlite((db) => db.prepare(
+    const row = with_sqlite(this.sqlite_path,(db) => db.prepare(
       "SELECT payload_json FROM tasks WHERE task_id = ? LIMIT 1",
     ).get(task_id) as { payload_json: string } | undefined) || null;
     return this.row_to_task(row);
@@ -120,7 +102,7 @@ export class TaskStore implements TaskStoreLike {
 
   async list(): Promise<TaskState[]> {
     await this.initialized;
-    const rows = this.with_sqlite((db) => db.prepare(
+    const rows = with_sqlite(this.sqlite_path,(db) => db.prepare(
       "SELECT payload_json FROM tasks ORDER BY updated_at DESC",
     ).all() as Array<{ payload_json: string }>) || [];
     const out: TaskState[] = [];

@@ -1,46 +1,48 @@
 ---
 name: python-sandbox
-description: Force Python execution inside an ephemeral container; install requirements.txt, run, and auto-remove container.
+description: Execute Python code inside ephemeral containers (podman/docker) with automatic cleanup. Use when Python execution is needed but must not affect the host: data analysis, pip install, script testing. Container sandbox is mandatory. Do NOT run python or pip directly on host. Do NOT use for simple shell commands (use just-bash).
+metadata:
+  model: local
+  tools:
+    - exec
+  triggers:
+    - 파이썬
+    - python
+    - 코드 실행
+    - 스크립트
+  aliases:
+    - python
 ---
 
 # Python Sandbox
 
-Use this skill when Python execution must not affect the host environment.
+## Quick Reference
 
-## Policy
+| Task | Command |
+|------|---------|
+| Run script | `$R run --rm -v "${PWD}:/workspace:rw" -w /workspace python:3.12-slim sh -lc "pip install -r requirements.txt && python script.py"` |
+| Run module | `$R run --rm -v "${PWD}:/workspace:rw" -w /workspace python:3.12-slim python -m module_name` |
+| Force cleanup | `$R rm -f $N` |
 
-- Container sandbox is mandatory.
-- Never run `python`/`pip` directly on host.
-- Never install Python packages on host.
-- Always run with `--rm` so container is removed immediately after run.
-- Always install dependencies from `requirements.txt` inside container before execution.
+Container sandbox mandatory. Never run `python`/`pip` directly on host.
 
 ## Runtime Selection
 
-Use `podman` first, fallback to `docker`. If neither exists, fail the task (no host fallback).
+`podman` first, fallback to `docker`. No host fallback.
 
 ```powershell
 $R = if (Get-Command podman -ErrorAction SilentlyContinue) { "podman" } elseif (Get-Command docker -ErrorAction SilentlyContinue) { "docker" } else { throw "container_runtime_not_found" }
 ```
 
-## Standard Run (requirements.txt -> execute -> remove)
+## Standard Run
 
 ```powershell
 $N = "py-sbx-$([guid]::NewGuid().ToString('N').Substring(0,8))"
 & $R run --rm --name $N -v "${PWD}:/workspace:rw" -w /workspace python:3.12-slim sh -lc "python -m venv /tmp/venv && . /tmp/venv/bin/activate && pip install -U pip && pip install -r requirements.txt && python your_script.py"
 ```
 
-## Module/Inline Variant
+## Guardrails
 
-```powershell
-$N = "py-sbx-$([guid]::NewGuid().ToString('N').Substring(0,8))"
-& $R run --rm --name $N -v "${PWD}:/workspace:rw" -w /workspace python:3.12-slim sh -lc "python -m venv /tmp/venv && . /tmp/venv/bin/activate && pip install -U pip && pip install -r requirements.txt && python -m your_module"
-```
-
-## Cleanup on Failure/Interrupt
-
-If a run was interrupted, force cleanup:
-
-```powershell
-& $R rm -f $N 2>$null
-```
+- Always `--rm` so container is removed after run.
+- Always install deps from `requirements.txt` inside container.
+- On interruption, force cleanup: `& $R rm -f $N`

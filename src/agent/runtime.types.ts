@@ -6,6 +6,7 @@ import type {
   TaskLoopRunResult,
 } from "./loop.js";
 import type { ToolExecutionContext, ToolLike } from "./tools/types.js";
+import type { ProviderId } from "../providers/types.js";
 
 export type AgentToolRuntimeContext = {
   channel: string;
@@ -58,10 +59,28 @@ export type AgentApprovalExecuteResult = {
   error?: string;
 };
 
+export type SpawnAndWaitOptions = {
+  task: string;
+  skill_names?: string[];
+  channel?: string;
+  chat_id?: string;
+  max_turns?: number;
+  timeout_ms?: number;
+  /** executor provider id (resolve_executor_provider 결과). */
+  provider_id?: ProviderId;
+};
+
+export type SpawnAndWaitResult = {
+  ok: boolean;
+  content: string;
+  error?: string;
+};
+
 export interface AgentRuntimeLike {
   get_context_builder(): ContextBuilder;
   get_always_skills(): string[];
   recommend_skills(task: string, limit?: number): string[];
+  get_skill_metadata(name: string): import("./skills.types.js").SkillMetadata | null;
   has_tool(name: string): boolean;
   register_tool(tool: ToolLike): void;
   get_tool_definitions(): Array<Record<string, unknown>>;
@@ -78,4 +97,6 @@ export interface AgentRuntimeLike {
   execute_approved_request(request_id: string): Promise<AgentApprovalExecuteResult>;
   run_agent_loop(options: AgentLoopRunOptions): Promise<AgentLoopRunResult>;
   run_task_loop(options: TaskLoopRunOptions): Promise<TaskLoopRunResult>;
+  /** headless 에이전트를 spawn하여 도구 실행이 필요한 작업을 위임하고 완료를 대기. */
+  spawn_and_wait(options: SpawnAndWaitOptions): Promise<SpawnAndWaitResult>;
 }

@@ -51,8 +51,9 @@ export class FileRequestTool extends Tool {
 
   protected async run(params: Record<string, unknown>, _context?: ToolExecutionContext): Promise<string> {
     if (!this.send_callback) return "Error: send callback is not configured";
-    const channel = String(params.channel || this.default_channel || "");
-    const chat_id = String(params.chat_id || this.default_chat_id || "");
+    const context = _context || {};
+    const channel = String(params.channel || context.channel || this.default_channel || "");
+    const chat_id = String(params.chat_id || context.chat_id || this.default_chat_id || "");
     const prompt = String(params.prompt || "").trim();
     const accept = Array.isArray(params.accept) ? params.accept.map((v) => String(v || "").trim()).filter(Boolean) : [];
     if (!channel || !chat_id) return "Error: channel and chat_id are required";

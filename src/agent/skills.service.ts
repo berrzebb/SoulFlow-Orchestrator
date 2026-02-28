@@ -62,7 +62,8 @@ export class SkillsLoader {
     this._scan_all();
   }
 
-  private _refresh(): void {
+  /** 스킬 설치/삭제 후 명시적으로 호출. 일반 읽기 메서드에서는 캐시 사용. */
+  refresh(): void {
     this._scan_all();
   }
 
@@ -113,6 +114,8 @@ export class SkillsLoader {
       const requirements = Array.isArray(meta.requires) ? meta.requires.map((v) => String(v)) : [];
       const aliases = this.parse_meta_string_list(meta.aliases ?? meta.alias ?? meta.names);
       const triggers = this.parse_meta_string_list(meta.triggers ?? meta.trigger);
+      const tools = this.parse_meta_string_list(meta.tools ?? meta.tool);
+      const model = typeof meta.model === "string" ? meta.model.trim() || null : null;
 
       const skillMeta: SkillMetadata = {
         name,
@@ -122,7 +125,9 @@ export class SkillsLoader {
         summary,
         aliases,
         triggers,
+        tools,
         requirements,
+        model,
         frontmatter: meta,
       };
       target.set(name, skillMeta);
@@ -140,7 +145,7 @@ export class SkillsLoader {
   }
 
   list_skills(filter_unavailable = false): Array<Record<string, string>> {
-    this._refresh();
+
     const out: Array<Record<string, string>> = [];
     for (const meta of this.merged.values()) {
       if (filter_unavailable && !this._check_requirements(meta.frontmatter)) continue;
@@ -149,13 +154,14 @@ export class SkillsLoader {
         summary: meta.summary,
         source: meta.source,
         always: meta.always ? "true" : "false",
+        model: meta.model || "auto",
       });
     }
     return out;
   }
 
   load_skills(name: string): string | null {
-    this._refresh();
+
     const resolved = this._resolve_skill_name(name);
     if (!resolved) return null;
     const raw = this.raw_by_name.get(resolved);
@@ -164,7 +170,7 @@ export class SkillsLoader {
   }
 
   load_skills_for_context(skill_names: string[]): string {
-    this._refresh();
+
     const selected = new Set<string>();
     // Always skills are pinned in context only when requirements are satisfied.
     for (const meta of this.merged.values()) {
@@ -189,12 +195,21 @@ export class SkillsLoader {
   }
 
   build_skill_summary(): string {
-    const rows = this.list_skills(true);
-    return rows.map((r) => `- ${r.name} [${r.source}]${r.always === "true" ? " [always]" : ""}: ${r.summary}`).join("\n");
+
+    const lines: string[] = [];
+    for (const meta of this.merged.values()) {
+      if (!this._check_requirements(meta.frontmatter)) continue;
+      const tags: string[] = [meta.source];
+      if (meta.always) tags.push("always");
+      if (meta.model) tags.push(`model:${meta.model}`);
+      if (meta.tools.length > 0) tags.push(`tools:${meta.tools.join(",")}`);
+      lines.push(`- ${meta.name} [${tags.join(", ")}]: ${meta.summary}`);
+    }
+    return lines.join("\n");
   }
 
   suggest_skills_for_text(task: string, limit = 6): string[] {
-    this._refresh();
+
     const max = Math.max(1, Math.min(20, Number(limit || 6)));
     const text_norm = this.normalize_text_for_match(task);
     if (!text_norm) return [];
@@ -207,14 +222,14 @@ export class SkillsLoader {
       for (const name of names) {
         const key = this.normalize_text_for_match(name);
         if (!key) continue;
-        if (text_norm.includes(` ${key} `) || text_norm.startsWith(`${key} `) || text_norm.endsWith(` ${key}`)) {
+        if (text_norm.includes(key)) {
           score += (name === meta.name ? 6 : 4);
         }
       }
       for (const trigger of meta.triggers) {
         const key = this.normalize_text_for_match(trigger);
         if (!key) continue;
-        if (text_norm.includes(` ${key} `) || text_norm.startsWith(`${key} `) || text_norm.endsWith(` ${key}`)) {
+        if (text_norm.includes(key)) {
           score += 5;
         }
       }
@@ -248,11 +263,18 @@ export class SkillsLoader {
   }
 
   get_skill_meta(name: string): Record<string, unknown> | null {
-    this._refresh();
+
     const resolved = this._resolve_skill_name(name);
     if (!resolved) return null;
     const meta = this.merged.get(resolved);
     return meta ? { ...meta.frontmatter } : null;
+  }
+
+  get_skill_metadata(name: string): SkillMetadata | null {
+
+    const resolved = this._resolve_skill_name(name);
+    if (!resolved) return null;
+    return this.merged.get(resolved) || null;
   }
 
   _get_missing_requirements(skill_meta: Record<string, unknown>): string {
@@ -295,7 +317,7 @@ export class SkillsLoader {
         out[activeListKey] = prev;
         continue;
       }
-      const kv = trimmed.match(/^([A-Za-z0-9_\-]+)\s*:\s*(.*)$/);
+      const kv = trimmed.match(/^([A-Za-z0-9_-]+)\s*:\s*(.*)$/);
       if (!kv) continue;
       const key = kv[1];
       const rhs = kv[2].trim();
@@ -317,31 +339,12 @@ export class SkillsLoader {
   }
 
   get_always_skills(): string[] {
-    this._refresh();
+
     const out: string[] = [];
     for (const meta of this.merged.values()) {
       if (meta.always && this._check_requirements(meta.frontmatter)) out.push(meta.name);
     }
     return out;
-  }
-
-  get_skill_metadata(name: string): Record<string, unknown> | null {
-    this._refresh();
-    const resolved = this._resolve_skill_name(name);
-    if (!resolved) return null;
-    const meta = this.merged.get(resolved);
-    if (!meta) return null;
-    return {
-      name: meta.name,
-      source: meta.source,
-      summary: meta.summary,
-      always: meta.always,
-      aliases: [...meta.aliases],
-      triggers: [...meta.triggers],
-      requirements: meta.requirements,
-      path: meta.path,
-      frontmatter: { ...meta.frontmatter },
-    };
   }
 
   private register_alias(alias_raw: string, name: string): void {

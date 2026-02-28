@@ -1,8 +1,9 @@
 import { loadConfig } from "./config/index.js";
+import { load_config_from_env } from "./config/schema.js";
 import { Phi4RuntimeManager } from "./providers/index.js";
 
 async function main(): Promise<void> {
-  const config = loadConfig();
+  const config = loadConfig(load_config_from_env());
   const manager = new Phi4RuntimeManager({
     enabled: true,
     engine: config.phi4RuntimeEngine,
@@ -16,15 +17,15 @@ async function main(): Promise<void> {
   });
 
   const status = await manager.health_check();
-  // eslint-disable-next-line no-console
-  console.log(JSON.stringify(status, null, 2));
+   
+  process.stdout.write(JSON.stringify(status, null, 2) + "\n");
   if (!status.running) process.exit(1);
   if (status.model_loaded === false) process.exit(2);
 }
 
 void main().catch((error) => {
-  // eslint-disable-next-line no-console
-  console.error(error instanceof Error ? error.message : String(error));
+   
+  process.stderr.write((error instanceof Error ? error.message : String(error)) + "\n");
   process.exit(9);
 });
 

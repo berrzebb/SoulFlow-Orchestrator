@@ -4,19 +4,16 @@ import type { JsonSchema, ToolExecutionContext } from "./types.js";
 import { Tool } from "./base.js";
 import { ToolInstallerService } from "./installer.js";
 import { FileMcpServerStore, type McpServerEntry, type McpServerStoreLike } from "./mcp-store.js";
+import { ensure_json_object } from "../../utils/common.js";
 
 type RuntimeAdminArgs = {
   workspace: string;
   installer: ToolInstallerService;
   refresh_dynamic_tools?: () => number;
+  refresh_skills?: () => void;
   list_registered_tool_names?: () => string[];
   mcp_store?: McpServerStoreLike;
 };
-
-function ensure_json_object(v: unknown): Record<string, unknown> | null {
-  if (!v || typeof v !== "object" || Array.isArray(v)) return null;
-  return v as Record<string, unknown>;
-}
 
 function safe_skill_dir_name(name: string): string {
   const raw = String(name || "").trim().toLowerCase();
@@ -107,6 +104,7 @@ export class RuntimeAdminTool extends Tool {
   private readonly workspace: string;
   private readonly installer: ToolInstallerService;
   private readonly refresh_dynamic_tools: (() => number) | null;
+  private readonly refresh_skills: (() => void) | null;
   private readonly list_registered_tool_names: (() => string[]) | null;
   private readonly mcp_store: McpServerStoreLike;
 
@@ -115,6 +113,7 @@ export class RuntimeAdminTool extends Tool {
     this.workspace = resolve(String(args.workspace || process.cwd()));
     this.installer = args.installer;
     this.refresh_dynamic_tools = args.refresh_dynamic_tools || null;
+    this.refresh_skills = args.refresh_skills || null;
     this.list_registered_tool_names = args.list_registered_tool_names || null;
     this.mcp_store = args.mcp_store || new FileMcpServerStore(this.workspace);
   }
@@ -158,6 +157,7 @@ export class RuntimeAdminTool extends Tool {
     ].join("\n");
     await mkdir(dirname(path), { recursive: true });
     await writeFile(path, `${frontmatter}${body.trim()}\n`, "utf-8");
+    if (this.refresh_skills) this.refresh_skills();
     return JSON.stringify({
       ok: true,
       action: "skill_upsert",

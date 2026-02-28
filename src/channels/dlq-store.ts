@@ -1,9 +1,7 @@
 import { mkdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
-import Database from "better-sqlite3";
+import { with_sqlite } from "../utils/sqlite-helper.js";
 import type { ChannelProvider } from "./types.js";
-
-type DatabaseSync = Database.Database;
 
 type DlqRow = {
   at: string;
@@ -53,25 +51,9 @@ export class SqliteDispatchDlqStore implements DispatchDlqStoreLike {
     return this.sqlite_path;
   }
 
-  private with_sqlite<T>(run: (db: DatabaseSync) => T): T | null {
-    let db: DatabaseSync | null = null;
-    try {
-      db = new Database(this.sqlite_path);
-      return run(db);
-    } catch {
-      return null;
-    } finally {
-      try {
-        db?.close();
-      } catch {
-        // no-op
-      }
-    }
-  }
-
   private async ensure_initialized(): Promise<void> {
     await mkdir(dirname(this.sqlite_path), { recursive: true });
-    this.with_sqlite((db) => {
+    with_sqlite(this.sqlite_path,(db) => {
       db.exec(`
         PRAGMA journal_mode=WAL;
         CREATE TABLE IF NOT EXISTS outbound_dlq (
@@ -100,7 +82,7 @@ export class SqliteDispatchDlqStore implements DispatchDlqStoreLike {
   async append(record: DispatchDlqRecord): Promise<void> {
     await this.initialized;
     const job = this.write_queue.then(async () => {
-      this.with_sqlite((db) => {
+      const ok = with_sqlite(this.sqlite_path,(db) => {
         db.prepare(`
           INSERT INTO outbound_dlq (
             at, provider, chat_id, message_id, sender_id, reply_to, thread_id,
@@ -121,6 +103,7 @@ export class SqliteDispatchDlqStore implements DispatchDlqStoreLike {
         );
         return true;
       });
+      if (!ok) throw new Error("dlq_write_failed");
     });
     this.write_queue = job.then(() => undefined, () => undefined);
     await job;
@@ -128,7 +111,7 @@ export class SqliteDispatchDlqStore implements DispatchDlqStoreLike {
 
   async list(limit = 100): Promise<DispatchDlqRecord[]> {
     await this.initialized;
-    const rows = this.with_sqlite((db) => db.prepare(`
+    const rows = with_sqlite(this.sqlite_path,(db) => db.prepare(`
       SELECT at, provider, chat_id, message_id, sender_id, reply_to, thread_id, retry_count, error, content, metadata_json
       FROM outbound_dlq
       ORDER BY id DESC

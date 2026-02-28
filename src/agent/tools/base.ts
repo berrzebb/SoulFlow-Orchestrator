@@ -1,5 +1,5 @@
 import type { JsonSchema, ToolExecutionContext, ToolLike, ToolSchema } from "./types.js";
-import { SecretVaultService } from "../../security/secret-vault.js";
+import { get_shared_secret_vault } from "../../security/secret-vault-factory.js";
 
 const TYPE_MAP: Record<string, (v: unknown) => boolean> = {
   string: (v) => typeof v === "string",
@@ -15,7 +15,7 @@ export abstract class Tool implements ToolLike {
   abstract readonly description: string;
   abstract readonly parameters: JsonSchema;
   protected abstract run(params: Record<string, unknown>, context?: ToolExecutionContext): Promise<string>;
-  private readonly _param_secret_vault = new SecretVaultService(process.cwd());
+  private readonly _param_secret_vault = get_shared_secret_vault(process.cwd());
 
   async execute(params: Record<string, unknown>, context?: ToolExecutionContext): Promise<string> {
     const state = {

@@ -1,30 +1,38 @@
 ---
 name: just-bash
-description: Efficient shell execution workflow using the exec tool with automatic just-bash runtime.
-always: true
+description: Efficient shell execution using the exec tool with automatic just-bash runtime. Use for any local computation, file inspection, system commands, git operations, or CLI tools. Always available as the default execution pathway. Do NOT use for interactive TTY (use tmux) or container isolation (use python-sandbox or temp-db).
+metadata:
+  model: local
+  always: true
+  tools:
+    - exec
+  aliases:
+    - bash
+    - shell
+    - 쉘
 ---
 
 # just-bash
 
-Use this skill when fast local computation or command-line inspection is needed.
+## Quick Reference
 
-## Runtime Behavior
+| Task | Example |
+|------|---------|
+| File search | `exec: rg "pattern" src/` |
+| Git operation | `exec: git log --oneline -10` |
+| System info | `exec: systeminfo` |
+| File list | `exec: Get-ChildItem -Recurse *.ts` |
 
-- Use the `exec` tool only.
-- `exec` automatically uses `just-bash` when available.
-- If `just-bash` is unavailable, it falls back to the native shell.
-
-No extra environment variable is required.
+`exec` automatically uses `just-bash` runtime when available, native shell as fallback.
 
 ## Recommended Flow
 
-1. Prefer short, deterministic commands.
-2. Start with read-only inspection (`rg`, `Get-ChildItem`, `Get-Content`, `git status`).
-3. For transformations, keep commands single-purpose and easy to verify.
-4. For write commands, summarize intent before execution and verify results immediately.
+1. Start with read-only inspection (`rg`, `Get-ChildItem`, `git status`).
+2. Keep commands short, deterministic, single-purpose.
+3. For write operations, summarize intent first and verify results after.
 
 ## Guardrails
 
-- Avoid long interactive commands in `exec`.
-- Avoid destructive commands unless explicitly requested.
-- Keep commands scoped to the workspace path whenever possible.
+- No long interactive commands (use tmux skill instead).
+- No destructive commands unless explicitly requested.
+- Scope commands to workspace path whenever possible.

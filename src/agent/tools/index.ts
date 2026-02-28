@@ -9,12 +9,17 @@ import { SpawnTool, type SpawnRequest } from "./spawn.js";
 import { ToolRegistry } from "./registry.js";
 import { ExecTool } from "./shell.js";
 import { WebBrowserTool, WebFetchTool, WebSearchTool } from "./web.js";
+import { ChainTool } from "./chain.js";
 import { DiagramRenderTool } from "./diagram.js";
 import { DynamicToolRuntimeLoader, ToolRuntimeReloader } from "./runtime-loader.js";
 import { ToolInstallerService } from "./installer.js";
 import { SqliteDynamicToolStore, type DynamicToolStoreLike } from "./store.js";
-import { FileMcpServerStore, type McpServerStoreLike, type McpServerEntry } from "./mcp-store.js";
+import { FileMcpServerStore } from "./mcp-store.js";
 import { ToolSelfTestService } from "./self-test.js";
+import { MemoryTool } from "./memory-tool.js";
+import { DecisionTool } from "./decision-tool.js";
+import { SecretTool } from "./secret-tool.js";
+import { PromiseTool } from "./promise-tool.js";
 import { RuntimeAdminTool } from "./runtime-admin.js";
 import type { AppendWorkflowEventInput, AppendWorkflowEventResult } from "../../events/types.js";
 
@@ -32,7 +37,12 @@ export {
   MessageTool,
   FileRequestTool,
   SpawnTool,
+  ChainTool,
   CronTool,
+  MemoryTool,
+  DecisionTool,
+  SecretTool,
+  PromiseTool,
   DynamicToolRuntimeLoader,
   ToolRuntimeReloader,
   ToolInstallerService,
@@ -56,6 +66,7 @@ export type { DynamicToolManifestEntry } from "./dynamic.js";
 export type { InstallShellToolInput } from "./installer.js";
 export type { DynamicToolStoreLike } from "./store.js";
 export type { McpServerStoreLike, McpServerEntry } from "./mcp-store.js";
+export { execute_chain, type ChainStep, type ChainResult } from "./chain.js";
 
 export function create_default_tool_registry(args?: {
   workspace?: string;
@@ -67,6 +78,7 @@ export function create_default_tool_registry(args?: {
   bus?: MessageBus | null;
   spawn_callback?: ((request: SpawnRequest) => Promise<{ subagent_id: string; status: string; message?: string }>) | null;
   event_recorder?: ((event: AppendWorkflowEventInput) => Promise<AppendWorkflowEventResult>) | null;
+  refresh_skills?: () => void;
 }): ToolRegistry {
   const registry = new ToolRegistry({
     on_approval_request: args?.bus
@@ -136,7 +148,7 @@ export function create_default_tool_registry(args?: {
               // keep approval flow non-blocking even if event storage fails
             }
           }
-          await args.bus!.publish_outbound(message);
+          await args.bus?.publish_outbound(message);
         }
       : undefined,
   });
@@ -153,10 +165,11 @@ export function create_default_tool_registry(args?: {
   registry.register(new WebFetchTool());
   registry.register(new WebBrowserTool());
   registry.register(new DiagramRenderTool());
+  registry.register(new ChainTool(registry));
 
   if (args?.bus) {
     sender = async (message: OutboundMessage): Promise<void> => {
-      await args.bus!.publish_outbound(message);
+      await args.bus?.publish_outbound(message);
     };
     registry.register(new MessageTool({
       send_callback: sender,
@@ -181,6 +194,7 @@ export function create_default_tool_registry(args?: {
     workspace,
     installer,
     list_registered_tool_names: () => registry.tool_names(),
+    refresh_skills: args?.refresh_skills || undefined,
     refresh_dynamic_tools: () => {
       const tools = dynamic_loader.load_tools();
       registry.set_dynamic_tools(tools);

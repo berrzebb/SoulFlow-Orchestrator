@@ -1,5 +1,12 @@
 import { resolve } from "node:path";
 
+const SAFE_BASENAME_EXTENSIONS = new Set([
+  "txt", "md", "json", "yaml", "yml", "toml", "ini", "log",
+  "csv", "tsv", "xml", "html", "css", "js", "mjs", "cjs", "ts", "tsx", "jsx",
+  "py", "go", "rs", "java", "c", "cpp", "h", "hpp", "cs", "sh", "ps1", "bat", "sql",
+  "png", "jpg", "jpeg", "webp", "gif", "pdf", "docx", "xlsx", "pptx", "zip",
+]);
+
 export function normalize_local_candidate_path(path_value: string): string {
   let value = String(path_value || "").trim();
   if (!value) return "";
@@ -49,6 +56,7 @@ export function is_local_reference(path_value: string): boolean {
   if (/^\\\\/.test(value)) return true;
   if (value.startsWith("/") || value.startsWith("./") || value.startsWith("../")) return true;
   if (/^[^\\/:*?"<>|]+[\\/].+/.test(value)) return true;
+  if (is_safe_basename_reference(value)) return true;
   return false;
 }
 
@@ -56,4 +64,15 @@ export function resolve_local_reference(workspace: string, path_value: string): 
   const normalized = normalize_local_candidate_path(String(path_value || "").trim());
   if (!normalized) return "";
   return resolve(workspace, normalized);
+}
+
+function is_safe_basename_reference(value: string): boolean {
+  const raw = String(value || "").trim();
+  if (!raw) return false;
+  if (/[\\/]/.test(raw)) return false;
+  if (!/^(?!-)(?!.*[:*?"<>|])[^\r\n]+\.[A-Za-z0-9]{1,16}$/.test(raw)) return false;
+  const m = raw.match(/\.([A-Za-z0-9]{1,16})$/);
+  if (!m) return false;
+  const ext = String(m[1] || "").toLowerCase();
+  return SAFE_BASENAME_EXTENSIONS.has(ext);
 }

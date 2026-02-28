@@ -4,6 +4,7 @@ import { basename, extname } from "node:path";
 import type { InboundMessage, MediaItem, OutboundMessage } from "../bus/types.js";
 import { now_iso } from "../utils/common.js";
 import { BaseChannel } from "./base.js";
+import type { CommandDescriptor } from "./commands/registry.js";
 
 type TelegramChannelOptions = {
   bot_token?: string;
@@ -270,7 +271,92 @@ export class TelegramChannel extends BaseChannel {
     }
   }
 
-  protected async set_typing_remote(chat_id: string, typing: boolean): Promise<void> {
+  async edit_message(chat_id: string, message_id: string, content: string): Promise<{ ok: boolean; error?: string }> {
+    if (!this.bot_token) return { ok: false, error: "telegram_bot_token_missing" };
+    if (!chat_id || !message_id) return { ok: false, error: "chat_id_and_message_id_required" };
+    try {
+      const url = `${this.api_base}/bot${this.bot_token}/editMessageText`;
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chat_id, message_id: Number(message_id), text: String(content || "") }),
+      });
+      const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+      if (!response.ok || data.ok !== true) {
+        return { ok: false, error: as_string(data.description || `http_${response.status}`) };
+      }
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  }
+
+  async add_reaction(chat_id: string, message_id: string, reaction: string): Promise<{ ok: boolean; error?: string }> {
+    if (!this.bot_token) return { ok: false, error: "telegram_bot_token_missing" };
+    if (!chat_id || !message_id || !reaction) return { ok: false, error: "chat_id_message_id_reaction_required" };
+    try {
+      const url = `${this.api_base}/bot${this.bot_token}/setMessageReaction`;
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chat_id,
+          message_id: Number(message_id),
+          reaction: [{ type: "emoji", emoji: reaction }],
+        }),
+      });
+      const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+      if (!response.ok || data.ok !== true) {
+        return { ok: false, error: as_string(data.description || `http_${response.status}`) };
+      }
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  }
+
+  async remove_reaction(chat_id: string, message_id: string, _reaction: string): Promise<{ ok: boolean; error?: string }> {
+    if (!this.bot_token) return { ok: false, error: "telegram_bot_token_missing" };
+    try {
+      const url = `${this.api_base}/bot${this.bot_token}/setMessageReaction`;
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chat_id, message_id: Number(message_id), reaction: [] }),
+      });
+      const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+      if (!response.ok || data.ok !== true) {
+        return { ok: false, error: as_string(data.description || `http_${response.status}`) };
+      }
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  }
+
+  async sync_commands(descriptors: CommandDescriptor[]): Promise<void> {
+    if (!this.bot_token) return;
+    const commands = descriptors.map((d) => ({
+      command: d.name,
+      description: d.description.slice(0, 256),
+    }));
+    try {
+      const url = `${this.api_base}/bot${this.bot_token}/setMyCommands`;
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ commands }),
+      });
+      const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+      if (!response.ok || data.ok !== true) {
+        this.last_error = as_string(data.description || `setMyCommands_http_${response.status}`);
+      }
+    } catch (error) {
+      this.last_error = error instanceof Error ? error.message : String(error);
+    }
+  }
+
+  protected async set_typing_remote(chat_id: string, typing: boolean, _anchor_message_id?: string): Promise<void> {
     if (!typing) return;
     if (!this.bot_token) return;
     const url = `${this.api_base}/bot${this.bot_token}/sendChatAction`;
@@ -282,27 +368,6 @@ export class TelegramChannel extends BaseChannel {
         action: "typing",
       }),
     });
-  }
-
-  private split_text_chunks(raw: string, max_chars: number): string[] {
-    const text = String(raw || "");
-    const max = Math.max(500, Number(max_chars || 3500));
-    if (text.length <= max) return [text];
-    const out: string[] = [];
-    let cursor = 0;
-    while (cursor < text.length) {
-      const remain = text.length - cursor;
-      if (remain <= max) {
-        out.push(text.slice(cursor));
-        break;
-      }
-      const probe = text.slice(cursor, cursor + max);
-      const hard_break = Math.max(probe.lastIndexOf("\n\n"), probe.lastIndexOf("\n"), probe.lastIndexOf(" "));
-      const take = hard_break > Math.floor(max * 0.55) ? hard_break : max;
-      out.push(text.slice(cursor, cursor + take).trim());
-      cursor += take;
-    }
-    return out.filter((v) => Boolean(String(v || "").trim()));
   }
 
   private async send_text_document(

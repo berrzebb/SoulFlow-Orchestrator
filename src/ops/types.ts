@@ -10,6 +10,7 @@ export type OpsRuntimeDeps = {
   cron: CronScheduler;
   heartbeat: HeartbeatService;
   decisions: DecisionService;
+  logger?: import("../logger.js").Logger | null;
 };
 
 export type OpsRuntimeStatus = {

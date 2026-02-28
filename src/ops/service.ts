@@ -1,8 +1,12 @@
+import type { Logger } from "../logger.js";
+import type { ServiceLike } from "../runtime/service.types.js";
 import { now_iso } from "../utils/common.js";
 import type { OpsRuntimeDeps, OpsRuntimeStatus } from "./types.js";
 
-export class OpsRuntimeService {
+export class OpsRuntimeService implements ServiceLike {
+  readonly name = "ops-runtime";
   private readonly deps: OpsRuntimeDeps;
+  private readonly logger: Logger | null;
   private readonly health_log_enabled: boolean;
   private readonly health_log_on_change: boolean;
   private last_health_signature = "";
@@ -13,6 +17,7 @@ export class OpsRuntimeService {
 
   constructor(deps: OpsRuntimeDeps) {
     this.deps = deps;
+    this.logger = deps.logger ?? null;
     this.health_log_enabled = String(process.env.OPS_HEALTH_LOG_ENABLED || "0").trim() === "1";
     this.health_log_on_change = String(process.env.OPS_HEALTH_LOG_ON_CHANGE || "1").trim() !== "0";
   }
@@ -31,6 +36,10 @@ export class OpsRuntimeService {
     this.status_state.running = false;
   }
 
+  health_check(): { ok: boolean; details?: Record<string, unknown> } {
+    return { ok: this.status_state.running };
+  }
+
   status(): OpsRuntimeStatus {
     return { ...this.status_state };
   }
@@ -38,8 +47,7 @@ export class OpsRuntimeService {
   private async startup_changelog(): Promise<void> {
     if (this.status_state.startup_logged) return;
     this.status_state.startup_logged = true;
-    // eslint-disable-next-line no-console
-    console.log(`[ops] startup ${now_iso()}`);
+    this.logger?.info(`startup ${now_iso()}`);
   }
 
   private async health_tick(): Promise<void> {
@@ -51,9 +59,8 @@ export class OpsRuntimeService {
     if (this.health_log_enabled) {
       const changed = signature !== this.last_health_signature;
       if (!this.health_log_on_change || changed) {
-        // eslint-disable-next-line no-console
-        console.log(
-          `[ops] health queue(in=${q.inbound},out=${q.outbound}) channels=${channelStatus.enabled_channels.join(",")} mention_loop=${channelStatus.mention_loop_running} heartbeat=${heartbeat.enabled}`,
+        this.logger?.info(
+          `health queue(in=${q.inbound},out=${q.outbound}) channels=${channelStatus.enabled_channels.join(",")} mention_loop=${channelStatus.mention_loop_running} heartbeat=${heartbeat.enabled}`,
         );
       }
     }
@@ -68,8 +75,6 @@ export class OpsRuntimeService {
 
   private async bridge_pump_tick(): Promise<void> {
     if (!this.status_state.running) return;
-    // Disabled by default: direct channel polling already handles inbound routing.
-    // Enable only for explicit recovery diagnostics.
     const enabled = String(process.env.ENABLE_BRIDGE_PUMP || "0").trim() === "1";
     if (enabled) {
       try {
@@ -78,8 +83,7 @@ export class OpsRuntimeService {
           await this.deps.channels.handle_inbound_message(inbound);
         }
       } catch (error) {
-        // eslint-disable-next-line no-console
-        console.error(`[ops] bridge pump failed: ${error instanceof Error ? error.message : String(error)}`);
+        this.logger?.error(`bridge pump failed: ${error instanceof Error ? error.message : String(error)}`);
       }
     }
     this.status_state.last_bridge_pump_at = now_iso();
@@ -90,12 +94,10 @@ export class OpsRuntimeService {
     try {
       const result = await this.deps.decisions.dedupe_decisions();
       if (result.removed > 0) {
-        // eslint-disable-next-line no-console
-        console.log(`[ops] decision dedupe removed=${result.removed} active=${result.active}`);
+        this.logger?.info(`decision dedupe removed=${result.removed} active=${result.active}`);
       }
     } catch (error) {
-      // eslint-disable-next-line no-console
-      console.error(`[ops] decision dedupe failed: ${error instanceof Error ? error.message : String(error)}`);
+      this.logger?.error(`decision dedupe failed: ${error instanceof Error ? error.message : String(error)}`);
     }
     this.status_state.last_decision_dedupe_at = now_iso();
   }

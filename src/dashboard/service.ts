@@ -10,6 +10,8 @@ import type { DecisionService } from "../decision/index.js";
 import type { WorkflowEventService } from "../events/index.js";
 import type { HeartbeatService } from "../heartbeat/index.js";
 import type { OpsRuntimeService } from "../ops/index.js";
+import type { Logger } from "../logger.js";
+import type { ServiceLike } from "../runtime/service.types.js";
 import { now_iso } from "../utils/common.js";
 
 type DashboardOptions = {
@@ -24,6 +26,7 @@ type DashboardOptions = {
   ops: OpsRuntimeService;
   decisions: DecisionService;
   events: WorkflowEventService;
+  logger?: Logger | null;
 };
 
 type SseClient = {
@@ -53,9 +56,11 @@ function set_no_cache(res: ServerResponse): void {
   res.setHeader("Expires", "0");
 }
 
-export class DashboardService {
+export class DashboardService implements ServiceLike {
+  readonly name = "dashboard";
   private readonly options: DashboardOptions;
   private readonly root_dir: string;
+  private readonly logger: Logger | null;
   private server: Server | null = null;
   private watcher: FSWatcher | null = null;
   private bound_port: number | null = null;
@@ -64,6 +69,7 @@ export class DashboardService {
   constructor(options: DashboardOptions) {
     this.options = options;
     this.root_dir = this.resolve_root_dir(options);
+    this.logger = options.logger ?? null;
   }
 
   async start(): Promise<void> {
@@ -77,12 +83,19 @@ export class DashboardService {
       const code = String((error as { code?: string } | null)?.code || "");
       const allow_fallback = String(process.env.DASHBOARD_PORT_FALLBACK || "1").trim() !== "0";
       if (!allow_fallback || (code !== "EACCES" && code !== "EADDRINUSE")) {
+        this.server.close();
         this.server = null;
         throw error;
       }
-      // eslint-disable-next-line no-console
-      console.warn(`[dashboard] listen failed ${this.options.host}:${this.options.port} code=${code}; retry on ephemeral port`);
-      await this.listen_on_port(0);
+       
+      this.logger?.warn(`listen failed ${this.options.host}:${this.options.port} code=${code}; retry on ephemeral port`);
+      try {
+        await this.listen_on_port(0);
+      } catch (fallback_error) {
+        this.server?.close();
+        this.server = null;
+        throw fallback_error;
+      }
     }
     this.start_watcher();
   }
@@ -98,6 +111,10 @@ export class DashboardService {
     this.server = null;
     this.bound_port = null;
     await new Promise<void>((resolve) => s.close(() => resolve()));
+  }
+
+  health_check(): { ok: boolean; details?: Record<string, unknown> } {
+    return { ok: this.server !== null, details: { port: this.bound_port, sse_clients: this.sse_clients.size } };
   }
 
   get_url(): string {
@@ -128,13 +145,13 @@ export class DashboardService {
         this.broadcast_reload(file ? String(file) : "");
       });
       this.watcher.on("error", (error) => {
-        // eslint-disable-next-line no-console
-        console.warn(`[dashboard] file watcher disabled: ${error instanceof Error ? error.message : String(error)}`);
+         
+        this.logger?.warn(`file watcher disabled: ${error instanceof Error ? error.message : String(error)}`);
         this.stop_watcher();
       });
     } catch (error) {
-      // eslint-disable-next-line no-console
-      console.warn(`[dashboard] file watcher unavailable: ${error instanceof Error ? error.message : String(error)}`);
+       
+      this.logger?.warn(`file watcher unavailable: ${error instanceof Error ? error.message : String(error)}`);
       this.watcher = null;
     }
   }
@@ -147,9 +164,11 @@ export class DashboardService {
 
   private broadcast_reload(file: string): void {
     const payload = `event: reload\ndata: ${JSON.stringify({ file, at: now_iso() })}\n\n`;
-    for (const client of this.sse_clients.values()) {
-      client.res.write(payload);
+    const dead: string[] = [];
+    for (const [id, client] of this.sse_clients.entries()) {
+      try { client.res.write(payload); } catch { dead.push(id); }
     }
+    for (const id of dead) this.sse_clients.delete(id);
   }
 
   private async build_state(): Promise<Record<string, unknown>> {
@@ -248,7 +267,12 @@ export class DashboardService {
 
   private serve_file(res: ServerResponse, relative_path: string): void {
     const safe = normalize(relative_path).replace(/^(\.\.[/\\])+/, "");
-    const abs = join(this.root_dir, safe);
+    const abs = resolve(this.root_dir, safe);
+    if (!abs.startsWith(this.root_dir)) {
+      res.statusCode = 403;
+      res.end("forbidden");
+      return;
+    }
     if (!existsSync(abs)) {
       res.statusCode = 404;
       res.end("not_found");
@@ -258,7 +282,12 @@ export class DashboardService {
     res.statusCode = 200;
     set_no_cache(res);
     res.setHeader("Content-Type", MIME[ext] || "application/octet-stream");
-    createReadStream(abs).pipe(res);
+    const stream = createReadStream(abs);
+    stream.on("error", () => {
+      if (!res.headersSent) res.statusCode = 500;
+      res.end();
+    });
+    stream.pipe(res);
   }
 
   private add_sse_client(res: ServerResponse): void {

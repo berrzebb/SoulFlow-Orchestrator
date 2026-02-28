@@ -1,47 +1,57 @@
 ---
 name: github
-description: "Interact with GitHub using the `gh` CLI. Use `gh issue`, `gh pr`, `gh run`, and `gh api` for issues, PRs, CI runs, and advanced queries."
-metadata: {"orchestrator":{"emoji":"octopus","requires":{"bins":["gh"]},"install":[{"id":"brew","kind":"brew","formula":"gh","bins":["gh"],"label":"Install GitHub CLI (brew)"},{"id":"apt","kind":"apt","package":"gh","bins":["gh"],"label":"Install GitHub CLI (apt)"}]}}
+description: Interact with GitHub using the gh CLI for issues, pull requests, CI/CD runs, releases, and API queries. Use when the user mentions GitHub, PRs, issues, CI checks, workflow runs, or references a GitHub URL. Do NOT use for generic git operations (use just-bash) or non-GitHub platforms.
+metadata:
+  model: remote
+  tools:
+    - exec
+  triggers:
+    - 깃허브
+    - github
+    - PR
+    - 이슈
+    - issue
+    - pull request
+    - 커밋
+  aliases:
+    - gh
 ---
 
 # GitHub Skill
 
-Use the `gh` CLI to interact with GitHub. Always specify `--repo owner/repo` when not in a git directory, or use URLs directly.
+## Quick Reference
 
-## Pull Requests
+| Task | Command |
+|------|---------|
+| PR CI checks | `gh pr checks <N> --repo owner/repo` |
+| Workflow runs | `gh run list --repo owner/repo --limit 10` |
+| Failed logs | `gh run view <id> --repo owner/repo --log-failed` |
+| API query | `gh api repos/owner/repo/pulls/<N> --jq '.title'` |
+| Issue list | `gh issue list --repo owner/repo --json number,title` |
 
-Check CI status on a PR:
+Always specify `--repo owner/repo` when not in a git directory.
+
+## CI/CD Inspection
+
 ```bash
+# Check CI status
 gh pr checks 55 --repo owner/repo
-```
 
-List recent workflow runs:
-```bash
-gh run list --repo owner/repo --limit 10
-```
-
-View a run and see which steps failed:
-```bash
-gh run view <run-id> --repo owner/repo
-```
-
-View logs for failed steps only:
-```bash
+# View failed run details
 gh run view <run-id> --repo owner/repo --log-failed
 ```
 
-## API for Advanced Queries
+## API Queries
 
-The `gh api` command is useful for accessing data not available through other subcommands.
+Use `gh api` for data not available through subcommands:
 
-Get PR with specific fields:
 ```bash
 gh api repos/owner/repo/pulls/55 --jq '.title, .state, .user.login'
 ```
 
-## JSON Output
+## JSON Filtering
 
-Most commands support `--json` for structured output.  You can use `--jq` to filter:
+Most commands support `--json` + `--jq`:
 
 ```bash
 gh issue list --repo owner/repo --json number,title --jq '.[] | "\(.number): \(.title)"'

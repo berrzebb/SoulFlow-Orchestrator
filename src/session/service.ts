@@ -1,10 +1,9 @@
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import Database from "better-sqlite3";
-import type { SessionHistoryEntry, SessionHistoryRange, SessionInfo, SessionMessage } from "./types.js";
+import { with_sqlite, type DatabaseSync } from "../utils/sqlite-helper.js";
+import type { SessionHistoryEntry, SessionHistoryRange, SessionMessage } from "./types.js";
+import type { Logger } from "../logger.js";
 import { now_iso } from "../utils/common.js";
-
-type DatabaseSync = Database.Database;
 
 export interface SessionStoreLike {
   get_or_create(key: string): Promise<Session>;
@@ -92,35 +91,26 @@ export class Session {
   }
 }
 
+const MAX_CACHE_SIZE = 200;
+
 export class SessionStore implements SessionStoreLike {
   private readonly workspace: string;
   private readonly sessions_dir: string;
   private readonly sqlite_path: string;
   private readonly cache = new Map<string, Session>();
   private readonly initialized: Promise<void>;
+  private readonly logger: Logger | null;
 
-  constructor(workspace = process.cwd(), sessions_dir_override?: string) {
+  constructor(workspace = process.cwd(), sessions_dir_override?: string, logger?: Logger | null) {
     this.workspace = workspace;
     this.sessions_dir = sessions_dir_override || join(this.workspace, "sessions");
     this.sqlite_path = join(this.sessions_dir, "sessions.db");
+    this.logger = logger ?? null;
     this.initialized = this.ensure_initialized();
   }
 
   private with_sqlite<T>(run: (db: DatabaseSync) => T): T | null {
-    let db: DatabaseSync | null = null;
-    try {
-      db = new Database(this.sqlite_path);
-      db.exec("PRAGMA foreign_keys=ON;");
-      return run(db);
-    } catch {
-      return null;
-    } finally {
-      try {
-        db?.close();
-      } catch {
-        // no-op
-      }
-    }
+    return with_sqlite(this.sqlite_path, run, { pragmas: ["foreign_keys=ON"] });
   }
 
   private async ensure_initialized(): Promise<void> {
@@ -176,11 +166,24 @@ export class SessionStore implements SessionStoreLike {
   async get_or_create(key: string): Promise<Session> {
     await this.initialized;
     const cached = this.cache.get(key);
-    if (cached) return cached;
+    if (cached) {
+      this.cache.delete(key);
+      this.cache.set(key, cached);
+      return cached;
+    }
     const loaded = await this.load(key);
     const session = loaded || new Session({ key });
+    this.evict_if_full();
     this.cache.set(key, session);
     return session;
+  }
+
+  private evict_if_full(): void {
+    while (this.cache.size >= MAX_CACHE_SIZE) {
+      const oldest = this.cache.keys().next().value;
+      if (oldest === undefined) break;
+      this.cache.delete(oldest);
+    }
   }
 
   private async load(key: string): Promise<Session | null> {
@@ -232,7 +235,7 @@ export class SessionStore implements SessionStoreLike {
 
   async save(session: Session): Promise<void> {
     await this.initialized;
-    this.with_sqlite((db) => {
+    const saved = this.with_sqlite((db) => {
       db.exec("BEGIN IMMEDIATE");
       try {
         db.prepare(`
@@ -277,34 +280,17 @@ export class SessionStore implements SessionStoreLike {
       }
       return true;
     });
+    if (!saved) {
+      this.logger?.error(`save failed for key=${session.key}`);
+      this.cache.delete(session.key);
+      return;
+    }
+    this.evict_if_full();
     this.cache.set(session.key, session);
-  }
-
-  async save_session(session: Session): Promise<void> {
-    await this.save(session);
   }
 
   invalidate(key: string): void {
     this.cache.delete(key);
-  }
-
-  invalidate_session(key: string): void {
-    this.invalidate(key);
-  }
-
-  async list_sessions(): Promise<SessionInfo[]> {
-    await this.initialized;
-    const rows = this.with_sqlite((db) => db.prepare(`
-      SELECT key, created_at, updated_at
-      FROM sessions
-      ORDER BY updated_at DESC
-    `).all() as Array<{ key: string; created_at: string; updated_at: string }>) || [];
-    return rows.map((row) => ({
-      key: String(row.key || ""),
-      created_at: String(row.created_at || ""),
-      updated_at: String(row.updated_at || ""),
-      path: `sqlite://sessions/${encodeURIComponent(String(row.key || ""))}`,
-    }));
   }
 
   async get_history_range(key: string, start_offset: number, end_offset: number): Promise<SessionHistoryRange> {

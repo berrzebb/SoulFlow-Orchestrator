@@ -1,10 +1,8 @@
 import { createHash } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import Database from "better-sqlite3";
+import { with_sqlite } from "../../utils/sqlite-helper.js";
 import type { DynamicToolManifestEntry } from "./dynamic.js";
-
-type DatabaseSync = Database.Database;
 
 type ToolRow = {
   name: string;
@@ -65,24 +63,8 @@ export class SqliteDynamicToolStore implements DynamicToolStoreLike {
     return this.sqlite_path;
   }
 
-  private with_sqlite<T>(run: (db: DatabaseSync) => T): T | null {
-    let db: DatabaseSync | null = null;
-    try {
-      db = new Database(this.sqlite_path);
-      return run(db);
-    } catch {
-      return null;
-    } finally {
-      try {
-        db?.close();
-      } catch {
-        // no-op
-      }
-    }
-  }
-
   private ensure_initialized(): void {
-    this.with_sqlite((db) => {
+    with_sqlite(this.sqlite_path,(db) => {
       db.exec(`
         PRAGMA journal_mode=WAL;
         CREATE TABLE IF NOT EXISTS dynamic_tools (
@@ -104,7 +86,7 @@ export class SqliteDynamicToolStore implements DynamicToolStoreLike {
   }
 
   list_tools(): DynamicToolManifestEntry[] {
-    const rows = this.with_sqlite((db) => db.prepare(`
+    const rows = with_sqlite(this.sqlite_path,(db) => db.prepare(`
       SELECT name, description, enabled, kind, parameters_json, command_template, working_dir, requires_approval, updated_at_ms
       FROM dynamic_tools
       ORDER BY name ASC
@@ -120,7 +102,7 @@ export class SqliteDynamicToolStore implements DynamicToolStoreLike {
   upsert_tool(entry: DynamicToolManifestEntry): boolean {
     const name = String(entry.name || "").trim();
     if (!name) return false;
-    const changed = this.with_sqlite((db) => {
+    const changed = with_sqlite(this.sqlite_path,(db) => {
       const now = Date.now();
       const result = db.prepare(`
         INSERT INTO dynamic_tools (
@@ -154,7 +136,7 @@ export class SqliteDynamicToolStore implements DynamicToolStoreLike {
   remove_tool(name_raw: string): boolean {
     const name = String(name_raw || "").trim();
     if (!name) return false;
-    const removed = this.with_sqlite((db) => {
+    const removed = with_sqlite(this.sqlite_path,(db) => {
       const result = db.prepare("DELETE FROM dynamic_tools WHERE name = ?").run(name);
       return Number(result.changes || 0) > 0;
     });

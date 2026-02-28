@@ -129,7 +129,7 @@ export class ToolRegistry {
 
   private async _run_background(task_id: string): Promise<void> {
     const current = this.background_tasks.get(task_id);
-    if (!current) return;
+    if (!current || is_terminal(current.status)) return;
     const tool = this.tools.get(current.tool_name);
     if (!tool) {
       this.background_tasks.set(task_id, {

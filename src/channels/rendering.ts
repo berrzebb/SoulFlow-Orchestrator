@@ -1,4 +1,5 @@
 import { sanitizeMarkdown } from "markdown-to-markdown-sanitizer";
+import { escape_html } from "../utils/common.js";
 import type { ChannelProvider } from "./types.js";
 
 export type RenderMode = "markdown" | "html" | "plain";
@@ -19,7 +20,6 @@ export type RenderedOutput = {
 const DEFAULT_ORIGIN = "https://example.invalid";
 const DEFAULT_LINK_PREFIXES = ["https:", "http:"] as const;
 const DEFAULT_IMAGE_PREFIXES = ["https:", "http:"] as const;
-const TEMPLATE_HEADER_RE = /^##\s*(요약|핵심|코드(?:\/|·)?명령|미디어)\b/im;
 const BLOCKED_IMAGE_MARKDOWN_RE = /!\[([^\]]*)\]\(\/forbidden\)/g;
 const BLOCKED_LINK_MARKDOWN_RE = /\[([^\]]+)\]\(#\)/g;
 const HEX_ENTITY_RE = /&([0-9a-f]{2,6});/gi;
@@ -63,7 +63,7 @@ export function render_agent_output(raw: string, profile: RenderProfile): Render
 }
 
 function sanitize_markdown_output(raw: string, profile: RenderProfile): string {
-  const input = String(raw || "").trim();
+  const input = normalize_html_to_markdown(String(raw || "").trim());
   if (!input) return "";
   let sanitized = "";
   try {
@@ -88,56 +88,25 @@ function sanitize_markdown_output(raw: string, profile: RenderProfile): string {
   return collapse_blank_lines(sanitized).trim();
 }
 
+/** LLM이 HTML을 직접 생성한 경우 마크다운 등가물로 변환. 파이프라인은 항상 markdown 입력을 기대. */
+function normalize_html_to_markdown(input: string): string {
+  let out = String(input || "");
+  if (!/<[a-z][a-z0-9]*[\s>]/i.test(out)) return out;
+  out = out.replace(/<code>([^<]+)<\/code>/gi, "`$1`");
+  out = out.replace(/<(?:b|strong)>([^<]+)<\/(?:b|strong)>/gi, "**$1**");
+  out = out.replace(/<(?:i|em)>([^<]+)<\/(?:i|em)>/gi, "*$1*");
+  out = out.replace(/<a\s+href="([^"]+)"[^>]*>([^<]+)<\/a>/gi, "[$2]($1)");
+  out = out.replace(/<br\s*\/?>/gi, "\n");
+  out = out.replace(/<\/p>\s*<p[^>]*>/gi, "\n\n");
+  out = out.replace(/<\/?(?:p|div|span)[^>]*>/gi, "");
+  return out;
+}
+
 function normalize_response_template(raw: string): string {
   const input = String(raw || "").replace(/\r/g, "").trim();
   if (!input) return "";
-  const secret_resolution_template = normalize_secret_resolution_template(input);
-  if (secret_resolution_template) return secret_resolution_template;
-  if (TEMPLATE_HEADER_RE.test(input)) return input;
-
-  const has_code = /```[\s\S]*?```/.test(input);
-  const has_media_hint = /!\[[^\]]*\]\(([^)]+)\)|\[(?:IMAGE|VIDEO|FILE)\s*:\s*([^\]]+)\]|<(?:img|video)[^>]*src=["']([^"']+)["']/i.test(input);
-  const is_short_plain = input.length < 180 && input.split("\n").length <= 3 && !has_code && !has_media_hint;
-  if (is_short_plain) return input;
-
-  const media_refs = extract_media_refs(input);
-  const code_blocks = extract_code_blocks(input);
-  let body = input;
-  for (const code of code_blocks) body = body.replace(code, "");
-  body = strip_media_refs(body);
-  body = collapse_blank_lines(body).trim();
-  const body_lines = body
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean);
-
-  const summary = (body_lines[0] || input.split("\n")[0] || "").trim() || "(요약 없음)";
-  const keypoints = extract_key_points(body_lines, summary);
-  const code_section = code_blocks.length > 0 ? code_blocks.join("\n\n").trim() : "(없음)";
-  const media_section = media_refs.length > 0
-    ? media_refs.map((v) => `- ${v}`).join("\n")
-    : "(없음)";
-  const should_use_section_template = has_code || media_refs.length > 0 || body_lines.length >= 6;
-  if (!should_use_section_template) {
-    const compact = [
-      summary,
-      ...keypoints.slice(0, 3).map((v) => `- ${v}`),
-    ].filter(Boolean);
-    return compact.join("\n").trim();
-  }
-
-  const sections: string[] = [];
-  sections.push("## 요약", summary);
-  if (keypoints.length > 0) {
-    sections.push("", "## 핵심", ...keypoints.map((v) => `- ${v}`));
-  }
-  if (code_blocks.length > 0) {
-    sections.push("", "## 코드/명령", code_section);
-  }
-  if (media_refs.length > 0) {
-    sections.push("", "## 미디어", media_section);
-  }
-  return sections.join("\n").trim();
+  // secret resolution 전용 — 나머지는 LLM 응답을 그대로 통과
+  return normalize_secret_resolution_template(input) || input;
 }
 
 function normalize_secret_resolution_template(raw: string): string | null {
@@ -178,91 +147,6 @@ function normalize_secret_resolution_template(raw: string): string | null {
   ].join("\n");
 }
 
-function extract_code_blocks(raw: string): string[] {
-  const out: string[] = [];
-  const text = String(raw || "");
-  const re = /```[\s\S]*?```/g;
-  let m: RegExpExecArray | null = null;
-  while (true) {
-    m = re.exec(text);
-    if (!m) break;
-    const code = String(m[0] || "").trim();
-    if (!code) continue;
-    out.push(code);
-    if (out.length >= 4) break;
-  }
-  return out;
-}
-
-function extract_media_refs(raw: string): string[] {
-  const out: string[] = [];
-  const seen = new Set<string>();
-  const push = (value: string): void => {
-    const text = String(value || "").trim();
-    if (!text || seen.has(text)) return;
-    seen.add(text);
-    out.push(text);
-  };
-  const source = String(raw || "");
-
-  source.replace(/!\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g, (_m, altRaw, urlRaw) => {
-    const alt = String(altRaw || "").trim();
-    const url = String(urlRaw || "").trim();
-    push(alt ? `[IMAGE: ${url}] ${alt}` : `[IMAGE: ${url}]`);
-    return "";
-  });
-  source.replace(/\[(IMAGE|VIDEO|FILE)\s*:\s*([^\]]+)\]/gi, (_m, kindRaw, urlRaw) => {
-    const kind = String(kindRaw || "").trim().toUpperCase();
-    const url = String(urlRaw || "").trim();
-    push(`${kind}: ${url}`);
-    return "";
-  });
-  source.replace(/<(img|video)[^>]*src=["']([^"']+)["'][^>]*>/gi, (_m, tagRaw, urlRaw) => {
-    const tag = String(tagRaw || "").trim().toLowerCase();
-    const url = String(urlRaw || "").trim();
-    if (tag === "video") push(`[VIDEO: ${url}]`);
-    else push(`[IMAGE: ${url}]`);
-    return "";
-  });
-  return out.slice(0, 8);
-}
-
-function strip_media_refs(raw: string): string {
-  let text = String(raw || "");
-  text = text.replace(/!\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g, "");
-  text = text.replace(/\[(IMAGE|VIDEO|FILE)\s*:\s*([^\]]+)\]/gi, "");
-  text = text.replace(/<(?:img|video)[^>]*src=["']([^"']+)["'][^>]*>/gi, "");
-  return text;
-}
-
-function extract_key_points(lines: string[], summary: string): string[] {
-  const out: string[] = [];
-  const seen = new Set<string>();
-  const push = (value: string): void => {
-    const text = String(value || "").replace(/^[-*]\s+/, "").trim();
-    if (!text) return;
-    if (text === summary) return;
-    if (seen.has(text)) return;
-    seen.add(text);
-    out.push(text);
-  };
-
-  for (const line of lines) {
-    if (/^[-*]\s+/.test(line) || /^\d+\.\s+/.test(line)) push(line);
-    if (out.length >= 4) return out;
-  }
-
-  const sentence_source = lines.join(" ");
-  const chunks = sentence_source
-    .split(/(?<=[.!?])\s+/)
-    .map((v) => v.trim())
-    .filter(Boolean);
-  for (const sentence of chunks) {
-    push(sentence);
-    if (out.length >= 4) break;
-  }
-  return out.slice(0, 4);
-}
 
 function fix_blocked_email_links(markdown: string): string {
   return String(markdown || "").replace(BLOCKED_LINK_MARKDOWN_RE, (_match, labelRaw) => {
@@ -441,14 +325,6 @@ function collapse_blank_lines(input: string): string {
     .map((line) => line.trimEnd())
     .filter((line, idx, arr) => !(line === "" && arr[idx - 1] === ""))
     .join("\n");
-}
-
-function escape_html(input: string): string {
-  return String(input || "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
 }
 
 function escape_html_attr(input: string): string {

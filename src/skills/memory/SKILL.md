@@ -1,28 +1,43 @@
 ---
 name: memory
-description: Two-layer memory system with memory.db longterm + daily recall.
-always: true
+description: Two-layer persistent memory system (longterm facts + daily recall) backed by memory.db. Use when the user mentions remembering, recalling past events, storing preferences, or asks about past context. Also use automatically to persist important user preferences, project facts, and relationship data. Do NOT use for ephemeral session data.
+metadata:
+  model: local
+  always: true
+  tools:
+    - memory
+  triggers:
+    - 기억
+    - 메모리
+    - 기록
+    - memory
 ---
 
 # Memory
 
-## Structure
+## Quick Reference
 
-- `memory/memory.db` — Long-term and daily memory single source of truth.
-- `sqlite://memory/longterm` — Long-term facts (preferences, project context, relationships).
-- `sqlite://memory/daily/yyyy-mm-dd` — Daily execution/context memory.
+| Task | Tool Call |
+|------|-----------|
+| Store fact | `memory(action="store", scope="longterm", content="User prefers dark mode")` |
+| Daily log | `memory(action="store", scope="daily", content="Deployed v2.1 to staging")` |
+| Search | `memory(action="search", query="user preferences")` |
+| Recall today | `memory(action="recall", scope="daily")` |
 
-## Search Past Events
+## Two-Layer Architecture
 
-Use the memory search API/tooling instead of markdown file scan.
+- **Longterm** (`sqlite://memory/longterm`) — persistent facts: preferences, project context, relationships.
+- **Daily** (`sqlite://memory/daily/yyyy-mm-dd`) — execution logs, conversation context.
 
-## When to Update Longterm Memory
+Both backed by `memory/memory.db`.
 
-Write important facts immediately using memory tools:
-- User preferences ("I prefer dark mode")
-- Project context ("The API uses OAuth2")
+## Auto-Store Triggers
+
+Store immediately when user reveals:
+- Preferences ("I prefer dark mode")
+- Project facts ("The API uses OAuth2")
 - Relationships ("Alice is the project lead")
 
-## Auto-consolidation
+## Auto-Consolidation
 
-Old conversations are summarized from recent daily memory rows into longterm memory as sessions grow.
+Old daily memory rows are summarized into longterm as sessions grow.

@@ -1,24 +1,72 @@
 import { SkillsLoader } from "./skills.js";
 import { MemoryStore, type MemoryStoreLike } from "./memory.js";
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { extname, isAbsolute, join, resolve } from "node:path";
 import type { AgentContextSnapshot, ContextMessage } from "./context.types.js";
 import { now_iso } from "../utils/common.js";
-import { DecisionService } from "../decision/index.js";
+import { DecisionService, PromiseService } from "../decision/index.js";
+import { load_all_personas, type RolePersona } from "./persona.js";
+
+async function try_read_first_file(candidates: string[]): Promise<string> {
+  for (const path of candidates) {
+    if (!existsSync(path)) continue;
+    const raw = (await readFile(path, "utf-8")).trim();
+    if (raw) return raw;
+  }
+  return "";
+}
+
+const IMAGE_MIME: Record<string, string> = {
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".webp": "image/webp",
+  ".gif": "image/gif",
+  ".bmp": "image/bmp",
+  ".svg": "image/svg+xml",
+};
 
 export class ContextBuilder {
   private readonly snapshots = new Map<string, AgentContextSnapshot>();
+  private role_personas = new Map<string, RolePersona>();
   readonly skills_loader: SkillsLoader;
   readonly memory_store: MemoryStoreLike;
   readonly decision_service: DecisionService;
+  readonly promise_service: PromiseService;
   private readonly workspace: string;
 
-  constructor(workspace: string, args?: { memory_store?: MemoryStoreLike }) {
+  constructor(workspace: string, args?: { memory_store?: MemoryStoreLike; promises_dir?: string }) {
     this.workspace = workspace;
     this.skills_loader = new SkillsLoader(workspace);
     this.memory_store = args?.memory_store || new MemoryStore(workspace);
     this.decision_service = new DecisionService(workspace);
+    this.promise_service = new PromiseService(workspace, args?.promises_dir);
+  }
+
+  get_role_persona(role: string): RolePersona | null {
+    return this.role_personas.get(role) || null;
+  }
+
+  /** once 모드 전용: identity + butler 페르소나 + 스킬 콘텐츠 포함 프롬프트. */
+  async build_once_prompt(
+    skill_names?: string[],
+    session_context?: { channel?: string | null; chat_id?: string | null },
+  ): Promise<string> {
+    const identity = await this._get_identity();
+    if (this.role_personas.size === 0) await this._load_roles_from_agents();
+    const butler = this.get_role_persona("butler");
+    const persona = butler?.body ? `# ROLE: BUTLER\n${butler.body}` : "";
+    const skills_content = skill_names?.length
+      ? this.skills_loader.load_skills_for_context(skill_names)
+      : "";
+    const current_session = this._build_current_session_section(session_context?.channel, session_context?.chat_id);
+    return [
+      identity,
+      persona,
+      skills_content ? `# Skills In Context\n${skills_content}` : "",
+      current_session,
+    ].filter(Boolean).join("\n\n").trim();
   }
 
   async build_system_prompt(
@@ -30,10 +78,9 @@ export class ContextBuilder {
     const identity = await this._get_identity();
     const bootstrap = await this._load_bootstrap_files();
     const memory_context = await this._build_memory_context();
-    const decisions = await this.decision_service.build_compact_injection({
-      team_id: decision_context?.team_id || null,
-      agent_id: decision_context?.agent_id || null,
-    });
+    const decision_ctx = { team_id: decision_context?.team_id || null, agent_id: decision_context?.agent_id || null };
+    const decisions = await this.decision_service.build_compact_injection(decision_ctx);
+    const promises = await this.promise_service.build_compact_injection(decision_ctx);
     const skills_content = this.skills_loader.load_skills_for_context(skill_names);
     const skill_summary = this.skills_loader.build_skill_summary();
     const current_session = this._build_current_session_section(session_context?.channel, session_context?.chat_id);
@@ -43,8 +90,10 @@ export class ContextBuilder {
       bootstrap,
       memory_context,
       decisions || "",
+      promises || "",
       skills_content ? `# Skills In Context\n${skills_content}` : "",
       `# Skills Summary\n${skill_summary || "(no skills found)"}`,
+      MODEL_ROUTING_GUIDE,
       current_session,
     ]
       .filter(Boolean)
@@ -63,30 +112,22 @@ export class ContextBuilder {
   }
 
   async _get_identity(): Promise<string> {
-    const candidates = [
+    const raw = await try_read_first_file([
       join(this.workspace, "templates", "IDENTITY.md"),
       join(this.workspace, "IDENTITY.md"),
-    ];
-    for (const path of candidates) {
-      if (!existsSync(path)) continue;
-      const raw = (await readFile(path, "utf-8")).trim();
-      if (raw) return raw;
-    }
-    return "You are a headless orchestration assistant.";
+    ]);
+    return raw || "You are a headless orchestration assistant.";
   }
 
   async _load_bootstrap_files(): Promise<string> {
     const names = ["AGENTS.md", "SOUL.md", "HEART.md", "USER.md", "TOOLS.md"];
     const parts: string[] = [];
     for (const name of names) {
-      const candidates = [join(this.workspace, "templates", name), join(this.workspace, name)];
-      for (const path of candidates) {
-        if (!existsSync(path)) continue;
-        const raw = (await readFile(path, "utf-8")).trim();
-        if (!raw) continue;
-        parts.push(`# ${name}\n${raw}`);
-        break;
-      }
+      const raw = await try_read_first_file([
+        join(this.workspace, "templates", name),
+        join(this.workspace, name),
+      ]);
+      if (raw) parts.push(`# ${name}\n${raw}`);
     }
     const roles = await this._load_roles_from_agents();
     if (roles) parts.push(`# ROLES\n${roles}`);
@@ -95,18 +136,13 @@ export class ContextBuilder {
 
   private async _load_roles_from_agents(): Promise<string> {
     const agents_dir = join(this.workspace, "agents");
-    if (!existsSync(agents_dir)) return "";
-    const files = readdirSync(agents_dir)
-      .filter((name) => name.toLowerCase().endsWith(".md"))
-      .sort((a, b) => a.localeCompare(b));
-    if (files.length === 0) return "";
+    this.role_personas = await load_all_personas(agents_dir);
+    if (this.role_personas.size === 0) return "";
 
     const chunks: string[] = [];
-    for (const name of files) {
-      const path = join(agents_dir, name);
-      const raw = (await readFile(path, "utf-8")).trim();
-      if (!raw) continue;
-      chunks.push(`## ${name}\n${raw}`);
+    for (const [role, persona] of this.role_personas) {
+      if (!persona.body) continue;
+      chunks.push(`## ${role}\n${persona.body}`);
     }
     return chunks.join("\n\n");
   }
@@ -187,29 +223,13 @@ export class ContextBuilder {
     ].filter(Boolean).join("\n\n");
   }
 
-  private async _load_recent_daily_history(limit_days: number): Promise<string> {
-    const files = (await this.memory_store.list_daily())
-      .map((f) => f.slice(0, 10))
-      .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d))
-      .sort((a, b) => b.localeCompare(a))
-      .slice(0, Math.max(0, limit_days));
-    if (files.length === 0) return "";
-    const chunks: string[] = [];
-    for (const day of files) {
-      const raw = (await this.memory_store.read_daily(day)).trim();
-      if (!raw) continue;
-      chunks.push(`### ${day}\n${raw}`);
-    }
-    return chunks.join("\n\n");
-  }
-
   private _to_image_data_uri_if_local(path_or_url: string): string | null {
     const raw = String(path_or_url || "").trim();
     if (!raw) return null;
     if (/^https?:\/\//i.test(raw)) return null;
     if (/^data:/i.test(raw)) return raw;
     const ext = extname(raw).toLowerCase();
-    const mime = this._image_mime_from_ext(ext);
+    const mime = IMAGE_MIME[ext] || null;
     if (!mime) return null;
     const resolved_path = isAbsolute(raw) ? raw : resolve(this.workspace, raw);
     const candidate = existsSync(raw) ? raw : resolved_path;
@@ -221,16 +241,6 @@ export class ContextBuilder {
     } catch {
       return null;
     }
-  }
-
-  private _image_mime_from_ext(ext: string): string | null {
-    if (ext === ".png") return "image/png";
-    if (ext === ".jpg" || ext === ".jpeg") return "image/jpeg";
-    if (ext === ".webp") return "image/webp";
-    if (ext === ".gif") return "image/gif";
-    if (ext === ".bmp") return "image/bmp";
-    if (ext === ".svg") return "image/svg+xml";
-    return null;
   }
 
   private async _load_history_from_daily(history_days: string[]): Promise<string> {
@@ -310,40 +320,43 @@ export class ContextBuilder {
     return snap;
   }
 
-  attach_memory(agentId: string, memory: Record<string, unknown>): AgentContextSnapshot | null {
+  private update_snapshot(
+    agentId: string,
+    patch: Partial<AgentContextSnapshot>,
+  ): AgentContextSnapshot | null {
     const prev = this.snapshots.get(agentId);
     if (!prev) return null;
-    const next: AgentContextSnapshot = {
-      ...prev,
-      memory: { ...(prev.memory || {}), ...memory },
-      updatedAt: now_iso(),
-    };
+    const next: AgentContextSnapshot = { ...prev, ...patch, updatedAt: now_iso() };
     this.snapshots.set(agentId, next);
     return next;
+  }
+
+  attach_memory(agentId: string, memory: Record<string, unknown>): AgentContextSnapshot | null {
+    const prev = this.snapshots.get(agentId);
+    return this.update_snapshot(agentId, {
+      memory: { ...(prev?.memory || {}), ...memory },
+    });
   }
 
   attach_skills(agentId: string, skills: string[]): AgentContextSnapshot | null {
     const prev = this.snapshots.get(agentId);
-    if (!prev) return null;
-    const next: AgentContextSnapshot = {
-      ...prev,
-      skills: [...new Set([...(prev.skills || []), ...skills])],
-      updatedAt: now_iso(),
-    };
-    this.snapshots.set(agentId, next);
-    return next;
+    return this.update_snapshot(agentId, {
+      skills: [...new Set([...(prev?.skills || []), ...skills])],
+    });
   }
 
   attach_tools(agentId: string, tools: string[]): AgentContextSnapshot | null {
     const prev = this.snapshots.get(agentId);
-    if (!prev) return null;
-    const next: AgentContextSnapshot = {
-      ...prev,
-      tools: [...new Set([...(prev.tools || []), ...tools])],
-      updatedAt: now_iso(),
-    };
-    this.snapshots.set(agentId, next);
-    return next;
+    return this.update_snapshot(agentId, {
+      tools: [...new Set([...(prev?.tools || []), ...tools])],
+    });
   }
 
 }
+
+const MODEL_ROUTING_GUIDE = [
+  "# Skill Model Routing",
+  "- model:local → 직접 실행 (도구 호출, 단순 매핑)",
+  "- model:remote → spawn 도구로 외부 모델의 서브에이전트 생성 (복잡한 추론 필요)",
+  "- model 미지정 → 복잡도 판단하여 직접 또는 spawn",
+].join("\n");

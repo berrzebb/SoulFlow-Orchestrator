@@ -1,7 +1,8 @@
 import { Tool } from "./base.js";
 import { run_shell_command } from "./shell-runtime.js";
 import type { JsonSchema, ToolExecutionContext } from "./types.js";
-import { SecretVaultService } from "../../security/secret-vault.js";
+import { get_shared_secret_vault } from "../../security/secret-vault-factory.js";
+import type { SecretVaultService } from "../../security/secret-vault.js";
 import { redact_sensitive_text } from "../../security/sensitive.js";
 
 export type DynamicToolManifestEntry = {
@@ -41,7 +42,7 @@ export class DynamicShellTool extends Tool {
     this.command_template = entry.command_template;
     this.working_dir = entry.working_dir || default_working_dir;
     this.requires_approval = entry.requires_approval === true;
-    this.secret_vault = new SecretVaultService(this.working_dir);
+    this.secret_vault = get_shared_secret_vault(this.working_dir);
   }
 
   protected async run(params: Record<string, unknown>, context?: ToolExecutionContext): Promise<string> {

@@ -1,10 +1,13 @@
 import type { AgentLoopState, TaskState } from "../contracts.js";
+import type { Logger } from "../logger.js";
 import type { AgentLoopRunOptions, AgentLoopRunResult, TaskLoopRunOptions, TaskLoopRunResult } from "./loop.types.js";
 import type { TaskStore } from "./task-store.js";
 import { parse_tool_calls_from_text } from "./tool-call-parser.js";
 import { ConsecutiveToolCallGuard, type ToolCallGuard } from "./tool-call-guard.js";
 
 const SEOUL_TZ = "Asia/Seoul";
+const TERMINAL_TASK_STATUSES = new Set(["waiting_approval", "failed", "cancelled", "completed"]);
+const MAX_TASK_TURNS = 500;
 
 function now_seoul_iso(): string {
   const now = new Date();
@@ -26,9 +29,21 @@ export class AgentLoopStore {
   private readonly loops = new Map<string, AgentLoopState>();
   private readonly tasks = new Map<string, TaskState>();
   private readonly task_store: TaskStore | null;
+  private readonly logger: Logger | null;
 
-  constructor(options?: { task_store?: TaskStore | null }) {
+  constructor(options?: { task_store?: TaskStore | null; logger?: Logger | null }) {
     this.task_store = options?.task_store || null;
+    this.logger = options?.logger || null;
+  }
+
+  private save_loop_snapshot(state: AgentLoopState): void {
+    this.loops.set(state.loopId, { ...state });
+  }
+
+  private async save_task_snapshot(state: TaskState): Promise<void> {
+    state.memory = { ...state.memory, __updated_at_seoul: now_seoul_iso() };
+    this.tasks.set(state.taskId, { ...state });
+    await this.persist_task(state);
   }
 
   async initialize(): Promise<void> {
@@ -73,7 +88,9 @@ export class AgentLoopStore {
     state.status = "cancelled";
     state.exitReason = reason;
     this.tasks.set(task_id, state);
-    void this.persist_task(state);
+    this.persist_task(state).catch((e) => {
+      this.logger?.error("cancel_task persist failed", { task_id, error: e instanceof Error ? e.message : String(e) });
+    });
     return state;
   }
 
@@ -83,7 +100,7 @@ export class AgentLoopStore {
     if (state.status === "completed" || state.status === "cancelled") return state;
     if (state.currentTurn >= state.maxTurns) {
       const extend_by = Math.max(1, Math.ceil(Math.max(1, state.maxTurns) * 0.25));
-      state.maxTurns = state.currentTurn + extend_by;
+      state.maxTurns = Math.min(state.currentTurn + extend_by, MAX_TASK_TURNS);
     }
     state.status = "running";
     state.exitReason = reason;
@@ -134,10 +151,9 @@ export class AgentLoopStore {
         await options.on_turn({ state, response, last_content: final_content });
       }
 
-      const implicit_tool_calls = response.has_tool_calls
-        ? []
+      const effective_tool_calls = response.has_tool_calls
+        ? response.tool_calls
         : parse_tool_calls_from_text(final_content);
-      const effective_tool_calls = response.has_tool_calls ? response.tool_calls : implicit_tool_calls;
 
       if (effective_tool_calls.length > 0) {
         const guard = tool_call_guard.observe(effective_tool_calls);
@@ -163,7 +179,7 @@ export class AgentLoopStore {
           response,
         });
         current_message = followup || "(tool execution completed; continue)";
-        this.loops.set(state.loopId, { ...state });
+        this.save_loop_snapshot(state);
         continue;
       }
       tool_call_guard.reset();
@@ -178,7 +194,7 @@ export class AgentLoopStore {
         break;
       }
       current_message = final_content || options.objective;
-      this.loops.set(state.loopId, { ...state });
+      this.save_loop_snapshot(state);
     }
 
     if (state.status === "running" && state.currentTurn >= state.maxTurns) {
@@ -191,7 +207,7 @@ export class AgentLoopStore {
       state.terminationReason = state.terminationReason || "stopped";
     }
 
-    this.loops.set(state.loopId, { ...state });
+    this.save_loop_snapshot(state);
     return { state: { ...state }, final_content };
   }
 
@@ -252,12 +268,9 @@ export class AgentLoopStore {
         state.exitReason = error instanceof Error ? error.message : String(error);
       }
 
-      this.tasks.set(state.taskId, { ...state, memory: { ...state.memory, __updated_at_seoul: now_seoul_iso() } });
-      await this.persist_task(state);
+      await this.save_task_snapshot(state);
       if (options.on_turn) await options.on_turn(state);
-      if (state.status === "waiting_approval" || state.status === "failed" || state.status === "cancelled" || state.status === "completed") {
-        break;
-      }
+      if (TERMINAL_TASK_STATUSES.has(state.status)) break;
     }
 
     if (state.status === "running" && state.currentTurn >= state.maxTurns) {
@@ -265,8 +278,7 @@ export class AgentLoopStore {
       state.exitReason = "max_turns_reached";
     }
 
-    this.tasks.set(state.taskId, { ...state, memory: { ...state.memory, __updated_at_seoul: now_seoul_iso() } });
-    await this.persist_task(state);
+    await this.save_task_snapshot(state);
     return { state: { ...state, memory: { ...state.memory } } };
   }
 

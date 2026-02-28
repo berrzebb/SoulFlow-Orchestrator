@@ -209,31 +209,70 @@ export class SlackChannel extends BaseChannel {
     }
   }
 
-  protected async set_typing_remote(_chat_id: string, _typing: boolean): Promise<void> {
-    // Slack bot API does not provide a standard typing start/stop API for generic bot messages.
-    // Keep in-memory state only.
-  }
-
-  async add_reaction(chat_id: string, timestamp: string, reaction: string): Promise<{ ok: boolean; error?: string }> {
-    if (!this.bot_token) return { ok: false, error: "slack_bot_token_missing" };
-    if (!chat_id || !timestamp || !reaction) return { ok: false, error: "chat_id_timestamp_reaction_required" };
+  protected async set_typing_remote(chat_id: string, typing: boolean, anchor_message_id?: string): Promise<void> {
+    if (!this.bot_token || !anchor_message_id) return;
+    const reaction = "hourglass_flowing_sand";
+    const method = typing ? "reactions.add" : "reactions.remove";
     try {
-      const response = await fetch("https://slack.com/api/reactions.add", {
+      await fetch(`https://slack.com/api/${method}`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${this.bot_token}`,
           "Content-Type": "application/json; charset=utf-8",
         },
-        body: JSON.stringify({
-          channel: chat_id,
-          timestamp,
-          name: reaction.replace(/:/g, ""),
-        }),
+        body: JSON.stringify({ channel: chat_id, timestamp: anchor_message_id, name: reaction }),
+      });
+    } catch { /* best-effort */ }
+  }
+
+  async edit_message(chat_id: string, message_id: string, content: string): Promise<{ ok: boolean; error?: string }> {
+    if (!this.bot_token) return { ok: false, error: "slack_bot_token_missing" };
+    if (!chat_id || !message_id) return { ok: false, error: "chat_id_and_message_id_required" };
+    try {
+      const response = await fetch("https://slack.com/api/chat.update", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${this.bot_token}`,
+          "Content-Type": "application/json; charset=utf-8",
+        },
+        body: JSON.stringify({ channel: chat_id, ts: message_id, text: String(content || "") }),
+      });
+      const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+      if (!response.ok || data.ok !== true) {
+        return { ok: false, error: String(data.error || `http_${response.status}`) };
+      }
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  }
+
+  async add_reaction(chat_id: string, message_id: string, reaction: string): Promise<{ ok: boolean; error?: string }> {
+    return this.slack_reaction("reactions.add", chat_id, message_id, reaction, "already_reacted");
+  }
+
+  async remove_reaction(chat_id: string, message_id: string, reaction: string): Promise<{ ok: boolean; error?: string }> {
+    return this.slack_reaction("reactions.remove", chat_id, message_id, reaction, "no_reaction");
+  }
+
+  private async slack_reaction(
+    method: string, chat_id: string, message_id: string, reaction: string, ignore_error: string,
+  ): Promise<{ ok: boolean; error?: string }> {
+    if (!this.bot_token) return { ok: false, error: "slack_bot_token_missing" };
+    if (!chat_id || !message_id || !reaction) return { ok: false, error: "chat_id_message_id_reaction_required" };
+    try {
+      const response = await fetch(`https://slack.com/api/${method}`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${this.bot_token}`,
+          "Content-Type": "application/json; charset=utf-8",
+        },
+        body: JSON.stringify({ channel: chat_id, timestamp: message_id, name: reaction.replace(/:/g, "") }),
       });
       const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
       if (!response.ok || data.ok !== true) {
         const error = String(data.error || `http_${response.status}`);
-        if (error === "already_reacted") return { ok: true };
+        if (error === ignore_error) return { ok: true };
         return { ok: false, error };
       }
       return { ok: true };
@@ -252,7 +291,7 @@ export class SlackChannel extends BaseChannel {
         Authorization: `Bearer ${this.bot_token}`,
       },
     });
-    const data = (await response.json()) as SlackApiResult;
+    const data = await response.json().catch(() => ({ ok: false, error: `json_parse_failed_${response.status}` })) as SlackApiResult;
     if (!response.ok) {
       return {
         ok: false,
@@ -260,27 +299,6 @@ export class SlackChannel extends BaseChannel {
       };
     }
     return data;
-  }
-
-  private split_text_chunks(raw: string, max_chars: number): string[] {
-    const text = String(raw || "");
-    const max = Math.max(500, Number(max_chars || 3200));
-    if (text.length <= max) return [text];
-    const out: string[] = [];
-    let cursor = 0;
-    while (cursor < text.length) {
-      const remain = text.length - cursor;
-      if (remain <= max) {
-        out.push(text.slice(cursor));
-        break;
-      }
-      const probe = text.slice(cursor, cursor + max);
-      const hard_break = Math.max(probe.lastIndexOf("\n\n"), probe.lastIndexOf("\n"), probe.lastIndexOf(" "));
-      const take = hard_break > Math.floor(max * 0.55) ? hard_break : max;
-      out.push(text.slice(cursor, cursor + take).trim());
-      cursor += take;
-    }
-    return out.filter((v) => Boolean(String(v || "").trim()));
   }
 
   private async post_text_message(

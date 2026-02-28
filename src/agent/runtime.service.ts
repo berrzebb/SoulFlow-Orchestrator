@@ -6,6 +6,8 @@ import type {
   AgentApprovalStatus,
   AgentRuntimeLike,
   AgentToolRuntimeContext,
+  SpawnAndWaitOptions,
+  SpawnAndWaitResult,
 } from "./runtime.types.js";
 import type { ToolExecutionContext } from "./tools/types.js";
 import type {
@@ -17,13 +19,23 @@ import type {
 import type { ContextBuilder } from "./context.js";
 import type { ToolLike } from "./tools/types.js";
 
-type MessageToolContextSetter = {
-  set_context?: (channel: string, chat_id: string, reply_to?: string | null) => void;
+type ToolContextSetter = {
+  set_context?: (...args: string[]) => void;
 };
 
-type ChannelToolContextSetter = {
-  set_context?: (channel: string, chat_id: string) => void;
-};
+function parse_approval_row(raw: unknown): AgentApprovalRequest {
+  const row = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  return {
+    request_id: String(row.request_id || ""),
+    tool_name: String(row.tool_name || ""),
+    params: (row.params && typeof row.params === "object") ? (row.params as Record<string, unknown>) : {},
+    created_at: String(row.created_at || ""),
+    status: String(row.status || "pending") as AgentApprovalStatus,
+    context: (row.context && typeof row.context === "object")
+      ? (row.context as AgentApprovalRequest["context"])
+      : undefined,
+  };
+}
 
 export class AgentRuntimeAdapter implements AgentRuntimeLike {
   private readonly domain: AgentDomain;
@@ -37,11 +49,15 @@ export class AgentRuntimeAdapter implements AgentRuntimeLike {
   }
 
   get_always_skills(): string[] {
-    return this.domain.context.skills_loader.get_always_skills();
+    return this.domain.list_always_skills();
   }
 
   recommend_skills(task: string, limit = 6): string[] {
-    return this.domain.context.skills_loader.suggest_skills_for_text(task, limit);
+    return this.domain.recommend_skills(task, limit);
+  }
+
+  get_skill_metadata(name: string): import("./skills.types.js").SkillMetadata | null {
+    return this.domain.get_skill_metadata(name);
   }
 
   has_tool(name: string): boolean {
@@ -62,14 +78,14 @@ export class AgentRuntimeAdapter implements AgentRuntimeLike {
     if (!channel || !chat_id) return;
     const reply_to = String(context.reply_to || "").trim() || null;
 
-    const message_tool = this.domain.tools.get("message") as MessageToolContextSetter | null;
-    message_tool?.set_context?.(channel, chat_id, reply_to);
-
-    const spawn_tool = this.domain.tools.get("spawn") as ChannelToolContextSetter | null;
-    spawn_tool?.set_context?.(channel, chat_id);
-
-    const file_request_tool = this.domain.tools.get("request_file") as ChannelToolContextSetter | null;
-    file_request_tool?.set_context?.(channel, chat_id);
+    for (const tool_name of ["message", "spawn", "request_file"] as const) {
+      const tool = this.domain.tools.get(tool_name) as ToolContextSetter | null;
+      if (tool_name === "message") {
+        tool?.set_context?.(channel, chat_id, reply_to || "");
+      } else {
+        tool?.set_context?.(channel, chat_id);
+      }
+    }
   }
 
   execute_tool(name: string, params: Record<string, unknown>, context?: ToolExecutionContext): Promise<string> {
@@ -77,39 +93,16 @@ export class AgentRuntimeAdapter implements AgentRuntimeLike {
   }
 
   async append_daily_memory(content: string, day?: string): Promise<void> {
-    await this.domain.context.memory_store.append_daily(content, day);
+    await this.domain.append_daily_memory(content, day);
   }
 
   list_approval_requests(status?: AgentApprovalStatus): AgentApprovalRequest[] {
-    const rows = this.domain.tools.list_approval_requests(status as never);
-    return rows.map((row) => ({
-      request_id: String((row as Record<string, unknown>).request_id || ""),
-      tool_name: String((row as Record<string, unknown>).tool_name || ""),
-      params: ((row as Record<string, unknown>).params && typeof (row as Record<string, unknown>).params === "object")
-        ? ((row as Record<string, unknown>).params as Record<string, unknown>)
-        : {},
-      created_at: String((row as Record<string, unknown>).created_at || ""),
-      status: String((row as Record<string, unknown>).status || "pending") as AgentApprovalStatus,
-      context: ((row as Record<string, unknown>).context && typeof (row as Record<string, unknown>).context === "object")
-        ? ((row as Record<string, unknown>).context as AgentApprovalRequest["context"])
-        : undefined,
-    }));
+    return this.domain.tools.list_approval_requests(status as never).map(parse_approval_row);
   }
 
   get_approval_request(request_id: string): AgentApprovalRequest | null {
     const row = this.domain.tools.get_approval_request(String(request_id || "").trim());
-    if (!row) return null;
-    const rec = row as unknown as Record<string, unknown>;
-    return {
-      request_id: String(rec.request_id || ""),
-      tool_name: String(rec.tool_name || ""),
-      params: (rec.params && typeof rec.params === "object") ? (rec.params as Record<string, unknown>) : {},
-      created_at: String(rec.created_at || ""),
-      status: String(rec.status || "pending") as AgentApprovalStatus,
-      context: (rec.context && typeof rec.context === "object")
-        ? (rec.context as AgentApprovalRequest["context"])
-        : undefined,
-    };
+    return row ? parse_approval_row(row) : null;
   }
 
   resolve_approval_request(request_id: string, response_text: string): AgentApprovalResolveResult {
@@ -132,6 +125,32 @@ export class AgentRuntimeAdapter implements AgentRuntimeLike {
 
   run_task_loop(options: TaskLoopRunOptions): Promise<TaskLoopRunResult> {
     return this.domain.loop.run_task_loop(options);
+  }
+
+  async spawn_and_wait(options: SpawnAndWaitOptions): Promise<SpawnAndWaitResult> {
+    try {
+      const spawned = await this.domain.subagents.spawn({
+        task: options.task,
+        skill_names: options.skill_names,
+        origin_channel: options.channel,
+        origin_chat_id: options.chat_id,
+        max_iterations: options.max_turns ?? 8,
+        announce: false,
+        provider_id: options.provider_id,
+      });
+      const result = await this.domain.subagents.wait_for_completion(
+        spawned.subagent_id,
+        options.timeout_ms ?? 120_000,
+      );
+      if (!result) return { ok: false, content: "", error: "spawn_not_found" };
+      return {
+        ok: result.status === "completed",
+        content: result.content || "",
+        error: result.error,
+      };
+    } catch (e) {
+      return { ok: false, content: "", error: e instanceof Error ? e.message : String(e) };
+    }
   }
 }
 

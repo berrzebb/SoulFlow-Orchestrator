@@ -1,21 +1,31 @@
 ---
 name: summarize
-description: Summarize or extract text/transcripts from URLs, podcasts, and local files (great fallback for “transcribe this YouTube/video”).
-homepage: https://summarize.sh
-metadata: {"orchestrator":{"emoji":"receipt","requires":{"bins":["summarize"]},"install":[{"id":"brew","kind":"brew","formula":"steipete/tap/summarize","bins":["summarize"],"label":"Install summarize (brew)"}]}}
+description: Summarize or extract text from URLs, local files, YouTube videos, and podcasts using the summarize CLI. Use when the user asks to summarize a link, article, video, or document. Supports multiple output lengths and models. Do NOT use for web search (use web-search) or for content the agent can read directly.
+metadata:
+  model: remote
+  tools:
+    - exec
+  triggers:
+    - 요약
+    - 정리
+    - summarize
+    - 요약해줘
+    - 정리해줘
+  aliases:
+    - 요약
+  homepage: https://summarize.sh
 ---
 
 # Summarize
 
-Fast CLI to summarize URLs, local files, and YouTube links.
+## Quick Reference
 
-## When to use (trigger phrases)
-
-Use this skill immediately when the user asks any of:
-- “use summarize.sh”
-- “what’s this link/video about?”
-- “summarize this URL/article”
-- “transcribe this YouTube/video” (best-effort transcript extraction; no `yt-dlp` needed)
+| Input | Command |
+|-------|---------|
+| URL/article | `summarize “https://...” --model openai/gpt-4.1-mini` |
+| Local file | `summarize “/path/to/file.pdf”` |
+| YouTube | `summarize “https://youtu.be/...” --youtube auto` |
+| Extract only | `summarize “URL” --extract-only` |
 
 ## Quick start
 

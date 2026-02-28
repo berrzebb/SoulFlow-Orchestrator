@@ -1,10 +1,8 @@
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import Database from "better-sqlite3";
+import { with_sqlite } from "../utils/sqlite-helper.js";
 import type { DecisionIndexData, DecisionRecord } from "./types.js";
 import { now_iso } from "../utils/common.js";
-
-type DatabaseSync = Database.Database;
 
 const INDEX_VERSION = 1;
 
@@ -41,25 +39,9 @@ export class DecisionStore {
     await mkdir(this.decisions_dir, { recursive: true });
   }
 
-  private with_sqlite<T>(run: (db: DatabaseSync) => T): T | null {
-    let db: DatabaseSync | null = null;
-    try {
-      db = new Database(this.sqlite_path);
-      return run(db);
-    } catch {
-      return null;
-    } finally {
-      try {
-        db?.close();
-      } catch {
-        // no-op
-      }
-    }
-  }
-
   private async ensure_initialized(): Promise<void> {
     await this.ensure_dirs();
-    this.with_sqlite((db) => {
+    with_sqlite(this.sqlite_path,(db) => {
       db.exec(`
         CREATE TABLE IF NOT EXISTS decisions (
           id TEXT PRIMARY KEY,
@@ -159,7 +141,7 @@ export class DecisionStore {
 
   private async upsert_records(records: DecisionRecord[]): Promise<void> {
     if (records.length === 0) return;
-    this.with_sqlite((db) => {
+    with_sqlite(this.sqlite_path,(db) => {
       db.exec("BEGIN IMMEDIATE");
       try {
         const stmt = db.prepare(`
@@ -213,7 +195,7 @@ export class DecisionStore {
 
   private async rebuild_index_from_store(): Promise<DecisionIndexData> {
     const index = default_index();
-    const rows = this.with_sqlite((db) => db.prepare(`
+    const rows = with_sqlite(this.sqlite_path,(db) => db.prepare(`
       SELECT record_json
       FROM decisions
       ORDER BY updated_at ASC

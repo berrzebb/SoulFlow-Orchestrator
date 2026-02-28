@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import type { ToolRegistry } from "./registry.js";
-import { DynamicShellTool, type DynamicToolManifestEntry } from "./dynamic.js";
+import { DynamicShellTool } from "./dynamic.js";
 import { SqliteDynamicToolStore, type DynamicToolStoreLike } from "./store.js";
 
 export class DynamicToolRuntimeLoader {

@@ -1,22 +1,29 @@
 ---
 name: clawhub
-description: Search and install agent skills from ClawHub, the public skill registry.
-homepage: https://clawhub.ai
-metadata: {"orchestrator":{"emoji":"lobster"}}
+description: Search and install agent skills from ClawHub, the public skill registry. Use when the user asks to find, install, update, or list available skills. No API key needed. Do NOT use for creating skills (use skill-creator) or managing locally installed skills.
+metadata:
+  model: local
+  tools:
+    - exec
+  triggers:
+    - 스킬 설치
+    - install skill
+    - clawhub
+  homepage: https://clawhub.ai
 ---
 
 # ClawHub
 
 Public skill registry for AI agents. Search by natural language (vector search).
 
-## When to use
+## Quick Reference
 
-Use this skill when the user asks any of:
-- "find a skill for …"
-- "search for skills"
-- "install a skill"
-- "what skills are available?"
-- "update my skills"
+| Task | Command |
+|------|---------|
+| Search | `npx --yes clawhub@latest search "topic" --limit 5` |
+| Install | `npx --yes clawhub@latest install <slug> --workdir .` |
+| Update all | `npx --yes clawhub@latest update --all --workdir .` |
+| List installed | `npx --yes clawhub@latest list --workdir .` |
 
 ## Search
 

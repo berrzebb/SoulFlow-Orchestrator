@@ -1,10 +1,9 @@
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import Database from "better-sqlite3";
+import { escape_regexp, now_iso } from "../utils/common.js";
+import { with_sqlite_strict } from "../utils/sqlite-helper.js";
 import { redact_sensitive_text } from "./sensitive.js";
-
-type DatabaseSync = Database.Database;
 
 type SecretEntry = {
   ciphertext: string;
@@ -56,10 +55,6 @@ function b64url_decode(value: string): Buffer {
   return Buffer.from(padded, "base64");
 }
 
-function now_iso(): string {
-  return new Date().toISOString();
-}
-
 function normalize_secret_name(value: unknown): string {
   return String(value || "")
     .trim()
@@ -104,24 +99,8 @@ export class SecretVaultService implements SecretVaultLike {
     };
   }
 
-  private with_sqlite<T>(run: (db: DatabaseSync) => T): T | null {
-    let db: DatabaseSync | null = null;
-    try {
-      db = new Database(this.store_path);
-      return run(db);
-    } catch {
-      return null;
-    } finally {
-      try {
-        db?.close();
-      } catch {
-        // no-op
-      }
-    }
-  }
-
   private ensure_store_db(): void {
-    this.with_sqlite((db) => {
+    with_sqlite_strict(this.store_path,(db) => {
       db.exec(`
         PRAGMA journal_mode=WAL;
         CREATE TABLE IF NOT EXISTS secrets (
@@ -149,11 +128,17 @@ export class SecretVaultService implements SecretVaultLike {
       const raw = (await readFile(this.key_path, "utf-8")).trim();
       const bytes = b64url_decode(raw);
       if (bytes.length !== 32) throw new Error("invalid_key_length");
+      await chmod(this.key_path, 0o600).catch(() => undefined);
       this.key_cache = bytes;
       return bytes;
-    } catch {
+    } catch (error) {
+      const code = (error as { code?: string } | null)?.code || "";
+      if (code && code !== "ENOENT") {
+        throw error;
+      }
       const generated = randomBytes(32);
-      await writeFile(this.key_path, b64url_encode(generated), "utf-8");
+      await writeFile(this.key_path, b64url_encode(generated), { encoding: "utf-8", mode: 0o600 });
+      await chmod(this.key_path, 0o600).catch(() => undefined);
       this.key_cache = generated;
       return generated;
     }
@@ -187,7 +172,7 @@ export class SecretVaultService implements SecretVaultLike {
 
   private async read_store_map(): Promise<Record<string, SecretEntry>> {
     await this.ensure_ready();
-    const rows = this.with_sqlite((db) => db.prepare(`
+    const rows = with_sqlite_strict(this.store_path,(db) => db.prepare(`
       SELECT name, ciphertext, updated_at
       FROM secrets
       ORDER BY name ASC
@@ -206,7 +191,7 @@ export class SecretVaultService implements SecretVaultLike {
 
   async list_names(): Promise<string[]> {
     await this.ensure_ready();
-    const rows = this.with_sqlite((db) => db.prepare(`
+    const rows = with_sqlite_strict(this.store_path,(db) => db.prepare(`
       SELECT name
       FROM secrets
       ORDER BY name ASC
@@ -221,7 +206,7 @@ export class SecretVaultService implements SecretVaultLike {
     if (!name) return { ok: false, name: "" };
     await this.ensure_ready();
     const ciphertext = await this.encrypt_text(plaintext, `secret:${name}`);
-    const ok = this.with_sqlite((db) => {
+    const ok = with_sqlite_strict(this.store_path,(db) => {
       db.prepare(`
         INSERT INTO secrets(name, ciphertext, updated_at)
         VALUES (?, ?, ?)
@@ -238,7 +223,7 @@ export class SecretVaultService implements SecretVaultLike {
     const name = normalize_secret_name(nameRaw);
     if (!name) return false;
     await this.ensure_ready();
-    const removed = this.with_sqlite((db) => {
+    const removed = with_sqlite_strict(this.store_path,(db) => {
       const r = db.prepare("DELETE FROM secrets WHERE name = ?").run(name);
       return Number(r.changes || 0) > 0;
     });
@@ -249,7 +234,7 @@ export class SecretVaultService implements SecretVaultLike {
     const name = normalize_secret_name(nameRaw);
     if (!name) return null;
     await this.ensure_ready();
-    const row = this.with_sqlite((db) => db.prepare(`
+    const row = with_sqlite_strict(this.store_path,(db) => db.prepare(`
       SELECT ciphertext
       FROM secrets
       WHERE name = ?
@@ -402,9 +387,5 @@ export class SecretVaultService implements SecretVaultLike {
     const redacted = redact_sensitive_text(out);
     return redacted.text;
   }
-}
-
-function escape_regexp(value: string): string {
-  return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 

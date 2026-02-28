@@ -5,6 +5,8 @@ export type SpawnRequest = {
   task: string;
   label?: string;
   role?: string;
+  soul?: string;
+  heart?: string;
   model?: string;
   max_turns?: number;
   origin_channel?: string;
@@ -22,7 +24,9 @@ export class SpawnTool extends Tool {
     properties: {
       task: { type: "string", description: "Task description for the subagent" },
       label: { type: "string", description: "Optional short label for tracking" },
-      role: { type: "string", description: "Optional role hint for subagent" },
+      role: { type: "string", description: "Optional role hint for subagent (e.g. lead, implementer)" },
+      soul: { type: "string", description: "Optional soul override for subagent persona" },
+      heart: { type: "string", description: "Optional heart override for subagent tone" },
       model: { type: "string", description: "Optional model override" },
       max_turns: { type: "integer", minimum: 1, maximum: 500, description: "Turn budget for spawned loop" },
     },
@@ -49,6 +53,8 @@ export class SpawnTool extends Tool {
       task: String(params.task || ""),
       label: params.label ? String(params.label) : undefined,
       role: params.role ? String(params.role) : undefined,
+      soul: params.soul ? String(params.soul) : undefined,
+      heart: params.heart ? String(params.heart) : undefined,
       model: params.model ? String(params.model) : undefined,
       max_turns: params.max_turns ? Number(params.max_turns) : undefined,
       origin_channel: String(context.channel || this.origin_channel || "") || undefined,

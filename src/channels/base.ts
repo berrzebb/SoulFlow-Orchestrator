@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { InboundMessage, OutboundMessage } from "../bus/types.js";
 import { now_iso } from "../utils/common.js";
+import type { CommandDescriptor } from "./commands/registry.js";
 import type { AgentMention, ChannelCommand, ChannelHealth, ChannelProvider, ChannelTypingState, ChatChannel, FileRequestResult } from "./types.js";
 import { parse_slash_command } from "./slash-command.js";
 
@@ -18,13 +19,25 @@ export abstract class BaseChannel implements ChatChannel {
   abstract stop(): Promise<void>;
   abstract send(message: OutboundMessage): Promise<{ ok: boolean; message_id?: string; error?: string }>;
   abstract read(chat_id: string, limit?: number): Promise<InboundMessage[]>;
-  protected abstract set_typing_remote(chat_id: string, typing: boolean): Promise<void>;
+  protected abstract set_typing_remote(chat_id: string, typing: boolean, anchor_message_id?: string): Promise<void>;
+
+  async edit_message(_chat_id: string, _message_id: string, _content: string): Promise<{ ok: boolean; error?: string }> {
+    return { ok: false, error: "edit_not_supported" };
+  }
+
+  async add_reaction(_chat_id: string, _message_id: string, _reaction: string): Promise<{ ok: boolean; error?: string }> {
+    return { ok: false, error: "reactions_not_supported" };
+  }
+
+  async remove_reaction(_chat_id: string, _message_id: string, _reaction: string): Promise<{ ok: boolean; error?: string }> {
+    return { ok: false, error: "reactions_not_supported" };
+  }
 
   is_running(): boolean {
     return this.running;
   }
 
-  async set_typing(chat_id: string, typing: boolean): Promise<void> {
+  async set_typing(chat_id: string, typing: boolean, anchor_message_id?: string): Promise<void> {
     const normalized = String(chat_id || "");
     if (!normalized) return;
     this.typing_state.set(normalized, {
@@ -33,7 +46,7 @@ export abstract class BaseChannel implements ChatChannel {
       updated_at: now_iso(),
     });
     try {
-      await this.set_typing_remote(normalized, typing);
+      await this.set_typing_remote(normalized, typing, anchor_message_id);
     } catch (error) {
       this.last_error = error instanceof Error ? error.message : String(error);
     }
@@ -147,6 +160,31 @@ export abstract class BaseChannel implements ChatChannel {
       out.push({ raw, alias });
     }
     return out;
+  }
+
+  async sync_commands(_descriptors: CommandDescriptor[]): Promise<void> {
+    /* no-op — 각 채널에서 오버라이드. */
+  }
+
+  protected split_text_chunks(raw: string, max_chars: number): string[] {
+    const text = String(raw || "");
+    const max = Math.max(500, Number(max_chars || 3500));
+    if (text.length <= max) return [text];
+    const out: string[] = [];
+    let cursor = 0;
+    while (cursor < text.length) {
+      const remain = text.length - cursor;
+      if (remain <= max) {
+        out.push(text.slice(cursor));
+        break;
+      }
+      const probe = text.slice(cursor, cursor + max);
+      const hard_break = Math.max(probe.lastIndexOf("\n\n"), probe.lastIndexOf("\n"), probe.lastIndexOf(" "));
+      const take = hard_break > Math.floor(max * 0.55) ? hard_break : max;
+      out.push(text.slice(cursor, cursor + take).trim());
+      cursor += take;
+    }
+    return out.filter((v) => Boolean(String(v || "").trim()));
   }
 
   get_health(): ChannelHealth {

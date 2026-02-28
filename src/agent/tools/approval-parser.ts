@@ -32,7 +32,6 @@ const CANCEL_PATTERNS: RegExp[] = [
 const CLARIFY_PATTERNS: RegExp[] = [
   /\b(why|reason|explain|detail|what)\b/i,
   /\b(왜|이유|설명|근거|상세)\b/i,
-  /\?/,
 ];
 
 function normalize(input: string): string {

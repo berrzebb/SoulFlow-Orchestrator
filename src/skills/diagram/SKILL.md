@@ -1,59 +1,48 @@
 ---
 name: diagram
-description: Generate Mermaid diagrams with the builtin diagram_render tool (@vercel/beautiful-mermaid).
+description: Generate Mermaid diagrams (flowcharts, sequence, ERD, class, state, gantt, pie, mindmap) as SVG or ASCII using the builtin diagram_render tool. Use when the user asks for architecture diagrams, visual charts, or mentions Mermaid syntax. Do NOT use for image generation, screenshots, or non-diagram visuals.
+metadata:
+  model: local
+  tools:
+    - diagram_render
+  triggers:
+    - 다이어그램
+    - 도표
+    - 플로우차트
+    - 시퀀스
+    - mermaid
+    - diagram
+    - chart
+  aliases:
+    - 차트
 ---
 
 # Diagram
 
-Use this skill when the user asks for architecture diagrams, flowcharts, sequence diagrams, ERD, class diagrams, or ASCII diagrams.
+## Quick Reference
 
-## Primary Tool
+| Task | Tool Call |
+|------|-----------|
+| SVG flowchart | `diagram_render(action="render", format="svg", diagram="graph TD; A-->B")` |
+| ASCII diagram | `diagram_render(action="render", format="ascii", diagram="...")` |
+| Themed SVG | `diagram_render(action="render", format="svg", theme="vercel-dark", animate=true, diagram="...")` |
+| List themes | `diagram_render(action="list_themes")` |
 
-- `diagram_render` (builtin)
+No external CLI required — renderer is embedded in the orchestrator runtime.
 
-No external CLI is required. The renderer is embedded in the orchestrator runtime.
+## Supported Diagram Types
+
+flowchart, sequence, ERD, class, state, gantt, pie, mindmap (all standard Mermaid syntax).
 
 ## Workflow
 
 1. Draft Mermaid source from user intent.
 2. Render with `diagram_render`.
-3. If SVG is requested, save output to a `.svg` file via `write_file`.
-4. If terminal-friendly output is requested, render `format=ascii`.
+3. SVG output → save to `.svg` via `write_file`. Terminal output → use `format=ascii`.
 
-## Tool Calls
-
-List themes:
-
-```text
-diagram_render(action="list_themes")
-```
-
-Render SVG (default):
-
-```text
-diagram_render(
-  action="render",
-  format="svg",
-  theme="vercel-dark",
-  animate=true,
-  diagram="graph TD; A[Start] --> B{Check}; B -->|OK| C[Done]; B -->|Fail| D[Retry]"
-)
-```
-
-Render ASCII:
-
-```text
-diagram_render(
-  action="render",
-  format="ascii",
-  use_ascii=false,
-  diagram="sequenceDiagram; Alice->>Bob: Hello; Bob-->>Alice: Hi"
-)
-```
-
-## Quality Rules
+## Guardrails
 
 - Keep node labels short and explicit.
-- Prefer deterministic layout directions (`TD`, `LR`) to reduce redraw churn.
-- For large diagrams, split into multiple focused diagrams.
+- Use deterministic layout directions (`TD`, `LR`) to reduce redraw churn.
+- Large diagrams → split into multiple focused diagrams.
 

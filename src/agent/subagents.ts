@@ -1,10 +1,12 @@
 import { randomUUID } from "node:crypto";
+import type { Logger } from "../logger.js";
 import { now_iso } from "../utils/common.js";
 import type { ChatMessage, ProviderId, ProviderRegistry, ToolCallRequest } from "../providers/index.js";
 import { create_default_tool_registry, type ToolRegistry } from "./tools.js";
 import type { MessageBus, InboundMessage } from "../bus/index.js";
 import type { ContextBuilder } from "./context.js";
 import { parse_tool_calls_from_text } from "./tool-call-parser.js";
+import { resolve_executor_provider } from "../providers/executor.js";
 
 export type SubagentStatus = "idle" | "running" | "completed" | "failed" | "cancelled" | "offline";
 
@@ -34,12 +36,16 @@ export type SpawnSubagentOptions = {
   origin_channel?: string;
   origin_chat_id?: string;
   announce?: boolean;
+  parent_id?: string;
+  /** 추천된 스킬 이름 — build_system_prompt에 스킬 컨텍스트를 포함. */
+  skill_names?: string[];
 };
 
 type RunningSubagent = {
   ref: SubagentRef;
   abort: AbortController;
   done: Promise<void>;
+  parent_id: string | null;
 };
 
 type ControllerPlan = {
@@ -58,6 +64,7 @@ export class SubagentRegistry {
   private readonly bus: MessageBus | null;
   private readonly build_tools: () => ToolRegistry;
   private readonly context_builder: ContextBuilder | null;
+  private readonly logger: Logger | null;
 
   constructor(args?: {
     workspace?: string;
@@ -65,12 +72,14 @@ export class SubagentRegistry {
     bus?: MessageBus | null;
     build_tools?: (() => ToolRegistry) | null;
     context_builder?: ContextBuilder | null;
+    logger?: Logger | null;
   }) {
     this.workspace = args?.workspace || process.cwd();
     this.providers = args?.providers || null;
     this.bus = args?.bus || null;
     this.build_tools = args?.build_tools || (() => create_default_tool_registry({ workspace: this.workspace, bus: this.bus }));
     this.context_builder = args?.context_builder || null;
+    this.logger = args?.logger || null;
   }
 
   upsert(ref: SubagentRef): void {
@@ -141,11 +150,11 @@ export class SubagentRegistry {
 
     const abort = new AbortController();
     const done = this._run_subagent(subagent_id, options, abort);
-    this.running.set(subagent_id, { ref, abort, done });
+    this.running.set(subagent_id, { ref, abort, done, parent_id: options.parent_id || null });
     done.finally(() => {
       this.running.delete(subagent_id);
-    }).catch(() => {
-      // finalized in _run_subagent
+    }).catch((e) => {
+      this.logger?.error("subagent unhandled rejection", { subagent_id, error: e instanceof Error ? e.message : String(e) });
     });
 
     return {
@@ -155,7 +164,7 @@ export class SubagentRegistry {
     };
   }
 
-  cancel(id: string): boolean {
+  cancel(id: string, cascade = true): boolean {
     const running = this.running.get(id);
     if (!running) return false;
     running.abort.abort();
@@ -167,21 +176,33 @@ export class SubagentRegistry {
         updated_at: now_iso(),
       });
     }
+
+    if (cascade) {
+      const children = [...this.running.entries()]
+        .filter(([, child]) => child.parent_id === id)
+        .map(([child_id]) => child_id);
+      for (const child_id of children) {
+        this.cancel(child_id, true);
+      }
+    }
     return true;
   }
 
   private async _run_subagent(id: string, options: SpawnSubagentOptions, abort: AbortController): Promise<void> {
+    const providers = this.providers;
+    if (!providers) throw new Error("providers_not_configured");
     const max_iterations = Math.max(1, Number(options.max_iterations || 15));
-    const controller_provider_id = this.providers!.get_orchestrator_provider_id();
-    const executor_provider_id = options.provider_id || "claude_code";
+    const controller_provider_id = providers.get_orchestrator_provider_id();
+    const executor_provider_id = resolve_executor_provider(options.provider_id || "claude_code");
     const model = options.model;
     const max_tokens = options.max_tokens ?? 4096;
     const temperature = options.temperature ?? 0.4;
 
     const tools = this.build_tools();
     const always_skills = this.context_builder?.skills_loader.get_always_skills() || [];
+    const merged_skills = [...new Set([...always_skills, ...(options.skill_names || [])])];
     const contextual_system = this.context_builder
-      ? await this.context_builder.build_system_prompt(always_skills, { agent_id: id }, {
+      ? await this.context_builder.build_system_prompt(merged_skills, { agent_id: id }, {
           channel: options.origin_channel || null,
           chat_id: options.origin_chat_id || null,
         })
@@ -200,7 +221,7 @@ export class SubagentRegistry {
           return;
         }
 
-        const controller = await this.providers!.run_orchestrator({
+        const controller = await providers.run_orchestrator({
           provider_id: controller_provider_id,
           messages: [
             {
@@ -254,7 +275,7 @@ export class SubagentRegistry {
         });
 
         // Clean executor turn: do not carry previous assistant/tool chat history.
-        const response = await this.providers!.run_headless({
+        const response = await providers.run_headless({
           provider_id: executor_provider_id,
           messages: [
             {
@@ -286,9 +307,8 @@ export class SubagentRegistry {
             last_stream_emit_at = now;
           },
         });
-        if (this._extract_provider_error(response.content || "")) {
-          throw new Error(this._extract_provider_error(response.content || "") || "provider_error");
-        }
+        const provider_err = this._extract_provider_error(response.content || "");
+        if (provider_err) throw new Error(provider_err);
         await this._flush_stream_buffer({
           subagent_id: id,
           label: options.label || options.task.slice(0, 40),
@@ -297,48 +317,44 @@ export class SubagentRegistry {
           stream_buffer_ref: () => stream_buffer,
           clear_stream_buffer: () => { stream_buffer = ""; },
         });
-        const implicit_tool_calls = response.has_tool_calls
-          ? []
-          : parse_tool_calls_from_text(response.content || "");
-        const effective_tool_calls = response.has_tool_calls ? response.tool_calls : implicit_tool_calls;
-        if (effective_tool_calls.length > 0) {
-          const followup_messages: ChatMessage[] = [
-            { role: "system", content: this._build_executor_prompt(options, id, contextual_system) },
-            { role: "user", content: plan.executor_prompt },
-            this._assistant_tool_call_message(response.content, effective_tool_calls),
-          ];
-          for (const tool_call of effective_tool_calls) {
-            if (abort.signal.aborted) {
-              this._update_status(id, "cancelled");
-              return;
-            }
-            const result = await tools.execute(tool_call.name, tool_call.arguments, {
+
+        // executor tool-use loop: 다중 라운드 tool call 지원
+        const MAX_TOOL_ROUNDS = 5;
+        let current_response = response;
+        let tool_messages: ChatMessage[] = [
+          { role: "system", content: this._build_executor_prompt(options, id, contextual_system) },
+          { role: "user", content: plan.executor_prompt },
+        ];
+        for (let tool_round = 0; tool_round < MAX_TOOL_ROUNDS; tool_round++) {
+          const implicit = current_response.has_tool_calls
+            ? []
+            : parse_tool_calls_from_text(current_response.content || "");
+          const effective = current_response.has_tool_calls ? current_response.tool_calls : implicit;
+          if (effective.length === 0) break;
+
+          tool_messages.push(this._assistant_tool_call_message(current_response.content, effective));
+          for (const tc of effective) {
+            if (abort.signal.aborted) { this._update_status(id, "cancelled"); return; }
+            const result = await tools.execute(tc.name, tc.arguments, {
               signal: abort.signal,
               channel: options.origin_channel,
               chat_id: options.origin_chat_id,
               sender_id: `subagent:${id}`,
             });
-            followup_messages.push({
-              role: "tool",
-              tool_call_id: tool_call.id,
-              name: tool_call.name,
-              content: result,
-            });
+            tool_messages.push({ role: "tool", tool_call_id: tc.id, name: tc.name, content: result });
           }
-          const followup = await this.providers!.run_headless({
+          const followup = await providers.run_headless({
             provider_id: executor_provider_id,
-            messages: followup_messages,
+            messages: tool_messages,
             model,
             max_tokens,
             temperature,
           });
-          if (this._extract_provider_error(followup.content || "")) {
-            throw new Error(this._extract_provider_error(followup.content || "") || "provider_error");
-          }
-          last_executor_output = followup.content || response.content || "";
-          continue;
+          const followup_err = this._extract_provider_error(followup.content || "");
+          if (followup_err) throw new Error(followup_err);
+          current_response = followup;
         }
-        last_executor_output = response.content || "";
+        last_executor_output = current_response.content || response.content || "";
       }
 
       if (!final_content) {

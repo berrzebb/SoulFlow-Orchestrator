@@ -129,20 +129,74 @@ export class DiscordChannel extends BaseChannel {
   async read(chat_id: string, limit = 20): Promise<InboundMessage[]> {
     if (!this.bot_token) return [];
     const n = Math.max(1, Math.min(100, Number(limit || 20)));
-    const response = await fetch(`${this.api_base}/channels/${chat_id}/messages?limit=${n}`, {
-      headers: {
-        Authorization: `Bot ${this.bot_token}`,
-      },
-    });
-    if (!response.ok) return [];
-    const rows = (await response.json().catch(() => [])) as unknown;
-    if (!Array.isArray(rows)) return [];
-    return rows
-      .map((r) => (r && typeof r === "object" ? to_inbound_message(this, r as Record<string, unknown>, chat_id) : null))
-      .filter((r): r is InboundMessage => Boolean(r));
+    try {
+      const response = await fetch(`${this.api_base}/channels/${chat_id}/messages?limit=${n}`, {
+        headers: {
+          Authorization: `Bot ${this.bot_token}`,
+        },
+      });
+      if (!response.ok) return [];
+      const rows = (await response.json().catch(() => [])) as unknown;
+      if (!Array.isArray(rows)) return [];
+      return rows
+        .map((r) => (r && typeof r === "object" ? to_inbound_message(this, r as Record<string, unknown>, chat_id) : null))
+        .filter((r): r is InboundMessage => Boolean(r));
+    } catch (error) {
+      this.last_error = error instanceof Error ? error.message : String(error);
+      return [];
+    }
   }
 
-  protected async set_typing_remote(chat_id: string, typing: boolean): Promise<void> {
+  async edit_message(chat_id: string, message_id: string, content: string): Promise<{ ok: boolean; error?: string }> {
+    if (!this.bot_token) return { ok: false, error: "discord_bot_token_missing" };
+    if (!chat_id || !message_id) return { ok: false, error: "chat_id_and_message_id_required" };
+    try {
+      const response = await fetch(`${this.api_base}/channels/${chat_id}/messages/${message_id}`, {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bot ${this.bot_token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ content: String(content || "") }),
+      });
+      const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+      if (!response.ok) return { ok: false, error: String(data.message || `http_${response.status}`) };
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  }
+
+  async add_reaction(chat_id: string, message_id: string, reaction: string): Promise<{ ok: boolean; error?: string }> {
+    return this.discord_reaction("PUT", chat_id, message_id, reaction);
+  }
+
+  async remove_reaction(chat_id: string, message_id: string, reaction: string): Promise<{ ok: boolean; error?: string }> {
+    return this.discord_reaction("DELETE", chat_id, message_id, reaction);
+  }
+
+  private async discord_reaction(
+    method: string, chat_id: string, message_id: string, reaction: string,
+  ): Promise<{ ok: boolean; error?: string }> {
+    if (!this.bot_token) return { ok: false, error: "discord_bot_token_missing" };
+    if (!chat_id || !message_id || !reaction) return { ok: false, error: "chat_id_message_id_reaction_required" };
+    try {
+      const emoji = encodeURIComponent(reaction.replace(/:/g, ""));
+      const response = await fetch(
+        `${this.api_base}/channels/${chat_id}/messages/${message_id}/reactions/${emoji}/@me`,
+        { method, headers: { Authorization: `Bot ${this.bot_token}` } },
+      );
+      if (!response.ok && response.status !== 204) {
+        const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+        return { ok: false, error: String(data.message || `http_${response.status}`) };
+      }
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  }
+
+  protected async set_typing_remote(chat_id: string, typing: boolean, _anchor_message_id?: string): Promise<void> {
     if (!typing) return;
     if (!this.bot_token) return;
     await fetch(`${this.api_base}/channels/${chat_id}/typing`, {

@@ -2,7 +2,8 @@ import { resolve } from "node:path";
 import { Tool } from "./base.js";
 import { run_shell_command } from "./shell-runtime.js";
 import type { JsonSchema, ToolExecutionContext } from "./types.js";
-import { SecretVaultService } from "../../security/secret-vault.js";
+import { get_shared_secret_vault } from "../../security/secret-vault-factory.js";
+import type { SecretVaultService } from "../../security/secret-vault.js";
 import { redact_sensitive_text } from "../../security/sensitive.js";
 
 type ShellToolOptions = {
@@ -23,6 +24,8 @@ const DEFAULT_DENY_PATTERNS = [
   ">\\s*/dev/sd",
   "\\b(shutdown|reboot|poweroff)\\b",
   ":\\(\\)\\s*\\{.*\\};\\s*:",
+  "\\b(base64|certutil|openssl)\\b[\\s\\S]{0,120}(?:--decode|-d|decode)[\\s\\S]{0,120}\\|\\s*(?:bash|sh|zsh|pwsh|powershell|cmd(?:\\.exe)?)\\b",
+  "\\b(?:iex|invoke-expression)\\b",
 ];
 
 const WRITE_APPROVAL_PATTERNS = [
@@ -78,13 +81,16 @@ export class ExecTool extends Tool {
     this.write_approval_patterns = WRITE_APPROVAL_PATTERNS.map((p) => new RegExp(p, "i"));
     this.allow_patterns = (options?.allow_patterns || []).map((p) => new RegExp(p, "i"));
     this.restrict_to_working_dir = Boolean(options?.restrict_to_working_dir);
-    this.secret_vault = new SecretVaultService(this.default_working_dir);
+    this.secret_vault = get_shared_secret_vault(this.default_working_dir);
   }
 
   protected async run(params: Record<string, unknown>, context?: ToolExecutionContext): Promise<string> {
     const command_raw = String(params.command || "").trim();
     const command = await this.secret_vault.resolve_placeholders(command_raw);
-    const cwd = resolve(String(params.working_dir || this.default_working_dir));
+    // restrict_to_working_dir 시 LLM의 working_dir 오버라이드를 무시 — 항상 workspace 기준
+    const cwd = this.restrict_to_working_dir
+      ? this.default_working_dir
+      : resolve(String(params.working_dir || this.default_working_dir));
     const timeout_seconds = Math.max(1, Number(params.timeout_seconds || this.timeout_seconds));
     const approved = params.__approved === true || String(params.__approved || "").trim().toLowerCase() === "true";
     const guard = this._guard_command(command, cwd);
@@ -119,6 +125,15 @@ export class ExecTool extends Tool {
       const text = output.trim() || "(no output)";
       return text.length > 20000 ? `${text.slice(0, 20000)}\n... (truncated)` : text;
     } catch (error) {
+      // exec 실패 시 stdout에 유효한 결과가 있을 수 있음 (PowerShell non-zero exit + JSON 출력)
+      const exec_err = error as { stdout?: string; stderr?: string; code?: number };
+      if (exec_err.stdout) {
+        const out = String(exec_err.stdout).trim();
+        if (out) {
+          const masked = redact_sensitive_text(await this.secret_vault.mask_known_secrets(out)).text;
+          return masked.length > 20000 ? `${masked.slice(0, 20000)}\n... (truncated)` : masked;
+        }
+      }
       const message = error instanceof Error ? error.message : String(error);
       const safe = redact_sensitive_text(await this.secret_vault.mask_known_secrets(message)).text;
       return `Error: ${safe}`;
@@ -127,6 +142,9 @@ export class ExecTool extends Tool {
 
   private _guard_command(command: string, cwd: string): { kind: "blocked" | "approval_required"; reason: string; requested_path?: string } | null {
     const lower = command.toLowerCase();
+    if (this.has_shell_obfuscation(command)) {
+      return { kind: "blocked", reason: "blocked by safety anti-obfuscation policy" };
+    }
     for (const pattern of this.deny_patterns) {
       if (pattern.test(lower)) return { kind: "blocked", reason: "blocked by safety deny-pattern" };
     }
@@ -144,7 +162,7 @@ export class ExecTool extends Tool {
     if (this.restrict_to_working_dir) {
       if (lower.includes("../") || lower.includes("..\\")) return { kind: "blocked", reason: "path traversal is not allowed" };
       const win_paths = command.match(/[A-Za-z]:\\[^\s"'`]+/g) || [];
-      const unix_abs_paths = command.match(/(?:^|[\s"'`])\/[A-Za-z0-9._\-\/]+/g) || [];
+      const unix_abs_paths = command.match(/(?:^|[\s"'`])\/[A-Za-z0-9._\-/]+/g) || [];
       for (const raw of win_paths) {
         const abs = resolve(raw);
         const cwd_norm = cwd.toLowerCase();
@@ -173,5 +191,15 @@ export class ExecTool extends Tool {
       }
     }
     return null;
+  }
+
+  private has_shell_obfuscation(command: string): boolean {
+    const text = String(command || "");
+    if (!text) return false;
+    if (/`[^`]+`/.test(text)) return true;
+    if (/\$\([^)]*\)/.test(text)) return true;
+    if (/\balias\s+[a-zA-Z_][a-zA-Z0-9_]*\s*=/.test(text)) return true;
+    if (/\bfunction\s+[a-zA-Z_][a-zA-Z0-9_]*\b/.test(text)) return true;
+    return false;
   }
 }

@@ -8,7 +8,9 @@ export type SkillMetadata = {
   summary: string;
   aliases: string[];
   triggers: string[];
+  tools: string[];
   requirements: string[];
+  model: string | null;
   frontmatter: Record<string, unknown>;
 };
 

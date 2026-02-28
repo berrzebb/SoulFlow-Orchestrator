@@ -1,5 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
+import { ensure_json_object } from "../../utils/common.js";
 
 type McpRoot = Record<string, unknown> & {
   mcpServers?: Record<string, unknown>;
@@ -20,11 +21,6 @@ export interface McpServerStoreLike {
   list_servers(): Promise<Record<string, McpServerEntry>>;
   upsert_server(name: string, entry: McpServerEntry): Promise<void>;
   remove_server(name: string): Promise<boolean>;
-}
-
-function ensure_json_object(v: unknown): Record<string, unknown> | null {
-  if (!v || typeof v !== "object" || Array.isArray(v)) return null;
-  return v as Record<string, unknown>;
 }
 
 function normalize_server_entry(value: unknown): McpServerEntry {

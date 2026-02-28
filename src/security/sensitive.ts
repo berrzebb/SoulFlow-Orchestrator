@@ -1,3 +1,5 @@
+import { escape_regexp } from "../utils/common.js";
+
 const REDACTED = "[REDACTED]";
 const SECRET_KEYWORDS = [
   "token",
@@ -42,11 +44,11 @@ const DIRECT_PATTERNS: Array<{ name: string; re: RegExp }> = [
   },
   {
     name: "bearer_token",
-    re: /\bBearer\s+[A-Za-z0-9._~+\/=-]{16,}\b/gi,
+    re: /\bBearer\s+[A-Za-z0-9._~+/=-]{16,}\b/gi,
   },
   {
     name: "basic_token",
-    re: /\bBasic\s+[A-Za-z0-9+\/=]{16,}\b/gi,
+    re: /\bBasic\s+[A-Za-z0-9+/=]{16,}\b/gi,
   },
 ];
 
@@ -80,10 +82,6 @@ function collect_env_secret_values(): string[] {
     out.push(token);
   }
   return [...new Set(out)];
-}
-
-function escape_regexp(value: string): string {
-  return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function mask_exact_values(input: string, values: string[]): string {

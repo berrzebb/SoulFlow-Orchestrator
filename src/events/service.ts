@@ -1,9 +1,11 @@
 import { mkdir } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
-import Database from "better-sqlite3";
+import { with_sqlite, type DatabaseSync } from "../utils/sqlite-helper.js";
+import { normalize_text } from "../utils/common.js";
 import type { TaskState } from "../contracts.js";
 import type { TaskStoreLike } from "../agent/task-store.js";
+import type { Logger } from "../logger.js";
 import { now_iso } from "../utils/common.js";
 import type {
   AppendWorkflowEventInput,
@@ -16,11 +18,6 @@ import type {
 
 const PHASES = new Set<WorkflowPhase>(["assign", "progress", "blocked", "done", "approval"]);
 const SOURCES = new Set<WorkflowEventSource>(["outbound", "inbound", "system"]);
-type DatabaseSync = Database.Database;
-
-function normalize_text(value: unknown): string {
-  return String(value || "").replace(/\s+/g, " ").trim();
-}
 
 function normalize_phase(value: unknown): WorkflowPhase {
   const phase = String(value || "").trim().toLowerCase();
@@ -59,11 +56,13 @@ export class WorkflowEventService {
   private readonly initialized: Promise<void>;
   private write_queue: Promise<void> = Promise.resolve();
   private task_store: TaskStoreLike | null = null;
+  private readonly logger: Logger | null;
 
-  constructor(root = process.cwd(), events_dir_override?: string) {
+  constructor(root = process.cwd(), events_dir_override?: string, logger?: Logger | null) {
     this.root = root;
     this.events_dir = events_dir_override || join(root, "runtime", "events");
     this.sqlite_path = join(this.events_dir, "events.db");
+    this.logger = logger ?? null;
     this.initialized = this.ensure_initialized();
   }
 
@@ -78,20 +77,7 @@ export class WorkflowEventService {
   }
 
   private with_sqlite<T>(run: (db: DatabaseSync) => T): T | null {
-    let db: DatabaseSync | null = null;
-    try {
-      db = new Database(this.sqlite_path);
-      db.exec("PRAGMA foreign_keys=ON;");
-      return run(db);
-    } catch {
-      return null;
-    } finally {
-      try {
-        db?.close();
-      } catch {
-        // no-op
-      }
-    }
+    return with_sqlite(this.sqlite_path, run, { pragmas: ["foreign_keys=ON"] });
   }
 
   private async ensure_dirs(): Promise<void> {
@@ -100,7 +86,7 @@ export class WorkflowEventService {
 
   private async ensure_initialized(): Promise<void> {
     await this.ensure_dirs();
-    this.with_sqlite((db) => {
+    const initialized = this.with_sqlite((db) => {
       db.exec(`
         CREATE TABLE IF NOT EXISTS workflow_events (
           event_id TEXT PRIMARY KEY,
@@ -199,6 +185,9 @@ export class WorkflowEventService {
       `);
       return true;
     });
+    if (!initialized) {
+      this.logger?.error("schema initialization failed");
+    }
   }
 
   private row_to_event(row: DbEventRow): WorkflowEvent | null {

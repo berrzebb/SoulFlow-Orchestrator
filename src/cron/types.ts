@@ -51,6 +51,7 @@ export type CronOnJob = (job: CronJob) => Promise<string | null>;
 export type CronServiceOptions = {
   default_tick_ms?: number;
   running_lease_ms?: number;
+  logger?: import("../logger.js").Logger | null;
 };
 
 export type CronServiceStatus = {
