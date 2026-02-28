@@ -24,6 +24,7 @@ export class ProviderRegistry {
   private readonly health_scorer: ProviderHealthScorer;
   private active_provider_id: ProviderId = "chatgpt";
   private orchestrator_provider_id: ProviderId = "phi4_local";
+  private readonly orchestrator_max_tokens: number;
   private readonly secret_vault: SecretVaultService;
 
   constructor(options?: {
@@ -31,6 +32,7 @@ export class ProviderRegistry {
     openrouter_model?: string;
     phi4_api_base?: string;
     phi4_model?: string;
+    orchestrator_max_tokens?: number;
     circuit_breaker?: CircuitBreakerOptions;
     health_scorer?: HealthScorerOptions;
   }) {
@@ -78,6 +80,7 @@ export class ProviderRegistry {
     }
     this.health_scorer = new ProviderHealthScorer(options?.health_scorer);
 
+    this.orchestrator_max_tokens = options?.orchestrator_max_tokens ?? 4096;
     this.orchestrator_provider_id = this.resolve_default_orchestrator_provider();
   }
 
@@ -282,7 +285,7 @@ export class ProviderRegistry {
     return this.run_headless({
       ...args,
       provider_id: args.provider_id || this.orchestrator_provider_id,
-      max_tokens: args.max_tokens ?? 2048,
+      max_tokens: args.max_tokens ?? this.orchestrator_max_tokens,
       temperature: args.temperature ?? 0.2,
     });
   }

@@ -127,15 +127,15 @@ export class CronTool extends Tool {
   }
 
   private resolve_delete_after_run(params: Record<string, unknown>, schedule: CronSchedule): boolean {
-    if (typeof params.delete_after_run === "boolean") return Boolean(params.delete_after_run);
-    // One-shot jobs are auto-cleaned by default unless explicitly overridden.
+    if (typeof params.delete_after_run === "boolean") return params.delete_after_run;
+    if (typeof params.delete_after_run === "string") return params.delete_after_run === "true";
     return schedule.kind === "at";
   }
 
-  private resolve_deliver_mode(params: Record<string, unknown>, message: string): boolean {
-    if (typeof params.deliver === "boolean") return Boolean(params.deliver);
-    const text = String(message || "").toLowerCase();
-    if (!text) return false;
-    return /(remind|reminder|알림|리마인드|알려줘|깨워)/i.test(text);
+  private resolve_deliver_mode(params: Record<string, unknown>, _message: string): boolean {
+    if (typeof params.deliver === "boolean") return params.deliver;
+    if (typeof params.deliver === "string") return params.deliver === "true";
+    // 기본값: task 모드(에이전트가 실행). deliver는 LLM이 명시적으로 true를 전달할 때만.
+    return false;
   }
 }

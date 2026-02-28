@@ -23,7 +23,8 @@ function format_ctx(ctx: LogContext | undefined): string {
   const parts: string[] = [];
   for (const [k, v] of Object.entries(ctx)) {
     if (v === undefined) continue;
-    parts.push(`${k}=${typeof v === "string" ? v : JSON.stringify(v)}`);
+    try { parts.push(`${k}=${typeof v === "string" ? v : JSON.stringify(v)}`); }
+    catch { parts.push(`${k}=[json_error]`); }
   }
   return parts.length > 0 ? ` ${parts.join(" ")}` : "";
 }
@@ -51,7 +52,7 @@ class ConsoleLogger implements Logger {
     if (LEVEL_ORDER[level] < this.min_level) return;
     const line = `${this.prefix} ${msg}${format_ctx(ctx)}`;
     if (level === "error") {
-       
+      // eslint-disable-next-line no-console
       console.error(line);
     } else {
       // eslint-disable-next-line no-console

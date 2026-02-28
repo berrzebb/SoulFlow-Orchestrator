@@ -28,8 +28,11 @@ export class ProviderHealthScorer {
 
   constructor(opts?: HealthScorerOptions) {
     this.window_size = opts?.window_size ?? 50;
-    this.latency_weight = opts?.latency_weight ?? 0.3;
-    this.success_weight = opts?.success_weight ?? 0.7;
+    const sw = opts?.success_weight ?? 0.7;
+    const lw = opts?.latency_weight ?? 0.3;
+    const sum = sw + lw;
+    this.success_weight = sum > 0 ? sw / sum : 0.5;
+    this.latency_weight = sum > 0 ? lw / sum : 0.5;
     this.latency_target_ms = opts?.latency_target_ms ?? 5000;
     this.max_age_ms = opts?.max_age_ms ?? 600_000;
   }

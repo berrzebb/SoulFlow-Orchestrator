@@ -15,6 +15,7 @@ const DESCRIPTORS: readonly CommandDescriptor[] = [
   { name: "promise", description: "약속(제약 조건) 관리", usage: "status|list|set <key> <value>" },
   { name: "cron", description: "예약 작업 관리", usage: "status|list|add|remove" },
   { name: "reload", description: "설정·도구·스킬 다시 불러오기", usage: "config|tools|skills" },
+  { name: "task", description: "작업(Task Loop) 조회·취소", usage: "[list|status <id>|cancel <id>]" },
   { name: "status", description: "현재 상태 요약", usage: "| /tools | /skills" },
 ] as const;
 

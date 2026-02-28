@@ -251,9 +251,10 @@ export class WebSearchTool extends Tool {
     if (!query) return "Error: query is required";
     if (context?.signal?.aborted) return "Error: cancelled";
     const session = compact_session_name(context, params.session);
-    const search_url = new URL("https://duckduckgo.com/");
+    const search_url = new URL("https://www.google.com/search");
     search_url.searchParams.set("q", query);
-    search_url.searchParams.set("ia", "web");
+    search_url.searchParams.set("hl", "ko");
+    search_url.searchParams.set("num", String(count));
     const base = ["--session", session];
 
     const open_result = await run_agent_browser_cli([...base, "open", search_url.toString(), "--json"], context);
@@ -274,7 +275,7 @@ export class WebSearchTool extends Tool {
       {
         query,
         session,
-        engine: "duckduckgo",
+        engine: "google",
         url: search_url.toString(),
         results,
         security: content.security,

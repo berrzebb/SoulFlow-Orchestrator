@@ -57,7 +57,7 @@ export class DynamicShellTool extends Tool {
     const command = await this.secret_vault.resolve_placeholders(interpolate(this.command_template, params));
     const { stdout, stderr } = await run_shell_command(command, {
       cwd: this.working_dir,
-      timeout_ms: 0,
+      timeout_ms: 30_000,
       max_buffer_bytes: 10 * 1024 * 1024,
       signal: context?.signal,
     });

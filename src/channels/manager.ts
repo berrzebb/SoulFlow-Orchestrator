@@ -9,6 +9,7 @@ import type { CommandRouter } from "./commands/router.js";
 import { format_mention, type CommandContext } from "./commands/types.js";
 import type { DispatchService } from "./dispatch.service.js";
 import type { ApprovalService } from "./approval.service.js";
+import type { TaskResumeService } from "./task-resume.service.js";
 import type { SessionRecorder } from "./session-recorder.js";
 import type { MediaCollector } from "./media-collector.js";
 import type { OrchestrationService } from "../orchestration/service.js";
@@ -38,6 +39,7 @@ export type ChannelManagerDeps = {
   command_router: CommandRouter;
   orchestration: OrchestrationService;
   approval: ApprovalService;
+  task_resume: TaskResumeService;
   session_recorder: SessionRecorder;
   media_collector: MediaCollector;
   providers: ProviderRegistry | null;
@@ -61,6 +63,7 @@ export class ChannelManager implements ServiceLike {
   private readonly commands: CommandRouter;
   private readonly orchestration: OrchestrationService;
   private readonly approval: ApprovalService;
+  private readonly task_resume: TaskResumeService;
   private readonly recorder: SessionRecorder;
   private readonly media: MediaCollector;
   private readonly providers: ProviderRegistry | null;
@@ -87,6 +90,7 @@ export class ChannelManager implements ServiceLike {
     this.commands = deps.command_router;
     this.orchestration = deps.orchestration;
     this.approval = deps.approval;
+    this.task_resume = deps.task_resume;
     this.recorder = deps.session_recorder;
     this.media = deps.media_collector;
     this.providers = deps.providers;
@@ -178,7 +182,29 @@ export class ChannelManager implements ServiceLike {
     const provider = resolve_provider(message);
     if (!provider) return;
 
-    if (await this.approval.try_handle_text_reply(provider, message)) return;
+    const approval = await this.approval.try_handle_text_reply(provider, message);
+    if (approval.handled) {
+      // 승인 후 대기 중이던 Task이 있으면 도구 실행 결과를 주입하고 task loop 재개
+      if (approval.task_id && approval.tool_result) {
+        const resumed = await this.task_resume.resume_after_approval(
+          approval.task_id,
+          approval.tool_result,
+        );
+        if (resumed) {
+          this.logger.info("task resumed after approval", { task_id: approval.task_id });
+          await this.invoke_and_reply(provider, message, this.config.defaultAlias, approval.task_id);
+        }
+      }
+      return;
+    }
+
+    // HITL: 대기/실패 Task이 있으면 사용자 입력으로 재개
+    const resume = await this.task_resume.try_resume(provider, message);
+    if (resume?.resumed) {
+      this.logger.info("task resumed from user input", { task_id: resume.task_id, previous_status: resume.previous_status });
+      await this.invoke_and_reply(provider, message, this.config.defaultAlias, resume.task_id);
+      return;
+    }
 
     const slash = parse_slash_command_from_message(message);
     const ctx: CommandContext = {
@@ -221,7 +247,19 @@ export class ChannelManager implements ServiceLike {
         try {
           const rows = await this.registry.read(provider, target, this.config.readLimit);
           if (this.config.approvalReactionEnabled) {
-            await this.approval.try_handle_approval_reactions(provider, rows);
+            const rxn_result = await this.approval.try_handle_approval_reactions(provider, rows);
+            if (rxn_result.handled && rxn_result.task_id && rxn_result.tool_result) {
+              const resumed = await this.task_resume.resume_after_approval(rxn_result.task_id, rxn_result.tool_result);
+              if (resumed) {
+                const rxn_msg = rows.find((r) => is_reaction_message(r));
+                if (rxn_msg) {
+                  this.logger.info("task resumed after reaction approval", { task_id: rxn_result.task_id });
+                  this.handle_inbound_message(rxn_msg).catch((e) =>
+                    this.logger.error("reaction resume failed", { error: e instanceof Error ? e.message : String(e) }),
+                  );
+                }
+              }
+            }
           }
 
           const target_key = `${provider}:${target}`;
@@ -233,6 +271,7 @@ export class ChannelManager implements ServiceLike {
 
           const sorted = [...rows].sort((a, b) => extract_ts(a) - extract_ts(b));
           for (const msg of sorted) {
+            if (is_reaction_message(msg)) continue;
             if (this.is_duplicate(msg)) continue;
             this.mark_seen(msg);
             this.bus.publish_inbound(msg).catch((e) =>
@@ -279,7 +318,7 @@ export class ChannelManager implements ServiceLike {
     }
   }
 
-  private async invoke_and_reply(provider: ChannelProvider, message: InboundMessage, alias: string): Promise<void> {
+  private async invoke_and_reply(provider: ChannelProvider, message: InboundMessage, alias: string, resumed_task_id?: string): Promise<void> {
     const run_key = `${provider}:${message.chat_id}:${alias}`.toLowerCase();
     const prev = this.active_runs.get(run_key);
     if (prev && !prev.abort.signal.aborted) prev.abort.abort();
@@ -287,9 +326,12 @@ export class ChannelManager implements ServiceLike {
     const abort = new AbortController();
     this.active_runs.set(run_key, { abort, provider, chat_id: message.chat_id, alias });
 
-    const anchor_ts = String((message.metadata as Record<string, unknown>)?.message_id || message.id || "");
+    const meta = (message.metadata && typeof message.metadata === "object") ? message.metadata as Record<string, unknown> : {};
+    const anchor_ts = String(meta.message_id || message.id || "");
     const typing_ticker = setInterval(() => {
-      this.registry.set_typing(provider, message.chat_id, true, anchor_ts).catch(() => {});
+      this.registry.set_typing(provider, message.chat_id, true, anchor_ts).catch((e) =>
+        this.logger.debug("typing_update_failed", { error: e instanceof Error ? e.message : String(e) }),
+      );
     }, 4000);
 
     const stream_state = { message_id: "", last_update: 0, chain: Promise.resolve() };
@@ -306,6 +348,7 @@ export class ChannelManager implements ServiceLike {
         message, alias, provider, media_inputs,
         session_history: history,
         skill_names: [],
+        resumed_task_id,
         on_stream: (chunk) => {
           stream_state.chain = stream_state.chain
             .then(() => this.send_or_edit_stream(provider, message, alias, chunk, stream_state))
@@ -341,7 +384,7 @@ export class ChannelManager implements ServiceLike {
     const final_text = `${mention}${rendered.content}`.trim();
 
     if (result.streamed && stream_message_id) {
-      await this.registry.edit_message(provider, message.chat_id, stream_message_id, final_text);
+      await this.registry.edit_message(provider, message.chat_id, stream_message_id, final_text, rendered.parse_mode);
       await this.recorder.record_assistant(provider, message, alias, rendered.content);
       return;
     }
@@ -368,7 +411,7 @@ export class ChannelManager implements ServiceLike {
     if (!text) return;
 
     if (state.message_id) {
-      await this.registry.edit_message(provider, message.chat_id, state.message_id, text);
+      await this.registry.edit_message(provider, message.chat_id, state.message_id, text, rendered.parse_mode);
     } else {
       const result = await this.dispatch.send(provider, {
         id: `stream-${Date.now()}`, provider, channel: provider, sender_id: alias,
@@ -482,6 +525,11 @@ export class ChannelManager implements ServiceLike {
   }
 }
 
+
+function is_reaction_message(message: InboundMessage): boolean {
+  const meta = (message.metadata || {}) as Record<string, unknown>;
+  return meta.is_reaction === true;
+}
 
 function should_ignore(message: InboundMessage): boolean {
   const sender = String(message.sender_id || "").trim().toLowerCase();

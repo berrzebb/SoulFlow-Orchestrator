@@ -783,4 +783,21 @@ export class CronService implements CronScheduler, ServiceLike {
     }, Math.max(1_000, ms));
     this._interval_timers.add(t);
   }
+
+  async disable_all_and_pause(): Promise<number> {
+    const store = await this._load_store();
+    let count = 0;
+    for (const job of store.jobs) {
+      if (job.enabled) {
+        job.enabled = false;
+        job.state.next_run_at_ms = null;
+        job.updated_at_ms = now_ms();
+        count++;
+      }
+    }
+    this._paused = true;
+    await this._cancel_timer();
+    if (count > 0) await this._save_store();
+    return count;
+  }
 }

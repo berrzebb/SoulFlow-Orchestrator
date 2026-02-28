@@ -105,7 +105,8 @@ export class DispatchService implements ServiceLike {
       this.logger.debug("rate limited, waiting", { provider, wait_ms: wait });
       await sleep(wait);
       if (!this.rate_limiter.try_consume()) {
-        this.logger.debug("rate limit still exceeded after wait", { provider });
+        this.logger.warn("rate limit still exceeded after wait", { provider, wait_ms: wait });
+        return { ok: false, error: "rate_limit_exceeded" };
       }
     }
 
@@ -135,7 +136,7 @@ export class DispatchService implements ServiceLike {
     const dispatch_retry = get_retry_count(message);
     if (allow_requeue && dispatch_retry < this.retry_config.retryMax && is_retryable(last_error)) {
       this.schedule_retry(provider, message, dispatch_retry + 1, last_error);
-      return { ok: false, error: `requeued_retry_${dispatch_retry + 1}:${last_error}` };
+      return { ok: false, error: `dispatch_requeued_${dispatch_retry + 1}:${last_error}` };
     }
 
     if (allow_requeue && dispatch_retry >= this.retry_config.retryMax) {

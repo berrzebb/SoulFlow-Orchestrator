@@ -1,13 +1,12 @@
 import type { OutboundMessage } from "../bus/types.js";
+import { normalize_text as _normalize_text } from "../utils/common.js";
 import type { ChannelProvider } from "./types.js";
 
 export interface OutboundDedupePolicy {
   key(provider: ChannelProvider, message: OutboundMessage): string;
 }
 
-function normalize_text(value: unknown): string {
-  return String(value || "").replace(/\s+/g, " ").trim().toLowerCase();
-}
+const normalize_text = (v: unknown): string => _normalize_text(v, true);
 
 function normalize_media(message: OutboundMessage): string {
   return Array.isArray(message.media)

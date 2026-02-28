@@ -136,15 +136,20 @@ async function run_cli(
     };
     abort_signal?.addEventListener("abort", on_abort, { once: true });
 
+    let stream_cb_error: Error | null = null;
+    const safe_chunk = (text: string) => {
+      if (!on_chunk || stream_cb_error) return;
+      void Promise.resolve(on_chunk(text)).catch((e) => { stream_cb_error = e instanceof Error ? e : new Error(String(e)); });
+    };
     child.stdout.on("data", (chunk) => {
       const text = decode_chunk(chunk);
       stdout = append_limited(stdout, text, capture_max_chars);
-      if (on_chunk) void Promise.resolve(on_chunk(text)).catch(() => {});
+      safe_chunk(text);
     });
     child.stderr.on("data", (chunk) => {
       const text = decode_chunk(chunk);
       stderr = append_limited(stderr, text, capture_max_chars);
-      if (on_chunk) void Promise.resolve(on_chunk(text)).catch(() => {});
+      safe_chunk(text);
     });
     child.on("error", (error) => {
       if (done) return;
@@ -158,7 +163,8 @@ async function run_cli(
       done = true;
       clearTimeout(timer);
       abort_signal?.removeEventListener("abort", on_abort);
-      resolve({ ok: code === 0, stdout, stderr, code });
+      const final_stderr = stream_cb_error ? `${stderr}\n[stream_cb_error] ${stream_cb_error.message}`.trim() : stderr;
+      resolve({ ok: code === 0, stdout, stderr: final_stderr, code });
     });
 
     child.stdin.write(prompt);

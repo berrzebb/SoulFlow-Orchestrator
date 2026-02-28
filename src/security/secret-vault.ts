@@ -84,6 +84,7 @@ export class SecretVaultService implements SecretVaultLike {
   private readonly key_path: string;
   private readonly store_path: string;
   private key_cache: Buffer | null = null;
+  private key_lock: Promise<Buffer> | null = null;
 
   constructor(workspace: string) {
     this.root_dir = join(workspace, "runtime", "security");
@@ -122,6 +123,17 @@ export class SecretVaultService implements SecretVaultLike {
   }
 
   async get_or_create_key(): Promise<Buffer> {
+    if (this.key_cache) return this.key_cache;
+    if (this.key_lock) return this.key_lock;
+    this.key_lock = this._load_or_generate_key();
+    try {
+      return await this.key_lock;
+    } finally {
+      this.key_lock = null;
+    }
+  }
+
+  private async _load_or_generate_key(): Promise<Buffer> {
     if (this.key_cache) return this.key_cache;
     await mkdir(dirname(this.key_path), { recursive: true });
     try {
@@ -329,6 +341,7 @@ export class SecretVaultService implements SecretVaultLike {
     const tokens = new Set<string>(report.text.match(CIPHERTEXT_TOKEN_RE) || []);
     for (const token of tokens.values()) {
       if (!token) continue;
+      // AAD 없이 decrypt — 인바운드 seal 등 AAD 없이 암호화된 토큰 대상. AAD 불일치 시 catch로 invalid 처리.
       const plain = await this.decrypt_text(token).catch(() => "");
       if (!plain) {
         invalid.add(token);

@@ -13,8 +13,22 @@ metadata:
     - 반복
     - 매일
     - 매주
+    - 오전
+    - 오후
+    - 시에
+    - 아침
+    - 저녁
+    - 자정
+    - 정오
+    - 뒤에
+    - 후에
+    - 분 후
+    - 시간 후
     - remind
     - schedule
+    - at
+    - every
+    - timer
   aliases:
     - 스케줄러
     - scheduler
@@ -26,17 +40,20 @@ metadata:
 
 | Task | Tool Call |
 |------|-----------|
-| Add reminder | `cron(action="add", message="...", every_seconds=1200)` |
-| Add cron job | `cron(action="add", message="...", cron_expr="0 9 * * 1-5", tz="...")` |
-| One-time | `cron(action="add", message="...", at="<ISO datetime>")` |
+| Add task (실행) | `cron(action="add", message="Hikari를 재생해줘", at="<ISO>")` |
+| Add reminder (알림) | `cron(action="add", message="회의 시간입니다", at="<ISO>", deliver=true)` |
+| Recurring task | `cron(action="add", message="...", cron_expr="0 9 * * 1-5", tz="...")` |
 | List all | `cron(action="list")` |
 | Remove | `cron(action="remove", job_id="abc123")` |
 
-## Three Modes
+## deliver Parameter (중요)
 
-1. **Reminder** — message sent directly to user.
-2. **Task** — agent executes message as a task and sends result.
-3. **One-time** — runs once at specified time, then auto-deletes.
+| deliver | 동작 | 사용 시점 |
+|---------|------|-----------|
+| `true` | 메시지만 채널에 전달 (알림/리마인더) | "알려줘", "리마인드", "알림" |
+| `false` (기본값) | 에이전트가 메시지를 **작업으로 실행** | "재생해줘", "실행해줘", "검색해줘", "보내줘" |
+
+**행동이 필요한 요청은 반드시 `deliver: false`** (또는 생략). `deliver: true`는 단순 텍스트 알림에만 사용.
 
 ## Time Expression Mapping
 

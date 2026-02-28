@@ -44,12 +44,6 @@ export function normalize_common_command_text(content: string): string {
   return stripped.replace(/\s+/g, " ").trim();
 }
 
-export function has_explicit_memory_intent(text_raw: string): boolean {
-  const text = normalize_common_command_text(text_raw).toLowerCase();
-  if (!text || text.startsWith("/")) return false;
-  return /(메모리\s*(상태|확인|조회|검색|목록)|현재\s*메모리|memory\s*(status|state|search|list))/i.test(text);
-}
-
 export function parse_memory_quick_action(
   text_raw: string,
   command: ParsedSlashCommand | null,
@@ -96,14 +90,6 @@ export function extract_memory_search_query(text_raw: string, command: ParsedSla
 
 export type StatusQuickAction = "tools" | "skills" | "overview";
 
-export function has_explicit_status_intent(text_raw: string): boolean {
-  const text = normalize_common_command_text(text_raw).toLowerCase();
-  if (!text || text.startsWith("/")) return false;
-  return /(?:사용\s*(?:가능|할\s*수\s*있는)|현재|available|list)\s*(?:도구|스킬|tool|skill|기능|능력|command|명령)/i.test(text)
-    || /(?:도구|스킬|tool|skill|기능|능력|command|명령)\s*(?:목록|리스트|list|알려|뭐가?\s*있|어떤|뭐야|뭡니까|는\??)/i.test(text)
-    || /(?:뭐\s*(?:할\s*수\s*있|할수있|도와줄\s*수)|무엇을?\s*할\s*수\s*있|what\s*can\s*you\s*do)/i.test(text);
-}
-
 export function parse_status_quick_action(
   text_raw: string,
   command: ParsedSlashCommand | null,
@@ -118,14 +104,7 @@ export function parse_status_quick_action(
 
   if (/(?:도구|tool|command|명령)/i.test(text)) return "tools";
   if (/(?:스킬|skill|기능|능력)/i.test(text)) return "skills";
-  if (has_explicit_status_intent(text_raw)) return "overview";
   return null;
-}
-
-export function has_explicit_decision_intent(text_raw: string): boolean {
-  const text = normalize_common_command_text(text_raw).toLowerCase();
-  if (!text || text.startsWith("/")) return false;
-  return /(현재\s*(지침|정책)|결정\s*사항\s*(확인|조회|목록|리스트)|정책\s*(확인|조회|목록|수정|변경)|decision\s*(status|list|show|set)|policy\s*(status|list|show|set))/i.test(text);
 }
 
 export function parse_decision_quick_action(

@@ -1,6 +1,20 @@
 import type { JsonSchema, ToolExecutionContext, ToolLike, ToolSchema } from "./types.js";
 import { get_shared_secret_vault } from "../../security/secret-vault-factory.js";
 
+const TRUTHY = new Set(["true", "yes", "on", "1", "ok", "y", "예", "네"]);
+const FALSY = new Set(["false", "no", "off", "0", "n", "아니오", "아니"]);
+
+function coerce_boolean(val: unknown): boolean {
+  if (typeof val === "boolean") return val;
+  if (typeof val === "number") return val !== 0;
+  if (typeof val === "string") {
+    const norm = val.trim().toLowerCase();
+    if (TRUTHY.has(norm)) return true;
+    if (FALSY.has(norm)) return false;
+  }
+  return Boolean(val);
+}
+
 const TYPE_MAP: Record<string, (v: unknown) => boolean> = {
   string: (v) => typeof v === "string",
   integer: (v) => Number.isInteger(v),
@@ -29,7 +43,7 @@ export abstract class Tool implements ToolLike {
     const normalized = (resolved && typeof resolved === "object" && !Array.isArray(resolved))
       ? (resolved as Record<string, unknown>)
       : params;
-    return this.run(normalized, context);
+    return this.run(this.coerce_params(normalized), context);
   }
 
   validate_params(params: Record<string, unknown>): string[] {
@@ -87,6 +101,28 @@ export abstract class Tool implements ToolLike {
       "action_3: 요청에는 {{secret:<name>}} 형태만 사용하세요.",
     ].filter(Boolean);
     return lines.join("\n");
+  }
+
+  /** LLM이 잘못 전달한 파라미터 타입을 스키마 기반으로 보정. */
+  private coerce_params(params: Record<string, unknown>): Record<string, unknown> {
+    const props = this.parameters?.properties;
+    if (!props || typeof props !== "object") return params;
+    const out = { ...params };
+    for (const [key, schema] of Object.entries(props)) {
+      if (!(key in out)) continue;
+      const val = out[key];
+      const expected = (schema as JsonSchema).type;
+      if (expected === "boolean" && typeof val !== "boolean") {
+        out[key] = coerce_boolean(val);
+      } else if (expected === "integer" && typeof val === "string") {
+        const n = Number(val);
+        if (Number.isFinite(n)) out[key] = Math.round(n);
+      } else if (expected === "number" && typeof val === "string") {
+        const n = Number(val);
+        if (Number.isFinite(n)) out[key] = n;
+      }
+    }
+    return out;
   }
 
   private validate_value(value: unknown, schema: JsonSchema, path: string): string[] {

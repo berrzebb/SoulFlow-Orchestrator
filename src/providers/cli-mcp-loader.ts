@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
+import { parse_bool_like } from "../utils/common.js";
 
 export type McpServerConfig = {
   command?: string;
@@ -165,13 +166,6 @@ function parse_server_name_allowlist(raw: string): Set<string> {
   return out;
 }
 
-export function parse_bool_like(raw: string | undefined, fallback: boolean): boolean {
-  const v = String(raw || "").trim().toLowerCase();
-  if (!v) return fallback;
-  if (v === "1" || v === "true" || v === "yes" || v === "on") return true;
-  if (v === "0" || v === "false" || v === "no" || v === "off") return false;
-  return fallback;
-}
 
 export function should_enable_all_project_mcp_servers(cwd: string): boolean {
   if (String(process.env.ORCH_MCP_ENABLE_ALL_PROJECT || "").trim()) {

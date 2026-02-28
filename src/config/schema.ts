@@ -1,11 +1,8 @@
 import { z } from "zod";
+import { parse_bool_like } from "../utils/common.js";
 
 function env_bool(key: string, fallback: boolean): boolean {
-  const v = String(process.env[key] || "").trim().toLowerCase();
-  if (!v) return fallback;
-  if (["1", "true", "yes", "on"].includes(v)) return true;
-  if (["0", "false", "no", "off"].includes(v)) return false;
-  return fallback;
+  return parse_bool_like(process.env[key], fallback);
 }
 
 function env_str(key: string, fallback: string): string {
@@ -91,6 +88,7 @@ const Phi4Schema = z.object({
 
 const OrchestrationSchema = z.object({
   maxToolResultChars: z.number().min(50),
+  orchestratorMaxTokens: z.number().min(256),
 });
 
 const DashboardSchema = z.object({
@@ -126,7 +124,7 @@ export function load_config_from_env(): AppConfig {
   const phi4Port = env_num("PHI4_RUNTIME_PORT", 11434);
 
   const raw = {
-    timezoneOffsetMin: env_num("TZ_OFFSET_MIN", 540),
+    timezoneOffsetMin: Math.max(-840, Math.min(840, env_num("TZ_OFFSET_MIN", 540))),
     agentLoopMaxTurns: env_num("AGENT_LOOP_MAX_TURNS", 30),
     taskLoopMaxTurns: env_num("TASK_LOOP_MAX_TURNS", 40),
     dataDir,
@@ -193,6 +191,7 @@ export function load_config_from_env(): AppConfig {
     },
     orchestration: {
       maxToolResultChars: Math.max(50, env_num("ORCHESTRATION_MAX_TOOL_RESULT_CHARS", 500)),
+      orchestratorMaxTokens: Math.max(256, env_num("ORCHESTRATION_MAX_TOKENS", 4096)),
     },
     phi4: {
       runtimeEnabled: env_bool("PHI4_RUNTIME_ENABLED", false),

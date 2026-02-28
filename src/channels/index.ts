@@ -56,10 +56,10 @@ export class ChannelRegistry implements ChannelRegistryLike {
     return channel.send(message);
   }
 
-  async edit_message(provider: ChannelProvider, chat_id: string, message_id: string, content: string): Promise<{ ok: boolean; error?: string }> {
+  async edit_message(provider: ChannelProvider, chat_id: string, message_id: string, content: string, parse_mode?: string): Promise<{ ok: boolean; error?: string }> {
     const channel = this.channels.get(provider);
     if (!channel) return { ok: false, error: `channel_not_registered:${provider}` };
-    return channel.edit_message(chat_id, message_id, content);
+    return channel.edit_message(chat_id, message_id, content, parse_mode);
   }
 
   async add_reaction(provider: ChannelProvider, chat_id: string, message_id: string, reaction: string): Promise<{ ok: boolean; error?: string }> {

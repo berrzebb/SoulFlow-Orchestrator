@@ -6,6 +6,7 @@ import type { TaskState } from "../contracts.js";
 export interface TaskStoreLike {
   upsert(task: TaskState): Promise<void>;
   get(task_id: string): Promise<TaskState | null>;
+  find_waiting_by_chat(provider: string, chat_id: string): Promise<TaskState | null>;
 }
 
 export class TaskStore implements TaskStoreLike {
@@ -27,10 +28,13 @@ export class TaskStore implements TaskStoreLike {
           task_id TEXT PRIMARY KEY,
           status TEXT NOT NULL,
           updated_at TEXT NOT NULL,
-          payload_json TEXT NOT NULL
+          payload_json TEXT NOT NULL,
+          provider TEXT NOT NULL DEFAULT '',
+          chat_id TEXT NOT NULL DEFAULT ''
         );
         CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
         CREATE INDEX IF NOT EXISTS idx_tasks_updated_at ON tasks(updated_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_tasks_chat_status ON tasks(provider, chat_id, status);
         CREATE VIRTUAL TABLE IF NOT EXISTS tasks_fts USING fts5(
           content,
           task_id UNINDEXED,
@@ -74,19 +78,25 @@ export class TaskStore implements TaskStoreLike {
   async upsert(task: TaskState): Promise<void> {
     await this.initialized;
     const normalized = this.normalize_task(task);
+    const provider = String(normalized.memory.channel || "").trim();
+    const chat_id = String(normalized.memory.chat_id || "").trim();
     with_sqlite(this.sqlite_path,(db) => {
       db.prepare(`
-        INSERT INTO tasks (task_id, status, updated_at, payload_json)
-        VALUES (?, ?, ?, ?)
+        INSERT INTO tasks (task_id, status, updated_at, payload_json, provider, chat_id)
+        VALUES (?, ?, ?, ?, ?, ?)
         ON CONFLICT(task_id) DO UPDATE SET
           status = excluded.status,
           updated_at = excluded.updated_at,
-          payload_json = excluded.payload_json
+          payload_json = excluded.payload_json,
+          provider = excluded.provider,
+          chat_id = excluded.chat_id
       `).run(
         normalized.taskId,
         String(normalized.status || "running"),
         new Date().toISOString(),
         JSON.stringify(normalized),
+        provider,
+        chat_id,
       );
       return true;
     });
@@ -115,6 +125,16 @@ export class TaskStore implements TaskStoreLike {
 
   async list_resumable(): Promise<TaskState[]> {
     const rows = await this.list();
-    return rows.filter((t) => ["running", "waiting_approval", "max_turns_reached"].includes(t.status));
+    return rows.filter((t) => ["running", "waiting_approval", "waiting_user_input", "max_turns_reached"].includes(t.status));
+  }
+
+  async find_waiting_by_chat(provider: string, chat_id: string): Promise<TaskState | null> {
+    await this.initialized;
+    const row = with_sqlite(this.sqlite_path, (db) => db.prepare(
+      `SELECT payload_json FROM tasks
+       WHERE provider = ? AND chat_id = ? AND status IN ('waiting_user_input', 'waiting_approval', 'failed')
+       ORDER BY updated_at DESC LIMIT 1`,
+    ).get(provider, chat_id) as { payload_json: string } | undefined) || null;
+    return this.row_to_task(row);
   }
 }

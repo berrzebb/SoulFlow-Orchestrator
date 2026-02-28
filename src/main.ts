@@ -24,7 +24,9 @@ import {
   PromiseHandler,
   ReloadHandler,
   StatusHandler,
+  TaskHandler,
 } from "./channels/commands/index.js";
+import { TaskResumeService } from "./channels/task-resume.service.js";
 import { DispatchService } from "./channels/dispatch.service.js";
 import { MediaCollector } from "./channels/media-collector.js";
 import { DefaultOutboundDedupePolicy } from "./channels/outbound-dedupe.js";
@@ -78,7 +80,7 @@ function resolve_from_workspace(workspace: string, path_value: string, fallback:
   return resolve(workspace, raw);
 }
 
-export function createRuntime(options?: { skip_env_load?: boolean }): RuntimeApp {
+export async function createRuntime(options?: { skip_env_load?: boolean }): Promise<RuntimeApp> {
   const workspace = process.cwd();
   let env_load_summary: { loaded: number; files: string[] } | null = null;
   if (!options?.skip_env_load) {
@@ -106,7 +108,9 @@ export function createRuntime(options?: { skip_env_load?: boolean }): RuntimeApp
   const bus = new MessageBus();
   const decisions = new DecisionService(workspace, decisions_dir);
   const events = new WorkflowEventService(workspace, events_dir);
-  const providers = new ProviderRegistry();
+  const providers = new ProviderRegistry({
+    orchestrator_max_tokens: app_config.orchestration.orchestratorMaxTokens,
+  });
   const agent = new AgentDomain(workspace, { providers, bus, data_dir, events });
   const agent_inspector = create_agent_inspector(agent);
   const agent_runtime = create_agent_runtime(agent);
@@ -149,6 +153,7 @@ export function createRuntime(options?: { skip_env_load?: boolean }): RuntimeApp
       telegram_bot_token: config.channels.telegram.bot_token,
       telegram_api_base: config.channels.telegram.api_base,
     },
+    logger,
   });
 
   const approval = new ApprovalService({
@@ -171,6 +176,7 @@ export function createRuntime(options?: { skip_env_load?: boolean }): RuntimeApp
       streaming_interval_ms: app_config.channel.streaming.intervalMs,
       streaming_min_chars: app_config.channel.streaming.minChars,
       max_tool_result_chars: app_config.orchestration.maxToolResultChars,
+      orchestrator_max_tokens: app_config.orchestration.orchestratorMaxTokens,
     },
     logger: logger.child("orchestration"),
   });
@@ -205,11 +211,24 @@ export function createRuntime(options?: { skip_env_load?: boolean }): RuntimeApp
         return agent.context.skills_loader.list_skills().length;
       },
     }),
+    new TaskHandler({
+      find_waiting_task: (provider, chat_id) => agent_runtime.find_waiting_task(provider, chat_id),
+      get_task: (task_id) => agent_runtime.get_task(task_id),
+      cancel_task: (task_id, reason) => agent_runtime.cancel_task(task_id, reason),
+      list_active_tasks: () => agent_runtime.list_active_tasks(),
+      list_active_loops: () => agent_runtime.list_active_loops(),
+      stop_loop: (loop_id, reason) => agent_runtime.stop_loop(loop_id, reason),
+    }),
     new StatusHandler({
       list_tools: () => agent.tools.get_definitions().map((d) => ({ name: String((d as Record<string, unknown>).name || "") })),
       list_skills: () => agent.context.skills_loader.list_skills(true) as Array<{ name: string; summary: string; always: string }>,
     }),
   ]);
+
+  const task_resume = new TaskResumeService({
+    agent_runtime,
+    logger: logger.child("task-resume"),
+  });
 
   const channel_manager = new ChannelManager({
     bus,
@@ -218,6 +237,7 @@ export function createRuntime(options?: { skip_env_load?: boolean }): RuntimeApp
     command_router,
     orchestration,
     approval,
+    task_resume,
     session_recorder,
     media_collector,
     providers,
@@ -304,19 +324,16 @@ export function createRuntime(options?: { skip_env_load?: boolean }): RuntimeApp
   ].filter(Boolean);
   logger.info(`channels=${enabled_channels.join(",")} primary=${config.provider} tzOffset=${config.timezoneOffsetMin}`);
 
-  void register_mcp_tools(workspace, mcp, agent_runtime, logger).catch((error) => {
+  await register_mcp_tools(workspace, mcp, agent_runtime, logger).catch((error) => {
     logger.error(`mcp tool registration failed: ${error instanceof Error ? error.message : String(error)}`);
   });
 
-  void services.start().then(() => {
-    if (dashboard) logger.info(`dashboard ${dashboard.get_url()}`);
-    const status = phi4_runtime.get_status();
-    if (status.enabled) {
-      logger.info(`phi4 running=${status.running} engine=${status.engine || "n/a"} base=${status.api_base}`);
-    }
-  }).catch((error) => {
-    logger.error(`service start failed: ${error instanceof Error ? error.message : String(error)}`);
-  });
+  await services.start();
+  if (dashboard) logger.info(`dashboard ${dashboard.get_url()}`);
+  const phi4_status = phi4_runtime.get_status();
+  if (phi4_status.enabled) {
+    logger.info(`phi4 running=${phi4_status.running} engine=${phi4_status.engine || "n/a"} base=${phi4_status.api_base}`);
+  }
 
   const app: RuntimeApp = {
     agent,
@@ -391,7 +408,7 @@ if (is_main_entry()) {
       process.exit(1);
     }
 
-    const app = createRuntime({ skip_env_load: true });
+    const app = await createRuntime({ skip_env_load: true });
     const release_lock = async (): Promise<void> => {
       await lock.release().catch(() => undefined);
     };

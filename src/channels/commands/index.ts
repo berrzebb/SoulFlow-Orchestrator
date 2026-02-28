@@ -11,3 +11,4 @@ export { CronHandler } from "./cron.handler.js";
 export { ReloadHandler, type ReloadTarget } from "./reload.handler.js";
 export { StatusHandler, type StatusAccess } from "./status.handler.js";
 export { PromiseHandler, type PromiseAccess, type PromiseServiceLike } from "./promise.handler.js";
+export { TaskHandler, type TaskAccess } from "./task.handler.js";

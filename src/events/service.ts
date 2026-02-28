@@ -237,7 +237,10 @@ export class WorkflowEventService {
         WHERE task_id = ?
         LIMIT 1
       `).get(task_id) as { content: string } | undefined;
-      const next = `${String(existing?.content || "")}${section}`;
+      const prev = String(existing?.content || "");
+      const combined_len = prev.length + section.length;
+      const keep = Math.max(0, 256_000 - section.length);
+      const next = combined_len > 512_000 ? (keep > 0 ? prev.slice(-keep) : "") + section : prev + section;
       db.prepare(`
         INSERT INTO workflow_task_details(task_id, content, updated_at)
         VALUES (?, ?, ?)

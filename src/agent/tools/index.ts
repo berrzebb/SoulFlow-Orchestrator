@@ -5,6 +5,7 @@ import { CronTool } from "./cron.js";
 import { EditFileTool, ListDirTool, ReadFileTool, WriteFileTool } from "./filesystem.js";
 import { FileRequestTool } from "./file-request.js";
 import { MessageTool } from "./message.js";
+import { SendFileTool } from "./send-file.js";
 import { SpawnTool, type SpawnRequest } from "./spawn.js";
 import { ToolRegistry } from "./registry.js";
 import { ExecTool } from "./shell.js";
@@ -36,6 +37,7 @@ export {
   DiagramRenderTool,
   MessageTool,
   FileRequestTool,
+  SendFileTool,
   SpawnTool,
   ChainTool,
   CronTool,
@@ -177,6 +179,7 @@ export function create_default_tool_registry(args?: {
       workspace,
     }));
     registry.register(new FileRequestTool({ send_callback: sender }));
+    registry.register(new SendFileTool({ send_callback: sender, workspace }));
   }
   if (args?.spawn_callback) {
     registry.register(new SpawnTool(args.spawn_callback));

@@ -160,20 +160,22 @@ export function sanitize_provider_output(raw: string): string {
   // 블록 정규식을 라인 필터보다 먼저 실행 (구분자가 라인 단위 제거되면 블록 매칭 불가)
   const blocks_stripped = strip_tool_protocol_leaks(text);
   const filtered = filter_lines(blocks_stripped, FINAL_OUTPUT_LINE_FILTERS);
-  return strip_persona_leak_blocks(filtered).trim();
+  return strip_inline_html(strip_persona_leak_blocks(filtered)).trim();
 }
 
-/** LLM이 생성한 인라인 HTML 태그를 텍스트 등가물로 변환 (스트리밍 중간 표시용). */
+/** LLM이 생성한 인라인 HTML 태그를 텍스트 등가물로 변환. 잔여 태그는 catch-all로 제거. */
 function strip_inline_html(input: string): string {
   const out = String(input || "");
-  if (!/<[a-z][a-z0-9]*[\s>]/i.test(out)) return out;
+  if (!/<[a-z/][a-z0-9]*[\s>/]/i.test(out)) return out;
   return out
-    .replace(/<code>([^<]+)<\/code>/gi, "`$1`")
-    .replace(/<(?:b|strong)>([^<]+)<\/(?:b|strong)>/gi, "$1")
-    .replace(/<(?:i|em)>([^<]+)<\/(?:i|em)>/gi, "$1")
-    .replace(/<a\s+href="[^"]*"[^>]*>([^<]+)<\/a>/gi, "$1")
+    .replace(/<(?:script|style|iframe|object|embed)[^>]*>[\s\S]*?<\/(?:script|style|iframe|object|embed)>/gi, "")
+    .replace(/<(?:script|style|iframe|object|embed|img)[^>]*\/?>/gi, "")
+    .replace(/<code>([^<]*)<\/code>/gi, "`$1`")
+    .replace(/<(?:b|strong)>([^<]*)<\/(?:b|strong)>/gi, "$1")
+    .replace(/<(?:i|em)>([^<]*)<\/(?:i|em)>/gi, "$1")
+    .replace(/<a\s+href="[^"]*"[^>]*>([^<]*)<\/a>/gi, "$1")
     .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<\/?(?:p|div|span)[^>]*>/gi, "");
+    .replace(/<\/?[a-z][a-z0-9]*(?:\s[^>]*)?\/?>/gi, "");
 }
 
 const ORCH_FINAL_RE = /<<ORCH_FINAL(?:_END)?>>/g;

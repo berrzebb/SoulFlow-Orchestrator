@@ -1,6 +1,5 @@
 import {
   parse_memory_quick_action,
-  has_explicit_memory_intent,
   extract_memory_search_query,
   normalize_common_command_text,
 } from "../command-intent.js";
@@ -40,7 +39,7 @@ export class MemoryHandler implements CommandHandler {
   can_handle(ctx: CommandContext): boolean {
     const normalized = normalize_common_command_text(String(ctx.message.content || ""));
     const action = parse_memory_quick_action(normalized, ctx.command);
-    return !!action || has_explicit_memory_intent(normalized);
+    return !!action;
   }
 
   async handle(ctx: CommandContext): Promise<boolean> {

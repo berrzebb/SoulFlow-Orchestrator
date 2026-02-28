@@ -21,7 +21,7 @@ export abstract class BaseChannel implements ChatChannel {
   abstract read(chat_id: string, limit?: number): Promise<InboundMessage[]>;
   protected abstract set_typing_remote(chat_id: string, typing: boolean, anchor_message_id?: string): Promise<void>;
 
-  async edit_message(_chat_id: string, _message_id: string, _content: string): Promise<{ ok: boolean; error?: string }> {
+  async edit_message(_chat_id: string, _message_id: string, _content: string, _parse_mode?: string): Promise<{ ok: boolean; error?: string }> {
     return { ok: false, error: "edit_not_supported" };
   }
 

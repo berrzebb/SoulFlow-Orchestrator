@@ -1,6 +1,5 @@
 import {
   parse_decision_quick_action,
-  has_explicit_decision_intent,
   extract_decision_set_pair,
   normalize_common_command_text,
 } from "../command-intent.js";
@@ -46,7 +45,7 @@ export class DecisionHandler implements CommandHandler {
 
   can_handle(ctx: CommandContext): boolean {
     const normalized = normalize_common_command_text(String(ctx.message.content || ""));
-    return !!parse_decision_quick_action(normalized, ctx.command) || has_explicit_decision_intent(normalized);
+    return !!parse_decision_quick_action(normalized, ctx.command);
   }
 
   async handle(ctx: CommandContext): Promise<boolean> {

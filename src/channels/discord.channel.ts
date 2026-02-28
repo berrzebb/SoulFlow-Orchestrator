@@ -147,7 +147,7 @@ export class DiscordChannel extends BaseChannel {
     }
   }
 
-  async edit_message(chat_id: string, message_id: string, content: string): Promise<{ ok: boolean; error?: string }> {
+  async edit_message(chat_id: string, message_id: string, content: string, _parse_mode?: string): Promise<{ ok: boolean; error?: string }> {
     if (!this.bot_token) return { ok: false, error: "discord_bot_token_missing" };
     if (!chat_id || !message_id) return { ok: false, error: "chat_id_and_message_id_required" };
     try {

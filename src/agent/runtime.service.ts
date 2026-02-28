@@ -127,6 +127,34 @@ export class AgentRuntimeAdapter implements AgentRuntimeLike {
     return this.domain.loop.run_task_loop(options);
   }
 
+  async resume_task(task_id: string, user_input?: string, reason?: string): Promise<import("../contracts.js").TaskState | null> {
+    return this.domain.loop.resume_task(task_id, user_input, reason);
+  }
+
+  async find_waiting_task(provider: string, chat_id: string): Promise<import("../contracts.js").TaskState | null> {
+    return this.domain.task_store.find_waiting_by_chat(provider, chat_id);
+  }
+
+  async get_task(task_id: string): Promise<import("../contracts.js").TaskState | null> {
+    return this.domain.task_store.get(task_id);
+  }
+
+  async cancel_task(task_id: string, reason?: string): Promise<import("../contracts.js").TaskState | null> {
+    return this.domain.loop.cancel_task(task_id, reason);
+  }
+
+  list_active_tasks(): import("../contracts.js").TaskState[] {
+    return this.domain.loop.list_tasks().filter((t) => !["completed", "cancelled"].includes(t.status));
+  }
+
+  list_active_loops(): import("../contracts.js").AgentLoopState[] {
+    return this.domain.loop.list_loops().filter((l) => l.status === "running");
+  }
+
+  stop_loop(loop_id: string, reason?: string): import("../contracts.js").AgentLoopState | null {
+    return this.domain.loop.stop_loop(loop_id, reason);
+  }
+
   async spawn_and_wait(options: SpawnAndWaitOptions): Promise<SpawnAndWaitResult> {
     try {
       const spawned = await this.domain.subagents.spawn({

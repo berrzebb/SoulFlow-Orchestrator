@@ -16,4 +16,12 @@ export interface CronScheduler {
   list_jobs(include_disabled?: boolean): Promise<CronJob[]>;
   status(): Promise<CronServiceStatus>;
   every(ms: number, fn: () => Promise<void>): void;
+  /** 크론 스케줄러 일시 정지 — 등록된 작업은 유지하되 실행을 중단. */
+  pause(): Promise<void>;
+  /** 일시 정지된 스케줄러를 재개. */
+  resume(): Promise<void>;
+  /** 스케줄러 완전 중지 — 타이머 해제. */
+  stop(): Promise<void>;
+  /** 전체 작업을 비활성화(enabled=false)하고 스케줄러를 일시 정지. */
+  disable_all_and_pause(): Promise<number>;
 }

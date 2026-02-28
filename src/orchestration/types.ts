@@ -12,6 +12,8 @@ export type OrchestrationRequest = {
   skill_names: string[];
   on_stream?: (chunk: string) => void;
   signal?: AbortSignal;
+  /** TaskResumeService가 재개한 Task ID. 이 값이 있으면 새 orchestration 대신 기존 Task을 이어서 실행. */
+  resumed_task_id?: string;
 };
 
 export type OrchestrationResult = {

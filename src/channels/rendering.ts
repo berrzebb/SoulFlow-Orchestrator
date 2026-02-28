@@ -91,14 +91,16 @@ function sanitize_markdown_output(raw: string, profile: RenderProfile): string {
 /** LLM이 HTML을 직접 생성한 경우 마크다운 등가물로 변환. 파이프라인은 항상 markdown 입력을 기대. */
 function normalize_html_to_markdown(input: string): string {
   let out = String(input || "");
-  if (!/<[a-z][a-z0-9]*[\s>]/i.test(out)) return out;
-  out = out.replace(/<code>([^<]+)<\/code>/gi, "`$1`");
-  out = out.replace(/<(?:b|strong)>([^<]+)<\/(?:b|strong)>/gi, "**$1**");
-  out = out.replace(/<(?:i|em)>([^<]+)<\/(?:i|em)>/gi, "*$1*");
-  out = out.replace(/<a\s+href="([^"]+)"[^>]*>([^<]+)<\/a>/gi, "[$2]($1)");
+  if (!/<[a-z/][a-z0-9]*[\s>/]/i.test(out)) return out;
+  out = out.replace(/<(?:script|style|iframe|object|embed)[^>]*>[\s\S]*?<\/(?:script|style|iframe|object|embed)>/gi, "");
+  out = out.replace(/<(?:script|style|iframe|object|embed|img)[^>]*\/?>/gi, "");
+  out = out.replace(/<code>([^<]*)<\/code>/gi, "`$1`");
+  out = out.replace(/<(?:b|strong)>([^<]*)<\/(?:b|strong)>/gi, "**$1**");
+  out = out.replace(/<(?:i|em)>([^<]*)<\/(?:i|em)>/gi, "*$1*");
+  out = out.replace(/<a\s+href="([^"]+)"[^>]*>([^<]*)<\/a>/gi, "[$2]($1)");
   out = out.replace(/<br\s*\/?>/gi, "\n");
   out = out.replace(/<\/p>\s*<p[^>]*>/gi, "\n\n");
-  out = out.replace(/<\/?(?:p|div|span)[^>]*>/gi, "");
+  out = out.replace(/<\/?[a-z][a-z0-9]*(?:\s[^>]*)?\/?>/gi, "");
   return out;
 }
 
@@ -274,10 +276,17 @@ function inline_markdown_to_html(text: string): string {
   line = line.replace(/\*([^*]+)\*/g, (_m, italicRaw) => hold(`<i>${escape_html(String(italicRaw || ""))}</i>`));
 
   const escaped = escape_html(line);
-  return escaped.replace(INLINE_TOKEN_RE, (_m, idxRaw) => {
-    const idx = Number(idxRaw || -1);
-    return Number.isInteger(idx) && idx >= 0 && idx < tokens.length ? tokens[idx] : "";
-  });
+  const restore = (s: string): string =>
+    s.replace(INLINE_TOKEN_RE, (_m, idxRaw) => {
+      const idx = Number(idxRaw || -1);
+      return Number.isInteger(idx) && idx >= 0 && idx < tokens.length ? tokens[idx] : "";
+    });
+  let result = restore(escaped);
+  for (let depth = 0; depth < 4 && INLINE_TOKEN_RE.test(result); depth++) {
+    INLINE_TOKEN_RE.lastIndex = 0;
+    result = restore(result);
+  }
+  return result;
 }
 
 function normalize_href(raw: string): string | null {

@@ -2,11 +2,9 @@ import { randomUUID } from "node:crypto";
 import { Tool } from "./base.js";
 import type { MediaItem, OutboundMessage } from "../../bus/types.js";
 import { now_iso, normalize_text } from "../../utils/common.js";
-import { is_local_reference, normalize_local_candidate_path, resolve_local_reference } from "../../utils/local-ref.js";
 import type { JsonSchema, ToolExecutionContext } from "./types.js";
 import type { AppendWorkflowEventInput, AppendWorkflowEventResult, WorkflowPhase } from "../../events/types.js";
-import { existsSync, statSync } from "node:fs";
-import { basename, extname } from "node:path";
+import { to_local_media_item } from "./media-utils.js";
 
 export type MessageSendCallback = (message: OutboundMessage) => Promise<void>;
 export type MessageEventRecordCallback = (event: AppendWorkflowEventInput) => Promise<AppendWorkflowEventResult>;
@@ -17,35 +15,6 @@ function normalize_phase(value: unknown): WorkflowPhase {
   const v = String(value || "").trim().toLowerCase();
   if (PHASE_SET.has(v as WorkflowPhase)) return v as WorkflowPhase;
   return "progress";
-}
-
-function detect_media_type(path_value: string): MediaItem["type"] {
-  const lower = String(path_value || "").toLowerCase();
-  if (/\.(png|jpg|jpeg|gif|webp|svg)$/.test(lower)) return "image";
-  if (/\.(mp4|mov|webm|mkv|avi)$/.test(lower)) return "video";
-  if (/\.(mp3|wav|ogg|m4a)$/.test(lower)) return "audio";
-  if (/\.(pdf|txt|md|csv|json|zip|tar|gz)$/.test(lower)) return "file";
-  const ext = extname(lower);
-  if (!ext) return "file";
-  return "file";
-}
-
-function to_local_media_item(value: string, workspace: string): MediaItem | null {
-  const candidate = normalize_local_candidate_path(value);
-  if (!candidate) return null;
-  if (!is_local_reference(candidate)) return null;
-  const local_path = resolve_local_reference(workspace, candidate);
-  if (!existsSync(local_path)) return null;
-  try {
-    if (!statSync(local_path).isFile()) return null;
-  } catch {
-    return null;
-  }
-  return {
-    type: detect_media_type(local_path),
-    url: local_path,
-    name: basename(local_path),
-  };
 }
 
 export class MessageTool extends Tool {

@@ -1,5 +1,4 @@
 import {
-  has_explicit_status_intent,
   parse_status_quick_action,
 } from "../command-intent.js";
 import { slash_name_in } from "../slash-command.js";
@@ -18,8 +17,7 @@ export class StatusHandler implements CommandHandler {
   constructor(private readonly access: StatusAccess) {}
 
   can_handle(ctx: CommandContext): boolean {
-    return slash_name_in(ctx.command?.name || "", COMMAND_ALIASES)
-      || has_explicit_status_intent(ctx.text);
+    return slash_name_in(ctx.command?.name || "", COMMAND_ALIASES);
   }
 
   async handle(ctx: CommandContext): Promise<boolean> {

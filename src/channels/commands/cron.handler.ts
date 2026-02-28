@@ -6,17 +6,24 @@ import type { CronScheduler } from "../../cron/contracts.js";
 import type { CronSchedule } from "../../cron/types.js";
 import { format_mention, type CommandContext, type CommandHandler } from "./types.js";
 
-type CronQuickAction = "status" | "list" | "add" | "remove";
+type CronQuickAction = "status" | "list" | "add" | "remove" | "pause" | "resume" | "stop" | "nuke";
 
 const ROOT_ALIASES = ["cron", "크론"] as const;
 const STATUS_COMMAND_ALIASES = ["cron-status", "cron_status", "크론상태", "크론-상태"] as const;
 const LIST_COMMAND_ALIASES = ["cron-list", "cron_list", "크론목록", "크론-목록"] as const;
 const ADD_COMMAND_ALIASES = ["cron-add", "cron_add", "크론추가", "크론-추가"] as const;
 const REMOVE_COMMAND_ALIASES = ["cron-remove", "cron_remove", "cron-delete", "cron_delete", "크론삭제", "크론-삭제"] as const;
+const PAUSE_COMMAND_ALIASES = ["cron-pause", "cron_pause", "크론일시정지", "크론-일시정지"] as const;
+const RESUME_COMMAND_ALIASES = ["cron-resume", "cron_resume", "크론재개", "크론-재개"] as const;
+const STOP_COMMAND_ALIASES = ["cron-stop", "cron_stop", "크론중지", "크론-중지"] as const;
 const STATUS_ARG_ALIASES = ["status", "상태", "확인", "조회"] as const;
 const LIST_ARG_ALIASES = ["jobs", "list", "목록", "리스트"] as const;
 const ADD_ARG_ALIASES = ["add", "추가", "등록", "create"] as const;
 const REMOVE_ARG_ALIASES = ["remove", "delete", "삭제", "제거"] as const;
+const PAUSE_ARG_ALIASES = ["pause", "일시정지", "멈춰", "중단"] as const;
+const RESUME_ARG_ALIASES = ["resume", "재개", "시작", "다시"] as const;
+const STOP_ARG_ALIASES = ["stop", "중지", "꺼"] as const;
+const NUKE_ARG_ALIASES = ["nuke", "전체삭제", "전체중지", "kill", "killall"] as const;
 
 function parse_action(message: InboundMessage, command: ParsedSlashCommand | null): CronQuickAction | null {
   const cmd = String(command?.name || "");
@@ -27,11 +34,18 @@ function parse_action(message: InboundMessage, command: ParsedSlashCommand | nul
     if (!arg0 || slash_token_in(arg0, STATUS_ARG_ALIASES)) return "status";
     if (slash_token_in(arg0, ADD_ARG_ALIASES)) return "add";
     if (slash_token_in(arg0, REMOVE_ARG_ALIASES)) return "remove";
+    if (slash_token_in(arg0, PAUSE_ARG_ALIASES)) return "pause";
+    if (slash_token_in(arg0, RESUME_ARG_ALIASES)) return "resume";
+    if (slash_token_in(arg0, STOP_ARG_ALIASES)) return "stop";
+    if (slash_token_in(arg0, NUKE_ARG_ALIASES)) return "nuke";
   }
   if (slash_name_in(cmd, STATUS_COMMAND_ALIASES)) return "status";
   if (slash_name_in(cmd, LIST_COMMAND_ALIASES)) return "list";
   if (slash_name_in(cmd, ADD_COMMAND_ALIASES)) return "add";
   if (slash_name_in(cmd, REMOVE_COMMAND_ALIASES)) return "remove";
+  if (slash_name_in(cmd, PAUSE_COMMAND_ALIASES)) return "pause";
+  if (slash_name_in(cmd, RESUME_COMMAND_ALIASES)) return "resume";
+  if (slash_name_in(cmd, STOP_COMMAND_ALIASES)) return "stop";
 
   const text = normalize_common_command_text(String(message.content || "")).toLowerCase();
   if (!text) return null;
@@ -39,13 +53,11 @@ function parse_action(message: InboundMessage, command: ParsedSlashCommand | nul
   if (/^(?:cron|크론)(?:\s*작업)?\s*(?:jobs|list|목록|리스트)/.test(text)) return "list";
   if (/^(?:cron|크론)(?:\s*작업)?\s*(?:add|추가|등록)\b/.test(text)) return "add";
   if (/^(?:cron|크론)(?:\s*작업)?\s*(?:remove|delete|삭제|제거)\b/.test(text)) return "remove";
+  if (/^(?:cron|크론)(?:\s*작업)?\s*(?:pause|일시정지|멈춰|중단)\b/.test(text)) return "pause";
+  if (/^(?:cron|크론)(?:\s*작업)?\s*(?:resume|재개|시작|다시)\b/.test(text)) return "resume";
+  if (/^(?:cron|크론)(?:\s*작업)?\s*(?:stop|중지|꺼)\b/.test(text)) return "stop";
+  if (/^(?:cron|크론)(?:\s*작업)?\s*(?:nuke|전체삭제|전체중지|kill)\b/.test(text)) return "nuke";
   return null;
-}
-
-function has_cron_intent(message: InboundMessage): boolean {
-  const text = normalize_common_command_text(String(message.content || "")).toLowerCase();
-  if (!text || text.startsWith("/")) return false;
-  return /(cron|크론|스케줄|예약|리마인드|remind|알림)/i.test(text);
 }
 
 function parse_duration_ms(token: string): number | null {
@@ -61,9 +73,6 @@ function parse_duration_ms(token: string): number | null {
   return value * 1_000;
 }
 
-function has_natural_schedule_intent(body: string): boolean {
-  return /(알림|리마인드|알려|깨워|예약|등록|실행|수행|전송|보내|notify|remind|run)/i.test(body);
-}
 
 type AddSpec = {
   schedule: CronSchedule;
@@ -156,7 +165,7 @@ function parse_natural_add_spec(message: InboundMessage): AddSpec | null {
     const start_delay = parse_duration_ms(`${delayed_every[1]}${delayed_every[2]}`);
     const every_ms = parse_duration_ms(`${delayed_every[3]}${delayed_every[4]}`);
     const body = String(delayed_every[5] || "").trim();
-    if (!start_delay || !every_ms || !body || !has_natural_schedule_intent(body)) return null;
+    if (!start_delay || !every_ms || !body) return null;
     return {
       schedule: { kind: "every", every_ms, at_ms: Date.now() + start_delay },
       message: body, name: body.slice(0, 40),
@@ -169,7 +178,7 @@ function parse_natural_add_spec(message: InboundMessage): AddSpec | null {
   if (rel) {
     const duration = parse_duration_ms(`${rel[1]}${rel[2]}`);
     const body = String(rel[3] || "").trim();
-    if (!duration || !body || !has_natural_schedule_intent(body)) return null;
+    if (!duration || !body) return null;
     return {
       schedule: { kind: "at", at_ms: Date.now() + duration },
       message: body, name: body.slice(0, 40),
@@ -186,7 +195,7 @@ function parse_natural_add_spec(message: InboundMessage): AddSpec | null {
   const minute = Number(abs[4] || 0);
   const second = Number(abs[5] || 0);
   const body = String(abs[6] || "").trim();
-  if (!body || !has_natural_schedule_intent(body)) return null;
+  if (!body) return null;
   if (hour < 0 || hour > 24 || minute < 0 || minute > 59 || second < 0 || second > 59) return null;
 
   if (meridiem === "오전" || meridiem === "새벽") { if (hour === 12) hour = 0; }
@@ -240,10 +249,7 @@ export class CronHandler implements CommandHandler {
 
   can_handle(ctx: CommandContext): boolean {
     if (!this.cron) return false;
-    const action = parse_action(ctx.message, ctx.command);
-    if (action) return true;
-    if (parse_natural_add_spec(ctx.message)) return true;
-    return has_cron_intent(ctx.message);
+    return !!parse_action(ctx.message, ctx.command);
   }
 
   async handle(ctx: CommandContext): Promise<boolean> {
@@ -296,6 +302,31 @@ export class CronHandler implements CommandHandler {
             ? `${mention}cron 작업 삭제 완료: ${job_id}`
             : `${mention}cron 작업을 찾지 못했습니다: ${job_id}`,
         );
+        return true;
+      }
+
+      if (action === "pause") {
+        await this.cron.pause();
+        await ctx.send_reply(`${mention}⏸️ cron 스케줄러를 일시 정지했습니다. 새 작업이 실행되지 않습니다.\n재개: /cron resume`);
+        return true;
+      }
+
+      if (action === "resume") {
+        await this.cron.resume();
+        const status = await this.cron.status();
+        await ctx.send_reply(`${mention}▶️ cron 스케줄러를 재개했습니다.\n- jobs: ${status.jobs}\n- next_wake: ${format_time_kr(status.next_wake_at_ms)}`);
+        return true;
+      }
+
+      if (action === "stop") {
+        await this.cron.stop();
+        await ctx.send_reply(`${mention}⏹️ cron 스케줄러를 완전 중지했습니다. 모든 타이머가 해제됩니다.\n재시작: /cron resume`);
+        return true;
+      }
+
+      if (action === "nuke") {
+        const disabled_count = await this.cron.disable_all_and_pause();
+        await ctx.send_reply(`${mention}🚫 전체 cron 작업 비활성화 + 스케줄러 정지 완료\n- 비활성화된 작업: ${disabled_count}개\n재개: /cron resume (개별 enable 필요)`);
         return true;
       }
 

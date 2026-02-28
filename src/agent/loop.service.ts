@@ -6,7 +6,7 @@ import { parse_tool_calls_from_text } from "./tool-call-parser.js";
 import { ConsecutiveToolCallGuard, type ToolCallGuard } from "./tool-call-guard.js";
 
 const SEOUL_TZ = "Asia/Seoul";
-const TERMINAL_TASK_STATUSES = new Set(["waiting_approval", "failed", "cancelled", "completed"]);
+const TERMINAL_TASK_STATUSES = new Set(["waiting_approval", "waiting_user_input", "failed", "cancelled", "completed"]);
 const MAX_TASK_TURNS = 500;
 
 function now_seoul_iso(): string {
@@ -94,13 +94,17 @@ export class AgentLoopStore {
     return state;
   }
 
-  async resume_task(task_id: string, reason = "resumed"): Promise<TaskState | null> {
+  async resume_task(task_id: string, user_input?: string, reason = "resumed"): Promise<TaskState | null> {
     const state = this.tasks.get(task_id);
     if (!state) return null;
     if (state.status === "completed" || state.status === "cancelled") return state;
     if (state.currentTurn >= state.maxTurns) {
       const extend_by = Math.max(1, Math.ceil(Math.max(1, state.maxTurns) * 0.25));
       state.maxTurns = Math.min(state.currentTurn + extend_by, MAX_TASK_TURNS);
+    }
+    if (user_input !== undefined) {
+      state.memory.__user_input = user_input;
+      state.memory.__resumed_at = new Date().toISOString();
     }
     state.status = "running";
     state.exitReason = reason;

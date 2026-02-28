@@ -36,7 +36,7 @@ export interface TaskState {
   title: string;
   currentTurn: number;
   maxTurns: number;
-  status: "running" | "waiting_approval" | "completed" | "failed" | "cancelled" | "max_turns_reached";
+  status: "running" | "waiting_approval" | "waiting_user_input" | "completed" | "failed" | "cancelled" | "max_turns_reached";
   currentStep?: string;
   exitReason?: string;
   memory: Record<string, unknown>;

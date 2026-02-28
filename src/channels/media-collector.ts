@@ -3,6 +3,7 @@ import { join, basename } from "node:path";
 import type { InboundMessage } from "../bus/types.js";
 import type { ChannelProvider } from "./types.js";
 import { is_local_reference, resolve_local_reference } from "../utils/local-ref.js";
+import type { Logger } from "../logger.js";
 
 type ProviderTokens = {
   slack_bot_token?: string;
@@ -13,18 +14,23 @@ type ProviderTokens = {
 export type MediaCollectorOptions = {
   workspace_dir: string;
   tokens: ProviderTokens;
+  logger?: Logger;
 };
 
 const FILE_EXTENSION_RE = /\.(txt|md|csv|json|xml|yaml|yml|pdf|log|zip|tar|gz|png|jpg|jpeg|webp|gif|mp3|wav|ogg|mp4|mov|webm)(?:$|\?)/i;
 const MAX_REMOTE_FILE_SIZE = 20 * 1024 * 1024;
+const FETCH_TIMEOUT_MS = 15_000;
+const PRIVATE_HOST_RE = /^(?:localhost|127\.|10\.|172\.(?:1[6-9]|2\d|3[01])\.|192\.168\.|169\.254\.|0\.|::1|\[::1\]|fc|fd)/i;
 
 export class MediaCollector {
   private readonly workspace_dir: string;
   private readonly tokens: ProviderTokens;
+  private readonly logger: Logger | null;
 
   constructor(options: MediaCollectorOptions) {
     this.workspace_dir = options.workspace_dir;
     this.tokens = options.tokens;
+    this.logger = options.logger || null;
   }
 
   async collect(provider: ChannelProvider, message: InboundMessage): Promise<string[]> {
@@ -72,16 +78,19 @@ export class MediaCollector {
   private async download_with_auth(url: string, hint_name: string | undefined, sub_dir: string, token?: string): Promise<string | null> {
     if (!url || !token) return null;
     try {
-      const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
       if (!res.ok) return null;
       return this.save_response(res, url, hint_name, sub_dir);
-    } catch { return null; }
+    } catch (e) {
+      this.logger?.debug("download_with_auth failed", { url: url.slice(0, 120), error: e instanceof Error ? e.message : String(e) });
+      return null;
+    }
   }
 
   private async download_file(url: string, hint_name: string | undefined, sub_dir: string, max_size?: number): Promise<string | null> {
-    if (!url) return null;
+    if (!url || is_private_url(url)) return null;
     try {
-      const res = await fetch(url);
+      const res = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
       if (!res.ok) return null;
       if (max_size) {
         const cl = Number(res.headers.get("content-length") || 0);
@@ -94,7 +103,10 @@ export class MediaCollector {
       const path = join(dir, `${Date.now()}-${name}`);
       await writeFile(path, bytes);
       return path;
-    } catch { return null; }
+    } catch (e) {
+      this.logger?.debug("download_file failed", { url: url.slice(0, 120), error: e instanceof Error ? e.message : String(e) });
+      return null;
+    }
   }
 
   private async download_telegram_file(file_id: string): Promise<string | null> {
@@ -102,16 +114,19 @@ export class MediaCollector {
     const api_base = this.tokens.telegram_api_base || "https://api.telegram.org";
     if (!token || !file_id) return null;
     try {
-      const info_res = await fetch(`${api_base}/bot${token}/getFile?file_id=${encodeURIComponent(file_id)}`);
+      const info_res = await fetch(`${api_base}/bot${token}/getFile?file_id=${encodeURIComponent(file_id)}`, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
       const info = (await info_res.json().catch(() => ({}))) as Record<string, unknown>;
       if (!info_res.ok || info.ok !== true) return null;
       const result = (info.result && typeof info.result === "object") ? info.result as Record<string, unknown> : null;
       const file_path = String(result?.file_path || "").trim();
       if (!file_path) return null;
-      const file_res = await fetch(`${api_base}/file/bot${token}/${file_path}`);
+      const file_res = await fetch(`${api_base}/file/bot${token}/${file_path}`, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
       if (!file_res.ok) return null;
       return this.save_response(file_res, file_path, undefined, "telegram");
-    } catch { return null; }
+    } catch (e) {
+      this.logger?.debug("download_telegram_file failed", { file_id, error: e instanceof Error ? e.message : String(e) });
+      return null;
+    }
   }
 
   private async save_response(res: Response, source_path: string, hint_name: string | undefined, sub_dir: string): Promise<string> {
@@ -206,4 +221,14 @@ function url_basename(url_or_path: string): string {
 
 function safe_filename(name: string): string {
   return (name || "file.bin").replace(/[<>:"/\\|?*\x00-\x1F]/g, "_").slice(0, 120);
+}
+
+function is_private_url(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    if (!["http:", "https:"].includes(parsed.protocol)) return true;
+    return PRIVATE_HOST_RE.test(parsed.hostname);
+  } catch {
+    return true;
+  }
 }

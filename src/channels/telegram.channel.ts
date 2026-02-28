@@ -93,6 +93,39 @@ function to_inbound_message(
   };
 }
 
+/** Telegram message_reaction 업데이트를 InboundMessage로 변환. */
+function to_reaction_message(
+  raw: Record<string, unknown>,
+  target_chat_id: string,
+  update_id: number,
+): InboundMessage | null {
+  const chat = (raw.chat && typeof raw.chat === "object") ? (raw.chat as Record<string, unknown>) : {};
+  if (as_string(chat.id) !== as_string(target_chat_id)) return null;
+  const user = (raw.user && typeof raw.user === "object") ? (raw.user as Record<string, unknown>) : {};
+  const new_reactions = Array.isArray(raw.new_reaction) ? (raw.new_reaction as Array<Record<string, unknown>>) : [];
+  const emoji_list = new_reactions
+    .filter((r) => String(r.type || "") === "emoji")
+    .map((r) => String(r.emoji || ""))
+    .filter(Boolean);
+  if (emoji_list.length === 0) return null;
+  return {
+    id: String(update_id),
+    provider: "telegram",
+    channel: "telegram",
+    sender_id: as_string(user.id || "unknown"),
+    chat_id: target_chat_id,
+    content: "",
+    at: now_iso(),
+    metadata: {
+      is_reaction: true,
+      telegram_reaction: {
+        message_id: as_string(raw.message_id || ""),
+        emoji: emoji_list,
+      },
+    },
+  };
+}
+
 export class TelegramChannel extends BaseChannel {
   private readonly bot_token: string;
   private readonly default_chat_id: string;
@@ -240,7 +273,8 @@ export class TelegramChannel extends BaseChannel {
     const n = Math.max(1, Math.min(100, Number(limit || 20)));
     try {
       const offset_qs = this.last_update_id > 0 ? `&offset=${this.last_update_id + 1}` : "";
-      const url = `${this.api_base}/bot${this.bot_token}/getUpdates?limit=${n}&timeout=0${offset_qs}`;
+      const allowed = encodeURIComponent(JSON.stringify(["message", "message_reaction"]));
+      const url = `${this.api_base}/bot${this.bot_token}/getUpdates?limit=${n}&timeout=0&allowed_updates=${allowed}${offset_qs}`;
       const response = await fetch(url);
       const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
       if (!response.ok || data.ok !== true) {
@@ -259,10 +293,20 @@ export class TelegramChannel extends BaseChannel {
         const msg = (update.message && typeof update.message === "object")
           ? (update.message as Record<string, unknown>)
           : null;
-        if (!msg) continue;
-        const msg_chat = (msg.chat && typeof msg.chat === "object") ? (msg.chat as Record<string, unknown>) : {};
-        if (as_string(msg_chat.id) !== as_string(chat_id)) continue;
-        rows.push(to_inbound_message(this, msg, chat_id, update_id));
+        if (msg) {
+          const msg_chat = (msg.chat && typeof msg.chat === "object") ? (msg.chat as Record<string, unknown>) : {};
+          if (as_string(msg_chat.id) === as_string(chat_id)) {
+            rows.push(to_inbound_message(this, msg, chat_id, update_id));
+          }
+          continue;
+        }
+        const rxn = (update.message_reaction && typeof update.message_reaction === "object")
+          ? (update.message_reaction as Record<string, unknown>)
+          : null;
+        if (rxn) {
+          const inbound = to_reaction_message(rxn, chat_id, update_id);
+          if (inbound) rows.push(inbound);
+        }
       }
       return rows;
     } catch (error) {
@@ -271,15 +315,18 @@ export class TelegramChannel extends BaseChannel {
     }
   }
 
-  async edit_message(chat_id: string, message_id: string, content: string): Promise<{ ok: boolean; error?: string }> {
+  async edit_message(chat_id: string, message_id: string, content: string, parse_mode?: string): Promise<{ ok: boolean; error?: string }> {
     if (!this.bot_token) return { ok: false, error: "telegram_bot_token_missing" };
     if (!chat_id || !message_id) return { ok: false, error: "chat_id_and_message_id_required" };
     try {
       const url = `${this.api_base}/bot${this.bot_token}/editMessageText`;
+      const payload: Record<string, unknown> = { chat_id, message_id: Number(message_id), text: String(content || "") };
+      const resolved = this.resolve_parse_mode(parse_mode);
+      if (resolved) payload.parse_mode = resolved;
       const response = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ chat_id, message_id: Number(message_id), text: String(content || "") }),
+        body: JSON.stringify(payload),
       });
       const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
       if (!response.ok || data.ok !== true) {
