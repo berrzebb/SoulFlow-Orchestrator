@@ -152,13 +152,13 @@ export class McpClientManager implements ServiceLike {
     }
   }
 
-  /** MCP 서버의 도구를 호출한다. signal이 전달되면 abort 시 즉시 에러 반환. */
-  async call_tool(tool_name: string, args: Record<string, unknown>, signal?: AbortSignal): Promise<McpCallResult> {
+  /** MCP 서버의 도구를 호출한다. target_server 지정 시 해당 서버로 직접 라우팅. */
+  async call_tool(tool_name: string, args: Record<string, unknown>, signal?: AbortSignal, target_server?: string): Promise<McpCallResult> {
     if (signal?.aborted) {
       return { content: [{ type: "text", text: "Error: aborted" }], is_error: true };
     }
 
-    const server_name = this.tool_index.get(tool_name);
+    const server_name = target_server || this.tool_index.get(tool_name);
     if (!server_name) {
       return { content: [{ type: "text", text: `Error: unknown_mcp_tool:${tool_name}` }], is_error: true };
     }

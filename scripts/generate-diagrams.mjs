@@ -155,6 +155,96 @@ const diagrams = [
   style HO fill:#6a5a2d,stroke:#a94`,
   },
   {
+    name: "orchestrator-flow",
+    code: `flowchart TD
+  REQ["Inbound Message"]
+
+  subgraph Classify["Classification"]
+    CLS{"Complexity Scorer"}
+  end
+
+  subgraph Once["once mode"]
+    O_EXEC["Single LLM call"]
+    O_TOOL{"tool_calls?"}
+    O_RUN["Tool Execution"]
+    O_FOLLOW["Followup LLM"]
+    O_DONE["Return reply"]
+  end
+
+  subgraph Agent["agent mode"]
+    A_BACK["AgentBackend.run()"]
+    A_NAT{"native_tool_loop?"}
+    A_SDK["SDK internal loop"]
+    A_CLI["CLI single turn"]
+    A_TRUN["Tool Execution"]
+    A_ITER{"max_turns?"}
+    A_DONE["Return result"]
+  end
+
+  subgraph Task["task mode"]
+    T_PLAN["Build plan nodes"]
+    T_NODE["Execute node"]
+    T_GATE{"Phase Gate"}
+    T_NEXT["Next node"]
+    T_DONE["Task complete"]
+  end
+
+  REQ --> CLS
+  CLS -->|"simple"| Once
+  CLS -->|"complex"| Agent
+  CLS -->|"multi-step"| Task
+
+  O_EXEC --> O_TOOL
+  O_TOOL -->|yes| O_RUN --> O_FOLLOW --> O_DONE
+  O_TOOL -->|no| O_DONE
+
+  A_BACK --> A_NAT
+  A_NAT -->|"SDK/AppServer"| A_SDK --> A_DONE
+  A_NAT -->|"CLI"| A_CLI --> A_TRUN --> A_ITER
+  A_ITER -->|"continue"| A_CLI
+  A_ITER -->|"done"| A_DONE
+
+  T_PLAN --> T_NODE --> T_GATE
+  T_GATE -->|pass| T_NEXT --> T_NODE
+  T_GATE -->|fail| T_NODE
+  T_GATE -->|"all done"| T_DONE
+
+  style Once fill:#1a3a2a,stroke:#3a7a5a
+  style Agent fill:#1a2a3a,stroke:#3a5a7a
+  style Task fill:#3a2a1a,stroke:#7a5a3a`,
+  },
+  {
+    name: "sensitive-seal-flow",
+    code: `flowchart LR
+  IN["Inbound Message"]
+  DETECT["Detect Sensitive Patterns"]
+  SEAL["Seal AES-256-GCM"]
+  REF["Replace with secret ref"]
+  STORE["SecretVault store"]
+  AGENT["Agent receives sealed prompt"]
+  TOOL["Tool requests secret"]
+  DECRYPT["Vault decrypt JIT"]
+  EXEC["Execute with plaintext"]
+  RESP["Response redact"]
+  OUT["Outbound Message"]
+
+  IN --> DETECT
+  DETECT -->|found| SEAL --> REF --> STORE
+  DETECT -->|clean| AGENT
+  STORE --> AGENT
+  AGENT --> TOOL --> DECRYPT --> EXEC
+  EXEC --> RESP --> OUT
+
+  subgraph KeyFormat["Key Format"]
+    direction LR
+    K["inbound.provider.cHash.type.vHash"]
+  end
+
+  style SEAL fill:#6a2d2d,stroke:#bf5a5a
+  style DECRYPT fill:#2d6a2d,stroke:#5abf5a
+  style STORE fill:#2d4a6a,stroke:#5a8abf`,
+  },
+  {
     name: "role-delegation",
     code: `flowchart TD
   USER["User Message"]

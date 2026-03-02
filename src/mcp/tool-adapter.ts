@@ -29,7 +29,7 @@ export class McpToolAdapter implements ToolLike {
   }
 
   async execute(params: Record<string, unknown>, context?: ToolExecutionContext): Promise<string> {
-    const result = await this.mcp.call_tool(this.original_name, params, context?.signal);
+    const result = await this.mcp.call_tool(this.original_name, params, context?.signal, this.server_name);
     if (result.is_error) {
       const text = result.content.map((c) => c.text || "").filter(Boolean).join("\n");
       return `Error: ${text || "mcp_tool_error"}`;

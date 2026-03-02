@@ -207,6 +207,7 @@ export class ToolRegistry {
     timeout_ms = 300_000,
   ): { request_id: string; decision: Promise<ApprovalDecision> } {
     const request = this.create_approval_request(tool_name, {}, context, detail);
+    request.bridge = true;
     void this.notify_approval_required(request);
 
     const decision = new Promise<ApprovalDecision>((resolve) => {
@@ -276,6 +277,10 @@ export class ToolRegistry {
     if (!req) return { ok: false, status: "unknown", error: "approval_request_not_found" };
     if (req.status !== "approved") {
       return { ok: false, status: req.status, tool_name: req.tool_name, error: `approval_not_approved:${req.status}` };
+    }
+    // SDK 브리지 모드: SDK가 도구 실행을 직접 관리 — 이중 실행 방지
+    if (req.bridge) {
+      return { ok: true, status: req.status, tool_name: req.tool_name, result: "bridge_approved" };
     }
     const tool = this.tools.get(req.tool_name);
     if (!tool) return { ok: false, status: req.status, tool_name: req.tool_name, error: `tool_not_found:${req.tool_name}` };

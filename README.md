@@ -66,7 +66,7 @@
 - 에이전트/태스크/프로세스/결정/워크플로우 이벤트 조회
 - SSE 기반 실시간 업데이트 (에이전트 스트림, 이벤트 피드)
 - 인라인 정적 자산 (외부 파일 의존 없음)
-- 고정 포트 바인딩 (기본 3789, fallback opt-in)
+- 고정 포트 바인딩 (기본 4200, fallback opt-in)
 
 ## 보안 우선 정책
 - 민감정보/보안 규칙은 다른 모든 규칙보다 우선합니다.
@@ -96,8 +96,10 @@
 ### 역할 위임 흐름
 ![Role Delegation](docs/diagrams/role-delegation.svg)
 
-### 레거시 (참고용)
+### 오케스트레이션 실행 흐름
 ![Orchestrator Flow](docs/diagrams/orchestrator-flow.svg)
+
+### 민감정보 Sealing
 ![Sensitive Seal Flow](docs/diagrams/sensitive-seal-flow.svg)
 
 ## 빠른 시작
@@ -150,8 +152,8 @@ cd next/workspace && node ../dist/main.js
 ```
 
 ### 5) 대시보드
-- 기본 URL: `http://127.0.0.1:3789`
-- `DASHBOARD_ENABLED=true`일 때 활성화
+- 기본 URL: `http://127.0.0.1:4200`
+- `DASHBOARD_ENABLED=true`일 때 활성화 (기본값: 활성)
 - 고정 포트 — `DASHBOARD_PORT_FALLBACK=1` 설정 시에만 자동 fallback
 
 ### 6) 슬래시 명령
@@ -169,10 +171,12 @@ cd next/workspace && node ../dist/main.js
 | `/cron status\|list\|add\|remove` | 크론 스케줄 관리 |
 | `/promise status\|list\|resolve <id> <value>` | Promise/지연 실행 관리 |
 | `/reload config\|tools\|skills` | 설정/도구/스킬 핫 리로드 |
+| `/task list\|cancel <id>` | 프로세스·작업 조회/취소 |
 | `/status` | 런타임 상태 요약 (도구·스킬 목록 포함) |
 | `/agent list\|cancel\|send` | 서브에이전트 목록/취소/입력 전송 |
 | `/skill list\|info\|suggest` | 스킬 목록/상세/추천 |
-| `/stats` | 런타임 통계 (프로세스·큐·히스토리) |
+| `/stats` | 런타임 통계 (CD 점수·세션 메트릭) |
+| `/verify` | 출력물 검증 |
 | `/doctor` | 런타임 자가진단 (서비스 건강 상태 점검) |
 
 ## 주요 환경 변수
@@ -252,6 +256,7 @@ next/
     runtime/
       security/           ← master.key, secrets.db
       sessions/           ← sessions.db
+      agent-sessions.db   ← 에이전트 백엔드 세션 (resume)
       tasks/              ← tasks.db
       events/             ← events.db
       decisions/          ← decisions.db
