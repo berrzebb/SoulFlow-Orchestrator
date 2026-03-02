@@ -18,6 +18,8 @@ export type ApprovalHandleResult = {
   task_id?: string;
   /** 승인 후 도구 실행 결과 요약 — task memory에 주입하여 컨텍스트 유지. */
   tool_result?: string;
+  /** 승인 요청의 최종 상태. denied/cancelled 시 Task 취소에 사용. */
+  approval_status?: "approved" | "denied" | "deferred" | "cancelled" | "clarify";
 };
 
 export class ApprovalService {
@@ -147,7 +149,7 @@ export class ApprovalService {
     });
 
     const task_id = selected.context?.task_id;
-    return { handled: true, task_id, tool_result };
+    return { handled: true, task_id, tool_result, approval_status: resolved.status as ApprovalHandleResult["approval_status"] };
   }
 }
 
@@ -157,7 +159,7 @@ function extract_request_id(text: string): string | null {
   return m ? (m[1]?.trim() || null) : null;
 }
 
-function extract_reaction_names(message: InboundMessage): string[] {
+export function extract_reaction_names(message: InboundMessage): string[] {
   const meta = (message.metadata || {}) as Record<string, unknown>;
 
   // Slack: metadata.slack.reactions
@@ -194,6 +196,11 @@ const APPROVE = ["white_check_mark", "heavy_check_mark", "thumbsup", "+1", "gree
 const DENY = ["x", "thumbsdown", "-1", "no_entry", "no_entry_sign", "red_circle"];
 const DEFER = ["hourglass_flowing_sand", "hourglass", "pause_button", "thinking_face"];
 const CANCEL = ["octagonal_sign", "stop_sign"];
+
+/** 리액션 이름이 실행 중지 컨트롤인지 판별. */
+export function is_control_stop_reaction(names: string[]): boolean {
+  return CANCEL.some((n) => names.includes(n));
+}
 
 function reaction_to_decision(names: string[]): "approve" | "deny" | "defer" | "cancel" | null {
   const set = new Set(names);

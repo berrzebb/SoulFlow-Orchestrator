@@ -48,11 +48,6 @@ const ChannelSchema = z.object({
   readLimit: z.number().min(1).max(100),
   readAckEnabled: z.boolean(),
   readAckReaction: z.string().min(1),
-  statusNoticeEnabled: z.boolean(),
-  progressPulseEnabled: z.boolean(),
-  groupingEnabled: z.boolean(),
-  groupingWindowMs: z.number().min(500),
-  groupingMaxMessages: z.number().min(2),
   seenTtlMs: z.number().min(60_000),
   seenMaxSize: z.number().min(2_000),
   inboundConcurrency: z.number().min(1),
@@ -86,6 +81,11 @@ const Phi4Schema = z.object({
   apiBase: z.string(),
 });
 
+const AgentBackendSchema = z.object({
+  claudeBackend: z.enum(["claude_cli", "claude_sdk"]).default("claude_cli"),
+  codexBackend: z.enum(["codex_cli", "codex_appserver"]).default("codex_cli"),
+});
+
 const OrchestrationSchema = z.object({
   maxToolResultChars: z.number().min(50),
   orchestratorMaxTokens: z.number().min(256),
@@ -95,7 +95,6 @@ const DashboardSchema = z.object({
   enabled: z.boolean(),
   port: z.number().int().positive(),
   host: z.string(),
-  assetsDir: z.string(),
 });
 
 export const AppConfigSchema = z.object({
@@ -103,7 +102,6 @@ export const AppConfigSchema = z.object({
   agentLoopMaxTurns: z.number().min(1),
   taskLoopMaxTurns: z.number().min(1),
   dataDir: z.string(),
-  templateSourceDir: z.string(),
   workspaceDir: z.string(),
   channels: z.object({
     slack: ProviderChannelSchema,
@@ -112,6 +110,7 @@ export const AppConfigSchema = z.object({
   }),
   channel: ChannelSchema,
   orchestration: OrchestrationSchema,
+  agentBackend: AgentBackendSchema,
   phi4: Phi4Schema,
   dashboard: DashboardSchema,
 });
@@ -128,7 +127,6 @@ export function load_config_from_env(): AppConfig {
     agentLoopMaxTurns: env_num("AGENT_LOOP_MAX_TURNS", 30),
     taskLoopMaxTurns: env_num("TASK_LOOP_MAX_TURNS", 40),
     dataDir,
-    templateSourceDir: env_str("TEMPLATE_SOURCE_DIR", ""),
     workspaceDir: workspace,
     channels: {
       slack: {
@@ -157,11 +155,6 @@ export function load_config_from_env(): AppConfig {
       readLimit: Math.max(1, Math.min(100, env_num("CHANNEL_READ_LIMIT", 30))),
       readAckEnabled: env_bool("READ_ACK_ENABLED", true),
       readAckReaction: env_str("READ_ACK_REACTION", "eyes"),
-      statusNoticeEnabled: env_bool("CHANNEL_STATUS_NOTICE", false),
-      progressPulseEnabled: env_bool("CHANNEL_PROGRESS_PULSE", false),
-      groupingEnabled: env_bool("CHANNEL_GROUPING_ENABLED", false),
-      groupingWindowMs: Math.max(500, env_num("CHANNEL_GROUPING_WINDOW_MS", 3500)),
-      groupingMaxMessages: Math.max(2, env_num("CHANNEL_GROUPING_MAX_MESSAGES", 8)),
       seenTtlMs: Math.max(60_000, env_num("CHANNEL_SEEN_TTL_MS", 86_400_000)),
       seenMaxSize: Math.max(2_000, env_num("CHANNEL_SEEN_MAX_SIZE", 50_000)),
       inboundConcurrency: Math.max(1, env_num("CHANNEL_INBOUND_CONCURRENCY", 4)),
@@ -193,6 +186,10 @@ export function load_config_from_env(): AppConfig {
       maxToolResultChars: Math.max(50, env_num("ORCHESTRATION_MAX_TOOL_RESULT_CHARS", 500)),
       orchestratorMaxTokens: Math.max(256, env_num("ORCHESTRATION_MAX_TOKENS", 4096)),
     },
+    agentBackend: {
+      claudeBackend: env_str("AGENT_CLAUDE_BACKEND", "claude_cli") as "claude_cli" | "claude_sdk",
+      codexBackend: env_str("AGENT_CODEX_BACKEND", "codex_cli") as "codex_cli" | "codex_appserver",
+    },
     phi4: {
       runtimeEnabled: env_bool("PHI4_RUNTIME_ENABLED", false),
       runtimeEngine: env_str("PHI4_RUNTIME_ENGINE", "auto") as "auto" | "docker" | "podman" | "native",
@@ -208,9 +205,8 @@ export function load_config_from_env(): AppConfig {
     },
     dashboard: {
       enabled: env_bool("DASHBOARD_ENABLED", true),
-      port: env_num("DASHBOARD_PORT", 3789),
+      port: env_num("DASHBOARD_PORT", 4200),
       host: env_str("DASHBOARD_HOST", "127.0.0.1"),
-      assetsDir: env_str("DASHBOARD_ASSETS_DIR", ""),
     },
   };
 

@@ -48,6 +48,7 @@ export class SpawnTool extends Tool {
   }
 
   protected async run(params: Record<string, unknown>, _context?: ToolExecutionContext): Promise<string> {
+    if (_context?.signal?.aborted) return JSON.stringify({ error: "cancelled" });
     const context = _context || {};
     const request: SpawnRequest = {
       task: String(params.task || ""),
@@ -59,7 +60,9 @@ export class SpawnTool extends Tool {
       max_turns: params.max_turns ? Number(params.max_turns) : undefined,
       origin_channel: String(context.channel || this.origin_channel || "") || undefined,
       origin_chat_id: String(context.chat_id || this.origin_chat_id || "") || undefined,
-      metadata: {},
+      metadata: {
+        parent_id: context?.task_id || undefined,
+      },
     };
     const result = await this.spawn_callback(request);
     return JSON.stringify(result);

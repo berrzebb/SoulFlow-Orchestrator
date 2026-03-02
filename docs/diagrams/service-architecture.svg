@@ -1,0 +1,144 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 4721.619999999999 2052.2" width="4721.619999999999" height="2052.2" style="--bg:#0A0A0A;--fg:#EDEDED;--line:#EDEDED;--accent:#EDEDED;--muted:#888888;--surface:#0A0A0A;--border:#454545;background:var(--bg)">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;display=swap');
+  text { font-family: 'Geist', system-ui, sans-serif; }
+  svg {
+    /* Derived from --bg and --fg (overridable via --line, --accent, etc.) */
+    --_text:          var(--fg);
+    --_text-sec:      var(--muted, color-mix(in srgb, var(--fg) 60%, var(--bg)));
+    --_text-muted:    var(--muted, color-mix(in srgb, var(--fg) 40%, var(--bg)));
+    --_text-faint:    color-mix(in srgb, var(--fg) 25%, var(--bg));
+    --_line:          var(--line, color-mix(in srgb, var(--fg) 30%, var(--bg)));
+    --_arrow:         var(--accent, color-mix(in srgb, var(--fg) 50%, var(--bg)));
+    --_node-fill:     var(--surface, color-mix(in srgb, var(--fg) 3%, var(--bg)));
+    --_node-stroke:   var(--border, color-mix(in srgb, var(--fg) 20%, var(--bg)));
+    --_group-fill:    var(--bg);
+    --_group-hdr:     color-mix(in srgb, var(--fg) 5%, var(--bg));
+    --_inner-stroke:  color-mix(in srgb, var(--fg) 12%, var(--bg));
+    --_key-badge:     color-mix(in srgb, var(--fg) 10%, var(--bg));
+  }
+</style>
+<defs>
+  <marker id="arrowhead" markerWidth="7" markerHeight="7" refX="0" refY="3.5" orient="auto" markerUnits="userSpaceOnUse" overflow="visible">
+    <polygon points="0 0, 7 3.5, 0 7" fill="var(--_arrow)" />
+  </marker>
+  <marker id="arrowhead-start" markerWidth="7" markerHeight="7" refX="7" refY="3.5" orient="auto-start-reverse" markerUnits="userSpaceOnUse" overflow="visible">
+    <polygon points="7 0, 0 3.5, 7 7" fill="var(--_arrow)" />
+  </marker>
+  <pattern id="diag-hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+    <rect width="6" height="6" fill="var(--bg)" />
+    <line x1="0" y1="0" x2="0" y2="6" stroke="#171717" stroke-width="3" />
+  </pattern>
+</defs>
+<rect x="64" y="80" width="3840.3399999999992" height="1892.2" rx="3" ry="3" fill="url(#diag-hatch)" stroke="#454545" stroke-width="1" />
+<rect x="3100.256" y="120" width="784.0839999999998" height="1510" rx="3" ry="3" fill="url(#diag-hatch)" stroke="#454545" stroke-width="1" />
+<rect x="2188.16" y="1452.8" width="924.0959999999998" height="494.4000000000001" rx="3" ry="3" fill="url(#diag-hatch)" stroke="#454545" stroke-width="1" />
+<rect x="550.0159999999998" y="1452.8000000000002" width="1650.1439999999998" height="177.20000000000005" rx="3" ry="3" fill="url(#diag-hatch)" stroke="#454545" stroke-width="1" />
+<rect x="3892.3399999999997" y="428.19999999999993" width="765.28" height="227.2" rx="3" ry="3" fill="url(#diag-hatch)" stroke="#454545" stroke-width="1" />
+<rect x="4154.255999999999" y="1427.8000000000002" width="477.6" height="227.20000000000005" rx="3" ry="3" fill="url(#diag-hatch)" stroke="#454545" stroke-width="1" />
+<path d="M684.9120000000003,1251.7999999999997 L684.9120000000003,1268.8 Q684.9120000000003,1276.8 692.9120000000003,1276.8 L3267.5599999999995,1276.8 Q3275.5599999999995,1276.8 3275.5599999999995,1284.8 L3275.5599999999995,1543.3999999999999 Q3275.5599999999995,1551.3999999999999 3267.5599999999995,1551.3999999999999 L3155.2559999999994,1551.3999999999999" fill="none" stroke="var(--_line)" stroke-width="1.5" marker-end="url(#arrowhead)" />
+<polyline points="684.9120000000003,1251.7999999999997 684.9120000000003,1508.8" fill="none" stroke="var(--_line)" stroke-width="1.5" marker-end="url(#arrowhead)" />
+<path d="M2616.4919999999997,1584.9999999999998 L2616.4919999999997,1702 Q2616.4919999999997,1710 2624.4919999999997,1710 L2973.4239999999995,1710 Q2981.4239999999995,1710 2981.4239999999995,1718 L2981.4239999999995,1826" fill="none" stroke="var(--_line)" stroke-width="1.5" marker-end="url(#arrowhead)" />
+<path d="M2616.4919999999997,1584.9999999999998 L2616.4919999999997,1702 Q2616.4919999999997,1710 2624.4919999999997,1710 L2770.6079999999997,1710 Q2778.6079999999997,1710 2778.6079999999997,1718 L2778.6079999999997,1826" fill="none" stroke="var(--_line)" stroke-width="1.5" marker-end="url(#arrowhead)" />
+<path d="M2616.4919999999997,1584.9999999999998 L2616.4919999999997,1702 Q2616.4919999999997,1710 2608.4919999999997,1710 L2583.792,1710 Q2575.792,1710 2575.792,1718 L2575.792,1826" fill="none" stroke="var(--_line)" stroke-width="1.5" marker-end="url(#arrowhead)" />
+<path d="M2616.4919999999997,1584.9999999999998 L2616.4919999999997,1702 Q2616.4919999999997,1710 2608.4919999999997,1710 L2351.024,1710 Q2343.024,1710 2343.024,1718 L2343.024,1826" fill="none" stroke="var(--_line)" stroke-width="1.5" marker-end="url(#arrowhead)" />
+<path d="M4457.8279999999995,585.4 L4457.8279999999995,652.4 Q4457.8279999999995,660.4 4449.8279999999995,660.4 L3738.2399999999993,660.4 Q3730.2399999999993,660.4 3730.2399999999993,668.4 L3730.2399999999993,877 Q3730.2399999999993,885 3738.2399999999993,885 L3798.5839999999994,885" fill="none" stroke="var(--_line)" stroke-width="1.5" marker-end="url(#arrowhead)" marker-start="url(#arrowhead-start)" />
+<path d="M4190.115999999999,585.4 L4190.115999999999,652.4 Q4190.115999999999,660.4 4182.115999999999,660.4 L3663.4399999999996,660.4 Q3655.4399999999996,660.4 3655.4399999999996,668.4 L3655.4399999999996,877 Q3655.4399999999996,885 3663.4399999999996,885 L3798.5839999999994,885" fill="none" stroke="var(--_line)" stroke-width="1.5" marker-end="url(#arrowhead)" marker-start="url(#arrowhead-start)" />
+<path d="M4007.2679999999996,585.4 L4007.2679999999996,652.4 Q4007.2679999999996,660.4 3999.2679999999996,660.4 L3504.4439999999995,660.4 Q3496.4439999999995,660.4 3496.4439999999995,668.4 L3496.4439999999995,877 Q3496.4439999999995,885 3488.4439999999995,885 L3269.3839999999996,885" fill="none" stroke="var(--_line)" stroke-width="1.5" marker-end="url(#arrowhead)" marker-start="url(#arrowhead-start)" />
+<path d="M3533.9839999999995,918.6 L3533.9839999999995,935.6 Q3533.9839999999995,943.6 3541.9839999999995,943.6 L3714.6479999999997,943.6 Q3722.6479999999997,943.6 3722.6479999999997,951.6 L3722.6479999999997,1210.1999999999998 Q3722.6479999999997,1218.1999999999998 3714.6479999999997,1218.1999999999998 L550.0400000000004,1218.1999999999998" fill="none" stroke="var(--_line)" stroke-width="1.5" marker-end="url(#arrowhead)" />
+<path d="M325.52000000000044,1184.6 L325.52000000000044,1167.6 Q325.52000000000044,1159.6 333.52000000000044,1159.6 L3336.46,1159.6 Q3344.46,1159.6 3344.46,1151.6 L3344.46,893 Q3344.46,885 3336.46,885 L3269.3839999999996,885" fill="none" stroke="var(--_line)" stroke-width="1.5" marker-end="url(#arrowhead)" />
+<path d="M3533.9839999999995,918.6 L3533.9839999999995,1048.94 Q3533.9839999999995,1051.6 3531.3239999999996,1051.6 L3531.3239999999996,1051.6 Q3528.6639999999998,1051.6 3528.6639999999998,1054.2599999999998 L3528.6639999999998,1175.6" fill="none" stroke="var(--_line)" stroke-width="1.5" marker-end="url(#arrowhead)" />
+<path d="M3528.6639999999998,1251.7999999999997 L3528.6639999999998,1268.8 Q3528.6639999999998,1276.8 3536.6639999999998,1276.8 L3710.7479999999996,1276.8 Q3718.7479999999996,1276.8 3718.7479999999996,1284.8 L3718.7479999999996,1543.3999999999999 Q3718.7479999999996,1551.3999999999999 3710.7479999999996,1551.3999999999999 L2914.0679999999998,1551.3999999999999" fill="none" stroke="var(--_line)" stroke-width="1.5" marker-end="url(#arrowhead)" />
+<path d="M3528.6639999999998,1251.7999999999997 L3528.6639999999998,1268.8 Q3528.6639999999998,1276.8 3536.6639999999998,1276.8 L3664.548,1276.8 Q3672.548,1276.8 3672.548,1284.8 L3672.548,1543.3999999999999 Q3672.548,1551.3999999999999 3680.548,1551.3999999999999 L4409.047999999999,1551.3999999999999" fill="none" stroke="var(--_line)" stroke-width="1.5" marker-end="url(#arrowhead)" />
+<path d="M3528.6639999999998,1251.7999999999997 L3528.6639999999998,1268.8 Q3528.6639999999998,1276.8 3520.6639999999998,1276.8 L3512.2639999999997,1276.8 Q3504.2639999999997,1276.8 3504.2639999999997,1284.8 L3504.2639999999997,1543.3999999999999 Q3504.2639999999997,1551.3999999999999 3512.2639999999997,1551.3999999999999 L4191.256,1551.3999999999999" fill="none" stroke="var(--_line)" stroke-width="1.5" marker-end="url(#arrowhead)" />
+<path d="M3528.6639999999998,1251.7999999999997 L3528.6639999999998,1268.8 Q3528.6639999999998,1276.8 3520.6639999999998,1276.8 L3447.8639999999996,1276.8 Q3439.8639999999996,1276.8 3439.8639999999996,1284.8 L3439.8639999999996,1543.3999999999999 Q3439.8639999999996,1551.3999999999999 3447.8639999999996,1551.3999999999999 L3674.4719999999998,1551.3999999999999" fill="none" stroke="var(--_line)" stroke-width="1.5" marker-end="url(#arrowhead)" />
+<path d="M3533.9839999999995,851.4 L3533.9839999999995,834.4 Q3533.9839999999995,826.4 3525.9839999999995,826.4 L3396.3599999999997,826.4 Q3388.3599999999997,826.4 3388.3599999999997,818.4 L3388.3599999999997,226.6 Q3388.3599999999997,218.6 3380.3599999999997,218.6 L3221.076,218.6" fill="none" stroke="var(--_line)" stroke-width="1.5" marker-end="url(#arrowhead)" />
+<path d="M3505.644,252.2 L3505.644,269.2 Q3505.644,277.2 3513.644,277.2 L3702.7279999999996,277.2 Q3710.7279999999996,277.2 3710.7279999999996,285.2 L3710.7279999999996,543.8 Q3710.7279999999996,551.8 3718.7279999999996,551.8 L4295.035999999999,551.8" fill="none" stroke="var(--_line)" stroke-width="1.5" marker-end="url(#arrowhead)" />
+<path d="M3505.644,252.2 L3505.644,269.2 Q3505.644,277.2 3513.644,277.2 L3638.3279999999995,277.2 Q3646.3279999999995,277.2 3646.3279999999995,285.2 L3646.3279999999995,543.8 Q3646.3279999999995,551.8 3654.3279999999995,551.8 L4107.195999999999,551.8" fill="none" stroke="var(--_line)" stroke-width="1.5" marker-end="url(#arrowhead)" />
+<path d="M3505.644,252.2 L3505.644,543.8 Q3505.644,551.8 3513.644,551.8 L3929.3399999999997,551.8" fill="none" stroke="var(--_line)" stroke-width="1.5" marker-end="url(#arrowhead)" />
+<path d="M325.52000000000044,1184.6 L325.52000000000044,1167.6 Q325.52000000000044,1159.6 333.52000000000044,1159.6 L3195.7599999999998,1159.6 Q3203.7599999999998,1159.6 3203.7599999999998,1151.6 L3203.7599999999998,222.75800000000012 Q3203.7599999999998,218.6 3207.9179999999997,218.6 L3212.076,218.6" fill="none" stroke="var(--_line)" stroke-width="1.5" marker-end="url(#arrowhead)" />
+<rect x="72" y="92" width="250.784" height="24" fill="var(--bg)" rx="2" ry="2" />
+<text x="80" y="104" dy="0.35em" style="font-family:'Geist Mono',system-ui,sans-serif;font-size:16px;font-weight:600;text-transform:uppercase;" fill="rgba(255,255,255,0.92)">&quot;RuntimeApp&quot;</text>
+<rect x="3108.256" y="132" width="282.79999999999995" height="24" fill="var(--bg)" rx="2" ry="2" />
+<text x="3116.256" y="144" dy="0.35em" style="font-family:'Geist Mono',system-ui,sans-serif;font-size:16px;font-weight:600;text-transform:uppercase;" fill="rgba(255,255,255,0.92)">&quot;Core Services&quot;</text>
+<rect x="2196.16" y="1464.8" width="293.4719999999999" height="24" fill="var(--bg)" rx="2" ry="2" />
+<text x="2204.16" y="1476.8" dy="0.35em" style="font-family:'Geist Mono',system-ui,sans-serif;font-size:16px;font-weight:600;text-transform:uppercase;" fill="rgba(255,255,255,0.92)">&quot;Agent Backends&quot;</text>
+<rect x="558.0159999999998" y="1464.8000000000002" width="293.4719999999999" height="24" fill="var(--bg)" rx="2" ry="2" />
+<text x="566.0159999999998" y="1476.8000000000002" dy="0.35em" style="font-family:'Geist Mono',system-ui,sans-serif;font-size:16px;font-weight:600;text-transform:uppercase;" fill="rgba(255,255,255,0.92)">&quot;Infrastructure&quot;</text>
+<rect x="3900.3399999999997" y="440.19999999999993" width="314.816" height="24" fill="var(--bg)" rx="2" ry="2" />
+<text x="3908.3399999999997" y="452.19999999999993" dy="0.35em" style="font-family:'Geist Mono',system-ui,sans-serif;font-size:16px;font-weight:600;text-transform:uppercase;" fill="rgba(255,255,255,0.92)">&quot;Channel Adapters&quot;</text>
+<rect x="4162.255999999999" y="1439.8000000000002" width="282.79999999999995" height="24" fill="var(--bg)" rx="2" ry="2" />
+<text x="4170.255999999999" y="1451.8000000000002" dy="0.35em" style="font-family:'Geist Mono',system-ui,sans-serif;font-size:16px;font-weight:600;text-transform:uppercase;" fill="rgba(255,255,255,0.92)">&quot;API Providers&quot;</text>
+<rect x="3698.8399999999992" y="705.4" width="62.800000000000004" height="26" rx="4" ry="4" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="0.5" />
+<text x="3730.2399999999993" y="718.4" text-anchor="middle" dy="0.35em" font-size="10" font-weight="400" fill="var(--_text-muted)">read/send</text>
+<rect x="3624.0399999999995" y="705.4" width="62.800000000000004" height="26" rx="4" ry="4" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="0.5" />
+<text x="3655.4399999999996" y="718.4" text-anchor="middle" dy="0.35em" font-size="10" font-weight="400" fill="var(--_text-muted)">read/send</text>
+<rect x="3465.0439999999994" y="705.4" width="62.800000000000004" height="26" rx="4" ry="4" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="0.5" />
+<text x="3496.4439999999995" y="718.4" text-anchor="middle" dy="0.35em" font-size="10" font-weight="400" fill="var(--_text-muted)">read/send</text>
+<rect x="3675.6479999999997" y="1038.6" width="94" height="26" rx="4" ry="4" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="0.5" />
+<text x="3722.6479999999997" y="1051.6" text-anchor="middle" dy="0.35em" font-size="10" font-weight="400" fill="var(--_text-muted)">publish_inbound</text>
+<rect x="3297.46" y="1038.6" width="94" height="26" rx="4" ry="4" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="0.5" />
+<text x="3344.46" y="1051.6" text-anchor="middle" dy="0.35em" font-size="10" font-weight="400" fill="var(--_text-muted)">consume_inbound</text>
+<rect x="3502.464" y="1038.6" width="52.4" height="26" rx="4" ry="4" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="0.5" />
+<text x="3528.6639999999998" y="1051.6" text-anchor="middle" dy="0.35em" font-size="10" font-weight="400" fill="var(--_text-muted)">execute</text>
+<rect x="3702.9479999999994" y="1371.8" width="31.6" height="26" rx="4" ry="4" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="0.5" />
+<text x="3718.7479999999996" y="1384.8" text-anchor="middle" dy="0.35em" font-size="10" font-weight="400" fill="var(--_text-muted)">run</text>
+<rect x="3654.1479999999997" y="1371.8" width="36.8" height="26" rx="4" ry="4" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="0.5" />
+<text x="3672.548" y="1384.8" text-anchor="middle" dy="0.35em" font-size="10" font-weight="400" fill="var(--_text-muted)">chat</text>
+<rect x="3485.8639999999996" y="1371.8" width="36.8" height="26" rx="4" ry="4" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="0.5" />
+<text x="3504.2639999999997" y="1384.8" text-anchor="middle" dy="0.35em" font-size="10" font-weight="400" fill="var(--_text-muted)">chat</text>
+<rect x="3405.8639999999996" y="1371.8" width="68" height="26" rx="4" ry="4" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="0.5" />
+<text x="3439.8639999999996" y="1384.8" text-anchor="middle" dy="0.35em" font-size="10" font-weight="400" fill="var(--_text-muted)">tool calls</text>
+<rect x="3354.3599999999997" y="538.8" width="68" height="26" rx="4" ry="4" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="0.5" />
+<text x="3388.3599999999997" y="551.8" text-anchor="middle" dy="0.35em" font-size="10" font-weight="400" fill="var(--_text-muted)">send reply</text>
+<rect x="3684.528" y="372.2" width="52.4" height="26" rx="4" ry="4" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="0.5" />
+<text x="3710.7279999999996" y="385.2" text-anchor="middle" dy="0.35em" font-size="10" font-weight="400" fill="var(--_text-muted)">deliver</text>
+<rect x="3620.1279999999997" y="372.2" width="52.4" height="26" rx="4" ry="4" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="0.5" />
+<text x="3646.3279999999995" y="385.2" text-anchor="middle" dy="0.35em" font-size="10" font-weight="400" fill="var(--_text-muted)">deliver</text>
+<rect x="3479.444" y="372.2" width="52.4" height="26" rx="4" ry="4" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="0.5" />
+<text x="3505.644" y="385.2" text-anchor="middle" dy="0.35em" font-size="10" font-weight="400" fill="var(--_text-muted)">deliver</text>
+<rect x="3154.16" y="705.4" width="99.2" height="26" rx="4" ry="4" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="0.5" />
+<text x="3203.7599999999998" y="718.4" text-anchor="middle" dy="0.35em" font-size="10" font-weight="400" fill="var(--_text-muted)">consume_outbound</text>
+<rect x="581.0400000000003" y="1184.6" width="207.744" height="67.2" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<rect x="110.00000000000043" y="1184.6" width="431.04" height="67.2" rx="33.6" ry="33.6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<rect x="3146.2559999999994" y="1517.8" width="537.216" height="67.2" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<rect x="3260.3839999999996" y="851.4" width="547.2" height="67.2" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<rect x="3212.076" y="185" width="587.136" height="67.2" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<rect x="3245.08" y="1184.6" width="567.168" height="67.2" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<rect x="2327.9159999999997" y="1517.8" width="577.1519999999999" height="67.2" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<rect x="2897.5199999999995" y="1835" width="167.808" height="67.2" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<rect x="2699.696" y="1835" width="157.824" height="67.2" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<rect x="2491.888" y="1835" width="167.808" height="67.2" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<rect x="2234.16" y="1835" width="217.72799999999998" height="67.2" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<rect x="596.0160000000003" y="1517.8" width="177.792" height="67.2" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<rect x="813.8079999999998" y="1517.8" width="227.712" height="67.2" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<rect x="1081.52" y="1517.8" width="237.69600000000003" height="67.2" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<rect x="1359.216" y="1517.8" width="527.232" height="67.2" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<rect x="1926.448" y="1517.8" width="227.712" height="67.2" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<rect x="4304.035999999999" y="518.2" width="307.584" height="67.2" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<rect x="4116.195999999999" y="518.2" width="147.84" height="67.2" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<rect x="3938.3399999999997" y="518.2" width="137.856" height="67.2" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<rect x="4418.047999999999" y="1517.8" width="167.808" height="67.2" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<rect x="4200.256" y="1517.8" width="177.792" height="67.2" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<text x="684.9120000000003" y="1218.1999999999998" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;ServiceManager&quot;</text>
+<text x="325.52000000000044" y="1218.1999999999998" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;MessageBus&lt;br/&gt;inbound ↔ outbound&quot;</text>
+<text x="3414.8639999999996" y="1551.3999999999999" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;AgentDomain&lt;br/&gt;tools · skills · memory · tasks&quot;</text>
+<text x="3533.9839999999995" y="885" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;ChannelManager&lt;br/&gt;polling · routing · streaming&quot;</text>
+<text x="3505.6440000000002" y="218.6" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;DispatchService&lt;br/&gt;retry · DLQ · dedup · rate-limit&quot;</text>
+<text x="3528.6639999999998" y="1218.1999999999998" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;OrchestrationService&lt;br/&gt;once · agent · task modes&quot;</text>
+<text x="2616.4919999999997" y="1551.3999999999999" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;AgentBackendRegistry&lt;br/&gt;circuit breaker · fallback&quot;</text>
+<text x="2981.4239999999995" y="1868.6" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;claude_cli&quot;</text>
+<text x="2778.6079999999997" y="1868.6" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;codex_cli&quot;</text>
+<text x="2575.792" y="1868.6" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;claude_sdk&quot;</text>
+<text x="2343.024" y="1868.6" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;codex_appserver&quot;</text>
+<text x="684.9120000000003" y="1551.3999999999999" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;CronService&quot;</text>
+<text x="927.6639999999998" y="1551.3999999999999" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;HeartbeatService&quot;</text>
+<text x="1200.368" y="1551.3999999999999" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;OpsRuntimeService&quot;</text>
+<text x="1622.8319999999999" y="1551.3999999999999" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;DashboardService&lt;br/&gt;API · SSE · inline assets&quot;</text>
+<text x="2040.304" y="1551.3999999999999" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;McpClientManager&quot;</text>
+<text x="4457.8279999999995" y="551.8000000000001" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;Slack&lt;br/&gt;@slack/web-api&quot;</text>
+<text x="4190.115999999999" y="551.8000000000001" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;Telegram&quot;</text>
+<text x="4007.2679999999996" y="551.8000000000001" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;Discord&quot;</text>
+<text x="4501.951999999999" y="1551.3999999999999" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;OpenRouter&quot;</text>
+<text x="4289.152" y="1551.3999999999999" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;Phi-4 local&quot;</text>
+</svg>

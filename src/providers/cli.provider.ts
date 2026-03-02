@@ -28,7 +28,35 @@ import {
   with_codex_permission_overrides,
 } from "./cli-permission.js";
 
-export { __cli_provider_test__ } from "./cli-protocol.js";
+/** 자식 프로세스에 전달할 안전한 환경변수만 추출. API 키·토큰 유출 방지. */
+function build_safe_child_env(): NodeJS.ProcessEnv {
+  const ALLOWED_KEYS = new Set([
+    "PATH", "Path",
+    "HOME", "USERPROFILE", "HOMEDRIVE", "HOMEPATH",
+    "TEMP", "TMP", "TMPDIR",
+    "SYSTEMROOT", "WINDIR", "COMSPEC",
+    "SHELL", "TERM", "LANG", "LC_ALL", "LC_CTYPE",
+    "NODE_ENV", "NODE_OPTIONS", "NODE_EXTRA_CA_CERTS",
+    "APPDATA", "LOCALAPPDATA", "PROGRAMFILES", "PROGRAMFILES(X86)",
+    "USERNAME", "USER", "LOGNAME", "HOSTNAME",
+    "EDITOR", "VISUAL", "PAGER",
+    "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_CACHE_HOME", "XDG_RUNTIME_DIR",
+    "NO_COLOR", "FORCE_COLOR", "CLICOLOR",
+    "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY",
+    "http_proxy", "https_proxy", "no_proxy",
+    "SSL_CERT_FILE", "SSL_CERT_DIR",
+    "PYTHONDONTWRITEBYTECODE", "VIRTUAL_ENV",
+    "GOPATH", "GOROOT", "CARGO_HOME", "RUSTUP_HOME",
+    "npm_config_prefix", "npm_config_cache",
+  ]);
+  const env: NodeJS.ProcessEnv = {};
+  for (const [key, value] of Object.entries(process.env)) {
+    if (ALLOWED_KEYS.has(key)) {
+      env[key] = value;
+    }
+  }
+  return env;
+}
 
 function append_limited(base: string, incoming: string, max_chars: number): string {
   const max = Math.max(1_000, Number(max_chars || DEFAULT_CAPTURE_MAX_CHARS));
@@ -95,9 +123,8 @@ async function run_cli(
   const resolved = resolve_command_for_windows(command);
   const use_cmd_wrapper = process.platform === "win32" && /\.(cmd|bat)$/i.test(resolved);
 
-  // 중첩 세션 감지 방지: CLAUDECODE 환경변수를 자식 프로세스에 전달하지 않음
-  const child_env = { ...process.env };
-  delete child_env.CLAUDECODE;
+  // 자식 프로세스에 민감한 환경변수(API 키, 토큰) 전달 방지 — 필수 변수만 allowlist
+  const child_env = build_safe_child_env();
 
   return new Promise((resolve) => {
     const child = use_cmd_wrapper
@@ -179,6 +206,8 @@ export class CliHeadlessProvider extends BaseLlmProvider {
   private readonly default_command: string;
   private readonly default_args: string;
   private readonly default_timeout_ms: number;
+  private readonly capture_max_chars: number;
+  private readonly stream_state_max_chars: number;
 
   constructor(args: {
     id: ProviderId;
@@ -203,6 +232,8 @@ export class CliHeadlessProvider extends BaseLlmProvider {
     this.default_command = args.default_command;
     this.default_args = args.default_args || "";
     this.default_timeout_ms = args.default_timeout_ms || 180000;
+    this.capture_max_chars = Math.max(10_000, Number(process.env.CLI_PROVIDER_MAX_CAPTURE_CHARS || DEFAULT_CAPTURE_MAX_CHARS));
+    this.stream_state_max_chars = Math.max(8_000, Number(process.env.CLI_PROVIDER_MAX_STREAM_STATE_CHARS || DEFAULT_STREAM_STATE_MAX_CHARS));
   }
 
   async chat(options: ChatOptions): Promise<LlmResponse> {
@@ -232,21 +263,15 @@ export class CliHeadlessProvider extends BaseLlmProvider {
     args = with_claude_permission_overrides(command, args, options.runtime_policy);
     args = with_codex_mcp_runtime_overrides(command, args, options.runtime_policy);
     const timeout_ms = Math.max(1000, Number(process.env[this.timeout_env] || this.default_timeout_ms));
-    const capture_max_chars = Math.max(
-      10_000,
-      Number(process.env.CLI_PROVIDER_MAX_CAPTURE_CHARS || DEFAULT_CAPTURE_MAX_CHARS),
-    );
-    const stream_state_max_chars = Math.max(
-      8_000,
-      Number(process.env.CLI_PROVIDER_MAX_STREAM_STATE_CHARS || DEFAULT_STREAM_STATE_MAX_CHARS),
-    );
+    const capture_max_chars = this.capture_max_chars;
+    const stream_state_max_chars = this.stream_state_max_chars;
     const json_mode = args.includes("--json") || raw_args.includes("stream-json");
     let streamed_partial = "";
     let raw_stream = "";
     let json_line_buffer = "";
     let final_from_json = "";
     let saw_json_event = false;
-    const json_state = { last_full_text: "" };
+    const json_state: { last_full_text: string; metadata?: Record<string, unknown> } = { last_full_text: "" };
     let last_emitted_chunk_key = "";
     let last_emitted_chunk_at = 0;
     const emit_stream = async (raw: string): Promise<void> => {
@@ -323,6 +348,7 @@ export class CliHeadlessProvider extends BaseLlmProvider {
         content: null,
         tool_calls,
         finish_reason: "tool_calls",
+        metadata: json_state.metadata,
       });
     }
     const jsonText = extract_final_from_json_output(merged_output) || final_from_json;
@@ -332,11 +358,13 @@ export class CliHeadlessProvider extends BaseLlmProvider {
       return new LlmResponse({
         content: `Error calling ${this.id}: no_protocol_output`,
         finish_reason: "error",
+        metadata: json_state.metadata,
       });
     }
     return new LlmResponse({
       content: text || null,
       finish_reason: "stop",
+      metadata: json_state.metadata,
     });
   }
 }

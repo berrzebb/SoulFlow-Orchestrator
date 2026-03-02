@@ -1,13 +1,14 @@
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { with_sqlite, type DatabaseSync } from "../utils/sqlite-helper.js";
-import type { SessionHistoryEntry, SessionHistoryRange, SessionMessage } from "./types.js";
+import type { SessionHistoryEntry, SessionMessage } from "./types.js";
 import type { Logger } from "../logger.js";
 import { now_iso } from "../utils/common.js";
 
 export interface SessionStoreLike {
   get_or_create(key: string): Promise<Session>;
   save(session: Session): Promise<void>;
+  prune_expired?(max_age_ms: number): Promise<number>;
 }
 
 export class Session {
@@ -60,35 +61,6 @@ export class Session {
     return out;
   }
 
-  get_history_range(start_offset: number, end_offset: number): SessionHistoryRange {
-    const total = this.messages.length;
-    const start = Math.max(0, Number(start_offset || 0));
-    const end = Math.max(start, Number(end_offset || start));
-    const from = Math.max(0, total - end);
-    const to = Math.max(from, total - start);
-    const slice = this.messages.slice(from, to);
-    const items = slice.map((m): SessionHistoryEntry => {
-      const out: SessionHistoryEntry = {
-        role: String(m.role || ""),
-        content: String(m.content || ""),
-      };
-      if ("tool_calls" in m) out.tool_calls = m.tool_calls;
-      if (typeof m.tool_call_id === "string") out.tool_call_id = m.tool_call_id;
-      if (typeof m.name === "string") out.name = m.name;
-      return out;
-    });
-    return {
-      start_offset: start,
-      end_offset: end,
-      items,
-    };
-  }
-
-  clear(): void {
-    this.messages = [];
-    this.last_consolidated = 0;
-    this.updated_at = now_iso();
-  }
 }
 
 const MAX_CACHE_SIZE = 200;
@@ -289,12 +261,19 @@ export class SessionStore implements SessionStoreLike {
     this.cache.set(session.key, session);
   }
 
-  invalidate(key: string): void {
-    this.cache.delete(key);
-  }
-
-  async get_history_range(key: string, start_offset: number, end_offset: number): Promise<SessionHistoryRange> {
-    const session = await this.get_or_create(key);
-    return session.get_history_range(start_offset, end_offset);
+  async prune_expired(max_age_ms: number): Promise<number> {
+    await this.initialized;
+    const cutoff = new Date(Date.now() - Math.max(max_age_ms, 60_000)).toISOString();
+    const deleted = this.with_sqlite((db) => {
+      const r = db.prepare("DELETE FROM sessions WHERE updated_at < ?").run(cutoff);
+      return Number(r.changes || 0);
+    });
+    const count = deleted ?? 0;
+    if (count > 0) {
+      for (const [key, session] of this.cache) {
+        if (session.updated_at < cutoff) this.cache.delete(key);
+      }
+    }
+    return count;
   }
 }

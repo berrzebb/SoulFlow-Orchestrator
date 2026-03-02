@@ -40,3 +40,18 @@ export type ProgressEvent = {
   chat_id: string;
   at: string;
 };
+
+export type MessageBusObserver = (direction: "inbound" | "outbound", message: Message) => void;
+
+export interface MessageBusLike {
+  publish_inbound(message: InboundMessage): Promise<void>;
+  publish_outbound(message: OutboundMessage): Promise<void>;
+  consume_inbound(options?: ConsumeMessageOptions): Promise<InboundMessage | null>;
+  consume_outbound(options?: ConsumeMessageOptions): Promise<OutboundMessage | null>;
+  publish_progress(event: ProgressEvent): Promise<void>;
+  consume_progress(options?: ConsumeMessageOptions): Promise<ProgressEvent | null>;
+  get_size(direction?: "inbound" | "outbound"): number;
+  get_sizes(): { inbound: number; outbound: number; total: number };
+  close(): Promise<void>;
+  is_closed(): boolean;
+}

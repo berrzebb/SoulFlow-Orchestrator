@@ -12,3 +12,8 @@ export { ReloadHandler, type ReloadTarget } from "./reload.handler.js";
 export { StatusHandler, type StatusAccess } from "./status.handler.js";
 export { PromiseHandler, type PromiseAccess, type PromiseServiceLike } from "./promise.handler.js";
 export { TaskHandler, type TaskAccess } from "./task.handler.js";
+export { SkillHandler, type SkillAccess } from "./skill.handler.js";
+export { DoctorHandler, type DoctorAccess } from "./doctor.handler.js";
+export { AgentHandler, type AgentAccess } from "./agent.handler.js";
+export { StatsHandler, type StatsAccess } from "./stats.handler.js";
+export { VerifyHandler, type VerifyAccess } from "./verify.handler.js";

@@ -1,5 +1,6 @@
 import { resolve } from "node:path";
-import type { ChatOptions } from "./types.js";
+import type { ChatOptions, FsAccessLevel } from "./types.js";
+import { sandbox_from_preset } from "./types.js";
 import { parse_bool_like } from "../utils/common.js";
 import {
   build_codex_mcp_overrides,
@@ -54,14 +55,6 @@ export function strip_approval_flags(args: string[]): string[] {
     out.push(token);
   }
   return out;
-}
-
-function normalize_permission_profile(raw: unknown): "strict" | "workspace-write" | "full-auto" | null {
-  const v = String(raw || "").trim().toLowerCase();
-  if (v === "strict") return "strict";
-  if (v === "workspace-write" || v === "workspace_write") return "workspace-write";
-  if (v === "full-auto" || v === "full_auto" || v === "bypass") return "full-auto";
-  return null;
 }
 
 function command_basename(command: string): string {
@@ -151,11 +144,11 @@ export function with_codex_permission_overrides(
   if (!is_codex_invocation(command, args)) return args;
   let out = strip_approval_flags(args);
   if (has_any_flag(out, ["--dangerously-bypass-approvals-and-sandbox"])) return out;
-  const command_profile = String(runtime_policy?.command_profile || "").trim().toLowerCase();
-  const requested_profile = normalize_permission_profile(runtime_policy?.permission_profile);
-  const profile = requested_profile
-    || (command_profile === "safe" ? "strict" : command_profile === "extended" ? "full-auto" : null);
-  const bypass_all = profile === "full-auto"
+
+  const sandbox = runtime_policy?.sandbox ?? sandbox_from_preset("full-auto");
+  const fs = sandbox.fs_access;
+
+  const bypass_all = fs === "full-access"
     ? true
     : parse_bool_like(process.env.ORCH_CODEX_BYPASS_SANDBOX, false);
   if (bypass_all) {
@@ -165,19 +158,22 @@ export function with_codex_permission_overrides(
     return out;
   }
 
-  const sandbox_mode = profile === "strict"
-    ? "read-only"
-    : profile === "workspace-write"
-      ? "workspace-write"
-      : String(process.env.ORCH_CODEX_SANDBOX_MODE || "workspace-write").trim();
-  const has_sandbox = has_any_flag(out, ["-s", "--sandbox", "--full-auto"]);
-
-  if (sandbox_mode && !has_sandbox) {
+  const SANDBOX_MAP: Record<FsAccessLevel, string> = {
+    "read-only": "read-only",
+    "workspace-write": "workspace-write",
+    "full-access": "workspace-write",
+  };
+  const sandbox_mode = SANDBOX_MAP[fs] || String(process.env.ORCH_CODEX_SANDBOX_MODE || "workspace-write").trim();
+  if (sandbox_mode && !has_any_flag(out, ["-s", "--sandbox", "--full-auto"])) {
     out = with_codex_global_option(out, "--sandbox", sandbox_mode);
   }
 
-  const add_dirs = split_path_list(String(process.env.ORCH_CODEX_ADD_DIRS || ""))
+  // writable_roots (sandbox policy) + 환경변수 fallback
+  const policy_dirs = (sandbox.writable_roots || []).map((d) => resolve(d));
+  const env_dirs = split_path_list(String(process.env.ORCH_CODEX_ADD_DIRS || ""))
     .map((d) => resolve(String(process.env.WORKSPACE_DIR || process.cwd()), d));
+  const all_dirs = [...policy_dirs, ...env_dirs];
+
   const existing_dirs = new Set<string>();
   for (let i = 0; i < out.length; i += 1) {
     const token = String(out[i] || "").trim().toLowerCase();
@@ -186,7 +182,7 @@ export function with_codex_permission_overrides(
     if (!dir) continue;
     existing_dirs.add(resolve(dir).toLowerCase());
   }
-  for (const dir of add_dirs) {
+  for (const dir of all_dirs) {
     const key = resolve(dir).toLowerCase();
     if (existing_dirs.has(key)) continue;
     out = with_codex_global_option(out, "--add-dir", dir);
@@ -203,13 +199,14 @@ export function with_claude_permission_overrides(
 ): string[] {
   if (!is_claude_invocation(command, args)) return args;
   const out = [...args];
-  const command_profile = String(runtime_policy?.command_profile || "").trim().toLowerCase();
-  const requested_profile = normalize_permission_profile(runtime_policy?.permission_profile);
-  const profile = requested_profile
-    || (command_profile === "safe" ? "strict" : command_profile === "extended" ? "full-auto" : null);
-  const mode = profile === "strict"
-    ? "default"
-    : String(process.env.ORCH_CLAUDE_PERMISSION_MODE || "dontAsk").trim();
+  const sandbox = runtime_policy?.sandbox ?? sandbox_from_preset("full-auto");
+
+  const MODE_MAP: Record<FsAccessLevel, string> = {
+    "read-only": "default",
+    "workspace-write": "acceptEdits",
+    "full-access": String(process.env.ORCH_CLAUDE_PERMISSION_MODE || "dontAsk").trim(),
+  };
+  const mode = sandbox.plan_only ? "plan" : MODE_MAP[sandbox.fs_access];
   if (!mode) return out;
   if (!has_any_flag(out, ["--permission-mode"])) {
     out.push("--permission-mode", mode);
@@ -227,9 +224,9 @@ export function with_codex_mcp_runtime_overrides(
   if (!is_codex_invocation(command, args)) return args;
   if (args.some((v) => /mcp_servers\./i.test(String(v || "")))) return args;
   const cwd = resolve(String(process.env.WORKSPACE_DIR || process.cwd()));
-  const runtime_allow = runtime_mcp_allowlist(runtime_policy?.mcp_servers);
-  const enable_all_project = typeof runtime_policy?.mcp_enable_all_project === "boolean"
-    ? runtime_policy.mcp_enable_all_project
+  const runtime_allow = runtime_mcp_allowlist(runtime_policy?.mcp?.servers);
+  const enable_all_project = typeof runtime_policy?.mcp?.enable_all_project === "boolean"
+    ? runtime_policy.mcp.enable_all_project
     : should_enable_all_project_mcp_servers(cwd);
   const servers = load_mcp_servers_for_codex(cwd, runtime_allow);
   const overrides = build_codex_mcp_overrides(servers);

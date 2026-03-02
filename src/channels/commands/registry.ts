@@ -15,8 +15,13 @@ const DESCRIPTORS: readonly CommandDescriptor[] = [
   { name: "promise", description: "약속(제약 조건) 관리", usage: "status|list|set <key> <value>" },
   { name: "cron", description: "예약 작업 관리", usage: "status|list|add|remove" },
   { name: "reload", description: "설정·도구·스킬 다시 불러오기", usage: "config|tools|skills" },
-  { name: "task", description: "작업(Task Loop) 조회·취소", usage: "[list|status <id>|cancel <id>]" },
+  { name: "task", description: "프로세스·작업 조회·취소", usage: "[list|status <id>|cancel <id|all>|recent]" },
   { name: "status", description: "현재 상태 요약", usage: "| /tools | /skills" },
+  { name: "skill", description: "스킬 관리", usage: "[list|info <name>|roles|recommend <task>|refresh]" },
+  { name: "doctor", description: "시스템 건강 진단", usage: "[providers|mcp]" },
+  { name: "agent", description: "서브에이전트 관리", usage: "[running|status <id>|cancel <id|all>]" },
+  { name: "stats", description: "CD 점수 및 세션 메트릭", usage: "[cd|reset]" },
+  { name: "verify", description: "출력물 검증", usage: "[<criteria>]" },
 ] as const;
 
 /** 등록된 모든 커맨드의 메타데이터를 반환. */

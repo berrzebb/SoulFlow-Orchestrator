@@ -9,6 +9,7 @@ export class OpsRuntimeService implements ServiceLike {
   private readonly logger: Logger | null;
   private readonly health_log_enabled: boolean;
   private readonly health_log_on_change: boolean;
+  private readonly bridge_pump_enabled: boolean;
   private last_health_signature = "";
   private readonly status_state: OpsRuntimeStatus = {
     running: false,
@@ -20,6 +21,7 @@ export class OpsRuntimeService implements ServiceLike {
     this.logger = deps.logger ?? null;
     this.health_log_enabled = String(process.env.OPS_HEALTH_LOG_ENABLED || "0").trim() === "1";
     this.health_log_on_change = String(process.env.OPS_HEALTH_LOG_ON_CHANGE || "1").trim() !== "0";
+    this.bridge_pump_enabled = String(process.env.ENABLE_BRIDGE_PUMP || "0").trim() === "1";
   }
 
   async start(): Promise<void> {
@@ -30,6 +32,7 @@ export class OpsRuntimeService implements ServiceLike {
     this.deps.cron.every(45_000, async () => this.watchdog_tick());
     this.deps.cron.every(5_000, async () => this.bridge_pump_tick());
     this.deps.cron.every(5 * 60_000, async () => this.decision_dedupe_tick());
+    this.deps.cron.every(30 * 60_000, async () => this.secret_prune_tick());
   }
 
   async stop(): Promise<void> {
@@ -70,13 +73,23 @@ export class OpsRuntimeService implements ServiceLike {
 
   private async watchdog_tick(): Promise<void> {
     if (!this.status_state.running) return;
+    if (this.deps.services) {
+      try {
+        const results = await this.deps.services.health_check();
+        const unhealthy = results.filter((r) => !r.ok);
+        if (unhealthy.length > 0) {
+          this.logger?.warn(`watchdog: unhealthy services`, { services: unhealthy.map((s) => s.name) });
+        }
+      } catch (error) {
+        this.logger?.error(`watchdog health_check failed: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
     this.status_state.last_watchdog_at = now_iso();
   }
 
   private async bridge_pump_tick(): Promise<void> {
     if (!this.status_state.running) return;
-    const enabled = String(process.env.ENABLE_BRIDGE_PUMP || "0").trim() === "1";
-    if (enabled) {
+    if (this.bridge_pump_enabled) {
       try {
         const inbound = await this.deps.bus.consume_inbound({ timeout_ms: 20 });
         if (inbound) {
@@ -99,6 +112,42 @@ export class OpsRuntimeService implements ServiceLike {
     } catch (error) {
       this.logger?.error(`decision dedupe failed: ${error instanceof Error ? error.message : String(error)}`);
     }
+    if (this.deps.promises) {
+      try {
+        const result = await this.deps.promises.dedupe_promises();
+        if (result.removed > 0) {
+          this.logger?.info(`promise dedupe removed=${result.removed} active=${result.active}`);
+        }
+      } catch (error) {
+        this.logger?.error(`promise dedupe failed: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
     this.status_state.last_decision_dedupe_at = now_iso();
+  }
+
+  private async secret_prune_tick(): Promise<void> {
+    if (!this.status_state.running || !this.deps.secret_vault) return;
+    try {
+      const removed = await this.deps.secret_vault.prune_expired(6 * 3_600_000);
+      if (removed > 0) this.logger?.info(`secret prune removed=${removed}`);
+    } catch (error) {
+      this.logger?.error(`secret prune failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    if (this.deps.session_store?.prune_expired) {
+      try {
+        const removed = await this.deps.session_store.prune_expired(24 * 3_600_000);
+        if (removed > 0) this.logger?.info(`session prune removed=${removed}`);
+      } catch (error) {
+        this.logger?.error(`session prune failed: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+    if (this.deps.dlq?.prune_older_than) {
+      try {
+        const removed = await this.deps.dlq.prune_older_than(7 * 24 * 3_600_000);
+        if (removed > 0) this.logger?.info(`dlq prune removed=${removed}`);
+      } catch (error) {
+        this.logger?.error(`dlq prune failed: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
   }
 }

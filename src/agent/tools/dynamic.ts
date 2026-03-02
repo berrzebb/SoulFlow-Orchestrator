@@ -16,12 +16,18 @@ export type DynamicToolManifestEntry = {
   requires_approval?: boolean;
 };
 
+function shell_escape(value: string): string {
+  if (!value) return "''";
+  if (/^[A-Za-z0-9_./:@=-]+$/.test(value)) return value;
+  return "'" + value.replace(/'/g, "'\\''") + "'";
+}
+
 function interpolate(template: string, params: Record<string, unknown>): string {
   return template.replace(/\{\{\s*([a-zA-Z0-9_.-]+)\s*\}\}/g, (_m, key) => {
     const v = params[key];
     if (v === undefined || v === null) return "";
-    if (typeof v === "string") return v;
-    return JSON.stringify(v);
+    if (typeof v === "string") return shell_escape(v);
+    return shell_escape(JSON.stringify(v));
   });
 }
 

@@ -63,7 +63,10 @@ export function is_local_reference(path_value: string): boolean {
 export function resolve_local_reference(workspace: string, path_value: string): string {
   const normalized = normalize_local_candidate_path(String(path_value || "").trim());
   if (!normalized) return "";
-  return resolve(workspace, normalized);
+  const resolved = resolve(workspace, normalized);
+  const ws = resolve(workspace);
+  if (!resolved.startsWith(ws + "/") && !resolved.startsWith(ws + "\\") && resolved !== ws) return "";
+  return resolved;
 }
 
 function is_safe_basename_reference(value: string): boolean {

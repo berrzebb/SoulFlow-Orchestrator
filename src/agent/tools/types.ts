@@ -40,21 +40,25 @@ export interface ToolLike {
   to_schema(): ToolSchema;
 }
 
-export type BackgroundTaskStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
-
-export type BackgroundTaskRecord = {
-  id: string;
-  tool_name: string;
-  params: Record<string, unknown>;
-  status: BackgroundTaskStatus;
-  created_at: string;
-  started_at?: string;
-  finished_at?: string;
-  result?: string;
-  error?: string;
+/** PreToolUse 훅이 반환하는 결정. deny > ask > allow 우선순위. */
+export type ToolHookDecision = {
+  permission?: "allow" | "deny" | "ask";
+  reason?: string;
+  /** allow 시 수정된 파라미터 (원본 대체). */
+  updated_params?: Record<string, unknown>;
 };
 
-export type BackgroundExecuteResult = {
-  task_id: string;
-  status: BackgroundTaskStatus;
-};
+export type PreToolHook = (
+  tool_name: string,
+  params: Record<string, unknown>,
+  context?: ToolExecutionContext,
+) => Promise<ToolHookDecision> | ToolHookDecision;
+
+export type PostToolHook = (
+  tool_name: string,
+  params: Record<string, unknown>,
+  result: string,
+  context?: ToolExecutionContext,
+  is_error?: boolean,
+) => Promise<void> | void;
+

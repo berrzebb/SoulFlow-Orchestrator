@@ -218,20 +218,11 @@ export class McpClientManager implements ServiceLike {
     return statuses;
   }
 
-  /** 도구 이름으로 서버를 찾는다. */
-  get_server_for_tool(tool_name: string): string | null {
-    return this.tool_index.get(tool_name) ?? null;
+  /** SDK 백엔드에 전달할 서버 설정 맵. */
+  get_server_configs(): Record<string, McpServerConfig> {
+    return Object.fromEntries(this.configs);
   }
 
-  /** 연결된 서버 수. */
-  get connected_count(): number {
-    return this.servers.size;
-  }
-
-  /** 발견된 총 도구 수. */
-  get tool_count(): number {
-    return this.tool_index.size;
-  }
 }
 
 function with_timeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {

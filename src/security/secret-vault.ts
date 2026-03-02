@@ -39,6 +39,7 @@ export interface SecretVaultLike {
   resolve_inline_secrets_with_report(input: string): Promise<SecretResolveReport>;
   inspect_secret_references(input: string): Promise<{ missing_keys: string[]; invalid_ciphertexts: string[] }>;
   mask_known_secrets(input: string): Promise<string>;
+  prune_expired(max_age_ms: number): Promise<number>;
 }
 
 const KEY_FILE = "master.key";
@@ -383,6 +384,17 @@ export class SecretVaultService implements SecretVaultLike {
       missing_keys: [...missing_keys.values()],
       invalid_ciphertexts: [...invalid_ciphertexts.values()],
     };
+  }
+
+  async prune_expired(max_age_ms: number): Promise<number> {
+    await this.ensure_ready();
+    const cutoff = new Date(Date.now() - Math.max(max_age_ms, 60_000)).toISOString();
+    const deleted = with_sqlite_strict(this.store_path, (db) => {
+      // inbound seal이 생성한 자동 시크릿(inbound. 접두사)만 정리, 사용자 시크릿은 유지
+      const r = db.prepare("DELETE FROM secrets WHERE updated_at < ? AND name LIKE 'inbound.%'").run(cutoff);
+      return Number(r.changes || 0);
+    });
+    return deleted ?? 0;
   }
 
   async mask_known_secrets(input: string): Promise<string> {

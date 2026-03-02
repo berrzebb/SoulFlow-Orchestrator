@@ -282,7 +282,7 @@ function _row_to_job(row: CronDbRow): CronJob {
 
 export class CronService implements CronScheduler, ServiceLike {
   readonly name = "cron";
-  readonly store_path: string;
+  private readonly store_path: string;
   readonly on_job: CronOnJob | null;
 
   private readonly sqlite_path: string;
@@ -297,6 +297,7 @@ export class CronService implements CronScheduler, ServiceLike {
   private _running = false;
   private _paused = false;
   private readonly logger: Logger | null;
+  private readonly _on_change: ((type: import("./types.js").CronChangeType, job_id?: string) => void) | null;
 
   constructor(store_path: string, on_job: CronOnJob | null = null, options?: CronServiceOptions) {
     this.store_path = store_path;
@@ -305,6 +306,7 @@ export class CronService implements CronScheduler, ServiceLike {
     this.running_lease_ms = Math.max(5_000, Number(options?.running_lease_ms || 120_000));
     this.on_job = on_job;
     this.logger = options?.logger ?? null;
+    this._on_change = options?.on_change ?? null;
     this.initialized = this.ensure_initialized();
   }
 
@@ -586,9 +588,14 @@ export class CronService implements CronScheduler, ServiceLike {
       } else {
         job.state.next_run_at_ms = _compute_next_run(job.schedule, now_ms(), (m) => this.logger?.warn(m));
       }
+      this._notify("executed", job.id);
     } finally {
       await this._release_job_lock(lock_path);
     }
+  }
+
+  private _notify(type: import("./types.js").CronChangeType, job_id?: string): void {
+    try { this._on_change?.(type, job_id); } catch { /* noop */ }
   }
 
   private _is_running_fresh(job: CronJob, now = now_ms()): boolean {
@@ -667,6 +674,7 @@ export class CronService implements CronScheduler, ServiceLike {
   async pause(): Promise<void> {
     this._paused = true;
     await this._cancel_timer();
+    this._notify("paused");
   }
 
   async resume(): Promise<void> {
@@ -676,6 +684,7 @@ export class CronService implements CronScheduler, ServiceLike {
     }
     this._paused = false;
     await this._arm_timer();
+    this._notify("resumed");
   }
 
   async list_jobs(include_disabled = false): Promise<CronJob[]> {
@@ -729,6 +738,7 @@ export class CronService implements CronScheduler, ServiceLike {
     };
     store.jobs.push(job);
     await this._save_and_rearm();
+    this._notify("added", job.id);
     return job;
   }
 
@@ -737,7 +747,10 @@ export class CronService implements CronScheduler, ServiceLike {
     const before = store.jobs.length;
     store.jobs = store.jobs.filter((j) => j.id !== job_id);
     const removed = store.jobs.length < before;
-    if (removed) await this._save_and_rearm();
+    if (removed) {
+      await this._save_and_rearm();
+      this._notify("removed", job_id);
+    }
     return removed;
   }
 
@@ -750,6 +763,7 @@ export class CronService implements CronScheduler, ServiceLike {
       if (enabled) job.state.next_run_at_ms = _compute_next_run(job.schedule, now_ms(), (m) => this.logger?.warn(m));
       else job.state.next_run_at_ms = null;
       await this._save_and_rearm();
+      this._notify(enabled ? "enabled" : "disabled", job_id);
       return job;
     }
     return null;

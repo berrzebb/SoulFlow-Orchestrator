@@ -72,13 +72,17 @@ export class AgentRuntimeAdapter implements AgentRuntimeLike {
     return this.domain.tools.get_definitions();
   }
 
+  get_tool_executors(): ToolLike[] {
+    return this.domain.tools.get_all();
+  }
+
   apply_tool_runtime_context(context: AgentToolRuntimeContext): void {
     const channel = String(context.channel || "").trim();
     const chat_id = String(context.chat_id || "").trim();
     if (!channel || !chat_id) return;
     const reply_to = String(context.reply_to || "").trim() || null;
 
-    for (const tool_name of ["message", "spawn", "request_file"] as const) {
+    for (const tool_name of ["message", "spawn", "request_file", "send_file"] as const) {
       const tool = this.domain.tools.get(tool_name) as ToolContextSetter | null;
       if (tool_name === "message") {
         tool?.set_context?.(channel, chat_id, reply_to || "");
@@ -119,6 +123,13 @@ export class AgentRuntimeAdapter implements AgentRuntimeLike {
     return this.domain.tools.execute_approved_request(request_id);
   }
 
+  register_approval_with_callback(
+    tool_name: string, detail: string,
+    context?: import("./tools/types.js").ToolExecutionContext, timeout_ms?: number,
+  ): { request_id: string; decision: Promise<import("./runtime.types.js").AgentApprovalDecision> } {
+    return this.domain.tools.register_approval_with_callback(tool_name, detail, context, timeout_ms);
+  }
+
   run_agent_loop(options: AgentLoopRunOptions): Promise<AgentLoopRunResult> {
     return this.domain.loop.run_agent_loop(options);
   }
@@ -147,12 +158,21 @@ export class AgentRuntimeAdapter implements AgentRuntimeLike {
     return this.domain.loop.list_tasks().filter((t) => !["completed", "cancelled"].includes(t.status));
   }
 
+  expire_stale_tasks(ttl_ms?: number): import("../contracts.js").TaskState[] {
+    return this.domain.loop.expire_stale_tasks(ttl_ms);
+  }
+
   list_active_loops(): import("../contracts.js").AgentLoopState[] {
     return this.domain.loop.list_loops().filter((l) => l.status === "running");
   }
 
   stop_loop(loop_id: string, reason?: string): import("../contracts.js").AgentLoopState | null {
     return this.domain.loop.stop_loop(loop_id, reason);
+  }
+
+  find_session_by_task(task_id: string): import("./agent.types.js").AgentSession | null {
+    const store = this.domain.subagents.get_agent_backends()?.get_session_store();
+    return store?.find_by_task(task_id) ?? null;
   }
 
   async spawn_and_wait(options: SpawnAndWaitOptions): Promise<SpawnAndWaitResult> {

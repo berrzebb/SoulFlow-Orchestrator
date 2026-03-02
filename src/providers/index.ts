@@ -7,14 +7,17 @@ export type { Phi4RuntimeEngine, Phi4RuntimeOptions, Phi4RuntimeStatus } from ".
 export { ProviderRegistry } from "./service.js";
 export { parse_executor_preference, resolve_executor_provider } from "./executor.js";
 export type { ExecutorProvider } from "./executor.js";
-export { LlmResponse } from "./types.js";
+export { LlmResponse, sandbox_from_preset } from "./types.js";
 export type {
+  ApprovalMode,
   ChatMessage,
   ChatOptions,
-  ChatRole,
+  FsAccessLevel,
   LlmProvider,
   LlmUsage,
   ProviderId,
   RuntimeExecutionPolicy,
+  SandboxPolicy,
+  SandboxPreset,
   ToolCallRequest,
 } from "./types.js";

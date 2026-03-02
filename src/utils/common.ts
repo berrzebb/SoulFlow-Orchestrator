@@ -1,4 +1,4 @@
-import { access, mkdir, readFile } from "node:fs/promises";
+import { access } from "node:fs/promises";
 
 export function now_ms(): number {
   return Date.now();
@@ -22,15 +22,6 @@ export async function file_exists(path: string): Promise<boolean> {
   } catch {
     return false;
   }
-}
-
-export async function ensure_dir(path: string): Promise<string> {
-  await mkdir(path, { recursive: true });
-  return path;
-}
-
-export function safe_filename(value: string): string {
-  return value.replace(/[^A-Za-z0-9._-]/g, "_");
 }
 
 /** TTL + maxSize 기반 Map 정리. get_ts_ms로 각 엔트리의 타임스탬프를 추출. */
@@ -90,12 +81,4 @@ export function parse_bool_like(raw: string | undefined, fallback: boolean): boo
   return fallback;
 }
 
-export async function read_text_if_exists(path: string): Promise<string | null> {
-  if (!(await file_exists(path))) return null;
-  try {
-    return await readFile(path, "utf-8");
-  } catch {
-    return null;
-  }
-}
 

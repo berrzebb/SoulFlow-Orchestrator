@@ -51,6 +51,12 @@ export class TaskResumeService {
     if (!text) return null;
     if (SKIP_PATTERNS.some((p) => p.test(text))) return null;
 
+    // 만료된 대기 작업 자동 정리 (10분 TTL)
+    const expired = this.runtime.expire_stale_tasks();
+    if (expired.length > 0) {
+      this.logger.info("expired_stale_tasks", { count: expired.length, ids: expired.map((t) => t.taskId) });
+    }
+
     const waiting = await this.runtime.find_waiting_task(provider, message.chat_id);
     if (!waiting) return null;
 
@@ -98,6 +104,12 @@ export class TaskResumeService {
 
     this.logger.info("task resumed after approval", { task_id });
     return true;
+  }
+
+  /** 승인 거부/취소 시 좀비 Task 방지를 위한 즉시 취소. */
+  async cancel_task(task_id: string, reason: string): Promise<void> {
+    const result = await this.runtime.cancel_task(task_id, reason);
+    if (result) this.logger.info("task cancelled", { task_id, reason, status: result.status });
   }
 
   private is_within_ttl(iso_date: string, ttl_ms: number): boolean {

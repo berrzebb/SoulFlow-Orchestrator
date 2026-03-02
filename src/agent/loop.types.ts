@@ -71,6 +71,7 @@ export type TaskLoopRunOptions = {
   initial_memory?: Record<string, unknown>;
   start_step_index?: number;
   on_turn?: (state: TaskState) => Promise<void> | void;
+  abort_signal?: AbortSignal;
 };
 
 export type TaskLoopRunResult = {

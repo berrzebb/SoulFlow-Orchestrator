@@ -3,7 +3,8 @@ export type {
   ConsumeMessageOptions,
   InboundMessage,
   MediaItem,
-  MediaItemType,
-  MessageProvider,
+  MessageBusLike,
+  MessageBusObserver,
   OutboundMessage,
+  ProgressEvent,
 } from "./types.js";

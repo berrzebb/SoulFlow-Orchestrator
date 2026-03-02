@@ -37,14 +37,13 @@ export interface RuntimeConfig {
   phi4RuntimeAutoStop: boolean;
   phi4RuntimeGpuEnabled: boolean;
   phi4RuntimeGpuArgs: string[];
+  phi4RuntimeApiBase: string;
   channelPollIntervalMs: number;
   channelReadLimit: number;
   dashboardEnabled: boolean;
   dashboardPort: number;
   dashboardHost: string;
   dataDir: string;
-  dashboardAssetsDir: string;
-  templateSourceDir: string;
 }
 
 /** AppConfig(Zod)에서 RuntimeConfig를 파생. process.env 중복 파싱 제거. */
@@ -85,14 +84,13 @@ export function loadConfig(app_config: AppConfig): RuntimeConfig {
     phi4RuntimeAutoStop: c.phi4.autoStop,
     phi4RuntimeGpuEnabled: c.phi4.gpuEnabled,
     phi4RuntimeGpuArgs: c.phi4.gpuArgs,
+    phi4RuntimeApiBase: c.phi4.apiBase,
     channelPollIntervalMs: c.channel.pollIntervalMs,
     channelReadLimit: c.channel.readLimit,
     dashboardEnabled: c.dashboard.enabled,
     dashboardPort: c.dashboard.port,
     dashboardHost: c.dashboard.host,
     dataDir: c.dataDir,
-    dashboardAssetsDir: c.dashboard.assetsDir,
-    templateSourceDir: c.templateSourceDir,
   };
 }
 

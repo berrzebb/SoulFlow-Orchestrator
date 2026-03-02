@@ -47,7 +47,10 @@ export class SessionRecorder {
     }
   }
 
-  async record_assistant(provider: ChannelProvider, message: InboundMessage, alias: string, content: string): Promise<void> {
+  async record_assistant(
+    provider: ChannelProvider, message: InboundMessage, alias: string, content: string,
+    metadata?: { stream_full_content?: string; parsed_output?: unknown; tool_calls_count?: number; run_id?: string; usage?: Record<string, unknown> },
+  ): Promise<void> {
     if (!this.sessions) return;
     try {
       const key = session_key(provider, message.chat_id, alias, message.thread_id);
@@ -57,6 +60,11 @@ export class SessionRecorder {
         sender_id: alias,
         at: new Date().toISOString(),
         thread_id: message.thread_id,
+        ...(metadata?.stream_full_content ? { stream_full_content: metadata.stream_full_content } : {}),
+        ...(metadata?.parsed_output !== undefined ? { parsed_output: metadata.parsed_output } : {}),
+        ...(metadata?.tool_calls_count ? { tool_calls_count: metadata.tool_calls_count } : {}),
+        ...(metadata?.run_id ? { run_id: metadata.run_id } : {}),
+        ...(metadata?.usage ? { usage: metadata.usage } : {}),
       });
       await this.sessions.save(session);
       await this.append_daily("assistant", provider, message.chat_id, message.thread_id, alias, safe);
@@ -95,6 +103,22 @@ export class SessionRecorder {
         .filter((r) => Boolean(r.content));
     } catch {
       return [];
+    }
+  }
+
+  /** 지정 채널의 마지막 assistant 메시지 content 조회. /verify 등에서 사용. */
+  async get_last_assistant_content(provider: ChannelProvider, chat_id: string, alias: string): Promise<string | null> {
+    if (!this.sessions) return null;
+    try {
+      const key = session_key(provider, chat_id, alias, undefined);
+      const session = await this.sessions.get_or_create(key);
+      for (let i = session.messages.length - 1; i >= 0; i--) {
+        const msg = session.messages[i];
+        if (msg.role === "assistant" && msg.content) return String(msg.content);
+      }
+      return null;
+    } catch {
+      return null;
     }
   }
 

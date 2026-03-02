@@ -35,6 +35,8 @@ export interface DispatchDlqStoreLike {
   append(record: DispatchDlqRecord): Promise<void>;
   list(limit?: number): Promise<DispatchDlqRecord[]>;
   get_path(): string;
+  /** TTL 기반 오래된 레코드 삭제. 삭제 건수 반환. */
+  prune_older_than(max_age_ms: number): Promise<number>;
 }
 
 export class SqliteDispatchDlqStore implements DispatchDlqStoreLike {
@@ -107,6 +109,16 @@ export class SqliteDispatchDlqStore implements DispatchDlqStoreLike {
     });
     this.write_queue = job.then(() => undefined, () => undefined);
     await job;
+  }
+
+  async prune_older_than(max_age_ms: number): Promise<number> {
+    await this.initialized;
+    const cutoff = new Date(Date.now() - Math.max(0, max_age_ms)).toISOString();
+    const deleted = with_sqlite(this.sqlite_path, (db) => {
+      const result = db.prepare(`DELETE FROM outbound_dlq WHERE at < ?`).run(cutoff);
+      return result.changes;
+    }) || 0;
+    return deleted;
   }
 
   async list(limit = 100): Promise<DispatchDlqRecord[]> {

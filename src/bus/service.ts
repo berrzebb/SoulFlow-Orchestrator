@@ -1,27 +1,34 @@
-import type { ConsumeMessageOptions, InboundMessage, OutboundMessage, ProgressEvent } from "./types.js";
+import type { ConsumeMessageOptions, InboundMessage, MessageBusLike, MessageBusObserver, OutboundMessage, ProgressEvent } from "./types.js";
 
 type Waiter<T> = (message: T | null) => void;
 
 const DEFAULT_CONSUME_TIMEOUT_MS = 30_000;
 const MAX_CONSUME_TIMEOUT_MS = 300_000;
 
-export class MessageBus {
+export class MessageBus implements MessageBusLike {
   private readonly inbound_queue: InboundMessage[] = [];
   private readonly outbound_queue: OutboundMessage[] = [];
   private readonly progress_queue: ProgressEvent[] = [];
   private readonly inbound_waiters: Array<Waiter<InboundMessage>> = [];
   private readonly outbound_waiters: Array<Waiter<OutboundMessage>> = [];
   private readonly progress_waiters: Array<Waiter<ProgressEvent>> = [];
+  private readonly observers: MessageBusObserver[] = [];
   private _closed = false;
+
+  on_publish(observer: MessageBusObserver): void {
+    this.observers.push(observer);
+  }
 
   async publish_inbound(message: InboundMessage): Promise<void> {
     if (this._closed) return;
     this.publish(message, this.inbound_queue, this.inbound_waiters);
+    for (const fn of this.observers) try { fn("inbound", message); } catch { /* noop */ }
   }
 
   async publish_outbound(message: OutboundMessage): Promise<void> {
     if (this._closed) return;
     this.publish(message, this.outbound_queue, this.outbound_waiters);
+    for (const fn of this.observers) try { fn("outbound", message); } catch { /* noop */ }
   }
 
   async consume_inbound(options?: ConsumeMessageOptions): Promise<InboundMessage | null> {
@@ -41,11 +48,6 @@ export class MessageBus {
     return this.consume(this.progress_queue, this.progress_waiters, options);
   }
 
-  peek(limit = 20): Array<InboundMessage | OutboundMessage> {
-    const n = Math.max(1, Number(limit || 20));
-    return [...this.inbound_queue.slice(0, n), ...this.outbound_queue.slice(0, n)];
-  }
-
   get_size(direction?: "inbound" | "outbound"): number {
     if (direction === "inbound") return this.inbound_queue.length;
     if (direction === "outbound") return this.outbound_queue.length;
@@ -58,7 +60,7 @@ export class MessageBus {
     return { inbound, outbound, total: inbound + outbound };
   }
 
-  async drain(limit = 5000): Promise<{ drained_inbound: number; drained_outbound: number; drained_progress: number }> {
+  private async drain(limit = 5000): Promise<{ drained_inbound: number; drained_outbound: number; drained_progress: number }> {
     const max = Math.max(1, Number(limit || 5000));
     let drained_inbound = 0;
     let drained_outbound = 0;

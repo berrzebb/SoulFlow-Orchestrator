@@ -28,8 +28,8 @@ export class McpToolAdapter implements ToolLike {
     return this.name.replace(`mcp__${this.server_name}__`, "");
   }
 
-  async execute(params: Record<string, unknown>, _context?: ToolExecutionContext): Promise<string> {
-    const result = await this.mcp.call_tool(this.original_name, params);
+  async execute(params: Record<string, unknown>, context?: ToolExecutionContext): Promise<string> {
+    const result = await this.mcp.call_tool(this.original_name, params, context?.signal);
     if (result.is_error) {
       const text = result.content.map((c) => c.text || "").filter(Boolean).join("\n");
       return `Error: ${text || "mcp_tool_error"}`;

@@ -2,9 +2,8 @@ import { randomUUID } from "node:crypto";
 import { now_iso } from "../../utils/common.js";
 import { parse_approval_response, type ApprovalDecision, type ApprovalParseResult } from "./approval-parser.js";
 import type {
-  BackgroundExecuteResult,
-  BackgroundTaskRecord,
-  BackgroundTaskStatus,
+  PreToolHook,
+  PostToolHook,
   ToolExecutionContext,
   ToolLike,
 } from "./types.js";
@@ -13,10 +12,6 @@ const ERROR_HINT = "\n\n[Analyze the error and retry with a safer or narrower ap
 
 function as_error_message(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
-}
-
-function is_terminal(status: BackgroundTaskStatus): boolean {
-  return status === "completed" || status === "failed" || status === "cancelled";
 }
 
 type ApprovalRequest = {
@@ -29,22 +24,29 @@ type ApprovalRequest = {
   status: "pending" | "approved" | "denied" | "deferred" | "cancelled" | "clarify";
   response_text?: string;
   response_parsed?: ApprovalParseResult;
+  /** true면 SDK 브리지 모드 — SDK가 도구 실행을 직접 관리하므로 execute_approved_request를 스킵. */
+  bridge?: boolean;
 };
 
 type ToolRegistryOptions = {
   on_approval_request?: (request: ApprovalRequest) => Promise<void>;
+  pre_hooks?: PreToolHook[];
+  post_hooks?: PostToolHook[];
 };
 
 export class ToolRegistry {
   private readonly tools = new Map<string, ToolLike>();
   private readonly dynamic_tool_names = new Set<string>();
-  private readonly background_tasks = new Map<string, BackgroundTaskRecord>();
-  private readonly task_aborters = new Map<string, AbortController>();
   private readonly approval_requests = new Map<string, ApprovalRequest>();
+  private readonly approval_callbacks = new Map<string, (decision: ApprovalDecision) => void>();
   private readonly on_approval_request: ((request: ApprovalRequest) => Promise<void>) | null;
+  private readonly pre_hooks: PreToolHook[];
+  private readonly post_hooks: PostToolHook[];
 
   constructor(options?: ToolRegistryOptions) {
     this.on_approval_request = options?.on_approval_request || null;
+    this.pre_hooks = options?.pre_hooks || [];
+    this.post_hooks = options?.post_hooks || [];
   }
 
   register(tool: ToolLike): void {
@@ -66,6 +68,11 @@ export class ToolRegistry {
 
   tool_names(): string[] {
     return [...this.tools.keys()];
+  }
+
+  /** 등록된 모든 ToolLike 인스턴스. */
+  get_all(): ToolLike[] {
+    return [...this.tools.values()];
   }
 
   set_dynamic_tools(tools: ToolLike[]): void {
@@ -93,9 +100,32 @@ export class ToolRegistry {
       if (errors.length > 0) {
         return `Error: Invalid parameters for tool '${name}': ${errors.join("; ")}${ERROR_HINT}`;
       }
-      const result = await tool.execute(params, context);
+
+      // PreToolUse hooks — deny가 하나라도 있으면 즉시 차단
+      let effective_params = params;
+      for (const hook of this.pre_hooks) {
+        const decision = await hook(name, effective_params, context);
+        if (decision.permission === "deny") {
+          return `Error: denied by policy — ${decision.reason || "blocked"}${ERROR_HINT}`;
+        }
+        if (decision.permission === "ask") {
+          return this.trigger_approval_from_hook(name, effective_params, context, decision.reason || "hook_requires_approval");
+        }
+        if (decision.updated_params) {
+          effective_params = { ...effective_params, ...decision.updated_params };
+        }
+      }
+
+      const result = await tool.execute(effective_params, context);
+      const is_error = result.startsWith("Error:");
+
+      // PostToolUse hooks — fire-and-forget
+      for (const hook of this.post_hooks) {
+        try { await hook(name, effective_params, result, context, is_error); } catch { /* noop */ }
+      }
+
       if (result.startsWith("Error: approval_required")) {
-        const request = this.create_approval_request(name, params, context, result);
+        const request = this.create_approval_request(name, effective_params, context, result);
         await this.notify_approval_required(request);
         const response_hint = [
           "",
@@ -111,126 +141,21 @@ export class ToolRegistry {
     }
   }
 
-  async execute_background(name: string, params: Record<string, unknown>): Promise<BackgroundExecuteResult> {
-    const task_id = randomUUID().slice(0, 12);
-    const record: BackgroundTaskRecord = {
-      id: task_id,
-      tool_name: name,
-      params: { ...params },
-      status: "queued",
-      created_at: now_iso(),
-    };
-    this.background_tasks.set(task_id, record);
-    queueMicrotask(() => {
-      void this._run_background(task_id);
-    });
-    return { task_id, status: "queued" };
-  }
-
-  private async _run_background(task_id: string): Promise<void> {
-    const current = this.background_tasks.get(task_id);
-    if (!current || is_terminal(current.status)) return;
-    const tool = this.tools.get(current.tool_name);
-    if (!tool) {
-      this.background_tasks.set(task_id, {
-        ...current,
-        status: "failed",
-        finished_at: now_iso(),
-        error: `tool_not_found:${current.tool_name}`,
-      });
-      return;
-    }
-
-    const controller = new AbortController();
-    this.task_aborters.set(task_id, controller);
-    this.background_tasks.set(task_id, {
-      ...current,
-      status: "running",
-      started_at: now_iso(),
-    });
-
-    try {
-      const errors = tool.validate_params(current.params);
-      if (errors.length > 0) {
-        this.background_tasks.set(task_id, {
-          ...this.background_tasks.get(task_id)!,
-          status: "failed",
-          finished_at: now_iso(),
-          error: `invalid_params:${errors.join("; ")}`,
-        });
-        return;
-      }
-
-      const result = await tool.execute(current.params, { task_id, signal: controller.signal });
-      if (result.startsWith("Error: approval_required")) {
-        const request = this.create_approval_request(current.tool_name, current.params, { task_id }, result);
-        await this.notify_approval_required(request);
-      }
-      const prev = this.background_tasks.get(task_id);
-      if (!prev) return;
-      if (prev.status === "cancelled") return;
-      this.background_tasks.set(task_id, {
-        ...prev,
-        status: "completed",
-        finished_at: now_iso(),
-        result,
-      });
-    } catch (error) {
-      const prev = this.background_tasks.get(task_id);
-      if (!prev) return;
-      if (prev.status === "cancelled") return;
-      this.background_tasks.set(task_id, {
-        ...prev,
-        status: "failed",
-        finished_at: now_iso(),
-        error: as_error_message(error),
-      });
-    } finally {
-      this.task_aborters.delete(task_id);
-    }
-  }
-
-  get_background_task(task_id: string): BackgroundTaskRecord | null {
-    return this.background_tasks.get(task_id) || null;
-  }
-
-  list_background_tasks(options?: {
-    status?: BackgroundTaskStatus;
-    tool_name?: string;
-    limit?: number;
-  }): BackgroundTaskRecord[] {
-    const limit = Math.max(1, Number(options?.limit || 100));
-    const records = [...this.background_tasks.values()]
-      .sort((a, b) => b.created_at.localeCompare(a.created_at))
-      .filter((item) => (options?.status ? item.status === options.status : true))
-      .filter((item) => (options?.tool_name ? item.tool_name === options.tool_name : true));
-    return records.slice(0, limit);
-  }
-
-  cancel_background_task(task_id: string): boolean {
-    const record = this.background_tasks.get(task_id);
-    if (!record) return false;
-    if (is_terminal(record.status)) return false;
-    this.task_aborters.get(task_id)?.abort();
-    this.task_aborters.delete(task_id);
-    this.background_tasks.set(task_id, {
-      ...record,
-      status: "cancelled",
-      finished_at: now_iso(),
-    });
-    return true;
-  }
-
-  clear_completed_background(limit = 500): number {
-    const max = Math.max(1, Number(limit || 500));
-    let deleted = 0;
-    for (const [id, row] of this.background_tasks.entries()) {
-      if (!is_terminal(row.status)) continue;
-      this.background_tasks.delete(id);
-      deleted += 1;
-      if (deleted >= max) break;
-    }
-    return deleted;
+  private async trigger_approval_from_hook(
+    tool_name: string,
+    params: Record<string, unknown>,
+    context: ToolExecutionContext | undefined,
+    reason: string,
+  ): Promise<string> {
+    const detail = `Error: approval_required\nreason: ${reason}\ntool: ${tool_name}`;
+    const request = this.create_approval_request(tool_name, params, context, detail);
+    await this.notify_approval_required(request);
+    const response_hint = [
+      "",
+      `approval_request_id: ${request.request_id}`,
+      "approval_reply_examples: ✅ / 👍 / yes / 승인 / 허용 / go | ❌ / 👎 / no / 거절 / 불가 / stop | ⏸️ / 보류 / later | ? / 이유",
+    ].join("\n");
+    return `${detail}\n${response_hint}`;
   }
 
   private async notify_approval_required(request: ApprovalRequest): Promise<void> {
@@ -271,6 +196,40 @@ export class ToolRegistry {
     return rows.filter((r) => r.status === status);
   }
 
+  /**
+   * 네이티브 백엔드 승인 브리지용: 승인 요청을 등록하고 사용자 응답을 Promise로 대기.
+   * resolve_approval_request()가 호출되면 Promise가 resolve.
+   */
+  register_approval_with_callback(
+    tool_name: string,
+    detail: string,
+    context?: ToolExecutionContext,
+    timeout_ms = 300_000,
+  ): { request_id: string; decision: Promise<ApprovalDecision> } {
+    const request = this.create_approval_request(tool_name, {}, context, detail);
+    void this.notify_approval_required(request);
+
+    const decision = new Promise<ApprovalDecision>((resolve) => {
+      const timer = setTimeout(() => {
+        this.approval_callbacks.delete(request.request_id);
+        // 타임아웃된 요청의 상태도 cancelled로 갱신하여 유령 방지
+        const req = this.approval_requests.get(request.request_id);
+        if (req && req.status === "pending") {
+          req.status = "cancelled";
+          this.approval_requests.set(request.request_id, req);
+        }
+        resolve("cancel");
+      }, timeout_ms);
+
+      this.approval_callbacks.set(request.request_id, (d) => {
+        clearTimeout(timer);
+        resolve(d);
+      });
+    });
+
+    return { request_id: request.request_id, decision };
+  }
+
   resolve_approval_request(request_id: string, response_text: string): {
     ok: boolean;
     decision: ApprovalDecision;
@@ -290,6 +249,14 @@ export class ToolRegistry {
     req.response_text = response_text;
     req.response_parsed = parsed;
     this.approval_requests.set(request_id, req);
+
+    // 콜백이 있으면 호출 (네이티브 백엔드 브리지용)
+    const cb = this.approval_callbacks.get(request_id);
+    if (cb) {
+      this.approval_callbacks.delete(request_id);
+      cb(parsed.decision);
+    }
+
     return {
       ok: status !== "pending",
       decision: parsed.decision,
@@ -332,5 +299,25 @@ export class ToolRegistry {
         error: as_error_message(error),
       };
     }
+  }
+
+  /** pending 상태에서 TTL을 초과한 approval 요청을 cancelled로 전환하고 정리. */
+  expire_stale_approvals(ttl_ms = 600_000): number {
+    const now = Date.now();
+    let count = 0;
+    for (const [id, req] of this.approval_requests) {
+      if (req.status !== "pending") continue;
+      const created = new Date(req.created_at).getTime();
+      if (Number.isNaN(created) || now - created < ttl_ms) continue;
+      req.status = "cancelled";
+      this.approval_requests.set(id, req);
+      const cb = this.approval_callbacks.get(id);
+      if (cb) {
+        this.approval_callbacks.delete(id);
+        cb("cancel");
+      }
+      count++;
+    }
+    return count;
   }
 }

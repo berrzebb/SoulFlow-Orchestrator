@@ -25,15 +25,21 @@ function now_seoul_iso(): string {
   return `${get("year")}-${get("month")}-${get("day")}T${get("hour")}:${get("minute")}:${get("second")}+09:00`;
 }
 
+export type CascadeCancelFn = (parent_id: string) => void;
+
 export class AgentLoopStore {
   private readonly loops = new Map<string, AgentLoopState>();
   private readonly tasks = new Map<string, TaskState>();
   private readonly task_store: TaskStore | null;
   private readonly logger: Logger | null;
+  private readonly on_cascade_cancel?: CascadeCancelFn;
+  private readonly on_task_change?: (task: TaskState) => void;
 
-  constructor(options?: { task_store?: TaskStore | null; logger?: Logger | null }) {
+  constructor(options?: { task_store?: TaskStore | null; logger?: Logger | null; on_cascade_cancel?: CascadeCancelFn; on_task_change?: (task: TaskState) => void }) {
     this.task_store = options?.task_store || null;
     this.logger = options?.logger || null;
+    this.on_cascade_cancel = options?.on_cascade_cancel;
+    this.on_task_change = options?.on_task_change;
   }
 
   private save_loop_snapshot(state: AgentLoopState): void {
@@ -44,20 +50,13 @@ export class AgentLoopStore {
     state.memory = { ...state.memory, __updated_at_seoul: now_seoul_iso() };
     this.tasks.set(state.taskId, { ...state });
     await this.persist_task(state);
+    try { this.on_task_change?.({ ...state }); } catch { /* SSE 실패가 실행을 차단하면 안 됨 */ }
   }
 
   async initialize(): Promise<void> {
     if (!this.task_store) return;
     const rows = await this.task_store.list();
     for (const task of rows) this.tasks.set(task.taskId, task);
-  }
-
-  upsert(loop: AgentLoopState): void {
-    this.loops.set(loop.loopId, loop);
-  }
-
-  get(loopId: string): AgentLoopState | null {
-    return this.loops.get(loopId) || null;
   }
 
   list_loops(): AgentLoopState[] {
@@ -79,7 +78,29 @@ export class AgentLoopStore {
     state.status = "stopped";
     state.terminationReason = reason;
     this.loops.set(loop_id, state);
+    this.on_cascade_cancel?.(loop_id);
     return state;
+  }
+
+  /** waiting_approval/waiting_user_input 상태에서 TTL을 초과한 작업을 자동 취소. */
+  expire_stale_tasks(ttl_ms = 600_000): TaskState[] {
+    const now = Date.now();
+    const expired: TaskState[] = [];
+    for (const state of this.tasks.values()) {
+      if (state.status !== "waiting_approval" && state.status !== "waiting_user_input") continue;
+      const updated = state.memory?.__updated_at_seoul as string | undefined;
+      if (!updated) continue;
+      const updated_ms = new Date(updated).getTime();
+      if (Number.isNaN(updated_ms) || now - updated_ms < ttl_ms) continue;
+      state.status = "cancelled";
+      state.exitReason = "expired_stale";
+      this.tasks.set(state.taskId, state);
+      this.persist_task(state).catch((e) => {
+        this.logger?.error("expire_stale persist failed", { task_id: state.taskId, error: e instanceof Error ? e.message : String(e) });
+      });
+      expired.push(state);
+    }
+    return expired;
   }
 
   cancel_task(task_id: string, reason = "cancelled_by_request"): TaskState | null {
@@ -88,6 +109,7 @@ export class AgentLoopStore {
     state.status = "cancelled";
     state.exitReason = reason;
     this.tasks.set(task_id, state);
+    this.on_cascade_cancel?.(task_id);
     this.persist_task(state).catch((e) => {
       this.logger?.error("cancel_task persist failed", { task_id, error: e instanceof Error ? e.message : String(e) });
     });
@@ -131,6 +153,12 @@ export class AgentLoopStore {
     const tool_call_guard: ToolCallGuard = new ConsecutiveToolCallGuard(2);
 
     while (state.currentTurn < state.maxTurns && state.checkShouldContinue) {
+      if (options.abort_signal?.aborted) {
+        state.status = "stopped";
+        state.terminationReason = "aborted";
+        state.checkShouldContinue = false;
+        break;
+      }
       state.currentTurn += 1;
       const response = await options.providers.run_headless_with_context({
         context_builder: options.context_builder,
@@ -235,6 +263,11 @@ export class AgentLoopStore {
     }
 
     while (state.currentTurn < state.maxTurns && state.status === "running") {
+      if (options.abort_signal?.aborted) {
+        state.status = "cancelled";
+        state.exitReason = "aborted";
+        break;
+      }
       const current_index = Math.max(0, Number(state.memory.__step_index || 0));
       if (current_index >= options.nodes.length) {
         state.status = "completed";

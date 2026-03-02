@@ -1,5 +1,4 @@
-import type { MessageBus } from "../bus/service.js";
-import type { OutboundMessage } from "../bus/types.js";
+import type { MessageBusLike, OutboundMessage } from "../bus/types.js";
 import type { Logger } from "../logger.js";
 import type { ServiceLike } from "../runtime/service.types.js";
 import type { AppConfig } from "../config/schema.js";
@@ -15,7 +14,7 @@ type RetryConfig = AppConfig["channel"]["dispatch"];
 type DedupeConfig = AppConfig["channel"]["outboundDedupe"];
 
 export type DispatchServiceDeps = {
-  bus: MessageBus;
+  bus: MessageBusLike;
   registry: ChannelRegistryLike;
   retry_config: RetryConfig;
   dedupe_config: DedupeConfig;
@@ -23,6 +22,8 @@ export type DispatchServiceDeps = {
   dedupe_policy: OutboundDedupePolicy;
   logger: Logger;
   rate_limiter?: RateLimiterOptions;
+  /** send() 직접 호출로 전달된 메시지 알림. 대시보드 SSE 등에서 사용. */
+  on_direct_send?: (message: OutboundMessage) => void;
 };
 
 const NON_RETRYABLE_ERRORS = [
@@ -33,7 +34,7 @@ const NON_RETRYABLE_ERRORS = [
 export class DispatchService implements ServiceLike {
   readonly name = "dispatch";
 
-  private readonly bus: MessageBus;
+  private readonly bus: MessageBusLike;
   private readonly registry: ChannelRegistryLike;
   private readonly retry_config: RetryConfig;
   private readonly dedupe_config: DedupeConfig;
@@ -41,6 +42,7 @@ export class DispatchService implements ServiceLike {
   private readonly dedupe_policy: OutboundDedupePolicy;
   private readonly logger: Logger;
   private readonly rate_limiter: TokenBucketRateLimiter;
+  private readonly on_direct_send: ((message: OutboundMessage) => void) | null;
   private readonly recent = new Map<string, RecentRecord>();
   private readonly pending_retries = new Set<ReturnType<typeof setTimeout>>();
   private running = false;
@@ -55,6 +57,7 @@ export class DispatchService implements ServiceLike {
     this.dedupe_policy = deps.dedupe_policy;
     this.logger = deps.logger;
     this.rate_limiter = new TokenBucketRateLimiter(deps.rate_limiter);
+    this.on_direct_send = deps.on_direct_send || null;
   }
 
   async start(): Promise<void> {
@@ -79,7 +82,11 @@ export class DispatchService implements ServiceLike {
   }
 
   async send(provider: ChannelProvider, message: OutboundMessage): Promise<{ ok: boolean; message_id?: string; error?: string }> {
-    return this.send_with_retry(provider, message, true);
+    const result = await this.send_with_retry(provider, message, true);
+    if (result.ok && this.on_direct_send) {
+      try { this.on_direct_send(message); } catch { /* 옵저버 실패가 전달을 차단하면 안 됨 */ }
+    }
+    return result;
   }
 
   private async consume_loop(): Promise<void> {

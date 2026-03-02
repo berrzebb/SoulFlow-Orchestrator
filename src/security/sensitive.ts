@@ -50,6 +50,42 @@ const DIRECT_PATTERNS: Array<{ name: string; re: RegExp }> = [
     name: "basic_token",
     re: /\bBasic\s+[A-Za-z0-9+/=]{16,}\b/gi,
   },
+  {
+    name: "stripe_key",
+    re: /\b[sr]k_(live|test)_[A-Za-z0-9]{10,}\b/g,
+  },
+  {
+    name: "stripe_publishable",
+    re: /\bpk_(live|test)_[A-Za-z0-9]{10,}\b/g,
+  },
+  {
+    name: "twilio_sid",
+    re: /\bAC[a-f0-9]{32}\b/g,
+  },
+  {
+    name: "sendgrid_key",
+    re: /\bSG\.[A-Za-z0-9_-]{22,}\.[A-Za-z0-9_-]{22,}\b/g,
+  },
+  {
+    name: "telegram_bot_token",
+    re: /\b\d{8,10}:[A-Za-z0-9_-]{35}\b/g,
+  },
+  {
+    name: "google_api_key",
+    re: /\bAIza[A-Za-z0-9_-]{35}\b/g,
+  },
+  {
+    name: "azure_connection_string",
+    re: /(?:DefaultEndpointsProtocol|AccountKey|SharedAccessSignature)=[^;\s]{10,}/gi,
+  },
+  {
+    name: "mongodb_uri",
+    re: /\bmongodb(?:\+srv)?:\/\/[^\s"'`]{10,}/gi,
+  },
+  {
+    name: "postgres_uri",
+    re: /\bpostgres(?:ql)?:\/\/[^\s"'`]{10,}/gi,
+  },
 ];
 
 const ASSIGNMENT_RE = /\b([A-Za-z0-9_.-]{2,64})\s*[:=]\s*([^\s"'`]{6,}|["'][^"']{6,}["'])/g;
@@ -147,14 +183,5 @@ export function redact_sensitive_unknown(value: unknown): unknown {
     out[k] = redact_sensitive_unknown(v);
   }
   return out;
-}
-
-export function redact_for_log(value: unknown): string {
-  if (typeof value === "string") return redact_sensitive_text(value).text;
-  try {
-    return JSON.stringify(redact_sensitive_unknown(value));
-  } catch {
-    return REDACTED;
-  }
 }
 

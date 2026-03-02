@@ -19,9 +19,6 @@ export { TelegramChannel } from "./telegram.channel.js";
 export { ChannelManager } from "./manager.js";
 export { SqliteDispatchDlqStore, type DispatchDlqStoreLike, type DispatchDlqRecord } from "./dlq-store.js";
 export type { ChannelManagerStatus } from "./manager.js";
-export { render_content_blocks, render_bar, render_line, render_pie } from "./content-renderer.js";
-export type { ContentBlock, ChartDataPoint, ContentRendererOptions } from "./content-renderer.js";
-
 export class ChannelRegistry implements ChannelRegistryLike {
   private readonly channels = new Map<ChannelProvider, ChatChannel>();
 
@@ -113,30 +110,6 @@ export class ChannelRegistry implements ChannelRegistryLike {
   get_health(): ChannelHealth[] {
     return [...this.channels.values()].map((channel) => channel.get_health());
   }
-}
-
-export function create_default_channels(): ChannelRegistry {
-  return create_channels_from_config({
-    channels: {
-      slack: {
-        enabled: true,
-        bot_token: process.env.SLACK_BOT_TOKEN || "",
-        default_channel: process.env.SLACK_DEFAULT_CHANNEL || "",
-      },
-      discord: {
-        enabled: true,
-        bot_token: process.env.DISCORD_BOT_TOKEN || "",
-        default_channel: process.env.DISCORD_DEFAULT_CHANNEL || "",
-        api_base: process.env.DISCORD_API_BASE || "https://discord.com/api/v10",
-      },
-      telegram: {
-        enabled: true,
-        bot_token: process.env.TELEGRAM_BOT_TOKEN || "",
-        default_chat_id: process.env.TELEGRAM_DEFAULT_CHAT_ID || "",
-        api_base: process.env.TELEGRAM_API_BASE || "https://api.telegram.org",
-      },
-    },
-  });
 }
 
 export function create_channels_from_config(args: {

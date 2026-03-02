@@ -1,9 +1,15 @@
 import type { AgentRuntimeLike } from "../agent/runtime.types.js";
-import type { MessageBus } from "../bus/index.js";
+import type { AgentBackendRegistry } from "../agent/agent-registry.js";
+import type { AgentFinishReason, AgentHooks } from "../agent/agent.types.js";
+import type { ToolSchema } from "../agent/tools/types.js";
+import type { MessageBusLike } from "../bus/index.js";
 import type { RuntimeConfig } from "../config/index.js";
 import type { WorkflowEventService } from "../events/index.js";
-import type { ProviderRegistry } from "../providers/index.js";
 import { parse_executor_preference, resolve_executor_provider } from "../providers/executor.js";
+import { sanitize_provider_output } from "../channels/output-sanitizer.js";
+import { seal_inbound_sensitive_text } from "../security/inbound-seal.js";
+import { redact_sensitive_text } from "../security/sensitive.js";
+import type { SecretVaultService } from "../security/secret-vault.js";
 import type { CronJob, CronOnJob } from "./types.js";
 
 type CronTarget = { provider: "slack" | "discord" | "telegram"; chat_id: string };
@@ -12,13 +18,21 @@ const CRON_BLOCKED_TOOL_NAMES = new Set(["spawn", "cron"]);
 
 export type CronRuntimeHandlerDeps = {
   config: RuntimeConfig;
-  bus: MessageBus;
+  bus: MessageBusLike;
   events: WorkflowEventService;
   agent_runtime: AgentRuntimeLike;
-  providers: ProviderRegistry;
+  agent_backends: AgentBackendRegistry;
+  secret_vault: SecretVaultService;
 };
 
-export function default_chat_for_provider(config: RuntimeConfig, provider: CronTarget["provider"]): string {
+const CRON_FINISH_WARNINGS: Partial<Record<AgentFinishReason, string>> = {
+  max_turns: "에이전트 최대 턴 도달",
+  max_budget: "비용 한도 초과",
+  max_tokens: "토큰 한도 초과",
+  output_retries: "출력 재시도 한도 초과",
+};
+
+function default_chat_for_provider(config: RuntimeConfig, provider: CronTarget["provider"]): string {
   if (provider === "slack") return String(config.channels.slack.default_channel || "").trim();
   if (provider === "discord") return String(config.channels.discord.default_channel || "").trim();
   return String(config.channels.telegram.default_chat_id || "").trim();
@@ -72,11 +86,7 @@ export function create_cron_job_handler(deps: CronRuntimeHandlerDeps): CronOnJob
       await publish_notice(
         "cron",
         `⚠️ cron 실행 실패\n- id: ${job.id}\n- name: ${job.name}\n- error: ${reason}`,
-        {
-          kind: "cron_failed",
-          job_id: job.id,
-          error: reason,
-        },
+        { kind: "cron_failed", job_id: job.id, error: reason },
       );
       throw new Error(reason);
     }
@@ -99,11 +109,7 @@ export function create_cron_job_handler(deps: CronRuntimeHandlerDeps): CronOnJob
           agent_id: agent_alias,
           phase,
           summary,
-          payload: {
-            job_id: job.id,
-            job_name: job.name,
-            ...payload,
-          },
+          payload: { job_id: job.id, job_name: job.name, ...payload },
           provider: target.provider,
           channel: target.provider,
           chat_id: target.chat_id,
@@ -111,29 +117,24 @@ export function create_cron_job_handler(deps: CronRuntimeHandlerDeps): CronOnJob
           detail: detail ?? null,
         });
       } catch {
-        // keep scheduler non-blocking when event logging fails
+        // 이벤트 로깅 실패가 스케줄러를 차단하면 안 됨
       }
     };
 
     await append_event(
       "assign",
       `cron trigger: ${job.name}`,
-      {
-        schedule: job.schedule,
-        deliver: job.payload.deliver,
-      },
+      { schedule: job.schedule, deliver: job.payload.deliver },
       String(job.payload.message || ""),
     );
 
     try {
+      // deliver 모드: 메시지만 전달하고 종료
       if (job.payload.deliver) {
         await publish_notice(
           "cron",
           `⏰ ${job.name}\n${job.payload.message}`.trim(),
-          {
-            kind: "cron_deliver",
-            job_id: job.id,
-          },
+          { kind: "cron_deliver", job_id: job.id },
         );
         await append_event("done", `cron delivered: ${job.name}`, { mode: "deliver" });
         return "delivered";
@@ -143,96 +144,121 @@ export function create_cron_job_handler(deps: CronRuntimeHandlerDeps): CronOnJob
       await publish_notice(
         "cron",
         `⏱ cron 작업 실행 시작\n- id: ${job.id}\n- name: ${job.name}`,
-        {
-          kind: "cron_run_start",
-          job_id: job.id,
-        },
+        { kind: "cron_run_start", job_id: job.id },
       );
+
+      // 백엔드 결정
       const preferred = parse_executor_preference(String(process.env.ORCH_EXECUTOR_PROVIDER || "chatgpt"));
       const provider_id = resolve_executor_provider(preferred);
+      const backend_id = deps.agent_backends.resolve_backend_id(provider_id);
+      const backend = deps.agent_backends.get_backend(backend_id);
+
+      // 도구 준비
       const always_skills = deps.agent_runtime.get_always_skills();
       deps.agent_runtime.apply_tool_runtime_context({
         channel: target.provider,
         chat_id: target.chat_id,
       });
       const tool_definitions = deps.agent_runtime.get_tool_definitions();
-      const result = await deps.agent_runtime.run_agent_loop({
-        loop_id: `cron-loop-${job.id}-${Date.now()}`,
-        agent_id: agent_alias,
-        objective: String(job.payload.message || job.name || "scheduled task"),
-        context_builder: deps.agent_runtime.get_context_builder(),
-        providers: deps.providers,
-        tools: tool_definitions,
-        provider_id,
-        current_message: String(job.payload.message || ""),
-        history_days: [],
-        skill_names: always_skills,
-        channel: target.provider,
-        chat_id: target.chat_id,
-        max_turns: Math.max(1, Number(process.env.AGENT_LOOP_MAX_TURNS || deps.config.agentLoopDefaultMaxTurns || 8)),
-        model: undefined,
-        max_tokens: 1800,
-        temperature: 0.3,
-        check_should_continue: async () => false,
-        on_tool_calls: async ({ tool_calls }) => {
-          const outputs: string[] = [];
-          for (const tool_call of tool_calls) {
-            if (CRON_BLOCKED_TOOL_NAMES.has(String(tool_call.name || "").trim().toLowerCase())) {
-              outputs.push(`[tool:${tool_call.name}] Error: disabled_in_cron_context`);
-              continue;
-            }
-            const out = await deps.agent_runtime.execute_tool(
-              tool_call.name,
-              tool_call.arguments || {},
-              {
-                task_id,
-                channel: target.provider,
-                chat_id: target.chat_id,
-                sender_id: "cron",
-              },
-            );
-            outputs.push(`[tool:${tool_call.name}] ${out}`);
-          }
-          return outputs.join("\n");
-        },
-      });
-      const final_content = String(result.final_content || "").trim();
-      if (final_content) {
-        await publish_notice(
-          agent_alias,
-          final_content,
-          {
-            kind: "cron_result",
-            job_id: job.id,
-            provider_id,
-          },
-        );
-        await append_event("done", `cron task completed: ${job.name}`, { provider_id }, final_content);
-        return final_content;
-      }
-      const fallback_done = `✅ cron 작업 완료\n- id: ${job.id}\n- name: ${job.name}\n- 결과 본문 없음(도구 실행만 완료)`;
-      await publish_notice(
-        "cron",
-        fallback_done,
-        {
-          kind: "cron_result",
-          job_id: job.id,
-          provider_id,
-          empty: true,
-        },
+      const tool_executors = deps.agent_runtime.get_tool_executors();
+
+      // 시스템 프롬프트 구성
+      const context_builder = deps.agent_runtime.get_context_builder();
+      const system_prompt = await context_builder.build_system_prompt(
+        always_skills,
+        undefined,
+        { channel: target.provider, chat_id: target.chat_id },
       );
-      await append_event("done", `cron task completed: ${job.name}`, { provider_id, empty: true }, fallback_done);
-      return fallback_done;
+
+      // 크론 전용 hooks
+      const hooks: AgentHooks = {
+        pre_tool_use: async (name) => {
+          if (CRON_BLOCKED_TOOL_NAMES.has(String(name || "").trim().toLowerCase())) {
+            return { permission: "deny", reason: "disabled_in_cron_context" };
+          }
+          return {};
+        },
+      };
+
+      const cron_abort = new AbortController();
+      const cron_timeout = setTimeout(() => cron_abort.abort(), 300_000);
+
+      // 인바운드 텍스트 sealing: 크론 메시지도 민감 정보 보호 적용
+      const raw_task = String(job.payload.message || job.name || "scheduled task");
+      let sealed_task: string;
+      try {
+        const sealed = await seal_inbound_sensitive_text(raw_task, {
+          provider: target.provider,
+          chat_id: target.chat_id,
+          vault: deps.secret_vault,
+        });
+        sealed_task = sealed.text;
+      } catch {
+        sealed_task = redact_sensitive_text(raw_task).text;
+      }
+
+      const caps = backend?.capabilities;
+      try {
+        const result = await deps.agent_backends.run(backend_id, {
+          task: sealed_task,
+          task_id,
+          system_prompt,
+          tools: tool_definitions as ToolSchema[],
+          tool_executors,
+          hooks,
+          max_turns: Math.max(1, Number(process.env.AGENT_LOOP_MAX_TURNS || deps.config.agentLoopDefaultMaxTurns || 8)),
+          max_tokens: 1800,
+          temperature: 0.3,
+          effort: "medium",
+          ...(caps?.thinking ? { enable_thinking: true, max_thinking_tokens: 10000 } : {}),
+          abort_signal: cron_abort.signal,
+          tool_context: { channel: target.provider, chat_id: target.chat_id, sender_id: `cron:${job.id}` },
+        });
+
+        // finish_reason 분기: cancelled → 조용히 종료, 비정상 종료 → 경고 추가
+        if (result.finish_reason === "cancelled") {
+          await append_event("done", `cron task cancelled: ${job.name}`, { provider_id, backend_id, finish_reason: "cancelled" });
+          return "cancelled";
+        }
+
+        // usage 추출
+        const usage = result.usage as Record<string, unknown> | undefined;
+        const usage_payload = usage ? {
+          prompt_tokens: Number(usage.prompt_tokens || usage.input_tokens || 0),
+          completion_tokens: Number(usage.completion_tokens || usage.output_tokens || 0),
+        } : undefined;
+
+        const raw_content = String(result.content || "").trim();
+        const warn = CRON_FINISH_WARNINGS[result.finish_reason];
+        const sanitized = sanitize_provider_output(raw_content).trim();
+        const final_content = warn ? (sanitized ? `${sanitized}\n\n⚠️ ${warn}` : `⚠️ ${warn}`) : sanitized;
+
+        if (final_content) {
+          await publish_notice(
+            agent_alias,
+            final_content,
+            { kind: "cron_result", job_id: job.id, provider_id, backend_id, ...usage_payload ? { usage: usage_payload } : {} },
+          );
+          await append_event("done", `cron task completed: ${job.name}`, { provider_id, backend_id, finish_reason: result.finish_reason, ...usage_payload ? { usage: usage_payload } : {} }, final_content);
+          return final_content;
+        }
+        const fallback_done = `✅ cron 작업 완료\n- id: ${job.id}\n- name: ${job.name}\n- 결과 본문 없음(도구 실행만 완료)`;
+        await publish_notice(
+          "cron",
+          fallback_done,
+          { kind: "cron_result", job_id: job.id, provider_id, backend_id, empty: true, ...usage_payload ? { usage: usage_payload } : {} },
+        );
+        await append_event("done", `cron task completed: ${job.name}`, { provider_id, backend_id, empty: true, ...usage_payload ? { usage: usage_payload } : {} }, fallback_done);
+        return fallback_done;
+      } finally {
+        clearTimeout(cron_timeout);
+      }
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
       await publish_notice(
         "cron",
         `⚠️ cron 실행 실패\n- id: ${job.id}\n- name: ${job.name}\n- error: ${reason}`,
-        {
-          kind: "cron_failed",
-          job_id: job.id,
-          error: reason,
-        },
+        { kind: "cron_failed", job_id: job.id, error: reason },
       );
       await append_event("blocked", `cron task failed: ${job.name}`, { error: reason }, reason);
       throw error;

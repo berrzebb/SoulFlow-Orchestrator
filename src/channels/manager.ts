@@ -1,5 +1,4 @@
-import type { MessageBus } from "../bus/service.js";
-import type { InboundMessage, MediaItem } from "../bus/types.js";
+import type { InboundMessage, MediaItem, MessageBusLike } from "../bus/types.js";
 import { resolve_provider, type ChannelProvider, type ChannelRegistryLike } from "./types.js";
 import type { ProviderRegistry } from "../providers/service.js";
 import type { ServiceLike } from "../runtime/service.types.js";
@@ -9,11 +8,13 @@ import type { CommandRouter } from "./commands/router.js";
 import { format_mention, type CommandContext } from "./commands/types.js";
 import type { DispatchService } from "./dispatch.service.js";
 import type { ApprovalService } from "./approval.service.js";
+import { extract_reaction_names, is_control_stop_reaction } from "./approval.service.js";
 import type { TaskResumeService } from "./task-resume.service.js";
 import type { SessionRecorder } from "./session-recorder.js";
 import type { MediaCollector } from "./media-collector.js";
 import type { OrchestrationService } from "../orchestration/service.js";
 import type { OrchestrationResult } from "../orchestration/types.js";
+import type { ProcessTrackerLike } from "../orchestration/process-tracker.js";
 import { resolve_reply_to } from "../orchestration/service.js";
 import { get_command_descriptors } from "./commands/registry.js";
 import { parse_slash_command_from_message } from "./slash-command.js";
@@ -33,7 +34,7 @@ export type ChannelManagerStatus = {
 };
 
 export type ChannelManagerDeps = {
-  bus: MessageBus;
+  bus: MessageBusLike;
   registry: ChannelRegistryLike;
   dispatch: DispatchService;
   command_router: CommandRouter;
@@ -42,10 +43,13 @@ export type ChannelManagerDeps = {
   task_resume: TaskResumeService;
   session_recorder: SessionRecorder;
   media_collector: MediaCollector;
+  process_tracker: ProcessTrackerLike | null;
   providers: ProviderRegistry | null;
   config: AppConfig["channel"];
   workspace_dir: string;
   logger: Logger;
+  /** AgentEvent를 대시보드 SSE로 릴레이할 콜백. */
+  on_agent_event?: ((event: import("../agent/agent.types.js").AgentEvent) => void) | null;
 };
 
 type ActiveRun = { abort: AbortController; provider: ChannelProvider; chat_id: string; alias: string };
@@ -57,7 +61,7 @@ type ActiveRun = { abort: AbortController; provider: ChannelProvider; chat_id: s
 export class ChannelManager implements ServiceLike {
   readonly name = "channel-manager";
 
-  private readonly bus: MessageBus;
+  private readonly bus: MessageBusLike;
   private readonly registry: ChannelRegistryLike;
   private readonly dispatch: DispatchService;
   private readonly commands: CommandRouter;
@@ -66,10 +70,12 @@ export class ChannelManager implements ServiceLike {
   private readonly task_resume: TaskResumeService;
   private readonly recorder: SessionRecorder;
   private readonly media: MediaCollector;
+  private readonly tracker: ProcessTrackerLike | null;
   private readonly providers: ProviderRegistry | null;
   private readonly config: AppConfig["channel"];
   private readonly workspace_dir: string;
   private readonly logger: Logger;
+  private readonly on_agent_event: ((event: import("../agent/agent.types.js").AgentEvent) => void) | null;
 
   private running = false;
   private poll_task: Promise<void> | null = null;
@@ -78,6 +84,7 @@ export class ChannelManager implements ServiceLike {
   private readonly primed_targets = new Set<string>();
   private readonly active_runs = new Map<string, ActiveRun>();
   private readonly mention_cooldowns = new Map<string, number>();
+  private readonly control_reaction_seen = new Map<string, number>();
   private readonly render_profiles = new Map<string, RenderProfile>();
   private readonly inbound_inflight = new Set<Promise<void>>();
   private inbound_active = 0;
@@ -93,10 +100,12 @@ export class ChannelManager implements ServiceLike {
     this.task_resume = deps.task_resume;
     this.recorder = deps.session_recorder;
     this.media = deps.media_collector;
+    this.tracker = deps.process_tracker;
     this.providers = deps.providers;
     this.config = deps.config;
     this.workspace_dir = deps.workspace_dir;
     this.logger = deps.logger;
+    this.on_agent_event = deps.on_agent_event || null;
   }
 
   async start(): Promise<void> {
@@ -148,12 +157,30 @@ export class ChannelManager implements ServiceLike {
     };
   }
 
+  /** 채널별 연결 상태 + 에러 정보. 대시보드 build_state()에서 사용. */
+  get_channel_health(): import("./types.js").ChannelHealth[] {
+    return this.registry.get_health();
+  }
+
+  /** 현재 동시 실행 수. */
+  get_active_run_count(): number {
+    return this.active_runs.size;
+  }
+
   cancel_active_runs(key?: string): number {
     const lk = key?.toLowerCase();
     const targets = lk
       ? [...this.active_runs.keys()].filter((k) => k === lk || k.startsWith(`${lk}:`))
       : [...this.active_runs.keys()];
-    for (const k of targets) { this.active_runs.get(k)?.abort.abort(); this.active_runs.delete(k); }
+    for (const k of targets) {
+      const run = this.active_runs.get(k);
+      if (run) {
+        run.abort.abort();
+        const entry = this.tracker?.find_active_by_key(run.provider, run.chat_id, run.alias);
+        if (entry) this.tracker!.end(entry.run_id, "cancelled", "stopped_by_request");
+      }
+      this.active_runs.delete(k);
+    }
     return targets.length;
   }
 
@@ -184,8 +211,8 @@ export class ChannelManager implements ServiceLike {
 
     const approval = await this.approval.try_handle_text_reply(provider, message);
     if (approval.handled) {
-      // 승인 후 대기 중이던 Task이 있으면 도구 실행 결과를 주입하고 task loop 재개
       if (approval.task_id && approval.tool_result) {
+        // 승인 → 도구 실행 결과를 주입하고 task loop 재개
         const resumed = await this.task_resume.resume_after_approval(
           approval.task_id,
           approval.tool_result,
@@ -194,6 +221,10 @@ export class ChannelManager implements ServiceLike {
           this.logger.info("task resumed after approval", { task_id: approval.task_id });
           await this.invoke_and_reply(provider, message, this.config.defaultAlias, approval.task_id);
         }
+      } else if (approval.task_id && (approval.approval_status === "denied" || approval.approval_status === "cancelled")) {
+        // 거부/취소 → 좀비 방지: Task 즉시 취소
+        await this.task_resume.cancel_task(approval.task_id, `approval_${approval.approval_status}`);
+        this.logger.info("task cancelled after approval denial", { task_id: approval.task_id, status: approval.approval_status });
       }
       return;
     }
@@ -248,18 +279,28 @@ export class ChannelManager implements ServiceLike {
           const rows = await this.registry.read(provider, target, this.config.readLimit);
           if (this.config.approvalReactionEnabled) {
             const rxn_result = await this.approval.try_handle_approval_reactions(provider, rows);
-            if (rxn_result.handled && rxn_result.task_id && rxn_result.tool_result) {
-              const resumed = await this.task_resume.resume_after_approval(rxn_result.task_id, rxn_result.tool_result);
-              if (resumed) {
-                const rxn_msg = rows.find((r) => is_reaction_message(r));
-                if (rxn_msg) {
-                  this.logger.info("task resumed after reaction approval", { task_id: rxn_result.task_id });
-                  this.handle_inbound_message(rxn_msg).catch((e) =>
-                    this.logger.error("reaction resume failed", { error: e instanceof Error ? e.message : String(e) }),
-                  );
+            if (rxn_result.handled && rxn_result.task_id) {
+              if (rxn_result.tool_result) {
+                const resumed = await this.task_resume.resume_after_approval(rxn_result.task_id, rxn_result.tool_result);
+                if (resumed) {
+                  const trigger_msg = rows.find((r) => is_reaction_message(r)) || rows[0];
+                  if (trigger_msg) {
+                    this.logger.info("task resumed after reaction approval", { task_id: rxn_result.task_id });
+                    this.invoke_and_reply(provider, trigger_msg, this.config.defaultAlias, rxn_result.task_id).catch((e) =>
+                      this.logger.error("reaction resume failed", { error: e instanceof Error ? e.message : String(e) }),
+                    );
+                  }
                 }
+              } else if (rxn_result.approval_status === "denied" || rxn_result.approval_status === "cancelled") {
+                this.task_resume.cancel_task(rxn_result.task_id, `approval_${rxn_result.approval_status}`).catch((e) =>
+                  this.logger.error("reaction denial cancel failed", { error: e instanceof Error ? e.message : String(e) }),
+                );
+                this.logger.info("task cancelled after reaction denial", { task_id: rxn_result.task_id, status: rxn_result.approval_status });
               }
             }
+          }
+          if (this.config.controlReactionEnabled) {
+            this.handle_control_reactions(provider, rows);
           }
 
           const target_key = `${provider}:${target}`;
@@ -326,6 +367,8 @@ export class ChannelManager implements ServiceLike {
     const abort = new AbortController();
     this.active_runs.set(run_key, { abort, provider, chat_id: message.chat_id, alias });
 
+    const run_id = this.tracker?.start({ provider, chat_id: message.chat_id, alias, sender_id: message.sender_id });
+
     const meta = (message.metadata && typeof message.metadata === "object") ? message.metadata as Record<string, unknown> : {};
     const anchor_ts = String(meta.message_id || message.id || "");
     const typing_ticker = setInterval(() => {
@@ -347,21 +390,56 @@ export class ChannelManager implements ServiceLike {
       const result = await this.orchestration.execute({
         message, alias, provider, media_inputs,
         session_history: history,
-        skill_names: [],
         resumed_task_id,
+        run_id,
         on_stream: (chunk) => {
           stream_state.chain = stream_state.chain
             .then(() => this.send_or_edit_stream(provider, message, alias, chunk, stream_state))
             .catch((e) => this.logger.debug("stream_update_failed", { error: e instanceof Error ? e.message : String(e) }));
         },
+        on_progress: (event) => {
+          this.bus.publish_progress(event).catch((e) =>
+            this.logger.debug("progress_publish_failed", { error: e instanceof Error ? e.message : String(e) }),
+          );
+        },
+        on_agent_event: this.on_agent_event || undefined,
+        on_tool_block: (block) => {
+          stream_state.chain = stream_state.chain
+            .then(async () => {
+              const profile = this.effective_render_profile(provider, message.chat_id);
+              const rendered = render_agent_output(block, profile);
+              const text = String(rendered.content || "").trim().slice(0, 700);
+              if (!text) return;
+
+              if (stream_state.message_id) {
+                // 기존 스트림 메시지(실행 모드 라벨 등)를 툴 블록 내용으로 교체
+                await this.registry.edit_message(
+                  provider, message.chat_id, stream_state.message_id, text, rendered.parse_mode,
+                );
+                stream_state.message_id = "";
+              } else {
+                await this.send_outbound(provider, message, alias, text, {
+                  kind: "tool_block", agent_alias: alias,
+                  render_parse_mode: rendered.parse_mode || null,
+                });
+              }
+            })
+            .catch((e) => this.logger.debug("tool_block_send_failed", { error: e instanceof Error ? e.message : String(e) }));
+        },
         signal: abort.signal,
       });
+
+      if (run_id) {
+        this.tracker!.set_tool_count(run_id, result.tool_calls_count);
+        this.tracker!.end(run_id, result.error ? "failed" : "completed", result.error);
+      }
 
       await stream_state.chain;
       await this.deliver_result(provider, message, alias, result, stream_state.message_id);
     } catch (e) {
+      if (run_id) this.tracker!.end(run_id, "failed", e instanceof Error ? e.message : String(e));
       this.logger.error("invoke failed", { alias, error: e instanceof Error ? e.message : String(e) });
-      await this.send_error_reply(provider, message, alias, e instanceof Error ? e.message : String(e));
+      await this.send_error_reply(provider, message, alias, e instanceof Error ? e.message : String(e), run_id);
     } finally {
       clearInterval(typing_ticker);
       const current = this.active_runs.get(run_key);
@@ -375,7 +453,7 @@ export class ChannelManager implements ServiceLike {
   ): Promise<void> {
     if (result.suppress_reply) return;
     if (!result.reply) {
-      if (result.error) await this.send_error_reply(provider, message, alias, result.error);
+      if (result.error) await this.send_error_reply(provider, message, alias, result.error, result.run_id);
       return;
     }
 
@@ -383,18 +461,41 @@ export class ChannelManager implements ServiceLike {
     const mention = format_mention(provider, message.sender_id);
     const final_text = `${mention}${rendered.content}`.trim();
 
+    const record_meta = {
+      stream_full_content: result.stream_full_content,
+      parsed_output: result.parsed_output,
+      tool_calls_count: result.tool_calls_count,
+      run_id: result.run_id,
+      usage: result.usage as Record<string, unknown> | undefined,
+    };
+
     if (result.streamed && stream_message_id) {
-      await this.registry.edit_message(provider, message.chat_id, stream_message_id, final_text, rendered.parse_mode);
-      await this.recorder.record_assistant(provider, message, alias, rendered.content);
+      if (!this.config.streaming.suppressFinalAfterStream) {
+        try {
+          await this.registry.edit_message(provider, message.chat_id, stream_message_id, final_text, rendered.parse_mode);
+        } catch (e) {
+          this.logger.warn("edit_message_failed, sending as new message", { error: e instanceof Error ? e.message : String(e) });
+          await this.send_outbound(provider, message, alias, final_text, { kind: "agent_reply", agent_alias: alias }, rendered.media);
+        }
+      }
+      if (rendered.media.length > 0) {
+        await this.send_outbound(provider, message, alias, "첨부 파일을 확인해주세요.", { kind: "agent_media", agent_alias: alias }, rendered.media);
+      }
+      await this.recorder.record_assistant(provider, message, alias, rendered.content, record_meta);
       return;
     }
 
-    await this.send_outbound(provider, message, alias, final_text, {
+    const outbound_meta: Record<string, unknown> = {
       kind: "agent_reply", agent_alias: alias,
       trigger_message_id: String((message.metadata as Record<string, unknown>)?.message_id || message.id || ""),
       render_mode: rendered.render_mode, render_parse_mode: rendered.parse_mode || null,
-    }, rendered.media);
-    await this.recorder.record_assistant(provider, message, alias, rendered.content);
+    };
+    if (result.parsed_output !== undefined) outbound_meta.parsed_output = result.parsed_output;
+    if (result.run_id) outbound_meta.run_id = result.run_id;
+    if (result.usage) outbound_meta.usage = result.usage;
+
+    await this.send_outbound(provider, message, alias, final_text, outbound_meta, rendered.media);
+    await this.recorder.record_assistant(provider, message, alias, rendered.content, record_meta);
   }
 
   private async send_or_edit_stream(
@@ -411,7 +512,11 @@ export class ChannelManager implements ServiceLike {
     if (!text) return;
 
     if (state.message_id) {
-      await this.registry.edit_message(provider, message.chat_id, state.message_id, text, rendered.parse_mode);
+      try {
+        await this.registry.edit_message(provider, message.chat_id, state.message_id, text, rendered.parse_mode);
+      } catch (e) {
+        this.logger.debug("stream_edit_failed", { error: e instanceof Error ? e.message : String(e) });
+      }
     } else {
       const result = await this.dispatch.send(provider, {
         id: `stream-${Date.now()}`, provider, channel: provider, sender_id: alias,
@@ -446,18 +551,22 @@ export class ChannelManager implements ServiceLike {
     return profile;
   }
 
-  private async send_error_reply(provider: ChannelProvider, message: InboundMessage, alias: string, error: string): Promise<void> {
+  private async send_error_reply(provider: ChannelProvider, message: InboundMessage, alias: string, error: string, run_id?: string): Promise<void> {
     const mention = format_mention(provider, message.sender_id);
     const reason = strip_secret_reference_tokens(normalize_error_detail(error));
-    await this.send_outbound(provider, message, alias, `${mention}${alias} 작업 처리에 실패했습니다. (${reason})`.trim(), { kind: "agent_error", agent_alias: alias });
+    const content = `${mention}${alias} 작업 처리에 실패했습니다. (${reason})`.trim();
+    await this.send_outbound(provider, message, alias, content, { kind: "agent_error", agent_alias: alias });
+    await this.recorder.record_assistant(provider, message, alias, content, { run_id });
   }
 
   private async send_command_reply(provider: ChannelProvider, message: InboundMessage, content: string): Promise<void> {
     const profile = this.effective_render_profile(provider, message.chat_id);
     const rendered = render_agent_output(content, profile);
-    await this.send_outbound(provider, message, this.config.defaultAlias, String(rendered.content || "").slice(0, 1600), {
+    const text = String(rendered.content || "").slice(0, 1600);
+    await this.send_outbound(provider, message, this.config.defaultAlias, text, {
       kind: "command_reply", render_parse_mode: rendered.parse_mode || null,
     });
+    await this.recorder.record_assistant(provider, message, this.config.defaultAlias, text);
   }
 
   private async send_outbound(
@@ -492,7 +601,7 @@ export class ChannelManager implements ServiceLike {
       : (channel?.parse_agent_mentions(String(message.content || "")) || []).map((m) => m.alias).filter(Boolean);
 
     const out = new Set<string>();
-    const bot_id = String(process.env.SLACK_BOT_USER_ID || "").trim().toLowerCase();
+    const bot_id = _read_bot_ids().slack;
     for (const alias of raw) {
       const low = alias.toLowerCase();
       if (provider === "slack" && bot_id && low === bot_id) { out.add(this.config.defaultAlias); continue; }
@@ -521,7 +630,53 @@ export class ChannelManager implements ServiceLike {
 
   private prune_seen(): void {
     prune_ttl_map(this.seen, (ts) => ts, this.config.seenTtlMs, this.config.seenMaxSize);
+    prune_ttl_map(this.control_reaction_seen, (ts) => ts, this.config.reactionActionTtlMs, this.config.seenMaxSize);
     this.approval.prune_seen(this.config.seenTtlMs, this.config.seenMaxSize);
+  }
+
+  /** 🛑 등 컨트롤 리액션으로 활성 실행을 취소. */
+  private handle_control_reactions(provider: ChannelProvider, rows: InboundMessage[]): void {
+    for (const row of rows) {
+      if (!is_reaction_message(row)) continue;
+      const names = extract_reaction_names(row);
+      if (names.length === 0 || !is_control_stop_reaction(names)) continue;
+
+      const sig = `${provider}:${row.chat_id}:${names.sort().join(",")}`;
+      if (this.control_reaction_seen.has(sig)) continue;
+      this.control_reaction_seen.set(sig, Date.now());
+
+      if (!this.tracker) continue;
+      const active = this.tracker.list_active().filter(
+        (e) => e.provider === provider && e.chat_id === row.chat_id,
+      );
+      if (active.length === 0) continue;
+
+      for (const entry of active) {
+        this.tracker.cancel(entry.run_id).then((r) => {
+          if (r.cancelled) {
+            this.logger.info("control reaction cancelled run", { run_id: entry.run_id, details: r.details });
+          }
+        }).catch((e) =>
+          this.logger.error("control reaction cancel failed", { error: e instanceof Error ? e.message : String(e) }),
+        );
+      }
+
+      const reply_to = resolve_reply_to(provider, row);
+      this.dispatch.send(provider, {
+        id: `${provider}-ctrl-${Date.now()}`,
+        provider,
+        channel: provider,
+        sender_id: "system",
+        chat_id: row.chat_id,
+        content: `\u{1F6D1} 실행이 중지되었습니다. (${active.length}건)`,
+        at: new Date().toISOString(),
+        reply_to,
+        thread_id: row.thread_id,
+        metadata: { kind: "control_reaction", action: "stop" },
+      }).catch((e) =>
+        this.logger.debug("control reaction reply failed", { error: e instanceof Error ? e.message : String(e) }),
+      );
+    }
   }
 }
 
@@ -531,6 +686,15 @@ function is_reaction_message(message: InboundMessage): boolean {
   return meta.is_reaction === true;
 }
 
+/** 환경변수에서 봇 ID를 매번 읽음. 캐싱하면 테스트·런타임 env 변경을 놓침. */
+function _read_bot_ids(): Record<string, string> {
+  return {
+    slack: String(process.env.SLACK_BOT_USER_ID || "").trim().toLowerCase(),
+    telegram: String(process.env.TELEGRAM_BOT_USER_ID || process.env.TELEGRAM_BOT_SELF_ID || "").trim().toLowerCase(),
+    discord: String(process.env.DISCORD_BOT_USER_ID || process.env.DISCORD_BOT_SELF_ID || "").trim().toLowerCase(),
+  };
+}
+
 function should_ignore(message: InboundMessage): boolean {
   const sender = String(message.sender_id || "").trim().toLowerCase();
   if (!sender || sender === "unknown" || sender.startsWith("subagent:") || sender === "approval-bot" || sender === "recovery") return true;
@@ -538,11 +702,7 @@ function should_ignore(message: InboundMessage): boolean {
   if (String(meta.kind || "").toLowerCase() === "task_recovery") return true;
   if (meta.from_is_bot === true) return true;
   const provider = resolve_provider(message);
-  const bot_ids: Record<string, string> = {
-    slack: String(process.env.SLACK_BOT_USER_ID || "").trim().toLowerCase(),
-    telegram: String(process.env.TELEGRAM_BOT_USER_ID || process.env.TELEGRAM_BOT_SELF_ID || "").trim().toLowerCase(),
-    discord: String(process.env.DISCORD_BOT_USER_ID || process.env.DISCORD_BOT_SELF_ID || "").trim().toLowerCase(),
-  };
+  const bot_ids = _read_bot_ids();
   if (provider && bot_ids[provider] && sender === bot_ids[provider]) return true;
 
   const slack = (meta.slack && typeof meta.slack === "object") ? meta.slack as Record<string, unknown> : null;

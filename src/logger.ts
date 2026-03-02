@@ -63,6 +63,6 @@ class ConsoleLogger implements Logger {
 
 const _log_level = parse_log_level(process.env.LOG_LEVEL);
 
-export function create_logger(name: string): Logger {
-  return new ConsoleLogger(name, _log_level);
+export function create_logger(name: string, level_override?: "debug" | "info" | "warn" | "error"): Logger {
+  return new ConsoleLogger(name, level_override ?? _log_level);
 }

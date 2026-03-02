@@ -59,7 +59,8 @@ export function render_agent_output(raw: string, profile: RenderProfile): Render
   if (!markdown) return { markdown: "", content: "" };
   if (profile.mode === "plain") return { markdown, content: markdown_to_plain(markdown) };
   if (profile.mode === "html") return { markdown, content: markdown_to_html(markdown), parse_mode: "HTML" };
-  return { markdown, content: markdown };
+  // Slack/Discord mrkdwn은 CommonMark 백슬래시 이스케이프를 지원하지 않으므로 제거
+  return { markdown, content: markdown.replace(ESCAPED_MARKDOWN_PUNCT_RE, "$1") };
 }
 
 function sanitize_markdown_output(raw: string, profile: RenderProfile): string {

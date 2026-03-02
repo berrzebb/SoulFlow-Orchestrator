@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
-import type { SkillMetadata, SkillSource } from "./skills.types.js";
+import type { SkillMetadata, SkillSource, SkillType } from "./skills.types.js";
 
 const SUMMARY_STOP_WORDS = new Set([
   "the", "and", "for", "with", "that", "this", "from", "into", "your",
@@ -54,6 +54,8 @@ export class SkillsLoader {
   private readonly merged = new Map<string, SkillMetadata>();
   private readonly raw_by_name = new Map<string, string>();
   private readonly alias_to_name = new Map<string, string>();
+  /** _shared/ 프로토콜: 이름(확장자 제외) → 본문. 스킬 아님. */
+  private readonly shared_protocols = new Map<string, string>();
 
   constructor(workspace: string) {
     this.workspace = workspace;
@@ -87,10 +89,19 @@ export class SkillsLoader {
     this.merged.clear();
     this.raw_by_name.clear();
     this.alias_to_name.clear();
+    this.shared_protocols.clear();
     for (const root of this.builtin_skills_roots) {
       this._scan_source(root, "builtin_skills", this.builtin_skills);
     }
     this._scan_source(this.workspace_skills_root, "workspace_skills", this.workspace_skills);
+
+    // .claude/commands/*.md — 워크스페이스 슬래시 커맨드 (스킬과 동일 취급)
+    const commands_dir = join(this.workspace, ".claude", "commands");
+    this._scan_flat_md(commands_dir, "workspace_commands", this.workspace_skills);
+
+    // .claude/skills/*/SKILL.md — 워크스페이스 스킬 (SDK 호환 경로)
+    const dot_claude_skills = join(this.workspace, ".claude", "skills");
+    this._scan_source(dot_claude_skills, "workspace_skills", this.workspace_skills);
 
     for (const [k, v] of this.builtin_skills.entries()) this.merged.set(k, v);
     for (const [k, v] of this.workspace_skills.entries()) this.merged.set(k, v);
@@ -98,6 +109,35 @@ export class SkillsLoader {
       this.register_alias(meta.name, meta.name);
       for (const alias of meta.aliases) {
         this.register_alias(alias, meta.name);
+      }
+    }
+    this._scan_shared_protocols();
+  }
+
+  /** _shared/ 디렉토리의 .md 파일을 프로토콜로 로드. 서브디렉토리는 네임스페이스 키 사용 (예: lang/typescript). */
+  private _scan_shared_protocols(): void {
+    const roots = [
+      ...this.builtin_skills_roots.map((r) => join(r, "_shared")),
+      join(this.workspace_skills_root, "_shared"),
+    ];
+    for (const root of roots) {
+      if (!existsSync(root)) continue;
+      this._scan_shared_dir(root, root);
+    }
+  }
+
+  private _scan_shared_dir(root: string, dir: string): void {
+    for (const name of readdirSync(dir)) {
+      const filePath = join(dir, name);
+      const st = statSync(filePath);
+      if (st.isDirectory()) {
+        this._scan_shared_dir(root, filePath);
+      } else if (st.isFile() && name.endsWith(".md")) {
+        const rel = relative(root, filePath).replace(/\\/g, "/");
+        const key = rel.replace(/\.md$/, "");
+        if (!this.shared_protocols.has(key)) {
+          this.shared_protocols.set(key, readFileSync(filePath, "utf-8").trim());
+        }
       }
     }
   }
@@ -117,10 +157,17 @@ export class SkillsLoader {
       const tools = this.parse_meta_string_list(meta.tools ?? meta.tool);
       const model = typeof meta.model === "string" ? meta.model.trim() || null : null;
 
+      const type: SkillType = String(meta.type || "").toLowerCase() === "role" ? "role" : "tool";
+      const role = type === "role" ? String(meta.role || "").trim() || null : null;
+      const soul = typeof meta.soul === "string" ? meta.soul.trim() || null : null;
+      const heart = typeof meta.heart === "string" ? meta.heart.trim() || null : null;
+      const shared_protocols = this.parse_meta_string_list(meta.shared_protocols);
+
       const skillMeta: SkillMetadata = {
         name,
         path: skillPath,
         source,
+        type,
         always,
         summary,
         aliases,
@@ -129,8 +176,67 @@ export class SkillsLoader {
         requirements,
         model,
         frontmatter: meta,
+        role,
+        soul,
+        heart,
+        shared_protocols,
       };
       target.set(name, skillMeta);
+      this.raw_by_name.set(name, raw);
+    }
+  }
+
+  /**
+   * 디렉토리 내 *.md 파일을 직접 스캔. .claude/commands/ 용.
+   * SKILL.MD 패턴이 아닌 파일명 기반 (review.md → "review").
+   */
+  private _scan_flat_md(
+    dir: string,
+    source: SkillSource,
+    target: Map<string, SkillMetadata>,
+    force_type?: SkillType,
+  ): void {
+    if (!existsSync(dir)) return;
+    for (const filename of readdirSync(dir)) {
+      if (!filename.endsWith(".md")) continue;
+      const filePath = join(dir, filename);
+      if (!statSync(filePath).isFile()) continue;
+      const raw = readFileSync(filePath, "utf-8");
+      const meta = this._parse_metadata(raw);
+      const body = this._strip_formatter(raw);
+      const name = String(meta.name || filename.replace(/\.md$/i, ""));
+      if (target.has(name)) continue;
+      const summary = String(meta.summary || meta.description || this._extract_summary(body));
+      const always = Boolean(meta.always === true || String(meta.load || "").toLowerCase() === "always");
+      const requirements = Array.isArray(meta.requires) ? meta.requires.map((v) => String(v)) : [];
+      const aliases = this.parse_meta_string_list(meta.aliases ?? meta.alias);
+      const triggers = this.parse_meta_string_list(meta.triggers ?? meta.trigger);
+      const tools = this.parse_meta_string_list(meta.tools ?? meta.tool);
+      const model = typeof meta.model === "string" ? meta.model.trim() || null : null;
+      const type: SkillType = force_type ?? (String(meta.type || "").toLowerCase() === "role" ? "role" : "tool");
+      const role = type === "role" ? String(meta.role || name).trim() || null : null;
+      const soul = typeof meta.soul === "string" ? meta.soul.trim() || null : null;
+      const heart = typeof meta.heart === "string" ? meta.heart.trim() || null : null;
+      const shared_protocols = this.parse_meta_string_list(meta.shared_protocols);
+
+      target.set(name, {
+        name,
+        path: filePath,
+        source,
+        type,
+        always,
+        summary,
+        aliases,
+        triggers,
+        tools,
+        requirements,
+        model,
+        frontmatter: meta,
+        role,
+        soul,
+        heart,
+        shared_protocols,
+      });
       this.raw_by_name.set(name, raw);
     }
   }
@@ -144,29 +250,21 @@ export class SkillsLoader {
     return "No summary.";
   }
 
-  list_skills(filter_unavailable = false): Array<Record<string, string>> {
-
+  list_skills(filter_unavailable = false, type_filter?: SkillType): Array<Record<string, string>> {
     const out: Array<Record<string, string>> = [];
     for (const meta of this.merged.values()) {
+      if (type_filter && meta.type !== type_filter) continue;
       if (filter_unavailable && !this._check_requirements(meta.frontmatter)) continue;
       out.push({
         name: meta.name,
         summary: meta.summary,
         source: meta.source,
+        type: meta.type,
         always: meta.always ? "true" : "false",
         model: meta.model || "auto",
       });
     }
     return out;
-  }
-
-  load_skills(name: string): string | null {
-
-    const resolved = this._resolve_skill_name(name);
-    if (!resolved) return null;
-    const raw = this.raw_by_name.get(resolved);
-    if (!raw) return null;
-    return this._strip_formatter(raw);
   }
 
   load_skills_for_context(skill_names: string[]): string {
@@ -195,9 +293,9 @@ export class SkillsLoader {
   }
 
   build_skill_summary(): string {
-
     const lines: string[] = [];
     for (const meta of this.merged.values()) {
+      if (meta.type === "role") continue;
       if (!this._check_requirements(meta.frontmatter)) continue;
       const tags: string[] = [meta.source];
       if (meta.always) tags.push("always");
@@ -209,13 +307,13 @@ export class SkillsLoader {
   }
 
   suggest_skills_for_text(task: string, limit = 6): string[] {
-
     const max = Math.max(1, Math.min(20, Number(limit || 6)));
     const text_norm = this.normalize_text_for_match(task);
     if (!text_norm) return [];
 
     const scored: Array<{ name: string; score: number }> = [];
     for (const meta of this.merged.values()) {
+      if (meta.type === "role") continue;
       if (!this._check_requirements(meta.frontmatter)) continue;
       let score = 0;
       const names = [...new Set([meta.name, ...meta.aliases])];
@@ -254,20 +352,6 @@ export class SkillsLoader {
       })
       .slice(0, max)
       .map((row) => row.name);
-  }
-
-  get_missing_requirements(name: string): string {
-    const meta = this.get_skill_meta(name);
-    if (!meta) return "skill_not_found";
-    return this._get_missing_requirements(meta);
-  }
-
-  get_skill_meta(name: string): Record<string, unknown> | null {
-
-    const resolved = this._resolve_skill_name(name);
-    if (!resolved) return null;
-    const meta = this.merged.get(resolved);
-    return meta ? { ...meta.frontmatter } : null;
   }
 
   get_skill_metadata(name: string): SkillMetadata | null {
@@ -339,12 +423,52 @@ export class SkillsLoader {
   }
 
   get_always_skills(): string[] {
-
     const out: string[] = [];
     for (const meta of this.merged.values()) {
       if (meta.always && this._check_requirements(meta.frontmatter)) out.push(meta.name);
     }
     return out;
+  }
+
+  /** 역할명으로 역할 스킬 조회. "implementer" → role:implementer 매핑. */
+  get_role_skill(role: string): SkillMetadata | null {
+    const target = String(role || "").trim();
+    if (!target) return null;
+    for (const meta of this.merged.values()) {
+      if (meta.type !== "role") continue;
+      if (meta.role === target) return meta;
+    }
+    return null;
+  }
+
+  /** 역할 스킬 본문 + _shared/ 프로토콜을 결합한 컨텍스트 문자열. */
+  load_role_context(role: string): string | null {
+    const meta = this.get_role_skill(role);
+    if (!meta) return null;
+    const raw = this.raw_by_name.get(meta.name);
+    const body = raw ? this._strip_formatter(raw) : null;
+    if (!body) return null;
+
+    const parts: string[] = [];
+    for (const proto_name of meta.shared_protocols) {
+      const content = this.shared_protocols.get(proto_name);
+      if (content) parts.push(`## protocol:${proto_name}\n${content}`);
+    }
+    parts.push(body);
+    return parts.join("\n\n").trim();
+  }
+
+  /** 등록된 모든 역할 스킬 목록. */
+  list_role_skills(): SkillMetadata[] {
+    const out: SkillMetadata[] = [];
+    for (const meta of this.merged.values()) {
+      if (meta.type === "role") out.push(meta);
+    }
+    return out;
+  }
+
+  get_shared_protocol(name: string): string | null {
+    return this.shared_protocols.get(name) || null;
   }
 
   private register_alias(alias_raw: string, name: string): void {

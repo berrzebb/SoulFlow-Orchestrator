@@ -192,10 +192,19 @@ export function parse_json_line(line: string): Record<string, unknown> | null {
 
 export function extract_json_event_text(
   event: Record<string, unknown>,
-  state: { last_full_text: string },
+  state: { last_full_text: string; metadata?: Record<string, unknown> },
 ): { delta?: string; final?: string } {
   const type = as_string(event.type).toLowerCase();
   if (!type) return {};
+
+  // init/system 이벤트에서 session_id, model 등 메타데이터 캡처
+  if (type === "init" || type === "system" || type === "session.created") {
+    state.metadata = state.metadata || {};
+    if (event.session_id) state.metadata.session_id = String(event.session_id);
+    if (event.model) state.metadata.model = String(event.model);
+    if (event.thread_id) state.metadata.thread_id = String(event.thread_id);
+    return {};
+  }
 
   if (type === "item.completed" && event.item && typeof event.item === "object") {
     const item = event.item as Record<string, unknown>;

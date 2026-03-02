@@ -159,11 +159,16 @@ export class ProviderRegistry {
     return "phi4_local";
   }
 
+  /** 지정 ID의 LlmProvider 인스턴스 반환. AgentBackendRegistry에서 래핑 시 사용. */
+  get_provider_instance(provider_id: ProviderId): LlmProvider {
+    const provider = this.providers.get(provider_id);
+    if (!provider) throw new Error(`provider_not_found:${provider_id}`);
+    return provider;
+  }
+
   private get_provider(provider_id?: ProviderId): LlmProvider {
     const id = provider_id || this.active_provider_id;
-    const provider = this.providers.get(id);
-    if (!provider) throw new Error(`provider_not_found:${id}`);
-    return provider;
+    return this.get_provider_instance(id);
   }
 
   get_circuit_breaker(provider_id: ProviderId): CircuitBreaker | undefined {
@@ -178,6 +183,11 @@ export class ProviderRegistry {
 
   get_health_scorer(): ProviderHealthScorer {
     return this.health_scorer;
+  }
+
+  /** 지정 프로바이더가 multi-turn tool loop을 지원하는지 확인. */
+  supports_tool_loop(provider_id?: ProviderId): boolean {
+    return this.get_provider(provider_id).supports_tool_loop;
   }
 
   async run_headless(args: {

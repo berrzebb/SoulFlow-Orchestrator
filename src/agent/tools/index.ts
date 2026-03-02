@@ -1,4 +1,4 @@
-import type { MessageBus, OutboundMessage } from "../../bus/index.js";
+import type { MessageBusLike, OutboundMessage } from "../../bus/index.js";
 import type { CronScheduler } from "../../cron/contracts.js";
 import { now_iso } from "../../utils/common.js";
 import { CronTool } from "./cron.js";
@@ -23,6 +23,51 @@ import { SecretTool } from "./secret-tool.js";
 import { PromiseTool } from "./promise-tool.js";
 import { RuntimeAdminTool } from "./runtime-admin.js";
 import type { AppendWorkflowEventInput, AppendWorkflowEventResult } from "../../events/types.js";
+import type { RuntimeExecutionPolicy } from "../../providers/types.js";
+import type { PreToolHook, PostToolHook } from "./types.js";
+import { redact_sensitive_unknown } from "../../security/sensitive.js";
+
+const WRITE_TOOLS = new Set(["exec", "write_file", "edit_file", "send_file", "message"]);
+const NETWORK_TOOLS = new Set(["web_search", "web_fetch", "web_browser"]);
+const DANGEROUS_COMMANDS = ["rm -rf", "drop table", "format c:", "mkfs", "dd if="];
+
+/** RuntimeExecutionPolicy.sandbox 기반 PreToolHook. fs_access/network_access/approval에 따라 allow/deny/ask 결정. */
+export function create_policy_pre_hook(policy: RuntimeExecutionPolicy): PreToolHook {
+  return (tool_name, params) => {
+    const sandbox = policy.sandbox;
+    if (!sandbox || sandbox.approval === "auto-approve") return { permission: "allow" };
+
+    if (!sandbox.network_access && NETWORK_TOOLS.has(tool_name)) {
+      return { permission: "deny", reason: `network access disabled: ${tool_name} blocked` };
+    }
+
+    if (sandbox.fs_access === "read-only" && WRITE_TOOLS.has(tool_name)) {
+      return { permission: "ask", reason: `read-only policy: ${tool_name} requires approval` };
+    }
+
+    if (sandbox.fs_access === "workspace-write" && tool_name === "exec") {
+      const cmd = String(params.command || "").toLowerCase();
+      if (DANGEROUS_COMMANDS.some((d) => cmd.includes(d))) {
+        return { permission: "deny", reason: `dangerous command blocked: ${cmd.slice(0, 50)}` };
+      }
+    }
+
+    if (sandbox.approval === "always-ask" && WRITE_TOOLS.has(tool_name)) {
+      return { permission: "ask", reason: `approval required: ${tool_name}` };
+    }
+
+    if (sandbox.approval === "trusted-only" && WRITE_TOOLS.has(tool_name)) {
+      const cmd = String(params.command || "").toLowerCase();
+      const is_dangerous = tool_name === "exec" && DANGEROUS_COMMANDS.some((d) => cmd.includes(d));
+      if (is_dangerous) {
+        return { permission: "deny", reason: `dangerous command blocked: ${cmd.slice(0, 50)}` };
+      }
+      return { permission: "ask", reason: `trusted-only: ${tool_name} requires approval` };
+    }
+
+    return { permission: "allow" };
+  };
+}
 
 export {
   ToolRegistry,
@@ -60,9 +105,9 @@ export type {
   ToolLike,
   ToolExecuteResult,
   ToolExecutionContext,
-  BackgroundTaskRecord,
-  BackgroundTaskStatus,
-  BackgroundExecuteResult,
+  ToolHookDecision,
+  PreToolHook,
+  PostToolHook,
 } from "./types.js";
 export type { DynamicToolManifestEntry } from "./dynamic.js";
 export type { InstallShellToolInput } from "./installer.js";
@@ -77,17 +122,27 @@ export function create_default_tool_registry(args?: {
   dynamic_store_path?: string;
   dynamic_store?: DynamicToolStoreLike;
   cron?: CronScheduler | null;
-  bus?: MessageBus | null;
+  bus?: MessageBusLike | null;
   spawn_callback?: ((request: SpawnRequest) => Promise<{ subagent_id: string; status: string; message?: string }>) | null;
   event_recorder?: ((event: AppendWorkflowEventInput) => Promise<AppendWorkflowEventResult>) | null;
   refresh_skills?: () => void;
+  runtime_policy?: RuntimeExecutionPolicy;
+  pre_hooks?: PreToolHook[];
+  post_hooks?: PostToolHook[];
 }): ToolRegistry {
+  const pre_hooks: PreToolHook[] = [...(args?.pre_hooks || [])];
+  if (args?.runtime_policy) {
+    pre_hooks.unshift(create_policy_pre_hook(args.runtime_policy));
+  }
   const registry = new ToolRegistry({
+    pre_hooks,
+    post_hooks: args?.post_hooks || [],
     on_approval_request: args?.bus
       ? async (request) => {
           const channel = String(request.context?.channel || "");
           const chat_id = String(request.context?.chat_id || "");
           if (!channel || !chat_id) return;
+          const safe_params = redact_sensitive_unknown(request.params) as Record<string, unknown>;
           const message: OutboundMessage = {
             id: `approval-${request.request_id}`,
             provider: channel,
@@ -116,7 +171,7 @@ export function create_default_tool_registry(args?: {
                 agent_id: String(request.context?.sender_id || "agent"),
                 phase: "approval",
                 summary: `${request.tool_name} approval required`,
-                payload: { tool: request.tool_name, params: request.params },
+                payload: { tool: request.tool_name, params: safe_params },
                 provider: channel,
                 channel,
                 chat_id,
@@ -125,7 +180,7 @@ export function create_default_tool_registry(args?: {
               },
               request_id: request.request_id,
               tool_name: request.tool_name,
-              params: request.params,
+              params: safe_params,
               created_at: request.created_at,
             },
           };
@@ -138,7 +193,7 @@ export function create_default_tool_registry(args?: {
                 agent_id: String(request.context?.sender_id || "agent"),
                 phase: "approval",
                 summary: `${request.tool_name} approval required`,
-                payload: { tool: request.tool_name, params: request.params },
+                payload: { tool: request.tool_name, params: safe_params },
                 provider: channel,
                 channel,
                 chat_id,

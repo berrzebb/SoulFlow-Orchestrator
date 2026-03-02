@@ -2,11 +2,52 @@ export type ProviderId = "chatgpt" | "claude_code" | "openrouter" | "phi4_local"
 
 export type ChatRole = "system" | "user" | "assistant" | "tool";
 
+// ── Sandbox Policy ──
+
+/** 파일시스템 접근 수준. */
+export type FsAccessLevel = "read-only" | "workspace-write" | "full-access";
+
+/** 도구 실행 승인 모드. */
+export type ApprovalMode = "always-ask" | "auto-approve" | "trusted-only";
+
+/**
+ * 오케스트레이터→에이전트 샌드박스 계약.
+ * 백엔드가 지원하지 않는 필드는 조용히 무시.
+ */
+export type SandboxPolicy = {
+  fs_access: FsAccessLevel;
+  network_access: boolean;
+  approval: ApprovalMode;
+  /** 쓰기 허용 추가 디렉토리. Codex 전용. */
+  writable_roots?: string[];
+  /** 계획 전용 모드 (도구 실행 차단). Claude SDK 전용. */
+  plan_only?: boolean;
+};
+
+/** MCP 서버 설정. 샌드박스와 직교. */
+export type McpPolicy = {
+  servers?: string[] | null;
+  enable_all_project?: boolean;
+};
+
+/** 프리셋 이름 — permission_profile 후속. */
+export type SandboxPreset = "strict" | "workspace-write" | "full-auto";
+
+/** 프리셋 → SandboxPolicy 팩토리. */
+export function sandbox_from_preset(preset: SandboxPreset): SandboxPolicy {
+  switch (preset) {
+    case "strict":
+      return { fs_access: "read-only", network_access: false, approval: "always-ask" };
+    case "workspace-write":
+      return { fs_access: "workspace-write", network_access: true, approval: "trusted-only" };
+    case "full-auto":
+      return { fs_access: "full-access", network_access: true, approval: "auto-approve" };
+  }
+}
+
 export type RuntimeExecutionPolicy = {
-  permission_profile?: "strict" | "workspace-write" | "full-auto";
-  command_profile?: "safe" | "balanced" | "extended";
-  mcp_servers?: string[] | null;
-  mcp_enable_all_project?: boolean;
+  sandbox: SandboxPolicy;
+  mcp?: McpPolicy;
 };
 
 export type ChatMessage = {
@@ -23,10 +64,25 @@ export type ToolCallRequest = {
   arguments: Record<string, unknown>;
 };
 
+/** 모델별 토큰/비용 내역. SDK result.modelUsage 기반. */
+export type ModelUsageEntry = {
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_input_tokens: number;
+  cache_creation_input_tokens: number;
+  cost_usd: number;
+};
+
 export type LlmUsage = {
   prompt_tokens?: number;
   completion_tokens?: number;
   total_tokens?: number;
+  cache_creation_input_tokens?: number;
+  cache_read_input_tokens?: number;
+  /** 총 비용 (USD). SDK total_cost_usd 기반. */
+  total_cost_usd?: number;
+  /** 모델별 토큰/비용 내역. SDK modelUsage 기반. */
+  model_usage?: Record<string, ModelUsageEntry>;
 };
 
 export class LlmResponse {
@@ -35,6 +91,8 @@ export class LlmResponse {
   readonly finish_reason: string;
   readonly usage: LlmUsage;
   readonly reasoning_content: string | null;
+  /** CLI 세션 ID, 모델명 등 프로바이더가 전달하는 부가 정보. */
+  readonly metadata: Record<string, unknown>;
 
   constructor(args: {
     content?: string | null;
@@ -42,12 +100,14 @@ export class LlmResponse {
     finish_reason?: string;
     usage?: LlmUsage;
     reasoning_content?: string | null;
+    metadata?: Record<string, unknown>;
   }) {
     this.content = args.content ?? null;
     this.tool_calls = args.tool_calls ?? [];
     this.finish_reason = args.finish_reason ?? "stop";
     this.usage = args.usage ?? {};
     this.reasoning_content = args.reasoning_content ?? null;
+    this.metadata = args.metadata ?? {};
   }
 
   get has_tool_calls(): boolean {
@@ -62,6 +122,7 @@ export type ChatOptions = {
   model?: string;
   max_tokens?: number;
   temperature?: number;
+  effort?: import("../agent/agent.types.js").EffortLevel;
   on_stream?: (chunk: string) => void | Promise<void>;
   abort_signal?: AbortSignal;
 };

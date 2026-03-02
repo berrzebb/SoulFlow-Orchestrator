@@ -48,10 +48,12 @@ export type CronStore = {
 
 export type CronOnJob = (job: CronJob) => Promise<string | null>;
 
+export type CronChangeType = "executed" | "added" | "removed" | "enabled" | "disabled" | "paused" | "resumed";
+
 export type CronServiceOptions = {
-  default_tick_ms?: number;
   running_lease_ms?: number;
   logger?: import("../logger.js").Logger | null;
+  on_change?: (type: CronChangeType, job_id?: string) => void;
 };
 
 export type CronServiceStatus = {

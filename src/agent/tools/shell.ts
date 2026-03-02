@@ -196,10 +196,23 @@ export class ExecTool extends Tool {
   private has_shell_obfuscation(command: string): boolean {
     const text = String(command || "");
     if (!text) return false;
+    // backtick 명령 치환
     if (/`[^`]+`/.test(text)) return true;
+    // $() 명령 치환
     if (/\$\([^)]*\)/.test(text)) return true;
+    // ${} 변수 확장 (단순 $VAR는 허용, 중괄호 확장만 차단)
+    if (/\$\{[^}]+\}/.test(text)) return true;
+    // alias/function 정의
     if (/\balias\s+[a-zA-Z_][a-zA-Z0-9_]*\s*=/.test(text)) return true;
     if (/\bfunction\s+[a-zA-Z_][a-zA-Z0-9_]*\b/.test(text)) return true;
+    // eval, source, exec — 간접 실행
+    if (/\b(eval|source|exec)\s+/.test(text)) return true;
+    // here-string / here-doc 리디렉션
+    if (/<<</.test(text) || /<<\s*['"]?[A-Za-z_]+['"]?\s*$/.test(text)) return true;
+    // hex/octal 이스케이프 시퀀스 ($'\x41', $'\101', \x 패턴)
+    if (/\$'[^']*\\[xX0][^']*'/.test(text)) return true;
+    // printf를 통한 우회 실행 (printf '\x...' | sh)
+    if (/\bprintf\b[^|]*\|/.test(text)) return true;
     return false;
   }
 }

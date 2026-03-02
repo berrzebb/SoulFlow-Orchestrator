@@ -1,6 +1,6 @@
 /** 도구를 카테고리로 분류하여 요청에 필요한 서브셋만 선택. */
 
-type ToolCategory = "filesystem" | "shell" | "web" | "messaging" | "file_transfer" | "scheduling" | "memory" | "decision" | "promise" | "secret" | "diagram" | "admin" | "spawn";
+type ToolCategory = "filesystem" | "shell" | "web" | "messaging" | "file_transfer" | "scheduling" | "memory" | "decision" | "promise" | "secret" | "diagram" | "admin" | "spawn" | "external";
 
 const TOOL_CATEGORIES: Record<string, ToolCategory> = {
   read_file: "filesystem",
@@ -32,8 +32,8 @@ const ALWAYS_INCLUDED: ReadonlySet<ToolCategory> = new Set(["messaging", "file_t
 /** 모드별 기본 포함 카테고리. */
 const MODE_DEFAULTS: Record<string, ReadonlySet<ToolCategory>> = {
   once: new Set(["scheduling", "memory", "decision", "promise", "secret", "messaging", "file_transfer", "diagram"]),
-  agent: new Set(["filesystem", "shell", "web", "messaging", "file_transfer", "scheduling", "memory", "decision", "promise", "secret", "diagram", "spawn"]),
-  task: new Set(["filesystem", "shell", "web", "messaging", "file_transfer", "scheduling", "memory", "decision", "promise", "secret", "diagram", "spawn", "admin"]),
+  agent: new Set(["filesystem", "shell", "web", "messaging", "file_transfer", "scheduling", "memory", "decision", "promise", "secret", "diagram", "spawn", "external"]),
+  task: new Set(["filesystem", "shell", "web", "messaging", "file_transfer", "scheduling", "memory", "decision", "promise", "secret", "diagram", "spawn", "admin", "external"]),
 };
 
 
@@ -48,8 +48,7 @@ export type ToolSelectionResult = {
 function resolve_skill_tool_categories(tool_names: string[]): Set<ToolCategory> {
   const out = new Set<ToolCategory>();
   for (const name of tool_names) {
-    const cat = TOOL_CATEGORIES[name];
-    if (cat) out.add(cat);
+    out.add(TOOL_CATEGORIES[name] ?? "external");
   }
   return out;
 }
@@ -69,8 +68,7 @@ export function select_tools_for_request(
 
   const tools = all_tools.filter((def) => {
     const name = String((def as Record<string, unknown>).name || tool_name_from_def(def));
-    const category = TOOL_CATEGORIES[name];
-    if (!category) return true;
+    const category = TOOL_CATEGORIES[name] ?? "external";
     return selected.has(category);
   });
 

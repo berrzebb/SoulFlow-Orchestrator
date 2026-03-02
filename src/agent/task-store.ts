@@ -132,7 +132,7 @@ export class TaskStore implements TaskStoreLike {
     await this.initialized;
     const row = with_sqlite(this.sqlite_path, (db) => db.prepare(
       `SELECT payload_json FROM tasks
-       WHERE provider = ? AND chat_id = ? AND status IN ('waiting_user_input', 'waiting_approval', 'failed')
+       WHERE provider = ? AND chat_id = ? AND status IN ('waiting_user_input', 'waiting_approval', 'failed', 'max_turns_reached')
        ORDER BY updated_at DESC LIMIT 1`,
     ).get(provider, chat_id) as { payload_json: string } | undefined) || null;
     return this.row_to_task(row);

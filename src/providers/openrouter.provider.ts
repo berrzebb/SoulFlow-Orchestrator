@@ -4,12 +4,18 @@ import { LlmResponse, parse_openai_response, sanitize_messages_for_api, type Cha
 const DEFAULT_TIMEOUT_MS = 120_000;
 
 export class OpenRouterProvider extends BaseLlmProvider {
+  private readonly http_referer: string;
+  private readonly app_title: string;
+
   constructor(args?: { api_base?: string; default_model?: string }) {
     super({
       id: "openrouter",
       api_base: args?.api_base ?? (process.env.OPENROUTER_API_BASE || "https://openrouter.ai/api/v1"),
       default_model: args?.default_model ?? (process.env.OPENROUTER_MODEL || "openai/gpt-4.1-mini"),
+      supports_tool_loop: true,
     });
+    this.http_referer = String(process.env.OPENROUTER_HTTP_REFERER || "").trim();
+    this.app_title = String(process.env.OPENROUTER_APP_TITLE || "").trim();
   }
 
   async chat(options: ChatOptions): Promise<LlmResponse> {
@@ -31,10 +37,8 @@ export class OpenRouterProvider extends BaseLlmProvider {
         Authorization: `Bearer ${api_key}`,
         "Content-Type": "application/json",
       };
-      const referer = String(process.env.OPENROUTER_HTTP_REFERER || "").trim();
-      const title = String(process.env.OPENROUTER_APP_TITLE || "").trim();
-      if (referer) headers["HTTP-Referer"] = referer;
-      if (title) headers["X-Title"] = title;
+      if (this.http_referer) headers["HTTP-Referer"] = this.http_referer;
+      if (this.app_title) headers["X-Title"] = this.app_title;
 
       const timeout_signal = AbortSignal.timeout(DEFAULT_TIMEOUT_MS);
       const signal = options.abort_signal

@@ -3,10 +3,23 @@ import type { Logger } from "../logger.js";
 import { now_iso } from "../utils/common.js";
 import type { ChatMessage, ProviderId, ProviderRegistry, ToolCallRequest } from "../providers/index.js";
 import { create_default_tool_registry, type ToolRegistry } from "./tools.js";
-import type { MessageBus, InboundMessage } from "../bus/index.js";
+import type { MessageBusLike } from "../bus/index.js";
 import type { ContextBuilder } from "./context.js";
 import { parse_tool_calls_from_text } from "./tool-call-parser.js";
 import { resolve_executor_provider } from "../providers/executor.js";
+import type { AgentBackendRegistry } from "./agent-registry.js";
+import type { ToolSchema } from "./tools/types.js";
+import type { AgentBackendId, AgentEvent, AgentEventSource, AgentFinishReason, AgentHooks } from "./agent.types.js";
+import { sandbox_from_preset, type RuntimeExecutionPolicy } from "../providers/types.js";
+import { create_policy_pre_hook } from "./tools/index.js";
+import { sanitize_provider_output } from "../channels/output-sanitizer.js";
+
+const SUBAGENT_FINISH_WARNINGS: Partial<Record<AgentFinishReason, string>> = {
+  max_turns: "에이전트 최대 턴 도달",
+  max_budget: "비용 한도 초과",
+  max_tokens: "토큰 한도 초과",
+  output_retries: "출력 재시도 한도 초과",
+};
 
 export type SubagentStatus = "idle" | "running" | "completed" | "failed" | "cancelled" | "offline";
 
@@ -15,6 +28,8 @@ export interface SubagentRef {
   role: string;
   model?: string;
   status: SubagentStatus;
+  /** CLI 세션 ID (claude: session_id, codex: thread_id). */
+  session_id?: string;
   created_at?: string;
   updated_at?: string;
   last_error?: string;
@@ -39,6 +54,8 @@ export type SpawnSubagentOptions = {
   parent_id?: string;
   /** 추천된 스킬 이름 — build_system_prompt에 스킬 컨텍스트를 포함. */
   skill_names?: string[];
+  /** 이벤트/스트림 훅. */
+  hooks?: Pick<AgentHooks, "on_event" | "on_stream">;
 };
 
 type RunningSubagent = {
@@ -46,6 +63,8 @@ type RunningSubagent = {
   abort: AbortController;
   done: Promise<void>;
   parent_id: string | null;
+  /** late-binding: 백엔드가 연결 후 등록. */
+  send_input?: (text: string) => void;
 };
 
 type ControllerPlan = {
@@ -61,18 +80,20 @@ export class SubagentRegistry {
   private readonly running = new Map<string, RunningSubagent>();
   private readonly workspace: string;
   private readonly providers: ProviderRegistry | null;
-  private readonly bus: MessageBus | null;
+  private readonly bus: MessageBusLike | null;
   private readonly build_tools: () => ToolRegistry;
   private readonly context_builder: ContextBuilder | null;
   private readonly logger: Logger | null;
+  private readonly agent_backends: AgentBackendRegistry | null;
 
   constructor(args?: {
     workspace?: string;
     providers?: ProviderRegistry | null;
-    bus?: MessageBus | null;
+    bus?: MessageBusLike | null;
     build_tools?: (() => ToolRegistry) | null;
     context_builder?: ContextBuilder | null;
     logger?: Logger | null;
+    agent_backends?: AgentBackendRegistry | null;
   }) {
     this.workspace = args?.workspace || process.cwd();
     this.providers = args?.providers || null;
@@ -80,6 +101,11 @@ export class SubagentRegistry {
     this.build_tools = args?.build_tools || (() => create_default_tool_registry({ workspace: this.workspace, bus: this.bus }));
     this.context_builder = args?.context_builder || null;
     this.logger = args?.logger || null;
+    this.agent_backends = args?.agent_backends || null;
+  }
+
+  get_agent_backends(): AgentBackendRegistry | null {
+    return this.agent_backends;
   }
 
   upsert(ref: SubagentRef): void {
@@ -149,8 +175,10 @@ export class SubagentRegistry {
     this.items.set(subagent_id, ref);
 
     const abort = new AbortController();
-    const done = this._run_subagent(subagent_id, options, abort);
-    this.running.set(subagent_id, { ref, abort, done, parent_id: options.parent_id || null });
+    const entry: RunningSubagent = { ref, abort, done: Promise.resolve(), parent_id: options.parent_id || null };
+    this.running.set(subagent_id, entry);
+    const done = this._run_subagent(subagent_id, options, abort, (fn) => { entry.send_input = fn; });
+    entry.done = done;
     done.finally(() => {
       this.running.delete(subagent_id);
     }).catch((e) => {
@@ -162,6 +190,13 @@ export class SubagentRegistry {
       status: "started",
       message: `Subagent '${label}' started (${subagent_id})`,
     };
+  }
+
+  send_input(id: string, text: string): boolean {
+    const entry = this.running.get(id);
+    if (!entry?.send_input) return false;
+    entry.send_input(text);
+    return true;
   }
 
   cancel(id: string, cascade = true): boolean {
@@ -188,7 +223,24 @@ export class SubagentRegistry {
     return true;
   }
 
-  private async _run_subagent(id: string, options: SpawnSubagentOptions, abort: AbortController): Promise<void> {
+  /** 특정 parent의 모든 자식 서브에이전트를 cascade cancel. */
+  cancel_by_parent_id(parent_id: string): number {
+    let count = 0;
+    for (const [id, running] of this.running.entries()) {
+      if (running.parent_id === parent_id) {
+        this.cancel(id, true);
+        count++;
+      }
+    }
+    return count;
+  }
+
+  private async _run_subagent(
+    id: string,
+    options: SpawnSubagentOptions,
+    abort: AbortController,
+    register_input?: (fn: (text: string) => void) => void,
+  ): Promise<void> {
     const providers = this.providers;
     if (!providers) throw new Error("providers_not_configured");
     const max_iterations = Math.max(1, Number(options.max_iterations || 15));
@@ -201,23 +253,35 @@ export class SubagentRegistry {
     const tools = this.build_tools();
     const always_skills = this.context_builder?.skills_loader.get_always_skills() || [];
     const merged_skills = [...new Set([...always_skills, ...(options.skill_names || [])])];
+    const role = options.role || "";
+    const role_skill = role && this.context_builder?.skills_loader.get_role_skill(role);
+    const decision_ctx = { agent_id: id };
+    const session_ctx = { channel: options.origin_channel || null, chat_id: options.origin_chat_id || null };
     const contextual_system = this.context_builder
-      ? await this.context_builder.build_system_prompt(merged_skills, { agent_id: id }, {
-          channel: options.origin_channel || null,
-          chat_id: options.origin_chat_id || null,
-        })
+      ? role_skill
+        ? await this.context_builder.build_role_system_prompt(role, merged_skills, decision_ctx, session_ctx)
+        : await this.context_builder.build_system_prompt(merged_skills, decision_ctx, session_ctx)
       : "";
+
+    // 백엔드 결정 (반복문 전에 1회만)
+    const executor_backend = this.agent_backends?.resolve_backend(executor_provider_id) ?? null;
+    const backend_id: AgentBackendId = executor_backend?.id
+      ?? (String(executor_provider_id).includes("codex") ? "codex_cli" : "claude_cli");
 
     let final_content = "";
     let stream_buffer = "";
     let last_stream_emit_at = 0;
     let last_executor_output = "";
     let loop_iteration = 0;
+    let actual_finish_reason: AgentFinishReason = "stop";
+    const label = options.label || options.task.slice(0, 40);
     const handoff_emitted = new Set<string>();
+    this._fire(options, id, label, (s) => ({ type: "init", source: s, at: now_iso() }), backend_id);
     try {
       for (let iteration = 0; iteration < max_iterations; iteration += 1) {
         if (abort.signal.aborted) {
           this._update_status(id, "cancelled");
+          this._fire(options, id, label, (s) => ({ type: "complete", source: s, at: now_iso(), finish_reason: "cancelled", content: "" }), backend_id);
           return;
         }
 
@@ -243,6 +307,7 @@ export class SubagentRegistry {
           temperature: 0.1,
         });
         const plan = this._parse_controller_plan(controller.content || "");
+        this._fire(options, id, label, (s) => ({ type: "content_delta", source: s, at: now_iso(), text: `[plan] iteration=${iteration + 1} done=${plan.done}` }), backend_id);
         if (plan.handoffs.length > 0) {
           for (const handoff of plan.handoffs) {
             const key = `${handoff.alias}::${handoff.instruction}`;
@@ -274,92 +339,198 @@ export class SubagentRegistry {
           content: `turn ${loop_iteration}: executor started`,
         });
 
-        // Clean executor turn: do not carry previous assistant/tool chat history.
-        const response = await providers.run_headless({
-          provider_id: executor_provider_id,
-          messages: [
-            {
-              role: "system",
-              content: this._build_executor_prompt(options, id, contextual_system),
+        // executor 턴: native_tool_loop 백엔드는 전체 tool loop를 내부에서 처리.
+        if (executor_backend?.native_tool_loop && this.agent_backends) {
+          const sa_task_id = `subagent:${id}`;
+          const ref = this.items.get(id);
+          const resume_session = ref?.session_id
+            ? { session_id: ref.session_id, backend: executor_backend.id, created_at: ref.created_at || now_iso() }
+            : (this.agent_backends.get_session_store()?.find_by_task(sa_task_id) ?? undefined);
+          // 서브에이전트 기본 정책: workspace-write + auto-approve (자율 실행, 정책 검증은 유지)
+          const sa_policy: RuntimeExecutionPolicy = {
+            sandbox: sandbox_from_preset("full-auto"),
+          };
+          const sa_hooks: AgentHooks = {
+            on_event: options.hooks?.on_event,
+            on_stream: async (chunk) => {
+              if (abort.signal.aborted) return;
+              stream_buffer += String(chunk || "");
+              const now = Date.now();
+              if (stream_buffer.length < 120 && now - last_stream_emit_at < 1500) return;
+              await this._flush_stream_buffer({
+                subagent_id: id,
+                label: options.label || options.task.slice(0, 40),
+                origin_channel: options.origin_channel,
+                origin_chat_id: options.origin_chat_id,
+                stream_buffer_ref: () => stream_buffer,
+                clear_stream_buffer: () => { stream_buffer = ""; },
+              });
+              last_stream_emit_at = now;
             },
-            {
-              role: "user",
-              content: plan.executor_prompt,
+            pre_tool_use: create_policy_pre_hook(sa_policy),
+            post_tool_use: (tool_name, _params, result, _ctx, is_error) => {
+              if (tool_name === "spawn" && !is_error && options.hooks?.on_event) {
+                try {
+                  const parsed = JSON.parse(String(result || "{}")) as Record<string, unknown>;
+                  const sid = String(parsed.subagent_id || "").trim();
+                  if (sid) {
+                    options.hooks.on_event({
+                      type: "tool_result",
+                      source: { backend: executor_backend?.id || "claude_sdk", task_id: `subagent:${id}` },
+                      at: now_iso(),
+                      tool_name: "spawn",
+                      tool_id: "",
+                      result: String(result || "").slice(0, 200),
+                      params: {},
+                      is_error: false,
+                    });
+                  }
+                } catch { /* noop */ }
+              }
             },
-          ],
-          tools: tools.get_definitions(),
-          model,
-          max_tokens,
-          temperature,
-          on_stream: async (chunk) => {
-            if (abort.signal.aborted) return;
-            stream_buffer += String(chunk || "");
-            const now = Date.now();
-            if (stream_buffer.length < 120 && now - last_stream_emit_at < 1500) return;
-            await this._flush_stream_buffer({
-              subagent_id: id,
-              label: options.label || options.task.slice(0, 40),
-              origin_channel: options.origin_channel,
-              origin_chat_id: options.origin_chat_id,
-              stream_buffer_ref: () => stream_buffer,
-              clear_stream_buffer: () => { stream_buffer = ""; },
-            });
-            last_stream_emit_at = now;
-          },
-        });
-        const provider_err = this._extract_provider_error(response.content || "");
-        if (provider_err) throw new Error(provider_err);
-        await this._flush_stream_buffer({
-          subagent_id: id,
-          label: options.label || options.task.slice(0, 40),
-          origin_channel: options.origin_channel,
-          origin_chat_id: options.origin_chat_id,
-          stream_buffer_ref: () => stream_buffer,
-          clear_stream_buffer: () => { stream_buffer = ""; },
-        });
-
-        // executor tool-use loop: 다중 라운드 tool call 지원
-        const MAX_TOOL_ROUNDS = 5;
-        let current_response = response;
-        let tool_messages: ChatMessage[] = [
-          { role: "system", content: this._build_executor_prompt(options, id, contextual_system) },
-          { role: "user", content: plan.executor_prompt },
-        ];
-        for (let tool_round = 0; tool_round < MAX_TOOL_ROUNDS; tool_round++) {
-          const implicit = current_response.has_tool_calls
-            ? []
-            : parse_tool_calls_from_text(current_response.content || "");
-          const effective = current_response.has_tool_calls ? current_response.tool_calls : implicit;
-          if (effective.length === 0) break;
-
-          tool_messages.push(this._assistant_tool_call_message(current_response.content, effective));
-          for (const tc of effective) {
-            if (abort.signal.aborted) { this._update_status(id, "cancelled"); return; }
-            const result = await tools.execute(tc.name, tc.arguments, {
-              signal: abort.signal,
-              channel: options.origin_channel,
-              chat_id: options.origin_chat_id,
-              sender_id: `subagent:${id}`,
-            });
-            tool_messages.push({ role: "tool", tool_call_id: tc.id, name: tc.name, content: result });
+          };
+          const sa_caps = executor_backend.capabilities;
+          const agent_result = await this.agent_backends.run(executor_backend.id, {
+            task: plan.executor_prompt,
+            task_id: sa_task_id,
+            system_prompt: this._build_executor_prompt(options, id, contextual_system),
+            tools: tools.get_definitions() as ToolSchema[],
+            tool_executors: tools.get_all(),
+            runtime_policy: sa_policy,
+            max_tokens,
+            temperature,
+            model,
+            effort: "medium",
+            ...(sa_caps.thinking ? { enable_thinking: true, max_thinking_tokens: 10000 } : {}),
+            resume_session,
+            register_send_input: register_input,
+            hooks: sa_hooks,
+            abort_signal: abort.signal,
+            tool_context: { channel: options.origin_channel, chat_id: options.origin_chat_id, sender_id: `subagent:${id}` },
+          });
+          if (agent_result.finish_reason === "error") {
+            throw new Error(String(agent_result.metadata?.error || "agent_backend_error"));
           }
-          const followup = await providers.run_headless({
+          if (agent_result.finish_reason === "cancelled") {
+            this._update_status(id, "cancelled");
+            this._fire(options, id, label, (s) => ({ type: "complete", source: s, at: now_iso(), finish_reason: "cancelled", content: "" }), backend_id);
+            return;
+          }
+          actual_finish_reason = agent_result.finish_reason;
+          // 비정상 종료 경고를 결과에 추가
+          const sa_warn = SUBAGENT_FINISH_WARNINGS[agent_result.finish_reason];
+          if (sa_warn) {
+            last_executor_output = `${agent_result.content || ""}\n\n⚠️ ${sa_warn}`.trim();
+          }
+          if (agent_result.session) {
+            const ref = this.items.get(id);
+            if (ref && !ref.session_id) {
+              ref.session_id = agent_result.session.session_id;
+              this.items.set(id, ref);
+            }
+          }
+          if (!sa_warn) last_executor_output = agent_result.content || "";
+        } else {
+          // CLI: 기존 run_headless + 수동 tool loop
+          const response = await providers.run_headless({
             provider_id: executor_provider_id,
-            messages: tool_messages,
+            messages: [
+              {
+                role: "system",
+                content: this._build_executor_prompt(options, id, contextual_system),
+              },
+              {
+                role: "user",
+                content: plan.executor_prompt,
+              },
+            ],
+            tools: tools.get_definitions(),
             model,
             max_tokens,
             temperature,
+            on_stream: async (chunk) => {
+              if (abort.signal.aborted) return;
+              stream_buffer += String(chunk || "");
+              const now = Date.now();
+              if (stream_buffer.length < 120 && now - last_stream_emit_at < 1500) return;
+              await this._flush_stream_buffer({
+                subagent_id: id,
+                label: options.label || options.task.slice(0, 40),
+                origin_channel: options.origin_channel,
+                origin_chat_id: options.origin_chat_id,
+                stream_buffer_ref: () => stream_buffer,
+                clear_stream_buffer: () => { stream_buffer = ""; },
+              });
+              last_stream_emit_at = now;
+            },
           });
-          const followup_err = this._extract_provider_error(followup.content || "");
-          if (followup_err) throw new Error(followup_err);
-          current_response = followup;
+          // session_id 캡처 (첫 응답에서만)
+          const sid = String(response.metadata?.session_id || response.metadata?.thread_id || "").trim();
+          if (sid) {
+            const ref = this.items.get(id);
+            if (ref && !ref.session_id) {
+              ref.session_id = sid;
+              this.items.set(id, ref);
+            }
+          }
+
+          const provider_err = this._extract_provider_error(response.content || "");
+          if (provider_err) throw new Error(provider_err);
+          await this._flush_stream_buffer({
+            subagent_id: id,
+            label: options.label || options.task.slice(0, 40),
+            origin_channel: options.origin_channel,
+            origin_chat_id: options.origin_chat_id,
+            stream_buffer_ref: () => stream_buffer,
+            clear_stream_buffer: () => { stream_buffer = ""; },
+          });
+
+          // executor tool-use loop: 다중 라운드 tool call 지원
+          const MAX_TOOL_ROUNDS = 5;
+          let current_response = response;
+          let tool_messages: ChatMessage[] = [
+            { role: "system", content: this._build_executor_prompt(options, id, contextual_system) },
+            { role: "user", content: plan.executor_prompt },
+          ];
+          for (let tool_round = 0; tool_round < MAX_TOOL_ROUNDS; tool_round++) {
+            const implicit = current_response.has_tool_calls
+              ? []
+              : parse_tool_calls_from_text(current_response.content || "");
+            const effective = current_response.has_tool_calls ? current_response.tool_calls : implicit;
+            if (effective.length === 0) break;
+
+            tool_messages.push(this._assistant_tool_call_message(current_response.content, effective));
+            for (const tc of effective) {
+              if (abort.signal.aborted) { this._update_status(id, "cancelled"); return; }
+              this._fire(options, id, label, (s) => ({ type: "tool_use", source: s, at: now_iso(), tool_name: tc.name, tool_id: tc.id, params: tc.arguments }), backend_id);
+              const result = await tools.execute(tc.name, tc.arguments, {
+                signal: abort.signal,
+                channel: options.origin_channel,
+                chat_id: options.origin_chat_id,
+                sender_id: `subagent:${id}`,
+              });
+              this._fire(options, id, label, (s) => ({ type: "tool_result", source: s, at: now_iso(), tool_name: tc.name, tool_id: tc.id, result: result.slice(0, 200) }), backend_id);
+              tool_messages.push({ role: "tool", tool_call_id: tc.id, name: tc.name, content: result });
+            }
+            const followup = await providers.run_headless({
+              provider_id: executor_provider_id,
+              messages: tool_messages,
+              model,
+              max_tokens,
+              temperature,
+            });
+            const followup_err = this._extract_provider_error(followup.content || "");
+            if (followup_err) throw new Error(followup_err);
+            current_response = followup;
+          }
+          last_executor_output = current_response.content || response.content || "";
         }
-        last_executor_output = current_response.content || response.content || "";
       }
 
       if (!final_content) {
         final_content = last_executor_output || "completed_without_final_response";
       }
+      final_content = sanitize_provider_output(final_content).trim() || final_content;
       await this._flush_stream_buffer({
         subagent_id: id,
         label: options.label || options.task.slice(0, 40),
@@ -369,6 +540,7 @@ export class SubagentRegistry {
         clear_stream_buffer: () => { stream_buffer = ""; },
       });
       this._update_status(id, "completed", undefined, final_content);
+      this._fire(options, id, label, (s) => ({ type: "complete", source: s, at: now_iso(), finish_reason: actual_finish_reason, content: final_content }), backend_id);
       if (options.announce !== false) {
         await this._announce_result({
           subagent_id: id,
@@ -382,6 +554,7 @@ export class SubagentRegistry {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this._update_status(id, "failed", message);
+      this._fire(options, id, label, (s) => ({ type: "error", source: s, at: now_iso(), error: message }), backend_id);
       if (options.announce !== false) {
         await this._announce_result({
           subagent_id: id,
@@ -393,6 +566,25 @@ export class SubagentRegistry {
         });
       }
     }
+  }
+
+  /** AgentEvent 발행 헬퍼. source를 자동 구성. */
+  private _fire(
+    options: SpawnSubagentOptions,
+    id: string,
+    label: string,
+    build: (source: AgentEventSource) => AgentEvent,
+    backend_id: AgentBackendId = "codex_cli",
+  ): void {
+    if (!options.hooks?.on_event) return;
+    const source: AgentEventSource = {
+      backend: backend_id,
+      subagent_id: id,
+      subagent_label: label,
+    };
+    try {
+      void Promise.resolve(options.hooks.on_event(build(source)));
+    } catch { /* noop */ }
   }
 
   private _parse_controller_plan(raw: string): ControllerPlan {
@@ -534,24 +726,22 @@ export class SubagentRegistry {
     origin_chat_id?: string;
   }): Promise<void> {
     if (!this.bus) return;
-    const inbound: InboundMessage = {
+    const channel = String(args.origin_channel || "").trim();
+    const chat_id = String(args.origin_chat_id || "").trim();
+    if (!channel || !chat_id) return;
+    await this.bus.publish_outbound({
       id: randomUUID().slice(0, 12),
-      provider: "system",
-      channel: args.origin_channel || "system",
+      provider: channel,
+      channel,
       sender_id: `subagent:${args.subagent_id}`,
-      chat_id: args.origin_chat_id || "direct",
-      content: [
-        `[Subagent ${args.label} done]`,
-        `Task: ${args.task}`,
-        `Result: ${args.content}`,
-      ].join("\n"),
+      chat_id,
+      content: `✅ ${args.label}: ${args.content.slice(0, 800)}`,
       at: now_iso(),
       metadata: {
-        type: "subagent_result",
+        kind: "subagent_result",
         subagent_id: args.subagent_id,
       },
-    };
-    await this.bus.publish_inbound(inbound);
+    });
   }
 
   private async _announce_handoff(args: {

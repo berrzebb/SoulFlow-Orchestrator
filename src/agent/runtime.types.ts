@@ -84,6 +84,8 @@ export interface AgentRuntimeLike {
   has_tool(name: string): boolean;
   register_tool(tool: ToolLike): void;
   get_tool_definitions(): Array<Record<string, unknown>>;
+  /** ToolLike 인스턴스 목록. SDK 백엔드의 MCP 도구 브리지에 사용. */
+  get_tool_executors(): ToolLike[];
   apply_tool_runtime_context(context: AgentToolRuntimeContext): void;
   execute_tool(
     name: string,
@@ -95,6 +97,11 @@ export interface AgentRuntimeLike {
   get_approval_request(request_id: string): AgentApprovalRequest | null;
   resolve_approval_request(request_id: string, response_text: string): AgentApprovalResolveResult;
   execute_approved_request(request_id: string): Promise<AgentApprovalExecuteResult>;
+  /** 네이티브 백엔드 승인 브리지: 승인 요청을 등록하고 채널 응답까지 Promise로 블로킹. */
+  register_approval_with_callback(
+    tool_name: string, detail: string,
+    context?: import("./tools/types.js").ToolExecutionContext, timeout_ms?: number,
+  ): { request_id: string; decision: Promise<AgentApprovalDecision> };
   run_agent_loop(options: AgentLoopRunOptions): Promise<AgentLoopRunResult>;
   run_task_loop(options: TaskLoopRunOptions): Promise<TaskLoopRunResult>;
   /** headless 에이전트를 spawn하여 도구 실행이 필요한 작업을 위임하고 완료를 대기. */
@@ -105,10 +112,14 @@ export interface AgentRuntimeLike {
   find_waiting_task(provider: string, chat_id: string): Promise<import("../contracts.js").TaskState | null>;
   /** Task ID로 상태를 조회. */
   get_task(task_id: string): Promise<import("../contracts.js").TaskState | null>;
+  /** Task에 연결된 에이전트 세션을 조회. */
+  find_session_by_task(task_id: string): import("./agent.types.js").AgentSession | null;
   /** Task을 취소. */
   cancel_task(task_id: string, reason?: string): Promise<import("../contracts.js").TaskState | null>;
   /** 완료/취소되지 않은 활성 Task 목록. */
   list_active_tasks(): import("../contracts.js").TaskState[];
+  /** waiting 상태에서 TTL 초과한 Task를 자동 취소. */
+  expire_stale_tasks(ttl_ms?: number): import("../contracts.js").TaskState[];
   /** 현재 실행 중인 Agent Loop 목록. */
   list_active_loops(): import("../contracts.js").AgentLoopState[];
   /** Agent Loop을 중지. */

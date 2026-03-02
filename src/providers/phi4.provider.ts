@@ -6,6 +6,7 @@ const DEFAULT_PER_CALL_TIMEOUT_MS = 90_000;
 
 export class Phi4LocalProvider extends BaseLlmProvider {
   private readonly per_call_timeout_ms: number;
+  private readonly api_key: string;
 
   constructor(args?: { api_base?: string; default_model?: string; per_call_timeout_ms?: number }) {
     super({
@@ -14,6 +15,7 @@ export class Phi4LocalProvider extends BaseLlmProvider {
       default_model: args?.default_model ?? (process.env.PHI4_MODEL || "phi4"),
     });
     this.per_call_timeout_ms = args?.per_call_timeout_ms ?? DEFAULT_PER_CALL_TIMEOUT_MS;
+    this.api_key = String(process.env.PHI4_API_KEY || "").trim();
   }
 
   async chat(options: ChatOptions): Promise<LlmResponse> {
@@ -31,7 +33,7 @@ export class Phi4LocalProvider extends BaseLlmProvider {
 
     try {
       const headers: Record<string, string> = { "Content-Type": "application/json" };
-      if (process.env.PHI4_API_KEY) headers.Authorization = `Bearer ${process.env.PHI4_API_KEY}`;
+      if (this.api_key) headers.Authorization = `Bearer ${this.api_key}`;
 
       const timeout_signal = AbortSignal.timeout(this.per_call_timeout_ms);
       const signal = options.abort_signal
