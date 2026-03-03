@@ -229,12 +229,17 @@ export interface DashboardOAuthOps {
   start_auth(id: string, client_secret?: string, origin?: string): Promise<{ ok: boolean; auth_url?: string; error?: string }>;
   refresh(id: string): Promise<{ ok: boolean; error?: string }>;
   test(id: string): Promise<{ ok: boolean; detail?: string; error?: string }>;
-  list_presets(): Array<{ service_type: string; label: string; auth_url: string; token_url: string; scopes_available: string[]; default_scopes: string[]; supports_refresh: boolean; is_builtin?: boolean; token_auth_method?: "basic" | "body"; test_url?: string }>;
+  list_presets(): Array<{ service_type: string; label: string; auth_url: string; token_url: string; scopes_available: string[]; default_scopes: string[]; supports_refresh: boolean; is_builtin?: boolean; token_auth_method?: "basic" | "body"; scope_separator?: " " | ","; test_url?: string }>;
   register_preset(preset: {
     service_type: string; label: string; auth_url: string; token_url: string;
     scopes_available?: string[]; default_scopes?: string[]; supports_refresh?: boolean;
-    token_auth_method?: "basic" | "body"; test_url?: string;
+    token_auth_method?: "basic" | "body"; scope_separator?: " " | ","; test_url?: string;
     extra_auth_params?: Record<string, string>;
+  }): Promise<{ ok: boolean; error?: string }>;
+  update_preset(service_type: string, patch: {
+    scopes_available?: string[]; default_scopes?: string[]; supports_refresh?: boolean;
+    token_auth_method?: "basic" | "body"; scope_separator?: " " | ","; test_url?: string;
+    auth_url?: string; token_url?: string;
   }): Promise<{ ok: boolean; error?: string }>;
   unregister_preset(service_type: string): Promise<{ ok: boolean; error?: string }>;
 }
@@ -1477,6 +1482,15 @@ export class DashboardService implements ServiceLike {
       return;
     }
     const oauth_preset_match = url.pathname.match(/^\/api\/oauth\/presets\/([^/]+)$/);
+    if (oauth_preset_match && req.method === "PUT") {
+      const ops = this.options.oauth_ops;
+      if (!ops) { this._json(res, 503, { error: "oauth_ops_unavailable" }); return; }
+      const body = await this._read_json_body(req);
+      if (!body) { this._json(res, 400, { error: "invalid_body" }); return; }
+      const result = await ops.update_preset(decodeURIComponent(oauth_preset_match[1]), body as Parameters<typeof ops.update_preset>[1]);
+      this._json(res, result.ok ? 200 : 404, result);
+      return;
+    }
     if (oauth_preset_match && req.method === "DELETE") {
       const ops = this.options.oauth_ops;
       if (!ops) { this._json(res, 503, { error: "oauth_ops_unavailable" }); return; }

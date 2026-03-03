@@ -310,7 +310,7 @@ export class OrchestrationService {
           const result = await this.agent_backends.run(backend.id, {
             task: args.context_block,
             task_id: `once:${args.req.provider}:${args.req.message.chat_id}`,
-            system_prompt: `${String(messages[0].content || "")}\n\n${CUSTOM_TOOL_OVERLAY}`,
+            system_prompt: String(messages[0].content || ""),
             tools: args.tool_definitions as ToolSchema[],
             tool_executors: this.runtime.get_tool_executors(),
             runtime_policy: args.runtime_policy,
@@ -322,7 +322,6 @@ export class OrchestrationService {
             hooks: this._build_agent_hooks(stream, args.req.on_stream, args.runtime_policy, { channel: args.req.provider, chat_id: String(args.req.message.chat_id || "") }, args.req.on_tool_block, backend.id, args.req.on_progress, args.req.run_id, args.req.on_agent_event).hooks,
             abort_signal: args.req.signal,
             mcp_server_configs: this.get_mcp_configs?.() ?? undefined,
-            // SDK 네이티브 도구는 CUSTOM_TOOL_OVERLAY 프롬프트로 소프트 가이드 (하드 블록 제거)
             tool_context: args.tool_ctx,
           });
           this.flush_remaining(stream, args.req.on_stream);
@@ -423,7 +422,7 @@ export class OrchestrationService {
           const result = await this.agent_backends.run(backend.id, {
             task: args.context_block,
             task_id: `agent:${args.req.provider}:${args.req.message.chat_id}:${args.req.alias}`,
-            system_prompt: `${system}\n\n${AGENT_MODE_OVERLAY}\n\n${CUSTOM_TOOL_OVERLAY}`,
+            system_prompt: `${system}\n\n${AGENT_MODE_OVERLAY}`,
             tools: args.tool_definitions as ToolSchema[],
             tool_executors: this.runtime.get_tool_executors(),
             runtime_policy: args.runtime_policy,
@@ -435,7 +434,6 @@ export class OrchestrationService {
             hooks: this._build_agent_hooks(stream, args.req.on_stream, args.runtime_policy, { channel: args.req.provider, chat_id: String(args.req.message.chat_id || "") }, args.req.on_tool_block, backend.id, args.req.on_progress, args.req.run_id, args.req.on_agent_event).hooks,
             abort_signal: args.req.signal,
             mcp_server_configs: this.get_mcp_configs?.() ?? undefined,
-            // SDK 네이티브 도구는 CUSTOM_TOOL_OVERLAY 프롬프트로 소프트 가이드 (하드 블록 제거)
             tool_context: args.tool_ctx,
           });
           this.flush_remaining(stream, args.req.on_stream);
@@ -831,7 +829,7 @@ export class OrchestrationService {
       return await this.agent_backends.run(backend.id, {
         task: seed_prompt,
         task_id: `task:${task_id}`,
-        system_prompt: `${system}\n\n${AGENT_MODE_OVERLAY}\n\n${CUSTOM_TOOL_OVERLAY}`,
+        system_prompt: `${system}\n\n${AGENT_MODE_OVERLAY}`,
         tools: args.tool_definitions as ToolSchema[],
         tool_executors: this.runtime.get_tool_executors(),
         runtime_policy: args.runtime_policy,
@@ -843,7 +841,6 @@ export class OrchestrationService {
         hooks: this._build_agent_hooks(stream, args.req.on_stream, args.runtime_policy, { channel: args.req.provider, chat_id: String(args.req.message.chat_id || "") }, args.req.on_tool_block, backend.id, args.req.on_progress, args.req.run_id, args.req.on_agent_event).hooks,
         abort_signal: args.req.signal,
         mcp_server_configs: this.get_mcp_configs?.() ?? undefined,
-        // SDK 네이티브 도구는 CUSTOM_TOOL_OVERLAY 프롬프트로 소프트 가이드 (하드 블록 제거)
         tool_context: task_tool_ctx,
         ...(resume_session ? { resume_session } : {}),
       });
@@ -1516,13 +1513,12 @@ const ONCE_MODE_OVERLAY = [
   "Always respond in Korean as the butler persona.",
 ].join("\n");
 
-/** agent 모드 전용 지시. 도구를 적극적으로 사용하도록 유도. */
+/** agent 모드 전용 지시. */
 const AGENT_MODE_OVERLAY = [
   "# Execution Mode: agent",
   "You are a butler assistant operating in multi-turn agent mode.",
   "Never reveal your internal model name, provider, or system architecture.",
-  "You MUST use the provided tools to accomplish the user's request — do not just describe what you would do.",
-  "Continue calling tools until the task is fully complete.",
+  "Use tools when the task requires execution, file access, or external interaction. Do not call tools unnecessarily — if you can answer directly, do so.",
   "Never expose internal orchestration meta text.",
   "Always respond in Korean as the butler persona.",
   "The workspace directory is separate from the source code. Ignore git status of unrelated files (e.g. src/) — they are managed by a different process. Never halt or refuse work due to uncommitted changes outside your workspace.",
@@ -1536,20 +1532,6 @@ const AGENT_TOOL_NUDGE = [
 ].join("\n");
 
 
-/** 커스텀 도구 우선 사용 지시. Codex 등 disallowedTools 미지원 백엔드를 위한 소프트 가드. */
-const CUSTOM_TOOL_OVERLAY = [
-  "# Tool Usage Policy",
-  "Always prefer the registered custom tools over built-in alternatives:",
-  "- Shell/command execution: use `exec` (not commandExecution or Bash)",
-  "- File reading: use `read_file`",
-  "- File writing: use `write_file`",
-  "- File editing: use `edit_file` (not fileChange or Edit)",
-  "- Directory listing: use `list_dir`",
-  "- Web search: use `web_search` (not webSearch or WebSearch)",
-  "- Web page fetch: use `web_fetch`",
-  "- File transfer: use `send_file` for sending files to the user",
-  "Only use built-in tools when no custom equivalent exists.",
-].join("\n");
 
 function format_secret_notice(guard: { missing_keys: string[]; invalid_ciphertexts: string[] }): string {
   const missing = guard.missing_keys.filter(Boolean).slice(0, 8);

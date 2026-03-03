@@ -37,15 +37,16 @@ export class OAuthFlowService {
       created_at: Date.now(),
     });
 
+    const preset = get_preset(integration.service_type);
+    const scope_sep = preset?.scope_separator ?? " ";
     const params = new URLSearchParams({
       client_id: "", // placeholder — 실제 client_id는 아래에서 대체
       redirect_uri: integration.redirect_uri,
-      scope: integration.scopes.join(" "),
+      scope: integration.scopes.join(scope_sep),
       state,
       response_type: "code",
     });
 
-    const preset = get_preset(integration.service_type);
     if (preset?.extra_auth_params) {
       for (const [k, v] of Object.entries(preset.extra_auth_params)) {
         params.set(k, v);

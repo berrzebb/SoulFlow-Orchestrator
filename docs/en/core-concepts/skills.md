@@ -42,6 +42,27 @@ Edit skill files directly from **Workspace → Skills tab**.
 
 > Builtin skills are embedded in source code and cannot be edited from the dashboard.
 
+### Tool Picker (shown automatically when editing SKILL.md)
+
+When editing `SKILL.md`, a **Tool Picker** appears below the editor automatically.
+
+| Section | Content |
+|---------|---------|
+| **Tools:** | SoulFlow registry tools — click to toggle in the `tools:` frontmatter field |
+| **SDK:** | Claude Code native tools: Bash · Read · Write · Edit · Glob · Grep · etc. |
+| **OAuth:** | Registered OAuth services — click to toggle in the `oauth:` frontmatter field |
+| **Role preset:** | Click a role button → bulk-merge that role's tool set |
+
+The tool picker directly updates the `tools:` and `oauth:` fields in the SKILL.md frontmatter:
+
+```markdown
+---
+metadata:
+  tools: [web_search, send_message, read_file]
+  oauth: [github]
+---
+```
+
 ## Skill Management Commands
 
 ```

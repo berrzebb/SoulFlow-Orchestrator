@@ -1451,6 +1451,13 @@ function _create_oauth_ops(deps: {
       return { ok: true };
     },
 
+    async update_preset(service_type, patch) {
+      const existing = get_oauth_preset(service_type);
+      if (!existing) return { ok: false, error: "preset_not_found" };
+      oauth_flow.register_custom_preset({ ...existing, ...patch });
+      return { ok: true };
+    },
+
     async unregister_preset(service_type) {
       const removed = oauth_flow.unregister_custom_preset(service_type);
       return removed ? { ok: true } : { ok: false, error: "preset_not_found_in_db" };

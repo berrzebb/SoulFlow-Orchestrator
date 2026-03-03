@@ -48,14 +48,19 @@ View and edit the agent's memory and DB-backed records.
 
 ### Sessions
 View conversation session list and message history.
-- Filter by channel
-- Click session → full message history
+- **Channel filter chips**: filter by All / Slack / Telegram / Discord / Web provider
+- Click session → provider badge + full message history with timestamps
 
 ### Skills
 View and edit agent skill files.
 - **Builtin skills**: read-only (built-in role skills)
 - **Workspace skills**: directly edit `SKILL.md` and `references/` files
 - Switch file tabs, click Save to persist — changes take effect immediately (no restart)
+- **Tool picker** (shown automatically when editing `SKILL.md`)
+  - `Tools:` — click to toggle SoulFlow registry tools → updates `tools:` frontmatter
+  - `SDK:` — Bash · Read · Write · Edit and other Claude Code native tools
+  - `OAuth:` — click to toggle registered OAuth services → updates `oauth:` frontmatter
+  - `Role preset:` — click a role button → bulk-merge that role's tool set
 
 ### Cron
 Manage cron jobs — list, add, edit, delete, run now.

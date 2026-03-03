@@ -28,6 +28,7 @@ interface OAuthPreset {
   supports_refresh: boolean;
   is_builtin?: boolean;
   token_auth_method?: "basic" | "body";
+  scope_separator?: " " | ",";
   test_url?: string;
 }
 
@@ -38,7 +39,7 @@ export default function OAuthPage() {
   const { toast } = useToast();
   const t = useT();
   const [modal, setModal] = useState<ModalMode | null>(null);
-  const [presetModal, setPresetModal] = useState(false);
+  const [presetModal, setPresetModal] = useState<OAuthPreset | null | "add">(null);
 
   const { data: integrations, isLoading } = useQuery<OAuthIntegration[]>({
     queryKey: ["oauth-integrations"],
@@ -102,19 +103,20 @@ export default function OAuthPage() {
       {/* ── Presets ── */}
       <div className="section-header" style={{ marginTop: 32 }}>
         <h2>{t("oauth.presets_title")}</h2>
-        <button className="btn btn--sm btn--accent" onClick={() => setPresetModal(true)}>
+        <button className="btn btn--sm btn--accent" onClick={() => setPresetModal("add")}>
           {t("oauth.add_preset")}
         </button>
       </div>
 
       <div className="stat-grid" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))" }}>
         {builtin_presets.map((p) => (
-          <PresetCard key={p.service_type} preset={p} onRemove={null} />
+          <PresetCard key={p.service_type} preset={p} onEdit={() => setPresetModal(p)} onRemove={null} />
         ))}
         {custom_presets.map((p) => (
           <PresetCard
             key={p.service_type}
             preset={p}
+            onEdit={() => setPresetModal(p)}
             onRemove={() => {
               if (confirm(t("oauth.preset_remove_confirm", { label: p.label }))) removePreset.mutate(p.service_type);
             }}
@@ -137,11 +139,12 @@ export default function OAuthPage() {
         />
       )}
 
-      {presetModal && (
+      {presetModal !== null && (
         <PresetModal
-          onClose={() => setPresetModal(false)}
+          initial={presetModal === "add" ? null : presetModal}
+          onClose={() => setPresetModal(null)}
           onSaved={() => {
-            setPresetModal(false);
+            setPresetModal(null);
             void qc.invalidateQueries({ queryKey: ["oauth-presets"] });
           }}
         />
@@ -152,8 +155,9 @@ export default function OAuthPage() {
 
 // ── PresetCard ────────────────────────────────────────────────────────────────
 
-function PresetCard({ preset, onRemove }: {
+function PresetCard({ preset, onEdit, onRemove }: {
   preset: OAuthPreset;
+  onEdit: () => void;
   onRemove: (() => void) | null;
 }) {
   const t = useT();
@@ -181,11 +185,12 @@ function PresetCard({ preset, onRemove }: {
           {preset.default_scopes.map((s) => <Badge key={s} status={s} variant="info" />)}
         </div>
       )}
-      {!preset.is_builtin && onRemove && (
-        <div style={{ marginTop: "auto", paddingTop: 8 }}>
+      <div style={{ marginTop: "auto", paddingTop: 8, display: "flex", gap: 6 }}>
+        <button className="btn btn--xs" onClick={onEdit}>{t("common.edit")}</button>
+        {!preset.is_builtin && onRemove && (
           <button className="btn btn--xs btn--danger" onClick={onRemove}>{t("common.remove")}</button>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
@@ -340,9 +345,7 @@ function OAuthModal({ mode, presets, onClose, onSaved }: {
   const [clientSecret, setClientSecret] = useState("");
   const [authUrl, setAuthUrl] = useState("");
   const [tokenUrl, setTokenUrl] = useState("");
-  const [selectedScopes, setSelectedScopes] = useState<Set<string>>(
-    new Set(initial?.scopes ?? []),
-  );
+  const [scopeText, setScopeText] = useState((initial?.scopes ?? []).join(", "));
   const [saving, setSaving] = useState(false);
   const { toast } = useToast();
 
@@ -351,11 +354,14 @@ function OAuthModal({ mode, presets, onClose, onSaved }: {
   const is_custom = serviceType === "custom";
   const is_basic_auth = active_preset?.token_auth_method === "basic";
 
+  const parse_scopes = () => scopeText.split(",").map((s) => s.trim()).filter(Boolean);
+  const is_scope_selected = (s: string) => parse_scopes().includes(s);
+
   const handle_service_change = (type: string) => {
     setServiceType(type);
     const preset = presets.find((p) => p.service_type === type);
     if (preset) {
-      setSelectedScopes(new Set(preset.default_scopes));
+      setScopeText(preset.default_scopes.join(", "));
       if (type !== "custom") {
         setAuthUrl(preset.auth_url);
         setTokenUrl(preset.token_url);
@@ -364,9 +370,9 @@ function OAuthModal({ mode, presets, onClose, onSaved }: {
   };
 
   const toggle_scope = (s: string) => {
-    const next = new Set(selectedScopes);
-    if (next.has(s)) next.delete(s); else next.add(s);
-    setSelectedScopes(next);
+    const current = parse_scopes();
+    const next = current.includes(s) ? current.filter((x) => x !== s) : [...current, s];
+    setScopeText(next.join(", "));
   };
 
   async function handleSubmit(e: React.FormEvent) {
@@ -377,7 +383,7 @@ function OAuthModal({ mode, presets, onClose, onSaved }: {
         await api.put(`/api/oauth/integrations/${encodeURIComponent(initial!.instance_id)}`, {
           label: label || initial!.instance_id,
           enabled,
-          scopes: [...selectedScopes],
+          scopes: parse_scopes(),
         });
         toast(t("oauth.updated"), "ok");
       } else {
@@ -385,7 +391,7 @@ function OAuthModal({ mode, presets, onClose, onSaved }: {
           service_type: serviceType,
           label: label || serviceType,
           client_id: clientId,
-          scopes: [...selectedScopes],
+          scopes: parse_scopes(),
         };
         if (clientSecret) body.client_secret = clientSecret;
         if (is_custom) {
@@ -502,19 +508,25 @@ function OAuthModal({ mode, presets, onClose, onSaved }: {
               </>
             )}
 
-            {available_scopes.length > 0 && (
-              <div className="form-group">
-                <label className="form-label">{t("oauth.scopes")}</label>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <div className="form-group">
+              <label className="form-label">{t("oauth.scopes")}</label>
+              {available_scopes.length > 0 && (
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 6 }}>
                   {available_scopes.map((s) => (
                     <label key={s} style={{ fontSize: "var(--fs-sm)", display: "flex", alignItems: "center", gap: 4 }}>
-                      <input type="checkbox" checked={selectedScopes.has(s)} onChange={() => toggle_scope(s)} />
+                      <input type="checkbox" checked={is_scope_selected(s)} onChange={() => toggle_scope(s)} />
                       {s}
                     </label>
                   ))}
                 </div>
-              </div>
-            )}
+              )}
+              <input
+                className="form-input"
+                value={scopeText}
+                onChange={(e) => setScopeText(e.target.value)}
+                placeholder={t("oauth.scopes_hint")}
+              />
+            </div>
           </div>
 
           <div className="modal__footer">
@@ -531,42 +543,60 @@ function OAuthModal({ mode, presets, onClose, onSaved }: {
 
 // ── PresetModal (프리셋 추가) ─────────────────────────────────────────────────
 
-function PresetModal({ onClose, onSaved }: {
+function PresetModal({ initial, onClose, onSaved }: {
+  initial: OAuthPreset | null;
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const isEdit = initial !== null;
   const t = useT();
   const { toast } = useToast();
 
-  const [serviceType, setServiceType] = useState("");
-  const [label, setLabel] = useState("");
-  const [authUrl, setAuthUrl] = useState("");
-  const [tokenUrl, setTokenUrl] = useState("");
-  const [tokenAuthMethod, setTokenAuthMethod] = useState<"body" | "basic">("body");
-  const [testUrl, setTestUrl] = useState("");
-  const [scopesAvailable, setScopesAvailable] = useState("");
-  const [defaultScopes, setDefaultScopes] = useState("");
-  const [supportsRefresh, setSupportsRefresh] = useState(true);
+  const [serviceType, setServiceType] = useState(initial?.service_type ?? "");
+  const [label, setLabel] = useState(initial?.label ?? "");
+  const [authUrl, setAuthUrl] = useState(initial?.auth_url ?? "");
+  const [tokenUrl, setTokenUrl] = useState(initial?.token_url ?? "");
+  const [tokenAuthMethod, setTokenAuthMethod] = useState<"body" | "basic">(initial?.token_auth_method ?? "body");
+  const [scopeSeparator, setScopeSeparator] = useState<" " | ",">(initial?.scope_separator ?? " ");
+  const [testUrl, setTestUrl] = useState(initial?.test_url ?? "");
+  const [scopesAvailable, setScopesAvailable] = useState((initial?.scopes_available ?? []).join(", "));
+  const [defaultScopes, setDefaultScopes] = useState((initial?.default_scopes ?? []).join(", "));
+  const [supportsRefresh, setSupportsRefresh] = useState(initial?.supports_refresh ?? true);
   const [saving, setSaving] = useState(false);
+
+  const parse_csv = (s: string) => s.split(",").map((x) => x.trim()).filter(Boolean);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
     try {
-      const scopes_available = scopesAvailable.split(",").map((s) => s.trim()).filter(Boolean);
-      const default_scopes = defaultScopes.split(",").map((s) => s.trim()).filter(Boolean);
-      await api.post("/api/oauth/presets", {
-        service_type: serviceType.trim(),
-        label: label.trim(),
-        auth_url: authUrl.trim(),
-        token_url: tokenUrl.trim(),
-        token_auth_method: tokenAuthMethod,
-        test_url: testUrl.trim() || undefined,
-        scopes_available,
-        default_scopes,
-        supports_refresh: supportsRefresh,
-      });
-      toast(t("oauth.preset_added"), "ok");
+      if (isEdit) {
+        await api.put(`/api/oauth/presets/${encodeURIComponent(initial.service_type)}`, {
+          auth_url: authUrl.trim(),
+          token_url: tokenUrl.trim(),
+          token_auth_method: tokenAuthMethod,
+          scope_separator: scopeSeparator,
+          test_url: testUrl.trim() || undefined,
+          scopes_available: parse_csv(scopesAvailable),
+          default_scopes: parse_csv(defaultScopes),
+          supports_refresh: supportsRefresh,
+        });
+        toast(t("oauth.preset_updated"), "ok");
+      } else {
+        await api.post("/api/oauth/presets", {
+          service_type: serviceType.trim(),
+          label: label.trim(),
+          auth_url: authUrl.trim(),
+          token_url: tokenUrl.trim(),
+          token_auth_method: tokenAuthMethod,
+          scope_separator: scopeSeparator,
+          test_url: testUrl.trim() || undefined,
+          scopes_available: parse_csv(scopesAvailable),
+          default_scopes: parse_csv(defaultScopes),
+          supports_refresh: supportsRefresh,
+        });
+        toast(t("oauth.preset_added"), "ok");
+      }
       onSaved();
     } catch (err) {
       toast(t("oauth.preset_save_failed", { error: err instanceof Error ? err.message : String(err) }), "err");
@@ -579,7 +609,7 @@ function PresetModal({ onClose, onSaved }: {
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal__header">
-          <h3>{t("oauth.preset_add_title")}</h3>
+          <h3>{isEdit ? t("oauth.preset_edit_title") : t("oauth.preset_add_title")}</h3>
           <button className="modal__close" onClick={onClose} aria-label={t("common.close_modal")}>x</button>
         </div>
         <form onSubmit={handleSubmit}>
@@ -589,9 +619,10 @@ function PresetModal({ onClose, onSaved }: {
               <input
                 className="form-input"
                 value={serviceType}
-                onChange={(e) => setServiceType(e.target.value)}
+                onChange={(e) => !isEdit && setServiceType(e.target.value)}
                 placeholder="e.g. notion, dropbox"
-                required
+                disabled={isEdit}
+                required={!isEdit}
               />
             </div>
             <div className="form-group">
@@ -599,9 +630,10 @@ function PresetModal({ onClose, onSaved }: {
               <input
                 className="form-input"
                 value={label}
-                onChange={(e) => setLabel(e.target.value)}
+                onChange={(e) => !isEdit && setLabel(e.target.value)}
                 placeholder="e.g. Notion"
-                required
+                disabled={isEdit}
+                required={!isEdit}
               />
             </div>
             <div className="form-group">
@@ -629,6 +661,13 @@ function PresetModal({ onClose, onSaved }: {
               <select className="form-input" value={tokenAuthMethod} onChange={(e) => setTokenAuthMethod(e.target.value as "body" | "basic")}>
                 <option value="body">{t("oauth.token_auth_body")}</option>
                 <option value="basic">{t("oauth.token_auth_basic")}</option>
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="form-label">{t("oauth.scope_separator")}</label>
+              <select className="form-input" value={scopeSeparator} onChange={(e) => setScopeSeparator(e.target.value as " " | ",")}>
+                <option value=" ">{t("oauth.scope_sep_space")}</option>
+                <option value=",">{t("oauth.scope_sep_comma")}</option>
               </select>
             </div>
             <div className="form-group">
@@ -669,7 +708,7 @@ function PresetModal({ onClose, onSaved }: {
           <div className="modal__footer">
             <button type="button" className="btn btn--sm" onClick={onClose}>{t("common.cancel")}</button>
             <button type="submit" className="btn btn--sm btn--accent" disabled={saving}>
-              {saving ? t("common.saving") : t("common.add")}
+              {saving ? t("common.saving") : isEdit ? t("common.save") : t("common.add")}
             </button>
           </div>
         </form>

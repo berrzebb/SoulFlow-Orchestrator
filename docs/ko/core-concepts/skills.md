@@ -42,6 +42,27 @@ workspace/skills/
 
 > builtin 스킬은 소스 코드에 내장되어 있어 대시보드 편집이 불가합니다.
 
+### 도구 피커 (SKILL.md 편집 시 자동 표시)
+
+`SKILL.md`를 편집할 때 에디터 아래에 **도구 피커**가 자동으로 표시됩니다.
+
+| 섹션 | 내용 |
+|------|------|
+| **도구:** | SoulFlow 레지스트리에 등록된 도구 (클릭으로 `tools:` 필드 토글) |
+| **SDK:** | Bash · Read · Write · Edit · Glob · Grep 등 Claude Code 네이티브 도구 |
+| **OAuth:** | 등록된 OAuth 서비스 (클릭으로 `oauth:` 필드 토글) |
+| **역할 프리셋:** | 역할 버튼 클릭 → 해당 역할의 도구 세트를 일괄 병합 |
+
+도구 피커는 SKILL.md 상단 frontmatter의 `tools:`, `oauth:` 필드를 직접 수정합니다:
+
+```markdown
+---
+metadata:
+  tools: [web_search, send_message, read_file]
+  oauth: [github]
+---
+```
+
 ## 스킬 관리 커맨드
 
 ```

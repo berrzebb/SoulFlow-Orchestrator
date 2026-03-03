@@ -6,7 +6,7 @@
 
 Slack · Telegram · Discord 메시지를 **헤드리스 에이전트**로 처리하는 비동기 오케스트레이션 런타임.
 
-4개 에이전트 백엔드(Claude/Codex × CLI/SDK), 8개 역할 기반 스킬 시스템, CircuitBreaker 기반 프로바이더 복원력, AES-256-GCM 보안 Vault, OAuth 2.0 외부 서비스 연동을 내장한 올인원 솔루션입니다.
+5개 에이전트 백엔드(Claude/Codex × CLI/SDK + OpenAI 호환), 8개 역할 기반 스킬 시스템, CircuitBreaker 기반 프로바이더 복원력, AES-256-GCM 보안 Vault, OAuth 2.0 외부 서비스 연동을 내장한 올인원 솔루션입니다.
 
 ## 목차
 
@@ -87,6 +87,7 @@ flowchart TD
 | `claude_cli` | Headless CLI 래퍼 | 안정성 · 범용 | — |
 | `codex_appserver` | 네이티브 AppServer | 병렬 실행 · tool loop 내장 | → `codex_cli` |
 | `codex_cli` | Headless CLI 래퍼 | 샌드박스 모드 지원 | — |
+| `openai_compatible` | OpenAI 호환 API | vLLM · Ollama · LM Studio · Together AI · Gemini 등 로컬/원격 모델 | — |
 
 ### 역할 스킬
 
@@ -178,11 +179,18 @@ Wizard에서 다음을 순서대로 설정합니다:
 
 #### Sessions 탭
 대화 세션 목록과 히스토리를 조회합니다.
+- **채널 필터**: 전체 / Slack / Telegram / Discord / Web 탭으로 프로바이더별 필터링
+- 세션 클릭 → 프로바이더 배지 + 타임스탬프 포함 전체 메시지 히스토리
 
 #### Skills 탭
 에이전트 스킬 목록과 파일 내용을 확인/편집합니다.
 - **builtin 스킬**: 읽기 전용
 - **workspace 스킬**: `SKILL.md` 및 `references/` 파일 직접 편집 가능
+- **도구 피커** (`SKILL.md` 편집 시 자동 표시)
+  - `도구:` — 클릭으로 SoulFlow 레지스트리 도구 → `tools:` frontmatter 토글
+  - `SDK:` — Bash · Read · Write · Edit 등 Claude Code 네이티브 도구
+  - `OAuth:` — 클릭으로 등록된 OAuth 서비스 → `oauth:` frontmatter 토글
+  - `역할 프리셋:` — 역할 버튼 클릭 → 해당 역할 도구 세트 일괄 병합
 
 #### Cron 탭
 크론 잡 목록 · 추가/수정/삭제 · 즉시 실행

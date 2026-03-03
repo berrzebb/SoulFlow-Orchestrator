@@ -4,7 +4,7 @@
 
 An asynchronous orchestration runtime that processes Slack · Telegram · Discord messages through **headless agents**.
 
-The batteries-included solution featuring 4 agent backends (Claude/Codex × CLI/SDK), an 8-role skill system, CircuitBreaker-based provider resilience, AES-256-GCM security vault, and OAuth 2.0 external service integrations.
+The batteries-included solution featuring 5 agent backends (Claude/Codex × CLI/SDK + OpenAI-compatible), an 8-role skill system, CircuitBreaker-based provider resilience, AES-256-GCM security vault, and OAuth 2.0 external service integrations.
 
 ## Table of Contents
 
@@ -85,6 +85,7 @@ An **orchestration runtime** that receives messages from chat channels and dispa
 | `claude_cli` | Headless CLI wrapper | Stability · general purpose | — |
 | `codex_appserver` | Native AppServer | Parallel execution · built-in tool loop | → `codex_cli` |
 | `codex_cli` | Headless CLI wrapper | Sandbox mode support | — |
+| `openai_compatible` | OpenAI-compatible API | vLLM · Ollama · LM Studio · Together AI · Gemini and other local/remote models | — |
 
 ### Role Skills
 
@@ -175,12 +176,20 @@ View and edit the agent's memory and DB-backed records.
 - **Decisions/Promises/Events**: Decision · promise · event records from DB
 
 #### Sessions Tab
-View conversation session list and message history.
+View conversation session list and message history across all channels.
+- **Channel filter**: All / Slack / Telegram / Discord / Web provider tabs
+- Click a session → provider badge + full message history with timestamps
 
 #### Skills Tab
 View and edit agent skill files.
 - **Builtin skills**: read-only
 - **Workspace skills**: directly edit `SKILL.md` and `references/` files
+- Switch between file tabs, edit, and click Save
+- **Tool picker** (shown automatically when editing `SKILL.md`)
+  - `Tools:` — click to toggle SoulFlow registry tools → updates frontmatter `tools:`
+  - `SDK:` — Bash · Read · Write · Edit · Glob · Grep and other Claude Code native tools
+  - `OAuth:` — click to toggle registered OAuth services → updates frontmatter `oauth:`
+  - `Role preset:` — click a role skill button → bulk-merge that role's tool set
 
 #### Cron Tab
 Manage cron jobs — list, add, edit, delete, run now.

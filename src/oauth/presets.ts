@@ -12,6 +12,8 @@ export interface OAuthServicePreset {
   is_builtin?: boolean;
   /** 토큰 교환/갱신 시 client 자격증명 전달 방식. "basic" = Authorization 헤더, "body" = 요청 바디 (기본값). */
   token_auth_method?: "basic" | "body";
+  /** OAuth 인증 URL의 scope 파라미터 구분자. 기본값: " " (공백). */
+  scope_separator?: " " | ",";
   /** 토큰 유효성 테스트에 사용할 API 엔드포인트. 미설정 시 테스트 생략. */
   test_url?: string;
   extra_auth_params?: Record<string, string>;

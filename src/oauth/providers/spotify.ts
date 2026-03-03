@@ -17,5 +17,6 @@ register_preset({
   supports_refresh: true,
   is_builtin: true,
   token_auth_method: "basic",
+  scope_separator: " ",
   test_url: "https://api.spotify.com/v1/me",
 });

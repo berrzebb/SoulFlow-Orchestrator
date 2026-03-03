@@ -48,8 +48,8 @@ Workspace는 8개 탭으로 구성됩니다.
 
 ### Sessions
 대화 세션 목록과 히스토리를 조회합니다.
-- 채널별 세션 필터
-- 세션 클릭 → 전체 메시지 히스토리
+- **채널 필터 칩**: 전체 / Slack / Telegram / Discord / Web 탭으로 프로바이더별 필터링
+- 세션 클릭 → 프로바이더 배지 + 타임스탬프 포함 전체 메시지 히스토리
 
 ### Skills
 에이전트 스킬 목록과 파일을 확인/편집합니다.
@@ -57,6 +57,11 @@ Workspace는 8개 탭으로 구성됩니다.
 - **workspace 스킬**: `SKILL.md` 및 `references/` 파일 직접 편집 가능
 - 파일 탭 전환, 편집 후 Save 버튼으로 저장
 - 저장 즉시 에이전트에 반영 (재시작 불필요)
+- **도구 피커** (`SKILL.md` 편집 시 자동 표시)
+  - `도구:` — SoulFlow 레지스트리 도구 칩 클릭 → `tools:` frontmatter 토글
+  - `SDK:` — Bash · Read · Write · Edit 등 네이티브 도구
+  - `OAuth:` — 등록된 OAuth 서비스 → `oauth:` frontmatter 토글
+  - `역할 프리셋:` — 역할 버튼 클릭 → 해당 역할 도구 세트 일괄 병합
 
 ### Cron
 크론 잡을 관리합니다.
