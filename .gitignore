@@ -30,6 +30,3 @@ Thumbs.db
 .idea/
 .vscode/
 *.swp
-
-# Tests
-tests/**
