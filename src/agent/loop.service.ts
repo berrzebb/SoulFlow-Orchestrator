@@ -34,6 +34,8 @@ export class AgentLoopStore {
   private readonly logger: Logger | null;
   private readonly on_cascade_cancel?: CascadeCancelFn;
   private readonly on_task_change?: (task: TaskState) => void;
+  private session_id = "";
+  private readonly loop_mailbox = new Map<string, string[]>();
 
   constructor(options?: { task_store?: TaskStore | null; logger?: Logger | null; on_cascade_cancel?: CascadeCancelFn; on_task_change?: (task: TaskState) => void }) {
     this.task_store = options?.task_store || null;
@@ -42,12 +44,14 @@ export class AgentLoopStore {
     this.on_task_change = options?.on_task_change;
   }
 
+  set_session_id(id: string): void { this.session_id = id; }
+
   private save_loop_snapshot(state: AgentLoopState): void {
     this.loops.set(state.loopId, { ...state });
   }
 
   private async save_task_snapshot(state: TaskState): Promise<void> {
-    state.memory = { ...state.memory, __updated_at_seoul: now_seoul_iso() };
+    state.memory = { ...state.memory, __updated_at_seoul: now_seoul_iso(), __session_id: this.session_id || undefined };
     this.tasks.set(state.taskId, { ...state });
     await this.persist_task(state);
     try { this.on_task_change?.({ ...state }); } catch { /* SSE 실패가 실행을 차단하면 안 됨 */ }
@@ -57,6 +61,37 @@ export class AgentLoopStore {
     if (!this.task_store) return;
     const rows = await this.task_store.list();
     for (const task of rows) this.tasks.set(task.taskId, task);
+
+    if (!this.session_id) return;
+    const orphaned = await this.recover_orphaned_tasks();
+    if (orphaned.length > 0) {
+      this.logger?.info("recovered_orphaned_tasks", { count: orphaned.length, ids: orphaned.map((t) => t.taskId) });
+    }
+  }
+
+  /** 이전 세션에서 running 상태로 남은 고아 작업을 정리. task-mode는 resume 가능하게, adhoc은 실패 처리. */
+  private async recover_orphaned_tasks(): Promise<TaskState[]> {
+    const recovered: TaskState[] = [];
+    for (const task of this.tasks.values()) {
+      if (task.status !== "running") continue;
+      const task_session = task.memory.__session_id as string | undefined;
+      if (task_session === this.session_id) continue;
+
+      if (task.taskId.startsWith("task:")) {
+        task.status = "waiting_user_input";
+        task.exitReason = "session_expired";
+        task.memory.__interrupted = true;
+      } else {
+        task.status = "failed";
+        task.exitReason = "session_expired";
+      }
+
+      this.tasks.set(task.taskId, task);
+      await this.persist_task(task);
+      try { this.on_task_change?.({ ...task }); } catch { /* broadcast 실패가 복구를 차단하면 안 됨 */ }
+      recovered.push(task);
+    }
+    return recovered;
   }
 
   list_loops(): AgentLoopState[] {
@@ -80,6 +115,23 @@ export class AgentLoopStore {
     this.loops.set(loop_id, state);
     this.on_cascade_cancel?.(loop_id);
     return state;
+  }
+
+  /** 실행 중인 루프에 외부 메시지 주입. 다음 턴에서 소비된다. */
+  inject_message(loop_id: string, message: string): boolean {
+    const loop_state = this.loops.get(loop_id);
+    if (!loop_state || loop_state.status !== "running") return false;
+    const queue = this.loop_mailbox.get(loop_id) || [];
+    queue.push(message);
+    this.loop_mailbox.set(loop_id, queue);
+    return true;
+  }
+
+  /** 지정 루프의 대기 메시지를 모두 꺼내고 큐를 비운다. */
+  drain_mailbox(loop_id: string): string[] {
+    const msgs = this.loop_mailbox.get(loop_id) || [];
+    if (msgs.length > 0) this.loop_mailbox.delete(loop_id);
+    return msgs;
   }
 
   /** waiting_approval/waiting_user_input 상태에서 TTL을 초과한 작업을 자동 취소. */
@@ -210,22 +262,34 @@ export class AgentLoopStore {
           tool_calls: effective_tool_calls,
           response,
         });
-        current_message = followup || "(tool execution completed; continue)";
+        const injected_after_tool = this.drain_mailbox(state.loopId);
+        const followup_parts = [followup || "(tool execution completed; continue)", ...injected_after_tool];
+        current_message = followup_parts.join("\n\n");
         this.save_loop_snapshot(state);
         continue;
       }
       tool_call_guard.reset();
 
-      const should_continue = options.check_should_continue
-        ? Boolean(await options.check_should_continue({ state, response, last_content: final_content }))
+      const injected_text_turn = this.drain_mailbox(state.loopId);
+      if (injected_text_turn.length > 0) {
+        current_message = injected_text_turn.join("\n\n");
+        this.save_loop_snapshot(state);
+        continue;
+      }
+
+      const continue_result = options.check_should_continue
+        ? await options.check_should_continue({ state, response, last_content: final_content })
         : false;
+      const should_continue = typeof continue_result === "string" ? continue_result.length > 0 : Boolean(continue_result);
       state.checkShouldContinue = should_continue;
       if (!should_continue) {
         state.status = "completed";
         state.terminationReason = "check_should_continue_false";
         break;
       }
-      current_message = final_content || options.objective;
+      current_message = typeof continue_result === "string"
+        ? continue_result
+        : (final_content || options.objective);
       this.save_loop_snapshot(state);
     }
 
@@ -249,6 +313,9 @@ export class AgentLoopStore {
     const state: TaskState = existing || {
       taskId: options.task_id,
       title: options.title,
+      objective: options.objective,
+      channel: options.channel,
+      chatId: options.chat_id,
       currentTurn: 0,
       maxTurns: max_turns,
       status: "running",
@@ -267,6 +334,10 @@ export class AgentLoopStore {
         state.status = "cancelled";
         state.exitReason = "aborted";
         break;
+      }
+      const injected_task = this.drain_mailbox(state.taskId);
+      if (injected_task.length > 0) {
+        state.memory.__injected_message = injected_task.join("\n\n");
       }
       const current_index = Math.max(0, Number(state.memory.__step_index || 0));
       if (current_index >= options.nodes.length) {

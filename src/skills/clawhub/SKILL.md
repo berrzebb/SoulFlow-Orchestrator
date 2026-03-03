@@ -5,6 +5,7 @@ metadata:
   model: local
   tools:
     - exec
+    - Bash
   triggers:
     - 스킬 설치
     - install skill

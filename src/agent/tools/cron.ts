@@ -90,7 +90,7 @@ export class CronTool extends Tool {
       to,
       delete_after_run,
     );
-    return JSON.stringify(job);
+    return `registered job_id=${job.id} name="${job.name}" delete_after_run=${job.delete_after_run}`;
   }
 
   private _parse_schedule(params: Record<string, unknown>): CronSchedule | string {

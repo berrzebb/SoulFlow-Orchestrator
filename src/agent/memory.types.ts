@@ -25,7 +25,7 @@ export type MemoryConsolidateOptions = {
 export type MemoryConsolidateResult = {
   ok: boolean;
   longterm_appended_chars: number;
-  daily_files_used: string[];
+  daily_entries_used: string[];
   archived_files: string[];
   summary: string;
   compressed_prompt: string;

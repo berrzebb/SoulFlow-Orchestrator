@@ -91,8 +91,8 @@ export class SecretHandler implements CommandHandler {
     await ctx.send_reply([
       `${mention}secret vault 상태`,
       `- names: ${names.length}`,
-      `- key_path: ${paths.key_path}`,
       `- store_path: ${paths.store_path}`,
+      `- master_key: DB 내장 (master_key 테이블)`,
     ].join("\n"));
     return true;
   }

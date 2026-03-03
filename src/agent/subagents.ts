@@ -6,7 +6,7 @@ import { create_default_tool_registry, type ToolRegistry } from "./tools.js";
 import type { MessageBusLike } from "../bus/index.js";
 import type { ContextBuilder } from "./context.js";
 import { parse_tool_calls_from_text } from "./tool-call-parser.js";
-import { resolve_executor_provider } from "../providers/executor.js";
+import { resolve_executor_provider, type ProviderCapabilities } from "../providers/executor.js";
 import type { AgentBackendRegistry } from "./agent-registry.js";
 import type { ToolSchema } from "./tools/types.js";
 import type { AgentBackendId, AgentEvent, AgentEventSource, AgentFinishReason, AgentHooks } from "./agent.types.js";
@@ -85,6 +85,7 @@ export class SubagentRegistry {
   private readonly context_builder: ContextBuilder | null;
   private readonly logger: Logger | null;
   private readonly agent_backends: AgentBackendRegistry | null;
+  private readonly provider_caps: ProviderCapabilities;
 
   constructor(args?: {
     workspace?: string;
@@ -94,6 +95,7 @@ export class SubagentRegistry {
     context_builder?: ContextBuilder | null;
     logger?: Logger | null;
     agent_backends?: AgentBackendRegistry | null;
+    provider_caps?: ProviderCapabilities;
   }) {
     this.workspace = args?.workspace || process.cwd();
     this.providers = args?.providers || null;
@@ -102,6 +104,7 @@ export class SubagentRegistry {
     this.context_builder = args?.context_builder || null;
     this.logger = args?.logger || null;
     this.agent_backends = args?.agent_backends || null;
+    this.provider_caps = args?.provider_caps || { chatgpt_available: false, claude_available: false, openrouter_available: false };
   }
 
   get_agent_backends(): AgentBackendRegistry | null {
@@ -245,7 +248,7 @@ export class SubagentRegistry {
     if (!providers) throw new Error("providers_not_configured");
     const max_iterations = Math.max(1, Number(options.max_iterations || 15));
     const controller_provider_id = providers.get_orchestrator_provider_id();
-    const executor_provider_id = resolve_executor_provider(options.provider_id || "claude_code");
+    const executor_provider_id = resolve_executor_provider(options.provider_id || "claude_code", this.provider_caps);
     const model = options.model;
     const max_tokens = options.max_tokens ?? 4096;
     const temperature = options.temperature ?? 0.4;

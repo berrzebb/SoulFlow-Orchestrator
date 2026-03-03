@@ -8,7 +8,7 @@ import type { SecretVaultService } from "../security/secret-vault.js";
 import type { TaskNode } from "../agent/loop.js";
 import type { Logger } from "../logger.js";
 import type { ToolExecutionContext } from "../agent/tools/types.js";
-import type { ExecutionMode, OrchestrationRequest, OrchestrationResult } from "./types.js";
+import type { ClassificationResult, ExecutionMode, OrchestrationRequest, OrchestrationResult } from "./types.js";
 import { StreamBuffer } from "../channels/stream-buffer.js";
 import {
   sanitize_provider_output,
@@ -19,8 +19,8 @@ import {
 import { seal_inbound_sensitive_text } from "../security/inbound-seal.js";
 import { redact_sensitive_text } from "../security/sensitive.js";
 import { is_local_reference } from "../utils/local-ref.js";
-import { resolve_executor_provider, type ExecutorProvider } from "../providers/executor.js";
-import { select_tools_for_request } from "./tool-selector.js";
+import { resolve_executor_provider, type ExecutorProvider, type ProviderCapabilities } from "../providers/executor.js";
+import { select_tools_for_request, TOOL_CATEGORIES } from "./tool-selector.js";
 import { create_policy_pre_hook } from "../agent/tools/index.js";
 import type { AgentBackendRegistry } from "../agent/agent-registry.js";
 import type { AgentEvent, AgentHooks, AgentRunResult, AgentSession } from "../agent/agent.types.js";
@@ -32,6 +32,7 @@ import { now_iso } from "../utils/common.js";
 
 type OrchestratorConfig = {
   executor_provider: ExecutorProvider;
+  provider_caps?: ProviderCapabilities;
   agent_loop_max_turns: number;
   task_loop_max_turns: number;
   streaming_enabled: boolean;
@@ -59,6 +60,13 @@ export type OrchestrationServiceDeps = {
 
 type ToolCallEntry = { name: string; arguments?: Record<string, unknown> };
 type ToolCallState = { suppress: boolean; file_requested?: boolean; done_sent?: boolean; tool_count: number };
+
+type ClassifierContext = {
+  active_tasks?: import("../contracts.js").TaskState[];
+  recent_history?: Array<{ role: string; content: string }>;
+  available_tool_categories?: string[];
+  available_skills?: string[];
+};
 
 /**
  * 메시지 수신 → 실행 모드 분류(once/agent/task) → 프로바이더 실행 → 결과 반환.
@@ -88,6 +96,10 @@ export class OrchestrationService {
     this.process_tracker = deps.process_tracker || null;
     this.get_mcp_configs = deps.get_mcp_configs || null;
     this.events = deps.events || null;
+  }
+
+  private _caps(): ProviderCapabilities {
+    return this.config.provider_caps ?? { chatgpt_available: true, claude_available: false, openrouter_available: false };
   }
 
   /** 세션 누적 CD 점수 조회. */
@@ -159,18 +171,32 @@ export class OrchestrationService {
     const active_tasks_in_chat = this.runtime.list_active_tasks().filter(
       (t) => String(t.memory?.chat_id || "") === String(req.message.chat_id),
     );
-    let mode = await this.pick_execution_mode(task_with_media, active_tasks_in_chat);
-    const executor = resolve_executor_provider(this.config.executor_provider);
+    const tool_categories = [...new Set(Object.values(TOOL_CATEGORIES))];
+    const classification = await this.pick_execution_mode(task_with_media, {
+      active_tasks: active_tasks_in_chat,
+      recent_history: req.session_history.slice(-6),
+      available_tool_categories: tool_categories,
+      available_skills: skill_names,
+    });
+    const executor = resolve_executor_provider(this.config.executor_provider, this._caps());
+    const skill_provider_prefs = this._collect_skill_provider_preferences(skill_names);
+
+    // builtin: 기존 커맨드 핸들러로 직접 위임
+    if (classification.mode === "builtin") {
+      this.log_event({ ...evt_base, phase: "done", summary: `builtin: ${classification.command}`, payload: { mode: "builtin", command: classification.command } });
+      return { reply: null, mode: "once", tool_calls_count: 0, streamed: false, builtin_command: classification.command, builtin_args: classification.args };
+    }
 
     // inquiry: Phi-4가 "이전 작업 상태 조회 의도"로 분류 → spawn 없이 직접 응답
-    if (mode === ("inquiry" as ExecutionMode) && active_tasks_in_chat.length > 0) {
+    if (classification.mode === "inquiry" && active_tasks_in_chat.length > 0) {
       this.logger.info("inquiry_shortcircuit", { count: active_tasks_in_chat.length, chat_id: req.message.chat_id });
       const session_lookup = (task_id: string) => this.runtime.find_session_by_task(task_id);
       const inquiry_result = { reply: format_active_task_summary(active_tasks_in_chat, session_lookup), mode: "once" as const, tool_calls_count: 0, streamed: false };
       this.log_event({ ...evt_base, phase: "done", summary: "inquiry shortcircuit", payload: { mode: "inquiry", active_count: active_tasks_in_chat.length } });
       return inquiry_result;
     }
-    if (mode === ("inquiry" as ExecutionMode)) mode = "once"; // 활성 작업 없으면 once로 fallback
+
+    let mode: ExecutionMode = classification.mode === "inquiry" ? "once" : classification.mode;
 
     if (mode !== "once" && !this.providers.supports_tool_loop(executor)) {
       this.logger.info("mode_downgrade", { original: mode, executor, reason: "no_tool_loop" });
@@ -204,48 +230,54 @@ export class OrchestrationService {
     };
 
     // once → executor 1회 호출. 에스컬레이션 시 executor 루프로 전환.
-    let escalation_error: string | undefined;
-    if (mode === "once") {
-      const once_result = await this.run_once({
-        req, executor, task_with_media, context_block, skill_names,
-        runtime_policy, tool_definitions, tool_ctx,
-      });
-      if (!is_once_escalation(once_result.error)) {
-        return finalize(once_result);
+    try {
+      let escalation_error: string | undefined;
+      if (mode === "once") {
+        const once_result = await this.run_once({
+          req, executor, task_with_media, context_block, skill_names,
+          runtime_policy, tool_definitions, tool_ctx, skill_provider_prefs,
+        });
+        if (!is_once_escalation(once_result.error)) {
+          return finalize(once_result);
+        }
+        escalation_error = once_result.error ?? undefined;
       }
-      escalation_error = once_result.error ?? undefined;
-    }
 
-    // agent/task 또는 once 에스컬레이션 → executor 루프
-    const loop_mode: "task" | "agent" = mode === "task"
-      ? "task"
-      : (escalation_error === "once_requires_task_loop" ? "task" : "agent");
+      // agent/task 또는 once 에스컬레이션 → executor 루프
+      const loop_mode: "task" | "agent" = mode === "task"
+        ? "task"
+        : (escalation_error === "once_requires_task_loop" ? "task" : "agent");
 
-    if (req.run_id && loop_mode !== mode) this.process_tracker?.set_mode(req.run_id, loop_mode);
+      if (req.run_id && loop_mode !== mode) this.process_tracker?.set_mode(req.run_id, loop_mode);
 
-    const run_loop = async (executor: ExecutorProvider): Promise<OrchestrationResult> => {
-      const loop_args = {
-        req, executor, task_with_media, media, context_block,
-        skill_names, runtime_policy, tool_definitions, tool_ctx,
+      const run_loop = async (executor: ExecutorProvider): Promise<OrchestrationResult> => {
+        const loop_args = {
+          req, executor, task_with_media, media, context_block,
+          skill_names, runtime_policy, tool_definitions, tool_ctx, skill_provider_prefs,
+        };
+        return loop_mode === "task"
+          ? this.run_task_loop(loop_args)
+          : this.run_agent_loop({ ...loop_args, history_lines });
       };
-      return loop_mode === "task"
-        ? this.run_task_loop(loop_args)
-        : this.run_agent_loop({ ...loop_args, history_lines });
-    };
 
-    const first = await run_loop(executor);
-    if (first.reply || first.suppress_reply) return finalize(first);
+      const first = await run_loop(executor);
+      if (first.reply || first.suppress_reply) return finalize(first);
 
-    if (executor === "claude_code") {
-      const fallback = resolve_executor_provider("chatgpt");
-      if (fallback !== executor) {
-        this.logger.warn("executor failed, trying fallback", { executor, fallback, error: first.error });
-        const second = await run_loop(fallback);
-        if (second.reply || second.suppress_reply) return finalize(second);
-        return finalize({ ...second, error: second.error || first.error });
+      if (executor === "claude_code") {
+        const fallback = resolve_executor_provider("chatgpt", this._caps());
+        if (fallback !== executor) {
+          this.logger.warn("executor failed, trying fallback", { executor, fallback, error: first.error });
+          const second = await run_loop(fallback);
+          if (second.reply || second.suppress_reply) return finalize(second);
+          return finalize({ ...second, error: second.error || first.error });
+        }
       }
+      return finalize(first);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      this.logger.error("execute unhandled", { error: msg });
+      return finalize(error_result(mode, new StreamBuffer(), msg));
     }
-    return finalize(first);
   }
 
   /** executor에게 1회 질의. Phi-4는 분류만 수행하고 실제 응답은 executor가 생성. */
@@ -258,6 +290,7 @@ export class OrchestrationService {
     runtime_policy: RuntimeExecutionPolicy;
     tool_definitions: Array<Record<string, unknown>>;
     tool_ctx: ToolExecutionContext;
+    skill_provider_prefs?: string[];
   }): Promise<OrchestrationResult> {
     const stream = new StreamBuffer();
     this.emit_execution_info(stream, args.req.on_stream, "once", args.executor);
@@ -267,16 +300,17 @@ export class OrchestrationService {
       { role: "user", content: args.context_block },
     ];
 
-    // native_tool_loop 백엔드: 전체 실행을 위임하고 결과를 변환.
+    // native_tool_loop 백엔드: 스마트 라우팅 우선, 레거시 폴백.
     if (this.agent_backends) {
-      const backend = this.agent_backends.resolve_backend(args.executor);
+      const backend = this.agent_backends.resolve_for_mode("once", args.skill_provider_prefs)
+        ?? this.agent_backends.resolve_backend(args.executor);
       if (backend?.native_tool_loop) {
         try {
           const caps = backend.capabilities;
           const result = await this.agent_backends.run(backend.id, {
             task: args.context_block,
             task_id: `once:${args.req.provider}:${args.req.message.chat_id}`,
-            system_prompt: String(messages[0].content || ""),
+            system_prompt: `${String(messages[0].content || "")}\n\n${CUSTOM_TOOL_OVERLAY}`,
             tools: args.tool_definitions as ToolSchema[],
             tool_executors: this.runtime.get_tool_executors(),
             runtime_policy: args.runtime_policy,
@@ -288,6 +322,7 @@ export class OrchestrationService {
             hooks: this._build_agent_hooks(stream, args.req.on_stream, args.runtime_policy, { channel: args.req.provider, chat_id: String(args.req.message.chat_id || "") }, args.req.on_tool_block, backend.id, args.req.on_progress, args.req.run_id, args.req.on_agent_event).hooks,
             abort_signal: args.req.signal,
             mcp_server_configs: this.get_mcp_configs?.() ?? undefined,
+            // SDK 네이티브 도구는 CUSTOM_TOOL_OVERLAY 프롬프트로 소프트 가이드 (하드 블록 제거)
             tool_context: args.tool_ctx,
           });
           this.flush_remaining(stream, args.req.on_stream);
@@ -372,13 +407,15 @@ export class OrchestrationService {
     tool_definitions: Array<Record<string, unknown>>;
     tool_ctx: ToolExecutionContext;
     history_lines: string[];
+    skill_provider_prefs?: string[];
   }): Promise<OrchestrationResult> {
     const stream = new StreamBuffer();
     this.emit_execution_info(stream, args.req.on_stream, "agent", args.executor);
 
-    // native backend 우선: 전체 tool loop를 백엔드에 위임
+    // native backend 우선: 스마트 라우팅 → 레거시 폴백
     if (this.agent_backends) {
-      const backend = this.agent_backends.resolve_backend(args.executor);
+      const backend = this.agent_backends.resolve_for_mode("agent", args.skill_provider_prefs)
+        ?? this.agent_backends.resolve_backend(args.executor);
       if (backend?.native_tool_loop) {
         try {
           const system = await this._build_system_prompt(args.skill_names, args.req.provider, args.req.message.chat_id);
@@ -386,7 +423,7 @@ export class OrchestrationService {
           const result = await this.agent_backends.run(backend.id, {
             task: args.context_block,
             task_id: `agent:${args.req.provider}:${args.req.message.chat_id}:${args.req.alias}`,
-            system_prompt: system,
+            system_prompt: `${system}\n\n${AGENT_MODE_OVERLAY}\n\n${CUSTOM_TOOL_OVERLAY}`,
             tools: args.tool_definitions as ToolSchema[],
             tool_executors: this.runtime.get_tool_executors(),
             runtime_policy: args.runtime_policy,
@@ -398,6 +435,7 @@ export class OrchestrationService {
             hooks: this._build_agent_hooks(stream, args.req.on_stream, args.runtime_policy, { channel: args.req.provider, chat_id: String(args.req.message.chat_id || "") }, args.req.on_tool_block, backend.id, args.req.on_progress, args.req.run_id, args.req.on_agent_event).hooks,
             abort_signal: args.req.signal,
             mcp_server_configs: this.get_mcp_configs?.() ?? undefined,
+            // SDK 네이티브 도구는 CUSTOM_TOOL_OVERLAY 프롬프트로 소프트 가이드 (하드 블록 제거)
             tool_context: args.tool_ctx,
           });
           this.flush_remaining(stream, args.req.on_stream);
@@ -425,7 +463,7 @@ export class OrchestrationService {
       tools: args.tool_definitions,
       provider_id: args.executor,
       runtime_policy: args.runtime_policy,
-      current_message: args.context_block,
+      current_message: `${AGENT_MODE_OVERLAY}\n\n${args.context_block}`,
       history_days: [],
       skill_names: args.skill_names,
       media: args.media,
@@ -437,7 +475,10 @@ export class OrchestrationService {
       temperature: 0.3,
       abort_signal: args.req.signal,
       on_stream: this.create_stream_handler(stream, args.req.on_stream),
-      check_should_continue: async () => false,
+      check_should_continue: async ({ state }) => {
+        if (state.currentTurn > 1) return false;
+        return AGENT_TOOL_NUDGE;
+      },
       on_tool_calls: this.create_tool_call_handler(args.tool_ctx, state, {
         buffer: stream, on_stream: args.req.on_stream, on_tool_block: args.req.on_tool_block,
         on_tool_event: (e) => this.session_cd.observe(e),
@@ -455,7 +496,10 @@ export class OrchestrationService {
     const err = extract_provider_error(content);
     if (err) return error_result("agent", stream, err, state.tool_count);
 
-    return reply_result("agent", stream, normalize_agent_reply(content, args.req.alias, args.req.message.sender_id), state.tool_count);
+    const reply = normalize_agent_reply(content, args.req.alias, args.req.message.sender_id);
+    if (!reply) return error_result("agent", stream, "empty_provider_response", state.tool_count);
+    const final_reply = state.tool_count === 0 ? append_no_tool_notice(reply) : reply;
+    return reply_result("agent", stream, final_reply, state.tool_count);
   }
 
   private async run_task_loop(args: {
@@ -468,6 +512,7 @@ export class OrchestrationService {
     runtime_policy: RuntimeExecutionPolicy;
     tool_definitions: Array<Record<string, unknown>>;
     tool_ctx: ToolExecutionContext;
+    skill_provider_prefs?: string[];
   }): Promise<OrchestrationResult> {
     const stream = new StreamBuffer();
     this.emit_execution_info(stream, args.req.on_stream, "task", args.executor);
@@ -480,16 +525,16 @@ export class OrchestrationService {
       {
         id: "plan",
         run: async ({ memory }) => ({
-          memory_patch: { ...memory, objective: args.task_with_media, seed_prompt: args.context_block, mode: "task_loop" },
+          memory_patch: { ...memory, seed_prompt: args.context_block, mode: "task_loop" },
           next_step_index: 1,
           current_step: "plan",
         }),
       },
       {
         id: "execute",
-        run: async ({ memory }) => {
+        run: async ({ task_state, memory }) => {
           const task_tool_ctx: ToolExecutionContext = { ...args.tool_ctx, task_id };
-          const objective = String(memory.objective || args.task_with_media);
+          const objective = task_state.objective || String(memory.objective || args.task_with_media);
           const seed_prompt = String(memory.seed_prompt || args.context_block);
 
           // native backend 우선: 전체 tool loop를 백엔드에 위임
@@ -522,7 +567,7 @@ export class OrchestrationService {
             tools: args.tool_definitions,
             provider_id: args.executor,
             runtime_policy: args.runtime_policy,
-            current_message: seed_prompt,
+            current_message: `${AGENT_MODE_OVERLAY}\n\n${seed_prompt}`,
             history_days: [],
             skill_names: args.skill_names,
             media: args.media,
@@ -570,9 +615,15 @@ export class OrchestrationService {
     const result = await this.runtime.run_task_loop({
       task_id,
       title: `ChannelTask:${args.req.alias}`,
+      objective: args.task_with_media,
+      channel: args.req.provider,
+      chat_id: args.req.message.chat_id,
       nodes,
       max_turns: this.config.task_loop_max_turns,
-      initial_memory: { alias: args.req.alias, channel: args.req.provider, chat_id: args.req.message.chat_id },
+      initial_memory: {
+        alias: args.req.alias,
+        __trigger_message_id: raw_message_id(args.req.message),
+      },
       abort_signal: args.req.signal,
     });
 
@@ -608,26 +659,43 @@ export class OrchestrationService {
   /** Phi-4에게 실행 모드 분류를 위임. 정규식 사전 필터 없이 항상 LLM 판단. */
   private async pick_execution_mode(
     task: string,
-    active_tasks?: import("../contracts.js").TaskState[],
-  ): Promise<ExecutionMode> {
+    ctx: ClassifierContext,
+  ): Promise<ClassificationResult> {
     const text = String(task || "").trim();
-    if (!text) return "once";
-    if (!has_orchestrator(this.providers)) return "once";
+    if (!text) return { mode: "once" };
+    if (!has_orchestrator(this.providers)) return { mode: "once" };
 
-    // 활성 작업이 있을 때만 inquiry 모드를 분류 옵션에 추가
-    const has_active = active_tasks && active_tasks.length > 0;
-    const active_context = has_active
-      ? build_active_task_context(active_tasks)
-      : "";
-    const prompt = has_active
-      ? EXECUTION_MODE_CLASSIFY_PROMPT + "\n" + INQUIRY_MODE_ADDENDUM + "\n" + active_context
-      : EXECUTION_MODE_CLASSIFY_PROMPT;
+    const has_active = ctx.active_tasks && ctx.active_tasks.length > 0;
+
+    // 프롬프트 조립: 모드 정의 + (inquiry 정의?) + flowchart + (활성 작업 컨텍스트?)
+    const parts = [EXECUTION_MODE_DEFINITIONS];
+    if (has_active) {
+      parts.push(INQUIRY_DEFINITION);
+      parts.push(INQUIRY_FLOWCHART);
+      parts.push(build_active_task_context(ctx.active_tasks!));
+    } else {
+      parts.push(BASE_FLOWCHART);
+    }
+    const prompt = parts.join("\n");
+
+    // user 메시지: 요청 + 가용 능력 + 최근 대화
+    const user_parts = [`[REQUEST]\n${text}`];
+    if (ctx.available_tool_categories?.length || ctx.available_skills?.length) {
+      user_parts.push(build_classifier_capabilities(
+        ctx.available_tool_categories || [],
+        ctx.available_skills || [],
+      ));
+    }
+    if (ctx.recent_history && ctx.recent_history.length > 0) {
+      const history_block = ctx.recent_history.map((r) => `[${r.role}] ${r.content}`).join("\n");
+      user_parts.push(`\n[RECENT_CONTEXT]\n${history_block}`);
+    }
 
     try {
       const response = await this.providers.run_orchestrator({
         messages: [
           { role: "system", content: prompt },
-          { role: "user", content: `[REQUEST]\n${text}` },
+          { role: "user", content: user_parts.join("\n\n") },
         ],
         max_tokens: 120,
         temperature: 0,
@@ -638,7 +706,7 @@ export class OrchestrationService {
       this.logger.debug("execution mode classify failed", { error: String(e) });
     }
 
-    return "once";
+    return { mode: "once" };
   }
 
   private create_stream_handler(
@@ -695,10 +763,27 @@ export class OrchestrationService {
     if (provider_err) return error_result(mode, stream, provider_err, result.tool_calls_count);
     const usage = _extract_usage(result.usage);
     const reply = normalize_agent_reply(content, req.alias, req.message.sender_id);
-    // 비정상 종료 시 reply 끝에 경고 힌트 추가
+    if (!reply) return error_result(mode, stream, "native_backend_empty_after_normalize", result.tool_calls_count);
     const warn = FINISH_REASON_WARNINGS[result.finish_reason];
-    const final_reply = warn ? `${reply}\n\n⚠️ ${warn}` : reply;
+    const with_warn = warn ? `${reply}\n\n⚠️ ${warn}` : reply;
+    const final_reply = mode === "agent" && result.tool_calls_count === 0
+      ? append_no_tool_notice(with_warn)
+      : with_warn;
     return reply_result(mode, stream, final_reply, result.tool_calls_count, result.parsed_output, usage);
+  }
+
+  /** 활성 스킬들의 preferred_providers를 수집 (중복 제거, 순서 유지). */
+  private _collect_skill_provider_preferences(skill_names: string[]): string[] {
+    const prefs: string[] = [];
+    const seen = new Set<string>();
+    for (const name of skill_names) {
+      const meta = this.runtime.get_context_builder().skills_loader.get_skill_metadata(name);
+      if (!meta?.preferred_providers?.length) continue;
+      for (const p of meta.preferred_providers) {
+        if (!seen.has(p)) { seen.add(p); prefs.push(p); }
+      }
+    }
+    return prefs;
   }
 
   /** 시스템 프롬프트를 빌드. butler 역할 힌트 포함. */
@@ -726,6 +811,7 @@ export class OrchestrationService {
       task_with_media: string;
       media: string[];
       context_block: string;
+      skill_provider_prefs?: string[];
     },
     stream: StreamBuffer,
     task_tool_ctx: ToolExecutionContext,
@@ -735,7 +821,8 @@ export class OrchestrationService {
     resume_session?: AgentSession,
   ): Promise<AgentRunResult | null> {
     if (!this.agent_backends) return null;
-    const backend = this.agent_backends.resolve_backend(args.executor);
+    const backend = this.agent_backends.resolve_for_mode("task", args.skill_provider_prefs)
+      ?? this.agent_backends.resolve_backend(args.executor);
     if (!backend?.native_tool_loop) return null;
 
     try {
@@ -744,7 +831,7 @@ export class OrchestrationService {
       return await this.agent_backends.run(backend.id, {
         task: seed_prompt,
         task_id: `task:${task_id}`,
-        system_prompt: system,
+        system_prompt: `${system}\n\n${AGENT_MODE_OVERLAY}\n\n${CUSTOM_TOOL_OVERLAY}`,
         tools: args.tool_definitions as ToolSchema[],
         tool_executors: this.runtime.get_tool_executors(),
         runtime_policy: args.runtime_policy,
@@ -756,6 +843,7 @@ export class OrchestrationService {
         hooks: this._build_agent_hooks(stream, args.req.on_stream, args.runtime_policy, { channel: args.req.provider, chat_id: String(args.req.message.chat_id || "") }, args.req.on_tool_block, backend.id, args.req.on_progress, args.req.run_id, args.req.on_agent_event).hooks,
         abort_signal: args.req.signal,
         mcp_server_configs: this.get_mcp_configs?.() ?? undefined,
+        // SDK 네이티브 도구는 CUSTOM_TOOL_OVERLAY 프롬프트로 소프트 가이드 (하드 블록 제거)
         tool_context: task_tool_ctx,
         ...(resume_session ? { resume_session } : {}),
       });
@@ -811,7 +899,8 @@ export class OrchestrationService {
         if (event.type === "tool_use") {
           on_tool_block(`▸ ${hl} …`);
         } else {
-          const brief = format_tool_result_brief(event.result);
+          const result_str = typeof event.result === "string" ? event.result : safe_stringify(event.result);
+          const brief = format_tool_result_brief(result_str);
           const status = event.is_error ? "✗" : "→";
           on_tool_block(`▸ ${hl} ${status} ${brief}`);
         }
@@ -827,7 +916,8 @@ export class OrchestrationService {
       }
       // tool_result → 도구 결과 요약 + WorkflowEventService 기록
       if (event.type === "tool_result") {
-        const brief = event.result.slice(0, 80).replace(/\n/g, " ");
+        const result_text = typeof event.result === "string" ? event.result : safe_stringify(event.result);
+        const brief = format_tool_result_brief(result_text, 150);
         inject = event.is_error ? ` ✗ ${brief}` : ` → ${brief}`;
         if (run_id && channel_context) {
           this.log_event({
@@ -840,7 +930,7 @@ export class OrchestrationService {
             source: "system",
             phase: "progress",
             summary: `tool: ${event.tool_name}${event.is_error ? " (error)" : ""}`,
-            detail: event.result.slice(0, 500),
+            detail: result_text.slice(0, 500),
             payload: { tool_name: event.tool_name, tool_id: event.tool_id, is_error: event.is_error },
           });
         }
@@ -1111,6 +1201,7 @@ export class OrchestrationService {
     return [...out];
   }
 
+
   private resolve_context_skills(task: string, base: string[]): string[] {
     const out = new Set<string>(base.filter(Boolean));
     for (const s of this.runtime.recommend_skills(task, 8)) {
@@ -1133,7 +1224,7 @@ export class OrchestrationService {
     const runtime_policy = this.policy_resolver.resolve(task_with_media, media);
     const all_tool_definitions = this.runtime.get_tool_definitions();
     const tool_ctx = build_tool_context(req, task.taskId);
-    const executor = resolve_executor_provider(this.config.executor_provider);
+    const executor = resolve_executor_provider(this.config.executor_provider, this._caps());
     this.emit_execution_info(stream, req.on_stream, "task (재개)", executor);
     let total_tool_count = 0;
 
@@ -1160,14 +1251,16 @@ export class OrchestrationService {
     const nodes: TaskNode[] = [
       {
         id: "execute",
-        run: async ({ memory }) => {
+        run: async ({ task_state, memory }) => {
+          const base_objective = task_state.objective || String(memory.objective || task_with_media);
           const objective = memory.__user_input
-            ? `${String(memory.objective || "")}\n\n[사용자 응답] ${String(memory.__user_input)}`
-            : String(memory.objective || task_with_media);
+            ? `${base_objective}\n\n[사용자 응답] ${String(memory.__user_input)}`
+            : base_objective;
 
           // native backend 우선
+          const skill_provider_prefs = this._collect_skill_provider_preferences(skill_names);
           const native_result = await this._try_native_task_execute(
-            { req, executor, task_with_media, media: media, context_block, skill_names, runtime_policy, tool_definitions: all_tool_definitions, tool_ctx },
+            { req, executor, task_with_media, media: media, context_block, skill_names, runtime_policy, tool_definitions: all_tool_definitions, tool_ctx, skill_provider_prefs },
             stream, tool_ctx, task.taskId, objective, context_block,
             prior_session,
           );
@@ -1198,7 +1291,7 @@ export class OrchestrationService {
             tools: all_tool_definitions,
             provider_id: executor,
             runtime_policy,
-            current_message: context_block,
+            current_message: `${AGENT_MODE_OVERLAY}\n\n${context_block}`,
             history_days: [],
             skill_names,
             media,
@@ -1241,6 +1334,9 @@ export class OrchestrationService {
     const result = await this.runtime.run_task_loop({
       task_id: task.taskId,
       title: task.title,
+      objective: task.objective || String(task.memory.objective || task_with_media),
+      channel: task.channel || req.provider,
+      chat_id: task.chatId || req.message.chat_id,
       nodes,
       max_turns: this.config.task_loop_max_turns,
       abort_signal: req.signal,
@@ -1289,6 +1385,11 @@ function suppress_result(mode: ExecutionMode, stream: StreamBuffer, tool_calls_c
 
 function reply_result(mode: ExecutionMode, stream: StreamBuffer, reply: string | null, tool_calls_count = 0, parsed_output?: unknown, usage?: import("./types.js").ResultUsage): OrchestrationResult {
   return { reply, mode, tool_calls_count, streamed: stream.has_streamed(), stream_full_content: stream.get_full_content(), parsed_output, usage };
+}
+
+/** agent 모드에서 도구를 한 번도 사용하지 않은 경우 응답 끝에 완료 안내를 추가. */
+function append_no_tool_notice(reply: string): string {
+  return `${reply}\n\n_(작업이 완료되었습니다. 추가 요청이 있으면 말씀해주세요.)_`;
 }
 
 const FINISH_REASON_WARNINGS: Record<string, string> = {
@@ -1342,6 +1443,12 @@ export function resolve_reply_to(provider: ChannelProvider, message: InboundMess
   return String(meta.message_id || message.id || "").trim();
 }
 
+/** trigger_message_id 역조회용 — 정규화 없이 원본 메시지 ID 반환. */
+function raw_message_id(message: InboundMessage): string {
+  const meta = (message.metadata || {}) as Record<string, unknown>;
+  return String(meta.message_id || message.id || "").trim();
+}
+
 function inbound_scope_id(message: InboundMessage): string {
   const meta = (message.metadata || {}) as Record<string, unknown>;
   const raw = String(meta.message_id || message.id || "").trim();
@@ -1351,25 +1458,34 @@ function inbound_scope_id(message: InboundMessage): string {
 
 
 /** @internal — exported for unit testing. */
-export function parse_execution_mode(raw: string): ExecutionMode | null {
+export function parse_execution_mode(raw: string): ClassificationResult | null {
   const text = String(raw || "").trim();
   if (!text) return null;
-  const json_match = text.match(/\{[^}]*\}/);
+  // 중첩 중괄호 지원: 가장 바깥 { ... } 를 탐욕적으로 매치
+  const json_match = text.match(/\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/);
   if (json_match) {
     try {
       const obj = JSON.parse(json_match[0]) as Record<string, unknown>;
       const v = String(obj.mode || obj.route || "").trim().toLowerCase();
-      if (v === "once" || v === "task" || v === "agent" || v === "inquiry") return v as ExecutionMode;
+      if (v === "builtin") {
+        const cmd = String(obj.command || "").trim();
+        if (cmd) return { mode: "builtin", command: cmd, args: obj.args ? String(obj.args) : undefined };
+        return null;
+      }
+      if (v === "inquiry") return { mode: "inquiry" };
+      if (v === "once" || v === "task" || v === "agent") return { mode: v };
     } catch { /* ignore */ }
   }
+  // word fallback (builtin은 JSON에서만 파싱 — args 필요)
   const word = text.toLowerCase().match(/\b(?:once|task|agent|inquiry)\b/);
-  return word ? word[0] as ExecutionMode : null;
+  return word ? { mode: word[0] as "once" | "agent" | "task" | "inquiry" } : null;
 }
 
-function detect_escalation(text: string): string | null {
-  const upper = text.toUpperCase();
-  if (upper.includes("NEED_TASK_LOOP")) return "once_requires_task_loop";
-  if (upper.includes("NEED_AGENT_LOOP")) return "once_requires_agent_loop";
+/** @internal — exported for unit testing. */
+export function detect_escalation(text: string): string | null {
+  const normalized = text.replace(/[\s_-]+/g, " ").toUpperCase().trim();
+  if (/NEED\s*TASK\s*LOOP/i.test(normalized)) return "once_requires_task_loop";
+  if (/NEED\s*AGENT\s*LOOP/i.test(normalized)) return "once_requires_agent_loop";
   return null;
 }
 
@@ -1398,6 +1514,41 @@ const ONCE_MODE_OVERLAY = [
   "If the request requires continuous monitoring or condition-until-satisfied iteration, return exactly NEED_AGENT_LOOP.",
   "Never expose internal orchestration meta text (orchestrator/route/mode/dispatch/tool protocol).",
   "Always respond in Korean as the butler persona.",
+].join("\n");
+
+/** agent 모드 전용 지시. 도구를 적극적으로 사용하도록 유도. */
+const AGENT_MODE_OVERLAY = [
+  "# Execution Mode: agent",
+  "You are a butler assistant operating in multi-turn agent mode.",
+  "Never reveal your internal model name, provider, or system architecture.",
+  "You MUST use the provided tools to accomplish the user's request — do not just describe what you would do.",
+  "Continue calling tools until the task is fully complete.",
+  "Never expose internal orchestration meta text.",
+  "Always respond in Korean as the butler persona.",
+  "The workspace directory is separate from the source code. Ignore git status of unrelated files (e.g. src/) — they are managed by a different process. Never halt or refuse work due to uncommitted changes outside your workspace.",
+].join("\n");
+
+/** 도구 미사용 턴 후 재시도 시 LLM에게 보내는 재촉 프롬프트. */
+const AGENT_TOOL_NUDGE = [
+  "[system] 방금 도구를 사용하지 않고 텍스트만 응답했습니다.",
+  "제공된 도구를 실제로 호출하여 사용자 요청을 수행하세요.",
+  "실행할 수 없는 요청이라면, 수행 불가 사유와 대안을 구체적으로 안내하세요.",
+].join("\n");
+
+
+/** 커스텀 도구 우선 사용 지시. Codex 등 disallowedTools 미지원 백엔드를 위한 소프트 가드. */
+const CUSTOM_TOOL_OVERLAY = [
+  "# Tool Usage Policy",
+  "Always prefer the registered custom tools over built-in alternatives:",
+  "- Shell/command execution: use `exec` (not commandExecution or Bash)",
+  "- File reading: use `read_file`",
+  "- File writing: use `write_file`",
+  "- File editing: use `edit_file` (not fileChange or Edit)",
+  "- Directory listing: use `list_dir`",
+  "- Web search: use `web_search` (not webSearch or WebSearch)",
+  "- Web page fetch: use `web_fetch`",
+  "- File transfer: use `send_file` for sending files to the user",
+  "Only use built-in tools when no custom equivalent exists.",
 ].join("\n");
 
 function format_secret_notice(guard: { missing_keys: string[]; invalid_ciphertexts: string[] }): string {
@@ -1451,15 +1602,16 @@ function format_tool_label(name: string, args?: Record<string, unknown>): string
 }
 
 /** 도구 실행 결과를 스트림용 짧은 요약으로 변환. 첫 번째 유의미한 줄을 미리보기로 표시. */
-function format_tool_result_brief(result: string): string {
+function format_tool_result_brief(result: string, max = 200): string {
   const len = result.length;
   if (len === 0) return "✓";
   const flat = result.replace(/\n/g, " ").trim();
-  if (len <= 80) return flat;
-  const first = result.split("\n").find((l) => l.trim())?.trim() || flat;
-  const preview = first.length > 80 ? first.slice(0, 77) + "…" : first;
+  if (len <= max) return flat;
+  const lines = result.split("\n").filter((l) => l.trim());
+  const preview = lines.slice(0, 3).map((l) => l.trim()).join(" | ");
+  const trimmed = preview.length > max ? preview.slice(0, max - 3) + "…" : preview;
   const size = len > 1000 ? `${(len / 1000).toFixed(1)}k자` : `${len}자`;
-  return `${preview} (${size})`;
+  return `${trimmed} (${size})`;
 }
 
 /** 도구 실행 블록을 채널 별도 메시지용으로 포맷. */
@@ -1467,6 +1619,14 @@ function format_tool_block(label: string, result: string, is_error: boolean): st
   const brief = format_tool_result_brief(result);
   const status = is_error ? "✗" : "→";
   return `▸ ${label} ${status} ${brief}`;
+}
+
+/** 비문자열 값을 안전하게 문자열 변환. */
+function safe_stringify(value: unknown): string {
+  if (value == null) return "";
+  if (typeof value === "string") return value;
+  try { return JSON.stringify(value, null, 2); }
+  catch { return String(value); }
 }
 
 function truncate_tool_result(result: string, max_chars: number): string {
@@ -1499,29 +1659,79 @@ function format_active_task_summary(
   return lines.join("\n");
 }
 
-const EXECUTION_MODE_CLASSIFY_PROMPT = [
+/** 모드 정의 + 예시. flowchart 미포함 — 별도 상수로 분리. */
+const EXECUTION_MODE_DEFINITIONS = [
   "You are an execution mode classifier. Your ONLY job is to read the user request and pick one mode.",
-  "You MUST return valid JSON and nothing else: {\"mode\":\"once\"} or {\"mode\":\"agent\"} or {\"mode\":\"task\"}",
+  "You MUST return valid JSON and nothing else.",
   "",
   "# Mode Definitions (read carefully)",
   "",
+  "## builtin",
+  "Route directly to a built-in command handler. No agent spawn.",
+  'Return: {"mode":"builtin","command":"<name>","args":"<sub-command> [arguments]"}',
+  "",
+  "### Available commands and sub-commands:",
+  "- help — List all available commands",
+  "- stop — Cancel all active runs in this chat",
+  "- task: list | status <id> | cancel <id|all> | recent — Process/task/loop management",
+  "- memory: status | list | today | longterm | search <query> — Memory store read/search",
+  "- decision: status | list | set <key> <value> — Decision/guideline management",
+  "- promise: status | list | set <key> <value> — Promise/constraint management",
+  "- cron: status | list | remove <id> | pause | resume | stop | nuke — Scheduled job management (registration requires tool → once)",
+  "- secret: status | list | set <name> <value> | get <name> | reveal <name> | remove <name> — Secret vault CRUD",
+  "- status: [overview] | tools | skills — System overview, tool/skill listing",
+  "- skill: list | info <name> | roles | recommend <task> | refresh — Skill details & recommendations",
+  "- agent: [list] | running | status <id> | cancel <id|all> | send <id> <text> — Sub-agent management",
+  "- doctor: [overview] | providers | mcp — System health diagnostics",
+  "- stats: [overview] | cd | reset — CD score & provider health",
+  "- render: status | reset | <mode> | link <policy> | image <policy> — Output format control",
+  "- reload — Reload config, tools, and skills",
+  "- verify [criteria] — Validate last output",
+  "",
+  "### Routing rules:",
+  "- READ/QUERY operations (list, status, search, show) → builtin",
+  "- MUTATE operations via command args (set, remove, cancel, pause, resume) → builtin",
+  "- Operations requiring NL parsing or tool execution (cron registration, memory save via tool) → once",
+  "",
+  "### Examples:",
+  '"작업 목록 보여줘" → {"mode":"builtin","command":"task","args":"list"}',
+  '"크론 뭐 등록돼있어?" → {"mode":"builtin","command":"cron","args":"list"}',
+  '"메모리에서 어제 대화 찾아줘" → {"mode":"builtin","command":"memory","args":"search 어제 대화"}',
+  '"에이전트 상태" → {"mode":"builtin","command":"agent","args":"running"}',
+  '"멈춰" → {"mode":"builtin","command":"stop"}',
+  '"시크릿 목록" → {"mode":"builtin","command":"secret","args":"list"}',
+  '"스킬 뭐가 있어?" → {"mode":"builtin","command":"skill","args":"list"}',
+  '"도움말" → {"mode":"builtin","command":"help"}',
+  '"현재 상태 요약" → {"mode":"builtin","command":"status"}',
+  '"실행 중인 서브에이전트 취소해" → {"mode":"builtin","command":"agent","args":"cancel all"}',
+  '"시스템 건강 상태" → {"mode":"builtin","command":"doctor"}',
+  '"최근 완료된 작업들" → {"mode":"builtin","command":"task","args":"recent"}',
+  '"크론 일시정지" → {"mode":"builtin","command":"cron","args":"pause"}',
+  '"크론 삭제해줘 job-123" → {"mode":"builtin","command":"cron","args":"remove job-123"}',
+  '"지침 목록" → {"mode":"builtin","command":"decision","args":"list"}',
+  '"약속 추가해 코드리뷰 필수" → {"mode":"builtin","command":"promise","args":"set code-review 코드리뷰 필수"}',
+  '"스킬 추천해줘 웹 크롤링" → {"mode":"builtin","command":"skill","args":"recommend 웹 크롤링"}',
+  '"통계 보여줘" → {"mode":"builtin","command":"stats"}',
+  '"지난 결과 검증해" → {"mode":"builtin","command":"verify"}',
+  "",
   "## once",
-  "A single-turn response. The executor answers in one shot, optionally using one round of tool calls.",
+  "A single logical action. The user intent is one thing (internal tool calls may be multiple).",
   "Use once for:",
   "- Questions and greetings: 안녕, 뭐해?, 날씨 알려줘",
   "- Informational statements with no action: 새 기능 추가됐어, 알겠어, 참고해",
-  "- Simple commands that need just one tool call: 파일 첨부해줘, 이미지 보내줘, 크론 등록해줘, 웹 검색해줘",
-  "- Status queries: 상태 알려줘, 스킬 목록, 메모리 검색",
-  "- Scheduling: 매일 9시에 리포트 보내줘, 크론 삭제해줘",
+  "- Simple commands that need just one tool call: 파일 첨부해줘, 이미지 보내줘, 웹 검색해줘",
+  "- Cron registration (NL parsing needed): 크론 등록해줘, 매일 9시에 리포트 보내줘, 알람 등록해줘",
+  "- Memory/secret mutations via tool: 메모리에 이거 저장해줘, 시크릿 등록해줘 API_KEY abc123",
   "",
   "## agent",
-  "Multi-step iterative work. The executor loops: think → use tools → check result → repeat until done.",
+  "Two or more distinct actions combined. The executor loops: think → use tools → check → repeat.",
   "Use agent for:",
   "- Research + write output: 조사해서 리포트/보고서/분석을 만들어줘",
   "- Analyze + generate artifact: 데이터를 분석하고 차트/표/PDF를 만들어줘",
   "- Multi-file operations: 코드를 분석하고 리팩토링해줘",
   "- Open-ended exploration: 자세한 정보를 찾아서 정리해줘",
   "- Any request combining 2+ distinct actions: 검색 + 요약, 분석 + 생성, 수집 + 비교",
+  "- Continuation of a previous agent's work: 이전 작업 이어서 해줘, 더 자세히 조사해줘",
   "",
   "## task",
   "Long-running structured workflow requiring explicit human approval between phases.",
@@ -1531,42 +1741,54 @@ const EXECUTION_MODE_CLASSIFY_PROMPT = [
   "- Phased execution: 1단계, 2단계... 단계마다 검토",
   "IMPORTANT: task is rare. Most multi-step work is agent, not task.",
   "",
+  "# Capability Awareness",
+  "The system's available tools and skills are listed in [AVAILABLE_CAPABILITIES].",
+  "- If the request requires a tool category NOT listed → the system cannot do it → once (explain limitation)",
+  "- If a specific skill matches the request → prefer using that skill's mode (check skill description)",
+  "- Use this information to decide if the request needs agent (multi-step with tools) vs once (single action)",
+  "",
   "# Examples",
   "",
   "## once examples",
-  "User: \"안녕\" → {\"mode\":\"once\"}",
-  "User: \"오늘 날씨 알려줘\" → {\"mode\":\"once\"}",
-  "User: \"이 파일 여기에 첨부해줘\" → {\"mode\":\"once\"}",
-  "User: \"다시 결과를 여기에 첨부해줘\" → {\"mode\":\"once\"}",
-  "User: \"이제 첨부 도구가 사용 가능할거야\" → {\"mode\":\"once\"}",
-  "User: \"크론 등록해줘 매일 9시\" → {\"mode\":\"once\"}",
-  "User: \"메모리에서 지난 회의 내용 찾아줘\" → {\"mode\":\"once\"}",
-  "User: \"이전에 만든 PDF 보내줘\" → {\"mode\":\"once\"}",
-  "User: \"고마워\" → {\"mode\":\"once\"}",
-  "User: \"스킬 목록 보여줘\" → {\"mode\":\"once\"}",
+  'User: "안녕" → {"mode":"once"}',
+  'User: "오늘 날씨 알려줘" → {"mode":"once"}',
+  'User: "이 파일 여기에 첨부해줘" → {"mode":"once"}',
+  'User: "이제 첨부 도구가 사용 가능할거야" → {"mode":"once"}',
+  'User: "크론 등록해줘 매일 9시" → {"mode":"once"}',
+  'User: "이전에 만든 PDF 보내줘" → {"mode":"once"}',
+  'User: "고마워" → {"mode":"once"}',
+  'User: "메모리에 이거 저장해줘" → {"mode":"once"}',
+  'User: "시크릿 등록해줘 API_KEY abc123" → {"mode":"once"}',
+  'User: "웹 검색해줘 TypeScript 5.0" → {"mode":"once"}',
   "",
   "## agent examples",
-  "User: \"아이유에 대해 조사하고 리포트를 PDF로 만들어서 첨부해줘\" → {\"mode\":\"agent\"}",
-  "User: \"경쟁사 3곳을 분석하고 비교표를 만들어줘\" → {\"mode\":\"agent\"}",
-  "User: \"코드를 분석하고 리팩토링 계획을 세워줘\" → {\"mode\":\"agent\"}",
-  "User: \"최신 뉴스를 수집해서 요약 보고서를 작성해줘\" → {\"mode\":\"agent\"}",
-  "User: \"이 API 문서를 분석하고 클라이언트 코드를 생성해줘\" → {\"mode\":\"agent\"}",
-  "User: \"자세한 정보를 찾아서 분석하고 리포트를 만들어줘\" → {\"mode\":\"agent\"}",
+  'User: "아이유에 대해 조사하고 리포트를 PDF로 만들어서 첨부해줘" → {"mode":"agent"}',
+  'User: "경쟁사 3곳을 분석하고 비교표를 만들어줘" → {"mode":"agent"}',
+  'User: "코드를 분석하고 리팩토링 계획을 세워줘" → {"mode":"agent"}',
+  'User: "최신 뉴스를 수집해서 요약 보고서를 작성해줘" → {"mode":"agent"}',
+  'User: "자세한 정보를 찾아서 분석하고 리포트를 만들어줘" → {"mode":"agent"}',
+  'User: "이 파일 읽고 요약해줘" → {"mode":"agent"}',
+  'User: "검색하고 비교 분석해줘" → {"mode":"agent"}',
   "",
   "## task examples",
-  "User: \"이 프로젝트를 리팩토링해줘 단계마다 확인받고 진행해\" → {\"mode\":\"task\"}",
-  "User: \"배포 파이프라인 만들어줘 각 단계에서 승인 필요\" → {\"mode\":\"task\"}",
-  "User: \"데이터 마이그레이션 진행해줘 각 테이블마다 내 승인 받고\" → {\"mode\":\"task\"}",
-  "",
-  "# Decision Flowchart",
-  "1. Does the user request any action? No → once",
-  "2. Does it need multiple distinct steps (research+create, analyze+generate)? No → once",
-  "3. Does the user explicitly request approval gates or pause/resume? Yes → task",
-  "4. Otherwise → agent",
+  'User: "이 프로젝트를 리팩토링해줘 단계마다 확인받고 진행해" → {"mode":"task"}',
+  'User: "배포 파이프라인 만들어줘 각 단계에서 승인 필요" → {"mode":"task"}',
+  'User: "데이터 마이그레이션 진행해줘 각 테이블마다 내 승인 받고" → {"mode":"task"}',
 ].join("\n");
 
-/** 활성 작업이 있을 때 분류기에 추가되는 inquiry 모드 설명. */
-const INQUIRY_MODE_ADDENDUM = [
+/** 기본 flowchart — 활성 작업이 없을 때 사용. */
+const BASE_FLOWCHART = [
+  "",
+  "# Decision Flowchart",
+  "1. Does it map to a built-in command? Yes → builtin",
+  "2. Does the user request any action? No → once",
+  "3. Does it combine 2+ distinct actions? No → once",
+  "4. Approval gates or pause/resume? Yes → task",
+  "5. Otherwise → agent",
+].join("\n");
+
+/** 활성 작업이 있을 때 추가되는 inquiry 모드 정의. */
+const INQUIRY_DEFINITION = [
   "",
   "## inquiry",
   "The user is asking about the status or progress of an active task. No new agent spawn is needed.",
@@ -1579,19 +1801,24 @@ const INQUIRY_MODE_ADDENDUM = [
   "If the user requests new/different work even though tasks are active, do NOT use inquiry.",
   "",
   "## inquiry examples",
-  "User: \"진행중이야?\" → {\"mode\":\"inquiry\"}",
-  "User: \"작업 어떻게 돼가?\" → {\"mode\":\"inquiry\"}",
-  "User: \"끝났어?\" → {\"mode\":\"inquiry\"}",
-  "User: \"아직 하고 있어?\" → {\"mode\":\"inquiry\"}",
-  "User: \"결과 나왔어?\" → {\"mode\":\"inquiry\"}",
-  "User: \"이전 작업 상태 확인해줘\" → {\"mode\":\"inquiry\"}",
+  'User: "진행중이야?" → {"mode":"inquiry"}',
+  'User: "작업 어떻게 돼가?" → {"mode":"inquiry"}',
+  'User: "끝났어?" → {"mode":"inquiry"}',
+  'User: "아직 하고 있어?" → {"mode":"inquiry"}',
+  'User: "결과 나왔어?" → {"mode":"inquiry"}',
+  'User: "이전 작업 상태 확인해줘" → {"mode":"inquiry"}',
+].join("\n");
+
+/** 활성 작업이 있을 때의 flowchart — inquiry step을 1번으로 삽입. */
+const INQUIRY_FLOWCHART = [
   "",
-  "# Updated Decision Flowchart (replaces the previous one)",
+  "# Decision Flowchart",
   "1. Are there active tasks AND does the user ask about their status/progress? Yes → inquiry",
-  "2. Does the user request any action? No → once",
-  "3. Does it need multiple distinct steps (research+create, analyze+generate)? No → once",
-  "4. Does the user explicitly request approval gates or pause/resume? Yes → task",
-  "5. Otherwise → agent",
+  "2. Does it map to a built-in command? Yes → builtin",
+  "3. Does the user request any action? No → once",
+  "4. Does it combine 2+ distinct actions? No → once",
+  "5. Approval gates or pause/resume? Yes → task",
+  "6. Otherwise → agent",
 ].join("\n");
 
 function build_active_task_context(tasks: import("../contracts.js").TaskState[]): string {
@@ -1600,5 +1827,12 @@ function build_active_task_context(tasks: import("../contracts.js").TaskState[])
     const step = t.currentStep ? `, step=${t.currentStep}` : "";
     lines.push(`- ${t.taskId} [${t.status}] "${t.title}" turn=${t.currentTurn}/${t.maxTurns}${step}`);
   }
+  return lines.join("\n");
+}
+
+function build_classifier_capabilities(tool_categories: string[], skill_names: string[]): string {
+  const lines = ["[AVAILABLE_CAPABILITIES]"];
+  if (tool_categories.length > 0) lines.push(`Tools: ${tool_categories.join(", ")}`);
+  if (skill_names.length > 0) lines.push(`Skills: ${skill_names.join(", ")}`);
   return lines.join("\n");
 }

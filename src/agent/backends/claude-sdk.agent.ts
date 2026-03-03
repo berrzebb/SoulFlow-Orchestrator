@@ -39,7 +39,7 @@ type SdkQueryFn = (args: {
  * optional dependency — `@anthropic-ai/claude-agent-sdk` 미설치 시 is_available()=false.
  */
 export class ClaudeSdkAgent implements AgentBackend {
-  readonly id: AgentBackendId = "claude_sdk";
+  readonly id: AgentBackendId;
   readonly native_tool_loop = true;
   readonly supports_resume = true;
   readonly capabilities: BackendCapabilities = {
@@ -58,10 +58,13 @@ export class ClaudeSdkAgent implements AgentBackend {
   private _available = false;
 
   constructor(private readonly config?: {
+    id?: string;
     cwd?: string;
     model?: string;
     max_budget_usd?: number;
-  }) {}
+  }) {
+    this.id = config?.id ?? "claude_sdk";
+  }
 
   is_available(): boolean {
     if (!this.checked) {
@@ -142,10 +145,11 @@ export class ClaudeSdkAgent implements AgentBackend {
     }
 
     // 등록 도구 → in-process MCP 서버로 래핑 (SDK가 네이티브 호출)
+    // SDK가 도구명에 mcp__<name>__ 접두사를 부여하므로, 서버 이름을 최소화
     if (options.tool_executors?.length) {
       const tool_ctx = { task_id: options.task_id, signal: options.abort_signal, ...options.tool_context };
-      const tool_server = await create_sdk_tool_server("soulflow-tools", options.tool_executors, tool_ctx);
-      if (tool_server) mcp_servers["soulflow-tools"] = tool_server;
+      const tool_server = await create_sdk_tool_server("builtin", options.tool_executors, tool_ctx);
+      if (tool_server) mcp_servers["builtin"] = tool_server;
     }
 
     if (Object.keys(mcp_servers).length > 0) {
@@ -347,7 +351,7 @@ export class ClaudeSdkAgent implements AgentBackend {
         if (message.type === "result") {
           const subtype = String(message.subtype || "success");
           result_finish_reason = sdk_result_subtype_to_finish_reason(subtype);
-          result_content = String(message.result || "");
+          result_content = _stringify_for_render(message.result);
           if (message.structured_output !== undefined) {
             result_parsed_output = message.structured_output;
           }
@@ -449,7 +453,7 @@ export class ClaudeSdkAgent implements AgentBackend {
 
         // content streaming + content_delta 이벤트
         if (message.content) {
-          const text = String(message.content);
+          const text = _stringify(message.content);
           this._emit(emit, { type: "content_delta", source, at: now_iso(), text });
           if (options.hooks?.on_stream) {
             void Promise.resolve(options.hooks.on_stream(text)).catch(() => {});
@@ -612,6 +616,49 @@ function _deny_hook(reason: string): Record<string, unknown> {
   };
 }
 
+/** 객체/배열을 안전하게 문자열 변환. 스트리밍 등 원시 텍스트 컨텍스트용. */
+function _stringify(value: unknown): string {
+  if (value == null) return "";
+  if (typeof value === "string") return value;
+  try { return JSON.stringify(value, null, 2); }
+  catch { return String(value); }
+}
+
+/** 객체/배열을 렌더링 가능한 문자열로 변환. 마크다운 코드블록으로 래핑. */
+function _stringify_for_render(value: unknown): string {
+  if (value == null) return "";
+  if (typeof value === "string") return value;
+  try {
+    const json = JSON.stringify(value, null, 2);
+    return "```json\n" + json + "\n```";
+  }
+  catch { return String(value); }
+}
+
+/**
+ * SDK hook의 tool_response에서 텍스트 추출.
+ * MCP 프로토콜 형식 `{ content: [{ type: "text", text }] }` 또는 plain string 모두 처리.
+ */
+function _extract_tool_response_text(response: unknown): string {
+  if (response == null) return "";
+  if (typeof response === "string") return response;
+  if (typeof response === "object") {
+    const rec = response as Record<string, unknown>;
+    // MCP content blocks: { content: [{ type: "text", text: "..." }] }
+    if (Array.isArray(rec.content)) {
+      const texts = (rec.content as Record<string, unknown>[])
+        .filter((b) => b.type === "text" && typeof b.text === "string")
+        .map((b) => b.text as string);
+      if (texts.length > 0) return texts.join("\n");
+    }
+    // content가 단일 문자열인 경우
+    if (typeof rec.content === "string") return rec.content;
+    // text 필드
+    if (typeof rec.text === "string") return rec.text;
+  }
+  return _stringify(response);
+}
+
 type EmitFn = ((event: AgentEvent) => void | Promise<void>) | undefined;
 
 /** PostToolHook → SDK PostToolUse hook 변환. tool_result 이벤트 발행 + 콜백 호출. */
@@ -625,7 +672,7 @@ function _create_post_tool_hook(
     const tool_name = String(input.tool_name ?? "unknown");
     const tool_id = String(input.tool_use_id ?? "");
     const tool_input = (input.tool_input ?? {}) as Record<string, unknown>;
-    const tool_response = String(input.tool_response ?? "");
+    const tool_response = _extract_tool_response_text(input.tool_response);
 
     if (emit) {
       void Promise.resolve(emit({
@@ -651,7 +698,7 @@ function _create_post_tool_failure_hook(
     const tool_name = String(input.tool_name ?? "unknown");
     const tool_id = String(input.tool_use_id ?? "");
     const tool_input = (input.tool_input ?? {}) as Record<string, unknown>;
-    const error_msg = String(input.error ?? "unknown error");
+    const error_msg = _extract_tool_response_text(input.error) || "unknown error";
 
     if (emit) {
       void Promise.resolve(emit({

@@ -69,3 +69,7 @@ metadata:
 ## Timezone
 
 Use `tz` with `cron_expr` for IANA timezone scheduling. Without `tz`, server local timezone is used.
+
+## References
+
+- **[cron-expressions.md](references/cron-expressions.md)** — cron 표현식 패턴, every_seconds 값, 주요 타임존, 자연어→cron 변환표

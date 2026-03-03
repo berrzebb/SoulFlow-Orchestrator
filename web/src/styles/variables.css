@@ -1,0 +1,69 @@
+:root {
+  /* Colors — dark (default) */
+  --bg: #121619;
+  --panel: #1b2228;
+  --panel-hover: #1f2a32;
+  --panel-elevated: #1e272f;
+  --line: #2b3742;
+  --text: #dbe7f3;
+  --muted: #91a4b7;
+  --ok: #2fb171;
+  --warn: #d9a441;
+  --err: #c56a6a;
+  --off: #7c8a98;
+  --accent: #4a9eff;
+
+  /* Shadows — dark */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.5), 0 4px 12px rgba(0, 0, 0, 0.3);
+
+}
+
+/* Light theme */
+:root[data-theme="light"] {
+  --bg: #f4f6f9;
+  --panel: #ffffff;
+  --panel-hover: #f8f9fb;
+  --panel-elevated: #eef1f6;
+  --line: #d0d7e2;
+  --text: #1c2a3a;
+  --muted: #64788f;
+  --ok: #1d9e60;
+  --warn: #b87d10;
+  --err: #b03a3a;
+  --off: #8ea0b0;
+  --accent: #1a7bd8;
+
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.10), 0 2px 4px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.12), 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+:root {
+  /* Typography */
+  --font-sans: "Inter", "Noto Sans KR", "Segoe UI", "Malgun Gothic", "Apple SD Gothic Neo", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "Consolas", "Menlo", monospace;
+  --fs-xs: 11px;
+  --fs-sm: 12px;
+  --fs-base: 14px;
+  --fs-md: 16px;
+  --fs-lg: 20px;
+  --fs-xl: 24px;
+
+  /* Spacing (4px scale) */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-7: 28px;
+  --sp-8: 32px;
+
+  /* Radii */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-pill: 999px;
+}

@@ -1,8 +1,7 @@
 import type { InboundMessage, OutboundMessage } from "../bus/types.js";
-import { DiscordChannel } from "./discord.channel.js";
-import { SlackChannel } from "./slack.channel.js";
-import { TelegramChannel } from "./telegram.channel.js";
-import type { ChannelHealth, ChannelProvider, ChannelRegistryLike, ChannelTypingState, ChatChannel } from "./types.js";
+import type { ChannelHealth, ChannelRegistryLike, ChannelTypingState, ChatChannel } from "./types.js";
+import type { ChannelInstanceStore } from "./instance-store.js";
+import { create_channel_instance } from "./channel-factory.js";
 
 export type {
   ChannelConfig,
@@ -19,19 +18,42 @@ export { TelegramChannel } from "./telegram.channel.js";
 export { ChannelManager } from "./manager.js";
 export { SqliteDispatchDlqStore, type DispatchDlqStoreLike, type DispatchDlqRecord } from "./dlq-store.js";
 export type { ChannelManagerStatus } from "./manager.js";
+export { ChannelInstanceStore, type ChannelInstanceConfig, type CreateChannelInstanceInput } from "./instance-store.js";
+export { create_channel_instance, register_channel_factory, list_registered_providers } from "./channel-factory.js";
+
+/**
+ * instance_id 기반 채널 레지스트리.
+ * 같은 프로바이더의 다중 인스턴스를 지원하며,
+ * 기존 provider 기반 API와 후방 호환.
+ */
 export class ChannelRegistry implements ChannelRegistryLike {
-  private readonly channels = new Map<ChannelProvider, ChatChannel>();
+  private readonly channels = new Map<string, ChatChannel>();
 
   register(channel: ChatChannel): void {
-    this.channels.set(channel.provider, channel);
+    this.channels.set(channel.instance_id, channel);
   }
 
-  get_channel(provider: ChannelProvider): ChatChannel | null {
-    return this.channels.get(provider) || null;
+  unregister(instance_id: string): boolean {
+    return this.channels.delete(instance_id);
   }
 
-  list_channels(): ChatChannel[] {
-    return [...this.channels.values()];
+  /** instance_id로 조회. 폴백: provider명으로 첫 번째 일치 반환. */
+  get_channel(id: string): ChatChannel | null {
+    const direct = this.channels.get(id);
+    if (direct) return direct;
+    for (const ch of this.channels.values()) {
+      if (ch.provider === id) return ch;
+    }
+    return null;
+  }
+
+  get_channels_by_provider(provider: string): ChatChannel[] {
+    const lower = provider.toLowerCase();
+    return [...this.channels.values()].filter((ch) => ch.provider.toLowerCase() === lower);
+  }
+
+  list_channels(): Array<{ provider: string; instance_id: string }> {
+    return [...this.channels.values()].map((ch) => ({ provider: ch.provider, instance_id: ch.instance_id }));
   }
 
   async start_all(): Promise<void> {
@@ -47,43 +69,43 @@ export class ChannelRegistry implements ChannelRegistryLike {
   }
 
   async send(message: OutboundMessage): Promise<{ ok: boolean; message_id?: string; error?: string }> {
-    const provider = String(message.provider || message.channel || "").toLowerCase() as ChannelProvider;
-    const channel = this.channels.get(provider);
-    if (!channel) return { ok: false, error: `channel_not_registered:${provider}` };
+    const id = String(message.instance_id || message.provider || message.channel || "").toLowerCase();
+    const channel = this.get_channel(id);
+    if (!channel) return { ok: false, error: `channel_not_registered:${id}` };
     return channel.send(message);
   }
 
-  async edit_message(provider: ChannelProvider, chat_id: string, message_id: string, content: string, parse_mode?: string): Promise<{ ok: boolean; error?: string }> {
-    const channel = this.channels.get(provider);
-    if (!channel) return { ok: false, error: `channel_not_registered:${provider}` };
+  async edit_message(id: string, chat_id: string, message_id: string, content: string, parse_mode?: string): Promise<{ ok: boolean; error?: string }> {
+    const channel = this.get_channel(id);
+    if (!channel) return { ok: false, error: `channel_not_registered:${id}` };
     return channel.edit_message(chat_id, message_id, content, parse_mode);
   }
 
-  async add_reaction(provider: ChannelProvider, chat_id: string, message_id: string, reaction: string): Promise<{ ok: boolean; error?: string }> {
-    const channel = this.channels.get(provider);
-    if (!channel) return { ok: false, error: `channel_not_registered:${provider}` };
+  async add_reaction(id: string, chat_id: string, message_id: string, reaction: string): Promise<{ ok: boolean; error?: string }> {
+    const channel = this.get_channel(id);
+    if (!channel) return { ok: false, error: `channel_not_registered:${id}` };
     return channel.add_reaction(chat_id, message_id, reaction);
   }
 
-  async remove_reaction(provider: ChannelProvider, chat_id: string, message_id: string, reaction: string): Promise<{ ok: boolean; error?: string }> {
-    const channel = this.channels.get(provider);
-    if (!channel) return { ok: false, error: `channel_not_registered:${provider}` };
+  async remove_reaction(id: string, chat_id: string, message_id: string, reaction: string): Promise<{ ok: boolean; error?: string }> {
+    const channel = this.get_channel(id);
+    if (!channel) return { ok: false, error: `channel_not_registered:${id}` };
     return channel.remove_reaction(chat_id, message_id, reaction);
   }
 
-  async read(provider: ChannelProvider, chat_id: string, limit?: number): Promise<InboundMessage[]> {
-    const channel = this.channels.get(provider);
+  async read(id: string, chat_id: string, limit?: number): Promise<InboundMessage[]> {
+    const channel = this.get_channel(id);
     if (!channel) return [];
     return channel.read(chat_id, limit);
   }
 
   async find_latest_agent_mention(
-    provider: ChannelProvider,
+    id: string,
     chat_id: string,
     agent_alias: string,
     limit = 50,
   ): Promise<InboundMessage | null> {
-    const channel = this.channels.get(provider);
+    const channel = this.get_channel(id);
     if (!channel) return null;
     const rows = await channel.read(chat_id, Math.max(1, Math.min(200, limit)));
     const needle = `@${agent_alias}`.toLowerCase();
@@ -95,14 +117,14 @@ export class ChannelRegistry implements ChannelRegistryLike {
     return null;
   }
 
-  async set_typing(provider: ChannelProvider, chat_id: string, typing: boolean, anchor_message_id?: string): Promise<void> {
-    const channel = this.channels.get(provider);
+  async set_typing(id: string, chat_id: string, typing: boolean, anchor_message_id?: string): Promise<void> {
+    const channel = this.get_channel(id);
     if (!channel) return;
     await channel.set_typing(chat_id, typing, anchor_message_id);
   }
 
-  get_typing_state(provider: ChannelProvider, chat_id: string): ChannelTypingState | null {
-    const channel = this.channels.get(provider);
+  get_typing_state(id: string, chat_id: string): ChannelTypingState | null {
+    const channel = this.get_channel(id);
     if (!channel) return null;
     return channel.get_typing_state(chat_id);
   }
@@ -112,36 +134,19 @@ export class ChannelRegistry implements ChannelRegistryLike {
   }
 }
 
-export function create_channels_from_config(args: {
-  channels: {
-    slack: { enabled: boolean; bot_token: string; default_channel: string };
-    discord: { enabled: boolean; bot_token: string; default_channel: string; api_base: string };
-    telegram: { enabled: boolean; bot_token: string; default_chat_id: string; api_base: string };
-  };
-}): ChannelRegistry {
+/** instance store 기반으로 채널 레지스트리 구성. */
+export async function create_channels_from_store(
+  store: ChannelInstanceStore,
+): Promise<ChannelRegistry> {
   const registry = new ChannelRegistry();
-  const slack = new SlackChannel({
-    bot_token: args.channels.slack.bot_token,
-    default_channel: args.channels.slack.default_channel,
-  });
-  const discord = new DiscordChannel({
-    bot_token: args.channels.discord.bot_token,
-    default_channel: args.channels.discord.default_channel,
-    api_base: args.channels.discord.api_base,
-  });
-  const telegram = new TelegramChannel({
-    bot_token: args.channels.telegram.bot_token,
-    default_chat_id: args.channels.telegram.default_chat_id,
-    api_base: args.channels.telegram.api_base,
-  });
+  const instances = store.list();
 
-  const register_if_enabled = (provider: ChannelProvider): void => {
-    if (provider === "slack" && args.channels.slack.enabled) registry.register(slack);
-    if (provider === "discord" && args.channels.discord.enabled) registry.register(discord);
-    if (provider === "telegram" && args.channels.telegram.enabled) registry.register(telegram);
-  };
-  register_if_enabled("slack");
-  register_if_enabled("discord");
-  register_if_enabled("telegram");
+  for (const config of instances) {
+    if (!config.enabled) continue;
+    const token = await store.get_token(config.instance_id) || "";
+    const channel = create_channel_instance(config, token);
+    if (channel) registry.register(channel);
+  }
+
   return registry;
 }

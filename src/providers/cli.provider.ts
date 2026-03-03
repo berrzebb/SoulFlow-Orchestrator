@@ -19,6 +19,7 @@ import {
 import {
   is_claude_command,
   is_codex_command,
+  is_gemini_command,
   split_args,
   split_command_with_embedded_args,
   strip_approval_flags,
@@ -26,6 +27,7 @@ import {
   with_claude_permission_overrides,
   with_codex_mcp_runtime_overrides,
   with_codex_permission_overrides,
+  with_gemini_permission_overrides,
 } from "./cli-permission.js";
 
 /** 자식 프로세스에 전달할 안전한 환경변수만 추출. API 키·토큰 유출 방지. */
@@ -107,6 +109,19 @@ function resolve_command_for_windows(command: string): string {
   }
   if (cmd.toLowerCase() === "claude") {
     return "claude.exe";
+  }
+  if (cmd.toLowerCase() === "gemini") {
+    const appData = String(process.env.APPDATA || "").trim();
+    const candidates = [
+      appData ? join(appData, "npm", "gemini.cmd") : "",
+      appData ? join(appData, "npm", "gemini.exe") : "",
+      "gemini.cmd",
+    ].filter(Boolean);
+    for (const c of candidates) {
+      if (/[\\/]/.test(c) && existsSync(c)) return c;
+      if (!/[\\/]/.test(c)) return c;
+    }
+    return "gemini.cmd";
   }
   return cmd;
 }
@@ -200,25 +215,23 @@ async function run_cli(
 }
 
 export class CliHeadlessProvider extends BaseLlmProvider {
-  private readonly command_env: string;
-  private readonly args_env: string;
-  private readonly timeout_env: string;
-  private readonly default_command: string;
-  private readonly default_args: string;
-  private readonly default_timeout_ms: number;
+  private readonly command: string;
+  private readonly cli_args: string;
+  private readonly timeout_ms: number;
   private readonly capture_max_chars: number;
   private readonly stream_state_max_chars: number;
+  private readonly permission_config: import("./cli-permission.js").CliPermissionConfig;
 
   constructor(args: {
     id: ProviderId;
     api_base?: string;
     default_model: string;
-    command_env: string;
-    args_env: string;
-    timeout_env: string;
-    default_command: string;
-    default_args?: string;
-    default_timeout_ms?: number;
+    command: string;
+    args?: string;
+    timeout_ms?: number;
+    capture_max_chars?: number;
+    stream_state_max_chars?: number;
+    permission_config?: import("./cli-permission.js").CliPermissionConfig;
   }) {
     super({
       id: args.id,
@@ -226,30 +239,27 @@ export class CliHeadlessProvider extends BaseLlmProvider {
       default_model: args.default_model,
       supports_tool_loop: true,
     });
-    this.command_env = args.command_env;
-    this.args_env = args.args_env;
-    this.timeout_env = args.timeout_env;
-    this.default_command = args.default_command;
-    this.default_args = args.default_args || "";
-    this.default_timeout_ms = args.default_timeout_ms || 180000;
-    this.capture_max_chars = Math.max(10_000, Number(process.env.CLI_PROVIDER_MAX_CAPTURE_CHARS || DEFAULT_CAPTURE_MAX_CHARS));
-    this.stream_state_max_chars = Math.max(8_000, Number(process.env.CLI_PROVIDER_MAX_STREAM_STATE_CHARS || DEFAULT_STREAM_STATE_MAX_CHARS));
+    this.command = args.command;
+    this.cli_args = args.args || "";
+    this.timeout_ms = args.timeout_ms || 180000;
+    this.capture_max_chars = Math.max(10_000, args.capture_max_chars || DEFAULT_CAPTURE_MAX_CHARS);
+    this.stream_state_max_chars = Math.max(8_000, args.stream_state_max_chars || DEFAULT_STREAM_STATE_MAX_CHARS);
+    this.permission_config = args.permission_config || {};
   }
 
   async chat(options: ChatOptions): Promise<LlmResponse> {
     const tools = Array.isArray(options.tools) ? options.tools : [];
     const prompt = messages_to_prompt(this.sanitize_messages(options.messages), tools);
-    const command_env_value = String(process.env[this.command_env] || this.default_command).trim();
-    const normalized = split_command_with_embedded_args(command_env_value);
+    const normalized = split_command_with_embedded_args(this.command);
     const command = normalized.command;
     if (!command) {
       return new LlmResponse({
-        content: `Error calling ${this.id}: env_missing:${this.command_env}`,
+        content: `Error calling ${this.id}: command_not_configured`,
         finish_reason: "error",
       });
     }
 
-    const raw_args = String(process.env[this.args_env] || this.default_args).trim();
+    const raw_args = String(this.cli_args).trim();
     let args = strip_approval_flags([...normalized.args, ...split_args(raw_args)]);
     // Safe default for codex headless: force non-interactive exec mode.
     if (is_codex_command(command) && args.length === 0) {
@@ -259,10 +269,15 @@ export class CliHeadlessProvider extends BaseLlmProvider {
     if (is_claude_command(command) && args.length === 0) {
       args = ["-p", "--output-format", "text", "--permission-mode", "dontAsk", "-"];
     }
-    args = with_codex_permission_overrides(command, args, options.runtime_policy);
-    args = with_claude_permission_overrides(command, args, options.runtime_policy);
-    args = with_codex_mcp_runtime_overrides(command, args, options.runtime_policy);
-    const timeout_ms = Math.max(1000, Number(process.env[this.timeout_env] || this.default_timeout_ms));
+    // Gemini CLI headless: stdin → stream-json 출력
+    if (is_gemini_command(command) && args.length === 0) {
+      args = ["--output-format", "stream-json"];
+    }
+    args = with_codex_permission_overrides(command, args, options.runtime_policy, this.permission_config);
+    args = with_claude_permission_overrides(command, args, options.runtime_policy, this.permission_config);
+    args = with_gemini_permission_overrides(command, args, options.runtime_policy, this.permission_config);
+    args = with_codex_mcp_runtime_overrides(command, args, options.runtime_policy, this.permission_config);
+    const timeout_ms = Math.max(1000, this.timeout_ms);
     const capture_max_chars = this.capture_max_chars;
     const stream_state_max_chars = this.stream_state_max_chars;
     const json_mode = args.includes("--json") || raw_args.includes("stream-json");

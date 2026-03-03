@@ -5,10 +5,14 @@ import type { SessionHistoryEntry, SessionMessage } from "./types.js";
 import type { Logger } from "../logger.js";
 import { now_iso } from "../utils/common.js";
 
+export type SessionListEntry = { key: string; created_at: string; updated_at: string; message_count: number };
+
 export interface SessionStoreLike {
   get_or_create(key: string): Promise<Session>;
   save(session: Session): Promise<void>;
   prune_expired?(max_age_ms: number): Promise<number>;
+  delete?(key: string): Promise<boolean>;
+  list_by_prefix?(prefix: string, limit?: number): Promise<SessionListEntry[]>;
 }
 
 export class Session {
@@ -259,6 +263,28 @@ export class SessionStore implements SessionStoreLike {
     }
     this.evict_if_full();
     this.cache.set(session.key, session);
+  }
+
+  async delete(key: string): Promise<boolean> {
+    await this.initialized;
+    this.cache.delete(key);
+    const deleted = this.with_sqlite((db) => {
+      const r = db.prepare("DELETE FROM sessions WHERE key = ?").run(key);
+      return Number(r.changes || 0) > 0;
+    });
+    return deleted ?? false;
+  }
+
+  async list_by_prefix(prefix: string, limit = 100): Promise<SessionListEntry[]> {
+    await this.initialized;
+    const escaped = prefix.replace(/[%_\\]/g, "\\$&");
+    return this.with_sqlite((db) =>
+      db.prepare(`
+        SELECT s.key, s.created_at, s.updated_at,
+               (SELECT COUNT(*) FROM session_messages sm WHERE sm.session_key = s.key) AS message_count
+        FROM sessions s WHERE s.key LIKE ? ESCAPE '\\' ORDER BY s.updated_at DESC LIMIT ?
+      `).all(escaped + "%", limit) as SessionListEntry[]
+    ) ?? [];
   }
 
   async prune_expired(max_age_ms: number): Promise<number> {

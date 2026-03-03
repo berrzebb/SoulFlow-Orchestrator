@@ -16,12 +16,12 @@ export class OpsRuntimeService implements ServiceLike {
     startup_logged: false,
   };
 
-  constructor(deps: OpsRuntimeDeps) {
+  constructor(deps: OpsRuntimeDeps, ops_config?: { healthLogEnabled?: boolean; healthLogOnChange?: boolean; bridgePumpEnabled?: boolean }) {
     this.deps = deps;
     this.logger = deps.logger ?? null;
-    this.health_log_enabled = String(process.env.OPS_HEALTH_LOG_ENABLED || "0").trim() === "1";
-    this.health_log_on_change = String(process.env.OPS_HEALTH_LOG_ON_CHANGE || "1").trim() !== "0";
-    this.bridge_pump_enabled = String(process.env.ENABLE_BRIDGE_PUMP || "0").trim() === "1";
+    this.health_log_enabled = ops_config?.healthLogEnabled ?? false;
+    this.health_log_on_change = ops_config?.healthLogOnChange ?? true;
+    this.bridge_pump_enabled = ops_config?.bridgePumpEnabled ?? false;
   }
 
   async start(): Promise<void> {

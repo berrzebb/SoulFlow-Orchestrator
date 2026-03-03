@@ -121,6 +121,18 @@ export class DecisionService {
     });
   }
 
+  async archive_decision(id: string): Promise<boolean> {
+    return this.store.transaction(async ({ index, append }) => {
+      const record = index.records[id];
+      if (!record || record.status !== "active") return false;
+      record.status = "archived";
+      record.updated_at = now_iso();
+      index.records[id] = record;
+      append(record);
+      return true;
+    });
+  }
+
   async list_decisions(filter?: ListDecisionsFilter): Promise<DecisionRecord[]> {
     const rows = await this.store.list_records();
     const limit = Math.max(1, Number(filter?.limit || 200));

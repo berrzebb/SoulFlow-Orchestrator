@@ -3,6 +3,12 @@ import type { ChannelProvider } from "../channels/types.js";
 
 export type ExecutionMode = "once" | "agent" | "task";
 
+/** Phi-4 분류기 전체 출력. builtin/inquiry는 실행 전에 해소되는 라우팅 신호. */
+export type ClassificationResult =
+  | { mode: ExecutionMode }
+  | { mode: "inquiry" }
+  | { mode: "builtin"; command: string; args?: string };
+
 export type OrchestrationRequest = {
   message: InboundMessage;
   alias: string;
@@ -46,4 +52,7 @@ export type OrchestrationResult = {
   usage?: ResultUsage;
   /** 실행 추적 ID. */
   run_id?: string;
+  /** 분류기가 builtin 커맨드로 라우팅한 경우. ChannelManager가 CommandRouter에 위임. */
+  builtin_command?: string;
+  builtin_args?: string;
 };

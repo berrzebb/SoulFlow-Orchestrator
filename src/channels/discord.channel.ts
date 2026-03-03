@@ -6,6 +6,7 @@ import { now_iso } from "../utils/common.js";
 import { BaseChannel } from "./base.js";
 
 type DiscordChannelOptions = {
+  instance_id?: string;
   bot_token?: string;
   default_channel?: string;
   api_base?: string;
@@ -59,15 +60,16 @@ export class DiscordChannel extends BaseChannel {
   private readonly api_base: string;
 
   constructor(options?: DiscordChannelOptions) {
-    super("discord");
-    this.bot_token = options?.bot_token || process.env.DISCORD_BOT_TOKEN || "";
-    this.default_channel = options?.default_channel || process.env.DISCORD_DEFAULT_CHANNEL || "";
-    this.api_base = options?.api_base || process.env.DISCORD_API_BASE || "https://discord.com/api/v10";
+    super("discord", options?.instance_id);
+    this.bot_token = options?.bot_token || "";
+    this.default_channel = options?.default_channel || "";
+    this.api_base = options?.api_base || "https://discord.com/api/v10";
   }
 
   async start(): Promise<void> {
     if (!this.bot_token) throw new Error("discord_bot_token_missing");
     this.running = true;
+    this.log.info("started", { instance_id: this.instance_id });
   }
 
   async stop(): Promise<void> {
@@ -120,7 +122,9 @@ export class DiscordChannel extends BaseChannel {
       if (!response.ok) return { ok: false, error: String(data.message || `http_${response.status}`) };
       return { ok: true, message_id: String(data.id || "") };
     } catch (error) {
-      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+      const msg = error instanceof Error ? error.message : String(error);
+      this.log.warn("send failed", { chat_id, error: msg });
+      return { ok: false, error: msg };
     } finally {
       await this.set_typing(chat_id, false);
     }
@@ -143,6 +147,7 @@ export class DiscordChannel extends BaseChannel {
         .filter((r): r is InboundMessage => Boolean(r));
     } catch (error) {
       this.last_error = error instanceof Error ? error.message : String(error);
+      this.log.warn("read failed", { chat_id, error: this.last_error });
       return [];
     }
   }

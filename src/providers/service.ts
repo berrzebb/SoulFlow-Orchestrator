@@ -15,6 +15,7 @@ function parse_provider_id(raw: string): ProviderId | null {
   if (v === "claude_code") return "claude_code";
   if (v === "openrouter") return "openrouter";
   if (v === "phi4_local") return "phi4_local";
+  if (v === "gemini") return "gemini";
   return null;
 }
 
@@ -28,26 +29,31 @@ export class ProviderRegistry {
   private readonly secret_vault: SecretVaultService;
 
   constructor(options?: {
+    openrouter_api_key?: string | null;
     openrouter_api_base?: string;
     openrouter_model?: string;
+    openrouter_http_referer?: string;
+    openrouter_app_title?: string;
+    phi4_api_key?: string | null;
     phi4_api_base?: string;
     phi4_model?: string;
     orchestrator_max_tokens?: number;
+    orchestrator_provider?: string;
     circuit_breaker?: CircuitBreakerOptions;
     health_scorer?: HealthScorerOptions;
+    cli_configs?: Record<string, { command?: string; args?: string; timeout_ms?: number; permission_config?: import("./cli-permission.js").CliPermissionConfig }>;
   }) {
     this.secret_vault = get_shared_secret_vault(process.cwd());
+    const cli = options?.cli_configs || {};
     this.providers.set(
       "chatgpt",
         new CliHeadlessProvider({
           id: "chatgpt",
           default_model: "chatgpt-cli-headless",
-          command_env: "CHATGPT_HEADLESS_COMMAND",
-          args_env: "CHATGPT_HEADLESS_ARGS",
-          timeout_env: "CHATGPT_HEADLESS_TIMEOUT_MS",
-          default_command: "codex",
-          default_args: "exec --json --sandbox workspace-write --skip-git-repo-check -",
-          default_timeout_ms: 180000,
+          command: cli.chatgpt?.command || "codex",
+          args: cli.chatgpt?.args || "exec --json --sandbox workspace-write --skip-git-repo-check -",
+          timeout_ms: cli.chatgpt?.timeout_ms || 180000,
+          permission_config: cli.chatgpt?.permission_config,
         }),
       );
     this.providers.set(
@@ -55,24 +61,34 @@ export class ProviderRegistry {
         new CliHeadlessProvider({
           id: "claude_code",
           default_model: "claude-cli-headless",
-          command_env: "CLAUDE_HEADLESS_COMMAND",
-          args_env: "CLAUDE_HEADLESS_ARGS",
-          timeout_env: "CLAUDE_HEADLESS_TIMEOUT_MS",
-          default_command: "claude",
-          default_args: "-p --verbose --output-format stream-json --include-partial-messages --permission-mode dontAsk -",
-          default_timeout_ms: 180000,
+          command: cli.claude_code?.command || "claude",
+          args: cli.claude_code?.args || "-p --verbose --output-format stream-json --include-partial-messages --permission-mode dontAsk -",
+          timeout_ms: cli.claude_code?.timeout_ms || 180000,
+          permission_config: cli.claude_code?.permission_config,
         }),
       );
     this.providers.set(
       "openrouter",
       new OpenRouterProvider({
+        api_key: options?.openrouter_api_key ?? undefined,
         api_base: options?.openrouter_api_base,
         default_model: options?.openrouter_model,
+        http_referer: options?.openrouter_http_referer,
+        app_title: options?.openrouter_app_title,
       }),
     );
     this.providers.set("phi4_local", new Phi4LocalProvider({
+      api_key: options?.phi4_api_key ?? undefined,
       api_base: options?.phi4_api_base,
       default_model: options?.phi4_model,
+    }));
+    this.providers.set("gemini", new CliHeadlessProvider({
+      id: "gemini",
+      default_model: "gemini-cli-headless",
+      command: cli.gemini?.command || "gemini",
+      args: cli.gemini?.args || "--output-format stream-json",
+      timeout_ms: cli.gemini?.timeout_ms || 180000,
+      permission_config: cli.gemini?.permission_config,
     }));
 
     for (const id of this.providers.keys()) {
@@ -81,7 +97,7 @@ export class ProviderRegistry {
     this.health_scorer = new ProviderHealthScorer(options?.health_scorer);
 
     this.orchestrator_max_tokens = options?.orchestrator_max_tokens ?? 4096;
-    this.orchestrator_provider_id = this.resolve_default_orchestrator_provider();
+    this.orchestrator_provider_id = this.resolve_default_orchestrator_provider(options?.orchestrator_provider);
   }
 
   get_secret_vault(): SecretVaultService {
@@ -153,8 +169,8 @@ export class ProviderRegistry {
     return this.orchestrator_provider_id;
   }
 
-  private resolve_default_orchestrator_provider(): ProviderId {
-    const preferred = parse_provider_id(String(process.env.ORCH_ORCHESTRATOR_PROVIDER || ""));
+  private resolve_default_orchestrator_provider(override?: string): ProviderId {
+    const preferred = parse_provider_id(override || "");
     if (preferred && this.providers.has(preferred)) return preferred;
     return "phi4_local";
   }

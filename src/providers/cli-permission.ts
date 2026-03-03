@@ -1,13 +1,22 @@
 import { resolve } from "node:path";
 import type { ChatOptions, FsAccessLevel } from "./types.js";
 import { sandbox_from_preset } from "./types.js";
-import { parse_bool_like } from "../utils/common.js";
 import {
   build_codex_mcp_overrides,
   load_mcp_servers_for_codex,
   runtime_mcp_allowlist,
   should_enable_all_project_mcp_servers,
 } from "./cli-mcp-loader.js";
+
+export type CliPermissionConfig = {
+  workspace_dir?: string;
+  codex_bypass_sandbox?: boolean;
+  codex_sandbox_mode?: string;
+  codex_add_dirs?: string;
+  claude_permission_mode?: string;
+  gemini_approval_mode?: string;
+  mcp_enabled?: boolean;
+};
 
 export function split_args(raw: string): string[] {
   return raw
@@ -72,6 +81,16 @@ export function is_codex_command(command: string): boolean {
 export function is_claude_command(command: string): boolean {
   const base = command_basename(command);
   return base === "claude" || base === "claude.exe" || base === "claude.cmd";
+}
+
+export function is_gemini_command(command: string): boolean {
+  const base = command_basename(command);
+  return base === "gemini" || base === "gemini.exe" || base === "gemini.cmd";
+}
+
+function is_gemini_invocation(command: string, args: string[]): boolean {
+  if (is_gemini_command(command)) return true;
+  return is_gemini_command(first_non_flag_token(args));
 }
 
 function first_non_flag_index(args: string[]): number {
@@ -140,6 +159,7 @@ export function with_codex_permission_overrides(
   command: string,
   args: string[],
   runtime_policy?: ChatOptions["runtime_policy"],
+  config?: CliPermissionConfig,
 ): string[] {
   if (!is_codex_invocation(command, args)) return args;
   let out = strip_approval_flags(args);
@@ -150,7 +170,7 @@ export function with_codex_permission_overrides(
 
   const bypass_all = fs === "full-access"
     ? true
-    : parse_bool_like(process.env.ORCH_CODEX_BYPASS_SANDBOX, false);
+    : (config?.codex_bypass_sandbox ?? false);
   if (bypass_all) {
     if (!has_any_flag(out, ["--dangerously-bypass-approvals-and-sandbox"])) {
       out = with_codex_global_option(out, "--dangerously-bypass-approvals-and-sandbox");
@@ -163,16 +183,16 @@ export function with_codex_permission_overrides(
     "workspace-write": "workspace-write",
     "full-access": "workspace-write",
   };
-  const sandbox_mode = SANDBOX_MAP[fs] || String(process.env.ORCH_CODEX_SANDBOX_MODE || "workspace-write").trim();
+  const sandbox_mode = SANDBOX_MAP[fs] || (config?.codex_sandbox_mode || "workspace-write");
   if (sandbox_mode && !has_any_flag(out, ["-s", "--sandbox", "--full-auto"])) {
     out = with_codex_global_option(out, "--sandbox", sandbox_mode);
   }
 
-  // writable_roots (sandbox policy) + 환경변수 fallback
+  const workspace = config?.workspace_dir || process.cwd();
   const policy_dirs = (sandbox.writable_roots || []).map((d) => resolve(d));
-  const env_dirs = split_path_list(String(process.env.ORCH_CODEX_ADD_DIRS || ""))
-    .map((d) => resolve(String(process.env.WORKSPACE_DIR || process.cwd()), d));
-  const all_dirs = [...policy_dirs, ...env_dirs];
+  const add_dirs_raw = config?.codex_add_dirs || "";
+  const cfg_dirs = split_path_list(add_dirs_raw).map((d) => resolve(workspace, d));
+  const all_dirs = [...policy_dirs, ...cfg_dirs];
 
   const existing_dirs = new Set<string>();
   for (let i = 0; i < out.length; i += 1) {
@@ -196,6 +216,7 @@ export function with_claude_permission_overrides(
   command: string,
   args: string[],
   runtime_policy?: ChatOptions["runtime_policy"],
+  config?: CliPermissionConfig,
 ): string[] {
   if (!is_claude_invocation(command, args)) return args;
   const out = [...args];
@@ -204,7 +225,7 @@ export function with_claude_permission_overrides(
   const MODE_MAP: Record<FsAccessLevel, string> = {
     "read-only": "default",
     "workspace-write": "acceptEdits",
-    "full-access": String(process.env.ORCH_CLAUDE_PERMISSION_MODE || "dontAsk").trim(),
+    "full-access": config?.claude_permission_mode || "dontAsk",
   };
   const mode = sandbox.plan_only ? "plan" : MODE_MAP[sandbox.fs_access];
   if (!mode) return out;
@@ -214,16 +235,47 @@ export function with_claude_permission_overrides(
   return out;
 }
 
+/** SandboxPolicy → Gemini CLI --approval-mode / --sandbox 플래그로 변환. */
+export function with_gemini_permission_overrides(
+  command: string,
+  args: string[],
+  runtime_policy?: ChatOptions["runtime_policy"],
+  config?: CliPermissionConfig,
+): string[] {
+  if (!is_gemini_invocation(command, args)) return args;
+  const out = [...args];
+  const sandbox = runtime_policy?.sandbox ?? sandbox_from_preset("full-auto");
+
+  // approval-mode: read-only=default, workspace-write=auto_edit, full-access=yolo
+  const APPROVAL_MAP: Record<FsAccessLevel, string> = {
+    "read-only": "default",
+    "workspace-write": "auto_edit",
+    "full-access": config?.gemini_approval_mode || "yolo",
+  };
+  const mode = sandbox.plan_only ? "default" : APPROVAL_MAP[sandbox.fs_access];
+  if (mode && !has_any_flag(out, ["--approval-mode"])) {
+    out.push("--approval-mode", mode);
+  }
+
+  // sandbox flag: read-only일 때만 활성화
+  if (sandbox.fs_access === "read-only" && !has_any_flag(out, ["-s", "--sandbox"])) {
+    out.push("--sandbox");
+  }
+
+  return out;
+}
+
 export function with_codex_mcp_runtime_overrides(
   command: string,
   args: string[],
   runtime_policy?: ChatOptions["runtime_policy"],
+  config?: CliPermissionConfig,
 ): string[] {
-  const enabled = String(process.env.ORCH_MCP_ENABLED || "1").trim() !== "0";
+  const enabled = config?.mcp_enabled ?? true;
   if (!enabled) return args;
   if (!is_codex_invocation(command, args)) return args;
   if (args.some((v) => /mcp_servers\./i.test(String(v || "")))) return args;
-  const cwd = resolve(String(process.env.WORKSPACE_DIR || process.cwd()));
+  const cwd = resolve(config?.workspace_dir || process.cwd());
   const runtime_allow = runtime_mcp_allowlist(runtime_policy?.mcp?.servers);
   const enable_all_project = typeof runtime_policy?.mcp?.enable_all_project === "boolean"
     ? runtime_policy.mcp.enable_all_project

@@ -57,12 +57,14 @@ export class WorkflowEventService {
   private write_queue: Promise<void> = Promise.resolve();
   private task_store: TaskStoreLike | null = null;
   private readonly logger: Logger | null;
+  private readonly task_loop_max_turns: number;
 
-  constructor(root = process.cwd(), events_dir_override?: string, logger?: Logger | null) {
+  constructor(root = process.cwd(), events_dir_override?: string, logger?: Logger | null, task_loop_max_turns?: number) {
     this.root = root;
     this.events_dir = events_dir_override || join(root, "runtime", "events");
     this.sqlite_path = join(this.events_dir, "events.db");
     this.logger = logger ?? null;
+    this.task_loop_max_turns = Math.max(1, task_loop_max_turns || 40);
     this.initialized = this.ensure_initialized();
   }
 
@@ -410,8 +412,11 @@ export class WorkflowEventService {
     const base: TaskState = existing || {
       taskId: task_id,
       title: normalize_text(event.summary).slice(0, 120) || `Workflow:${task_id}`,
+      objective: normalize_text(event.summary).slice(0, 200),
+      channel: normalize_text(event.provider),
+      chatId: normalize_text(event.chat_id),
       currentTurn: 0,
-      maxTurns: Math.max(1, Number(process.env.TASK_LOOP_MAX_TURNS || 40)),
+      maxTurns: this.task_loop_max_turns,
       status: "running",
       currentStep: "assign",
       memory: {},

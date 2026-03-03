@@ -5,6 +5,7 @@ metadata:
   model: local
   tools:
     - exec
+    - Bash
   triggers:
     - tmux
     - 터미널

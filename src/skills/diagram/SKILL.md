@@ -40,6 +40,10 @@ flowchart, sequence, ERD, class, state, gantt, pie, mindmap (all standard Mermai
 2. Render with `diagram_render`.
 3. SVG output → save to `.svg` via `write_file`. Terminal output → use `format=ascii`.
 
+## References
+
+- **[mermaid-syntax.md](references/mermaid-syntax.md)** — 전체 다이어그램 타입별 문법 예시 (flowchart, sequence, ERD, class, state, gantt, pie, mindmap)
+
 ## Guardrails
 
 - Keep node labels short and explicit.

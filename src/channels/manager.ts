@@ -1,5 +1,6 @@
 import type { InboundMessage, MediaItem, MessageBusLike } from "../bus/types.js";
-import { resolve_provider, type ChannelProvider, type ChannelRegistryLike } from "./types.js";
+import { resolve_provider, type ChannelRegistryLike } from "./types.js";
+type ChannelProvider = string;
 import type { ProviderRegistry } from "../providers/service.js";
 import type { ServiceLike } from "../runtime/service.types.js";
 import type { AppConfig } from "../config/schema.js";
@@ -17,10 +18,11 @@ import type { OrchestrationResult } from "../orchestration/types.js";
 import type { ProcessTrackerLike } from "../orchestration/process-tracker.js";
 import { resolve_reply_to } from "../orchestration/service.js";
 import { get_command_descriptors } from "./commands/registry.js";
-import { parse_slash_command_from_message } from "./slash-command.js";
+import { parse_slash_command_from_message, parse_slash_command } from "./slash-command.js";
 import {
   default_render_profile,
   render_agent_output,
+  render_tool_block,
   type RenderProfile,
   type RenderMode,
 } from "./rendering.js";
@@ -33,6 +35,12 @@ export type ChannelManagerStatus = {
   mention_loop_running: boolean;
 };
 
+/** 봇 self ID와 기본 채널/chat_id를 제공하는 인터페이스. */
+export type BotIdentitySource = {
+  get_bot_self_id(provider: string): string;
+  get_default_target(provider: string): string;
+};
+
 export type ChannelManagerDeps = {
   bus: MessageBusLike;
   registry: ChannelRegistryLike;
@@ -42,17 +50,21 @@ export type ChannelManagerDeps = {
   approval: ApprovalService;
   task_resume: TaskResumeService;
   session_recorder: SessionRecorder;
+  session_store?: import("../session/service.js").SessionStoreLike | null;
   media_collector: MediaCollector;
   process_tracker: ProcessTrackerLike | null;
   providers: ProviderRegistry | null;
   config: AppConfig["channel"];
   workspace_dir: string;
   logger: Logger;
+  bot_identity: BotIdentitySource;
   /** AgentEvent를 대시보드 SSE로 릴레이할 콜백. */
   on_agent_event?: ((event: import("../agent/agent.types.js").AgentEvent) => void) | null;
+  /** 웹 채팅 스트리밍 텍스트 릴레이 콜백 (chat_id, content, done). */
+  on_web_stream?: ((chat_id: string, content: string, done: boolean) => void) | null;
 };
 
-type ActiveRun = { abort: AbortController; provider: ChannelProvider; chat_id: string; alias: string };
+type ActiveRun = { abort: AbortController; provider: ChannelProvider; chat_id: string; alias: string; done: Promise<void> };
 
 /**
  * 인바운드 수신 → 위임 체인(approval → command → orchestration) → 아웃바운드 전송.
@@ -76,6 +88,9 @@ export class ChannelManager implements ServiceLike {
   private readonly workspace_dir: string;
   private readonly logger: Logger;
   private readonly on_agent_event: ((event: import("../agent/agent.types.js").AgentEvent) => void) | null;
+  private readonly on_web_stream: ((chat_id: string, content: string, done: boolean) => void) | null;
+  private readonly session_store: import("../session/service.js").SessionStoreLike | null;
+  private readonly bot_identity: BotIdentitySource;
 
   private running = false;
   private poll_task: Promise<void> | null = null;
@@ -106,6 +121,10 @@ export class ChannelManager implements ServiceLike {
     this.workspace_dir = deps.workspace_dir;
     this.logger = deps.logger;
     this.on_agent_event = deps.on_agent_event || null;
+    this.on_web_stream = deps.on_web_stream || null;
+    this.session_store = deps.session_store ?? null;
+    this.bot_identity = deps.bot_identity;
+    _bot_identity_ref = deps.bot_identity;
   }
 
   async start(): Promise<void> {
@@ -116,24 +135,28 @@ export class ChannelManager implements ServiceLike {
     this.poll_task = this.run_poll_loop();
     this.consumer_task = this.run_inbound_consumer();
     this.prune_timer = setInterval(() => this.prune_seen(), 60_000);
+    this._recover_orphaned_messages().catch((e) =>
+      this.logger.warn("orphan recovery failed", { error: e instanceof Error ? e.message : String(e) }),
+    );
   }
 
   /** 각 채널 플랫폼에 커맨드 목록을 등록 (best-effort). */
   private async sync_commands_to_channels(): Promise<void> {
     const descriptors = get_command_descriptors();
     for (const entry of this.registry.list_channels()) {
-      const ch = this.registry.get_channel(entry.provider);
+      const ch = this.registry.get_channel(entry.instance_id);
       if (!ch) continue;
       try {
         await ch.sync_commands(descriptors);
       } catch (error) {
-        this.logger.warn("sync_commands failed", { provider: entry.provider, error: error instanceof Error ? error.message : String(error) });
+        this.logger.warn("sync_commands failed", { instance_id: entry.instance_id, error: error instanceof Error ? error.message : String(error) });
       }
     }
   }
 
   async stop(): Promise<void> {
     this.running = false;
+    this.cancel_active_runs();
     if (this.prune_timer) { clearInterval(this.prune_timer); this.prune_timer = null; }
     if (this.inbound_inflight.size > 0) await Promise.allSettled([...this.inbound_inflight]);
     await this.poll_task;
@@ -152,7 +175,7 @@ export class ChannelManager implements ServiceLike {
 
   get_status(): ChannelManagerStatus {
     return {
-      enabled_channels: this.registry.list_channels().map((ch) => ch.provider),
+      enabled_channels: this.registry.list_channels().map((ch) => ch.instance_id),
       mention_loop_running: this.running,
     };
   }
@@ -232,8 +255,18 @@ export class ChannelManager implements ServiceLike {
     // HITL: 대기/실패 Task이 있으면 사용자 입력으로 재개
     const resume = await this.task_resume.try_resume(provider, message);
     if (resume?.resumed) {
-      this.logger.info("task resumed from user input", { task_id: resume.task_id, previous_status: resume.previous_status });
+      this.logger.info("task resumed from referenced message", { task_id: resume.task_id, previous_status: resume.previous_status });
       await this.invoke_and_reply(provider, message, this.config.defaultAlias, resume.task_id);
+      return;
+    }
+    if (resume?.referenced_context) {
+      // 완료 작업 컨텍스트 + 사용자의 현재 요청을 합쳐서 새 오케스트레이션 진행
+      this.logger.info("enriching request with completed task context", { task_id: resume.task_id });
+      const enriched: InboundMessage = {
+        ...message,
+        content: `${resume.referenced_context}\n\n[현재 요청]\n${String(message.content || "").trim()}`,
+      };
+      await this.invoke_and_reply(provider, enriched, this.config.defaultAlias);
       return;
     }
 
@@ -271,12 +304,12 @@ export class ChannelManager implements ServiceLike {
 
   private async run_poll_loop(): Promise<void> {
     while (this.running) {
-      for (const { provider } of this.registry.list_channels()) {
+      for (const { provider, instance_id } of this.registry.list_channels()) {
         if (!this.running) return;
         const target = this.resolve_target(provider);
         if (!target) continue;
         try {
-          const rows = await this.registry.read(provider, target, this.config.readLimit);
+          const rows = await this.registry.read(instance_id, target, this.config.readLimit);
           if (this.config.approvalReactionEnabled) {
             const rxn_result = await this.approval.try_handle_approval_reactions(provider, rows);
             if (rxn_result.handled && rxn_result.task_id) {
@@ -303,7 +336,7 @@ export class ChannelManager implements ServiceLike {
             this.handle_control_reactions(provider, rows);
           }
 
-          const target_key = `${provider}:${target}`;
+          const target_key = `${instance_id}:${target}`;
           if (!this.primed_targets.has(target_key)) {
             for (const row of rows) this.mark_seen(row);
             this.primed_targets.add(target_key);
@@ -320,7 +353,7 @@ export class ChannelManager implements ServiceLike {
             );
           }
         } catch (e) {
-          this.logger.error("poll failed", { provider, error: e instanceof Error ? e.message : String(e) });
+          this.logger.error("poll failed", { instance_id, error: e instanceof Error ? e.message : String(e) });
         }
       }
       await sleep(this.config.pollIntervalMs);
@@ -362,10 +395,15 @@ export class ChannelManager implements ServiceLike {
   private async invoke_and_reply(provider: ChannelProvider, message: InboundMessage, alias: string, resumed_task_id?: string): Promise<void> {
     const run_key = `${provider}:${message.chat_id}:${alias}`.toLowerCase();
     const prev = this.active_runs.get(run_key);
-    if (prev && !prev.abort.signal.aborted) prev.abort.abort();
+    if (prev) {
+      if (!prev.abort.signal.aborted) prev.abort.abort();
+      await Promise.race([prev.done, sleep(3000)]);
+    }
 
+    let resolve_done!: () => void;
+    const done = new Promise<void>((r) => { resolve_done = r; });
     const abort = new AbortController();
-    this.active_runs.set(run_key, { abort, provider, chat_id: message.chat_id, alias });
+    this.active_runs.set(run_key, { abort, provider, chat_id: message.chat_id, alias, done });
 
     const run_id = this.tracker?.start({ provider, chat_id: message.chat_id, alias, sender_id: message.sender_id });
 
@@ -380,7 +418,7 @@ export class ChannelManager implements ServiceLike {
     const stream_state = { message_id: "", last_update: 0, chain: Promise.resolve() };
 
     try {
-      await this.recorder.record_user(provider, message, alias);
+      if (!meta.is_recovery) await this.recorder.record_user(provider, message, alias);
       const media_inputs = await this.media.collect(provider, message);
       const history = await this.recorder.get_history(
         provider, message.chat_id, alias, message.thread_id,
@@ -404,15 +442,15 @@ export class ChannelManager implements ServiceLike {
         },
         on_agent_event: this.on_agent_event || undefined,
         on_tool_block: (block) => {
+          if (provider === "web") return; // 웹은 최종 응답만 표시 (tool block 개별 전송 방지)
           stream_state.chain = stream_state.chain
             .then(async () => {
               const profile = this.effective_render_profile(provider, message.chat_id);
-              const rendered = render_agent_output(block, profile);
+              const rendered = render_tool_block(block, profile);
               const text = String(rendered.content || "").trim().slice(0, 700);
               if (!text) return;
 
               if (stream_state.message_id) {
-                // 기존 스트림 메시지(실행 모드 라벨 등)를 툴 블록 내용으로 교체
                 await this.registry.edit_message(
                   provider, message.chat_id, stream_state.message_id, text, rendered.parse_mode,
                 );
@@ -434,6 +472,22 @@ export class ChannelManager implements ServiceLike {
         this.tracker!.end(run_id, result.error ? "failed" : "completed", result.error);
       }
 
+      // builtin: 분류기가 커맨드 핸들러로 라우팅 → synthetic slash command로 위임
+      if (result.builtin_command) {
+        const synthetic_text = `/${result.builtin_command}${result.builtin_args ? " " + result.builtin_args : ""}`;
+        const synthetic_slash = parse_slash_command(synthetic_text);
+        if (synthetic_slash) {
+          const cmd_ctx: CommandContext = {
+            provider, message,
+            command: { ...synthetic_slash, args_lower: synthetic_slash.args.map((a) => a.toLowerCase()) },
+            text: synthetic_text,
+            send_reply: (content) => this.send_command_reply(provider, message, content),
+          };
+          if (await this.commands.try_handle(cmd_ctx)) return;
+        }
+        // fallback: 커맨드 매칭 실패 시 일반 결과 전달로 계속
+      }
+
       await stream_state.chain;
       await this.deliver_result(provider, message, alias, result, stream_state.message_id);
     } catch (e) {
@@ -442,6 +496,7 @@ export class ChannelManager implements ServiceLike {
       await this.send_error_reply(provider, message, alias, e instanceof Error ? e.message : String(e), run_id);
     } finally {
       clearInterval(typing_ticker);
+      resolve_done();
       const current = this.active_runs.get(run_key);
       if (current?.abort === abort) this.active_runs.delete(run_key);
     }
@@ -481,7 +536,7 @@ export class ChannelManager implements ServiceLike {
       if (rendered.media.length > 0) {
         await this.send_outbound(provider, message, alias, "첨부 파일을 확인해주세요.", { kind: "agent_media", agent_alias: alias }, rendered.media);
       }
-      await this.recorder.record_assistant(provider, message, alias, rendered.content, record_meta);
+      await this.recorder.record_assistant(provider, message, alias, rendered.markdown, record_meta);
       return;
     }
 
@@ -494,14 +549,22 @@ export class ChannelManager implements ServiceLike {
     if (result.run_id) outbound_meta.run_id = result.run_id;
     if (result.usage) outbound_meta.usage = result.usage;
 
+    if (provider === "web") this.on_web_stream?.(message.chat_id, "", true);
     await this.send_outbound(provider, message, alias, final_text, outbound_meta, rendered.media);
-    await this.recorder.record_assistant(provider, message, alias, rendered.content, record_meta);
+    await this.recorder.record_assistant(provider, message, alias, rendered.markdown, record_meta);
   }
 
   private async send_or_edit_stream(
     provider: ChannelProvider, message: InboundMessage, alias: string, content: string,
     state: { message_id: string; last_update: number },
   ): Promise<void> {
+    if (provider === "web") {
+      const now = Date.now();
+      if (now - state.last_update < 400) return;
+      state.last_update = now;
+      this.on_web_stream?.(message.chat_id, content, false);
+      return;
+    }
     const now = Date.now();
     if (now - state.last_update < 1200) return;
     const clipped = sanitize_provider_output(content).split("\n").slice(-12).join("\n").trim().slice(0, 700);
@@ -530,7 +593,7 @@ export class ChannelManager implements ServiceLike {
   }
 
   private render_reply(raw: string, provider: ChannelProvider, chat_id: string): {
-    content: string; media: MediaItem[]; parse_mode?: "HTML"; render_mode: RenderMode;
+    content: string; markdown: string; media: MediaItem[]; parse_mode?: "HTML"; render_mode: RenderMode;
   } {
     const profile = this.effective_render_profile(provider, chat_id);
     const cleaned = strip_sensitive_command_blocks(sanitize_provider_output(raw));
@@ -539,6 +602,7 @@ export class ChannelManager implements ServiceLike {
     const rendered = render_agent_output(fallback, profile);
     return {
       content: String(rendered.content || "").slice(0, 1600),
+      markdown: String(rendered.markdown || "").slice(0, 1600),
       media: media.slice(0, 4),
       parse_mode: rendered.parse_mode,
       render_mode: profile.mode,
@@ -566,18 +630,24 @@ export class ChannelManager implements ServiceLike {
     await this.send_outbound(provider, message, this.config.defaultAlias, text, {
       kind: "command_reply", render_parse_mode: rendered.parse_mode || null,
     });
-    await this.recorder.record_assistant(provider, message, this.config.defaultAlias, text);
+    const markdown = String(rendered.markdown || "").slice(0, 1600);
+    await this.recorder.record_assistant(provider, message, this.config.defaultAlias, markdown);
   }
 
   private async send_outbound(
     provider: ChannelProvider, message: InboundMessage, sender_id: string, content: string,
     metadata: Record<string, unknown>, media?: MediaItem[], id_prefix?: string,
   ): Promise<void> {
-    await this.dispatch.send(provider, {
+    const outbound = {
       id: `${id_prefix || provider}-${Date.now()}`, provider, channel: provider, sender_id,
       chat_id: message.chat_id, content, media, at: new Date().toISOString(),
       reply_to: resolve_reply_to(provider, message), thread_id: message.thread_id, metadata,
-    });
+    };
+    if (provider === "web") {
+      await this.bus.publish_outbound(outbound);
+      return;
+    }
+    await this.dispatch.send(provider, outbound);
   }
 
   private async try_read_ack(provider: ChannelProvider, message: InboundMessage): Promise<void> {
@@ -612,10 +682,7 @@ export class ChannelManager implements ServiceLike {
   }
 
   private resolve_target(provider: ChannelProvider): string | null {
-    const env_key = provider === "slack" ? "SLACK_DEFAULT_CHANNEL"
-      : provider === "discord" ? "DISCORD_DEFAULT_CHANNEL"
-      : provider === "telegram" ? "TELEGRAM_DEFAULT_CHAT_ID" : "";
-    return String(process.env[env_key] || "").trim() || null;
+    return this.bot_identity.get_default_target(provider) || null;
   }
 
   private mark_seen(msg: InboundMessage): void {
@@ -632,6 +699,59 @@ export class ChannelManager implements ServiceLike {
     prune_ttl_map(this.seen, (ts) => ts, this.config.seenTtlMs, this.config.seenMaxSize);
     prune_ttl_map(this.control_reaction_seen, (ts) => ts, this.config.reactionActionTtlMs, this.config.seenMaxSize);
     this.approval.prune_seen(this.config.seenTtlMs, this.config.seenMaxSize);
+  }
+
+  /** 프로세스 재시작 후 응답 없이 남은 사용자 메시지를 재처리. */
+  private async _recover_orphaned_messages(): Promise<void> {
+    const store = this.session_store;
+    if (!store?.list_by_prefix) return;
+
+    const RECOVERY_WINDOW_MS = 30 * 60 * 1000;
+    const now = Date.now();
+    const providers = ["telegram", "slack", "discord"];
+    let recovered = 0;
+
+    for (const provider of providers) {
+      try {
+        const entries = await store.list_by_prefix(`${provider}:`, 50);
+        for (const entry of entries) {
+          if (entry.message_count === 0) continue;
+          const updated = Date.parse(entry.updated_at);
+          if (!Number.isFinite(updated) || now - updated > RECOVERY_WINDOW_MS) continue;
+
+          const session = await store.get_or_create(entry.key);
+          const last = session.messages[session.messages.length - 1];
+          if (!last || last.role !== "user") continue;
+
+          const parts = entry.key.split(":");
+          if (parts.length < 4) continue;
+          const [, chat_id, , thread] = parts;
+          if (!chat_id) continue;
+
+          const sender_id = String((last as Record<string, unknown>).sender_id || "").trim();
+          if (!sender_id || sender_id === "unknown") continue;
+          const content = String(last.content || "").trim();
+          if (!content) continue;
+
+          this.logger.info("recovering orphaned message", { provider, chat_id, sender_id });
+          await this.bus.publish_inbound({
+            id: `recovery-${Date.now()}-${chat_id}`,
+            provider,
+            channel: provider,
+            sender_id,
+            chat_id,
+            content,
+            at: String(last.timestamp || new Date().toISOString()),
+            thread_id: thread === "main" ? undefined : thread,
+            metadata: { kind: "orphan_recovery", is_recovery: true },
+          });
+          recovered++;
+        }
+      } catch (e) {
+        this.logger.warn("orphan recovery scan failed", { provider, error: e instanceof Error ? e.message : String(e) });
+      }
+    }
+    if (recovered > 0) this.logger.info(`recovered ${recovered} orphaned message(s)`);
   }
 
   /** 🛑 등 컨트롤 리액션으로 활성 실행을 취소. */
@@ -686,12 +806,14 @@ function is_reaction_message(message: InboundMessage): boolean {
   return meta.is_reaction === true;
 }
 
-/** 환경변수에서 봇 ID를 매번 읽음. 캐싱하면 테스트·런타임 env 변경을 놓침. */
+/** BotIdentitySource에서 봇 ID 조회. */
+let _bot_identity_ref: BotIdentitySource | null = null;
 function _read_bot_ids(): Record<string, string> {
+  if (!_bot_identity_ref) return { slack: "", telegram: "", discord: "" };
   return {
-    slack: String(process.env.SLACK_BOT_USER_ID || "").trim().toLowerCase(),
-    telegram: String(process.env.TELEGRAM_BOT_USER_ID || process.env.TELEGRAM_BOT_SELF_ID || "").trim().toLowerCase(),
-    discord: String(process.env.DISCORD_BOT_USER_ID || process.env.DISCORD_BOT_SELF_ID || "").trim().toLowerCase(),
+    slack: _bot_identity_ref.get_bot_self_id("slack").toLowerCase(),
+    telegram: _bot_identity_ref.get_bot_self_id("telegram").toLowerCase(),
+    discord: _bot_identity_ref.get_bot_self_id("discord").toLowerCase(),
   };
 }
 

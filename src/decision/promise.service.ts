@@ -39,6 +39,10 @@ export class PromiseService {
     return ["# PROMISES_COMPACT", ...lines].join("\n");
   }
 
+  async archive_promise(id: string): Promise<boolean> {
+    return this.inner.archive_decision(id);
+  }
+
   async dedupe_promises(): Promise<{ removed: number; active: number }> {
     return this.inner.dedupe_decisions();
   }

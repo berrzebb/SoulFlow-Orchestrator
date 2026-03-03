@@ -1,18 +1,24 @@
 import { randomUUID } from "node:crypto";
 import type { InboundMessage, OutboundMessage } from "../bus/types.js";
+import type { Logger } from "../logger.js";
+import { create_logger } from "../logger.js";
 import { now_iso } from "../utils/common.js";
 import type { CommandDescriptor } from "./commands/registry.js";
-import type { AgentMention, ChannelCommand, ChannelHealth, ChannelProvider, ChannelTypingState, ChatChannel, FileRequestResult } from "./types.js";
+import type { AgentMention, ChannelCommand, ChannelHealth, ChannelTypingState, ChatChannel, FileRequestResult } from "./types.js";
 import { parse_slash_command } from "./slash-command.js";
 
 export abstract class BaseChannel implements ChatChannel {
-  readonly provider: ChannelProvider;
+  readonly provider: string;
+  readonly instance_id: string;
+  protected readonly log: Logger;
   protected running = false;
   protected last_error = "";
   protected readonly typing_state = new Map<string, ChannelTypingState>();
 
-  protected constructor(provider: ChannelProvider) {
+  protected constructor(provider: string, instance_id?: string) {
     this.provider = provider;
+    this.instance_id = instance_id || provider;
+    this.log = create_logger(`channel:${provider}`);
   }
 
   abstract start(): Promise<void>;
@@ -190,6 +196,7 @@ export abstract class BaseChannel implements ChatChannel {
   get_health(): ChannelHealth {
     return {
       provider: this.provider,
+      instance_id: this.instance_id,
       running: this.running,
       last_error: this.last_error || undefined,
     };

@@ -146,6 +146,10 @@ export class AgentRuntimeAdapter implements AgentRuntimeLike {
     return this.domain.task_store.find_waiting_by_chat(provider, chat_id);
   }
 
+  async find_task_by_trigger_message(provider: string, trigger_message_id: string): Promise<import("../contracts.js").TaskState | null> {
+    return this.domain.task_store.find_by_trigger_message_id(provider, trigger_message_id);
+  }
+
   async get_task(task_id: string): Promise<import("../contracts.js").TaskState | null> {
     return this.domain.task_store.get(task_id);
   }

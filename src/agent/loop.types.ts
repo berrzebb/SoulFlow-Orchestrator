@@ -32,7 +32,8 @@ export type AgentLoopRunOptions = {
   channel?: string | null;
   chat_id?: string | null;
   max_turns?: number;
-  check_should_continue?: (ctx: AgentLoopTurnContext) => Promise<boolean> | boolean;
+  /** false=종료, true=기본 메시지로 계속, string=해당 문자열을 다음 턴 메시지로 사용. */
+  check_should_continue?: (ctx: AgentLoopTurnContext) => Promise<boolean | string> | boolean | string;
   on_turn?: (ctx: AgentLoopTurnContext) => Promise<void> | void;
   on_tool_calls?: AgentToolCallHandler;
   on_stream?: (chunk: string) => Promise<void> | void;
@@ -66,6 +67,9 @@ export type TaskNode = {
 export type TaskLoopRunOptions = {
   task_id: string;
   title: string;
+  objective: string;
+  channel: string;
+  chat_id: string;
   nodes: TaskNode[];
   max_turns?: number;
   initial_memory?: Record<string, unknown>;

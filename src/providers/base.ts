@@ -60,11 +60,5 @@ export abstract class BaseLlmProvider implements LlmProvider {
     };
   }
 
-  protected require_env(name: string): string {
-    const value = String(process.env[name] || "").trim();
-    if (!value) throw new Error(`env_missing:${name}`);
-    return value;
-  }
-
   abstract chat(options: ChatOptions): Promise<LlmResponse>;
 }

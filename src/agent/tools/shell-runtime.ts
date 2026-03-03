@@ -1,15 +1,13 @@
-import { exec, execFile, spawnSync } from "node:child_process";
+import { execFile, spawnSync } from "node:child_process";
 import { promisify } from "node:util";
 
-const exec_async = promisify(exec);
 const exec_file_async = promisify(execFile);
 
-type ShellRunOptions = {
+export type ShellRunOptions = {
   cwd: string;
   timeout_ms: number;
   max_buffer_bytes: number;
   signal?: AbortSignal;
-  force_native_shell?: boolean;
 };
 
 type JsonRecord = Record<string, unknown>;
@@ -62,10 +60,6 @@ function find_just_bash_runner(): JustBashRunner | null {
   return null;
 }
 
-function should_use_just_bash(): boolean {
-  return Boolean(find_just_bash_runner());
-}
-
 function as_record(raw: unknown): JsonRecord | null {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
   return raw as JsonRecord;
@@ -96,16 +90,16 @@ function parse_just_bash_output(stdout: string): { stdout: string; stderr: strin
   }
 }
 
-/** Windows에서 PowerShell/pwsh 명령은 just-bash(Unix bash 샌드박스)로 실행 불가. */
-export function needs_native_shell(command: string): boolean {
-  if (process.platform !== "win32") return false;
-  const first_token = command.trimStart().split(/[\s\\/]/)[0]?.toLowerCase() || "";
-  return first_token === "powershell" || first_token === "powershell.exe" || first_token === "pwsh" || first_token === "pwsh.exe";
-}
-
+/**
+ * exec 도구의 셸 실행.
+ * - just-bash 사용 가능 → 샌드박스 실행 (토큰 절약, 파일 탐색용)
+ * - just-bash 미설치 → 시스템 기본 셸 폴백
+ * - 시스템 바이너리(python, curl 등) 실행은 SDK Bash 도구를 사용할 것.
+ */
 export async function run_shell_command(command: string, options: ShellRunOptions): Promise<{ stdout: string; stderr: string }> {
-  if (!options.force_native_shell && !needs_native_shell(command) && should_use_just_bash()) {
-    const runner = find_just_bash_runner() || { command: JUST_BASH_BINARY, prefix_args: [] };
+  // 1. just-bash 샌드박스
+  const runner = find_just_bash_runner();
+  if (runner) {
     const result = await exec_file_async(
       runner.command,
       [...runner.prefix_args, "-c", command, "--root", options.cwd, "--json"],
@@ -128,11 +122,15 @@ export async function run_shell_command(command: string, options: ShellRunOption
     return { stdout: String(result.stdout || ""), stderr: String(result.stderr || "") };
   }
 
+  // 2. 폴백: 시스템 기본 셸
+  const { exec } = await import("node:child_process");
+  const exec_async = promisify(exec);
   const result = await exec_async(command, {
     cwd: options.cwd,
     timeout: options.timeout_ms,
     maxBuffer: options.max_buffer_bytes,
     signal: options.signal,
+    windowsHide: true,
   });
   return { stdout: String(result.stdout || ""), stderr: String(result.stderr || "") };
 }

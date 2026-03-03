@@ -1,22 +1,4 @@
 import { z } from "zod";
-import { parse_bool_like } from "../utils/common.js";
-
-function env_bool(key: string, fallback: boolean): boolean {
-  return parse_bool_like(process.env[key], fallback);
-}
-
-function env_str(key: string, fallback: string): string {
-  return String(process.env[key] || "").trim() || fallback;
-}
-
-function env_num(key: string, fallback: number): number {
-  const raw = Number(process.env[key]);
-  return Number.isFinite(raw) ? raw : fallback;
-}
-
-function env_str_list(key: string): string[] {
-  return String(process.env[key] || "").split(/\s+/).map((s) => s.trim()).filter(Boolean);
-}
 
 const ChannelStreamingSchema = z.object({
   enabled: z.boolean(),
@@ -60,19 +42,12 @@ const ChannelSchema = z.object({
   outboundDedupe: ChannelDedupeSchema,
 });
 
-const ProviderChannelSchema = z.object({
-  enabled: z.boolean(),
-  botToken: z.string(),
-  defaultTarget: z.string(),
-  apiBase: z.string().optional(),
-});
-
 const Phi4Schema = z.object({
-  runtimeEnabled: z.boolean(),
-  runtimeEngine: z.enum(["auto", "native", "docker", "podman"]),
-  runtimeImage: z.string(),
-  runtimeContainer: z.string(),
-  runtimePort: z.number().int().positive(),
+  enabled: z.boolean(),
+  engine: z.enum(["auto", "native", "docker", "podman"]),
+  image: z.string(),
+  container: z.string(),
+  port: z.number().int().positive(),
   model: z.string(),
   pullModel: z.boolean(),
   autoStop: z.boolean(),
@@ -81,134 +56,188 @@ const Phi4Schema = z.object({
   apiBase: z.string(),
 });
 
-const AgentBackendSchema = z.object({
-  claudeBackend: z.enum(["claude_cli", "claude_sdk"]).default("claude_cli"),
-  codexBackend: z.enum(["codex_cli", "codex_appserver"]).default("codex_cli"),
-});
-
 const OrchestrationSchema = z.object({
   maxToolResultChars: z.number().min(50),
   orchestratorMaxTokens: z.number().min(256),
+  orchestratorProvider: z.string().default("phi4_local"),
+  executorProvider: z.string().default("chatgpt"),
 });
 
 const DashboardSchema = z.object({
   enabled: z.boolean(),
   port: z.number().int().positive(),
   host: z.string(),
+  portFallback: z.boolean(),
+  /** 외부 공개 URL (예: https://dashboard.example.com). OAuth redirect_uri 기준으로 사용됨. */
+  publicUrl: z.string().optional(),
+});
+
+const CliSchema = z.object({
+  maxCaptureChars: z.number().min(10_000),
+  maxStreamStateChars: z.number().min(8_000),
+});
+
+const McpSchema = z.object({
+  enabled: z.boolean(),
+  enableAllProject: z.boolean().optional(),
+  startupTimeoutSec: z.number().min(0),
+  serversFile: z.string(),
+  serversJson: z.string(),
+  serverNames: z.string(),
+});
+
+const LoggingSchema = z.object({
+  level: z.enum(["debug", "info", "warn", "error"]),
+});
+
+const OpsSchema = z.object({
+  healthLogEnabled: z.boolean(),
+  healthLogOnChange: z.boolean(),
+  bridgePumpEnabled: z.boolean(),
 });
 
 export const AppConfigSchema = z.object({
-  timezoneOffsetMin: z.number(),
   agentLoopMaxTurns: z.number().min(1),
   taskLoopMaxTurns: z.number().min(1),
   dataDir: z.string(),
   workspaceDir: z.string(),
-  channels: z.object({
-    slack: ProviderChannelSchema,
-    discord: ProviderChannelSchema,
-    telegram: ProviderChannelSchema,
-  }),
   channel: ChannelSchema,
   orchestration: OrchestrationSchema,
-  agentBackend: AgentBackendSchema,
   phi4: Phi4Schema,
   dashboard: DashboardSchema,
+  cli: CliSchema,
+  mcp: McpSchema,
+  logging: LoggingSchema,
+  ops: OpsSchema,
 });
 
 export type AppConfig = z.infer<typeof AppConfigSchema>;
 
-export function load_config_from_env(): AppConfig {
-  const workspace = process.cwd();
-  const dataDir = env_str("ORCH_DATA_DIR", "") || `${workspace}/runtime`;
-  const phi4Port = env_num("PHI4_RUNTIME_PORT", 11434);
-
-  const raw = {
-    timezoneOffsetMin: Math.max(-840, Math.min(840, env_num("TZ_OFFSET_MIN", 540))),
-    agentLoopMaxTurns: env_num("AGENT_LOOP_MAX_TURNS", 30),
-    taskLoopMaxTurns: env_num("TASK_LOOP_MAX_TURNS", 40),
-    dataDir,
-    workspaceDir: workspace,
-    channels: {
-      slack: {
-        enabled: env_bool("SLACK_ENABLED", true),
-        botToken: env_str("SLACK_BOT_TOKEN", ""),
-        defaultTarget: env_str("SLACK_DEFAULT_CHANNEL", ""),
-      },
-      discord: {
-        enabled: env_bool("DISCORD_ENABLED", true),
-        botToken: env_str("DISCORD_BOT_TOKEN", ""),
-        defaultTarget: env_str("DISCORD_DEFAULT_CHANNEL", ""),
-        apiBase: env_str("DISCORD_API_BASE", "https://discord.com/api/v10"),
-      },
-      telegram: {
-        enabled: env_bool("TELEGRAM_ENABLED", true),
-        botToken: env_str("TELEGRAM_BOT_TOKEN", ""),
-        defaultTarget: env_str("TELEGRAM_DEFAULT_CHAT_ID", ""),
-        apiBase: env_str("TELEGRAM_API_BASE", "https://api.telegram.org"),
-      },
-    },
+/** 하드코딩 기본값으로 AppConfig 생성. 유일한 env 의존: ORCH_DATA_DIR (부트스트랩). */
+export function get_config_defaults(): AppConfig {
+  const data_dir = "./runtime";
+  return AppConfigSchema.parse({
+    agentLoopMaxTurns: 20,
+    taskLoopMaxTurns: 50,
+    dataDir: data_dir,
+    workspaceDir: ".",
     channel: {
-      debug: env_bool("CHANNEL_DEBUG", false),
-      autoReply: env_bool("CHANNEL_AUTO_REPLY", true),
-      defaultAlias: env_str("DEFAULT_AGENT_ALIAS", "assistant"),
-      pollIntervalMs: Math.max(500, env_num("CHANNEL_POLL_INTERVAL_MS", 2000)),
-      readLimit: Math.max(1, Math.min(100, env_num("CHANNEL_READ_LIMIT", 30))),
-      readAckEnabled: env_bool("READ_ACK_ENABLED", true),
-      readAckReaction: env_str("READ_ACK_REACTION", "eyes"),
-      seenTtlMs: Math.max(60_000, env_num("CHANNEL_SEEN_TTL_MS", 86_400_000)),
-      seenMaxSize: Math.max(2_000, env_num("CHANNEL_SEEN_MAX_SIZE", 50_000)),
-      inboundConcurrency: Math.max(1, env_num("CHANNEL_INBOUND_CONCURRENCY", 4)),
-      sessionHistoryMaxAgeMs: Math.max(0, env_num("CHANNEL_SESSION_HISTORY_MAX_AGE_MS", 1_800_000)),
-      approvalReactionEnabled: env_bool("APPROVAL_REACTION_ENABLED", true),
-      controlReactionEnabled: env_bool("CONTROL_REACTION_ENABLED", true),
-      reactionActionTtlMs: Math.max(60_000, env_num("REACTION_ACTION_TTL_MS", 86_400_000)),
+      debug: false,
+      autoReply: true,
+      defaultAlias: "assistant",
+      pollIntervalMs: 2000,
+      readLimit: 30,
+      readAckEnabled: true,
+      readAckReaction: "eyes",
+      seenTtlMs: 86_400_000,
+      seenMaxSize: 50_000,
+      inboundConcurrency: 4,
+      sessionHistoryMaxAgeMs: 1_800_000,
+      approvalReactionEnabled: true,
+      controlReactionEnabled: true,
+      reactionActionTtlMs: 86_400_000,
       streaming: {
-        enabled: env_bool("CHANNEL_STREAMING_ENABLED", true),
-        intervalMs: Math.max(500, env_num("CHANNEL_STREAMING_INTERVAL_MS", 1400)),
-        minChars: Math.max(16, env_num("CHANNEL_STREAMING_MIN_CHARS", 48)),
-        suppressFinalAfterStream: env_bool("CHANNEL_SUPPRESS_FINAL_AFTER_STREAM", true),
+        enabled: true,
+        intervalMs: 1400,
+        minChars: 48,
+        suppressFinalAfterStream: true,
       },
       dispatch: {
-        inlineRetries: Math.max(0, env_num("CHANNEL_MANAGER_INLINE_RETRIES", 0)),
-        retryMax: Math.max(0, env_num("CHANNEL_DISPATCH_RETRY_MAX", 3)),
-        retryBaseMs: Math.max(100, env_num("CHANNEL_DISPATCH_RETRY_BASE_MS", 700)),
-        retryMaxMs: Math.max(100, env_num("CHANNEL_DISPATCH_RETRY_MAX_MS", 25_000)),
-        retryJitterMs: Math.max(0, env_num("CHANNEL_DISPATCH_RETRY_JITTER_MS", 250)),
-        dlqEnabled: env_bool("CHANNEL_DISPATCH_DLQ_ENABLED", true),
-        dlqPath: env_str("CHANNEL_DISPATCH_DLQ_PATH", `${dataDir}/dlq/dlq.db`),
+        inlineRetries: 0,
+        retryMax: 3,
+        retryBaseMs: 700,
+        retryMaxMs: 25_000,
+        retryJitterMs: 250,
+        dlqEnabled: true,
+        dlqPath: `${data_dir}/dlq/dlq.db`,
       },
       outboundDedupe: {
-        ttlMs: Math.max(1_000, env_num("CHANNEL_OUTBOUND_DEDUPE_TTL_MS", 25_000)),
-        maxSize: Math.max(500, env_num("CHANNEL_OUTBOUND_DEDUPE_MAX_SIZE", 20_000)),
+        ttlMs: 25_000,
+        maxSize: 20_000,
       },
     },
     orchestration: {
-      maxToolResultChars: Math.max(50, env_num("ORCHESTRATION_MAX_TOOL_RESULT_CHARS", 500)),
-      orchestratorMaxTokens: Math.max(256, env_num("ORCHESTRATION_MAX_TOKENS", 4096)),
-    },
-    agentBackend: {
-      claudeBackend: env_str("AGENT_CLAUDE_BACKEND", "claude_cli") as "claude_cli" | "claude_sdk",
-      codexBackend: env_str("AGENT_CODEX_BACKEND", "codex_cli") as "codex_cli" | "codex_appserver",
+      maxToolResultChars: 500,
+      orchestratorMaxTokens: 4096,
+      orchestratorProvider: "phi4_local",
+      executorProvider: "chatgpt",
     },
     phi4: {
-      runtimeEnabled: env_bool("PHI4_RUNTIME_ENABLED", false),
-      runtimeEngine: env_str("PHI4_RUNTIME_ENGINE", "auto") as "auto" | "docker" | "podman" | "native",
-      runtimeImage: env_str("PHI4_RUNTIME_IMAGE", "ollama/ollama:latest"),
-      runtimeContainer: env_str("PHI4_RUNTIME_CONTAINER", "orchestrator-phi4"),
-      runtimePort: phi4Port,
-      model: env_str("PHI4_MODEL", "phi4"),
-      pullModel: env_bool("PHI4_RUNTIME_PULL_MODEL", true),
-      autoStop: env_bool("PHI4_RUNTIME_AUTO_STOP", false),
-      gpuEnabled: env_bool("PHI4_RUNTIME_GPU_ENABLED", true),
-      gpuArgs: env_str_list("PHI4_RUNTIME_GPU_ARGS"),
-      apiBase: env_str("PHI4_API_BASE", `http://127.0.0.1:${phi4Port}/v1`),
+      enabled: false,
+      engine: "auto",
+      image: "ollama/ollama:latest",
+      container: "orchestrator-phi4",
+      port: 11434,
+      model: "phi4",
+      pullModel: true,
+      autoStop: false,
+      gpuEnabled: true,
+      gpuArgs: [],
+      apiBase: "http://127.0.0.1:11434/v1",
     },
     dashboard: {
-      enabled: env_bool("DASHBOARD_ENABLED", true),
-      port: env_num("DASHBOARD_PORT", 4200),
-      host: env_str("DASHBOARD_HOST", "127.0.0.1"),
+      enabled: true,
+      port: 4200,
+      host: "0.0.0.0",
+      portFallback: false,
     },
-  };
+    cli: {
+      maxCaptureChars: 500_000,
+      maxStreamStateChars: 200_000,
+    },
+    mcp: {
+      enabled: true,
+      startupTimeoutSec: 0,
+      serversFile: "",
+      serversJson: "",
+      serverNames: "",
+    },
+    logging: {
+      level: "info",
+    },
+    ops: {
+      healthLogEnabled: false,
+      healthLogOnChange: true,
+      bridgePumpEnabled: false,
+    },
+  });
+}
 
-  return AppConfigSchema.parse(raw);
+/**
+ * ConfigStore 오버라이드와 SecretVault 민감 값을 기본값에 병합.
+ * 우선순위: vault(민감) > store 오버라이드 > 하드코딩 기본값
+ */
+export async function load_config_merged(
+  store: import("./config-store.js").ConfigStore,
+): Promise<AppConfig> {
+  const defaults = get_config_defaults();
+  const overrides = store.get_all_overrides();
+  const merged = structuredClone(defaults) as Record<string, unknown>;
+
+  for (const { path, value } of overrides) {
+    set_nested(merged, path, value);
+  }
+
+  const { get_sensitive_fields } = await import("./config-meta.js");
+  for (const field of get_sensitive_fields()) {
+    const vault_value = await store.get_sensitive(field.path);
+    if (vault_value) {
+      set_nested(merged, field.path, vault_value);
+    }
+  }
+
+  return AppConfigSchema.parse(merged);
+}
+
+/** dot-path로 중첩 객체에 값 설정 */
+export function set_nested(obj: Record<string, unknown>, path: string, value: unknown): void {
+  const keys = path.split(".");
+  let current: Record<string, unknown> = obj;
+  for (let i = 0; i < keys.length - 1; i++) {
+    if (current[keys[i]] === undefined || typeof current[keys[i]] !== "object") {
+      current[keys[i]] = {};
+    }
+    current = current[keys[i]] as Record<string, unknown>;
+  }
+  current[keys[keys.length - 1]] = value;
 }

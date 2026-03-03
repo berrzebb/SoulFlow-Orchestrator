@@ -1,21 +1,29 @@
 import { BaseLlmProvider } from "./base.js";
+import { create_logger } from "../logger.js";
 import { LlmResponse, parse_openai_response, sanitize_messages_for_api, type ChatOptions } from "./types.js";
+
+const log = create_logger("provider:openrouter");
 
 const DEFAULT_TIMEOUT_MS = 120_000;
 
 export class OpenRouterProvider extends BaseLlmProvider {
   private readonly http_referer: string;
   private readonly app_title: string;
+  private readonly api_key: string;
 
-  constructor(args?: { api_base?: string; default_model?: string }) {
+  constructor(args?: {
+    api_base?: string; default_model?: string;
+    api_key?: string; http_referer?: string; app_title?: string;
+  }) {
     super({
       id: "openrouter",
-      api_base: args?.api_base ?? (process.env.OPENROUTER_API_BASE || "https://openrouter.ai/api/v1"),
-      default_model: args?.default_model ?? (process.env.OPENROUTER_MODEL || "openai/gpt-4.1-mini"),
+      api_base: args?.api_base ?? "https://openrouter.ai/api/v1",
+      default_model: args?.default_model ?? "openai/gpt-4.1-mini",
       supports_tool_loop: true,
     });
-    this.http_referer = String(process.env.OPENROUTER_HTTP_REFERER || "").trim();
-    this.app_title = String(process.env.OPENROUTER_APP_TITLE || "").trim();
+    this.api_key = (args?.api_key ?? "").trim();
+    this.http_referer = (args?.http_referer ?? "").trim();
+    this.app_title = (args?.app_title ?? "").trim();
   }
 
   async chat(options: ChatOptions): Promise<LlmResponse> {
@@ -32,7 +40,8 @@ export class OpenRouterProvider extends BaseLlmProvider {
     }
 
     try {
-      const api_key = this.require_env("OPENROUTER_API_KEY");
+      if (!this.api_key) throw new Error("openrouter_api_key_missing");
+      const api_key = this.api_key;
       const headers: Record<string, string> = {
         Authorization: `Bearer ${api_key}`,
         "Content-Type": "application/json",
@@ -53,6 +62,7 @@ export class OpenRouterProvider extends BaseLlmProvider {
       });
       const raw = (await response.json().catch(() => ({}))) as Record<string, unknown>;
       if (!response.ok) {
+        log.warn("api error", { status: response.status, model: body.model });
         return new LlmResponse({
           content: `Error calling OpenRouter: ${JSON.stringify(raw)}`,
           finish_reason: "error",
@@ -62,6 +72,7 @@ export class OpenRouterProvider extends BaseLlmProvider {
       const parsed = parse_openai_response(raw);
       return new LlmResponse(parsed);
     } catch (error) {
+      log.warn("request failed", { error: error instanceof Error ? error.message : String(error) });
       return new LlmResponse({
         content: `Error calling OpenRouter: ${error instanceof Error ? error.message : String(error)}`,
         finish_reason: "error",

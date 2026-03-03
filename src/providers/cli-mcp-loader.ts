@@ -2,6 +2,14 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { parse_bool_like } from "../utils/common.js";
 
+export type McpLoaderConfig = {
+  enable_all_project?: boolean | null;
+  startup_timeout_sec?: number;
+  servers_file?: string;
+  servers_json?: string;
+  server_names?: string;
+};
+
 export type McpServerConfig = {
   command?: string;
   args?: string[];
@@ -167,9 +175,9 @@ function parse_server_name_allowlist(raw: string): Set<string> {
 }
 
 
-export function should_enable_all_project_mcp_servers(cwd: string): boolean {
-  if (String(process.env.ORCH_MCP_ENABLE_ALL_PROJECT || "").trim()) {
-    return parse_bool_like(process.env.ORCH_MCP_ENABLE_ALL_PROJECT, true);
+export function should_enable_all_project_mcp_servers(cwd: string, config?: McpLoaderConfig): boolean {
+  if (config?.enable_all_project !== undefined && config.enable_all_project !== null) {
+    return Boolean(config.enable_all_project);
   }
   const settings_path = find_file_upward(cwd, join(".claude", "settings.json"));
   if (!settings_path) return false;
@@ -188,8 +196,8 @@ export function runtime_mcp_allowlist(mcp_servers: unknown): Set<string> | null 
   return out;
 }
 
-export function load_mcp_servers_for_codex(cwd: string, allowlist?: Set<string> | null): Record<string, McpServerConfig> {
-  const default_timeout_sec = Math.max(0, Number(process.env.ORCH_MCP_STARTUP_TIMEOUT_SEC || 0));
+export function load_mcp_servers_for_codex(cwd: string, allowlist?: Set<string> | null, config?: McpLoaderConfig): Record<string, McpServerConfig> {
+  const default_timeout_sec = Math.max(0, config?.startup_timeout_sec || 0);
   let merged: Record<string, McpServerConfig> = {};
   const base_dirs = [cwd];
 
@@ -216,9 +224,9 @@ export function load_mcp_servers_for_codex(cwd: string, allowlist?: Set<string> 
     }
   }
 
-  const env_file = String(process.env.ORCH_MCP_SERVERS_FILE || "").trim();
-  if (env_file) {
-    const abs = resolve(cwd, env_file);
+  const cfg_file = (config?.servers_file || "").trim();
+  if (cfg_file) {
+    const abs = resolve(cwd, cfg_file);
     const parsed = read_json_file(abs);
     if (parsed) {
       merged = merge_mcp_servers(
@@ -228,9 +236,9 @@ export function load_mcp_servers_for_codex(cwd: string, allowlist?: Set<string> 
     }
   }
 
-  const env_json = String(process.env.ORCH_MCP_SERVERS_JSON || "").trim();
-  if (env_json) {
-    const parsed = parse_json_object(env_json);
+  const cfg_json = (config?.servers_json || "").trim();
+  if (cfg_json) {
+    const parsed = parse_json_object(cfg_json);
     if (parsed) {
       merged = merge_mcp_servers(
         merged,
@@ -239,10 +247,10 @@ export function load_mcp_servers_for_codex(cwd: string, allowlist?: Set<string> 
     }
   }
 
-  const env_allow = parse_server_name_allowlist(String(process.env.ORCH_MCP_SERVER_NAMES || ""));
+  const cfg_allow = parse_server_name_allowlist(config?.server_names || "");
   const allow = allowlist && allowlist.size > 0
     ? allowlist
-    : (env_allow.size > 0 ? env_allow : null);
+    : (cfg_allow.size > 0 ? cfg_allow : null);
   if (allow) {
     const filtered: Record<string, McpServerConfig> = {};
     for (const [name, spec] of Object.entries(merged)) {

@@ -1,5 +1,8 @@
 import { execFile, type ChildProcess, spawn } from "node:child_process";
 import { promisify } from "node:util";
+import { create_logger } from "../logger.js";
+
+const log = create_logger("phi4-runtime");
 
 const exec_file_async = promisify(execFile);
 
@@ -82,7 +85,7 @@ export class Phi4RuntimeManager {
     this.pull_model = options?.pull_model ?? true;
     this.auto_stop = options?.auto_stop ?? false;
     this.api_base = options?.api_base || `http://127.0.0.1:${this.port}/v1`;
-    this.gpu_enabled = options?.gpu_enabled ?? (String(process.env.PHI4_RUNTIME_GPU_ENABLED || "1") !== "0");
+    this.gpu_enabled = options?.gpu_enabled ?? true;
     this.gpu_args_override = Array.isArray(options?.gpu_args) && options.gpu_args.length > 0
       ? options.gpu_args
       : null;
@@ -115,8 +118,11 @@ export class Phi4RuntimeManager {
     this.engine = await this.resolve_engine();
     if (!this.engine) {
       this.last_error = "no_runtime_engine_found";
+      log.warn("no runtime engine found");
       return this.get_status();
     }
+
+    log.info("starting", { engine: this.engine, model: this.model, port: this.port });
 
     try {
       if (this.engine === "native") {
@@ -136,10 +142,12 @@ export class Phi4RuntimeManager {
 
       this.running = await this.is_api_ready();
       if (!this.running) this.last_error = "phi4_runtime_not_ready_after_start";
+      log.info("started", { engine: this.engine, running: this.running });
       return await this.health_check();
     } catch (error) {
       this.last_error = error instanceof Error ? error.message : String(error);
       this.running = false;
+      log.error("start failed", { engine: this.engine, error: this.last_error });
       return this.get_status();
     }
   }
@@ -156,8 +164,10 @@ export class Phi4RuntimeManager {
         await this.run_container_engine(["stop", this.container]);
       }
       this.running = false;
+      log.info("stopped", { engine: this.engine });
     } catch (error) {
       this.last_error = error instanceof Error ? error.message : String(error);
+      log.warn("stop failed", { error: this.last_error });
     }
     return this.get_status();
   }
@@ -244,10 +254,7 @@ export class Phi4RuntimeManager {
     if (this.gpu_args_override && this.gpu_args_override.length > 0) {
       return [...this.gpu_args_override];
     }
-    const envRaw = String(process.env.PHI4_RUNTIME_GPU_ARGS || "").trim();
-    if (envRaw) {
-      return envRaw.split(/\s+/).map((s) => s.trim()).filter(Boolean);
-    }
+    // gpu_args_override가 없으면 엔진 기본값 사용
     if (this.engine === "docker") return ["--gpus", "all"];
     return ["--device", "nvidia.com/gpu=all"];
   }

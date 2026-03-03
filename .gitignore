@@ -1,9 +1,11 @@
 # Dependencies
 node_modules/
-/workspace/**
+
 
 # Build outputs
 dist/
+/workspace/**
+/standalone/**
 *.tsbuildinfo
 
 # Environment files

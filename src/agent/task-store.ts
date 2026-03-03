@@ -7,6 +7,7 @@ export interface TaskStoreLike {
   upsert(task: TaskState): Promise<void>;
   get(task_id: string): Promise<TaskState | null>;
   find_waiting_by_chat(provider: string, chat_id: string): Promise<TaskState | null>;
+  find_by_trigger_message_id(provider: string, trigger_message_id: string): Promise<TaskState | null>;
 }
 
 export class TaskStore implements TaskStoreLike {
@@ -30,11 +31,13 @@ export class TaskStore implements TaskStoreLike {
           updated_at TEXT NOT NULL,
           payload_json TEXT NOT NULL,
           provider TEXT NOT NULL DEFAULT '',
-          chat_id TEXT NOT NULL DEFAULT ''
+          chat_id TEXT NOT NULL DEFAULT '',
+          trigger_message_id TEXT NOT NULL DEFAULT ''
         );
         CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
         CREATE INDEX IF NOT EXISTS idx_tasks_updated_at ON tasks(updated_at DESC);
         CREATE INDEX IF NOT EXISTS idx_tasks_chat_status ON tasks(provider, chat_id, status);
+        CREATE INDEX IF NOT EXISTS idx_tasks_trigger_msg ON tasks(provider, trigger_message_id);
         CREATE VIRTUAL TABLE IF NOT EXISTS tasks_fts USING fts5(
           content,
           task_id UNINDEXED,
@@ -57,12 +60,23 @@ export class TaskStore implements TaskStoreLike {
           VALUES (new.rowid, new.payload_json, new.task_id, new.status);
         END;
       `);
+      // 기존 DB 마이그레이션 — 이미 존재하면 무시
+      try {
+        db.exec("ALTER TABLE tasks ADD COLUMN trigger_message_id TEXT NOT NULL DEFAULT ''");
+        db.exec("CREATE INDEX IF NOT EXISTS idx_tasks_trigger_msg ON tasks(provider, trigger_message_id)");
+      } catch { /* 이미 존재하면 무시 */ }
       return true;
     });
   }
 
   private normalize_task(task: TaskState): TaskState {
-    return { ...task, memory: { ...(task.memory || {}) } };
+    return {
+      ...task,
+      objective: task.objective || "",
+      channel: task.channel || "",
+      chatId: task.chatId || "",
+      memory: { ...(task.memory || {}) },
+    };
   }
 
   private row_to_task(row: { payload_json: string } | undefined | null): TaskState | null {
@@ -78,18 +92,20 @@ export class TaskStore implements TaskStoreLike {
   async upsert(task: TaskState): Promise<void> {
     await this.initialized;
     const normalized = this.normalize_task(task);
-    const provider = String(normalized.memory.channel || "").trim();
-    const chat_id = String(normalized.memory.chat_id || "").trim();
+    const provider = String(normalized.channel || normalized.memory.channel || "").trim();
+    const chat_id = String(normalized.chatId || normalized.memory.chat_id || "").trim();
+    const trigger_message_id = String(normalized.memory.__trigger_message_id || "").trim();
     with_sqlite(this.sqlite_path,(db) => {
       db.prepare(`
-        INSERT INTO tasks (task_id, status, updated_at, payload_json, provider, chat_id)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO tasks (task_id, status, updated_at, payload_json, provider, chat_id, trigger_message_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(task_id) DO UPDATE SET
           status = excluded.status,
           updated_at = excluded.updated_at,
           payload_json = excluded.payload_json,
           provider = excluded.provider,
-          chat_id = excluded.chat_id
+          chat_id = excluded.chat_id,
+          trigger_message_id = excluded.trigger_message_id
       `).run(
         normalized.taskId,
         String(normalized.status || "running"),
@@ -97,6 +113,7 @@ export class TaskStore implements TaskStoreLike {
         JSON.stringify(normalized),
         provider,
         chat_id,
+        trigger_message_id,
       );
       return true;
     });
@@ -135,6 +152,17 @@ export class TaskStore implements TaskStoreLike {
        WHERE provider = ? AND chat_id = ? AND status IN ('waiting_user_input', 'waiting_approval', 'failed', 'max_turns_reached')
        ORDER BY updated_at DESC LIMIT 1`,
     ).get(provider, chat_id) as { payload_json: string } | undefined) || null;
+    return this.row_to_task(row);
+  }
+
+  async find_by_trigger_message_id(provider: string, trigger_message_id: string): Promise<TaskState | null> {
+    if (!trigger_message_id) return null;
+    await this.initialized;
+    const row = with_sqlite(this.sqlite_path, (db) => db.prepare(
+      `SELECT payload_json FROM tasks
+       WHERE provider = ? AND trigger_message_id = ?
+       ORDER BY updated_at DESC LIMIT 1`,
+    ).get(provider, trigger_message_id) as { payload_json: string } | undefined) || null;
     return this.row_to_task(row);
   }
 }

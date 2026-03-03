@@ -1,7 +1,10 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
+import { create_logger } from "../logger.js";
 import type { ServiceLike } from "../runtime/service.types.js";
+
+const log = create_logger("heartbeat");
 import {
   DEFAULT_HEARTBEAT_INTERVAL_S,
   HEARTBEAT_OK_TOKEN,
@@ -131,8 +134,8 @@ export class HeartbeatService implements ServiceLike {
       const response = await this.on_heartbeat(HEARTBEAT_PROMPT);
       if (response.toUpperCase().includes(HEARTBEAT_OK_TOKEN)) return;
       if (this.on_notify) await this.on_notify(response);
-    } catch {
-      // heartbeat failures are isolated from scheduler loop.
+    } catch (err) {
+      log.warn("tick failed", { error: err instanceof Error ? err.message : String(err) });
     }
   }
 

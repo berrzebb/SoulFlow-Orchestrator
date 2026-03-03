@@ -227,8 +227,7 @@ export class MemoryStore implements MemoryStoreLike {
     `).all() as Array<{ day: string }>) || [];
     return rows
       .map((row) => String(row.day || ""))
-      .filter((day) => is_day_key(day))
-      .map((day) => `${day}.md`);
+      .filter((day) => is_day_key(day));
   }
 
   async read_longterm(): Promise<string> {
@@ -344,13 +343,12 @@ export class MemoryStore implements MemoryStoreLike {
     await this.initialized;
     const window_days = Math.max(1, Math.min(365, Number(options?.memory_window || 7)));
     const now = new Date();
-    const files = await this.list_daily();
+    const days = await this.list_daily();
     const used: string[] = [];
     const archived: string[] = [];
     const chunks: string[] = [];
 
-    for (const file of files) {
-      const day = String(file || "").slice(0, 10);
+    for (const day of days) {
       if (!is_day_key(day)) continue;
       const d = new Date(`${day}T00:00:00Z`);
       if (!Number.isFinite(d.getTime())) continue;
@@ -358,7 +356,7 @@ export class MemoryStore implements MemoryStoreLike {
       if (age > window_days) continue;
       const content = (await this.read_daily(day)).trim();
       if (!content) continue;
-      used.push(`${day}.md`);
+      used.push(day);
       chunks.push(`## Daily ${day}\n${content}`);
     }
 
@@ -396,8 +394,7 @@ export class MemoryStore implements MemoryStoreLike {
     ].join("\n");
 
     if (options?.archive) {
-      for (const file of used) {
-        const day = file.slice(0, 10);
+      for (const day of used) {
         if (!is_day_key(day)) continue;
         if (!this.sqlite_delete_daily(day)) continue;
         archived.push(`sqlite://memory/archive/daily/${day}`);
@@ -407,9 +404,9 @@ export class MemoryStore implements MemoryStoreLike {
     return {
       ok: true,
       longterm_appended_chars: block.length,
-      daily_files_used: used,
+      daily_entries_used: used,
       archived_files: archived,
-      summary: body ? `consolidated ${used.length} daily files` : "no daily files consolidated",
+      summary: body ? `consolidated ${used.length} daily entries` : "no daily entries consolidated",
       compressed_prompt,
     };
   }

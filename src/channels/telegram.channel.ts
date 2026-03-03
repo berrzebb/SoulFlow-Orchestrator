@@ -7,9 +7,11 @@ import { BaseChannel } from "./base.js";
 import type { CommandDescriptor } from "./commands/registry.js";
 
 type TelegramChannelOptions = {
+  instance_id?: string;
   bot_token?: string;
   default_chat_id?: string;
   api_base?: string;
+  settings?: Record<string, unknown>;
 };
 
 function as_string(value: unknown): string {
@@ -130,18 +132,21 @@ export class TelegramChannel extends BaseChannel {
   private readonly bot_token: string;
   private readonly default_chat_id: string;
   private readonly api_base: string;
+  private readonly settings: Record<string, unknown>;
   private last_update_id = 0;
 
   constructor(options?: TelegramChannelOptions) {
-    super("telegram");
-    this.bot_token = options?.bot_token || process.env.TELEGRAM_BOT_TOKEN || "";
-    this.default_chat_id = options?.default_chat_id || process.env.TELEGRAM_DEFAULT_CHAT_ID || "";
-    this.api_base = options?.api_base || process.env.TELEGRAM_API_BASE || "https://api.telegram.org";
+    super("telegram", options?.instance_id);
+    this.bot_token = options?.bot_token || "";
+    this.default_chat_id = options?.default_chat_id || "";
+    this.settings = options?.settings || {};
+    this.api_base = options?.api_base || "https://api.telegram.org";
   }
 
   async start(): Promise<void> {
     if (!this.bot_token) throw new Error("telegram_bot_token_missing");
     this.running = true;
+    this.log.info("started", { instance_id: this.instance_id });
   }
 
   async stop(): Promise<void> {
@@ -159,8 +164,8 @@ export class TelegramChannel extends BaseChannel {
         ? (message.metadata as Record<string, unknown>)
         : {};
       const parse_mode = this.resolve_parse_mode(meta.render_parse_mode || meta.parse_mode);
-      const chunk_size = Math.max(500, Number(process.env.TELEGRAM_TEXT_CHUNK_SIZE || 3500));
-      const file_fallback_threshold = Math.max(8_000, Number(process.env.TELEGRAM_TEXT_FILE_FALLBACK_THRESHOLD || 14_000));
+      const chunk_size = Math.max(500, Number(this.settings.text_chunk_size || 3500));
+      const file_fallback_threshold = Math.max(8_000, Number(this.settings.text_file_fallback_threshold || 14_000));
       let first_message_id = "";
       if (Array.isArray(message.media) && message.media.length > 0) {
         for (let idx = 0; idx < message.media.length; idx += 1) {
@@ -256,7 +261,9 @@ export class TelegramChannel extends BaseChannel {
       }
       return { ok: true, message_id: first_message_id || as_string(message.reply_to || "") };
     } catch (error) {
-      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+      const msg = error instanceof Error ? error.message : String(error);
+      this.log.warn("send failed", { chat_id, error: msg });
+      return { ok: false, error: msg };
     } finally {
       await this.set_typing(chat_id, false);
     }
@@ -311,6 +318,7 @@ export class TelegramChannel extends BaseChannel {
       return rows;
     } catch (error) {
       this.last_error = error instanceof Error ? error.message : String(error);
+      this.log.warn("read failed", { chat_id, error: this.last_error });
       return [];
     }
   }
@@ -400,6 +408,7 @@ export class TelegramChannel extends BaseChannel {
       }
     } catch (error) {
       this.last_error = error instanceof Error ? error.message : String(error);
+      this.log.warn("sync_commands failed", { error: this.last_error });
     }
   }
 

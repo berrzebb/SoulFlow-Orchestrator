@@ -94,7 +94,9 @@ export class DispatchService implements ServiceLike {
       const msg = await this.bus.consume_outbound({ timeout_ms: 2000 });
       if (!msg) continue;
       const provider = resolve_provider(msg);
-      if (!provider) continue;
+      // "web" 아웃바운드는 on_publish 옵저버(capture_web_outbound)가 처리함.
+      // 디스패치 루프에서 재시도하면 옵저버가 중복 호출되어 채팅 응답이 N개로 늘어남.
+      if (!provider || provider === "web") continue;
       const result = await this.send_with_retry(provider, msg, true);
       if (!result.ok) {
         this.logger.debug("dispatch failed", { provider, error: result.error });

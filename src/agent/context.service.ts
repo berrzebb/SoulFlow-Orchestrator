@@ -25,12 +25,24 @@ const IMAGE_MIME: Record<string, string> = {
   ".svg": "image/svg+xml",
 };
 
+/** OAuth 연동 요약 — 에이전트 컨텍스트 주입용. */
+export interface OAuthIntegrationSummary {
+  instance_id: string;
+  service_type: string;
+  label: string;
+  scopes: string[];
+  connected: boolean;
+}
+
+export type OAuthSummaryProvider = () => Promise<OAuthIntegrationSummary[]>;
+
 export class ContextBuilder {
   readonly skills_loader: SkillsLoader;
   readonly memory_store: MemoryStoreLike;
   readonly decision_service: DecisionService;
   readonly promise_service: PromiseService;
   private readonly workspace: string;
+  private _oauth_summary_provider: OAuthSummaryProvider | null = null;
 
   constructor(workspace: string, args?: { memory_store?: MemoryStoreLike; promises_dir?: string }) {
     this.workspace = workspace;
@@ -38,6 +50,10 @@ export class ContextBuilder {
     this.memory_store = args?.memory_store || new MemoryStore(workspace);
     this.decision_service = new DecisionService(workspace);
     this.promise_service = new PromiseService(workspace, args?.promises_dir);
+  }
+
+  set_oauth_summary_provider(provider: OAuthSummaryProvider): void {
+    this._oauth_summary_provider = provider;
   }
 
   async build_system_prompt(
@@ -54,6 +70,7 @@ export class ContextBuilder {
     const promises = await this.promise_service.build_compact_injection(decision_ctx);
     const skills_content = this.skills_loader.load_skills_for_context(skill_names);
     const skill_summary = this.skills_loader.build_skill_summary();
+    const oauth_section = await this._build_oauth_section();
     const current_session = this._build_current_session_section(session_context?.channel, session_context?.chat_id);
     return [
       security_override,
@@ -64,6 +81,7 @@ export class ContextBuilder {
       promises || "",
       skills_content ? `# Skills In Context\n${skills_content}` : "",
       `# Skills Summary\n${skill_summary || "(no skills found)"}`,
+      oauth_section,
       MODEL_ROUTING_GUIDE,
       current_session,
     ]
@@ -206,6 +224,29 @@ export class ContextBuilder {
       "source: memory.db",
       `## Longterm\n${longterm}`,
     ].filter(Boolean).join("\n\n");
+  }
+
+  private async _build_oauth_section(): Promise<string> {
+    if (!this._oauth_summary_provider) return "";
+    try {
+      const integrations = await this._oauth_summary_provider();
+      const connected = integrations.filter((i) => i.connected);
+      if (connected.length === 0) return "";
+      const lines = [
+        "# OAuth Integrations",
+        "사용 가능한 OAuth 연동. oauth_fetch 도구로 인증된 API 호출 가능.",
+        "",
+      ];
+      for (const i of connected) {
+        lines.push(`- **${i.label}** (service_id: \`${i.instance_id}\`) — scopes: ${i.scopes.join(", ") || "none"}`);
+      }
+      lines.push("");
+      lines.push("사용법: `oauth_fetch(service_id=\"<id>\", url=\"...\", method=\"GET\")`");
+      lines.push("또는 http_request의 headers에 `{{secret:oauth.<id>.access_token}}` 플레이스홀더 사용.");
+      return lines.join("\n");
+    } catch {
+      return "";
+    }
   }
 
   private _to_image_data_uri_if_local(path_or_url: string): string | null {

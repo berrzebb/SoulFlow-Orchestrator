@@ -5,6 +5,9 @@ metadata:
   model: remote
   tools:
     - exec
+    - Bash
+  oauth:
+    - github
   triggers:
     - 깃허브
     - github
@@ -56,3 +59,8 @@ Most commands support `--json` + `--jq`:
 ```bash
 gh issue list --repo owner/repo --json number,title --jq '.[] | "\(.number): \(.title)"'
 ```
+
+## References
+
+- **[gh-commands.md](references/gh-commands.md)** — PR/이슈/CI/릴리즈/API 전체 명령어 레퍼런스
+- **[oauth.md](references/oauth.md)** — GitHub OAuth Provider 설정 + `oauth_fetch` 직접 API 호출

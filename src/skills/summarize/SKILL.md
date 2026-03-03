@@ -5,6 +5,7 @@ metadata:
   model: remote
   tools:
     - exec
+    - Bash
   triggers:
     - 요약
     - 정리

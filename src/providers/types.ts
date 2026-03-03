@@ -1,4 +1,4 @@
-export type ProviderId = "chatgpt" | "claude_code" | "openrouter" | "phi4_local";
+export type ProviderId = "chatgpt" | "claude_code" | "openrouter" | "phi4_local" | "gemini";
 
 export type ChatRole = "system" | "user" | "assistant" | "tool";
 

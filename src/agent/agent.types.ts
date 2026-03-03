@@ -1,8 +1,33 @@
 import type { LlmUsage, RuntimeExecutionPolicy } from "../providers/types.js";
 import type { JsonSchema, PreToolHook, PostToolHook, ToolSchema } from "./tools/types.js";
+import type { ExecutionMode } from "../orchestration/types.js";
 
-/** Agent 백엔드 식별자. CLI 래퍼와 SDK/AppServer 네이티브를 구분. */
-export type AgentBackendId = "claude_cli" | "codex_cli" | "claude_sdk" | "codex_appserver";
+/** Agent 백엔드 식별자. 동적 프로바이더 인스턴스를 지원하기 위해 string으로 확장. */
+export type AgentBackendId = string;
+
+/** 빌트인 프로바이더 타입. 확장 시 register_agent_provider_factory()로 등록. */
+export type AgentProviderType = "claude_cli" | "codex_cli" | "claude_sdk" | "codex_appserver" | (string & {});
+
+/** 에이전트 프로바이더 인스턴스 설정. SQLite에 영속화되며 대시보드에서 CRUD. */
+export type AgentProviderConfig = {
+  instance_id: string;
+  provider_type: AgentProviderType;
+  label: string;
+  enabled: boolean;
+  /** 낮을수록 높은 우선순위. */
+  priority: number;
+  /** 지원하는 실행 모드. 빈 배열 = 모든 모드. */
+  supported_modes: ExecutionMode[];
+  /** 프로바이더 타입별 생성자 인자 (cwd, model, command 등). */
+  settings: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CreateAgentProviderInput = Pick<
+  AgentProviderConfig,
+  "instance_id" | "provider_type" | "label" | "enabled" | "priority" | "supported_modes" | "settings"
+>;
 
 /** 백엔드가 제공하는 기능 선언. 오케스트레이터가 보상 전략을 결정하는 데 사용. */
 export type BackendCapabilities = {

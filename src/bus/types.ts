@@ -1,4 +1,4 @@
-export type MessageProvider = "slack" | "discord" | "telegram" | "system" | string;
+export type MessageProvider = "slack" | "discord" | "telegram" | "web" | "system" | string;
 
 export type MediaItemType = "image" | "video" | "audio" | "file" | "link";
 
@@ -13,6 +13,7 @@ export type MediaItem = {
 export type Message = {
   id: string;
   provider: MessageProvider;
+  instance_id?: string;
   channel: string;
   sender_id: string;
   chat_id: string;

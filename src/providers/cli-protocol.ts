@@ -206,6 +206,32 @@ export function extract_json_event_text(
     return {};
   }
 
+  // Gemini CLI: message 이벤트 — role=assistant인 청크만 추출
+  if (type === "message" && as_string(event.role).toLowerCase() === "assistant") {
+    const full = strip_protocol_markers(collect_text_deep(event));
+    if (!full) return {};
+    let delta = full;
+    if (state.last_full_text && full.startsWith(state.last_full_text)) {
+      delta = full.slice(state.last_full_text.length);
+    }
+    state.last_full_text = full;
+    return { delta, final: full };
+  }
+
+  // Gemini CLI: result 이벤트 — response 필드에 최종 응답
+  if (type === "result") {
+    const response = as_string(event.response);
+    if (!response) return {};
+    const full = strip_protocol_markers(response);
+    if (!full) return {};
+    let delta = full;
+    if (state.last_full_text && full.startsWith(state.last_full_text)) {
+      delta = full.slice(state.last_full_text.length);
+    }
+    state.last_full_text = full;
+    return { delta, final: full };
+  }
+
   if (type === "item.completed" && event.item && typeof event.item === "object") {
     const item = event.item as Record<string, unknown>;
     const item_type = as_string(item.type).toLowerCase();

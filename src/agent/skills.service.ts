@@ -162,6 +162,9 @@ export class SkillsLoader {
       const soul = typeof meta.soul === "string" ? meta.soul.trim() || null : null;
       const heart = typeof meta.heart === "string" ? meta.heart.trim() || null : null;
       const shared_protocols = this.parse_meta_string_list(meta.shared_protocols);
+      const preferred_providers = this.parse_meta_string_list(meta.preferred_providers);
+      const oauth = this.parse_meta_string_list(meta.oauth);
+      if (oauth.length > 0 && !tools.includes("oauth_fetch")) tools.push("oauth_fetch");
 
       const skillMeta: SkillMetadata = {
         name,
@@ -180,6 +183,8 @@ export class SkillsLoader {
         soul,
         heart,
         shared_protocols,
+        preferred_providers,
+        oauth,
       };
       target.set(name, skillMeta);
       this.raw_by_name.set(name, raw);
@@ -218,6 +223,9 @@ export class SkillsLoader {
       const soul = typeof meta.soul === "string" ? meta.soul.trim() || null : null;
       const heart = typeof meta.heart === "string" ? meta.heart.trim() || null : null;
       const shared_protocols = this.parse_meta_string_list(meta.shared_protocols);
+      const preferred_providers = this.parse_meta_string_list(meta.preferred_providers);
+      const oauth = this.parse_meta_string_list(meta.oauth);
+      if (oauth.length > 0 && !tools.includes("oauth_fetch")) tools.push("oauth_fetch");
 
       target.set(name, {
         name,
@@ -236,6 +244,8 @@ export class SkillsLoader {
         soul,
         heart,
         shared_protocols,
+        preferred_providers,
+        oauth,
       });
       this.raw_by_name.set(name, raw);
     }
@@ -301,6 +311,7 @@ export class SkillsLoader {
       if (meta.always) tags.push("always");
       if (meta.model) tags.push(`model:${meta.model}`);
       if (meta.tools.length > 0) tags.push(`tools:${meta.tools.join(",")}`);
+      if (meta.oauth.length > 0) tags.push(`oauth:${meta.oauth.join(",")}`);
       lines.push(`- ${meta.name} [${tags.join(", ")}]: ${meta.summary}`);
     }
     return lines.join("\n");

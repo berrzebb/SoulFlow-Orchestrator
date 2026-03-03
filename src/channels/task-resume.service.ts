@@ -14,6 +14,8 @@ export type TaskResumeResult = {
   resumed: boolean;
   task_id: string;
   previous_status: TaskState["status"];
+  /** 완료 작업의 컨텍스트 요약 — 새 오케스트레이션 시 메시지에 포함. */
+  referenced_context?: string;
 };
 
 export type TaskResumeServiceDeps = {
@@ -57,6 +59,41 @@ export class TaskResumeService {
       this.logger.info("expired_stale_tasks", { count: expired.length, ids: expired.map((t) => t.taskId) });
     }
 
+    // 레퍼런스 메시지가 있으면 연결된 Task를 우선 탐색 (thread_id → reply_to 순서)
+    const ref_id = String(message.thread_id || message.reply_to || "").trim();
+    if (ref_id) {
+      const referenced = await this.runtime.find_task_by_trigger_message(provider, ref_id);
+      if (referenced) {
+        const resumable = ["waiting_user_input", "waiting_approval", "failed", "max_turns_reached"];
+        if (resumable.includes(referenced.status)) {
+          const previous_status = referenced.status;
+          const reason = previous_status === "failed" ? "retry_with_enrichment" : "referenced_message_reply";
+          this.logger.info("resuming task from referenced message", {
+            task_id: referenced.taskId,
+            previous_status,
+            reason,
+            ref_id,
+          });
+          const resumed = await this.runtime.resume_task(referenced.taskId, text, reason);
+          if (!resumed || resumed.status !== "running") return null;
+          return { resumed: true, task_id: referenced.taskId, previous_status };
+        }
+        if (referenced.status === "completed") {
+          this.logger.info("completed task referenced, enriching new request", {
+            task_id: referenced.taskId,
+            ref_id,
+          });
+          return {
+            resumed: false,
+            task_id: referenced.taskId,
+            previous_status: "completed",
+            referenced_context: build_task_context_summary(referenced),
+          };
+        }
+      }
+    }
+
+    // 폴백: 채팅 전체 대기 Task 조회
     const waiting = await this.runtime.find_waiting_task(provider, message.chat_id);
     if (!waiting) return null;
 
@@ -120,4 +157,13 @@ export class TaskResumeService {
       return false;
     }
   }
+}
+
+function build_task_context_summary(task: TaskState): string {
+  const objective = String(task.memory.objective || "").trim();
+  const last_output = String(task.memory.last_output || "").trim();
+  const parts: string[] = ["[이전 작업 컨텍스트]"];
+  if (objective) parts.push(`목적: ${objective.slice(0, 300)}`);
+  if (last_output) parts.push(`결과: ${last_output.slice(0, 500)}`);
+  return parts.join("\n");
 }

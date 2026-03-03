@@ -328,6 +328,21 @@ function unescape_markdown_text(input: string): string {
   return decoded.replace(ESCAPED_MARKDOWN_PUNCT_RE, "$1");
 }
 
+/** Tool block은 내부 생성 텍스트 — LLM 출력 sanitizer를 우회하고 모드별 최소 변환만 적용. */
+export function render_tool_block(block: string, profile: RenderProfile): RenderedOutput {
+  const text = String(block || "").trim();
+  if (!text) return { markdown: "", content: "" };
+  if (profile.mode === "plain") {
+    return { markdown: text, content: text.replace(/`([^`]+)`/g, "$1") };
+  }
+  if (profile.mode === "html") {
+    const content = escape_html(text).replace(/`([^`]+)`/g, (_, code) => `<code>${code}</code>`);
+    return { markdown: text, content, parse_mode: "HTML" };
+  }
+  // markdown/mrkdwn: backtick 그대로 유지
+  return { markdown: text, content: text };
+}
+
 function collapse_blank_lines(input: string): string {
   return String(input || "")
     .replace(/\r/g, "")

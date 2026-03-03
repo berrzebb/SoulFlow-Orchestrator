@@ -37,7 +37,8 @@ export async function create_sdk_tool_server(
         async (args: Record<string, unknown>) => {
           try {
             const result = await t.execute(args, context);
-            return { content: [{ type: "text" as const, text: result }] };
+            const text = typeof result === "string" ? result : JSON.stringify(result ?? "");
+            return { content: [{ type: "text" as const, text }] };
           } catch (e) {
             return {
               content: [{ type: "text" as const, text: `Error: ${e instanceof Error ? e.message : String(e)}` }],

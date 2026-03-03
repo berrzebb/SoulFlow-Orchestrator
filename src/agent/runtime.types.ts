@@ -110,6 +110,8 @@ export interface AgentRuntimeLike {
   resume_task(task_id: string, user_input?: string, reason?: string): Promise<import("../contracts.js").TaskState | null>;
   /** 특정 채팅에서 사용자 입력/승인을 대기 중인 Task을 조회. */
   find_waiting_task(provider: string, chat_id: string): Promise<import("../contracts.js").TaskState | null>;
+  /** 트리거 메시지 ID로 연결된 Task을 역조회. */
+  find_task_by_trigger_message(provider: string, trigger_message_id: string): Promise<import("../contracts.js").TaskState | null>;
   /** Task ID로 상태를 조회. */
   get_task(task_id: string): Promise<import("../contracts.js").TaskState | null>;
   /** Task에 연결된 에이전트 세션을 조회. */

@@ -3,8 +3,8 @@ import type { AgentBackendRegistry } from "../agent/agent-registry.js";
 import type { AgentFinishReason, AgentHooks } from "../agent/agent.types.js";
 import type { ToolSchema } from "../agent/tools/types.js";
 import type { MessageBusLike } from "../bus/index.js";
-import type { RuntimeConfig } from "../config/index.js";
 import type { WorkflowEventService } from "../events/index.js";
+import type { ProviderCapabilities } from "../providers/executor.js";
 import { parse_executor_preference, resolve_executor_provider } from "../providers/executor.js";
 import { sanitize_provider_output } from "../channels/output-sanitizer.js";
 import { seal_inbound_sensitive_text } from "../security/inbound-seal.js";
@@ -16,8 +16,16 @@ type CronTarget = { provider: "slack" | "discord" | "telegram"; chat_id: string 
 
 const CRON_BLOCKED_TOOL_NAMES = new Set(["spawn", "cron"]);
 
+export type CronConfig = {
+  agent_loop_max_turns: number;
+  default_alias: string;
+  executor_provider: string;
+  provider_caps: ProviderCapabilities;
+  resolve_default_target: () => { provider: string; chat_id: string } | null;
+};
+
 export type CronRuntimeHandlerDeps = {
-  config: RuntimeConfig;
+  config: CronConfig;
   bus: MessageBusLike;
   events: WorkflowEventService;
   agent_runtime: AgentRuntimeLike;
@@ -32,32 +40,27 @@ const CRON_FINISH_WARNINGS: Partial<Record<AgentFinishReason, string>> = {
   output_retries: "출력 재시도 한도 초과",
 };
 
-function default_chat_for_provider(config: RuntimeConfig, provider: CronTarget["provider"]): string {
-  if (provider === "slack") return String(config.channels.slack.default_channel || "").trim();
-  if (provider === "discord") return String(config.channels.discord.default_channel || "").trim();
-  return String(config.channels.telegram.default_chat_id || "").trim();
+function resolve_fallback_target(config: CronConfig): CronTarget | null {
+  const result = config.resolve_default_target();
+  if (!result) return null;
+  return { provider: result.provider as CronTarget["provider"], chat_id: result.chat_id };
 }
 
-function resolve_fallback_target(config: RuntimeConfig): CronTarget | null {
-  const provider = config.provider;
-  const chat_id = default_chat_for_provider(config, provider);
-  if (!chat_id) return null;
-  return { provider, chat_id };
-}
-
-function resolve_cron_target(config: RuntimeConfig, job: CronJob): CronTarget | null {
+function resolve_cron_target(config: CronConfig, job: CronJob): CronTarget | null {
   const explicit_provider = String(job.payload.channel || "").trim().toLowerCase();
-  let provider: CronTarget["provider"] | null = null;
-  if (!explicit_provider) {
-    provider = config.provider;
-  } else if (explicit_provider === "slack" || explicit_provider === "discord" || explicit_provider === "telegram") {
-    provider = explicit_provider;
-  } else {
+  const explicit_to = String(job.payload.to || "").trim();
+  if (explicit_provider && explicit_to) {
+    if (explicit_provider === "slack" || explicit_provider === "discord" || explicit_provider === "telegram") {
+      return { provider: explicit_provider, chat_id: explicit_to };
+    }
     return null;
   }
-  const chat_id = String(job.payload.to || default_chat_for_provider(config, provider) || "").trim();
-  if (!chat_id) return null;
-  return { provider, chat_id };
+  const fallback = resolve_fallback_target(config);
+  if (!fallback) return null;
+  return {
+    provider: (explicit_provider || fallback.provider) as CronTarget["provider"],
+    chat_id: explicit_to || fallback.chat_id,
+  };
 }
 
 export function create_cron_job_handler(deps: CronRuntimeHandlerDeps): CronOnJob {
@@ -93,7 +96,7 @@ export function create_cron_job_handler(deps: CronRuntimeHandlerDeps): CronOnJob
     const run_ts = Date.now();
     const run_id = `cron-run:${job.id}:${run_ts}`;
     const task_id = `cron-task:${job.id}:${run_ts}`;
-    const agent_alias = String(process.env.DEFAULT_AGENT_ALIAS || "assistant").trim() || "assistant";
+    const agent_alias = deps.config.default_alias;
 
     const append_event = async (
       phase: "assign" | "progress" | "blocked" | "done" | "approval",
@@ -148,8 +151,8 @@ export function create_cron_job_handler(deps: CronRuntimeHandlerDeps): CronOnJob
       );
 
       // 백엔드 결정
-      const preferred = parse_executor_preference(String(process.env.ORCH_EXECUTOR_PROVIDER || "chatgpt"));
-      const provider_id = resolve_executor_provider(preferred);
+      const preferred = parse_executor_preference(deps.config.executor_provider);
+      const provider_id = resolve_executor_provider(preferred, deps.config.provider_caps);
       const backend_id = deps.agent_backends.resolve_backend_id(provider_id);
       const backend = deps.agent_backends.get_backend(backend_id);
 
@@ -206,7 +209,7 @@ export function create_cron_job_handler(deps: CronRuntimeHandlerDeps): CronOnJob
           tools: tool_definitions as ToolSchema[],
           tool_executors,
           hooks,
-          max_turns: Math.max(1, Number(process.env.AGENT_LOOP_MAX_TURNS || deps.config.agentLoopDefaultMaxTurns || 8)),
+          max_turns: Math.max(1, deps.config.agent_loop_max_turns),
           max_tokens: 1800,
           temperature: 0.3,
           effort: "medium",

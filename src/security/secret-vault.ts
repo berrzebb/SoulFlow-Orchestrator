@@ -1,9 +1,12 @@
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
-import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { mkdir, readFile, unlink } from "node:fs/promises";
+import { join } from "node:path";
+import { create_logger } from "../logger.js";
 import { escape_regexp, now_iso } from "../utils/common.js";
 import { with_sqlite_strict } from "../utils/sqlite-helper.js";
 import { redact_sensitive_text } from "./sensitive.js";
+
+const log = create_logger("secret-vault");
 
 type SecretEntry = {
   ciphertext: string;
@@ -23,7 +26,7 @@ export type SecretResolveReport = {
 };
 
 export interface SecretVaultLike {
-  get_paths(): { root_dir: string; key_path: string; store_path: string };
+  get_paths(): { root_dir: string; store_path: string };
   ensure_ready(): Promise<void>;
   get_or_create_key(): Promise<Buffer>;
   encrypt_text(plaintext: string, aad?: string): Promise<string>;
@@ -42,8 +45,8 @@ export interface SecretVaultLike {
   prune_expired(max_age_ms: number): Promise<number>;
 }
 
-const KEY_FILE = "master.key";
 const STORE_FILE = "secrets.db";
+const LEGACY_KEY_FILE = "master.key";
 const CIPHERTEXT_TOKEN_RE = /\bsv1\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g;
 
 function b64url_encode(buffer: Buffer): string {
@@ -82,29 +85,31 @@ function is_valid_ciphertext_shape(token: string): boolean {
 
 export class SecretVaultService implements SecretVaultLike {
   private readonly root_dir: string;
-  private readonly key_path: string;
   private readonly store_path: string;
   private key_cache: Buffer | null = null;
   private key_lock: Promise<Buffer> | null = null;
 
   constructor(workspace: string) {
     this.root_dir = join(workspace, "runtime", "security");
-    this.key_path = join(this.root_dir, KEY_FILE);
     this.store_path = join(this.root_dir, STORE_FILE);
   }
 
-  get_paths(): { root_dir: string; key_path: string; store_path: string } {
+  get_paths(): { root_dir: string; store_path: string } {
     return {
       root_dir: this.root_dir,
-      key_path: this.key_path,
       store_path: this.store_path,
     };
   }
 
   private ensure_store_db(): void {
-    with_sqlite_strict(this.store_path,(db) => {
+    with_sqlite_strict(this.store_path, (db) => {
       db.exec(`
         PRAGMA journal_mode=WAL;
+        CREATE TABLE IF NOT EXISTS master_key (
+          id INTEGER PRIMARY KEY CHECK (id = 1),
+          key_b64url TEXT NOT NULL,
+          created_at TEXT NOT NULL
+        );
         CREATE TABLE IF NOT EXISTS secrets (
           name TEXT PRIMARY KEY,
           ciphertext TEXT NOT NULL,
@@ -119,8 +124,8 @@ export class SecretVaultService implements SecretVaultLike {
 
   async ensure_ready(): Promise<void> {
     await mkdir(this.root_dir, { recursive: true });
-    await this.get_or_create_key();
     this.ensure_store_db();
+    await this.get_or_create_key();
   }
 
   async get_or_create_key(): Promise<Buffer> {
@@ -136,25 +141,48 @@ export class SecretVaultService implements SecretVaultLike {
 
   private async _load_or_generate_key(): Promise<Buffer> {
     if (this.key_cache) return this.key_cache;
-    await mkdir(dirname(this.key_path), { recursive: true });
-    try {
-      const raw = (await readFile(this.key_path, "utf-8")).trim();
-      const bytes = b64url_decode(raw);
-      if (bytes.length !== 32) throw new Error("invalid_key_length");
-      await chmod(this.key_path, 0o600).catch(() => undefined);
+    await mkdir(this.root_dir, { recursive: true });
+    this.ensure_store_db();
+
+    // DB에서 마스터 키 조회
+    const row = with_sqlite_strict(this.store_path, (db) =>
+      db.prepare("SELECT key_b64url FROM master_key WHERE id = 1").get() as { key_b64url: string } | undefined
+    );
+    if (row?.key_b64url) {
+      const bytes = b64url_decode(row.key_b64url);
+      if (bytes.length !== 32) throw new Error("invalid_master_key_in_db");
       this.key_cache = bytes;
       return bytes;
-    } catch (error) {
-      const code = (error as { code?: string } | null)?.code || "";
-      if (code && code !== "ENOENT") {
-        throw error;
-      }
-      const generated = randomBytes(32);
-      await writeFile(this.key_path, b64url_encode(generated), { encoding: "utf-8", mode: 0o600 });
-      await chmod(this.key_path, 0o600).catch(() => undefined);
-      this.key_cache = generated;
-      return generated;
     }
+
+    // 레거시 파일(master.key)이 있으면 마이그레이션 후 삭제
+    let key: Buffer;
+    const legacy_path = join(this.root_dir, LEGACY_KEY_FILE);
+    try {
+      const raw = (await readFile(legacy_path, "utf-8")).trim();
+      const bytes = b64url_decode(raw);
+      if (bytes.length !== 32) throw new Error("invalid_key_length");
+      key = bytes;
+      await unlink(legacy_path).catch(() => undefined);
+      log.info("master key migrated from legacy file");
+    } catch (err) {
+      const code = (err as { code?: string } | null)?.code || "";
+      const msg = (err as Error).message || "";
+      if (code !== "ENOENT" && msg !== "invalid_key_length") throw err;
+      key = randomBytes(32);
+      log.info("master key generated");
+    }
+
+    // DB에 저장 (파일에는 쓰지 않음)
+    with_sqlite_strict(this.store_path, (db) => {
+      db.prepare(
+        "INSERT OR REPLACE INTO master_key(id, key_b64url, created_at) VALUES (1, ?, ?)"
+      ).run(b64url_encode(key), now_iso());
+      return true;
+    });
+
+    this.key_cache = key;
+    return key;
   }
 
   async encrypt_text(plaintext: string, aad?: string): Promise<string> {
@@ -185,7 +213,7 @@ export class SecretVaultService implements SecretVaultLike {
 
   private async read_store_map(): Promise<Record<string, SecretEntry>> {
     await this.ensure_ready();
-    const rows = with_sqlite_strict(this.store_path,(db) => db.prepare(`
+    const rows = with_sqlite_strict(this.store_path, (db) => db.prepare(`
       SELECT name, ciphertext, updated_at
       FROM secrets
       ORDER BY name ASC
@@ -204,7 +232,7 @@ export class SecretVaultService implements SecretVaultLike {
 
   async list_names(): Promise<string[]> {
     await this.ensure_ready();
-    const rows = with_sqlite_strict(this.store_path,(db) => db.prepare(`
+    const rows = with_sqlite_strict(this.store_path, (db) => db.prepare(`
       SELECT name
       FROM secrets
       ORDER BY name ASC
@@ -219,7 +247,7 @@ export class SecretVaultService implements SecretVaultLike {
     if (!name) return { ok: false, name: "" };
     await this.ensure_ready();
     const ciphertext = await this.encrypt_text(plaintext, `secret:${name}`);
-    const ok = with_sqlite_strict(this.store_path,(db) => {
+    const ok = with_sqlite_strict(this.store_path, (db) => {
       db.prepare(`
         INSERT INTO secrets(name, ciphertext, updated_at)
         VALUES (?, ?, ?)
@@ -236,7 +264,7 @@ export class SecretVaultService implements SecretVaultLike {
     const name = normalize_secret_name(nameRaw);
     if (!name) return false;
     await this.ensure_ready();
-    const removed = with_sqlite_strict(this.store_path,(db) => {
+    const removed = with_sqlite_strict(this.store_path, (db) => {
       const r = db.prepare("DELETE FROM secrets WHERE name = ?").run(name);
       return Number(r.changes || 0) > 0;
     });
@@ -247,7 +275,7 @@ export class SecretVaultService implements SecretVaultLike {
     const name = normalize_secret_name(nameRaw);
     if (!name) return null;
     await this.ensure_ready();
-    const row = with_sqlite_strict(this.store_path,(db) => db.prepare(`
+    const row = with_sqlite_strict(this.store_path, (db) => db.prepare(`
       SELECT ciphertext
       FROM secrets
       WHERE name = ?
@@ -264,7 +292,8 @@ export class SecretVaultService implements SecretVaultLike {
     if (!cipher) return null;
     try {
       return await this.decrypt_text(cipher, `secret:${name}`);
-    } catch {
+    } catch (err) {
+      log.warn("decrypt failed", { name, error: err instanceof Error ? err.message : String(err) });
       return null;
     }
   }
@@ -342,7 +371,7 @@ export class SecretVaultService implements SecretVaultLike {
     const tokens = new Set<string>(report.text.match(CIPHERTEXT_TOKEN_RE) || []);
     for (const token of tokens.values()) {
       if (!token) continue;
-      // AAD 없이 decrypt — 인바운드 seal 등 AAD 없이 암호화된 토큰 대상. AAD 불일치 시 catch로 invalid 처리.
+      // AAD 없이 decrypt — 인바운드 seal 등 AAD 없이 암호화된 토큰 대상
       const plain = await this.decrypt_text(token).catch(() => "");
       if (!plain) {
         invalid.add(token);
@@ -413,4 +442,3 @@ export class SecretVaultService implements SecretVaultLike {
     return redacted.text;
   }
 }
-

@@ -19,13 +19,20 @@ import { CodexJsonRpcClient } from "./codex-jsonrpc.js";
 
 type EmitFn = (event: AgentEvent) => void | Promise<void>;
 
+/** Codex 빌트인 도구 이름 → SoulFlow 커스텀 도구 이름 매핑. 채널 표시 일관성. */
+const CODEX_BUILTIN_NAME_MAP: Record<string, string> = {
+  commandExecution: "exec",
+  webSearch: "web_search",
+  fileChange: "edit_file",
+};
+
 /**
  * Codex CLI app-server 모드를 JSON-RPC 2.0으로 제어하는 백엔드.
  * 프로세스를 한 번 spawn하고, thread/start → turn/start 로 실행을 위임.
  * SDK와 동일하게 native_tool_loop=true (내부에서 전체 tool loop 처리).
  */
 export class CodexAppServerAgent implements AgentBackend {
-  readonly id: AgentBackendId = "codex_appserver";
+  readonly id: AgentBackendId;
   readonly native_tool_loop = true;
   readonly supports_resume = true;
   readonly capabilities: BackendCapabilities = {
@@ -43,11 +50,14 @@ export class CodexAppServerAgent implements AgentBackend {
   private initialized = false;
 
   constructor(private readonly config: {
+    id?: string;
     command?: string;
     cwd?: string;
     model?: string;
     request_timeout_ms?: number;
-  } = {}) {}
+  } = {}) {
+    this.id = config.id ?? "codex_appserver";
+  }
 
   is_available(): boolean {
     const command = this.config.command || "codex";
@@ -275,10 +285,10 @@ export class CodexAppServerAgent implements AgentBackend {
           const TOOL_ITEM_TYPES = ["commandExecution", "mcpToolCall", "fileChange", "webSearch", "dynamicToolCall"];
           if (TOOL_ITEM_TYPES.includes(String(item.type))) {
             tool_count++;
-            // dynamicToolCall은 item.name/item.tool에 실제 도구 이름이 있음
-            const actual_name = String(item.type) === "dynamicToolCall"
-              ? String(item.name || item.tool || item.type)
-              : String(item.type);
+            const raw_type = String(item.type);
+            const actual_name = raw_type === "dynamicToolCall"
+              ? String(item.name || item.tool || raw_type)
+              : (CODEX_BUILTIN_NAME_MAP[raw_type] || raw_type);
             _fire(emit, {
               type: "tool_use", source, at: now_iso(),
               tool_name: actual_name,
@@ -313,10 +323,11 @@ export class CodexAppServerAgent implements AgentBackend {
           const item = params.item as Record<string, unknown> | undefined;
           const RESULT_ITEM_TYPES = ["commandExecution", "mcpToolCall", "fileChange", "webSearch", "dynamicToolCall"];
           if (item?.type && RESULT_ITEM_TYPES.includes(String(item.type))) {
-            const is_dynamic = String(item.type) === "dynamicToolCall";
+            const raw_item_type = String(item.type);
+            const is_dynamic = raw_item_type === "dynamicToolCall";
             const tool_name = is_dynamic
-              ? String(item.name || item.tool || item.type)
-              : String(item.type);
+              ? String(item.name || item.tool || raw_item_type)
+              : (CODEX_BUILTIN_NAME_MAP[raw_item_type] || raw_item_type);
             const tool_result = String(item.output || item.result || "");
             // dynamicToolCall은 exitCode 대신 success 필드로 에러 판별
             const is_error = is_dynamic

@@ -2,7 +2,7 @@
 
 type ToolCategory = "filesystem" | "shell" | "web" | "messaging" | "file_transfer" | "scheduling" | "memory" | "decision" | "promise" | "secret" | "diagram" | "admin" | "spawn" | "external";
 
-const TOOL_CATEGORIES: Record<string, ToolCategory> = {
+export const TOOL_CATEGORIES: Record<string, ToolCategory> = {
   read_file: "filesystem",
   write_file: "filesystem",
   edit_file: "filesystem",
@@ -63,8 +63,6 @@ export function select_tools_for_request(
   const skill_cats = resolve_skill_tool_categories(skill_tool_names);
   const mode_defaults = MODE_DEFAULTS[mode] || MODE_DEFAULTS.agent;
   const selected = new Set<ToolCategory>([...ALWAYS_INCLUDED, ...mode_defaults, ...skill_cats]);
-
-  if (mode === "once") selected.delete("messaging");
 
   const tools = all_tools.filter((def) => {
     const name = String((def as Record<string, unknown>).name || tool_name_from_def(def));

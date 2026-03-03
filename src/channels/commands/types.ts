@@ -10,9 +10,9 @@ export type CommandContext = {
   send_reply: (content: string) => Promise<void>;
 };
 
-/** Telegram은 @멘션 불필요, 나머지 채널은 @sender 접두어 사용. */
+/** Telegram·web은 @멘션 불필요, 나머지 채널은 @sender 접두어 사용. */
 export function format_mention(provider: ChannelProvider, sender_id: string): string {
-  return provider === "telegram" ? "" : `@${sender_id} `;
+  return provider === "telegram" || provider === "web" ? "" : `@${sender_id} `;
 }
 
 /** 단일 커맨드 도메인을 처리하는 핸들러. */

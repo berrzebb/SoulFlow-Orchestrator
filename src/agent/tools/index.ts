@@ -22,6 +22,10 @@ import { DecisionTool } from "./decision-tool.js";
 import { SecretTool } from "./secret-tool.js";
 import { PromiseTool } from "./promise-tool.js";
 import { RuntimeAdminTool } from "./runtime-admin.js";
+import { DateTimeTool } from "./datetime.js";
+import { HttpRequestTool } from "./http-request.js";
+import { OAuthFetchTool } from "./oauth-fetch.js";
+import { TaskQueryTool, type TaskQueryCallback } from "./task-query.js";
 import type { AppendWorkflowEventInput, AppendWorkflowEventResult } from "../../events/types.js";
 import type { RuntimeExecutionPolicy } from "../../providers/types.js";
 import type { PreToolHook, PostToolHook } from "./types.js";
@@ -90,6 +94,10 @@ export {
   DecisionTool,
   SecretTool,
   PromiseTool,
+  DateTimeTool,
+  HttpRequestTool,
+  OAuthFetchTool,
+  TaskQueryTool,
   DynamicToolRuntimeLoader,
   ToolRuntimeReloader,
   ToolInstallerService,
@@ -113,6 +121,7 @@ export type { DynamicToolManifestEntry } from "./dynamic.js";
 export type { InstallShellToolInput } from "./installer.js";
 export type { DynamicToolStoreLike } from "./store.js";
 export type { McpServerStoreLike, McpServerEntry } from "./mcp-store.js";
+export type { TaskQueryResult, TaskQueryCallback } from "./task-query.js";
 export { execute_chain, type ChainStep, type ChainResult } from "./chain.js";
 
 export function create_default_tool_registry(args?: {
@@ -124,6 +133,7 @@ export function create_default_tool_registry(args?: {
   cron?: CronScheduler | null;
   bus?: MessageBusLike | null;
   spawn_callback?: ((request: SpawnRequest) => Promise<{ subagent_id: string; status: string; message?: string }>) | null;
+  task_query_callback?: TaskQueryCallback | null;
   event_recorder?: ((event: AppendWorkflowEventInput) => Promise<AppendWorkflowEventResult>) | null;
   refresh_skills?: () => void;
   runtime_policy?: RuntimeExecutionPolicy;
@@ -222,8 +232,13 @@ export function create_default_tool_registry(args?: {
   registry.register(new WebFetchTool());
   registry.register(new WebBrowserTool());
   registry.register(new DiagramRenderTool());
+  registry.register(new DateTimeTool());
+  registry.register(new HttpRequestTool());
   registry.register(new ChainTool(registry));
 
+  if (args?.task_query_callback) {
+    registry.register(new TaskQueryTool(args.task_query_callback));
+  }
   if (args?.bus) {
     sender = async (message: OutboundMessage): Promise<void> => {
       await args.bus?.publish_outbound(message);

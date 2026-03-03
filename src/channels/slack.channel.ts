@@ -7,8 +7,10 @@ import { now_iso } from "../utils/common.js";
 import { BaseChannel } from "./base.js";
 
 type SlackChannelOptions = {
+  instance_id?: string;
   bot_token?: string;
   default_channel?: string;
+  settings?: Record<string, unknown>;
 };
 
 function to_inbound_message(channel: SlackChannel, raw: Record<string, unknown>, chat_id: string): InboundMessage {
@@ -55,24 +57,51 @@ function to_inbound_message(channel: SlackChannel, raw: Record<string, unknown>,
   };
 }
 
+/** Slack ts 포맷 검증: "Unix.microseconds" 형식만 유효. Sentinel 값(9223372036854775807 등) 차단. */
+function is_valid_slack_ts(ts: string): boolean {
+  return /^\d+\.\d+$/.test(ts);
+}
+
+/** 스레드 reply 캐시 키 → { reply_count, latest_reply, messages }. 변경 없는 스레드 재호출 방지. */
+type ThreadCacheEntry = {
+  reply_count: number;
+  latest_reply: string;
+  messages: Array<Record<string, unknown>>;
+  fetched_at: number;
+};
+
 export class SlackChannel extends BaseChannel {
   private readonly client: WebClient;
   private readonly default_channel: string;
+  private readonly settings: Record<string, unknown>;
+  private readonly thread_cache = new Map<string, ThreadCacheEntry>();
+  private static readonly THREAD_CACHE_TTL_MS = 300_000;
+  private static readonly MAX_THREAD_FETCHES_PER_READ = 3;
 
   constructor(options?: SlackChannelOptions) {
-    super("slack");
-    const token = options?.bot_token || process.env.SLACK_BOT_TOKEN || "";
+    super("slack", options?.instance_id);
+    const token = options?.bot_token || "";
     this.client = new WebClient(token);
-    this.default_channel = options?.default_channel || process.env.SLACK_DEFAULT_CHANNEL || "";
+    this.default_channel = options?.default_channel || "";
+    this.settings = options?.settings || {};
   }
 
   async start(): Promise<void> {
     await this.client.auth.test();
     this.running = true;
+    this.log.info("started", { instance_id: this.instance_id });
   }
 
   async stop(): Promise<void> {
     this.running = false;
+    this.thread_cache.clear();
+  }
+
+  private prune_thread_cache(): void {
+    const now = Date.now();
+    for (const [key, entry] of this.thread_cache) {
+      if (now - entry.fetched_at > SlackChannel.THREAD_CACHE_TTL_MS) this.thread_cache.delete(key);
+    }
   }
 
   async send(message: OutboundMessage): Promise<{ ok: boolean; message_id?: string; error?: string }> {
@@ -82,8 +111,8 @@ export class SlackChannel extends BaseChannel {
       await this.set_typing(channel, true);
       const text = String(message.content || "");
       const thread_ts = String(message.reply_to || "").trim() || undefined;
-      const chunk_size = Math.max(500, Number(process.env.SLACK_TEXT_CHUNK_SIZE || 3200));
-      const file_fallback_threshold = Math.max(8_000, Number(process.env.SLACK_TEXT_FILE_FALLBACK_THRESHOLD || 14_000));
+      const chunk_size = Math.max(500, Number(this.settings.text_chunk_size || 3200));
+      const file_fallback_threshold = Math.max(8_000, Number(this.settings.text_file_fallback_threshold || 14_000));
       let root_message_ts = "";
 
       if (text.trim()) {
@@ -129,7 +158,9 @@ export class SlackChannel extends BaseChannel {
       }
       return { ok: true, message_id: root_message_ts || String(message.reply_to || "") };
     } catch (error) {
-      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+      const msg = error instanceof Error ? error.message : String(error);
+      this.log.warn("send failed", { chat_id: channel, error: msg });
+      return { ok: false, error: msg };
     } finally {
       await this.set_typing(channel, false);
     }
@@ -155,21 +186,41 @@ export class SlackChannel extends BaseChannel {
 
       const threadedParents = messages
         .filter((m): m is Record<string, unknown> => m != null && typeof m === "object")
-        .filter((m) => Number(m.reply_count || 0) > 0 && typeof m.thread_ts === "string")
-        .slice(0, 5);
+        .filter((m) => Number(m.reply_count || 0) > 0 && typeof m.thread_ts === "string" && is_valid_slack_ts(String(m.thread_ts)))
+        .slice(0, SlackChannel.MAX_THREAD_FETCHES_PER_READ);
+
+      this.prune_thread_cache();
 
       for (const parent of threadedParents) {
         const ts = String(parent.thread_ts || "");
         if (!ts) continue;
+        const reply_count = Number(parent.reply_count || 0);
+        const latest_reply = String(parent.latest_reply || "");
+        const cache_key = `${chat_id}:${ts}`;
+        const cached = this.thread_cache.get(cache_key);
+
+        // 캐시 히트: reply_count + latest_reply 동일하면 API 호출 스킵
+        if (cached && cached.reply_count === reply_count && cached.latest_reply === latest_reply) {
+          for (const rec of cached.messages) {
+            const rts = String(rec.ts || "");
+            if (rts) merged.set(rts, rec);
+          }
+          continue;
+        }
+
         const replies = await this.client.conversations.replies({ channel: chat_id, ts, limit: 20 });
         if (!replies.ok || !Array.isArray(replies.messages)) continue;
+
+        const reply_records: Array<Record<string, unknown>> = [];
         for (const r of replies.messages) {
           if (!r || typeof r !== "object") continue;
           const rec = r as Record<string, unknown>;
           const rts = String(rec.ts || "");
           if (!rts) continue;
           merged.set(rts, rec);
+          reply_records.push(rec);
         }
+        this.thread_cache.set(cache_key, { reply_count, latest_reply, messages: reply_records, fetched_at: Date.now() });
       }
 
       const rows = [...merged.values()]
@@ -180,12 +231,13 @@ export class SlackChannel extends BaseChannel {
         .filter((m): m is InboundMessage => Boolean(m));
     } catch (error) {
       this.last_error = error instanceof Error ? error.message : String(error);
+      this.log.warn("read failed", { chat_id, error: this.last_error });
       return [];
     }
   }
 
   protected async set_typing_remote(chat_id: string, typing: boolean, anchor_message_id?: string): Promise<void> {
-    if (!anchor_message_id) return;
+    if (!anchor_message_id || !is_valid_slack_ts(anchor_message_id)) return;
     const name = "hourglass_flowing_sand";
     try {
       if (typing) {

@@ -63,7 +63,7 @@ export class SecretTool extends Tool {
       return [
         `시크릿 수: ${names.length}`,
         `저장 경로: ${paths.store_path}`,
-        `마스터 키: ${paths.key_path}`,
+        `마스터 키: DB 내장 (master_key 테이블)`,
       ].join("\n");
     }
 

@@ -1,5 +1,6 @@
 import type { MessageBusLike } from "../bus/index.js";
 import type { ProviderRegistry } from "../providers/index.js";
+import type { ProviderCapabilities } from "../providers/executor.js";
 import type { ServiceLike } from "../runtime/service.types.js";
 import { ContextBuilder } from "./context.js";
 import { AgentLoopStore } from "./loop.js";
@@ -42,6 +43,7 @@ export class AgentDomain implements ServiceLike {
       agent_backends?: AgentBackendRegistry | null;
       secret_vault?: SecretVaultService | null;
       logger?: Logger | null;
+      provider_caps?: ProviderCapabilities;
       on_task_change?: (task: import("../contracts.js").TaskState) => void;
     },
   ) {
@@ -55,6 +57,7 @@ export class AgentDomain implements ServiceLike {
       context_builder: this.context,
       agent_backends: args?.agent_backends || null,
       logger: args?.logger || null,
+      provider_caps: args?.provider_caps,
     });
     this.loop = new AgentLoopStore({
       task_store: this.task_store,

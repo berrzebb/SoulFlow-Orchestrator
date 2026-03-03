@@ -31,6 +31,10 @@ metadata:
 2. Keep commands short, deterministic, single-purpose.
 3. For write operations, summarize intent first and verify results after.
 
+## References
+
+- **[common-patterns.md](references/common-patterns.md)** — 파일 탐색, git, 텍스트 처리, 시스템, JSON, 네트워크 명령 패턴
+
 ## Guardrails
 
 - No long interactive commands (use tmux skill instead).

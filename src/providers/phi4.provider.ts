@@ -1,6 +1,9 @@
 import { BaseLlmProvider } from "./base.js";
+import { create_logger } from "../logger.js";
 import { LlmResponse, parse_openai_response, sanitize_messages_for_api, type ChatOptions } from "./types.js";
 import { parse_tool_calls_from_text } from "../agent/tool-call-parser.js";
+
+const log = create_logger("provider:phi4");
 
 const DEFAULT_PER_CALL_TIMEOUT_MS = 90_000;
 
@@ -8,14 +11,17 @@ export class Phi4LocalProvider extends BaseLlmProvider {
   private readonly per_call_timeout_ms: number;
   private readonly api_key: string;
 
-  constructor(args?: { api_base?: string; default_model?: string; per_call_timeout_ms?: number }) {
+  constructor(args?: {
+    api_base?: string; default_model?: string;
+    per_call_timeout_ms?: number; api_key?: string;
+  }) {
     super({
       id: "phi4_local",
-      api_base: args?.api_base ?? (process.env.PHI4_API_BASE || "http://127.0.0.1:11434/v1"),
-      default_model: args?.default_model ?? (process.env.PHI4_MODEL || "phi4"),
+      api_base: args?.api_base ?? "http://127.0.0.1:11434/v1",
+      default_model: args?.default_model ?? "phi4",
     });
     this.per_call_timeout_ms = args?.per_call_timeout_ms ?? DEFAULT_PER_CALL_TIMEOUT_MS;
-    this.api_key = String(process.env.PHI4_API_KEY || "").trim();
+    this.api_key = (args?.api_key ?? "").trim();
   }
 
   async chat(options: ChatOptions): Promise<LlmResponse> {
@@ -48,6 +54,7 @@ export class Phi4LocalProvider extends BaseLlmProvider {
       });
       const raw = await response.json().catch(() => ({})) as Record<string, unknown>;
       if (!response.ok) {
+        log.warn("api error", { status: response.status, model: body.model });
         return new LlmResponse({
           content: `Error calling phi4_local: ${JSON.stringify(raw)}`,
           finish_reason: "error",
@@ -66,6 +73,7 @@ export class Phi4LocalProvider extends BaseLlmProvider {
 
       return new LlmResponse(parsed);
     } catch (error) {
+      log.warn("request failed", { error: error instanceof Error ? error.message : String(error) });
       return new LlmResponse({
         content: `Error calling phi4_local: ${error instanceof Error ? error.message : String(error)}`,
         finish_reason: "error",

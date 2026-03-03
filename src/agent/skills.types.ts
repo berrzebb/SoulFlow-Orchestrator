@@ -22,5 +22,9 @@ export type SkillMetadata = {
   heart: string | null;
   /** _shared/ 프로토콜 문서명 목록. */
   shared_protocols: string[];
+  /** 선호 프로바이더 instance_id 또는 provider_type 목록 (우선순위 순). */
+  preferred_providers: string[];
+  /** 필요한 OAuth 연동 서비스 ID 목록 (e.g., ["github", "google"]). */
+  oauth: string[];
 };
 
