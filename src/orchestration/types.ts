@@ -27,6 +27,8 @@ export type OrchestrationRequest = {
   resumed_task_id?: string;
   /** ProcessTracker가 부여한 실행 추적 ID. */
   run_id?: string;
+  /** PTY HITL: 사용자 입력 전송 콜백 등록. */
+  register_send_input?: (cb: (text: string) => void) => void;
 };
 
 /** 결과에 포함되는 토큰/비용 요약. */

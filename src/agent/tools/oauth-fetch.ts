@@ -7,6 +7,9 @@ import { Tool } from "./base.js";
 import type { JsonSchema } from "./types.js";
 import type { OAuthFlowService } from "../../oauth/flow-service.js";
 import type { OAuthIntegrationStore } from "../../oauth/integration-store.js";
+import { create_logger } from "../../logger.js";
+
+const log = create_logger("oauth-fetch");
 
 export class OAuthFetchTool extends Tool {
   readonly name = "oauth_fetch";
@@ -49,11 +52,20 @@ export class OAuthFetchTool extends Tool {
     }
 
     const integration = this.store.get(service_id);
-    if (!integration) return `Error: OAuth integration "${service_id}" not found`;
-    if (!integration.enabled) return `Error: OAuth integration "${service_id}" is disabled`;
+    if (!integration) {
+      log.warn("oauth_fetch_error", { service_id, error: "integration_not_found" });
+      return `Error: OAuth integration "${service_id}" not found`;
+    }
+    if (!integration.enabled) {
+      log.warn("oauth_fetch_error", { service_id, error: "integration_disabled" });
+      return `Error: OAuth integration "${service_id}" is disabled`;
+    }
 
     const { token, error } = await this.flow.get_valid_access_token(service_id);
-    if (!token) return `Error: no valid access token for "${service_id}" — ${error || "token not configured"}`;
+    if (!token) {
+      log.warn("oauth_fetch_error", { service_id, error: error || "token_not_configured" });
+      return `Error: no valid access token for "${service_id}" — ${error || "token not configured"}`;
+    }
 
     const method = String(params.method || "GET").toUpperCase();
     const req_headers: Record<string, string> = {
@@ -83,6 +95,7 @@ export class OAuthFetchTool extends Tool {
 
     // 401 시 토큰 갱신 후 재시도
     if (res.status === 401) {
+      log.warn("oauth_fetch_retry", { service_id, method, host: new URL(url_str).host, reason: "401_refresh" });
       const refresh_result = await this.flow.refresh_token(service_id);
       if (refresh_result.ok) {
         const new_token = await this.store.get_access_token(service_id);
@@ -104,6 +117,7 @@ export class OAuthFetchTool extends Tool {
       try { body_out = JSON.parse(raw_text); } catch { /* keep as string */ }
     }
 
+    log.info("oauth_fetch", { service_id, method, host: new URL(url_str).host, status: res.status });
     return JSON.stringify({
       status: res.status,
       status_text: res.response.statusText,

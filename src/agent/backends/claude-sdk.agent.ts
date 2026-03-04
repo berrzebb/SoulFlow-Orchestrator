@@ -1,5 +1,4 @@
 import { createRequire } from "node:module";
-import { randomUUID } from "node:crypto";
 import type {
   AgentBackend,
   AgentBackendId,
@@ -14,10 +13,11 @@ import type {
 } from "../agent.types.js";
 import type { PreToolHook, PostToolHook } from "../tools/types.js";
 import type { LlmUsage, ModelUsageEntry } from "../../providers/types.js";
-import { now_iso } from "../../utils/common.js";
+import { now_iso, error_message, short_id, safe_stringify } from "../../utils/common.js";
 import { sandbox_to_sdk_permission, sdk_result_subtype_to_finish_reason } from "./convert.js";
 import { sandbox_from_preset } from "../../providers/types.js";
 import { create_sdk_tool_server } from "./sdk-tool-bridge.js";
+import { fire } from "./tool-loop-helpers.js";
 
 /** SDK Query 객체. AsyncIterable + lifecycle 메서드. */
 type SdkQuery = AsyncIterable<Record<string, unknown>> & {
@@ -190,20 +190,18 @@ export class ClaudeSdkAgent implements AgentBackend {
     const abort_controller = new AbortController();
     sdk_options.abortController = abort_controller;
 
-    this._emit(emit, { type: "init", source, at: now_iso() });
+    fire(emit, { type: "init", source, at: now_iso() });
 
     const sdk_query_instance = query({ prompt: options.task, options: sdk_options });
 
     // abort → interrupt() (graceful) → abort_controller (강제)
+    const abort_relay = () => {
+      void sdk_query_instance.interrupt?.()?.catch(() => {});
+      abort_controller.abort();
+    };
     if (options.abort_signal) {
-      if (options.abort_signal.aborted) {
-        abort_controller.abort();
-      } else {
-        options.abort_signal.addEventListener("abort", () => {
-          void sdk_query_instance.interrupt?.()?.catch(() => {});
-          abort_controller.abort();
-        }, { once: true });
-      }
+      if (options.abort_signal.aborted) abort_controller.abort();
+      else options.abort_signal.addEventListener("abort", abort_relay, { once: true });
     }
 
     if (options.register_send_input && sdk_query_instance.streamInput) {
@@ -222,7 +220,7 @@ export class ClaudeSdkAgent implements AgentBackend {
     try {
       for await (const message of sdk_query_instance) {
         if (abort_controller.signal.aborted) {
-          this._emit(emit, { type: "complete", source, at: now_iso(), finish_reason: "cancelled", content: result_content || undefined });
+          fire(emit, { type: "complete", source, at: now_iso(), finish_reason: "cancelled", content: result_content || undefined });
           return {
             content: result_content || null,
             session: this._build_session(session_id),
@@ -241,7 +239,7 @@ export class ClaudeSdkAgent implements AgentBackend {
 
         // status: compacting → 컨텍스트 압축 진행 중 알림
         if (message.type === "system" && message.subtype === "status" && message.status === "compacting") {
-          this._emit(emit, {
+          fire(emit, {
             type: "compact_boundary", source, at: now_iso(),
             trigger: "auto", pre_tokens: 0,
           });
@@ -254,7 +252,7 @@ export class ClaudeSdkAgent implements AgentBackend {
         // compact_boundary: 컨텍스트 압축 감지
         if (message.type === "system" && message.subtype === "compact_boundary") {
           const meta = message.compact_metadata as { trigger?: string; pre_tokens?: number } | undefined;
-          this._emit(emit, {
+          fire(emit, {
             type: "compact_boundary", source, at: now_iso(),
             trigger: (meta?.trigger === "manual" ? "manual" : "auto"),
             pre_tokens: Number(meta?.pre_tokens || 0),
@@ -267,13 +265,13 @@ export class ClaudeSdkAgent implements AgentBackend {
           const auth = message as Record<string, unknown>;
           const output = Array.isArray(auth.output) ? (auth.output as string[]) : [];
           const error_msg = auth.error as string | undefined;
-          this._emit(emit, {
+          fire(emit, {
             type: "auth_request", source, at: now_iso(),
             messages: error_msg ? [...output, `Error: ${error_msg}`] : output,
             is_error: Boolean(error_msg),
           });
           if (error_msg) {
-            this._emit(emit, {
+            fire(emit, {
               type: "error", source, at: now_iso(),
               error: `auth_failed: ${error_msg}`, code: "auth_failed",
             });
@@ -289,7 +287,7 @@ export class ClaudeSdkAgent implements AgentBackend {
           if (info) {
             const status = info.status === "allowed_warning" ? "allowed_warning"
               : info.status === "rejected" ? "rejected" : "allowed";
-            this._emit(emit, {
+            fire(emit, {
               type: "rate_limit", source, at: now_iso(),
               status: status as "allowed" | "allowed_warning" | "rejected",
               resets_at: info.resetsAt,
@@ -312,7 +310,7 @@ export class ClaudeSdkAgent implements AgentBackend {
             ? (status_map[String(message.status)] || "completed")
             : status_map[message.subtype as string] || "progress";
           const task_usage = message.usage as { total_tokens?: number; tool_uses?: number; duration_ms?: number } | undefined;
-          this._emit(emit, {
+          fire(emit, {
             type: "task_lifecycle", source, at: now_iso(),
             sdk_task_id, status,
             description: String(message.description || message.summary || ""),
@@ -339,7 +337,7 @@ export class ClaudeSdkAgent implements AgentBackend {
 
         // tool_use_summary: 연속 도구 호출 요약
         if (message.type === "tool_use_summary") {
-          this._emit(emit, {
+          fire(emit, {
             type: "tool_summary", source, at: now_iso(),
             summary: String(message.summary || ""),
             tool_use_ids: (message.preceding_tool_use_ids as string[]) || [],
@@ -394,7 +392,7 @@ export class ClaudeSdkAgent implements AgentBackend {
 
           Object.assign(extra_metadata, result_meta);
 
-          this._emit(emit, {
+          fire(emit, {
             type: "complete", source, at: now_iso(),
             finish_reason: result_finish_reason, content: result_content,
           });
@@ -404,7 +402,7 @@ export class ClaudeSdkAgent implements AgentBackend {
         // assistant 메시지의 에러 필드 — 문자열 리터럴 유니온 (authentication_failed, billing_error, rate_limit 등)
         if (message.type === "assistant" && message.error) {
           const err_type = String(message.error);
-          this._emit(emit, {
+          fire(emit, {
             type: "error", source, at: now_iso(),
             error: err_type, code: `sdk:${err_type}`,
           });
@@ -421,16 +419,16 @@ export class ClaudeSdkAgent implements AgentBackend {
           for (const block of blocks) {
             if (block.type === "tool_use") {
               tool_calls_count++;
-              this._emit(emit, {
+              fire(emit, {
                 type: "tool_use", source, at: now_iso(),
                 tool_name: String(block.name || "unknown"),
-                tool_id: String(block.id || randomUUID().slice(0, 8)),
+                tool_id: String(block.id || short_id(8)),
                 params: (block.input as Record<string, unknown>) ?? {},
               });
             } else if (block.type === "text" && block.text) {
               const text = String(block.text);
               result_content += text;
-              this._emit(emit, { type: "content_delta", source, at: now_iso(), text });
+              fire(emit, { type: "content_delta", source, at: now_iso(), text });
               if (options.hooks?.on_stream) {
                 void Promise.resolve(options.hooks.on_stream(text)).catch(() => {});
               }
@@ -453,8 +451,8 @@ export class ClaudeSdkAgent implements AgentBackend {
 
         // content streaming + content_delta 이벤트
         if (message.content) {
-          const text = _stringify(message.content);
-          this._emit(emit, { type: "content_delta", source, at: now_iso(), text });
+          const text = safe_stringify(message.content);
+          fire(emit, { type: "content_delta", source, at: now_iso(), text });
           if (options.hooks?.on_stream) {
             void Promise.resolve(options.hooks.on_stream(text)).catch(() => {});
           }
@@ -462,7 +460,7 @@ export class ClaudeSdkAgent implements AgentBackend {
       }
 
       if (total_input || total_output) {
-        this._emit(emit, {
+        fire(emit, {
           type: "usage", source, at: now_iso(),
           tokens: {
             input: total_input, output: total_output,
@@ -483,20 +481,13 @@ export class ClaudeSdkAgent implements AgentBackend {
         metadata: { ...(session_id ? { session_id } : {}), ...extra_metadata },
       };
     } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      this._emit(emit, { type: "error", source, at: now_iso(), error: msg });
+      const msg = error_message(error);
+      fire(emit, { type: "error", source, at: now_iso(), error: msg });
       return this._error_result(msg, tool_calls_count);
     } finally {
+      options.abort_signal?.removeEventListener("abort", abort_relay);
       void Promise.resolve(sdk_query_instance.close?.()).catch(() => {});
     }
-  }
-
-  private _emit(
-    emit: ((event: AgentEvent) => void | Promise<void>) | undefined,
-    event: AgentEvent,
-  ): void {
-    if (!emit) return;
-    void Promise.resolve(emit(event)).catch(() => {});
   }
 
   private _build_session(session_id?: string): AgentSession | null {
@@ -574,7 +565,7 @@ function _create_pre_tool_hook(
     // on_approval 훅 실행
     if (on_approval) {
       const request: ApprovalBridgeRequest = {
-        request_id: randomUUID().slice(0, 12),
+        request_id: short_id(),
         type: "tool_use",
         detail: `tool: ${tool_name}`,
         tool_name,
@@ -616,23 +607,12 @@ function _deny_hook(reason: string): Record<string, unknown> {
   };
 }
 
-/** 객체/배열을 안전하게 문자열 변환. 스트리밍 등 원시 텍스트 컨텍스트용. */
-function _stringify(value: unknown): string {
-  if (value == null) return "";
-  if (typeof value === "string") return value;
-  try { return JSON.stringify(value, null, 2); }
-  catch { return String(value); }
-}
-
 /** 객체/배열을 렌더링 가능한 문자열로 변환. 마크다운 코드블록으로 래핑. */
 function _stringify_for_render(value: unknown): string {
   if (value == null) return "";
   if (typeof value === "string") return value;
-  try {
-    const json = JSON.stringify(value, null, 2);
-    return "```json\n" + json + "\n```";
-  }
-  catch { return String(value); }
+  const text = safe_stringify(value);
+  return text.startsWith("{") || text.startsWith("[") ? "```json\n" + text + "\n```" : text;
 }
 
 /**
@@ -656,7 +636,7 @@ function _extract_tool_response_text(response: unknown): string {
     // text 필드
     if (typeof rec.text === "string") return rec.text;
   }
-  return _stringify(response);
+  return safe_stringify(response);
 }
 
 type EmitFn = ((event: AgentEvent) => void | Promise<void>) | undefined;

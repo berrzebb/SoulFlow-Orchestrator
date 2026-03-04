@@ -14,7 +14,7 @@ import {
   type OnHeartbeat,
   type OnNotify,
 } from "./types.js";
-import { file_exists } from "../utils/common.js";
+import { file_exists, error_message} from "../utils/common.js";
 
 const SKIP_PATTERNS = new Set(["- [ ]", "* [ ]", "- [x]", "* [x]"]);
 
@@ -135,7 +135,7 @@ export class HeartbeatService implements ServiceLike {
       if (response.toUpperCase().includes(HEARTBEAT_OK_TOKEN)) return;
       if (this.on_notify) await this.on_notify(response);
     } catch (err) {
-      log.warn("tick failed", { error: err instanceof Error ? err.message : String(err) });
+      log.warn("tick failed", { error: error_message(err) });
     }
   }
 

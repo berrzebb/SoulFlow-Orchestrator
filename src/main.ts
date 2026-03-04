@@ -1,3 +1,4 @@
+import { error_message, now_iso} from "./utils/common.js";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { AgentDomain } from "./agent/index.js";
@@ -10,29 +11,10 @@ import {
   SqliteDispatchDlqStore,
   ChannelInstanceStore,
   create_channels_from_store,
-  create_channel_instance,
   type ChannelRegistryLike,
 } from "./channels/index.js";
 import { ApprovalService } from "./channels/approval.service.js";
-import {
-  CommandRouter,
-  HelpHandler,
-  StopHandler,
-  RenderHandler,
-  SecretHandler,
-  MemoryHandler,
-  DecisionHandler,
-  CronHandler,
-  PromiseHandler,
-  ReloadHandler,
-  StatusHandler,
-  TaskHandler,
-  SkillHandler,
-  DoctorHandler,
-  AgentHandler,
-  StatsHandler,
-  VerifyHandler,
-} from "./channels/commands/index.js";
+import { create_command_router } from "./channels/create-command-router.js";
 import { TaskResumeService } from "./channels/task-resume.service.js";
 import { DispatchService } from "./channels/dispatch.service.js";
 import { MediaCollector } from "./channels/media-collector.js";
@@ -40,9 +22,8 @@ import { DefaultOutboundDedupePolicy } from "./channels/outbound-dedupe.js";
 import { sanitize_provider_output } from "./channels/output-sanitizer.js";
 import { DefaultRuntimePolicyResolver } from "./channels/runtime-policy.js";
 import { SessionRecorder } from "./channels/session-recorder.js";
-import { get_config_defaults, load_config_merged, set_nested } from "./config/schema.js";
+import { load_config_merged } from "./config/schema.js";
 import { ConfigStore } from "./config/config-store.js";
-import { SECTION_ORDER, SECTION_LABELS, type ConfigSection } from "./config/config-meta.js";
 import { get_shared_secret_vault } from "./security/secret-vault-factory.js";
 import { create_cron_job_handler, CronService } from "./cron/index.js";
 import { DashboardService } from "./dashboard/service.js";
@@ -65,13 +46,18 @@ import { FileMcpServerStore } from "./agent/tools/mcp-store.js";
 import { AgentBackendRegistry } from "./agent/agent-registry.js";
 import { AgentSessionStore } from "./agent/agent-session-store.js";
 import { AgentProviderStore } from "./agent/provider-store.js";
-import { create_agent_provider, list_registered_provider_types } from "./agent/provider-factory.js";
+import { create_agent_provider } from "./agent/provider-factory.js";
+import { CliAuthService } from "./agent/cli-auth.service.js";
 import { randomUUID } from "node:crypto";
 import { init_log_level } from "./logger.js";
 import { OAuthIntegrationStore } from "./oauth/integration-store.js";
 import { OAuthFlowService } from "./oauth/flow-service.js";
-import { list_presets as list_oauth_presets, get_preset as get_oauth_preset } from "./oauth/presets.js";
 import { OAuthFetchTool } from "./agent/tools/oauth-fetch.js";
+import {
+  create_template_ops, create_channel_ops, create_agent_provider_ops,
+  create_bootstrap_ops, create_memory_ops, create_workspace_ops, create_oauth_ops,
+  create_config_ops, create_skill_ops, create_tool_ops, create_cli_auth_ops,
+} from "./dashboard/ops-factory.js";
 
 export interface RuntimeApp {
   agent: AgentDomain;
@@ -91,6 +77,7 @@ export interface RuntimeApp {
   ops: OpsRuntimeService;
   services: ServiceManager;
   session_prune_timer: ReturnType<typeof setInterval>;
+  cli_auth: CliAuthService;
 }
 
 function resolve_from_workspace(workspace: string, path_value: string, fallback: string): string {
@@ -101,6 +88,7 @@ function resolve_from_workspace(workspace: string, path_value: string, fallback:
 
 export async function createRuntime(): Promise<RuntimeApp> {
   const workspace = resolve_workspace();
+  const app_root = resolve_app_root();
 
   // ConfigStore: 하드코딩 기본값 위에 영속 오버라이드 + vault 민감 설정 병합
   const bootstrap_data_dir = join(workspace, "runtime");
@@ -184,14 +172,17 @@ export async function createRuntime(): Promise<RuntimeApp> {
     },
   });
 
+  // CLI 인증 서비스: container_cli 백엔드의 OAuth 상태 관리
+  const cli_auth = new CliAuthService({ logger: logger.child("cli-auth") });
+
   // 팩토리 기반 백엔드 생성
-  const factory_deps = { provider_registry: providers, workspace };
+  const factory_deps = { provider_registry: providers, workspace, cli_auth_service: cli_auth };
   const agent_backends: import("./agent/agent.types.js").AgentBackend[] = [];
   for (const config of provider_store.list()) {
     if (!config.enabled) continue;
     const token = await provider_store.get_token(config.instance_id);
     const backend = create_agent_provider(config, token, factory_deps);
-    if (backend?.is_available()) agent_backends.push(backend);
+    if (backend) agent_backends.push(backend);
   }
 
   const agent_session_store = new AgentSessionStore(join(data_dir, "agent-sessions.db"));
@@ -220,7 +211,7 @@ export async function createRuntime(): Promise<RuntimeApp> {
     openrouter_available: Boolean(openrouter_key),
   };
 
-  const agent = new AgentDomain(workspace, { providers, bus, data_dir, events, agent_backends: agent_backend_registry, secret_vault: providers.get_secret_vault(), logger: logger.child("agent"), provider_caps, on_task_change: (task) => dashboard?.broadcast_task_event("status_change", task) });
+  const agent = new AgentDomain(workspace, { providers, bus, data_dir, events, agent_backends: agent_backend_registry, secret_vault: providers.get_secret_vault(), logger: logger.child("agent"), provider_caps, on_task_change: (task) => dashboard?.sse.broadcast_task_event("status_change", task), app_root });
   agent.context.set_oauth_summary_provider(async () => {
     const configs = oauth_store.list();
     const results = [];
@@ -258,7 +249,7 @@ export async function createRuntime(): Promise<RuntimeApp> {
     agent_backends: agent_backend_registry,
     secret_vault: providers.get_secret_vault(),
   }), {
-    on_change: (type, job_id) => dashboard?.broadcast_cron_event(type, job_id),
+    on_change: (type, job_id) => dashboard?.sse.broadcast_cron_event(type, job_id),
   });
   events.bind_task_store(agent.task_store);
 
@@ -288,7 +279,7 @@ export async function createRuntime(): Promise<RuntimeApp> {
     dlq_store,
     dedupe_policy: new DefaultOutboundDedupePolicy(),
     logger: logger.child("dispatch"),
-    on_direct_send: (msg) => dashboard?.broadcast_message_event("outbound", msg.sender_id, msg.content, msg.chat_id),
+    on_direct_send: (msg) => dashboard?.sse.broadcast_message_event("outbound", msg.sender_id, msg.content, msg.chat_id),
   });
 
   const session_recorder = new SessionRecorder({
@@ -334,7 +325,7 @@ export async function createRuntime(): Promise<RuntimeApp> {
       cancel_task: async (task_id) => !!(await agent_runtime.cancel_task(task_id)),
       cancel_subagent: (id) => agent.subagents.cancel(id),
     },
-    on_change: (type, entry) => dashboard?.broadcast_process_event(type, entry),
+    on_change: (type, entry) => dashboard?.sse.broadcast_process_event(type, entry),
   });
 
   const orchestration = new OrchestrationService({
@@ -362,147 +353,31 @@ export async function createRuntime(): Promise<RuntimeApp> {
     events,
   });
 
-  const command_router = new CommandRouter([
-    new HelpHandler(),
-    new StopHandler(async (provider, chat_id) => {
-      const key = `${provider}:${chat_id}`;
-      return channel_manager_ref?.cancel_active_runs(key) ?? 0;
-    }),
-    new RenderHandler({
-      get: (provider, chat_id) => channel_manager_ref!.get_render_profile(provider, chat_id),
-      set: (provider, chat_id, patch) => channel_manager_ref!.set_render_profile(provider, chat_id, patch),
-      reset: (provider, chat_id) => channel_manager_ref!.reset_render_profile(provider, chat_id),
-    }),
-    new SecretHandler(providers.get_secret_vault()),
-    new MemoryHandler({ get_memory_store: () => agent.context.memory_store }),
-    new DecisionHandler({ get_decision_service: () => decisions }),
-    new PromiseHandler({ get_promise_service: () => agent.context.promise_service }),
-    new CronHandler(cron),
-    new ReloadHandler({
-      reload_config: async () => {
-        // config 리로드는 config_store에서 자동 반영됨
-      },
-      reload_tools: async () => {
-        agent.tool_reloader.reload_now();
-        return agent.tools.get_definitions().length;
-      },
-      reload_skills: async () => {
-        agent.context.skills_loader.refresh();
-        return agent.context.skills_loader.list_skills().length;
-      },
-    }),
-    new TaskHandler({
-      find_waiting_task: (provider, chat_id) => agent_runtime.find_waiting_task(provider, chat_id),
-      get_task: (task_id) => agent_runtime.get_task(task_id),
-      cancel_task: (task_id, reason) => agent_runtime.cancel_task(task_id, reason),
-      list_active_tasks: () => agent_runtime.list_active_tasks(),
-      list_active_loops: () => agent_runtime.list_active_loops(),
-      stop_loop: (loop_id, reason) => agent_runtime.stop_loop(loop_id, reason),
-      list_active_processes: () => process_tracker.list_active(),
-      list_recent_processes: (limit) => process_tracker.list_recent(limit),
-      get_process: (run_id) => process_tracker.get(run_id),
-      cancel_process: (run_id) => process_tracker.cancel(run_id),
-    }),
-    new StatusHandler({
-      list_tools: () => agent.tools.tool_names().map((name) => ({ name })),
-      list_skills: () => agent.context.skills_loader.list_skills(true) as Array<{ name: string; summary: string; always: string }>,
-    }),
-    new SkillHandler({
-      list_skills: () => agent.context.skills_loader.list_skills(true).map((s) => ({
-        name: String(s.name || ""), summary: String(s.summary || ""),
-        type: String(s.type || "tool"), source: String(s.source || "local"),
-        always: s.always === "true", model: s.model ? String(s.model) : null,
-      })),
-      get_skill: (name) => {
-        const m = agent.context.skills_loader.get_skill_metadata(name);
-        if (!m) return null;
-        return {
-          name: m.name, summary: m.summary, type: m.type, source: m.source,
-          always: m.always, model: m.model, tools: m.tools, requirements: m.requirements, role: m.role,
-          shared_protocols: m.shared_protocols,
-        };
-      },
-      list_role_skills: () => agent.context.skills_loader.list_role_skills().map((m) => ({
-        name: m.name, role: m.role, summary: m.summary,
-      })),
-      recommend: (task, limit) => agent.context.skills_loader.suggest_skills_for_text(task, limit ?? 5),
-      refresh: () => { agent.context.skills_loader.refresh(); return agent.context.skills_loader.list_skills().length; },
-    }),
-    new DoctorHandler({
-      get_tool_count: () => agent.tools.tool_names().length,
-      get_skill_count: () => agent.context.skills_loader.list_skills().length,
-      get_active_task_count: () => agent_runtime.list_active_tasks().length,
-      get_active_loop_count: () => agent_runtime.list_active_loops().length,
-      list_backends: () => agent_backend_registry.list_backends().map(String),
-      list_mcp_servers: () => mcp.list_servers().map((s) => ({
-        name: s.name, connected: s.connected, tool_count: s.tools.length, error: s.error,
-      })),
-      get_cron_job_count: () => cron.list_jobs().then((jobs) => jobs.length),
-    }),
-    new AgentHandler({
-      list: () => agent.subagents.list().map((s) => ({
-        id: s.id, role: s.role, status: s.status, label: s.label,
-        created_at: s.created_at, last_error: s.last_error,
-        model: s.model, session_id: s.session_id, updated_at: s.updated_at, last_result: s.last_result,
-      })),
-      list_running: () => agent.subagents.list_running().map((s) => ({
-        id: s.id, role: s.role, status: s.status, label: s.label,
-        created_at: s.created_at, last_error: s.last_error,
-        model: s.model, session_id: s.session_id, updated_at: s.updated_at, last_result: s.last_result,
-      })),
-      get: (id) => {
-        const s = agent.subagents.get(id);
-        if (!s) return null;
-        return {
-          id: s.id, role: s.role, status: s.status, label: s.label,
-          created_at: s.created_at, last_error: s.last_error,
-          model: s.model, session_id: s.session_id, updated_at: s.updated_at, last_result: s.last_result,
-        };
-      },
-      cancel: (id) => agent.subagents.cancel(id),
-      send_input: (id, text) => agent.subagents.send_input(id, text),
-      get_running_count: () => agent.subagents.get_running_count(),
-    }),
-    new StatsHandler({
-      get_cd_score: () => orchestration.get_cd_score(),
-      reset_cd: () => orchestration.reset_cd_score(),
-      get_active_task_count: () => agent_runtime.list_active_tasks().length,
-      get_active_loop_count: () => agent_runtime.list_active_loops().length,
-      get_provider_health: () => {
-        const scorer = providers.get_health_scorer();
-        return scorer.rank().map((r) => {
-          const m = scorer.get_metrics(r.provider);
-          const total = m.success_count + m.failure_count;
-          return {
-            provider: r.provider,
-            score: r.score,
-            success_count: m.success_count,
-            failure_count: m.failure_count,
-            avg_latency_ms: total > 0 ? m.total_latency_ms / total : 0,
-          };
-        });
-      },
-    }),
-    new VerifyHandler({
-      get_last_output: (provider, chat_id) =>
-        session_recorder.get_last_assistant_content(provider as import("./channels/types.js").ChannelProvider, chat_id, app_config.channel.defaultAlias),
-      run_verification: (task) => agent_runtime.spawn_and_wait({ task, max_turns: 5, timeout_ms: 60_000 }),
-    }),
-  ]);
+  const command_router = create_command_router({
+    cancel_active_runs: (key) => channel_manager_ref?.cancel_active_runs(key) ?? 0,
+    render_profile: {
+      get: (p, c) => channel_manager_ref!.get_render_profile(p, c),
+      set: (p, c, patch) => channel_manager_ref!.set_render_profile(p, c, patch),
+      reset: (p, c) => channel_manager_ref!.reset_render_profile(p, c),
+    },
+    agent, agent_runtime, process_tracker, orchestration, providers,
+    agent_backend_registry, mcp, session_recorder, cron, decisions,
+    default_alias: app_config.channel.defaultAlias,
+  });
 
   const task_resume = new TaskResumeService({
     agent_runtime,
     logger: logger.child("task-resume"),
   });
 
-  // bot identity: instance store에서 bot_self_id / default_target 조회
+  // bot identity: instance_id 우선 조회 → provider 폴백
   const bot_identity = {
-    get_bot_self_id(provider: string): string {
-      const inst = instance_store.get(provider);
+    get_bot_self_id(id: string): string {
+      const inst = instance_store.get(id);
       return String((inst?.settings as Record<string, unknown>)?.bot_self_id || "").trim();
     },
-    get_default_target(provider: string): string {
-      const inst = instance_store.get(provider);
+    get_default_target(id: string): string {
+      const inst = instance_store.get(id);
       const s = (inst?.settings as Record<string, unknown>) || {};
       return String(s.default_channel || s.default_chat_id || "").trim();
     },
@@ -525,8 +400,8 @@ export async function createRuntime(): Promise<RuntimeApp> {
     workspace_dir: workspace,
     logger: app_config.channel.debug ? create_logger("channels", "debug") : logger.child("channels"),
     bot_identity,
-    on_agent_event: (event) => dashboard?.broadcast_agent_event(event),
-    on_web_stream: (chat_id, content, done) => dashboard?.broadcast_web_stream(chat_id, content, done),
+    on_agent_event: (event) => dashboard?.sse.broadcast_agent_event(event),
+    on_web_stream: (chat_id, content, done) => dashboard?.sse.broadcast_web_stream(chat_id, content, done),
   });
   channel_manager_ref = channel_manager;
 
@@ -560,7 +435,7 @@ export async function createRuntime(): Promise<RuntimeApp> {
             sender_id: "heartbeat",
             chat_id: default_chat_id,
             content: `💓 Heartbeat:\n${message}`,
-            at: new Date().toISOString(),
+            at: now_iso(),
             metadata: { kind: "heartbeat_notify" },
           });
         }
@@ -605,124 +480,27 @@ export async function createRuntime(): Promise<RuntimeApp> {
       },
       dlq: dlq_store,
       secrets: providers.get_secret_vault(),
-      config_ops: {
-        get_current_config: () => app_config as unknown as Record<string, unknown>,
-        get_sections: async () => {
-          const config_raw = app_config as unknown as Record<string, unknown>;
-          const results = [];
-          for (const id of SECTION_ORDER) {
-            results.push({ id, label: SECTION_LABELS[id], fields: await config_store.get_section_status(id, config_raw) });
-          }
-          return results;
-        },
-        get_section: async (section: string) => {
-          if (!SECTION_ORDER.includes(section as ConfigSection)) return null;
-          const config_raw = app_config as unknown as Record<string, unknown>;
-          return {
-            id: section,
-            label: SECTION_LABELS[section as ConfigSection],
-            fields: await config_store.get_section_status(section as ConfigSection, config_raw),
-          };
-        },
-        set_value: async (path: string, value: unknown) => {
-          await config_store.set_value(path, value);
-          set_nested(app_config as unknown as Record<string, unknown>, path, value);
-        },
-        remove_value: async (path: string) => {
-          await config_store.remove_value(path);
-          const fresh = get_config_defaults();
-          const keys = path.split(".");
-          let def: unknown = fresh as unknown as Record<string, unknown>;
-          for (const k of keys) {
-            if (def == null || typeof def !== "object") { def = undefined; break; }
-            def = (def as Record<string, unknown>)[k];
-          }
-          set_nested(app_config as unknown as Record<string, unknown>, path, def);
-        },
-      },
-      skill_ops: {
-        list_skills: () => agent.context.skills_loader.list_skills(),
-        get_skill_detail: (name: string) => {
-          const meta = agent.context.skills_loader.get_skill_metadata(name);
-          let content: string | null = null;
-          let references: Array<{ name: string; content: string }> | null = null;
-          if (meta?.path) {
-            try { content = readFileSync(meta.path, "utf-8"); } catch { /* skip */ }
-            const refs_dir = join(meta.path, "..", "references");
-            if (existsSync(refs_dir)) {
-              try {
-                references = readdirSync(refs_dir)
-                  .filter((f) => f.endsWith(".md") || f.endsWith(".txt"))
-                  .map((f) => ({ name: f, content: readFileSync(join(refs_dir, f), "utf-8") }));
-              } catch { /* skip */ }
-            }
-          }
-          return { metadata: meta as unknown as Record<string, unknown> | null, content, references };
-        },
-        refresh: () => agent.context.skills_loader.refresh(),
-        write_skill_file: (name: string, file: string, content: string) => {
-          try {
-            const meta = agent.context.skills_loader.get_skill_metadata(name);
-            if (!meta?.path) return { ok: false, error: "skill_not_found" };
-            // builtin 스킬은 편집 거부
-            if (String(meta.source ?? "").toLowerCase() === "builtin") return { ok: false, error: "builtin_readonly" };
-            const target = file === "SKILL.md"
-              ? meta.path
-              : join(meta.path, "..", "references", file);
-            writeFileSync(target, content, "utf-8");
-            agent.context.skills_loader.refresh();
-            return { ok: true };
-          } catch (e) {
-            return { ok: false, error: e instanceof Error ? e.message : String(e) };
-          }
-        },
-        upload_skill: (name: string, zip_buffer: Buffer) => {
-          try {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
-            const AdmZip = require("adm-zip") as typeof import("adm-zip");
-            const zip = new AdmZip(zip_buffer);
-            const skill_dir = join(workspace, "skills", name);
-            // zip 내 최상위 단일 디렉터리 prefix 제거 (예: my-skill/SKILL.md → SKILL.md)
-            const entries = zip.getEntries();
-            const top_dirs = new Set(entries.map((e) => e.entryName.split("/")[0]).filter(Boolean));
-            const strip_prefix = top_dirs.size === 1 ? `${[...top_dirs][0]}/` : "";
-            for (const entry of entries) {
-              if (entry.isDirectory) continue;
-              const rel = strip_prefix ? entry.entryName.replace(strip_prefix, "") : entry.entryName;
-              if (!rel) continue;
-              const target = join(skill_dir, rel);
-              mkdirSync(join(target, ".."), { recursive: true });
-              writeFileSync(target, entry.getData());
-            }
-            agent.context.skills_loader.refresh();
-            return { ok: true, path: skill_dir };
-          } catch (e) {
-            return { ok: false, path: "", error: e instanceof Error ? e.message : String(e) };
-          }
-        },
-      },
-      tool_ops: {
-        tool_names: () => agent.tools.tool_names(),
-        get_definitions: () => agent.tools.get_definitions(),
-        list_mcp_servers: () => mcp.list_servers().map((s) => ({ name: s.name, connected: s.connected, tools: s.tools.map((t) => t.name), error: s.error })),
-      },
-      template_ops: _create_template_ops(workspace),
-      channel_ops: _create_channel_ops({ channels, instance_store, app_config }),
-      agent_provider_ops: _create_agent_provider_ops({
+      config_ops: create_config_ops({ app_config, config_store }),
+      skill_ops: create_skill_ops({ skills_loader: agent.context.skills_loader, workspace }),
+      tool_ops: create_tool_ops({ tool_names: () => agent.tools.tool_names(), get_definitions: () => agent.tools.get_definitions(), mcp }),
+      template_ops: create_template_ops(workspace),
+      channel_ops: create_channel_ops({ channels, instance_store, app_config }),
+      agent_provider_ops: create_agent_provider_ops({
         provider_store, agent_backends: agent_backend_registry,
         provider_registry: providers, workspace,
       }),
-      bootstrap_ops: _create_bootstrap_ops({ provider_store, config_store, provider_registry: providers, agent_backends: agent_backend_registry, workspace }),
+      bootstrap_ops: create_bootstrap_ops({ provider_store, config_store, provider_registry: providers, agent_backends: agent_backend_registry, workspace }),
       session_store: sessions,
-      memory_ops: _create_memory_ops(agent.context.memory_store),
-      workspace_ops: _create_workspace_ops(workspace),
-      oauth_ops: _create_oauth_ops({ oauth_store, oauth_flow, dashboard_port: app_config.dashboard.port, public_url: app_config.dashboard.publicUrl }),
+      memory_ops: create_memory_ops(agent.context.memory_store),
+      workspace_ops: create_workspace_ops(workspace),
+      oauth_ops: create_oauth_ops({ oauth_store, oauth_flow, dashboard_port: app_config.dashboard.port, public_url: app_config.dashboard.publicUrl }),
+      cli_auth_ops: create_cli_auth_ops({ cli_auth }),
       default_alias: app_config.channel.defaultAlias,
       workspace,
     });
     dashboard.set_oauth_callback_handler((code, state) => oauth_flow.handle_callback(code, state));
     bus.on_publish((dir, msg) => {
-      dashboard?.broadcast_message_event(dir, msg.sender_id, msg.content, msg.chat_id);
+      dashboard?.sse.broadcast_message_event(dir, msg.sender_id, msg.content, msg.chat_id);
       if (dir === "outbound" && msg.provider === "web" && msg.chat_id) {
         const media = msg.media?.map((m) => ({ type: m.type as string, url: m.url, mime: m.mime, name: m.name }));
         dashboard?.capture_web_outbound(msg.chat_id, msg.content, media);
@@ -734,7 +512,7 @@ export async function createRuntime(): Promise<RuntimeApp> {
   (async function progress_relay() {
     while (!bus.is_closed()) {
       const event = await bus.consume_progress({ timeout_ms: 5000 });
-      if (event) dashboard?.broadcast_progress_event(event);
+      if (event) dashboard?.sse.broadcast_progress_event(event);
     }
   })().catch(() => {});
 
@@ -786,7 +564,7 @@ export async function createRuntime(): Promise<RuntimeApp> {
   logger.info(`channels=${enabled_channels.join(",")} primary=${primary_provider}`);
 
   await register_mcp_tools(workspace, mcp, agent_runtime, logger).catch((error) => {
-    logger.error(`mcp tool registration failed: ${error instanceof Error ? error.message : String(error)}`);
+    logger.error(`mcp tool registration failed: ${error_message(error)}`);
   });
 
   const session_id = randomUUID();
@@ -801,6 +579,21 @@ export async function createRuntime(): Promise<RuntimeApp> {
     try { agent_session_store.prune_expired(); } catch { /* noop */ }
   }, 60 * 60 * 1000);
   session_prune_timer.unref();
+
+  // CLI 인증 상태 비차단 확인: container_cli 백엔드의 is_available() 갱신
+  cli_auth.check_all().then((statuses) => {
+    for (const s of statuses) {
+      logger.info(`cli-auth ${s.cli} authenticated=${s.authenticated}${s.account ? ` account=${s.account}` : ""}`);
+    }
+    // ContainerCliAgent.check_auth() 호출하여 is_available() 반영
+    for (const backend of agent_backends) {
+      if ("check_auth" in backend && typeof (backend as { check_auth: () => Promise<boolean> }).check_auth === "function") {
+        void (backend as { check_auth: () => Promise<boolean> }).check_auth();
+      }
+    }
+  }).catch((err) => {
+    logger.warn(`cli-auth check failed: ${error_message(err)}`);
+  });
 
   if (dashboard) logger.info(`dashboard ${dashboard.get_url()}`);
   const phi4_status = phi4_runtime.get_status();
@@ -826,6 +619,7 @@ export async function createRuntime(): Promise<RuntimeApp> {
     ops,
     services,
     session_prune_timer,
+    cli_auth,
   };
 
   return app;
@@ -860,615 +654,16 @@ async function register_mcp_tools(
   }
 }
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
-import type { DashboardTemplateOps, DashboardChannelOps, ChannelStatusInfo, BootstrapOps, DashboardOAuthOps, OAuthIntegrationInfo } from "./dashboard/service.js";
-import { DEFAULT_TEMPLATES } from "./bootstrap-templates.js";
-
-const TEMPLATE_NAMES = ["IDENTITY", "AGENTS", "SOUL", "HEART", "USER", "TOOLS", "HEARTBEAT"] as const;
-
-function _create_template_ops(workspace: string): DashboardTemplateOps {
-  const templates_dir = join(workspace, "templates");
-
-  function resolve_path(name: string): string | null {
-    const in_templates = join(templates_dir, `${name}.md`);
-    if (existsSync(in_templates)) return in_templates;
-    const in_root = join(workspace, `${name}.md`);
-    if (existsSync(in_root)) return in_root;
-    return null;
-  }
-
-  return {
-    list() {
-      return TEMPLATE_NAMES.map((name) => ({ name, exists: resolve_path(name) !== null }));
-    },
-    read(name: string) {
-      const p = resolve_path(name);
-      if (!p) return null;
-      return readFileSync(p, "utf-8");
-    },
-    write(name: string, content: string) {
-      if (!mkdirSync(templates_dir, { recursive: true }) && !existsSync(templates_dir)) return { ok: false };
-      const target = join(templates_dir, `${name}.md`);
-      writeFileSync(target, content, "utf-8");
-      return { ok: true };
-    },
-  };
-}
-
-const CHANNEL_TEST_URLS: Record<string, (token: string, api_base?: string) => { url: string; headers: Record<string, string> }> = {
-  slack: (token) => ({ url: "https://slack.com/api/auth.test", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } }),
-  discord: (token, api_base) => ({ url: `${api_base || "https://discord.com/api/v10"}/users/@me`, headers: { Authorization: `Bot ${token}` } }),
-  telegram: (token, api_base) => ({ url: `${api_base || "https://api.telegram.org"}/bot${token}/getMe`, headers: {} }),
-};
-
-function _create_channel_ops(deps: {
-  channels: import("./channels/index.js").ChannelRegistryLike;
-  instance_store: import("./channels/instance-store.js").ChannelInstanceStore;
-  app_config: import("./config/schema.js").AppConfig;
-}): DashboardChannelOps {
-  const { channels, instance_store } = deps;
-  const log = create_logger("channel-ops");
-
-  function build_status(
-    config: import("./channels/instance-store.js").ChannelInstanceConfig,
-    health: import("./channels/types.js").ChannelHealth | null,
-    has_token: boolean,
-  ): ChannelStatusInfo {
-    const settings = config.settings as Record<string, unknown>;
-    const default_target = String(settings.default_channel || settings.default_chat_id || "");
-    return {
-      provider: config.provider,
-      instance_id: config.instance_id,
-      label: config.label,
-      enabled: config.enabled,
-      running: health?.running ?? false,
-      healthy: health?.running ?? false,
-      last_error: health?.last_error,
-      token_configured: has_token,
-      default_target,
-      settings: config.settings,
-      created_at: config.created_at,
-      updated_at: config.updated_at,
-    };
-  }
-
-  return {
-    async list(): Promise<ChannelStatusInfo[]> {
-      const instances = instance_store.list();
-      const health_list = channels.get_health();
-      const health_map = new Map(health_list.map((h) => [h.instance_id, h]));
-
-      const results: ChannelStatusInfo[] = [];
-      for (const config of instances) {
-        const has_token = await instance_store.has_token(config.instance_id);
-        results.push(build_status(config, health_map.get(config.instance_id) ?? null, has_token));
-      }
-      return results;
-    },
-
-    async get(instance_id: string): Promise<ChannelStatusInfo | null> {
-      const config = instance_store.get(instance_id);
-      if (!config) return null;
-      const health = channels.get_health().find((h) => h.instance_id === instance_id) ?? null;
-      const has_token = await instance_store.has_token(instance_id);
-      return build_status(config, health, has_token);
-    },
-
-    async create(input): Promise<{ ok: boolean; error?: string }> {
-      if (!input.instance_id || !input.provider) return { ok: false, error: "instance_id_and_provider_required" };
-      if (instance_store.get(input.instance_id)) return { ok: false, error: "instance_already_exists" };
-      const config = {
-        instance_id: input.instance_id,
-        provider: input.provider,
-        label: input.label || input.instance_id,
-        enabled: input.enabled ?? true,
-        settings: input.settings || {},
-      };
-      instance_store.upsert(config);
-      if (input.token) {
-        await instance_store.set_token(input.instance_id, input.token);
-      }
-      const saved = instance_store.get(input.instance_id);
-      if (saved?.enabled) {
-        const token = await instance_store.get_token(saved.instance_id) || "";
-        const ch = create_channel_instance(saved, token);
-        if (ch) {
-          channels.register(ch);
-          try {
-            await ch.start();
-            log.info("channel created and started", { instance_id: saved.instance_id, provider: saved.provider });
-          } catch (err) {
-            log.warn("channel created but start failed", { instance_id: saved.instance_id, error: err instanceof Error ? err.message : String(err) });
-          }
-        }
-      }
-      return { ok: true };
-    },
-
-    async update(instance_id, patch): Promise<{ ok: boolean; error?: string }> {
-      const existing = instance_store.get(instance_id);
-      if (!existing) return { ok: false, error: "not_found" };
-      instance_store.update_settings(instance_id, {
-        label: patch.label,
-        enabled: patch.enabled,
-        settings: patch.settings,
-      });
-      if (patch.token !== undefined) {
-        if (patch.token) {
-          await instance_store.set_token(instance_id, patch.token);
-        } else {
-          await instance_store.remove_token(instance_id);
-        }
-      }
-      // 핫스왑: 기존 인스턴스 정지 → 새 설정으로 재생성
-      const old = channels.get_channel(instance_id);
-      if (old?.is_running()) {
-        try { await old.stop(); } catch { /* best-effort */ }
-      }
-      channels.unregister(instance_id);
-      const updated = instance_store.get(instance_id);
-      if (updated?.enabled) {
-        const token = await instance_store.get_token(instance_id) || "";
-        const ch = create_channel_instance(updated, token);
-        if (ch) {
-          channels.register(ch);
-          try {
-            await ch.start();
-            log.info("channel hot-swapped", { instance_id, provider: updated.provider });
-          } catch (err) {
-            log.warn("channel hot-swap start failed", { instance_id, error: err instanceof Error ? err.message : String(err) });
-          }
-        }
-      } else {
-        log.info("channel stopped (disabled)", { instance_id });
-      }
-      return { ok: true };
-    },
-
-    async remove(instance_id): Promise<{ ok: boolean; error?: string }> {
-      const ch = channels.get_channel(instance_id);
-      if (ch?.is_running()) {
-        try { await ch.stop(); } catch { /* best-effort */ }
-      }
-      channels.unregister(instance_id);
-      await instance_store.remove_token(instance_id);
-      const removed = instance_store.remove(instance_id);
-      if (removed) {
-        log.info("channel removed", { instance_id });
-      }
-      return { ok: removed, error: removed ? undefined : "not_found" };
-    },
-
-    async test_connection(instance_id: string): Promise<{ ok: boolean; detail?: string; error?: string }> {
-      const config = instance_store.get(instance_id);
-      if (!config) return { ok: false, error: "instance_not_found" };
-      const token = await instance_store.get_token(instance_id) || "";
-      if (!token) return { ok: false, error: "token_not_configured" };
-
-      const builder = CHANNEL_TEST_URLS[config.provider];
-      if (!builder) return { ok: false, error: "unsupported_provider" };
-      const api_base = String((config.settings as Record<string, unknown>).api_base || "");
-      const { url, headers } = builder(token, api_base || undefined);
-
-      try {
-        const resp = await fetch(url, { headers, signal: AbortSignal.timeout(10_000) });
-        const body = await resp.json().catch(() => null) as Record<string, unknown> | null;
-        if (!resp.ok) {
-          log.warn("channel test_connection failed", { instance_id, provider: config.provider, status: resp.status });
-          return { ok: false, error: `HTTP ${resp.status}`, detail: JSON.stringify(body).slice(0, 200) };
-        }
-
-        if (config.provider === "slack" && body?.ok === false) {
-          log.warn("channel test_connection failed", { instance_id, provider: config.provider, error: String(body.error || "slack_auth_failed") });
-          return { ok: false, error: String(body.error || "slack_auth_failed") };
-        }
-
-        const detail = config.provider === "slack"
-          ? String(body?.team || "")
-          : config.provider === "discord"
-            ? String((body as Record<string, unknown>)?.username || "")
-            : String((body as { result?: { username?: string } })?.result?.username || "");
-        log.info("channel test_connection ok", { instance_id, provider: config.provider });
-        return { ok: true, detail };
-      } catch (e) {
-        log.warn("channel test_connection error", { instance_id, provider: config.provider, error: e instanceof Error ? e.message : String(e) });
-        return { ok: false, error: e instanceof Error ? e.message : String(e) };
-      }
-    },
-
-    list_providers(): string[] {
-      return [...new Set(instance_store.list().map((c) => c.provider))];
-    },
-  };
-}
-
-function _create_agent_provider_ops(deps: {
-  provider_store: AgentProviderStore;
-  agent_backends: AgentBackendRegistry;
-  provider_registry: ProviderRegistry;
-  workspace: string;
-}): import("./dashboard/service.js").DashboardAgentProviderOps {
-  const { provider_store, agent_backends, provider_registry, workspace } = deps;
-
-  return {
-    async list() {
-      const configs = provider_store.list();
-      const status_map = new Map(agent_backends.list_backend_status().map((s) => [s.id, s]));
-      return configs.map((c) => {
-        const s = status_map.get(c.instance_id);
-        return {
-          ...c,
-          available: s?.available ?? false,
-          circuit_state: s?.circuit_state ?? "closed",
-          capabilities: s?.capabilities ?? null,
-          token_configured: false, // 아래에서 비동기 보완
-        };
-      });
-    },
-
-    async get(instance_id) {
-      const config = provider_store.get(instance_id);
-      if (!config) return null;
-      const status = agent_backends.list_backend_status().find((s) => s.id === instance_id);
-      const has_token = await provider_store.has_token(instance_id);
-      return {
-        ...config,
-        available: status?.available ?? false,
-        circuit_state: status?.circuit_state ?? "closed",
-        capabilities: status?.capabilities ?? null,
-        token_configured: has_token,
-      };
-    },
-
-    async create(input) {
-      if (!input.instance_id || !input.provider_type) return { ok: false, error: "instance_id_and_provider_type_required" };
-      if (provider_store.get(input.instance_id)) return { ok: false, error: "instance_already_exists" };
-
-      provider_store.upsert({
-        instance_id: input.instance_id,
-        provider_type: input.provider_type,
-        label: input.label || input.instance_id,
-        enabled: input.enabled ?? true,
-        priority: input.priority ?? 100,
-        supported_modes: (input.supported_modes ?? ["once", "agent", "task"]) as import("./orchestration/types.js").ExecutionMode[],
-        settings: input.settings || {},
-      });
-
-      if (input.token) {
-        await provider_store.set_token(input.instance_id, input.token);
-      }
-
-      // 즉시 등록 (재시작 불필요)
-      const config = provider_store.get(input.instance_id);
-      if (config) {
-        const token = await provider_store.get_token(input.instance_id);
-        const backend = create_agent_provider(config, token, { provider_registry, workspace });
-        if (backend?.is_available()) {
-          agent_backends.register(backend, config);
-        }
-      }
-
-      return { ok: true };
-    },
-
-    async update(instance_id, patch) {
-      const existing = provider_store.get(instance_id);
-      if (!existing) return { ok: false, error: "not_found" };
-
-      provider_store.update_settings(instance_id, {
-        label: patch.label,
-        enabled: patch.enabled,
-        priority: patch.priority,
-        supported_modes: patch.supported_modes as import("./orchestration/types.js").ExecutionMode[] | undefined,
-        settings: patch.settings,
-      });
-
-      if (patch.token !== undefined) {
-        if (patch.token) {
-          await provider_store.set_token(instance_id, patch.token);
-        } else {
-          await provider_store.remove_token(instance_id);
-        }
-      }
-
-      // 핫스왑: 설정 변경 시 팩토리 재생성 + registry 재등록
-      const updated_config = provider_store.get(instance_id);
-      if (updated_config) {
-        const token = await provider_store.get_token(instance_id);
-        const backend = create_agent_provider(updated_config, token, { provider_registry, workspace });
-        if (backend) {
-          agent_backends.register(backend, updated_config);
-        }
-      }
-
-      return { ok: true };
-    },
-
-    async remove(instance_id) {
-      await agent_backends.unregister(instance_id);
-      await provider_store.remove_token(instance_id);
-      const removed = provider_store.remove(instance_id);
-      return { ok: removed, error: removed ? undefined : "not_found" };
-    },
-
-    async test_availability(instance_id) {
-      const config = provider_store.get(instance_id);
-      if (!config) return { ok: false, error: "instance_not_found" };
-      const token = await provider_store.get_token(instance_id);
-
-      const backend = create_agent_provider(config, token, { provider_registry, workspace });
-      if (!backend) return { ok: false, error: "unknown_provider_type" };
-
-      try {
-        const available = backend.is_available();
-        try { backend.stop?.(); } catch { /* best-effort */ }
-        return { ok: available, detail: available ? "available" : "unavailable" };
-      } catch (e) {
-        return { ok: false, error: e instanceof Error ? e.message : String(e) };
-      }
-    },
-
-    list_provider_types() {
-      return list_registered_provider_types();
-    },
-  };
-}
-
-function _create_bootstrap_ops(deps: {
-  provider_store: AgentProviderStore;
-  config_store: ConfigStore;
-  provider_registry: ProviderRegistry;
-  agent_backends: AgentBackendRegistry;
-  workspace: string;
-}): BootstrapOps {
-  const { provider_store, config_store, provider_registry, agent_backends, workspace } = deps;
-  return {
-    get_status() {
-      return {
-        needed: provider_store.count() === 0,
-        providers: list_registered_provider_types(),
-      };
-    },
-    async apply(input) {
-      if (!Array.isArray(input.providers) || input.providers.length === 0) {
-        return { ok: false, error: "at_least_one_provider_required" };
-      }
-      for (const p of input.providers) {
-        if (!p.instance_id || !p.provider_type) {
-          return { ok: false, error: "instance_id_and_provider_type_required" };
-        }
-        provider_store.upsert({
-          instance_id: p.instance_id,
-          provider_type: p.provider_type,
-          label: p.label || p.instance_id,
-          enabled: p.enabled ?? true,
-          priority: p.priority ?? 100,
-          supported_modes: ["once", "agent", "task"],
-          settings: p.settings || {},
-        });
-        if (p.token) {
-          await provider_store.set_token(p.instance_id, p.token);
-        }
-        // 즉시 백엔드 등록
-        const config = provider_store.get(p.instance_id);
-        if (config) {
-          const token = await provider_store.get_token(p.instance_id);
-          const backend = create_agent_provider(config, token, { provider_registry, workspace });
-          if (backend?.is_available()) agent_backends.register(backend, config);
-        }
-      }
-      if (input.executor) {
-        await config_store.set_value("orchestration.executorProvider", input.executor);
-      }
-      if (input.orchestrator) {
-        await config_store.set_value("orchestration.orchestratorProvider", input.orchestrator);
-      }
-      if (input.alias) {
-        await config_store.set_value("channel.defaultAlias", input.alias);
-      }
-      // 최초 부트스트랩 시 기본 페르소나 템플릿 생성 (기존 파일은 덮어쓰지 않음)
-      const templates_dir = join(workspace, "templates");
-      mkdirSync(templates_dir, { recursive: true });
-      for (const [name, content] of Object.entries(DEFAULT_TEMPLATES)) {
-        const target = join(templates_dir, `${name}.md`);
-        if (!existsSync(target)) writeFileSync(target, content, "utf-8");
-      }
-      return { ok: true };
-    },
-  };
-}
-
-function _create_memory_ops(memory_store: import("./agent/memory.types.js").MemoryStoreLike): import("./dashboard/service.js").DashboardMemoryOps {
-  return {
-    read_longterm: () => memory_store.read_longterm(),
-    write_longterm: (content) => memory_store.write_longterm(content),
-    list_daily: () => memory_store.list_daily(),
-    read_daily: (day) => memory_store.read_daily(day),
-    write_daily: (content, day) => memory_store.write_daily(content, day),
-  };
-}
-
-function _create_workspace_ops(workspace_dir: string): import("./dashboard/service.js").DashboardWorkspaceOps {
-  return {
-    async list_files(rel_path = "") {
-      const safe = rel_path.replace(/\.\./g, "").replace(/^\/+/, "");
-      const abs = join(workspace_dir, safe);
-      try {
-        const entries = readdirSync(abs, { withFileTypes: true });
-        return entries.map((e) => {
-          const rel = safe ? `${safe}/${e.name}` : e.name;
-          let size = 0;
-          let mtime = 0;
-          try {
-            const st = statSync(join(abs, e.name));
-            size = st.size;
-            mtime = st.mtimeMs;
-          } catch { /* skip */ }
-          return { name: e.name, rel, is_dir: e.isDirectory(), size, mtime };
-        });
-      } catch {
-        return [];
-      }
-    },
-    async read_file(rel_path) {
-      const safe = rel_path.replace(/\.\./g, "").replace(/^\/+/, "");
-      const abs = join(workspace_dir, safe);
-      try {
-        return readFileSync(abs, "utf-8");
-      } catch {
-        return null;
-      }
-    },
-  };
-}
-
-function _create_oauth_ops(deps: {
-  oauth_store: OAuthIntegrationStore;
-  oauth_flow: OAuthFlowService;
-  dashboard_port: number;
-  public_url?: string;
-}): DashboardOAuthOps {
-  const { oauth_store, oauth_flow, dashboard_port, public_url } = deps;
-
-  /** public_url 설정 시 해당 origin 사용, 없으면 요청 origin 사용. */
-  function resolve_origin(request_origin: string | undefined): string {
-    if (public_url) return public_url.replace(/\/$/, "");
-    return request_origin ?? `http://localhost:${dashboard_port}`;
-  }
-
-  async function build_info(config: import("./oauth/integration-store.js").OAuthIntegrationConfig): Promise<OAuthIntegrationInfo> {
-    const has_token = await oauth_store.has_access_token(config.instance_id);
-    return {
-      instance_id: config.instance_id,
-      service_type: config.service_type,
-      label: config.label,
-      enabled: config.enabled,
-      scopes: config.scopes,
-      token_configured: has_token,
-      expired: oauth_store.is_expired(config.instance_id),
-      expires_at: config.expires_at,
-      created_at: config.created_at,
-      updated_at: config.updated_at,
-    };
-  }
-
-  return {
-    async list() {
-      const configs = oauth_store.list();
-      return Promise.all(configs.map(build_info));
-    },
-
-    async get(id) {
-      const config = oauth_store.get(id);
-      return config ? build_info(config) : null;
-    },
-
-    async create(input) {
-      if (!input.service_type || !input.client_id) {
-        return { ok: false, error: "service_type_and_client_id_required" };
-      }
-      const instance_id = input.label?.toLowerCase().replace(/\s+/g, "-") || input.service_type;
-      if (oauth_store.get(instance_id)) {
-        return { ok: false, error: "instance_already_exists" };
-      }
-
-      const preset = get_oauth_preset(input.service_type);
-      const auth_url = input.auth_url || preset?.auth_url || "";
-      const token_url = input.token_url || preset?.token_url || "";
-      const redirect_uri = `${resolve_origin(undefined)}/api/oauth/callback`;
-
-      oauth_store.upsert({
-        instance_id,
-        service_type: input.service_type,
-        label: input.label || instance_id,
-        enabled: true,
-        scopes: input.scopes || preset?.default_scopes || [],
-        auth_url,
-        token_url,
-        redirect_uri,
-        settings: {},
-      });
-      await oauth_store.vault_store_client_id(instance_id, input.client_id);
-      if (input.client_secret) await oauth_store.vault_store_client_secret(instance_id, input.client_secret);
-      return { ok: true, instance_id };
-    },
-
-    async update(id, patch) {
-      const existing = oauth_store.get(id);
-      if (!existing) return { ok: false, error: "not_found" };
-      oauth_store.update_settings(id, patch);
-      return { ok: true };
-    },
-
-    async remove(id) {
-      const existed = oauth_store.remove(id);
-      if (!existed) return { ok: false, error: "not_found" };
-      await oauth_store.remove_tokens(id);
-      return { ok: true };
-    },
-
-    async start_auth(id, client_secret, origin) {
-      const integration = oauth_store.get(id);
-      if (!integration) return { ok: false, error: "not_found" };
-
-      const client_id = await oauth_store.get_client_id(id);
-      if (!client_id) return { ok: false, error: "missing_client_id" };
-
-      // client_secret이 전달된 경우 vault 갱신 (없으면 기존 저장 값 또는 빈 값으로 진행)
-      if (client_secret) await oauth_store.vault_store_client_secret(id, client_secret);
-
-      const effective_origin = resolve_origin(origin);
-      const redirect_uri = `${effective_origin}/api/oauth/callback`;
-      if (integration.redirect_uri !== redirect_uri) {
-        oauth_store.upsert({ ...integration, redirect_uri });
-      }
-
-      const updated = oauth_store.get(id) ?? integration;
-      const auth_url = oauth_flow.generate_auth_url_with_client_id(updated, client_id);
-      return { ok: true, auth_url };
-    },
-
-    async refresh(id) {
-      return oauth_flow.refresh_token(id);
-    },
-
-    async test(id) {
-      return oauth_flow.test_token(id);
-    },
-
-    list_presets() {
-      return list_oauth_presets();
-    },
-
-    async register_preset(preset) {
-      if (!preset.service_type || !preset.auth_url || !preset.token_url) {
-        return { ok: false, error: "service_type, auth_url, token_url required" };
-      }
-      oauth_flow.register_custom_preset({
-        scopes_available: [], default_scopes: [], supports_refresh: true,
-        ...preset,
-      });
-      return { ok: true };
-    },
-
-    async update_preset(service_type, patch) {
-      const existing = get_oauth_preset(service_type);
-      if (!existing) return { ok: false, error: "preset_not_found" };
-      oauth_flow.register_custom_preset({ ...existing, ...patch });
-      return { ok: true };
-    },
-
-    async unregister_preset(service_type) {
-      const removed = oauth_flow.unregister_custom_preset(service_type);
-      return removed ? { ok: true } : { ok: false, error: "preset_not_found_in_db" };
-    },
-  };
-}
-
 function resolve_workspace(): string {
   if (process.env.WORKSPACE) return resolve(process.env.WORKSPACE);
   const src_dir = fileURLToPath(new URL(".", import.meta.url));
   return join(resolve(src_dir, ".."), "workspace");
+}
+
+/** dist/main.js → 프로젝트 루트. Docker에서 workspace와 앱 루트가 다를 때 builtin skill 탐색에 사용. */
+function resolve_app_root(): string {
+  const src_dir = fileURLToPath(new URL(".", import.meta.url));
+  return resolve(src_dir, "..");
 }
 
 function is_main_entry(): boolean {
@@ -1484,15 +679,16 @@ if (is_main_entry()) {
     const boot_logger = create_logger("boot");
     const workspace = resolve_workspace();
     boot_logger.info(`workspace=${workspace}`);
-    const lock = await acquire_runtime_instance_lock({ workspace, retries: 25, retry_ms: 200 });
-    if (!lock.acquired) {
+    const skip_lock = process.env.SKIP_INSTANCE_LOCK === "1";
+    const lock = skip_lock ? null : await acquire_runtime_instance_lock({ workspace, retries: 25, retry_ms: 200 });
+    if (lock && !lock.acquired) {
       boot_logger.error(`another instance is active holder_pid=${lock.holder_pid || "unknown"} lock=${lock.lock_path}`);
       process.exit(1);
     }
 
     const app = await createRuntime();
     const release_lock = async (): Promise<void> => {
-      await lock.release().catch(() => undefined);
+      await lock?.release().catch(() => undefined);
     };
     const SHUTDOWN_TIMEOUT_MS = 5_000;
     let shutting_down = false;
@@ -1510,7 +706,7 @@ if (is_main_entry()) {
         .then(() => app.agent_backends.close())
         .then(() => app.bus.close())
         .then(() => { if ("close" in app.sessions) (app.sessions as { close(): void }).close(); })
-        .catch((err) => { boot_logger.error(`shutdown error: ${err instanceof Error ? err.message : String(err)}`); })
+        .catch((err) => { boot_logger.error(`shutdown error: ${error_message(err)}`); })
         .finally(() => {
           clearTimeout(force_exit);
           void release_lock().finally(() => {
@@ -1522,7 +718,7 @@ if (is_main_entry()) {
     process.on("SIGINT", () => on_signal("SIGINT"));
     process.on("SIGTERM", () => on_signal("SIGTERM"));
   })().catch((error) => {
-    const detail = error instanceof Error ? error.message : JSON.stringify(error, null, 2);
+    const detail = error_message(error);
     create_logger("boot").error(`bootstrap failed: ${detail}`);
     process.exit(1);
   });

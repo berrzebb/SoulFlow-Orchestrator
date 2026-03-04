@@ -11,6 +11,7 @@
  */
 import type { TaskState, AgentLoopState } from "../../contracts.js";
 import type { ProcessEntry } from "../../orchestration/process-tracker.js";
+import { STATUS_EMOJI } from "../../orchestration/prompts.js";
 import { slash_name_in } from "../slash-command.js";
 import { format_mention, type CommandContext, type CommandHandler } from "./types.js";
 
@@ -164,17 +165,6 @@ function resolve_action(args: string[]): TaskAction {
   if (sub === "recent" || sub === "이력" || sub === "history" || sub === "최근") return { type: "recent" };
   return { type: "unknown" };
 }
-
-const STATUS_EMOJI: Record<string, string> = {
-  running: "🔄",
-  waiting_approval: "🔐",
-  waiting_user_input: "💬",
-  failed: "❌",
-  max_turns_reached: "⚠️",
-  stopped: "⏹️",
-  completed: "✅",
-  cancelled: "🚫",
-};
 
 function status_icon(status: string): string {
   return STATUS_EMOJI[status] || "❓";

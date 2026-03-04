@@ -2,7 +2,8 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import { Badge } from "../../components/badge";
-import { useT } from "../../i18n";
+import { useI18n, useT } from "../../i18n";
+import { tool_i18n } from "../../i18n/tool-descriptions";
 
 interface ToolSchema {
   type: string;
@@ -29,11 +30,7 @@ function extract_params(parameters: Record<string, unknown>): ParamInfo[] {
 function ToolIcon({ name, is_mcp }: { name: string; is_mcp: boolean }) {
   const color = is_mcp ? "var(--ok)" : "var(--accent)";
   return (
-    <span style={{
-      display: "inline-flex", alignItems: "center", justifyContent: "center",
-      width: 40, height: 40, borderRadius: 10,
-      background: `${color}22`, color, fontWeight: 700, fontSize: 16, flexShrink: 0,
-    }}>
+    <span className="tool-card__icon" style={{ background: `${color}22`, color }}>
       {name.charAt(0).toUpperCase()}
     </span>
   );
@@ -43,26 +40,23 @@ function ToolCard({ name, description, params, is_mcp, is_open, onToggle }: {
   name: string; description: string; params: ParamInfo[]; is_mcp: boolean; is_open: boolean; onToggle: (name: string) => void;
 }) {
   const t = useT();
+  const { locale } = useI18n();
+  const i18n = is_mcp ? undefined : tool_i18n[locale]?.[name];
+  const loc_desc = i18n?.desc ?? description;
+  const loc_param = (p_name: string, fallback: string) => i18n?.params?.[p_name] ?? fallback;
+
   return (
-    <div style={{
-      display: "flex", flexDirection: "column", gap: 10,
-      padding: "14px 16px", background: "var(--panel)",
-      borderRadius: 10, border: "1px solid var(--line)",
-    }}>
-      <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+    <div className="tool-card">
+      <div className="tool-card__header">
         <ToolIcon name={name} is_mcp={is_mcp} />
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontWeight: 600, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</div>
+          <div className="tool-card__name">{name}</div>
           {is_mcp && <div style={{ marginTop: 2 }}><Badge status="mcp" variant="ok" /></div>}
         </div>
       </div>
-      {description && (
-        <div style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.5, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
-          {description}
-        </div>
-      )}
+      {loc_desc && <div className="tool-card__desc">{loc_desc}</div>}
       {params.length > 0 && (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>
+        <div className="tool-card__tags">
           {params.slice(0, 4).map((p) => (
             <span key={p.name} style={{
               padding: "1px 6px", borderRadius: "var(--radius-pill)", fontSize: 10,
@@ -72,7 +66,7 @@ function ToolCard({ name, description, params, is_mcp, is_open, onToggle }: {
               {p.name}
             </span>
           ))}
-          {params.length > 4 && <span style={{ fontSize: 10, color: "var(--muted)", alignSelf: "center" }}>+{params.length - 4}</span>}
+          {params.length > 4 && <span className="text-xs text-muted" style={{ alignSelf: "center" }}>+{params.length - 4}</span>}
         </div>
       )}
       {params.length > 0 && (
@@ -81,23 +75,20 @@ function ToolCard({ name, description, params, is_mcp, is_open, onToggle }: {
             {is_open ? "▾" : "▸"} {t("tools.params")} ({params.length})
           </button>
           {is_open && (
-            <div style={{ display: "grid", gap: 4, borderTop: "1px solid var(--line)", paddingTop: 8 }}>
-              {params.map((p) => (
-                <div key={p.name} style={{
-                  display: "flex", flexDirection: "column", gap: 2,
-                  padding: "4px 6px", borderRadius: 4,
-                  background: "rgba(255,255,255,0.02)", fontSize: 11,
-                }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
-                    <code style={{ color: "var(--accent)", fontWeight: 600 }}>{p.name}</code>
-                    <Badge status={p.type} variant="info" />
-                    {p.required && <Badge status={t("tools.required")} variant="warn" />}
+            <div className="tool-card__params">
+              {params.map((p) => {
+                const p_desc = loc_param(p.name, p.description);
+                return (
+                  <div key={p.name} className="tool-card__param">
+                    <div className="tool-card__param-header">
+                      <code style={{ color: "var(--accent)" }} className="fw-600">{p.name}</code>
+                      <Badge status={p.type} variant="info" />
+                      {p.required && <Badge status={t("tools.required")} variant="warn" />}
+                    </div>
+                    {p_desc && <span className="text-muted" style={{ lineHeight: 1.4, wordBreak: "break-word" }}>{p_desc}</span>}
                   </div>
-                  {p.description && (
-                    <span style={{ color: "var(--muted)", lineHeight: 1.4, wordBreak: "break-word" }}>{p.description}</span>
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </>
@@ -114,7 +105,7 @@ function ToolGrid({ tools, is_mcp }: { tools: ToolSchema[]; is_mcp: boolean }) {
     return next;
   });
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 12, marginBottom: 16 }}>
+    <div className="tool-grid">
       {tools.map((d) => {
         const fn = d.function;
         return (
@@ -146,22 +137,18 @@ export function ToolsTab() {
 
   return (
     <>
-      <h2 style={{ marginBottom: 16 }}>{t("tools.title", { count: data.names.length })}</h2>
+      <h2>{t("tools.title", { count: data.names.length })}</h2>
 
       {servers.length > 0 && (
-        <section className="panel" style={{ marginBottom: 16 }}>
-          <h3 style={{ fontSize: 13, margin: "0 0 10px" }}>{t("tools.mcp_servers", { count: servers.length })}</h3>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+        <section className="panel">
+          <h3>{t("tools.mcp_servers", { count: servers.length })}</h3>
+          <div className="ws-chip-row" style={{ gap: 8 }}>
             {servers.map((s) => (
-              <div key={s.name} style={{
-                display: "flex", alignItems: "center", gap: 8,
-                padding: "6px 12px", borderRadius: 8,
-                background: "var(--panel-elevated)", border: "1px solid var(--line)", fontSize: 12,
-              }}>
-                <span style={{ width: 7, height: 7, borderRadius: "50%", flexShrink: 0, background: s.connected ? "var(--ok)" : "var(--err)", display: "inline-block" }} />
-                <span style={{ fontWeight: 600 }}>{s.name}</span>
-                <span style={{ color: "var(--muted)" }}>{t("tools.server_tool_count", { count: s.tools.length })}</span>
-                {s.error && <span style={{ color: "var(--err)", fontSize: 11 }}>⚠ {s.error}</span>}
+              <div key={s.name} className="mcp-server">
+                <span className={`status-dot status-dot--${s.connected ? "ok" : "err"}`} />
+                <span className="fw-600">{s.name}</span>
+                <span className="text-muted">{t("tools.server_tool_count", { count: s.tools.length })}</span>
+                {s.error && <span className="text-xs text-err">⚠ {s.error}</span>}
               </div>
             ))}
           </div>
@@ -170,12 +157,12 @@ export function ToolsTab() {
 
       {mcp_tools.length > 0 && (
         <>
-          <h3 style={{ fontSize: 13, color: "var(--muted)", margin: "0 0 10px" }}>{t("tools.mcp_tools", { count: mcp_tools.length })}</h3>
+          <h3 className="text-muted">{t("tools.mcp_tools", { count: mcp_tools.length })}</h3>
           <ToolGrid tools={mcp_tools} is_mcp />
         </>
       )}
 
-      <h3 style={{ fontSize: 13, color: "var(--muted)", margin: "16px 0 10px" }}>{t("tools.builtin", { count: builtin.length })}</h3>
+      <h3 className="text-muted">{t("tools.builtin", { count: builtin.length })}</h3>
       <ToolGrid tools={builtin} is_mcp={false} />
     </>
   );

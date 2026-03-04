@@ -1,3 +1,4 @@
+import { error_message } from "../utils/common.js";
 import { writeFile, mkdir } from "node:fs/promises";
 import { join, basename } from "node:path";
 import type { InboundMessage } from "../bus/types.js";
@@ -22,6 +23,15 @@ const MAX_REMOTE_FILE_SIZE = 20 * 1024 * 1024;
 const FETCH_TIMEOUT_MS = 15_000;
 const PRIVATE_HOST_RE = /^(?:localhost|127\.|10\.|172\.(?:1[6-9]|2\d|3[01])\.|192\.168\.|169\.254\.|0\.|::1|\[::1\]|fc|fd)/i;
 
+const MIME_TO_EXT: Record<string, string> = {
+  "image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp",
+  "image/gif": ".gif", "image/bmp": ".bmp", "image/svg+xml": ".svg",
+  "application/pdf": ".pdf", "text/plain": ".txt", "text/csv": ".csv",
+  "text/markdown": ".md", "application/json": ".json",
+};
+
+const DATA_URI_RE = /^data:([^;,]+)?(?:;base64)?,(.+)$/s;
+
 export class MediaCollector {
   private readonly workspace_dir: string;
   private readonly tokens: ProviderTokens;
@@ -39,7 +49,12 @@ export class MediaCollector {
     for (const m of Array.isArray(message.media) ? message.media : []) {
       if (!m?.url) continue;
       const url = String(m.url || "").trim();
-      if (is_local_reference(url)) paths.push(resolve_local_reference(this.workspace_dir, url));
+      if (is_local_reference(url)) {
+        paths.push(resolve_local_reference(this.workspace_dir, url));
+      } else if (url.startsWith("data:")) {
+        const saved = await this.save_data_uri(url, m.name, provider);
+        if (saved) paths.push(saved);
+      }
     }
 
     await this.collect_provider_files(provider, message, paths);
@@ -49,29 +64,29 @@ export class MediaCollector {
 
   private async collect_provider_files(provider: ChannelProvider, message: InboundMessage, paths: UniqueList): Promise<void> {
     const meta = message_meta(message);
+    const tasks: Promise<string | null>[] = [];
 
     if (provider === "slack") {
-      for (const f of extract_slack_files(meta)) {
-        const saved = await this.download_with_auth(f.url, f.name, "slack", this.tokens.slack_bot_token);
-        if (saved) paths.push(saved);
-      }
+      for (const f of extract_slack_files(meta)) tasks.push(this.download_with_auth(f.url, f.name, "slack", this.tokens.slack_bot_token));
     } else if (provider === "telegram") {
-      for (const id of extract_telegram_file_ids(meta)) {
-        const saved = await this.download_telegram_file(id);
-        if (saved) paths.push(saved);
-      }
+      for (const id of extract_telegram_file_ids(meta)) tasks.push(this.download_telegram_file(id));
     } else if (provider === "discord") {
-      for (const f of extract_discord_files(meta)) {
-        const saved = await this.download_file(f.url, f.name, "discord");
-        if (saved) paths.push(saved);
-      }
+      for (const f of extract_discord_files(meta)) tasks.push(this.download_file(f.url, f.name, "discord"));
+    }
+
+    const results = await Promise.allSettled(tasks);
+    for (const r of results) {
+      if (r.status === "fulfilled" && r.value) paths.push(r.value);
     }
   }
 
   private async collect_linked_files(provider: ChannelProvider, text: string, paths: UniqueList): Promise<void> {
-    for (const url of extract_file_links(text)) {
-      const saved = await this.download_file(url, undefined, provider, MAX_REMOTE_FILE_SIZE);
-      if (saved) paths.push(saved);
+    const urls = extract_file_links(text);
+    const results = await Promise.allSettled(
+      urls.map((url) => this.download_file(url, undefined, provider, MAX_REMOTE_FILE_SIZE)),
+    );
+    for (const r of results) {
+      if (r.status === "fulfilled" && r.value) paths.push(r.value);
     }
   }
 
@@ -82,7 +97,7 @@ export class MediaCollector {
       if (!res.ok) return null;
       return this.save_response(res, url, hint_name, sub_dir);
     } catch (e) {
-      this.logger?.debug("download_with_auth failed", { url: url.slice(0, 120), error: e instanceof Error ? e.message : String(e) });
+      this.logger?.debug("download_with_auth failed", { url: url.slice(0, 120), error: error_message(e) });
       return null;
     }
   }
@@ -104,7 +119,7 @@ export class MediaCollector {
       await writeFile(path, bytes);
       return path;
     } catch (e) {
-      this.logger?.debug("download_file failed", { url: url.slice(0, 120), error: e instanceof Error ? e.message : String(e) });
+      this.logger?.debug("download_file failed", { url: url.slice(0, 120), error: error_message(e) });
       return null;
     }
   }
@@ -124,7 +139,7 @@ export class MediaCollector {
       if (!file_res.ok) return null;
       return this.save_response(file_res, file_path, undefined, "telegram");
     } catch (e) {
-      this.logger?.debug("download_telegram_file failed", { file_id, error: e instanceof Error ? e.message : String(e) });
+      this.logger?.debug("download_telegram_file failed", { file_id, error: error_message(e) });
       return null;
     }
   }
@@ -136,6 +151,26 @@ export class MediaCollector {
     const path = join(dir, `${Date.now()}-${name}`);
     await writeFile(path, bytes);
     return path;
+  }
+
+  private async save_data_uri(data_uri: string, hint_name: string | undefined, sub_dir: string): Promise<string | null> {
+    try {
+      const match = data_uri.match(DATA_URI_RE);
+      if (!match) return null;
+      const mime = (match[1] || "application/octet-stream").toLowerCase();
+      const b64 = match[2];
+      const bytes = Buffer.from(b64, "base64");
+      if (bytes.byteLength === 0) return null;
+      const ext = MIME_TO_EXT[mime] || ".bin";
+      const name = safe_filename(hint_name || `file${ext}`);
+      const dir = await this.ensure_dir(sub_dir);
+      const path = join(dir, `${Date.now()}-${name}`);
+      await writeFile(path, bytes);
+      return path;
+    } catch (e) {
+      this.logger?.debug("save_data_uri failed", { error: error_message(e) });
+      return null;
+    }
   }
 
   private async ensure_dir(sub_dir: string): Promise<string> {

@@ -12,13 +12,7 @@ export const en: TranslationDict = {
   // ── Nav ──
   "nav.overview": "Overview",
   "nav.channels": "Channels",
-  "nav.agents": "Agents",
-  "nav.cron": "Cron",
   "nav.secrets": "Secrets",
-  "nav.decisions": "Decisions",
-  "nav.templates": "Templates",
-  "nav.tools": "Tools",
-  "nav.skills": "Skills",
   "nav.settings": "Settings",
   "nav.providers": "Providers",
   "nav.chat": "Chat",
@@ -60,6 +54,7 @@ export const en: TranslationDict = {
   "common.no_data": "No data",
   "common.close_modal": "Close modal",
   "common.optional": "optional",
+  "common.unknown_error": "Unknown error",
 
   // ── Overview ──
   "overview.queue": "Queue",
@@ -94,6 +89,8 @@ export const en: TranslationDict = {
   "overview.uptime": "Uptime",
   "overview.net_rx": "RX",
   "overview.net_tx": "TX",
+  "overview.more_fmt": "+{count} more",
+  "overview.mention_loop": "mention loop running",
 
   // ── Channels ──
   "channels.title": "Channels",
@@ -118,6 +115,7 @@ export const en: TranslationDict = {
   "channels.updated": "Channel updated",
   "channels.added": "Channel added",
   "channels.save_failed": "Save failed: {error}",
+  "channels.remove_title": "Remove Channel",
   "channels.remove_confirm": "Remove \"{label}\"?",
   "channels.connected": "connected",
   "channels.test_failed": "Test failed",
@@ -223,8 +221,10 @@ export const en: TranslationDict = {
   "secrets.value_placeholder": "secret value",
 
   // ── Decisions ──
-  "decisions.title": "Decisions ({count})",
-  "decisions.workflow_events": "Workflow Events ({count})",
+  "decisions.p0": "P0 — Critical",
+  "decisions.p1": "P1 — High",
+  "decisions.p2": "P2 — Medium",
+  "decisions.p3": "P3 — Low",
   "decisions.no_decisions": "No decisions",
   "decisions.no_events": "No events",
   "decisions.priority": "Priority",
@@ -237,7 +237,8 @@ export const en: TranslationDict = {
   "decisions.time": "Time",
 
   // ── Promises ──
-  "promises.title": "Promises ({count})",
+  "promises.key_placeholder": "e.g. never_force_push",
+  "promises.value_placeholder": "e.g. Always confirm before force-pushing",
   "promises.no_promises": "No promises",
   "promises.add": "Add Promise",
   "promises.added": "Promise added",
@@ -269,6 +270,7 @@ export const en: TranslationDict = {
   "providers.updated": "Provider updated",
   "providers.added": "Provider added",
   "providers.save_failed": "Save failed: {error}",
+  "providers.remove_title": "Remove Provider",
   "providers.remove_confirm": "Remove \"{label}\"?",
   "providers.available": "available",
   "providers.test_failed": "Test failed",
@@ -276,9 +278,31 @@ export const en: TranslationDict = {
   "providers.off": "off",
   "providers.pass": "pass",
   "providers.fail": "fail",
+  "providers.settings": "Settings",
+  "providers.api_base": "API Base URL",
+  "providers.api_base_hint": "e.g., https://api.openai.com/v1",
+  "providers.model": "Model",
+  "providers.model_hint_openai": "e.g., gpt-4o, gpt-4o-mini",
+  "providers.model_hint_openrouter": "e.g., anthropic/claude-sonnet-4, openai/gpt-4o",
+  "providers.max_tokens": "Max Tokens",
+  "providers.temperature": "Temperature",
+  "providers.site_url": "Site URL",
+  "providers.site_url_hint": "For OpenRouter ranking (HTTP-Referer)",
+  "providers.app_name": "App Name",
+  "providers.app_name_hint": "For OpenRouter ranking (X-Title)",
+
+  // ── CLI Auth ──
+  "cli_auth.title": "CLI Auth",
+  "cli_auth.no_agents": "No CLI agents configured",
+  "cli_auth.authenticated": "Authenticated",
+  "cli_auth.not_authenticated": "Not Authenticated",
+  "cli_auth.login": "Login",
+  "cli_auth.open_url": "Open this URL in your browser:",
+  "cli_auth.cancel_login": "Cancel Login",
+  "cli_auth.done": "Done",
+  "cli_auth.login_failed": "Login failed: {error}",
 
   // ── Templates ──
-  "templates.title": "Templates",
   "templates.select": "Select a template to edit",
   "templates.unsaved": "unsaved",
   "templates.saved_fmt": "{name}.md saved",
@@ -289,11 +313,7 @@ export const en: TranslationDict = {
   "tools.mcp_tools": "MCP Tools ({count})",
   "tools.builtin": "Built-in Tools ({count})",
   "tools.loading": "Loading tools...",
-  "tools.server": "Server",
-  "tools.error": "Error",
-  "tools.description": "Description",
   "tools.params": "Params",
-  "tools.parameter": "Parameter",
   "tools.required": "required",
   "tools.server_tool_count": "{count} tools",
 
@@ -328,7 +348,6 @@ export const en: TranslationDict = {
   "skills.skill_md": "SKILL.md",
   "skills.references": "Reference Files",
   "skills.no_references": "No reference files",
-  "skills.view_details": "View Details",
 
   // ── Workspace ──
   "workspace.title": "Workspace",
@@ -401,6 +420,9 @@ export const en: TranslationDict = {
   "chat.attach_file": "Attach file",
   "chat.attached": "attached",
   "chat.remove_attachment": "Remove attachment",
+  "chat.avatar": "AI",
+  "chat.welcome_title": "Start a conversation",
+  "chat.welcome_subtitle": "Create a new session to begin chatting with the assistant.",
 
   // ── Config Sections ──
   "cfg.section.general": "General",
@@ -596,7 +618,6 @@ export const en: TranslationDict = {
   "setup.error": "Setup failed: {error}",
 
   // ── OAuth ──
-  "nav.oauth": "OAuth",
   "oauth.title": "OAuth Integrations",
   "oauth.add": "+ Add Integration",
   "oauth.no_integrations": "No OAuth integrations configured.",
@@ -619,6 +640,7 @@ export const en: TranslationDict = {
   "oauth.added": "Integration added",
   "oauth.updated": "Integration updated",
   "oauth.removed": "Integration removed",
+  "oauth.remove_title": "Remove Integration",
   "oauth.remove_confirm": "Remove \"{label}\"?",
   "oauth.remove_failed": "Remove failed: {error}",
   "oauth.save_failed": "Save failed: {error}",
@@ -640,6 +662,7 @@ export const en: TranslationDict = {
   "oauth.preset_added": "Preset added",
   "oauth.preset_updated": "Preset updated",
   "oauth.preset_removed": "Preset removed",
+  "oauth.preset_remove_title": "Remove Preset",
   "oauth.preset_remove_confirm": "Remove preset \"{label}\"?",
   "oauth.preset_remove_failed": "Remove failed: {error}",
   "oauth.preset_save_failed": "Save failed: {error}",

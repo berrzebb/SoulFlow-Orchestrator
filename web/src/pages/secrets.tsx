@@ -54,7 +54,7 @@ export default function SecretsPage() {
             {names.map((name) => (
               <tr key={name}>
                 <td><b>{name}</b></td>
-                <td style={{ fontSize: 11, color: "var(--muted)" }}>{`{{secret:${name}}}`}</td>
+                <td className="text-xs text-muted">{`{{secret:${name}}}`}</td>
                 <td>
                   <button className="btn btn--xs" onClick={() => { setNewName(name); setNewValue(""); setAdding(true); }}>{t("secrets.update")}</button>{" "}
                   <button className="btn btn--xs btn--danger" onClick={() => setDeleteTarget(name)}>{t("common.delete")}</button>
@@ -74,7 +74,7 @@ export default function SecretsPage() {
         confirmLabel={t("common.delete")}
         danger
       >
-        <p style={{ fontSize: 12 }}>{t("secrets.delete_confirm", { name: deleteTarget ?? "" })}</p>
+        <p className="text-sm">{t("secrets.delete_confirm", { name: deleteTarget ?? "" })}</p>
       </Modal>
 
       <Modal
@@ -84,21 +84,25 @@ export default function SecretsPage() {
         onConfirm={() => void add()}
         confirmLabel={t("common.save")}
       >
-        <label style={{ display: "block", fontSize: 12, color: "var(--muted)", marginBottom: 4 }}>{t("common.name")}</label>
-        <input
-          value={newName}
-          onChange={(e) => setNewName(e.target.value)}
-          placeholder={t("secrets.name_placeholder")}
-          style={{ width: "100%", background: "var(--bg)", color: "var(--text)", border: "1px solid var(--line)", padding: 6, fontFamily: "inherit", fontSize: 12, marginBottom: 10 }}
-        />
-        <label style={{ display: "block", fontSize: 12, color: "var(--muted)", marginBottom: 4 }}>{t("secrets.value")}</label>
-        <input
-          type="password"
-          value={newValue}
-          onChange={(e) => setNewValue(e.target.value)}
-          placeholder={t("secrets.value_placeholder")}
-          style={{ width: "100%", background: "var(--bg)", color: "var(--text)", border: "1px solid var(--line)", padding: 6, fontFamily: "inherit", fontSize: 12 }}
-        />
+        <div className="form-group">
+          <label className="form-label">{t("common.name")}</label>
+          <input
+            className="form-input"
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            placeholder={t("secrets.name_placeholder")}
+          />
+        </div>
+        <div className="form-group">
+          <label className="form-label">{t("secrets.value")}</label>
+          <input
+            className="form-input"
+            type="password"
+            value={newValue}
+            onChange={(e) => setNewValue(e.target.value)}
+            placeholder={t("secrets.value_placeholder")}
+          />
+        </div>
       </Modal>
     </div>
   );

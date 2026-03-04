@@ -1,6 +1,8 @@
+import { error_message, now_iso} from "../utils/common.js";
 import type { AgentRuntimeLike } from "../agent/runtime.types.js";
 import type { AgentBackendRegistry } from "../agent/agent-registry.js";
-import type { AgentFinishReason, AgentHooks } from "../agent/agent.types.js";
+import type { AgentHooks } from "../agent/agent.types.js";
+import { FINISH_REASON_WARNINGS } from "../agent/finish-reason-warnings.js";
 import type { ToolSchema } from "../agent/tools/types.js";
 import type { MessageBusLike } from "../bus/index.js";
 import type { WorkflowEventService } from "../events/index.js";
@@ -33,12 +35,6 @@ export type CronRuntimeHandlerDeps = {
   secret_vault: SecretVaultService;
 };
 
-const CRON_FINISH_WARNINGS: Partial<Record<AgentFinishReason, string>> = {
-  max_turns: "에이전트 최대 턴 도달",
-  max_budget: "비용 한도 초과",
-  max_tokens: "토큰 한도 초과",
-  output_retries: "출력 재시도 한도 초과",
-};
 
 function resolve_fallback_target(config: CronConfig): CronTarget | null {
   const result = config.resolve_default_target();
@@ -80,7 +76,7 @@ export function create_cron_job_handler(deps: CronRuntimeHandlerDeps): CronOnJob
         sender_id,
         chat_id: fallback_target.chat_id,
         content,
-        at: new Date().toISOString(),
+        at: now_iso(),
         metadata,
       });
     };
@@ -232,7 +228,7 @@ export function create_cron_job_handler(deps: CronRuntimeHandlerDeps): CronOnJob
         } : undefined;
 
         const raw_content = String(result.content || "").trim();
-        const warn = CRON_FINISH_WARNINGS[result.finish_reason];
+        const warn = FINISH_REASON_WARNINGS[result.finish_reason];
         const sanitized = sanitize_provider_output(raw_content).trim();
         const final_content = warn ? (sanitized ? `${sanitized}\n\n⚠️ ${warn}` : `⚠️ ${warn}`) : sanitized;
 
@@ -257,7 +253,7 @@ export function create_cron_job_handler(deps: CronRuntimeHandlerDeps): CronOnJob
         clearTimeout(cron_timeout);
       }
     } catch (error) {
-      const reason = error instanceof Error ? error.message : String(error);
+      const reason = error_message(error);
       await publish_notice(
         "cron",
         `⚠️ cron 실행 실패\n- id: ${job.id}\n- name: ${job.name}\n- error: ${reason}`,

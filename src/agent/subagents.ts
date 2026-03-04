@@ -1,6 +1,5 @@
-import { randomUUID } from "node:crypto";
 import type { Logger } from "../logger.js";
-import { now_iso } from "../utils/common.js";
+import { now_iso, now_seoul_iso, error_message, short_id, normalize_text, sleep } from "../utils/common.js";
 import type { ChatMessage, ProviderId, ProviderRegistry, ToolCallRequest } from "../providers/index.js";
 import { create_default_tool_registry, type ToolRegistry } from "./tools.js";
 import type { MessageBusLike } from "../bus/index.js";
@@ -12,14 +11,8 @@ import type { ToolSchema } from "./tools/types.js";
 import type { AgentBackendId, AgentEvent, AgentEventSource, AgentFinishReason, AgentHooks } from "./agent.types.js";
 import { sandbox_from_preset, type RuntimeExecutionPolicy } from "../providers/types.js";
 import { create_policy_pre_hook } from "./tools/index.js";
-import { sanitize_provider_output } from "../channels/output-sanitizer.js";
-
-const SUBAGENT_FINISH_WARNINGS: Partial<Record<AgentFinishReason, string>> = {
-  max_turns: "에이전트 최대 턴 도달",
-  max_budget: "비용 한도 초과",
-  max_tokens: "토큰 한도 초과",
-  output_retries: "출력 재시도 한도 초과",
-};
+import { sanitize_provider_output, is_provider_error_reply } from "../channels/output-sanitizer.js";
+import { FINISH_REASON_WARNINGS } from "./finish-reason-warnings.js";
 
 export type SubagentStatus = "idle" | "running" | "completed" | "failed" | "cancelled" | "offline";
 
@@ -119,6 +112,19 @@ export class SubagentRegistry {
       created_at: prev?.created_at || ref.created_at || now_iso(),
       updated_at: now_iso(),
     });
+    if (this.items.size > 500) this._prune_items();
+  }
+
+  private _prune_items(): void {
+    const completed: { id: string; at: string }[] = [];
+    for (const [id, ref] of this.items) {
+      if (ref.status === "completed" || ref.status === "failed" || ref.status === "cancelled") {
+        completed.push({ id, at: ref.updated_at || "" });
+      }
+    }
+    completed.sort((a, b) => a.at.localeCompare(b.at));
+    const target = Math.max(1, completed.length - 50);
+    for (let i = 0; i < target; i++) this.items.delete(completed[i].id);
   }
 
   get(id: string): SubagentRef | null {
@@ -155,15 +161,24 @@ export class SubagentRegistry {
       if (ref.status === "failed" || ref.status === "cancelled" || ref.status === "offline") {
         return { status: ref.status, error: ref.last_error };
       }
-      await new Promise<void>((resolve) => setTimeout(resolve, Math.max(50, poll_interval_ms)));
+      await sleep(Math.max(50, poll_interval_ms));
     }
   }
+
+  private static readonly MAX_CONCURRENT_SUBAGENTS = 10;
 
   async spawn(options: SpawnSubagentOptions): Promise<{ subagent_id: string; status: string; message: string }> {
     if (!this.providers) {
       throw new Error("providers_not_configured");
     }
-    const subagent_id = randomUUID().slice(0, 8);
+    if (this.running.size >= SubagentRegistry.MAX_CONCURRENT_SUBAGENTS) {
+      return {
+        subagent_id: "",
+        status: "rejected",
+        message: `concurrent subagent limit reached (${SubagentRegistry.MAX_CONCURRENT_SUBAGENTS})`,
+      };
+    }
+    const subagent_id = short_id(8);
     const role = options.role || "worker";
     const label = options.label || options.task.slice(0, 40);
     const ref: SubagentRef = {
@@ -185,7 +200,7 @@ export class SubagentRegistry {
     done.finally(() => {
       this.running.delete(subagent_id);
     }).catch((e) => {
-      this.logger?.error("subagent unhandled rejection", { subagent_id, error: e instanceof Error ? e.message : String(e) });
+      this.logger?.error("subagent unhandled rejection", { subagent_id, error: error_message(e) });
     });
 
     return {
@@ -421,7 +436,7 @@ export class SubagentRegistry {
           }
           actual_finish_reason = agent_result.finish_reason;
           // 비정상 종료 경고를 결과에 추가
-          const sa_warn = SUBAGENT_FINISH_WARNINGS[agent_result.finish_reason];
+          const sa_warn = FINISH_REASON_WARNINGS[agent_result.finish_reason];
           if (sa_warn) {
             last_executor_output = `${agent_result.content || ""}\n\n⚠️ ${sa_warn}`.trim();
           }
@@ -477,8 +492,8 @@ export class SubagentRegistry {
             }
           }
 
-          const provider_err = this._extract_provider_error(response.content || "");
-          if (provider_err) throw new Error(provider_err);
+          const content = response.content || "";
+          if (is_provider_error_reply(content)) throw new Error(content);
           await this._flush_stream_buffer({
             subagent_id: id,
             label: options.label || options.task.slice(0, 40),
@@ -522,8 +537,7 @@ export class SubagentRegistry {
               max_tokens,
               temperature,
             });
-            const followup_err = this._extract_provider_error(followup.content || "");
-            if (followup_err) throw new Error(followup_err);
+            if (is_provider_error_reply(followup.content || "")) throw new Error(followup.content || "");
             current_response = followup;
           }
           last_executor_output = current_response.content || response.content || "";
@@ -555,7 +569,7 @@ export class SubagentRegistry {
         });
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = error_message(error);
       this._update_status(id, "failed", message);
       this._fire(options, id, label, (s) => ({ type: "error", source: s, at: now_iso(), error: message }), backend_id);
       if (options.announce !== false) {
@@ -631,21 +645,6 @@ export class SubagentRegistry {
     }
   }
 
-  private _extract_provider_error(text: string): string | null {
-    const raw = String(text || "").trim();
-    if (!raw) return null;
-    const low = raw.toLowerCase();
-    if (low.startsWith("error calling claude:")) return raw;
-    if (low.startsWith("error calling claude_code:")) return raw;
-    if (low.startsWith("error calling chatgpt:")) return raw;
-    if (low.startsWith("error calling openrouter:")) return raw;
-    if (low.startsWith("error calling phi4_local:")) return raw;
-    if (low.includes("not logged in")) return raw;
-    if (low.includes("please run /login")) return raw;
-    if (low.includes("stream disconnected before completion")) return raw;
-    return null;
-  }
-
   private async _announce_progress(args: {
     subagent_id: string;
     label: string;
@@ -658,7 +657,7 @@ export class SubagentRegistry {
     const chat_id = String(args.origin_chat_id || "").trim();
     if (!channel || !chat_id) return;
     await this.bus.publish_outbound({
-      id: randomUUID().slice(0, 12),
+      id: short_id(),
       provider: channel,
       channel,
       sender_id: `subagent:${args.subagent_id}`,
@@ -681,7 +680,7 @@ export class SubagentRegistry {
     clear_stream_buffer: () => void;
   }): Promise<void> {
     const raw = args.stream_buffer_ref();
-    const preview = raw.replace(/\s+/g, " ").trim().slice(0, 240);
+    const preview = normalize_text(raw).slice(0, 240);
     if (!preview) return;
     args.clear_stream_buffer();
     await this._announce_progress({
@@ -733,7 +732,7 @@ export class SubagentRegistry {
     const chat_id = String(args.origin_chat_id || "").trim();
     if (!channel || !chat_id) return;
     await this.bus.publish_outbound({
-      id: randomUUID().slice(0, 12),
+      id: short_id(),
       provider: channel,
       channel,
       sender_id: `subagent:${args.subagent_id}`,
@@ -759,7 +758,7 @@ export class SubagentRegistry {
     const chat_id = String(args.origin_chat_id || "").trim();
     if (!channel || !chat_id) return;
     await this.bus.publish_outbound({
-      id: randomUUID().slice(0, 12),
+      id: short_id(),
       provider: channel,
       channel,
       sender_id: `subagent:${args.subagent_id}`,
@@ -775,14 +774,14 @@ export class SubagentRegistry {
   }
 
   private _build_subagent_prompt(options: SpawnSubagentOptions, subagent_id: string): string {
-    const now = new Date().toLocaleString("sv-SE", { timeZone: "Asia/Seoul", hour12: false }).replace(" ", "T");
+    const now = now_seoul_iso();
     const role = options.role || "worker";
     const soul = options.soul || "Calm, pragmatic, collaborative teammate.";
     const heart = options.heart || "Prioritize correctness, safety, and completion.";
     return [
       "# Subagent",
       `id: ${subagent_id}`,
-      `now: ${now}+09:00`,
+      `now: ${now}`,
       `role: ${role}`,
       `soul: ${soul}`,
       `heart: ${heart}`,

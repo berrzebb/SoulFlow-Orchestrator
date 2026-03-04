@@ -4,14 +4,14 @@
 
 An asynchronous orchestration runtime that processes Slack · Telegram · Discord messages through **headless agents**.
 
-The batteries-included solution featuring 5 agent backends (Claude/Codex × CLI/SDK + OpenAI-compatible), an 8-role skill system, CircuitBreaker-based provider resilience, AES-256-GCM security vault, and OAuth 2.0 external service integrations.
+The batteries-included solution featuring 8 agent backends (Claude/Codex/Gemini × CLI/SDK + OpenAI-compatible + container), an 8-role skill system, CircuitBreaker-based provider resilience, AES-256-GCM security vault, OAuth 2.0 integrations, and a React + Vite web dashboard with i18n and markdown rendering.
 
 ## Table of Contents
 
 - [Architecture](#architecture)
 - [What Is This?](#what-is-this)
 - [Quick Start](#quick-start)
-- [Dashboard Guide](#dashboard-guide)
+- [Dashboard](#dashboard)
 - [OAuth Integration](#oauth-integration)
 - [Usage Examples](#usage-examples)
 - [Slash Commands](#slash-commands)
@@ -43,6 +43,17 @@ flowchart TD
         CCLI[claude_cli]
         CAPPS[codex_appserver]
         CCLIX[codex_cli]
+        GCLI[gemini_cli]
+        OAI[openai_compatible]
+        ORT[openrouter]
+        CTR[container_cli]
+    end
+
+    subgraph PTY["PTY / Docker Isolation"]
+        direction LR
+        POOL[ContainerPool]
+        BUS[AgentBus]
+        BRIDGE[MCP Bridge]
     end
 
     subgraph Skills["Role Skills"]
@@ -53,10 +64,14 @@ flowchart TD
         DBG[debugger · validator]
     end
 
+    DASH[Dashboard · OAuth]
+
     Channels --> Pipeline
     Pipeline --> Backends
+    CTR --> PTY
     Backends --> Skills
     Skills --> OUT([Response · Streaming])
+    DASH -.-> Pipeline
 ```
 
 Detailed diagrams: [Service Architecture](diagrams/service-architecture.svg) · [Inbound Pipeline](diagrams/inbound-pipeline.svg) · [Provider Resilience](diagrams/provider-resilience.svg) · [Role Delegation](diagrams/role-delegation.svg)
@@ -85,7 +100,9 @@ An **orchestration runtime** that receives messages from chat channels and dispa
 | `claude_cli` | Headless CLI wrapper | Stability · general purpose | — |
 | `codex_appserver` | Native AppServer | Parallel execution · built-in tool loop | → `codex_cli` |
 | `codex_cli` | Headless CLI wrapper | Sandbox mode support | — |
+| `gemini_cli` | Headless CLI wrapper | Gemini CLI integration | — |
 | `openai_compatible` | OpenAI-compatible API | vLLM · Ollama · LM Studio · Together AI · Gemini and other local/remote models | — |
+| `container_cli` | Container CLI wrapper | Podman/Docker sandboxed execution | — |
 
 ### Role Skills
 
@@ -123,6 +140,18 @@ npm run build
 cd workspace && node ../dist/main.js
 ```
 
+### Docker
+
+```bash
+# Production (orchestrator + phi4)
+docker compose up -d
+
+# Development (live reload)
+docker compose -f docker-compose.dev.yml up
+```
+
+The `full` image includes Claude Code, Codex, and Gemini CLIs pre-installed.
+
 ### Setup Wizard
 
 On first launch, if no provider is configured, the dashboard automatically redirects to the Setup Wizard (`/setup`).
@@ -140,155 +169,29 @@ No need to create a `.env` file manually — the Wizard handles all configuratio
 
 ---
 
-## Dashboard Guide
+## Dashboard
 
-Dashboard URL: `http://127.0.0.1:4200`
+`http://127.0.0.1:4200` — React + Vite SPA. Korean/English i18n (auto-detected from browser locale).
 
-Navigate between 7 sections via the sidebar. Toggle dark/light theme with the button at the bottom of the sidebar.
+| Page | Path | Function |
+|------|------|----------|
+| Overview | `/` | Runtime status summary, system metrics, SSE live feed |
+| Workspace | `/workspace` | Memory · sessions · skills · cron · tools · agents · templates · OAuth (8 tabs) |
+| Chat | `/chat` | Web-based agent conversation (markdown rendering + code highlighting) |
+| Channels | `/channels` | Channel connection status · global settings |
+| Providers | `/providers` | Agent provider CRUD · Circuit Breaker state |
+| Secrets | `/secrets` | AES-256-GCM secret management |
+| Settings | `/settings` | Global runtime settings |
 
----
-
-### Overview
-
-View the entire runtime at a glance.
-
-| Section | Content |
-|---------|---------|
-| **Stat cards** | Active agent count · running processes · connected channels |
-| **Performance** | CPU · Memory · Swap usage (progress bars) |
-| **Network** | Network RX/TX speed (KB/s) — Linux only |
-| **Agents** | Role badges · last message time |
-| **Running Processes** | run_id · mode · tool call count · error status |
-| **Cron** | Active cron jobs (shown only when jobs exist) |
-| **Decisions** | Key decisions (shown only when decisions exist) |
-| **Recent Events** | Workflow event stream |
-
----
-
-### Workspace
-
-Manage the agent workspace. Organized in 8 tabs.
-
-#### Memory Tab
-View and edit the agent's memory and DB-backed records.
-- **Long-term**: Long-term memory (editable)
-- **Daily**: Daily notes by date (editable)
-- **Decisions/Promises/Events**: Decision · promise · event records from DB
-
-#### Sessions Tab
-View conversation session list and message history across all channels.
-- **Channel filter**: All / Slack / Telegram / Discord / Web provider tabs
-- Click a session → provider badge + full message history with timestamps
-
-#### Skills Tab
-View and edit agent skill files.
-- **Builtin skills**: read-only
-- **Workspace skills**: directly edit `SKILL.md` and `references/` files
-- Switch between file tabs, edit, and click Save
-- **Tool picker** (shown automatically when editing `SKILL.md`)
-  - `Tools:` — click to toggle SoulFlow registry tools → updates frontmatter `tools:`
-  - `SDK:` — Bash · Read · Write · Edit · Glob · Grep and other Claude Code native tools
-  - `OAuth:` — click to toggle registered OAuth services → updates frontmatter `oauth:`
-  - `Role preset:` — click a role skill button → bulk-merge that role's tool set
-
-#### Cron Tab
-Manage cron jobs — list, add, edit, delete, run now.
-
-#### Tools Tab
-Browse all tools available to agents. Click a row → expand parameter details.
-
-#### Agents Tab
-Manage agent configurations (role · backend · add/edit/delete).
-
-#### Templates Tab
-Edit system prompt templates: `IDENTITY.md` · `USER.md` · `SOUL.md` · etc.
-
-#### OAuth Tab
-Manage OAuth 2.0 external service integrations → [OAuth Integration](#oauth-integration)
-
----
-
-### Chat
-
-Chat directly with agents from your web browser (useful for testing without Slack/Telegram).
-
----
-
-### Channels
-
-Check channel connection status and configure global channel settings (poll interval · streaming · dispatch).
-
----
-
-### Providers
-
-Manage AI providers (LLM backends) — Circuit Breaker state · health score · token configuration.
-
----
-
-### Secrets
-
-Manage AES-256-GCM encrypted secrets. Agents access secrets by reference only; actual values are decrypted only during tool execution.
-
----
-
-### Settings
-
-View and edit global runtime settings (agents · MCP · orchestrator · logging · etc.).
-
----
+→ Details: [Dashboard Guide](en/guide/dashboard.md)
 
 ## OAuth Integration
 
-Manage external service OAuth 2.0 integrations from **Workspace → OAuth tab**.
+GitHub · Google · Custom OAuth 2.0 external service integrations. Managed from Dashboard Workspace → OAuth tab.
 
-### Supported Services
+Agent tools use `oauth:{instance_id}` reference for automatic token injection with 401 auto-refresh retry.
 
-| Service | service_type | Default Scopes |
-|---------|-------------|---------------|
-| GitHub | `github` | `repo`, `read:user` |
-| Google | `google` | `openid`, `email`, `profile` |
-| Custom | `custom` | User-defined |
-
-### Adding an Integration
-
-1. Go to **Workspace → OAuth tab**
-2. Click **Add**
-3. Select service (GitHub / Google / Custom)
-4. Enter **Label** (display name)
-5. Enter **Client ID** / **Client Secret**
-   - GitHub: `github.com/settings/developers` → OAuth Apps
-   - Google: `console.cloud.google.com` → Credentials
-   - Custom: enter `auth_url` · `token_url` directly
-6. Select required scopes → click **Add**
-
-### Connecting
-
-After adding, click **Connect** on the card:
-1. An OAuth popup opens
-2. Authorize in the service
-3. On callback success, card status changes to **Connected**
-
-> The card auto-refreshes about 3 seconds after successful connection.
-
-### Token Management
-
-| Button | Action |
-|--------|--------|
-| **Connect** | Start new OAuth flow via popup |
-| **Refresh** | Refresh access token using refresh token |
-| **Test** | Test API call with current token |
-| **Edit** | Modify scopes · enabled state |
-| **Remove** | Delete integration (including token) |
-
-### Using in Agents
-
-Connected OAuth tokens can be used in agent tools via `oauth:{instance_id}` reference.
-
-```
-User: Fetch my GitHub issues
-→ Agent calls GitHub API with oauth:github token
-```
+→ Details: [OAuth Guide](en/guide/oauth.md)
 
 ---
 
@@ -357,26 +260,40 @@ User: Call the API using MY_API_KEY
 
 ```text
 next/
+  Dockerfile              ← Multi-stage Docker build (5 stages)
+  docker-compose.yml      ← Production deployment
+  docker-compose.dev.yml  ← Development with live reload
+  .devcontainer/          ← VS Code Dev Container setup
   src/
-    agent/          ← Agent runtime (backends/, tools/)
+    agent/
+      backends/     ← SDK/CLI/OpenAI backend adapters
+      pty/          ← PTY-based CLI integration (ContainerPool, AgentBus, MCP bridge, NDJSON wire)
+      tools/        ← Agent tool implementations (incl. oauth_fetch)
     bus/            ← MessageBus (inbound/outbound pub/sub)
     channels/       ← Channel manager · commands · dispatch · approval
-    config/         ← Zod-based config schema
+    config/         ← Zod-based config schema + config-meta
     cron/           ← Cron scheduler (SQLite)
-    dashboard/      ← Web dashboard (API + SSE)
+    dashboard/
+      routes/       ← 22 route handlers (state, config, chat, cron, etc.)
+      service.ts    ← HTTP server + route registration
     decision/       ← Decision service
     mcp/            ← MCP client manager
-    orchestration/  ← Agent Loop · Task Loop executors
+    oauth/          ← OAuth 2.0 integration (flow-service, integration-store)
+    orchestration/  ← Gateway · Classifier · Prompts · ToolCallHandler · AgentHooksBuilder
     security/       ← Secret Vault (AES-256-GCM)
     session/        ← Session store
     skills/
       _shared/      ← Shared protocols
       roles/        ← 8 role skills
+  scripts/          ← oauth-relay.mjs (OAuth TCP relay)
   workspace/
     templates/      ← System prompt templates
     skills/         ← User-defined skills
     runtime/        ← SQLite DBs (sessions, tasks, events, decisions, cron, dlq)
-  web/              ← Dashboard frontend (React + Vite)
+  web/              ← Dashboard frontend (React + Vite + i18n + Zustand)
+  docs/
+    */guide/        ← User guides (dashboard, oauth, providers, heartbeat)
+    */design/       ← Architecture design documents (pty-agent-backend, loop-continuity, phase-loop)
   diagrams/         ← SVG architecture diagrams
 ```
 

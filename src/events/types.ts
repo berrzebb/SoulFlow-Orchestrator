@@ -1,5 +1,14 @@
 export type WorkflowPhase = "assign" | "progress" | "blocked" | "done" | "approval";
 
+const WORKFLOW_PHASES = new Set<WorkflowPhase>(["assign", "progress", "blocked", "done", "approval"]);
+
+/** unknown 값을 WorkflowPhase로 정규화. 유효하지 않으면 "progress" 반환. */
+export function normalize_phase(value: unknown): WorkflowPhase {
+  const phase = String(value || "").trim().toLowerCase();
+  if (WORKFLOW_PHASES.has(phase as WorkflowPhase)) return phase as WorkflowPhase;
+  return "progress";
+}
+
 export type WorkflowEventSource = "outbound" | "inbound" | "system";
 
 export type WorkflowEvent = {

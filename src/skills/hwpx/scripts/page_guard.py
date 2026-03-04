@@ -61,9 +61,6 @@ def collect_metrics(hwpx_path: Path) -> Metrics:
     if not paragraphs:
         paragraphs = root.xpath(".//hp:p", namespaces=NS)
 
-    page_break_count = sum(1 for p in paragraphs if p.get("pageBreak") == "1")
-    column_break_count = sum(1 for p in paragraphs if p.get("columnBreak") == "1")
-
     tables = root.xpath(".//hp:tbl", namespaces=NS)
     table_shapes: List[Tuple[str, str, str, str, str, str]] = []
     for t in tables:
@@ -81,20 +78,22 @@ def collect_metrics(hwpx_path: Path) -> Metrics:
             )
         )
 
-    t_nodes = root.xpath(".//hp:t", namespaces=NS)
-    text_char_total = 0
-    text_char_total_nospace = 0
-    for t in t_nodes:
-        s = _text_of_t_node(t)
-        text_char_total += len(s)
-        text_char_total_nospace += len("".join(s.split()))
-
+    page_break_count = 0
+    column_break_count = 0
     paragraph_text_lengths: List[int] = []
+    text_char_total_nospace = 0
     for p in paragraphs:
+        if p.get("pageBreak") == "1":
+            page_break_count += 1
+        if p.get("columnBreak") == "1":
+            column_break_count += 1
         plen = 0
         for t in p.xpath(".//hp:t", namespaces=NS):
-            plen += len(_text_of_t_node(t))
+            s = _text_of_t_node(t)
+            plen += len(s)
+            text_char_total_nospace += sum(1 for c in s if not c.isspace())
         paragraph_text_lengths.append(plen)
+    text_char_total = sum(paragraph_text_lengths)
 
     return Metrics(
         paragraph_count=len(paragraphs),

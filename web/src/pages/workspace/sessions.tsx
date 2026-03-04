@@ -53,9 +53,8 @@ export function SessionsTab() {
   return (
     <SplitPane
       left={
-        <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-          {/* 채널 필터 */}
-          <div style={{ padding: "6px 10px", borderBottom: "1px solid var(--line)", display: "flex", flexWrap: "wrap", gap: 4, flexShrink: 0 }}>
+        <div className="ws-col">
+          <div className="ws-chip-bar" style={{ flexDirection: "row", flexWrap: "wrap" }}>
             <span
               onClick={() => { setProviderFilter(""); setSelected(null); }}
               style={{
@@ -84,27 +83,16 @@ export function SessionsTab() {
               </span>
             ))}
           </div>
-          {/* 세션 목록 */}
-          <div style={{ overflowY: "auto", flex: 1 }}>
+          <div className="ws-scroll">
             {sessions.length === 0 ? (
-              <p className="empty" style={{ padding: 14, fontSize: 12 }}>{t("workspace.sessions.no_sessions")}</p>
+              <p className="empty" style={{ padding: 14 }}>{t("workspace.sessions.no_sessions")}</p>
             ) : sessions.map((s) => (
-              <div
-                key={s.key}
-                onClick={() => setSelected(s.key)}
-                style={{
-                  padding: "10px 14px", cursor: "pointer", fontSize: 12,
-                  background: selected === s.key ? "var(--panel-elevated)" : "none",
-                  borderLeft: selected === s.key ? "3px solid var(--accent)" : "3px solid transparent",
-                }}
-              >
-                <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }}>
+              <div key={s.key} onClick={() => setSelected(s.key)} className={`ws-item${selected === s.key ? " ws-item--active" : ""}`} style={{ padding: "10px 14px" }}>
+                <div className="li-flex" style={{ marginBottom: 2 }}>
                   <Badge status={s.provider} variant="info" />
-                  <span style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>
-                    {s.chat_id}
-                  </span>
+                  <span className="fw-600 truncate" style={{ flex: 1 }}>{s.chat_id}</span>
                 </div>
-                <div style={{ color: "var(--muted)", fontSize: 10 }}>
+                <div className="text-xs text-muted">
                   {s.alias && s.alias !== s.provider && <span style={{ marginRight: 6 }}>{s.alias}</span>}
                   {s.thread && s.thread !== "main" && <span style={{ marginRight: 6 }}>#{s.thread}</span>}
                   {t("workspace.sessions.msgs_fmt", { count: s.message_count })} · {s.updated_at.slice(0, 10)}
@@ -115,34 +103,32 @@ export function SessionsTab() {
         </div>
       }
       right={
-        <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-          <div style={{ padding: "10px 14px", borderBottom: "1px solid var(--line)", flexShrink: 0, display: "flex", alignItems: "center", gap: 8 }}>
+        <div className="ws-col">
+          <div className="ws-detail-header">
             {selected_session ? (
               <>
                 <Badge status={selected_session.provider} variant="info" />
-                <span style={{ fontWeight: 600, fontSize: 13 }}>{selected_session.chat_id}</span>
+                <span className="fw-600" style={{ fontSize: "var(--fs-sm)" }}>{selected_session.chat_id}</span>
                 {selected_session.thread !== "main" && (
-                  <span style={{ fontSize: 11, color: "var(--muted)" }}>#{selected_session.thread}</span>
+                  <span className="text-xs text-muted">#{selected_session.thread}</span>
                 )}
               </>
             ) : (
-              <span style={{ fontWeight: 600, fontSize: 13 }}>{t("workspace.select_item")}</span>
+              <span className="fw-600" style={{ fontSize: "var(--fs-sm)" }}>{t("workspace.select_item")}</span>
             )}
           </div>
-          <div style={{ flex: 1, overflowY: "auto", padding: 14, display: "flex", flexDirection: "column", gap: 10 }}>
+          <div className="ws-preview" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {!selected ? (
               <p className="empty">{t("workspace.select_item")}</p>
             ) : !detail ? (
               <p className="empty">{t("common.loading")}</p>
             ) : detail.messages.map((m, i) => (
-              <div key={i} style={{
+              <div key={i} className={`ws-msg ws-msg--${m.direction}`} style={{
                 alignSelf: m.direction === "user" ? "flex-end" : "flex-start",
-                maxWidth: "80%", padding: "8px 12px", borderRadius: 8, fontSize: 12,
-                background: m.direction === "user" ? "rgba(74,158,255,0.15)" : "var(--panel-elevated)",
-                color: "var(--text)", lineHeight: 1.5,
+                maxWidth: "80%", borderRadius: 8,
               }}>
-                <div style={{ fontSize: 10, color: "var(--muted)", marginBottom: 4, fontWeight: 600 }}>
-                  {m.direction === "user" ? "user" : "assistant"} · {m.at.slice(0, 16)}
+                <div className="ws-msg__header">
+                  {m.direction === "user" ? t("chat.you") : t("chat.assistant")} · {m.at.slice(0, 16)}
                 </div>
                 <pre style={{ margin: 0, whiteSpace: "pre-wrap", fontFamily: "inherit" }}>{m.content}</pre>
               </div>

@@ -2,7 +2,7 @@ import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { mkdir, readFile, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { create_logger } from "../logger.js";
-import { escape_regexp, now_iso } from "../utils/common.js";
+import { now_iso, error_message } from "../utils/common.js";
 import { with_sqlite_strict } from "../utils/sqlite-helper.js";
 import { redact_sensitive_text } from "./sensitive.js";
 
@@ -257,7 +257,9 @@ export class SecretVaultService implements SecretVaultLike {
       `).run(name, ciphertext, now_iso());
       return true;
     });
-    return { ok: Boolean(ok), name };
+    const result = { ok: Boolean(ok), name };
+    log.info("secret_put", { name, ok: result.ok });
+    return result;
   }
 
   async remove_secret(nameRaw: string): Promise<boolean> {
@@ -268,6 +270,7 @@ export class SecretVaultService implements SecretVaultLike {
       const r = db.prepare("DELETE FROM secrets WHERE name = ?").run(name);
       return Number(r.changes || 0) > 0;
     });
+    log.info("secret_remove", { name, removed: Boolean(removed) });
     return Boolean(removed);
   }
 
@@ -289,11 +292,16 @@ export class SecretVaultService implements SecretVaultLike {
     const name = normalize_secret_name(nameRaw);
     if (!name) return null;
     const cipher = await this.get_secret_cipher(name);
-    if (!cipher) return null;
+    if (!cipher) {
+      log.info("secret_reveal", { name, found: false });
+      return null;
+    }
     try {
-      return await this.decrypt_text(cipher, `secret:${name}`);
+      const value = await this.decrypt_text(cipher, `secret:${name}`);
+      log.info("secret_reveal", { name, found: value !== null });
+      return value;
     } catch (err) {
-      log.warn("decrypt failed", { name, error: err instanceof Error ? err.message : String(err) });
+      log.warn("decrypt failed", { name, error: error_message(err) });
       return null;
     }
   }
@@ -349,7 +357,7 @@ export class SecretVaultService implements SecretVaultLike {
         invalid_ciphertexts.add(cipher);
         continue;
       }
-      out = out.replace(new RegExp(escape_regexp(cipher), "g"), plain);
+      out = out.replaceAll(cipher, plain);
     }
     return {
       text: out,
@@ -377,7 +385,7 @@ export class SecretVaultService implements SecretVaultLike {
         invalid.add(token);
         continue;
       }
-      out = out.replace(new RegExp(escape_regexp(token), "g"), plain);
+      out = out.replaceAll(token, plain);
     }
     return {
       text: out,
@@ -436,7 +444,7 @@ export class SecretVaultService implements SecretVaultLike {
       if (!cipher) continue;
       const plain = await this.decrypt_text(cipher, `secret:${name}`).catch(() => "");
       if (!plain || plain.length < 4) continue;
-      out = out.replace(new RegExp(escape_regexp(plain), "g"), "[REDACTED:SECRET]");
+      out = out.replaceAll(plain, "[REDACTED:SECRET]");
     }
     const redacted = redact_sensitive_text(out);
     return redacted.text;

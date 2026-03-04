@@ -1,8 +1,7 @@
-import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { basename } from "node:path";
 import type { InboundMessage, MediaItem, OutboundMessage } from "../bus/types.js";
-import { now_iso } from "../utils/common.js";
+import { now_iso, error_message, short_id} from "../utils/common.js";
 import { BaseChannel } from "./base.js";
 
 type DiscordChannelOptions = {
@@ -41,7 +40,7 @@ function to_inbound_message(channel: DiscordChannel, raw: Record<string, unknown
     })
     .filter((v): v is MediaItem => Boolean(v));
   return {
-    id: String(raw.id || randomUUID().slice(0, 12)),
+    id: String(raw.id || short_id()),
     provider: "discord",
     channel: "discord",
     sender_id: String(author.id || "unknown"),
@@ -122,7 +121,7 @@ export class DiscordChannel extends BaseChannel {
       if (!response.ok) return { ok: false, error: String(data.message || `http_${response.status}`) };
       return { ok: true, message_id: String(data.id || "") };
     } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
+      const msg = error_message(error);
       this.log.warn("send failed", { chat_id, error: msg });
       return { ok: false, error: msg };
     } finally {
@@ -146,7 +145,7 @@ export class DiscordChannel extends BaseChannel {
         .map((r) => (r && typeof r === "object" ? to_inbound_message(this, r as Record<string, unknown>, chat_id) : null))
         .filter((r): r is InboundMessage => Boolean(r));
     } catch (error) {
-      this.last_error = error instanceof Error ? error.message : String(error);
+      this.last_error = error_message(error);
       this.log.warn("read failed", { chat_id, error: this.last_error });
       return [];
     }
@@ -168,7 +167,7 @@ export class DiscordChannel extends BaseChannel {
       if (!response.ok) return { ok: false, error: String(data.message || `http_${response.status}`) };
       return { ok: true };
     } catch (error) {
-      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+      return { ok: false, error: error_message(error) };
     }
   }
 
@@ -197,7 +196,7 @@ export class DiscordChannel extends BaseChannel {
       }
       return { ok: true };
     } catch (error) {
-      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+      return { ok: false, error: error_message(error) };
     }
   }
 

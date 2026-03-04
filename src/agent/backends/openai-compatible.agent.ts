@@ -8,7 +8,7 @@ import type {
   AgentRunOptions, AgentRunResult, BackendCapabilities,
 } from "../agent.types.js";
 import { agent_options_to_chat } from "./convert.js";
-import { now_iso } from "../../utils/common.js";
+import { now_iso, error_message} from "../../utils/common.js";
 import {
   build_executor_map, execute_single_tool, map_finish_reason,
   fire, accum_usage, emit_usage,
@@ -22,6 +22,8 @@ export type OpenAiCompatibleConfig = {
   max_tokens?: number;
   temperature?: number;
   request_timeout_ms?: number;
+  /** 요청마다 추가할 커스텀 헤더 (OpenRouter HTTP-Referer/X-Title 등). */
+  extra_headers?: Record<string, string>;
 };
 
 export class OpenAiCompatibleAgent implements AgentBackend {
@@ -147,7 +149,7 @@ export class OpenAiCompatibleAgent implements AgentBackend {
         metadata: { model: this.config.model },
       };
     } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
+      const msg = error_message(error);
       fire(emit, { type: "error", source, at: now_iso(), error: msg });
       return {
         content: `Error: ${msg}`,
@@ -186,12 +188,14 @@ export class OpenAiCompatibleAgent implements AgentBackend {
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.config.request_timeout_ms ?? 120_000);
-    if (options?.abort_signal) {
-      options.abort_signal.addEventListener("abort", () => controller.abort(), { once: true });
-    }
+    const relay = () => controller.abort();
+    options?.abort_signal?.addEventListener("abort", relay, { once: true });
 
     try {
-      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+        ...this.config.extra_headers,
+      };
       if (this.config.api_key) headers["Authorization"] = `Bearer ${this.config.api_key}`;
 
       const res = await fetch(url, {
@@ -204,6 +208,7 @@ export class OpenAiCompatibleAgent implements AgentBackend {
       return await res.json() as Record<string, unknown>;
     } finally {
       clearTimeout(timeout);
+      options?.abort_signal?.removeEventListener("abort", relay);
     }
   }
 }

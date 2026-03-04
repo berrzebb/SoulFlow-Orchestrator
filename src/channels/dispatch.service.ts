@@ -6,7 +6,7 @@ import { resolve_provider, type ChannelProvider, type ChannelRegistryLike } from
 import type { DispatchDlqStoreLike } from "./dlq-store.js";
 import type { OutboundDedupePolicy } from "./outbound-dedupe.js";
 import { TokenBucketRateLimiter, type RateLimiterOptions } from "./rate-limiter.js";
-import { prune_ttl_map, sleep } from "../utils/common.js";
+import { prune_ttl_map, sleep, error_message, now_iso} from "../utils/common.js";
 
 type RecentRecord = { at_ms: number; message_id: string };
 
@@ -135,6 +135,7 @@ export class DispatchService implements ServiceLike {
       if (sent.ok) {
         this.recent.set(dedupe_key, { at_ms: Date.now(), message_id: String(sent.message_id || message.id || "") });
         if (this.recent.size > this.dedupe_config.maxSize + 500) this.prune_recent_cache(true);
+        this.logger.info("outbound_sent", { provider, chat_id: message.chat_id, message_id: sent.message_id || message.id });
         return sent;
       }
       last_error = String(sent.error || "unknown_error");
@@ -166,7 +167,7 @@ export class DispatchService implements ServiceLike {
     const timer = setTimeout(() => {
       this.pending_retries.delete(timer);
       if (this.running) this.bus.publish_outbound(retry_msg).catch((e) => {
-        this.logger.debug("retry publish failed", { error: e instanceof Error ? e.message : String(e) });
+        this.logger.debug("retry publish failed", { error: error_message(e) });
       });
     }, delay);
     this.pending_retries.add(timer);
@@ -177,7 +178,7 @@ export class DispatchService implements ServiceLike {
     if (!this.dlq) return;
     try {
       await this.dlq.append({
-        at: new Date().toISOString(),
+        at: now_iso(),
         provider,
         chat_id: String(message.chat_id || ""),
         message_id: String(message.id || ""),
@@ -189,8 +190,9 @@ export class DispatchService implements ServiceLike {
         content: String(message.content || "").slice(0, 4000),
         metadata: (message.metadata as Record<string, unknown>) || {},
       });
+      this.logger.warn("dlq_written", { provider, chat_id: message.chat_id, message_id: message.id, retry_count, error });
     } catch (e) {
-      this.logger.error("dlq append failed", { error: String(e) });
+      this.logger.error("dlq_append_failed", { error: error_message(e) });
     }
   }
 

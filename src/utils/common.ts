@@ -1,4 +1,5 @@
 import { access } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 
 export function now_ms(): number {
   return Date.now();
@@ -6,6 +7,18 @@ export function now_ms(): number {
 
 export function now_iso(): string {
   return new Date().toISOString();
+}
+
+const SEOUL_FORMATTER = new Intl.DateTimeFormat("sv-SE", {
+  timeZone: "Asia/Seoul",
+  year: "numeric", month: "2-digit", day: "2-digit",
+  hour: "2-digit", minute: "2-digit", second: "2-digit",
+  hour12: false,
+});
+
+/** Asia/Seoul KST ISO 형식 타임스탬프. sv-SE locale → "YYYY-MM-DD HH:mm:ss" 형식. */
+export function now_seoul_iso(): string {
+  return SEOUL_FORMATTER.format(new Date()).replace(" ", "T") + "+09:00";
 }
 
 export function today_key(date = new Date()): string {
@@ -66,10 +79,28 @@ export function ensure_json_object(v: unknown): Record<string, unknown> | null {
   return v as Record<string, unknown>;
 }
 
+/** unknown 값을 안전하게 문자열로 변환. JSON 직렬화 실패 시 String() 폴백. */
+export function safe_stringify(value: unknown): string {
+  if (value == null) return "";
+  if (typeof value === "string") return value;
+  try { return JSON.stringify(value, null, 2); }
+  catch { return String(value); }
+}
+
+/** unknown 에러를 메시지 문자열로 변환. */
+export function error_message(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
+}
+
 /** 공백 정규화 + trim. lowercase 옵션 지원 (dedupe key 등). */
 export function normalize_text(value: unknown, lowercase = false): string {
   const s = String(value || "").replace(/\s+/g, " ").trim();
   return lowercase ? s.toLowerCase() : s;
+}
+
+/** UUID 기반 짧은 ID 생성. */
+export function short_id(length: 8 | 12 = 12): string {
+  return randomUUID().slice(0, length);
 }
 
 /** 문자열을 불리언으로 파싱. "1"/"true"/"yes"/"on" → true, "0"/"false"/"no"/"off" → false. */

@@ -10,8 +10,9 @@ import type {
   MemoryKind,
   MemoryStoreLike,
 } from "./memory.types.js";
-import { today_key } from "../utils/common.js";
+import { today_key, now_iso} from "../utils/common.js";
 import { redact_sensitive_text } from "../security/sensitive.js";
+import { sanitize_untrusted_text } from "../security/content-sanitizer.js";
 import { get_shared_secret_vault } from "../security/secret-vault-factory.js";
 import { parse_tool_calls_from_text } from "./tool-call-parser.js";
 
@@ -144,7 +145,7 @@ export class MemoryStore implements MemoryStoreLike {
         day,
         path,
         String(content || ""),
-        new Date().toISOString(),
+        now_iso(),
       );
       return true;
     });
@@ -165,7 +166,7 @@ export class MemoryStore implements MemoryStoreLike {
         day,
         path,
         String(content || ""),
-        new Date().toISOString(),
+        now_iso(),
       );
       return true;
     });
@@ -485,13 +486,15 @@ export class MemoryStore implements MemoryStoreLike {
 
     const history_entry = args.history_entry;
     if (history_entry !== undefined && history_entry !== null) {
-      const text = typeof history_entry === "string" ? history_entry : JSON.stringify(history_entry);
+      const raw = typeof history_entry === "string" ? history_entry : JSON.stringify(history_entry);
+      const text = sanitize_untrusted_text(raw).text;
       if (text.trim()) await this.append_daily(`${text}\n`);
     }
 
     const memory_update = args.memory_update;
     if (memory_update !== undefined && memory_update !== null) {
-      const text = typeof memory_update === "string" ? memory_update : JSON.stringify(memory_update);
+      const raw = typeof memory_update === "string" ? memory_update : JSON.stringify(memory_update);
+      const text = sanitize_untrusted_text(raw).text;
       if (text !== current_memory) await this.write_longterm(text);
     }
 

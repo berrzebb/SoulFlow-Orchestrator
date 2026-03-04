@@ -1,6 +1,6 @@
 import type { Logger } from "../logger.js";
 import type { ServiceLike } from "../runtime/service.types.js";
-import { now_iso } from "../utils/common.js";
+import { now_iso, error_message} from "../utils/common.js";
 import type { OpsRuntimeDeps, OpsRuntimeStatus } from "./types.js";
 
 export class OpsRuntimeService implements ServiceLike {
@@ -81,7 +81,7 @@ export class OpsRuntimeService implements ServiceLike {
           this.logger?.warn(`watchdog: unhealthy services`, { services: unhealthy.map((s) => s.name) });
         }
       } catch (error) {
-        this.logger?.error(`watchdog health_check failed: ${error instanceof Error ? error.message : String(error)}`);
+        this.logger?.error(`watchdog health_check failed: ${error_message(error)}`);
       }
     }
     this.status_state.last_watchdog_at = now_iso();
@@ -96,7 +96,7 @@ export class OpsRuntimeService implements ServiceLike {
           await this.deps.channels.handle_inbound_message(inbound);
         }
       } catch (error) {
-        this.logger?.error(`bridge pump failed: ${error instanceof Error ? error.message : String(error)}`);
+        this.logger?.error(`bridge pump failed: ${error_message(error)}`);
       }
     }
     this.status_state.last_bridge_pump_at = now_iso();
@@ -110,7 +110,7 @@ export class OpsRuntimeService implements ServiceLike {
         this.logger?.info(`decision dedupe removed=${result.removed} active=${result.active}`);
       }
     } catch (error) {
-      this.logger?.error(`decision dedupe failed: ${error instanceof Error ? error.message : String(error)}`);
+      this.logger?.error(`decision dedupe failed: ${error_message(error)}`);
     }
     if (this.deps.promises) {
       try {
@@ -119,7 +119,7 @@ export class OpsRuntimeService implements ServiceLike {
           this.logger?.info(`promise dedupe removed=${result.removed} active=${result.active}`);
         }
       } catch (error) {
-        this.logger?.error(`promise dedupe failed: ${error instanceof Error ? error.message : String(error)}`);
+        this.logger?.error(`promise dedupe failed: ${error_message(error)}`);
       }
     }
     this.status_state.last_decision_dedupe_at = now_iso();
@@ -131,14 +131,14 @@ export class OpsRuntimeService implements ServiceLike {
       const removed = await this.deps.secret_vault.prune_expired(6 * 3_600_000);
       if (removed > 0) this.logger?.info(`secret prune removed=${removed}`);
     } catch (error) {
-      this.logger?.error(`secret prune failed: ${error instanceof Error ? error.message : String(error)}`);
+      this.logger?.error(`secret prune failed: ${error_message(error)}`);
     }
     if (this.deps.session_store?.prune_expired) {
       try {
         const removed = await this.deps.session_store.prune_expired(24 * 3_600_000);
         if (removed > 0) this.logger?.info(`session prune removed=${removed}`);
       } catch (error) {
-        this.logger?.error(`session prune failed: ${error instanceof Error ? error.message : String(error)}`);
+        this.logger?.error(`session prune failed: ${error_message(error)}`);
       }
     }
     if (this.deps.dlq?.prune_older_than) {
@@ -146,7 +146,7 @@ export class OpsRuntimeService implements ServiceLike {
         const removed = await this.deps.dlq.prune_older_than(7 * 24 * 3_600_000);
         if (removed > 0) this.logger?.info(`dlq prune removed=${removed}`);
       } catch (error) {
-        this.logger?.error(`dlq prune failed: ${error instanceof Error ? error.message : String(error)}`);
+        this.logger?.error(`dlq prune failed: ${error_message(error)}`);
       }
     }
   }

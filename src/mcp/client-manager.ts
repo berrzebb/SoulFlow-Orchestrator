@@ -6,6 +6,7 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import type { Logger } from "../logger.js";
+import { error_message } from "../utils/common.js";
 import type { ServiceLike } from "../runtime/service.types.js";
 import type {
   McpServerConfig,
@@ -148,7 +149,7 @@ export class McpClientManager implements ServiceLike {
     try {
       await server.client.close();
     } catch (error) {
-      this.logger.debug("mcp server close error", { server: name, error: String(error) });
+      this.logger.debug("mcp server close error", { server: name, error: error_message(error) });
     }
   }
 
@@ -171,6 +172,7 @@ export class McpClientManager implements ServiceLike {
     try {
       const call_promise = server.client.callTool({ name: tool_name, arguments: args });
 
+      let result;
       if (signal) {
         const abort_promise = new Promise<never>((_, reject) => {
           const on_abort = () => reject(new Error("aborted"));
@@ -178,17 +180,19 @@ export class McpClientManager implements ServiceLike {
           signal.addEventListener("abort", on_abort, { once: true });
           call_promise.finally(() => signal.removeEventListener("abort", on_abort));
         });
-        const result = await Promise.race([call_promise, abort_promise]);
-        const content = (result.content as McpCallResult["content"]) || [];
-        return { content, is_error: result.isError === true };
+        result = await Promise.race([call_promise, abort_promise]);
+      } else {
+        result = await call_promise;
       }
 
-      const result = await call_promise;
       const content = (result.content as McpCallResult["content"]) || [];
-      return { content, is_error: result.isError === true };
+      const is_error = result.isError === true;
+      this.logger.info("mcp_tool_call", { server: server_name, tool: tool_name, is_error });
+      return { content, is_error };
     } catch (error) {
+      this.logger.warn("mcp_tool_call", { server: server_name, tool: tool_name, is_error: true, error: error_message(error) });
       return {
-        content: [{ type: "text", text: `Error calling MCP tool ${tool_name}: ${String(error)}` }],
+        content: [{ type: "text", text: `Error calling MCP tool ${tool_name}: ${error_message(error)}` }],
         is_error: true,
       };
     }

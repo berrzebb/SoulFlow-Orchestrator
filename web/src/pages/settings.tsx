@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
 import { Badge } from "../components/badge";
+import { ToggleSwitch } from "../components/toggle-switch";
 import { useToast } from "../components/toast";
 import { useT } from "../i18n";
 
@@ -142,7 +143,7 @@ function FieldCard({ field }: { field: FieldInfo }) {
   return (
     <div
       style={{
-        display: "flex", alignItems: "center", gap: "var(--sp-3)",
+        display: "flex", alignItems: "flex-start", gap: "var(--sp-3)",
         padding: "var(--sp-2) var(--sp-3)",
         borderRadius: "var(--radius-sm)",
         background: editing ? "rgba(74,158,255,0.04)" : "transparent",
@@ -165,7 +166,7 @@ function FieldCard({ field }: { field: FieldInfo }) {
       </div>
 
       {/* Value / Edit controls */}
-      <div style={{ flex: "1 1 240px", minWidth: 120 }}>
+      <div style={{ flex: "1 1 240px", minWidth: 120, paddingTop: 2 }}>
         {editing ? (
           <EditInline field={field} draft={draft} setDraft={setDraft} onCommit={commit} onCancel={() => setEditing(false)} isPending={save.isPending} />
         ) : (
@@ -174,7 +175,7 @@ function FieldCard({ field }: { field: FieldInfo }) {
       </div>
 
       {/* Actions */}
-      <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+      <div style={{ display: "flex", gap: 4, flexShrink: 0, paddingTop: 2 }}>
         {!editing && field.type !== "boolean" && (
           <button className="btn btn--xs" onClick={start_edit}>{t("common.edit")}</button>
         )}
@@ -191,25 +192,12 @@ function FieldCard({ field }: { field: FieldInfo }) {
 function ValueDisplay({ field, onClick }: { field: FieldInfo; onClick: () => void }) {
   const t = useT();
   if (field.type === "boolean") {
-    const on = field.value as boolean;
     return (
-      <button
-        onClick={onClick}
+      <ToggleSwitch
+        checked={field.value as boolean}
+        onChange={() => onClick()}
         aria-label={t("settings.toggle_field", { label: field.label })}
-        style={{
-          position: "relative", width: 36, height: 20, borderRadius: 10,
-          border: "none", cursor: "pointer",
-          background: on ? "var(--ok)" : "rgba(124,138,152,0.3)",
-          transition: "background 0.2s",
-        }}
-      >
-        <span style={{
-          position: "absolute", top: 2, left: on ? 18 : 2,
-          width: 16, height: 16, borderRadius: "50%",
-          background: "#fff", transition: "left 0.2s",
-          boxShadow: "0 1px 3px rgba(0,0,0,0.3)",
-        }} />
-      </button>
+      />
     );
   }
 

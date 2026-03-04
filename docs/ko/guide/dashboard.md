@@ -2,7 +2,22 @@
 
 `http://127.0.0.1:4200`에서 접근 가능한 웹 기반 관리 UI입니다.
 
+**React + Vite**로 구축. **한국어/영어 i18n** 지원 (브라우저 로케일 자동 감지). CSS 디자인 토큰 시스템(`var(--sp-*)`, `var(--fs-*)`, `var(--line)`, `var(--radius-*)`)으로 일관된 테마 제공.
+
+전역 상태 관리는 Zustand (`store.ts`) — SSE 연결 상태, 사이드바, 테마, 웹 스트리밍.
+
 사이드바에서 7개 섹션으로 이동합니다. 하단 버튼으로 다크/라이트 테마를 전환할 수 있습니다.
+
+## Setup Wizard
+
+첫 실행 시 프로바이더가 설정되지 않으면 자동으로 `/setup`으로 리디렉트됩니다.
+
+| 단계 | 내용 |
+|------|------|
+| 1 | AI 프로바이더 선택 + API 키 입력 |
+| 2 | 기본 executor/orchestrator 선택 |
+| 3 | 에이전트 alias 입력 |
+| 4 | 완료 → 1.5초 후 Overview로 이동 |
 
 ## 페이지 구성
 
@@ -10,11 +25,11 @@
 |--------|------|------|
 | Overview | `/` | 런타임 상태 요약, 시스템 메트릭, SSE 실시간 피드 |
 | Workspace | `/workspace` | 메모리·세션·스킬·크론·도구·에이전트·템플릿·OAuth 관리 (8탭) |
-| Chat | `/chat` | 웹 기반 에이전트 대화 |
+| Chat | `/chat` | 웹 기반 에이전트 대화 (마크다운 렌더링 + 코드 하이라이팅) |
 | Channels | `/channels` | 채널 연결 상태 · 글로벌 설정 |
 | Providers | `/providers` | 에이전트 프로바이더 CRUD |
 | Secrets | `/secrets` | AES-256-GCM 시크릿 관리 |
-| Settings | `/settings` | 글로벌 런타임 설정 |
+| Settings | `/settings` | 글로벌 런타임 설정 (섹션 탭, 인라인 편집, ToggleSwitch) |
 
 ## Overview
 
@@ -86,6 +101,18 @@ Workspace는 8개 탭으로 구성됩니다.
 ### OAuth
 OAuth 2.0 외부 서비스 연동 관리 → [OAuth 가이드](./oauth.md) 참고
 
+## Chat 페이지
+
+Slack/Telegram 없이 웹에서 에이전트와 직접 대화합니다.
+
+- **마크다운 렌더링**: GFM 완전 지원 (헤딩, 볼드, 리스트, 테이블, 인용)
+- **코드 하이라이팅**: 펜스드 코드블록 언어별 구문 강조 (`highlight.js`)
+- **보안**: `rehype-sanitize`로 `<script>`, `<iframe>`, `javascript:` URL 등 XSS 차단
+- **스트리밍**: 에이전트 스트리밍 중 부분 마크다운 점진적 렌더링
+- **승인 배너**: 도구 승인 요청 시 인라인 승인/거부 UI
+- **미디어 프리뷰**: 첨부파일 인라인 렌더링
+- **에이전트 선택**: 설정된 에이전트 간 전환
+
 ## Providers 페이지 주요 기능
 
 에이전트 백엔드를 추가/수정/삭제하고 연결을 테스트합니다.
@@ -106,12 +133,32 @@ AES-256-GCM으로 암호화된 민감정보를 관리합니다.
 
 ## 실시간 피드
 
-Overview 페이지는 SSE(Server-Sent Events)로 실시간 이벤트를 표시합니다.
+Overview 페이지는 SSE(Server-Sent Events)로 실시간 이벤트를 표시합니다. `SseManager`가 7종 이벤트를 브로드캐스트합니다:
 
-- 에이전트 시작/완료
-- 태스크 단계 전환
-- 채널 메시지 수신
-- 서킷 브레이커 상태 변경
+| SSE 이벤트 | 용도 |
+|-----------|------|
+| `process` | 실행 시작/종료 |
+| `message` | 인바운드/아웃바운드 메시지 (최근 40개 유지) |
+| `cron` | 크론 잡 이벤트 |
+| `progress` | 진행 상황 |
+| `task` | 태스크 상태 변경 |
+| `web_stream` | 웹 채팅 스트리밍 |
+| `agent` | 에이전트 이벤트 (slim 필드만) |
+
+## 백엔드 아키텍처
+
+대시보드 백엔드는 다음 서비스로 분리되어 있습니다:
+
+| 서비스 | 역할 |
+|--------|------|
+| `RouteContext` | 라우트 핸들러 공통 컨텍스트 (req/res + `json()`, `read_body()`, `add_sse_client()` 등 액션 함수) |
+| `SseManager` | SSE 클라이언트 관리 + 7종 이벤트 브로드캐스트 |
+| `StateBuilder` | 대시보드 상태 순수 조립 함수 (`build_dashboard_state`, `build_merged_tasks`) |
+| `StaticServer` | SPA 정적 자산 서빙 + `index.html` fallback (html: no-store, 나머지: immutable) |
+| `MediaTokenStore` | 토큰 기반 미디어 서빙 (workspace 외부 경로 차단, 1시간 TTL) |
+| `OpsFactory` | 11개 도메인별 ops 객체 팩토리 (template, channel, agent-provider, bootstrap, memory, workspace, oauth, config, skill, tool, cli-auth) |
+
+22개 라우트 핸들러가 `src/dashboard/routes/`에 분리되어 있으며, 각 라우트는 `async (ctx: RouteContext) => boolean` 패턴을 따릅니다.
 
 ## 접근 제한
 

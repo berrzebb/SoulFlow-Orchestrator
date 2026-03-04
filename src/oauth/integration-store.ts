@@ -254,6 +254,11 @@ export class OAuthIntegrationStore {
     return cipher !== null;
   }
 
+  async has_client_secret(instance_id: string): Promise<boolean> {
+    const cipher = await this.vault.get_secret_cipher(vault_key(instance_id, "client_secret"));
+    return cipher !== null;
+  }
+
   async remove_tokens(instance_id: string): Promise<void> {
     await this.vault.remove_secret(vault_key(instance_id, "access_token"));
     await this.vault.remove_secret(vault_key(instance_id, "refresh_token"));

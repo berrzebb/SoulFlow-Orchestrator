@@ -3,6 +3,7 @@
  * state 파라미터 기반 CSRF 방지 + 토큰 교환/갱신.
  */
 
+import { error_message } from "../utils/common.js";
 import { randomUUID } from "node:crypto";
 import { create_logger } from "../logger.js";
 import type { OAuthIntegrationStore, OAuthIntegrationConfig } from "./integration-store.js";
@@ -17,16 +18,21 @@ interface PendingFlow {
 
 const FLOW_TTL_MS = 10 * 60 * 1000; // 10분
 const CLEANUP_INTERVAL_MS = 60 * 1000; // 1분
+const REFRESH_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5분
+const REFRESH_MARGIN_MS = 5 * 60 * 1000; // 만료 5분 전 선제 갱신
 
 export class OAuthFlowService {
   private readonly store: OAuthIntegrationStore;
   private readonly pending_flows = new Map<string, PendingFlow>();
   private readonly cleanup_timer: ReturnType<typeof setInterval>;
+  private readonly refresh_timer: ReturnType<typeof setInterval>;
 
   constructor(store: OAuthIntegrationStore) {
     this.store = store;
     this.cleanup_timer = setInterval(() => this._prune_expired(), CLEANUP_INTERVAL_MS);
     this.cleanup_timer.unref();
+    this.refresh_timer = setInterval(() => void this._refresh_expiring_tokens(), REFRESH_CHECK_INTERVAL_MS);
+    this.refresh_timer.unref();
   }
 
   /** 인증 URL 생성. state를 랜덤 생성하여 pending_flows에 저장. */
@@ -37,6 +43,7 @@ export class OAuthFlowService {
       created_at: Date.now(),
     });
 
+    log.info("oauth_flow_start", { instance_id: integration.instance_id, service: integration.service_type });
     const preset = get_preset(integration.service_type);
     const scope_sep = preset?.scope_separator ?? " ";
     const params = new URLSearchParams({
@@ -68,11 +75,13 @@ export class OAuthFlowService {
   async handle_callback(code: string, state: string): Promise<{ ok: boolean; instance_id?: string; error?: string }> {
     const flow = this.pending_flows.get(state);
     if (!flow) {
+      log.warn("oauth_state_invalid", { state: state.slice(0, 8) });
       return { ok: false, error: "invalid_or_expired_state" };
     }
 
     if (Date.now() - flow.created_at > FLOW_TTL_MS) {
       this.pending_flows.delete(state);
+      log.warn("oauth_state_expired", { instance_id: flow.instance_id });
       return { ok: false, error: "flow_expired" };
     }
 
@@ -96,7 +105,7 @@ export class OAuthFlowService {
       log.info("token exchange ok", { instance_id, service: integration.service_type });
       return { ok: true, instance_id };
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
+      const msg = error_message(e);
       log.warn("token exchange failed", { instance_id, error: msg });
       return { ok: false, instance_id, error: msg };
     }
@@ -131,7 +140,7 @@ export class OAuthFlowService {
       log.info("token refreshed", { instance_id });
       return { ok: true };
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
+      const msg = error_message(e);
       log.warn("token refresh failed", { instance_id, error: msg });
       return { ok: false, error: msg };
     }
@@ -166,7 +175,7 @@ export class OAuthFlowService {
 
       return { ok: false, error: `HTTP ${res.status}` };
     } catch (e) {
-      return { ok: false, error: e instanceof Error ? e.message : String(e) };
+      return { ok: false, error: error_message(e) };
     }
   }
 
@@ -207,6 +216,7 @@ export class OAuthFlowService {
 
   close(): void {
     clearInterval(this.cleanup_timer);
+    clearInterval(this.refresh_timer);
   }
 
   // ── private ──
@@ -266,6 +276,22 @@ export class OAuthFlowService {
     }
 
     return data;
+  }
+
+  private async _refresh_expiring_tokens(): Promise<void> {
+    for (const config of this.store.list()) {
+      if (!config.enabled || !config.expires_at) continue;
+      const preset = get_preset(config.service_type);
+      if (!preset?.supports_refresh) continue;
+
+      const margin = new Date(config.expires_at).getTime() - Date.now();
+      if (margin > REFRESH_MARGIN_MS) continue;
+
+      const result = await this.refresh_token(config.instance_id);
+      if (!result.ok) {
+        log.warn("auto-refresh failed", { instance_id: config.instance_id, error: result.error });
+      }
+    }
   }
 
   private _prune_expired(): void {

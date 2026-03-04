@@ -1,0 +1,53 @@
+services:
+  docker-proxy:
+    image: tecnativa/docker-socket-proxy
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      CONTAINERS: 1          # create/start/kill/inspect/list/events/stats
+      IMAGES: 0
+      NETWORKS: 0
+      VOLUMES: 0
+      POST: 1                # container create/start/kill 등 POST 허용
+
+  orchestrator:
+    build:
+      context: .
+      target: full                        # CLI 에이전트(Claude, Codex, Gemini) 포함
+    container_name: soulflow-orchestrator
+    restart: unless-stopped
+    depends_on:
+      phi4:
+        condition: service_started
+      docker-proxy:
+        condition: service_started
+    ports:
+      - "${DASHBOARD_PORT:-4200}:4200"
+    volumes:
+      - ${WORKSPACE_PATH:-./workspace2}:/data
+      - cli-auth-claude:/root/.claude      # 컨테이너 내부 CLI OAuth 토큰 영속
+      - cli-auth-codex:/root/.codex
+      - cli-auth-gemini:/root/.gemini
+    environment:
+      - WORKSPACE=/data
+      - NODE_ENV=production
+      - SKIP_INSTANCE_LOCK=1
+      - DOCKER_HOST=tcp://docker-proxy:2375
+
+  phi4:
+    image: ollama/ollama:latest
+    container_name: orchestrator-phi4
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - phi4-data:/root/.ollama
+    devices:
+      - nvidia.com/gpu=all
+
+volumes:
+  phi4-data:
+  cli-auth-claude:
+  cli-auth-codex:
+  cli-auth-gemini:

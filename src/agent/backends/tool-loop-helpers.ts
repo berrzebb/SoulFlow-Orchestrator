@@ -3,7 +3,7 @@
 import type { ToolExecutionContext, ToolLike } from "../tools/types.js";
 import type { AgentEvent, AgentEventSource, AgentFinishReason, AgentHooks } from "../agent.types.js";
 import type { LlmUsage } from "../../providers/types.js";
-import { now_iso } from "../../utils/common.js";
+import { now_iso, error_message} from "../../utils/common.js";
 
 export type UsageAccumulator = {
   input: number;
@@ -44,7 +44,7 @@ export async function execute_single_tool(
     try {
       text = await executor.execute(params, ctx);
     } catch (e) {
-      text = `Error: ${e instanceof Error ? e.message : String(e)}`;
+      text = `Error: ${error_message(e)}`;
       is_error = true;
     }
   } else {

@@ -1,4 +1,5 @@
 import type { CommandContext, CommandHandler } from "./types.js";
+import { escape_regexp } from "../../utils/common.js";
 
 /** 등록된 핸들러를 순회하며 첫 번째 매칭되는 핸들러에 위임. 오타 시 퍼지 매칭. */
 export class CommandRouter {
@@ -43,7 +44,7 @@ export class CommandRouter {
     const original_name = ctx.command.name;
     const content = String(ctx.message.content || "");
     const fixed_content = content.replace(
-      new RegExp(`^/\\s*${escape_regex(original_name)}`, "i"),
+      new RegExp(`^/\\s*${escape_regexp(original_name)}`, "i"),
       `/${corrected_name}`,
     );
     return {
@@ -75,6 +76,3 @@ function levenshtein(a: string, b: string): number {
   return prev[n];
 }
 
-function escape_regex(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}

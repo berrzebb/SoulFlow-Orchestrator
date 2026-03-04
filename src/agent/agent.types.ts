@@ -179,8 +179,13 @@ export type AgentRunOptions = {
   enable_thinking?: boolean;
   /** thinking 최대 토큰 수. SDK: maxThinkingTokens. enable_thinking=true일 때만 유효. */
   max_thinking_tokens?: number;
-  /** 비용 상한 (SDK만 지원). */
+  /** 비용 상한. SDK: max_budget_usd, PTY(Claude): --max-budget-usd. */
   max_budget_usd?: number;
+
+  /** 추가 작업 디렉토리. PTY: --add-dir / --include-directories. */
+  add_dirs?: string[];
+  /** 세션 비영구화. PTY(Claude): --no-session-persistence, PTY(Codex): --ephemeral. */
+  ephemeral?: boolean;
 
   /** 허용 도구 이름 목록. SDK: allowedTools. */
   allowed_tools?: string[];
@@ -192,6 +197,9 @@ export type AgentRunOptions = {
 
   /** 실행 중 외부 입력을 수신할 콜백 등록. 백엔드가 지원할 때만 호출. */
   register_send_input?: (fn: (text: string) => void) => void;
+
+  /** complete 후 followup 대기 시간 (ms). task HITL용. 0 = 대기 없음 (기본). */
+  wait_for_input_ms?: number;
 
   /** 도구 실행 시 전달할 요청별 컨텍스트. set_context() 전역 뮤테이션 대신 사용. */
   tool_context?: Partial<import("./tools/types.js").ToolExecutionContext>;

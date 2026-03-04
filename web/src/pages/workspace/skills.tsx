@@ -1,6 +1,5 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRef } from "react";
 import { api } from "../../api/client";
 import { Badge } from "../../components/badge";
 import { Modal } from "../../components/modal";
@@ -123,28 +122,28 @@ function ToolPicker({ content, onChange, all_tools, native_tools, oauth_services
 
   if (all_tools.length === 0 && native_tools.length === 0 && oauth_services.length === 0) return null;
   return (
-    <div style={{ padding: "6px 10px", borderBottom: "1px solid var(--line)", background: "var(--panel-elevated)", flexShrink: 0, display: "flex", flexDirection: "column", gap: 4 }}>
+    <div className="ws-chip-bar">
       {all_tools.length > 0 && (
-        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 4 }}>
-          <span style={{ fontSize: 10, color: "var(--muted)", fontWeight: 600, marginRight: 2 }}>{t("skills.tools")}:</span>
+        <div className="ws-chip-row">
+          <span className="ws-chip-label text-muted">{t("skills.tools")}:</span>
           {all_tools.map((tool) => chip(tool, tools_set.has(tool), () => toggle_tool(tool)))}
         </div>
       )}
       {native_tools.length > 0 && (
-        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 4 }}>
-          <span style={{ fontSize: 10, color: "var(--ok)", fontWeight: 600, marginRight: 2 }}>SDK:</span>
+        <div className="ws-chip-row">
+          <span className="ws-chip-label text-ok">SDK:</span>
           {native_tools.map((tool) => chip(tool, tools_set.has(tool), () => toggle_tool(tool), "var(--ok)"))}
         </div>
       )}
       {oauth_services.length > 0 && (
-        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 4 }}>
-          <span style={{ fontSize: 10, color: "var(--warn)", fontWeight: 600, marginRight: 2 }}>OAuth:</span>
+        <div className="ws-chip-row">
+          <span className="ws-chip-label text-warn">OAuth:</span>
           {oauth_services.map((svc) => chip(svc, oauth_set.has(svc), () => toggle_oauth(svc), "var(--warn)"))}
         </div>
       )}
       {roles.length > 0 && (
-        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 4 }}>
-          <span style={{ fontSize: 10, color: "var(--muted)", fontWeight: 600, marginRight: 2 }}>{t("skills.from_role")}:</span>
+        <div className="ws-chip-row">
+          <span className="ws-chip-label text-muted">{t("skills.from_role")}:</span>
           {roles.map((role) => (
             <button
               key={role.name}
@@ -230,7 +229,7 @@ export function SkillsTab() {
       setZipFile(null);
       if (fileRef.current) fileRef.current.value = "";
     } catch {
-      toast(t("common.error" as never) || "Error", "err");
+      toast(t("common.unknown_error"), "err");
     } finally {
       setImporting(false);
     }
@@ -280,102 +279,77 @@ export function SkillsTab() {
     <>
       <SplitPane
         left={
-          <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-            <div style={{ padding: "8px 10px", borderBottom: "1px solid var(--line)", display: "flex", gap: 4, flexShrink: 0 }}>
+          <div className="ws-col">
+            <div className="ws-toolbar">
               {selected && (
                 <button className="btn btn--xs" onClick={() => { setSelected(null); setEditContent(null); }}>{t("common.back")}</button>
               )}
               <button className="btn btn--xs" onClick={() => setShowImport(true)}>{t("skills.import")}</button>
               <button className="btn btn--xs" onClick={() => void refresh()}>{t("common.refresh")}</button>
             </div>
-            <div style={{ overflowY: "auto", flex: 1 }}>
+            <div className="ws-scroll">
               {roles.length > 0 && (
                 <>
-                  <div style={{ padding: "6px 14px 2px", fontSize: 11, color: "var(--accent)", fontWeight: 600 }}>{t("skills.category_roles")}</div>
+                  <div className="ws-group-label" style={{ color: "var(--accent)" }}>{t("skills.category_roles")}</div>
                   {roles.map((s) => (
-                    <div
-                      key={s.name}
-                      onClick={() => handle_select(s.name)}
-                      style={{
-                        padding: "8px 14px", cursor: "pointer", fontSize: 12,
-                        background: selected === s.name ? "var(--panel-elevated)" : "none",
-                        borderLeft: selected === s.name ? "3px solid var(--accent)" : "3px solid transparent",
-                      }}
-                    >
-                      <div style={{ fontWeight: 600 }}>{s.name}</div>
-                      <div style={{ color: "var(--muted)", marginTop: 2, display: "flex", gap: 4 }}>
-                        <Badge status={s.source} variant="info" />
-                      </div>
+                    <div key={s.name} onClick={() => handle_select(s.name)} className={`ws-item${selected === s.name ? " ws-item--active" : ""}`}>
+                      <div className="ws-item__name">{s.name}</div>
+                      <div className="ws-item__meta"><Badge status={s.source} variant="info" /></div>
                     </div>
                   ))}
                 </>
               )}
               {tools.length > 0 && (
                 <>
-                  <div style={{ padding: "6px 14px 2px", fontSize: 11, color: "var(--ok)", fontWeight: 600, borderTop: roles.length > 0 ? "1px solid var(--line)" : undefined }}>{t("skills.category_tools")}</div>
+                  <div className="ws-group-label text-ok" style={roles.length > 0 ? { borderTop: "1px solid var(--line)" } : undefined}>{t("skills.category_tools")}</div>
                   {tools.map((s) => (
-                    <div
-                      key={s.name}
-                      onClick={() => handle_select(s.name)}
-                      style={{
-                        padding: "8px 14px", cursor: "pointer", fontSize: 12,
-                        background: selected === s.name ? "var(--panel-elevated)" : "none",
-                        borderLeft: selected === s.name ? "3px solid var(--ok)" : "3px solid transparent",
-                      }}
-                    >
-                      <div style={{ fontWeight: 600 }}>{s.name}</div>
-                      <div style={{ color: "var(--muted)", marginTop: 2, display: "flex", gap: 4 }}>
-                        <Badge status={s.source} variant="info" />
-                      </div>
+                    <div key={s.name} onClick={() => handle_select(s.name)} className={`ws-item${selected === s.name ? " ws-item--active ws-item--active-ok" : ""}`}>
+                      <div className="ws-item__name">{s.name}</div>
+                      <div className="ws-item__meta"><Badge status={s.source} variant="info" /></div>
                     </div>
                   ))}
                 </>
               )}
-              {skills.length === 0 && <p className="empty" style={{ padding: 14, fontSize: 12 }}>-</p>}
+              {skills.length === 0 && <p className="empty" style={{ padding: 14 }}>-</p>}
             </div>
           </div>
         }
         right={
           !selected || !detail ? (
-            <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-              <div style={{ padding: "10px 14px", borderBottom: "1px solid var(--line)", flexShrink: 0 }}>
-                <span style={{ fontWeight: 600, fontSize: 13 }}>{t("workspace.select_item")}</span>
+            <div className="ws-col">
+              <div className="ws-detail-header">
+                <span className="fw-600" style={{ fontSize: 13 }}>{t("workspace.select_item")}</span>
               </div>
               <p className="empty">{t("workspace.select_item")}</p>
             </div>
           ) : (
             <div style={{ display: "flex", height: "100%" }}>
-              {/* 메타데이터 패널 */}
-              <div style={{ width: 200, borderRight: "1px solid var(--line)", overflow: "auto", flexShrink: 0 }}>
+              <div className="ws-meta-panel">
                 {detail.metadata && (
                   <table className="data-table" style={{ fontSize: 11 }}>
                     <tbody>
-                      <tr><td style={{ color: "var(--muted)" }}>{t("common.type")}</td><td><Badge status={detail.metadata.type} variant="info" /></td></tr>
-                      <tr><td style={{ color: "var(--muted)" }}>{t("skills.source")}</td><td><Badge status={detail.metadata.source} variant={detail.metadata.source === "builtin" ? "off" : "ok"} /></td></tr>
-                      {detail.metadata.model && <tr><td style={{ color: "var(--muted)" }}>{t("skills.model")}</td><td>{detail.metadata.model}</td></tr>}
-                      {detail.metadata.role && <tr><td style={{ color: "var(--muted)" }}>{t("skills.role")}</td><td>{detail.metadata.role}</td></tr>}
-                      {detail.metadata.aliases.length > 0 && <tr><td style={{ color: "var(--muted)" }}>{t("skills.aliases")}</td><td style={{ fontSize: 10 }}>{detail.metadata.aliases.join(", ")}</td></tr>}
-                      {detail.metadata.tools.length > 0 && <tr><td style={{ color: "var(--muted)" }}>{t("skills.tools")}</td><td style={{ fontSize: 10 }}>{detail.metadata.tools.join(", ")}</td></tr>}
+                      <tr><td className="text-muted">{t("common.type")}</td><td><Badge status={detail.metadata.type} variant="info" /></td></tr>
+                      <tr><td className="text-muted">{t("skills.source")}</td><td><Badge status={detail.metadata.source} variant={detail.metadata.source === "builtin" ? "off" : "ok"} /></td></tr>
+                      {detail.metadata.model && <tr><td className="text-muted">{t("skills.model")}</td><td>{detail.metadata.model}</td></tr>}
+                      {detail.metadata.role && <tr><td className="text-muted">{t("skills.role")}</td><td>{detail.metadata.role}</td></tr>}
+                      {detail.metadata.aliases.length > 0 && <tr><td className="text-muted">{t("skills.aliases")}</td><td className="text-xs">{detail.metadata.aliases.join(", ")}</td></tr>}
+                      {detail.metadata.triggers.length > 0 && <tr><td className="text-muted">{t("skills.triggers")}</td><td className="text-xs">{detail.metadata.triggers.join(", ")}</td></tr>}
+                      {detail.metadata.tools.length > 0 && <tr><td className="text-muted">{t("skills.tools")}</td><td className="text-xs">{detail.metadata.tools.join(", ")}</td></tr>}
+                      {detail.metadata.requirements.length > 0 && <tr><td className="text-muted">{t("skills.requirements")}</td><td className="text-xs">{detail.metadata.requirements.join(", ")}</td></tr>}
+                      {detail.metadata.shared_protocols.length > 0 && <tr><td className="text-muted">{t("skills.protocols")}</td><td className="text-xs">{detail.metadata.shared_protocols.join(", ")}</td></tr>}
+                      {detail.metadata.soul && <tr><td className="text-muted">{t("skills.soul")}</td><td className="text-xs">{detail.metadata.soul}</td></tr>}
+                      {detail.metadata.heart && <tr><td className="text-muted">{t("skills.heart")}</td><td className="text-xs">{detail.metadata.heart}</td></tr>}
+                      {detail.metadata.always && <tr><td className="text-muted">{t("skills.always")}</td><td><Badge status={t("common.yes")} variant="ok" /></td></tr>}
+                      {detail.metadata.path && <tr><td className="text-muted">{t("skills.path")}</td><td className="text-xs" style={{ wordBreak: "break-all" }}>{detail.metadata.path}</td></tr>}
                     </tbody>
                   </table>
                 )}
               </div>
-              {/* 파일 내용 패널 */}
-              <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-                <div style={{ display: "flex", alignItems: "center", borderBottom: "1px solid var(--line)", flexShrink: 0, overflowX: "auto" }}>
+              <div className="ws-col" style={{ overflow: "hidden" }}>
+                <div className="ws-tab-bar">
                   <div style={{ display: "flex", flex: 1 }}>
                     {["SKILL.md", ...(detail.references?.map((r) => r.name) ?? [])].map((name) => (
-                      <button
-                        key={name}
-                        onClick={() => handle_tab_change(name)}
-                        style={{
-                          padding: "6px 12px", fontSize: 11, border: "none",
-                          borderBottom: activeFile === name ? "2px solid var(--accent)" : "2px solid transparent",
-                          background: "none", cursor: "pointer",
-                          color: activeFile === name ? "var(--accent)" : "var(--muted)",
-                          whiteSpace: "nowrap", flexShrink: 0,
-                        }}
-                      >
+                      <button key={name} onClick={() => handle_tab_change(name)} className={`ws-tab${activeFile === name ? " ws-tab--active" : ""}`}>
                         {name}
                       </button>
                     ))}
@@ -405,19 +379,14 @@ export function SkillsTab() {
                 )}
                 {is_editable ? (
                   <textarea
+                    className={`ws-editor ${editContent !== null ? "ws-editor--editing" : "ws-editor--readonly"}`}
                     value={active_content}
                     onChange={(e) => setEditContent(e.target.value)}
-                    style={{
-                      flex: 1, resize: "none", border: "none",
-                      background: editContent !== null ? "var(--bg)" : "var(--panel-elevated)",
-                      color: "var(--text)", fontFamily: "var(--font-mono)", fontSize: 11,
-                      lineHeight: 1.6, padding: 10, outline: "none",
-                    }}
                   />
                 ) : (
-                  <div style={{ flex: 1, overflow: "auto", padding: 10 }}>
+                  <div className="ws-preview">
                     {active_content ? (
-                      <pre style={{ margin: 0, fontSize: 11, whiteSpace: "pre-wrap", lineHeight: 1.6 }}>{active_content}</pre>
+                      <pre>{active_content}</pre>
                     ) : (
                       <p className="empty">{t("skills.no_content")}</p>
                     )}
@@ -436,22 +405,16 @@ export function SkillsTab() {
         onConfirm={() => void confirm_import()}
         confirmLabel={importing ? "..." : t("skills.import")}
       >
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          <label style={{ fontSize: 12 }}>
-            <span style={{ display: "block", marginBottom: 4, color: "var(--muted)" }}>{t("skills.import_name")}</span>
-            <input
-              className="input"
-              value={importName}
-              onChange={(e) => setImportName(e.target.value)}
-              placeholder={t("skills.import_name_hint")}
-              style={{ width: "100%" }}
-            />
+        <div className="ws-import-form">
+          <label className="ws-import-label">
+            <span className="ws-import-hint">{t("skills.import_name")}</span>
+            <input className="form-input" value={importName} onChange={(e) => setImportName(e.target.value)} placeholder={t("skills.import_name_hint")} />
           </label>
-          <label style={{ fontSize: 12 }}>
-            <span style={{ display: "block", marginBottom: 4, color: "var(--muted)" }}>{t("skills.import_file")}</span>
-            <input ref={fileRef} type="file" accept=".zip" onChange={handle_import_file} style={{ fontSize: 12 }} />
+          <label className="ws-import-label">
+            <span className="ws-import-hint">{t("skills.import_file")}</span>
+            <input ref={fileRef} type="file" accept=".zip" onChange={handle_import_file} className="text-xs" />
             {zipFile && (
-              <span style={{ fontSize: 11, color: "var(--muted)", marginTop: 4, display: "block" }}>
+              <span className="text-xs text-muted" style={{ marginTop: 4, display: "block" }}>
                 {zipFile.name} ({Math.round(zipFile.size / 1024)} KB)
               </span>
             )}

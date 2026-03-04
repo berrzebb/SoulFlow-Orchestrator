@@ -2,7 +2,22 @@
 
 Web-based management UI accessible at `http://127.0.0.1:4200`.
 
+Built with **React + Vite**. Supports **Korean/English i18n** (auto-detected from browser locale). Uses a CSS design token system (`var(--sp-*)`, `var(--fs-*)`, `var(--line)`, `var(--radius-*)`) for consistent theming.
+
+Global state management via Zustand (`store.ts`) — SSE connection status, sidebar, theme, web streaming.
+
 Navigate between 7 sections via the sidebar. Toggle dark/light theme with the button at the bottom of the sidebar.
+
+## Setup Wizard
+
+On first launch with no providers configured, the dashboard auto-redirects to `/setup`.
+
+| Step | Content |
+|------|---------|
+| 1 | Select AI providers + enter API keys |
+| 2 | Choose default executor/orchestrator |
+| 3 | Enter agent alias |
+| 4 | Complete → redirect to Overview after 1.5s |
 
 ## Pages
 
@@ -10,11 +25,11 @@ Navigate between 7 sections via the sidebar. Toggle dark/light theme with the bu
 |------|------|----------|
 | Overview | `/` | Runtime status summary, system metrics, SSE live feed |
 | Workspace | `/workspace` | Memory · sessions · skills · cron · tools · agents · templates · OAuth (8 tabs) |
-| Chat | `/chat` | Web-based agent conversation |
+| Chat | `/chat` | Web-based agent conversation (markdown rendering + code highlighting) |
 | Channels | `/channels` | Channel connection status · global settings |
 | Providers | `/providers` | Agent provider CRUD |
 | Secrets | `/secrets` | AES-256-GCM secret management |
-| Settings | `/settings` | Global runtime settings |
+| Settings | `/settings` | Global runtime settings (section tabs, inline edit, ToggleSwitch) |
 
 ## Overview
 
@@ -81,6 +96,18 @@ Edit system prompt templates.
 ### OAuth
 Manage OAuth 2.0 external service integrations → [OAuth Guide](./oauth.md)
 
+## Chat Page
+
+Web-based agent conversation for testing without Slack/Telegram.
+
+- **Markdown rendering**: Agent responses rendered with full GFM support (headings, bold, lists, tables, blockquotes)
+- **Code highlighting**: Fenced code blocks with language-specific syntax highlighting (`highlight.js`)
+- **Security**: `rehype-sanitize` blocks `<script>`, `<iframe>`, `javascript:` URLs and XSS vectors
+- **Streaming**: Partial markdown rendered progressively as the agent streams
+- **Approval banner**: Inline approve/deny UI for tool approval requests
+- **Media preview**: File attachments rendered inline
+- **Agent selector**: Switch between configured agents
+
 ## Providers Page
 
 Add, edit, delete, and test agent backends.
@@ -101,12 +128,32 @@ Manage AES-256-GCM encrypted secrets.
 
 ## Live Feed
 
-The Overview page shows real-time events via SSE (Server-Sent Events).
+The Overview page shows real-time events via SSE (Server-Sent Events). `SseManager` broadcasts 7 event types:
 
-- Agent start/complete
-- Task step transitions
-- Channel message received
-- Circuit breaker state changes
+| SSE Event | Purpose |
+|-----------|---------|
+| `process` | Execution start/complete |
+| `message` | Inbound/outbound messages (keeps last 40) |
+| `cron` | Cron job events |
+| `progress` | Progress updates |
+| `task` | Task state changes |
+| `web_stream` | Web chat streaming |
+| `agent` | Agent events (slim fields only) |
+
+## Backend Architecture
+
+The dashboard backend is split into these services:
+
+| Service | Role |
+|---------|------|
+| `RouteContext` | Shared handler context (req/res + `json()`, `read_body()`, `add_sse_client()` action functions) |
+| `SseManager` | SSE client management + 7-type event broadcast |
+| `StateBuilder` | Pure functions for dashboard state assembly (`build_dashboard_state`, `build_merged_tasks`) |
+| `StaticServer` | SPA static asset serving + `index.html` fallback (html: no-store, others: immutable) |
+| `MediaTokenStore` | Token-based media serving (workspace path validation, 1-hour TTL) |
+| `OpsFactory` | 11 domain ops factories (template, channel, agent-provider, bootstrap, memory, workspace, oauth, config, skill, tool, cli-auth) |
+
+22 route handlers in `src/dashboard/routes/` — each follows the `async (ctx: RouteContext) => boolean` pattern.
 
 ## Access Control
 

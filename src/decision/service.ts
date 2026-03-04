@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 import type {
   AppendDecisionInput,
   AppendDecisionResult,
@@ -7,18 +7,14 @@ import type {
   ListDecisionsFilter,
 } from "./types.js";
 import { DecisionStore } from "./store.js";
-import { now_iso } from "../utils/common.js";
-
-function normalize_space(value: string): string {
-  return String(value || "").replace(/\s+/g, " ").trim();
-}
+import { now_iso, short_id, normalize_text } from "../utils/common.js";
 
 function normalize_key(value: string): string {
-  return normalize_space(value).toLowerCase().replace(/[\s-]+/g, "_");
+  return normalize_text(value).toLowerCase().replace(/[\s-]+/g, "_");
 }
 
 function normalize_value(value: string): string {
-  return normalize_space(value).toLowerCase();
+  return normalize_text(value).toLowerCase();
 }
 
 function fingerprint_of(parts: string[]): string {
@@ -92,18 +88,18 @@ export class DecisionService {
       }
 
       const record: DecisionRecord = {
-        id: randomUUID().slice(0, 12),
+        id: short_id(),
         scope: input.scope,
         scope_id,
         key: input.key,
         canonical_key,
-        value: normalize_space(input.value),
+        value: normalize_text(input.value),
         normalized_value,
-        rationale: input.rationale ? normalize_space(input.rationale) : null,
+        rationale: input.rationale ? normalize_text(input.rationale) : null,
         priority: input.priority ?? 1,
         status: "active",
         source: input.source ?? "system",
-        tags: Array.isArray(input.tags) ? input.tags.map((v) => normalize_space(v)).filter(Boolean) : [],
+        tags: Array.isArray(input.tags) ? input.tags.map((v) => normalize_text(v)).filter(Boolean) : [],
         supersedes_id: activeId || null,
         fingerprint: fp,
         created_at: now,

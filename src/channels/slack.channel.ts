@@ -1,9 +1,8 @@
-import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { basename } from "node:path";
 import { WebClient } from "@slack/web-api";
 import type { InboundMessage, MediaItem, OutboundMessage } from "../bus/types.js";
-import { now_iso } from "../utils/common.js";
+import { now_iso, error_message, short_id} from "../utils/common.js";
 import { BaseChannel } from "./base.js";
 
 type SlackChannelOptions = {
@@ -44,7 +43,7 @@ function to_inbound_message(channel: SlackChannel, raw: Record<string, unknown>,
     })
     .filter((m): m is MediaItem => Boolean(m));
   return {
-    id: String(raw.ts || randomUUID().slice(0, 12)),
+    id: String(raw.ts || short_id()),
     provider: "slack",
     channel: "slack",
     sender_id,
@@ -158,7 +157,7 @@ export class SlackChannel extends BaseChannel {
       }
       return { ok: true, message_id: root_message_ts || String(message.reply_to || "") };
     } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
+      const msg = error_message(error);
       this.log.warn("send failed", { chat_id: channel, error: msg });
       return { ok: false, error: msg };
     } finally {
@@ -230,7 +229,7 @@ export class SlackChannel extends BaseChannel {
         .map((m) => to_inbound_message(this, m, chat_id))
         .filter((m): m is InboundMessage => Boolean(m));
     } catch (error) {
-      this.last_error = error instanceof Error ? error.message : String(error);
+      this.last_error = error_message(error);
       this.log.warn("read failed", { chat_id, error: this.last_error });
       return [];
     }
@@ -254,7 +253,7 @@ export class SlackChannel extends BaseChannel {
       await this.client.chat.update({ channel: chat_id, ts: message_id, text: String(content || "") });
       return { ok: true };
     } catch (error) {
-      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+      return { ok: false, error: error_message(error) };
     }
   }
 
@@ -279,7 +278,7 @@ export class SlackChannel extends BaseChannel {
       }
       return { ok: true };
     } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
+      const msg = error_message(error);
       if (msg.includes(ignore_error)) return { ok: true };
       return { ok: false, error: msg };
     }
@@ -297,7 +296,7 @@ export class SlackChannel extends BaseChannel {
       });
       return { ok: true, message_id: String(result.ts || "") };
     } catch (error) {
-      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+      return { ok: false, error: error_message(error) };
     }
   }
 
@@ -310,7 +309,7 @@ export class SlackChannel extends BaseChannel {
       await (this.client.filesUploadV2 as (a: unknown) => Promise<unknown>)(args);
       return { ok: true };
     } catch (error) {
-      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+      return { ok: false, error: error_message(error) };
     }
   }
 
@@ -323,7 +322,7 @@ export class SlackChannel extends BaseChannel {
       await (this.client.filesUploadV2 as (a: unknown) => Promise<unknown>)(args);
       return { ok: true };
     } catch (error) {
-      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+      return { ok: false, error: error_message(error) };
     }
   }
 }

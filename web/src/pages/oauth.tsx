@@ -2,7 +2,9 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
 import { Badge } from "../components/badge";
+import { Modal, FormModal } from "../components/modal";
 import { useToast } from "../components/toast";
+import { useTestMutation } from "../hooks/use-test-mutation";
 import { useT } from "../i18n";
 
 interface OAuthIntegration {
@@ -14,6 +16,7 @@ interface OAuthIntegration {
   token_configured: boolean;
   expired: boolean;
   expires_at: string | null;
+  has_client_secret: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -34,12 +37,18 @@ interface OAuthPreset {
 
 type ModalMode = { kind: "add" } | { kind: "edit"; instance: OAuthIntegration };
 
+function parse_csv(s: string): string[] {
+  return s.split(",").map((x) => x.trim()).filter(Boolean);
+}
+
 export default function OAuthPage() {
   const qc = useQueryClient();
   const { toast } = useToast();
   const t = useT();
   const [modal, setModal] = useState<ModalMode | null>(null);
   const [presetModal, setPresetModal] = useState<OAuthPreset | null | "add">(null);
+  const [deleteTarget, setDeleteTarget] = useState<OAuthIntegration | null>(null);
+  const [deletePresetTarget, setDeletePresetTarget] = useState<OAuthPreset | null>(null);
 
   const { data: integrations, isLoading } = useQuery<OAuthIntegration[]>({
     queryKey: ["oauth-integrations"],
@@ -78,37 +87,35 @@ export default function OAuthPage() {
       </div>
 
       {isLoading ? (
-        <div className="stat-grid" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))" }}>
+        <div className="stat-grid stat-grid--wide">
           <div className="skeleton skeleton-card" />
           <div className="skeleton skeleton-card" />
         </div>
       ) : !integrations?.length ? (
         <p className="empty">{t("oauth.no_integrations")}</p>
       ) : (
-        <div className="stat-grid" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))" }}>
+        <div className="stat-grid stat-grid--wide">
           {integrations.map((inst) => (
             <OAuthCard
               key={inst.instance_id}
               instance={inst}
               presets={presets}
               onEdit={() => setModal({ kind: "edit", instance: inst })}
-              onRemove={() => {
-                if (confirm(t("oauth.remove_confirm", { label: inst.label || inst.instance_id }))) remove.mutate(inst.instance_id);
-              }}
+              onRemove={() => setDeleteTarget(inst)}
             />
           ))}
         </div>
       )}
 
       {/* ── Presets ── */}
-      <div className="section-header" style={{ marginTop: 32 }}>
+      <div className="section-header section-header--spaced">
         <h2>{t("oauth.presets_title")}</h2>
         <button className="btn btn--sm btn--accent" onClick={() => setPresetModal("add")}>
           {t("oauth.add_preset")}
         </button>
       </div>
 
-      <div className="stat-grid" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))" }}>
+      <div className="stat-grid stat-grid--wider">
         {builtin_presets.map((p) => (
           <PresetCard key={p.service_type} preset={p} onEdit={() => setPresetModal(p)} onRemove={null} />
         ))}
@@ -117,15 +124,45 @@ export default function OAuthPage() {
             key={p.service_type}
             preset={p}
             onEdit={() => setPresetModal(p)}
-            onRemove={() => {
-              if (confirm(t("oauth.preset_remove_confirm", { label: p.label }))) removePreset.mutate(p.service_type);
-            }}
+            onRemove={() => setDeletePresetTarget(p)}
           />
         ))}
         {custom_presets.length === 0 && builtin_presets.length === presets.filter((p) => p.service_type !== "custom").length && (
           <p className="empty" style={{ gridColumn: "1 / -1" }}>{t("oauth.no_custom_presets")}</p>
         )}
       </div>
+
+      <Modal
+        open={!!deleteTarget}
+        title={t("oauth.remove_title")}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          if (deleteTarget) remove.mutate(deleteTarget.instance_id);
+          setDeleteTarget(null);
+        }}
+        confirmLabel={t("common.remove")}
+        danger
+      >
+        <p style={{ fontSize: "var(--fs-sm)" }}>
+          {t("oauth.remove_confirm", { label: deleteTarget?.label || deleteTarget?.instance_id || "" })}
+        </p>
+      </Modal>
+
+      <Modal
+        open={!!deletePresetTarget}
+        title={t("oauth.preset_remove_title")}
+        onClose={() => setDeletePresetTarget(null)}
+        onConfirm={() => {
+          if (deletePresetTarget) removePreset.mutate(deletePresetTarget.service_type);
+          setDeletePresetTarget(null);
+        }}
+        confirmLabel={t("common.remove")}
+        danger
+      >
+        <p style={{ fontSize: "var(--fs-sm)" }}>
+          {t("oauth.preset_remove_confirm", { label: deletePresetTarget?.label || "" })}
+        </p>
+      </Modal>
 
       {modal && (
         <OAuthModal
@@ -164,28 +201,26 @@ function PresetCard({ preset, onEdit, onRemove }: {
 
   return (
     <div className="stat-card">
-      <div className="stat-card__header" style={{ flexWrap: "wrap", gap: 4 }}>
+      <div className="stat-card__header stat-card__header--wrap">
         <Badge
           status={preset.is_builtin ? t("oauth.builtin_badge") : t("oauth.custom_badge")}
           variant={preset.is_builtin ? "ok" : "info"}
         />
         <Badge status={preset.service_type} variant="info" />
       </div>
-      <div className="stat-card__value" style={{ fontSize: "var(--fs-md)" }}>{preset.label}</div>
-      <div className="stat-card__label" style={{ fontSize: "var(--fs-xs)", wordBreak: "break-all" }}>
+      <div className="stat-card__value stat-card__value--md">{preset.label}</div>
+      <div className="stat-card__label stat-card__label--break">
         {preset.auth_url}
       </div>
       {preset.token_auth_method === "basic" && (
-        <div style={{ fontSize: "var(--fs-xs)", color: "var(--muted)", marginTop: 2 }}>
-          {t("oauth.token_auth_basic")}
-        </div>
+        <div className="stat-card__extra">{t("oauth.token_auth_basic")}</div>
       )}
       {preset.default_scopes.length > 0 && (
-        <div style={{ fontSize: "var(--fs-xs)", color: "var(--muted)", marginTop: 4, display: "flex", gap: 4, flexWrap: "wrap" }}>
+        <div className="stat-card__tags">
           {preset.default_scopes.map((s) => <Badge key={s} status={s} variant="info" />)}
         </div>
       )}
-      <div style={{ marginTop: "auto", paddingTop: 8, display: "flex", gap: 6 }}>
+      <div className="stat-card__actions">
         <button className="btn btn--xs" onClick={onEdit}>{t("common.edit")}</button>
         {!preset.is_builtin && onRemove && (
           <button className="btn btn--xs btn--danger" onClick={onRemove}>{t("common.remove")}</button>
@@ -203,35 +238,29 @@ function OAuthCard({ instance, presets, onEdit, onRemove }: {
   onEdit: () => void;
   onRemove: () => void;
 }) {
-  const [testing, setTesting] = useState(false);
-  const [connecting, setConnecting] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
   const [showConnectModal, setShowConnectModal] = useState(false);
-  const [testResult, setTestResult] = useState<{ ok: boolean; detail?: string; error?: string } | null>(null);
   const { toast } = useToast();
   const t = useT();
   const qc = useQueryClient();
 
   const preset = presets.find((p) => p.service_type === instance.service_type);
   const service_label = preset?.label || instance.service_type;
-  const needs_secret_on_connect = preset?.token_auth_method === "basic";
+  const needs_secret_on_connect = preset?.token_auth_method === "basic" && !instance.has_client_secret;
 
   const connect = useMutation({
     mutationFn: (client_secret?: string) => api.post<{ ok: boolean; auth_url?: string; error?: string }>(
       `/api/oauth/integrations/${encodeURIComponent(instance.instance_id)}/auth`,
       client_secret ? { client_secret } : {},
     ),
-    onMutate: () => setConnecting(true),
     onSuccess: (r) => {
       if (r.ok && r.auth_url) {
         window.open(r.auth_url, "oauth_popup", "width=600,height=700");
         setTimeout(() => void qc.invalidateQueries({ queryKey: ["oauth-integrations"] }), 3000);
       } else {
-        toast(r.error || "Unknown error", "err");
+        toast(r.error || t("common.unknown_error"), "err");
       }
     },
     onError: (err) => toast(err.message, "err"),
-    onSettled: () => setConnecting(false),
   });
 
   const handle_connect_click = () => {
@@ -246,29 +275,18 @@ function OAuthCard({ instance, presets, onEdit, onRemove }: {
     mutationFn: () => api.post<{ ok: boolean; error?: string }>(
       `/api/oauth/integrations/${encodeURIComponent(instance.instance_id)}/refresh`,
     ),
-    onMutate: () => setRefreshing(true),
     onSuccess: (r) => {
       toast(r.ok ? t("oauth.refreshed") : t("oauth.refresh_failed", { error: r.error || "" }), r.ok ? "ok" : "err");
       void qc.invalidateQueries({ queryKey: ["oauth-integrations"] });
     },
     onError: (err) => toast(t("oauth.refresh_failed", { error: err.message }), "err"),
-    onSettled: () => setRefreshing(false),
   });
 
-  const test = useMutation({
-    mutationFn: () => api.post<{ ok: boolean; detail?: string; error?: string }>(
-      `/api/oauth/integrations/${encodeURIComponent(instance.instance_id)}/test`,
-    ),
-    onMutate: () => { setTesting(true); setTestResult(null); },
-    onSuccess: (r) => {
-      setTestResult(r);
-      toast(r.ok ? t("oauth.test_passed") : t("oauth.test_failed", { error: r.error || "" }), r.ok ? "ok" : "err");
-    },
-    onError: (err) => {
-      setTestResult({ ok: false, error: err.message });
-      toast(t("oauth.test_failed", { error: err.message }), "err");
-    },
-    onSettled: () => setTesting(false),
+  const { testing, testResult, test } = useTestMutation({
+    url: `/api/oauth/integrations/${encodeURIComponent(instance.instance_id)}/test`,
+    onOk: () => t("oauth.test_passed"),
+    onFail: (r) => t("oauth.test_failed", { error: r.error || "" }),
+    onError: (err) => t("oauth.test_failed", { error: err.message }),
   });
 
   const status_variant = instance.token_configured
@@ -280,23 +298,23 @@ function OAuthCard({ instance, presets, onEdit, onRemove }: {
 
   return (
     <div className={`stat-card desk--${status_variant}`}>
-      <div className="stat-card__header" style={{ flexWrap: "wrap", gap: 4 }}>
+      <div className="stat-card__header stat-card__header--wrap">
         <Badge status={service_label} variant="info" />
         <Badge status={status_label} variant={status_variant} />
       </div>
-      <div className="stat-card__value" style={{ fontSize: "var(--fs-md)" }}>
+      <div className="stat-card__value stat-card__value--md">
         {instance.label || instance.instance_id}
       </div>
       <div className="stat-card__label">{instance.instance_id}</div>
       {instance.scopes.length > 0 && (
-        <div style={{ fontSize: "var(--fs-xs)", color: "var(--muted)", marginTop: 4, display: "flex", gap: 4, flexWrap: "wrap" }}>
+        <div className="stat-card__tags">
           {instance.scopes.map((s) => <Badge key={s} status={s} variant="info" />)}
         </div>
       )}
       {testResult && (
-        <div style={{ fontSize: "var(--fs-xs)", marginTop: 4 }}>
+        <div className="stat-card__tags">
           <Badge status={testResult.ok ? "pass" : "fail"} variant={testResult.ok ? "ok" : "err"} />
-          <span style={{ marginLeft: 4 }}>{testResult.ok ? testResult.detail : testResult.error}</span>
+          <span>{testResult.ok ? testResult.detail : testResult.error}</span>
         </div>
       )}
       {showConnectModal && (
@@ -305,14 +323,14 @@ function OAuthCard({ instance, presets, onEdit, onRemove }: {
           onConnect={(secret) => { setShowConnectModal(false); connect.mutate(secret); }}
         />
       )}
-      <div style={{ marginTop: "auto", paddingTop: 8, display: "flex", gap: 6, flexWrap: "wrap" }}>
-        <button className="btn btn--xs btn--accent" onClick={handle_connect_click} disabled={connecting}>
-          {connecting ? t("oauth.connecting") : t("oauth.connect")}
+      <div className="stat-card__actions">
+        <button className="btn btn--xs btn--accent" onClick={handle_connect_click} disabled={connect.isPending}>
+          {connect.isPending ? t("oauth.connecting") : t("oauth.connect")}
         </button>
         {instance.token_configured && (
           <>
-            <button className="btn btn--xs" onClick={() => refresh.mutate()} disabled={refreshing}>
-              {refreshing ? t("oauth.refreshing") : t("common.refresh")}
+            <button className="btn btn--xs" onClick={() => refresh.mutate()} disabled={refresh.isPending}>
+              {refresh.isPending ? t("oauth.refreshing") : t("common.refresh")}
             </button>
             <button className="btn btn--xs btn--ok" onClick={() => test.mutate()} disabled={testing}>
               {testing ? t("common.testing") : t("common.test")}
@@ -354,8 +372,7 @@ function OAuthModal({ mode, presets, onClose, onSaved }: {
   const is_custom = serviceType === "custom";
   const is_basic_auth = active_preset?.token_auth_method === "basic";
 
-  const parse_scopes = () => scopeText.split(",").map((s) => s.trim()).filter(Boolean);
-  const is_scope_selected = (s: string) => parse_scopes().includes(s);
+  const is_scope_selected = (s: string) => parse_csv(scopeText).includes(s);
 
   const handle_service_change = (type: string) => {
     setServiceType(type);
@@ -370,7 +387,7 @@ function OAuthModal({ mode, presets, onClose, onSaved }: {
   };
 
   const toggle_scope = (s: string) => {
-    const current = parse_scopes();
+    const current = parse_csv(scopeText);
     const next = current.includes(s) ? current.filter((x) => x !== s) : [...current, s];
     setScopeText(next.join(", "));
   };
@@ -383,7 +400,7 @@ function OAuthModal({ mode, presets, onClose, onSaved }: {
         await api.put(`/api/oauth/integrations/${encodeURIComponent(initial!.instance_id)}`, {
           label: label || initial!.instance_id,
           enabled,
-          scopes: parse_scopes(),
+          scopes: parse_csv(scopeText),
         });
         toast(t("oauth.updated"), "ok");
       } else {
@@ -391,7 +408,7 @@ function OAuthModal({ mode, presets, onClose, onSaved }: {
           service_type: serviceType,
           label: label || serviceType,
           client_id: clientId,
-          scopes: parse_scopes(),
+          scopes: parse_csv(scopeText),
         };
         if (clientSecret) body.client_secret = clientSecret;
         if (is_custom) {
@@ -410,134 +427,89 @@ function OAuthModal({ mode, presets, onClose, onSaved }: {
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <div className="modal__header">
-          <h3>{isEdit ? t("oauth.edit_title") : t("oauth.add_title")}</h3>
-          <button className="modal__close" onClick={onClose} aria-label={t("common.close_modal")}>x</button>
-        </div>
-        <form onSubmit={handleSubmit}>
-          <div className="modal__body" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            <div className="form-group">
-              <label className="form-label">{t("oauth.service_type")}</label>
-              {isEdit ? (
-                <input className="form-input" value={active_preset?.label || serviceType} disabled />
-              ) : (
-                <select className="form-input" value={serviceType} onChange={(e) => handle_service_change(e.target.value)}>
-                  {presets.map((p) => (
-                    <option key={p.service_type} value={p.service_type}>{p.label}</option>
-                  ))}
-                </select>
-              )}
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">{t("oauth.label")}</label>
-              <input className="form-input" value={label} onChange={(e) => setLabel(e.target.value)} placeholder={serviceType} />
-            </div>
-
-            {isEdit && (
-              <div className="form-group">
-                <label className="form-label">
-                  <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
-                  {" "}{t("common.enabled")}
-                </label>
-              </div>
-            )}
-
-            {!isEdit && (
-              <>
-                <div className="form-group">
-                  <label className="form-label">{t("oauth.client_id")}</label>
-                  <input
-                    className="form-input"
-                    value={clientId}
-                    onChange={(e) => setClientId(e.target.value)}
-                    placeholder={t("oauth.client_id_placeholder")}
-                    required
-                    autoComplete="off"
-                  />
-                </div>
-                {!is_basic_auth && (
-                  <div className="form-group">
-                    <label className="form-label">
-                      {t("oauth.client_secret")}
-                      <span style={{ color: "var(--muted)", fontWeight: "normal" }}> ({t("common.optional")})</span>
-                    </label>
-                    <input
-                      className="form-input"
-                      type="password"
-                      value={clientSecret}
-                      onChange={(e) => setClientSecret(e.target.value)}
-                      placeholder={t("oauth.client_secret_placeholder")}
-                      autoComplete="off"
-                    />
-                  </div>
-                )}
-                {is_basic_auth && (
-                  <p style={{ fontSize: "var(--fs-xs)", color: "var(--muted)" }}>
-                    {t("oauth.client_secret_hint")}
-                  </p>
-                )}
-              </>
-            )}
-
-            {is_custom && !isEdit && (
-              <>
-                <div className="form-group">
-                  <label className="form-label">{t("oauth.auth_url")}</label>
-                  <input
-                    className="form-input"
-                    value={authUrl}
-                    onChange={(e) => setAuthUrl(e.target.value)}
-                    placeholder="https://..."
-                    required
-                  />
-                  <span style={{ fontSize: "var(--fs-xs)", color: "var(--muted)" }}>{t("oauth.custom_url_hint")}</span>
-                </div>
-                <div className="form-group">
-                  <label className="form-label">{t("oauth.token_url")}</label>
-                  <input
-                    className="form-input"
-                    value={tokenUrl}
-                    onChange={(e) => setTokenUrl(e.target.value)}
-                    placeholder="https://..."
-                    required
-                  />
-                </div>
-              </>
-            )}
-
-            <div className="form-group">
-              <label className="form-label">{t("oauth.scopes")}</label>
-              {available_scopes.length > 0 && (
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 6 }}>
-                  {available_scopes.map((s) => (
-                    <label key={s} style={{ fontSize: "var(--fs-sm)", display: "flex", alignItems: "center", gap: 4 }}>
-                      <input type="checkbox" checked={is_scope_selected(s)} onChange={() => toggle_scope(s)} />
-                      {s}
-                    </label>
-                  ))}
-                </div>
-              )}
-              <input
-                className="form-input"
-                value={scopeText}
-                onChange={(e) => setScopeText(e.target.value)}
-                placeholder={t("oauth.scopes_hint")}
-              />
-            </div>
-          </div>
-
-          <div className="modal__footer">
-            <button type="button" className="btn btn--sm" onClick={onClose}>{t("common.cancel")}</button>
-            <button type="submit" className="btn btn--sm btn--accent" disabled={saving}>
-              {saving ? t("common.saving") : isEdit ? t("common.save") : t("common.add")}
-            </button>
-          </div>
-        </form>
+    <FormModal
+      open
+      title={isEdit ? t("oauth.edit_title") : t("oauth.add_title")}
+      onClose={onClose}
+      onSubmit={handleSubmit}
+      submitLabel={isEdit ? t("common.save") : t("common.add")}
+      saving={saving}
+    >
+      <div className="form-group">
+        <label className="form-label">{t("oauth.service_type")}</label>
+        {isEdit ? (
+          <input className="form-input" value={active_preset?.label || serviceType} disabled />
+        ) : (
+          <select className="form-input" value={serviceType} onChange={(e) => handle_service_change(e.target.value)}>
+            {presets.map((p) => (
+              <option key={p.service_type} value={p.service_type}>{p.label}</option>
+            ))}
+          </select>
+        )}
       </div>
-    </div>
+
+      <div className="form-group">
+        <label className="form-label">{t("oauth.label")}</label>
+        <input className="form-input" value={label} onChange={(e) => setLabel(e.target.value)} placeholder={serviceType} />
+      </div>
+
+      {isEdit && (
+        <div className="form-group">
+          <label className="form-label">
+            <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
+            {" "}{t("common.enabled")}
+          </label>
+        </div>
+      )}
+
+      {!isEdit && (
+        <>
+          <div className="form-group">
+            <label className="form-label">{t("oauth.client_id")}</label>
+            <input className="form-input" value={clientId} onChange={(e) => setClientId(e.target.value)} placeholder={t("oauth.client_id_placeholder")} required autoComplete="off" />
+          </div>
+          {!is_basic_auth && (
+            <div className="form-group">
+              <label className="form-label">
+                {t("oauth.client_secret")}
+                <span className="form-label__optional"> ({t("common.optional")})</span>
+              </label>
+              <input className="form-input" type="password" value={clientSecret} onChange={(e) => setClientSecret(e.target.value)} placeholder={t("oauth.client_secret_placeholder")} autoComplete="off" />
+            </div>
+          )}
+          {is_basic_auth && <p className="form-hint">{t("oauth.client_secret_hint")}</p>}
+        </>
+      )}
+
+      {is_custom && !isEdit && (
+        <>
+          <div className="form-group">
+            <label className="form-label">{t("oauth.auth_url")}</label>
+            <input className="form-input" value={authUrl} onChange={(e) => setAuthUrl(e.target.value)} placeholder="https://..." required />
+            <span className="form-hint">{t("oauth.custom_url_hint")}</span>
+          </div>
+          <div className="form-group">
+            <label className="form-label">{t("oauth.token_url")}</label>
+            <input className="form-input" value={tokenUrl} onChange={(e) => setTokenUrl(e.target.value)} placeholder="https://..." required />
+          </div>
+        </>
+      )}
+
+      <div className="form-group">
+        <label className="form-label">{t("oauth.scopes")}</label>
+        {available_scopes.length > 0 && (
+          <div className="checkbox-group" style={{ marginBottom: 6 }}>
+            {available_scopes.map((s) => (
+              <label key={s} className="checkbox-label">
+                <input type="checkbox" checked={is_scope_selected(s)} onChange={() => toggle_scope(s)} />
+                {s}
+              </label>
+            ))}
+          </div>
+        )}
+        <input className="form-input" value={scopeText} onChange={(e) => setScopeText(e.target.value)} placeholder={t("oauth.scopes_hint")} />
+      </div>
+    </FormModal>
   );
 }
 
@@ -563,8 +535,6 @@ function PresetModal({ initial, onClose, onSaved }: {
   const [defaultScopes, setDefaultScopes] = useState((initial?.default_scopes ?? []).join(", "));
   const [supportsRefresh, setSupportsRefresh] = useState(initial?.supports_refresh ?? true);
   const [saving, setSaving] = useState(false);
-
-  const parse_csv = (s: string) => s.split(",").map((x) => x.trim()).filter(Boolean);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -606,114 +576,63 @@ function PresetModal({ initial, onClose, onSaved }: {
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <div className="modal__header">
-          <h3>{isEdit ? t("oauth.preset_edit_title") : t("oauth.preset_add_title")}</h3>
-          <button className="modal__close" onClick={onClose} aria-label={t("common.close_modal")}>x</button>
-        </div>
-        <form onSubmit={handleSubmit}>
-          <div className="modal__body" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            <div className="form-group">
-              <label className="form-label">{t("oauth.service_type")}</label>
-              <input
-                className="form-input"
-                value={serviceType}
-                onChange={(e) => !isEdit && setServiceType(e.target.value)}
-                placeholder="e.g. notion, dropbox"
-                disabled={isEdit}
-                required={!isEdit}
-              />
-            </div>
-            <div className="form-group">
-              <label className="form-label">{t("oauth.label")}</label>
-              <input
-                className="form-input"
-                value={label}
-                onChange={(e) => !isEdit && setLabel(e.target.value)}
-                placeholder="e.g. Notion"
-                disabled={isEdit}
-                required={!isEdit}
-              />
-            </div>
-            <div className="form-group">
-              <label className="form-label">{t("oauth.auth_url")}</label>
-              <input
-                className="form-input"
-                value={authUrl}
-                onChange={(e) => setAuthUrl(e.target.value)}
-                placeholder="https://..."
-                required
-              />
-            </div>
-            <div className="form-group">
-              <label className="form-label">{t("oauth.token_url")}</label>
-              <input
-                className="form-input"
-                value={tokenUrl}
-                onChange={(e) => setTokenUrl(e.target.value)}
-                placeholder="https://..."
-                required
-              />
-            </div>
-            <div className="form-group">
-              <label className="form-label">{t("oauth.token_auth_method")}</label>
-              <select className="form-input" value={tokenAuthMethod} onChange={(e) => setTokenAuthMethod(e.target.value as "body" | "basic")}>
-                <option value="body">{t("oauth.token_auth_body")}</option>
-                <option value="basic">{t("oauth.token_auth_basic")}</option>
-              </select>
-            </div>
-            <div className="form-group">
-              <label className="form-label">{t("oauth.scope_separator")}</label>
-              <select className="form-input" value={scopeSeparator} onChange={(e) => setScopeSeparator(e.target.value as " " | ",")}>
-                <option value=" ">{t("oauth.scope_sep_space")}</option>
-                <option value=",">{t("oauth.scope_sep_comma")}</option>
-              </select>
-            </div>
-            <div className="form-group">
-              <label className="form-label">{t("oauth.test_url")}</label>
-              <input
-                className="form-input"
-                value={testUrl}
-                onChange={(e) => setTestUrl(e.target.value)}
-                placeholder="https://... (optional)"
-              />
-            </div>
-            <div className="form-group">
-              <label className="form-label">{t("oauth.scopes_available")}</label>
-              <input
-                className="form-input"
-                value={scopesAvailable}
-                onChange={(e) => setScopesAvailable(e.target.value)}
-                placeholder={t("oauth.scopes_hint")}
-              />
-            </div>
-            <div className="form-group">
-              <label className="form-label">{t("oauth.default_scopes")}</label>
-              <input
-                className="form-input"
-                value={defaultScopes}
-                onChange={(e) => setDefaultScopes(e.target.value)}
-                placeholder={t("oauth.scopes_hint")}
-              />
-            </div>
-            <div className="form-group">
-              <label className="form-label">
-                <input type="checkbox" checked={supportsRefresh} onChange={(e) => setSupportsRefresh(e.target.checked)} />
-                {" "}{t("oauth.supports_refresh")}
-              </label>
-            </div>
-          </div>
-
-          <div className="modal__footer">
-            <button type="button" className="btn btn--sm" onClick={onClose}>{t("common.cancel")}</button>
-            <button type="submit" className="btn btn--sm btn--accent" disabled={saving}>
-              {saving ? t("common.saving") : isEdit ? t("common.save") : t("common.add")}
-            </button>
-          </div>
-        </form>
+    <FormModal
+      open
+      title={isEdit ? t("oauth.preset_edit_title") : t("oauth.preset_add_title")}
+      onClose={onClose}
+      onSubmit={handleSubmit}
+      submitLabel={isEdit ? t("common.save") : t("common.add")}
+      saving={saving}
+    >
+      <div className="form-group">
+        <label className="form-label">{t("oauth.service_type")}</label>
+        <input className="form-input" value={serviceType} onChange={(e) => !isEdit && setServiceType(e.target.value)} placeholder="e.g. notion, dropbox" disabled={isEdit} required={!isEdit} />
       </div>
-    </div>
+      <div className="form-group">
+        <label className="form-label">{t("oauth.label")}</label>
+        <input className="form-input" value={label} onChange={(e) => !isEdit && setLabel(e.target.value)} placeholder="e.g. Notion" disabled={isEdit} required={!isEdit} />
+      </div>
+      <div className="form-group">
+        <label className="form-label">{t("oauth.auth_url")}</label>
+        <input className="form-input" value={authUrl} onChange={(e) => setAuthUrl(e.target.value)} placeholder="https://..." required />
+      </div>
+      <div className="form-group">
+        <label className="form-label">{t("oauth.token_url")}</label>
+        <input className="form-input" value={tokenUrl} onChange={(e) => setTokenUrl(e.target.value)} placeholder="https://..." required />
+      </div>
+      <div className="form-group">
+        <label className="form-label">{t("oauth.token_auth_method")}</label>
+        <select className="form-input" value={tokenAuthMethod} onChange={(e) => setTokenAuthMethod(e.target.value as "body" | "basic")}>
+          <option value="body">{t("oauth.token_auth_body")}</option>
+          <option value="basic">{t("oauth.token_auth_basic")}</option>
+        </select>
+      </div>
+      <div className="form-group">
+        <label className="form-label">{t("oauth.scope_separator")}</label>
+        <select className="form-input" value={scopeSeparator} onChange={(e) => setScopeSeparator(e.target.value as " " | ",")}>
+          <option value=" ">{t("oauth.scope_sep_space")}</option>
+          <option value=",">{t("oauth.scope_sep_comma")}</option>
+        </select>
+      </div>
+      <div className="form-group">
+        <label className="form-label">{t("oauth.test_url")}</label>
+        <input className="form-input" value={testUrl} onChange={(e) => setTestUrl(e.target.value)} placeholder="https://... (optional)" />
+      </div>
+      <div className="form-group">
+        <label className="form-label">{t("oauth.scopes_available")}</label>
+        <input className="form-input" value={scopesAvailable} onChange={(e) => setScopesAvailable(e.target.value)} placeholder={t("oauth.scopes_hint")} />
+      </div>
+      <div className="form-group">
+        <label className="form-label">{t("oauth.default_scopes")}</label>
+        <input className="form-input" value={defaultScopes} onChange={(e) => setDefaultScopes(e.target.value)} placeholder={t("oauth.scopes_hint")} />
+      </div>
+      <div className="form-group">
+        <label className="form-label">
+          <input type="checkbox" checked={supportsRefresh} onChange={(e) => setSupportsRefresh(e.target.checked)} />
+          {" "}{t("oauth.supports_refresh")}
+        </label>
+      </div>
+    </FormModal>
   );
 }
 
@@ -732,34 +651,26 @@ function ConnectModal({ onClose, onConnect }: {
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 400 }}>
-        <div className="modal__header">
-          <h3>{t("oauth.connect")}</h3>
-          <button className="modal__close" onClick={onClose} aria-label={t("common.close_modal")}>x</button>
-        </div>
-        <form onSubmit={handleSubmit}>
-          <div className="modal__body">
-            <div className="form-group">
-              <label className="form-label">{t("oauth.client_secret")}</label>
-              <input
-                className="form-input"
-                type="password"
-                value={clientSecret}
-                onChange={(e) => setClientSecret(e.target.value)}
-                placeholder={t("oauth.client_secret_placeholder")}
-                required
-                autoComplete="off"
-                autoFocus
-              />
-            </div>
-          </div>
-          <div className="modal__footer">
-            <button type="button" className="btn btn--sm" onClick={onClose}>{t("common.cancel")}</button>
-            <button type="submit" className="btn btn--sm btn--accent">{t("oauth.connect")}</button>
-          </div>
-        </form>
+    <FormModal
+      open
+      title={t("oauth.connect")}
+      onClose={onClose}
+      onSubmit={handleSubmit}
+      submitLabel={t("oauth.connect")}
+    >
+      <div className="form-group">
+        <label className="form-label">{t("oauth.client_secret")}</label>
+        <input
+          className="form-input"
+          type="password"
+          value={clientSecret}
+          onChange={(e) => setClientSecret(e.target.value)}
+          placeholder={t("oauth.client_secret_placeholder")}
+          required
+          autoComplete="off"
+          autoFocus
+        />
       </div>
-    </div>
+    </FormModal>
   );
 }

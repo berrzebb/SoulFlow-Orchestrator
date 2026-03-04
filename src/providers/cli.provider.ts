@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { TextDecoder } from "node:util";
+import { normalize_text } from "../utils/common.js";
 import { BaseLlmProvider } from "./base.js";
 import { LlmResponse, type ChatOptions, type ProviderId } from "./types.js";
 import {
@@ -292,7 +293,7 @@ export class CliHeadlessProvider extends BaseLlmProvider {
     const emit_stream = async (raw: string): Promise<void> => {
       const clean = strip_protocol_scaffold(raw);
       if (!clean) return;
-      const key = clean.replace(/\s+/g, " ").trim().toLowerCase();
+      const key = normalize_text(clean, true);
       if (!key) return;
       const now = Date.now();
       if (key === last_emitted_chunk_key && now - last_emitted_chunk_at < 30_000) return;

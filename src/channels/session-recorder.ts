@@ -1,3 +1,4 @@
+import { error_message, now_iso, normalize_text } from "../utils/common.js";
 import type { InboundMessage } from "../bus/types.js";
 import type { ChannelProvider } from "./types.js";
 import type { SessionStoreLike } from "../session/service.js";
@@ -43,7 +44,7 @@ export class SessionRecorder {
       await this.sessions.save(session);
       await this.append_daily("user", provider, message.chat_id, message.thread_id, message.sender_id, safe);
     } catch (e) {
-      this.logger.debug("record_user failed", { error: String(e) });
+      this.logger.debug("record_user failed", { error: error_message(e) });
     }
   }
 
@@ -58,7 +59,7 @@ export class SessionRecorder {
       const safe = this.sanitize(String(content || ""));
       session.add_message("assistant", safe, {
         sender_id: alias,
-        at: new Date().toISOString(),
+        at: now_iso(),
         thread_id: message.thread_id,
         ...(metadata?.stream_full_content ? { stream_full_content: metadata.stream_full_content } : {}),
         ...(metadata?.parsed_output !== undefined ? { parsed_output: metadata.parsed_output } : {}),
@@ -69,7 +70,7 @@ export class SessionRecorder {
       await this.sessions.save(session);
       await this.append_daily("assistant", provider, message.chat_id, message.thread_id, alias, safe);
     } catch (e) {
-      this.logger.debug("record_assistant failed", { error: String(e) });
+      this.logger.debug("record_assistant failed", { error: error_message(e) });
     }
   }
 
@@ -131,13 +132,13 @@ export class SessionRecorder {
     content: string,
   ): Promise<void> {
     if (!this.daily_memory) return;
-    const text = content.replace(/\s+/g, " ").trim().slice(0, 1600);
+    const text = normalize_text(content).slice(0, 1600);
     if (!text) return;
     const thread = thread_id?.trim() || "-";
     const sender = sender_id?.trim() || "unknown";
-    const line = `- [${new Date().toISOString()}] [${provider}:${chat_id}:${thread}] ${role.toUpperCase()}(${sender}): ${text}\n`;
+    const line = `- [${now_iso()}] [${provider}:${chat_id}:${thread}] ${role.toUpperCase()}(${sender}): ${text}\n`;
     try { await this.daily_memory.append_daily_memory(line); }
-    catch (error) { this.logger.warn("daily memory write failed", { error: error instanceof Error ? error.message : String(error) }); }
+    catch (error) { this.logger.warn("daily memory write failed", { error: error_message(error) }); }
   }
 }
 

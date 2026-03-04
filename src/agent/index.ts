@@ -45,9 +45,10 @@ export class AgentDomain implements ServiceLike {
       logger?: Logger | null;
       provider_caps?: ProviderCapabilities;
       on_task_change?: (task: import("../contracts.js").TaskState) => void;
+      app_root?: string;
     },
   ) {
-    this.context = new ContextBuilder(workspace);
+    this.context = new ContextBuilder(workspace, { app_root: args?.app_root });
     const data_dir = args?.data_dir || join(workspace, "runtime");
     this.task_store = new TaskStore(join(data_dir, "tasks"));
     this.subagents = new SubagentRegistry({

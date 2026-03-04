@@ -1,5 +1,6 @@
 import type { ParsedSlashCommand } from "./slash-command.js";
 import { slash_name_in, slash_token_in } from "./slash-command.js";
+import { normalize_text } from "../utils/common.js";
 
 export type MemoryQuickAction = "status" | "list" | "today" | "longterm" | "search";
 export type DecisionQuickAction = "status" | "list" | "set";
@@ -41,7 +42,7 @@ export function strip_leading_mentions_and_aliases(text: string): string {
 
 export function normalize_common_command_text(content: string): string {
   const stripped = strip_leading_mentions_and_aliases(String(content || ""));
-  return stripped.replace(/\s+/g, " ").trim();
+  return normalize_text(stripped);
 }
 
 export function parse_memory_quick_action(

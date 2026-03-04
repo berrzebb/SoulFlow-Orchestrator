@@ -1,3 +1,4 @@
+import { error_message } from "../../utils/common.js";
 import { slash_name_in, slash_token_in } from "../slash-command.js";
 import type { SecretVaultLike } from "../../security/secret-vault.js";
 import { format_mention, type CommandContext, type CommandHandler } from "./types.js";
@@ -175,7 +176,7 @@ export class SecretHandler implements CommandHandler {
       const plain = await this.vault.decrypt_text(cipher, "adhoc:secret");
       await ctx.send_reply(`${mention}decrypt 결과\n${plain}`);
     } catch (error) {
-      const reason = error instanceof Error ? error.message : String(error);
+      const reason = error_message(error);
       await ctx.send_reply(`${mention}decrypt 실패: ${reason}`);
     }
     return true;

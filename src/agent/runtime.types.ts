@@ -44,6 +44,21 @@ export type AgentApprovalRequest = {
   };
 };
 
+/** DB 행을 AgentApprovalRequest로 변환. inspector/runtime 양쪽에서 사용. */
+export function parse_approval_row(raw: unknown): AgentApprovalRequest {
+  const row = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  return {
+    request_id: String(row.request_id || ""),
+    tool_name: String(row.tool_name || ""),
+    params: (row.params && typeof row.params === "object") ? (row.params as Record<string, unknown>) : {},
+    created_at: String(row.created_at || ""),
+    status: String(row.status || "pending") as AgentApprovalStatus,
+    context: (row.context && typeof row.context === "object")
+      ? (row.context as AgentApprovalRequest["context"])
+      : undefined,
+  };
+}
+
 export type AgentApprovalResolveResult = {
   ok: boolean;
   decision: AgentApprovalDecision;

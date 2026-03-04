@@ -5,6 +5,8 @@ const ChannelStreamingSchema = z.object({
   intervalMs: z.number().min(500),
   minChars: z.number().min(16),
   suppressFinalAfterStream: z.boolean(),
+  /** 도구 사용 표시: count(상단 카운트), inline(스트림 주입), separate(별도 메시지). */
+  toolDisplay: z.enum(["count", "inline", "separate"]),
 });
 
 const ChannelDispatchSchema = z.object({
@@ -141,6 +143,7 @@ export function get_config_defaults(): AppConfig {
         intervalMs: 1400,
         minChars: 48,
         suppressFinalAfterStream: true,
+        toolDisplay: "count" as const,
       },
       dispatch: {
         inlineRetries: 0,
@@ -168,7 +171,7 @@ export function get_config_defaults(): AppConfig {
       image: "ollama/ollama:latest",
       container: "orchestrator-phi4",
       port: 11434,
-      model: "phi4",
+      model: "phi4-mini",
       pullModel: true,
       autoStop: false,
       gpuEnabled: true,

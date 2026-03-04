@@ -1,3 +1,4 @@
+import { error_message } from "./utils/common.js";
 import { join } from "node:path";
 import { Phi4RuntimeManager } from "./providers/index.js";
 import { ConfigStore } from "./config/config-store.js";
@@ -32,6 +33,6 @@ async function main(): Promise<void> {
 
 void main().catch((error) => {
 
-  process.stderr.write((error instanceof Error ? error.message : String(error)) + "\n");
+  process.stderr.write((error_message(error)) + "\n");
   process.exit(9);
 });

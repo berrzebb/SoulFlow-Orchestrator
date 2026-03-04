@@ -9,44 +9,12 @@ Usage:
 """
 
 import argparse
-import os
 import sys
 from pathlib import Path
-from zipfile import ZIP_DEFLATED, ZIP_STORED, ZipFile
 
-
-def pack(input_dir: str, hwpx_path: str) -> None:
-    """Create HWPX archive from a directory."""
-
-    root = Path(input_dir)
-    if not root.is_dir():
-        raise FileNotFoundError(f"Directory not found: {input_dir}")
-
-    mimetype_file = root / "mimetype"
-    if not mimetype_file.is_file():
-        raise FileNotFoundError(
-            f"Missing required 'mimetype' file in {input_dir}"
-        )
-
-    all_files = sorted(
-        p.relative_to(root).as_posix()
-        for p in root.rglob("*")
-        if p.is_file()
-    )
-
-    with ZipFile(hwpx_path, "w", ZIP_DEFLATED) as zf:
-        # mimetype MUST be the first entry, stored without compression
-        zf.write(mimetype_file, "mimetype", compress_type=ZIP_STORED)
-
-        for rel_path in all_files:
-            if rel_path == "mimetype":
-                continue  # Already written
-            full_path = root / rel_path
-            zf.write(full_path, rel_path, compress_type=ZIP_DEFLATED)
-
-    count = len(all_files)
-    print(f"Packed: {input_dir} -> {hwpx_path}")
-    print(f"  Files: {count} entries (mimetype first, ZIP_STORED)")
+# build_hwpx.py is in the parent directory
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from build_hwpx import pack_hwpx
 
 
 def main() -> None:
@@ -57,11 +25,16 @@ def main() -> None:
     parser.add_argument("output", help="Output .hwpx file path")
     args = parser.parse_args()
 
-    if not os.path.isdir(args.input):
+    input_dir = Path(args.input)
+    if not input_dir.is_dir():
         print(f"Error: Directory not found: {args.input}", file=sys.stderr)
         sys.exit(1)
 
-    pack(args.input, args.output)
+    output_path = Path(args.output)
+    count = pack_hwpx(input_dir, output_path)
+
+    print(f"Packed: {args.input} -> {args.output}")
+    print(f"  Files: {count} entries (mimetype first, ZIP_STORED)")
 
 
 if __name__ == "__main__":

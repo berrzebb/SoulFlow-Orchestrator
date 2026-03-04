@@ -1,3 +1,4 @@
+import { error_message } from "../../utils/common.js";
 import { resolve } from "node:path";
 import { Tool } from "./base.js";
 import { run_shell_command } from "./shell-runtime.js";
@@ -132,7 +133,7 @@ export class ExecTool extends Tool {
           return masked.length > 20000 ? `${masked.slice(0, 20000)}\n... (truncated)` : masked;
         }
       }
-      const message = error instanceof Error ? error.message : String(error);
+      const message = error_message(error);
       const safe = redact_sensitive_text(await this.secret_vault.mask_known_secrets(message)).text;
       return `Error: ${safe}`;
     }

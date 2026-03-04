@@ -13,7 +13,17 @@
     "dev": "tsx watch --clear-screen=false src/main.ts",
     "dev:once": "tsx src/main.ts",
     "health:phi4": "tsx src/phi4-health.ts",
-    "build:standalone": "node scripts/build-standalone.mjs"
+    "container:build": "podman build -t soulflow-orchestrator .",
+    "container:up": "podman compose up -d --build -V",
+    "container:down": "podman compose down",
+    "container:logs": "podman compose logs -f orchestrator",
+    "container:dev": "podman compose -f docker-compose.yml -f docker-compose.dev.yml up --build",
+    "container:bash": "podman exec -it soulflow-orchestrator bash",
+    "container:test": "podman exec -it soulflow-orchestrator npx vitest run",
+    "container:test:pty": "podman exec -it soulflow-orchestrator npx vitest run tests/agent/pty/",
+    "container:login:codex": "podman run --rm -it -p 1455:1456 -v next_cli-auth-codex:/root/.codex -v ./scripts/oauth-relay.mjs:/tmp/relay.mjs:ro next-orchestrator bash -c \"node /tmp/relay.mjs 1456 1455 & codex auth login\"",
+    "container:login:claude": "podman run --rm -it -v next_cli-auth-claude:/root/.claude next-orchestrator claude login",
+    "container:login:gemini": "podman run --rm -it -v next_cli-auth-gemini:/root/.gemini next-orchestrator gemini auth login"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

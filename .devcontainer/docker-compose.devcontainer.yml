@@ -1,0 +1,18 @@
+services:
+  devcontainer:
+    build:
+      context: ..
+      target: deps
+    command: sleep infinity
+    volumes:
+      - ..:/app
+      - devcontainer-node-modules:/app/node_modules
+      - devcontainer-web-modules:/app/web/node_modules
+      - ${WORKSPACE_PATH:-../newworkspace}:/data
+    environment:
+      - WORKSPACE=/data
+      - NODE_ENV=development
+
+volumes:
+  devcontainer-node-modules:
+  devcontainer-web-modules:

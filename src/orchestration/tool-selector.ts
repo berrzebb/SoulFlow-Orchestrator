@@ -24,6 +24,10 @@ export const TOOL_CATEGORIES: Record<string, ToolCategory> = {
   runtime_admin: "admin",
   spawn: "spawn",
   chain: "admin",
+  datetime: "memory",
+  http_request: "web",
+  oauth_fetch: "web",
+  task_query: "admin",
 };
 
 /** 항상 포함되는 카테고리. */

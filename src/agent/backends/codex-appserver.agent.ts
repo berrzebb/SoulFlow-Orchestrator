@@ -1,5 +1,4 @@
 import { execFileSync } from "node:child_process";
-import { randomUUID } from "node:crypto";
 import type {
   AgentBackend,
   AgentBackendId,
@@ -12,12 +11,11 @@ import type {
   ApprovalBridgeRequest,
   BackendCapabilities,
 } from "../agent.types.js";
-import { now_iso } from "../../utils/common.js";
+import { now_iso, error_message, short_id } from "../../utils/common.js";
 import { sandbox_to_codex_policy, effort_to_codex } from "./convert.js";
+import { fire } from "./tool-loop-helpers.js";
 import { sandbox_from_preset, type LlmUsage } from "../../providers/types.js";
 import { CodexJsonRpcClient } from "./codex-jsonrpc.js";
-
-type EmitFn = (event: AgentEvent) => void | Promise<void>;
 
 /** Codex 빌트인 도구 이름 → SoulFlow 커스텀 도구 이름 매핑. 채널 표시 일관성. */
 const CODEX_BUILTIN_NAME_MAP: Record<string, string> = {
@@ -76,7 +74,7 @@ export class CodexAppServerAgent implements AgentBackend {
     let result_content = "";
     let tool_calls_count = 0;
 
-    _fire(emit, { type: "init", source, at: now_iso() });
+    fire(emit, { type: "init", source, at: now_iso() });
 
     try {
       const rpc = await this._ensure_client();
@@ -109,6 +107,7 @@ export class CodexAppServerAgent implements AgentBackend {
           approvalPolicy: codex.approval_policy,
           cwd: this.config.cwd,
           ...(dynamic_tools?.length ? { dynamicTools: dynamic_tools } : {}),
+          ...(options.system_prompt ? { instructions: options.system_prompt } : {}),
         }) as { thread?: { id?: string } };
         thread_id = res?.thread?.id;
       }
@@ -123,7 +122,7 @@ export class CodexAppServerAgent implements AgentBackend {
       tool_calls_count = turn_result.tools;
 
       if (turn_result.usage.prompt_tokens || turn_result.usage.completion_tokens) {
-        _fire(emit, {
+        fire(emit, {
           type: "usage", source, at: now_iso(),
           tokens: {
             input: turn_result.usage.prompt_tokens || 0,
@@ -144,8 +143,8 @@ export class CodexAppServerAgent implements AgentBackend {
         metadata: thread_id ? { thread_id } : {},
       };
     } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      _fire(emit, { type: "error", source, at: now_iso(), error: msg });
+      const msg = error_message(error);
+      fire(emit, { type: "error", source, at: now_iso(), error: msg });
       return this._error_result(msg, tool_calls_count);
     }
   }
@@ -259,7 +258,7 @@ export class CodexAppServerAgent implements AgentBackend {
           const delta = String(params.delta || "");
           content += delta;
           if (delta) {
-            _fire(emit, { type: "content_delta", source, at: now_iso(), text: delta });
+            fire(emit, { type: "content_delta", source, at: now_iso(), text: delta });
             if (on_stream) {
               void Promise.resolve(on_stream(delta)).catch(() => {});
             }
@@ -273,7 +272,7 @@ export class CodexAppServerAgent implements AgentBackend {
           if (!item?.type) return;
           // contextCompaction: 컨텍스트 압축 시작 알림
           if (String(item.type) === "contextCompaction") {
-            _fire(emit, {
+            fire(emit, {
               type: "compact_boundary", source, at: now_iso(),
               trigger: "auto", pre_tokens: 0,
             });
@@ -289,10 +288,10 @@ export class CodexAppServerAgent implements AgentBackend {
             const actual_name = raw_type === "dynamicToolCall"
               ? String(item.name || item.tool || raw_type)
               : (CODEX_BUILTIN_NAME_MAP[raw_type] || raw_type);
-            _fire(emit, {
+            fire(emit, {
               type: "tool_use", source, at: now_iso(),
               tool_name: actual_name,
-              tool_id: String(item.id || randomUUID().slice(0, 8)),
+              tool_id: String(item.id || short_id(8)),
               params: (item.arguments as Record<string, unknown>) ?? {},
             });
           }
@@ -333,7 +332,7 @@ export class CodexAppServerAgent implements AgentBackend {
             const is_error = is_dynamic
               ? item.success === false
               : (item.exitCode !== 0 && item.exitCode !== undefined);
-            _fire(emit, {
+            fire(emit, {
               type: "tool_result", source, at: now_iso(),
               tool_name, tool_id: String(item.id || ""),
               result: tool_result, is_error,
@@ -369,7 +368,7 @@ export class CodexAppServerAgent implements AgentBackend {
             const err_msg = String(te.message || "turn_failed");
             const err_code = _extract_codex_error_type(te.codexErrorInfo);
             finish_reason = _codex_error_to_finish_reason(err_code);
-            _fire(emit, {
+            fire(emit, {
               type: "error", source, at: now_iso(),
               error: err_msg, code: `codex:${err_code}`,
             });
@@ -391,7 +390,7 @@ export class CodexAppServerAgent implements AgentBackend {
             cache_read = Number(u.cache_read_input_tokens || u.cached_input_tokens || 0);
             cache_creation = Number(u.cache_creation_input_tokens || 0);
           }
-          _fire(emit, {
+          fire(emit, {
             type: "complete", source, at: now_iso(),
             finish_reason, content,
           });
@@ -415,7 +414,7 @@ export class CodexAppServerAgent implements AgentBackend {
             turn_completed = true;
             const reason = String(params.reason || "thread_closed");
             finish_reason = reason === "completed" ? "stop" : "error";
-            _fire(emit, {
+            fire(emit, {
               type: "complete", source, at: now_iso(),
               finish_reason, content,
             });
@@ -439,7 +438,7 @@ export class CodexAppServerAgent implements AgentBackend {
           const diff = String(params.diff || "");
           if (diff) {
             const file_count = (diff.match(/^diff --git /gm) || []).length;
-            _fire(emit, {
+            fire(emit, {
               type: "content_delta", source, at: now_iso(),
               text: `\n📝 파일 ${file_count || "?"}개 변경`,
             });
@@ -489,7 +488,7 @@ export class CodexAppServerAgent implements AgentBackend {
 
         // model reroute 알림
         if (method === "model/rerouted" && params.threadId === thread_id) {
-          _fire(emit, {
+          fire(emit, {
             type: "error", source, at: now_iso(),
             error: `model rerouted: ${String(params.fromModel || "?")} → ${String(params.toModel || "?")} (${String(params.reason || "unknown")})`,
             code: "codex:model_rerouted",
@@ -502,7 +501,7 @@ export class CodexAppServerAgent implements AgentBackend {
           const err_obj = (params.error || params) as Record<string, unknown>;
           const msg = String(err_obj.message || params.message || "codex_turn_error");
           const code = _extract_codex_error_type(err_obj.codexErrorInfo);
-          _fire(emit, {
+          fire(emit, {
             type: "error", source, at: now_iso(),
             error: msg, code: `codex:${code}`,
           });
@@ -515,7 +514,7 @@ export class CodexAppServerAgent implements AgentBackend {
 
       const on_abort = () => {
         rpc.request("turn/interrupt", { threadId: thread_id, turnId: turn_id }).catch(() => {});
-        _fire(emit, { type: "complete", source, at: now_iso(), finish_reason: "cancelled", content });
+        fire(emit, { type: "complete", source, at: now_iso(), finish_reason: "cancelled", content });
         cleanup();
         resolve({ content, tools: tool_count, finish_reason: "cancelled", usage: {} });
       };
@@ -554,7 +553,7 @@ export class CodexAppServerAgent implements AgentBackend {
               rpc.respond(req.id, { success: true, contentItems: [{ type: "inputText", text: result }] });
               if (post_tool) void Promise.resolve(post_tool(tool_name, args, result, tool_ctx, false)).catch(() => {});
             } catch (err) {
-              const err_msg = String(err);
+              const err_msg = error_message(err);
               rpc.respond(req.id, { success: false, contentItems: [{ type: "inputText", text: err_msg }] });
               if (post_tool) void Promise.resolve(post_tool(tool_name, args, err_msg, tool_ctx, true)).catch(() => {});
             }
@@ -599,13 +598,13 @@ export class CodexAppServerAgent implements AgentBackend {
         const raw_cmd = req.params.command;
         const cmd_str = Array.isArray(raw_cmd) ? raw_cmd.join(" ") : String(raw_cmd || "");
         const bridge_request: ApprovalBridgeRequest = {
-          request_id: randomUUID().slice(0, 12),
+          request_id: short_id(),
           type: is_file_change ? "file_change" : "command_execution",
           detail: cmd_str || String(req.params.reason || ""),
           command: is_file_change ? undefined : cmd_str,
         };
 
-        _fire(emit, {
+        fire(emit, {
           type: "approval_request", source, at: now_iso(),
           request: bridge_request,
         });
@@ -647,7 +646,7 @@ export class CodexAppServerAgent implements AgentBackend {
         ...(options.effort ? { effort: effort_to_codex(options.effort) } : {}),
         ...(turn_sandbox_policy ? { sandboxPolicy: turn_sandbox_policy } : {}),
         ...(options.structured_output ? { outputSchema: options.structured_output } : {}),
-        ...(options.system_prompt ? { settings: { developer_instructions: options.system_prompt } } : {}),
+        ...(options.system_prompt ? { instructions: options.system_prompt } : {}),
       }).then(() => {
         if (turn_completed) return;
       }).catch((err) => {
@@ -674,11 +673,6 @@ export class CodexAppServerAgent implements AgentBackend {
   }
 }
 
-/** fire-and-forget 이벤트 발행. */
-function _fire(emit: EmitFn | undefined, event: AgentEvent): void {
-  if (!emit) return;
-  void Promise.resolve(emit(event)).catch(() => {});
-}
 
 /** codexErrorInfo에서 에러 타입 문자열 추출. 객체 `{ type: "..." }` 또는 문자열 또는 undefined 처리. */
 function _extract_codex_error_type(info: unknown): string {

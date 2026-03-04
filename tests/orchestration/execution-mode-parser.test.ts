@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parse_execution_mode, detect_escalation } from "@src/orchestration/service.js";
+import { parse_execution_mode, detect_escalation } from "@src/orchestration/classifier.js";
 
 describe("parse_execution_mode — ClassificationResult", () => {
   // === builtin 파싱 ===

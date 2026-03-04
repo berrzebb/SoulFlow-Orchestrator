@@ -71,9 +71,9 @@ export function sandbox_to_sdk_permission(policy: SandboxPolicy): {
   }
 }
 
-/** SandboxPolicy → Codex thread/start 파라미터. sandbox는 camelCase 문자열, sandboxPolicy는 per-turn 객체. */
+/** SandboxPolicy → Codex thread/start 파라미터. sandbox는 kebab-case 문자열. */
 export function sandbox_to_codex_policy(policy: SandboxPolicy, cwd: string): {
-  /** thread/start.sandbox — "readOnly" | "workspaceWrite" | "dangerFullAccess" */
+  /** thread/start.sandbox — "read-only" | "workspace-write" | "danger-full-access" */
   sandbox: string;
   /** thread/start.approvalPolicy — "unlessTrusted" | "onRequest" | "never" */
   approval_policy: string;
@@ -89,10 +89,10 @@ export function sandbox_to_codex_policy(policy: SandboxPolicy, cwd: string): {
 
   switch (policy.fs_access) {
     case "read-only":
-      return { sandbox: "readOnly", approval_policy };
+      return { sandbox: "read-only", approval_policy };
     case "workspace-write":
       return {
-        sandbox: "workspaceWrite",
+        sandbox: "workspace-write",
         approval_policy,
         turn_sandbox_policy: {
           type: "workspaceWrite",
@@ -101,7 +101,7 @@ export function sandbox_to_codex_policy(policy: SandboxPolicy, cwd: string): {
         },
       };
     case "full-access":
-      return { sandbox: "dangerFullAccess", approval_policy };
+      return { sandbox: "danger-full-access", approval_policy };
   }
 }
 

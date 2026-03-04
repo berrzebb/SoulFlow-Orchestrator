@@ -25,22 +25,28 @@ function walk_skill_files(root: string): string[] {
   return out;
 }
 
-function collect_builtin_skill_roots(start: string): string[] {
+function collect_builtin_skill_roots(start: string, app_root?: string): string[] {
   const roots: string[] = [];
   const seen = new Set<string>();
-  let current = resolve(start);
-  while (true) {
-    const candidates = [join(current, "src", "skills"), join(current, "builtin_skills")];
-    for (const candidate of candidates) {
-      const key = resolve(candidate).toLowerCase();
-      if (seen.has(key)) continue;
-      seen.add(key);
-      if (existsSync(candidate)) roots.push(candidate);
+
+  const walk_up = (from: string) => {
+    let current = resolve(from);
+    while (true) {
+      const candidates = [join(current, "src", "skills"), join(current, "builtin_skills")];
+      for (const candidate of candidates) {
+        const key = resolve(candidate).toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        if (existsSync(candidate)) roots.push(candidate);
+      }
+      const parent = dirname(current);
+      if (parent === current) break;
+      current = parent;
     }
-    const parent = dirname(current);
-    if (parent === current) break;
-    current = parent;
-  }
+  };
+
+  walk_up(start);
+  if (app_root) walk_up(app_root);
   return roots;
 }
 
@@ -57,10 +63,10 @@ export class SkillsLoader {
   /** _shared/ 프로토콜: 이름(확장자 제외) → 본문. 스킬 아님. */
   private readonly shared_protocols = new Map<string, string>();
 
-  constructor(workspace: string) {
+  constructor(workspace: string, app_root?: string) {
     this.workspace = workspace;
     this.workspace_skills_root = join(workspace, "skills");
-    this.builtin_skills_roots = collect_builtin_skill_roots(workspace);
+    this.builtin_skills_roots = collect_builtin_skill_roots(workspace, app_root);
     this._scan_all();
   }
 

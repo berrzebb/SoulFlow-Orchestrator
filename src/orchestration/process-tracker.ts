@@ -1,7 +1,6 @@
 /** 요청 실행 흐름의 통합 추적. run_id → loop/task/subagent 연결 + cascade 취소. */
 
-import { randomUUID } from "node:crypto";
-import { now_iso } from "../utils/common.js";
+import { now_iso, short_id } from "../utils/common.js";
 import type { ChannelProvider } from "../channels/types.js";
 import type { ExecutionMode } from "./types.js";
 
@@ -54,10 +53,6 @@ export interface ProcessTrackerLike {
 
 const DEFAULT_MAX_HISTORY = 100;
 
-function make_run_id(): string {
-  return randomUUID().replace(/-/g, "").slice(0, 12);
-}
-
 function run_key(provider: ChannelProvider, chat_id: string, alias: string): string {
   return `${provider}:${chat_id}:${alias}`.toLowerCase();
 }
@@ -81,7 +76,7 @@ export class ProcessTracker implements ProcessTrackerLike {
   }
 
   start(params: { provider: ChannelProvider; chat_id: string; alias: string; sender_id: string }): string {
-    const id = make_run_id();
+    const id = short_id();
     const entry: ProcessEntry = {
       run_id: id,
       provider: params.provider,

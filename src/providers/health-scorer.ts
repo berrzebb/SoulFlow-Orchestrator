@@ -87,16 +87,18 @@ export class ProviderHealthScorer {
     if (!window || window.length === 0) {
       return { success_count: 0, failure_count: 0, total_latency_ms: 0, last_success_at: null, last_failure_at: null };
     }
-
-    const success_count = window.filter((s) => s.ok).length;
-    const failure_count = window.length - success_count;
-    const total_latency_ms = window.reduce((sum, s) => sum + s.latency_ms, 0);
-    const last_success = window.filter((s) => s.ok).at(-1);
-    const last_failure = window.filter((s) => !s.ok).at(-1);
-
+    let success_count = 0;
+    let total_latency_ms = 0;
+    let last_success: Sample | null = null;
+    let last_failure: Sample | null = null;
+    for (const s of window) {
+      total_latency_ms += s.latency_ms;
+      if (s.ok) { success_count++; last_success = s; }
+      else { last_failure = s; }
+    }
     return {
       success_count,
-      failure_count,
+      failure_count: window.length - success_count,
       total_latency_ms,
       last_success_at: last_success ? new Date(last_success.at).toISOString() : null,
       last_failure_at: last_failure ? new Date(last_failure.at).toISOString() : null,

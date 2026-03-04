@@ -1,3 +1,4 @@
+import { error_message, now_iso, now_seoul_iso } from "../utils/common.js";
 import type { AgentLoopState, TaskState } from "../contracts.js";
 import type { Logger } from "../logger.js";
 import type { AgentLoopRunOptions, AgentLoopRunResult, TaskLoopRunOptions, TaskLoopRunResult } from "./loop.types.js";
@@ -5,25 +6,8 @@ import type { TaskStore } from "./task-store.js";
 import { parse_tool_calls_from_text } from "./tool-call-parser.js";
 import { ConsecutiveToolCallGuard, type ToolCallGuard } from "./tool-call-guard.js";
 
-const SEOUL_TZ = "Asia/Seoul";
 const TERMINAL_TASK_STATUSES = new Set(["waiting_approval", "waiting_user_input", "failed", "cancelled", "completed"]);
 const MAX_TASK_TURNS = 500;
-
-function now_seoul_iso(): string {
-  const now = new Date();
-  const format = new Intl.DateTimeFormat("sv-SE", {
-    timeZone: SEOUL_TZ,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  }).formatToParts(now);
-  const get = (type: string): string => format.find((p) => p.type === type)?.value || "00";
-  return `${get("year")}-${get("month")}-${get("day")}T${get("hour")}:${get("minute")}:${get("second")}+09:00`;
-}
 
 export type CascadeCancelFn = (parent_id: string) => void;
 
@@ -53,6 +37,7 @@ export class AgentLoopStore {
   private async save_task_snapshot(state: TaskState): Promise<void> {
     state.memory = { ...state.memory, __updated_at_seoul: now_seoul_iso(), __session_id: this.session_id || undefined };
     this.tasks.set(state.taskId, { ...state });
+    this.logger?.info("task_snapshot", { task_id: state.taskId, status: state.status, turn: state.currentTurn, exit: state.exitReason || null });
     await this.persist_task(state);
     try { this.on_task_change?.({ ...state }); } catch { /* SSE 실패가 실행을 차단하면 안 됨 */ }
   }
@@ -148,7 +133,7 @@ export class AgentLoopStore {
       state.exitReason = "expired_stale";
       this.tasks.set(state.taskId, state);
       this.persist_task(state).catch((e) => {
-        this.logger?.error("expire_stale persist failed", { task_id: state.taskId, error: e instanceof Error ? e.message : String(e) });
+        this.logger?.error("expire_stale persist failed", { task_id: state.taskId, error: error_message(e) });
       });
       expired.push(state);
     }
@@ -158,12 +143,13 @@ export class AgentLoopStore {
   cancel_task(task_id: string, reason = "cancelled_by_request"): TaskState | null {
     const state = this.tasks.get(task_id);
     if (!state) return null;
+    this.logger?.info("task_cancel", { task_id, reason });
     state.status = "cancelled";
     state.exitReason = reason;
     this.tasks.set(task_id, state);
     this.on_cascade_cancel?.(task_id);
     this.persist_task(state).catch((e) => {
-      this.logger?.error("cancel_task persist failed", { task_id, error: e instanceof Error ? e.message : String(e) });
+      this.logger?.error("cancel_task persist failed", { task_id, error: error_message(e) });
     });
     return state;
   }
@@ -178,10 +164,11 @@ export class AgentLoopStore {
     }
     if (user_input !== undefined) {
       state.memory.__user_input = user_input;
-      state.memory.__resumed_at = new Date().toISOString();
+      state.memory.__resumed_at = now_iso();
     }
     state.status = "running";
     state.exitReason = reason;
+    this.logger?.info("task_resume", { task_id, reason, has_input: user_input !== undefined });
     this.tasks.set(task_id, state);
     await this.persist_task(state);
     return state;
@@ -373,7 +360,7 @@ export class AgentLoopStore {
         }
       } catch (error) {
         state.status = "failed";
-        state.exitReason = error instanceof Error ? error.message : String(error);
+        state.exitReason = error_message(error);
       }
 
       await this.save_task_snapshot(state);

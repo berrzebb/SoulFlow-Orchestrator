@@ -1,21 +1,12 @@
-import { randomUUID } from "node:crypto";
 import { Tool } from "./base.js";
 import type { MediaItem, OutboundMessage } from "../../bus/types.js";
-import { now_iso, normalize_text } from "../../utils/common.js";
+import { now_iso, normalize_text, error_message, short_id} from "../../utils/common.js";
 import type { JsonSchema, ToolExecutionContext } from "./types.js";
-import type { AppendWorkflowEventInput, AppendWorkflowEventResult, WorkflowPhase } from "../../events/types.js";
+import { normalize_phase, type AppendWorkflowEventInput, type AppendWorkflowEventResult } from "../../events/types.js";
 import { to_local_media_item } from "./media-utils.js";
 
 export type MessageSendCallback = (message: OutboundMessage) => Promise<void>;
 export type MessageEventRecordCallback = (event: AppendWorkflowEventInput) => Promise<AppendWorkflowEventResult>;
-
-const PHASE_SET = new Set<WorkflowPhase>(["assign", "progress", "blocked", "done", "approval"]);
-
-function normalize_phase(value: unknown): WorkflowPhase {
-  const v = String(value || "").trim().toLowerCase();
-  if (PHASE_SET.has(v as WorkflowPhase)) return v as WorkflowPhase;
-  return "progress";
-}
 
 export class MessageTool extends Tool {
   readonly name = "message";
@@ -109,7 +100,7 @@ export class MessageTool extends Tool {
     if (!content) return "Error: content or detail is required";
     const task_id = normalize_text(params.task_id || _context?.task_id || "task-unspecified");
     const run_id = normalize_text(params.run_id || `run-${Date.now()}`);
-    const event_id = normalize_text(params.event_id || randomUUID().slice(0, 12));
+    const event_id = normalize_text(params.event_id || short_id());
     const agent_id = normalize_text(params.agent_id || _context?.sender_id || "agent");
     const payload = (params.payload && typeof params.payload === "object" && !Array.isArray(params.payload))
       ? { ...(params.payload as Record<string, unknown>) }
@@ -134,7 +125,7 @@ export class MessageTool extends Tool {
           at: now_iso(),
         });
       } catch (error) {
-        return `Error: event_record_failed:${error instanceof Error ? error.message : String(error)}`;
+        return `Error: event_record_failed:${error_message(error)}`;
       }
     }
 
@@ -165,7 +156,7 @@ export class MessageTool extends Tool {
     };
 
     const message: OutboundMessage = {
-      id: randomUUID().slice(0, 12),
+      id: short_id(),
       provider: channel,
       channel,
       sender_id: agent_id || "agent",

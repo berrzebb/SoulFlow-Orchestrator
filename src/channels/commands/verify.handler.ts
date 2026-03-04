@@ -1,3 +1,4 @@
+import { error_message } from "../../utils/common.js";
 import { slash_name_in } from "../slash-command.js";
 import { format_mention, type CommandContext, type CommandHandler } from "./types.js";
 
@@ -45,7 +46,7 @@ export class VerifyHandler implements CommandHandler {
       const icon = result.ok ? "✅ PASS" : "❌ FAIL";
       await ctx.send_reply(`${mention}${icon}\n${result.content}`);
     } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
+      const msg = error_message(error);
       await ctx.send_reply(`${mention}검증 중 오류: ${msg}`);
     }
 

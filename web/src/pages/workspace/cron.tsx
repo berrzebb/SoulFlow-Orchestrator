@@ -93,7 +93,7 @@ export function CronTab() {
                 <tr key={j.id}>
                   <td>
                     <b>{j.name}</b>
-                    <br /><span style={{ fontSize: 10, color: "var(--muted)" }}>{j.id.slice(0, 12)}</span>
+                    <br /><span style={{ fontSize: "var(--fs-xs)", color: "var(--muted)" }}>{j.id.slice(0, 12)}</span>
                   </td>
                   <td>{fmt_schedule(j.schedule)}</td>
                   <td>
@@ -108,7 +108,7 @@ export function CronTab() {
                   <td>
                     {j.state?.last_status ? <Badge status={j.state.last_status} /> : "-"}
                     {j.state?.last_error && (
-                      <span style={{ color: "var(--err)", fontSize: 10, display: "block" }}>{j.state.last_error.slice(0, 60)}</span>
+                      <span style={{ color: "var(--err)", fontSize: "var(--fs-xs)", display: "block" }}>{j.state.last_error.slice(0, 60)}</span>
                     )}
                   </td>
                   <td>{j.delete_after_run ? <Badge status={t("cron.once")} variant="info" /> : "-"}</td>

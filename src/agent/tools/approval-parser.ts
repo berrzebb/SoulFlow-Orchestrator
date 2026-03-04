@@ -1,3 +1,5 @@
+import { normalize_text } from "../../utils/common.js";
+
 export type ApprovalDecision = "approve" | "deny" | "defer" | "cancel" | "clarify" | "unknown";
 
 export type ApprovalParseResult = {
@@ -34,10 +36,6 @@ const CLARIFY_PATTERNS: RegExp[] = [
   /\b(왜|이유|설명|근거|상세)\b/i,
 ];
 
-function normalize(input: string): string {
-  return String(input || "").replace(/\s+/g, " ").trim();
-}
-
 function score(patterns: RegExp[], text: string): number {
   let s = 0;
   for (const p of patterns) {
@@ -47,7 +45,7 @@ function score(patterns: RegExp[], text: string): number {
 }
 
 export function parse_approval_response(input: string): ApprovalParseResult {
-  const text = normalize(input);
+  const text = normalize_text(input);
   if (!text) return { decision: "unknown", confidence: 0, normalized: "" };
 
   const scores: Array<{ decision: ApprovalDecision; score: number }> = [

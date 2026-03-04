@@ -2,7 +2,7 @@ import type { ChatMessage, LlmProvider } from "../../providers/types.js";
 import type { ToolExecutionContext } from "../tools/types.js";
 import type { AgentBackend, AgentBackendId, AgentEventSource, AgentRunOptions, AgentRunResult, BackendCapabilities } from "../agent.types.js";
 import { agent_options_to_chat, llm_response_to_agent_result } from "./convert.js";
-import { now_iso } from "../../utils/common.js";
+import { now_iso, error_message} from "../../utils/common.js";
 import { build_executor_map, execute_single_tool, map_finish_reason, fire, accum_usage, emit_usage } from "./tool-loop-helpers.js";
 
 /**
@@ -131,7 +131,7 @@ export class CliAgent implements AgentBackend {
         },
       };
     } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
+      const msg = error_message(error);
       fire(emit, { type: "error", source, at: now_iso(), error: msg });
       return {
         content: `Error: ${msg}`,

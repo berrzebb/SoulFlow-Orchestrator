@@ -6,6 +6,8 @@
  * 4개 함수가 모두 동일한 "정규식 리스트 → 하나라도 매칭 → true" 패턴이므로 추상화.
  */
 
+import { escape_regexp, normalize_text } from "../utils/common.js";
+
 type LineMatcher = (line: string) => boolean;
 
 function create_line_matcher(patterns: RegExp[]): LineMatcher {
@@ -193,34 +195,53 @@ export function sanitize_stream_chunk(raw: string): string {
   return strip_tool_protocol_leaks(filtered).slice(0, 800).trim();
 }
 
+const RE_LEADING_MENTIONS = /^(\s*@[A-Za-z0-9._-]+\s*)+/;
+
+const MAX_REGEX_CACHE = 200;
+const normalize_regex_cache = new Map<string, { intro_ko: RegExp; intro_en: RegExp; sender: RegExp }>();
+
+function get_normalize_regexes(alias: string, sender_id: string) {
+  const key = `${alias}\0${sender_id}`;
+  let cached = normalize_regex_cache.get(key);
+  if (!cached) {
+    if (normalize_regex_cache.size >= MAX_REGEX_CACHE) normalize_regex_cache.clear();
+    cached = {
+      intro_ko: new RegExp(`^안녕하세요[,!\\s]*@?${escape_regexp(alias)}[^\\n]*`, "i"),
+      intro_en: new RegExp(`^(hello|hi)[,!\\s]*i\\s*(am|\\'m)\\s*@?${escape_regexp(alias)}[^\\n]*`, "i"),
+      sender: sender_id ? new RegExp(`^@${escape_regexp(sender_id)}\\s+`, "i") : /(?!)/,
+    };
+    normalize_regex_cache.set(key, cached);
+  }
+  return cached;
+}
+
 export function normalize_agent_reply(raw: string, alias: string, sender_id: string): string | null {
   const text = String(raw || "").trim();
   if (!text || is_provider_error_reply(text)) return null;
 
-  let cleaned = text;
-  const esc = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const re = get_normalize_regexes(alias, sender_id);
 
-  // 선행 멘션 체인 제거
-  cleaned = cleaned.replace(/^(\s*@[A-Za-z0-9._-]+\s*)+/g, "").trim();
-  // 자기소개 패턴 제거
-  cleaned = cleaned.replace(new RegExp(`^안녕하세요[,!\\s]*@?${esc(alias)}[^\\n]*`, "i"), "").trim();
-  cleaned = cleaned.replace(new RegExp(`^(hello|hi)[,!\\s]*i\\s*(am|\\'m)\\s*@?${esc(alias)}[^\\n]*`, "i"), "").trim();
-  // 발신자 멘션 에코 제거
+  let cleaned = text;
+  cleaned = cleaned.replace(RE_LEADING_MENTIONS, "").trim();
+  cleaned = cleaned.replace(re.intro_ko, "").trim();
+  cleaned = cleaned.replace(re.intro_en, "").trim();
   if (sender_id) {
-    cleaned = cleaned.replace(new RegExp(`^@${esc(sender_id)}\\s+`, "i"), "").trim();
+    cleaned = cleaned.replace(re.sender, "").trim();
   }
 
   return cleaned || text || null;
 }
 
+export const RE_PROVIDER_ERROR = /^Error calling ([A-Za-z0-9_-]+):\s*(.*)$/i;
+
 export function extract_provider_error(text: string): string | null {
   const raw = String(text || "").trim();
   if (!raw) return null;
-  const match = raw.match(/^Error calling ([A-Za-z0-9_-]+):\s*(.*)$/i);
+  const match = raw.match(RE_PROVIDER_ERROR);
   if (!match) return null;
   const body = String(match[2] || "").trim();
   if (!body) return `provider_error:${String(match[1] || "unknown").toLowerCase()}`;
-  return body.replace(/\s+/g, " ").slice(0, 180);
+  return normalize_text(body).slice(0, 180);
 }
 
 const PROVIDER_ERROR_INDICATORS = [
@@ -239,7 +260,5 @@ const PROVIDER_ERROR_INDICATORS = [
 export function is_provider_error_reply(text: string): boolean {
   const t = String(text || "").trim().toLowerCase();
   if (!t) return false;
-  return PROVIDER_ERROR_INDICATORS.some((indicator) =>
-    t.startsWith(indicator) || t.includes(indicator),
-  );
+  return PROVIDER_ERROR_INDICATORS.some((indicator) => t.includes(indicator));
 }

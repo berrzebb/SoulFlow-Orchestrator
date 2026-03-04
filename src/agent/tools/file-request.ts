@@ -1,7 +1,6 @@
-import { randomUUID } from "node:crypto";
 import { Tool } from "./base.js";
 import type { OutboundMessage } from "../../bus/types.js";
-import { now_iso } from "../../utils/common.js";
+import { now_iso, short_id} from "../../utils/common.js";
 import type { JsonSchema, ToolExecutionContext } from "./types.js";
 
 export type FileRequestCallback = (message: OutboundMessage) => Promise<void>;
@@ -59,7 +58,7 @@ export class FileRequestTool extends Tool {
     if (!channel || !chat_id) return "Error: channel and chat_id are required";
     if (!prompt) return "Error: prompt is required";
 
-    const request_id = randomUUID().slice(0, 12);
+    const request_id = short_id();
     const content = [
       `[FILE_REQUEST id=${request_id}]`,
       prompt,
@@ -69,7 +68,7 @@ export class FileRequestTool extends Tool {
     ].filter(Boolean).join("\n");
 
     const message: OutboundMessage = {
-      id: randomUUID().slice(0, 12),
+      id: short_id(),
       provider: channel,
       channel,
       sender_id: "agent",

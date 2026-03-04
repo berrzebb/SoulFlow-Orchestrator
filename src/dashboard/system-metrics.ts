@@ -17,14 +17,9 @@ export interface SystemMetrics {
 type CpuTick = { idle: number; total: number };
 
 function cpu_ticks(): CpuTick {
-  let idle = 0;
-  let total = 0;
-  for (const cpu of cpus()) {
-    for (const v of Object.values(cpu.times)) idle += cpu.times.idle, total += (v as number);
-  }
-  // idle counted twice in the loop above — fix:
-  idle = cpus().reduce((s, c) => s + c.times.idle, 0);
-  total = cpus().reduce((s, c) => s + Object.values(c.times).reduce((a, b) => a + b, 0), 0);
+  const cores = cpus();
+  const idle = cores.reduce((s, c) => s + c.times.idle, 0);
+  const total = cores.reduce((s, c) => s + Object.values(c.times).reduce((a, b) => a + b, 0), 0);
   return { idle, total };
 }
 

@@ -1,8 +1,7 @@
-import { randomUUID } from "node:crypto";
 import type { InboundMessage, OutboundMessage } from "../bus/types.js";
 import type { Logger } from "../logger.js";
 import { create_logger } from "../logger.js";
-import { now_iso } from "../utils/common.js";
+import { now_iso, error_message, short_id} from "../utils/common.js";
 import type { CommandDescriptor } from "./commands/registry.js";
 import type { AgentMention, ChannelCommand, ChannelHealth, ChannelTypingState, ChatChannel, FileRequestResult } from "./types.js";
 import { parse_slash_command } from "./slash-command.js";
@@ -54,7 +53,7 @@ export abstract class BaseChannel implements ChatChannel {
     try {
       await this.set_typing_remote(normalized, typing, anchor_message_id);
     } catch (error) {
-      this.last_error = error instanceof Error ? error.message : String(error);
+      this.last_error = error_message(error);
     }
   }
 
@@ -71,7 +70,7 @@ export abstract class BaseChannel implements ChatChannel {
   async send_command(chat_id: string, command: string, args?: string[]): Promise<{ ok: boolean; message_id?: string; error?: string }> {
     const line = `/${command}${Array.isArray(args) && args.length > 0 ? ` ${args.join(" ")}` : ""}`;
     return this.send({
-      id: randomUUID().slice(0, 12),
+      id: short_id(),
       provider: this.provider,
       channel: this.provider,
       sender_id: "agent",
@@ -85,14 +84,14 @@ export abstract class BaseChannel implements ChatChannel {
   }
 
   async request_file(chat_id: string, prompt: string, accept?: string[]): Promise<FileRequestResult> {
-    const request_id = randomUUID().slice(0, 12);
+    const request_id = short_id();
     const content = [
       `[FILE_REQUEST id=${request_id}]`,
       prompt,
       Array.isArray(accept) && accept.length > 0 ? `accepted_types: ${accept.join(", ")}` : "",
     ].filter(Boolean).join("\n");
     const result = await this.send({
-      id: randomUUID().slice(0, 12),
+      id: short_id(),
       provider: this.provider,
       channel: this.provider,
       sender_id: "agent",
@@ -122,7 +121,7 @@ export abstract class BaseChannel implements ChatChannel {
   ): Promise<{ ok: boolean; message_id?: string; error?: string }> {
     const content = `[AGENT-MENTION] from=@${from_alias} to=@${to_alias}\n@${to_alias} ${message}`;
     return this.send({
-      id: randomUUID().slice(0, 12),
+      id: short_id(),
       provider: this.provider,
       channel: this.provider,
       sender_id: from_alias,

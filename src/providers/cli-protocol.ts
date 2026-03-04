@@ -1,5 +1,4 @@
 import { dedupe_tool_calls, parse_tool_calls_from_text, parse_tool_calls_from_unknown } from "../agent/tool-call-parser.js";
-import { escape_regexp } from "../utils/common.js";
 import type { ChatMessage, ToolCallRequest } from "./types.js";
 
 export const OUTPUT_BLOCK_START = "<<ORCH_FINAL>>";
@@ -8,6 +7,14 @@ export const TOOL_BLOCK_START = "<<ORCH_TOOL_CALLS>>";
 export const TOOL_BLOCK_END = "<<ORCH_TOOL_CALLS_END>>";
 export const DEFAULT_CAPTURE_MAX_CHARS = 500_000;
 export const DEFAULT_STREAM_STATE_MAX_CHARS = 200_000;
+
+/** 프로토콜 마커 regex — 리터럴로 선언하여 모듈 로드 시 1회 컴파일. */
+const RE_OUTPUT_START = /<<ORCH_FINAL>>/g;
+const RE_OUTPUT_END = /<<ORCH_FINAL_END>>/g;
+const RE_TOOL_START = /<<ORCH_TOOL_CALLS>>/g;
+const RE_TOOL_END = /<<ORCH_TOOL_CALLS_END>>/g;
+const RE_OUTPUT_BLOCK = /<<ORCH_FINAL>>([\s\S]*?)<<ORCH_FINAL_END>>/g;
+const RE_TOOL_BLOCK = /<<ORCH_TOOL_CALLS>>([\s\S]*?)<<ORCH_TOOL_CALLS_END>>/g;
 
 function compact_tool_catalog(tools: Record<string, unknown>[]): string {
   return tools
@@ -79,7 +86,7 @@ export function messages_to_prompt(messages: ChatMessage[], tools?: Record<strin
 }
 
 export function extract_protocol_output(raw: string): string {
-  return extract_last_block(raw, OUTPUT_BLOCK_START, OUTPUT_BLOCK_END);
+  return extract_last_block_re(String(raw || ""), RE_OUTPUT_BLOCK);
 }
 
 export function extract_protocol_partial(raw: string): string {
@@ -93,12 +100,9 @@ export function extract_protocol_partial(raw: string): string {
   return text.slice(body_start);
 }
 
-function extract_last_block(raw: string, start_marker: string, end_marker: string): string {
-  const text = String(raw || "");
+function extract_last_block_re(text: string, re: RegExp): string {
   if (!text) return "";
-  const escapedStart = escape_regexp(start_marker);
-  const escapedEnd = escape_regexp(end_marker);
-  const re = new RegExp(`${escapedStart}([\\s\\S]*?)${escapedEnd}`, "g");
+  re.lastIndex = 0;
   let match: RegExpExecArray | null = null;
   let last = "";
   while (true) {
@@ -110,11 +114,12 @@ function extract_last_block(raw: string, start_marker: string, end_marker: strin
 }
 
 export function strip_protocol_markers(raw: string): string {
+  RE_OUTPUT_START.lastIndex = RE_OUTPUT_END.lastIndex = RE_TOOL_START.lastIndex = RE_TOOL_END.lastIndex = 0;
   return String(raw || "")
-    .replace(new RegExp(escape_regexp(OUTPUT_BLOCK_START), "g"), "")
-    .replace(new RegExp(escape_regexp(OUTPUT_BLOCK_END), "g"), "")
-    .replace(new RegExp(escape_regexp(TOOL_BLOCK_START), "g"), "")
-    .replace(new RegExp(escape_regexp(TOOL_BLOCK_END), "g"), "")
+    .replace(RE_OUTPUT_START, "")
+    .replace(RE_OUTPUT_END, "")
+    .replace(RE_TOOL_START, "")
+    .replace(RE_TOOL_END, "")
     .trim();
 }
 
@@ -296,7 +301,7 @@ function parse_tool_calls_from_json_events(raw: string): ToolCallRequest[] {
 }
 
 export function parse_tool_calls_from_output(raw: string): ToolCallRequest[] {
-  const block = extract_last_block(raw, TOOL_BLOCK_START, TOOL_BLOCK_END);
+  const block = extract_last_block_re(String(raw || ""), RE_TOOL_BLOCK);
   const out: ToolCallRequest[] = [];
   if (block) {
     const from_block = parse_tool_calls_from_text(block);
@@ -309,7 +314,7 @@ export function parse_tool_calls_from_output(raw: string): ToolCallRequest[] {
 
   const final_from_json = extract_final_from_json_output(raw);
   if (final_from_json) {
-    const final_block = extract_last_block(final_from_json, TOOL_BLOCK_START, TOOL_BLOCK_END);
+    const final_block = extract_last_block_re(final_from_json, RE_TOOL_BLOCK);
     if (final_block) {
       const parsed = parse_tool_calls_from_text(final_block);
       if (parsed.length > 0) return parsed;
@@ -320,7 +325,7 @@ export function parse_tool_calls_from_output(raw: string): ToolCallRequest[] {
 
   const final_from_protocol = extract_protocol_output(raw);
   if (final_from_protocol) {
-    const protocol_block = extract_last_block(final_from_protocol, TOOL_BLOCK_START, TOOL_BLOCK_END);
+    const protocol_block = extract_last_block_re(final_from_protocol, RE_TOOL_BLOCK);
     if (protocol_block) {
       const parsed = parse_tool_calls_from_text(protocol_block);
       if (parsed.length > 0) return parsed;

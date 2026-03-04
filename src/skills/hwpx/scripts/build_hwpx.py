@@ -36,13 +36,15 @@ from zipfile import ZIP_DEFLATED, ZIP_STORED, ZipFile
 
 from lxml import etree
 
+from validate import validate
+
 # Resolve paths relative to this script
 SCRIPT_DIR = Path(__file__).resolve().parent
 SKILL_DIR = SCRIPT_DIR.parent
 TEMPLATES_DIR = SKILL_DIR / "templates"
 BASE_DIR = TEMPLATES_DIR / "base"
 
-AVAILABLE_TEMPLATES = ["gonmun", "report", "minutes"]
+AVAILABLE_TEMPLATES = ["gonmun", "report", "minutes", "proposal"]
 
 
 def validate_xml(filepath: Path) -> None:
@@ -92,8 +94,8 @@ def update_metadata(content_hpf: Path, title: str | None, creator: str | None) -
     )
 
 
-def pack_hwpx(input_dir: Path, output_path: Path) -> None:
-    """Create HWPX archive with mimetype as first entry (ZIP_STORED)."""
+def pack_hwpx(input_dir: Path, output_path: Path) -> int:
+    """Create HWPX archive with mimetype as first entry (ZIP_STORED). Returns file count."""
     mimetype_file = input_dir / "mimetype"
     if not mimetype_file.is_file():
         raise SystemExit(f"Missing 'mimetype' in {input_dir}")
@@ -111,47 +113,7 @@ def pack_hwpx(input_dir: Path, output_path: Path) -> None:
                 continue
             zf.write(input_dir / rel_path, rel_path, compress_type=ZIP_DEFLATED)
 
-
-def validate_hwpx(hwpx_path: Path) -> list[str]:
-    """Quick structural validation of the output HWPX."""
-    errors: list[str] = []
-    required = [
-        "mimetype",
-        "Contents/content.hpf",
-        "Contents/header.xml",
-        "Contents/section0.xml",
-    ]
-
-    try:
-        from zipfile import BadZipFile
-        zf = ZipFile(hwpx_path, "r")
-    except BadZipFile:
-        return [f"Not a valid ZIP: {hwpx_path}"]
-
-    with zf:
-        names = zf.namelist()
-        for r in required:
-            if r not in names:
-                errors.append(f"Missing: {r}")
-
-        if "mimetype" in names:
-            content = zf.read("mimetype").decode("utf-8").strip()
-            if content != "application/hwp+zip":
-                errors.append(f"Bad mimetype content: {content}")
-            if names[0] != "mimetype":
-                errors.append("mimetype is not the first ZIP entry")
-            info = zf.getinfo("mimetype")
-            if info.compress_type != ZIP_STORED:
-                errors.append("mimetype is not ZIP_STORED")
-
-        for name in names:
-            if name.endswith(".xml") or name.endswith(".hpf"):
-                try:
-                    etree.fromstring(zf.read(name))
-                except etree.XMLSyntaxError as e:
-                    errors.append(f"Malformed XML: {name}: {e}")
-
-    return errors
+    return len(all_files)
 
 
 def build(
@@ -201,16 +163,15 @@ def build(
         update_metadata(work / "Contents" / "content.hpf", title, creator)
 
         # 5. Validate all XML files
-        for xml_file in work.rglob("*.xml"):
-            validate_xml(xml_file)
-        for hpf_file in work.rglob("*.hpf"):
-            validate_xml(hpf_file)
+        for f in work.rglob("*"):
+            if f.suffix in (".xml", ".hpf"):
+                validate_xml(f)
 
         # 6. Pack
         pack_hwpx(work, output)
 
     # 7. Final validation
-    errors = validate_hwpx(output)
+    errors = validate(str(output))
     if errors:
         print(f"WARNING: {output} has issues:", file=sys.stderr)
         for e in errors:

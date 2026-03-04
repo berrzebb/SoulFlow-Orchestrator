@@ -1,6 +1,5 @@
 import { mkdir, open, stat, unlink } from "node:fs/promises";
 import { join } from "node:path";
-import { randomUUID } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
 import { with_sqlite } from "../utils/sqlite-helper.js";
 import type {
@@ -15,7 +14,7 @@ import type {
 import type { CronScheduler } from "./contracts.js";
 import type { ServiceLike } from "../runtime/service.types.js";
 import type { Logger } from "../logger.js";
-import { now_ms } from "../utils/common.js";
+import { now_ms, error_message, short_id} from "../utils/common.js";
 
 type CronDbRow = {
   id: string;
@@ -42,9 +41,25 @@ type CronDbRow = {
   delete_after_run: number;
 };
 
+const _tz_formatter_cache = new Map<string, Intl.DateTimeFormat>();
+
+function _get_tz_formatter(tz: string): Intl.DateTimeFormat {
+  let fmt = _tz_formatter_cache.get(tz);
+  if (!fmt) {
+    fmt = new Intl.DateTimeFormat("en-US", {
+      timeZone: tz,
+      month: "numeric", day: "numeric",
+      hour: "numeric", minute: "numeric",
+      weekday: "short", hour12: false,
+    });
+    _tz_formatter_cache.set(tz, fmt);
+  }
+  return fmt;
+}
+
 function _is_valid_timezone(tz: string): boolean {
   try {
-    new Intl.DateTimeFormat("en-US", { timeZone: tz }).format(new Date());
+    _get_tz_formatter(tz);
     return true;
   } catch {
     return false;
@@ -138,15 +153,7 @@ function _get_local_parts(ms: number): CronDateParts {
 
 function _get_tz_parts(ms: number, tz: string): CronDateParts | null {
   try {
-    const parts = new Intl.DateTimeFormat("en-US", {
-      timeZone: tz,
-      month: "numeric",
-      day: "numeric",
-      hour: "numeric",
-      minute: "numeric",
-      weekday: "short",
-      hour12: false,
-    }).formatToParts(new Date(ms));
+    const parts = _get_tz_formatter(tz).formatToParts(new Date(ms));
     const num = (type: "month" | "day" | "hour" | "minute"): number | null => {
       const raw = parts.find((p) => p.type === type)?.value || "";
       const n = Number(raw);
@@ -544,7 +551,7 @@ export class CronService implements CronScheduler, ServiceLike {
           await this._execute_job(job);
         } catch (e) {
           job.state.last_status = "error";
-          job.state.last_error = e instanceof Error ? e.message : String(e);
+          job.state.last_error = error_message(e);
         }
       }
       await this._save_store();
@@ -562,15 +569,18 @@ export class CronService implements CronScheduler, ServiceLike {
     job.state.running = true;
     job.state.running_started_at_ms = start_ms;
     job.updated_at_ms = start_ms;
+    this.logger?.info("cron_job_start", { job_id: job.id, name: job.name, schedule: job.schedule.kind });
     try {
       await this._save_store();
       try {
         if (this.on_job) await this.on_job(job);
         job.state.last_status = "ok";
         job.state.last_error = null;
+        this.logger?.info("cron_job_finish", { job_id: job.id, name: job.name, status: "ok" });
       } catch (error) {
         job.state.last_status = "error";
-        job.state.last_error = error instanceof Error ? error.message : String(error);
+        job.state.last_error = error_message(error);
+        this.logger?.warn("cron_job_finish", { job_id: job.id, name: job.name, status: "error", error: error_message(error) });
       }
 
       job.state.last_run_at_ms = start_ms;
@@ -713,7 +723,7 @@ export class CronService implements CronScheduler, ServiceLike {
       ? delete_after_run
       : schedule.kind === "at";
     const job: CronJob = {
-      id: randomUUID().slice(0, 8),
+      id: short_id(8),
       name,
       enabled: true,
       schedule,
@@ -739,6 +749,7 @@ export class CronService implements CronScheduler, ServiceLike {
     store.jobs.push(job);
     await this._save_and_rearm();
     this._notify("added", job.id);
+    this.logger?.info("cron_job_add", { job_id: job.id, name, schedule: schedule.kind });
     return job;
   }
 
@@ -750,6 +761,7 @@ export class CronService implements CronScheduler, ServiceLike {
     if (removed) {
       await this._save_and_rearm();
       this._notify("removed", job_id);
+      this.logger?.info("cron_job_remove", { job_id });
     }
     return removed;
   }
@@ -764,6 +776,7 @@ export class CronService implements CronScheduler, ServiceLike {
       else job.state.next_run_at_ms = null;
       await this._save_and_rearm();
       this._notify(enabled ? "enabled" : "disabled", job_id);
+      this.logger?.info("cron_job_toggle", { job_id, enabled });
       return job;
     }
     return null;
@@ -793,7 +806,7 @@ export class CronService implements CronScheduler, ServiceLike {
 
   every(ms: number, fn: () => Promise<void>): void {
     const t = setInterval(() => {
-      fn().catch((e) => this.logger?.error("interval callback failed", { error: e instanceof Error ? e.message : String(e) }));
+      fn().catch((e) => this.logger?.error("interval callback failed", { error: error_message(e) }));
     }, Math.max(1_000, ms));
     this._interval_timers.add(t);
   }

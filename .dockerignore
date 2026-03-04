@@ -1,0 +1,42 @@
+# Dependencies (rebuilt in container)
+node_modules/
+web/node_modules/
+
+# Build outputs
+dist/
+standalone/
+
+# Persistent data (volume-mounted, not baked in)
+workspace/
+*.db
+*.db-wal
+*.db-shm
+
+# Development
+.claude/
+.git/
+.vscode/
+.idea/
+
+# Environment / secrets
+.env
+.env.*
+
+# Tests
+tests/
+**/*.test.ts
+**/*.spec.ts
+vitest.config.*
+
+# Temporary
+*.tsbuildinfo
+*.log
+nul
+temp_*
+
+# Documentation (not needed at runtime)
+docs/
+
+# OS artifacts
+Thumbs.db
+.DS_Store

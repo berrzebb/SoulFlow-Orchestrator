@@ -1,3 +1,4 @@
+import { error_message } from "../../utils/common.js";
 import { slash_name_in, slash_token_in } from "../slash-command.js";
 import { normalize_common_command_text } from "../command-intent.js";
 import type { InboundMessage } from "../../bus/types.js";
@@ -359,7 +360,7 @@ export class CronHandler implements CommandHandler {
       ].join("\n"));
       return true;
     } catch (error) {
-      const reason = error instanceof Error ? error.message : String(error);
+      const reason = error_message(error);
       await ctx.send_reply(`${mention}cron ${action || "add"} 처리 실패: ${reason}`);
       return true;
     }

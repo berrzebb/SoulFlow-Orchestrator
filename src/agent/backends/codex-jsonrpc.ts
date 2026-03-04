@@ -1,5 +1,5 @@
+import { short_id } from "../../utils/common.js";
 import { spawn, type ChildProcess } from "node:child_process";
-import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 
 /** JSON-RPC 2.0 요청. */
@@ -87,7 +87,7 @@ export class CodexJsonRpcClient extends EventEmitter {
       throw new Error("codex_process_not_running");
     }
 
-    const id = randomUUID().slice(0, 12);
+    const id = short_id();
     const msg: JsonRpcRequest = { jsonrpc: "2.0", id, method, params };
     const timeout = this.config.request_timeout_ms || 30_000;
 

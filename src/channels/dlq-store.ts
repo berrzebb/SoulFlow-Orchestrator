@@ -1,3 +1,4 @@
+import { now_iso } from "../utils/common.js";
 import { mkdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { with_sqlite } from "../utils/sqlite-helper.js";
@@ -91,7 +92,7 @@ export class SqliteDispatchDlqStore implements DispatchDlqStoreLike {
             retry_count, error, content, metadata_json
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
-          String(record.at || new Date().toISOString()),
+          String(record.at || now_iso()),
           String(record.provider || ""),
           String(record.chat_id || ""),
           String(record.message_id || ""),

@@ -6,14 +6,14 @@
 
 Slack · Telegram · Discord 메시지를 **헤드리스 에이전트**로 처리하는 비동기 오케스트레이션 런타임.
 
-5개 에이전트 백엔드(Claude/Codex × CLI/SDK + OpenAI 호환), 8개 역할 기반 스킬 시스템, CircuitBreaker 기반 프로바이더 복원력, AES-256-GCM 보안 Vault, OAuth 2.0 외부 서비스 연동을 내장한 올인원 솔루션입니다.
+8개 에이전트 백엔드(Claude/Codex/Gemini × CLI/SDK + OpenAI 호환 + 컨테이너), 8개 역할 기반 스킬 시스템, CircuitBreaker 기반 프로바이더 복원력, AES-256-GCM 보안 Vault, OAuth 2.0 연동, React + Vite 웹 대시보드(i18n, 마크다운 렌더링)를 내장한 올인원 솔루션입니다.
 
 ## 목차
 
 - [아키텍처](#아키텍처)
 - [이게 뭔가요?](#이게-뭔가요)
 - [빠른 시작](#빠른-시작)
-- [대시보드 사용법](#대시보드-사용법)
+- [대시보드](#대시보드)
 - [OAuth 연동](#oauth-연동)
 - [사용 예시](#사용-예시)
 - [슬래시 커맨드](#슬래시-커맨드)
@@ -45,6 +45,17 @@ flowchart TD
         CCLI[claude_cli]
         CAPPS[codex_appserver]
         CCLIX[codex_cli]
+        GCLI[gemini_cli]
+        OAI[openai_compatible]
+        ORT[openrouter]
+        CTR[container_cli]
+    end
+
+    subgraph PTY["PTY / Docker 격리"]
+        direction LR
+        POOL[ContainerPool]
+        BUS[AgentBus]
+        BRIDGE[MCP 브릿지]
     end
 
     subgraph Skills["역할 스킬"]
@@ -55,10 +66,14 @@ flowchart TD
         DBG[debugger · validator]
     end
 
+    DASH[대시보드 · OAuth]
+
     Channels --> Pipeline
     Pipeline --> Backends
+    CTR --> PTY
     Backends --> Skills
     Skills --> OUT([응답 · 스트리밍])
+    DASH -.-> Pipeline
 ```
 
 상세 다이어그램: [서비스 아키텍처](diagrams/service-architecture.svg) · [인바운드 파이프라인](diagrams/inbound-pipeline.svg) · [프로바이더 복원력](diagrams/provider-resilience.svg) · [역할 위임](diagrams/role-delegation.svg)
@@ -87,7 +102,9 @@ flowchart TD
 | `claude_cli` | Headless CLI 래퍼 | 안정성 · 범용 | — |
 | `codex_appserver` | 네이티브 AppServer | 병렬 실행 · tool loop 내장 | → `codex_cli` |
 | `codex_cli` | Headless CLI 래퍼 | 샌드박스 모드 지원 | — |
+| `gemini_cli` | Headless CLI 래퍼 | Gemini CLI 연동 | — |
 | `openai_compatible` | OpenAI 호환 API | vLLM · Ollama · LM Studio · Together AI · Gemini 등 로컬/원격 모델 | — |
+| `container_cli` | 컨테이너 CLI 래퍼 | Podman/Docker 샌드박스 실행 | — |
 
 ### 역할 스킬
 
@@ -125,6 +142,18 @@ npm run build
 cd workspace && node ../dist/main.js
 ```
 
+### Docker
+
+```bash
+# 프로덕션 (orchestrator + phi4)
+docker compose up -d
+
+# 개발 (라이브 리로드)
+docker compose -f docker-compose.dev.yml up
+```
+
+`full` 이미지에 Claude Code, Codex, Gemini CLI가 사전 설치되어 있습니다.
+
 ### Setup Wizard
 
 첫 실행 시 프로바이더가 설정되지 않으면 대시보드가 자동으로 Setup Wizard(`/setup`)로 이동합니다.
@@ -142,143 +171,29 @@ Wizard에서 다음을 순서대로 설정합니다:
 
 ---
 
-## 대시보드 사용법
+## 대시보드
 
-대시보드 URL: `http://127.0.0.1:4200`
+`http://127.0.0.1:4200` — React + Vite SPA. 한국어/영어 i18n 지원 (브라우저 로케일 자동 감지).
 
-사이드바에서 7개 섹션으로 이동합니다. 오른쪽 하단 버튼으로 다크/라이트 테마를 전환할 수 있습니다.
+| 페이지 | 경로 | 기능 |
+|--------|------|------|
+| Overview | `/` | 런타임 상태 요약, 시스템 메트릭, SSE 실시간 피드 |
+| Workspace | `/workspace` | 메모리 · 세션 · 스킬 · 크론 · 도구 · 에이전트 · 템플릿 · OAuth (8탭) |
+| Chat | `/chat` | 웹 기반 에이전트 대화 (마크다운 렌더링 + 코드 하이라이팅) |
+| Channels | `/channels` | 채널 연결 상태 · 글로벌 설정 |
+| Providers | `/providers` | 에이전트 프로바이더 CRUD · Circuit Breaker 상태 |
+| Secrets | `/secrets` | AES-256-GCM 시크릿 관리 |
+| Settings | `/settings` | 글로벌 런타임 설정 |
 
----
-
-### Overview
-
-런타임 전체 상태를 한눈에 확인합니다.
-
-| 섹션 | 내용 |
-|------|------|
-| **통계 카드** | 활성 에이전트 수 · 실행 중 프로세스 · 연결된 채널 |
-| **Performance** | CPU · 메모리 · Swap 사용률 (프로그레스 바) |
-| **Network** | 네트워크 수신/송신 속도 (KB/s) — Linux 환경에서만 표시 |
-| **에이전트** | 역할별 상태 배지 · 마지막 메시지 시간 |
-| **실행 중인 프로세스** | run_id · 모드 · 도구 호출 수 · 에러 여부 |
-| **크론** | 활성 크론 잡 (잡 있을 때만 표시) |
-| **결정사항** | 주요 결정 키-값 (결정 있을 때만 표시) |
-| **최근 이벤트** | 워크플로우 이벤트 스트림 |
-
----
-
-### Workspace
-
-에이전트 워크스페이스를 관리합니다. 8개 탭으로 구성됩니다.
-
-#### Memory 탭
-에이전트의 메모리와 DB 기반 기록을 조회/편집합니다.
-- **Long-term**: 장기 메모리 (편집 가능)
-- **Daily**: 날짜별 일일 노트 (편집 가능)
-- **Decisions/Promises/Events**: DB에 저장된 결정사항·약속·이벤트
-
-#### Sessions 탭
-대화 세션 목록과 히스토리를 조회합니다.
-- **채널 필터**: 전체 / Slack / Telegram / Discord / Web 탭으로 프로바이더별 필터링
-- 세션 클릭 → 프로바이더 배지 + 타임스탬프 포함 전체 메시지 히스토리
-
-#### Skills 탭
-에이전트 스킬 목록과 파일 내용을 확인/편집합니다.
-- **builtin 스킬**: 읽기 전용
-- **workspace 스킬**: `SKILL.md` 및 `references/` 파일 직접 편집 가능
-- **도구 피커** (`SKILL.md` 편집 시 자동 표시)
-  - `도구:` — 클릭으로 SoulFlow 레지스트리 도구 → `tools:` frontmatter 토글
-  - `SDK:` — Bash · Read · Write · Edit 등 Claude Code 네이티브 도구
-  - `OAuth:` — 클릭으로 등록된 OAuth 서비스 → `oauth:` frontmatter 토글
-  - `역할 프리셋:` — 역할 버튼 클릭 → 해당 역할 도구 세트 일괄 병합
-
-#### Cron 탭
-크론 잡 목록 · 추가/수정/삭제 · 즉시 실행
-
-#### Tools 탭
-에이전트 사용 가능 도구 목록. 행 클릭 → 파라미터 상세
-
-#### Agents 탭
-에이전트 설정 관리 (역할 · 백엔드 · 추가/수정/삭제)
-
-#### Templates 탭
-`IDENTITY.md` · `USER.md` · `SOUL.md` 등 시스템 프롬프트 템플릿 편집
-
-#### OAuth 탭
-OAuth 2.0 외부 서비스 연동 관리 → [OAuth 연동](#oauth-연동) 참고
-
----
-
-### Chat
-
-웹 브라우저에서 직접 에이전트와 대화합니다 (Slack/Telegram 없이 테스트 가능).
-
----
-
-### Channels
-
-채널 연결 상태 확인 및 글로벌 채널 설정 (폴링 주기 · 스트리밍 · 디스패치).
-
----
-
-### Providers
-
-AI 프로바이더(LLM 백엔드) 관리 — Circuit Breaker 상태 · 헬스 스코어 · 토큰 설정.
-
----
-
-### Secrets
-
-AES-256-GCM 암호화된 민감정보 관리. 에이전트는 참조명으로만 접근, 실제 값은 도구 실행 시에만 복호화.
-
----
-
-### Settings
-
-런타임 전체 설정 조회/편집 (에이전트 · MCP · 오케스트레이터 · 로깅 등).
-
----
+→ 상세: [대시보드 가이드](ko/guide/dashboard.md)
 
 ## OAuth 연동
 
-대시보드 **Workspace → OAuth 탭**에서 외부 서비스 OAuth 2.0 연동을 관리합니다.
+GitHub · Google · Custom OAuth 2.0 외부 서비스 연동. 대시보드 Workspace → OAuth 탭에서 관리합니다.
 
-### 지원 서비스
+에이전트 도구에서 `oauth:{instance_id}` 참조로 토큰 자동 주입, 401 시 자동 갱신 재시도.
 
-| 서비스 | service_type | 기본 스코프 |
-|--------|-------------|------------|
-| GitHub | `github` | `repo`, `read:user` |
-| Google | `google` | `openid`, `email`, `profile` |
-| Custom | `custom` | 사용자 정의 |
-
-### 연동 추가
-
-1. **Workspace → OAuth 탭** 접속
-2. **Add** 버튼 클릭
-3. 서비스 선택 (GitHub / Google / Custom)
-4. **Label** 입력 (식별용 이름)
-5. **Client ID** / **Client Secret** 입력
-   - GitHub: `github.com/settings/developers` → OAuth Apps
-   - Google: `console.cloud.google.com` → 사용자 인증 정보
-   - Custom: `auth_url` · `token_url` 직접 입력
-6. 필요한 스코프 선택 후 **Add**
-
-### 연결(Connect)
-
-추가 후 카드의 **Connect** 버튼을 클릭합니다.
-1. OAuth 팝업 창이 열립니다
-2. 해당 서비스에서 권한 승인
-3. 콜백 성공 시 카드 상태가 **Connected**로 변경
-
-### 토큰 관리
-
-| 버튼 | 동작 |
-|------|------|
-| **Connect** | OAuth 팝업으로 신규 인증 |
-| **Refresh** | Refresh Token으로 Access Token 갱신 |
-| **Test** | 현재 토큰으로 API 호출 테스트 |
-| **Edit** | 스코프 · 활성화 상태 수정 |
-| **Remove** | 연동 삭제 (토큰 포함) |
+→ 상세: [OAuth 가이드](ko/guide/oauth.md)
 
 ---
 
@@ -347,26 +262,40 @@ AES-256-GCM 암호화된 민감정보 관리. 에이전트는 참조명으로만
 
 ```text
 next/
+  Dockerfile              ← 멀티스테이지 Docker 빌드 (5 스테이지)
+  docker-compose.yml      ← 프로덕션 배포
+  docker-compose.dev.yml  ← 개발용 라이브 리로드
+  .devcontainer/          ← VS Code Dev Container 설정
   src/
-    agent/          ← 에이전트 런타임 (backends/, tools/)
+    agent/
+      backends/     ← SDK/CLI/OpenAI 백엔드 어댑터
+      pty/          ← PTY 기반 CLI 통합 (ContainerPool, AgentBus, MCP 브릿지, NDJSON 와이어)
+      tools/        ← 에이전트 도구 구현 (oauth_fetch 포함)
     bus/            ← MessageBus (inbound/outbound pub/sub)
     channels/       ← 채널 매니저 · 커맨드 · 디스패치 · 승인
-    config/         ← Zod 기반 설정 스키마
+    config/         ← Zod 기반 설정 스키마 + config-meta
     cron/           ← 크론 스케줄러 (SQLite)
-    dashboard/      ← 웹 대시보드 (API + SSE)
+    dashboard/
+      routes/       ← 22개 라우트 핸들러 (state, config, chat, cron 등)
+      service.ts    ← HTTP 서버 + 라우트 등록
     decision/       ← 결정사항 서비스
     mcp/            ← MCP 클라이언트 매니저
-    orchestration/  ← Agent Loop · Task Loop 실행기
+    oauth/          ← OAuth 2.0 연동 (flow-service, integration-store)
+    orchestration/  ← Gateway · Classifier · Prompts · ToolCallHandler · AgentHooksBuilder
     security/       ← Secret Vault (AES-256-GCM)
     session/        ← 세션 저장소
     skills/
       _shared/      ← 공유 프로토콜
       roles/        ← 8개 역할 스킬
+  scripts/          ← oauth-relay.mjs (OAuth TCP 릴레이)
   workspace/
     templates/      ← 시스템 프롬프트 템플릿
     skills/         ← 사용자 정의 스킬
     runtime/        ← SQLite DB 모음 (sessions, tasks, events, decisions, cron, dlq)
-  web/              ← 대시보드 프론트엔드 (React + Vite)
+  web/              ← 대시보드 프론트엔드 (React + Vite + i18n + Zustand)
+  docs/
+    */guide/        ← 사용자 가이드 (dashboard, oauth, providers, heartbeat)
+    */design/       ← 아키텍처 설계 문서 (pty-agent-backend, loop-continuity, phase-loop)
   diagrams/         ← SVG 아키텍처 다이어그램
 ```
 

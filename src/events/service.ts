@@ -1,29 +1,20 @@
 import { mkdir } from "node:fs/promises";
-import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { with_sqlite, type DatabaseSync } from "../utils/sqlite-helper.js";
-import { normalize_text } from "../utils/common.js";
+import { normalize_text, short_id, now_iso } from "../utils/common.js";
 import type { TaskState } from "../contracts.js";
 import type { TaskStoreLike } from "../agent/task-store.js";
 import type { Logger } from "../logger.js";
-import { now_iso } from "../utils/common.js";
-import type {
-  AppendWorkflowEventInput,
-  AppendWorkflowEventResult,
-  ListWorkflowEventsFilter,
-  WorkflowEvent,
-  WorkflowEventSource,
-  WorkflowPhase,
+import {
+  normalize_phase,
+  type AppendWorkflowEventInput,
+  type AppendWorkflowEventResult,
+  type ListWorkflowEventsFilter,
+  type WorkflowEvent,
+  type WorkflowEventSource,
 } from "./types.js";
 
-const PHASES = new Set<WorkflowPhase>(["assign", "progress", "blocked", "done", "approval"]);
 const SOURCES = new Set<WorkflowEventSource>(["outbound", "inbound", "system"]);
-
-function normalize_phase(value: unknown): WorkflowPhase {
-  const phase = String(value || "").trim().toLowerCase();
-  if (PHASES.has(phase as WorkflowPhase)) return phase as WorkflowPhase;
-  return "progress";
-}
 
 function normalize_source(value: unknown): WorkflowEventSource {
   const source = String(value || "").trim().toLowerCase();
@@ -259,7 +250,7 @@ export class WorkflowEventService {
   async append(input: AppendWorkflowEventInput): Promise<AppendWorkflowEventResult> {
     await this.initialized;
     return this.enqueue_write(async () => {
-      const event_id = normalize_text(input.event_id) || randomUUID().slice(0, 12);
+      const event_id = normalize_text(input.event_id) || short_id();
       const existing = this.with_sqlite((db) => db.prepare(`
         SELECT event_id, run_id, task_id, agent_id, phase, summary, payload_json, provider, channel, chat_id, thread_id, source, detail_file, at
         FROM workflow_events

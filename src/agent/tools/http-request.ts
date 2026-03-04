@@ -1,3 +1,4 @@
+import { error_message } from "../../utils/common.js";
 import { Tool } from "./base.js";
 import type { JsonSchema } from "./types.js";
 
@@ -109,7 +110,7 @@ export class HttpRequestTool extends Tool {
         truncated,
       });
     } catch (e) {
-      return `Error: ${e instanceof Error ? e.message : String(e)}`;
+      return `Error: ${error_message(e)}`;
     } finally {
       clearTimeout(timer);
     }

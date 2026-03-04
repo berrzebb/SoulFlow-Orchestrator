@@ -1,5 +1,4 @@
-import { randomUUID } from "node:crypto";
-import { now_iso } from "../../utils/common.js";
+import { now_iso, error_message, short_id} from "../../utils/common.js";
 import { parse_approval_response, type ApprovalDecision, type ApprovalParseResult } from "./approval-parser.js";
 import type {
   PreToolHook,
@@ -10,9 +9,6 @@ import type {
 
 const ERROR_HINT = "\n\n[Analyze the error and retry with a safer or narrower approach.]";
 
-function as_error_message(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
 
 type ApprovalRequest = {
   request_id: string;
@@ -137,7 +133,7 @@ export class ToolRegistry {
       if (result.startsWith("Error:")) return `${result}${ERROR_HINT}`;
       return result;
     } catch (error) {
-      return `Error executing ${name}: ${as_error_message(error)}${ERROR_HINT}`;
+      return `Error executing ${name}: ${error_message(error)}${ERROR_HINT}`;
     }
   }
 
@@ -174,7 +170,7 @@ export class ToolRegistry {
     detail: string,
   ): ApprovalRequest {
     const request: ApprovalRequest = {
-      request_id: randomUUID().slice(0, 12),
+      request_id: short_id(),
       tool_name,
       params: { ...params },
       context,
@@ -301,7 +297,7 @@ export class ToolRegistry {
         ok: false,
         status: req.status,
         tool_name: req.tool_name,
-        error: as_error_message(error),
+        error: error_message(error),
       };
     }
   }

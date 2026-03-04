@@ -1,3 +1,4 @@
+import { error_message } from "../../utils/common.js";
 import { renderMermaid, renderMermaidAscii, THEMES } from "@vercel/beautiful-mermaid";
 import { Tool } from "./base.js";
 import type { JsonSchema, ToolExecutionContext } from "./types.js";
@@ -65,7 +66,7 @@ export class DiagramRenderTool extends Tool {
         const ascii = renderMermaidAscii(diagram, { useAscii: params.use_ascii === true });
         return trunc(ascii, max_chars);
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
+        const message = error_message(error);
         return `Error: ${message}`;
       }
     }
@@ -84,7 +85,7 @@ export class DiagramRenderTool extends Tool {
         const svg = await renderMermaid(diagram, render_options);
         return trunc(svg, max_chars);
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
+        const message = error_message(error);
         return `Error: ${message}`;
       }
     }

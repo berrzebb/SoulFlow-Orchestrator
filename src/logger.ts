@@ -18,39 +18,33 @@ function parse_log_level(raw: string | undefined): LogLevel {
   return "info";
 }
 
-function format_ctx(ctx: LogContext | undefined): string {
-  if (!ctx) return "";
-  const parts: string[] = [];
-  for (const [k, v] of Object.entries(ctx)) {
-    if (v === undefined) continue;
-    try { parts.push(`${k}=${typeof v === "string" ? v : JSON.stringify(v)}`); }
-    catch { parts.push(`${k}=[json_error]`); }
-  }
-  return parts.length > 0 ? ` ${parts.join(" ")}` : "";
-}
-
 class ConsoleLogger implements Logger {
-  private readonly prefix: string;
+  private readonly name: string;
   private readonly min_level: number;
 
   constructor(name: string, min_level: LogLevel) {
-    this.prefix = `[${name}]`;
+    this.name = name;
     this.min_level = LEVEL_ORDER[min_level];
   }
 
-  debug(msg: string, ctx?: LogContext): void { this.log("debug", msg, ctx); }
-  info(msg: string, ctx?: LogContext): void { this.log("info", msg, ctx); }
-  warn(msg: string, ctx?: LogContext): void { this.log("warn", msg, ctx); }
-  error(msg: string, ctx?: LogContext): void { this.log("error", msg, ctx); }
+  debug(msg: string, ctx?: LogContext): void { this._emit("debug", msg, ctx); }
+  info(msg: string, ctx?: LogContext): void { this._emit("info", msg, ctx); }
+  warn(msg: string, ctx?: LogContext): void { this._emit("warn", msg, ctx); }
+  error(msg: string, ctx?: LogContext): void { this._emit("error", msg, ctx); }
 
   child(name: string): Logger {
     const level = Object.entries(LEVEL_ORDER).find(([, v]) => v === this.min_level)?.[0] as LogLevel || "info";
     return new ConsoleLogger(name, level);
   }
 
-  private log(level: LogLevel, msg: string, ctx?: LogContext): void {
+  private _emit(level: LogLevel, msg: string, ctx?: LogContext): void {
     if (LEVEL_ORDER[level] < this.min_level) return;
-    const line = `${this.prefix} ${msg}${format_ctx(ctx)}`;
+    let line: string;
+    try {
+      line = JSON.stringify({ ts: new Date().toISOString(), level, name: this.name, msg, ...ctx });
+    } catch {
+      line = JSON.stringify({ ts: new Date().toISOString(), level, name: this.name, msg, _ctx_error: true });
+    }
     if (level === "error") {
       // eslint-disable-next-line no-console
       console.error(line);

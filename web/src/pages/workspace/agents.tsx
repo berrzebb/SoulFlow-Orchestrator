@@ -6,6 +6,7 @@ import { Modal } from "../../components/modal";
 import { SendAgentModal } from "../../components/send-agent-modal";
 import { useToast } from "../../components/toast";
 import { classify_agent } from "../../utils/classify";
+import { fmt_time } from "../../utils/format";
 import { useT } from "../../i18n";
 
 interface Agent {
@@ -45,13 +46,9 @@ const MODE_COLOR: Record<string, string> = {
   once: "var(--muted)", agent: "var(--accent)", task: "#16a34a",
 };
 
-function fmt_time(iso: string): string {
-  try { return new Date(iso).toLocaleTimeString(); } catch { return iso; }
-}
-
 function ChannelRef({ channelId, messageId }: { channelId: string; messageId?: string }) {
   return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11 }}>
+    <span className="li-flex text-xs">
       <Badge status={channelId} variant="info" />
       {messageId && <span className="text-muted" style={{ fontSize: 10 }}>#{messageId.slice(-6)}</span>}
     </span>
@@ -100,18 +97,29 @@ export function AgentsTab() {
   const active_processes = processes_data?.active ?? [];
   const recent_processes = processes_data?.recent ?? [];
 
-  const cancel_agent = async (id: string) => { await api.post(`/api/agents/${id}/cancel`); toast(t("agents.cancelled"), "ok"); refresh(); };
-  const handle_send = async (agentId: string, text: string) => { await api.post(`/api/agents/${agentId}/send`, { text }); toast(t("agents.message_sent"), "ok"); setSendTarget(null); refresh(); };
-  const stop_loop = async (loopId: string) => { await api.post(`/api/loops/${loopId}/stop`, { reason: "stopped_from_dashboard" }); toast(t("agents.loop_stopped"), "ok"); refresh(); };
-  const cancel_task = async (taskId: string) => { await api.post(`/api/tasks/${taskId}/cancel`); toast(t("agents.task_cancelled"), "ok"); refresh(); };
-  const cancel_process = async (run_id: string) => { await api.post(`/api/processes/${run_id}/cancel`); toast(t("agents.process_cancelled"), "ok"); refresh(); };
-  const confirm_resume = async () => {
+  const safe_action = async (fn: () => Promise<void>, ok_msg: string, after?: () => void) => {
+    try {
+      await fn();
+      toast(ok_msg, "ok");
+      after?.();
+      refresh();
+    } catch (err) {
+      toast(err instanceof Error ? err.message : String(err), "err");
+    }
+  };
+
+  const cancel_agent = (id: string) => void safe_action(() => api.post(`/api/agents/${id}/cancel`), t("agents.cancelled"));
+  const handle_send = (agentId: string, text: string) => void safe_action(() => api.post(`/api/agents/${agentId}/send`, { text }), t("agents.message_sent"), () => setSendTarget(null));
+  const stop_loop = (loopId: string) => void safe_action(() => api.post(`/api/loops/${loopId}/stop`, { reason: "stopped_from_dashboard" }), t("agents.loop_stopped"));
+  const cancel_task = (taskId: string) => void safe_action(() => api.post(`/api/tasks/${taskId}/cancel`), t("agents.task_cancelled"));
+  const cancel_process = (run_id: string) => void safe_action(() => api.post(`/api/processes/${run_id}/cancel`), t("agents.process_cancelled"));
+  const confirm_resume = () => {
     if (!resumeTarget) return;
-    await api.post(`/api/tasks/${resumeTarget}/resume`, { text: resumeText || undefined });
-    toast(t("agents.task_resumed"), "ok");
-    setResumeTarget(null);
-    setResumeText("");
-    refresh();
+    void safe_action(
+      () => api.post(`/api/tasks/${resumeTarget}/resume`, { text: resumeText || undefined }),
+      t("agents.task_resumed"),
+      () => { setResumeTarget(null); setResumeText(""); },
+    );
   };
 
   return (
@@ -119,20 +127,17 @@ export function AgentsTab() {
       <SendAgentModal agentId={sendTarget} onClose={() => setSendTarget(null)} onSend={(id, text) => void handle_send(id, text)} />
 
       <Modal open={!!resumeTarget} title={t("agents.resume_task")} onClose={() => { setResumeTarget(null); setResumeText(""); }} onConfirm={() => void confirm_resume()} confirmLabel={t("agents.resume")}>
-        <label style={{ display: "block", fontSize: 12, color: "var(--muted)", marginBottom: 6 }}>{t("agents.user_input")}</label>
-        <textarea value={resumeText} onChange={(e) => setResumeText(e.target.value)} rows={3}
-          style={{ width: "100%", background: "var(--bg)", color: "var(--text)", border: "1px solid var(--line)", padding: 8, fontFamily: "inherit", fontSize: 12, resize: "vertical" }} />
+        <label className="form-label">{t("agents.user_input")}</label>
+        <textarea className="form-input" value={resumeText} onChange={(e) => setResumeText(e.target.value)} rows={3} style={{ resize: "vertical" }} />
       </Modal>
 
       {/* 실행 프로세스 */}
-      <div className="section-header" style={{ marginBottom: 8 }}>
-        <h2 style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <span style={{ fontSize: 14 }}>⚡</span>
+      <div className="section-header">
+        <h2 className="li-flex">
+          <span className="section-header__icon">⚡</span>
           {t("agents.processes_title")}
           {active_processes.length > 0 && (
-            <span style={{ fontSize: 11, background: "var(--accent)", color: "#fff", borderRadius: 4, padding: "1px 6px", marginLeft: 4 }}>
-              {t("agents.processes_active", { count: active_processes.length })}
-            </span>
+            <span className="section-header__badge">{t("agents.processes_active", { count: active_processes.length })}</span>
           )}
         </h2>
       </div>
@@ -154,7 +159,7 @@ export function AgentsTab() {
                 <tr key={p.run_id}>
                   <td className="text-xs text-muted">{p.run_id}</td>
                   <td>
-                    <span style={{ fontSize: 11, fontWeight: 600, color: MODE_COLOR[p.mode] ?? "var(--muted)", background: "color-mix(in srgb, currentColor 10%, transparent)", padding: "2px 6px", borderRadius: 4, border: "1px solid currentColor" }}>
+                    <span className="mode-badge" style={{ color: MODE_COLOR[p.mode] ?? "var(--muted)", background: "color-mix(in srgb, currentColor 10%, transparent)", border: "1px solid currentColor" }}>
                       {p.mode}
                     </span>
                   </td>
@@ -172,8 +177,8 @@ export function AgentsTab() {
       )}
 
       {recent_processes.length > 0 && (
-        <div style={{ marginTop: 8 }}>
-          <button className="btn btn--sm" onClick={() => setShowRecentProcesses((v) => !v)} style={{ color: "var(--muted)", background: "none", border: "1px solid var(--line)" }}>
+        <div style={{ marginTop: "var(--sp-2)" }}>
+          <button className="btn btn--sm toggle-btn" onClick={() => setShowRecentProcesses((v) => !v)}>
             {showRecentProcesses ? t("agents.hide_recent") : t("agents.show_recent", { count: recent_processes.length })}
           </button>
           {showRecentProcesses && (
@@ -186,7 +191,7 @@ export function AgentsTab() {
                   {recent_processes.map((p) => (
                     <tr key={p.run_id}>
                       <td className="text-xs text-muted">{p.run_id}</td>
-                      <td><span style={{ fontSize: 10, fontWeight: 600, color: MODE_COLOR[p.mode] ?? "var(--muted)" }}>{p.mode}</span></td>
+                      <td><span className="mode-badge" style={{ color: MODE_COLOR[p.mode] ?? "var(--muted)" }}>{p.mode}</span></td>
                       <td>{p.provider} / {p.alias}</td>
                       <td>{p.executor_provider || "-"}</td>
                       <td>{p.tool_calls_count}</td>
@@ -203,9 +208,9 @@ export function AgentsTab() {
       )}
 
       {/* Agent Loop */}
-      <div className="section-header" style={{ marginTop: 20, marginBottom: 8 }}>
-        <h2 style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <span style={{ fontSize: 14 }}>🔄</span>
+      <div className="section-header section-header--spaced">
+        <h2 className="li-flex">
+          <span className="section-header__icon">🔄</span>
           {t("agents.agent_loops", { count: agent_loops.length })}
         </h2>
       </div>
@@ -234,9 +239,9 @@ export function AgentsTab() {
       )}
 
       {/* Task Loop */}
-      <div className="section-header" style={{ marginTop: 20, marginBottom: 8 }}>
-        <h2 style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <span style={{ fontSize: 14 }}>⚙️</span>
+      <div className="section-header section-header--spaced">
+        <h2 className="li-flex">
+          <span className="section-header__icon">⚙️</span>
           {t("agents.task_loops", { count: active_tasks.length })}
         </h2>
       </div>
@@ -260,7 +265,7 @@ export function AgentsTab() {
                   <td>{task.channel ? <ChannelRef channelId={task.channel} messageId={task.chat_id} /> : <span className="text-muted">-</span>}</td>
                   <td><Badge status={task.status} /></td>
                   <td>
-                    <div style={{ display: "flex", gap: 4 }}>
+                    <div className="li-flex">
                       <button className="btn btn--xs btn--danger" onClick={() => void cancel_task(task.taskId)}>{t("common.cancel")}</button>
                       {WAITING_STATUSES.has(task.status) && (
                         <button className="btn btn--xs btn--ok" onClick={() => setResumeTarget(task.taskId)}>{t("agents.resume")}</button>
@@ -276,19 +281,17 @@ export function AgentsTab() {
 
       {/* 완료 목록 */}
       {completed_tasks.length > 0 && (
-        <div style={{ marginTop: 20 }}>
-          <button className="btn btn--sm" onClick={() => setShowCompleted((v) => !v)} style={{ color: "var(--muted)", background: "none", border: "1px solid var(--line)" }}>
+        <div style={{ marginTop: "var(--sp-5, 20px)" }}>
+          <button className="btn btn--sm toggle-btn" onClick={() => setShowCompleted((v) => !v)}>
             {showCompleted ? t("agents.hide_completed") : t("agents.show_completed", { count: completed_tasks.length })}
           </button>
           {showCompleted && (
-            <div style={{ marginTop: 8 }}>
-              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 8 }}>
-                <input type="search" value={completedSearch} onChange={(e) => setCompletedSearch(e.target.value)} placeholder={t("agents.filter_placeholder")}
-                  style={{ fontSize: 12, padding: "4px 8px", background: "var(--bg)", color: "var(--text)", border: "1px solid var(--line)", borderRadius: 4, width: 180 }} />
+            <div style={{ marginTop: "var(--sp-2)" }}>
+              <div className="filter-bar">
+                <input type="search" className="filter-input" value={completedSearch} onChange={(e) => setCompletedSearch(e.target.value)} placeholder={t("agents.filter_placeholder")} />
                 <div style={{ display: "flex", gap: 4 }}>
                   {(["all", ...completed_statuses] as string[]).map((s) => (
-                    <button key={s} className="btn btn--xs" onClick={() => setCompletedStatusFilter(s)}
-                      style={{ opacity: completedStatusFilter === s ? 1 : 0.45, background: completedStatusFilter === s ? "var(--accent)" : "none", color: completedStatusFilter === s ? "#fff" : "var(--text)", border: "1px solid var(--line)" }}>
+                    <button key={s} className={`btn btn--xs ${completedStatusFilter === s ? "filter-btn--active" : "filter-btn"}`} onClick={() => setCompletedStatusFilter(s)}>
                       {s === "all" ? t("agents.filter_all") : s}
                     </button>
                   ))}
@@ -327,9 +330,9 @@ export function AgentsTab() {
       {/* 서브에이전트 */}
       {agents.length > 0 && (
         <>
-          <div className="section-header" style={{ marginTop: 20, marginBottom: 8 }}>
+          <div className="section-header section-header--spaced">
             <h2 style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <span style={{ fontSize: 14 }}>🤖</span>
+              <span className="section-header__icon">🤖</span>
               {t("agents.once_title", { count: agents.length })}
             </h2>
           </div>

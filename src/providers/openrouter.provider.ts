@@ -1,3 +1,4 @@
+import { error_message } from "../utils/common.js";
 import { BaseLlmProvider } from "./base.js";
 import { create_logger } from "../logger.js";
 import { LlmResponse, parse_openai_response, sanitize_messages_for_api, type ChatOptions } from "./types.js";
@@ -72,9 +73,9 @@ export class OpenRouterProvider extends BaseLlmProvider {
       const parsed = parse_openai_response(raw);
       return new LlmResponse(parsed);
     } catch (error) {
-      log.warn("request failed", { error: error instanceof Error ? error.message : String(error) });
+      log.warn("request failed", { error: error_message(error) });
       return new LlmResponse({
-        content: `Error calling OpenRouter: ${error instanceof Error ? error.message : String(error)}`,
+        content: `Error calling OpenRouter: ${error_message(error)}`,
         finish_reason: "error",
       });
     }

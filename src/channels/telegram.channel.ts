@@ -1,8 +1,7 @@
-import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { basename, extname } from "node:path";
 import type { InboundMessage, MediaItem, OutboundMessage } from "../bus/types.js";
-import { now_iso } from "../utils/common.js";
+import { now_iso, error_message, short_id} from "../utils/common.js";
 import { BaseChannel } from "./base.js";
 import type { CommandDescriptor } from "./commands/registry.js";
 
@@ -74,7 +73,7 @@ function to_inbound_message(
   }
   const dedupe_id = Number.isFinite(update_id) && update_id > 0
     ? String(update_id)
-    : as_string(raw.message_id || randomUUID().slice(0, 12));
+    : as_string(raw.message_id || short_id());
   return {
     id: dedupe_id,
     provider: "telegram",
@@ -261,7 +260,7 @@ export class TelegramChannel extends BaseChannel {
       }
       return { ok: true, message_id: first_message_id || as_string(message.reply_to || "") };
     } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
+      const msg = error_message(error);
       this.log.warn("send failed", { chat_id, error: msg });
       return { ok: false, error: msg };
     } finally {
@@ -317,7 +316,7 @@ export class TelegramChannel extends BaseChannel {
       }
       return rows;
     } catch (error) {
-      this.last_error = error instanceof Error ? error.message : String(error);
+      this.last_error = error_message(error);
       this.log.warn("read failed", { chat_id, error: this.last_error });
       return [];
     }
@@ -342,7 +341,7 @@ export class TelegramChannel extends BaseChannel {
       }
       return { ok: true };
     } catch (error) {
-      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+      return { ok: false, error: error_message(error) };
     }
   }
 
@@ -366,7 +365,7 @@ export class TelegramChannel extends BaseChannel {
       }
       return { ok: true };
     } catch (error) {
-      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+      return { ok: false, error: error_message(error) };
     }
   }
 
@@ -385,7 +384,7 @@ export class TelegramChannel extends BaseChannel {
       }
       return { ok: true };
     } catch (error) {
-      return { ok: false, error: error instanceof Error ? error.message : String(error) };
+      return { ok: false, error: error_message(error) };
     }
   }
 
@@ -407,7 +406,7 @@ export class TelegramChannel extends BaseChannel {
         this.last_error = as_string(data.description || `setMyCommands_http_${response.status}`);
       }
     } catch (error) {
-      this.last_error = error instanceof Error ? error.message : String(error);
+      this.last_error = error_message(error);
       this.log.warn("sync_commands failed", { error: this.last_error });
     }
   }

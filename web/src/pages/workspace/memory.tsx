@@ -16,11 +16,6 @@ interface WorkflowEvent { event_id: string; task_id: string; agent_id: string; p
 
 type MemoryView = "longterm" | { day: string } | "decisions" | "promises" | "events";
 
-const INPUT_STYLE: React.CSSProperties = {
-  width: "100%", background: "var(--bg)", color: "var(--text)",
-  border: "1px solid var(--line)", padding: "6px 10px",
-  fontFamily: "inherit", fontSize: 12, borderRadius: 4,
-};
 
 export function MemoryTab() {
   const t = useT();
@@ -97,27 +92,18 @@ export function MemoryTab() {
   };
 
   const nav_item = (active: boolean, onClick: () => void, children: React.ReactNode) => (
-    <div
-      onClick={onClick}
-      style={{
-        padding: "8px 14px", cursor: "pointer", fontSize: 12,
-        background: active ? "var(--panel-elevated)" : "none",
-        borderLeft: active ? "3px solid var(--accent)" : "3px solid transparent",
-      }}
-    >
-      {children}
-    </div>
+    <div onClick={onClick} className={`ws-item${active ? " ws-item--active" : ""}`}>{children}</div>
   );
 
   const section_label = (label: string) => (
-    <div style={{ borderTop: "1px solid var(--line)", margin: "4px 0", padding: "6px 14px 2px" }}>
-      <span style={{ fontSize: 11, color: "var(--muted)" }}>{label}</span>
+    <div className="ws-group-label ws-group-label--section">
+      <span className="text-muted">{label}</span>
     </div>
   );
 
   const right_header = (title: string, action?: React.ReactNode) => (
-    <div style={{ padding: "10px 14px", borderBottom: "1px solid var(--line)", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
-      <span style={{ fontWeight: 600, fontSize: 13 }}>{title}</span>
+    <div className="ws-detail-header">
+      <span className="fw-600" style={{ fontSize: "var(--fs-sm)" }}>{title}</span>
       {action}
     </div>
   );
@@ -125,9 +111,9 @@ export function MemoryTab() {
   const right_content = () => {
     if (view === "decisions") {
       return (
-        <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+        <div className="ws-col">
           {right_header(t("workspace.memory.decisions"))}
-          <div style={{ flex: 1, overflow: "auto", padding: 14 }}>
+          <div className="ws-preview">
             {!decisions.length ? (
               <p className="empty">{t("decisions.no_decisions")}</p>
             ) : (
@@ -153,11 +139,11 @@ export function MemoryTab() {
 
     if (view === "promises") {
       return (
-        <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+        <div className="ws-col">
           {right_header(t("workspace.memory.promises"),
             <button className="btn btn--xs btn--ok" onClick={() => setShowAddPromise(true)}>{t("promises.add")}</button>
           )}
-          <div style={{ flex: 1, overflow: "auto", padding: 14 }}>
+          <div className="ws-preview">
             {!promises.length ? (
               <p className="empty">{t("promises.no_promises")}</p>
             ) : (
@@ -182,9 +168,9 @@ export function MemoryTab() {
 
     if (view === "events") {
       return (
-        <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+        <div className="ws-col">
           {right_header(t("workspace.memory.events"))}
-          <div style={{ flex: 1, overflow: "auto", padding: 14 }}>
+          <div className="ws-preview">
             {!events.length ? (
               <p className="empty">{t("decisions.no_events")}</p>
             ) : (
@@ -194,10 +180,10 @@ export function MemoryTab() {
                   {events.map((e) => (
                     <tr key={e.event_id}>
                       <td><Badge status={e.phase} /></td>
-                      <td style={{ fontSize: 11 }}>{e.task_id || "-"}</td>
-                      <td style={{ fontSize: 11 }}>{e.agent_id || "-"}</td>
+                      <td className="text-xs">{e.task_id || "-"}</td>
+                      <td className="text-xs">{e.agent_id || "-"}</td>
                       <td style={{ maxWidth: 240, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.summary || "-"}</td>
-                      <td style={{ fontSize: 11, color: "var(--muted)" }}>{e.at || "-"}</td>
+                      <td className="text-xs text-muted">{e.at || "-"}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -218,7 +204,7 @@ export function MemoryTab() {
               {t("common.edit")}
             </button>
           ) : (
-            <div style={{ display: "flex", gap: 6 }}>
+            <div className="li-flex">
               <button className="btn btn--xs" onClick={() => setEditing(false)}>{t("common.cancel")}</button>
               <button className="btn btn--xs btn--accent" onClick={() => save.mutate(editText)} disabled={save.isPending}>
                 {save.isPending ? t("common.saving") : t("workspace.memory.save")}
@@ -230,23 +216,11 @@ export function MemoryTab() {
           {content_loading ? (
             <p className="empty">{t("common.loading")}</p>
           ) : editing ? (
-            <textarea
-              value={editText}
-              onChange={(e) => setEditText(e.target.value)}
-              style={{
-                flex: 1, resize: "none", border: "none", background: "var(--bg)",
-                color: "var(--text)", fontFamily: "var(--font-mono)", fontSize: 12,
-                lineHeight: 1.6, padding: 14, outline: "none",
-              }}
-            />
+            <textarea className="ws-editor ws-editor--editing" value={editText} onChange={(e) => setEditText(e.target.value)} />
           ) : (
-            <pre style={{
-              flex: 1, margin: 0, padding: 14, overflow: "auto",
-              fontSize: 12, whiteSpace: "pre-wrap", lineHeight: 1.6,
-              fontFamily: "var(--font-mono)", color: "var(--text)",
-            }}>
-              {content_data?.content || <span style={{ color: "var(--muted)" }}>-</span>}
-            </pre>
+            <div className="ws-preview">
+              <pre>{content_data?.content || <span className="text-muted">-</span>}</pre>
+            </div>
           )}
         </div>
       </div>
@@ -257,42 +231,35 @@ export function MemoryTab() {
     <>
       <SplitPane
         left={
-          <div style={{ overflowY: "auto", flex: 1 }}>
+          <div className="ws-scroll">
             {/* 메모리 */}
             {nav_item(view === "longterm", () => { setView("longterm"); setEditing(false); },
-              <span style={{ fontWeight: 600 }}>{t("workspace.memory.longterm")}</span>
+              <span className="fw-600">{t("workspace.memory.longterm")}</span>
             )}
             {section_label(t("workspace.memory.daily"))}
             {nav_item(typeof view === "object" && (view as { day: string }).day === today, () => { setView({ day: today }); setEditing(false); },
               <>{today} <Badge status={t("workspace.memory.today")} variant="ok" /></>
             )}
             {days.filter((d) => d !== today).map((day) => (
-              <div
-                key={day}
-                onClick={() => { setView({ day }); setEditing(false); }}
-                style={{
-                  padding: "8px 14px", cursor: "pointer", fontSize: 12,
-                  background: typeof view === "object" && (view as { day: string }).day === day ? "var(--panel-elevated)" : "none",
-                  borderLeft: typeof view === "object" && (view as { day: string }).day === day ? "3px solid var(--accent)" : "3px solid transparent",
-                }}
-              >
+              <div key={day} onClick={() => { setView({ day }); setEditing(false); }}
+                className={`ws-item${typeof view === "object" && (view as { day: string }).day === day ? " ws-item--active" : ""}`}>
                 {day}
               </div>
             ))}
             {days.length === 0 && (
-              <div style={{ padding: "8px 14px", fontSize: 12, color: "var(--muted)" }}>{t("workspace.memory.no_daily")}</div>
+              <div className="ws-item text-muted">{t("workspace.memory.no_daily")}</div>
             )}
 
             {/* 결정사항 / 약속 / 이벤트 */}
             {section_label(t("workspace.memory.decisions"))}
             {nav_item(view === "decisions", () => setView("decisions"),
-              <>{t("workspace.memory.decisions")} <span style={{ fontSize: 10, color: "var(--muted)" }}>({decisions.length})</span></>
+              <>{t("workspace.memory.decisions")} <span className="text-xs text-muted">({decisions.length})</span></>
             )}
             {nav_item(view === "promises", () => setView("promises"),
-              <>{t("workspace.memory.promises")} <span style={{ fontSize: 10, color: "var(--muted)" }}>({promises.length})</span></>
+              <>{t("workspace.memory.promises")} <span className="text-xs text-muted">({promises.length})</span></>
             )}
             {nav_item(view === "events", () => setView("events"),
-              <>{t("workspace.memory.events")} <span style={{ fontSize: 10, color: "var(--muted)" }}>({events.length})</span></>
+              <>{t("workspace.memory.events")} <span className="text-xs text-muted">({events.length})</span></>
             )}
           </div>
         }
@@ -306,17 +273,17 @@ export function MemoryTab() {
         onConfirm={() => void add_promise()}
         confirmLabel={t("common.save")}
       >
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <label style={{ fontSize: 11, color: "var(--muted)" }}>{t("decisions.key")}</label>
-          <input autoFocus value={newKey} onChange={(e) => setNewKey(e.target.value)} placeholder="e.g. never_force_push" style={INPUT_STYLE} />
-          <label style={{ fontSize: 11, color: "var(--muted)" }}>{t("decisions.value")}</label>
-          <input value={newValue} onChange={(e) => setNewValue(e.target.value)} placeholder="e.g. Always confirm before force-pushing" style={INPUT_STYLE} />
-          <label style={{ fontSize: 11, color: "var(--muted)" }}>{t("decisions.priority")}</label>
-          <select value={newPriority} onChange={(e) => setNewPriority(Number(e.target.value))} style={INPUT_STYLE}>
-            <option value={0}>P0 — Critical</option>
-            <option value={1}>P1 — High</option>
-            <option value={2}>P2 — Medium</option>
-            <option value={3}>P3 — Low</option>
+        <div className="modal__form-body">
+          <label className="form-label">{t("decisions.key")}</label>
+          <input autoFocus className="form-input" value={newKey} onChange={(e) => setNewKey(e.target.value)} placeholder={t("promises.key_placeholder")} />
+          <label className="form-label">{t("decisions.value")}</label>
+          <input className="form-input" value={newValue} onChange={(e) => setNewValue(e.target.value)} placeholder={t("promises.value_placeholder")} />
+          <label className="form-label">{t("decisions.priority")}</label>
+          <select className="form-input" value={newPriority} onChange={(e) => setNewPriority(Number(e.target.value))}>
+            <option value={0}>{t("decisions.p0")}</option>
+            <option value={1}>{t("decisions.p1")}</option>
+            <option value={2}>{t("decisions.p2")}</option>
+            <option value={3}>{t("decisions.p3")}</option>
           </select>
         </div>
       </Modal>
@@ -329,7 +296,7 @@ export function MemoryTab() {
         confirmLabel={t("common.delete")}
         danger
       >
-        <p style={{ fontSize: 12 }}>{t("promises.delete_warning")}</p>
+        <p className="text-sm">{t("promises.delete_warning")}</p>
       </Modal>
     </>
   );

@@ -7,6 +7,7 @@ import { api } from "../api/client";
 import { classify_agent } from "../utils/classify";
 import { fmt_time } from "../utils/format";
 import { useT } from "../i18n";
+import { PROVIDER_COLORS } from "../utils/constants";
 
 interface SystemMetrics {
   cpu_percent: number;
@@ -39,13 +40,13 @@ function MetricBar({ label, percent, used, total, unit = "MB", color = "var(--ac
   label: string; percent: number; used: number; total: number; unit?: string; color?: string;
 }) {
   return (
-    <div style={{ display: "grid", gap: 4 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
-        <span style={{ color: "var(--muted)" }}>{label}</span>
-        <span style={{ fontWeight: 600 }}>{used.toLocaleString()} / {total.toLocaleString()} {unit} <span style={{ color: "var(--muted)" }}>({percent}%)</span></span>
+    <div className="metric-bar">
+      <div className="metric-bar__header">
+        <span className="text-muted">{label}</span>
+        <span className="fw-600">{used.toLocaleString()} / {total.toLocaleString()} {unit} <span className="text-muted">({percent}%)</span></span>
       </div>
-      <div style={{ height: 6, borderRadius: 3, background: "var(--panel-elevated)", overflow: "hidden" }}>
-        <div style={{ height: "100%", width: `${Math.min(percent, 100)}%`, background: color, borderRadius: 3, transition: "width 0.6s ease" }} />
+      <div className="metric-bar__track">
+        <div className="metric-bar__fill" style={{ width: `${Math.min(percent, 100)}%`, background: color }} />
       </div>
     </div>
   );
@@ -110,14 +111,11 @@ const PHASE_VARIANT: Record<string, "ok" | "warn" | "err" | "info" | undefined> 
   done: "ok", start: "info", error: "err", fail: "err", warn: "warn",
 };
 
-const PROVIDER_COLORS: Record<string, string> = {
-  slack: "#36C5F0", discord: "#5865F2", telegram: "#2AABEE",
-};
 
 function ModeBadge({ mode }: { mode: string }) {
   const s = MODE_STYLE[mode] ?? { color: "var(--muted)", bg: "rgba(145,164,183,0.1)" };
   return (
-    <span style={{ fontSize: 10, fontWeight: 700, color: s.color, background: s.bg, padding: "1px 6px", borderRadius: 4, border: `1px solid ${s.color}`, letterSpacing: "0.04em" }}>
+    <span className="mode-badge" style={{ color: s.color, background: s.bg, border: `1px solid ${s.color}` }}>
       {mode.toUpperCase()}
     </span>
   );
@@ -125,15 +123,11 @@ function ModeBadge({ mode }: { mode: string }) {
 
 function PulseDot({ active }: { active: boolean }) {
   if (!active) return null;
-  return (
-    <span style={{ display: "inline-block", width: 7, height: 7, borderRadius: "50%", background: "var(--ok)", flexShrink: 0, animation: "pulse-fade 1.5s ease-in-out infinite" }} />
-  );
+  return <span className="pulse-dot" />;
 }
 
 function StatusDot({ ok }: { ok: boolean }) {
-  return (
-    <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", background: ok ? "var(--ok)" : "var(--err)", flexShrink: 0 }} />
-  );
+  return <span className={`status-dot ${ok ? "status-dot--ok" : "status-dot--err"}`} />;
 }
 
 export default function OverviewPage() {
@@ -221,49 +215,47 @@ export default function OverviewPage() {
       </div>
 
       {/* ── 2행: LLM 프로바이더 + 메시지 채널 ── */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "var(--sp-3)" }}>
-        <section className="panel" style={{ margin: 0 }}>
-          <div className="section-header" style={{ marginBottom: 10 }}>
+      <div className="panel-grid">
+        <section className="panel panel--flush">
+          <div className="section-header">
             <h2>LLM {t("nav.providers")}</h2>
             <Link to="/providers" className="btn btn--xs">{t("common.view_all")}</Link>
           </div>
           {providers.length === 0 ? (
-            <p className="empty" style={{ fontSize: 12 }}>{t("common.none")}</p>
+            <p className="empty text-xs">{t("common.none")}</p>
           ) : (
-            <div style={{ display: "grid", gap: 6 }}>
+            <div className="grid-stack">
               {providers.slice(0, 4).map((p) => (
-                <div key={p.instance_id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
+                <div key={p.instance_id} className="overview-row">
                   <StatusDot ok={p.available} />
-                  <span style={{ fontWeight: 600, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {p.label || p.instance_id}
-                  </span>
-                  <span style={{ color: "var(--muted)", fontSize: 11 }}>{p.provider_type}</span>
+                  <span className="overview-row__name">{p.label || p.instance_id}</span>
+                  <span className="text-xs text-muted">{p.provider_type}</span>
                   {p.circuit_state !== "closed" && <Badge status={p.circuit_state} variant="warn" />}
                 </div>
               ))}
-              {providers.length > 4 && <div style={{ fontSize: 11, color: "var(--muted)" }}>+{providers.length - 4} more</div>}
-              <div style={{ borderTop: "1px solid var(--line)", paddingTop: 6, fontSize: 11, color: "var(--muted)" }}>
+              {providers.length > 4 && <div className="text-xs text-muted">{t("overview.more_fmt", { count: providers.length - 4 })}</div>}
+              <div className="section-divider">
                 {available_providers.length}/{providers.length} {t("providers.available")}
               </div>
             </div>
           )}
         </section>
 
-        <section className="panel" style={{ margin: 0 }}>
-          <div className="section-header" style={{ marginBottom: 10 }}>
+        <section className="panel panel--flush">
+          <div className="section-header">
             <h2>{t("overview.channels")}</h2>
             <Link to="/channels" className="btn btn--xs">{t("common.view_all")}</Link>
           </div>
           {enabled_channels.length === 0 ? (
-            <p className="empty" style={{ fontSize: 12 }}>{t("common.none")}</p>
+            <p className="empty text-xs">{t("common.none")}</p>
           ) : (
-            <div style={{ display: "grid", gap: 6 }}>
+            <div className="grid-stack">
               {enabled_channels.map((ch) => {
                 const health = s.channels?.health?.[ch];
                 return (
-                  <div key={ch} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
-                    <span style={{ width: 10, height: 10, borderRadius: "50%", background: PROVIDER_COLORS[ch] ?? "var(--accent)", display: "inline-block", flexShrink: 0 }} />
-                    <span style={{ fontWeight: 600, flex: 1, textTransform: "capitalize" }}>{ch}</span>
+                  <div key={ch} className="overview-row">
+                    <span className="channel-dot" style={{ background: PROVIDER_COLORS[ch] ?? "var(--accent)" }} />
+                    <span className="overview-row__name" style={{ textTransform: "capitalize" }}>{ch}</span>
                     {health != null ? (
                       <Badge status={health.running ? t("channels.running") : health.healthy ? "ready" : "stopped"} variant={health.running ? "ok" : health.healthy ? "info" : "err"} />
                     ) : (
@@ -273,7 +265,7 @@ export default function OverviewPage() {
                 );
               })}
               {s.channels?.mention_loop_running && (
-                <div style={{ fontSize: 11, color: "var(--ok)", marginTop: 4 }}>↺ mention loop running</div>
+                <div className="text-xs text-ok" style={{ marginTop: 4 }}>↺ {t("overview.mention_loop")}</div>
               )}
             </div>
           )}
@@ -283,7 +275,7 @@ export default function OverviewPage() {
       {/* ── 3행: 프로세스 ── */}
       <section className="panel">
         <div className="section-header">
-          <h2 style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <h2 className="li-flex">
             {t("overview.processes")}
             {active_processes.length > 0 && <Badge status={t("overview.processes_active_fmt", { count: active_processes.length })} variant="warn" />}
           </h2>
@@ -293,12 +285,12 @@ export default function OverviewPage() {
         {active_processes.length === 0 ? (
           <p className="empty">{t("overview.no_active_processes")}</p>
         ) : (
-          <div style={{ display: "grid", gap: 6 }}>
+          <div className="grid-stack">
             {active_processes.map((p) => (
-              <div key={p.run_id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", background: "var(--panel-elevated)", borderRadius: 6, border: "1px solid var(--line)" }}>
+              <div key={p.run_id} className="process-row">
                 <PulseDot active={p.status === "running"} />
                 <ModeBadge mode={p.mode} />
-                <span style={{ fontWeight: 600, fontSize: 13 }}>{p.alias}</span>
+                <span className="settings-row__label truncate" style={{ flex: 1, minWidth: 0 }}>{p.alias}</span>
                 {p.provider && <span className="text-xs text-muted">{p.provider}</span>}
                 {p.executor_provider && <span className="text-xs" style={{ color: "var(--accent)" }}>{p.executor_provider}</span>}
                 <span className="text-xs text-muted" style={{ marginLeft: "auto" }}>{t("overview.tool_prefix")}{p.tool_calls_count}</span>
@@ -310,24 +302,23 @@ export default function OverviewPage() {
         )}
 
         {recent_processes.length > 0 && (
-          <div style={{ marginTop: 8 }}>
+          <div style={{ marginTop: "var(--sp-2)" }}>
             <button
-              className="btn btn--xs"
+              className="toggle-btn text-muted"
               onClick={() => setShowRecentProc((v) => !v)}
-              style={{ color: "var(--muted)", background: "none", border: "none", padding: "2px 0" }}
             >
               {showRecentProc ? "▾" : "▸"} {t("overview.recent_processes")} ({recent_processes.length})
             </button>
             {showRecentProc && (
-              <div style={{ display: "grid", gap: 4, marginTop: 6, opacity: 0.65 }}>
+              <div className="grid-stack" style={{ marginTop: 6, opacity: 0.65 }}>
                 {recent_processes.slice(0, 8).map((p) => (
-                  <div key={p.run_id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 10px", background: "var(--panel-elevated)", borderRadius: 6, border: "1px solid var(--line)", fontSize: 12 }}>
+                  <div key={p.run_id} className="process-row process-row--recent">
                     <Badge status={p.status} />
                     <ModeBadge mode={p.mode} />
                     <span>{p.alias}</span>
                     {p.executor_provider && <span className="text-muted">{p.executor_provider}</span>}
                     <span className="text-muted" style={{ marginLeft: "auto" }}>{t("overview.tool_prefix")}{p.tool_calls_count}</span>
-                    {p.error && <span style={{ color: "var(--err)", fontSize: 11 }}>⚠ {p.error}</span>}
+                    {p.error && <span className="text-err text-xs">⚠ {p.error}</span>}
                   </div>
                 ))}
               </div>
@@ -337,14 +328,14 @@ export default function OverviewPage() {
       </section>
 
       {/* ── 4행: 크론(잡 있을 때) + 메시지 ── */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: "var(--sp-3)" }}>
+      <div className="panel-grid panel-grid--wider">
         {s.cron && (enabled_jobs > 0 || running_jobs > 0) && (
-          <section className="panel" style={{ margin: 0 }}>
+          <section className="panel panel--flush">
             <div className="section-header">
               <h2>{t("overview.cron")}</h2>
               <Link to="/workspace" className="btn btn--xs">{t("common.view_all")}</Link>
             </div>
-            <div style={{ display: "grid", gap: 6 }}>
+            <div className="grid-stack">
               <div className="kv" style={{ margin: 0 }}>
                 <Badge status={s.cron.paused ? t("overview.paused") : t("overview.active")} variant={s.cron.paused ? "warn" : "ok"} />
                 <span className="text-sm text-muted">{t("overview.enabled_fmt", { enabled: enabled_jobs, total: total_jobs })}</span>
@@ -358,17 +349,17 @@ export default function OverviewPage() {
           </section>
         )}
 
-        <section className="panel" style={{ margin: 0 }}>
+        <section className="panel panel--flush">
           <h2>{t("overview.messages")}</h2>
           <ul className="list list--compact">
             {!s.messages?.length && <li className="empty">-</li>}
             {s.messages?.map((m, i) => (
               <li key={i}>
-                <span className="li-text" style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
-                  <span style={{ color: m.direction === "inbound" ? "var(--accent)" : "var(--muted)", fontWeight: 600, flexShrink: 0, fontSize: 11 }}>
+                <span className="li-text li-flex li-flex--baseline">
+                  <span className="fw-600" style={{ color: m.direction === "inbound" ? "var(--accent)" : "var(--muted)", flexShrink: 0, fontSize: "var(--fs-xs)", maxWidth: 160 }}>
                     {m.direction === "inbound" ? t("overview.msg_in") : t("overview.msg_out")} {m.sender_id}
                   </span>
-                  <span className="truncate text-sm text-muted">{m.content}</span>
+                  <span className="truncate text-sm text-muted" style={{ flex: 1, minWidth: 0 }}>{m.content}</span>
                 </span>
               </li>
             ))}
@@ -377,17 +368,17 @@ export default function OverviewPage() {
       </div>
 
       {/* ── 5행: 워크플로우 이벤트 + 결정사항 ── */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: "var(--sp-3)" }}>
-        <section className="panel" style={{ margin: 0 }}>
+      <div className="panel-grid panel-grid--wider">
+        <section className="panel panel--flush">
           <h2>{t("overview.workflow_events", { count: s.workflow_events?.length ?? 0 })}</h2>
           <ul className="list list--compact">
             {!s.workflow_events?.length && <li className="empty">-</li>}
             {s.workflow_events?.slice(0, 6).map((e) => (
               <li key={e.event_id}>
-                <span className="li-text" style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <span className="li-text li-flex">
                   <Badge status={e.phase} variant={PHASE_VARIANT[e.phase]} />
-                  <span className="text-xs text-muted truncate">{e.task_id || e.agent_id || "-"}</span>
-                  <span className="truncate text-sm">{e.summary || ""}</span>
+                  <span className="text-xs text-muted truncate" style={{ flexShrink: 0, maxWidth: 120 }}>{e.task_id || e.agent_id || "-"}</span>
+                  <span className="truncate text-sm" style={{ flex: 1, minWidth: 0 }}>{e.summary || ""}</span>
                 </span>
               </li>
             ))}
@@ -395,7 +386,7 @@ export default function OverviewPage() {
         </section>
 
         {(s.decisions?.length ?? 0) > 0 && (
-          <section className="panel" style={{ margin: 0 }}>
+          <section className="panel panel--flush">
             <div className="section-header">
               <h2>{t("overview.decisions", { count: s.decisions?.length ?? 0 })}</h2>
               <Link to="/workspace" className="btn btn--xs">{t("common.view_all")}</Link>
@@ -403,7 +394,7 @@ export default function OverviewPage() {
             <ul className="list list--compact">
               {s.decisions?.slice(0, 6).map((d) => (
                 <li key={d.id}>
-                  <span className="li-text" style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <span className="li-text li-flex">
                     <Badge status={`p${d.priority}`} variant="info" />
                     <span className="truncate text-sm"><b>{d.canonical_key}</b></span>
                     <span className="text-xs text-muted truncate">{String(d.value)}</span>
@@ -417,15 +408,15 @@ export default function OverviewPage() {
 
       {/* ── 6행: 성능 + 네트워크 모니터링 ── */}
       {metrics && (metrics.cpu_percent !== undefined || metrics.net_rx_kbps !== null) && (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "var(--sp-3)" }}>
-          <section className="panel" style={{ margin: 0 }}>
-            <div className="section-header" style={{ marginBottom: 12 }}>
+        <div className="panel-grid">
+          <section className="panel panel--flush">
+            <div className="section-header">
               <h2>{t("overview.perf_monitoring")}</h2>
               {metrics.uptime_s > 0 && (
                 <span className="text-xs text-muted">{t("overview.uptime")} {fmt_uptime(metrics.uptime_s)}</span>
               )}
             </div>
-            <div style={{ display: "grid", gap: 12 }}>
+            <div className="grid-stack grid-stack--lg">
               <MetricBar
                 label="CPU"
                 percent={metrics.cpu_percent}
@@ -454,19 +445,19 @@ export default function OverviewPage() {
           </section>
 
           {(metrics.net_rx_kbps !== null || metrics.net_tx_kbps !== null) && (
-            <section className="panel" style={{ margin: 0 }}>
-              <h2 style={{ marginBottom: 14 }}>{t("overview.net_monitoring")}</h2>
-              <div style={{ display: "grid", gap: 12 }}>
+            <section className="panel panel--flush">
+              <h2>{t("overview.net_monitoring")}</h2>
+              <div className="grid-stack grid-stack--lg">
                 {metrics.net_rx_kbps !== null && (
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 13 }}>
-                    <span style={{ color: "var(--muted)", fontSize: 12 }}>↓ {t("overview.net_rx")}</span>
-                    <span style={{ fontWeight: 700, color: "var(--ok)" }}>{fmt_kbps(metrics.net_rx_kbps)}</span>
+                  <div className="net-row">
+                    <span className="text-xs text-muted">↓ {t("overview.net_rx")}</span>
+                    <span className="fw-700 text-ok">{fmt_kbps(metrics.net_rx_kbps)}</span>
                   </div>
                 )}
                 {metrics.net_tx_kbps !== null && (
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 13 }}>
-                    <span style={{ color: "var(--muted)", fontSize: 12 }}>↑ {t("overview.net_tx")}</span>
-                    <span style={{ fontWeight: 700, color: "var(--accent)" }}>{fmt_kbps(metrics.net_tx_kbps)}</span>
+                  <div className="net-row">
+                    <span className="text-xs text-muted">↑ {t("overview.net_tx")}</span>
+                    <span className="fw-700" style={{ color: "var(--accent)" }}>{fmt_kbps(metrics.net_tx_kbps)}</span>
                   </div>
                 )}
               </div>

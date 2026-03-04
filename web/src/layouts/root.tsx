@@ -49,7 +49,12 @@ export function RootLayout() {
       message: debounced_message,
       web_stream: (data: unknown) => {
         const d = data as { chat_id?: string; content?: string; done?: boolean };
-        if (d.done) { set_web_stream(null); return; }
+        if (d.done) {
+          const prev = useDashboardStore.getState().web_stream;
+          if (prev) set_web_stream({ ...prev, done: true });
+          void qc.invalidateQueries({ queryKey: ["chat-session"] });
+          return;
+        }
         if (d.chat_id) set_web_stream({ chat_id: d.chat_id, content: d.content ?? "" });
       },
       task: () => void qc.invalidateQueries({ queryKey: ["state"] }),

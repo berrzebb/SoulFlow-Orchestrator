@@ -1,3 +1,4 @@
+import { now_iso } from "../utils/common.js";
 import type { InboundMessage, OutboundMessage } from "../bus/types.js";
 import type { Logger } from "../logger.js";
 import type { ChannelProvider } from "./types.js";
@@ -120,6 +121,10 @@ export class ApprovalService {
         tool_result = String(executed.result || "").slice(0, 2000);
         content = `\u2705 승인을 확인했습니다. 차단된 작업을 재개합니다.`;
       } else {
+        this.logger.warn("approval_execute_failed", {
+          request_id, tool_name: executed.tool_name || selected.tool_name,
+          error: String(executed.error || "unknown_error").slice(0, 220),
+        });
         content = `\ud83d\udd34 승인 반영 실패(${source}) \u00b7 tool=${executed.tool_name || selected.tool_name}\n${String(executed.error || "unknown_error").slice(0, 220)}`;
       }
     } else {
@@ -137,7 +142,7 @@ export class ApprovalService {
       sender_id: "approval-bot",
       chat_id: message.chat_id,
       content,
-      at: new Date().toISOString(),
+      at: now_iso(),
       reply_to: this.resolve_reply_to(provider, message),
       thread_id: message.thread_id,
       metadata: {
@@ -149,6 +154,13 @@ export class ApprovalService {
     });
 
     const task_id = selected.context?.task_id;
+    this.logger.info("approval_decision", {
+      request_id: selected.request_id,
+      tool_name: selected.tool_name,
+      status: resolved.status,
+      source,
+      task_id: task_id || null,
+    });
     return { handled: true, task_id, tool_result, approval_status: resolved.status as ApprovalHandleResult["approval_status"] };
   }
 }

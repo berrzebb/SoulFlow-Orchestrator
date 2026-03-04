@@ -1,3 +1,4 @@
+import { error_message, sleep } from "../utils/common.js";
 import { execFile, type ChildProcess, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import { create_logger } from "../logger.js";
@@ -81,7 +82,7 @@ export class Phi4RuntimeManager {
     this.image = options?.image || "ollama/ollama:latest";
     this.container = options?.container || "orchestrator-phi4";
     this.port = Math.max(1, Number(options?.port || 11434));
-    this.model = options?.model || "phi4";
+    this.model = options?.model || "phi4-mini";
     this.pull_model = options?.pull_model ?? true;
     this.auto_stop = options?.auto_stop ?? false;
     this.api_base = options?.api_base || `http://127.0.0.1:${this.port}/v1`;
@@ -145,7 +146,7 @@ export class Phi4RuntimeManager {
       log.info("started", { engine: this.engine, running: this.running });
       return await this.health_check();
     } catch (error) {
-      this.last_error = error instanceof Error ? error.message : String(error);
+      this.last_error = error_message(error);
       this.running = false;
       log.error("start failed", { engine: this.engine, error: this.last_error });
       return this.get_status();
@@ -166,7 +167,7 @@ export class Phi4RuntimeManager {
       this.running = false;
       log.info("stopped", { engine: this.engine });
     } catch (error) {
-      this.last_error = error instanceof Error ? error.message : String(error);
+      this.last_error = error_message(error);
       log.warn("stop failed", { error: this.last_error });
     }
     return this.get_status();
@@ -361,7 +362,7 @@ export class Phi4RuntimeManager {
     const deadline = Date.now() + timeout_ms;
     while (Date.now() < deadline) {
       if (await this.is_api_ready()) return;
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+      await sleep(1500);
     }
     throw new Error("phi4_api_ready_timeout");
   }

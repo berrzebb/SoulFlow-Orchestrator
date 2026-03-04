@@ -60,7 +60,10 @@ export class DynamicShellTool extends Tool {
       ].join("\n");
     }
     if (context?.signal?.aborted) return "Error: aborted";
-    const command = await this.secret_vault.resolve_placeholders(interpolate(this.command_template, params));
+    // 시크릿을 먼저 해석한 뒤 사용자 파라미터를 보간.
+    // 순서를 바꾸면 사용자가 {{secret:KEY}} 패턴을 파라미터로 주입하여 시크릿을 탈취할 수 있음.
+    const resolved_template = await this.secret_vault.resolve_placeholders(this.command_template);
+    const command = interpolate(resolved_template, params);
     const { stdout, stderr } = await run_shell_command(command, {
       cwd: this.working_dir,
       timeout_ms: 30_000,

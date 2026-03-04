@@ -46,12 +46,8 @@ export function TemplatesTab() {
             <div
               key={tmpl.name}
               onClick={() => setSelected(tmpl.name)}
-              style={{
-                padding: "8px 14px", cursor: "pointer", fontSize: 12,
-                background: selected === tmpl.name ? "var(--panel-elevated)" : "none",
-                borderLeft: selected === tmpl.name ? "3px solid var(--accent)" : "3px solid transparent",
-                display: "flex", justifyContent: "space-between", alignItems: "center",
-              }}
+              className={`ws-item${selected === tmpl.name ? " ws-item--active" : ""}`}
+              style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}
             >
               <span>{tmpl.name}.md</span>
               <Badge status={tmpl.exists ? "✓" : "—"} variant={tmpl.exists ? "ok" : "off"} />
@@ -61,12 +57,12 @@ export function TemplatesTab() {
       }
       right={
         <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-          <div style={{ padding: "10px 14px", borderBottom: "1px solid var(--line)", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
-            <span style={{ fontWeight: 600, fontSize: 13 }}>
+          <div className="ws-detail-header">
+            <span className="fw-600" style={{ fontSize: "var(--fs-sm)" }}>
               {selected ? (
                 <>
                   <b>{selected}.md</b>
-                  {dirty && <span style={{ color: "var(--warn)", marginLeft: 8, fontSize: 11 }}>● {t("templates.unsaved")}</span>}
+                  {dirty && <span className="text-xs" style={{ color: "var(--warn)", marginLeft: "var(--sp-2)" }}>● {t("templates.unsaved")}</span>}
                 </>
               ) : t("templates.select")}
             </span>
@@ -85,8 +81,8 @@ export function TemplatesTab() {
                 onChange={(e) => { setContent(e.target.value); setDirty(true); }}
                 style={{
                   flex: 1, resize: "none", border: "none", background: "var(--bg)",
-                  color: "var(--text)", fontFamily: "var(--font-mono)", fontSize: 12,
-                  lineHeight: 1.6, padding: 14, outline: "none",
+                  color: "var(--text)", fontFamily: "var(--font-mono)", fontSize: "var(--fs-xs)",
+                  lineHeight: 1.6, padding: "var(--sp-3)", outline: "none",
                 }}
               />
             )}

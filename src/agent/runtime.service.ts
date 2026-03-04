@@ -1,13 +1,15 @@
+import { error_message } from "../utils/common.js";
 import type { AgentDomain } from "./index.js";
-import type {
-  AgentApprovalExecuteResult,
-  AgentApprovalRequest,
-  AgentApprovalResolveResult,
-  AgentApprovalStatus,
-  AgentRuntimeLike,
-  AgentToolRuntimeContext,
-  SpawnAndWaitOptions,
-  SpawnAndWaitResult,
+import {
+  parse_approval_row,
+  type AgentApprovalExecuteResult,
+  type AgentApprovalRequest,
+  type AgentApprovalResolveResult,
+  type AgentApprovalStatus,
+  type AgentRuntimeLike,
+  type AgentToolRuntimeContext,
+  type SpawnAndWaitOptions,
+  type SpawnAndWaitResult,
 } from "./runtime.types.js";
 import type { ToolExecutionContext } from "./tools/types.js";
 import type {
@@ -22,20 +24,6 @@ import type { ToolLike } from "./tools/types.js";
 type ToolContextSetter = {
   set_context?: (...args: string[]) => void;
 };
-
-function parse_approval_row(raw: unknown): AgentApprovalRequest {
-  const row = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
-  return {
-    request_id: String(row.request_id || ""),
-    tool_name: String(row.tool_name || ""),
-    params: (row.params && typeof row.params === "object") ? (row.params as Record<string, unknown>) : {},
-    created_at: String(row.created_at || ""),
-    status: String(row.status || "pending") as AgentApprovalStatus,
-    context: (row.context && typeof row.context === "object")
-      ? (row.context as AgentApprovalRequest["context"])
-      : undefined,
-  };
-}
 
 export class AgentRuntimeAdapter implements AgentRuntimeLike {
   private readonly domain: AgentDomain;
@@ -201,7 +189,7 @@ export class AgentRuntimeAdapter implements AgentRuntimeLike {
         error: result.error,
       };
     } catch (e) {
-      return { ok: false, content: "", error: e instanceof Error ? e.message : String(e) };
+      return { ok: false, content: "", error: error_message(e) };
     }
   }
 }

@@ -1,20 +1,6 @@
 import type { AgentDomain } from "./index.js";
 import type { AgentInspectorLike } from "./inspector.types.js";
-import type { AgentApprovalRequest, AgentApprovalStatus } from "./runtime.types.js";
-
-function parse_approval_row(raw: unknown): AgentApprovalRequest {
-  const row = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
-  return {
-    request_id: String(row.request_id || ""),
-    tool_name: String(row.tool_name || ""),
-    params: (row.params && typeof row.params === "object") ? (row.params as Record<string, unknown>) : {},
-    created_at: String(row.created_at || ""),
-    status: String(row.status || "pending") as AgentApprovalStatus,
-    context: (row.context && typeof row.context === "object")
-      ? (row.context as AgentApprovalRequest["context"])
-      : undefined,
-  };
-}
+import { parse_approval_row, type AgentApprovalStatus } from "./runtime.types.js";
 
 export class AgentInspectorAdapter implements AgentInspectorLike {
   private readonly domain: AgentDomain;

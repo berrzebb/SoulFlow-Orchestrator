@@ -1,3 +1,4 @@
+import { error_message } from "../utils/common.js";
 import type { ProviderRegistry } from "../providers/service.js";
 import { CircuitBreaker } from "../providers/circuit-breaker.js";
 import type { ProviderId } from "../providers/types.js";
@@ -221,7 +222,7 @@ export class AgentBackendRegistry {
     } catch (error) {
       breaker?.record_failure();
       scorer.record(backend_id, { ok: false, latency_ms: Date.now() - start });
-      return this._try_fallback(backend_id, options, error instanceof Error ? error.message : String(error));
+      return this._try_fallback(backend_id, options, error_message(error));
     }
   }
 
@@ -309,9 +310,9 @@ export class AgentBackendRegistry {
   }
 }
 
-/** CircuitBreaker 상태를 문자열로 변환. */
+/** CircuitBreaker 상태를 문자열로 변환. 슬롯을 소비하지 않는 읽기 전용 조회. */
 function _circuit_state(breaker: CircuitBreaker): "closed" | "open" | "half_open" {
-  if (breaker.try_acquire()) return "closed";
+  if (breaker.can_acquire()) return breaker.state === "half_open" ? "half_open" : "closed";
   return "open";
 }
 

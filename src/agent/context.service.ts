@@ -44,9 +44,9 @@ export class ContextBuilder {
   private readonly workspace: string;
   private _oauth_summary_provider: OAuthSummaryProvider | null = null;
 
-  constructor(workspace: string, args?: { memory_store?: MemoryStoreLike; promises_dir?: string }) {
+  constructor(workspace: string, args?: { memory_store?: MemoryStoreLike; promises_dir?: string; app_root?: string }) {
     this.workspace = workspace;
-    this.skills_loader = new SkillsLoader(workspace);
+    this.skills_loader = new SkillsLoader(workspace, args?.app_root);
     this.memory_store = args?.memory_store || new MemoryStore(workspace);
     this.decision_service = new DecisionService(workspace);
     this.promise_service = new PromiseService(workspace, args?.promises_dir);

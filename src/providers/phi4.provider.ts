@@ -1,3 +1,4 @@
+import { error_message } from "../utils/common.js";
 import { BaseLlmProvider } from "./base.js";
 import { create_logger } from "../logger.js";
 import { LlmResponse, parse_openai_response, sanitize_messages_for_api, type ChatOptions } from "./types.js";
@@ -18,7 +19,7 @@ export class Phi4LocalProvider extends BaseLlmProvider {
     super({
       id: "phi4_local",
       api_base: args?.api_base ?? "http://127.0.0.1:11434/v1",
-      default_model: args?.default_model ?? "phi4",
+      default_model: args?.default_model ?? "phi4-mini",
     });
     this.per_call_timeout_ms = args?.per_call_timeout_ms ?? DEFAULT_PER_CALL_TIMEOUT_MS;
     this.api_key = (args?.api_key ?? "").trim();
@@ -73,9 +74,9 @@ export class Phi4LocalProvider extends BaseLlmProvider {
 
       return new LlmResponse(parsed);
     } catch (error) {
-      log.warn("request failed", { error: error instanceof Error ? error.message : String(error) });
+      log.warn("request failed", { error: error_message(error) });
       return new LlmResponse({
-        content: `Error calling phi4_local: ${error instanceof Error ? error.message : String(error)}`,
+        content: `Error calling phi4_local: ${error_message(error)}`,
         finish_reason: "error",
       });
     }

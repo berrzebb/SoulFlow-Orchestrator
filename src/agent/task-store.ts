@@ -1,3 +1,4 @@
+import { now_iso } from "../utils/common.js";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { with_sqlite } from "../utils/sqlite-helper.js";
@@ -109,7 +110,7 @@ export class TaskStore implements TaskStoreLike {
       `).run(
         normalized.taskId,
         String(normalized.status || "running"),
-        new Date().toISOString(),
+        now_iso(),
         JSON.stringify(normalized),
         provider,
         chat_id,

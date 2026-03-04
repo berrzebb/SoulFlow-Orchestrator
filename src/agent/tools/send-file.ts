@@ -1,9 +1,8 @@
 /** 로컬 파일을 현재 채널/채팅에 전송하는 도구. */
-import { randomUUID } from "node:crypto";
 import { basename } from "node:path";
 import { Tool } from "./base.js";
 import type { OutboundMessage } from "../../bus/types.js";
-import { now_iso } from "../../utils/common.js";
+import { now_iso, short_id} from "../../utils/common.js";
 import type { JsonSchema, ToolExecutionContext } from "./types.js";
 import { to_local_media_item } from "./media-utils.js";
 
@@ -66,7 +65,7 @@ export class SendFileTool extends Tool {
     const filename = basename(media_item.url);
 
     const message: OutboundMessage = {
-      id: randomUUID().slice(0, 12),
+      id: short_id(),
       provider: channel,
       channel,
       sender_id: String(context.sender_id || "agent"),

@@ -2,8 +2,12 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
 import { Badge } from "../components/badge";
+import { Modal, FormModal } from "../components/modal";
+import { ToggleSwitch } from "../components/toggle-switch";
 import { useToast } from "../components/toast";
+import { useTestMutation } from "../hooks/use-test-mutation";
 import { useT } from "../i18n";
+import { PROVIDER_COLORS } from "../utils/constants";
 
 interface ChannelInstance {
   provider: string;
@@ -22,49 +26,16 @@ interface ChannelInstance {
 
 type ModalMode = { kind: "add" } | { kind: "edit"; instance: ChannelInstance };
 
-const PROVIDER_COLORS: Record<string, string> = {
-  slack: "#36C5F0",
-  discord: "#5865F2",
-  telegram: "#2AABEE",
-};
-
 function ProviderIcon({ provider }: { provider: string }) {
   const color = PROVIDER_COLORS[provider] ?? "var(--accent)";
   const label = provider.charAt(0).toUpperCase();
   return (
-    <span style={{
-      display: "inline-flex", alignItems: "center", justifyContent: "center",
-      width: 32, height: 32, borderRadius: 8, background: color,
-      color: "#fff", fontWeight: 700, fontSize: 14, flexShrink: 0,
-    }}>
+    <span className="provider-icon" style={{ background: color }}>
       {label}
     </span>
   );
 }
 
-function ToggleSwitch({ checked, onChange, disabled }: { checked: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      disabled={disabled}
-      onClick={() => !disabled && onChange(!checked)}
-      style={{
-        position: "relative", display: "inline-flex", alignItems: "center",
-        width: 40, height: 22, borderRadius: 11, border: "none", cursor: disabled ? "default" : "pointer",
-        background: checked ? "var(--ok)" : "var(--line)",
-        transition: "background 0.2s", flexShrink: 0, padding: 0,
-        opacity: disabled ? 0.5 : 1,
-      }}
-    >
-      <span style={{
-        position: "absolute", left: checked ? 20 : 2, width: 18, height: 18,
-        borderRadius: "50%", background: "#fff", transition: "left 0.2s", boxShadow: "0 1px 3px rgba(0,0,0,0.3)",
-      }} />
-    </button>
-  );
-}
 
 interface ConfigField {
   path: string;
@@ -122,16 +93,12 @@ function GlobalSettingsSection() {
   return (
     <section className="panel">
       <h2 style={{ margin: "0 0 12px" }}>{t("channels.global_settings")}</h2>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 10 }}>
+      <div className="stat-grid stat-grid--wide">
         {settings.map((s) => (
-          <div key={s.key} style={{
-            display: "flex", alignItems: "center", justifyContent: "space-between",
-            gap: 12, padding: "10px 14px", background: "var(--panel-elevated)",
-            borderRadius: 8, border: "1px solid var(--line)",
-          }}>
+          <div key={s.key} className="settings-row">
             <div>
-              <div style={{ fontWeight: 600, fontSize: 13 }}>{s.label}</div>
-              <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>{s.desc}</div>
+              <div className="settings-row__label">{s.label}</div>
+              <div className="settings-row__desc">{s.desc}</div>
             </div>
             <ToggleSwitch checked={s.value} onChange={() => void toggle(s.key, s.value)} />
           </div>
@@ -146,6 +113,7 @@ export default function ChannelsPage() {
   const { toast } = useToast();
   const t = useT();
   const [modal, setModal] = useState<ModalMode | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ChannelInstance | null>(null);
 
   const { data: instances, isLoading } = useQuery<ChannelInstance[]>({
     queryKey: ["channel-instances"],
@@ -178,22 +146,20 @@ export default function ChannelsPage() {
       <GlobalSettingsSection />
 
       {isLoading ? (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 12, marginTop: 16 }}>
+        <div className="stat-grid stat-grid--wide" style={{ marginTop: 16 }}>
           <div className="skeleton skeleton-card" />
           <div className="skeleton skeleton-card" />
         </div>
       ) : !instances?.length ? (
         <p className="empty">{t("channels.no_instances")}</p>
       ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 12, marginTop: 16 }}>
+        <div className="stat-grid stat-grid--wide" style={{ marginTop: 16 }}>
           {instances.map((inst) => (
             <InstanceCard
               key={inst.instance_id}
               instance={inst}
               onEdit={() => setModal({ kind: "edit", instance: inst })}
-              onRemove={() => {
-                if (confirm(t("channels.remove_confirm", { label: inst.label || inst.instance_id }))) remove.mutate(inst.instance_id);
-              }}
+              onRemove={() => setDeleteTarget(inst)}
               onToggle={(enabled) => toggle_enabled.mutate({ id: inst.instance_id, enabled })}
             />
           ))}
@@ -210,6 +176,22 @@ export default function ChannelsPage() {
           }}
         />
       )}
+
+      <Modal
+        open={!!deleteTarget}
+        title={t("channels.remove_title")}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          if (deleteTarget) remove.mutate(deleteTarget.instance_id);
+          setDeleteTarget(null);
+        }}
+        confirmLabel={t("common.remove")}
+        danger
+      >
+        <p className="text-sm">
+          {t("channels.remove_confirm", { label: deleteTarget?.label || deleteTarget?.instance_id || "" })}
+        </p>
+      </Modal>
     </div>
   );
 }
@@ -220,72 +202,47 @@ function InstanceCard({ instance, onEdit, onRemove, onToggle }: {
   onRemove: () => void;
   onToggle: (enabled: boolean) => void;
 }) {
-  const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState<{ ok: boolean; detail?: string; error?: string } | null>(null);
-  const { toast } = useToast();
   const t = useT();
 
-  const test = useMutation({
-    mutationFn: () => api.post<{ ok: boolean; detail?: string; error?: string }>(
-      `/api/channel-instances/${encodeURIComponent(instance.instance_id)}/test`,
-    ),
-    onMutate: () => { setTesting(true); setTestResult(null); },
-    onSuccess: (r) => {
-      setTestResult(r);
-      toast(r.ok ? `${instance.label}: ${t("channels.connected")}` : `${instance.label}: ${r.error}`, r.ok ? "ok" : "err");
-    },
-    onError: (err) => {
-      setTestResult({ ok: false, error: err.message });
-      toast(t("channels.test_failed"), "err");
-    },
-    onSettled: () => setTesting(false),
+  const { testing, testResult, test } = useTestMutation({
+    url: `/api/channel-instances/${encodeURIComponent(instance.instance_id)}/test`,
+    onOk: (r) => `${instance.label}: ${r.detail || t("channels.connected")}`,
+    onFail: (r) => `${instance.label}: ${r.error || ""}`,
+    onError: () => t("channels.test_failed"),
   });
 
+  const status_cls = instance.running ? "ok" : "off";
+
   return (
-    <div style={{
-      display: "flex", flexDirection: "column", gap: 10,
-      padding: "14px 16px", background: "var(--panel)",
-      borderRadius: 10, border: `1px solid ${instance.running ? "var(--ok)" : instance.enabled ? "var(--line)" : "var(--line)"}`,
-      opacity: instance.enabled ? 1 : 0.7,
-    }}>
-      {/* 헤더: 프로바이더 아이콘 + 이름 + 토글 */}
-      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+    <div className={`stat-card desk--${status_cls}`} style={{ opacity: instance.enabled ? 1 : 0.7 }}>
+      <div className="stat-card__header">
         <ProviderIcon provider={instance.provider} />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontWeight: 600, fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {instance.label || instance.instance_id}
-          </div>
-          <div style={{ fontSize: 11, color: "var(--muted)" }}>{instance.instance_id}</div>
-        </div>
         <ToggleSwitch checked={instance.enabled} onChange={onToggle} />
       </div>
-
-      {/* 상태 배지 */}
-      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+      <div className="stat-card__value stat-card__value--md">
+        {instance.label || instance.instance_id}
+      </div>
+      <div className="stat-card__label">{instance.instance_id}</div>
+      <div className="stat-card__extra">
         {instance.running && <Badge status={t("channels.running")} variant="ok" />}
-        <span style={{ fontSize: 11, color: instance.token_configured ? "var(--ok)" : "var(--err)" }}>
+        {" "}
+        <span className={instance.token_configured ? "text-ok" : "text-err"}>
           {instance.token_configured ? t("channels.token_configured") : t("channels.no_token")}
         </span>
         {instance.default_target && (
-          <span style={{ fontSize: 11, color: "var(--muted)" }}>{instance.default_target}</span>
+          <span className="text-xs text-muted"> · {instance.default_target}</span>
         )}
       </div>
-
-      {/* 오류 */}
       {instance.last_error && (
-        <div style={{ color: "var(--err)", fontSize: 11 }}>{instance.last_error}</div>
+        <div className="text-xs text-err">{instance.last_error}</div>
       )}
-
-      {/* 테스트 결과 */}
       {testResult && (
-        <div style={{ fontSize: 11, display: "flex", gap: 6, alignItems: "center" }}>
+        <div className="stat-card__tags">
           <Badge status={testResult.ok ? t("channels.pass") : t("channels.fail")} variant={testResult.ok ? "ok" : "err"} />
-          <span style={{ color: "var(--muted)" }}>{testResult.ok ? testResult.detail : testResult.error}</span>
+          <span className="text-muted">{testResult.ok ? testResult.detail : testResult.error}</span>
         </div>
       )}
-
-      {/* 액션 버튼 */}
-      <div style={{ display: "flex", gap: 6, marginTop: "auto" }}>
+      <div className="stat-card__actions">
         <button className="btn btn--xs" onClick={onEdit}>{t("common.edit")}</button>
         <button className="btn btn--xs btn--ok" onClick={() => test.mutate()} disabled={testing || !instance.token_configured}>
           {testing ? t("common.testing") : t("common.test")}
@@ -363,94 +320,82 @@ function InstanceModal({ mode, onClose, onSaved }: {
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <div className="modal__header">
-          <h3>{isEdit ? t("channels.edit_title") : t("channels.add_title")}</h3>
-          <button className="modal__close" onClick={onClose}>×</button>
-        </div>
-        <form onSubmit={handleSubmit}>
-          <div className="modal__body" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            <div className="form-group">
-              <label className="form-label">{t("channels.provider")}</label>
-              {isEdit ? (
-                <input className="form-input" value={provider} disabled />
-              ) : (
-                <select className="form-input" value={provider} onChange={(e) => setProvider(e.target.value)}>
-                  {PROVIDER_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                </select>
-              )}
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">{t("channels.instance_id")}</label>
-              <input
-                className="form-input"
-                value={auto_id ? provider : instanceId}
-                onChange={(e) => setInstanceId(e.target.value)}
-                disabled={isEdit}
-                placeholder={provider}
-              />
-              {!isEdit && <span style={{ fontSize: "var(--fs-xs)", color: "var(--muted)" }}>
-                {t("channels.instance_id_hint")}
-              </span>}
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">{t("channels.label")}</label>
-              <input className="form-input" value={label} onChange={(e) => setLabel(e.target.value)} placeholder={t("channels.label_placeholder")} />
-            </div>
-
-            <div className="form-group" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <label className="form-label" style={{ margin: 0 }}>{t("common.enabled")}</label>
-              <ToggleSwitch checked={enabled} onChange={setEnabled} />
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">{t("channels.bot_token")}</label>
-              <input
-                className="form-input"
-                type="password"
-                value={token}
-                onChange={(e) => setToken(e.target.value)}
-                placeholder={isEdit ? t("channels.bot_token_placeholder_edit") : t("channels.bot_token_placeholder_new")}
-                autoComplete="off"
-              />
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">
-                {provider === "telegram" ? t("channels.default_chat_id") : t("channels.default_target")}
-              </label>
-              <input
-                className="form-input"
-                value={defaultTarget}
-                onChange={(e) => setDefaultTarget(e.target.value)}
-                placeholder={provider === "telegram" ? "-1001234567890" : "#general"}
-              />
-            </div>
-
-            {(provider === "discord" || provider === "telegram") && (
-              <div className="form-group">
-                <label className="form-label">{t("channels.api_base")}</label>
-                <input
-                  className="form-input"
-                  value={apiBase}
-                  onChange={(e) => setApiBase(e.target.value)}
-                  placeholder={provider === "telegram" ? "https://api.telegram.org" : "https://discord.com/api/v10"}
-                />
-              </div>
-            )}
-          </div>
-
-          <div className="modal__footer">
-            <button type="button" className="btn btn--sm" onClick={onClose}>{t("common.cancel")}</button>
-            <button type="submit" className="btn btn--sm btn--accent" disabled={saving}>
-              {saving ? t("common.saving") : isEdit ? t("common.save") : t("common.add")}
-            </button>
-          </div>
-        </form>
+    <FormModal
+      open
+      title={isEdit ? t("channels.edit_title") : t("channels.add_title")}
+      onClose={onClose}
+      onSubmit={handleSubmit}
+      submitLabel={isEdit ? t("common.save") : t("common.add")}
+      saving={saving}
+    >
+      <div className="form-group">
+        <label className="form-label">{t("channels.provider")}</label>
+        {isEdit ? (
+          <input className="form-input" value={provider} disabled />
+        ) : (
+          <select className="form-input" value={provider} onChange={(e) => setProvider(e.target.value)}>
+            {PROVIDER_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+        )}
       </div>
-    </div>
+
+      <div className="form-group">
+        <label className="form-label">{t("channels.instance_id")}</label>
+        <input
+          className="form-input"
+          value={auto_id ? provider : instanceId}
+          onChange={(e) => setInstanceId(e.target.value)}
+          disabled={isEdit}
+          placeholder={provider}
+        />
+        {!isEdit && <span className="form-hint">{t("channels.instance_id_hint")}</span>}
+      </div>
+
+      <div className="form-group">
+        <label className="form-label">{t("channels.label")}</label>
+        <input className="form-input" value={label} onChange={(e) => setLabel(e.target.value)} placeholder={t("channels.label_placeholder")} />
+      </div>
+
+      <div className="form-group form-group--row">
+        <label className="form-label" style={{ margin: 0 }}>{t("common.enabled")}</label>
+        <ToggleSwitch checked={enabled} onChange={setEnabled} />
+      </div>
+
+      <div className="form-group">
+        <label className="form-label">{t("channels.bot_token")}</label>
+        <input
+          className="form-input"
+          type="password"
+          value={token}
+          onChange={(e) => setToken(e.target.value)}
+          placeholder={isEdit ? t("channels.bot_token_placeholder_edit") : t("channels.bot_token_placeholder_new")}
+          autoComplete="off"
+        />
+      </div>
+
+      <div className="form-group">
+        <label className="form-label">
+          {provider === "telegram" ? t("channels.default_chat_id") : t("channels.default_target")}
+        </label>
+        <input
+          className="form-input"
+          value={defaultTarget}
+          onChange={(e) => setDefaultTarget(e.target.value)}
+          placeholder={provider === "telegram" ? "-1001234567890" : "#general"}
+        />
+      </div>
+
+      {(provider === "discord" || provider === "telegram") && (
+        <div className="form-group">
+          <label className="form-label">{t("channels.api_base")}</label>
+          <input
+            className="form-input"
+            value={apiBase}
+            onChange={(e) => setApiBase(e.target.value)}
+            placeholder={provider === "telegram" ? "https://api.telegram.org" : "https://discord.com/api/v10"}
+          />
+        </div>
+      )}
+    </FormModal>
   );
 }

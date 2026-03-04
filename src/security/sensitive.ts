@@ -109,23 +109,27 @@ function redact_env_style_tokens(text: string): string {
   });
 }
 
-function collect_env_secret_values(): string[] {
-  const out: string[] = [];
+/** process.env 기반 시크릿 값 + 사전 컴파일 regex 캐시. 런타임 중 env 변경 없으므로 1회만 빌드. */
+let _env_secret_patterns: Array<{ re: RegExp }> | null = null;
+function get_env_secret_patterns(): Array<{ re: RegExp }> {
+  if (_env_secret_patterns) return _env_secret_patterns;
+  const seen = new Set<string>();
+  const out: Array<{ re: RegExp }> = [];
   for (const [key, value] of Object.entries(process.env)) {
     if (!keyword_is_sensitive(key)) continue;
     const token = String(value || "").trim();
-    if (token.length < 6) continue;
-    out.push(token);
+    if (token.length < 6 || seen.has(token)) continue;
+    seen.add(token);
+    out.push({ re: new RegExp(escape_regexp(token), "g") });
   }
-  return [...new Set(out)];
+  _env_secret_patterns = out;
+  return out;
 }
 
-function mask_exact_values(input: string, values: string[]): string {
+function mask_exact_values(input: string): string {
   let out = String(input || "");
-  for (const raw of values) {
-    const value = String(raw || "");
-    if (!value || value.length < 6) continue;
-    const re = new RegExp(escape_regexp(value), "g");
+  for (const { re } of get_env_secret_patterns()) {
+    re.lastIndex = 0;
     out = out.replace(re, REDACTED);
   }
   return out;
@@ -156,7 +160,7 @@ export function redact_sensitive_text(input: string): RedactionResult {
     count += 1;
   }
 
-  const envMasked = mask_exact_values(text, collect_env_secret_values());
+  const envMasked = mask_exact_values(text);
   if (envMasked !== text) {
     text = envMasked;
     count += 1;

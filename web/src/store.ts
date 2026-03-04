@@ -6,6 +6,7 @@ type Theme = "dark" | "light";
 interface WebStream {
   chat_id: string;
   content: string;
+  done?: boolean;
 }
 
 interface DashboardStore {

@@ -5,6 +5,7 @@
  * optional dependency: @anthropic-ai/claude-agent-sdk, zod 미설치 시 null 반환.
  */
 
+import { error_message } from "../../utils/common.js";
 import type { ToolLike, ToolExecutionContext, JsonSchema } from "../tools/types.js";
 
 /** SDK mcpServers에 전달 가능한 in-process 서버 설정. */
@@ -41,7 +42,7 @@ export async function create_sdk_tool_server(
             return { content: [{ type: "text" as const, text }] };
           } catch (e) {
             return {
-              content: [{ type: "text" as const, text: `Error: ${e instanceof Error ? e.message : String(e)}` }],
+              content: [{ type: "text" as const, text: `Error: ${error_message(e)}` }],
               isError: true,
             };
           }
@@ -76,25 +77,33 @@ function json_schema_to_zod_shape(
 }
 
 function json_prop_to_zod(prop: JsonSchema, z: ZodModule["z"]): ZodTypeAny {
+  let base: ZodTypeAny;
   switch (prop.type) {
     case "string":
-      if (Array.isArray(prop.enum) && prop.enum.length > 0) return z.enum(prop.enum as [string, ...string[]]);
-      return z.string();
+      base = Array.isArray(prop.enum) && prop.enum.length > 0
+        ? z.enum(prop.enum as [string, ...string[]])
+        : z.string();
+      break;
     case "number":
     case "integer":
-      return z.number();
+      base = z.number();
+      break;
     case "boolean":
-      return z.boolean();
+      base = z.boolean();
+      break;
     case "array":
-      return z.array(prop.items ? json_prop_to_zod(prop.items, z) : z.unknown());
+      base = z.array(prop.items ? json_prop_to_zod(prop.items, z) : z.unknown());
+      break;
     case "object":
-      if (prop.properties) {
-        return z.object(json_schema_to_zod_shape(prop, z));
-      }
-      return z.record(z.string(), z.unknown());
+      base = prop.properties
+        ? z.object(json_schema_to_zod_shape(prop, z))
+        : z.record(z.string(), z.unknown());
+      break;
     default:
-      return z.unknown();
+      base = z.unknown();
+      break;
   }
+  return prop.description ? base.describe(prop.description) : base;
 }
 
 /* ── SDK 함수 시그니처 (dynamic import용) ─────────────── */
