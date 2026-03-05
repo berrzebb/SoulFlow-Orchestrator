@@ -1,13 +1,14 @@
 import type { InboundMessage, ProgressEvent } from "../bus/types.js";
 import type { ChannelProvider } from "../channels/types.js";
 
-export type ExecutionMode = "once" | "agent" | "task";
+export type ExecutionMode = "once" | "agent" | "task" | "phase";
 
-/** Phi-4 분류기 전체 출력. builtin/inquiry는 실행 전에 해소되는 라우팅 신호. */
+/** 오케스트레이터 LLM 분류기 전체 출력. builtin/inquiry는 실행 전에 해소되는 라우팅 신호. */
 export type ClassificationResult =
   | { mode: ExecutionMode }
   | { mode: "inquiry" }
-  | { mode: "builtin"; command: string; args?: string };
+  | { mode: "builtin"; command: string; args?: string }
+  | { mode: "phase"; workflow_id?: string };
 
 export type OrchestrationRequest = {
   message: InboundMessage;

@@ -117,6 +117,20 @@ export const EXECUTION_MODE_DEFINITIONS = [
   "- Phased execution: 1단계, 2단계... 단계마다 검토",
   "IMPORTANT: task is rare. Most multi-step work is agent, not task.",
   "",
+  "## phase",
+  "Multi-agent parallel workflow requiring multiple specialists to analyze/work simultaneously then synthesize.",
+  "Use phase when the user explicitly requests:",
+  "- Multiple specialists working in parallel: 시장 분석가 + 기술 분석가 + 전략가가 각각 분석해줘",
+  "- Workflow-based multi-phase work: 1단계에서 조사하고 2단계에서 전략 세워줘",
+  "- Explicit workflow command: /workflow, 워크플로우 실행해줘",
+  'Return: {"mode":"phase"} or {"mode":"phase","workflow_id":"template-name"}',
+  "IMPORTANT: phase is rare. Only use when the user explicitly wants parallel multi-agent work.",
+  "",
+  "## phase examples",
+  'User: "시장 조사 워크플로우 실행해줘" → {"mode":"phase","workflow_id":"market-research"}',
+  'User: "3명의 전문가가 각각 분석해줘" → {"mode":"phase"}',
+  'User: "/workflow market-research" → {"mode":"phase","workflow_id":"market-research"}',
+  "",
   "# Capability Awareness",
   "The system's available tools and skills are listed in [AVAILABLE_CAPABILITIES].",
   "- If the request requires a tool category NOT listed → the system cannot do it → once (explain limitation)",
@@ -158,9 +172,10 @@ export const BASE_FLOWCHART = [
   "# Decision Flowchart",
   "1. Does it map to a built-in command? Yes → builtin",
   "2. Does the user request any action? No → once",
-  "3. Does it combine 2+ distinct actions? No → once",
-  "4. Approval gates or pause/resume? Yes → task",
-  "5. Otherwise → agent",
+  "3. Explicit multi-agent parallel workflow? Yes → phase",
+  "4. Does it combine 2+ distinct actions? No → once",
+  "5. Approval gates or pause/resume? Yes → task",
+  "6. Otherwise → agent",
 ].join("\n");
 
 /** 활성 작업이 있을 때 추가되는 inquiry 모드 정의. */
@@ -192,9 +207,10 @@ export const INQUIRY_FLOWCHART = [
   "1. Are there active tasks AND does the user ask about their status/progress? Yes → inquiry",
   "2. Does it map to a built-in command? Yes → builtin",
   "3. Does the user request any action? No → once",
-  "4. Does it combine 2+ distinct actions? No → once",
-  "5. Approval gates or pause/resume? Yes → task",
-  "6. Otherwise → agent",
+  "4. Explicit multi-agent parallel workflow? Yes → phase",
+  "5. Does it combine 2+ distinct actions? No → once",
+  "6. Approval gates or pause/resume? Yes → task",
+  "7. Otherwise → agent",
 ].join("\n");
 
 // ── 포맷 함수 ──

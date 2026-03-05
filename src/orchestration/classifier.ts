@@ -1,4 +1,4 @@
-/** 실행 모드 분류: Phi-4 LLM 기반 once/agent/task/builtin/inquiry 판정. */
+/** 실행 모드 분류: 오케스트레이터 LLM 기반 once/agent/task/builtin/inquiry 판정. */
 
 import type { ChatMessage } from "../providers/types.js";
 import type { Logger } from "../logger.js";
@@ -24,7 +24,7 @@ type OrchestratorProvider = {
   run_orchestrator(args: { messages: ChatMessage[]; max_tokens?: number; temperature?: number }): Promise<{ content?: unknown }>;
 };
 
-/** Phi-4에게 실행 모드 분류를 위임. */
+/** 오케스트레이터 LLM에게 실행 모드 분류를 위임. */
 export async function classify_execution_mode(
   task: string,
   ctx: ClassifierContext,
@@ -83,7 +83,7 @@ export async function classify_execution_mode(
 }
 
 const RE_JSON_BLOCK = /\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/;
-const RE_MODE_WORD = /\b(?:once|task|agent|inquiry)\b/;
+const RE_MODE_WORD = /\b(?:once|task|agent|inquiry|phase)\b/;
 const RE_WHITESPACE_NORMALIZE = /[\s_-]+/g;
 const RE_NEED_TASK_LOOP = /NEED\s*TASK\s*LOOP/i;
 const RE_NEED_AGENT_LOOP = /NEED\s*AGENT\s*LOOP/i;
@@ -103,11 +103,19 @@ export function parse_execution_mode(raw: string): ClassificationResult | null {
         return null;
       }
       if (v === "inquiry") return { mode: "inquiry" };
+      if (v === "phase") {
+        const wid = obj.workflow_id ? String(obj.workflow_id) : undefined;
+        return { mode: "phase", workflow_id: wid };
+      }
       if (v === "once" || v === "task" || v === "agent") return { mode: v };
     } catch { /* ignore */ }
   }
   const word = text.toLowerCase().match(RE_MODE_WORD);
-  return word ? { mode: word[0] as "once" | "agent" | "task" | "inquiry" } : null;
+  if (word) {
+    if (word[0] === "phase") return { mode: "phase" };
+    return { mode: word[0] as "once" | "agent" | "task" | "inquiry" };
+  }
+  return null;
 }
 
 /** @internal — exported for unit testing. */

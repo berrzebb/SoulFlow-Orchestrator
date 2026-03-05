@@ -1,0 +1,164 @@
+/** workspace/workflows/*.yaml 템플릿 로더 + 변수 치환. */
+
+import { readdirSync, readFileSync, writeFileSync, unlinkSync, existsSync, mkdirSync } from "node:fs";
+import { join } from "node:path";
+import type { WorkflowDefinition, PhaseDefinition } from "../agent/phase-loop.types.js";
+
+/** YAML 의존성 없이 간단한 YAML-like 파싱 (JSON 직렬화된 YAML 지원). */
+let yaml_parse: ((text: string) => unknown) | null = null;
+let yaml_dump: ((obj: unknown) => string) | null = null;
+try {
+  const mod_name = "js-yaml";
+  const mod = await import(/* webpackIgnore: true */ mod_name) as { load: (text: string) => unknown; dump: (obj: unknown) => string };
+  yaml_parse = mod.load;
+  yaml_dump = mod.dump;
+} catch {
+  // js-yaml 미설치 시 JSON 폴백
+}
+
+function parse_yaml(text: string): unknown {
+  if (yaml_parse) return yaml_parse(text);
+  return JSON.parse(text);
+}
+
+/** workspace/workflows/ 디렉토리에서 모든 .yaml/.yml 파일을 로드. */
+export function load_workflow_templates(workspace: string): WorkflowDefinition[] {
+  const dir = join(workspace, "workflows");
+  if (!existsSync(dir)) return [];
+
+  const files = readdirSync(dir).filter((f) => f.endsWith(".yaml") || f.endsWith(".yml"));
+  const templates: WorkflowDefinition[] = [];
+
+  for (const file of files) {
+    try {
+      const content = readFileSync(join(dir, file), "utf-8");
+      const raw = parse_yaml(content) as Record<string, unknown>;
+      const def = normalize_workflow_definition(raw);
+      if (def) templates.push(def);
+    } catch { /* skip malformed files */ }
+  }
+
+  return templates;
+}
+
+/** 특정 워크플로우 템플릿을 이름으로 로드. */
+export function load_workflow_template(workspace: string, name: string): WorkflowDefinition | null {
+  const dir = join(workspace, "workflows");
+  for (const ext of [".yaml", ".yml"]) {
+    const path = join(dir, `${name}${ext}`);
+    if (!existsSync(path)) continue;
+    try {
+      const content = readFileSync(path, "utf-8");
+      const raw = parse_yaml(content) as Record<string, unknown>;
+      return normalize_workflow_definition(raw);
+    } catch { return null; }
+  }
+  return null;
+}
+
+/** 변수 치환: `{{key}}` → value. */
+export function substitute_variables(
+  definition: WorkflowDefinition,
+  vars: Record<string, string>,
+): WorkflowDefinition {
+  const json = JSON.stringify(definition);
+  const substituted = json.replace(/\{\{(\w+)\}\}/g, (_, key: string) => {
+    const value = vars[key];
+    // JSON 문자열 내부이므로 특수문자 이스케이프
+    return value !== undefined ? value.replace(/["\\\n\r\t]/g, (c) => `\\${c}`) : `{{${key}}}`;
+  });
+  return JSON.parse(substituted) as WorkflowDefinition;
+}
+
+/** 이름을 파일명 안전한 slug로 변환. */
+function slugify(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9가-힣\-_]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "") || "untitled";
+}
+
+/** 워크플로우 디렉토리 경로. */
+function workflows_dir(workspace: string): string {
+  const dir = join(workspace, "workflows");
+  mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
+/** 워크플로우 템플릿을 YAML로 저장. */
+export function save_workflow_template(workspace: string, name: string, definition: WorkflowDefinition): string {
+  const slug = slugify(name);
+  const dir = workflows_dir(workspace);
+  const path = join(dir, `${slug}.yaml`);
+  const content = yaml_dump ? yaml_dump(definition) : JSON.stringify(definition, null, 2);
+  writeFileSync(path, content, "utf-8");
+  return slug;
+}
+
+/** 워크플로우 템플릿 삭제. */
+export function delete_workflow_template(workspace: string, name: string): boolean {
+  const dir = join(workspace, "workflows");
+  if (!existsSync(dir)) return false;
+  for (const ext of [".yaml", ".yml"]) {
+    const path = join(dir, `${name}${ext}`);
+    if (existsSync(path)) { unlinkSync(path); return true; }
+  }
+  return false;
+}
+
+/** YAML 텍스트를 파싱하여 WorkflowDefinition으로 변환. */
+export function parse_workflow_yaml(yaml_content: string): WorkflowDefinition | null {
+  const raw = parse_yaml(yaml_content) as Record<string, unknown>;
+  return normalize_workflow_definition(raw);
+}
+
+/** YAML 직렬화: WorkflowDefinition → YAML 문자열. */
+export function serialize_to_yaml(definition: WorkflowDefinition): string {
+  return yaml_dump ? yaml_dump(definition) : JSON.stringify(definition, null, 2);
+}
+
+/** normalize를 외부에서도 사용할 수 있도록 export. */
+export { normalize_workflow_definition };
+
+/** raw YAML 객체를 WorkflowDefinition으로 정규화. */
+function normalize_workflow_definition(raw: Record<string, unknown>): WorkflowDefinition | null {
+  if (!raw.title || !raw.phases || !Array.isArray(raw.phases)) return null;
+
+  const phases: PhaseDefinition[] = [];
+  for (const p of raw.phases as Array<Record<string, unknown>>) {
+    if (!p.phase_id || !Array.isArray(p.agents)) continue;
+    phases.push({
+      phase_id: String(p.phase_id),
+      title: String(p.title || p.phase_id),
+      agents: (p.agents as Array<Record<string, unknown>>).map((a) => ({
+        agent_id: String(a.agent_id || a.role || `agent-${Math.random().toString(36).slice(2, 8)}`),
+        role: String(a.role || ""),
+        label: String(a.label || a.role || ""),
+        backend: String(a.backend || "openrouter"),
+        model: a.model ? String(a.model) : undefined,
+        system_prompt: String(a.system_prompt || ""),
+        tools: Array.isArray(a.tools) ? a.tools.map(String) : undefined,
+        max_turns: a.max_turns ? Number(a.max_turns) : undefined,
+      })),
+      critic: p.critic ? {
+        backend: String((p.critic as Record<string, unknown>).backend || "openrouter"),
+        model: (p.critic as Record<string, unknown>).model ? String((p.critic as Record<string, unknown>).model) : undefined,
+        system_prompt: String((p.critic as Record<string, unknown>).system_prompt || ""),
+        gate: Boolean((p.critic as Record<string, unknown>).gate ?? true),
+        on_rejection: ((p.critic as Record<string, unknown>).on_rejection as PhaseDefinition["critic"] extends { on_rejection?: infer R } ? R : undefined) || undefined,
+        max_retries: (p.critic as Record<string, unknown>).max_retries ? Number((p.critic as Record<string, unknown>).max_retries) : undefined,
+      } : undefined,
+      context_template: p.context_template ? String(p.context_template) : undefined,
+      failure_policy: (p.failure_policy as PhaseDefinition["failure_policy"]) || undefined,
+      quorum_count: p.quorum_count ? Number(p.quorum_count) : undefined,
+    });
+  }
+
+  if (phases.length === 0) return null;
+
+  return {
+    title: String(raw.title),
+    objective: String(raw.objective || ""),
+    phases,
+    variables: raw.variables && typeof raw.variables === "object"
+      ? Object.fromEntries(Object.entries(raw.variables as Record<string, unknown>).map(([k, v]) => [k, String(v)]))
+      : undefined,
+  };
+}

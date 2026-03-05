@@ -31,7 +31,7 @@ export default function SecretsPage() {
 
   const confirm_remove = async () => {
     if (!deleteTarget) return;
-    await api.del(`/api/secrets/${encodeURIComponent(deleteTarget)}`);
+    await api.del("/api/secrets", { name: deleteTarget });
     toast(t("secrets.removed"), "ok");
     setDeleteTarget(null);
     refresh();

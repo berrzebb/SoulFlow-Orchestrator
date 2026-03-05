@@ -46,7 +46,7 @@ describe("StatusHandler", () => {
       expect(handler.can_handle(make_ctx("/도구", "도구"))).toBe(true);
     });
 
-    it("does NOT match natural language — Phi-4가 처리", () => {
+    it("does NOT match natural language — 오케스트레이터 LLM이 처리", () => {
       expect(handler.can_handle(make_ctx("사용 가능한 도구는?"))).toBe(false);
       expect(handler.can_handle(make_ctx("현재 사용가능한 스킬 목록"))).toBe(false);
       expect(handler.can_handle(make_ctx("도구 목록 알려줘"))).toBe(false);

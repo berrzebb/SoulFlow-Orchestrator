@@ -49,6 +49,8 @@ export type SpawnSubagentOptions = {
   skill_names?: string[];
   /** 이벤트/스트림 훅. */
   hooks?: Pick<AgentHooks, "on_event" | "on_stream">;
+  /** controller loop 생략 — executor 백엔드 직접 1회 호출. Phase Loop 등 외부 orchestrator가 있을 때 사용. */
+  skip_controller?: boolean;
 };
 
 type RunningSubagent = {
@@ -296,6 +298,16 @@ export class SubagentRegistry {
     const handoff_emitted = new Set<string>();
     this._fire(options, id, label, (s) => ({ type: "init", source: s, at: now_iso() }), backend_id);
     try {
+      // skip_controller: executor 직접 호출 (Phase Loop 등 외부 orchestrator용)
+      if (options.skip_controller) {
+        const direct_result = await this._run_direct_executor({
+          options, id, label, backend_id, executor_provider_id, executor_backend,
+          contextual_system, model, max_tokens, temperature, tools, abort,
+          stream_buffer, last_stream_emit_at,
+        });
+        final_content = direct_result.content;
+        actual_finish_reason = direct_result.finish_reason;
+      } else
       for (let iteration = 0; iteration < max_iterations; iteration += 1) {
         if (abort.signal.aborted) {
           this._update_status(id, "cancelled");
@@ -807,7 +819,7 @@ export class SubagentRegistry {
       contextual_system ? `\n# ContextBuilder System\n${contextual_system}` : "",
       "",
       "Controller mode:",
-      "- You are phi4 orchestrator.",
+      "- You are the orchestrator LLM.",
       "- Decide next single executor turn.",
       "- Return strict JSON only.",
       "Schema:",
@@ -829,5 +841,88 @@ export class SubagentRegistry {
       "- Execute only the current instruction.",
       "- Return concise result for controller consumption.",
     ].join("\n");
+  }
+
+  /** controller loop 없이 executor 백엔드를 직접 1회 호출. */
+  private async _run_direct_executor(ctx: {
+    options: SpawnSubagentOptions;
+    id: string;
+    label: string;
+    backend_id: AgentBackendId;
+    executor_provider_id: string;
+    executor_backend: import("./agent.types.js").AgentBackend | null;
+    contextual_system: string;
+    model: string | undefined;
+    max_tokens: number;
+    temperature: number;
+    tools: ReturnType<SubagentRegistry["build_tools"]>;
+    abort: AbortController;
+    stream_buffer: string;
+    last_stream_emit_at: number;
+  }): Promise<{ content: string; finish_reason: AgentFinishReason }> {
+    const { options, id, label, executor_provider_id, executor_backend, contextual_system, model, max_tokens, temperature, tools, abort } = ctx;
+    let { stream_buffer, last_stream_emit_at } = ctx;
+    const providers = this.providers!;
+
+    const system_prompt = this._build_executor_prompt(options, id, contextual_system);
+    let finish_reason: AgentFinishReason = "stop";
+
+    if (executor_backend) {
+      const agent_result = await executor_backend.run({
+        task: options.task,
+        system_prompt,
+        model,
+        max_tokens,
+        max_turns: options.max_iterations || 1,
+        tools: tools.get_definitions() as ToolSchema[],
+        abort_signal: abort.signal,
+        hooks: {
+          on_event: (event: import("./agent.types.js").AgentEvent) => {
+            options.hooks?.on_event?.(event);
+            this._fire(options, id, label, () => event, ctx.backend_id);
+          },
+        },
+      });
+      this.logger?.debug("direct_executor_result", {
+        id, label, finish_reason: agent_result.finish_reason,
+        content_length: agent_result.content?.length ?? 0,
+        content_preview: (agent_result.content || "").slice(0, 120),
+        has_error: !!agent_result.metadata?.error,
+      });
+      if (agent_result.finish_reason === "error") throw new Error(String(agent_result.metadata?.error || "agent_backend_error"));
+      if (agent_result.finish_reason === "cancelled") return { content: "", finish_reason: "cancelled" };
+      finish_reason = agent_result.finish_reason;
+      const warn = FINISH_REASON_WARNINGS[finish_reason];
+      const content = warn ? `${agent_result.content || ""}\n\n⚠️ ${warn}`.trim() : (agent_result.content || "");
+      return { content, finish_reason };
+    }
+
+    // CLI fallback: run_headless
+    const response = await providers.run_headless({
+      provider_id: executor_provider_id as import("../providers/types.js").ProviderId,
+      messages: [
+        { role: "system", content: system_prompt },
+        { role: "user", content: options.task },
+      ],
+      tools: tools.get_definitions(),
+      model,
+      max_tokens,
+      temperature,
+      on_stream: async (chunk) => {
+        if (abort.signal.aborted) return;
+        stream_buffer += String(chunk || "");
+        const now = Date.now();
+        if (stream_buffer.length < 120 && now - last_stream_emit_at < 1500) return;
+        await this._flush_stream_buffer({
+          subagent_id: id, label, origin_channel: options.origin_channel, origin_chat_id: options.origin_chat_id,
+          stream_buffer_ref: () => stream_buffer, clear_stream_buffer: () => { stream_buffer = ""; },
+        });
+        last_stream_emit_at = now;
+      },
+    });
+
+    const content = response.content || "";
+    if (is_provider_error_reply(content)) throw new Error(content);
+    return { content, finish_reason: "stop" };
   }
 }

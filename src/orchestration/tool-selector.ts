@@ -57,7 +57,7 @@ function resolve_skill_tool_categories(tool_names: string[]): Set<ToolCategory> 
   return out;
 }
 
-/** 모드 기본값 + 스킬 요구 도구 기반으로 관련 도구 선택. 키워드 정규식 없음 — Phi-4 분류에 위임. */
+/** 모드 기본값 + 스킬 요구 도구 기반으로 관련 도구 선택. 키워드 정규식 없음 — 분류기에 위임. */
 export function select_tools_for_request(
   all_tools: ToolDefinition[],
   _request_text: string,

@@ -1,6 +1,6 @@
 import { CliHeadlessProvider } from "./cli.provider.js";
 import { OpenRouterProvider } from "./openrouter.provider.js";
-import { Phi4LocalProvider } from "./phi4.provider.js";
+import { OrchestratorLlmProvider } from "./orchestrator-llm.provider.js";
 import type { ChatMessage, ChatOptions, LlmProvider, LlmResponse, ProviderId } from "./types.js";
 import type { ContextBuilder } from "../agent/context.js";
 import { redact_sensitive_text, redact_sensitive_unknown } from "../security/sensitive.js";
@@ -14,7 +14,7 @@ function parse_provider_id(raw: string): ProviderId | null {
   if (v === "chatgpt") return "chatgpt";
   if (v === "claude_code") return "claude_code";
   if (v === "openrouter") return "openrouter";
-  if (v === "phi4_local") return "phi4_local";
+  if (v === "orchestrator_llm") return "orchestrator_llm";
   if (v === "gemini") return "gemini";
   return null;
 }
@@ -24,7 +24,7 @@ export class ProviderRegistry {
   private readonly breakers = new Map<ProviderId, CircuitBreaker>();
   private readonly health_scorer: ProviderHealthScorer;
   private active_provider_id: ProviderId = "chatgpt";
-  private orchestrator_provider_id: ProviderId = "phi4_local";
+  private orchestrator_provider_id: ProviderId = "orchestrator_llm";
   private readonly orchestrator_max_tokens: number;
   private readonly secret_vault: SecretVaultService;
 
@@ -34,9 +34,9 @@ export class ProviderRegistry {
     openrouter_model?: string;
     openrouter_http_referer?: string;
     openrouter_app_title?: string;
-    phi4_api_key?: string | null;
-    phi4_api_base?: string;
-    phi4_model?: string;
+    orchestrator_llm_api_key?: string | null;
+    orchestrator_llm_api_base?: string;
+    orchestrator_llm_model?: string;
     orchestrator_max_tokens?: number;
     orchestrator_provider?: string;
     circuit_breaker?: CircuitBreakerOptions;
@@ -77,10 +77,10 @@ export class ProviderRegistry {
         app_title: options?.openrouter_app_title,
       }),
     );
-    this.providers.set("phi4_local", new Phi4LocalProvider({
-      api_key: options?.phi4_api_key ?? undefined,
-      api_base: options?.phi4_api_base,
-      default_model: options?.phi4_model,
+    this.providers.set("orchestrator_llm", new OrchestratorLlmProvider({
+      api_key: options?.orchestrator_llm_api_key ?? undefined,
+      api_base: options?.orchestrator_llm_api_base,
+      default_model: options?.orchestrator_llm_model,
     }));
     this.providers.set("gemini", new CliHeadlessProvider({
       id: "gemini",
@@ -172,7 +172,7 @@ export class ProviderRegistry {
   private resolve_default_orchestrator_provider(override?: string): ProviderId {
     const preferred = parse_provider_id(override || "");
     if (preferred && this.providers.has(preferred)) return preferred;
-    return "phi4_local";
+    return "orchestrator_llm";
   }
 
   /** 지정 ID의 LlmProvider 인스턴스 반환. AgentBackendRegistry에서 래핑 시 사용. */

@@ -36,7 +36,7 @@ export function SessionsTab() {
 
   const { data: detail } = useQuery<SessionDetail>({
     queryKey: ["ws-session-detail", selected],
-    queryFn: () => api.get(`/api/sessions/${encodeURIComponent(selected!)}`),
+    queryFn: () => api.post("/api/sessions", { key: selected! }),
     enabled: !!selected,
   });
 

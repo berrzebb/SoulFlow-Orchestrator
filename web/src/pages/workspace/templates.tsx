@@ -23,7 +23,7 @@ export function TemplatesTab() {
     if (!selected) return;
     let cancelled = false;
     setLoading(true);
-    api.get<{ content: string | null }>(`/api/templates/${selected}`)
+    api.post<{ content: string | null }>("/api/templates", { name: selected })
       .then((res) => { if (!cancelled) { setContent(res.content ?? ""); setDirty(false); } })
       .catch(() => { if (!cancelled) setContent(""); })
       .finally(() => { if (!cancelled) setLoading(false); });
@@ -32,7 +32,7 @@ export function TemplatesTab() {
 
   const save = async () => {
     if (!selected) return;
-    await api.put(`/api/templates/${selected}`, { content });
+    await api.put("/api/templates", { name: selected, content });
     toast(t("templates.saved_fmt", { name: selected }), "ok");
     setDirty(false);
     void qc.invalidateQueries({ queryKey: ["templates"] });

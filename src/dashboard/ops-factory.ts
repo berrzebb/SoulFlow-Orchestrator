@@ -15,6 +15,7 @@ import type {
   DashboardAgentProviderOps, BootstrapOps, DashboardOAuthOps, OAuthIntegrationInfo,
   DashboardMemoryOps, DashboardWorkspaceOps,
   DashboardSkillOps, DashboardConfigOps, DashboardToolOps, DashboardCliAuthOps,
+  DashboardModelOps,
 } from "./service.js";
 import type { AgentBackendRegistry } from "../agent/agent-registry.js";
 import type { AgentProviderStore } from "../agent/provider-store.js";
@@ -26,6 +27,7 @@ import type { ChannelInstanceStore } from "../channels/instance-store.js";
 import type { AppConfig } from "../config/schema.js";
 import type { MemoryStoreLike } from "../agent/memory.types.js";
 import type { McpClientManager } from "../mcp/index.js";
+import type { OrchestratorLlmRuntime } from "../providers/orchestrator-llm.runtime.js";
 
 /** 프로바이더 저장 → 토큰 설정 → 백엔드 등록을 한 번에 수행. */
 async function activate_provider(
@@ -709,6 +711,139 @@ export function create_cli_auth_ops(deps: {
       const t = valid_cli(cli);
       if (!t) return { ok: false };
       return { ok: deps.cli_auth.cancel_login(t) };
+    },
+  };
+}
+
+// ─── Models ───────────────────────────────────────────────────────────────
+
+export function create_model_ops(runtime: OrchestratorLlmRuntime): DashboardModelOps {
+  return {
+    list: () => runtime.list_models(),
+    pull: (name) => runtime.pull_model_by_name(name),
+    pull_stream: (name) => runtime.pull_model_stream(name),
+    delete: (name) => runtime.delete_model(name),
+    list_active: () => runtime.list_running(),
+    get_runtime_status: () => runtime.health_check().then((s) => s as unknown as Record<string, unknown>),
+    switch_model: (name) => runtime.switch_model(name).then((s) => s as unknown as Record<string, unknown>),
+  };
+}
+
+// ─── Workflows ────────────────────────────────────────────────────────────
+
+import type { PhaseWorkflowStoreLike } from "../agent/phase-workflow-store.js";
+import type { SubagentRegistry } from "../agent/subagents.js";
+import type { DashboardWorkflowOps } from "./service.js";
+import type { PhaseLoopRunOptions, WorkflowDefinition } from "../agent/phase-loop.types.js";
+import {
+  load_workflow_templates, load_workflow_template,
+  substitute_variables, save_workflow_template,
+  delete_workflow_template, parse_workflow_yaml, serialize_to_yaml,
+} from "../orchestration/workflow-loader.js";
+import { run_phase_loop } from "../agent/phase-loop-runner.js";
+import { short_id } from "../utils/common.js";
+import type { Logger } from "../logger.js";
+
+export function create_workflow_ops(deps: {
+  store: PhaseWorkflowStoreLike;
+  subagents: SubagentRegistry;
+  workspace: string;
+  logger: Logger;
+  on_workflow_event?: (event: import("../agent/phase-loop.types.js").PhaseLoopEvent) => void;
+}): DashboardWorkflowOps {
+  const { store, subagents, workspace, logger, on_workflow_event } = deps;
+
+  return {
+    list: () => store.list(),
+    get: (id) => store.get(id),
+
+    async create(input) {
+      const title = String(input.title || "Untitled Workflow");
+      const objective = String(input.objective || "");
+      const channel = String(input.channel || "dashboard");
+      const chat_id = String(input.chat_id || "web");
+
+      let phases: PhaseLoopRunOptions["phases"];
+      if (input.template_name) {
+        const template = load_workflow_templates(workspace)
+          .find((t) => t.title.toLowerCase().includes(String(input.template_name).toLowerCase()));
+        if (!template) return { ok: false, error: "template_not_found" };
+        const substituted = substitute_variables(template, { objective, channel });
+        phases = substituted.phases;
+      } else if (Array.isArray(input.phases)) {
+        phases = input.phases as PhaseLoopRunOptions["phases"];
+      } else {
+        return { ok: false, error: "phases_or_template_name_required" };
+      }
+
+      const workflow_id = `wf-${short_id(12)}`;
+
+      // 비동기 실행 (즉시 반환)
+      void run_phase_loop({
+        workflow_id, title, objective, channel, chat_id, phases,
+      }, { subagents, store, logger, on_event: on_workflow_event }).catch((err) => {
+        logger.error("workflow_create_run_error", { workflow_id, error: String(err) });
+      });
+
+      return { ok: true, workflow_id };
+    },
+
+    async cancel(workflow_id) {
+      const state = await store.get(workflow_id);
+      if (!state) return false;
+      state.status = "cancelled";
+      await store.upsert(state);
+      subagents.cancel_by_parent_id(`workflow:${workflow_id}`);
+      return true;
+    },
+
+    get_messages: (wid, pid, aid) => store.get_messages(wid, pid, aid),
+
+    async send_message(workflow_id, phase_id, agent_id, content) {
+      if (!content.trim()) return { ok: false, error: "empty_content" };
+      const state = await store.get(workflow_id);
+      if (!state) return { ok: false, error: "workflow_not_found" };
+
+      const phase = state.phases.find((p) => p.phase_id === phase_id);
+      if (!phase) return { ok: false, error: "phase_not_found" };
+      const agent = phase.agents.find((a) => a.agent_id === agent_id);
+      if (!agent) return { ok: false, error: "agent_not_found" };
+
+      // 메시지 기록
+      const msg = { role: "user" as const, content, at: new Date().toISOString() };
+      await store.insert_message(workflow_id, phase_id, agent_id, msg);
+
+      // 실행 중인 에이전트에 메시지 전달
+      if (agent.subagent_id) {
+        try { subagents.send_input(agent.subagent_id, content); } catch { /* agent may have completed */ }
+      }
+
+      return { ok: true };
+    },
+
+    list_templates: () => load_workflow_templates(workspace),
+
+    get_template: (name) => load_workflow_template(workspace, name),
+
+    save_template(name, definition) {
+      return save_workflow_template(workspace, name, definition);
+    },
+
+    delete_template(name) {
+      return delete_workflow_template(workspace, name);
+    },
+
+    import_template(yaml_content) {
+      const def = parse_workflow_yaml(yaml_content);
+      if (!def) return { ok: false, error: "invalid_yaml" };
+      const slug = save_workflow_template(workspace, def.title || "imported", def);
+      return { ok: true, name: slug };
+    },
+
+    export_template(name) {
+      const def = load_workflow_template(workspace, name);
+      if (!def) return null;
+      return serialize_to_yaml(def);
     },
   };
 }

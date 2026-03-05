@@ -91,6 +91,15 @@ export type SpawnAndWaitResult = {
   error?: string;
 };
 
+export type PhaseWorkflowSummary = {
+  workflow_id: string;
+  title: string;
+  status: string;
+  current_phase: number;
+  phase_count: number;
+  created_at: string;
+};
+
 export interface AgentRuntimeLike {
   get_context_builder(): ContextBuilder;
   get_always_skills(): string[];
@@ -141,4 +150,8 @@ export interface AgentRuntimeLike {
   list_active_loops(): import("../contracts.js").AgentLoopState[];
   /** Agent Loop을 중지. */
   stop_loop(loop_id: string, reason?: string): import("../contracts.js").AgentLoopState | null;
+  /** Phase 워크플로우 목록 조회. */
+  list_phase_workflows(): Promise<PhaseWorkflowSummary[]>;
+  /** Phase 워크플로우 상태 조회. */
+  get_phase_workflow(workflow_id: string): Promise<import("./phase-loop.types.js").PhaseLoopState | null>;
 }

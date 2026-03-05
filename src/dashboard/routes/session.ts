@@ -1,9 +1,12 @@
 import type { RouteContext } from "../route-context.js";
 
 export async function handle_session(ctx: RouteContext): Promise<boolean> {
-  const { req, url, res, json, session_store } = ctx;
+  const { req, url, res, json, session_store, read_body } = ctx;
 
-  if (url.pathname === "/api/sessions" && req.method === "GET") {
+  if (url.pathname !== "/api/sessions") return false;
+
+  // GET /api/sessions?provider=... — 목록
+  if (req.method === "GET") {
     const store = session_store;
     if (!store?.list_by_prefix) { json(res, 200, []); return true; }
     const provider_filter = url.searchParams.get("provider") ?? "";
@@ -25,11 +28,14 @@ export async function handle_session(ctx: RouteContext): Promise<boolean> {
     json(res, 200, list);
     return true;
   }
-  const key_match = url.pathname.match(/^\/api\/sessions\/(.+)$/);
-  if (key_match && req.method === "GET") {
+
+  // POST /api/sessions { key } — 단건 조회
+  if (req.method === "POST") {
     const store = session_store;
     if (!store) { json(res, 503, { error: "session_store_unavailable" }); return true; }
-    const key = decodeURIComponent(key_match[1]);
+    const body = await read_body(req);
+    const key = String(body?.key || "").trim();
+    if (!key) { json(res, 400, { error: "key_required" }); return true; }
     const session = await store.get_or_create(key);
     const parts = key.split(":");
     const messages = session.messages.map((m) => ({

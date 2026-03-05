@@ -27,9 +27,11 @@ type ToolContextSetter = {
 
 export class AgentRuntimeAdapter implements AgentRuntimeLike {
   private readonly domain: AgentDomain;
+  private readonly _phase_store: import("./phase-workflow-store.js").PhaseWorkflowStoreLike | null;
 
-  constructor(domain: AgentDomain) {
+  constructor(domain: AgentDomain, options?: { phase_workflow_store?: import("./phase-workflow-store.js").PhaseWorkflowStoreLike | null }) {
     this.domain = domain;
+    this._phase_store = options?.phase_workflow_store ?? null;
   }
 
   get_context_builder(): ContextBuilder {
@@ -192,8 +194,31 @@ export class AgentRuntimeAdapter implements AgentRuntimeLike {
       return { ok: false, content: "", error: error_message(e) };
     }
   }
+
+  async list_phase_workflows(): Promise<import("./runtime.types.js").PhaseWorkflowSummary[]> {
+    const store = this._phase_store;
+    if (!store) return [];
+    const all = await store.list();
+    return all.map((w) => ({
+      workflow_id: w.workflow_id,
+      title: w.title,
+      status: w.status,
+      current_phase: w.current_phase,
+      phase_count: w.phases.length,
+      created_at: w.created_at,
+    }));
+  }
+
+  async get_phase_workflow(workflow_id: string): Promise<import("./phase-loop.types.js").PhaseLoopState | null> {
+    const store = this._phase_store;
+    if (!store) return null;
+    return store.get(workflow_id);
+  }
 }
 
-export function create_agent_runtime(domain: AgentDomain): AgentRuntimeLike {
-  return new AgentRuntimeAdapter(domain);
+export function create_agent_runtime(
+  domain: AgentDomain,
+  options?: { phase_workflow_store?: import("./phase-workflow-store.js").PhaseWorkflowStoreLike | null },
+): AgentRuntimeLike {
+  return new AgentRuntimeAdapter(domain, options);
 }

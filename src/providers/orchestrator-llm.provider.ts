@@ -4,11 +4,11 @@ import { create_logger } from "../logger.js";
 import { LlmResponse, parse_openai_response, sanitize_messages_for_api, type ChatOptions } from "./types.js";
 import { parse_tool_calls_from_text } from "../agent/tool-call-parser.js";
 
-const log = create_logger("provider:phi4");
+const log = create_logger("provider:orchestrator-llm");
 
 const DEFAULT_PER_CALL_TIMEOUT_MS = 90_000;
 
-export class Phi4LocalProvider extends BaseLlmProvider {
+export class OrchestratorLlmProvider extends BaseLlmProvider {
   private readonly per_call_timeout_ms: number;
   private readonly api_key: string;
 
@@ -17,9 +17,9 @@ export class Phi4LocalProvider extends BaseLlmProvider {
     per_call_timeout_ms?: number; api_key?: string;
   }) {
     super({
-      id: "phi4_local",
-      api_base: args?.api_base ?? "http://127.0.0.1:11434/v1",
-      default_model: args?.default_model ?? "phi4-mini",
+      id: "orchestrator_llm",
+      api_base: args?.api_base ?? "http://ollama:11434/v1",
+      default_model: args?.default_model ?? "qwen3.5:4b",
     });
     this.per_call_timeout_ms = args?.per_call_timeout_ms ?? DEFAULT_PER_CALL_TIMEOUT_MS;
     this.api_key = (args?.api_key ?? "").trim();
@@ -57,7 +57,7 @@ export class Phi4LocalProvider extends BaseLlmProvider {
       if (!response.ok) {
         log.warn("api error", { status: response.status, model: body.model });
         return new LlmResponse({
-          content: `Error calling phi4_local: ${JSON.stringify(raw)}`,
+          content: `Error calling orchestrator_llm: ${JSON.stringify(raw)}`,
           finish_reason: "error",
         });
       }
@@ -76,7 +76,7 @@ export class Phi4LocalProvider extends BaseLlmProvider {
     } catch (error) {
       log.warn("request failed", { error: error_message(error) });
       return new LlmResponse({
-        content: `Error calling phi4_local: ${error_message(error)}`,
+        content: `Error calling orchestrator_llm: ${error_message(error)}`,
         finish_reason: "error",
       });
     }

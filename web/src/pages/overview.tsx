@@ -142,7 +142,7 @@ export default function OverviewPage() {
     staleTime: 2000,
   });
 
-  const cancel_process = (id: string) => void api.post(`/api/processes/${id}/cancel`).then(() => refetch());
+  const cancel_process = (id: string) => void api.del("/api/processes", { run_id: id }).then(() => refetch());
 
   if (isLoading || !s) {
     return (
@@ -356,7 +356,7 @@ export default function OverviewPage() {
             {s.messages?.map((m, i) => (
               <li key={i}>
                 <span className="li-text li-flex li-flex--baseline">
-                  <span className="fw-600" style={{ color: m.direction === "inbound" ? "var(--accent)" : "var(--muted)", flexShrink: 0, fontSize: "var(--fs-xs)", maxWidth: 160 }}>
+                  <span className="fw-600 truncate" style={{ color: m.direction === "inbound" ? "var(--accent)" : "var(--muted)", flexShrink: 0, fontSize: "var(--fs-xs)", maxWidth: "40%" }}>
                     {m.direction === "inbound" ? t("overview.msg_in") : t("overview.msg_out")} {m.sender_id}
                   </span>
                   <span className="truncate text-sm text-muted" style={{ flex: 1, minWidth: 0 }}>{m.content}</span>
@@ -377,7 +377,7 @@ export default function OverviewPage() {
               <li key={e.event_id}>
                 <span className="li-text li-flex">
                   <Badge status={e.phase} variant={PHASE_VARIANT[e.phase]} />
-                  <span className="text-xs text-muted truncate" style={{ flexShrink: 0, maxWidth: 120 }}>{e.task_id || e.agent_id || "-"}</span>
+                  <span className="text-xs text-muted truncate" style={{ flexShrink: 0, maxWidth: "30%" }}>{e.task_id || e.agent_id || "-"}</span>
                   <span className="truncate text-sm" style={{ flex: 1, minWidth: 0 }}>{e.summary || ""}</span>
                 </span>
               </li>

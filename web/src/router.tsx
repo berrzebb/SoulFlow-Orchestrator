@@ -9,7 +9,12 @@ import SettingsPage from "./pages/settings";
 import ChatPage from "./pages/chat";
 import ProvidersPage from "./pages/providers";
 import SetupPage from "./pages/setup";
+import ModelsPage from "./pages/models";
 import WorkspacePage from "./pages/workspace/index";
+import WorkflowsPage from "./pages/workflows/index";
+import WorkflowDetailPage from "./pages/workflows/detail";
+import WorkflowTemplatesPage from "./pages/workflows/templates";
+import WorkflowBuilderPage from "./pages/workflows/builder";
 
 export const router = createHashRouter([
   {
@@ -21,9 +26,15 @@ export const router = createHashRouter([
       { path: "providers", element: <ProvidersPage /> },
       { path: "secrets", element: <SecretsPage /> },
       { path: "oauth", element: <OAuthPage /> },
+      { path: "models", element: <ModelsPage /> },
       { path: "settings", element: <SettingsPage /> },
       { path: "chat", element: <ChatPage /> },
       { path: "workspace", element: <WorkspacePage /> },
+      { path: "workflows", element: <WorkflowsPage /> },
+      { path: "workflows/:id", element: <WorkflowDetailPage /> },
+      { path: "workflows/templates", element: <WorkflowTemplatesPage /> },
+      { path: "workflows/templates/new", element: <WorkflowBuilderPage /> },
+      { path: "workflows/templates/:name", element: <WorkflowBuilderPage /> },
     ],
   },
 ]);

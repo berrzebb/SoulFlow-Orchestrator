@@ -5,7 +5,7 @@ function entry(overrides: Partial<FeedbackEntry> = {}): FeedbackEntry {
   return {
     request_summary: "test request",
     result: "success",
-    provider: "phi4_local",
+    provider: "orchestrator_llm",
     mode: "once",
     tool_calls_count: 0,
     duration_ms: 500,
@@ -37,10 +37,10 @@ describe("FeedbackAnalyzer", () => {
 
   it("에러율 낮으면 제안 없음", () => {
     for (let i = 0; i < 10; i++) {
-      analyzer.record(entry({ provider: "phi4_local", result: "success" }));
+      analyzer.record(entry({ provider: "orchestrator_llm", result: "success" }));
     }
     const suggestions = analyzer.analyze();
-    expect(suggestions.filter((s) => s.key.includes("phi4_local"))).toHaveLength(0);
+    expect(suggestions.filter((s) => s.key.includes("orchestrator_llm"))).toHaveLength(0);
   });
 
   it("반복 에러 패턴 → promise 제안", () => {

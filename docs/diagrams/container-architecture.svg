@@ -1,0 +1,95 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2267.44 1529.6000000000004" width="2267.44" height="1529.6000000000004" style="--bg:#0A0A0A;--fg:#EDEDED;--line:#EDEDED;--accent:#EDEDED;--muted:#888888;--surface:#0A0A0A;--border:#454545;background:var(--bg)">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;display=swap');
+  text { font-family: 'Geist', system-ui, sans-serif; }
+  svg {
+    /* Derived from --bg and --fg (overridable via --line, --accent, etc.) */
+    --_text:          var(--fg);
+    --_text-sec:      var(--muted, color-mix(in srgb, var(--fg) 60%, var(--bg)));
+    --_text-muted:    var(--muted, color-mix(in srgb, var(--fg) 40%, var(--bg)));
+    --_text-faint:    color-mix(in srgb, var(--fg) 25%, var(--bg));
+    --_line:          var(--line, color-mix(in srgb, var(--fg) 30%, var(--bg)));
+    --_arrow:         var(--accent, color-mix(in srgb, var(--fg) 50%, var(--bg)));
+    --_node-fill:     var(--surface, color-mix(in srgb, var(--fg) 3%, var(--bg)));
+    --_node-stroke:   var(--border, color-mix(in srgb, var(--fg) 20%, var(--bg)));
+    --_group-fill:    var(--bg);
+    --_group-hdr:     color-mix(in srgb, var(--fg) 5%, var(--bg));
+    --_inner-stroke:  color-mix(in srgb, var(--fg) 12%, var(--bg));
+    --_key-badge:     color-mix(in srgb, var(--fg) 10%, var(--bg));
+  }
+</style>
+<defs>
+  <marker id="arrowhead" markerWidth="7" markerHeight="7" refX="0" refY="3.5" orient="auto" markerUnits="userSpaceOnUse" overflow="visible">
+    <polygon points="0 0, 7 3.5, 0 7" fill="var(--_arrow)" />
+  </marker>
+  <marker id="arrowhead-start" markerWidth="7" markerHeight="7" refX="7" refY="3.5" orient="auto-start-reverse" markerUnits="userSpaceOnUse" overflow="visible">
+    <polygon points="7 0, 0 3.5, 7 7" fill="var(--_arrow)" />
+  </marker>
+  <pattern id="diag-hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+    <rect width="6" height="6" fill="var(--bg)" />
+    <line x1="0" y1="0" x2="0" y2="6" stroke="#171717" stroke-width="3" />
+  </pattern>
+</defs>
+<rect x="64" y="80" width="1006.7840000000001" height="1136.4" rx="3" ry="3" fill="url(#diag-hatch)" stroke="#454545" stroke-width="1" />
+<rect x="1084.7600000000002" y="806.0000000000001" width="707.2320000000001" height="643.6000000000001" rx="3" ry="3" fill="url(#diag-hatch)" stroke="#454545" stroke-width="1" />
+<rect x="1068.784" y="105" width="323.712" height="620" rx="3" ry="3" fill="url(#diag-hatch)" stroke="#454545" stroke-width="1" />
+<rect x="1400.496" y="265.8" width="802.9440000000001" height="298.4" rx="3" ry="3" fill="url(#diag-hatch)" stroke="#454545" stroke-width="1" />
+<path d="M313.712,938.2 L313.712,1129.8000000000002 Q313.712,1137.8000000000002 321.712,1137.8000000000002 L568.424,1137.8000000000002" fill="none" stroke="var(--_line)" stroke-width="1.5" marker-end="url(#arrowhead)" />
+<path d="M801.104,1171.4 L801.104,1188.4 Q801.104,1196.4 793.104,1196.4 L692.264,1196.4 Q684.264,1196.4 684.264,1204.4 L684.264,1213.4 Q684.264,1221.4 692.264,1221.4 L1407.576,1221.4 Q1415.576,1221.4 1415.576,1229.4 L1415.576,1328.4" fill="none" stroke="var(--_line)" stroke-width="1.5" marker-end="url(#arrowhead)" />
+<path d="M642.6239999999999,458.6 L642.6239999999999,722 Q642.6239999999999,730 634.6239999999999,730 L555.424,730 Q547.424,730 547.424,738 L547.424,1213.4 Q547.424,1221.4 555.424,1221.4 L1293.1760000000002,1221.4 Q1301.1760000000002,1221.4 1301.1760000000002,1229.4 L1301.1760000000002,1368.284 Q1301.1760000000002,1371 1298.46,1371 L1295.7440000000001,1371" fill="none" stroke="var(--_line)" stroke-width="1.5" marker-end="url(#arrowhead)" marker-start="url(#arrowhead-start)" />
+<path d="M642.6239999999999,458.6 L642.6239999999999,722 Q642.6239999999999,730 650.6239999999999,730 L665.108,730 Q673.108,730 673.108,738 L673.108,896.6 Q673.108,904.6 681.108,904.6 L1121.76,904.6" fill="none" stroke="var(--_line)" stroke-width="1.5" marker-end="url(#arrowhead)" marker-start="url(#arrowhead-start)" />
+<path d="M642.6239999999999,458.6 L642.6239999999999,722 Q642.6239999999999,730 650.6239999999999,730 L835.704,730 Q843.704,730 843.704,738 L843.704,896.6 Q843.704,904.6 851.704,904.6 L1459.36,904.6" fill="none" stroke="var(--_line)" stroke-width="1.5" marker-end="url(#arrowhead)" marker-start="url(#arrowhead-start)" />
+<path d="M1415.576,1337.4 L1415.576,1320.4 Q1415.576,1312.4 1423.576,1312.4 L1545.592,1312.4 Q1553.592,1312.4 1553.592,1304.4 L1553.592,1204.4 Q1553.592,1196.4 1545.592,1196.4 L925.9440000000001,1196.4 Q917.9440000000001,1196.4 917.9440000000001,1188.4 L917.9440000000001,1145.8000000000002 Q917.9440000000001,1137.8000000000002 925.9440000000001,1137.8000000000002 L1015.7840000000001,1137.8000000000002" fill="none" stroke="var(--_line)" stroke-width="1.5" marker-end="url(#arrowhead)" marker-start="url(#arrowhead-start)" />
+<path d="M1279.56,938.2 L1279.56,1129.8000000000002 Q1279.56,1137.8000000000002 1271.56,1137.8000000000002 L1033.784,1137.8000000000002" fill="none" stroke="var(--_line)" stroke-width="1.5" marker-end="url(#arrowhead)" marker-start="url(#arrowhead-start)" />
+<path d="M1607.176,938.2 L1607.176,1129.8000000000002 Q1607.176,1137.8000000000002 1599.176,1137.8000000000002 L1033.784,1137.8000000000002" fill="none" stroke="var(--_line)" stroke-width="1.5" marker-end="url(#arrowhead)" marker-start="url(#arrowhead-start)" />
+<rect x="72" y="92" width="272.12799999999993" height="24" fill="var(--bg)" rx="2" ry="2" />
+<text x="80" y="104" dy="0.35em" style="font-family:'Geist Mono',system-ui,sans-serif;font-size:16px;font-weight:600;text-transform:uppercase;" fill="rgba(255,255,255,0.92)">&quot;Orchestrator&quot;</text>
+<rect x="1092.7600000000002" y="818.0000000000001" width="304.14399999999995" height="24" fill="var(--bg)" rx="2" ry="2" />
+<text x="1100.7600000000002" y="830.0000000000001" dy="0.35em" style="font-family:'Geist Mono',system-ui,sans-serif;font-size:16px;font-weight:600;text-transform:uppercase;" fill="rgba(255,255,255,0.92)">&quot;Docker / Podman&quot;</text>
+<rect x="1076.784" y="117" width="336.15999999999997" height="24" fill="var(--bg)" rx="2" ry="2" />
+<text x="1084.784" y="129" dy="0.35em" style="font-family:'Geist Mono',system-ui,sans-serif;font-size:16px;font-weight:600;text-transform:uppercase;" fill="rgba(255,255,255,0.92)">&quot;Container Security&quot;</text>
+<rect x="1408.496" y="277.8" width="357.50399999999996" height="24" fill="var(--bg)" rx="2" ry="2" />
+<text x="1416.496" y="289.8" dy="0.35em" style="font-family:'Geist Mono',system-ui,sans-serif;font-size:16px;font-weight:600;text-transform:uppercase;" fill="rgba(255,255,255,0.92)">&quot;NDJSON Wire Protocol&quot;</text>
+<rect x="264.11199999999997" y="1008.2" width="99.2" height="26" rx="4" ry="4" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="0.5" />
+<text x="313.712" y="1021.2" text-anchor="middle" dy="0.35em" font-size="10" font-weight="400" fill="var(--_text-muted)">&quot;classify route&quot;</text>
+<rect x="1340.7920000000004" y="1241.4" width="151.20000000000002" height="26" rx="4" ry="4" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="0.5" />
+<text x="1416.3920000000003" y="1254.4" text-anchor="middle" dy="0.35em" font-size="10" font-weight="400" fill="var(--_text-muted)">&quot;spawn / kill / reconcile&quot;</text>
+<rect x="510.82399999999996" y="1008.2" width="73.2" height="26" rx="4" ry="4" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="0.5" />
+<text x="547.424" y="1021.2" text-anchor="middle" dy="0.35em" font-size="10" font-weight="400" fill="var(--_text-muted)">&quot;ask_agent&quot;</text>
+<rect x="636.5079999999999" y="775" width="73.2" height="26" rx="4" ry="4" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="0.5" />
+<text x="673.108" y="788" text-anchor="middle" dy="0.35em" font-size="10" font-weight="400" fill="var(--_text-muted)">&quot;ask_agent&quot;</text>
+<rect x="807.1039999999999" y="775" width="73.2" height="26" rx="4" ry="4" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="0.5" />
+<text x="843.704" y="788" text-anchor="middle" dy="0.35em" font-size="10" font-weight="400" fill="var(--_text-muted)">&quot;ask_agent&quot;</text>
+<rect x="1503.9920000000002" y="1241.4" width="99.2" height="26" rx="4" ry="4" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="0.5" />
+<text x="1553.592" y="1254.4" text-anchor="middle" dy="0.35em" font-size="10" font-weight="400" fill="var(--_text-muted)">&quot;NDJSON via Pty&quot;</text>
+<rect x="1229.96" y="1008.2" width="99.2" height="26" rx="4" ry="4" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="0.5" />
+<text x="1279.56" y="1021.2" text-anchor="middle" dy="0.35em" font-size="10" font-weight="400" fill="var(--_text-muted)">&quot;NDJSON via Pty&quot;</text>
+<rect x="1557.576" y="1008.2" width="99.2" height="26" rx="4" ry="4" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="0.5" />
+<text x="1607.176" y="1021.2" text-anchor="middle" dy="0.35em" font-size="10" font-weight="400" fill="var(--_text-muted)">&quot;NDJSON via Pty&quot;</text>
+<rect x="110" y="871" width="407.424" height="67.2" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<rect x="364.0319999999999" y="391.4" width="557.184" height="67.2" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<rect x="577.424" y="1104.2000000000003" width="447.36" height="67.2" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<rect x="1286.7440000000001" y="1337.4" width="257.664" height="67.2" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<rect x="1130.76" y="871" width="297.6" height="67.2" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<rect x="1468.36" y="871" width="277.63199999999995" height="67.2" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<rect x="1126.768" y="177" width="207.744" height="67.2" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<rect x="1141.7440000000001" y="284.2" width="177.792" height="67.2" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<rect x="1126.768" y="391.4" width="207.744" height="67.2" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<rect x="1116.784" y="498.5999999999999" width="227.712" height="67.2" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<rect x="1116.784" y="605.8" width="227.712" height="67.2" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<rect x="1483.44" y="337.8" width="637.056" height="67.2" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<rect x="1448.496" y="445" width="706.9440000000001" height="67.2" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<text x="313.712" y="904.6" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;Gateway&lt;br/&gt;lightweight classifier&quot;</text>
+<text x="642.6239999999999" y="425" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;AgentBus&lt;br/&gt;inter-agent comm · permission matrix&quot;</text>
+<text x="801.104" y="1137.8000000000002" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;ContainerPool&lt;br/&gt;lifecycle management&quot;</text>
+<text x="1415.576" y="1371" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;🏠 butler container&quot;</text>
+<text x="1279.56" y="904.6" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;⚡ implementer container&quot;</text>
+<text x="1607.176" y="904.6" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;🔍 reviewer container&quot;</text>
+<text x="1230.64" y="210.6" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;--cap-drop ALL&quot;</text>
+<text x="1230.64" y="317.8" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;--read-only&quot;</text>
+<text x="1230.64" y="425" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;--network none&quot;</text>
+<text x="1230.64" y="532.1999999999999" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;--user 1000:1000&quot;</text>
+<text x="1230.64" y="639.4" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;--pids-limit 100&quot;</text>
+<text x="1801.968" y="371.40000000000003" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;orchestrator → container&lt;br/&gt;prompt · tool_result · abort&quot;</text>
+<text x="1801.968" y="478.6" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;container → orchestrator&lt;br/&gt;text · tool_call · complete · error&quot;</text>
+</svg>

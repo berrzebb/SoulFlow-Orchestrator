@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 3587.8720000000003 351.2" width="3587.8720000000003" height="351.2" style="--bg:#0A0A0A;--fg:#EDEDED;--line:#EDEDED;--accent:#EDEDED;--muted:#888888;--surface:#0A0A0A;--border:#454545;background:var(--bg)">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;display=swap');
+  text { font-family: 'Geist', system-ui, sans-serif; }
+  svg {
+    /* Derived from --bg and --fg (overridable via --line, --accent, etc.) */
+    --_text:          var(--fg);
+    --_text-sec:      var(--muted, color-mix(in srgb, var(--fg) 60%, var(--bg)));
+    --_text-muted:    var(--muted, color-mix(in srgb, var(--fg) 40%, var(--bg)));
+    --_text-faint:    color-mix(in srgb, var(--fg) 25%, var(--bg));
+    --_line:          var(--line, color-mix(in srgb, var(--fg) 30%, var(--bg)));
+    --_arrow:         var(--accent, color-mix(in srgb, var(--fg) 50%, var(--bg)));
+    --_node-fill:     var(--surface, color-mix(in srgb, var(--fg) 3%, var(--bg)));
+    --_node-stroke:   var(--border, color-mix(in srgb, var(--fg) 20%, var(--bg)));
+    --_group-fill:    var(--bg);
+    --_group-hdr:     color-mix(in srgb, var(--fg) 5%, var(--bg));
+    --_inner-stroke:  color-mix(in srgb, var(--fg) 12%, var(--bg));
+    --_key-badge:     color-mix(in srgb, var(--fg) 10%, var(--bg));
+  }
+</style>
+<defs>
+  <marker id="arrowhead" markerWidth="7" markerHeight="7" refX="0" refY="3.5" orient="auto" markerUnits="userSpaceOnUse" overflow="visible">
+    <polygon points="0 0, 7 3.5, 0 7" fill="var(--_arrow)" />
+  </marker>
+  <marker id="arrowhead-start" markerWidth="7" markerHeight="7" refX="7" refY="3.5" orient="auto-start-reverse" markerUnits="userSpaceOnUse" overflow="visible">
+    <polygon points="7 0, 0 3.5, 7 7" fill="var(--_arrow)" />
+  </marker>
+  <pattern id="diag-hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+    <rect width="6" height="6" fill="var(--bg)" />
+    <line x1="0" y1="0" x2="0" y2="6" stroke="#171717" stroke-width="3" />
+  </pattern>
+</defs>
+<rect x="581.328" y="80" width="2067.2" height="191.2" rx="3" ry="3" fill="url(#diag-hatch)" stroke="#454545" stroke-width="1" />
+<polyline points="547.328,185.6 588.328,185.6" fill="none" stroke="var(--_line)" stroke-width="1.5" marker-end="url(#arrowhead)" />
+<path d="M932.88,185.6 L2684.7279999999996,185.6 Q2692.7279999999996,185.6 2692.7279999999996,177.6 L2692.7279999999996,161.8 Q2692.7279999999996,153.8 2700.7279999999996,153.8 L3408.092,153.8 Q3408.992,153.8 3408.992,152.9 L3408.992,152" fill="none" stroke="var(--_line)" stroke-width="1.5" marker-end="url(#arrowhead)" />
+<path d="M2272.016,185.6 L2504.4719999999998,185.6 Q2512.4719999999998,185.6 2512.4719999999998,193.6 L2512.4719999999998,209.4 Q2512.4719999999998,217.4 2520.4719999999998,217.4 L2743.928,217.4" fill="none" stroke="var(--_line)" stroke-width="1.5" marker-end="url(#arrowhead)" />
+<polyline points="2950.688,217.4 3093.288,217.4" fill="none" stroke="var(--_line)" stroke-width="1.5" marker-end="url(#arrowhead)" />
+<path d="M3260.1119999999996,217.4 L3408.092,217.4 Q3408.992,217.4 3408.992,218.3 L3408.992,219.2" fill="none" stroke="var(--_line)" stroke-width="1.5" marker-end="url(#arrowhead)" />
+<rect x="589.328" y="92" width="314.816" height="24" fill="var(--bg)" rx="2" ry="2" />
+<text x="597.328" y="104" dy="0.35em" style="font-family:'Geist Mono',system-ui,sans-serif;font-size:16px;font-weight:600;text-transform:uppercase;" fill="rgba(255,255,255,0.92)">&quot;Lane Queue Modes&quot;</text>
+<rect x="2971.688" y="140.8" width="109.60000000000001" height="26" rx="4" ry="4" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="0.5" />
+<text x="3026.4880000000003" y="153.8" text-anchor="middle" dy="0.35em" font-size="10" font-weight="400" fill="var(--_text-muted)">&quot;urgent directive&quot;</text>
+<rect x="2653.528" y="204.4" width="78.4" height="26" rx="4" ry="4" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="0.5" />
+<text x="2692.7279999999996" y="217.4" text-anchor="middle" dy="0.35em" font-size="10" font-weight="400" fill="var(--_text-muted)">&quot;accumulate&quot;</text>
+<rect x="2974.2880000000005" y="204.4" width="104.4" height="26" rx="4" ry="4" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="0.5" />
+<text x="3026.4880000000003" y="217.4" text-anchor="middle" dy="0.35em" font-size="10" font-weight="400" fill="var(--_text-muted)">&quot;agent completes&quot;</text>
+<rect x="80" y="152" width="467.328" height="67.2" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<rect x="3310.112" y="152" width="197.76" height="67.2" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<rect x="2752.928" y="183.8" width="197.76" height="67.2" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<rect x="3102.288" y="183.8" width="157.824" height="67.2" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<rect x="629.328" y="152" width="607.104" height="67.2" rx="6" ry="6" fill="#6a2d2d" stroke="#bf5a5a" stroke-width="0.75" />
+<rect x="1276.432" y="152" width="627.072" height="67.2" rx="6" ry="6" fill="#6a5a2d" stroke="#bf9a5a" stroke-width="0.75" />
+<rect x="1943.5040000000001" y="152" width="657.024" height="67.2" rx="6" ry="6" fill="#2d6a2d" stroke="#5abf5a" stroke-width="0.75" />
+<text x="313.664" y="185.6" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;New message&lt;br/&gt;arrives during execution&quot;</text>
+<text x="3408.992" y="185.6" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;Running Agent&quot;</text>
+<text x="2851.808" y="217.4" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;Message Queue&quot;</text>
+<text x="3181.2" y="217.4" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;Next Turn&quot;</text>
+<text x="932.88" y="185.6" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;🔴 steer&lt;br/&gt;Immediately inject&lt;br/&gt;into running agent&quot;</text>
+<text x="1589.968" y="185.6" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;🟡 followup&lt;br/&gt;Queue for next turn&lt;br/&gt;after completion&quot;</text>
+<text x="2272.016" y="185.6" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;🟢 collect&lt;br/&gt;Batch multiple messages&lt;br/&gt;deliver together&quot;</text>
+</svg>

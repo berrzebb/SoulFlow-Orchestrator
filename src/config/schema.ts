@@ -44,7 +44,7 @@ const ChannelSchema = z.object({
   outboundDedupe: ChannelDedupeSchema,
 });
 
-const Phi4Schema = z.object({
+const OrchestratorLlmSchema = z.object({
   enabled: z.boolean(),
   engine: z.enum(["auto", "native", "docker", "podman"]),
   image: z.string(),
@@ -61,7 +61,7 @@ const Phi4Schema = z.object({
 const OrchestrationSchema = z.object({
   maxToolResultChars: z.number().min(50),
   orchestratorMaxTokens: z.number().min(256),
-  orchestratorProvider: z.string().default("phi4_local"),
+  orchestratorProvider: z.string().default("orchestrator_llm"),
   executorProvider: z.string().default("chatgpt"),
 });
 
@@ -105,7 +105,7 @@ export const AppConfigSchema = z.object({
   workspaceDir: z.string(),
   channel: ChannelSchema,
   orchestration: OrchestrationSchema,
-  phi4: Phi4Schema,
+  orchestratorLlm: OrchestratorLlmSchema,
   dashboard: DashboardSchema,
   cli: CliSchema,
   mcp: McpSchema,
@@ -162,21 +162,21 @@ export function get_config_defaults(): AppConfig {
     orchestration: {
       maxToolResultChars: 500,
       orchestratorMaxTokens: 4096,
-      orchestratorProvider: "phi4_local",
+      orchestratorProvider: "orchestrator_llm",
       executorProvider: "chatgpt",
     },
-    phi4: {
+    orchestratorLlm: {
       enabled: false,
       engine: "auto",
       image: "ollama/ollama:latest",
-      container: "orchestrator-phi4",
+      container: "orchestrator-llm",
       port: 11434,
-      model: "phi4-mini",
+      model: "qwen3.5:4b",
       pullModel: true,
       autoStop: false,
       gpuEnabled: true,
       gpuArgs: [],
-      apiBase: "http://127.0.0.1:11434/v1",
+      apiBase: "http://ollama:11434/v1",
     },
     dashboard: {
       enabled: true,

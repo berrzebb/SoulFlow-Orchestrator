@@ -74,7 +74,7 @@ flowchart TD
     DASH -.-> Pipeline
 ```
 
-Detailed diagrams: [Service Architecture](diagrams/service-architecture.svg) · [Inbound Pipeline](diagrams/inbound-pipeline.svg) · [Provider Resilience](diagrams/provider-resilience.svg) · [Role Delegation](diagrams/role-delegation.svg)
+Detailed diagrams: [Service Architecture](diagrams/service-architecture.svg) · [Inbound Pipeline](diagrams/inbound-pipeline.svg) · [Orchestrator Flow](diagrams/orchestrator-flow.svg) · [Provider Resilience](diagrams/provider-resilience.svg) · [Role Delegation](diagrams/role-delegation.svg) · [Container Architecture](diagrams/container-architecture.svg) · [Phase Loop Lifecycle](diagrams/phase-loop-lifecycle.svg) · [Lane Queue](diagrams/lane-queue.svg) · [Error Recovery](diagrams/error-recovery.svg)
 
 ## What Is This?
 
@@ -83,7 +83,7 @@ An **orchestration runtime** that receives messages from chat channels and dispa
 | Component | Role | Key Features |
 |-----------|------|-------------|
 | **Channel Manager** | Slack · Telegram · Discord I/O | Streaming · grouping · typing updates |
-| **Orchestrator** | Inbound → agent execution | Agent Loop · Task Loop dual mode |
+| **Orchestrator** | Inbound → agent execution | Agent Loop · Task Loop · Phase Loop triple mode |
 | **Agent Backends** | Claude/Codex × CLI/SDK execution | CircuitBreaker · HealthScorer · auto-fallback |
 | **Role Skills** | 8-role hierarchical delegation | butler → pm/pl → implementer/reviewer/validator/debugger |
 | **Security Vault** | AES-256-GCM secret management | Auto inbound sealing · decrypt only in tool path |
@@ -124,7 +124,7 @@ An **orchestration runtime** that receives messages from chat channels and dispa
 - **Node.js** 20+
 - At least 1 channel Bot Token (Slack · Telegram · Discord)
 - (Optional) `@anthropic-ai/claude-code` SDK — for `claude_sdk` backend
-- (Optional) Podman/Docker + Ollama — for `phi4_local` classifier
+- (Optional) Podman/Docker + Ollama — for `orchestrator_llm` classifier
 
 ### Install & Run
 
@@ -143,7 +143,7 @@ cd workspace && node ../dist/main.js
 ### Docker
 
 ```bash
-# Production (orchestrator + phi4)
+# Production (orchestrator + ollama)
 docker compose up -d
 
 # Development (live reload)
@@ -181,6 +181,8 @@ No need to create a `.env` file manually — the Wizard handles all configuratio
 | Channels | `/channels` | Channel connection status · global settings |
 | Providers | `/providers` | Agent provider CRUD · Circuit Breaker state |
 | Secrets | `/secrets` | AES-256-GCM secret management |
+| Models | `/models` | Orchestrator LLM runtime · model pull/delete/switch |
+| Workflows | `/workflows` | Phase Loop workflow management · agent chat |
 | Settings | `/settings` | Global runtime settings |
 
 → Details: [Dashboard Guide](en/guide/dashboard.md)
@@ -293,7 +295,7 @@ next/
   web/              ← Dashboard frontend (React + Vite + i18n + Zustand)
   docs/
     */guide/        ← User guides (dashboard, oauth, providers, heartbeat)
-    */design/       ← Architecture design documents (pty-agent-backend, loop-continuity, phase-loop)
+    */design/       ← Architecture design documents (pty-agent-backend, loop-continuity, phase-loop, orchestrator-llm)
   diagrams/         ← SVG architecture diagrams
 ```
 
@@ -308,7 +310,7 @@ next/
 | Streaming not working | Enable streaming in Settings → `channel.streaming` |
 | SDK backend failure | Check `backend_fallback` in logs (`claude_sdk` → `claude_cli` auto-switch) |
 | OAuth Connect fails | Disable popup blocker, verify Client ID/Secret, check Redirect URI |
-| phi4 check | `npm run health:phi4` |
+| LLM runtime check | `npm run health:llm` |
 
 ## License
 

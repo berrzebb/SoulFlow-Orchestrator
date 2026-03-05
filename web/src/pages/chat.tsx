@@ -31,7 +31,7 @@ export default function ChatPage() {
 
   const { data: activeSession } = useQuery<ChatSession>({
     queryKey: ["chat-session", activeId],
-    queryFn: () => api.get(`/api/chat/sessions/${activeId}`),
+    queryFn: () => api.post<ChatSession>("/api/chat/sessions", { action: "get", id: activeId }),
     enabled: !!activeId,
     refetchInterval: 15000,
     refetchOnWindowFocus: false,
@@ -57,7 +57,7 @@ export default function ChatPage() {
   };
 
   const delete_session = async (id: string) => {
-    await api.del(`/api/chat/sessions/${id}`);
+    await api.del("/api/chat/sessions", { id });
     if (activeId === id) setActiveId(null);
     toast(t("chat.session_deleted"), "ok");
     void qc.invalidateQueries({ queryKey: ["chat-sessions"] });
@@ -85,7 +85,7 @@ export default function ChatPage() {
     try {
       const body: Record<string, unknown> = { content: input.trim() };
       if (pending_media.length > 0) body.media = pending_media;
-      await api.post(`/api/chat/sessions/${activeId}/send`, body);
+      await api.post("/api/chat/sessions", { action: "send", id: activeId, ...body });
       setInput("");
       setPendingMedia([]);
       void qc.invalidateQueries({ queryKey: ["chat-session", activeId] });
@@ -98,7 +98,7 @@ export default function ChatPage() {
 
   const resolve_approval = async (request_id: string, text: string) => {
     try {
-      await api.post(`/api/approvals/${encodeURIComponent(request_id)}/resolve`, { text });
+      await api.post("/api/approvals", { approval_id: request_id, text });
       toast(t("chat.approval_done"), "ok");
       void qc.invalidateQueries({ queryKey: ["approvals-pending"] });
       void qc.invalidateQueries({ queryKey: ["chat-session", activeId] });

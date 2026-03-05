@@ -22,7 +22,7 @@ export default function SetupPage() {
   const [providerTypes, setProviderTypes] = useState<string[]>([]);
   const [providers, setProviders] = useState<Record<string, ProviderEntry>>({});
   const [executor, setExecutor] = useState("codex_cli");
-  const [orchestrator, setOrchestrator] = useState("phi4_local");
+  const [orchestrator, setOrchestrator] = useState("orchestrator_llm");
   const [alias, setAlias] = useState("assistant");
   const [submitting, setSubmitting] = useState(false);
 
@@ -138,7 +138,7 @@ export default function SetupPage() {
             <label>
               <div className="form-label">{t("setup.orchestrator")}</div>
               <select value={orchestrator} onChange={(e) => setOrchestrator(e.target.value)} className="form-input">
-                <option value="phi4_local">Phi-4 Local</option>
+                <option value="orchestrator_llm">Orchestrator LLM</option>
                 {selected.map(([type]) => (
                   <option key={type} value={type}>{TYPE_LABELS[type] || type}</option>
                 ))}

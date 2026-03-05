@@ -41,7 +41,7 @@ export default function ProvidersPage() {
   });
 
   const remove = useMutation({
-    mutationFn: (id: string) => api.del(`/api/agent-providers/${encodeURIComponent(id)}`),
+    mutationFn: (id: string) => api.del("/api/agent-providers", { id }),
     onSuccess: () => { toast(t("providers.removed"), "ok"); void qc.invalidateQueries({ queryKey: ["agent-providers"] }); },
     onError: (err) => toast(t("providers.remove_failed", { error: err.message }), "err"),
   });
@@ -115,7 +115,8 @@ function ProviderCard({ instance, onEdit, onRemove }: {
   const t = useT();
 
   const { testing, testResult, test } = useTestMutation({
-    url: `/api/agent-providers/${encodeURIComponent(instance.instance_id)}/test`,
+    url: "/api/agent-providers",
+    body: { action: "test", id: instance.instance_id },
     onOk: (r) => `${instance.label}: ${r.detail || t("providers.available")}`,
     onFail: (r) => `${instance.label}: ${r.error || ""}`,
     onError: () => t("providers.test_failed"),
@@ -160,7 +161,7 @@ function ProviderCard({ instance, onEdit, onRemove }: {
       )}
       <div className="stat-card__actions">
         <button className="btn btn--xs" onClick={onEdit}>{t("common.edit")}</button>
-        <button className="btn btn--xs btn--ok" onClick={() => test.mutate()} disabled={testing || !instance.token_configured}>
+        <button className="btn btn--xs btn--ok" onClick={() => test()} disabled={testing || !instance.token_configured}>
           {testing ? t("common.testing") : t("common.test")}
         </button>
         <button className="btn btn--xs btn--danger" onClick={onRemove}>{t("common.remove")}</button>
@@ -374,7 +375,7 @@ function ProviderModal({ mode, onClose, onSaved }: {
         ...(token ? { token } : {}),
       };
       if (isEdit) {
-        await api.put(`/api/agent-providers/${encodeURIComponent(id)}`, body);
+        await api.put("/api/agent-providers", { id, ...body });
       } else {
         await api.post("/api/agent-providers", { instance_id: id, ...body });
       }

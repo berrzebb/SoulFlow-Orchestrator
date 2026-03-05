@@ -48,7 +48,7 @@ export function MemoryTab() {
     queryFn: () =>
       view === "longterm"
         ? api.get("/api/memory/longterm")
-        : api.get(`/api/memory/daily/${encodeURIComponent((view as { day: string }).day)}`),
+        : api.post("/api/memory/daily", { day: (view as { day: string }).day }),
     enabled: is_text_view,
   });
 
@@ -56,7 +56,7 @@ export function MemoryTab() {
     mutationFn: (text: string) =>
       view === "longterm"
         ? api.put("/api/memory/longterm", { content: text })
-        : api.put(`/api/memory/daily/${encodeURIComponent((view as { day: string }).day)}`, { content: text }),
+        : api.put("/api/memory/daily", { day: (view as { day: string }).day, content: text }),
     onSuccess: () => {
       toast(t("workspace.memory.saved"), "ok");
       setEditing(false);
@@ -85,7 +85,7 @@ export function MemoryTab() {
   };
 
   const delete_promise = async (id: string) => {
-    await api.del(`/api/promises/${id}`);
+    await api.del("/api/promises", { id });
     setDeleteTarget(null);
     toast(t("promises.deleted"), "ok");
     void qc.invalidateQueries({ queryKey: ["state"] });
@@ -117,6 +117,7 @@ export function MemoryTab() {
             {!decisions.length ? (
               <p className="empty">{t("decisions.no_decisions")}</p>
             ) : (
+              <div className="table-scroll">
               <table className="data-table">
                 <thead><tr><th>{t("decisions.priority")}</th><th>{t("decisions.key")}</th><th>{t("decisions.value")}</th></tr></thead>
                 <tbody>
@@ -124,13 +125,14 @@ export function MemoryTab() {
                     <tr key={d.id}>
                       <td><Badge status={`p${d.priority}`} variant="info" /></td>
                       <td><b>{d.canonical_key}</b></td>
-                      <td style={{ maxWidth: 300, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      <td style={{ maxWidth: "50%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                         {typeof d.value === "object" ? JSON.stringify(d.value) : String(d.value)}
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
+              </div>
             )}
           </div>
         </div>
@@ -147,6 +149,7 @@ export function MemoryTab() {
             {!promises.length ? (
               <p className="empty">{t("promises.no_promises")}</p>
             ) : (
+              <div className="table-scroll">
               <table className="data-table">
                 <thead><tr><th>{t("decisions.priority")}</th><th>{t("decisions.key")}</th><th>{t("decisions.value")}</th><th style={{ width: 60 }}></th></tr></thead>
                 <tbody>
@@ -154,12 +157,13 @@ export function MemoryTab() {
                     <tr key={p.id}>
                       <td><Badge status={`p${p.priority}`} variant="warn" /></td>
                       <td><b>{p.canonical_key}</b></td>
-                      <td style={{ maxWidth: 300, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.value}</td>
+                      <td style={{ maxWidth: "50%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.value}</td>
                       <td><button className="btn btn--xs btn--danger" onClick={() => setDeleteTarget(p.id)}>✕</button></td>
                     </tr>
                   ))}
                 </tbody>
               </table>
+              </div>
             )}
           </div>
         </div>
@@ -174,6 +178,7 @@ export function MemoryTab() {
             {!events.length ? (
               <p className="empty">{t("decisions.no_events")}</p>
             ) : (
+              <div className="table-scroll">
               <table className="data-table">
                 <thead><tr><th>{t("decisions.phase")}</th><th>{t("decisions.task")}</th><th>{t("decisions.agent")}</th><th>{t("decisions.summary")}</th><th>{t("decisions.time")}</th></tr></thead>
                 <tbody>
@@ -182,12 +187,13 @@ export function MemoryTab() {
                       <td><Badge status={e.phase} /></td>
                       <td className="text-xs">{e.task_id || "-"}</td>
                       <td className="text-xs">{e.agent_id || "-"}</td>
-                      <td style={{ maxWidth: 240, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.summary || "-"}</td>
+                      <td style={{ maxWidth: "40%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.summary || "-"}</td>
                       <td className="text-xs text-muted">{e.at || "-"}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
+              </div>
             )}
           </div>
         </div>

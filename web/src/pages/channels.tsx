@@ -122,14 +122,14 @@ export default function ChannelsPage() {
   });
 
   const remove = useMutation({
-    mutationFn: (id: string) => api.del(`/api/channel-instances/${encodeURIComponent(id)}`),
+    mutationFn: (id: string) => api.del("/api/channel-instances", { id }),
     onSuccess: () => { toast(t("channels.removed"), "ok"); void qc.invalidateQueries({ queryKey: ["channel-instances"] }); },
     onError: (err) => toast(t("channels.remove_failed", { error: err.message }), "err"),
   });
 
   const toggle_enabled = useMutation({
     mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) =>
-      api.put(`/api/channel-instances/${encodeURIComponent(id)}`, { enabled }),
+      api.put("/api/channel-instances", { id, enabled }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ["channel-instances"] }),
     onError: (err) => toast(t("channels.save_failed", { error: err.message }), "err"),
   });
@@ -205,7 +205,8 @@ function InstanceCard({ instance, onEdit, onRemove, onToggle }: {
   const t = useT();
 
   const { testing, testResult, test } = useTestMutation({
-    url: `/api/channel-instances/${encodeURIComponent(instance.instance_id)}/test`,
+    url: "/api/channel-instances",
+    body: { action: "test", id: instance.instance_id },
     onOk: (r) => `${instance.label}: ${r.detail || t("channels.connected")}`,
     onFail: (r) => `${instance.label}: ${r.error || ""}`,
     onError: () => t("channels.test_failed"),
@@ -244,7 +245,7 @@ function InstanceCard({ instance, onEdit, onRemove, onToggle }: {
       )}
       <div className="stat-card__actions">
         <button className="btn btn--xs" onClick={onEdit}>{t("common.edit")}</button>
-        <button className="btn btn--xs btn--ok" onClick={() => test.mutate()} disabled={testing || !instance.token_configured}>
+        <button className="btn btn--xs btn--ok" onClick={() => test()} disabled={testing || !instance.token_configured}>
           {testing ? t("common.testing") : t("common.test")}
         </button>
         <button className="btn btn--xs btn--danger" onClick={onRemove}>{t("common.remove")}</button>
@@ -294,14 +295,14 @@ function InstanceModal({ mode, onClose, onSaved }: {
     return s;
   }
 
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
     try {
       const id = isEdit ? initial!.instance_id : (instanceId || provider);
       if (isEdit) {
-        await api.put(`/api/channel-instances/${encodeURIComponent(id)}`, {
-          label, enabled, settings: build_settings(),
+        await api.put("/api/channel-instances", {
+          id, label, enabled, settings: build_settings(),
           ...(token ? { token } : {}),
         });
       } else {

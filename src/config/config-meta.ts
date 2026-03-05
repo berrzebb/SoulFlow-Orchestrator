@@ -39,6 +39,7 @@ export type ConfigSection =
   | "cli"
   | "mcp"
   | "logging"
+  | "orchestratorLlm"
   | "ops";
 
 export const SECTION_LABELS: Record<ConfigSection, string> = {
@@ -52,6 +53,7 @@ export const SECTION_LABELS: Record<ConfigSection, string> = {
   cli: "CLI Providers",
   mcp: "MCP Servers",
   logging: "Logging",
+  orchestratorLlm: "Orchestrator LLM",
   ops: "Operations",
 };
 
@@ -65,6 +67,7 @@ export const SECTION_ORDER: ConfigSection[] = [
   "dashboard",
   "cli",
   "mcp",
+  "orchestratorLlm",
   "logging",
   "ops",
 ];
@@ -113,8 +116,8 @@ export const CONFIG_FIELDS: ConfigFieldMeta[] = [
   // ── Orchestration ──
   { path: "orchestration.maxToolResultChars", label: "Max Tool Result Chars", section: "orchestration", type: "number", env_key: "ORCHESTRATION_MAX_TOOL_RESULT_CHARS", default_value: 500, sensitive: false, restart_required: false, description: "Truncate tool outputs beyond this length before sending to LLM" },
   { path: "orchestration.orchestratorMaxTokens", label: "Max Tokens", section: "orchestration", type: "number", env_key: "ORCHESTRATION_MAX_TOKENS", default_value: 4096, sensitive: false, restart_required: false, description: "Maximum output tokens for orchestrator LLM calls" },
-  { path: "orchestration.orchestratorProvider", label: "Orchestrator Provider", section: "orchestration", type: "select", env_key: "", default_value: "phi4_local", sensitive: false, restart_required: true, options: ["phi4_local", "openrouter", "chatgpt", "claude_code", "claude_sdk", "codex_cli", "codex_appserver", "gemini_cli", "openai_compatible"], description: "LLM provider for orchestrator classification" },
-  { path: "orchestration.executorProvider", label: "Executor Provider", section: "orchestration", type: "select", env_key: "", default_value: "chatgpt", sensitive: false, restart_required: true, options: ["chatgpt", "claude_code", "claude_sdk", "codex_cli", "codex_appserver", "gemini_cli", "openrouter", "openai_compatible", "phi4_local"], description: "LLM provider for task execution" },
+  { path: "orchestration.orchestratorProvider", label: "Orchestrator Provider", section: "orchestration", type: "select", env_key: "", default_value: "orchestrator_llm", sensitive: false, restart_required: true, options: ["orchestrator_llm", "openrouter", "chatgpt", "claude_code", "claude_sdk", "codex_cli", "codex_appserver", "gemini_cli", "openai_compatible"], description: "LLM provider for orchestrator classification" },
+  { path: "orchestration.executorProvider", label: "Executor Provider", section: "orchestration", type: "select", env_key: "", default_value: "chatgpt", sensitive: false, restart_required: true, options: ["chatgpt", "claude_code", "claude_sdk", "codex_cli", "codex_appserver", "gemini_cli", "openrouter", "openai_compatible", "orchestrator_llm"], description: "LLM provider for task execution" },
 
   // ── Dashboard ──
   { path: "dashboard.enabled", label: "Enabled", section: "dashboard", type: "boolean", env_key: "DASHBOARD_ENABLED", default_value: true, sensitive: false, restart_required: true, description: "Enable the web dashboard HTTP server" },
@@ -133,6 +136,18 @@ export const CONFIG_FIELDS: ConfigFieldMeta[] = [
   { path: "mcp.serversFile", label: "Servers File", section: "mcp", type: "string", env_key: "", default_value: "", sensitive: false, restart_required: false, description: "Path to additional MCP servers JSON config file" },
   { path: "mcp.serversJson", label: "Servers JSON", section: "mcp", type: "string", env_key: "", default_value: "", sensitive: false, restart_required: false, description: "Inline JSON MCP servers configuration" },
   { path: "mcp.serverNames", label: "Server Names", section: "mcp", type: "string", env_key: "", default_value: "", sensitive: false, restart_required: false, description: "Comma-separated allowlist of MCP server names" },
+
+  // ── Orchestrator LLM ──
+  { path: "orchestratorLlm.enabled", label: "Enabled", section: "orchestratorLlm", type: "boolean", env_key: "ORCHESTRATOR_LLM_ENABLED", default_value: false, sensitive: false, restart_required: true, description: "Enable local orchestrator LLM runtime (Ollama)" },
+  { path: "orchestratorLlm.engine", label: "Engine", section: "orchestratorLlm", type: "select", env_key: "ORCHESTRATOR_LLM_ENGINE", default_value: "auto", sensitive: false, restart_required: true, options: ["auto", "native", "docker", "podman"], description: "Container engine for Ollama runtime" },
+  { path: "orchestratorLlm.image", label: "Image", section: "orchestratorLlm", type: "string", env_key: "ORCHESTRATOR_LLM_IMAGE", default_value: "ollama/ollama:latest", sensitive: false, restart_required: true, description: "Container image for Ollama" },
+  { path: "orchestratorLlm.container", label: "Container Name", section: "orchestratorLlm", type: "string", env_key: "ORCHESTRATOR_LLM_CONTAINER", default_value: "orchestrator-llm", sensitive: false, restart_required: true, description: "Container name for Ollama instance" },
+  { path: "orchestratorLlm.port", label: "Port", section: "orchestratorLlm", type: "number", env_key: "ORCHESTRATOR_LLM_PORT", default_value: 11434, sensitive: false, restart_required: true, description: "Ollama API port" },
+  { path: "orchestratorLlm.model", label: "Model", section: "orchestratorLlm", type: "string", env_key: "ORCHESTRATOR_LLM_MODEL", default_value: "qwen3.5:4b", sensitive: false, restart_required: false, description: "Default model to load on startup" },
+  { path: "orchestratorLlm.pullModel", label: "Auto Pull Model", section: "orchestratorLlm", type: "boolean", env_key: "ORCHESTRATOR_LLM_PULL_MODEL", default_value: true, sensitive: false, restart_required: false, description: "Automatically pull the model if not installed" },
+  { path: "orchestratorLlm.autoStop", label: "Auto Stop", section: "orchestratorLlm", type: "boolean", env_key: "ORCHESTRATOR_LLM_AUTO_STOP", default_value: false, sensitive: false, restart_required: false, description: "Stop the container when the app shuts down" },
+  { path: "orchestratorLlm.gpuEnabled", label: "GPU Enabled", section: "orchestratorLlm", type: "boolean", env_key: "ORCHESTRATOR_LLM_GPU_ENABLED", default_value: true, sensitive: false, restart_required: true, description: "Enable GPU acceleration for Ollama" },
+  { path: "orchestratorLlm.apiBase", label: "API Base URL", section: "orchestratorLlm", type: "string", env_key: "ORCHESTRATOR_LLM_API_BASE", default_value: "http://ollama:11434/v1", sensitive: false, restart_required: true, description: "Ollama API base URL (OpenAI-compatible endpoint)" },
 
   // ── Logging ──
   { path: "logging.level", label: "Log Level", section: "logging", type: "select", env_key: "", default_value: "info", sensitive: false, restart_required: true, options: ["debug", "info", "warn", "error"], description: "Minimum log level for console output" },

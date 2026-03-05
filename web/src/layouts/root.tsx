@@ -80,7 +80,7 @@ export function RootLayout() {
             <button
               className="btn btn--xs"
               onClick={toggle_locale}
-              style={{ fontSize: 11, letterSpacing: "0.03em", padding: "2px 10px" }}
+              style={{ fontSize: "var(--fs-xs)", letterSpacing: "0.03em", padding: "4px 12px", minHeight: 32 }}
               aria-label={t("sidebar.toggle_language")}
             >
               {locale === "en" ? "한국어" : "English"}

@@ -1,4 +1,4 @@
-/** OpenAI 호환 API(vLLM, Ollama, LM Studio, Together AI, Phi-4 등)를 직접 호출하는 에이전트 백엔드. */
+/** OpenAI 호환 API(vLLM, Ollama, LM Studio, Together AI 등)를 직접 호출하는 에이전트 백엔드. */
 
 import type { ChatMessage } from "../../providers/types.js";
 import { parse_openai_response, sanitize_messages_for_api } from "../../providers/types.js";

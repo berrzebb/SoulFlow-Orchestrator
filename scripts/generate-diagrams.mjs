@@ -29,15 +29,18 @@ const diagrams = [
       AD["AgentDomain<br/>tools · skills · memory · tasks"]
       CM["ChannelManager<br/>polling · routing · streaming"]
       DS["DispatchService<br/>retry · DLQ · dedup · rate-limit"]
-      OS["OrchestrationService<br/>once · agent · task modes"]
+      OS["OrchestrationService<br/>once · agent · task · phase modes"]
     end
 
     subgraph Backends["Agent Backends"]
       ABR["AgentBackendRegistry<br/>circuit breaker · fallback"]
-      CLI_C["claude_cli"]
-      CLI_X["codex_cli"]
       SDK_C["claude_sdk"]
+      CLI_C["claude_cli"]
       SDK_X["codex_appserver"]
+      CLI_X["codex_cli"]
+      CLI_G["gemini_cli"]
+      OAI["openai_compatible"]
+      CTR["container_cli"]
     end
 
     subgraph Infra["Infrastructure"]
@@ -59,18 +62,19 @@ const diagrams = [
 
   subgraph Providers["API Providers"]
     OR["OpenRouter"]
-    P4["Phi-4 local"]
+    OLLM["Orchestrator LLM<br/>Ollama runtime"]
   end
 
   SM --> Core & Infra
-  ABR --> CLI_C & CLI_X & SDK_C & SDK_X
+  ABR --> SDK_C & CLI_C & SDK_X & CLI_X & CLI_G & OAI & CTR
 
   SL & TG & DC <-->|read/send| CM
   CM -->|publish_inbound| BUS
   BUS -->|consume_inbound| CM
   CM -->|execute| OS
   OS -->|run| ABR
-  OS -->|chat| OR & P4
+  OS -->|classify| OLLM
+  OS -->|chat| OR
   OS -->|tool calls| AD
   CM -->|send reply| DS
   DS -->|deliver| SL & TG & DC
@@ -102,7 +106,7 @@ const diagrams = [
   CMD -->|message| APR
   APR -->|approval text| DISP
   APR -->|normal| SEAL --> MEDIA --> ORCH
-  ORCH -->|once/agent/task| BACK
+  ORCH -->|once/agent/task/phase| BACK
   BACK -->|tool_calls| TOOL
   TOOL -->|result| BACK
   BACK -->|final| REC --> DISP --> OUT
@@ -189,10 +193,23 @@ const diagrams = [
     T_DONE["Task complete"]
   end
 
+  subgraph Phase["phase mode"]
+    PH_WF["Load workflow<br/>YAML / dynamic"]
+    PH_SPAWN["Spawn parallel agents"]
+    PH_AGENT1["Agent 1"]
+    PH_AGENT2["Agent 2"]
+    PH_AGENT3["Agent N"]
+    PH_WAIT["Await all agents"]
+    PH_CRITIC{"Critic review"}
+    PH_NEXT["Next phase"]
+    PH_DONE["Workflow complete"]
+  end
+
   REQ --> CLS
   CLS -->|"simple"| Once
   CLS -->|"complex"| Agent
   CLS -->|"multi-step"| Task
+  CLS -->|"workflow"| Phase
 
   O_EXEC --> O_TOOL
   O_TOOL -->|yes| O_RUN --> O_FOLLOW --> O_DONE
@@ -209,9 +226,18 @@ const diagrams = [
   T_GATE -->|fail| T_NODE
   T_GATE -->|"all done"| T_DONE
 
+  PH_WF --> PH_SPAWN
+  PH_SPAWN --> PH_AGENT1 & PH_AGENT2 & PH_AGENT3
+  PH_AGENT1 & PH_AGENT2 & PH_AGENT3 --> PH_WAIT
+  PH_WAIT --> PH_CRITIC
+  PH_CRITIC -->|"approve"| PH_NEXT --> PH_SPAWN
+  PH_CRITIC -->|"reject"| PH_SPAWN
+  PH_CRITIC -->|"final phase"| PH_DONE
+
   style Once fill:#1a3a2a,stroke:#3a7a5a
   style Agent fill:#1a2a3a,stroke:#3a5a7a
-  style Task fill:#3a2a1a,stroke:#7a5a3a`,
+  style Task fill:#3a2a1a,stroke:#7a5a3a
+  style Phase fill:#3a1a3a,stroke:#7a3a7a`,
   },
   {
     name: "sensitive-seal-flow",
@@ -278,6 +304,161 @@ const diagrams = [
   style VAL fill:#2d6a2d,stroke:#5abf5a
   style DBG fill:#6a2d2d,stroke:#bf5a5a
   style GEN fill:#4a4a4a,stroke:#8a8a8a`,
+  },
+  {
+    name: "container-architecture",
+    code: `flowchart TD
+  subgraph Orchestrator["Orchestrator"]
+    GW["Gateway<br/>lightweight classifier"]
+    AB["AgentBus<br/>inter-agent comm · permission matrix"]
+    CP["ContainerPool<br/>lifecycle management"]
+  end
+
+  subgraph Containers["Docker / Podman"]
+    C1["🏠 butler container"]
+    C2["⚡ implementer container"]
+    C3["🔍 reviewer container"]
+  end
+
+  subgraph Security["Container Security"]
+    direction LR
+    S1["--cap-drop ALL"]
+    S2["--read-only"]
+    S3["--network none"]
+    S4["--user 1000:1000"]
+    S5["--pids-limit 100"]
+  end
+
+  subgraph Protocol["NDJSON Wire Protocol"]
+    direction LR
+    TX["orchestrator → container<br/>prompt · tool_result · abort"]
+    RX["container → orchestrator<br/>text · tool_call · complete · error"]
+  end
+
+  GW -->|"classify route"| CP
+  CP -->|"spawn / kill / reconcile"| Containers
+  AB <-->|"ask_agent"| C1 & C2 & C3
+  C1 & C2 & C3 <-->|"NDJSON via Pty"| CP
+
+  style Orchestrator fill:#1a2a3a,stroke:#3a5a7a
+  style Containers fill:#2d4a2d,stroke:#4a8a4a
+  style Security fill:#6a2d2d,stroke:#bf5a5a
+  style Protocol fill:#3a2a1a,stroke:#7a5a3a`,
+  },
+  {
+    name: "phase-loop-lifecycle",
+    code: `flowchart TD
+  START["Workflow Start"]
+  LOAD["Load Definition<br/>YAML template / dynamic generation"]
+
+  subgraph PhaseN["Phase Execution"]
+    CTX["Build phase context<br/>inject prev phase results"]
+    SPAWN["Spawn parallel agents"]
+
+    subgraph Agents["Parallel Agents"]
+      direction LR
+      AG1["Agent 1<br/>independent session"]
+      AG2["Agent 2<br/>independent session"]
+      AG3["Agent N<br/>independent session"]
+    end
+
+    ASK["ask_agent<br/>inter-agent communication<br/>max_depth=3"]
+    WAIT["Await all agents"]
+    POLICY{"Failure Policy"}
+  end
+
+  subgraph Review["Critic Review"]
+    CR_EXEC["Critic evaluates<br/>all agent results"]
+    CR_GATE{"Gate Decision"}
+    CR_RETRY["Retry<br/>inject feedback"]
+    CR_ESC["Escalate<br/>user decision"]
+  end
+
+  DONE["Workflow Complete<br/>synthesized result"]
+
+  START --> LOAD --> CTX
+  CTX --> SPAWN --> Agents
+  AG1 & AG2 & AG3 <-.->|"ask_agent"| ASK
+  AG1 & AG2 & AG3 --> WAIT
+  WAIT --> POLICY
+  POLICY -->|"best_effort"| Review
+  POLICY -->|"fail_fast · any fail"| CR_ESC
+  POLICY -->|"quorum · enough"| Review
+
+  CR_EXEC --> CR_GATE
+  CR_GATE -->|"approve"| CTX
+  CR_GATE -->|"reject · retry_targeted"| CR_RETRY --> SPAWN
+  CR_GATE -->|"reject · escalate"| CR_ESC
+  CR_GATE -->|"final phase approved"| DONE
+
+  style PhaseN fill:#3a1a3a,stroke:#7a3a7a
+  style Review fill:#1a3a2a,stroke:#3a7a5a
+  style Agents fill:#2a2a3a,stroke:#5a5a7a`,
+  },
+  {
+    name: "lane-queue",
+    code: `flowchart LR
+  MSG["New message<br/>arrives during execution"]
+
+  subgraph Modes["Lane Queue Modes"]
+    direction TB
+    STEER["🔴 steer<br/>Immediately inject<br/>into running agent"]
+    FOLLOW["🟡 followup<br/>Queue for next turn<br/>after completion"]
+    COLLECT["🟢 collect<br/>Batch multiple messages<br/>deliver together"]
+  end
+
+  RUNNING["Running Agent"]
+  QUEUE["Message Queue"]
+  NEXT["Next Turn"]
+
+  MSG --> Modes
+  STEER -->|"urgent directive"| RUNNING
+  FOLLOW -->|"enqueue"| QUEUE
+  COLLECT -->|"accumulate"| QUEUE
+  QUEUE -->|"agent completes"| NEXT --> RUNNING
+
+  style STEER fill:#6a2d2d,stroke:#bf5a5a
+  style FOLLOW fill:#6a5a2d,stroke:#bf9a5a
+  style COLLECT fill:#2d6a2d,stroke:#5abf5a`,
+  },
+  {
+    name: "error-recovery",
+    code: `flowchart TD
+  ERR["Error Detected"]
+
+  ERR --> CLS{"Error Classifier"}
+
+  CLS -->|"context_overflow"| CTX["3-Stage Recovery"]
+  CLS -->|"auth_error"| AUTH["Auth Recovery"]
+  CLS -->|"rate_limit"| RATE["Rate Limit Recovery"]
+  CLS -->|"crash"| CRASH["Crash Recovery"]
+
+  subgraph CTXFlow["Context Overflow"]
+    CTX --> CTX1["1. Compaction<br/>summarize history"]
+    CTX1 -->|"still over"| CTX2["2. Tool result truncation"]
+    CTX2 -->|"still over"| CTX3["3. Give up<br/>return partial"]
+  end
+
+  subgraph AuthFlow["Auth Error"]
+    AUTH --> AUTH1["Rotate auth profile"]
+    AUTH1 -->|"profiles exhausted"| AUTH2["Model failover"]
+    AUTH2 -->|"all exhausted"| AUTH3["FailoverError"]
+  end
+
+  subgraph RateFlow["Rate Limit"]
+    RATE --> RATE1["Exponential backoff"]
+    RATE1 -->|"max retries"| RATE2["Fallback backend"]
+  end
+
+  subgraph CrashFlow["Crash"]
+    CRASH --> CRASH1["Recreate container"]
+    CRASH1 --> CRASH2["Restore context"]
+  end
+
+  style CTXFlow fill:#3a2a1a,stroke:#7a5a3a
+  style AuthFlow fill:#3a1a2a,stroke:#7a3a5a
+  style RateFlow fill:#1a3a2a,stroke:#3a7a5a
+  style CrashFlow fill:#1a2a3a,stroke:#3a5a7a`,
   },
 ];
 

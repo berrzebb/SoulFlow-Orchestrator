@@ -29,17 +29,17 @@ export function CronTab() {
     void qc.invalidateQueries({ queryKey: ["cron-jobs"] });
   };
 
-  const toggle = async (id: string, enabled: boolean) => { await api.post(`/api/cron/jobs/${id}/enable`, { enabled }); refresh(); };
-  const run = async (id: string) => { await api.post(`/api/cron/jobs/${id}/run`, { force: true }); toast(t("cron.job_triggered"), "ok"); refresh(); };
+  const toggle = async (id: string, enabled: boolean) => { await api.post("/api/cron", { action: "enable", job_id: id, enabled }); refresh(); };
+  const run = async (id: string) => { await api.post("/api/cron", { action: "run", job_id: id, force: true }); toast(t("cron.job_triggered"), "ok"); refresh(); };
   const confirm_remove = async () => {
     if (!deleteTarget) return;
-    await api.del(`/api/cron/jobs/${deleteTarget.id}`);
+    await api.del("/api/cron", { job_id: deleteTarget.id });
     toast(t("cron.job_removed"), "ok");
     setDeleteTarget(null);
     refresh();
   };
-  const pause = async () => { await api.post("/api/cron/pause"); toast(t("cron.paused"), "warn"); refresh(); };
-  const resume = async () => { await api.post("/api/cron/resume"); toast(t("cron.resumed"), "ok"); refresh(); };
+  const pause = async () => { await api.post("/api/cron", { action: "pause" }); toast(t("cron.paused"), "warn"); refresh(); };
+  const resume = async () => { await api.post("/api/cron", { action: "resume" }); toast(t("cron.resumed"), "ok"); refresh(); };
 
   return (
     <>
@@ -113,7 +113,7 @@ export function CronTab() {
                   </td>
                   <td>{j.delete_after_run ? <Badge status={t("cron.once")} variant="info" /> : "-"}</td>
                   <td>
-                    <div style={{ display: "flex", gap: 4 }}>
+                    <div style={{ display: "flex", flexWrap: "wrap" as const, gap: 4 }}>
                       <button className="btn btn--xs btn--ok" disabled={j.state?.running} onClick={() => void run(j.id)}>{t("cron.run")}</button>
                       <button className="btn btn--xs btn--danger" onClick={() => setDeleteTarget({ id: j.id, name: j.name })}>{t("cron.del")}</button>
                     </div>

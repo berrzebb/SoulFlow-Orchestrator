@@ -125,17 +125,17 @@ export class TestChannelRegistry implements ChannelRegistryLike {
   }
 }
 
-// ─── Phi-4 가용성 확인 ─────────────────────────────────────────────────────
+// ─── 오케스트레이터 LLM 가용성 확인 ─────────────────────────────────────────────────────
 
-/** Phi-4 가용성 확인 + warm-up: /models 확인 후 간단한 추론 요청으로 모델을 메모리에 로드. */
-export async function is_phi4_available(): Promise<boolean> {
-  const base = String(process.env.PHI4_API_BASE || "http://127.0.0.1:11434/v1").replace(/\/+$/, "");
+/** 오케스트레이터 LLM 가용성 확인 + warm-up: /models 확인 후 간단한 추론 요청으로 모델을 메모리에 로드. */
+export async function is_orchestrator_llm_available(): Promise<boolean> {
+  const base = String(process.env.ORCHESTRATOR_LLM_API_BASE || "http://127.0.0.1:11434/v1").replace(/\/+$/, "");
   try {
     const res = await fetch(`${base}/models`, { signal: AbortSignal.timeout(3000) });
     if (!res.ok) return false;
 
     // warm-up: 모델을 메모리에 로드 — cold start 시 첫 요청 timeout 방지
-    const model = String(process.env.PHI4_MODEL || "phi4-mini");
+    const model = String(process.env.ORCHESTRATOR_LLM_MODEL || "qwen3.5:4b");
     await fetch(`${base}/chat/completions`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -231,7 +231,7 @@ export async function create_real_harness(options?: {
 
   const bus = new MessageBus();
   const vault = new SecretVaultService(workspace);
-  const providers = new ProviderRegistry({ phi4_model: "phi4-mini" });
+  const providers = new ProviderRegistry({ orchestrator_llm_model: "qwen3.5:4b" });
   const agent_domain = new AgentDomain(workspace, { providers, bus });
 
   await Promise.all([
@@ -248,7 +248,7 @@ export async function create_real_harness(options?: {
     secret_vault: vault,
     runtime_policy_resolver: policy_resolver,
     config: {
-      executor_provider: "phi4_local",
+      executor_provider: "orchestrator_llm",
       agent_loop_max_turns: 4,
       task_loop_max_turns: 8,
       streaming_enabled: false,

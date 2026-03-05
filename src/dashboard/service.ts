@@ -47,6 +47,8 @@ import { handle_chat } from "./routes/chat.js";
 import { handle_session } from "./routes/session.js";
 import { handle_oauth } from "./routes/oauth.js";
 import { handle_cli_auth } from "./routes/cli-auth.js";
+import { handle_models } from "./routes/models.js";
+import { handle_workflow } from "./routes/workflows.js";
 
 const RE_MEDIA_TOKEN = /^\/media\/([a-z0-9]{16,})$/i;
 
@@ -242,6 +244,31 @@ export interface DashboardOAuthOps {
   unregister_preset(service_type: string): Promise<{ ok: boolean; error?: string }>;
 }
 
+export interface DashboardModelOps {
+  list(): Promise<Array<{ name: string; size: number; modified_at: string; digest: string; parameter_size?: string; quantization_level?: string }>>;
+  pull(name: string): Promise<{ status: string; completed?: number; total?: number }>;
+  pull_stream(name: string): AsyncGenerator<{ status: string; completed?: number; total?: number }>;
+  delete(name: string): Promise<boolean>;
+  list_active(): Promise<Array<{ name: string; size: number; size_vram: number; expires_at: string }>>;
+  get_runtime_status(): Promise<Record<string, unknown>>;
+  switch_model(name: string): Promise<Record<string, unknown>>;
+}
+
+export interface DashboardWorkflowOps {
+  list(): Promise<import("../agent/phase-loop.types.js").PhaseLoopState[]>;
+  get(workflow_id: string): Promise<import("../agent/phase-loop.types.js").PhaseLoopState | null>;
+  create(input: Record<string, unknown>): Promise<{ ok: boolean; workflow_id?: string; error?: string }>;
+  cancel(workflow_id: string): Promise<boolean>;
+  get_messages(workflow_id: string, phase_id: string, agent_id: string): Promise<import("../agent/phase-loop.types.js").PhaseMessage[]>;
+  send_message(workflow_id: string, phase_id: string, agent_id: string, content: string): Promise<{ ok: boolean; error?: string }>;
+  list_templates(): import("../agent/phase-loop.types.js").WorkflowDefinition[];
+  get_template(name: string): import("../agent/phase-loop.types.js").WorkflowDefinition | null;
+  save_template(name: string, definition: import("../agent/phase-loop.types.js").WorkflowDefinition): string;
+  delete_template(name: string): boolean;
+  import_template(yaml_content: string): { ok: boolean; name?: string; error?: string };
+  export_template(name: string): string | null;
+}
+
 export interface DashboardCliAuthOps {
   get_status(): Array<{ cli: string; authenticated: boolean; account?: string; error?: string }>;
   check(cli: string): Promise<{ cli: string; authenticated: boolean; account?: string; error?: string }>;
@@ -280,6 +307,8 @@ export type DashboardOptions = {
   workspace_ops?: DashboardWorkspaceOps | null;
   oauth_ops?: DashboardOAuthOps | null;
   cli_auth_ops?: DashboardCliAuthOps | null;
+  model_ops?: DashboardModelOps | null;
+  workflow_ops?: DashboardWorkflowOps | null;
   default_alias?: string;
   workspace?: string;
   logger?: Logger | null;
@@ -450,6 +479,9 @@ export class DashboardService implements ServiceLike {
     this.route_map.set("/api/sessions", handle_session);
     this.route_map.set("/api/oauth", handle_oauth);
     this.route_map.set("/api/cli-auth", handle_cli_auth);
+    this.route_map.set("/api/models", handle_models);
+    this.route_map.set("/api/workflows", handle_workflow);
+    this.route_map.set("/api/workflow-templates", handle_workflow);
     this.route_map.set("/api/stats", handle_health);
     this.route_map.set("/api/dlq", handle_health);
     this.route_map.set("/api/workflow-events", handle_health);

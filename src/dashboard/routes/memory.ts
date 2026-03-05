@@ -23,18 +23,24 @@ export async function handle_memory(ctx: RouteContext): Promise<boolean> {
     json(res, 200, { days });
     return true;
   }
-  const daily_match = url.pathname.match(/^\/api\/memory\/daily\/([^/]+)$/);
-  if (daily_match && req.method === "GET") {
+
+  // POST /api/memory/daily { day } — 단건 조회
+  if (url.pathname === "/api/memory/daily" && req.method === "POST") {
     if (!options.memory_ops) { json(res, 503, { error: "memory_unavailable" }); return true; }
-    const day = decodeURIComponent(daily_match[1]);
+    const body = await read_body(req);
+    const day = String(body?.day || "").trim();
+    if (!day) { json(res, 400, { error: "day_required" }); return true; }
     const content = await options.memory_ops.read_daily(day);
     json(res, 200, { content, day });
     return true;
   }
-  if (daily_match && req.method === "PUT") {
+
+  // PUT /api/memory/daily { day, content } — 수정
+  if (url.pathname === "/api/memory/daily" && req.method === "PUT") {
     if (!options.memory_ops) { json(res, 503, { error: "memory_unavailable" }); return true; }
-    const day = decodeURIComponent(daily_match[1]);
     const body = await read_body(req);
+    const day = String(body?.day || "").trim();
+    if (!day) { json(res, 400, { error: "day_required" }); return true; }
     const content = String(body?.content ?? "");
     await options.memory_ops.write_daily(content, day);
     json(res, 200, { ok: true });

@@ -3,21 +3,20 @@ import type { RouteContext } from "../route-context.js";
 export async function handle_approval(ctx: RouteContext): Promise<boolean> {
   const { req, url, res, options, json, read_body } = ctx;
 
-  if (url.pathname === "/api/approvals" && req.method === "GET") {
+  if (url.pathname !== "/api/approvals") return false;
+
+  // GET /api/approvals?status=...
+  if (req.method === "GET") {
     const status = url.searchParams.get("status") || undefined;
     json(res, 200, options.agent.list_approval_requests(status as never));
     return true;
   }
-  const id_match = url.pathname.match(/^\/api\/approvals\/([^/]+)$/);
-  if (id_match && req.method === "GET") {
-    const item = options.agent.get_approval_request(decodeURIComponent(id_match[1]));
-    json(res, item ? 200 : 404, item ?? { error: "not_found" });
-    return true;
-  }
-  const resolve_match = url.pathname.match(/^\/api\/approvals\/([^/]+)\/resolve$/);
-  if (req.method === "POST" && resolve_match) {
-    const approval_id = decodeURIComponent(resolve_match[1]);
+
+  // POST /api/approvals { approval_id, text? } — resolve
+  if (req.method === "POST") {
     const body = await read_body(req);
+    const approval_id = String(body?.approval_id || "").trim();
+    if (!approval_id) { json(res, 400, { error: "approval_id_required" }); return true; }
     const text = String(body?.text || "approve").trim();
     const result = options.agent.resolve_approval_request(approval_id, text);
     if (!result.ok) { json(res, 404, result); return true; }

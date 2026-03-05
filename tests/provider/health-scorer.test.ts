@@ -14,14 +14,14 @@ describe("ProviderHealthScorer", () => {
   });
 
   it("기록 없는 프로바이더 → score 1.0", () => {
-    expect(scorer.score("phi4_local")).toBe(1.0);
+    expect(scorer.score("orchestrator_llm")).toBe(1.0);
   });
 
   it("100% 성공 + 낮은 레이턴시 → score ≈ 1.0", () => {
     for (let i = 0; i < 5; i++) {
-      scorer.record("phi4_local", { ok: true, latency_ms: 100 });
+      scorer.record("orchestrator_llm", { ok: true, latency_ms: 100 });
     }
-    const s = scorer.score("phi4_local");
+    const s = scorer.score("orchestrator_llm");
     expect(s).toBeGreaterThan(0.9);
   });
 
@@ -46,15 +46,15 @@ describe("ProviderHealthScorer", () => {
   it("슬라이딩 윈도우 — 오래된 데이터 퇴거", () => {
     // window_size=10이므로 11개 기록하면 첫번째 제거
     for (let i = 0; i < 10; i++) {
-      scorer.record("phi4_local", { ok: false, latency_ms: 5000 });
+      scorer.record("orchestrator_llm", { ok: false, latency_ms: 5000 });
     }
-    const before = scorer.score("phi4_local");
+    const before = scorer.score("orchestrator_llm");
 
     // 이제 성공을 10개 추가 → 실패 데이터 전부 밀려남
     for (let i = 0; i < 10; i++) {
-      scorer.record("phi4_local", { ok: true, latency_ms: 100 });
+      scorer.record("orchestrator_llm", { ok: true, latency_ms: 100 });
     }
-    const after = scorer.score("phi4_local");
+    const after = scorer.score("orchestrator_llm");
 
     expect(after).toBeGreaterThan(before);
     expect(after).toBeGreaterThan(0.9);

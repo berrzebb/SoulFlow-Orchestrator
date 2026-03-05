@@ -94,7 +94,7 @@ function ToolPicker({ content, onChange, all_tools, native_tools, oauth_services
   const add_from_role = async (role_name: string) => {
     setLoadingRole(role_name);
     try {
-      const detail: SkillDetail = await api.get(`/api/skills/${encodeURIComponent(role_name)}`);
+      const detail: SkillDetail = await api.post("/api/skills", { name: role_name });
       const role_tools = detail.metadata?.tools ?? [];
       const merged = Array.from(new Set([...current_tools, ...role_tools]));
       onChange(update_frontmatter_tools(content, merged));
@@ -198,7 +198,7 @@ export function SkillsTab() {
 
   const { data: detail } = useQuery<SkillDetail>({
     queryKey: ["ws-skill-detail", selected],
-    queryFn: () => api.get(`/api/skills/${selected}`),
+    queryFn: () => api.post<SkillDetail>("/api/skills", { name: selected }),
     enabled: !!selected,
   });
 
@@ -261,7 +261,7 @@ export function SkillsTab() {
     if (!selected || editContent === null) return;
     setSaving(true);
     try {
-      await api.put(`/api/skills/${encodeURIComponent(selected)}`, { file: activeFile, content: editContent });
+      await api.put("/api/skills", { name: selected, file: activeFile, content: editContent });
       toast(t("skills.saved"), "ok");
       setEditContent(null);
       void qc.invalidateQueries({ queryKey: ["ws-skill-detail", selected] });
@@ -323,7 +323,7 @@ export function SkillsTab() {
               <p className="empty">{t("workspace.select_item")}</p>
             </div>
           ) : (
-            <div style={{ display: "flex", height: "100%" }}>
+            <div className="ws-detail-row" style={{ display: "flex", height: "100%" }}>
               <div className="ws-meta-panel">
                 {detail.metadata && (
                   <table className="data-table" style={{ fontSize: 11 }}>
@@ -355,7 +355,7 @@ export function SkillsTab() {
                     ))}
                   </div>
                   {is_editable && (
-                    <div style={{ display: "flex", gap: 4, padding: "0 8px", flexShrink: 0 }}>
+                    <div style={{ display: "flex", flexWrap: "wrap" as const, gap: 4, padding: "0 8px", flexShrink: 0 }}>
                       {editContent !== null && (
                         <>
                           <button className="btn btn--xs btn--ok" onClick={() => void save()} disabled={saving}>

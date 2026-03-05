@@ -1,5 +1,6 @@
 import { error_message, now_iso} from "./utils/common.js";
 import { join, resolve } from "node:path";
+import { mkdirSync, readdirSync, copyFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { AgentDomain } from "./agent/index.js";
 import { create_agent_inspector } from "./agent/inspector.service.js";
@@ -36,8 +37,8 @@ import { OrchestrationService } from "./orchestration/service.js";
 import { resolve_reply_to } from "./orchestration/service.js";
 import { ProcessTracker } from "./orchestration/process-tracker.js";
 import { parse_executor_preference, resolve_executor_provider, type ProviderCapabilities } from "./providers/executor.js";
-import { Phi4RuntimeManager, ProviderRegistry } from "./providers/index.js";
-import { Phi4ServiceAdapter } from "./providers/phi4-service.adapter.js";
+import { OrchestratorLlmRuntime, ProviderRegistry } from "./providers/index.js";
+import { OrchestratorLlmServiceAdapter } from "./providers/orchestrator-llm-service.adapter.js";
 import { acquire_runtime_instance_lock } from "./runtime/instance-lock.js";
 import { ServiceManager } from "./runtime/service-manager.js";
 import { SessionStore, type SessionStoreLike } from "./session/index.js";
@@ -56,8 +57,10 @@ import { OAuthFetchTool } from "./agent/tools/oauth-fetch.js";
 import {
   create_template_ops, create_channel_ops, create_agent_provider_ops,
   create_bootstrap_ops, create_memory_ops, create_workspace_ops, create_oauth_ops,
-  create_config_ops, create_skill_ops, create_tool_ops, create_cli_auth_ops,
+  create_config_ops, create_skill_ops, create_tool_ops, create_cli_auth_ops, create_model_ops,
+  create_workflow_ops,
 } from "./dashboard/ops-factory.js";
+import { PhaseWorkflowStore } from "./agent/phase-workflow-store.js";
 
 export interface RuntimeApp {
   agent: AgentDomain;
@@ -69,7 +72,7 @@ export interface RuntimeApp {
   mcp: McpClientManager;
   providers: ProviderRegistry;
   agent_backends: AgentBackendRegistry;
-  phi4_runtime: Phi4RuntimeManager;
+  orchestrator_llm_runtime: OrchestratorLlmRuntime;
   sessions: SessionStoreLike;
   dashboard: DashboardService | null;
   decisions: DecisionService;
@@ -89,6 +92,9 @@ function resolve_from_workspace(workspace: string, path_value: string, fallback:
 export async function createRuntime(): Promise<RuntimeApp> {
   const workspace = resolve_workspace();
   const app_root = resolve_app_root();
+
+  // 기본 워크플로우 템플릿 시드 (WORKSPACE/workflows/ 가 비어있으면 default-workflows/ 에서 복사)
+  seed_default_workflows(workspace, app_root);
 
   // ConfigStore: 하드코딩 기본값 위에 영속 오버라이드 + vault 민감 설정 병합
   const bootstrap_data_dir = join(workspace, "runtime");
@@ -122,8 +128,8 @@ export async function createRuntime(): Promise<RuntimeApp> {
   // vault에서 API 키 읽기
   const openrouter_config = provider_store.get("openrouter");
   const openrouter_key = await provider_store.get_token("openrouter");
-  const phi4_config = provider_store.get("phi4_local");
-  const phi4_key = await provider_store.get_token("phi4_local");
+  const orchestrator_llm_config = provider_store.get("orchestrator_llm");
+  const orchestrator_llm_key = await provider_store.get_token("orchestrator_llm");
 
   // CLI provider별 command/args/timeout/permission 설정 조립
   const cli_permission_config: import("./providers/cli-permission.js").CliPermissionConfig = {
@@ -147,9 +153,9 @@ export async function createRuntime(): Promise<RuntimeApp> {
     openrouter_model: (openrouter_config?.settings.model as string) || undefined,
     openrouter_http_referer: (openrouter_config?.settings.http_referer as string) || undefined,
     openrouter_app_title: (openrouter_config?.settings.app_title as string) || undefined,
-    phi4_api_key: phi4_key,
-    phi4_api_base: (phi4_config?.settings.api_base as string) || undefined,
-    phi4_model: (phi4_config?.settings.model as string) || undefined,
+    orchestrator_llm_api_key: orchestrator_llm_key,
+    orchestrator_llm_api_base: (orchestrator_llm_config?.settings.api_base as string) || undefined,
+    orchestrator_llm_model: (orchestrator_llm_config?.settings.model as string) || undefined,
     cli_configs: {
       chatgpt: {
         command: String(codex_settings.command || "codex"),
@@ -228,8 +234,9 @@ export async function createRuntime(): Promise<RuntimeApp> {
     }
     return results;
   });
+  const phase_workflow_store = new PhaseWorkflowStore(join(workspace, "runtime", "workflows", "phase-workflows.db"));
   const agent_inspector = create_agent_inspector(agent);
-  const agent_runtime = create_agent_runtime(agent);
+  const agent_runtime = create_agent_runtime(agent, { phase_workflow_store });
   const sessions = new SessionStore(workspace, sessions_dir);
 
   const cron = new CronService(join(data_dir, "cron"), create_cron_job_handler({
@@ -351,6 +358,10 @@ export async function createRuntime(): Promise<RuntimeApp> {
     process_tracker,
     get_mcp_configs: () => mcp.get_server_configs(),
     events,
+    workspace,
+    subagents: agent.subagents,
+    phase_workflow_store,
+    get_sse_broadcaster: () => dashboard?.sse ?? null,
   });
 
   const command_router = create_command_router({
@@ -405,18 +416,18 @@ export async function createRuntime(): Promise<RuntimeApp> {
   });
   channel_manager_ref = channel_manager;
 
-  const phi4_runtime = new Phi4RuntimeManager({
-    enabled: app_config.phi4.enabled,
-    engine: app_config.phi4.engine,
-    image: app_config.phi4.image,
-    container: app_config.phi4.container,
-    port: app_config.phi4.port,
-    model: app_config.phi4.model,
-    pull_model: app_config.phi4.pullModel,
-    auto_stop: app_config.phi4.autoStop,
-    gpu_enabled: app_config.phi4.gpuEnabled,
-    gpu_args: app_config.phi4.gpuArgs,
-    api_base: (phi4_config?.settings.api_base as string) || app_config.phi4.apiBase,
+  const orchestrator_llm_runtime = new OrchestratorLlmRuntime({
+    enabled: app_config.orchestratorLlm.enabled,
+    engine: app_config.orchestratorLlm.engine,
+    image: app_config.orchestratorLlm.image,
+    container: app_config.orchestratorLlm.container,
+    port: app_config.orchestratorLlm.port,
+    model: app_config.orchestratorLlm.model,
+    pull_model: app_config.orchestratorLlm.pullModel,
+    auto_stop: app_config.orchestratorLlm.autoStop,
+    gpu_enabled: app_config.orchestratorLlm.gpuEnabled,
+    gpu_args: app_config.orchestratorLlm.gpuArgs,
+    api_base: (orchestrator_llm_config?.settings.api_base as string) || app_config.orchestratorLlm.apiBase,
   });
 
   const services = new ServiceManager(logger.child("services"));
@@ -495,6 +506,8 @@ export async function createRuntime(): Promise<RuntimeApp> {
       workspace_ops: create_workspace_ops(workspace),
       oauth_ops: create_oauth_ops({ oauth_store, oauth_flow, dashboard_port: app_config.dashboard.port, public_url: app_config.dashboard.publicUrl }),
       cli_auth_ops: create_cli_auth_ops({ cli_auth }),
+      model_ops: orchestrator_llm_runtime ? create_model_ops(orchestrator_llm_runtime) : null,
+      workflow_ops: create_workflow_ops({ store: phase_workflow_store, subagents: agent.subagents, workspace, logger, on_workflow_event: (e) => dashboard?.sse.broadcast_workflow_event(e) }),
       default_alias: app_config.channel.defaultAlias,
       workspace,
     });
@@ -558,7 +571,7 @@ export async function createRuntime(): Promise<RuntimeApp> {
   services.register(ops, { required: false });
   if (dashboard) services.register(dashboard, { required: false });
   services.register(mcp, { required: false });
-  services.register(new Phi4ServiceAdapter(phi4_runtime), { required: false });
+  services.register(new OrchestratorLlmServiceAdapter(orchestrator_llm_runtime), { required: false });
 
   const enabled_channels = instance_store.list().filter((c) => c.enabled).map((c) => c.provider);
   logger.info(`channels=${enabled_channels.join(",")} primary=${primary_provider}`);
@@ -596,9 +609,9 @@ export async function createRuntime(): Promise<RuntimeApp> {
   });
 
   if (dashboard) logger.info(`dashboard ${dashboard.get_url()}`);
-  const phi4_status = phi4_runtime.get_status();
-  if (phi4_status.enabled) {
-    logger.info(`phi4 running=${phi4_status.running} engine=${phi4_status.engine || "n/a"} base=${phi4_status.api_base}`);
+  const orch_llm_status = orchestrator_llm_runtime.get_status();
+  if (orch_llm_status.enabled) {
+    logger.info(`orchestrator-llm running=${orch_llm_status.running} engine=${orch_llm_status.engine || "n/a"} base=${orch_llm_status.api_base}`);
   }
 
   const app: RuntimeApp = {
@@ -611,7 +624,7 @@ export async function createRuntime(): Promise<RuntimeApp> {
     mcp,
     providers,
     agent_backends: agent_backend_registry,
-    phi4_runtime,
+    orchestrator_llm_runtime,
     sessions,
     dashboard,
     decisions,
@@ -651,6 +664,29 @@ async function register_mcp_tools(
   }
   if (adapters.length > 0) {
     logger.info(`mcp tools registered count=${adapters.length}`);
+  }
+}
+
+/** WORKSPACE/workflows/ 가 비어있으면 빌트인 기본 템플릿을 시드. */
+function seed_default_workflows(workspace: string, app_root: string): void {
+  const target_dir = join(workspace, "workflows");
+  mkdirSync(target_dir, { recursive: true });
+
+  const existing = readdirSync(target_dir).filter((f) => f.endsWith(".yaml") || f.endsWith(".yml"));
+  if (existing.length > 0) return;
+
+  // production: Dockerfile COPY → default-workflows/
+  // dev: 볼륨 마운트 → workspace/workflows/ (소스 직접 참조)
+  const candidates = [
+    join(app_root, "default-workflows"),
+    join(app_root, "workspace", "workflows"),
+  ];
+  const source_dir = candidates.find((d) => existsSync(d));
+  if (!source_dir) return;
+
+  const templates = readdirSync(source_dir).filter((f) => f.endsWith(".yaml") || f.endsWith(".yml"));
+  for (const file of templates) {
+    copyFileSync(join(source_dir, file), join(target_dir, file));
   }
 }
 

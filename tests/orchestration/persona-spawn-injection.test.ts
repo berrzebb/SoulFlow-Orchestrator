@@ -2,7 +2,7 @@
  * 역할별 Soul/Heart 주입 통합 테스트 (skills/roles 기반)
  *
  * 캡처 대상 3개 레이어:
- *   1. Controller(Phi-4) system prompt  — soul/heart 주입 확인
+ *   1. Controller(orchestrator LLM) system prompt  — soul/heart 주입 확인
  *   2. Executor(subagent) system prompt — soul/heart 주입 확인
  *   3. Bus 메시지                       — 채널 발화 직전 content
  */
@@ -47,7 +47,7 @@ function create_harness(opts?: {
   const final_answer = opts?.final_answer ?? executor_response;
 
   const providers = {
-    get_orchestrator_provider_id: () => "phi4_local",
+    get_orchestrator_provider_id: () => "orchestrator_llm",
 
     run_orchestrator: async (args: { messages: Array<{ role: string; content: string }>; [k: string]: unknown }) => {
       controller_call_count++;

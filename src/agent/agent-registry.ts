@@ -13,11 +13,14 @@ export type AgentBackendConfig = {
   claude_backend: "claude_cli" | "claude_sdk";
   /** codex 실행에 사용할 백엔드. */
   codex_backend: "codex_cli" | "codex_appserver";
+  /** gemini 실행에 사용할 백엔드. */
+  gemini_backend?: "gemini_cli";
 };
 
 const DEFAULT_CONFIG: AgentBackendConfig = {
   claude_backend: "claude_cli",
   codex_backend: "codex_cli",
+  gemini_backend: "gemini_cli",
 };
 
 /** 레거시 fallback 쌍 (정적). resolve_for_mode 미사용 시의 안전망. */
@@ -115,6 +118,7 @@ export class AgentBackendRegistry {
   resolve_backend_id(provider_id: ProviderId): AgentBackendId {
     if (provider_id === "claude_code") return this.config.claude_backend;
     if (provider_id === "chatgpt") return this.config.codex_backend;
+    if (provider_id === "gemini") return this.config.gemini_backend || "gemini_cli";
     return this.config.codex_backend;
   }
 

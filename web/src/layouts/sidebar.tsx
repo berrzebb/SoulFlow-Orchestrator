@@ -8,6 +8,8 @@ const NAV_ITEMS = [
   { to: "/chat", key: "nav.chat", icon: "\ud83d\udcac" },
   { to: "/channels", key: "nav.channels", icon: "\u21cc" },
   { to: "/providers", key: "nav.providers", icon: "\u2b21" },
+  { to: "/models", key: "nav.models", icon: "\u2b22" },
+  { to: "/workflows", key: "nav.workflows", icon: "\u25b7" },
   { to: "/secrets", key: "nav.secrets", icon: "\u26bf" },
   { to: "/settings", key: "nav.settings", icon: "\u229e" },
 ] as const;
@@ -77,7 +79,7 @@ export function Sidebar() {
           <button
             className="btn btn--xs"
             onClick={toggle_locale}
-            style={{ flex: 1, fontSize: 10, letterSpacing: "0.04em" }}
+            style={{ flex: 1, fontSize: "var(--fs-xs)", letterSpacing: "0.04em" }}
             aria-label={t("sidebar.toggle_language")}
           >
             {collapsed ? (locale === "en" ? "KO" : "EN") : (locale === "en" ? "한국어" : "English")}

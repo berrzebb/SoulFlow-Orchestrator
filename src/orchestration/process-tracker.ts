@@ -20,6 +20,7 @@ export type ProcessEntry = {
   ended_at?: string;
   loop_id?: string;
   task_id?: string;
+  workflow_id?: string;
   subagent_ids: string[];
   tool_calls_count: number;
   executor_provider?: string;
@@ -40,6 +41,7 @@ export interface ProcessTrackerLike {
   link_loop(run_id: string, loop_id: string): void;
   link_task(run_id: string, task_id: string): void;
   link_subagent(run_id: string, subagent_id: string): void;
+  link_workflow(run_id: string, workflow_id: string): void;
   set_tool_count(run_id: string, count: number): void;
   end(run_id: string, status: ProcessStatus, error?: string): void;
   get(run_id: string): ProcessEntry | null;
@@ -120,6 +122,11 @@ export class ProcessTracker implements ProcessTrackerLike {
     if (e && !e.subagent_ids.includes(subagent_id)) {
       e.subagent_ids.push(subagent_id);
     }
+  }
+
+  link_workflow(run_id: string, workflow_id: string): void {
+    const e = this.active.get(run_id);
+    if (e) e.workflow_id = workflow_id;
   }
 
   set_tool_count(run_id: string, count: number): void {

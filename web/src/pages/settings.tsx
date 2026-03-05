@@ -67,7 +67,7 @@ export default function SettingsPage() {
             onClick={() => setActive(s.id)}
           >
             {t(`cfg.section.${s.id}`)}
-            <span style={{ marginLeft: 4, fontSize: 9, opacity: 0.6 }}>{s.fields.length}</span>
+            <span style={{ marginLeft: 4, fontSize: "var(--fs-xs)", opacity: 0.6 }}>{s.fields.length}</span>
           </button>
         ))}
       </div>
@@ -113,7 +113,7 @@ function FieldCard({ field }: { field: FieldInfo }) {
   });
 
   const reset = useMutation({
-    mutationFn: () => api.del(`/api/config/values/${encodeURIComponent(field.path)}`),
+    mutationFn: () => api.del("/api/config/values", { path: field.path }),
     onSuccess: () => {
       toast(t("settings.reset_fmt", { path: field.path }), "ok");
       void qc.invalidateQueries({ queryKey: ["config"] });
@@ -141,32 +141,20 @@ function FieldCard({ field }: { field: FieldInfo }) {
   };
 
   return (
-    <div
-      style={{
-        display: "flex", alignItems: "flex-start", gap: "var(--sp-3)",
-        padding: "var(--sp-2) var(--sp-3)",
-        borderRadius: "var(--radius-sm)",
-        background: editing ? "rgba(74,158,255,0.04)" : "transparent",
-        transition: "background 0.15s",
-      }}
-      onMouseEnter={(e) => { if (!editing) e.currentTarget.style.background = "rgba(255,255,255,0.02)"; }}
-      onMouseLeave={(e) => { if (!editing) e.currentTarget.style.background = "transparent"; }}
-    >
-      {/* Label + path + description */}
-      <div style={{ flex: "1 1 180px", minWidth: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <span style={{ fontWeight: 600, fontSize: "var(--fs-sm)" }}>{t(`cfg.${field.path}`)}</span>
+    <div className={`cfg-field${editing ? " cfg-field--editing" : ""}`}>
+      <div className="cfg-field__label">
+        <div className="cfg-field__name">
+          <span>{t(`cfg.${field.path}`)}</span>
           {field.restart_required && <Badge status={t("settings.restart")} variant="warn" />}
           {field.overridden && <Badge status={t("settings.override")} variant="info" />}
         </div>
-        <div style={{ fontSize: "var(--fs-xs)", color: "var(--off)", marginTop: 1 }}>{field.path}</div>
+        <div className="cfg-field__path">{field.path}</div>
         {field.description && (
-          <div style={{ fontSize: "var(--fs-xs)", color: "var(--muted)", marginTop: 2 }}>{t(`cfg.${field.path}.desc`)}</div>
+          <div className="cfg-field__desc">{t(`cfg.${field.path}.desc`)}</div>
         )}
       </div>
 
-      {/* Value / Edit controls */}
-      <div style={{ flex: "1 1 240px", minWidth: 120, paddingTop: 2 }}>
+      <div className="cfg-field__value">
         {editing ? (
           <EditInline field={field} draft={draft} setDraft={setDraft} onCommit={commit} onCancel={() => setEditing(false)} isPending={save.isPending} />
         ) : (
@@ -174,8 +162,7 @@ function FieldCard({ field }: { field: FieldInfo }) {
         )}
       </div>
 
-      {/* Actions */}
-      <div style={{ display: "flex", gap: 4, flexShrink: 0, paddingTop: 2 }}>
+      <div className="cfg-field__actions">
         {!editing && field.type !== "boolean" && (
           <button className="btn btn--xs" onClick={start_edit}>{t("common.edit")}</button>
         )}
@@ -266,18 +253,18 @@ function EditInline({
 
   if (field.type === "select" && field.options) {
     return (
-      <span style={{ display: "flex", gap: 4, alignItems: "center" }}>
-        <select className="form-input" style={{ flex: 1, padding: "3px 8px" }} value={draft} onChange={(e) => setDraft(e.target.value)} autoFocus>
+      <div className="cfg-edit-row">
+        <select className="form-input" value={draft} onChange={(e) => setDraft(e.target.value)} autoFocus>
           {field.options.map((o) => <option key={o} value={o}>{o}</option>)}
         </select>
         <button className="btn btn--xs btn--ok" onClick={onCommit} disabled={isPending}>{t(isPending ? "common.saving" : "common.save")}</button>
         <button className="btn btn--xs" onClick={onCancel} disabled={isPending}>{t("common.cancel")}</button>
-      </span>
+      </div>
     );
   }
 
   return (
-    <span style={{ display: "flex", gap: 4, alignItems: "center" }}>
+    <div className="cfg-edit-row">
       <input
         className="form-input"
         type={field.sensitive ? "password" : field.type === "number" ? "number" : "text"}
@@ -285,12 +272,12 @@ function EditInline({
         onChange={(e) => setDraft(e.target.value)}
         onKeyDown={on_key}
         placeholder={field.sensitive ? t("settings.enter_new_value") : String(field.default_value ?? "")}
-        style={{ flex: 1, padding: "3px 8px", fontSize: "var(--fs-sm)" }}
+        style={{ fontSize: "var(--fs-sm)" }}
         autoFocus
         disabled={isPending}
       />
       <button className="btn btn--xs btn--ok" onClick={onCommit} disabled={isPending}>{t(isPending ? "common.saving" : "common.save")}</button>
       <button className="btn btn--xs" onClick={onCancel} disabled={isPending}>{t("common.cancel")}</button>
-    </span>
+    </div>
   );
 }

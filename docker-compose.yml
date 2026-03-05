@@ -18,8 +18,8 @@ services:
     container_name: soulflow-orchestrator
     restart: unless-stopped
     depends_on:
-      phi4:
-        condition: service_started
+#      ollama:
+#        condition: service_started
       docker-proxy:
         condition: service_started
     ports:
@@ -35,19 +35,19 @@ services:
       - SKIP_INSTANCE_LOCK=1
       - DOCKER_HOST=tcp://docker-proxy:2375
 
-  phi4:
-    image: ollama/ollama:latest
-    container_name: orchestrator-phi4
-    restart: unless-stopped
-    ports:
-      - "11434:11434"
-    volumes:
-      - phi4-data:/root/.ollama
-    devices:
-      - nvidia.com/gpu=all
+# ollama:
+#   image: ollama/ollama:latest
+#   container_name: orchestrator-llm
+#   restart: unless-stopped
+#   ports:
+#     - "11434:11434"
+#   volumes:
+#     - ollama-data:/root/.ollama
+#   devices:
+#     - nvidia.com/gpu=all
 
 volumes:
-  phi4-data:
+  ollama-data:
   cli-auth-claude:
   cli-auth-codex:
   cli-auth-gemini:

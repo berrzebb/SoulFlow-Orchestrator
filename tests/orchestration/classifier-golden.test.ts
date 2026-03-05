@@ -51,7 +51,7 @@ const GOLDEN_CASES: Array<{ input: string; expected_mode: string; label: string 
 
 describe("classifier golden test — expected mode mapping", () => {
   it.each(GOLDEN_CASES)("[$label] '$input' → $expected_mode", ({ input, expected_mode }) => {
-    // 프롬프트 구조 검증용. 실제 Phi-4 통합 테스트는 별도 스크립트에서 실행.
+    // 프롬프트 구조 검증용. 실제 오케스트레이터 LLM 통합 테스트는 별도 스크립트에서 실행.
     expect(typeof input).toBe("string");
     expect(["builtin", "once", "agent", "task", "inquiry"]).toContain(expected_mode);
   });

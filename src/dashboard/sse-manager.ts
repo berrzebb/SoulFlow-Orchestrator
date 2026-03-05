@@ -69,6 +69,11 @@ export class SseManager {
     this._broadcast(`event: web_stream\ndata: ${JSON.stringify({ chat_id, content, done })}\n\n`);
   }
 
+  broadcast_workflow_event(event: import("../agent/phase-loop.types.js").PhaseLoopEvent): void {
+    if (this.clients.size === 0) return;
+    this._broadcast(`event: workflow\ndata: ${JSON.stringify({ ...event, at: now_iso() })}\n\n`);
+  }
+
   broadcast_agent_event(event: AgentEvent): void {
     if (this.clients.size === 0) return;
     const slim = { type: event.type, backend: event.source.backend, task_id: event.source.task_id, at: event.at, ...pick_agent_event_fields(event) };

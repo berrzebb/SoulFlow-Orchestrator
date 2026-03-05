@@ -1,0 +1,109 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2905.4599999999996 2974.704" width="2905.4599999999996" height="2974.704" style="--bg:#0A0A0A;--fg:#EDEDED;--line:#EDEDED;--accent:#EDEDED;--muted:#888888;--surface:#0A0A0A;--border:#454545;background:var(--bg)">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;display=swap');
+  text { font-family: 'Geist', system-ui, sans-serif; }
+  svg {
+    /* Derived from --bg and --fg (overridable via --line, --accent, etc.) */
+    --_text:          var(--fg);
+    --_text-sec:      var(--muted, color-mix(in srgb, var(--fg) 60%, var(--bg)));
+    --_text-muted:    var(--muted, color-mix(in srgb, var(--fg) 40%, var(--bg)));
+    --_text-faint:    color-mix(in srgb, var(--fg) 25%, var(--bg));
+    --_line:          var(--line, color-mix(in srgb, var(--fg) 30%, var(--bg)));
+    --_arrow:         var(--accent, color-mix(in srgb, var(--fg) 50%, var(--bg)));
+    --_node-fill:     var(--surface, color-mix(in srgb, var(--fg) 3%, var(--bg)));
+    --_node-stroke:   var(--border, color-mix(in srgb, var(--fg) 20%, var(--bg)));
+    --_group-fill:    var(--bg);
+    --_group-hdr:     color-mix(in srgb, var(--fg) 5%, var(--bg));
+    --_inner-stroke:  color-mix(in srgb, var(--fg) 12%, var(--bg));
+    --_key-badge:     color-mix(in srgb, var(--fg) 10%, var(--bg));
+  }
+</style>
+<defs>
+  <marker id="arrowhead" markerWidth="7" markerHeight="7" refX="0" refY="3.5" orient="auto" markerUnits="userSpaceOnUse" overflow="visible">
+    <polygon points="0 0, 7 3.5, 0 7" fill="var(--_arrow)" />
+  </marker>
+  <marker id="arrowhead-start" markerWidth="7" markerHeight="7" refX="7" refY="3.5" orient="auto-start-reverse" markerUnits="userSpaceOnUse" overflow="visible">
+    <polygon points="7 0, 0 3.5, 7 7" fill="var(--_arrow)" />
+  </marker>
+  <pattern id="diag-hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+    <rect width="6" height="6" fill="var(--bg)" />
+    <line x1="0" y1="0" x2="0" y2="6" stroke="#171717" stroke-width="3" />
+  </pattern>
+</defs>
+<rect x="64" y="884.96" width="1511.8" height="1676.5440000000003" rx="3" ry="3" fill="url(#diag-hatch)" stroke="#454545" stroke-width="1" />
+<rect x="153.856" y="1544.3600000000001" width="1401.9439999999997" height="177.20000000000005" rx="3" ry="3" fill="url(#diag-hatch)" stroke="#454545" stroke-width="1" />
+<rect x="1563.7999999999997" y="80" width="780.3320000000001" height="2814.704" rx="3" ry="3" fill="url(#diag-hatch)" stroke="#454545" stroke-width="1" />
+<polyline points="388.592,237.2 388.592,555.4799999999999" fill="none" stroke="var(--_line)" stroke-width="1.5" marker-end="url(#arrowhead)" />
+<polyline points="388.592,631.68 388.592,965.96" fill="none" stroke="var(--_line)" stroke-width="1.5" marker-end="url(#arrowhead)" />
+<polyline points="388.592,1042.16 388.592,1283.16" fill="none" stroke="var(--_line)" stroke-width="1.5" marker-end="url(#arrowhead)" />
+<polyline points="388.592,1359.36 388.592,1600.3600000000001" fill="none" stroke="var(--_line)" stroke-width="1.5" marker-end="url(#arrowhead)" />
+<path d="M388.592,1676.56 L388.592,1693.5600000000002 Q388.592,1701.5600000000002 380.592,1701.5600000000002 L307.22400000000005,1701.5600000000002 Q299.22400000000005,1701.5600000000002 299.22400000000005,1709.5600000000002 L299.22400000000005,1968.16 Q299.22400000000005,1976.16 307.22400000000005,1976.16 L321.05999999999995,1976.16" fill="none" stroke="var(--_line)" stroke-width="1.5" stroke-dasharray="4 4" marker-end="url(#arrowhead)" marker-start="url(#arrowhead-start)" />
+<path d="M824.988,1676.56 L824.988,1693.5600000000002 Q824.988,1701.5600000000002 816.988,1701.5600000000002 L631.6279999999999,1701.5600000000002 Q623.6279999999999,1701.5600000000002 623.6279999999999,1709.5600000000002 L623.6279999999999,1968.16 Q623.6279999999999,1976.16 615.6279999999999,1976.16 L339.05999999999995,1976.16" fill="none" stroke="var(--_line)" stroke-width="1.5" stroke-dasharray="4 4" marker-end="url(#arrowhead)" marker-start="url(#arrowhead-start)" />
+<path d="M1321.0639999999999,1676.56 L1321.0639999999999,1693.5600000000002 Q1321.0639999999999,1701.5600000000002 1313.0639999999999,1701.5600000000002 L1116.788,1701.5600000000002 Q1108.788,1701.5600000000002 1108.788,1709.5600000000002 L1108.788,1968.16 Q1108.788,1976.16 1100.788,1976.16 L956.1479999999999,1976.16" fill="none" stroke="var(--_line)" stroke-width="1.5" stroke-dasharray="4 4" marker-end="url(#arrowhead)" marker-start="url(#arrowhead-start)" />
+<path d="M388.592,1676.56 L388.592,1693.5600000000002 Q388.592,1701.5600000000002 396.592,1701.5600000000002 L563.028,1701.5600000000002 Q571.028,1701.5600000000002 571.028,1709.5600000000002 L571.028,1968.16 Q571.028,1976.16 579.028,1976.16 L978.1479999999999,1976.16" fill="none" stroke="var(--_line)" stroke-width="1.5" marker-end="url(#arrowhead)" />
+<path d="M824.988,1676.56 L824.988,1693.5600000000002 Q824.988,1701.5600000000002 832.988,1701.5600000000002 L1048.188,1701.5600000000002 Q1056.188,1701.5600000000002 1056.188,1709.5600000000002 L1056.188,1968.16 Q1056.188,1976.16 1048.188,1976.16 L996.1479999999999,1976.16" fill="none" stroke="var(--_line)" stroke-width="1.5" marker-end="url(#arrowhead)" />
+<path d="M1321.0639999999999,1676.56 L1321.0639999999999,1693.5600000000002 Q1321.0639999999999,1701.5600000000002 1329.0639999999999,1701.5600000000002 L1412.4319999999998,1701.5600000000002 Q1420.4319999999998,1701.5600000000002 1420.4319999999998,1709.5600000000002 L1420.4319999999998,1968.16 Q1420.4319999999998,1976.16 1412.4319999999998,1976.16 L1223.86,1976.16" fill="none" stroke="var(--_line)" stroke-width="1.5" marker-end="url(#arrowhead)" />
+<polyline points="1101.004,2009.76 1101.004,2250.76" fill="none" stroke="var(--_line)" stroke-width="1.5" marker-end="url(#arrowhead)" />
+<path d="M1203.352960230643,2362.1089602306433 L1203.352960230643,2242.76 Q1203.352960230643,2234.76 1211.352960230643,2234.76 L2159.192,2234.76 Q2167.192,2234.76 2167.192,2226.76 L2167.192,211.6 Q2167.192,203.6 2175.192,203.6 L2206.28,203.6" fill="none" stroke="var(--_line)" stroke-width="1.5" marker-end="url(#arrowhead)" />
+<path d="M1101.004,2491.504 L1101.004,2558.5040000000004 Q1101.004,2566.5040000000004 1109.004,2566.5040000000004 L1808.0080000000003,2566.5040000000004 Q1816.0080000000003,2566.5040000000004 1816.0080000000003,2574.5040000000004 L1816.0080000000003,2787.808 Q1816.0080000000003,2791.1040000000003 1812.712,2791.1040000000003 L1809.416,2791.1040000000003" fill="none" stroke="var(--_line)" stroke-width="1.5" marker-end="url(#arrowhead)" />
+<path d="M1991.6000000000004,237.2 L1991.6000000000004,354.19999999999993 Q1991.6000000000004,362.19999999999993 1983.6000000000004,362.19999999999993 L1918.4,362.19999999999993 Q1910.4,362.19999999999993 1910.4,370.19999999999993 L1910.4,478.19999999999993" fill="none" stroke="var(--_line)" stroke-width="1.5" marker-end="url(#arrowhead)" />
+<path d="M1841.4684536312104,640.0284536312101 L1841.4684536312104,725.96 Q1841.4684536312104,733.96 1833.4684536312104,733.96 L1695.116,733.96 Q1687.116,733.96 1687.116,741.96 L1687.116,1000.5600000000001 Q1687.116,1008.5600000000001 1679.116,1008.5600000000001 L676.184,1008.5600000000001" fill="none" stroke="var(--_line)" stroke-width="1.5" marker-end="url(#arrowhead)" />
+<path d="M1864.9485992217901,663.5085992217898 L1864.9485992217901,811.2342996108949 Q1864.9485992217901,819.2342996108949 1856.9485992217901,819.2342996108949 L1824.0080000000003,819.2342996108949 Q1816.0080000000003,819.2342996108949 1816.0080000000003,827.2342996108949 L1816.0080000000003,965.96" fill="none" stroke="var(--_line)" stroke-width="1.5" marker-end="url(#arrowhead)" />
+<path d="M1816.0080000000003,1042.16 L1816.0080000000003,1317.76 Q1816.0080000000003,1325.76 1808.0080000000003,1325.76 L536.4079999999999,1325.76" fill="none" stroke="var(--_line)" stroke-width="1.5" marker-end="url(#arrowhead)" />
+<path d="M1955.8514007782103,663.5085992217897 L1955.8514007782103,725.96 Q1955.8514007782103,733.96 1963.8514007782103,733.96 L1996.7920000000004,733.96 Q2004.7920000000004,733.96 2004.7920000000004,741.96 L2004.7920000000004,2783.1040000000003 Q2004.7920000000004,2791.1040000000003 2012.7920000000004,2791.1040000000003 L2118.968,2791.1040000000003" fill="none" stroke="var(--_line)" stroke-width="1.5" marker-end="url(#arrowhead)" />
+<path d="M1972.9084789644014,646.4515210355986 L1972.9084789644014,725.96 Q1972.9084789644014,733.96 1980.9084789644014,733.96 L2077.992,733.96 Q2085.992,733.96 2085.992,741.96 L2085.992,1000.5600000000001 Q2085.992,1008.5600000000001 2093.992,1008.5600000000001 L2349.1319999999996,1008.5600000000001" fill="none" stroke="var(--_line)" stroke-width="1.5" marker-end="url(#arrowhead)" />
+<rect x="72" y="896.96" width="304.14399999999995" height="24" fill="var(--bg)" rx="2" ry="2" />
+<text x="80" y="908.96" dy="0.35em" style="font-family:'Geist Mono',system-ui,sans-serif;font-size:16px;font-weight:600;text-transform:uppercase;" fill="rgba(255,255,255,0.92)">&quot;Phase Execution&quot;</text>
+<rect x="161.856" y="1556.3600000000001" width="304.14399999999995" height="24" fill="var(--bg)" rx="2" ry="2" />
+<text x="169.856" y="1568.3600000000001" dy="0.35em" style="font-family:'Geist Mono',system-ui,sans-serif;font-size:16px;font-weight:600;text-transform:uppercase;" fill="rgba(255,255,255,0.92)">&quot;Parallel Agents&quot;</text>
+<rect x="1571.7999999999997" y="92" width="282.79999999999995" height="24" fill="var(--bg)" rx="2" ry="2" />
+<text x="1579.7999999999997" y="104" dy="0.35em" style="font-family:'Geist Mono',system-ui,sans-serif;font-size:16px;font-weight:600;text-transform:uppercase;" fill="rgba(255,255,255,0.92)">&quot;Critic Review&quot;</text>
+<rect x="262.624" y="1796.5600000000002" width="73.2" height="26" rx="4" ry="4" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="0.5" />
+<text x="299.22400000000005" y="1809.5600000000002" text-anchor="middle" dy="0.35em" font-size="10" font-weight="400" fill="var(--_text-muted)">&quot;ask_agent&quot;</text>
+<rect x="587.0279999999999" y="1796.5600000000002" width="73.2" height="26" rx="4" ry="4" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="0.5" />
+<text x="623.6279999999999" y="1809.5600000000002" text-anchor="middle" dy="0.35em" font-size="10" font-weight="400" fill="var(--_text-muted)">&quot;ask_agent&quot;</text>
+<rect x="1072.188" y="1796.5600000000002" width="73.2" height="26" rx="4" ry="4" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="0.5" />
+<text x="1108.788" y="1809.5600000000002" text-anchor="middle" dy="0.35em" font-size="10" font-weight="400" fill="var(--_text-muted)">&quot;ask_agent&quot;</text>
+<rect x="2114.992" y="1312.76" width="104.4" height="26" rx="4" ry="4" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="0.5" />
+<text x="2167.192" y="1325.76" text-anchor="middle" dy="0.35em" font-size="10" font-weight="400" fill="var(--_text-muted)">&quot;quorum · enough&quot;</text>
+<rect x="1750.8080000000002" y="2611.5040000000004" width="130.4" height="26" rx="4" ry="4" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="0.5" />
+<text x="1816.0080000000003" y="2624.5040000000004" text-anchor="middle" dy="0.35em" font-size="10" font-weight="400" fill="var(--_text-muted)">&quot;fail_fast · any fail&quot;</text>
+<rect x="1655.716" y="828.96" width="62.800000000000004" height="26" rx="4" ry="4" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="0.5" />
+<text x="1687.116" y="841.96" text-anchor="middle" dy="0.35em" font-size="10" font-weight="400" fill="var(--_text-muted)">&quot;approve&quot;</text>
+<rect x="1743.0080000000003" y="828.96" width="146" height="26" rx="4" ry="4" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="0.5" />
+<text x="1816.0080000000003" y="841.96" text-anchor="middle" dy="0.35em" font-size="10" font-weight="400" fill="var(--_text-muted)">&quot;reject · retry_targeted&quot;</text>
+<rect x="1947.3920000000003" y="1629.96" width="114.8" height="26" rx="4" ry="4" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="0.5" />
+<text x="2004.7920000000004" y="1642.96" text-anchor="middle" dy="0.35em" font-size="10" font-weight="400" fill="var(--_text-muted)">&quot;reject · escalate&quot;</text>
+<rect x="2020.7920000000001" y="828.96" width="130.4" height="26" rx="4" ry="4" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="0.5" />
+<text x="2085.992" y="841.96" text-anchor="middle" dy="0.35em" font-size="10" font-weight="400" fill="var(--_text-muted)">&quot;final phase approved&quot;</text>
+<rect x="284.71999999999997" y="170" width="207.744" height="67.2" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<rect x="85.03999999999996" y="564.4799999999999" width="607.104" height="67.2" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<rect x="2358.1319999999996" y="974.96" width="467.328" height="67.2" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<rect x="110" y="974.96" width="557.184" height="67.2" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<rect x="249.776" y="1292.16" width="277.63199999999995" height="67.2" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<rect x="330.05999999999995" y="1942.5600000000002" width="617.088" height="67.2" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<rect x="987.1479999999999" y="1942.5600000000002" width="227.712" height="67.2" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<polygon points="1101.004,2259.76 1216.876,2375.632 1101.004,2491.504 985.132,2375.632" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<rect x="199.85599999999997" y="1609.3600000000001" width="377.47200000000004" height="67.2" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<rect x="636.2520000000001" y="1609.3600000000001" width="377.47200000000004" height="67.2" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<rect x="1132.3279999999997" y="1609.3600000000001" width="377.47200000000004" height="67.2" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<rect x="1767.9200000000003" y="170" width="447.36" height="67.2" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<polygon points="1910.4,487.19999999999993 2021.2800000000002,598.0799999999999 1910.4,708.9599999999999 1799.52,598.0799999999999" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<rect x="1657.2240000000002" y="974.96" width="317.568" height="67.2" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<rect x="1800.416" y="2757.5040000000004" width="327.552" height="67.2" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<text x="388.592" y="203.6" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;Workflow Start&quot;</text>
+<text x="388.592" y="598.0799999999999" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;Load Definition&lt;br/&gt;YAML template / dynamic generation&quot;</text>
+<text x="2591.7959999999994" y="1008.5600000000001" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;Workflow Complete&lt;br/&gt;synthesized result&quot;</text>
+<text x="388.592" y="1008.5600000000001" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;Build phase context&lt;br/&gt;inject prev phase results&quot;</text>
+<text x="388.592" y="1325.76" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;Spawn parallel agents&quot;</text>
+<text x="638.6039999999999" y="1976.16" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;ask_agent&lt;br/&gt;inter-agent communication&lt;br/&gt;max_depth=3&quot;</text>
+<text x="1101.004" y="1976.16" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;Await all agents&quot;</text>
+<text x="1101.004" y="2375.632" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;Failure Policy&quot;</text>
+<text x="388.592" y="1642.96" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;Agent 1&lt;br/&gt;independent session&quot;</text>
+<text x="824.988" y="1642.96" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;Agent 2&lt;br/&gt;independent session&quot;</text>
+<text x="1321.0639999999999" y="1642.96" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;Agent N&lt;br/&gt;independent session&quot;</text>
+<text x="1991.6000000000004" y="203.6" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;Critic evaluates&lt;br/&gt;all agent results&quot;</text>
+<text x="1910.4" y="598.0799999999999" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;Gate Decision&quot;</text>
+<text x="1816.0080000000003" y="1008.5600000000001" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;Retry&lt;br/&gt;inject feedback&quot;</text>
+<text x="1964.192" y="2791.1040000000003" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;Escalate&lt;br/&gt;user decision&quot;</text>
+</svg>

@@ -9,15 +9,22 @@ export async function handle_config(ctx: RouteContext): Promise<boolean> {
     json(res, 200, { raw: ops.get_current_config(), sections: await ops.get_sections() });
     return true;
   }
-  const section_match = url.pathname.match(/^\/api\/config\/sections\/([^/]+)$/);
-  if (section_match && req.method === "GET") {
+  // POST /api/config/sections { section } — 단건 조회
+  if (url.pathname === "/api/config/sections" && req.method === "POST") {
     const ops = options.config_ops;
     if (!ops) { json(res, 503, { error: "config_unavailable" }); return true; }
-    const section = await ops.get_section(decodeURIComponent(section_match[1]));
+    const body = await read_body(req);
+    const name = String(body?.section || "").trim();
+    if (!name) { json(res, 400, { error: "section_required" }); return true; }
+    const section = await ops.get_section(name);
     json(res, section ? 200 : 404, section ?? { error: "section_not_found" });
     return true;
   }
-  if (url.pathname === "/api/config/values" && req.method === "PUT") {
+
+  if (url.pathname !== "/api/config/values") return false;
+
+  // PUT /api/config/values { path, value } — 수정
+  if (req.method === "PUT") {
     const ops = options.config_ops;
     if (!ops) { json(res, 503, { error: "config_unavailable" }); return true; }
     const body = await read_body(req);
@@ -27,11 +34,14 @@ export async function handle_config(ctx: RouteContext): Promise<boolean> {
     json(res, 200, { ok: true, path: field_path });
     return true;
   }
-  const value_match = url.pathname.match(/^\/api\/config\/values\/(.+)$/);
-  if (value_match && req.method === "DELETE") {
+  // DELETE /api/config/values { path } — 초기화
+  if (req.method === "DELETE") {
     const ops = options.config_ops;
     if (!ops) { json(res, 503, { error: "config_unavailable" }); return true; }
-    await ops.remove_value(decodeURIComponent(value_match[1]));
+    const body = await read_body(req);
+    const field_path = String(body?.path || "").trim();
+    if (!field_path) { json(res, 400, { error: "path_required" }); return true; }
+    await ops.remove_value(field_path);
     json(res, 200, { ok: true, restored: "default" });
     return true;
   }

@@ -3,15 +3,15 @@ import { execFile, type ChildProcess, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import { create_logger } from "../logger.js";
 
-const log = create_logger("phi4-runtime");
+const log = create_logger("orchestrator-llm-runtime");
 
 const exec_file_async = promisify(execFile);
 
-export type Phi4RuntimeEngine = "native" | "docker" | "podman";
+export type OrchestratorLlmEngine = "native" | "docker" | "podman";
 
-export type Phi4RuntimeOptions = {
+export type OrchestratorLlmOptions = {
   enabled?: boolean;
-  engine?: "auto" | Phi4RuntimeEngine;
+  engine?: "auto" | OrchestratorLlmEngine;
   image?: string;
   container?: string;
   port?: number;
@@ -23,10 +23,10 @@ export type Phi4RuntimeOptions = {
   gpu_args?: string[];
 };
 
-export type Phi4RuntimeStatus = {
+export type OrchestratorLlmStatus = {
   enabled: boolean;
   running: boolean;
-  engine?: Phi4RuntimeEngine;
+  engine?: OrchestratorLlmEngine;
   container: string;
   image: string;
   port: number;
@@ -37,7 +37,29 @@ export type Phi4RuntimeStatus = {
   gpu_percent?: number;
 };
 
-function to_engine(value: string | undefined): "auto" | Phi4RuntimeEngine {
+export type ModelInfo = {
+  name: string;
+  size: number;
+  modified_at: string;
+  digest: string;
+  parameter_size?: string;
+  quantization_level?: string;
+};
+
+export type RunningModelInfo = {
+  name: string;
+  size: number;
+  size_vram: number;
+  expires_at: string;
+};
+
+export type PullProgress = {
+  status: string;
+  completed?: number;
+  total?: number;
+};
+
+function to_engine(value: string | undefined): "auto" | OrchestratorLlmEngine {
   const v = String(value || "auto").toLowerCase();
   if (v === "native") return "native";
   if (v === "docker") return "docker";
@@ -46,7 +68,7 @@ function to_engine(value: string | undefined): "auto" | Phi4RuntimeEngine {
 }
 
 /**
- * Ollama 기반 Phi4 런타임 매니저.
+ * Ollama 기반 오케스트레이터 LLM 런타임.
  *
  * 엔진 탐색 순서 (auto):
  *   1. API가 이미 응답 중이면 그대로 사용 (어떤 엔진이든)
@@ -57,32 +79,32 @@ function to_engine(value: string | undefined): "auto" | Phi4RuntimeEngine {
  * 네이티브가 우선인 이유: 호스트 GPU 드라이버에 직접 접근하여
  * 컨테이너 대비 GPU 할당 실패 가능성이 현저히 낮음.
  */
-export class Phi4RuntimeManager {
+export class OrchestratorLlmRuntime {
   readonly enabled: boolean;
-  readonly engine_pref: "auto" | Phi4RuntimeEngine;
+  readonly engine_pref: "auto" | OrchestratorLlmEngine;
   readonly image: string;
   readonly container: string;
   readonly port: number;
-  readonly model: string;
+  model: string;
   readonly pull_model: boolean;
   readonly auto_stop: boolean;
   readonly api_base: string;
   readonly gpu_enabled: boolean;
   readonly gpu_args_override: string[] | null;
 
-  private engine: Phi4RuntimeEngine | null = null;
+  private engine: OrchestratorLlmEngine | null = null;
   private running = false;
   private started_by_manager = false;
   private last_error = "";
   private native_process: ChildProcess | null = null;
 
-  constructor(options?: Phi4RuntimeOptions) {
+  constructor(options?: OrchestratorLlmOptions) {
     this.enabled = options?.enabled ?? false;
     this.engine_pref = to_engine(options?.engine);
     this.image = options?.image || "ollama/ollama:latest";
-    this.container = options?.container || "orchestrator-phi4";
+    this.container = options?.container || "orchestrator-llm";
     this.port = Math.max(1, Number(options?.port || 11434));
-    this.model = options?.model || "phi4-mini";
+    this.model = options?.model || "qwen3.5:4b";
     this.pull_model = options?.pull_model ?? true;
     this.auto_stop = options?.auto_stop ?? false;
     this.api_base = options?.api_base || `http://127.0.0.1:${this.port}/v1`;
@@ -92,7 +114,7 @@ export class Phi4RuntimeManager {
       : null;
   }
 
-  get_status(): Phi4RuntimeStatus {
+  get_status(): OrchestratorLlmStatus {
     return {
       enabled: this.enabled,
       running: this.running,
@@ -107,12 +129,13 @@ export class Phi4RuntimeManager {
     };
   }
 
-  async start(): Promise<Phi4RuntimeStatus> {
+  async start(): Promise<OrchestratorLlmStatus> {
     if (!this.enabled) return this.get_status();
 
-    // 이미 API가 응답 중이면 엔진 탐색 생략
+    // API가 이미 응답 중이면 외부에서 관리되는 런타임 — 엔진 탐색 생략
     if (await this.is_api_ready()) {
       this.running = true;
+      this.engine = this.engine ?? "native";
       return await this.health_check();
     }
 
@@ -142,7 +165,7 @@ export class Phi4RuntimeManager {
       await this.warmup();
 
       this.running = await this.is_api_ready();
-      if (!this.running) this.last_error = "phi4_runtime_not_ready_after_start";
+      if (!this.running) this.last_error = "orchestrator_llm_not_ready_after_start";
       log.info("started", { engine: this.engine, running: this.running });
       return await this.health_check();
     } catch (error) {
@@ -153,7 +176,7 @@ export class Phi4RuntimeManager {
     }
   }
 
-  async stop(): Promise<Phi4RuntimeStatus> {
+  async stop(): Promise<OrchestratorLlmStatus> {
     if (!this.enabled) return this.get_status();
     if (!this.auto_stop || !this.started_by_manager) return this.get_status();
 
@@ -173,7 +196,7 @@ export class Phi4RuntimeManager {
     return this.get_status();
   }
 
-  async health_check(): Promise<Phi4RuntimeStatus> {
+  async health_check(): Promise<OrchestratorLlmStatus> {
     const base = this.get_status();
     const api_ready = await this.is_api_ready();
     const model_loaded = api_ready ? await this.is_model_loaded(this.model) : false;
@@ -183,17 +206,22 @@ export class Phi4RuntimeManager {
 
   // ─── 엔진 탐색 ────────────────────────────────────
 
-  private async resolve_engine(): Promise<Phi4RuntimeEngine | null> {
+  private async resolve_engine(): Promise<OrchestratorLlmEngine | null> {
     if (this.engine_pref !== "auto") {
       const ok = this.engine_pref === "native"
         ? await this.check_native()
         : await this.check_container_engine(this.engine_pref);
-      return ok ? this.engine_pref : null;
+      if (ok) return this.engine_pref;
+      // CLI 바이너리 못 찾았지만 API가 응답 중이면 외부 관리 런타임
+      if (await this.is_api_ready()) return this.engine_pref;
+      return null;
     }
-    // auto: native → docker → podman
+    // auto: native → docker → podman → API fallback
     if (await this.check_native()) return "native";
     if (await this.check_container_engine("docker")) return "docker";
     if (await this.check_container_engine("podman")) return "podman";
+    // CLI 바이너리 못 찾았지만 API가 응답 중이면 외부 관리 런타임
+    if (await this.is_api_ready()) return "native";
     return null;
   }
 
@@ -280,7 +308,152 @@ export class Phi4RuntimeManager {
     }
   }
 
-  // ─── 모델 관리 ────────────────────────────────────
+  // ─── 모델 관리 (public) ─────────────────────────────
+
+  /** 설치된 모델 목록 조회 (GET /api/tags). */
+  async list_models(): Promise<ModelInfo[]> {
+    const base = this.api_base.replace(/\/v1\/?$/, "");
+    try {
+      const res = await fetch(`${base}/api/tags`, { signal: AbortSignal.timeout(5_000) });
+      if (!res.ok) return [];
+      const data = (await res.json()) as Record<string, unknown>;
+      const models = Array.isArray(data.models) ? data.models : [];
+      return models.map((m) => {
+        const rec = (m && typeof m === "object") ? m as Record<string, unknown> : {};
+        const details = (rec.details && typeof rec.details === "object") ? rec.details as Record<string, unknown> : {};
+        return {
+          name: String(rec.name || ""),
+          size: Number(rec.size || 0),
+          modified_at: String(rec.modified_at || ""),
+          digest: String(rec.digest || ""),
+          parameter_size: details.parameter_size ? String(details.parameter_size) : undefined,
+          quantization_level: details.quantization_level ? String(details.quantization_level) : undefined,
+        };
+      });
+    } catch {
+      return [];
+    }
+  }
+
+  /** 모델 pull (POST /api/pull). non-streaming 단건 응답. */
+  async pull_model_by_name(name: string): Promise<PullProgress> {
+    const base = this.api_base.replace(/\/v1\/?$/, "");
+    try {
+      const res = await fetch(`${base}/api/pull`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, stream: false }),
+        signal: AbortSignal.timeout(600_000),
+      });
+      if (!res.ok) return { status: `error_${res.status}` };
+      const data = (await res.json()) as Record<string, unknown>;
+      return {
+        status: String(data.status || "unknown"),
+        completed: data.completed != null ? Number(data.completed) : undefined,
+        total: data.total != null ? Number(data.total) : undefined,
+      };
+    } catch (error) {
+      return { status: `error: ${error_message(error)}` };
+    }
+  }
+
+  /**
+   * 모델 pull (스트리밍). Ollama NDJSON 스트림을 AsyncGenerator로 노출.
+   * 각 chunk는 PullProgress 형태. 호출자가 SSE 등으로 변환.
+   */
+  async *pull_model_stream(name: string): AsyncGenerator<PullProgress> {
+    const base = this.api_base.replace(/\/v1\/?$/, "");
+    const res = await fetch(`${base}/api/pull`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, stream: true }),
+      signal: AbortSignal.timeout(600_000),
+    });
+    if (!res.ok) {
+      yield { status: `error_${res.status}` };
+      return;
+    }
+    if (!res.body) {
+      yield { status: "error_no_body" };
+      return;
+    }
+    const decoder = new TextDecoder();
+    let buffer = "";
+    for await (const chunk of res.body as AsyncIterable<Uint8Array>) {
+      buffer += decoder.decode(chunk, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        try {
+          const data = JSON.parse(trimmed) as Record<string, unknown>;
+          yield {
+            status: String(data.status || "unknown"),
+            completed: data.completed != null ? Number(data.completed) : undefined,
+            total: data.total != null ? Number(data.total) : undefined,
+          };
+        } catch { /* malformed line skip */ }
+      }
+    }
+    if (buffer.trim()) {
+      try {
+        const data = JSON.parse(buffer.trim()) as Record<string, unknown>;
+        yield {
+          status: String(data.status || "done"),
+          completed: data.completed != null ? Number(data.completed) : undefined,
+          total: data.total != null ? Number(data.total) : undefined,
+        };
+      } catch { /* ignore */ }
+    }
+  }
+
+  /** 모델 삭제 (DELETE /api/delete). */
+  async delete_model(name: string): Promise<boolean> {
+    const base = this.api_base.replace(/\/v1\/?$/, "");
+    try {
+      const res = await fetch(`${base}/api/delete`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+        signal: AbortSignal.timeout(30_000),
+      });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  /** 현재 VRAM에 로드된 모델 조회 (GET /api/ps). */
+  async list_running(): Promise<RunningModelInfo[]> {
+    const base = this.api_base.replace(/\/v1\/?$/, "");
+    try {
+      const res = await fetch(`${base}/api/ps`, { signal: AbortSignal.timeout(3_000) });
+      if (!res.ok) return [];
+      const data = (await res.json()) as Record<string, unknown>;
+      const models = Array.isArray(data.models) ? data.models : [];
+      return models.map((m) => {
+        const rec = (m && typeof m === "object") ? m as Record<string, unknown> : {};
+        return {
+          name: String(rec.name || ""),
+          size: Number(rec.size || 0),
+          size_vram: Number(rec.size_vram || 0),
+          expires_at: String(rec.expires_at || ""),
+        };
+      });
+    } catch {
+      return [];
+    }
+  }
+
+  /** 활성 모델을 변경하고 warmup으로 VRAM에 로드. */
+  async switch_model(name: string): Promise<OrchestratorLlmStatus> {
+    this.model = name;
+    await this.warmup();
+    return this.get_status();
+  }
+
+  // ─── 모델 관리 (internal) ──────────────────────────
 
   private async pull_model_to_runtime(): Promise<void> {
     if (this.engine === "native") {
@@ -364,6 +537,6 @@ export class Phi4RuntimeManager {
       if (await this.is_api_ready()) return;
       await sleep(1500);
     }
-    throw new Error("phi4_api_ready_timeout");
+    throw new Error("orchestrator_llm_api_ready_timeout");
   }
 }

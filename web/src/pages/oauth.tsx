@@ -62,13 +62,13 @@ export default function OAuthPage() {
   });
 
   const remove = useMutation({
-    mutationFn: (id: string) => api.del(`/api/oauth/integrations/${encodeURIComponent(id)}`),
+    mutationFn: (id: string) => api.del("/api/oauth/integrations", { id }),
     onSuccess: () => { toast(t("oauth.removed"), "ok"); void qc.invalidateQueries({ queryKey: ["oauth-integrations"] }); },
     onError: (err) => toast(t("oauth.remove_failed", { error: err.message }), "err"),
   });
 
   const removePreset = useMutation({
-    mutationFn: (type: string) => api.del(`/api/oauth/presets/${encodeURIComponent(type)}`),
+    mutationFn: (type: string) => api.del("/api/oauth/presets", { service_type: type }),
     onSuccess: () => { toast(t("oauth.preset_removed"), "ok"); void qc.invalidateQueries({ queryKey: ["oauth-presets"] }); },
     onError: (err) => toast(t("oauth.preset_remove_failed", { error: err.message }), "err"),
   });
@@ -249,8 +249,8 @@ function OAuthCard({ instance, presets, onEdit, onRemove }: {
 
   const connect = useMutation({
     mutationFn: (client_secret?: string) => api.post<{ ok: boolean; auth_url?: string; error?: string }>(
-      `/api/oauth/integrations/${encodeURIComponent(instance.instance_id)}/auth`,
-      client_secret ? { client_secret } : {},
+      "/api/oauth/integrations",
+      { action: "auth", id: instance.instance_id, ...(client_secret ? { client_secret } : {}) },
     ),
     onSuccess: (r) => {
       if (r.ok && r.auth_url) {
@@ -273,7 +273,8 @@ function OAuthCard({ instance, presets, onEdit, onRemove }: {
 
   const refresh = useMutation({
     mutationFn: () => api.post<{ ok: boolean; error?: string }>(
-      `/api/oauth/integrations/${encodeURIComponent(instance.instance_id)}/refresh`,
+      "/api/oauth/integrations",
+      { action: "refresh", id: instance.instance_id },
     ),
     onSuccess: (r) => {
       toast(r.ok ? t("oauth.refreshed") : t("oauth.refresh_failed", { error: r.error || "" }), r.ok ? "ok" : "err");
@@ -283,7 +284,8 @@ function OAuthCard({ instance, presets, onEdit, onRemove }: {
   });
 
   const { testing, testResult, test } = useTestMutation({
-    url: `/api/oauth/integrations/${encodeURIComponent(instance.instance_id)}/test`,
+    url: "/api/oauth/integrations",
+    body: { action: "test", id: instance.instance_id },
     onOk: () => t("oauth.test_passed"),
     onFail: (r) => t("oauth.test_failed", { error: r.error || "" }),
     onError: (err) => t("oauth.test_failed", { error: err.message }),
@@ -332,7 +334,7 @@ function OAuthCard({ instance, presets, onEdit, onRemove }: {
             <button className="btn btn--xs" onClick={() => refresh.mutate()} disabled={refresh.isPending}>
               {refresh.isPending ? t("oauth.refreshing") : t("common.refresh")}
             </button>
-            <button className="btn btn--xs btn--ok" onClick={() => test.mutate()} disabled={testing}>
+            <button className="btn btn--xs btn--ok" onClick={() => test()} disabled={testing}>
               {testing ? t("common.testing") : t("common.test")}
             </button>
           </>
@@ -397,7 +399,8 @@ function OAuthModal({ mode, presets, onClose, onSaved }: {
     setSaving(true);
     try {
       if (isEdit) {
-        await api.put(`/api/oauth/integrations/${encodeURIComponent(initial!.instance_id)}`, {
+        await api.put("/api/oauth/integrations", {
+          id: initial!.instance_id,
           label: label || initial!.instance_id,
           enabled,
           scopes: parse_csv(scopeText),
@@ -541,7 +544,8 @@ function PresetModal({ initial, onClose, onSaved }: {
     setSaving(true);
     try {
       if (isEdit) {
-        await api.put(`/api/oauth/presets/${encodeURIComponent(initial.service_type)}`, {
+        await api.put("/api/oauth/presets", {
+          service_type: initial.service_type,
           auth_url: authUrl.trim(),
           token_url: tokenUrl.trim(),
           token_auth_method: tokenAuthMethod,

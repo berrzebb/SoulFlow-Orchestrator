@@ -108,15 +108,15 @@ export function AgentsTab() {
     }
   };
 
-  const cancel_agent = (id: string) => void safe_action(() => api.post(`/api/agents/${id}/cancel`), t("agents.cancelled"));
-  const handle_send = (agentId: string, text: string) => void safe_action(() => api.post(`/api/agents/${agentId}/send`, { text }), t("agents.message_sent"), () => setSendTarget(null));
-  const stop_loop = (loopId: string) => void safe_action(() => api.post(`/api/loops/${loopId}/stop`, { reason: "stopped_from_dashboard" }), t("agents.loop_stopped"));
-  const cancel_task = (taskId: string) => void safe_action(() => api.post(`/api/tasks/${taskId}/cancel`), t("agents.task_cancelled"));
-  const cancel_process = (run_id: string) => void safe_action(() => api.post(`/api/processes/${run_id}/cancel`), t("agents.process_cancelled"));
+  const cancel_agent = (id: string) => void safe_action(() => api.del("/api/agents", { agent_id: id }), t("agents.cancelled"));
+  const handle_send = (agentId: string, text: string) => void safe_action(() => api.post("/api/agents", { agent_id: agentId, text }), t("agents.message_sent"), () => setSendTarget(null));
+  const stop_loop = (loopId: string) => void safe_action(() => api.del("/api/loops", { loop_id: loopId, reason: "stopped_from_dashboard" }), t("agents.loop_stopped"));
+  const cancel_task = (taskId: string) => void safe_action(() => api.del("/api/tasks", { task_id: taskId }), t("agents.task_cancelled"));
+  const cancel_process = (run_id: string) => void safe_action(() => api.del("/api/processes", { run_id }), t("agents.process_cancelled"));
   const confirm_resume = () => {
     if (!resumeTarget) return;
     void safe_action(
-      () => api.post(`/api/tasks/${resumeTarget}/resume`, { text: resumeText || undefined }),
+      () => api.put("/api/tasks", { task_id: resumeTarget, text: resumeText || undefined }),
       t("agents.task_resumed"),
       () => { setResumeTarget(null); setResumeText(""); },
     );
@@ -226,7 +226,7 @@ export function AgentsTab() {
               {agent_loops.map((l) => (
                 <tr key={l.loopId} style={WAITING_STATUSES.has(l.status) ? { background: "color-mix(in srgb, var(--accent) 8%, transparent)" } : undefined}>
                   <td className="text-xs text-muted">{l.loopId.slice(0, 12)}</td>
-                  <td className="truncate" style={{ maxWidth: 280 }}>{l.objective || "-"}</td>
+                  <td className="truncate" style={{ maxWidth: "40%" }}>{l.objective || "-"}</td>
                   <td style={{ whiteSpace: "nowrap" }}>{l.currentTurn}/{l.maxTurns}</td>
                   <td>{l.channelId ? <ChannelRef channelId={l.channelId} messageId={l.messageId} /> : <span className="text-muted">-</span>}</td>
                   <td><Badge status={l.status} /></td>
@@ -260,7 +260,7 @@ export function AgentsTab() {
                     <b>{task.title || task.taskId.slice(0, 14)}</b>
                     <br /><span className="text-xs text-muted">{task.taskId.slice(0, 16)}</span>
                   </td>
-                  <td className="truncate" style={{ maxWidth: 240 }}>{task.objective || "-"}</td>
+                  <td className="truncate" style={{ maxWidth: "40%" }}>{task.objective || "-"}</td>
                   <td style={{ whiteSpace: "nowrap" }}>{task.currentTurn}/{task.maxTurns}</td>
                   <td>{task.channel ? <ChannelRef channelId={task.channel} messageId={task.chat_id} /> : <span className="text-muted">-</span>}</td>
                   <td><Badge status={task.status} /></td>
@@ -289,7 +289,7 @@ export function AgentsTab() {
             <div style={{ marginTop: "var(--sp-2)" }}>
               <div className="filter-bar">
                 <input type="search" className="filter-input" value={completedSearch} onChange={(e) => setCompletedSearch(e.target.value)} placeholder={t("agents.filter_placeholder")} />
-                <div style={{ display: "flex", gap: 4 }}>
+                <div style={{ display: "flex", flexWrap: "wrap" as const, gap: 4 }}>
                   {(["all", ...completed_statuses] as string[]).map((s) => (
                     <button key={s} className={`btn btn--xs ${completedStatusFilter === s ? "filter-btn--active" : "filter-btn"}`} onClick={() => setCompletedStatusFilter(s)}>
                       {s === "all" ? t("agents.filter_all") : s}

@@ -6,7 +6,7 @@ Built with **React + Vite**. Supports **Korean/English i18n** (auto-detected fro
 
 Global state management via Zustand (`store.ts`) — SSE connection status, sidebar, theme, web streaming.
 
-Navigate between 7 sections via the sidebar. Toggle dark/light theme with the button at the bottom of the sidebar.
+Navigate between 9 sections via the sidebar. Toggle dark/light theme with the button at the bottom of the sidebar.
 
 ## Setup Wizard
 
@@ -29,6 +29,8 @@ On first launch with no providers configured, the dashboard auto-redirects to `/
 | Channels | `/channels` | Channel connection status · global settings |
 | Providers | `/providers` | Agent provider CRUD |
 | Secrets | `/secrets` | AES-256-GCM secret management |
+| Models | `/models` | Orchestrator LLM runtime · model pull/delete/switch |
+| Workflows | `/workflows` | Phase Loop workflow management · agent chat |
 | Settings | `/settings` | Global runtime settings (section tabs, inline edit, ToggleSwitch) |
 
 ## Overview
@@ -119,6 +121,196 @@ Add, edit, delete, and test agent backends.
 
 Circuit breaker state (`closed` / `half_open` / `open`) is shown as a badge on each card.
 
+## Models Page
+
+Manage the orchestrator LLM runtime and models. The orchestrator is a lightweight classifier that determines the execution mode (`once`/`agent`/`task`/`phase`) for each user message. Hot-swap local LLMs (Phi-4, Qwen, DeepSeek, Gemma, etc.) used as the classifier directly from the dashboard — zero code changes required.
+
+### Runtime Status Card
+
+| Item | Content |
+|------|---------|
+| **Status** | running / stopped |
+| **Engine** | `native` (host Ollama) / `docker` / `podman` |
+| **GPU** | GPU utilization (%) |
+| **Active model** | Model currently used for classification |
+| **API Base** | Ollama API endpoint (default: `http://localhost:11434`) |
+
+### Model Management
+
+| Feature | Description |
+|---------|-------------|
+| **Model list** | All locally installed models — name, size, parameter count (e.g., 3.8B), quantization level (e.g., Q4_K_M) |
+| **Pull** | Download models from the Ollama registry — streaming progress display |
+| **Delete** | Remove models from disk (with confirmation) |
+| **Switch** | Change the active classifier model — config update + automatic warmup |
+| **VRAM monitor** | Currently VRAM-loaded models + memory usage |
+
+### Model Management API
+
+| Endpoint | Function |
+|----------|----------|
+| `GET /api/models` | List all installed models |
+| `POST /api/models` | Download a model (`{ name }`) |
+| `DELETE /api/models` | Delete a model (`{ name }`) |
+| `GET /api/models/active` | List VRAM-loaded models |
+| `GET /api/models/runtime` | Query runtime status |
+| `PATCH /api/models/runtime` | Change active model (`{ name }`) |
+
+### Engine Configuration
+
+The runtime engine is auto-detected in `auto` mode:
+
+| Engine | Condition | Features |
+|--------|-----------|----------|
+| `native` | Ollama installed on host | Fastest startup, direct GPU access |
+| `docker` | Docker available | Auto-manages `ollama/ollama:latest` image |
+| `podman` | Podman available | Same interface as Docker |
+
+## Workflows Page
+
+Manage Phase Loop workflows and chat with agents. Phase Loop differs from Agent Loop (1:1 single agent) and Task Loop (sequential N:1) by implementing a **2-dimensional execution model: parallel agents within a phase + critic review → next phase**.
+
+### Comparison with Other Loops
+
+| | Agent Loop | Task Loop | Phase Loop |
+|---|---|---|---|
+| Execution unit | Single prompt | Sequential nodes | Phase × parallel agents |
+| Agent count | 1 | 1/step | N/phase + critic |
+| Execution mode | Synchronous | Sequential | Parallel within phase, sequential between phases |
+| Conversation | Single session | Single session | Independent session per agent |
+| Quality gate | None | None | Critic review |
+
+### Workflow List
+
+Information displayed on workflow cards:
+- **Title** · **Status** (`running` / `completed` / `failed` / `cancelled` / `waiting_user_input`)
+- **Progress**: current phase / total phases, completed agent count
+- **Agent count** · **Critic count**
+
+### Workflow Detail View
+
+Clicking a workflow opens the detail page:
+
+- **Phase timeline**: Visual status of each phase (`pending` → `running` → `reviewing` → `completed`)
+- **Agent card grid**: Per-agent status cards within a phase
+  - Role · model · status badge
+  - `[Result]` — View agent's final output
+  - `[💬 Chat]` — Additional conversation with the agent
+- **Critic card**: Critic's review after all agents complete
+  - Approval status · feedback content
+  - On rejection, user choices: Continue / Retry / Abort
+
+### Agent Chat Panel
+
+Clicking `[💬]` on an agent card opens a right slide panel. Each agent has an independent session, allowing users to have bidirectional conversations with individual agents.
+
+- **Conversation history**: Full display of system prompt · agent responses · user messages
+- **Inter-agent communication display**: `ask_agent` calls/responses shown with distinct styling
+- **Real-time updates**: New messages auto-added via SSE `agent_message` events
+- **Re-run**: Button to re-execute the agent with its initial prompt
+
+Chat example:
+```
+User: "Competitor A is missing from the analysis, please add it"
+Market Analyst: "Adding A Corp analysis. [Updated analysis results]"
+→ agent.result updated, conversation recorded in agent.messages
+```
+
+### Inter-Agent Autonomous Communication
+
+Agents within a phase can communicate directly via the `ask_agent` tool without going through the orchestrator:
+
+```
+Market Analyst → ask_agent("Tech Analyst", "What's the 3nm process status?")
+← Tech Analyst: "TSMC N3E in mass production, Samsung 2nm GAA planned 2025..."
+```
+
+Safety measures:
+- Call depth counter (`max_depth=3`) — prevents infinite loops
+- Per-agent mutex — serializes concurrent requests
+- Queue depth limit (≤3) + timeout (30s)
+- Communication limited to agents within the same phase
+
+### Workflow Definitions (YAML)
+
+Define workflow templates as YAML files in the `workspace/workflows/` directory:
+
+```yaml
+title: Market Research
+objective: "Comprehensive market analysis for {{topic}}"
+
+phases:
+  - phase_id: research
+    title: Market Research
+    agents:
+      - role: Market Analyst
+        backend: openrouter
+        model: gpt-5.1-codex-max
+        system_prompt: "Analyze market size, growth rate, and trends."
+        tools: [web_search]
+      - role: Tech Analyst
+        backend: openrouter
+        system_prompt: "Analyze tech stack, patents, and technology trends."
+    critic:
+      backend: openrouter
+      system_prompt: "Review all analyses for logical consistency, data evidence, and gaps."
+      gate: true
+
+  - phase_id: strategy
+    title: Strategy Development
+    context_template: |
+      ## Previous Phase Results
+      {{#each prev_phase.agents}}
+      ### {{this.label}}
+      {{this.result}}
+      {{/each}}
+    agents:
+      - role: Strategist
+        ...
+```
+
+### Phase Failure Policies
+
+Configure per-phase behavior when some agents fail:
+
+| Policy | Behavior | Use Case |
+|--------|----------|----------|
+| `fail_fast` | Any failure → immediate phase failure | All agent results required |
+| `best_effort` (default) | Continue with available agents | Research/analysis (partial gaps OK) |
+| `quorum` | Proceed if ≥N agents succeed | Voting/consensus-based decisions |
+
+### Critic Rejection Behavior
+
+When a critic rejects, behavior depends on per-critic configuration:
+
+| Strategy | Behavior |
+|----------|----------|
+| `retry_all` | Re-run all agents (inject critic feedback) |
+| `retry_targeted` | Re-run only agents identified by critic |
+| `escalate` (default) | Delegate to user — Continue / Retry / Abort |
+
+### Dynamic Workflow Generation
+
+When no matching YAML template exists, the classifier auto-generates a workflow:
+
+1. Classifier determines `phase` mode
+2. Searches `workspace/workflows/` → no match
+3. Workflow planner auto-determines agent roles/count
+4. Preview presented to user → execution only after approval (no auto-execution)
+
+### Workflows API
+
+| Endpoint | Function |
+|----------|----------|
+| `GET /api/workflows` | List workflows |
+| `GET /api/workflows/:id` | Workflow detail (full `PhaseLoopState`) |
+| `POST /api/workflows` | Create/execute workflow |
+| `POST /api/workflows/:id/cancel` | Cancel workflow |
+| `GET /api/workflows/:id/phases/:pid/agents/:aid/messages` | Get agent conversation |
+| `POST /api/workflows/:id/phases/:pid/agents/:aid/messages` | Send message to agent |
+| `POST /api/workflows/:id/phases/:pid/agents/:aid/retry` | Retry agent |
+| `POST /api/workflows/:id/phases/:pid/critic/messages` | Send message to critic |
+
 ## Secrets Page
 
 Manage AES-256-GCM encrypted secrets.
@@ -128,7 +320,7 @@ Manage AES-256-GCM encrypted secrets.
 
 ## Live Feed
 
-The Overview page shows real-time events via SSE (Server-Sent Events). `SseManager` broadcasts 7 event types:
+The Overview page shows real-time events via SSE (Server-Sent Events). `SseManager` broadcasts the following events:
 
 | SSE Event | Purpose |
 |-----------|---------|
@@ -139,6 +331,17 @@ The Overview page shows real-time events via SSE (Server-Sent Events). `SseManag
 | `task` | Task state changes |
 | `web_stream` | Web chat streaming |
 | `agent` | Agent events (slim fields only) |
+
+Additional events during Phase Loop execution:
+
+| SSE Event | Purpose |
+|-----------|---------|
+| `workflow_started` | Workflow execution started |
+| `phase_started` / `phase_completed` | Phase start/completion |
+| `agent_started` / `agent_completed` / `agent_failed` | Agent start/completion/failure |
+| `agent_message` | Agent conversation message (real-time) |
+| `critic_started` / `critic_completed` / `critic_rejected` | Critic review start/completion/rejection |
+| `workflow_completed` / `workflow_failed` | Workflow completion/failure |
 
 ## Backend Architecture
 

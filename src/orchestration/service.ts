@@ -26,6 +26,7 @@ import type { ToolSchema } from "../agent/tools/types.js";
 import { create_cd_observer } from "../agent/cd-scoring.js";
 import type { ProcessTrackerLike } from "./process-tracker.js";
 import type { WorkflowEventService, AppendWorkflowEventInput } from "../events/index.js";
+import { join } from "node:path";
 import { now_iso, now_ms, error_message, short_id } from "../utils/common.js";
 // ── 추출 모듈 ──
 import {
@@ -85,6 +86,14 @@ export type OrchestrationServiceDeps = {
   get_mcp_configs?: () => Record<string, { command: string; args?: string[]; env?: Record<string, string>; cwd?: string }>;
   /** 워크플로우 이벤트 기록 서비스. 없으면 이벤트 기록 스킵. */
   events?: WorkflowEventService | null;
+  /** Phase Loop에서 사용할 workspace 경로. */
+  workspace?: string;
+  /** Phase Loop에서 사용할 SubagentRegistry. */
+  subagents?: import("../agent/subagents.js").SubagentRegistry | null;
+  /** Phase Loop 영속화 스토어. */
+  phase_workflow_store?: import("../agent/phase-workflow-store.js").PhaseWorkflowStoreLike | null;
+  /** SSE 브로드캐스트 (Phase Loop 이벤트 전파). lazy 참조 지원. */
+  get_sse_broadcaster?: () => { broadcast_workflow_event(event: import("../agent/phase-loop.types.js").PhaseLoopEvent): void } | null;
 };
 
 
@@ -103,6 +112,7 @@ export class OrchestrationService {
   private readonly process_tracker: ProcessTrackerLike | null;
   private readonly get_mcp_configs: (() => Record<string, { command: string; args?: string[]; env?: Record<string, string>; cwd?: string }>) | null;
   private readonly events: WorkflowEventService | null;
+  private readonly deps: OrchestrationServiceDeps;
   private readonly session_cd = create_cd_observer();
   private readonly streaming_cfg: { enabled: boolean; interval_ms: number; min_chars: number };
   private readonly hooks_deps: AgentHooksBuilderDeps;
@@ -119,6 +129,7 @@ export class OrchestrationService {
     this.process_tracker = deps.process_tracker || null;
     this.get_mcp_configs = deps.get_mcp_configs || null;
     this.events = deps.events || null;
+    this.deps = deps;
 
     this.streaming_cfg = {
       enabled: this.config.streaming_enabled,
@@ -259,16 +270,6 @@ export class OrchestrationService {
 
     const { mode, executor } = decision;
 
-    const { tools: tool_definitions } = select_tools_for_request(all_tool_definitions, task_with_media, mode, skill_tool_names);
-    const system_base = await this._build_system_prompt(skill_names, req.provider, req.message.chat_id);
-    this.logger.info("dispatch", { mode, executor, skills: skill_names, tool_count: tool_definitions.length });
-
-    if (req.run_id) {
-      this.process_tracker?.set_mode(req.run_id, mode);
-      this.process_tracker?.set_executor(req.run_id, executor);
-    }
-    this.log_event({ ...evt_base, phase: "progress", summary: `executing: ${mode}`, payload: { mode, executor } });
-
     // 결과에 done/blocked 이벤트를 기록하는 헬퍼
     const finalize = (result: OrchestrationResult): OrchestrationResult => {
       const phase = result.error ? "blocked" : "done";
@@ -285,6 +286,23 @@ export class OrchestrationService {
       }
       return result;
     };
+
+    // phase → Phase Loop Runner에 위임 (도구 선택 전에 분기)
+    if (mode === "phase") {
+      this.log_event({ ...evt_base, phase: "progress", summary: "executing: phase", payload: { mode, executor } });
+      const workflow_hint = decision.workflow_id;
+      return finalize(await this.run_phase_loop(req, task_with_media, workflow_hint));
+    }
+
+    const { tools: tool_definitions } = select_tools_for_request(all_tool_definitions, task_with_media, mode, skill_tool_names);
+    const system_base = await this._build_system_prompt(skill_names, req.provider, req.message.chat_id);
+    this.logger.info("dispatch", { mode, executor, skills: skill_names, tool_count: tool_definitions.length });
+
+    if (req.run_id) {
+      this.process_tracker?.set_mode(req.run_id, mode);
+      this.process_tracker?.set_executor(req.run_id, executor);
+    }
+    this.log_event({ ...evt_base, phase: "progress", summary: `executing: ${mode}`, payload: { mode, executor } });
 
     // once → executor 1회 호출. 에스컬레이션 시 executor 루프로 전환.
     try {
@@ -337,7 +355,7 @@ export class OrchestrationService {
     }
   }
 
-  /** executor에게 1회 질의. Phi-4는 분류만 수행하고 실제 응답은 executor가 생성. */
+  /** executor에게 1회 질의. 오케스트레이터 LLM은 분류만 수행하고 실제 응답은 executor가 생성. */
   private async run_once(args: RunExecutionArgs): Promise<OrchestrationResult> {
     const stream = new StreamBuffer();
     emit_execution_info(stream, args.req.on_stream, "once", args.executor, this.logger);
@@ -990,6 +1008,162 @@ export class OrchestrationService {
     const output = sanitize_provider_output(output_raw).trim();
     if (!output) return { ...error_result("task", stream, `resume_task_no_output:${result.state.status}`, total_tool_count), run_id: req.run_id };
     return { ...reply_result("task", stream, normalize_agent_reply(output, req.alias, req.message.sender_id), total_tool_count), run_id: req.run_id };
+  }
+
+  /** phase 모드: Phase Loop Runner에 위임. */
+  private async run_phase_loop(req: OrchestrationRequest, task_with_media: string, workflow_hint?: string): Promise<OrchestrationResult> {
+    const { run_phase_loop: exec } = await import("../agent/phase-loop-runner.js");
+    const { load_workflow_templates, load_workflow_template, substitute_variables } = await import("./workflow-loader.js");
+    const workspace = this.deps.workspace || process.cwd();
+    const store = this.deps.phase_workflow_store;
+    const subagents = this.deps.subagents;
+    if (!subagents || !store) {
+      return error_result("phase", null, "phase_loop_deps_not_configured");
+    }
+
+    // 분류기가 workflow_id를 힌트로 전달했으면 해당 템플릿 로드
+    const hint_id = workflow_hint;
+
+    let template: import("../agent/phase-loop.types.js").WorkflowDefinition | null = null;
+    if (hint_id) {
+      template = load_workflow_template(workspace, hint_id);
+    }
+    if (!template) {
+      // 키워드 매칭: 사용자 메시지에 포함된 키워드로 템플릿 탐색
+      const templates = load_workflow_templates(workspace);
+      const lower = task_with_media.toLowerCase();
+      template = templates.find((t) =>
+        lower.includes(t.title.toLowerCase()) ||
+        t.title.toLowerCase().split(/\s+/).some((word) => word.length > 2 && lower.includes(word)),
+      ) || null;
+    }
+    if (!template) {
+      // 동적 워크플로우 생성: 오케스트레이터 LLM에게 워크플로우 설계 요청
+      const dynamic = await this.generate_dynamic_workflow(task_with_media, workspace);
+      if (!dynamic) {
+        return error_result("phase", null, "no_matching_workflow_template");
+      }
+      // 동적 생성 워크플로우는 사용자 확인 후 실행 (비용 통제)
+      const preview = this.format_workflow_preview(dynamic);
+      const workflow_id = `wf-${short_id(12)}`;
+      // 대기 상태로 저장 → 대시보드에서 승인 후 실행
+      if (store) {
+        void store.upsert({
+          workflow_id, title: dynamic.title, objective: task_with_media,
+          channel: req.provider, chat_id: req.message.chat_id,
+          status: "waiting_user_input", current_phase: 0, phases: [],
+          memory: {}, created_at: now_iso(), updated_at: now_iso(),
+          definition: dynamic,
+        });
+      }
+      return { reply: preview, mode: "phase", tool_calls_count: 0, streamed: false, run_id: req.run_id };
+    }
+
+    const definition = substitute_variables(template, { objective: task_with_media, channel: req.provider });
+    const workflow_id = `wf-${short_id(12)}`;
+
+    // ProcessTracker 연결
+    if (req.run_id) {
+      this.process_tracker?.link_workflow(req.run_id, workflow_id);
+    }
+
+    const result = await exec({
+      workflow_id,
+      title: definition.title,
+      objective: task_with_media,
+      channel: req.provider,
+      chat_id: req.message.chat_id,
+      phases: definition.phases,
+      abort_signal: req.signal,
+      on_phase_change: (state) => {
+        req.on_progress?.({ task_id: workflow_id, step: state.current_phase + 1, total_steps: state.phases.length, description: `phase ${state.current_phase + 1}/${state.phases.length}`, provider: req.provider, chat_id: req.message.chat_id, at: now_iso() });
+      },
+    }, {
+      subagents,
+      store,
+      logger: this.logger,
+      on_event: (event) => {
+        this.deps.get_sse_broadcaster?.()?.broadcast_workflow_event(event);
+        req.on_agent_event?.({ type: "content_delta", source: { backend: "phase_loop", task_id: workflow_id }, at: now_iso(), text: `[phase] ${event.type}` });
+      },
+    });
+    const reply = result.status === "completed"
+      ? `워크플로우 \`${definition.title}\` 완료.\n\n${this.format_phase_summary(result)}`
+      : result.status === "waiting_user_input"
+        ? `워크플로우가 사용자 입력을 대기 중입니다. 대시보드에서 확인하세요.\nWorkflow ID: \`${workflow_id}\``
+        : `워크플로우 실패: ${result.error || result.status}`;
+    return { reply, mode: "phase", tool_calls_count: 0, streamed: false, run_id: req.run_id };
+  }
+
+  /** 동적 워크플로우 생성: 오케스트레이터 LLM에게 워크플로우 구조 설계 요청. */
+  private async generate_dynamic_workflow(
+    objective: string,
+    _workspace: string,
+  ): Promise<import("../agent/phase-loop.types.js").WorkflowDefinition | null> {
+    try {
+      const planner_prompt = [
+        "Design a multi-agent workflow for the following objective.",
+        `Objective: "${objective}"`,
+        "",
+        "Constraints:",
+        "- Maximum 3 phases",
+        "- Maximum 4 agents per phase",
+        "- Each agent needs: agent_id (snake_case), role, label, backend (use \"openrouter\"), system_prompt",
+        "- Add a critic to each phase with gate=true",
+        "",
+        "Return ONLY valid JSON matching this schema:",
+        '{ "title": string, "objective": string, "phases": [{ "phase_id": string, "title": string, "agents": [...], "critic": { "backend": "openrouter", "system_prompt": string, "gate": true } }] }',
+      ].join("\n");
+
+      const llm_response = await this.providers.run_orchestrator({
+        messages: [{ role: "user", content: planner_prompt }],
+        max_tokens: 4096,
+        temperature: 0.3,
+      });
+      const response = llm_response?.content;
+      if (!response) return null;
+
+      const json_match = response.match(/\{[\s\S]*"phases"[\s\S]*\}/);
+      if (!json_match) return null;
+
+      const raw = JSON.parse(json_match[0]) as Record<string, unknown>;
+      if (!raw.title || !Array.isArray(raw.phases)) return null;
+
+      return raw as unknown as import("../agent/phase-loop.types.js").WorkflowDefinition;
+    } catch (err) {
+      this.logger.warn("dynamic_workflow_generation_failed", { error: error_message(err) });
+      return null;
+    }
+  }
+
+  /** 동적 생성 워크플로우 미리보기 텍스트. */
+  private format_workflow_preview(def: import("../agent/phase-loop.types.js").WorkflowDefinition): string {
+    const lines = [`다음 워크플로우를 생성했습니다:\n`];
+    for (let i = 0; i < def.phases.length; i++) {
+      const p = def.phases[i];
+      const critic_note = p.critic ? " + critic" : "";
+      lines.push(`**Phase ${i + 1}: ${p.title}** (${p.agents.length} agents${critic_note})`);
+      for (const a of p.agents) {
+        lines.push(`  - ${a.label}: ${a.system_prompt.slice(0, 80)}`);
+      }
+    }
+    lines.push(`\n대시보드에서 워크플로우를 승인하거나 수정하세요.`);
+    return lines.join("\n");
+  }
+
+  private format_phase_summary(result: import("../agent/phase-loop.types.js").PhaseLoopRunResult): string {
+    const lines: string[] = [];
+    for (const phase of result.phases) {
+      lines.push(`**${phase.title}** (${phase.status})`);
+      for (const agent of phase.agents) {
+        const icon = agent.status === "completed" ? "o" : agent.status === "failed" ? "x" : "-";
+        lines.push(`  ${icon} ${agent.label}: ${(agent.result || agent.error || "").slice(0, 200)}`);
+      }
+      if (phase.critic?.review) {
+        lines.push(`  Critic: ${phase.critic.approved ? "Approved" : "Rejected"} — ${phase.critic.review.slice(0, 200)}`);
+      }
+    }
+    return lines.join("\n");
   }
 }
 

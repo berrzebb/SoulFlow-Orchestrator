@@ -1,0 +1,110 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1640.4159999999997 1590.7120000000002" width="1640.4159999999997" height="1590.7120000000002" style="--bg:#0A0A0A;--fg:#EDEDED;--line:#EDEDED;--accent:#EDEDED;--muted:#888888;--surface:#0A0A0A;--border:#454545;background:var(--bg)">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;display=swap');
+  text { font-family: 'Geist', system-ui, sans-serif; }
+  svg {
+    /* Derived from --bg and --fg (overridable via --line, --accent, etc.) */
+    --_text:          var(--fg);
+    --_text-sec:      var(--muted, color-mix(in srgb, var(--fg) 60%, var(--bg)));
+    --_text-muted:    var(--muted, color-mix(in srgb, var(--fg) 40%, var(--bg)));
+    --_text-faint:    color-mix(in srgb, var(--fg) 25%, var(--bg));
+    --_line:          var(--line, color-mix(in srgb, var(--fg) 30%, var(--bg)));
+    --_arrow:         var(--accent, color-mix(in srgb, var(--fg) 50%, var(--bg)));
+    --_node-fill:     var(--surface, color-mix(in srgb, var(--fg) 3%, var(--bg)));
+    --_node-stroke:   var(--border, color-mix(in srgb, var(--fg) 20%, var(--bg)));
+    --_group-fill:    var(--bg);
+    --_group-hdr:     color-mix(in srgb, var(--fg) 5%, var(--bg));
+    --_inner-stroke:  color-mix(in srgb, var(--fg) 12%, var(--bg));
+    --_key-badge:     color-mix(in srgb, var(--fg) 10%, var(--bg));
+  }
+</style>
+<defs>
+  <marker id="arrowhead" markerWidth="7" markerHeight="7" refX="0" refY="3.5" orient="auto" markerUnits="userSpaceOnUse" overflow="visible">
+    <polygon points="0 0, 7 3.5, 0 7" fill="var(--_arrow)" />
+  </marker>
+  <marker id="arrowhead-start" markerWidth="7" markerHeight="7" refX="7" refY="3.5" orient="auto-start-reverse" markerUnits="userSpaceOnUse" overflow="visible">
+    <polygon points="7 0, 0 3.5, 7 7" fill="var(--_arrow)" />
+  </marker>
+  <pattern id="diag-hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+    <rect width="6" height="6" fill="var(--bg)" />
+    <line x1="0" y1="0" x2="0" y2="6" stroke="#171717" stroke-width="3" />
+  </pattern>
+</defs>
+<rect x="63.99999999999997" y="649.912" width="509.40799999999996" height="860.8000000000002" rx="3" ry="3" fill="url(#diag-hatch)" stroke="#454545" stroke-width="1" />
+<rect x="1226.752" y="649.912" width="349.66399999999976" height="860.8000000000002" rx="3" ry="3" fill="url(#diag-hatch)" stroke="#454545" stroke-width="1" />
+<rect x="561.408" y="649.912" width="349.66400000000004" height="627.6000000000001" rx="3" ry="3" fill="url(#diag-hatch)" stroke="#454545" stroke-width="1" />
+<rect x="899.072" y="649.912" width="339.68000000000006" height="627.6000000000001" rx="3" ry="3" fill="url(#diag-hatch)" stroke="#454545" stroke-width="1" />
+<polyline points="902.5759999999999,147.2 902.5759999999999,288.2" fill="none" stroke="var(--_line)" stroke-width="1.5" marker-end="url(#arrowhead)" />
+<path d="M802.5610360514366,448.8970360514367 L802.5610360514366,573.9045180257184 Q802.5610360514366,581.9045180257184 794.5610360514366,581.9045180257184 L326.70399999999995,581.9045180257184 Q318.70399999999995,581.9045180257184 318.70399999999995,589.9045180257184 L318.70399999999995,705.912" fill="none" stroke="var(--_line)" stroke-width="1.5" marker-end="url(#arrowhead)" />
+<path d="M999.216452230005,452.271547769995 L999.216452230005,575.5917738849976 Q999.216452230005,583.5917738849976 1007.216452230005,583.5917738849976 L1393.5839999999998,583.5917738849976 Q1401.5839999999998,583.5917738849976 1401.5839999999998,591.5917738849976 L1401.5839999999998,705.912" fill="none" stroke="var(--_line)" stroke-width="1.5" marker-end="url(#arrowhead)" />
+<path d="M836.5769091780372,482.9129091780373 L836.5769091780372,590.9124545890187 Q836.5769091780372,598.9124545890187 828.5769091780372,598.9124545890187 L744.2399999999999,598.9124545890187 Q736.2399999999999,598.9124545890187 736.2399999999999,606.9124545890187 L736.2399999999999,705.912" fill="none" stroke="var(--_line)" stroke-width="1.5" marker-end="url(#arrowhead)" />
+<path d="M968.5750908219626,482.9129091780373 L968.5750908219626,590.9124545890187 Q968.5750908219626,598.9124545890187 976.5750908219626,598.9124545890187 L1060.9119999999998,598.9124545890187 Q1068.9119999999998,598.9124545890187 1068.9119999999998,606.9124545890187 L1068.9119999999998,705.912" fill="none" stroke="var(--_line)" stroke-width="1.5" marker-end="url(#arrowhead)" />
+<polyline points="318.70399999999995,782.1120000000001 318.70399999999995,923.1120000000001" fill="none" stroke="var(--_line)" stroke-width="1.5" marker-end="url(#arrowhead)" />
+<polyline points="318.70399999999995,999.3120000000001 318.70399999999995,1156.3120000000001" fill="none" stroke="var(--_line)" stroke-width="1.5" marker-end="url(#arrowhead)" />
+<polyline points="318.70399999999995,1232.512 318.70399999999995,1389.5120000000002" fill="none" stroke="var(--_line)" stroke-width="1.5" marker-end="url(#arrowhead)" />
+<polyline points="1401.5839999999998,782.1120000000001 1401.5839999999998,923.1120000000001" fill="none" stroke="var(--_line)" stroke-width="1.5" marker-end="url(#arrowhead)" />
+<polyline points="1401.5839999999998,999.3120000000001 1401.5839999999998,1156.3120000000001" fill="none" stroke="var(--_line)" stroke-width="1.5" marker-end="url(#arrowhead)" />
+<polyline points="1401.5839999999998,1232.512 1401.5839999999998,1389.5120000000002" fill="none" stroke="var(--_line)" stroke-width="1.5" marker-end="url(#arrowhead)" />
+<polyline points="736.2399999999999,782.1120000000001 736.2399999999999,923.1120000000001" fill="none" stroke="var(--_line)" stroke-width="1.5" marker-end="url(#arrowhead)" />
+<polyline points="736.2399999999999,999.3120000000001 736.2399999999999,1156.3120000000001" fill="none" stroke="var(--_line)" stroke-width="1.5" marker-end="url(#arrowhead)" />
+<polyline points="1068.9119999999998,782.1120000000001 1068.9119999999998,923.1120000000001" fill="none" stroke="var(--_line)" stroke-width="1.5" marker-end="url(#arrowhead)" />
+<polyline points="1068.9119999999998,999.3120000000001 1068.9119999999998,1156.3120000000001" fill="none" stroke="var(--_line)" stroke-width="1.5" marker-end="url(#arrowhead)" />
+<rect x="71.99999999999997" y="661.912" width="314.816" height="24" fill="var(--bg)" rx="2" ry="2" />
+<text x="79.99999999999997" y="673.912" dy="0.35em" style="font-family:'Geist Mono',system-ui,sans-serif;font-size:16px;font-weight:600;text-transform:uppercase;" fill="rgba(255,255,255,0.92)">&quot;Context Overflow&quot;</text>
+<rect x="1234.752" y="661.912" width="250.784" height="24" fill="var(--bg)" rx="2" ry="2" />
+<text x="1242.752" y="673.912" dy="0.35em" style="font-family:'Geist Mono',system-ui,sans-serif;font-size:16px;font-weight:600;text-transform:uppercase;" fill="rgba(255,255,255,0.92)">&quot;Auth Error&quot;</text>
+<rect x="569.408" y="661.912" width="250.784" height="24" fill="var(--bg)" rx="2" ry="2" />
+<text x="577.408" y="673.912" dy="0.35em" style="font-family:'Geist Mono',system-ui,sans-serif;font-size:16px;font-weight:600;text-transform:uppercase;" fill="rgba(255,255,255,0.92)">&quot;Rate Limit&quot;</text>
+<rect x="907.072" y="661.912" width="197.42399999999998" height="24" fill="var(--bg)" rx="2" ry="2" />
+<text x="915.072" y="673.912" dy="0.35em" style="font-family:'Geist Mono',system-ui,sans-serif;font-size:16px;font-weight:600;text-transform:uppercase;" fill="rgba(255,255,255,0.92)">&quot;Crash&quot;</text>
+<rect x="263.90399999999994" y="618.912" width="109.60000000000001" height="26" rx="4" ry="4" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="0.5" />
+<text x="318.70399999999995" y="631.912" text-anchor="middle" dy="0.35em" font-size="10" font-weight="400" fill="var(--_text-muted)">&quot;context_overflow&quot;</text>
+<rect x="1362.3839999999998" y="618.912" width="78.4" height="26" rx="4" ry="4" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="0.5" />
+<text x="1401.5839999999998" y="631.912" text-anchor="middle" dy="0.35em" font-size="10" font-weight="400" fill="var(--_text-muted)">&quot;auth_error&quot;</text>
+<rect x="697.0399999999998" y="618.912" width="78.4" height="26" rx="4" ry="4" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="0.5" />
+<text x="736.2399999999999" y="631.912" text-anchor="middle" dy="0.35em" font-size="10" font-weight="400" fill="var(--_text-muted)">&quot;rate_limit&quot;</text>
+<rect x="1042.7119999999998" y="618.912" width="52.4" height="26" rx="4" ry="4" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="0.5" />
+<text x="1068.9119999999998" y="631.912" text-anchor="middle" dy="0.35em" font-size="10" font-weight="400" fill="var(--_text-muted)">&quot;crash&quot;</text>
+<rect x="279.50399999999996" y="1069.3120000000001" width="78.4" height="26" rx="4" ry="4" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="0.5" />
+<text x="318.70399999999995" y="1082.3120000000001" text-anchor="middle" dy="0.35em" font-size="10" font-weight="400" fill="var(--_text-muted)">&quot;still over&quot;</text>
+<rect x="279.50399999999996" y="1302.5120000000002" width="78.4" height="26" rx="4" ry="4" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="0.5" />
+<text x="318.70399999999995" y="1315.5120000000002" text-anchor="middle" dy="0.35em" font-size="10" font-weight="400" fill="var(--_text-muted)">&quot;still over&quot;</text>
+<rect x="1341.5839999999998" y="1069.3120000000001" width="120" height="26" rx="4" ry="4" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="0.5" />
+<text x="1401.5839999999998" y="1082.3120000000001" text-anchor="middle" dy="0.35em" font-size="10" font-weight="400" fill="var(--_text-muted)">&quot;profiles exhausted&quot;</text>
+<rect x="1354.5839999999998" y="1302.5120000000002" width="94" height="26" rx="4" ry="4" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="0.5" />
+<text x="1401.5839999999998" y="1315.5120000000002" text-anchor="middle" dy="0.35em" font-size="10" font-weight="400" fill="var(--_text-muted)">&quot;all exhausted&quot;</text>
+<rect x="694.4399999999999" y="1069.3120000000001" width="83.60000000000001" height="26" rx="4" ry="4" fill="var(--bg)" stroke="var(--_inner-stroke)" stroke-width="0.5" />
+<text x="736.2399999999999" y="1082.3120000000001" text-anchor="middle" dy="0.35em" font-size="10" font-weight="400" fill="var(--_text-muted)">&quot;max retries&quot;</text>
+<rect x="798.704" y="80" width="207.744" height="67.2" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<polygon points="902.5759999999999,297.2 1028.4319999999998,423.056 902.5759999999999,548.912 776.7199999999999,423.056" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<rect x="204.84799999999996" y="714.912" width="227.712" height="67.2" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<rect x="109.99999999999994" y="932.1120000000001" width="417.408" height="67.2" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<rect x="159.91999999999996" y="1165.3120000000001" width="317.568" height="67.2" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<rect x="139.95199999999997" y="1398.5120000000002" width="357.50399999999996" height="67.2" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<rect x="1302.7039999999997" y="714.912" width="197.76" height="67.2" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<rect x="1272.752" y="932.1120000000001" width="257.664" height="67.2" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<rect x="1297.7119999999998" y="1165.3120000000001" width="207.744" height="67.2" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<rect x="1302.7039999999997" y="1398.5120000000002" width="197.76" height="67.2" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<rect x="607.4079999999999" y="714.912" width="257.664" height="67.2" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<rect x="607.4079999999999" y="932.1120000000001" width="257.664" height="67.2" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<rect x="622.3839999999999" y="1165.3120000000001" width="227.712" height="67.2" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<rect x="965.0399999999998" y="714.912" width="207.744" height="67.2" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<rect x="945.0719999999998" y="932.1120000000001" width="247.68" height="67.2" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<rect x="960.0479999999998" y="1165.3120000000001" width="217.72799999999998" height="67.2" rx="6" ry="6" fill="var(--_node-fill)" stroke="var(--_node-stroke)" stroke-width="0.75" />
+<text x="902.5759999999999" y="113.6" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;Error Detected&quot;</text>
+<text x="902.5759999999999" y="423.056" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;Error Classifier&quot;</text>
+<text x="318.70399999999995" y="748.5120000000001" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;3-Stage Recovery&quot;</text>
+<text x="318.70399999999995" y="965.7120000000001" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;1. Compaction&lt;br/&gt;summarize history&quot;</text>
+<text x="318.70399999999995" y="1198.912" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;2. Tool result truncation&quot;</text>
+<text x="318.70399999999995" y="1432.112" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;3. Give up&lt;br/&gt;return partial&quot;</text>
+<text x="1401.5839999999998" y="748.5120000000001" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;Auth Recovery&quot;</text>
+<text x="1401.5839999999998" y="965.7120000000001" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;Rotate auth profile&quot;</text>
+<text x="1401.5839999999998" y="1198.912" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;Model failover&quot;</text>
+<text x="1401.5839999999998" y="1432.112" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;FailoverError&quot;</text>
+<text x="736.2399999999999" y="748.5120000000001" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;Rate Limit Recovery&quot;</text>
+<text x="736.2399999999999" y="965.7120000000001" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;Exponential backoff&quot;</text>
+<text x="736.2399999999999" y="1198.912" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;Fallback backend&quot;</text>
+<text x="1068.9119999999998" y="748.5120000000001" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;Crash Recovery&quot;</text>
+<text x="1068.9119999999998" y="965.7120000000001" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;Recreate container&quot;</text>
+<text x="1068.9119999999998" y="1198.912" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;Restore context&quot;</text>
+</svg>

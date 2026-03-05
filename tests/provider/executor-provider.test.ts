@@ -7,7 +7,7 @@ describe("parse_executor_preference", () => {
     expect(parse_executor_preference("ChatGPT")).toBe("chatgpt");
     expect(parse_executor_preference("CLAUDE_CODE")).toBe("claude_code");
     expect(parse_executor_preference("OpenRouter")).toBe("openrouter");
-    expect(parse_executor_preference("PHI4_LOCAL")).toBe("phi4_local");
+    expect(parse_executor_preference("ORCHESTRATOR_LLM")).toBe("orchestrator_llm");
   });
 
   it("알 수 없는 값 → chatgpt (기본값)", () => {
@@ -30,9 +30,9 @@ describe("resolve_executor_provider", () => {
     openrouter_available: false,
   };
 
-  it("phi4_local → 항상 phi4_local (caps 무관)", () => {
-    expect(resolve_executor_provider("phi4_local", ALL_AVAILABLE)).toBe("phi4_local");
-    expect(resolve_executor_provider("phi4_local", NONE_AVAILABLE)).toBe("phi4_local");
+  it("orchestrator_llm → 항상 orchestrator_llm (caps 무관)", () => {
+    expect(resolve_executor_provider("orchestrator_llm", ALL_AVAILABLE)).toBe("orchestrator_llm");
+    expect(resolve_executor_provider("orchestrator_llm", NONE_AVAILABLE)).toBe("orchestrator_llm");
   });
 
   it("chatgpt 선호 + chatgpt 가용 → chatgpt", () => {

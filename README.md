@@ -74,7 +74,7 @@ flowchart TD
     DASH -.-> Pipeline
 ```
 
-상세 다이어그램: [서비스 아키텍처](docs/diagrams/service-architecture.svg) · [인바운드 파이프라인](docs/diagrams/inbound-pipeline.svg) · [프로바이더 복원력](docs/diagrams/provider-resilience.svg) · [역할 위임](docs/diagrams/role-delegation.svg)
+상세 다이어그램: [서비스 아키텍처](docs/diagrams/service-architecture.svg) · [인바운드 파이프라인](docs/diagrams/inbound-pipeline.svg) · [오케스트레이터 흐름](docs/diagrams/orchestrator-flow.svg) · [프로바이더 복원력](docs/diagrams/provider-resilience.svg) · [역할 위임](docs/diagrams/role-delegation.svg) · [컨테이너 아키텍처](docs/diagrams/container-architecture.svg) · [Phase Loop 생명주기](docs/diagrams/phase-loop-lifecycle.svg) · [Lane Queue](docs/diagrams/lane-queue.svg) · [에러 복구](docs/diagrams/error-recovery.svg)
 
 ## 이게 뭔가요?
 
@@ -83,7 +83,7 @@ flowchart TD
 | 구성 요소 | 역할 | 핵심 특징 |
 |----------|------|----------|
 | **채널 매니저** | Slack · Telegram · Discord 수신/응답 | 스트리밍 · 그룹핑 · typing 갱신 |
-| **오케스트레이터** | 인바운드 → 에이전트 실행 | Agent Loop · Task Loop 이중 모드 |
+| **오케스트레이터** | 인바운드 → 에이전트 실행 | Agent Loop · Task Loop · Phase Loop 삼중 모드 |
 | **에이전트 백엔드** | Claude/Codex/Gemini × CLI/SDK 실행 | CircuitBreaker · HealthScorer · 자동 fallback |
 | **역할 스킬** | 8개 역할 계층적 분담 | butler → pm/pl → implementer/reviewer/validator/debugger |
 | **보안 Vault** | AES-256-GCM 민감정보 관리 | 인바운드 자동 sealing · 도구 경로 복호화만 허용 |
@@ -124,7 +124,7 @@ flowchart TD
 - **Node.js** 20+
 - 최소 1개 채널 Bot Token (Slack · Telegram · Discord)
 - (선택) `@anthropic-ai/claude-code` SDK — `claude_sdk` 백엔드 사용 시
-- (선택) Podman/Docker + Ollama — `phi4_local` 분류기 사용 시
+- (선택) Podman/Docker + Ollama — `orchestrator_llm` 분류기 사용 시
 
 ### 설치 및 실행
 
@@ -143,7 +143,7 @@ cd workspace && node ../dist/main.js
 ### Docker
 
 ```bash
-# 프로덕션 (orchestrator + phi4)
+# 프로덕션 (orchestrator + ollama)
 docker compose up -d
 
 # 개발 (라이브 리로드)
@@ -181,6 +181,8 @@ Wizard에서 다음을 순서대로 설정합니다:
 | Channels | `/channels` | 채널 연결 상태 · 글로벌 설정 |
 | Providers | `/providers` | 에이전트 프로바이더 CRUD · Circuit Breaker 상태 |
 | Secrets | `/secrets` | AES-256-GCM 시크릿 관리 |
+| Models | `/models` | 오케스트레이터 LLM 런타임 · 모델 pull/삭제/전환 |
+| Workflows | `/workflows` | Phase Loop 워크플로우 관리 · 에이전트 채팅 |
 | Settings | `/settings` | 글로벌 런타임 설정 |
 
 → 상세: [대시보드 가이드](docs/ko/guide/dashboard.md)
@@ -302,7 +304,7 @@ next/
   web/              ← 대시보드 프론트엔드 (React + Vite + i18n + Zustand)
   docs/
     */guide/        ← 사용자 가이드 (dashboard, oauth, providers, heartbeat)
-    */design/       ← 아키텍처 설계 문서 (pty-agent-backend, loop-continuity, phase-loop)
+    */design/       ← 아키텍처 설계 문서 (pty-agent-backend, loop-continuity, phase-loop, orchestrator-llm)
   diagrams/         ← SVG 아키텍처 다이어그램
 ```
 
@@ -317,7 +319,7 @@ next/
 | 스트리밍 미동작 | Settings → `channel.streaming` 활성화 확인 |
 | SDK 백엔드 실패 | 로그의 `backend_fallback` 확인 (`claude_sdk` → `claude_cli` 자동 전환) |
 | OAuth Connect 안 됨 | 팝업 차단 해제, Client ID/Secret 확인, Redirect URI 설정 확인 |
-| phi4 점검 | `npm run health:phi4` |
+| LLM 런타임 점검 | `npm run health:llm` |
 
 ## 라이선스
 

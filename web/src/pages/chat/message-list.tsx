@@ -1,6 +1,6 @@
 import { forwardRef } from "react";
 import { useT } from "../../i18n";
-import { MessageBubble } from "./message-bubble";
+import { ChatMessageBubble } from "./message-bubble";
 import { ApprovalBanner } from "./approval-banner";
 import type { ChatMessage, PendingApproval } from "./types";
 
@@ -25,7 +25,7 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(function
         )}
 
         {props.messages.map((m, i) => (
-          <MessageBubble
+          <ChatMessageBubble
             key={`${m.at}-${m.direction}-${i}`}
             message={m}
             streaming={props.is_streaming && i === last_idx && m.direction === "assistant"}

@@ -12,7 +12,7 @@ export function parse_executor_preference(raw: string): ExecutorProvider {
   const normalized = String(raw || "").trim().toLowerCase();
   if (normalized === "claude_code") return "claude_code";
   if (normalized === "openrouter") return "openrouter";
-  if (normalized === "phi4_local") return "phi4_local";
+  if (normalized === "orchestrator_llm") return "orchestrator_llm";
   return "chatgpt";
 }
 
@@ -20,7 +20,7 @@ export function resolve_executor_provider(
   preferred: ExecutorProvider,
   caps: ProviderCapabilities,
 ): ExecutorProvider {
-  if (preferred === "phi4_local") return "phi4_local";
+  if (preferred === "orchestrator_llm") return "orchestrator_llm";
   if (preferred === "openrouter") {
     if (caps.openrouter_available) return "openrouter";
     if (caps.chatgpt_available) return "chatgpt";

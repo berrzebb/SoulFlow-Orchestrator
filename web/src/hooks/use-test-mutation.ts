@@ -11,17 +11,18 @@ export interface TestResult {
 
 interface UseTestMutationOptions {
   url: string;
+  body?: Record<string, unknown>;
   onOk: (r: TestResult) => string;
   onFail: (r: TestResult) => string;
   onError: (err: Error) => string;
 }
 
-export function useTestMutation({ url, onOk, onFail, onError }: UseTestMutationOptions) {
+export function useTestMutation({ url, body, onOk, onFail, onError }: UseTestMutationOptions) {
   const [result, setResult] = useState<TestResult | null>(null);
   const { toast } = useToast();
 
   const mutation = useMutation({
-    mutationFn: () => api.post<TestResult>(url),
+    mutationFn: () => api.post<TestResult>(url, body),
     onMutate: () => setResult(null),
     onSuccess: (r) => {
       setResult(r);

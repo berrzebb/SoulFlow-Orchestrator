@@ -1,11 +1,11 @@
 import type { ServiceLike } from "../runtime/service.types.js";
-import type { Phi4RuntimeManager } from "./phi4.runtime.js";
+import type { OrchestratorLlmRuntime } from "./orchestrator-llm.runtime.js";
 
-/** Phi4RuntimeManager를 ServiceLike 인터페이스로 감싸는 어댑터. */
-export class Phi4ServiceAdapter implements ServiceLike {
-  readonly name = "phi4-runtime";
+/** OrchestratorLlmRuntime을 ServiceLike 인터페이스로 감싸는 어댑터. */
+export class OrchestratorLlmServiceAdapter implements ServiceLike {
+  readonly name = "orchestrator-llm-runtime";
 
-  constructor(private readonly inner: Phi4RuntimeManager) {}
+  constructor(private readonly inner: OrchestratorLlmRuntime) {}
 
   async start(): Promise<void> {
     await this.inner.start();

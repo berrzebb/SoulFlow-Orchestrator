@@ -10,7 +10,7 @@
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
 import {
-  is_phi4_available,
+  is_orchestrator_llm_available,
   is_spotify_available,
   create_real_harness,
   inbound,
@@ -85,17 +85,17 @@ const EMPTY_RESULT: PipelineResult = {
  * @param cases [input, solver] 케이스 배열
  */
 export function define_e2e_suite(suite_name: string, cases: E2ECase[]): void {
-  const PHI4_PROMISE = is_phi4_available();
+  const ORCHESTRATOR_LLM_PROMISE = is_orchestrator_llm_available();
   const SPOTIFY_PROMISE = is_spotify_available();
 
   describe(suite_name, { sequential: true, timeout: 300_000 }, () => {
     let h: RealHarness;
-    let phi4_ok = false;
+    let orchestrator_llm_ok = false;
     let spotify_ok = false;
 
     beforeAll(async () => {
-      [phi4_ok, spotify_ok] = await Promise.all([PHI4_PROMISE, SPOTIFY_PROMISE]);
-      if (!phi4_ok) return;
+      [orchestrator_llm_ok, spotify_ok] = await Promise.all([ORCHESTRATOR_LLM_PROMISE, SPOTIFY_PROMISE]);
+      if (!orchestrator_llm_ok) return;
       h = await create_real_harness();
     }, 30_000);
 
@@ -111,8 +111,8 @@ export function define_e2e_suite(suite_name: string, cases: E2ECase[]): void {
       const needs_llm = c.requires_llm !== false;
 
       it(c.name, async () => {
-        if (!phi4_ok) {
-          console.log(`SKIP: Phi-4 미가동`);
+        if (!orchestrator_llm_ok) {
+          console.log(`SKIP: 오케스트레이터 LLM 미가동`);
           return;
         }
         if (c.requires_spotify && !spotify_ok) {

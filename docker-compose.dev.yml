@@ -20,7 +20,7 @@ services:
       - NODE_ENV=development
       - SKIP_INSTANCE_LOCK=1
 volumes:
-  phi4-data:
+  ollama-data:
   cli-auth-claude:
   cli-auth-codex:
   cli-auth-gemini:

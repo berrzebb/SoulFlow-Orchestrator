@@ -249,7 +249,7 @@ const PROVIDER_ERROR_INDICATORS = [
   "error calling claude_code:",
   "error calling chatgpt:",
   "error calling openrouter:",
-  "error calling phi4_local:",
+  "error calling orchestrator_llm:",
   "\"type\":\"authentication_error\"",
   "invalid x-api-key",
   "not logged in",
