@@ -733,6 +733,7 @@ export function create_model_ops(runtime: OrchestratorLlmRuntime): DashboardMode
 
 import type { PhaseWorkflowStoreLike } from "../agent/phase-workflow-store.js";
 import type { SubagentRegistry } from "../agent/subagents.js";
+import type { SkillsLoader } from "../agent/skills.service.js";
 import type { DashboardWorkflowOps } from "./service.js";
 import type { PhaseLoopRunOptions, WorkflowDefinition } from "../agent/phase-loop.types.js";
 import {
@@ -749,11 +750,31 @@ export function create_workflow_ops(deps: {
   subagents: SubagentRegistry;
   workspace: string;
   logger: Logger;
+  skills_loader?: SkillsLoader;
   on_workflow_event?: (event: import("../agent/phase-loop.types.js").PhaseLoopEvent) => void;
-}): DashboardWorkflowOps {
-  const { store, subagents, workspace, logger, on_workflow_event } = deps;
+  bus?: import("../bus/types.js").MessageBusLike;
+}): DashboardWorkflowOps & { hitl_bridge: import("../channels/manager.js").WorkflowHitlBridge } {
+  const { store, subagents, workspace, logger, skills_loader, on_workflow_event, bus } = deps;
+
+  /** HITL: 워크플로우별 사용자 응답 대기 Promise resolver. 키: workflow_id, 값의 chat_id도 추적. */
+  const pending_responses = new Map<string, { resolve: (response: string) => void; chat_id: string }>();
+
+  /** chat_id로 활성 워크플로우 HITL 응답 시도. */
+  const hitl_bridge: import("../channels/manager.js").WorkflowHitlBridge = {
+    async try_resolve(chat_id: string, content: string): Promise<boolean> {
+      for (const [wf_id, entry] of pending_responses) {
+        if (entry.chat_id === chat_id) {
+          pending_responses.delete(wf_id);
+          entry.resolve(content);
+          return true;
+        }
+      }
+      return false;
+    },
+  };
 
   return {
+    hitl_bridge,
     list: () => store.list(),
     get: (id) => store.get(id),
 
@@ -778,9 +799,35 @@ export function create_workflow_ops(deps: {
 
       const workflow_id = `wf-${short_id(12)}`;
 
+      /** HITL: 채널/대시보드로 질문을 보내고 사용자 응답을 대기하는 콜백. */
+      const ask_user = (question: string): Promise<string> => {
+        on_workflow_event?.({
+          type: "user_input_requested", workflow_id,
+          phase_id: "", question,
+        });
+
+        // 대시보드가 아닌 채널(Slack/Telegram 등)이면 질문을 채널로 전송
+        if (bus && channel !== "dashboard" && channel !== "web") {
+          bus.publish_outbound({
+            id: `wf-ask-${short_id(8)}`,
+            provider: channel,
+            channel,
+            sender_id: "system",
+            chat_id,
+            content: question,
+            at: new Date().toISOString(),
+            metadata: { workflow_id, type: "workflow_ask_user" },
+          }).catch((e) => logger.error("workflow_ask_user_send_failed", { workflow_id, error: String(e) }));
+        }
+
+        return new Promise<string>((resolve) => {
+          pending_responses.set(workflow_id, { resolve, chat_id });
+        });
+      };
+
       // 비동기 실행 (즉시 반환)
       void run_phase_loop({
-        workflow_id, title, objective, channel, chat_id, phases,
+        workflow_id, title, objective, channel, chat_id, phases, ask_user,
       }, { subagents, store, logger, on_event: on_workflow_event }).catch((err) => {
         logger.error("workflow_create_run_error", { workflow_id, error: String(err) });
       });
@@ -813,6 +860,14 @@ export function create_workflow_ops(deps: {
       const msg = { role: "user" as const, content, at: new Date().toISOString() };
       await store.insert_message(workflow_id, phase_id, agent_id, msg);
 
+      // HITL: pending response가 있으면 resolve하여 워크플로우 재개
+      const entry = pending_responses.get(workflow_id);
+      if (entry) {
+        pending_responses.delete(workflow_id);
+        entry.resolve(content);
+        return { ok: true };
+      }
+
       // 실행 중인 에이전트에 메시지 전달
       if (agent.subagent_id) {
         try { subagents.send_input(agent.subagent_id, content); } catch { /* agent may have completed */ }
@@ -844,6 +899,64 @@ export function create_workflow_ops(deps: {
       const def = load_workflow_template(workspace, name);
       if (!def) return null;
       return serialize_to_yaml(def);
+    },
+
+    list_roles() {
+      if (!skills_loader) return [];
+      return skills_loader.list_role_skills().map((m) => ({
+        id: m.role || m.name,
+        name: m.name.replace(/^role:/, ""),
+        description: m.summary,
+        soul: m.soul,
+        heart: m.heart,
+        tools: m.tools,
+      }));
+    },
+
+    async resume(workflow_id) {
+      const state = await store.get(workflow_id);
+      if (!state) return { ok: false, error: "workflow_not_found" };
+      if (state.status === "completed" || state.status === "cancelled") {
+        return { ok: false, error: `workflow_already_${state.status}` };
+      }
+      if (state.status === "running") {
+        return { ok: false, error: "workflow_already_running" };
+      }
+
+      // definition이 없으면 재실행 불가
+      if (!state.definition?.phases?.length) {
+        return { ok: false, error: "no_definition_for_resume" };
+      }
+
+      const { channel, chat_id } = state;
+
+      /** HITL 콜백 재생성. */
+      const ask_user = (question: string): Promise<string> => {
+        on_workflow_event?.({ type: "user_input_requested", workflow_id, phase_id: "", question });
+        if (bus && channel !== "dashboard" && channel !== "web") {
+          bus.publish_outbound({
+            id: `wf-ask-${short_id(8)}`, provider: channel, channel, sender_id: "system",
+            chat_id, content: question, at: new Date().toISOString(),
+            metadata: { workflow_id, type: "workflow_ask_user" },
+          }).catch((e) => logger.error("workflow_resume_ask_send_failed", { workflow_id, error: String(e) }));
+        }
+        return new Promise<string>((resolve) => {
+          pending_responses.set(workflow_id, { resolve, chat_id });
+        });
+      };
+
+      // 이미 완료된 Phase는 run_phase_loop 내부에서 skip됨 (상태머신 로직)
+      state.status = "running";
+      await store.upsert(state);
+
+      void run_phase_loop({
+        workflow_id, title: state.title, objective: state.objective,
+        channel, chat_id, phases: state.definition.phases, ask_user,
+      }, { subagents, store, logger, on_event: on_workflow_event }).catch((err) => {
+        logger.error("workflow_resume_run_error", { workflow_id, error: String(err) });
+      });
+
+      return { ok: true };
     },
   };
 }

@@ -267,6 +267,9 @@ export interface DashboardWorkflowOps {
   delete_template(name: string): boolean;
   import_template(yaml_content: string): { ok: boolean; name?: string; error?: string };
   export_template(name: string): string | null;
+  list_roles(): Array<{ id: string; name: string; description: string; soul: string | null; heart: string | null; tools: string[] }>;
+  /** 중단된 워크플로우를 영속 상태에서 재개. */
+  resume(workflow_id: string): Promise<{ ok: boolean; error?: string }>;
 }
 
 export interface DashboardCliAuthOps {

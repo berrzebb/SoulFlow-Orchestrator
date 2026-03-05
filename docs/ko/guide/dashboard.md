@@ -381,4 +381,5 @@ Phase Loop 실행 시 추가 이벤트:
 
 → [프로바이더 설정](./providers.md)
 → [OAuth 연동](./oauth.md)
+→ [워크플로우 가이드](./workflows.md)
 → [Heartbeat 설정](./heartbeat.md)

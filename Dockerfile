@@ -81,3 +81,4 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN npm install -g @anthropic-ai/claude-code@latest || true
 RUN npm install -g @openai/codex@latest || true
 RUN npm install -g @google/gemini-cli@latest || true
+RUN npm install -g nodemon

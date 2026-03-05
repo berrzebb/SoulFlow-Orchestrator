@@ -376,4 +376,5 @@ By default, the server binds to `127.0.0.1` only. To allow external access, chan
 
 → [Provider Configuration](./providers.md)
 → [OAuth Integration](./oauth.md)
+→ [Workflows Guide](./workflows.md)
 → [Heartbeat Setup](./heartbeat.md)

@@ -63,6 +63,12 @@ export interface PhaseState {
   status: PhaseStatus;
   agents: PhaseAgentState[];
   critic?: PhaseCriticState;
+  /** sequential_loop/interactive 모드: 현재 반복 횟수. */
+  loop_iteration?: number;
+  /** sequential_loop/interactive 모드: 각 반복 결과 누적. */
+  loop_results?: string[];
+  /** interactive 모드: 사용자 입력 대기 중 여부. */
+  pending_user_input?: boolean;
 }
 
 export interface PhaseLoopState {
@@ -84,7 +90,8 @@ export interface PhaseLoopState {
 // ── Definition (워크플로우 템플릿) ───────────────────
 
 export type PhaseFailurePolicy = "fail_fast" | "best_effort" | "quorum";
-export type CriticRejectionPolicy = "retry_all" | "retry_targeted" | "escalate";
+export type CriticRejectionPolicy = "retry_all" | "retry_targeted" | "escalate" | "goto";
+export type PhaseMode = "parallel" | "interactive" | "sequential_loop";
 
 /** Critic 검토 결과 (per-agent 평가 포함). */
 export interface CriticReview {
@@ -115,6 +122,8 @@ export interface PhaseCriticDefinition {
   system_prompt: string;
   gate?: boolean;
   on_rejection?: CriticRejectionPolicy;
+  /** on_rejection이 "goto"일 때 점프할 phase_id. */
+  goto_phase?: string;
   max_retries?: number;
 }
 
@@ -126,6 +135,14 @@ export interface PhaseDefinition {
   context_template?: string;
   failure_policy?: PhaseFailurePolicy;
   quorum_count?: number;
+  /** Phase 실행 모드. parallel(기본): 병렬, interactive: 사용자 대화, sequential_loop: fresh context 반복. */
+  mode?: PhaseMode;
+  /** sequential_loop 종료 조건. */
+  loop_until?: string;
+  /** interactive/sequential_loop 최대 반복 횟수. */
+  max_loop_iterations?: number;
+  /** Fork-Join: 이 Phase 시작 전에 완료되어야 하는 phase_id 목록. */
+  depends_on?: string[];
 }
 
 export interface WorkflowDefinition {
@@ -149,6 +166,8 @@ export interface PhaseLoopRunOptions {
   on_phase_change?: (state: PhaseLoopState) => void;
   on_agent_update?: (phase_id: string, agent_id: string, state: PhaseAgentState) => void;
   abort_signal?: AbortSignal;
+  /** Interactive/sequential_loop 모드에서 사용자에게 질문하고 응답을 받는 콜백. */
+  ask_user?: (question: string) => Promise<string>;
 }
 
 export interface PhaseLoopRunResult {
@@ -172,4 +191,8 @@ export type PhaseLoopEvent =
   | { type: "critic_completed"; workflow_id: string; phase_id: string; approved: boolean; review: string }
   | { type: "phase_completed"; workflow_id: string; phase_id: string }
   | { type: "workflow_completed"; workflow_id: string }
-  | { type: "workflow_failed"; workflow_id: string; error: string };
+  | { type: "workflow_failed"; workflow_id: string; error: string }
+  | { type: "user_input_requested"; workflow_id: string; phase_id: string; question: string }
+  | { type: "user_input_received"; workflow_id: string; phase_id: string }
+  | { type: "loop_iteration"; workflow_id: string; phase_id: string; iteration: number }
+  | { type: "phase_goto"; workflow_id: string; from_phase: string; to_phase: string; reason: string };

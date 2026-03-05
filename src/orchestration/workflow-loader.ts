@@ -144,10 +144,15 @@ function normalize_workflow_definition(raw: Record<string, unknown>): WorkflowDe
         gate: Boolean((p.critic as Record<string, unknown>).gate ?? true),
         on_rejection: ((p.critic as Record<string, unknown>).on_rejection as PhaseDefinition["critic"] extends { on_rejection?: infer R } ? R : undefined) || undefined,
         max_retries: (p.critic as Record<string, unknown>).max_retries ? Number((p.critic as Record<string, unknown>).max_retries) : undefined,
+        goto_phase: (p.critic as Record<string, unknown>).goto_phase ? String((p.critic as Record<string, unknown>).goto_phase) : undefined,
       } : undefined,
       context_template: p.context_template ? String(p.context_template) : undefined,
       failure_policy: (p.failure_policy as PhaseDefinition["failure_policy"]) || undefined,
       quorum_count: p.quorum_count ? Number(p.quorum_count) : undefined,
+      mode: (p.mode as PhaseDefinition["mode"]) || undefined,
+      loop_until: p.loop_until ? String(p.loop_until) : undefined,
+      max_loop_iterations: p.max_loop_iterations ? Number(p.max_loop_iterations) : undefined,
+      depends_on: Array.isArray(p.depends_on) ? p.depends_on.map(String) : undefined,
     });
   }
 

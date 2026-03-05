@@ -187,7 +187,7 @@ Wizard에서 다음을 순서대로 설정합니다:
 | Workflows | `/workflows` | Phase Loop 워크플로우 관리 · 에이전트 채팅 |
 | Settings | `/settings` | 글로벌 런타임 설정 |
 
-→ 상세: [대시보드 가이드](ko/guide/dashboard.md)
+→ 상세: [대시보드 가이드](ko/guide/dashboard.md) · [워크플로우 가이드](ko/guide/workflows.md)
 
 ## OAuth 연동
 

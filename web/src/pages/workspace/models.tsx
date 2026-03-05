@@ -1,9 +1,9 @@
 import { useState, useCallback, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api } from "../api/client";
-import { Badge } from "../components/badge";
-import { useToast } from "../components/toast";
-import { useT } from "../i18n";
+import { api } from "../../api/client";
+import { Badge } from "../../components/badge";
+import { useToast } from "../../components/toast";
+import { useT } from "../../i18n";
 
 interface PullProgress {
   status: string;
@@ -48,7 +48,7 @@ function fmt_size(bytes: number): string {
   return `${(bytes / (1024 ** 2)).toFixed(0)} MB`;
 }
 
-export default function ModelsPage() {
+export function ModelsTab() {
   const qc = useQueryClient();
   const { toast } = useToast();
   const t = useT();
@@ -151,8 +151,7 @@ export default function ModelsPage() {
   const runtimeVariant = runtime?.running ? "ok" as const : runtime?.enabled ? "warn" as const : "off" as const;
 
   return (
-    <div className="page">
-      <h2>{t("models.title")}</h2>
+    <div>
       <p style={{ fontSize: "var(--fs-xs)", color: "var(--muted)", marginBottom: "var(--sp-4)" }}>
         {t("models.description")}
       </p>

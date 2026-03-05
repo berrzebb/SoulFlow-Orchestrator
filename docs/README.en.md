@@ -185,7 +185,7 @@ No need to create a `.env` file manually — the Wizard handles all configuratio
 | Workflows | `/workflows` | Phase Loop workflow management · agent chat |
 | Settings | `/settings` | Global runtime settings |
 
-→ Details: [Dashboard Guide](en/guide/dashboard.md)
+→ Details: [Dashboard Guide](en/guide/dashboard.md) · [Workflows Guide](en/guide/workflows.md)
 
 ## OAuth Integration
 

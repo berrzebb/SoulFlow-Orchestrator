@@ -7,9 +7,10 @@ import { CronTab } from "./cron";
 import { ToolsTab } from "./tools";
 import { AgentsTab } from "./agents";
 import { TemplatesTab } from "./templates";
+import { ModelsTab } from "./models";
 import { OAuthTab } from "./oauth";
 
-type TabKey = "memory" | "sessions" | "skills" | "cron" | "tools" | "agents" | "templates" | "oauth";
+type TabKey = "memory" | "sessions" | "skills" | "cron" | "tools" | "agents" | "templates" | "models" | "oauth";
 
 function TabBar({ active, onChange }: { active: TabKey; onChange: (t: TabKey) => void }) {
   const t = useT();
@@ -21,6 +22,7 @@ function TabBar({ active, onChange }: { active: TabKey; onChange: (t: TabKey) =>
     { key: "tools", label: t("workspace.tab.tools") },
     { key: "agents", label: t("workspace.tab.agents") },
     { key: "templates", label: t("workspace.tab.templates") },
+    { key: "models", label: t("workspace.tab.models") },
     { key: "oauth", label: t("workspace.tab.oauth") },
   ];
   return (
@@ -59,6 +61,7 @@ export default function WorkspacePage() {
       {tab === "tools" && <ToolsTab />}
       {tab === "agents" && <AgentsTab />}
       {tab === "templates" && <TemplatesTab />}
+      {tab === "models" && <ModelsTab />}
       {tab === "oauth" && <OAuthTab />}
     </div>
   );

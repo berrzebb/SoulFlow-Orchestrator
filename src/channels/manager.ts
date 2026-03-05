@@ -34,6 +34,12 @@ export type ChannelManagerStatus = {
   mention_loop_running: boolean;
 };
 
+/** 워크플로우 HITL 브리지: 채널 응답 → 워크플로우 pending response. */
+export type WorkflowHitlBridge = {
+  /** chat_id로 활성 워크플로우 HITL 응답을 시도. 성공 시 true. */
+  try_resolve(chat_id: string, content: string): Promise<boolean>;
+};
+
 /** 봇 self ID와 기본 채널/chat_id를 제공하는 인터페이스. */
 export type BotIdentitySource = {
   get_bot_self_id(provider: string): string;
@@ -61,6 +67,8 @@ export type ChannelManagerDeps = {
   on_agent_event?: ((event: import("../agent/agent.types.js").AgentEvent) => void) | null;
   /** 웹 채팅 스트리밍 텍스트 릴레이 콜백 (chat_id, content, done). */
   on_web_stream?: ((chat_id: string, content: string, done: boolean) => void) | null;
+  /** 워크플로우 HITL: 채널 응답을 워크플로우 pending_response로 라우팅. */
+  workflow_hitl?: WorkflowHitlBridge | null;
 };
 
 type ActiveRun = { abort: AbortController; provider: ChannelProvider; chat_id: string; alias: string; done: Promise<void>; send_input?: (text: string) => void };
@@ -90,6 +98,7 @@ export class ChannelManager implements ServiceLike {
   private readonly on_web_stream: ((chat_id: string, content: string, done: boolean) => void) | null;
   private readonly session_store: import("../session/service.js").SessionStoreLike | null;
   private readonly bot_identity: BotIdentitySource;
+  private workflow_hitl: WorkflowHitlBridge | null;
 
   private running = false;
   private poll_task: Promise<void> | null = null;
@@ -123,8 +132,14 @@ export class ChannelManager implements ServiceLike {
     this.on_web_stream = deps.on_web_stream || null;
     this.session_store = deps.session_store ?? null;
     this.bot_identity = deps.bot_identity;
+    this.workflow_hitl = deps.workflow_hitl ?? null;
     _bot_identity_ref = deps.bot_identity;
     _bot_ids_cache = null;
+  }
+
+  /** 워크플로우 HITL 브리지를 지연 주입 (순환 의존성 회피). */
+  set_workflow_hitl(bridge: WorkflowHitlBridge): void {
+    this.workflow_hitl = bridge;
   }
 
   async start(): Promise<void> {
@@ -250,6 +265,15 @@ export class ChannelManager implements ServiceLike {
         this.logger.info("task cancelled after approval denial", { task_id: approval.task_id, status: approval.approval_status });
       }
       return;
+    }
+
+    // 워크플로우 HITL: 활성 워크플로우가 사용자 입력을 대기 중이면 라우팅
+    if (this.workflow_hitl) {
+      const resolved = await this.workflow_hitl.try_resolve(message.chat_id, String(message.content || "").trim());
+      if (resolved) {
+        this.logger.info("workflow_hitl_resolved", { chat_id: message.chat_id });
+        return;
+      }
     }
 
     // HITL: 대기/실패 Task이 있으면 사용자 입력으로 재개

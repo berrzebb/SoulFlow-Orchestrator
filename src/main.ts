@@ -466,6 +466,13 @@ export async function createRuntime(): Promise<RuntimeApp> {
   }, app_config.ops);
 
   if (app_config.dashboard.enabled) {
+    const workflow_ops_result = create_workflow_ops({
+      store: phase_workflow_store, subagents: agent.subagents, workspace, logger, bus,
+      skills_loader: agent.context.skills_loader,
+      on_workflow_event: (e) => dashboard?.sse.broadcast_workflow_event(e),
+    });
+    channel_manager.set_workflow_hitl(workflow_ops_result.hitl_bridge);
+
     dashboard = new DashboardService({
       host: app_config.dashboard.host,
       port: app_config.dashboard.port,
@@ -507,7 +514,7 @@ export async function createRuntime(): Promise<RuntimeApp> {
       oauth_ops: create_oauth_ops({ oauth_store, oauth_flow, dashboard_port: app_config.dashboard.port, public_url: app_config.dashboard.publicUrl }),
       cli_auth_ops: create_cli_auth_ops({ cli_auth }),
       model_ops: orchestrator_llm_runtime ? create_model_ops(orchestrator_llm_runtime) : null,
-      workflow_ops: create_workflow_ops({ store: phase_workflow_store, subagents: agent.subagents, workspace, logger, on_workflow_event: (e) => dashboard?.sse.broadcast_workflow_event(e) }),
+      workflow_ops: workflow_ops_result,
       default_alias: app_config.channel.defaultAlias,
       workspace,
     });

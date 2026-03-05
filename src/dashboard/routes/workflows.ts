@@ -43,6 +43,14 @@ export const handle_workflow: RouteHandler = async (ctx) => {
     return true;
   }
 
+  // POST /api/workflows/:id/resume — 중단된 워크플로우 재개
+  const resume_match = path.match(/^\/api\/workflows\/([^/]+)\/resume$/);
+  if (resume_match && method === "POST") {
+    const result = await ops.resume(resume_match[1]);
+    json(res, result.ok ? 200 : 400, result);
+    return true;
+  }
+
   // GET /api/workflows/:id/messages?phase_id=&agent_id=
   const msg_match = path.match(/^\/api\/workflows\/([^/]+)\/messages$/);
   if (msg_match && method === "GET") {
@@ -65,6 +73,13 @@ export const handle_workflow: RouteHandler = async (ctx) => {
       String(body.content || ""),
     );
     json(res, result.ok ? 200 : 400, result);
+    return true;
+  }
+
+  // GET /api/workflow-roles — 역할 프리셋 목록
+  if (path === "/api/workflow-roles" && method === "GET") {
+    const roles = ops.list_roles();
+    json(res, 200, roles);
     return true;
   }
 

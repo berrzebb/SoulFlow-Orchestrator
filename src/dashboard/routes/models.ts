@@ -7,7 +7,6 @@ export async function handle_models(ctx: RouteContext): Promise<boolean> {
   const { req, url, res, options, json, read_body } = ctx;
   const ops = options.model_ops;
 
-
   if (url.pathname === "/api/models" && req.method === "GET") {
     if (!ops) { json(res, 503, { error: "model_ops_unavailable" }); return true; }
     json(res, 200, await ops.list());

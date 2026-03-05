@@ -1,8 +1,9 @@
 import { forwardRef } from "react";
 import { useT } from "../../i18n";
 import { ChatMessageBubble } from "./message-bubble";
-import { ApprovalBanner } from "./approval-banner";
-import type { ChatMessage, PendingApproval } from "./types";
+import { ApprovalBanner } from "../../components/approval-banner";
+import type { PendingApproval } from "../../components/approval-banner";
+import type { ChatMessage } from "./types";
 
 interface MessageListProps {
   messages: ChatMessage[];

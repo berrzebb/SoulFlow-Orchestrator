@@ -8,7 +8,6 @@ const NAV_ITEMS = [
   { to: "/chat", key: "nav.chat", icon: "\ud83d\udcac" },
   { to: "/channels", key: "nav.channels", icon: "\u21cc" },
   { to: "/providers", key: "nav.providers", icon: "\u2b21" },
-  { to: "/models", key: "nav.models", icon: "\u2b22" },
   { to: "/workflows", key: "nav.workflows", icon: "\u25b7" },
   { to: "/secrets", key: "nav.secrets", icon: "\u26bf" },
   { to: "/settings", key: "nav.settings", icon: "\u229e" },

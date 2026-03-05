@@ -1,7 +1,15 @@
 import { useState } from "react";
-import { Badge } from "../../components/badge";
-import { useT } from "../../i18n";
-import type { PendingApproval } from "./types";
+import { Badge } from "./badge";
+import { useT } from "../i18n";
+
+export interface PendingApproval {
+  request_id: string;
+  tool_name: string;
+  status: string;
+  created_at: string;
+  params?: Record<string, unknown>;
+  context?: { channel?: string; chat_id?: string; task_id?: string };
+}
 
 export function ApprovalBanner({ approval, onResolve }: {
   approval: PendingApproval;

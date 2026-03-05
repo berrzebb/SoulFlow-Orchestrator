@@ -3,12 +3,13 @@ import { useState, useRef, useEffect, useMemo } from "react";
 import { api } from "../api/client";
 import { Badge } from "../components/badge";
 import { useToast } from "../components/toast";
+import { useApprovals } from "../hooks/use-approvals";
 import { useDashboardStore } from "../store";
 import { useT } from "../i18n";
 import { MessageList } from "./chat/message-list";
 import { ChatInputBar } from "./chat/chat-input-bar";
 import { EmptyState } from "./chat/empty-state";
-import type { ChatSessionSummary, ChatSession, ChatMessage, ChatMediaItem, PendingApproval } from "./chat/types";
+import type { ChatSessionSummary, ChatSession, ChatMessage, ChatMediaItem } from "./chat/types";
 
 export default function ChatPage() {
   const t = useT();
@@ -37,10 +38,8 @@ export default function ChatPage() {
     refetchOnWindowFocus: false,
   });
 
-  const { data: pending_approvals = [] } = useQuery<PendingApproval[]>({
-    queryKey: ["approvals-pending"],
-    queryFn: () => api.get("/api/approvals?status=pending"),
-    refetchInterval: 4000,
+  const { pending: pending_approvals, resolve: resolve_approval } = useApprovals({
+    related_query_keys: activeId ? [["chat-session", activeId]] : [],
   });
 
   useEffect(() => {
@@ -93,17 +92,6 @@ export default function ChatPage() {
       toast(t("chat.send_failed"), "err");
     } finally {
       setSending(false);
-    }
-  };
-
-  const resolve_approval = async (request_id: string, text: string) => {
-    try {
-      await api.post("/api/approvals", { approval_id: request_id, text });
-      toast(t("chat.approval_done"), "ok");
-      void qc.invalidateQueries({ queryKey: ["approvals-pending"] });
-      void qc.invalidateQueries({ queryKey: ["chat-session", activeId] });
-    } catch {
-      toast(t("chat.approval_failed"), "err");
     }
   };
 

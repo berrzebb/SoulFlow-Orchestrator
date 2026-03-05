@@ -158,18 +158,20 @@ function FieldCard({ field }: { field: FieldInfo }) {
         {editing ? (
           <EditInline field={field} draft={draft} setDraft={setDraft} onCommit={commit} onCancel={() => setEditing(false)} isPending={save.isPending} />
         ) : (
-          <ValueDisplay field={field} onClick={start_edit} />
-        )}
-      </div>
-
-      <div className="cfg-field__actions">
-        {!editing && field.type !== "boolean" && (
-          <button className="btn btn--xs" onClick={start_edit}>{t("common.edit")}</button>
-        )}
-        {!editing && field.overridden && (
-          <button className="btn btn--xs btn--danger" onClick={() => reset.mutate()} disabled={reset.isPending}>
-            {t("common.reset")}
-          </button>
+          <div className="cfg-field__value-row">
+            <ValueDisplay field={field} onClick={start_edit} />
+            {field.overridden && field.type !== "boolean" && (
+              <button
+                className="cfg-field__reset"
+                onClick={() => reset.mutate()}
+                disabled={reset.isPending}
+                title={t("common.reset")}
+                aria-label={t("common.reset")}
+              >
+                ✕
+              </button>
+            )}
+          </div>
         )}
       </div>
     </div>
@@ -257,8 +259,12 @@ function EditInline({
         <select className="form-input" value={draft} onChange={(e) => setDraft(e.target.value)} autoFocus>
           {field.options.map((o) => <option key={o} value={o}>{o}</option>)}
         </select>
-        <button className="btn btn--xs btn--ok" onClick={onCommit} disabled={isPending}>{t(isPending ? "common.saving" : "common.save")}</button>
-        <button className="btn btn--xs" onClick={onCancel} disabled={isPending}>{t("common.cancel")}</button>
+        <button className="btn btn--xs btn--ok" onClick={onCommit} disabled={isPending}>
+          {t(isPending ? "common.saving" : "common.save")}
+        </button>
+        <button className="cfg-field__reset" onClick={onCancel} disabled={isPending} aria-label={t("common.cancel")}>
+          ✕
+        </button>
       </div>
     );
   }
@@ -276,8 +282,12 @@ function EditInline({
         autoFocus
         disabled={isPending}
       />
-      <button className="btn btn--xs btn--ok" onClick={onCommit} disabled={isPending}>{t(isPending ? "common.saving" : "common.save")}</button>
-      <button className="btn btn--xs" onClick={onCancel} disabled={isPending}>{t("common.cancel")}</button>
+      <button className="btn btn--xs btn--ok" onClick={onCommit} disabled={isPending}>
+        {t(isPending ? "common.saving" : "common.save")}
+      </button>
+      <button className="cfg-field__reset" onClick={onCancel} disabled={isPending} aria-label={t("common.cancel")}>
+        ✕
+      </button>
     </div>
   );
 }

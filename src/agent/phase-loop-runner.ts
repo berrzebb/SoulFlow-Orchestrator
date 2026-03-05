@@ -53,19 +53,43 @@ export async function run_phase_loop(
   emit(on_event, { type: "workflow_started", workflow_id: state.workflow_id });
   logger.info("phase_loop_start", { workflow_id: state.workflow_id, phases: state.phases.length });
 
+  /** goto 루프 카운터: phase_id별 goto 횟수 추적. */
+  const goto_counts = new Map<string, number>();
+
   try {
-    for (let i = 0; i < options.phases.length; i++) {
+    // 상태 머신: 선형이 아닌 phase_id 기반 점프 지원
+    let phase_idx = 0;
+    while (phase_idx < options.phases.length) {
       if (options.abort_signal?.aborted) {
         state.status = "cancelled";
         break;
       }
 
-      state.current_phase = i;
-      const phase_def = options.phases[i];
-      const phase_state = state.phases[i];
+      state.current_phase = phase_idx;
+      const phase_def = options.phases[phase_idx];
+      const phase_state = state.phases[phase_idx];
+
+      // depends_on 검사: 의존 Phase가 모두 완료될 때까지 대기
+      if (phase_def.depends_on?.length) {
+        const unmet = phase_def.depends_on.filter((dep_id) => {
+          const dep_state = state.phases.find((p) => p.phase_id === dep_id);
+          return !dep_state || dep_state.status !== "completed";
+        });
+        if (unmet.length > 0) {
+          // 아직 의존 Phase 미완료 → 건너뛰고 다른 Phase 실행
+          phase_idx++;
+          continue;
+        }
+      }
+
+      // 이미 완료된 Phase는 스킵 (goto로 되돌아간 경우 리셋된 Phase만 재실행)
+      if (phase_state.status === "completed") {
+        phase_idx++;
+        continue;
+      }
 
       // 이전 페이즈 결과를 컨텍스트로 구성
-      const prev_context = i > 0 ? build_phase_context(state.phases[i - 1], phase_def.context_template) : "";
+      const prev_context = phase_idx > 0 ? build_phase_context(state.phases[phase_idx - 1], phase_def.context_template) : "";
 
       // 페이즈 실행
       phase_state.status = "running";
@@ -74,11 +98,33 @@ export async function run_phase_loop(
       emit(on_event, { type: "phase_started", workflow_id: state.workflow_id, phase_id: phase_def.phase_id });
       options.on_phase_change?.(state);
 
-      // 에이전트 병렬 실행
-      const agent_results = await run_phase_agents(
-        state, phase_def, phase_state, prev_context,
-        { subagents, store, logger, on_event, options },
-      );
+      // 모드에 따른 실행 분기
+      const mode = phase_def.mode || "parallel";
+      const agent_deps: AgentRunDeps = { subagents, store, logger, on_event, options };
+
+      if (mode === "interactive") {
+        await run_interactive_phase(state, phase_def, phase_state, prev_context, agent_deps);
+        phase_state.status = "completed";
+        state.updated_at = now_iso();
+        merge_phase_results_to_memory(state, phase_state);
+        await store.upsert(state);
+        emit(on_event, { type: "phase_completed", workflow_id: state.workflow_id, phase_id: phase_def.phase_id });
+        options.on_phase_change?.(state);
+        phase_idx++;
+        continue;
+      }
+
+      if (mode === "sequential_loop") {
+        await run_sequential_loop_phase(state, phase_def, phase_state, prev_context, agent_deps);
+      }
+
+      // parallel 또는 sequential_loop 후
+      const agent_results = mode === "sequential_loop"
+        ? phase_state.agents
+        : await run_phase_agents(
+            state, phase_def, phase_state, prev_context,
+            agent_deps,
+          );
 
       // 실패 정책 평가
       const failed_count = agent_results.filter((r) => r.status === "failed").length;
@@ -125,6 +171,40 @@ export async function run_phase_loop(
           const rejection_policy = phase_def.critic.on_rejection || "escalate";
           retries++;
 
+          // goto: 특정 Phase로 점프 (되돌리기)
+          if (rejection_policy === "goto" && phase_def.critic.goto_phase) {
+            const goto_key = `${phase_def.phase_id}->${phase_def.critic.goto_phase}`;
+            const count = (goto_counts.get(goto_key) || 0) + 1;
+            goto_counts.set(goto_key, count);
+
+            if (count > max_retries) {
+              // max_retries 초과 → escalate로 폴백
+              state.status = "waiting_user_input";
+              state.updated_at = now_iso();
+              await store.upsert(state);
+              logger.info("phase_loop_goto_exhausted", { workflow_id: state.workflow_id, phase_id: phase_def.phase_id, goto_phase: phase_def.critic.goto_phase, count });
+              return build_result(state);
+            }
+
+            const target_idx = options.phases.findIndex((p) => p.phase_id === phase_def.critic!.goto_phase);
+            if (target_idx < 0) {
+              logger.warn("phase_loop_goto_not_found", { goto_phase: phase_def.critic.goto_phase });
+              critic_passed = true;
+              break;
+            }
+
+            logger.info("phase_loop_goto", { workflow_id: state.workflow_id, from: phase_def.phase_id, to: phase_def.critic.goto_phase, attempt: count });
+            emit(on_event, { type: "phase_goto", workflow_id: state.workflow_id, from_phase: phase_def.phase_id, to_phase: phase_def.critic.goto_phase, reason: critic_result.summary.slice(0, 200) });
+
+            // 대상 Phase부터 현재 Phase까지 상태 리셋
+            for (let j = target_idx; j <= phase_idx; j++) {
+              reset_phase_state(state.phases[j]);
+            }
+
+            phase_idx = target_idx;
+            break; // critic 루프 탈출 → while 루프에서 goto 대상부터 재실행
+          }
+
           if (rejection_policy === "escalate" || retries > max_retries) {
             state.status = "waiting_user_input";
             state.updated_at = now_iso();
@@ -138,7 +218,6 @@ export async function run_phase_loop(
             logger.info("phase_loop_retry_all", { workflow_id: state.workflow_id, phase_id: phase_def.phase_id, retry: retries });
             const feedback_context = `\n\n[system] The critic provided the following feedback on your previous attempt:\n---\n${critic_result.summary}\n---\nPlease improve your work incorporating this feedback.`;
             phase_state.status = "running";
-            // 에이전트 상태 리셋
             for (const a of phase_state.agents) { a.status = "pending"; a.result = undefined; a.error = undefined; a.subagent_id = undefined; }
             state.updated_at = now_iso();
             await store.upsert(state);
@@ -154,7 +233,6 @@ export async function run_phase_loop(
             logger.info("phase_loop_retry_targeted", { workflow_id: state.workflow_id, phase_id: phase_def.phase_id, retry: retries });
             const feedback_context = `\n\n[system] The critic rejected your output:\n---\n${critic_result.summary}\n---\nPlease improve.`;
             phase_state.status = "running";
-            // critic agent_reviews 기반: low_quality/needs_improvement 에이전트 재실행, 없으면 failed/no-result 폴백
             const low_quality_ids = critic_result.agent_reviews
               ?.filter((r) => r.quality !== "good")
               .map((r) => r.agent_id) ?? [];
@@ -176,6 +254,9 @@ export async function run_phase_loop(
             continue;
           }
         }
+
+        // goto로 인해 critic 루프를 탈출한 경우 → phase_idx가 이미 변경됨
+        if (!critic_passed) continue;
       }
 
       // 페이즈 완료
@@ -185,6 +266,7 @@ export async function run_phase_loop(
       await store.upsert(state);
       emit(on_event, { type: "phase_completed", workflow_id: state.workflow_id, phase_id: phase_def.phase_id });
       options.on_phase_change?.(state);
+      phase_idx++;
     }
 
     // 워크플로우 완료
@@ -242,7 +324,7 @@ async function run_phase_agents(
         label: agent_def.label,
         model: agent_def.model,
         provider_id: backend_to_provider(agent_def.backend),
-        max_iterations: agent_def.max_turns || 10,
+        max_iterations: agent_def.max_turns === 0 ? 999 : (agent_def.max_turns || 10),
         origin_channel: state.channel,
         origin_chat_id: state.chat_id,
         announce: false,
@@ -383,6 +465,196 @@ async function run_critic(
   }
 }
 
+// ── Interactive Phase ─────────────────────────────────
+
+/** 에이전트가 사용자와 대화하며 명세를 작성. [ASK_USER]로 질문, [SPEC_COMPLETE]로 종료. */
+async function run_interactive_phase(
+  state: PhaseLoopState,
+  phase_def: PhaseDefinition,
+  phase_state: PhaseState,
+  prev_context: string,
+  deps: AgentRunDeps,
+): Promise<void> {
+  const agent_def = phase_def.agents[0];
+  const agent_state = phase_state.agents[0];
+  const max = phase_def.max_loop_iterations || 20;
+
+  phase_state.loop_results = [];
+  phase_state.loop_iteration = 0;
+
+  for (let i = 0; i < max; i++) {
+    if (deps.options.abort_signal?.aborted) break;
+
+    const conversation_history = phase_state.loop_results.join("\n---\n");
+    const task = build_agent_task(agent_def, state.objective, prev_context);
+    const full_task = conversation_history
+      ? `${task}\n\n## Conversation History\n${conversation_history}\n\n## Current Turn: ${i + 1}/${max}`
+      : task;
+
+    agent_state.status = "running";
+    emit(deps.on_event, { type: "agent_started", workflow_id: state.workflow_id, phase_id: phase_def.phase_id, agent_id: agent_def.agent_id });
+
+    const { subagent_id } = await deps.subagents.spawn({
+      task: full_task,
+      role: agent_def.role,
+      label: agent_def.label,
+      model: agent_def.model,
+      provider_id: backend_to_provider(agent_def.backend),
+      max_iterations: agent_def.max_turns === 0 ? 999 : (agent_def.max_turns || 10),
+      origin_channel: state.channel,
+      origin_chat_id: state.chat_id,
+      announce: false,
+      parent_id: `workflow:${state.workflow_id}`,
+      skip_controller: true,
+    });
+    agent_state.subagent_id = subagent_id;
+
+    const result = await deps.subagents.wait_for_completion(subagent_id, 5 * 60_000);
+    const content = result?.content || "";
+    const msg: PhaseMessage = { role: "assistant", content, at: now_iso() };
+    agent_state.messages.push(msg);
+    await deps.store.insert_message(state.workflow_id, phase_def.phase_id, agent_def.agent_id, msg);
+
+    // [SPEC_COMPLETE] → Phase 종료
+    if (content.includes("[SPEC_COMPLETE]")) {
+      agent_state.result = content.replace("[SPEC_COMPLETE]", "").trim();
+      agent_state.status = "completed";
+      emit(deps.on_event, {
+        type: "agent_completed", workflow_id: state.workflow_id,
+        phase_id: phase_def.phase_id, agent_id: agent_def.agent_id,
+        result: agent_state.result.slice(0, 500),
+      });
+      break;
+    }
+
+    // [ASK_USER] → 사용자 질문
+    if (content.includes("[ASK_USER]") && deps.options.ask_user) {
+      const question = content.replace(/\[ASK_USER\]/g, "").trim();
+      state.status = "waiting_user_input";
+      phase_state.pending_user_input = true;
+      await deps.store.upsert(state);
+      emit(deps.on_event, { type: "user_input_requested", workflow_id: state.workflow_id, phase_id: phase_def.phase_id, question });
+
+      const user_response = await deps.options.ask_user(question);
+
+      state.status = "running";
+      phase_state.pending_user_input = false;
+      emit(deps.on_event, { type: "user_input_received", workflow_id: state.workflow_id, phase_id: phase_def.phase_id });
+      phase_state.loop_results.push(`Agent: ${question}\nUser: ${user_response}`);
+    } else {
+      phase_state.loop_results.push(content);
+    }
+
+    phase_state.loop_iteration = i + 1;
+    emit(deps.on_event, { type: "loop_iteration", workflow_id: state.workflow_id, phase_id: phase_def.phase_id, iteration: i + 1 });
+    state.updated_at = now_iso();
+    await deps.store.upsert(state);
+  }
+
+  // max iterations 도달 시 마지막 결과를 최종 결과로 사용
+  if (agent_state.status !== "completed") {
+    agent_state.result = phase_state.loop_results.at(-1) || "";
+    agent_state.status = "completed";
+  }
+}
+
+// ── Sequential Loop Phase (Fresh Context) ────────────
+
+/** 같은 에이전트를 매 반복 fresh context로 spawn. [DONE]으로 종료. */
+async function run_sequential_loop_phase(
+  state: PhaseLoopState,
+  phase_def: PhaseDefinition,
+  phase_state: PhaseState,
+  prev_context: string,
+  deps: AgentRunDeps,
+): Promise<void> {
+  const agent_def = phase_def.agents[0];
+  const agent_state = phase_state.agents[0];
+  const max = phase_def.max_loop_iterations || 50;
+
+  phase_state.loop_results = [];
+  phase_state.loop_iteration = 0;
+
+  for (let i = 0; i < max; i++) {
+    if (deps.options.abort_signal?.aborted) break;
+
+    // 누적 결과를 컨텍스트로 주입
+    const loop_context = phase_state.loop_results
+      .map((r, idx) => `### Iteration ${idx + 1}\n${r}`)
+      .join("\n\n");
+
+    const task = build_agent_task(agent_def, state.objective, prev_context);
+    const full_task = loop_context
+      ? `${task}\n\n## Previous Iterations\n${loop_context}\n\n## Current Iteration: ${i + 1}/${max}`
+      : task;
+
+    agent_state.status = "running";
+    emit(deps.on_event, { type: "agent_started", workflow_id: state.workflow_id, phase_id: phase_def.phase_id, agent_id: agent_def.agent_id });
+
+    const { subagent_id } = await deps.subagents.spawn({
+      task: full_task,
+      role: agent_def.role,
+      label: agent_def.label,
+      model: agent_def.model,
+      provider_id: backend_to_provider(agent_def.backend),
+      max_iterations: agent_def.max_turns === 0 ? 999 : (agent_def.max_turns || 10),
+      origin_channel: state.channel,
+      origin_chat_id: state.chat_id,
+      announce: false,
+      parent_id: `workflow:${state.workflow_id}`,
+      skip_controller: true,
+    });
+    agent_state.subagent_id = subagent_id;
+
+    const result = await deps.subagents.wait_for_completion(subagent_id, 5 * 60_000);
+    const content = result?.content || "";
+    const msg: PhaseMessage = { role: "assistant", content, at: now_iso() };
+    agent_state.messages.push(msg);
+    await deps.store.insert_message(state.workflow_id, phase_def.phase_id, agent_def.agent_id, msg);
+
+    // [DONE] → 루프 종료
+    if (content.includes("[DONE]")) {
+      agent_state.result = content.replace("[DONE]", "").trim();
+      agent_state.status = "completed";
+      emit(deps.on_event, {
+        type: "agent_completed", workflow_id: state.workflow_id,
+        phase_id: phase_def.phase_id, agent_id: agent_def.agent_id,
+        result: agent_state.result.slice(0, 500),
+      });
+      break;
+    }
+
+    // [ASK_USER] → 사용자 질문
+    if (content.includes("[ASK_USER]") && deps.options.ask_user) {
+      const question = content.replace(/\[ASK_USER\]/g, "").trim();
+      state.status = "waiting_user_input";
+      phase_state.pending_user_input = true;
+      await deps.store.upsert(state);
+      emit(deps.on_event, { type: "user_input_requested", workflow_id: state.workflow_id, phase_id: phase_def.phase_id, question });
+
+      const user_response = await deps.options.ask_user(question);
+
+      state.status = "running";
+      phase_state.pending_user_input = false;
+      emit(deps.on_event, { type: "user_input_received", workflow_id: state.workflow_id, phase_id: phase_def.phase_id });
+      phase_state.loop_results.push(`[Iteration ${i + 1}]\n${content}\n\nUser: ${user_response}`);
+    } else {
+      phase_state.loop_results.push(content);
+    }
+
+    phase_state.loop_iteration = i + 1;
+    emit(deps.on_event, { type: "loop_iteration", workflow_id: state.workflow_id, phase_id: phase_def.phase_id, iteration: i + 1 });
+    state.updated_at = now_iso();
+    await deps.store.upsert(state);
+  }
+
+  // max iterations 도달 시 마지막 결과를 최종 결과로 사용
+  if (agent_state.status !== "completed") {
+    agent_state.result = phase_state.loop_results.at(-1) || "";
+    agent_state.status = "completed";
+  }
+}
+
 // ── Helpers ──────────────────────────────────────────
 
 function build_initial_phase_state(def: PhaseDefinition): PhaseState {
@@ -405,6 +677,25 @@ function build_initial_phase_state(def: PhaseDefinition): PhaseState {
       messages: [],
     } : undefined,
   };
+}
+
+/** goto 시 Phase 상태를 리셋하여 재실행 가능하게 만듦. */
+function reset_phase_state(phase_state: PhaseState): void {
+  phase_state.status = "pending";
+  phase_state.loop_iteration = undefined;
+  phase_state.loop_results = undefined;
+  phase_state.pending_user_input = undefined;
+  for (const a of phase_state.agents) {
+    a.status = "pending";
+    a.result = undefined;
+    a.error = undefined;
+    a.subagent_id = undefined;
+  }
+  if (phase_state.critic) {
+    phase_state.critic.status = "pending";
+    phase_state.critic.review = undefined;
+    phase_state.critic.approved = undefined;
+  }
 }
 
 function build_agent_task(agent_def: PhaseAgentDefinition, objective: string, prev_context: string): string {
