@@ -35,7 +35,7 @@ const ALWAYS_INCLUDED: ReadonlySet<ToolCategory> = new Set(["messaging", "file_t
 
 /** 모드별 기본 포함 카테고리. */
 const MODE_DEFAULTS: Record<string, ReadonlySet<ToolCategory>> = {
-  once: new Set(["scheduling", "memory", "decision", "promise", "secret", "messaging", "file_transfer", "diagram"]),
+  once: new Set(["web", "scheduling", "memory", "decision", "promise", "secret", "messaging", "file_transfer", "diagram"]),
   agent: new Set(["filesystem", "shell", "web", "messaging", "file_transfer", "scheduling", "memory", "decision", "promise", "secret", "diagram", "spawn", "external"]),
   task: new Set(["filesystem", "shell", "web", "messaging", "file_transfer", "scheduling", "memory", "decision", "promise", "secret", "diagram", "spawn", "admin", "external"]),
 };

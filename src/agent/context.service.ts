@@ -62,7 +62,6 @@ export class ContextBuilder {
     session_context?: { channel?: string | null; chat_id?: string | null },
   ): Promise<string> {
     const security_override = this._security_override_policy();
-    const identity = await this._get_identity();
     const bootstrap = await this._load_bootstrap_files();
     const memory_context = await this._build_memory_context();
     const decision_ctx = { team_id: decision_context?.team_id || null, agent_id: decision_context?.agent_id || null };
@@ -74,7 +73,6 @@ export class ContextBuilder {
     const current_session = this._build_current_session_section(session_context?.channel, session_context?.chat_id);
     return [
       security_override,
-      identity,
       bootstrap,
       memory_context,
       decisions || "",
@@ -127,14 +125,6 @@ export class ContextBuilder {
       "- 민감정보는 {{secret:<name>}} 참조 또는 암호문 상태로만 처리합니다.",
       "- 키를 식별할 수 없거나 복호화가 실패하면 작업을 중단하고 안내 템플릿으로 보고합니다.",
     ].join("\n");
-  }
-
-  async _get_identity(): Promise<string> {
-    const raw = await try_read_first_file([
-      join(this.workspace, "templates", "IDENTITY.md"),
-      join(this.workspace, "IDENTITY.md"),
-    ]);
-    return raw || "You are a headless orchestration assistant.";
   }
 
   async _load_bootstrap_files(): Promise<string> {

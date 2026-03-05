@@ -7,6 +7,7 @@ import type { AgentBackend, AgentBackendId, AgentProviderConfig, AgentRunOptions
 import type { AgentSessionStore } from "./agent-session-store.js";
 import type { AgentProviderStore } from "./provider-store.js";
 import type { Logger } from "../logger.js";
+import { FailoverError } from "./pty/types.js";
 
 export type AgentBackendConfig = {
   /** claude 실행에 사용할 백엔드. */
@@ -115,15 +116,18 @@ export class AgentBackendRegistry {
 
   // ── 레거시 호환 라우팅 (ProviderId → AgentBackendId) ──
 
-  resolve_backend_id(provider_id: ProviderId): AgentBackendId {
+  resolve_backend_id(provider_id: ProviderId): AgentBackendId | null {
     if (provider_id === "claude_code") return this.config.claude_backend;
     if (provider_id === "chatgpt") return this.config.codex_backend;
     if (provider_id === "gemini") return this.config.gemini_backend || "gemini_cli";
+    // openrouter, orchestrator_llm 등 API 기반 프로바이더는 CLI 백엔드 없음
+    if (provider_id === "openrouter" || provider_id === "orchestrator_llm") return null;
     return this.config.codex_backend;
   }
 
   resolve_backend(provider_id: ProviderId): AgentBackend | null {
     const id = this.resolve_backend_id(provider_id);
+    if (!id) return null;
     return this.backends.get(id) || null;
   }
 
@@ -224,9 +228,43 @@ export class AgentBackendRegistry {
       this._persist_session(result, options);
       return result;
     } catch (error) {
-      breaker?.record_failure();
       scorer.record(backend_id, { ok: false, latency_ms: Date.now() - start });
+
+      if (error instanceof FailoverError) {
+        this._handle_failover_circuit(backend_id, breaker, error.meta);
+        this.logger?.warn("backend_failover", {
+          backend: backend_id,
+          reason: error.meta.reason,
+          provider: error.meta.provider,
+          model: error.meta.model,
+        });
+        return this._try_fallback(backend_id, options, error.message);
+      }
+
+      breaker?.record_failure();
       return this._try_fallback(backend_id, options, error_message(error));
+    }
+  }
+
+  /** FailoverError reason에 따라 circuit breaker를 차등 적용. */
+  private _handle_failover_circuit(
+    backend_id: AgentBackendId,
+    breaker: CircuitBreaker | undefined,
+    meta: FailoverError["meta"],
+  ): void {
+    if (!breaker) return;
+    switch (meta.reason) {
+      case "auth":
+      case "quota":
+        // 인증/할당 문제 → 즉시 차단 (수동 복구 필요)
+        for (let i = 0; i < 5; i++) breaker.record_failure();
+        break;
+      case "rate_limit":
+        // 일시적 → 단일 실패 기록 (자동 half_open 복구)
+        breaker.record_failure();
+        break;
+      default:
+        breaker.record_failure();
     }
   }
 

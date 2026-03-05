@@ -135,7 +135,7 @@ export async function is_orchestrator_llm_available(): Promise<boolean> {
     if (!res.ok) return false;
 
     // warm-up: 모델을 메모리에 로드 — cold start 시 첫 요청 timeout 방지
-    const model = String(process.env.ORCHESTRATOR_LLM_MODEL || "qwen3.5:4b");
+    const model = String(process.env.ORCHESTRATOR_LLM_MODEL || "qwen3:4b");
     await fetch(`${base}/chat/completions`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -231,7 +231,7 @@ export async function create_real_harness(options?: {
 
   const bus = new MessageBus();
   const vault = new SecretVaultService(workspace);
-  const providers = new ProviderRegistry({ orchestrator_llm_model: "qwen3.5:4b" });
+  const providers = new ProviderRegistry({ orchestrator_llm_model: "qwen3:4b" });
   const agent_domain = new AgentDomain(workspace, { providers, bus });
 
   await Promise.all([

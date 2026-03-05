@@ -26,6 +26,9 @@ export type CronConfig = {
   resolve_default_target: () => { provider: string; chat_id: string } | null;
 };
 
+/** 워크플로우 트리거 콜백. cron이 workflow_trigger:{slug}을 실행하면 호출. */
+export type WorkflowTriggerCallback = (template_slug: string, channel: string, chat_id: string) => Promise<{ ok: boolean; workflow_id?: string; error?: string }>;
+
 export type CronRuntimeHandlerDeps = {
   config: CronConfig;
   bus: MessageBusLike;
@@ -33,6 +36,7 @@ export type CronRuntimeHandlerDeps = {
   agent_runtime: AgentRuntimeLike;
   agent_backends: AgentBackendRegistry;
   secret_vault: SecretVaultService;
+  on_workflow_trigger?: WorkflowTriggerCallback;
 };
 
 
@@ -128,6 +132,21 @@ export function create_cron_job_handler(deps: CronRuntimeHandlerDeps): CronOnJob
     );
 
     try {
+      // workflow_trigger 모드: 워크플로우 템플릿 자동 실행
+      const wf_prefix = "workflow_trigger:";
+      if (job.payload.message.startsWith(wf_prefix) && deps.on_workflow_trigger) {
+        const slug = job.payload.message.slice(wf_prefix.length).trim();
+        const result = await deps.on_workflow_trigger(slug, target.provider, target.chat_id);
+        if (result.ok) {
+          await publish_notice("cron", `⏰ 워크플로우 실행: ${job.name}\nworkflow_id: ${result.workflow_id}`, { kind: "cron_workflow_trigger", job_id: job.id, workflow_id: result.workflow_id });
+          await append_event("done", `cron workflow triggered: ${job.name}`, { mode: "workflow_trigger", workflow_id: result.workflow_id });
+        } else {
+          await publish_notice("cron", `⚠️ 워크플로우 트리거 실패: ${job.name}\nerror: ${result.error}`, { kind: "cron_workflow_failed", job_id: job.id, error: result.error });
+          await append_event("blocked", `cron workflow trigger failed: ${job.name}`, { error: result.error });
+        }
+        return result.ok ? `workflow:${result.workflow_id}` : null;
+      }
+
       // deliver 모드: 메시지만 전달하고 종료
       if (job.payload.deliver) {
         await publish_notice(
@@ -149,7 +168,7 @@ export function create_cron_job_handler(deps: CronRuntimeHandlerDeps): CronOnJob
       // 백엔드 결정
       const preferred = parse_executor_preference(deps.config.executor_provider);
       const provider_id = resolve_executor_provider(preferred, deps.config.provider_caps);
-      const backend_id = deps.agent_backends.resolve_backend_id(provider_id);
+      const backend_id = deps.agent_backends.resolve_backend_id(provider_id) ?? deps.agent_backends.list_backends()[0] ?? "claude_cli";
       const backend = deps.agent_backends.get_backend(backend_id);
 
       // 도구 준비

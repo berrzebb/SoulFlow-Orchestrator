@@ -26,6 +26,7 @@ import { DateTimeTool } from "./datetime.js";
 import { HttpRequestTool } from "./http-request.js";
 import { OAuthFetchTool } from "./oauth-fetch.js";
 import { TaskQueryTool, type TaskQueryCallback } from "./task-query.js";
+import { WorkflowTool } from "./workflow.js";
 import type { AppendWorkflowEventInput, AppendWorkflowEventResult } from "../../events/types.js";
 import type { RuntimeExecutionPolicy } from "../../providers/types.js";
 import type { PreToolHook, PostToolHook } from "./types.js";
@@ -98,6 +99,7 @@ export {
   HttpRequestTool,
   OAuthFetchTool,
   TaskQueryTool,
+  WorkflowTool,
   DynamicToolRuntimeLoader,
   ToolRuntimeReloader,
   ToolInstallerService,
@@ -123,6 +125,8 @@ export type { DynamicToolStoreLike } from "./store.js";
 export type { McpServerStoreLike, McpServerEntry } from "./mcp-store.js";
 export type { TaskQueryResult, TaskQueryCallback } from "./task-query.js";
 export { execute_chain, type ChainStep, type ChainResult } from "./chain.js";
+export { PolicyTool, type PolicyStoreLike } from "./policy-tool.js";
+export { validate_url, normalize_headers, serialize_body, format_response, timed_fetch, type HttpResponseSummary } from "./http-utils.js";
 
 export function create_default_tool_registry(args?: {
   workspace?: string;

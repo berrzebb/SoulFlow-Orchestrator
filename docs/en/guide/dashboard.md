@@ -92,7 +92,7 @@ Manage agent configurations — role · backend · add/edit/delete.
 
 ### Templates
 Edit system prompt templates.
-- Editable files: `IDENTITY` · `AGENTS` · `SOUL` · `HEART` · `USER` · `TOOLS` · `HEARTBEAT`
+- Editable files: `AGENTS` · `SOUL` · `HEART` · `USER` · `TOOLS` · `HEARTBEAT`
 - Changes take effect on the next agent execution
 
 ### OAuth

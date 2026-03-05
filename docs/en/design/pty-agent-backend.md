@@ -1,6 +1,6 @@
 # Design: Container-Based Agent Backend
 
-> **Status**: Core infrastructure implemented · Production features in progress
+> **Status**: Implementation complete
 
 ## Motivation
 

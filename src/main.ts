@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { AgentDomain } from "./agent/index.js";
 import { create_agent_inspector } from "./agent/inspector.service.js";
 import { create_agent_runtime } from "./agent/runtime.service.js";
-import { CronTool, MemoryTool, DecisionTool, SecretTool, PromiseTool, TaskQueryTool } from "./agent/tools/index.js";
+import { CronTool, MemoryTool, DecisionTool, SecretTool, PromiseTool, TaskQueryTool, WorkflowTool } from "./agent/tools/index.js";
 import { MessageBus } from "./bus/index.js";
 import {
   ChannelManager,
@@ -465,13 +465,15 @@ export async function createRuntime(): Promise<RuntimeApp> {
     dlq: dlq_store,
   }, app_config.ops);
 
+  // WorkflowOps는 대시보드 + WorkflowTool 양쪽에서 사용
+  const workflow_ops_result = create_workflow_ops({
+    store: phase_workflow_store, subagents: agent.subagents, workspace, logger, bus,
+    skills_loader: agent.context.skills_loader,
+    on_workflow_event: (e) => dashboard?.sse.broadcast_workflow_event(e),
+  });
+  channel_manager.set_workflow_hitl(workflow_ops_result.hitl_bridge);
+
   if (app_config.dashboard.enabled) {
-    const workflow_ops_result = create_workflow_ops({
-      store: phase_workflow_store, subagents: agent.subagents, workspace, logger, bus,
-      skills_loader: agent.context.skills_loader,
-      on_workflow_event: (e) => dashboard?.sse.broadcast_workflow_event(e),
-    });
-    channel_manager.set_workflow_hitl(workflow_ops_result.hitl_bridge);
 
     dashboard = new DashboardService({
       host: app_config.dashboard.host,
@@ -568,6 +570,9 @@ export async function createRuntime(): Promise<RuntimeApp> {
   }
   if (!agent_runtime.has_tool("oauth_fetch")) {
     agent_runtime.register_tool(new OAuthFetchTool(oauth_store, oauth_flow));
+  }
+  if (!agent_runtime.has_tool("workflow")) {
+    agent_runtime.register_tool(new WorkflowTool(workflow_ops_result));
   }
 
   services.register(agent, { required: true });

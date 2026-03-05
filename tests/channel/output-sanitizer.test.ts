@@ -52,9 +52,9 @@ describe("is_provider_noise_line", () => {
 });
 
 describe("is_stream_noise_line", () => {
-  it("treats empty lines as noise (streaming only)", () => {
-    expect(is_stream_noise_line("")).toBe(true);
-    expect(is_stream_noise_line("   ")).toBe(true);
+  it("preserves empty lines as paragraph breaks", () => {
+    expect(is_stream_noise_line("")).toBe(false);
+    expect(is_stream_noise_line("   ")).toBe(false);
   });
 
   it("delegates to is_provider_noise_line for non-empty", () => {
@@ -195,10 +195,10 @@ describe("sanitize_provider_output", () => {
 });
 
 describe("sanitize_stream_chunk", () => {
-  it("truncates to 800 chars", () => {
+  it("preserves long content without truncation", () => {
     const long = "a".repeat(1500);
     const result = sanitize_stream_chunk(long);
-    expect(result.length).toBeLessThanOrEqual(800);
+    expect(result.length).toBe(1500);
   });
 
   it("filters noise lines", () => {

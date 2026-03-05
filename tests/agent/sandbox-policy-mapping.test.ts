@@ -56,16 +56,16 @@ describe("sandbox_to_sdk_permission", () => {
 describe("sandbox_to_codex_policy", () => {
   const CWD = "/workspace";
 
-  it("strict preset → readOnly sandbox + unlessTrusted", () => {
+  it("strict preset → read-only sandbox + unlessTrusted", () => {
     const result = sandbox_to_codex_policy(sandbox_from_preset("strict"), CWD);
-    expect(result.sandbox).toBe("readOnly");
+    expect(result.sandbox).toBe("read-only");
     expect(result.approval_policy).toBe("unlessTrusted");
     expect(result.turn_sandbox_policy).toBeUndefined();
   });
 
-  it("workspace-write preset → workspaceWrite sandbox + onRequest + turn_sandbox_policy", () => {
+  it("workspace-write preset → workspace-write sandbox + onRequest + turn_sandbox_policy", () => {
     const result = sandbox_to_codex_policy(sandbox_from_preset("workspace-write"), CWD);
-    expect(result.sandbox).toBe("workspaceWrite");
+    expect(result.sandbox).toBe("workspace-write");
     expect(result.approval_policy).toBe("onRequest");
     expect(result.turn_sandbox_policy).toBeDefined();
     expect(result.turn_sandbox_policy!.type).toBe("workspaceWrite");
@@ -73,9 +73,9 @@ describe("sandbox_to_codex_policy", () => {
     expect(result.turn_sandbox_policy!.networkAccess).toBe(true);
   });
 
-  it("full-auto preset → dangerFullAccess sandbox + never", () => {
+  it("full-auto preset → danger-full-access sandbox + never", () => {
     const result = sandbox_to_codex_policy(sandbox_from_preset("full-auto"), CWD);
-    expect(result.sandbox).toBe("dangerFullAccess");
+    expect(result.sandbox).toBe("danger-full-access");
     expect(result.approval_policy).toBe("never");
   });
 

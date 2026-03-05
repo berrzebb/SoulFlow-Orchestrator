@@ -202,6 +202,7 @@ export class CodexAppServerAgent implements AgentBackend {
     let tool_count = 0;
     let turn_completed = false;
     let turn_id = "";
+    let after_tool = false;
     let finish_reason: AgentFinishReason = "error";
     let input_tokens = 0;
     let output_tokens = 0;
@@ -256,6 +257,8 @@ export class CodexAppServerAgent implements AgentBackend {
         // agent 텍스트 스트리밍 + content_delta 이벤트
         if (method === "item/agentMessage/delta" && params.threadId === thread_id) {
           const delta = String(params.delta || "");
+          // last-turn-wins: 도구 실행 후 새 에이전트 메시지가 시작되면 이전 중간 텍스트 버림
+          if (after_tool) { content = ""; after_tool = false; }
           content += delta;
           if (delta) {
             fire(emit, { type: "content_delta", source, at: now_iso(), text: delta });
@@ -338,6 +341,7 @@ export class CodexAppServerAgent implements AgentBackend {
               result: tool_result, is_error,
               params: (item.arguments as Record<string, unknown>) ?? {},
             });
+            after_tool = true;
             // dynamicToolCall은 item/tool/call 핸들러에서 post_tool_use 처리
             const post_tool = options.hooks?.post_tool_use;
             if (post_tool && !is_dynamic) {

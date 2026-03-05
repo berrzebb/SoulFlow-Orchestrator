@@ -1,4 +1,5 @@
 import type { MemoryStoreLike } from "../memory.js";
+import { strip_memory_uri } from "./memory-format.js";
 import { Tool } from "./base.js";
 import type { JsonSchema } from "./types.js";
 
@@ -34,7 +35,7 @@ export class MemoryTool extends Tool {
       const limit = Math.min(200, Math.max(1, Number(params.limit) || 20));
       const results = await this.store.search(query, { limit });
       if (results.length === 0) return `검색 결과 없음: "${query}"`;
-      return results.map((r) => `[${r.file}:${r.line}] ${r.text}`).join("\n");
+      return results.map((r) => `[${strip_memory_uri(r.file)}:${r.line}] ${r.text}`).join("\n");
     }
 
     if (action === "read_longterm") {

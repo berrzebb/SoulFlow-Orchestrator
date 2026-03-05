@@ -142,7 +142,7 @@ export function get_config_defaults(): AppConfig {
         enabled: true,
         intervalMs: 1400,
         minChars: 48,
-        suppressFinalAfterStream: true,
+        suppressFinalAfterStream: false,
         toolDisplay: "count" as const,
       },
       dispatch: {
@@ -171,7 +171,7 @@ export function get_config_defaults(): AppConfig {
       image: "ollama/ollama:latest",
       container: "orchestrator-llm",
       port: 11434,
-      model: "qwen3.5:4b",
+      model: "qwen3:4b",
       pullModel: true,
       autoStop: false,
       gpuEnabled: true,

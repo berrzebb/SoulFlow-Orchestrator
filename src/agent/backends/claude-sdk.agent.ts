@@ -90,6 +90,7 @@ export class ClaudeSdkAgent implements AgentBackend {
     const source: AgentEventSource = { backend: this.id, task_id: options.task_id };
     let session_id: string | undefined;
     let result_content = "";
+    let turn_text = "";
     let tool_calls_count = 0;
     let total_input = 0;
     let total_output = 0;
@@ -427,13 +428,17 @@ export class ClaudeSdkAgent implements AgentBackend {
               });
             } else if (block.type === "text" && block.text) {
               const text = String(block.text);
-              result_content += text;
+              turn_text += text;
               fire(emit, { type: "content_delta", source, at: now_iso(), text });
               if (options.hooks?.on_stream) {
                 void Promise.resolve(options.hooks.on_stream(text)).catch(() => {});
               }
             }
           }
+          // last-turn-wins: 텍스트가 있는 마지막 어시스턴트 턴만 최종 응답으로 사용.
+          // 중간 턴의 "사고 과정" 텍스트는 스트리밍(content_delta)으로만 전달.
+          if (turn_text) result_content = turn_text;
+          turn_text = "";
           continue;
         }
 

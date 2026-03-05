@@ -104,7 +104,7 @@ export class OrchestratorLlmRuntime {
     this.image = options?.image || "ollama/ollama:latest";
     this.container = options?.container || "orchestrator-llm";
     this.port = Math.max(1, Number(options?.port || 11434));
-    this.model = options?.model || "qwen3.5:4b";
+    this.model = options?.model || "";
     this.pull_model = options?.pull_model ?? true;
     this.auto_stop = options?.auto_stop ?? false;
     this.api_base = options?.api_base || `http://127.0.0.1:${this.port}/v1`;

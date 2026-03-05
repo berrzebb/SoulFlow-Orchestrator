@@ -52,7 +52,7 @@ export class StreamBuffer {
 
   /** 이전 청크와 비교하여 새로운 delta만 추출 (오버랩 감지). */
   private deduplicate(raw: string): string {
-    const incoming = String(raw || "").trim();
+    const incoming = String(raw || "");
     if (!incoming) return "";
 
     const prev = this.last_source;
@@ -60,11 +60,11 @@ export class StreamBuffer {
 
     if (!prev) return incoming;
     if (incoming === prev) return "";
-    if (incoming.startsWith(prev)) return incoming.slice(prev.length).trimStart();
+    if (incoming.startsWith(prev)) return incoming.slice(prev.length);
     if (prev.startsWith(incoming)) return "";
 
     const overlap = this.overlap_suffix_prefix(prev, incoming);
-    if (overlap > 0) return incoming.slice(overlap).trimStart();
+    if (overlap > 0) return incoming.slice(overlap);
     return incoming;
   }
 

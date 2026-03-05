@@ -71,7 +71,7 @@ describe("memory store daily layout", () => {
       await store.write_daily("- daily 2\n", "2026-02-26");
       const result = await store.consolidate({ memory_window: 10, archive: true });
       expect(result.ok).toBe(true);
-      expect(result.daily_files_used.length).toBeGreaterThanOrEqual(1);
+      expect(result.daily_entries_used.length).toBeGreaterThanOrEqual(1);
       const remains = await store.read_daily("2026-02-26");
       expect(remains.trim()).toBe("");
     } finally {

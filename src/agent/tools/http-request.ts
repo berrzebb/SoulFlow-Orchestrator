@@ -1,10 +1,7 @@
 import { error_message } from "../../utils/common.js";
 import { Tool } from "./base.js";
 import type { JsonSchema } from "./types.js";
-
-/** 사설망 호스트 차단 패턴. 외부 REST API 호출 전용. */
-const PRIVATE_HOST_RE =
-  /^(localhost|127\.\d+\.\d+\.\d+|::1|0\.0\.0\.0|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+|169\.254\.\d+\.\d+)$/i;
+import { validate_url, normalize_headers, serialize_body, format_response, timed_fetch } from "./http-utils.js";
 
 /**
  * 에이전트가 외부 JSON/REST API를 직접 호출할 수 있는 도구.
@@ -43,76 +40,21 @@ export class HttpRequestTool extends Tool {
   };
 
   protected async run(params: Record<string, unknown>): Promise<string> {
-    const url_str = String(params.url || "").trim();
-    if (!url_str) return "Error: url is required";
-
-    let parsed_url: URL;
-    try {
-      parsed_url = new URL(url_str);
-    } catch {
-      return `Error: invalid URL "${url_str}"`;
-    }
-    if (parsed_url.protocol !== "http:" && parsed_url.protocol !== "https:") {
-      return `Error: unsupported protocol "${parsed_url.protocol}"`;
-    }
-    if (PRIVATE_HOST_RE.test(parsed_url.hostname)) {
-      return `Error: private/loopback host blocked "${parsed_url.hostname}"`;
-    }
+    const url_or_error = validate_url(String(params.url || "").trim());
+    if (typeof url_or_error === "string") return `Error: ${url_or_error}`;
 
     const method = String(params.method || "GET").toUpperCase();
     const timeout_ms = Math.min(30_000, Math.max(100, Number(params.timeout_ms) || 10_000));
     const max_chars = Math.min(50_000, Math.max(100, Number(params.max_response_chars) || 8_000));
 
-    const req_headers: Record<string, string> = {};
-    if (params.headers && typeof params.headers === "object" && !Array.isArray(params.headers)) {
-      for (const [k, v] of Object.entries(params.headers as Record<string, unknown>)) {
-        req_headers[String(k)] = String(v ?? "");
-      }
-    }
+    const headers = normalize_headers(params.headers);
+    const body = serialize_body(params.body, headers);
 
-    let body_str: string | undefined;
-    if (params.body !== undefined && params.body !== null) {
-      if (typeof params.body === "string") {
-        body_str = params.body;
-      } else {
-        body_str = JSON.stringify(params.body);
-        if (!Object.keys(req_headers).some((k) => k.toLowerCase() === "content-type")) {
-          req_headers["Content-Type"] = "application/json";
-        }
-      }
-    }
-
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeout_ms);
     try {
-      const res = await fetch(url_str, {
-        method,
-        headers: req_headers,
-        body: body_str,
-        signal: controller.signal,
-      });
-
-      const content_type = res.headers.get("content-type") || "";
-      const raw_text = await res.text();
-      const truncated = raw_text.length > max_chars;
-      const text_out = truncated ? `${raw_text.slice(0, max_chars)}...(truncated, ${raw_text.length} chars total)` : raw_text;
-
-      let body_out: unknown = text_out;
-      if (content_type.includes("application/json") && !truncated) {
-        try { body_out = JSON.parse(raw_text); } catch { /* keep as string */ }
-      }
-
-      return JSON.stringify({
-        status: res.status,
-        status_text: res.statusText,
-        content_type,
-        body: body_out,
-        truncated,
-      });
+      const res = await timed_fetch(url_or_error.href, { method, headers, body, timeout_ms });
+      return format_response(res, max_chars);
     } catch (e) {
       return `Error: ${error_message(e)}`;
-    } finally {
-      clearTimeout(timer);
     }
   }
 }

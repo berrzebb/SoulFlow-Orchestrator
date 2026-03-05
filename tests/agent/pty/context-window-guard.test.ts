@@ -9,8 +9,8 @@ describe("evaluate_context_window_guard", () => {
   });
 
   it("hard_min_tokens 초과 시 hard_block", () => {
-    // 8000 tokens * 4 chars = 32000 chars
-    const result = evaluate_context_window_guard({ prompt_chars: 32_000 });
+    // default hard_min=16000, 64000 chars / 4 = 16000 tokens → hard_block
+    const result = evaluate_context_window_guard({ prompt_chars: 64_000 });
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.reason).toBe("hard_block");
   });

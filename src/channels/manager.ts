@@ -28,6 +28,7 @@ import {
 import { sanitize_provider_output, strip_sensitive_command_blocks, strip_secret_reference_tokens, RE_PROVIDER_ERROR } from "./output-sanitizer.js";
 import { extract_media_items } from "./media-extractor.js";
 import { prune_ttl_map, sleep, error_message, now_iso, normalize_text } from "../utils/common.js";
+import { LaneQueue } from "../agent/pty/lane-queue.js";
 
 export type ChannelManagerStatus = {
   enabled_channels: string[];
@@ -110,7 +111,7 @@ export class ChannelManager implements ServiceLike {
   private readonly control_reaction_seen = new Map<string, number>();
   private readonly render_profiles = new Map<string, RenderProfile>();
   private readonly inbound_inflight = new Set<Promise<void>>();
-  private inbound_active = 0;
+  private readonly inbound_lanes: LaneQueue;
   private prune_timer: NodeJS.Timeout | null = null;
 
   constructor(deps: ChannelManagerDeps) {
@@ -135,6 +136,7 @@ export class ChannelManager implements ServiceLike {
     this.workflow_hitl = deps.workflow_hitl ?? null;
     _bot_identity_ref = deps.bot_identity;
     _bot_ids_cache = null;
+    this.inbound_lanes = new LaneQueue({ global_concurrency: deps.config.inboundConcurrency });
   }
 
   /** 워크플로우 HITL 브리지를 지연 주입 (순환 의존성 회피). */
@@ -184,7 +186,7 @@ export class ChannelManager implements ServiceLike {
   health_check(): { ok: boolean; details?: Record<string, unknown> } {
     return {
       ok: this.running,
-      details: { seen_cache_size: this.seen.size, active_runs: this.active_runs.size, bus_inbound: this.bus.get_size("inbound") },
+      details: { seen_cache_size: this.seen.size, active_runs: this.active_runs.size, inbound_lanes: this.inbound_lanes.session_count, bus_inbound: this.bus.get_size("inbound") },
     };
   }
 
@@ -345,9 +347,10 @@ export class ChannelManager implements ServiceLike {
                   const trigger_msg = rows.find((r) => is_reaction_message(r)) || rows[0];
                   if (trigger_msg) {
                     this.logger.info("task resumed after reaction approval", { task_id: rxn_result.task_id });
-                    this.invoke_and_reply(provider, trigger_msg, this.config.defaultAlias, rxn_result.task_id).catch((e) =>
-                      this.logger.error("reaction resume failed", { error: error_message(e) }),
-                    );
+                    const rkey = `${trigger_msg.instance_id || provider}:${trigger_msg.chat_id}`;
+                    this.inbound_lanes.execute(rkey, () =>
+                      this.invoke_and_reply(provider, trigger_msg, this.config.defaultAlias, rxn_result.task_id),
+                    ).catch((e) => this.logger.error("reaction resume failed", { error: error_message(e) }));
                   }
                 }
               } else if (rxn_result.approval_status === "denied" || rxn_result.approval_status === "cancelled") {
@@ -386,25 +389,35 @@ export class ChannelManager implements ServiceLike {
     }
   }
 
-  /** bus에서 인바운드 메시지를 소비하여 concurrency 제한 내에서 처리. */
+  /** bus에서 인바운드 메시지를 소비. 같은 provider:chat_id는 FIFO 직렬, 다른 채팅은 병렬. */
   private async run_inbound_consumer(): Promise<void> {
     while (this.running) {
       const msg = await this.bus.consume_inbound({ timeout_ms: 2000 });
       if (!msg || !this.running) continue;
 
-      this.inbound_active += 1;
-      const task = this.handle_inbound_message(msg)
-        .catch((e) => this.logger.error("inbound handler failed", { error: error_message(e) }))
-        .finally(() => {
-          this.inbound_active = Math.max(0, this.inbound_active - 1);
-          this.inbound_inflight.delete(task);
-        });
-      this.inbound_inflight.add(task);
+      // HITL fast-path: 실행 중인 task에 send_input 등록 시 직렬화 없이 즉시 전달
+      if (this.try_hitl_send_input(msg)) continue;
 
-      if (this.inbound_active >= this.config.inboundConcurrency && this.inbound_inflight.size > 0) {
-        await Promise.race([...this.inbound_inflight].map((p) => p.catch(() => {})));
+      const chat_key = `${msg.instance_id || resolve_provider(msg) || "unknown"}:${msg.chat_id}`;
+      const task = this.inbound_lanes.execute(chat_key, () => this.handle_inbound_message(msg))
+        .catch((e) => this.logger.error("inbound handler failed", { error: error_message(e) }))
+        .finally(() => this.inbound_inflight.delete(task));
+      this.inbound_inflight.add(task);
+    }
+  }
+
+  /** HITL: 같은 chat_id의 활성 run에 send_input이 있으면 입력 주입. */
+  private try_hitl_send_input(msg: InboundMessage): boolean {
+    const content = String(msg.content || "").trim();
+    if (!content) return false;
+    for (const [, run] of this.active_runs) {
+      if (run.chat_id !== msg.chat_id) continue;
+      if (run.send_input && !run.abort.signal.aborted) {
+        run.send_input(content);
+        return true;
       }
     }
+    return false;
   }
 
   private async handle_mentions(provider: ChannelProvider, message: InboundMessage, aliases: string[]): Promise<void> {
@@ -422,11 +435,7 @@ export class ChannelManager implements ServiceLike {
     const run_key = `${message.instance_id || provider}:${message.chat_id}:${alias}`.toLowerCase();
     const prev = this.active_runs.get(run_key);
     if (prev) {
-      // HITL: 실행 중인 task에 send_input이 등록되어 있으면 입력 주입 후 리턴
-      if (prev.send_input && !prev.abort.signal.aborted) {
-        prev.send_input(String(message.content || ""));
-        return;
-      }
+      // send_input은 run_inbound_consumer의 try_hitl_send_input()에서 레인 진입 전에 처리됨
       if (!prev.abort.signal.aborted) prev.abort.abort();
       await Promise.race([prev.done, sleep(3000)]);
     }
@@ -468,6 +477,9 @@ export class ChannelManager implements ServiceLike {
         resumed_task_id,
         run_id,
         on_stream: (chunk) => {
+          if (stream_state.accumulated && !stream_state.accumulated.endsWith("\n") && !chunk.startsWith("\n")) {
+            stream_state.accumulated += "\n";
+          }
           stream_state.accumulated += chunk;
           stream_state.chain = stream_state.chain
             .then(() => this.send_or_edit_stream(provider, message, alias, stream_state.accumulated, stream_state))
@@ -587,31 +599,35 @@ export class ChannelManager implements ServiceLike {
     const now = Date.now();
     if (now - state.last_update < 1200) return;
 
-    // 누적 텍스트의 마지막 12줄 700자로 클리핑
-    const clipped = sanitize_provider_output(content).split("\n").slice(-12).join("\n").trim().slice(0, 700);
-    if (!clipped) return;
-    const profile = this.effective_render_profile(provider, message.chat_id);
-    const rendered = render_agent_output(clipped, profile);
-    let text = String(rendered.content || "").trim().slice(0, 700);
-    if (!text) return;
+    // 스트리밍은 최종 메시지로 교체되므로 진행 표시 역할 — 플랫폼 제한만 적용
+    const char_limit = provider === "telegram" ? 4000 : 3800;
+    const trimmed = content.trim();
+    if (!trimmed) return;
 
-    // 도구 사용 시 상단에 카운트 헤더 추가
+    // 플랫폼 제한 초과 시 후미만 표시 (앞부분은 어차피 최종 메시지에 포함)
+    const display = trimmed.length > char_limit
+      ? "…\n" + trimmed.slice(trimmed.length - char_limit + 2)
+      : trimmed;
+
+    let text = display;
     if (state.tool_count > 0) {
       text = `[${state.tool_count} tool calls]\n${text}`;
     }
 
+    // 스트림 편집은 plain text — 잘린 HTML/마크다운 파싱 에러 방지
     if (state.message_id) {
       try {
-        await this.registry.edit_message(provider, message.chat_id, state.message_id, text, rendered.parse_mode);
+        await this.registry.edit_message(provider, message.chat_id, state.message_id, text);
       } catch (e) {
         this.logger.debug("stream_edit_failed", { error: error_message(e) });
       }
     } else {
+      const profile = this.effective_render_profile(provider, message.chat_id);
       const result = await this.dispatch.send(provider, {
         id: `stream-${Date.now()}`, provider, channel: provider, sender_id: alias,
         chat_id: message.chat_id, content: text, at: now_iso(),
         reply_to: resolve_reply_to(provider, message), thread_id: message.thread_id,
-        metadata: { kind: "agent_stream", agent_alias: alias, render_mode: profile.mode, render_parse_mode: rendered.parse_mode || null },
+        metadata: { kind: "agent_stream", agent_alias: alias, render_mode: profile.mode, render_parse_mode: null },
       });
       if (result.ok && result.message_id) state.message_id = result.message_id;
     }
@@ -732,6 +748,7 @@ export class ChannelManager implements ServiceLike {
     prune_ttl_map(this.control_reaction_seen, (ts) => ts, this.config.reactionActionTtlMs, this.config.seenMaxSize);
     prune_ttl_map(this.mention_cooldowns, (ts) => ts, 30_000, this.config.seenMaxSize);
     this.approval.prune_seen(this.config.seenTtlMs, this.config.seenMaxSize);
+    this.inbound_lanes.prune_idle();
   }
 
   /** 프로세스 재시작 후 응답 없이 남은 사용자 메시지를 재처리. */
@@ -766,9 +783,16 @@ export class ChannelManager implements ServiceLike {
           const content = String(last.content || "").trim();
           if (!content) continue;
 
-          this.logger.info("recovering orphaned message", { provider, chat_id, sender_id });
-          await this.bus.publish_inbound({
-            id: `recovery-${Date.now()}-${chat_id}`,
+          // 결정적 ID 사용: seen cache에서 원본 메시지와 매칭되도록
+          const last_meta = (last as Record<string, unknown>).metadata as Record<string, unknown> | undefined;
+          const original_id = String(last_meta?.message_id || last_meta?.telegram_message_id || "");
+          const recovery_id = original_id || `recovery:${chat_id}:${session.messages.length}`;
+          const recovery_seen_key = `${provider}:${chat_id}:${recovery_id}`;
+          if (this.seen.has(recovery_seen_key)) continue;
+
+          this.logger.info("recovering orphaned message", { provider, chat_id, sender_id, recovery_id });
+          const recovery_msg: InboundMessage = {
+            id: recovery_id,
             provider,
             channel: provider,
             sender_id,
@@ -776,8 +800,10 @@ export class ChannelManager implements ServiceLike {
             content,
             at: String(last.timestamp || now_iso()),
             thread_id: thread === "main" ? undefined : thread,
-            metadata: { kind: "orphan_recovery", is_recovery: true },
-          });
+            metadata: { kind: "orphan_recovery", is_recovery: true, message_id: recovery_id },
+          };
+          this.mark_seen(recovery_msg);
+          await this.bus.publish_inbound(recovery_msg);
           recovered++;
         }
       } catch (e) {

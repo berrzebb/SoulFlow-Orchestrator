@@ -10,6 +10,27 @@ services:
       NETWORKS: 0
       VOLUMES: 0
       POST: 1                # container create/start/kill 등 POST 허용
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: "0.5"
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: orchestrator-llm
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    devices:
+      - nvidia.com/gpu=all
+    deploy:
+      resources:
+        limits:
+          memory: 6G
+          cpus: "4"
 
   orchestrator:
     build:
@@ -18,8 +39,8 @@ services:
     container_name: soulflow-orchestrator
     restart: unless-stopped
     depends_on:
-#      ollama:
-#        condition: service_started
+      ollama:
+        condition: service_started
       docker-proxy:
         condition: service_started
     ports:
@@ -34,17 +55,11 @@ services:
       - NODE_ENV=production
       - SKIP_INSTANCE_LOCK=1
       - DOCKER_HOST=tcp://docker-proxy:2375
-
-# ollama:
-#   image: ollama/ollama:latest
-#   container_name: orchestrator-llm
-#   restart: unless-stopped
-#   ports:
-#     - "11434:11434"
-#   volumes:
-#     - ollama-data:/root/.ollama
-#   devices:
-#     - nvidia.com/gpu=all
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: "2"
 
 volumes:
   ollama-data:

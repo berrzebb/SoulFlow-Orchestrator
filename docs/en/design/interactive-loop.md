@@ -1,6 +1,6 @@
 # Design: Interactive Phase + Fresh Context Loop
 
-> **Status**: Implementation in progress
+> **Status**: Implementation complete
 
 ## Overview
 
@@ -579,6 +579,66 @@ Node addition dropdown in the graph editor toolbar:
 - **Cron**: Opens schedule (cron expression) input modal
 - **Channel**: `GET /api/channel-instances` → Channel instance dropdown
 
+## Orchestration Node Blocks
+
+In addition to Phase (agent) nodes, deterministic orchestration nodes can be inserted into the DAG.
+
+### Node Types
+
+| Node | Description | Execution |
+|------|------------|-----------|
+| **Phase** | Agent LLM call | SubagentRegistry-based |
+| **HTTP** | External API call | `fetch()` + template variables |
+| **Code** | JS or Shell execution | `vm.runInNewContext` / `run_shell_command` |
+| **IF** | Conditional branching | JS expression eval → true/false branch |
+| **Merge** | Branch convergence | Wait for `depends_on`, collect data |
+| **Set** | Variable assignment | Write directly to `memory` |
+
+### Data Flow
+
+All nodes communicate via a shared `memory` bus:
+
+```
+[HTTP-1] → memory["http-1"] = { status, body }
+    ↓
+[IF-1]   → memory["http-1"].status === 200 ?
+    ↓ TRUE             ↓ FALSE
+[Code-1]           [Set-1] → memory["error"] = "failed"
+    ↓
+[Phase-1] → references memory["code-1"].result
+```
+
+- Template variables: `{{memory.nodeId.field}}` pattern for value references
+- IF branching: downstream nodes of inactive branches are marked `skipped`
+- Merge: passes when all `depends_on` nodes are completed or skipped
+
+### Per-Node Execution
+
+Every node has a ▶ button:
+- **Click** → `POST /api/workflows/nodes/run` (actual execution)
+- **Shift+Click** → `POST /api/workflows/nodes/test` (dry-run preview)
+
+| Mode | Phase Node | Orchestration Node |
+|------|-----------|-------------------|
+| Run | LLM call → result | Actual execution (HTTP/Code/IF/Merge/Set) |
+| Test | Prompt preview | Config validation + resolved preview |
+
+### Type System
+
+- `WorkflowNodeDefinition` = `PhaseNodeDefinition | OrcheNodeDefinition`
+- `normalize_workflow()`: legacy `phases[]` → unified `nodes[]` conversion
+- `OrcheNodeState`: runtime state tracking (pending/running/completed/failed/skipped)
+
+### Related Files
+
+| File | Role |
+|------|------|
+| `src/agent/workflow-node.types.ts` | Node union types, normalize |
+| `src/agent/orche-node-executor.ts` | 5 executors + resolve_templates |
+| `src/agent/phase-loop-runner.ts` | Main loop node dispatch |
+| `src/dashboard/routes/workflows.ts` | /nodes/run, /nodes/test API |
+| `web/src/pages/workflows/graph-editor.tsx` | Node SVG rendering, ▶ button |
+
 ## Workflow Resume (State Persistence)
 
 Every state mutation is persisted to SQLite via `store.upsert(state)`. This enables **resume from any point** after crashes, restarts, or `waiting_user_input` pauses.
@@ -620,12 +680,17 @@ The runner must be **idempotent**: re-running a completed phase is a no-op (the 
 
 | File | Change |
 |------|--------|
-| `src/agent/phase-loop.types.ts` | mode/loop fields, PhaseState loop state, new events, goto, depends_on |
-| `src/agent/phase-loop-runner.ts` | run_interactive_phase(), run_sequential_loop_phase(), main loop branch |
-| `src/dashboard/ops-factory.ts` | ask_user callback, pending response resolution |
+| `src/agent/phase-loop.types.ts` | mode/loop fields, PhaseState loop state, new events, goto, depends_on, orche_states |
+| `src/agent/phase-loop-runner.ts` | run_interactive_phase(), run_sequential_loop_phase(), main loop node dispatch, normalize_workflow integration |
+| `src/agent/workflow-node.types.ts` | WorkflowNodeDefinition union, normalize_workflow(), phase↔node converters |
+| `src/agent/orche-node-executor.ts` | HTTP/Code/IF/Merge/Set executors, resolve_templates, test_orche_node |
+| `src/dashboard/ops-factory.ts` | ask_user callback, pending response resolution, run/test_single_node |
+| `src/dashboard/routes/workflows.ts` | /api/workflows/nodes/run, /api/workflows/nodes/test endpoints |
+| `src/dashboard/service.ts` | DashboardWorkflowOps: run_single_node, test_single_node interface |
 | `src/orchestration/workflow-loader.ts` | Parse mode/loop fields in normalize |
-| `web/src/pages/workflows/builder.tsx` | Phase mode dropdown + loop settings |
-| `web/src/i18n/ko.ts`, `en.ts` | Mode-related i18n keys |
+| `web/src/pages/workflows/builder.tsx` | Phase mode dropdown, orche node edit modal, node run result modal, onRunNode |
+| `web/src/pages/workflows/graph-editor.tsx` | Orche node SVG components (OrcheRectNode, IfDiamondNode, MergeDiamondNode), ▶ play button |
+| `web/src/i18n/ko.ts`, `en.ts` | Mode + orchestration node i18n keys |
 
 ## Related Docs
 

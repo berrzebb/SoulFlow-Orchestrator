@@ -237,7 +237,7 @@ describe("persona spawn injection — skills/roles 기반", () => {
 
   /* ── 4. Soul/Heart 없는 role → 기본 fallback 사용 ── */
 
-  it("soul/heart가 없는 role은 기본 fallback을 사용한다", async () => {
+  it("soul/heart가 없는 role은 contextual_system이 있으면 fallback을 생략한다", async () => {
     await write_role_skill(workspace, "worker", {
       body: "# Worker\n\n## Mission\n일반 작업 수행.",
     });
@@ -259,8 +259,9 @@ describe("persona spawn injection — skills/roles 기반", () => {
     await registry.wait_for_completion(result.subagent_id, 5000);
 
     const prompt = provider_calls[0].system_prompt;
-    expect(extract_prompt_field(prompt, "soul")).toBe("Calm, pragmatic, collaborative teammate.");
-    expect(extract_prompt_field(prompt, "heart")).toBe("Prioritize correctness, safety, and completion.");
+    // contextual_system이 있으면 하드코딩 soul/heart 생략 (실제 템플릿이 우선)
+    expect(extract_prompt_field(prompt, "soul")).toBeFalsy();
+    expect(extract_prompt_field(prompt, "heart")).toBeFalsy();
   });
 
   /* ── 5. Bus 메시지 — 채널 발화 직전 content 검증 ── */

@@ -20,6 +20,21 @@ import type {
   PhaseLoopEvent,
   CriticReview,
 } from "./phase-loop.types.js";
+import {
+  normalize_workflow,
+  is_orche_node,
+  node_to_phase,
+  type PhaseNodeDefinition,
+  type IfNodeDefinition,
+} from "./workflow-node.types.js";
+import { execute_orche_node } from "./orche-node-executor.js";
+import {
+  create_worktree,
+  create_isolated_directory,
+  merge_worktrees,
+  cleanup_worktrees,
+  type WorktreeHandle,
+} from "./worktree.js";
 
 export type PhaseLoopRunnerDeps = {
   subagents: SubagentRegistry;
@@ -35,6 +50,11 @@ export async function run_phase_loop(
 ): Promise<PhaseLoopRunResult> {
   const { subagents, store, logger, on_event } = deps;
 
+  // 통합 노드 배열 정규화 (nodes[] 또는 phases[] → WorkflowNodeDefinition[])
+  const normalized = normalize_workflow(options);
+  const all_nodes = normalized.nodes;
+  const phase_defs = normalized.phase_defs;
+
   const state: PhaseLoopState = {
     workflow_id: options.workflow_id,
     title: options.title,
@@ -43,7 +63,12 @@ export async function run_phase_loop(
     chat_id: options.chat_id,
     status: "running",
     current_phase: 0,
-    phases: options.phases.map((p) => build_initial_phase_state(p)),
+    phases: phase_defs.map((p) => build_initial_phase_state(p)),
+    orche_states: all_nodes.filter(is_orche_node).map((n) => ({
+      node_id: n.node_id,
+      node_type: n.node_type,
+      status: "pending" as const,
+    })),
     memory: { ...(options.initial_memory || {}) },
     created_at: now_iso(),
     updated_at: now_iso(),
@@ -51,45 +76,123 @@ export async function run_phase_loop(
 
   await store.upsert(state);
   emit(on_event, { type: "workflow_started", workflow_id: state.workflow_id });
-  logger.info("phase_loop_start", { workflow_id: state.workflow_id, phases: state.phases.length });
+  logger.info("phase_loop_start", { workflow_id: state.workflow_id, nodes: all_nodes.length, phases: state.phases.length });
 
   /** goto 루프 카운터: phase_id별 goto 횟수 추적. */
   const goto_counts = new Map<string, number>();
+  /** IF 분기에 의해 스킵된 노드 ID 집합. */
+  const skipped_nodes = new Set<string>();
 
   try {
-    // 상태 머신: 선형이 아닌 phase_id 기반 점프 지원
-    let phase_idx = 0;
-    while (phase_idx < options.phases.length) {
+    let node_idx = 0;
+    while (node_idx < all_nodes.length) {
       if (options.abort_signal?.aborted) {
         state.status = "cancelled";
         break;
       }
 
-      state.current_phase = phase_idx;
-      const phase_def = options.phases[phase_idx];
-      const phase_state = state.phases[phase_idx];
+      const node = all_nodes[node_idx]!;
 
-      // depends_on 검사: 의존 Phase가 모두 완료될 때까지 대기
-      if (phase_def.depends_on?.length) {
-        const unmet = phase_def.depends_on.filter((dep_id) => {
-          const dep_state = state.phases.find((p) => p.phase_id === dep_id);
-          return !dep_state || dep_state.status !== "completed";
+      // IF 분기에 의해 스킵된 노드
+      if (skipped_nodes.has(node.node_id)) {
+        if (is_orche_node(node)) {
+          const os = state.orche_states?.find((s) => s.node_id === node.node_id);
+          if (os) os.status = "skipped";
+          emit(on_event, { type: "node_skipped", workflow_id: state.workflow_id, node_id: node.node_id, reason: "if_branch_inactive" });
+        }
+        node_idx++;
+        continue;
+      }
+
+      // depends_on 검사: 의존 노드가 모두 완료(또는 스킵)될 때까지 대기
+      if (node.depends_on?.length) {
+        const unmet = node.depends_on.filter((dep_id) => {
+          if (skipped_nodes.has(dep_id)) return false; // 스킵된 노드는 해결됨으로 취급
+          const phase_dep = state.phases.find((p) => p.phase_id === dep_id);
+          if (phase_dep) return phase_dep.status !== "completed";
+          const orche_dep = state.orche_states?.find((s) => s.node_id === dep_id);
+          if (orche_dep) return orche_dep.status !== "completed" && orche_dep.status !== "skipped";
+          return true;
         });
         if (unmet.length > 0) {
-          // 아직 의존 Phase 미완료 → 건너뛰고 다른 Phase 실행
-          phase_idx++;
+          node_idx++;
           continue;
         }
       }
 
-      // 이미 완료된 Phase는 스킵 (goto로 되돌아간 경우 리셋된 Phase만 재실행)
-      if (phase_state.status === "completed") {
-        phase_idx++;
+      // ── 오케스트레이션 노드 실행 ──
+      if (is_orche_node(node)) {
+        const orche_state = state.orche_states?.find((s) => s.node_id === node.node_id);
+        if (orche_state?.status === "completed" || orche_state?.status === "skipped") {
+          node_idx++;
+          continue;
+        }
+
+        if (orche_state) {
+          orche_state.status = "running";
+          orche_state.started_at = now_iso();
+        }
+        emit(on_event, { type: "node_started", workflow_id: state.workflow_id, node_id: node.node_id, node_type: node.node_type });
+
+        try {
+          const result = await execute_orche_node(node, {
+            memory: state.memory,
+            abort_signal: options.abort_signal,
+            workspace: undefined,
+          });
+          state.memory[node.node_id] = result.output;
+
+          // IF 분기 스킵 처리
+          if (node.node_type === "if" && result.branch) {
+            const if_node = node as IfNodeDefinition;
+            const inactive = result.branch === "true" ? if_node.outputs.false_branch : if_node.outputs.true_branch;
+            for (const skip_id of inactive) skipped_nodes.add(skip_id);
+          }
+
+          if (orche_state) {
+            orche_state.status = "completed";
+            orche_state.result = result.output;
+            orche_state.completed_at = now_iso();
+          }
+          const preview = typeof result.output === "string" ? result.output.slice(0, 200) : JSON.stringify(result.output).slice(0, 200);
+          emit(on_event, { type: "node_completed", workflow_id: state.workflow_id, node_id: node.node_id, node_type: node.node_type, output_preview: preview });
+        } catch (err) {
+          if (orche_state) {
+            orche_state.status = "failed";
+            orche_state.error = error_message(err);
+          }
+          logger.warn("orche_node_error", { node_id: node.node_id, node_type: node.node_type, error: error_message(err) });
+          // 오케스트레이션 노드 실패 → 워크플로우 실패
+          state.status = "failed";
+          state.updated_at = now_iso();
+          await store.upsert(state);
+          break;
+        }
+
+        state.updated_at = now_iso();
+        await store.upsert(state);
+        node_idx++;
         continue;
       }
 
-      // 이전 페이즈 결과를 컨텍스트로 구성
-      const prev_context = phase_idx > 0 ? build_phase_context(state.phases[phase_idx - 1], phase_def.context_template) : "";
+      // ── Phase(Agent) 노드 실행 ──
+      const phase_node = node as PhaseNodeDefinition;
+      const phase_def = node_to_phase(phase_node);
+      const phase_idx = state.phases.findIndex((p) => p.phase_id === phase_def.phase_id);
+      if (phase_idx < 0) { node_idx++; continue; }
+
+      state.current_phase = phase_idx;
+      const phase_state = state.phases[phase_idx]!;
+
+      // 이미 완료된 Phase는 스킵
+      if (phase_state.status === "completed") {
+        node_idx++;
+        continue;
+      }
+
+      // 이전 Phase 결과를 컨텍스트로 구성
+      const prev_phase_idx = phase_idx > 0 ? phase_idx - 1 : -1;
+      const prev_context = prev_phase_idx >= 0 ? build_phase_context(state.phases[prev_phase_idx]!, phase_def.context_template) : "";
 
       // 페이즈 실행
       phase_state.status = "running";
@@ -110,7 +213,7 @@ export async function run_phase_loop(
         await store.upsert(state);
         emit(on_event, { type: "phase_completed", workflow_id: state.workflow_id, phase_id: phase_def.phase_id });
         options.on_phase_change?.(state);
-        phase_idx++;
+        node_idx++;
         continue;
       }
 
@@ -186,7 +289,7 @@ export async function run_phase_loop(
               return build_result(state);
             }
 
-            const target_idx = options.phases.findIndex((p) => p.phase_id === phase_def.critic!.goto_phase);
+            const target_idx = phase_defs.findIndex((p) => p.phase_id === phase_def.critic!.goto_phase);
             if (target_idx < 0) {
               logger.warn("phase_loop_goto_not_found", { goto_phase: phase_def.critic.goto_phase });
               critic_passed = true;
@@ -201,7 +304,9 @@ export async function run_phase_loop(
               reset_phase_state(state.phases[j]);
             }
 
-            phase_idx = target_idx;
+            // goto 대상의 node_idx를 찾아 점프
+            const goto_node_idx = all_nodes.findIndex((n) => n.node_id === phase_def.critic!.goto_phase);
+            if (goto_node_idx >= 0) node_idx = goto_node_idx;
             break; // critic 루프 탈출 → while 루프에서 goto 대상부터 재실행
           }
 
@@ -255,7 +360,7 @@ export async function run_phase_loop(
           }
         }
 
-        // goto로 인해 critic 루프를 탈출한 경우 → phase_idx가 이미 변경됨
+        // goto로 인해 critic 루프를 탈출한 경우 → node_idx가 이미 변경됨
         if (!critic_passed) continue;
       }
 
@@ -266,7 +371,7 @@ export async function run_phase_loop(
       await store.upsert(state);
       emit(on_event, { type: "phase_completed", workflow_id: state.workflow_id, phase_id: phase_def.phase_id });
       options.on_phase_change?.(state);
-      phase_idx++;
+      node_idx++;
     }
 
     // 워크플로우 완료
@@ -309,6 +414,35 @@ async function run_phase_agents(
 ): Promise<PhaseAgentState[]> {
   const { subagents, store, logger, on_event, options } = deps;
 
+  // 격리 준비: worktree/directory 핸들 수집
+  const worktree_handles: WorktreeHandle[] = [];
+  const isolation_paths = new Map<string, string>();
+
+  for (const agent_def of phase_def.agents) {
+    const isolation = agent_def.filesystem_isolation || "none";
+    if (isolation === "worktree") {
+      const handle = await create_worktree({
+        workspace: process.cwd(),
+        workflow_id: state.workflow_id,
+        agent_id: agent_def.agent_id,
+      });
+      if (handle) {
+        worktree_handles.push(handle);
+        isolation_paths.set(agent_def.agent_id, handle.path);
+        logger.debug("worktree_created", { agent_id: agent_def.agent_id, path: handle.path, branch: handle.branch });
+      } else {
+        logger.warn("worktree_create_failed", { agent_id: agent_def.agent_id });
+      }
+    } else if (isolation === "directory") {
+      const dir = await create_isolated_directory({
+        workspace: process.cwd(),
+        workflow_id: state.workflow_id,
+        agent_id: agent_def.agent_id,
+      });
+      isolation_paths.set(agent_def.agent_id, dir);
+    }
+  }
+
   const promises = phase_def.agents.map(async (agent_def, idx) => {
     const agent_state = phase_state.agents[idx];
     agent_state.status = "running";
@@ -317,9 +451,14 @@ async function run_phase_agents(
     options.on_agent_update?.(phase_def.phase_id, agent_def.agent_id, agent_state);
 
     try {
-      const task_prompt = build_agent_task(agent_def, state.objective, prev_context);
+      // 격리 경로가 있으면 태스크에 워크스페이스 지시 추가
+      const workspace_path = isolation_paths.get(agent_def.agent_id);
+      const isolation_instruction = workspace_path
+        ? `\n\n## Workspace\nYour isolated workspace directory: ${workspace_path}\nAll file operations must be within this directory.`
+        : "";
+
       const { subagent_id } = await subagents.spawn({
-        task: task_prompt,
+        task: build_agent_task(agent_def, state.objective, prev_context, merge_tools(agent_def.tools, phase_def.tools)) + isolation_instruction,
         role: agent_def.role,
         label: agent_def.label,
         model: agent_def.model,
@@ -330,6 +469,7 @@ async function run_phase_agents(
         announce: false,
         parent_id: `workflow:${state.workflow_id}`,
         skip_controller: true,
+        skill_names: phase_def.skills,
       });
       agent_state.subagent_id = subagent_id;
 
@@ -372,7 +512,27 @@ async function run_phase_agents(
     return agent_state;
   });
 
-  return Promise.all(promises);
+  const agent_results = await Promise.all(promises);
+
+  // Phase 완료 후 worktree 병합 + 정리
+  if (worktree_handles.length > 0) {
+    const merge_results = await merge_worktrees(process.cwd(), worktree_handles);
+    for (const mr of merge_results) {
+      if (mr.conflict) {
+        logger.warn("worktree_merge_conflict", { agent_id: mr.agent_id, error: mr.error });
+        emit(on_event, {
+          type: "agent_failed", workflow_id: state.workflow_id,
+          phase_id: phase_def.phase_id, agent_id: mr.agent_id,
+          error: `merge conflict: ${mr.error}`,
+        });
+      } else if (mr.merged && mr.files_changed > 0) {
+        logger.info("worktree_merged", { agent_id: mr.agent_id, files_changed: mr.files_changed });
+      }
+    }
+    await cleanup_worktrees(process.cwd(), worktree_handles);
+  }
+
+  return agent_results;
 }
 
 // ── Critic 실행 ─────────────────────────────────────
@@ -486,7 +646,8 @@ async function run_interactive_phase(
     if (deps.options.abort_signal?.aborted) break;
 
     const conversation_history = phase_state.loop_results.join("\n---\n");
-    const task = build_agent_task(agent_def, state.objective, prev_context);
+    const merged = merge_tools(agent_def.tools, phase_def.tools);
+    const task = build_agent_task(agent_def, state.objective, prev_context, merged);
     const full_task = conversation_history
       ? `${task}\n\n## Conversation History\n${conversation_history}\n\n## Current Turn: ${i + 1}/${max}`
       : task;
@@ -506,6 +667,7 @@ async function run_interactive_phase(
       announce: false,
       parent_id: `workflow:${state.workflow_id}`,
       skip_controller: true,
+      skill_names: phase_def.skills,
     });
     agent_state.subagent_id = subagent_id;
 
@@ -583,7 +745,8 @@ async function run_sequential_loop_phase(
       .map((r, idx) => `### Iteration ${idx + 1}\n${r}`)
       .join("\n\n");
 
-    const task = build_agent_task(agent_def, state.objective, prev_context);
+    const merged = merge_tools(agent_def.tools, phase_def.tools);
+    const task = build_agent_task(agent_def, state.objective, prev_context, merged);
     const full_task = loop_context
       ? `${task}\n\n## Previous Iterations\n${loop_context}\n\n## Current Iteration: ${i + 1}/${max}`
       : task;
@@ -603,6 +766,7 @@ async function run_sequential_loop_phase(
       announce: false,
       parent_id: `workflow:${state.workflow_id}`,
       skip_controller: true,
+      skill_names: phase_def.skills,
     });
     agent_state.subagent_id = subagent_id;
 
@@ -698,8 +862,15 @@ function reset_phase_state(phase_state: PhaseState): void {
   }
 }
 
-function build_agent_task(agent_def: PhaseAgentDefinition, objective: string, prev_context: string): string {
+/** 에이전트 도구와 Phase 도구를 합산 (중복 제거). */
+function merge_tools(agent_tools?: string[], phase_tools?: string[]): string[] | undefined {
+  if (!agent_tools?.length && !phase_tools?.length) return undefined;
+  return [...new Set([...(agent_tools || []), ...(phase_tools || [])])];
+}
+
+function build_agent_task(agent_def: PhaseAgentDefinition, objective: string, prev_context: string, tools?: string[]): string {
   const parts = [agent_def.system_prompt];
+  if (tools?.length) parts.push(`\n## Available Tools\n${tools.join(", ")}`);
   if (prev_context) parts.push(`\n## Previous Phase Context\n${prev_context}`);
   parts.push(`\n## Objective\n${objective}`);
   return parts.join("\n");

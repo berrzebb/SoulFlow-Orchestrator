@@ -9,6 +9,40 @@ import type { SecretVaultService } from "../security/secret-vault.js";
 import { CircuitBreaker, type CircuitBreakerOptions } from "./circuit-breaker.js";
 import { ProviderHealthScorer, type HealthScorerOptions } from "./health-scorer.js";
 
+/** 일시적 오류 재시도 설정. */
+const MAX_TRANSIENT_RETRIES = 2;
+const RETRY_BASE_MS = 1000;
+
+function sleep_ms(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+const TRANSIENT_ERROR_PATTERNS = [
+  /rate.?limit/i,
+  /too.?many.?requests/i,
+  /429/,
+  /5\d{2}\b/,
+  /timeout/i,
+  /ECONNRESET/i,
+  /ECONNREFUSED/i,
+  /ETIMEDOUT/i,
+  /network/i,
+  /socket hang up/i,
+  /stream disconnected/i,
+];
+
+/** thrown exception이 일시적 오류인지 판별. */
+function is_transient_exception(err: unknown): boolean {
+  const msg = String((err as Error)?.message || err || "");
+  return TRANSIENT_ERROR_PATTERNS.some((p) => p.test(msg));
+}
+
+/** LLM 응답의 error content가 일시적 오류인지 판별. */
+function is_transient_error_content(content: string): boolean {
+  const c = String(content || "").toLowerCase();
+  return TRANSIENT_ERROR_PATTERNS.some((p) => p.test(c));
+}
+
 function parse_provider_id(raw: string): ProviderId | null {
   const v = String(raw || "").trim().toLowerCase();
   if (v === "chatgpt") return "chatgpt";
@@ -237,22 +271,42 @@ export class ProviderRegistry {
       abort_signal: args.abort_signal,
     };
 
-    const start = Date.now();
-    try {
-      const result = await provider.chat(options);
-      const is_error = result.finish_reason === "error";
-      if (is_error) {
-        breaker?.record_failure();
-      } else {
-        breaker?.record_success();
+    let last_error: unknown;
+    for (let attempt = 0; attempt <= MAX_TRANSIENT_RETRIES; attempt++) {
+      if (attempt > 0) {
+        if (args.abort_signal?.aborted) throw last_error;
+        await sleep_ms(RETRY_BASE_MS * 2 ** (attempt - 1));
+        if (args.abort_signal?.aborted) throw last_error;
       }
-      this.health_scorer.record(id, { ok: !is_error, latency_ms: Date.now() - start });
-      return result;
-    } catch (err) {
-      breaker?.record_failure();
-      this.health_scorer.record(id, { ok: false, latency_ms: Date.now() - start });
-      throw err;
+
+      const start = Date.now();
+      try {
+        const result = await provider.chat(options);
+        const is_error = result.finish_reason === "error";
+        if (is_error && attempt < MAX_TRANSIENT_RETRIES && is_transient_error_content(String(result.content || ""))) {
+          breaker?.record_failure();
+          this.health_scorer.record(id, { ok: false, latency_ms: Date.now() - start });
+          last_error = new Error(String(result.content || "transient_error"));
+          continue;
+        }
+        if (is_error) {
+          breaker?.record_failure();
+        } else {
+          breaker?.record_success();
+        }
+        this.health_scorer.record(id, { ok: !is_error, latency_ms: Date.now() - start });
+        return result;
+      } catch (err) {
+        this.health_scorer.record(id, { ok: false, latency_ms: Date.now() - start });
+        last_error = err;
+        if (!is_transient_exception(err) || attempt >= MAX_TRANSIENT_RETRIES) {
+          breaker?.record_failure();
+          throw err;
+        }
+        breaker?.record_failure();
+      }
     }
+    throw last_error;
   }
 
   async run_headless_prompt(args: {

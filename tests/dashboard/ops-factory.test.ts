@@ -32,15 +32,15 @@ describe("create_template_ops", () => {
   it("list()가 모든 템플릿 이름을 반환한다", () => {
     const ops = create_template_ops(workspace);
     const list = ops.list();
-    expect(list.length).toBe(7);
-    expect(list.map((t) => t.name)).toContain("IDENTITY");
+    expect(list.length).toBe(6);
+    expect(list.map((t) => t.name)).toContain("SOUL");
     expect(list.map((t) => t.name)).toContain("HEARTBEAT");
   });
 
   it("존재하는 템플릿은 exists: true", () => {
     const ops = create_template_ops(workspace);
-    const id = ops.list().find((t) => t.name === "IDENTITY");
-    expect(id?.exists).toBe(true);
+    const soul = ops.list().find((t) => t.name === "SOUL");
+    expect(soul?.exists).toBe(true);
   });
 
   it("없는 템플릿은 exists: false", () => {

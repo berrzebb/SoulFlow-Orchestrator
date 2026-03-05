@@ -1,6 +1,6 @@
 # 설계: Interactive Phase + Fresh Context Loop
 
-> **Status**: 구현 진행 중
+> **상태**: 구현 완료
 
 ## 개요
 
@@ -556,6 +556,66 @@ phases:
 - **Cron**: 클릭 시 스케줄(cron 표현식) 입력 모달
 - **Channel**: `GET /api/channel-instances` → 채널 인스턴스 선택 드롭다운
 
+## 오케스트레이션 노드 블록
+
+Phase(에이전트) 노드 외에 결정론적 오케스트레이션 노드를 DAG에 삽입할 수 있다.
+
+### 노드 타입
+
+| 노드 | 설명 | 실행 방식 |
+|------|------|----------|
+| **Phase** | 에이전트 LLM 호출 | SubagentRegistry 기반 |
+| **HTTP** | 외부 API 호출 | `fetch()` + 템플릿 변수 |
+| **Code** | JS 또는 Shell 실행 | `vm.runInNewContext` / `run_shell_command` |
+| **IF** | 조건 분기 | JS 표현식 평가 → true/false 분기 |
+| **Merge** | 분기 합류 | `depends_on` 대기 후 데이터 수집 |
+| **Set** | 변수 할당 | `memory`에 직접 기록 |
+
+### 데이터 플로우
+
+모든 노드는 공유 `memory` 버스를 통해 데이터를 주고받는다:
+
+```
+[HTTP-1] → memory["http-1"] = { status, body }
+    ↓
+[IF-1]   → memory["http-1"].status === 200 ?
+    ↓ TRUE             ↓ FALSE
+[Code-1]           [Set-1] → memory["error"] = "failed"
+    ↓
+[Phase-1] → memory["code-1"].result 참조
+```
+
+- 템플릿 변수: `{{memory.nodeId.field}}` 패턴으로 값 참조
+- IF 분기: 비활성 분기의 다운스트림 노드는 `skipped` 상태로 처리
+- Merge: `depends_on`에 명시된 노드가 completed 또는 skipped이면 통과
+
+### 노드 단독 실행
+
+모든 노드에 ▶ 버튼 제공:
+- **클릭** → `POST /api/workflows/nodes/run` (실제 실행)
+- **Shift+클릭** → `POST /api/workflows/nodes/test` (Dry-run 미리보기)
+
+| 모드 | Phase 노드 | 오케스트레이션 노드 |
+|------|-----------|-------------------|
+| Run | LLM 호출 → 결과 반환 | 실제 실행 (HTTP/Code/IF/Merge/Set) |
+| Test | 프롬프트 미리보기 | 설정 검증 + 해석 결과 |
+
+### 타입 시스템
+
+- `WorkflowNodeDefinition` = `PhaseNodeDefinition | OrcheNodeDefinition`
+- `normalize_workflow()`: 레거시 `phases[]` → 통합 `nodes[]` 변환
+- `OrcheNodeState`: 런타임 상태 추적 (pending/running/completed/failed/skipped)
+
+### 관련 파일
+
+| 파일 | 역할 |
+|------|------|
+| `src/agent/workflow-node.types.ts` | 노드 유니온 타입, normalize |
+| `src/agent/orche-node-executor.ts` | 5개 실행기 + resolve_templates |
+| `src/agent/phase-loop-runner.ts` | 메인 루프 노드 분기 |
+| `src/dashboard/routes/workflows.ts` | /nodes/run, /nodes/test API |
+| `web/src/pages/workflows/graph-editor.tsx` | 노드 SVG 렌더링, ▶ 버튼 |
+
 ## 워크플로우 Resume (상태 영속성)
 
 모든 상태 변경은 `store.upsert(state)`로 SQLite에 영속화. 이를 통해 크래시, 재시작, `waiting_user_input` 일시정지 후 **어느 지점에서든 재개** 가능.
@@ -597,12 +657,17 @@ phases:
 
 | 파일 | 변경 |
 |------|------|
-| `src/agent/phase-loop.types.ts` | mode/loop 필드, PhaseState 루프 상태, 새 이벤트, goto, depends_on |
-| `src/agent/phase-loop-runner.ts` | run_interactive_phase(), run_sequential_loop_phase(), 메인 루프 분기 |
-| `src/dashboard/ops-factory.ts` | ask_user 콜백, pending response 해소 |
+| `src/agent/phase-loop.types.ts` | mode/loop 필드, PhaseState 루프 상태, 새 이벤트, goto, depends_on, orche_states |
+| `src/agent/phase-loop-runner.ts` | run_interactive_phase(), run_sequential_loop_phase(), 메인 루프 노드 분기, normalize_workflow 통합 |
+| `src/agent/workflow-node.types.ts` | WorkflowNodeDefinition 유니온, normalize_workflow(), phase↔node 변환기 |
+| `src/agent/orche-node-executor.ts` | HTTP/Code/IF/Merge/Set 실행기, resolve_templates, test_orche_node |
+| `src/dashboard/ops-factory.ts` | ask_user 콜백, pending response 해소, run/test_single_node |
+| `src/dashboard/routes/workflows.ts` | /api/workflows/nodes/run, /api/workflows/nodes/test 엔드포인트 |
+| `src/dashboard/service.ts` | DashboardWorkflowOps: run_single_node, test_single_node 인터페이스 |
 | `src/orchestration/workflow-loader.ts` | normalize에서 mode/loop 필드 파싱 |
-| `web/src/pages/workflows/builder.tsx` | Phase mode 드롭다운 + loop 설정 |
-| `web/src/i18n/ko.ts`, `en.ts` | 모드 관련 i18n 키 |
+| `web/src/pages/workflows/builder.tsx` | Phase mode 드롭다운, 오케 노드 편집 모달, 노드 실행 결과 모달, onRunNode |
+| `web/src/pages/workflows/graph-editor.tsx` | 오케 노드 SVG 컴포넌트 (OrcheRectNode, IfDiamondNode, MergeDiamondNode), ▶ 버튼 |
+| `web/src/i18n/ko.ts`, `en.ts` | 모드 + 오케스트레이션 노드 i18n 키 |
 
 ## 관련 문서
 

@@ -48,6 +48,13 @@ const PROVIDER_NOISE_PATTERNS: RegExp[] = [
   /^usage:\s+codex\b/i,
   /^-{3,}$/,
   /^user$/i,
+  // 내부 URI / 메모리 메타데이터 누출 방지
+  /\bsqlite:\/\/\S+/i,
+  /^\[sqlite:\/\//i,
+  /^\[(?:daily|longterm|archive)\//i,
+  // 내부 컨텍스트 마커 누출 방지
+  /^\[(?:CURRENT_REQUEST|REFERENCE_RECENT_CONTEXT|ATTACHED_FILES)\]/i,
+  /\bCURRENT_REQUEST\b.*\bREFERENCE\b.*\b참고용/,
 ];
 
 const PERSONA_LEAK_PATTERNS: RegExp[] = [
@@ -87,10 +94,10 @@ export function is_provider_noise_line(line: string): boolean {
   return is_tool_protocol_leak_line(l) || PROVIDER_NOISE_PATTERNS.some((p) => p.test(l));
 }
 
-/** 스트리밍 전용: 빈 줄도 노이즈로 취급하여 청크 크기를 줄인다. */
+/** 스트리밍 전용: 프로바이더 노이즈 판별 (빈 줄은 paragraph break이므로 보존). */
 export function is_stream_noise_line(line: string): boolean {
   const l = String(line || "").trim();
-  if (!l) return true;
+  if (!l) return false;
   return is_provider_noise_line(l);
 }
 
@@ -105,8 +112,7 @@ export function strip_tool_protocol_leaks(raw: string): string {
     .replace(ORCH_TOOL_BLOCK_RE, "")
     .split("\n")
     .filter((l) => !is_tool_protocol_leak_line(l.trimEnd()))
-    .join("\n")
-    .trim();
+    .join("\n");
 }
 
 export function strip_persona_leak_blocks(raw: string): string {
@@ -192,7 +198,8 @@ export function sanitize_stream_chunk(raw: string): string {
     .split("\n")
     .filter((l) => !STREAM_ENV_RE.test(l))
     .join("\n");
-  return strip_tool_protocol_leaks(filtered).slice(0, 800).trim();
+  // 연속 빈 줄을 최대 1개로 축소 (paragraph break 보존, 과도한 공백 제거)
+  return strip_tool_protocol_leaks(filtered).replace(/\n{3,}/g, "\n\n");
 }
 
 const RE_LEADING_MENTIONS = /^(\s*@[A-Za-z0-9._-]+\s*)+/;

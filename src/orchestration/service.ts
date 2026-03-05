@@ -246,7 +246,12 @@ export class OrchestrationService {
         active_tasks: active_tasks_in_chat,
         recent_history: req.session_history.slice(-6),
         available_tool_categories: tool_categories,
-        available_skills: skill_names,
+        available_skills: skill_names.map(name => {
+          const meta = this.runtime.get_context_builder().skills_loader.get_skill_metadata(name);
+          return meta
+            ? { name, summary: meta.summary, triggers: meta.triggers }
+            : { name, summary: "", triggers: [] };
+        }),
       },
       active_tasks_in_chat,
       {

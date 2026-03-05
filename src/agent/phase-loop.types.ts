@@ -1,5 +1,7 @@
 /** Phase Loop — Multi-Agent Phase-Based Workflow 타입 정의. */
 
+import type { OrcheNodeState, OrcheNodeType, WorkflowNodeDefinition } from "./workflow-node.types.js";
+
 // ── State ────────────────────────────────────────────
 
 export type PhaseWorkflowStatus =
@@ -80,6 +82,8 @@ export interface PhaseLoopState {
   status: PhaseWorkflowStatus;
   current_phase: number;
   phases: PhaseState[];
+  /** 오케스트레이션 노드 상태 (HTTP/Code/IF/Merge/Set). */
+  orche_states?: OrcheNodeState[];
   memory: Record<string, unknown>;
   created_at: string;
   updated_at: string;
@@ -105,6 +109,8 @@ export interface CriticReview {
   }>;
 }
 
+export type FilesystemIsolation = "none" | "directory" | "worktree";
+
 export interface PhaseAgentDefinition {
   agent_id: string;
   role: string;
@@ -114,6 +120,8 @@ export interface PhaseAgentDefinition {
   system_prompt: string;
   tools?: string[];
   max_turns?: number;
+  /** 파일시스템 격리 모드. none(기본): 격리 없음, directory: 전용 디렉토리, worktree: git worktree 격리. */
+  filesystem_isolation?: FilesystemIsolation;
 }
 
 export interface PhaseCriticDefinition {
@@ -143,14 +151,92 @@ export interface PhaseDefinition {
   max_loop_iterations?: number;
   /** Fork-Join: 이 Phase 시작 전에 완료되어야 하는 phase_id 목록. */
   depends_on?: string[];
+  /** Phase에 바인딩된 도구 ID 목록 (tool_nodes 참조). */
+  tools?: string[];
+  /** Phase에 바인딩된 스킬 이름 목록 (skill_nodes 참조). */
+  skills?: string[];
+}
+
+/** 보조 Tool 노드 정의. */
+export interface ToolNodeDefinition {
+  id: string;
+  tool_id: string;
+  description: string;
+  attach_to?: string[];
+}
+
+/** 보조 Skill 노드 정의. */
+export interface SkillNodeDefinition {
+  id: string;
+  skill_name: string;
+  description: string;
+  attach_to?: string[];
+}
+
+/** Cron 트리거 정의. */
+export interface WorkflowTriggerDefinition {
+  type: "cron";
+  schedule: string;
+  timezone?: string;
+}
+
+/** HITL 채널 바인딩. */
+export interface HitlChannelDefinition {
+  channel_type: string;
+  chat_id?: string;
 }
 
 export interface WorkflowDefinition {
   title: string;
   objective: string;
+  /** 레거시: Phase 전용 배열. nodes[]가 없을 때 사용. */
   phases: PhaseDefinition[];
+  /** 통합 노드 배열 (Phase + 오케스트레이션). 있으면 phases[]보다 우선. */
+  nodes?: WorkflowNodeDefinition[];
   /** 변수: `{{objective}}`, `{{channel}}` 등 런타임 치환. */
   variables?: Record<string, string>;
+  /** 보조 Tool 노드 목록. */
+  tool_nodes?: ToolNodeDefinition[];
+  /** 보조 Skill 노드 목록. */
+  skill_nodes?: SkillNodeDefinition[];
+  /** @deprecated trigger_nodes 사용. */
+  trigger?: WorkflowTriggerDefinition;
+  /** 트리거 노드 (복수 지원). */
+  trigger_nodes?: TriggerNodeRecord[];
+  /** HITL 채널 바인딩 (interactive/sequential_loop 모드용). */
+  hitl_channel?: HitlChannelDefinition;
+  /** 오케스트레이션 노드 (UI에서 추가한 HTTP/Code/IF/Merge/Set). */
+  orche_nodes?: OrcheNodeRecord[];
+  /** 노드 간 필드 매핑 (UI에서 드래그 연결로 생성). */
+  field_mappings?: FieldMapping[];
+}
+
+/** UI 오케스트레이션 노드 (Phase가 아닌 보조 실행 노드). */
+export interface OrcheNodeRecord {
+  node_id: string;
+  node_type: OrcheNodeType;
+  title: string;
+  depends_on?: string[];
+  [key: string]: unknown;
+}
+
+/** 트리거 노드 레코드. */
+export interface TriggerNodeRecord {
+  id: string;
+  trigger_type: "cron" | "webhook" | "manual" | "channel_message";
+  schedule?: string;
+  timezone?: string;
+  webhook_path?: string;
+  channel_type?: string;
+  chat_id?: string;
+}
+
+/** 노드 간 필드 레벨 데이터 매핑. */
+export interface FieldMapping {
+  from_node: string;
+  from_field: string;   // "body.data[0].id"
+  to_node: string;
+  to_field: string;     // 타겟 노드의 입력 위치
 }
 
 // ── Run Options / Result ─────────────────────────────
@@ -195,4 +281,7 @@ export type PhaseLoopEvent =
   | { type: "user_input_requested"; workflow_id: string; phase_id: string; question: string }
   | { type: "user_input_received"; workflow_id: string; phase_id: string }
   | { type: "loop_iteration"; workflow_id: string; phase_id: string; iteration: number }
-  | { type: "phase_goto"; workflow_id: string; from_phase: string; to_phase: string; reason: string };
+  | { type: "phase_goto"; workflow_id: string; from_phase: string; to_phase: string; reason: string }
+  | { type: "node_started"; workflow_id: string; node_id: string; node_type: string }
+  | { type: "node_completed"; workflow_id: string; node_id: string; node_type: string; output_preview?: string }
+  | { type: "node_skipped"; workflow_id: string; node_id: string; reason: string };

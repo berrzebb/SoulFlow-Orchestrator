@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../api/client";
@@ -8,6 +8,7 @@ import { MessageBubble } from "../../components/message-bubble";
 import { useToast } from "../../components/toast";
 import { useApprovals } from "../../hooks/use-approvals";
 import { useT } from "../../i18n";
+import { time_ago } from "../../utils/format";
 
 interface PhaseMessage {
   role: "user" | "assistant" | "system";
@@ -123,6 +124,9 @@ export default function WorkflowDetailPage() {
                 <Badge status={wf.status} variant={STATUS_VARIANT[wf.status] || "off"} />
                 <Badge status={`${done_agents}/${total_agents} agents`} variant="info" />
                 <Badge status={`Phase ${wf.current_phase + 1}/${wf.phases.length}`} variant="off" />
+                <span className="wf-detail__time" title={new Date(wf.updated_at).toLocaleString()}>
+                  {time_ago(wf.updated_at)}
+                </span>
               </div>
             </div>
             {(wf.status === "failed" || wf.status === "waiting_user_input") && (
@@ -186,12 +190,15 @@ function PhaseCard({ phase, index, isCurrent, maxIterations, workflowId, onChat 
   const t = useT();
   const mode = phase.mode || "parallel";
   const modeLabel = MODE_LABEL[mode];
+  const defaultCollapsed = phase.status === "completed" && !isCurrent;
+  const [collapsed, setCollapsed] = useState(defaultCollapsed);
 
   return (
     <section className={`wf-phase ${DESK_CLS[phase.status] || "desk--off"}${isCurrent ? " wf-phase--current" : ""}`}>
-      {/* Phase Header */}
-      <div className="wf-phase__header">
+      {/* Phase Header — 클릭으로 접기/펼치기 */}
+      <div className="wf-phase__header" onClick={() => setCollapsed((c) => !c)} style={{ cursor: "pointer", userSelect: "none" }}>
         <div className="wf-phase__title-group">
+          <span className="wf-phase__collapse-icon">{collapsed ? "▸" : "▾"}</span>
           <span className="wf-phase__index">Phase {index + 1}</span>
           <h3 className="wf-phase__title">{phase.title}</h3>
           {modeLabel && (
@@ -205,11 +212,16 @@ function PhaseCard({ phase, index, isCurrent, maxIterations, workflowId, onChat 
           {phase.pending_user_input && (
             <Badge status={t("workflows.awaiting_input")} variant="warn" />
           )}
+          {collapsed && (
+            <span style={{ fontSize: "var(--fs-xs)", color: "var(--muted)" }}>
+              {phase.agents.length} agents
+            </span>
+          )}
         </div>
       </div>
 
       {/* Mode-specific body */}
-      {mode === "interactive" ? (
+      {!collapsed && (mode === "interactive" ? (
         <InteractivePhaseBody
           phase={phase}
           workflowId={workflowId}
@@ -223,9 +235,9 @@ function PhaseCard({ phase, index, isCurrent, maxIterations, workflowId, onChat 
         />
       ) : (
         <ParallelPhaseBody phase={phase} onChat={onChat} />
-      )}
+      ))}
 
-      {phase.critic && <CriticCard critic={phase.critic} />}
+      {!collapsed && phase.critic && <CriticCard critic={phase.critic} />}
     </section>
   );
 }
@@ -235,7 +247,6 @@ function ParallelPhaseBody({ phase, onChat }: {
   phase: PhaseState;
   onChat: (agent_id: string, label: string, model?: string, status?: string) => void;
 }) {
-  const t = useT();
   const completed = phase.agents.filter((a) => a.status === "completed").length;
   const total = phase.agents.length;
   const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
@@ -248,34 +259,70 @@ function ParallelPhaseBody({ phase, onChat }: {
 
       <div className="stat-grid stat-grid--narrow">
         {phase.agents.map((agent) => (
-          <div key={agent.agent_id} className={`stat-card stat-card--compact ${DESK_CLS[agent.status] || "desk--off"}`}>
-            <div className="stat-card__header">
-              <Badge status={agent.status} variant={STATUS_VARIANT[agent.status] || "off"} />
-            </div>
-            <div className="stat-card__value stat-card__value--md">{agent.label}</div>
-            <div className="stat-card__label">{agent.role}{agent.model ? ` · ${agent.model}` : ""}</div>
-            {agent.result && (
-              <div className="stat-card__extra wf-agent__result">
-                {agent.result.slice(0, 120)}…
-              </div>
-            )}
-            {agent.error && (
-              <div className="stat-card__extra wf-agent__error">
-                {agent.error.slice(0, 80)}
-              </div>
-            )}
-            <div className="stat-card__actions">
-              <button
-                className="btn btn--xs"
-                onClick={() => onChat(agent.agent_id, agent.label, agent.model, agent.status)}
-              >
-                💬 {t("workflows.chat")}
-              </button>
-            </div>
-          </div>
+          <AgentCard key={agent.agent_id} agent={agent} onChat={onChat} />
         ))}
       </div>
     </>
+  );
+}
+
+/** 에이전트 카드: 결과 복사 + 에러 펼치기. */
+function AgentCard({ agent, onChat }: {
+  agent: PhaseAgentState;
+  onChat: (agent_id: string, label: string, model?: string, status?: string) => void;
+}) {
+  const t = useT();
+  const [errorExpanded, setErrorExpanded] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const copyResult = useCallback(() => {
+    const text = agent.result || agent.error || "";
+    if (!text) return;
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  }, [agent.result, agent.error]);
+
+  return (
+    <div className={`stat-card stat-card--compact ${DESK_CLS[agent.status] || "desk--off"}`}>
+      <div className="stat-card__header">
+        <Badge status={agent.status} variant={STATUS_VARIANT[agent.status] || "off"} />
+        {(agent.result || agent.error) && (
+          <button
+            className="btn btn--xs wf-agent__copy"
+            onClick={copyResult}
+            title={copied ? "Copied!" : "Copy result"}
+          >
+            {copied ? "✓" : "⧉"}
+          </button>
+        )}
+      </div>
+      <div className="stat-card__value stat-card__value--md">{agent.label}</div>
+      <div className="stat-card__label">{agent.role}{agent.model ? ` · ${agent.model}` : ""}</div>
+      {agent.result && (
+        <div className="stat-card__extra wf-agent__result">
+          {agent.result.length > 120 ? agent.result.slice(0, 120) + "…" : agent.result}
+        </div>
+      )}
+      {agent.error && (
+        <div
+          className="stat-card__extra wf-agent__error"
+          onClick={() => setErrorExpanded((e) => !e)}
+          style={{ cursor: agent.error.length > 80 ? "pointer" : undefined }}
+        >
+          {errorExpanded ? agent.error : (agent.error.length > 80 ? agent.error.slice(0, 80) + "… ▸" : agent.error)}
+        </div>
+      )}
+      <div className="stat-card__actions">
+        <button
+          className="btn btn--xs"
+          onClick={() => onChat(agent.agent_id, agent.label, agent.model, agent.status)}
+        >
+          💬 {t("workflows.chat")}
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -397,7 +444,7 @@ function SequentialLoopPhaseBody({ phase, maxIterations, onChat }: {
               key={i}
               className={`wf-loop-timeline__item${i === iteration - 1 && phase.status === "running" ? " wf-loop-timeline__item--active" : ""}`}
             >
-              <span className="wf-loop-timeline__marker">
+              <span className="wf-loop-timeline__marker" title={isAskUser ? "Ask user for input" : isUserInput ? "User input" : "Completed"}>
                 {isAskUser ? "❓" : isUserInput ? "👤" : "✅"} #{i + 1}
               </span>
               <span className="wf-loop-timeline__text">
@@ -409,14 +456,14 @@ function SequentialLoopPhaseBody({ phase, maxIterations, onChat }: {
 
         {iteration < maxIterations && phase.status === "running" && !phase.pending_user_input && (
           <div className="wf-loop-timeline__item wf-loop-timeline__item--active">
-            <span className="wf-loop-timeline__marker">🔄 #{iteration + 1}</span>
+            <span className="wf-loop-timeline__marker" title="Currently running">🔄 #{iteration + 1}</span>
             <span className="wf-loop-timeline__text">{t("workflows.loading")}...</span>
           </div>
         )}
 
         {iteration + 1 < maxIterations && (
           <div className="wf-loop-timeline__item wf-loop-timeline__item--remaining">
-            <span className="wf-loop-timeline__marker">⏳</span>
+            <span className="wf-loop-timeline__marker" title="Remaining iterations">⏳</span>
             <span className="wf-loop-timeline__text">
               #{iteration + 2}–{maxIterations} {t("workflows.remaining")}
             </span>

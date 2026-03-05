@@ -48,7 +48,7 @@ import { handle_session } from "./routes/session.js";
 import { handle_oauth } from "./routes/oauth.js";
 import { handle_cli_auth } from "./routes/cli-auth.js";
 import { handle_models } from "./routes/models.js";
-import { handle_workflow } from "./routes/workflows.js";
+import { handle_workflow, handle_workflow_node } from "./routes/workflows.js";
 
 const RE_MEDIA_TOKEN = /^\/media\/([a-z0-9]{16,})$/i;
 
@@ -270,6 +270,10 @@ export interface DashboardWorkflowOps {
   list_roles(): Array<{ id: string; name: string; description: string; soul: string | null; heart: string | null; tools: string[] }>;
   /** 중단된 워크플로우를 영속 상태에서 재개. */
   resume(workflow_id: string): Promise<{ ok: boolean; error?: string }>;
+  /** 단일 노드 실행 (Run 모드). */
+  run_single_node?(node: Record<string, unknown>, input_memory: Record<string, unknown>): Promise<{ ok: boolean; output?: unknown; duration_ms?: number; error?: string }>;
+  /** 단일 노드 테스트 (Dry-run). */
+  test_single_node?(node: Record<string, unknown>, input_memory: Record<string, unknown>): { ok: boolean; preview?: unknown; warnings?: string[] };
 }
 
 export interface DashboardCliAuthOps {
@@ -484,7 +488,10 @@ export class DashboardService implements ServiceLike {
     this.route_map.set("/api/cli-auth", handle_cli_auth);
     this.route_map.set("/api/models", handle_models);
     this.route_map.set("/api/workflows", handle_workflow);
+    this.route_map.set("/api/workflow-roles", handle_workflow);
     this.route_map.set("/api/workflow-templates", handle_workflow);
+    this.route_map.set("/api/workflow-node-runs", handle_workflow_node);
+    this.route_map.set("/api/workflow-node-tests", handle_workflow_node);
     this.route_map.set("/api/stats", handle_health);
     this.route_map.set("/api/dlq", handle_health);
     this.route_map.set("/api/workflow-events", handle_health);

@@ -141,3 +141,37 @@ export const handle_workflow: RouteHandler = async (ctx) => {
 
   return false;
 };
+
+/** POST /api/workflow-node-runs, /api/workflow-node-tests — 노드 단독 실행/테스트. */
+export const handle_workflow_node: RouteHandler = async (ctx) => {
+  const { req, res, url, json, read_body, options } = ctx;
+  const ops: DashboardWorkflowOps | null = (options as unknown as { workflow_ops?: DashboardWorkflowOps | null }).workflow_ops ?? null;
+  if (!ops) { json(res, 501, { error: "workflow_ops_not_configured" }); return true; }
+
+  const path = url.pathname;
+  const method = req.method || "GET";
+
+  // POST /api/workflow-node-runs — 노드 실행
+  if (path === "/api/workflow-node-runs" && method === "POST") {
+    if (!ops.run_single_node) { json(res, 501, { error: "not_implemented" }); return true; }
+    const body = await read_body(req);
+    if (!body?.node) { json(res, 400, { error: "node_required" }); return true; }
+    const mem = (body.input_memory && typeof body.input_memory === "object" ? body.input_memory : {}) as Record<string, unknown>;
+    const result = await ops.run_single_node(body.node as Record<string, unknown>, mem);
+    json(res, result.ok ? 200 : 400, result);
+    return true;
+  }
+
+  // POST /api/workflow-node-tests — 노드 Dry-run 테스트
+  if (path === "/api/workflow-node-tests" && method === "POST") {
+    if (!ops.test_single_node) { json(res, 501, { error: "not_implemented" }); return true; }
+    const body = await read_body(req);
+    if (!body?.node) { json(res, 400, { error: "node_required" }); return true; }
+    const tmem = (body.input_memory && typeof body.input_memory === "object" ? body.input_memory : {}) as Record<string, unknown>;
+    const result = ops.test_single_node(body.node as Record<string, unknown>, tmem);
+    json(res, 200, result);
+    return true;
+  }
+
+  return false;
+};

@@ -19,7 +19,7 @@ export class OrchestratorLlmProvider extends BaseLlmProvider {
     super({
       id: "orchestrator_llm",
       api_base: args?.api_base ?? "http://ollama:11434/v1",
-      default_model: args?.default_model ?? "qwen3.5:4b",
+      default_model: args?.default_model ?? "",
     });
     this.per_call_timeout_ms = args?.per_call_timeout_ms ?? DEFAULT_PER_CALL_TIMEOUT_MS;
     this.api_key = (args?.api_key ?? "").trim();

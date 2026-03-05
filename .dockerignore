@@ -8,6 +8,7 @@ standalone/
 
 # Persistent data (volume-mounted, not baked in)
 workspace/
+!workspace/workflows/
 *.db
 *.db-wal
 *.db-shm

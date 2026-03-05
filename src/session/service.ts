@@ -4,6 +4,7 @@ import { with_sqlite, type DatabaseSync } from "../utils/sqlite-helper.js";
 import type { SessionHistoryEntry, SessionMessage } from "./types.js";
 import type { Logger } from "../logger.js";
 import { now_iso } from "../utils/common.js";
+import { Lane } from "../agent/pty/lane-queue.js";
 
 export type SessionListEntry = { key: string; created_at: string; updated_at: string; message_count: number };
 
@@ -74,6 +75,7 @@ export class SessionStore implements SessionStoreLike {
   private readonly sessions_dir: string;
   private readonly sqlite_path: string;
   private readonly cache = new Map<string, Session>();
+  private readonly write_lanes = new Map<string, Lane>();
   private readonly initialized: Promise<void>;
   private readonly logger: Logger | null;
 
@@ -83,6 +85,15 @@ export class SessionStore implements SessionStoreLike {
     this.sqlite_path = join(this.sessions_dir, "sessions.db");
     this.logger = logger ?? null;
     this.initialized = this.ensure_initialized();
+  }
+
+  private resolve_write_lane(key: string): Lane {
+    let lane = this.write_lanes.get(key);
+    if (!lane) {
+      lane = new Lane();
+      this.write_lanes.set(key, lane);
+    }
+    return lane;
   }
 
   private with_sqlite<T>(run: (db: DatabaseSync) => T): T | null {
@@ -211,58 +222,60 @@ export class SessionStore implements SessionStoreLike {
 
   async save(session: Session): Promise<void> {
     await this.initialized;
-    const saved = this.with_sqlite((db) => {
-      db.exec("BEGIN IMMEDIATE");
-      try {
-        db.prepare(`
-          INSERT INTO sessions (key, created_at, updated_at, metadata_json, last_consolidated)
-          VALUES (?, ?, ?, ?, ?)
-          ON CONFLICT(key) DO UPDATE SET
-            created_at = excluded.created_at,
-            updated_at = excluded.updated_at,
-            metadata_json = excluded.metadata_json,
-            last_consolidated = excluded.last_consolidated
-        `).run(
-          session.key,
-          session.created_at,
-          session.updated_at,
-          JSON.stringify(session.metadata || {}),
-          Number(session.last_consolidated || 0),
-        );
-        db.prepare("DELETE FROM session_messages WHERE session_key = ?").run(session.key);
-        const insert = db.prepare(`
-          INSERT INTO session_messages (session_key, idx, role, content, timestamp, message_json)
-          VALUES (?, ?, ?, ?, ?, ?)
-        `);
-        for (let i = 0; i < session.messages.length; i += 1) {
-          const row = session.messages[i];
-          insert.run(
-            session.key,
-            i,
-            String(row.role || ""),
-            typeof row.content === "string" ? row.content : "",
-            typeof row.timestamp === "string" ? row.timestamp : "",
-            JSON.stringify(row),
-          );
-        }
-        db.exec("COMMIT");
-      } catch (error) {
+    await this.resolve_write_lane(session.key).enqueue(async () => {
+      const saved = this.with_sqlite((db) => {
+        db.exec("BEGIN IMMEDIATE");
         try {
-          db.exec("ROLLBACK");
-        } catch {
-          // no-op
+          db.prepare(`
+            INSERT INTO sessions (key, created_at, updated_at, metadata_json, last_consolidated)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(key) DO UPDATE SET
+              created_at = excluded.created_at,
+              updated_at = excluded.updated_at,
+              metadata_json = excluded.metadata_json,
+              last_consolidated = excluded.last_consolidated
+          `).run(
+            session.key,
+            session.created_at,
+            session.updated_at,
+            JSON.stringify(session.metadata || {}),
+            Number(session.last_consolidated || 0),
+          );
+          db.prepare("DELETE FROM session_messages WHERE session_key = ?").run(session.key);
+          const insert = db.prepare(`
+            INSERT INTO session_messages (session_key, idx, role, content, timestamp, message_json)
+            VALUES (?, ?, ?, ?, ?, ?)
+          `);
+          for (let i = 0; i < session.messages.length; i += 1) {
+            const row = session.messages[i];
+            insert.run(
+              session.key,
+              i,
+              String(row.role || ""),
+              typeof row.content === "string" ? row.content : "",
+              typeof row.timestamp === "string" ? row.timestamp : "",
+              JSON.stringify(row),
+            );
+          }
+          db.exec("COMMIT");
+        } catch (error) {
+          try {
+            db.exec("ROLLBACK");
+          } catch {
+            // no-op
+          }
+          throw error;
         }
-        throw error;
+        return true;
+      });
+      if (!saved) {
+        this.logger?.error(`save failed for key=${session.key}`);
+        this.cache.delete(session.key);
+        return;
       }
-      return true;
+      this.evict_if_full();
+      this.cache.set(session.key, session);
     });
-    if (!saved) {
-      this.logger?.error(`save failed for key=${session.key}`);
-      this.cache.delete(session.key);
-      return;
-    }
-    this.evict_if_full();
-    this.cache.set(session.key, session);
   }
 
   async delete(key: string): Promise<boolean> {
@@ -299,6 +312,9 @@ export class SessionStore implements SessionStoreLike {
       for (const [key, session] of this.cache) {
         if (session.updated_at < cutoff) this.cache.delete(key);
       }
+    }
+    for (const [key, lane] of this.write_lanes) {
+      if (lane.is_idle) this.write_lanes.delete(key);
     }
     return count;
   }

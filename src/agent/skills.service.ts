@@ -348,7 +348,7 @@ export class SkillsLoader {
           score += 5;
         }
       }
-      if (score <= 0) {
+      {
         const summary_keywords = this.extract_summary_keywords(meta.summary);
         let keyword_hits = 0;
         for (const keyword of summary_keywords) {
@@ -504,11 +504,16 @@ export class SkillsLoader {
   }
 
   private normalize_text_for_match(value: string): string {
-    const normalized = String(value || "")
+    let normalized = String(value || "")
       .trim()
       .toLowerCase()
       .replace(/[^a-z0-9가-힣]+/gi, " ")
       .replace(/\s+/g, " ");
+    // 한글 조사 제거: "PDF를" → "PDF", "문서에서" → "문서"
+    normalized = normalized.replace(
+      /([가-힣])(을|를|이|가|은|는|에서|에|으로|로|의|와|과|도)(?=\s|$)/g,
+      "$1",
+    );
     return normalized ? ` ${normalized} ` : "";
   }
 

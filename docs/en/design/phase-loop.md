@@ -1,6 +1,6 @@
 # Design: Phase Loop — Multi-Agent Phase-Based Workflow
 
-> **Status**: Core implementation complete · PTY/ask_agent/worktree not yet implemented
+> **Status**: Implementation complete
 
 ## Overview
 

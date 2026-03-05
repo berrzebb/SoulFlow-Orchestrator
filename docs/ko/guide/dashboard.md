@@ -97,7 +97,7 @@ Workspace는 8개 탭으로 구성됩니다.
 
 ### Templates
 시스템 프롬프트 템플릿을 편집합니다.
-- 편집 가능 파일: `IDENTITY` · `AGENTS` · `SOUL` · `HEART` · `USER` · `TOOLS` · `HEARTBEAT`
+- 편집 가능 파일: `AGENTS` · `SOUL` · `HEART` · `USER` · `TOOLS` · `HEARTBEAT`
 - 저장 후 다음 에이전트 실행 시 즉시 반영
 
 ### OAuth

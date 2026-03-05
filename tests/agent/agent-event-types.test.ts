@@ -4,6 +4,7 @@ import type {
   AgentEventSource,
   AgentFinishReason,
   AgentHooks,
+  ApprovalBridgeRequest,
 } from "../../src/agent/agent.types.js";
 import type { PostToolHook } from "../../src/agent/tools/types.js";
 
@@ -49,15 +50,45 @@ describe("AgentEvent discriminated union", () => {
     }
   });
 
-  it("todo_update 이벤트에 TodoItem 배열 포함", () => {
-    const todos: TodoItem[] = [
-      { content: "Step 1", status: "completed", active_form: "Completing step 1" },
-      { content: "Step 2", status: "in_progress", active_form: "Working on step 2" },
-    ];
-    const event: AgentEvent = { type: "todo_update", source, at: "2026-01-01T00:00:00Z", todos };
-    if (event.type === "todo_update") {
-      expect(event.todos).toHaveLength(2);
-      expect(event.todos[0].status).toBe("completed");
+  it("approval_request 이벤트에 ApprovalBridgeRequest 포함", () => {
+    const request: ApprovalBridgeRequest = {
+      request_id: "req_1",
+      type: "command_execution",
+      detail: "rm -rf /tmp/data",
+      command: "rm -rf /tmp/data",
+    };
+    const event: AgentEvent = { type: "approval_request", source, at: "2026-01-01T00:00:00Z", request };
+    if (event.type === "approval_request") {
+      expect(event.request.request_id).toBe("req_1");
+      expect(event.request.type).toBe("command_execution");
+      expect(event.request.command).toBe("rm -rf /tmp/data");
+    }
+  });
+
+  it("task_lifecycle 이벤트에 sdk_task_id, status 포함", () => {
+    const event: AgentEvent = {
+      type: "task_lifecycle", source, at: "2026-01-01T00:00:00Z",
+      sdk_task_id: "task_99", status: "completed",
+      summary: "작업 완료",
+      task_usage: { total_tokens: 500, tool_uses: 3, duration_ms: 1200 },
+    };
+    if (event.type === "task_lifecycle") {
+      expect(event.sdk_task_id).toBe("task_99");
+      expect(event.status).toBe("completed");
+      expect(event.summary).toBe("작업 완료");
+      expect(event.task_usage!.total_tokens).toBe(500);
+    }
+  });
+
+  it("rate_limit 이벤트에 status 필수", () => {
+    const event: AgentEvent = {
+      type: "rate_limit", source, at: "2026-01-01T00:00:00Z",
+      status: "rejected", resets_at: 1700000000, utilization: 0.95,
+    };
+    if (event.type === "rate_limit") {
+      expect(event.status).toBe("rejected");
+      expect(event.resets_at).toBe(1700000000);
+      expect(event.utilization).toBe(0.95);
     }
   });
 

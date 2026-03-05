@@ -1,0 +1,554 @@
+/**
+ * 워크플로우 노드 타입 — Phase(Agent) + 오케스트레이션(HTTP/Code/IF/Merge/Set) 통합.
+ * n8n 스타일 DAG 실행을 위한 노드 유니온 타입.
+ */
+
+import type {
+  PhaseAgentDefinition,
+  PhaseCriticDefinition,
+  PhaseDefinition,
+  PhaseFailurePolicy,
+  PhaseMode,
+} from "./phase-loop.types.js";
+
+// ── Output Schema ───────────────────────────────────
+
+export type FieldType = "string" | "number" | "boolean" | "object" | "array" | "unknown";
+
+export interface OutputField {
+  name: string;
+  type: FieldType;
+  description?: string;
+}
+
+// ── Node Base ───────────────────────────────────────
+
+export interface NodeBase {
+  node_id: string;
+  title: string;
+  depends_on?: string[];
+  /** 커스텀 출력 필드 정의 (없으면 노드 타입별 기본값). */
+  output_schema?: OutputField[];
+}
+
+// ── Phase (Agent) Node ──────────────────────────────
+
+export interface PhaseNodeDefinition extends NodeBase {
+  node_type: "phase";
+  agents: PhaseAgentDefinition[];
+  critic?: PhaseCriticDefinition;
+  context_template?: string;
+  failure_policy?: PhaseFailurePolicy;
+  quorum_count?: number;
+  mode?: PhaseMode;
+  loop_until?: string;
+  max_loop_iterations?: number;
+  tools?: string[];
+  skills?: string[];
+}
+
+// ── HTTP Request Node ───────────────────────────────
+
+export interface HttpNodeDefinition extends NodeBase {
+  node_type: "http";
+  url: string;
+  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+  headers?: Record<string, string>;
+  body?: unknown;
+  timeout_ms?: number;
+}
+
+// ── Code Node ───────────────────────────────────────
+
+/** 컨테이너 샌드박스 지원 언어. JS/shell은 인프로세스, 나머지는 컨테이너 실행. */
+export type CodeLanguage =
+  | "javascript" | "shell"
+  | "python" | "ruby" | "bash" | "go" | "rust" | "deno" | "bun";
+
+export interface CodeNodeDefinition extends NodeBase {
+  node_type: "code";
+  language: CodeLanguage;
+  code: string;
+  timeout_ms?: number;
+  /** 컨테이너 런타임 오버라이드. 미지정 시 언어별 기본 이미지 사용. */
+  container_image?: string;
+  /** 컨테이너 네트워크 허용 (pip install, API 호출 등). 기본 false. */
+  network_access?: boolean;
+  /** 컨테이너를 실행 후 유지 (재사용). 기본 false (one-shot). */
+  keep_container?: boolean;
+}
+
+// ── IF (Conditional Branch) Node ────────────────────
+
+export interface IfNodeDefinition extends NodeBase {
+  node_type: "if";
+  /** JS 표현식. memory 객체를 컨텍스트로 평가. */
+  condition: string;
+  outputs: {
+    true_branch: string[];
+    false_branch: string[];
+  };
+}
+
+// ── Merge (Join) Node ───────────────────────────────
+
+export interface MergeNodeDefinition extends NodeBase {
+  node_type: "merge";
+  merge_mode: "wait_all" | "first_completed" | "collect";
+}
+
+// ── Set (Variable Assignment) Node ──────────────────
+
+export interface SetNodeDefinition extends NodeBase {
+  node_type: "set";
+  assignments: Array<{ key: string; value: unknown }>;
+}
+
+// ── Split (Array Decomposition) Node ────────────────
+
+export interface SplitNodeDefinition extends NodeBase {
+  node_type: "split";
+  /** 분리할 배열 필드 경로 (예: "body.users"). */
+  array_field: string;
+  /** 배치 크기 (기본 1 = 하나씩). */
+  batch_size?: number;
+}
+
+// ── Trigger Node ────────────────────────────────────
+
+export type TriggerType = "cron" | "webhook" | "manual" | "channel_message";
+
+export interface TriggerNodeDefinition extends NodeBase {
+  node_type: "trigger";
+  trigger_type: TriggerType;
+  /** cron */
+  schedule?: string;
+  timezone?: string;
+  /** webhook */
+  webhook_path?: string;
+  /** channel_message */
+  channel_type?: string;
+  chat_id?: string;
+}
+
+// ── LLM Node ───────────────────────────────────────
+
+export interface LlmNodeDefinition extends NodeBase {
+  node_type: "llm";
+  backend: string;
+  model?: string;
+  prompt_template: string;
+  system_prompt?: string;
+  temperature?: number;
+  max_tokens?: number;
+  /** 구조화 출력 JSON 스키마 (없으면 자유 텍스트). */
+  output_json_schema?: Record<string, unknown>;
+}
+
+// ── Switch Node ────────────────────────────────────
+
+export interface SwitchNodeDefinition extends NodeBase {
+  node_type: "switch";
+  /** 평가할 JS 표현식 (결과값으로 분기). */
+  expression: string;
+  cases: Array<{ value: string; targets: string[] }>;
+  default_targets?: string[];
+}
+
+// ── Wait Node ──────────────────────────────────────
+
+export interface WaitNodeDefinition extends NodeBase {
+  node_type: "wait";
+  wait_type: "timer" | "webhook" | "approval";
+  delay_ms?: number;
+  webhook_path?: string;
+  approval_message?: string;
+}
+
+// ── Template Node ──────────────────────────────────
+
+export interface TemplateNodeDefinition extends NodeBase {
+  node_type: "template";
+  template: string;
+  output_field?: string;
+}
+
+// ── OAuth Node ─────────────────────────────────────
+
+export interface OauthNodeDefinition extends NodeBase {
+  node_type: "oauth";
+  service_id: string;
+  url: string;
+  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+  headers?: Record<string, string>;
+  body?: unknown;
+  timeout_ms?: number;
+}
+
+// ── Sub-workflow Node ──────────────────────────────
+
+export interface SubWorkflowNodeDefinition extends NodeBase {
+  node_type: "sub_workflow";
+  workflow_name: string;
+  input_mapping?: Record<string, string>;
+  timeout_ms?: number;
+}
+
+// ── Filter Node ───────────────────────────────────
+
+export interface FilterNodeDefinition extends NodeBase {
+  node_type: "filter";
+  /** JS 표현식 — `item`으로 각 요소 참조. */
+  condition: string;
+  /** 필터링 대상 배열 필드 경로. */
+  array_field: string;
+}
+
+// ── Loop Node ─────────────────────────────────────
+
+export interface LoopNodeDefinition extends NodeBase {
+  node_type: "loop";
+  /** 순회 대상 배열 필드 경로. */
+  array_field: string;
+  /** 루프 본문에서 실행할 노드 ID 목록. */
+  body_nodes?: string[];
+  /** 최대 반복 횟수 (안전장치). */
+  max_iterations?: number;
+}
+
+// ── Transform Node ────────────────────────────────
+
+export interface TransformNodeDefinition extends NodeBase {
+  node_type: "transform";
+  /** JS 표현식 — `item`으로 각 요소 참조, 새 형태 반환. */
+  expression: string;
+  /** 변환 대상 배열 필드 경로. */
+  array_field: string;
+}
+
+// ── DB Node ───────────────────────────────────────
+
+export interface DbNodeDefinition extends NodeBase {
+  node_type: "db";
+  operation: "query" | "insert" | "update" | "delete";
+  /** 데이터소스 식별자 (설정에서 관리). */
+  datasource: string;
+  /** SQL 또는 쿼리 표현식 (템플릿 지원). */
+  query: string;
+  /** INSERT/UPDATE 시 파라미터. */
+  params?: Record<string, unknown>;
+}
+
+// ── File Node ─────────────────────────────────────
+
+export interface FileNodeDefinition extends NodeBase {
+  node_type: "file";
+  operation: "read" | "write" | "extract";
+  /** 파일 경로 (템플릿 지원). */
+  file_path: string;
+  /** write 시 내용. */
+  content?: string;
+  /** extract 시 포맷 (csv, json, text). */
+  format?: "csv" | "json" | "text";
+}
+
+// ── Analyzer Node ─────────────────────────────────
+
+export interface AnalyzerNodeDefinition extends NodeBase {
+  node_type: "analyzer";
+  /** LLM 백엔드 (openrouter, claude_sdk 등). */
+  backend: string;
+  model?: string;
+  /** 분석 지시 프롬프트. */
+  prompt_template: string;
+  /** 분석 대상 입력 필드 경로. */
+  input_field: string;
+  /** 구조화 출력 JSON 스키마. */
+  output_json_schema?: Record<string, unknown>;
+  /** 분류/판정 결과에 사용할 카테고리 목록. */
+  categories?: string[];
+  temperature?: number;
+}
+
+// ── Retriever Node ────────────────────────────────
+
+export interface RetrieverNodeDefinition extends NodeBase {
+  node_type: "retriever";
+  /** 검색 소스 타입. */
+  source: "http" | "file" | "memory";
+  /** HTTP 소스: 검색 API URL (템플릿 지원). */
+  url?: string;
+  /** HTTP 소스: 메서드. */
+  method?: "GET" | "POST";
+  /** File 소스: 검색 대상 파일/디렉토리 경로. */
+  file_path?: string;
+  /** 검색 쿼리 (템플릿 지원). */
+  query: string;
+  /** 반환할 최대 결과 수. */
+  top_k?: number;
+}
+
+// ── AI Agent Node ─────────────────────────────────
+
+export interface AiAgentNodeDefinition extends NodeBase {
+  node_type: "ai_agent";
+  /** LLM 백엔드. */
+  backend: string;
+  model?: string;
+  /** 에이전트 시스템 프롬프트. */
+  system_prompt: string;
+  /** 사용자 입력 (템플릿 지원). */
+  user_prompt: string;
+  /** 에이전트가 사용할 수 있는 도구 노드 ID 목록. */
+  tool_nodes?: string[];
+  /** 최대 턴 수 (도구 호출 반복 제한). */
+  max_turns?: number;
+  temperature?: number;
+  /** 구조화 출력 스키마. */
+  output_json_schema?: Record<string, unknown>;
+}
+
+// ── Text Splitter Node ────────────────────────────
+
+export interface TextSplitterNodeDefinition extends NodeBase {
+  node_type: "text_splitter";
+  /** 분할 대상 텍스트 필드 경로. */
+  input_field: string;
+  /** 청크 크기 (문자 수). */
+  chunk_size: number;
+  /** 청크 간 오버랩 (문자 수). */
+  chunk_overlap: number;
+  /** 분할 구분자. */
+  separator?: string;
+}
+
+// ── Task Node ─────────────────────────────────────
+
+export interface TaskNodeDefinition extends NodeBase {
+  node_type: "task";
+  /** 태스크 제목. */
+  task_title: string;
+  /** 태스크 목표 (템플릿 지원). */
+  objective: string;
+  /** 실행할 채널. */
+  channel?: string;
+  chat_id?: string;
+  /** 최대 턴 수. */
+  max_turns?: number;
+  /** 초기 메모리 매핑 (템플릿 지원). */
+  initial_memory?: Record<string, string>;
+}
+
+// ── Spawn Agent Node ──────────────────────────────
+
+export interface SpawnAgentNodeDefinition extends NodeBase {
+  node_type: "spawn_agent";
+  /** 에이전트에게 전달할 태스크 (템플릿 지원). */
+  task: string;
+  /** 에이전트 역할. */
+  role?: string;
+  /** LLM 모델. */
+  model?: string;
+  /** 발신 채널 (결과 보고용). */
+  origin_channel?: string;
+  origin_chat_id?: string;
+  /** 완료까지 대기할지 여부. */
+  await_completion?: boolean;
+  /** 최대 반복 횟수. */
+  max_iterations?: number;
+}
+
+// ── Decision Node ─────────────────────────────────
+
+export interface DecisionNodeDefinition extends NodeBase {
+  node_type: "decision";
+  operation: "append" | "list" | "get_effective" | "archive";
+  scope?: "global" | "team" | "agent";
+  scope_id?: string;
+  /** append 시: 결정 키. */
+  key?: string;
+  /** append 시: 결정 값 (템플릿 지원). */
+  value?: string;
+  rationale?: string;
+  priority?: 0 | 1 | 2 | 3;
+  tags?: string[];
+  /** archive 시: 대상 ID. */
+  target_id?: string;
+}
+
+// ── Promise Node ──────────────────────────────────
+
+export interface PromiseNodeDefinition extends NodeBase {
+  node_type: "promise";
+  operation: "append" | "list" | "get_effective" | "archive";
+  scope?: "global" | "team" | "agent";
+  scope_id?: string;
+  key?: string;
+  value?: string;
+  rationale?: string;
+  priority?: 0 | 1 | 2 | 3;
+  tags?: string[];
+  target_id?: string;
+}
+
+// ── Embedding / Vector Store ─────────────────────────
+
+export interface EmbeddingNodeDefinition extends NodeBase {
+  node_type: "embedding";
+  /** 임베딩할 텍스트 필드 (memory 경로). */
+  input_field: string;
+  /** 임베딩 모델 ID (orchestrator-llm 레지스트리). */
+  model: string;
+  /** 배치 크기 (한번에 임베딩할 텍스트 수). */
+  batch_size?: number;
+  /** 출력 차원수 (모델 기본값 사용 시 생략). */
+  dimensions?: number;
+}
+
+export interface VectorStoreNodeDefinition extends NodeBase {
+  node_type: "vector_store";
+  operation: "upsert" | "query" | "delete";
+  /** 벡터 스토어 ID (datasource 레지스트리). */
+  store_id: string;
+  /** 컬렉션/인덱스 이름. */
+  collection: string;
+  /** upsert: 벡터 + 메타데이터 소스 필드. */
+  vectors_field?: string;
+  documents_field?: string;
+  /** query: 쿼리 벡터 필드. */
+  query_vector_field?: string;
+  /** query: 반환 결과 수. */
+  top_k?: number;
+  /** query: 유사도 임계값 (0~1). */
+  min_score?: number;
+  /** delete: 삭제 대상 ID 필드. */
+  ids_field?: string;
+  /** 메타데이터 필터 (JSON). */
+  filter?: Record<string, unknown>;
+}
+
+// ── Union Types ─────────────────────────────────────
+
+export type OrcheNodeType = "http" | "code" | "if" | "merge" | "set" | "split"
+  | "llm" | "switch" | "wait" | "template" | "oauth" | "sub_workflow"
+  | "filter" | "loop" | "transform" | "db" | "file"
+  | "analyzer" | "retriever" | "ai_agent" | "text_splitter"
+  | "task" | "spawn_agent" | "decision" | "promise"
+  | "embedding" | "vector_store";
+
+export type OrcheNodeDefinition =
+  | HttpNodeDefinition
+  | CodeNodeDefinition
+  | IfNodeDefinition
+  | MergeNodeDefinition
+  | SetNodeDefinition
+  | SplitNodeDefinition
+  | LlmNodeDefinition
+  | SwitchNodeDefinition
+  | WaitNodeDefinition
+  | TemplateNodeDefinition
+  | OauthNodeDefinition
+  | SubWorkflowNodeDefinition
+  | FilterNodeDefinition
+  | LoopNodeDefinition
+  | TransformNodeDefinition
+  | DbNodeDefinition
+  | FileNodeDefinition
+  | AnalyzerNodeDefinition
+  | RetrieverNodeDefinition
+  | AiAgentNodeDefinition
+  | TextSplitterNodeDefinition
+  | TaskNodeDefinition
+  | SpawnAgentNodeDefinition
+  | DecisionNodeDefinition
+  | PromiseNodeDefinition
+  | EmbeddingNodeDefinition
+  | VectorStoreNodeDefinition;
+
+export type WorkflowNodeDefinition = PhaseNodeDefinition | OrcheNodeDefinition | TriggerNodeDefinition;
+
+// ── Orche Node State ────────────────────────────────
+
+export type OrcheNodeStatus = "pending" | "running" | "completed" | "failed" | "skipped";
+
+export interface OrcheNodeState {
+  node_id: string;
+  node_type: OrcheNodeType;
+  status: OrcheNodeStatus;
+  result?: unknown;
+  error?: string;
+  started_at?: string;
+  completed_at?: string;
+}
+
+// ── Normalizer ──────────────────────────────────────
+
+/** PhaseDefinition → PhaseNodeDefinition 변환. */
+export function phase_to_node(p: PhaseDefinition): PhaseNodeDefinition {
+  return {
+    node_type: "phase",
+    node_id: p.phase_id,
+    title: p.title,
+    agents: p.agents,
+    critic: p.critic,
+    context_template: p.context_template,
+    failure_policy: p.failure_policy,
+    quorum_count: p.quorum_count,
+    mode: p.mode,
+    loop_until: p.loop_until,
+    max_loop_iterations: p.max_loop_iterations,
+    depends_on: p.depends_on,
+    tools: p.tools,
+    skills: p.skills,
+  };
+}
+
+/** PhaseNodeDefinition → PhaseDefinition 역변환. */
+export function node_to_phase(n: PhaseNodeDefinition): PhaseDefinition {
+  return {
+    phase_id: n.node_id,
+    title: n.title,
+    agents: n.agents,
+    critic: n.critic,
+    context_template: n.context_template,
+    failure_policy: n.failure_policy,
+    quorum_count: n.quorum_count,
+    mode: n.mode,
+    loop_until: n.loop_until,
+    max_loop_iterations: n.max_loop_iterations,
+    depends_on: n.depends_on,
+    tools: n.tools,
+    skills: n.skills,
+  };
+}
+
+export interface NormalizedWorkflow {
+  nodes: WorkflowNodeDefinition[];
+  phase_defs: PhaseDefinition[];
+}
+
+/**
+ * WorkflowDefinition의 nodes[] 또는 phases[]를 통합된 노드 배열로 정규화.
+ * nodes[]가 있으면 우선 사용, 없으면 phases[]를 PhaseNodeDefinition으로 변환.
+ */
+export function normalize_workflow(def: {
+  nodes?: WorkflowNodeDefinition[];
+  phases?: PhaseDefinition[];
+}): NormalizedWorkflow {
+  if (def.nodes?.length) {
+    const phase_defs = def.nodes
+      .filter((n): n is PhaseNodeDefinition => n.node_type === "phase")
+      .map(node_to_phase);
+    return { nodes: def.nodes, phase_defs };
+  }
+  const phases = def.phases || [];
+  return {
+    nodes: phases.map(phase_to_node),
+    phase_defs: phases,
+  };
+}
+
+/** 노드가 오케스트레이션 노드인지 확인. */
+export function is_orche_node(node: WorkflowNodeDefinition): node is OrcheNodeDefinition {
+  return node.node_type !== "phase" && node.node_type !== "trigger";
+}

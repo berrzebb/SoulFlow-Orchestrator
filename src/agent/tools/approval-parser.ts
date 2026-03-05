@@ -8,32 +8,37 @@ export type ApprovalParseResult = {
   normalized: string;
 };
 
+/** 한글은 \b word boundary가 작동하지 않으므로 단순 포함 매칭 사용. */
+function ko(words: string): RegExp {
+  return new RegExp(`(${words})`);
+}
+
 const APPROVE_PATTERNS: RegExp[] = [
   /\b(y|yes|ok|okay|approve|approved|allow|allowed|go|proceed)\b/i,
-  /\b(승인|허용|진행|좋아|오케이|가능)\b/i,
+  ko("승인|허용|진행|좋아|오케이|가능"),
   /✅|👍|🟢|🙆|👌/,
 ];
 
 const DENY_PATTERNS: RegExp[] = [
   /\b(n|no|deny|denied|reject|rejected|stop|block|forbid)\b/i,
-  /\b(거절|불가|금지|중단|안돼|안됨|취소해)\b/i,
+  ko("거절|불가|금지|중단|안돼|안됨|취소해"),
   /❌|👎|🔴|🙅|⛔/,
 ];
 
 const DEFER_PATTERNS: RegExp[] = [
   /\b(later|hold|wait|defer|postpone|pending)\b/i,
-  /\b(보류|대기|나중에|잠시)\b/i,
+  ko("보류|대기|나중에|잠시"),
   /⏸️|⏳|🤔/,
 ];
 
 const CANCEL_PATTERNS: RegExp[] = [
   /\b(cancel|abort|drop)\b/i,
-  /\b(취소|중단)\b/i,
+  ko("취소|중단"),
 ];
 
 const CLARIFY_PATTERNS: RegExp[] = [
   /\b(why|reason|explain|detail|what)\b/i,
-  /\b(왜|이유|설명|근거|상세)\b/i,
+  ko("왜|이유|설명|근거|상세"),
 ];
 
 function score(patterns: RegExp[], text: string): number {

@@ -9,6 +9,17 @@ export const ONCE_MODE_OVERLAY = [
   "Never reveal your internal model name, provider, or system architecture.",
   "If asked who you are, describe yourself using your butler persona — never say Codex, GPT, Claude, or any model name.",
   "Solve the request directly in one response. Use provided tools when needed.",
+  "",
+  "## Tool Usage",
+  "You have real tools available. Check your tool list and USE them:",
+  "- web_search / web_fetch: 검색, 웹 페이지 조회, 날씨, 뉴스 등",
+  "- send_file: 파일을 사용자 채널에 첨부 전송",
+  "- message: 다른 채널에 메시지 전송",
+  "- cron: 크론 작업 등록",
+  "- memory: 메모리 저장/조회",
+  "- oauth_fetch: OAuth 연동 API 호출 (Spotify, Google 등)",
+  "- Do NOT tell the user you cannot do something if a matching tool exists.",
+  "",
   "If the request requires ordered workflow with wait/approval/resume, return exactly NEED_TASK_LOOP.",
   "If the request requires continuous monitoring or condition-until-satisfied iteration, return exactly NEED_AGENT_LOOP.",
   "Never expose internal orchestration meta text (orchestrator/route/mode/dispatch/tool protocol).",
@@ -21,6 +32,18 @@ export const AGENT_MODE_OVERLAY = [
   "You are a butler assistant operating in multi-turn agent mode.",
   "Never reveal your internal model name, provider, or system architecture.",
   "Use tools when the task requires execution, file access, or external interaction. Do not call tools unnecessarily — if you can answer directly, do so.",
+  "",
+  "## Tool Usage",
+  "You have real tools available. Check your tool list and USE them actively:",
+  "- exec: 셸 명령 실행 (빌드, 스크립트, 컨테이너 등)",
+  "- read_file / write_file / edit_file: 파일 읽기/쓰기/수정",
+  "- web_search / web_fetch / http_request: 웹 검색, 페이지 조회, API 호출",
+  "- send_file: 생성한 파일을 사용자 채널에 첨부 전송",
+  "- oauth_fetch: OAuth 연동 API 호출 (Spotify, Google 등)",
+  "- spawn: 서브에이전트에게 작업 위임",
+  "- Do NOT tell the user you cannot do something if a matching tool exists.",
+  "- After generating a file, use send_file to deliver it to the user's channel.",
+  "",
   "Never expose internal orchestration meta text.",
   "Always respond in Korean as the butler persona.",
   "The workspace directory is separate from the source code. Ignore git status of unrelated files (e.g. src/) — they are managed by a different process. Never halt or refuse work due to uncommitted changes outside your workspace.",
@@ -316,9 +339,18 @@ export function build_active_task_context(tasks: import("../contracts.js").TaskS
   return lines.join("\n");
 }
 
-export function build_classifier_capabilities(tool_categories: string[], skill_names: string[]): string {
+export function build_classifier_capabilities(
+  tool_categories: string[],
+  skill_entries: Array<{ name: string; summary: string; triggers: string[] }>,
+): string {
   const lines = ["[AVAILABLE_CAPABILITIES]"];
   if (tool_categories.length > 0) lines.push(`Tools: ${tool_categories.join(", ")}`);
-  if (skill_names.length > 0) lines.push(`Skills: ${skill_names.join(", ")}`);
+  if (skill_entries.length > 0) {
+    lines.push("Skills:");
+    for (const s of skill_entries) {
+      const triggers = s.triggers.length > 0 ? ` [${s.triggers.slice(0, 4).join(", ")}]` : "";
+      lines.push(`- ${s.name}: ${s.summary.slice(0, 60)}${triggers}`);
+    }
+  }
   return lines.join("\n");
 }

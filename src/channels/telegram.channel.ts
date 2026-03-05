@@ -275,7 +275,7 @@ export class TelegramChannel extends BaseChannel {
   }
 
   async read(chat_id: string, limit = 20): Promise<InboundMessage[]> {
-    if (!this.bot_token) return [];
+    if (!this.bot_token || !this.running) return [];
     const n = Math.max(1, Math.min(100, Number(limit || 20)));
     try {
       const offset_qs = this.last_update_id > 0 ? `&offset=${this.last_update_id + 1}` : "";
@@ -284,7 +284,12 @@ export class TelegramChannel extends BaseChannel {
       const response = await fetch(url);
       const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
       if (!response.ok || data.ok !== true) {
-        this.last_error = as_string(data.description || `http_${response.status}`);
+        const desc = as_string(data.description || `http_${response.status}`);
+        this.last_error = desc;
+        if (/conflict.*terminated.*other.*getUpdates/i.test(desc)) {
+          this.log.error("telegram conflict: another bot instance is polling — disabling reads to prevent duplicate processing", { description: desc });
+          this.running = false;
+        }
         return [];
       }
       const results = Array.isArray(data.result) ? data.result : [];

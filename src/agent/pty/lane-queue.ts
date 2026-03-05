@@ -29,6 +29,10 @@ export class Lane {
     return this.queue.length;
   }
 
+  get is_idle(): boolean {
+    return !this.running && this.queue.length === 0;
+  }
+
   private async drain(): Promise<void> {
     this.running = true;
     while (this.queue.length > 0) {
@@ -126,6 +130,18 @@ export class LaneQueue {
     this.session_lanes.delete(session_key);
     this.pending_followups.delete(session_key);
     this.collected.delete(session_key);
+  }
+
+  /** 유휴 레인 정리. 메모리 누수 방지. */
+  prune_idle(): number {
+    let pruned = 0;
+    for (const [key, lane] of this.session_lanes) {
+      if (lane.is_idle) {
+        this.session_lanes.delete(key);
+        pruned++;
+      }
+    }
+    return pruned;
   }
 
   get session_count(): number {

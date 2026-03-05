@@ -93,8 +93,8 @@ describe("StreamBuffer", () => {
     const buf = new StreamBuffer();
     buf.append("hello world");
     buf.append("hello world and more");
-    // "hello world and more" starts with "hello world", so delta = "and more" (trimStart)
-    expect(buf.get_full_content()).toBe("hello worldand more");
+    // "hello world and more" starts with "hello world", delta = " and more" (공백 보존)
+    expect(buf.get_full_content()).toBe("hello world and more");
   });
 
   it("deduplicates exact duplicate chunks", () => {
@@ -108,8 +108,8 @@ describe("StreamBuffer", () => {
     const buf = new StreamBuffer();
     buf.append("Hello, how are");
     buf.append("are you doing?");
-    // overlap "are" detected, delta = "you doing?" (trimStart removes leading space)
-    expect(buf.get_full_content()).toBe("Hello, how areyou doing?");
+    // overlap "are" detected, delta = " you doing?" (단어 경계 공백 보존)
+    expect(buf.get_full_content()).toBe("Hello, how are you doing?");
   });
 
   it("handles empty/null chunks gracefully", () => {
@@ -117,7 +117,8 @@ describe("StreamBuffer", () => {
     buf.append("");
     buf.append("  ");
     buf.append("real content");
-    expect(buf.get_full_content()).toBe("real content");
+    // 공백 전용 청크("  ")도 유효한 콘텐츠로 축적
+    expect(buf.get_full_content()).toBe("  real content");
   });
 
   it("multiple flush cycles work correctly", () => {
@@ -133,5 +134,101 @@ describe("StreamBuffer", () => {
 
     expect(buf.get_flush_count()).toBe(3);
     expect(buf.get_full_content()).toBe("cycle1cycle2cycle3");
+  });
+});
+
+describe("StreamBuffer — edge cases", () => {
+  it("full content caps at MAX_FULL_CHARS (200_000)", () => {
+    const buf = new StreamBuffer();
+    // 250K chars 주입 → full은 200K로 잘림
+    const chunk = "x".repeat(250_000);
+    buf.append(chunk);
+    expect(buf.get_full_content().length).toBe(200_000);
+    // buffer는 전체 포함
+    const flushed = buf.flush();
+    expect(flushed).toBeTruthy();
+    expect(flushed!.length).toBe(250_000);
+  });
+
+  it("full content은 후미 200K를 유지한다", () => {
+    const buf = new StreamBuffer();
+    buf.append("A".repeat(150_000));
+    buf.append("B".repeat(100_000));
+    const full = buf.get_full_content();
+    expect(full.length).toBe(200_000);
+    // 후미가 B로 끝나야 함
+    expect(full.endsWith("B".repeat(100_000))).toBe(true);
+  });
+
+  it("flush dedup은 whitespace만 다른 콘텐츠를 동일로 취급한다", () => {
+    const buf = new StreamBuffer();
+    buf.append("hello  world");
+    expect(buf.flush()).toBe("hello  world");
+    // 같은 내용이지만 공백이 다름
+    buf.append("hello world");
+    expect(buf.flush()).toBeNull(); // dedup key: "hello world" vs "hello world" → 동일
+  });
+
+  it("flush dedup은 case만 다른 콘텐츠를 동일로 취급한다", () => {
+    const buf = new StreamBuffer();
+    buf.append("Hello World");
+    expect(buf.flush()).toBe("Hello World");
+    buf.append("hello world");
+    expect(buf.flush()).toBeNull(); // lowercase key 동일
+  });
+
+  it("prev가 incoming보다 길면 incoming은 무시한다 (부분집합)", () => {
+    const buf = new StreamBuffer();
+    buf.append("complete sentence with more details");
+    buf.append("complete sentence");
+    // incoming이 prev의 부분집합 → 무시
+    expect(buf.get_full_content()).toBe("complete sentence with more details");
+  });
+
+  it("overlap_suffix_prefix가 max_scan=280 이내에서 동작한다", () => {
+    const buf = new StreamBuffer();
+    const overlap = "X".repeat(280);
+    buf.append("prefix" + overlap);
+    buf.append(overlap + "suffix");
+    // 280자 오버랩 감지 → "suffix"만 추가
+    expect(buf.get_full_content()).toContain("prefix");
+    expect(buf.get_full_content()).toContain("suffix");
+    // 오버랩 부분이 중복되지 않아야 함
+    const content = buf.get_full_content();
+    const firstX = content.indexOf("X");
+    const lastX = content.lastIndexOf("X");
+    expect(lastX - firstX + 1).toBe(280); // 정확히 280개의 X
+  });
+
+  it("연속 빈 flush가 flush_count를 증가시키지 않는다", () => {
+    const buf = new StreamBuffer();
+    buf.flush();
+    buf.flush();
+    buf.flush();
+    expect(buf.get_flush_count()).toBe(0);
+    expect(buf.has_streamed()).toBe(false);
+  });
+
+  it("한글 콘텐츠를 정상 처리한다", () => {
+    const buf = new StreamBuffer();
+    buf.append("안녕하세요. 반갑습니다.");
+    buf.append("오늘 날씨가 좋네요.");
+    const flushed = buf.flush();
+    expect(flushed).toBeTruthy();
+    expect(flushed).toContain("안녕하세요");
+    expect(flushed).toContain("좋네요");
+  });
+
+  it("도구 이벤트 + 텍스트가 올바르게 누적된다", () => {
+    const buf = new StreamBuffer();
+    buf.append("분석을 시작합니다.");
+    buf.append("\n▸ `read_file`");
+    buf.append(" → 파일 내용: ...");
+    buf.append("\n결과를 정리하겠습니다.");
+    const full = buf.get_full_content();
+    expect(full).toContain("분석을 시작합니다.");
+    expect(full).toContain("▸ `read_file`");
+    expect(full).toContain("→ 파일 내용");
+    expect(full).toContain("결과를 정리하겠습니다.");
   });
 });

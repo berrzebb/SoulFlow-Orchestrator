@@ -140,8 +140,8 @@ export class AgentLoopStore {
     return expired;
   }
 
-  cancel_task(task_id: string, reason = "cancelled_by_request"): TaskState | null {
-    const state = this.tasks.get(task_id);
+  async cancel_task(task_id: string, reason = "cancelled_by_request"): Promise<TaskState | null> {
+    const state = this.tasks.get(task_id) ?? await this.task_store?.get(task_id) ?? null;
     if (!state) return null;
     this.logger?.info("task_cancel", { task_id, reason });
     state.status = "cancelled";
@@ -155,7 +155,7 @@ export class AgentLoopStore {
   }
 
   async resume_task(task_id: string, user_input?: string, reason = "resumed"): Promise<TaskState | null> {
-    const state = this.tasks.get(task_id);
+    const state = this.tasks.get(task_id) ?? await this.task_store?.get(task_id) ?? null;
     if (!state) return null;
     if (state.status === "completed" || state.status === "cancelled") return state;
     if (state.currentTurn >= state.maxTurns) {

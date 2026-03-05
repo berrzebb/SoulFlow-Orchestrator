@@ -3,6 +3,7 @@ import {
   extract_memory_search_query,
   normalize_common_command_text,
 } from "../command-intent.js";
+import { strip_memory_uri } from "../../agent/tools/memory-format.js";
 import { format_mention, type CommandContext, type CommandHandler } from "./types.js";
 
 export interface MemoryStoreLike {
@@ -64,7 +65,7 @@ export class MemoryHandler implements CommandHandler {
             ? `${mention}메모리 검색 결과가 없습니다. query='${query}'`
             : [
                 `${mention}메모리 검색 결과 (${Math.min(rows.length, 10)})`,
-                ...rows.slice(0, 10).map((row, i) => `${i + 1}. ${row.file}:${row.line} ${String(row.text || "").slice(0, 120)}`),
+                ...rows.slice(0, 10).map((row, i) => `${i + 1}. ${strip_memory_uri(row.file)}:${row.line} ${String(row.text || "").slice(0, 120)}`),
               ].join("\n"),
         );
         return true;

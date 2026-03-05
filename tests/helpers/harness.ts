@@ -216,6 +216,7 @@ export type HarnessOptions = {
 export type Harness = {
   workspace: string;
   manager: ChannelManager;
+  bus: MessageBus;
   registry: FakeChannelRegistry;
   dispatch: FakeDispatchService;
   orchestration: FakeOrchestrationService;
@@ -279,7 +280,7 @@ export async function create_harness(options: HarnessOptions = {}): Promise<Harn
     await remove_with_retry(workspace);
   };
 
-  return { workspace, manager, registry, dispatch, orchestration, approval, recorder, media, cleanup };
+  return { workspace, manager, bus, registry, dispatch, orchestration, approval, recorder, media, cleanup };
 }
 
 async function remove_with_retry(path: string): Promise<void> {

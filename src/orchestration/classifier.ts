@@ -13,11 +13,13 @@ import {
 } from "./prompts.js";
 import { error_message } from "../utils/common.js";
 
+export type SkillEntry = { name: string; summary: string; triggers: string[] };
+
 export type ClassifierContext = {
   active_tasks?: import("../contracts.js").TaskState[];
   recent_history?: Array<{ role: string; content: string }>;
   available_tool_categories?: string[];
-  available_skills?: string[];
+  available_skills?: SkillEntry[];
 };
 
 type OrchestratorProvider = {
