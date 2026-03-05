@@ -59,6 +59,8 @@ export class AgentDomain implements ServiceLike {
       agent_backends: args?.agent_backends || null,
       logger: args?.logger || null,
       provider_caps: args?.provider_caps,
+      // 메인 ToolRegistry를 공유하여 oauth_fetch, workflow 등 모든 도구 사용 가능.
+      build_tools: () => this.tools,
     });
     this.loop = new AgentLoopStore({
       task_store: this.task_store,

@@ -376,9 +376,9 @@ export class SubagentRegistry {
           const resume_session = ref?.session_id
             ? { session_id: ref.session_id, backend: executor_backend.id, created_at: ref.created_at || now_iso() }
             : (this.agent_backends.get_session_store()?.find_by_task(sa_task_id) ?? undefined);
-          // 서브에이전트 기본 정책: workspace-write + auto-approve (자율 실행, 정책 검증은 유지)
+          // 서브에이전트 정책: workspace-write + 신뢰 도구만 자동 승인 (워크스페이스 격리 보장).
           const sa_policy: RuntimeExecutionPolicy = {
-            sandbox: sandbox_from_preset("full-auto"),
+            sandbox: sandbox_from_preset("workspace-write"),
           };
           const sa_hooks: AgentHooks = {
             on_event: options.hooks?.on_event,
@@ -785,18 +785,28 @@ export class SubagentRegistry {
     });
   }
 
-  private _build_subagent_prompt(options: SpawnSubagentOptions, subagent_id: string): string {
+  /**
+   * 서브에이전트 기본 프롬프트 조립.
+   * has_contextual_system=true이면 soul/heart를 생략 (contextual_system에 실제 템플릿 포함).
+   */
+  private _build_subagent_prompt(options: SpawnSubagentOptions, subagent_id: string, has_contextual_system = false): string {
     const now = now_seoul_iso();
     const role = options.role || "worker";
-    const soul = options.soul || "Calm, pragmatic, collaborative teammate.";
-    const heart = options.heart || "Prioritize correctness, safety, and completion.";
-    return [
+    const lines = [
       "# Subagent",
       `id: ${subagent_id}`,
       `now: ${now}`,
       `role: ${role}`,
-      `soul: ${soul}`,
-      `heart: ${heart}`,
+    ];
+    if (options.soul) lines.push(`soul: ${options.soul}`);
+    if (options.heart) lines.push(`heart: ${options.heart}`);
+    if (!has_contextual_system && !options.soul && !options.heart) {
+      lines.push(
+        "soul: Calm, pragmatic, collaborative teammate.",
+        "heart: Prioritize correctness, safety, and completion.",
+      );
+    }
+    lines.push(
       `origin_channel: ${options.origin_channel || "system"}`,
       `origin_chat_id: ${options.origin_chat_id || "direct"}`,
       "",
@@ -809,11 +819,12 @@ export class SubagentRegistry {
       "5. Keep routing context and return result to origin.",
       "",
       `Assigned task: ${options.task}`,
-    ].join("\n");
+    );
+    return lines.join("\n");
   }
 
   private _build_controller_prompt(options: SpawnSubagentOptions, subagent_id: string, contextual_system = ""): string {
-    const base = this._build_subagent_prompt(options, subagent_id);
+    const base = this._build_subagent_prompt(options, subagent_id, !!contextual_system);
     return [
       base,
       contextual_system ? `\n# ContextBuilder System\n${contextual_system}` : "",
@@ -831,7 +842,7 @@ export class SubagentRegistry {
   }
 
   private _build_executor_prompt(options: SpawnSubagentOptions, subagent_id: string, contextual_system = ""): string {
-    const base = this._build_subagent_prompt(options, subagent_id);
+    const base = this._build_subagent_prompt(options, subagent_id, !!contextual_system);
     return [
       base,
       contextual_system ? `\n# ContextBuilder System\n${contextual_system}` : "",
@@ -875,7 +886,9 @@ export class SubagentRegistry {
         max_tokens,
         max_turns: options.max_iterations || 1,
         tools: tools.get_definitions() as ToolSchema[],
+        tool_executors: tools.get_all(),
         abort_signal: abort.signal,
+        tool_context: { channel: options.origin_channel, chat_id: options.origin_chat_id, sender_id: `subagent:${id}` },
         hooks: {
           on_event: (event: import("./agent.types.js").AgentEvent) => {
             options.hooks?.on_event?.(event);
@@ -897,7 +910,11 @@ export class SubagentRegistry {
       return { content, finish_reason };
     }
 
-    // CLI fallback: run_headless
+    // API fallback: run_headless
+    this.logger?.debug("direct_executor_headless", {
+      id, label, executor_provider_id, model, max_tokens,
+      task_length: options.task.length,
+    });
     const response = await providers.run_headless({
       provider_id: executor_provider_id as import("../providers/types.js").ProviderId,
       messages: [
@@ -921,6 +938,11 @@ export class SubagentRegistry {
       },
     });
 
+    this.logger?.debug("direct_executor_headless_result", {
+      id, label, content_length: response.content?.length ?? 0,
+      content_preview: (response.content || "").slice(0, 120),
+      finish_reason: response.finish_reason,
+    });
     const content = response.content || "";
     if (is_provider_error_reply(content)) throw new Error(content);
     return { content, finish_reason: "stop" };

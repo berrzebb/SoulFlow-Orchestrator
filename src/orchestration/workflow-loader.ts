@@ -2,7 +2,7 @@
 
 import { readdirSync, readFileSync, writeFileSync, unlinkSync, existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
-import type { WorkflowDefinition, PhaseDefinition } from "../agent/phase-loop.types.js";
+import type { WorkflowDefinition, PhaseDefinition, ToolNodeDefinition, SkillNodeDefinition, WorkflowTriggerDefinition, HitlChannelDefinition, OrcheNodeRecord, FieldMapping, TriggerNodeRecord } from "../agent/phase-loop.types.js";
 
 /** YAML 의존성 없이 간단한 YAML-like 파싱 (JSON 직렬화된 YAML 지원). */
 let yaml_parse: ((text: string) => unknown) | null = null;
@@ -71,7 +71,7 @@ export function substitute_variables(
 }
 
 /** 이름을 파일명 안전한 slug로 변환. */
-function slugify(name: string): string {
+export function slugify(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9가-힣\-_]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "") || "untitled";
 }
 
@@ -131,14 +131,14 @@ function normalize_workflow_definition(raw: Record<string, unknown>): WorkflowDe
         agent_id: String(a.agent_id || a.role || `agent-${Math.random().toString(36).slice(2, 8)}`),
         role: String(a.role || ""),
         label: String(a.label || a.role || ""),
-        backend: String(a.backend || "openrouter"),
+        backend: String(a.backend || "codex_cli"),
         model: a.model ? String(a.model) : undefined,
         system_prompt: String(a.system_prompt || ""),
         tools: Array.isArray(a.tools) ? a.tools.map(String) : undefined,
         max_turns: a.max_turns ? Number(a.max_turns) : undefined,
       })),
       critic: p.critic ? {
-        backend: String((p.critic as Record<string, unknown>).backend || "openrouter"),
+        backend: String((p.critic as Record<string, unknown>).backend || "codex_cli"),
         model: (p.critic as Record<string, unknown>).model ? String((p.critic as Record<string, unknown>).model) : undefined,
         system_prompt: String((p.critic as Record<string, unknown>).system_prompt || ""),
         gate: Boolean((p.critic as Record<string, unknown>).gate ?? true),
@@ -153,10 +153,92 @@ function normalize_workflow_definition(raw: Record<string, unknown>): WorkflowDe
       loop_until: p.loop_until ? String(p.loop_until) : undefined,
       max_loop_iterations: p.max_loop_iterations ? Number(p.max_loop_iterations) : undefined,
       depends_on: Array.isArray(p.depends_on) ? p.depends_on.map(String) : undefined,
+      tools: Array.isArray(p.tools) ? p.tools.map(String) : undefined,
+      skills: Array.isArray(p.skills) ? p.skills.map(String) : undefined,
     });
   }
 
   if (phases.length === 0) return null;
+
+  // 보조 노드 파싱
+  const tool_nodes: ToolNodeDefinition[] | undefined = Array.isArray(raw.tool_nodes)
+    ? (raw.tool_nodes as Array<Record<string, unknown>>).map((n) => ({
+        id: String(n.id || ""),
+        tool_id: String(n.tool_id || ""),
+        description: String(n.description || n.tool_id || ""),
+        attach_to: Array.isArray(n.attach_to) ? n.attach_to.map(String) : undefined,
+      }))
+    : undefined;
+
+  const skill_nodes: SkillNodeDefinition[] | undefined = Array.isArray(raw.skill_nodes)
+    ? (raw.skill_nodes as Array<Record<string, unknown>>).map((n) => ({
+        id: String(n.id || ""),
+        skill_name: String(n.skill_name || ""),
+        description: String(n.description || n.skill_name || ""),
+        attach_to: Array.isArray(n.attach_to) ? n.attach_to.map(String) : undefined,
+      }))
+    : undefined;
+
+  const trigger: WorkflowTriggerDefinition | undefined =
+    raw.trigger && typeof raw.trigger === "object" && (raw.trigger as Record<string, unknown>).type === "cron"
+      ? {
+          type: "cron" as const,
+          schedule: String((raw.trigger as Record<string, unknown>).schedule || ""),
+          timezone: (raw.trigger as Record<string, unknown>).timezone ? String((raw.trigger as Record<string, unknown>).timezone) : undefined,
+        }
+      : undefined;
+
+  const hitl_channel: HitlChannelDefinition | undefined =
+    raw.hitl_channel && typeof raw.hitl_channel === "object"
+      ? {
+          channel_type: String((raw.hitl_channel as Record<string, unknown>).channel_type || ""),
+          chat_id: (raw.hitl_channel as Record<string, unknown>).chat_id ? String((raw.hitl_channel as Record<string, unknown>).chat_id) : undefined,
+        }
+      : undefined;
+
+  // 오케스트레이션 노드 (UI에서 추가한 HTTP/Code/IF/Merge/Set)
+  const orche_nodes: OrcheNodeRecord[] | undefined = Array.isArray(raw.orche_nodes)
+    ? (raw.orche_nodes as Array<Record<string, unknown>>).filter(
+        (n) => n.node_id && n.node_type,
+      ).map((n) => ({
+        ...n,
+        node_id: String(n.node_id),
+        node_type: String(n.node_type) as OrcheNodeRecord["node_type"],
+        title: String(n.title || n.node_id || ""),
+        depends_on: Array.isArray(n.depends_on) ? n.depends_on.map(String) : undefined,
+      }))
+    : undefined;
+
+  // 트리거 노드 (복수 지원 + 레거시 trigger → trigger_nodes 변환)
+  let trigger_nodes: TriggerNodeRecord[] | undefined = Array.isArray(raw.trigger_nodes)
+    ? (raw.trigger_nodes as Array<Record<string, unknown>>).filter(
+        (n) => n.id && n.trigger_type,
+      ).map((n) => ({
+        id: String(n.id),
+        trigger_type: String(n.trigger_type) as TriggerNodeRecord["trigger_type"],
+        schedule: n.schedule ? String(n.schedule) : undefined,
+        timezone: n.timezone ? String(n.timezone) : undefined,
+        webhook_path: n.webhook_path ? String(n.webhook_path) : undefined,
+        channel_type: n.channel_type ? String(n.channel_type) : undefined,
+        chat_id: n.chat_id ? String(n.chat_id) : undefined,
+      }))
+    : undefined;
+  // 레거시 trigger → trigger_nodes 자동 변환
+  if (!trigger_nodes && trigger) {
+    trigger_nodes = [{ id: "__cron__", trigger_type: "cron", schedule: trigger.schedule, timezone: trigger.timezone }];
+  }
+
+  // 필드 매핑
+  const field_mappings: FieldMapping[] | undefined = Array.isArray(raw.field_mappings)
+    ? (raw.field_mappings as Array<Record<string, unknown>>).filter(
+        (m) => m.from_node && m.from_field && m.to_node,
+      ).map((m) => ({
+        from_node: String(m.from_node),
+        from_field: String(m.from_field),
+        to_node: String(m.to_node),
+        to_field: String(m.to_field || ""),
+      }))
+    : undefined;
 
   return {
     title: String(raw.title),
@@ -165,5 +247,12 @@ function normalize_workflow_definition(raw: Record<string, unknown>): WorkflowDe
     variables: raw.variables && typeof raw.variables === "object"
       ? Object.fromEntries(Object.entries(raw.variables as Record<string, unknown>).map(([k, v]) => [k, String(v)]))
       : undefined,
+    tool_nodes,
+    skill_nodes,
+    trigger,
+    trigger_nodes,
+    hitl_channel,
+    orche_nodes,
+    field_mappings,
   };
 }
