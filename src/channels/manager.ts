@@ -766,8 +766,7 @@ export class ChannelManager implements ServiceLike {
     const profile = this.effective_render_profile(provider, chat_id);
     const cleaned = strip_sensitive_command_blocks(sanitize_provider_output(raw));
     const { content: text_content, media } = extract_media_items(cleaned, this.workspace_dir);
-    const capped_text = cap_to_max_reply(text_content || "", this.config.maxReplyLength);
-    const fallback = capped_text || (media.length > 0 ? "첨부 파일을 확인해주세요." : "");
+    const fallback = text_content || (media.length > 0 ? "첨부 파일을 확인해주세요." : "");
     const rendered = render_agent_output(fallback, profile);
     return {
       content: String(rendered.content || ""),
@@ -801,8 +800,7 @@ export class ChannelManager implements ServiceLike {
 
   private async send_command_reply(provider: ChannelProvider, message: InboundMessage, content: string): Promise<void> {
     const profile = this.effective_render_profile(provider, message.chat_id);
-    const capped = cap_to_max_reply(content, this.config.maxReplyLength);
-    const rendered = render_agent_output(capped, profile);
+    const rendered = render_agent_output(content, profile);
     const max_len = get_provider_max_length(provider);
     const meta = { kind: "command_reply", render_parse_mode: rendered.parse_mode || null };
     await this.send_chunked(provider, message, this.config.defaultAlias, "", rendered.content, max_len, meta);
@@ -1127,16 +1125,5 @@ function abortable_sleep(ms: number, signal: AbortSignal): Promise<void> {
     const on_abort = () => { clearTimeout(timer); resolve(); };
     signal.addEventListener("abort", on_abort, { once: true });
   });
-}
-
-/**
- * 텍스트를 maxLength 글자 이내로 자른다.
- * 초과 시 후미에 잘림 표시 suffix를 추가한다.
- */
-function cap_to_max_reply(text: string, maxLength: number): string {
-  if (!text || text.length <= maxLength) return text;
-  const suffix = "\n…(이하 생략)";
-  if (maxLength <= suffix.length) return suffix;
-  return text.slice(0, maxLength - suffix.length) + suffix;
 }
 
