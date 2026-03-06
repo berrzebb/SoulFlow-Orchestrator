@@ -16,6 +16,7 @@ dist/
 
 # Runtime/generated state
 **/runtime/
+!src/runtime/
 **/memory/
 
 # Logs
