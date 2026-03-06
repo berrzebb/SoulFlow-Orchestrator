@@ -160,6 +160,7 @@ export function create_test_channel_config(): AppConfig["channel"] {
     approvalReactionEnabled: false,
     controlReactionEnabled: false,
     reactionActionTtlMs: 86_400_000,
+    maxReplyLength: 1600,
     streaming: {
       enabled: false,
       mode: "live" as const,

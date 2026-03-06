@@ -916,7 +916,7 @@ if (is_main_entry()) {
         .then(() => app.agent_backends.close())
         .then(() => app.bus.close())
         .then(() => { if ("close" in app.sessions) (app.sessions as { close(): void }).close(); })
-        .catch((err) => { boot_logger.error(`shutdown error: ${error_message(err)}`); })
+        .catch((err: unknown) => { boot_logger.error(`shutdown error: ${error_message(err)}`); })
         .finally(() => {
           clearTimeout(force_exit);
           void release_lock().finally(() => {

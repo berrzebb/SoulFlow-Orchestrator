@@ -41,6 +41,8 @@ const ChannelSchema = z.object({
   approvalReactionEnabled: z.boolean(),
   controlReactionEnabled: z.boolean(),
   reactionActionTtlMs: z.number().min(60_000),
+  /** 에이전트 응답 최대 글자 수 (최소 500자). 초과 시 잘라서 전송한다. */
+  maxReplyLength: z.number().min(500).default(1600),
   streaming: ChannelStreamingSchema,
   dispatch: ChannelDispatchSchema,
   outboundDedupe: ChannelDedupeSchema,
@@ -166,7 +168,7 @@ export function get_config_defaults(): AppConfig {
       maxToolResultChars: 500,
       orchestratorMaxTokens: 4096,
       orchestratorProvider: "",
-      executorProvider: "",
+      executorProvider: "chatgpt",
     },
     orchestratorLlm: {
       enabled: false,
