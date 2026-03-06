@@ -6,6 +6,7 @@ import type { JsonSchema } from "./types.js";
 /** 오케스트레이터가 메모리를 직접 조회·검색·추가할 수 있는 도구. */
 export class MemoryTool extends Tool {
   readonly name = "memory";
+  readonly category = "memory" as const;
   readonly description = "메모리 조회·검색·추가. action=search|read_longterm|read_daily|list_daily|append_daily";
   readonly parameters: JsonSchema = {
     type: "object",

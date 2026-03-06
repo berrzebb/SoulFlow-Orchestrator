@@ -1,9 +1,10 @@
 /** Analyzer (AI 분석기) 노드 핸들러. */
 
-import type { NodeHandler } from "../node-registry.js";
+import type { NodeHandler, RunnerContext } from "../node-registry.js";
 import type { AnalyzerNodeDefinition, OrcheNodeDefinition } from "../workflow-node.types.js";
 import type { OrcheNodeExecutorContext, OrcheNodeExecuteResult, OrcheNodeTestResult } from "../orche-node-executor.js";
 import { resolve_templates } from "../orche-node-executor.js";
+import { error_message } from "../../utils/common.js";
 
 export const analyzer_handler: NodeHandler = {
   node_type: "analyzer",
@@ -34,8 +35,6 @@ export const analyzer_handler: NodeHandler = {
     const prompt = resolve_templates(n.prompt_template, tpl_ctx);
     const input_field = resolve_templates(n.input_field, tpl_ctx);
 
-    // 스텁: 실제 LLM 호출은 phase-loop-runner가 backend resolver를 통해 실행.
-    // 여기서는 구조만 반환.
     return {
       output: {
         analysis: {},
@@ -43,16 +42,54 @@ export const analyzer_handler: NodeHandler = {
         confidence: 0,
         raw_output: "",
         _meta: {
-          backend: n.backend,
-          model: n.model,
-          prompt,
-          input_field,
-          output_json_schema: n.output_json_schema,
-          categories: n.categories,
+          backend: n.backend, model: n.model, prompt, input_field,
+          output_json_schema: n.output_json_schema, categories: n.categories,
           resolved: true,
         },
       },
     };
+  },
+
+  async runner_execute(node: OrcheNodeDefinition, ctx: OrcheNodeExecutorContext, runner: RunnerContext): Promise<OrcheNodeExecuteResult> {
+    const invoke = runner.services?.invoke_llm;
+    if (!invoke) return this.execute(node, ctx);
+
+    const n = node as AnalyzerNodeDefinition;
+    const tpl_ctx = { memory: ctx.memory };
+    const prompt = resolve_templates(n.prompt_template, tpl_ctx);
+    const cats = n.categories?.length ? `\nCategories: ${n.categories.join(", ")}` : "";
+    const schema = n.output_json_schema as Record<string, unknown> | undefined ?? {
+      type: "object",
+      properties: {
+        category: { type: "string" },
+        confidence: { type: "number" },
+        analysis: { type: "object" },
+      },
+    };
+
+    try {
+      const result = await invoke({
+        provider_id: n.backend,
+        prompt: prompt + cats,
+        system: "You are an analysis engine. Respond with structured JSON only.",
+        model: n.model,
+        temperature: 0,
+        output_json_schema: schema,
+        abort_signal: ctx.abort_signal,
+      });
+      const parsed = result.parsed as Record<string, unknown> | null;
+      return {
+        output: {
+          analysis: parsed ?? {},
+          category: String(parsed?.category ?? n.categories?.[0] ?? "unknown"),
+          confidence: Number(parsed?.confidence ?? 0),
+          raw_output: result.content,
+        },
+      };
+    } catch (err) {
+      runner.logger.warn("analyzer_node_error", { node_id: n.node_id, error: error_message(err) });
+      return { output: { analysis: {}, category: "error", confidence: 0, raw_output: "", error: error_message(err) } };
+    }
   },
 
   test(node: OrcheNodeDefinition): OrcheNodeTestResult {

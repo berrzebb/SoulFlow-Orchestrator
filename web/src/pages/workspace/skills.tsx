@@ -75,6 +75,7 @@ function ToolPicker({ content, onChange, all_tools, native_tools, oauth_services
   roles: SkillInfo[];
 }) {
   const t = useT();
+  const { toast } = useToast();
   const [loading_role, setLoadingRole] = useState<string | null>(null);
   const current_tools = parse_frontmatter_tools(content);
   const current_oauth = parse_frontmatter_oauth(content);
@@ -94,31 +95,22 @@ function ToolPicker({ content, onChange, all_tools, native_tools, oauth_services
   const add_from_role = async (role_name: string) => {
     setLoadingRole(role_name);
     try {
-      const detail: SkillDetail = await api.post("/api/skills", { name: role_name });
+      const detail: SkillDetail = await api.get(`/api/skills/${encodeURIComponent(role_name)}`);
       const role_tools = detail.metadata?.tools ?? [];
       const merged = Array.from(new Set([...current_tools, ...role_tools]));
       onChange(update_frontmatter_tools(content, merged));
+    } catch {
+      toast(t("skills.role_load_failed"), "err");
     } finally {
       setLoadingRole(null);
     }
   };
 
-  const chip = (label: string, active: boolean, onClick: () => void, accent = "var(--accent)") => (
-    <span
-      key={label}
-      onClick={onClick}
-      style={{
-        cursor: "pointer", padding: "1px 7px",
-        borderRadius: "var(--radius-pill)", fontSize: 10,
-        background: active ? `${accent}22` : "rgba(255,255,255,0.04)",
-        color: active ? accent : "var(--muted)",
-        border: `1px solid ${active ? `${accent}55` : "transparent"}`,
-        userSelect: "none",
-      }}
-    >
-      {label}
-    </span>
-  );
+  const chip_cls = (active: boolean, variant?: string) => {
+    const base = "filter-chip";
+    const v = variant ? ` filter-chip--${variant}` : "";
+    return active ? `${base}${v} filter-chip--active` : base;
+  };
 
   if (all_tools.length === 0 && native_tools.length === 0 && oauth_services.length === 0) return null;
   return (
@@ -126,19 +118,19 @@ function ToolPicker({ content, onChange, all_tools, native_tools, oauth_services
       {all_tools.length > 0 && (
         <div className="ws-chip-row">
           <span className="ws-chip-label text-muted">{t("skills.tools")}:</span>
-          {all_tools.map((tool) => chip(tool, tools_set.has(tool), () => toggle_tool(tool)))}
+          {all_tools.map((tool) => <button key={tool} type="button" className={chip_cls(tools_set.has(tool))} onClick={() => toggle_tool(tool)}>{tool}</button>)}
         </div>
       )}
       {native_tools.length > 0 && (
         <div className="ws-chip-row">
           <span className="ws-chip-label text-ok">SDK:</span>
-          {native_tools.map((tool) => chip(tool, tools_set.has(tool), () => toggle_tool(tool), "var(--ok)"))}
+          {native_tools.map((tool) => <button key={tool} type="button" className={chip_cls(tools_set.has(tool), "ok")} onClick={() => toggle_tool(tool)}>{tool}</button>)}
         </div>
       )}
       {oauth_services.length > 0 && (
         <div className="ws-chip-row">
           <span className="ws-chip-label text-warn">OAuth:</span>
-          {oauth_services.map((svc) => chip(svc, oauth_set.has(svc), () => toggle_oauth(svc), "var(--warn)"))}
+          {oauth_services.map((svc) => <button key={svc} type="button" className={chip_cls(oauth_set.has(svc), "warn")} onClick={() => toggle_oauth(svc)}>{svc}</button>)}
         </div>
       )}
       {roles.length > 0 && (
@@ -150,7 +142,6 @@ function ToolPicker({ content, onChange, all_tools, native_tools, oauth_services
               className="btn btn--xs"
               disabled={loading_role !== null}
               onClick={() => void add_from_role(role.name)}
-              style={{ fontSize: 9, padding: "1px 6px" }}
             >
               {loading_role === role.name ? "..." : `+${role.name}`}
             </button>
@@ -174,6 +165,7 @@ export function SkillsTab() {
   const [importing, setImporting] = useState(false);
   const [editContent, setEditContent] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [metaExpanded, setMetaExpanded] = useState(false);
 
   const { data: skills = [] } = useQuery<SkillInfo[]>({
     queryKey: ["ws-skills"],
@@ -198,7 +190,7 @@ export function SkillsTab() {
 
   const { data: detail } = useQuery<SkillDetail>({
     queryKey: ["ws-skill-detail", selected],
-    queryFn: () => api.post<SkillDetail>("/api/skills", { name: selected }),
+    queryFn: () => api.get<SkillDetail>(`/api/skills/${encodeURIComponent(selected!)}`),
     enabled: !!selected,
   });
 
@@ -221,7 +213,7 @@ export function SkillsTab() {
     try {
       const buf = await zipFile.arrayBuffer();
       const zip_b64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
-      await api.post("/api/skills/import", { name: importName.trim(), zip_b64 });
+      await api.post("/api/skills", { name: importName.trim(), zip_b64 });
       toast(t("skills.imported", { name: importName.trim() }), "ok");
       void qc.invalidateQueries({ queryKey: ["ws-skills"] });
       setShowImport(false);
@@ -255,13 +247,14 @@ export function SkillsTab() {
     setSelected(name);
     setActiveFile("SKILL.md");
     setEditContent(null);
+    setMetaExpanded(false);
   };
 
   const save = async () => {
     if (!selected || editContent === null) return;
     setSaving(true);
     try {
-      await api.put("/api/skills", { name: selected, file: activeFile, content: editContent });
+      await api.put(`/api/skills/${encodeURIComponent(selected!)}/files`, { file: activeFile, content: editContent });
       toast(t("skills.saved"), "ok");
       setEditContent(null);
       void qc.invalidateQueries({ queryKey: ["ws-skill-detail", selected] });
@@ -278,6 +271,7 @@ export function SkillsTab() {
   return (
     <>
       <SplitPane
+        showRight={!!selected}
         left={
           <div className="ws-col">
             <div className="ws-toolbar">
@@ -290,9 +284,9 @@ export function SkillsTab() {
             <div className="ws-scroll">
               {roles.length > 0 && (
                 <>
-                  <div className="ws-group-label" style={{ color: "var(--accent)" }}>{t("skills.category_roles")}</div>
+                  <div className="ws-group-label text-accent">{t("skills.category_roles")}</div>
                   {roles.map((s) => (
-                    <div key={s.name} onClick={() => handle_select(s.name)} className={`ws-item${selected === s.name ? " ws-item--active" : ""}`}>
+                    <div key={s.name} role="button" tabIndex={0} onClick={() => handle_select(s.name)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handle_select(s.name); } }} className={`ws-item${selected === s.name ? " ws-item--active" : ""}`}>
                       <div className="ws-item__name">{s.name}</div>
                       <div className="ws-item__meta"><Badge status={s.source} variant="info" /></div>
                     </div>
@@ -301,16 +295,16 @@ export function SkillsTab() {
               )}
               {tools.length > 0 && (
                 <>
-                  <div className="ws-group-label text-ok" style={roles.length > 0 ? { borderTop: "1px solid var(--line)" } : undefined}>{t("skills.category_tools")}</div>
+                  <div className={`ws-group-label text-ok${roles.length > 0 ? " ws-group-label--bordered" : ""}`}>{t("skills.category_tools")}</div>
                   {tools.map((s) => (
-                    <div key={s.name} onClick={() => handle_select(s.name)} className={`ws-item${selected === s.name ? " ws-item--active ws-item--active-ok" : ""}`}>
+                    <div key={s.name} role="button" tabIndex={0} onClick={() => handle_select(s.name)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handle_select(s.name); } }} className={`ws-item${selected === s.name ? " ws-item--active ws-item--active-ok" : ""}`}>
                       <div className="ws-item__name">{s.name}</div>
                       <div className="ws-item__meta"><Badge status={s.source} variant="info" /></div>
                     </div>
                   ))}
                 </>
               )}
-              {skills.length === 0 && <p className="empty" style={{ padding: 14 }}>-</p>}
+              {skills.length === 0 && <div className="empty-state"><div className="empty-state__icon">🛠️</div><div className="empty-state__text">No skills</div></div>}
             </div>
           </div>
         }
@@ -318,15 +312,15 @@ export function SkillsTab() {
           !selected || !detail ? (
             <div className="ws-col">
               <div className="ws-detail-header">
-                <span className="fw-600" style={{ fontSize: 13 }}>{t("workspace.select_item")}</span>
+                <span className="fw-600 text-sm">{t("workspace.select_item")}</span>
               </div>
-              <p className="empty">{t("workspace.select_item")}</p>
+              <div className="empty-state"><div className="empty-state__icon">🛠️</div><div className="empty-state__text">{t("workspace.select_item")}</div></div>
             </div>
           ) : (
-            <div className="ws-detail-row" style={{ display: "flex", height: "100%" }}>
-              <div className="ws-meta-panel">
+            <div className="ws-detail-row">
+              <div className={`ws-meta-panel ws-meta-panel--clickable${metaExpanded ? " ws-meta-panel--expanded" : ""}`} role="button" tabIndex={0} aria-expanded={metaExpanded} onClick={() => setMetaExpanded((v) => !v)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setMetaExpanded((v) => !v); } }}>
                 {detail.metadata && (
-                  <table className="data-table" style={{ fontSize: 11 }}>
+                  <table className="data-table data-table--xs">
                     <tbody>
                       <tr><td className="text-muted">{t("common.type")}</td><td><Badge status={detail.metadata.type} variant="info" /></td></tr>
                       <tr><td className="text-muted">{t("skills.source")}</td><td><Badge status={detail.metadata.source} variant={detail.metadata.source === "builtin" ? "off" : "ok"} /></td></tr>
@@ -340,22 +334,23 @@ export function SkillsTab() {
                       {detail.metadata.soul && <tr><td className="text-muted">{t("skills.soul")}</td><td className="text-xs">{detail.metadata.soul}</td></tr>}
                       {detail.metadata.heart && <tr><td className="text-muted">{t("skills.heart")}</td><td className="text-xs">{detail.metadata.heart}</td></tr>}
                       {detail.metadata.always && <tr><td className="text-muted">{t("skills.always")}</td><td><Badge status={t("common.yes")} variant="ok" /></td></tr>}
-                      {detail.metadata.path && <tr><td className="text-muted">{t("skills.path")}</td><td className="text-xs" style={{ wordBreak: "break-all" }}>{detail.metadata.path}</td></tr>}
+                      {detail.metadata.path && <tr><td className="text-muted">{t("skills.path")}</td><td className="text-xs break-all">{detail.metadata.path}</td></tr>}
                     </tbody>
                   </table>
                 )}
               </div>
-              <div className="ws-col" style={{ overflow: "hidden" }}>
+              <div className="ws-col ws-col--clip">
                 <div className="ws-tab-bar">
-                  <div style={{ display: "flex", flex: 1 }}>
+                  <button className="ws-back-btn" onClick={() => { setSelected(null); setEditContent(null); }}>{t("common.back")}</button>
+                  <div className="flex-fill li-flex" role="tablist">
                     {["SKILL.md", ...(detail.references?.map((r) => r.name) ?? [])].map((name) => (
-                      <button key={name} onClick={() => handle_tab_change(name)} className={`ws-tab${activeFile === name ? " ws-tab--active" : ""}`}>
+                      <button key={name} role="tab" aria-selected={activeFile === name} onClick={() => handle_tab_change(name)} className={`ws-tab${activeFile === name ? " ws-tab--active" : ""}`}>
                         {name}
                       </button>
                     ))}
                   </div>
                   {is_editable && (
-                    <div style={{ display: "flex", flexWrap: "wrap" as const, gap: 4, padding: "0 8px", flexShrink: 0 }}>
+                    <div className="li-flex ws-tab-bar__actions">
                       {editContent !== null && (
                         <>
                           <button className="btn btn--xs btn--ok" onClick={() => void save()} disabled={saving}>
@@ -388,7 +383,7 @@ export function SkillsTab() {
                     {active_content ? (
                       <pre>{active_content}</pre>
                     ) : (
-                      <p className="empty">{t("skills.no_content")}</p>
+                      <div className="empty-state"><div className="empty-state__icon">📄</div><div className="empty-state__text">{t("skills.no_content")}</div></div>
                     )}
                   </div>
                 )}
@@ -414,7 +409,7 @@ export function SkillsTab() {
             <span className="ws-import-hint">{t("skills.import_file")}</span>
             <input ref={fileRef} type="file" accept=".zip" onChange={handle_import_file} className="text-xs" />
             {zipFile && (
-              <span className="text-xs text-muted" style={{ marginTop: 4, display: "block" }}>
+              <span className="text-xs text-muted d-block mt-1">
                 {zipFile.name} ({Math.round(zipFile.size / 1024)} KB)
               </span>
             )}

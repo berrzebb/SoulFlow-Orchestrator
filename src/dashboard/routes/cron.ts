@@ -2,9 +2,10 @@ import type { RouteContext } from "../route-context.js";
 
 export async function handle_cron(ctx: RouteContext): Promise<boolean> {
   const { req, url, res, options, json, read_body } = ctx;
+  const path = url.pathname;
 
   // GET /api/cron/jobs
-  if (url.pathname === "/api/cron/jobs" && req.method === "GET") {
+  if (path === "/api/cron/jobs" && req.method === "GET") {
     const cron = options.cron;
     if (!cron) { json(res, 503, { error: "cron_unavailable" }); return true; }
     const include_disabled = url.searchParams.get("include_disabled") === "1";
@@ -13,62 +14,60 @@ export async function handle_cron(ctx: RouteContext): Promise<boolean> {
   }
 
   // GET /api/cron/status
-  if (url.pathname === "/api/cron/status" && req.method === "GET") {
+  if (path === "/api/cron/status" && req.method === "GET") {
     const cron = options.cron;
     if (!cron) { json(res, 503, { error: "cron_unavailable" }); return true; }
     json(res, 200, await cron.status());
     return true;
   }
 
-  if (url.pathname !== "/api/cron") return false;
-
-  // POST /api/cron { action, job_id, ... } — enable/run/pause/resume
-  if (req.method === "POST") {
+  // PUT /api/cron/status { paused } — 스케줄러 일시정지/재개
+  if (path === "/api/cron/status" && req.method === "PUT") {
     const cron = options.cron;
     if (!cron) { json(res, 503, { error: "cron_unavailable" }); return true; }
     const body = await read_body(req);
-    const action = String(body?.action || "").trim();
-
-    if (action === "enable") {
-      const job_id = String(body?.job_id || "").trim();
-      if (!job_id) { json(res, 400, { error: "job_id_required" }); return true; }
-      const enabled = body?.enabled !== false;
-      const job = await cron.enable_job(job_id, enabled);
-      json(res, job ? 200 : 404, job ?? { error: "not_found" });
-      return true;
-    }
-    if (action === "run") {
-      const job_id = String(body?.job_id || "").trim();
-      if (!job_id) { json(res, 400, { error: "job_id_required" }); return true; }
-      const force = body?.force === true;
-      const ok = await cron.run_job(job_id, force);
-      json(res, ok ? 200 : 404, { ok });
-      return true;
-    }
-    if (action === "pause") {
+    if (body?.paused === true) {
       await cron.pause();
-      json(res, 200, { ok: true });
-      return true;
-    }
-    if (action === "resume") {
+    } else {
       await cron.resume();
-      json(res, 200, { ok: true });
-      return true;
     }
-
-    json(res, 400, { error: "unknown_action" });
+    json(res, 200, { ok: true });
     return true;
   }
 
-  // DELETE /api/cron { job_id } — 삭제
-  if (req.method === "DELETE") {
+  // PUT /api/cron/jobs/:id { enabled, force? } — 활성화/비활성화
+  const job_match = path.match(/^\/api\/cron\/jobs\/([^/]+)$/);
+  if (job_match && req.method === "PUT") {
     const cron = options.cron;
     if (!cron) { json(res, 503, { error: "cron_unavailable" }); return true; }
+    const job_id = decodeURIComponent(job_match[1]);
     const body = await read_body(req);
-    const job_id = String(body?.job_id || "").trim();
-    if (!job_id) { json(res, 400, { error: "job_id_required" }); return true; }
+    const enabled = body?.enabled !== false;
+    const job = await cron.enable_job(job_id, enabled);
+    json(res, job ? 200 : 404, job ?? { error: "not_found" });
+    return true;
+  }
+
+  // DELETE /api/cron/jobs/:id
+  if (job_match && req.method === "DELETE") {
+    const cron = options.cron;
+    if (!cron) { json(res, 503, { error: "cron_unavailable" }); return true; }
+    const job_id = decodeURIComponent(job_match[1]);
     const removed = await cron.remove_job(job_id);
     json(res, removed ? 200 : 404, { removed });
+    return true;
+  }
+
+  // POST /api/cron/jobs/:id/runs { force? } — 즉시 실행
+  const run_match = path.match(/^\/api\/cron\/jobs\/([^/]+)\/runs$/);
+  if (run_match && req.method === "POST") {
+    const cron = options.cron;
+    if (!cron) { json(res, 503, { error: "cron_unavailable" }); return true; }
+    const job_id = decodeURIComponent(run_match[1]);
+    const body = await read_body(req);
+    const force = body?.force === true;
+    const ok = await cron.run_job(job_id, force);
+    json(res, ok ? 200 : 404, { ok });
     return true;
   }
 

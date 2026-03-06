@@ -17,3 +17,4 @@ export { DoctorHandler, type DoctorAccess } from "./doctor.handler.js";
 export { AgentHandler, type AgentAccess } from "./agent.handler.js";
 export { StatsHandler, type StatsAccess } from "./stats.handler.js";
 export { VerifyHandler, type VerifyAccess } from "./verify.handler.js";
+export { GuardHandler } from "./guard.handler.js";

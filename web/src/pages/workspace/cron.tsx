@@ -3,9 +3,10 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import { Badge } from "../../components/badge";
 import { Modal } from "../../components/modal";
+import { ToggleSwitch } from "../../components/toggle-switch";
 import { useToast } from "../../components/toast";
 import { useT } from "../../i18n";
-import { fmt_time, fmt_schedule } from "../../utils/format";
+import { fmt_time, fmt_schedule, time_ago } from "../../utils/format";
 
 interface CronStatus { paused: boolean; next_wake_at_ms: number }
 interface CronJob {
@@ -19,8 +20,8 @@ export function CronTab() {
   const t = useT();
   const qc = useQueryClient();
   const { toast } = useToast();
-  const { data: status } = useQuery<CronStatus>({ queryKey: ["cron-status"], queryFn: () => api.get("/api/cron/status"), refetchInterval: 5000 });
-  const { data: jobs = [] } = useQuery<CronJob[]>({ queryKey: ["cron-jobs"], queryFn: () => api.get("/api/cron/jobs?include_disabled=1"), refetchInterval: 5000 });
+  const { data: status } = useQuery<CronStatus>({ queryKey: ["cron-status"], queryFn: () => api.get("/api/cron/status"), refetchInterval: 15_000, staleTime: 5_000 });
+  const { data: jobs = [] } = useQuery<CronJob[]>({ queryKey: ["cron-jobs"], queryFn: () => api.get("/api/cron/jobs?include_disabled=1"), refetchInterval: 15_000, staleTime: 5_000 });
 
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
 
@@ -29,17 +30,31 @@ export function CronTab() {
     void qc.invalidateQueries({ queryKey: ["cron-jobs"] });
   };
 
-  const toggle = async (id: string, enabled: boolean) => { await api.post("/api/cron", { action: "enable", job_id: id, enabled }); refresh(); };
-  const run = async (id: string) => { await api.post("/api/cron", { action: "run", job_id: id, force: true }); toast(t("cron.job_triggered"), "ok"); refresh(); };
+  const toggle = async (id: string, enabled: boolean) => {
+    try { await api.put(`/api/cron/jobs/${encodeURIComponent(id)}`, { enabled }); refresh(); }
+    catch { toast(t("cron.toggle_failed"), "err"); }
+  };
+  const run = async (id: string) => {
+    try { await api.post(`/api/cron/jobs/${encodeURIComponent(id)}/runs`, { force: true }); toast(t("cron.job_triggered"), "ok"); refresh(); }
+    catch { toast(t("cron.run_failed"), "err"); }
+  };
   const confirm_remove = async () => {
     if (!deleteTarget) return;
-    await api.del("/api/cron", { job_id: deleteTarget.id });
-    toast(t("cron.job_removed"), "ok");
-    setDeleteTarget(null);
-    refresh();
+    try {
+      await api.del(`/api/cron/jobs/${encodeURIComponent(deleteTarget.id)}`);
+      toast(t("cron.job_removed"), "ok");
+      setDeleteTarget(null);
+      refresh();
+    } catch { toast(t("cron.remove_failed"), "err"); }
   };
-  const pause = async () => { await api.post("/api/cron", { action: "pause" }); toast(t("cron.paused"), "warn"); refresh(); };
-  const resume = async () => { await api.post("/api/cron", { action: "resume" }); toast(t("cron.resumed"), "ok"); refresh(); };
+  const pause = async () => {
+    try { await api.put("/api/cron/status", { paused: true }); toast(t("cron.paused"), "warn"); refresh(); }
+    catch { toast(t("cron.pause_failed"), "err"); }
+  };
+  const resume = async () => {
+    try { await api.put("/api/cron/status", { paused: false }); toast(t("cron.resumed"), "ok"); refresh(); }
+    catch { toast(t("cron.resume_failed"), "err"); }
+  };
 
   return (
     <>
@@ -51,7 +66,7 @@ export function CronTab() {
         confirmLabel={t("common.remove")}
         danger
       >
-        <p style={{ fontSize: 12 }}>{t("cron.remove_confirm", { name: deleteTarget?.name ?? "" })}</p>
+        <p className="text-sm">{t("cron.remove_confirm", { name: deleteTarget?.name ?? "" })}</p>
       </Modal>
 
       <div className="section-header">
@@ -65,7 +80,7 @@ export function CronTab() {
         </div>
       </div>
 
-      <div className="kv" style={{ marginBottom: 12 }}>
+      <div className="kv mb-2">
         <div>
           {t("cron.status_label")} <Badge status={status?.paused ? t("overview.paused") : t("overview.active")} variant={status?.paused ? "warn" : "ok"} />
           {" · "}{t("cron.next_wake")} {fmt_time(status?.next_wake_at_ms)}
@@ -73,7 +88,10 @@ export function CronTab() {
       </div>
 
       {!jobs.length ? (
-        <p className="empty">{t("cron.no_jobs")}</p>
+        <div className="empty-state">
+          <div className="empty-state__icon">⏰</div>
+          <div className="empty-state__text">{t("cron.no_jobs")}</div>
+        </div>
       ) : (
         <div className="table-scroll">
           <table className="data-table">
@@ -92,28 +110,30 @@ export function CronTab() {
               {jobs.map((j) => (
                 <tr key={j.id}>
                   <td>
-                    <b>{j.name}</b>
-                    <br /><span style={{ fontSize: "var(--fs-xs)", color: "var(--muted)" }}>{j.id.slice(0, 12)}</span>
+                    <div className="li-flex">
+                      {j.state?.running && <span className="cron-running-dot" title={t("cron.currently_running") || "Running now"} />}
+                      <b>{j.name}</b>
+                    </div>
+                    <span className="text-xs text-muted">{j.id.slice(0, 12)}</span>
                   </td>
                   <td>{fmt_schedule(j.schedule)}</td>
                   <td>
-                    <span
-                      className={`toggle ${j.enabled ? "toggle--on" : "toggle--off"}`}
-                      onClick={() => void toggle(j.id, !j.enabled)}
-                    >
-                      {j.enabled ? t("cron.on") : t("cron.off")}
-                    </span>
+                    <ToggleSwitch
+                      checked={j.enabled}
+                      onChange={(v) => void toggle(j.id, v)}
+                      aria-label={t("common.enabled")}
+                    />
                   </td>
-                  <td>{fmt_time(j.state?.next_run_at_ms)}</td>
+                  <td title={j.state?.next_run_at_ms ? time_ago(j.state.next_run_at_ms) : ""}>{fmt_time(j.state?.next_run_at_ms)}</td>
                   <td>
                     {j.state?.last_status ? <Badge status={j.state.last_status} /> : "-"}
                     {j.state?.last_error && (
-                      <span style={{ color: "var(--err)", fontSize: "var(--fs-xs)", display: "block" }}>{j.state.last_error.slice(0, 60)}</span>
+                      <span className="text-xs text-err d-block">{j.state.last_error.slice(0, 60)}</span>
                     )}
                   </td>
                   <td>{j.delete_after_run ? <Badge status={t("cron.once")} variant="info" /> : "-"}</td>
                   <td>
-                    <div style={{ display: "flex", flexWrap: "wrap" as const, gap: 4 }}>
+                    <div className="li-flex">
                       <button className="btn btn--xs btn--ok" disabled={j.state?.running} onClick={() => void run(j.id)}>{t("cron.run")}</button>
                       <button className="btn btn--xs btn--danger" onClick={() => setDeleteTarget({ id: j.id, name: j.name })}>{t("cron.del")}</button>
                     </div>

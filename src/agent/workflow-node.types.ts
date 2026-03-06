@@ -427,6 +427,242 @@ export interface VectorStoreNodeDefinition extends NodeBase {
   filter?: Record<string, unknown>;
 }
 
+// ── Notify Node ──────────────────────────────────────
+
+export interface NotifyNodeDefinition extends NodeBase {
+  node_type: "notify";
+  /** 메시지 내용 (템플릿 지원). */
+  content: string;
+  /** 전송 대상. origin: 트리거 채널, specified: 지정 채널. */
+  target: "origin" | "specified";
+  /** target=specified 시 채널 ID. */
+  channel?: string;
+  chat_id?: string;
+  /** 메시지 parse 모드 (markdown 등). */
+  parse_mode?: string;
+}
+
+// ── Aggregate Node ───────────────────────────────────
+
+export type AggregateOperation = "collect" | "count" | "sum" | "avg" | "min" | "max" | "join" | "unique" | "flatten";
+
+export interface AggregateNodeDefinition extends NodeBase {
+  node_type: "aggregate";
+  /** 집계 연산. */
+  operation: AggregateOperation;
+  /** 집계 대상 배열 필드 경로. */
+  array_field: string;
+  /** join 연산 시 구분자. */
+  separator?: string;
+}
+
+// ── Send File Node ───────────────────────────────────
+
+export interface SendFileNodeDefinition extends NodeBase {
+  node_type: "send_file";
+  /** 전송할 파일 경로 (템플릿 지원). */
+  file_path: string;
+  /** 파일과 함께 보낼 캡션. */
+  caption?: string;
+  /** 전송 대상. origin: 트리거 채널, specified: 지정 채널. */
+  target: "origin" | "specified";
+  channel?: string;
+  chat_id?: string;
+}
+
+// ── Error Handler Node ───────────────────────────────
+
+export interface ErrorHandlerNodeDefinition extends NodeBase {
+  node_type: "error_handler";
+  /** 에러 감시 대상 노드 ID 목록. */
+  try_nodes: string[];
+  /** 에러 발생 시 동작. continue: 다음 노드 진행, fallback: fallback_nodes 실행. */
+  on_error: "continue" | "fallback";
+  /** fallback 시 실행할 노드 ID 목록. */
+  fallback_nodes?: string[];
+}
+
+// ── HITL (Human-in-the-Loop) Node ────────────────────
+
+export interface HitlNodeDefinition extends NodeBase {
+  node_type: "hitl";
+  /** 사용자에게 보낼 질문 (템플릿 지원). */
+  prompt: string;
+  /** 전송 대상. origin: 트리거 채널, specified: 지정 채널. */
+  target: "origin" | "specified";
+  /** target=specified 시 채널 ID. */
+  channel?: string;
+  chat_id?: string;
+  /** 응답 대기 제한 시간 (ms). 기본 5분. */
+  timeout_ms?: number;
+  /** 타임아웃 시 사용할 기본값. */
+  fallback_value?: string;
+}
+
+// ── Approval Node ────────────────────────────────────
+
+export interface ApprovalNodeDefinition extends NodeBase {
+  node_type: "approval";
+  /** 승인 요청 메시지 (템플릿 지원). */
+  message: string;
+  /** 전송 대상. */
+  target: "origin" | "specified";
+  channel?: string;
+  chat_id?: string;
+  /** 필요한 승인 수 (다중 승인자). 기본 1. */
+  quorum?: number;
+  /** 코멘트 필수 여부. */
+  require_comment?: boolean;
+  timeout_ms?: number;
+}
+
+// ── Form Node ────────────────────────────────────────
+
+export interface FormFieldDefinition {
+  name: string;
+  label: string;
+  type: "text" | "number" | "select" | "textarea" | "boolean";
+  required?: boolean;
+  default_value?: string;
+  options?: string[];
+  placeholder?: string;
+}
+
+export interface FormNodeDefinition extends NodeBase {
+  node_type: "form";
+  /** 폼 제목. */
+  title: string;
+  /** 폼 설명. */
+  description?: string;
+  /** 전송 대상. */
+  target: "origin" | "specified";
+  channel?: string;
+  chat_id?: string;
+  /** 폼 필드 정의. */
+  fields: FormFieldDefinition[];
+  timeout_ms?: number;
+}
+
+// ── Tool Invoke Node ─────────────────────────────────
+
+export interface ToolInvokeNodeDefinition extends NodeBase {
+  node_type: "tool_invoke";
+  /** 호출할 도구 ID (템플릿 지원). */
+  tool_id: string;
+  /** 도구 파라미터 (템플릿 지원). */
+  params?: Record<string, unknown>;
+  timeout_ms?: number;
+}
+
+// ── Gate Node ────────────────────────────────────────
+
+export interface GateNodeDefinition extends NodeBase {
+  node_type: "gate";
+  /** 진행에 필요한 최소 완료 수. */
+  quorum: number;
+  timeout_ms?: number;
+  /** 타임아웃 시 동작. */
+  on_timeout?: "proceed" | "fail";
+}
+
+// ── Escalation Node ──────────────────────────────────
+
+export type EscalationCondition = "always" | "on_timeout" | "on_rejection" | "custom";
+
+export interface EscalationNodeDefinition extends NodeBase {
+  node_type: "escalation";
+  /** 에스컬레이션 조건. */
+  condition: EscalationCondition;
+  /** custom 조건 시 JS 표현식. */
+  custom_expression?: string;
+  /** 에스컬레이션 메시지 (템플릿 지원). */
+  message: string;
+  /** 에스컬레이션 대상 채널. */
+  target_channel: string;
+  target_chat_id?: string;
+  /** 우선순위. */
+  priority?: "critical" | "high" | "medium" | "low";
+}
+
+// ── Cache Node ───────────────────────────────────────
+
+export interface CacheNodeDefinition extends NodeBase {
+  node_type: "cache";
+  /** 캐시 키 (템플릿 지원). */
+  cache_key: string;
+  /** TTL (ms). 기본 5분. */
+  ttl_ms?: number;
+  /** 연산 모드. */
+  operation?: "get_or_set" | "invalidate";
+}
+
+// ── Retry Node ───────────────────────────────────────
+
+export type BackoffStrategy = "exponential" | "linear" | "fixed";
+
+export interface RetryNodeDefinition extends NodeBase {
+  node_type: "retry";
+  /** 재시도 대상 노드 ID. */
+  target_node: string;
+  /** 최대 시도 횟수. */
+  max_attempts: number;
+  /** 백오프 전략. */
+  backoff?: BackoffStrategy;
+  /** 초기 대기 시간 (ms). */
+  initial_delay_ms?: number;
+  /** 최대 대기 시간 (ms). */
+  max_delay_ms?: number;
+}
+
+// ── Batch Node ───────────────────────────────────────
+
+export interface BatchNodeDefinition extends NodeBase {
+  node_type: "batch";
+  /** 처리할 배열 필드 경로. */
+  array_field: string;
+  /** 각 아이템에 실행할 노드 ID. */
+  body_node: string;
+  /** 동시 실행 수. 기본 5. */
+  concurrency?: number;
+  /** 아이템 실패 시 동작. */
+  on_item_error?: "continue" | "halt";
+}
+
+// ── Assert Node ──────────────────────────────────────
+
+export interface AssertionDefinition {
+  /** JS 표현식 (memory 컨텍스트). true면 통과. */
+  condition: string;
+  /** 실패 시 에러 메시지. */
+  message?: string;
+}
+
+export interface AssertNodeDefinition extends NodeBase {
+  node_type: "assert";
+  /** 검증 조건 목록. */
+  assertions: AssertionDefinition[];
+  /** 실패 시 동작. halt: 워크플로우 중단, continue: 경고 후 진행. */
+  on_fail?: "halt" | "continue";
+  /** 전체 에러 메시지 (템플릿 지원). */
+  error_message?: string;
+}
+
+// ── Webhook Node ─────────────────────────────────────
+
+export interface WebhookNodeDefinition extends NodeBase {
+  node_type: "webhook";
+  /** 수신 경로 (예: /hooks/payment-callback). */
+  path: string;
+  /** 허용 HTTP 메서드. */
+  http_method: "GET" | "POST" | "PUT" | "DELETE";
+  /** 응답 모드. immediate: 즉시 200, wait: 워크플로우 완료 후 응답. */
+  response_mode: "immediate" | "wait";
+  /** 응답 상태 코드. */
+  response_status?: number;
+  /** 응답 바디 (템플릿 지원). */
+  response_body?: string;
+}
+
 // ── Union Types ─────────────────────────────────────
 
 export type OrcheNodeType = "http" | "code" | "if" | "merge" | "set" | "split"
@@ -434,7 +670,10 @@ export type OrcheNodeType = "http" | "code" | "if" | "merge" | "set" | "split"
   | "filter" | "loop" | "transform" | "db" | "file"
   | "analyzer" | "retriever" | "ai_agent" | "text_splitter"
   | "task" | "spawn_agent" | "decision" | "promise"
-  | "embedding" | "vector_store";
+  | "embedding" | "vector_store"
+  | "notify" | "aggregate" | "send_file" | "error_handler" | "webhook"
+  | "hitl" | "approval" | "form" | "tool_invoke" | "gate" | "escalation"
+  | "cache" | "retry" | "batch" | "assert";
 
 export type OrcheNodeDefinition =
   | HttpNodeDefinition
@@ -463,7 +702,22 @@ export type OrcheNodeDefinition =
   | DecisionNodeDefinition
   | PromiseNodeDefinition
   | EmbeddingNodeDefinition
-  | VectorStoreNodeDefinition;
+  | VectorStoreNodeDefinition
+  | NotifyNodeDefinition
+  | AggregateNodeDefinition
+  | SendFileNodeDefinition
+  | ErrorHandlerNodeDefinition
+  | WebhookNodeDefinition
+  | HitlNodeDefinition
+  | ApprovalNodeDefinition
+  | FormNodeDefinition
+  | ToolInvokeNodeDefinition
+  | GateNodeDefinition
+  | EscalationNodeDefinition
+  | CacheNodeDefinition
+  | RetryNodeDefinition
+  | BatchNodeDefinition
+  | AssertNodeDefinition;
 
 export type WorkflowNodeDefinition = PhaseNodeDefinition | OrcheNodeDefinition | TriggerNodeDefinition;
 
@@ -536,16 +790,61 @@ export function normalize_workflow(def: {
   phases?: PhaseDefinition[];
 }): NormalizedWorkflow {
   if (def.nodes?.length) {
-    const phase_defs = def.nodes
+    const sorted = topological_sort(def.nodes);
+    const phase_defs = sorted
       .filter((n): n is PhaseNodeDefinition => n.node_type === "phase")
       .map(node_to_phase);
-    return { nodes: def.nodes, phase_defs };
+    return { nodes: sorted, phase_defs };
   }
   const phases = def.phases || [];
   return {
     nodes: phases.map(phase_to_node),
     phase_defs: phases,
   };
+}
+
+/** depends_on 기반 토폴로지 정렬. 순환이 있으면 원본 순서 유지. */
+function topological_sort(nodes: WorkflowNodeDefinition[]): WorkflowNodeDefinition[] {
+  const id_to_node = new Map<string, WorkflowNodeDefinition>();
+  for (const n of nodes) id_to_node.set(n.node_id, n);
+
+  const in_degree = new Map<string, number>();
+  const dependents = new Map<string, string[]>();
+  for (const n of nodes) {
+    in_degree.set(n.node_id, 0);
+    dependents.set(n.node_id, []);
+  }
+  for (const n of nodes) {
+    for (const dep of n.depends_on ?? []) {
+      if (id_to_node.has(dep)) {
+        in_degree.set(n.node_id, (in_degree.get(n.node_id) ?? 0) + 1);
+        dependents.get(dep)!.push(n.node_id);
+      }
+    }
+  }
+
+  // Kahn's algorithm — 안정 정렬 (원본 순서 유지)
+  const order_map = new Map(nodes.map((n, i) => [n.node_id, i]));
+  const queue = nodes
+    .filter((n) => (in_degree.get(n.node_id) ?? 0) === 0)
+    .map((n) => n.node_id);
+  const sorted: WorkflowNodeDefinition[] = [];
+
+  while (queue.length > 0) {
+    // 원본 순서가 앞선 노드를 우선 선택
+    queue.sort((a, b) => (order_map.get(a) ?? 0) - (order_map.get(b) ?? 0));
+    const id = queue.shift()!;
+    sorted.push(id_to_node.get(id)!);
+    for (const dep_id of dependents.get(id) ?? []) {
+      const deg = (in_degree.get(dep_id) ?? 1) - 1;
+      in_degree.set(dep_id, deg);
+      if (deg === 0) queue.push(dep_id);
+    }
+  }
+
+  // 순환 감지: 정렬 결과가 전체를 포함하지 못하면 원본 반환
+  if (sorted.length < nodes.length) return nodes;
+  return sorted;
 }
 
 /** 노드가 오케스트레이션 노드인지 확인. */

@@ -10,12 +10,12 @@ function IfEditPanel({ node, update, t }: EditPanelProps) {
       </div>
       <div className="builder-row-pair">
         <div className="builder-row">
-          <label className="label">{t("workflows.if_true_targets") || "True → targets"}</label>
-          <input className="input input--sm" value={((node.true_targets as string[]) || []).join(", ")} onChange={(e) => update({ true_targets: e.target.value.split(",").map((s: string) => s.trim()).filter(Boolean) })} placeholder="next-node" />
+          <label className="label">{t("workflows.if_true_branch")}</label>
+          <input className="input input--sm" value={(((node.outputs as Record<string, unknown>)?.true_branch as string[]) || []).join(", ")} onChange={(e) => update({ outputs: { ...((node.outputs as Record<string, unknown>) || {}), true_branch: e.target.value.split(",").map((s: string) => s.trim()).filter(Boolean) } })} placeholder="next-node" />
         </div>
         <div className="builder-row">
-          <label className="label">{t("workflows.if_false_targets") || "False → targets"}</label>
-          <input className="input input--sm" value={((node.false_targets as string[]) || []).join(", ")} onChange={(e) => update({ false_targets: e.target.value.split(",").map((s: string) => s.trim()).filter(Boolean) })} placeholder="fallback-node" />
+          <label className="label">{t("workflows.if_false_branch")}</label>
+          <input className="input input--sm" value={(((node.outputs as Record<string, unknown>)?.false_branch as string[]) || []).join(", ")} onChange={(e) => update({ outputs: { ...((node.outputs as Record<string, unknown>) || {}), false_branch: e.target.value.split(",").map((s: string) => s.trim()).filter(Boolean) } })} placeholder="fallback-node" />
         </div>
       </div>
     </>
@@ -28,6 +28,7 @@ export const if_descriptor: FrontendNodeDescriptor = {
   color: "#f39c12",
   shape: "diamond",
   toolbar_label: "+ IF",
+  category: "flow",
   output_schema: [
     { name: "branch",           type: "string",  description: '"true" or "false"' },
     { name: "condition_result", type: "boolean", description: "Evaluated condition" },

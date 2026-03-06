@@ -71,12 +71,13 @@ export class TaskStore implements TaskStoreLike {
   }
 
   private normalize_task(task: TaskState): TaskState {
+    const mem = task.memory || {};
     return {
       ...task,
-      objective: task.objective || "",
-      channel: task.channel || "",
-      chatId: task.chatId || "",
-      memory: { ...(task.memory || {}) },
+      objective: task.objective || String(mem.objective || ""),
+      channel: task.channel || String(mem.channel || ""),
+      chatId: task.chatId || String(mem.chat_id || ""),
+      memory: { ...mem },
     };
   }
 

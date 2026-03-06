@@ -31,6 +31,7 @@ function theme_names(): string[] {
 
 export class DiagramRenderTool extends Tool {
   readonly name = "diagram_render";
+  readonly category = "diagram" as const;
   readonly description = "Render Mermaid diagrams to SVG or ASCII using @vercel/beautiful-mermaid.";
   readonly parameters: JsonSchema = {
     type: "object",

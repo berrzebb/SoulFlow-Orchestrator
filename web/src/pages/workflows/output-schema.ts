@@ -3,7 +3,7 @@
  * 오케 노드: registry 조회. Phase/Trigger/Channel: 로컬 상수.
  */
 
-import type { OrcheNodeDef, PhaseDef } from "./graph-editor";
+import type { OrcheNodeDef, PhaseDef } from "./workflow-types";
 import { get_frontend_node } from "./node-registry";
 import { register_all_frontend_nodes } from "./nodes";
 
@@ -18,30 +18,30 @@ export interface OutputField {
 
 // ── Non-Orche Node Schemas (registry 외) ────────────
 
-const PHASE_OUTPUT: OutputField[] = [
+export const PHASE_OUTPUT: OutputField[] = [
   { name: "result", type: "string", description: "Agent output" },
   { name: "agents", type: "array",  description: "Per-agent results" },
 ];
 
-const PHASE_INPUT: OutputField[] = [
+export const PHASE_INPUT: OutputField[] = [
   { name: "prompt",  type: "string", description: "Input prompt / context" },
   { name: "context", type: "object", description: "Previous phase result" },
   { name: "channel", type: "object", description: "HITL channel binding" },
 ];
 
-const TRIGGER_OUTPUT: OutputField[] = [
+export const TRIGGER_OUTPUT: OutputField[] = [
   { name: "payload",  type: "object", description: "Trigger data" },
   { name: "metadata", type: "object", description: "Trigger meta (timestamp, source)" },
 ];
 
-const CHANNEL_OUTPUT: OutputField[] = [
+export const CHANNEL_OUTPUT: OutputField[] = [
   { name: "message",    type: "string", description: "Received message" },
   { name: "sender",     type: "object", description: "Sender info" },
   { name: "channel_id", type: "string", description: "Channel ID" },
   { name: "files",      type: "array",  description: "Received attachments" },
 ];
 
-const CHANNEL_INPUT: OutputField[] = [
+export const CHANNEL_INPUT: OutputField[] = [
   { name: "message", type: "string", description: "Message to send" },
   { name: "files",   type: "array",  description: "Files to deliver" },
 ];
@@ -60,25 +60,6 @@ const EXTRA_INPUT: Record<string, OutputField[]> = {
   channel: CHANNEL_INPUT,
 };
 
-// ── Compat Accessors (graph-editor에서 직접 참조하는 곳용) ──
-
-/** @deprecated get_output_fields / get_input_fields 사용 권장. */
-export const NODE_OUTPUT_SCHEMAS: Record<string, OutputField[]> = new Proxy({} as Record<string, OutputField[]>, {
-  get(_, key: string) {
-    const desc = get_frontend_node(key);
-    if (desc) return desc.output_schema;
-    return EXTRA_OUTPUT[key] || [];
-  },
-});
-
-/** @deprecated get_output_fields / get_input_fields 사용 권장. */
-export const NODE_INPUT_SCHEMAS: Record<string, OutputField[]> = new Proxy({} as Record<string, OutputField[]>, {
-  get(_, key: string) {
-    const desc = get_frontend_node(key);
-    if (desc) return desc.input_schema;
-    return EXTRA_INPUT[key] || [];
-  },
-});
 
 // ── Field Type Colors ───────────────────────────────
 

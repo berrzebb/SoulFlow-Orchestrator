@@ -69,6 +69,11 @@ export class SseManager {
     this._broadcast(`event: web_stream\ndata: ${JSON.stringify({ chat_id, content, done })}\n\n`);
   }
 
+  broadcast_mirror_message(event: { session_key: string; direction: string; sender_id: string; content: string; at: string }): void {
+    if (this.clients.size === 0) return;
+    this._broadcast(`event: mirror_message\ndata: ${JSON.stringify(event)}\n\n`);
+  }
+
   broadcast_workflow_event(event: import("../agent/phase-loop.types.js").PhaseLoopEvent): void {
     if (this.clients.size === 0) return;
     this._broadcast(`event: workflow\ndata: ${JSON.stringify({ ...event, at: now_iso() })}\n\n`);

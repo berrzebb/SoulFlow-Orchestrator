@@ -3,6 +3,21 @@ import { Tool } from "./base.js";
 import type { JsonSchema } from "./types.js";
 import { validate_url, normalize_headers, serialize_body, format_response, timed_fetch } from "./http-utils.js";
 
+function apply_auth(headers: Record<string, string>, auth: unknown): void {
+  if (!auth || typeof auth !== "object" || Array.isArray(auth)) return;
+  const a = auth as Record<string, unknown>;
+  const type = String(a.type || "").toLowerCase();
+  if (type === "bearer") {
+    headers["Authorization"] = `Bearer ${String(a.token || "")}`;
+  } else if (type === "basic") {
+    const encoded = Buffer.from(`${String(a.username || "")}:${String(a.password || "")}`).toString("base64");
+    headers["Authorization"] = `Basic ${encoded}`;
+  } else if (type === "api_key") {
+    const header_name = String(a.header_name || "X-API-Key");
+    headers[header_name] = String(a.key || "");
+  }
+}
+
 /**
  * 에이전트가 외부 JSON/REST API를 직접 호출할 수 있는 도구.
  * web_fetch와 달리 HTML 변환 없이 구조화된 JSON 응답을 반환하며
@@ -10,6 +25,8 @@ import { validate_url, normalize_headers, serialize_body, format_response, timed
  */
 export class HttpRequestTool extends Tool {
   readonly name = "http_request";
+  readonly category = "web" as const;
+  readonly policy_flags = { network: true } as const;
   readonly description = "외부 JSON/REST API HTTP 요청 (GET/POST/PUT/PATCH/DELETE). 구조화된 응답 반환.";
   readonly parameters: JsonSchema = {
     type: "object",
@@ -22,6 +39,10 @@ export class HttpRequestTool extends Tool {
         description: "HTTP 메서드 (기본: GET)",
       },
       headers: { type: "object", description: "요청 헤더 key-value 객체" },
+      auth: {
+        type: "object",
+        description: "인증 설정. { type: 'bearer', token } | { type: 'basic', username, password } | { type: 'api_key', header_name, key }",
+      },
       body: { description: "요청 바디. 객체면 JSON 직렬화, 문자열은 그대로 전송" },
       timeout_ms: {
         type: "integer",
@@ -48,6 +69,7 @@ export class HttpRequestTool extends Tool {
     const max_chars = Math.min(50_000, Math.max(100, Number(params.max_response_chars) || 8_000));
 
     const headers = normalize_headers(params.headers);
+    apply_auth(headers, params.auth);
     const body = serialize_body(params.body, headers);
 
     try {

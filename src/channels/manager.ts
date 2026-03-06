@@ -22,6 +22,8 @@ import { parse_slash_command_from_message, parse_slash_command } from "./slash-c
 import {
   default_render_profile,
   render_agent_output,
+  split_markdown,
+  get_provider_max_length,
   type RenderProfile,
   type RenderMode,
 } from "./rendering.js";
@@ -29,6 +31,19 @@ import { sanitize_provider_output, strip_sensitive_command_blocks, strip_secret_
 import { extract_media_items } from "./media-extractor.js";
 import { prune_ttl_map, sleep, error_message, now_iso, normalize_text } from "../utils/common.js";
 import { LaneQueue } from "../agent/pty/lane-queue.js";
+
+/** status mode: 도구 이름 → 상태 아이콘 매핑. */
+const STATUS_ICONS: Record<string, string> = {
+  Read: "📄", Glob: "📂", Grep: "🔍", Edit: "✏️", Write: "✏️",
+  Bash: "🔧", WebFetch: "🌐", WebSearch: "🌐", Agent: "🤖",
+};
+
+/** status mode: 도구 이름 → 상태 라벨 매핑. */
+const STATUS_LABELS: Record<string, string> = {
+  Read: "파일 읽는 중", Glob: "파일 검색 중", Grep: "코드 검색 중",
+  Edit: "수정 중", Write: "파일 작성 중", Bash: "명령 실행 중",
+  WebFetch: "웹 조회 중", WebSearch: "웹 검색 중", Agent: "서브에이전트 실행 중",
+};
 
 export type ChannelManagerStatus = {
   enabled_channels: string[];
@@ -70,6 +85,8 @@ export type ChannelManagerDeps = {
   on_web_stream?: ((chat_id: string, content: string, done: boolean) => void) | null;
   /** 워크플로우 HITL: 채널 응답을 워크플로우 pending_response로 라우팅. */
   workflow_hitl?: WorkflowHitlBridge | null;
+  /** 실행 전 확인 가드. */
+  confirmation_guard?: import("../orchestration/confirmation-guard.js").ConfirmationGuard | null;
 };
 
 type ActiveRun = { abort: AbortController; provider: ChannelProvider; chat_id: string; alias: string; done: Promise<void>; send_input?: (text: string) => void };
@@ -100,8 +117,10 @@ export class ChannelManager implements ServiceLike {
   private readonly session_store: import("../session/service.js").SessionStoreLike | null;
   private readonly bot_identity: BotIdentitySource;
   private workflow_hitl: WorkflowHitlBridge | null;
+  private readonly confirmation_guard: import("../orchestration/confirmation-guard.js").ConfirmationGuard | null;
 
   private running = false;
+  private abort_ctl = new AbortController();
   private poll_task: Promise<void> | null = null;
   private consumer_task: Promise<void> | null = null;
   private readonly seen = new Map<string, number>();
@@ -134,6 +153,7 @@ export class ChannelManager implements ServiceLike {
     this.session_store = deps.session_store ?? null;
     this.bot_identity = deps.bot_identity;
     this.workflow_hitl = deps.workflow_hitl ?? null;
+    this.confirmation_guard = deps.confirmation_guard ?? null;
     _bot_identity_ref = deps.bot_identity;
     _bot_ids_cache = null;
     this.inbound_lanes = new LaneQueue({ global_concurrency: deps.config.inboundConcurrency });
@@ -173,6 +193,7 @@ export class ChannelManager implements ServiceLike {
 
   async stop(): Promise<void> {
     this.running = false;
+    this.abort_ctl.abort();
     this.cancel_active_runs();
     if (this.prune_timer) { clearInterval(this.prune_timer); this.prune_timer = null; }
     if (this.inbound_inflight.size > 0) await Promise.allSettled([...this.inbound_inflight]);
@@ -259,7 +280,11 @@ export class ChannelManager implements ServiceLike {
         );
         if (resumed) {
           this.logger.info("task resumed after approval", { task_id: approval.task_id });
+          await this.send_outbound(provider, message, this.config.defaultAlias, "✅ 승인이 처리되었습니다. 작업을 재개합니다.", { kind: "approval_resume_ack" });
           await this.invoke_and_reply(provider, message, this.config.defaultAlias, approval.task_id);
+        } else {
+          this.logger.warn("approval_resume_failed", { task_id: approval.task_id });
+          await this.send_outbound(provider, message, this.config.defaultAlias, "⚠️ 승인이 처리되었으나 작업을 재개할 수 없습니다. 작업이 이미 완료되었거나 만료되었을 수 있습니다.", { kind: "approval_resume_failed" });
         }
       } else if (approval.task_id && (approval.approval_status === "denied" || approval.approval_status === "cancelled")) {
         // 거부/취소 → 좀비 방지: Task 즉시 취소
@@ -274,14 +299,35 @@ export class ChannelManager implements ServiceLike {
       const resolved = await this.workflow_hitl.try_resolve(message.chat_id, String(message.content || "").trim());
       if (resolved) {
         this.logger.info("workflow_hitl_resolved", { chat_id: message.chat_id });
+        await this.send_outbound(provider, message, this.config.defaultAlias, "✅ 입력을 받았습니다. 워크플로우를 재개합니다.", { kind: "workflow_resume_ack" });
         return;
       }
     }
+
+    // Confirmation Guard: 실행 확인 대기 중인 요청이 있으면 해소
+    if (this.confirmation_guard?.has_pending(provider, message.chat_id)) {
+      const guard_result = this.confirmation_guard.try_resolve(provider, message.chat_id, String(message.content || "").trim());
+      if (guard_result) {
+        if (guard_result.action === "cancelled") {
+          await this.send_outbound(provider, message, this.config.defaultAlias, "🚫 작업이 취소되었습니다.", { kind: "guard_cancelled" });
+          return;
+        }
+        this.logger.info("guard_confirmed", { provider, chat_id: message.chat_id });
+        const original: InboundMessage = { ...message, content: guard_result.original_text };
+        await this.invoke_and_reply(provider, original, this.config.defaultAlias);
+        return;
+      }
+      // null → pending 만료 또는 무관한 텍스트 → 정상 플로우로 계속
+    }
+
+    // TTL 만료 태스크 알림
+    await this.notify_expired_tasks(provider);
 
     // HITL: 대기/실패 Task이 있으면 사용자 입력으로 재개
     const resume = await this.task_resume.try_resume(provider, message);
     if (resume?.resumed) {
       this.logger.info("task resumed from referenced message", { task_id: resume.task_id, previous_status: resume.previous_status });
+      await this.send_outbound(provider, message, this.config.defaultAlias, "✅ 입력을 받았습니다. 작업을 재개합니다.", { kind: "task_resume_ack" });
       await this.invoke_and_reply(provider, message, this.config.defaultAlias, resume.task_id);
       return;
     }
@@ -330,9 +376,10 @@ export class ChannelManager implements ServiceLike {
   }
 
   private async run_poll_loop(): Promise<void> {
-    while (this.running) {
+    const signal = this.abort_ctl.signal;
+    while (this.running && !signal.aborted) {
       for (const { provider, instance_id } of this.registry.list_channels()) {
-        if (!this.running) return;
+        if (!this.running || signal.aborted) return;
         const target = this.resolve_target(provider, instance_id);
         if (!target) continue;
         try {
@@ -352,6 +399,8 @@ export class ChannelManager implements ServiceLike {
                       this.invoke_and_reply(provider, trigger_msg, this.config.defaultAlias, rxn_result.task_id),
                     ).catch((e) => this.logger.error("reaction resume failed", { error: error_message(e) }));
                   }
+                } else {
+                  this.logger.warn("reaction_approval_resume_failed", { task_id: rxn_result.task_id });
                 }
               } else if (rxn_result.approval_status === "denied" || rxn_result.approval_status === "cancelled") {
                 this.task_resume.cancel_task(rxn_result.task_id, `approval_${rxn_result.approval_status}`).catch((e) =>
@@ -385,15 +434,16 @@ export class ChannelManager implements ServiceLike {
           this.logger.error("poll failed", { instance_id, error: error_message(e) });
         }
       }
-      await sleep(this.config.pollIntervalMs);
+      await abortable_sleep(this.config.pollIntervalMs, this.abort_ctl.signal);
     }
   }
 
   /** bus에서 인바운드 메시지를 소비. 같은 provider:chat_id는 FIFO 직렬, 다른 채팅은 병렬. */
   private async run_inbound_consumer(): Promise<void> {
-    while (this.running) {
+    const signal = this.abort_ctl.signal;
+    while (this.running && !signal.aborted) {
       const msg = await this.bus.consume_inbound({ timeout_ms: 2000 });
-      if (!msg || !this.running) continue;
+      if (!msg || !this.running || signal.aborted) continue;
 
       // HITL fast-path: 실행 중인 task에 send_input 등록 시 직렬화 없이 즉시 전달
       if (this.try_hitl_send_input(msg)) continue;
@@ -471,29 +521,53 @@ export class ChannelManager implements ServiceLike {
         12, this.config.sessionHistoryMaxAgeMs,
       );
 
+      const is_status_mode = this.config.streaming.enabled && this.config.streaming.mode === "status";
+
       const result = await this.orchestration.execute({
         message, alias, provider, media_inputs,
         session_history: history,
         resumed_task_id,
         run_id,
-        on_stream: (chunk) => {
-          if (stream_state.accumulated && !stream_state.accumulated.endsWith("\n") && !chunk.startsWith("\n")) {
-            stream_state.accumulated += "\n";
-          }
-          stream_state.accumulated += chunk;
-          stream_state.chain = stream_state.chain
-            .then(() => this.send_or_edit_stream(provider, message, alias, stream_state.accumulated, stream_state))
-            .catch((e) => this.logger.debug("stream_update_failed", { error: error_message(e) }));
-        },
+        on_stream: is_status_mode
+          ? (chunk) => {
+              stream_state.accumulated += chunk;
+              // 최초 스트림 수신 시 상태 메시지 생성
+              if (!stream_state.message_id) {
+                stream_state.chain = stream_state.chain
+                  .then(() => this.send_status_message(provider, message, alias, "🔍 분석 중...", stream_state))
+                  .catch((e) => this.logger.debug("status_create_failed", { error: error_message(e) }));
+              }
+            }
+          : (chunk) => {
+              if (stream_state.accumulated && !stream_state.accumulated.endsWith("\n") && !chunk.startsWith("\n")) {
+                stream_state.accumulated += "\n";
+              }
+              stream_state.accumulated += chunk;
+              stream_state.chain = stream_state.chain
+                .then(() => this.send_or_edit_stream(provider, message, alias, stream_state.accumulated, stream_state))
+                .catch((e) => this.logger.debug("stream_update_failed", { error: error_message(e) }));
+            },
         on_progress: (event) => {
           this.bus.publish_progress(event).catch((e) =>
             this.logger.debug("progress_publish_failed", { error: error_message(e) }),
           );
         },
         on_agent_event: this.on_agent_event || undefined,
-        on_tool_block: this.config.streaming.toolDisplay === "inline"
-          ? undefined   // inline: on_tool_block 미등록 → on_stream으로 폴스루
-          : () => { stream_state.tool_count++; },
+        on_tool_block: is_status_mode
+          ? (tool_name: string) => {
+              stream_state.tool_count++;
+              const icon = STATUS_ICONS[tool_name] || "🔧";
+              const label = STATUS_LABELS[tool_name] || `${tool_name} 실행 중`;
+              stream_state.chain = stream_state.chain
+                .then(() => this.update_status_message(
+                  provider, message, stream_state,
+                  `${icon} ${label}... [${stream_state.tool_count} tool${stream_state.tool_count > 1 ? "s" : ""}]`,
+                ))
+                .catch((e) => this.logger.debug("status_update_failed", { error: error_message(e) }));
+            }
+          : this.config.streaming.toolDisplay === "inline"
+            ? undefined   // inline: on_tool_block 미등록 → on_stream으로 폴스루
+            : (_tool_name: string) => { stream_state.tool_count++; },
         signal: abort.signal,
         register_send_input: (cb) => { active_run.send_input = cb; },
       });
@@ -545,7 +619,7 @@ export class ChannelManager implements ServiceLike {
 
     const rendered = this.render_reply(result.reply, provider, message.chat_id);
     const mention = format_mention(provider, message.sender_id);
-    const final_text = `${mention}${rendered.content}`.trim();
+    const max_len = get_provider_max_length(provider);
 
     const record_meta = {
       stream_full_content: result.stream_full_content,
@@ -555,13 +629,38 @@ export class ChannelManager implements ServiceLike {
       usage: result.usage as Record<string, unknown> | undefined,
     };
 
+    const build_meta = (): Record<string, unknown> => {
+      const m: Record<string, unknown> = {
+        kind: "agent_reply", agent_alias: alias,
+        trigger_message_id: String((message.metadata as Record<string, unknown>)?.message_id || message.id || ""),
+        render_mode: rendered.render_mode, render_parse_mode: rendered.parse_mode || null,
+      };
+      if (result.parsed_output !== undefined) m.parsed_output = result.parsed_output;
+      if (result.run_id) m.run_id = result.run_id;
+      if (result.usage) m.usage = result.usage;
+      return m;
+    };
+
+    // status mode: 상태 메시지 → "✓ 완료" + 최종 답변 새 메시지
+    const is_status_mode = this.config.streaming.enabled && this.config.streaming.mode === "status";
+    if (is_status_mode && stream_message_id) {
+      try {
+        await this.registry.edit_message(provider, message.chat_id, stream_message_id, "✓ 완료");
+      } catch { /* 상태 메시지 마무리 실패는 무시 */ }
+      if (provider === "web") this.on_web_stream?.(message.chat_id, "", true);
+      await this.send_chunked(provider, message, alias, mention, rendered.content, max_len, build_meta(), rendered.media);
+      await this.recorder.record_assistant(provider, message, alias, rendered.markdown, record_meta);
+      return;
+    }
+
     if (result.streamed && stream_message_id) {
       if (!this.config.streaming.suppressFinalAfterStream) {
+        const first_chunk_text = `${mention}${rendered.content}`.trim();
         try {
-          await this.registry.edit_message(provider, message.chat_id, stream_message_id, final_text, rendered.parse_mode);
+          await this.registry.edit_message(provider, message.chat_id, stream_message_id, first_chunk_text.slice(0, max_len), rendered.parse_mode);
         } catch (e) {
           this.logger.warn("edit_message_failed, sending as new message", { error: error_message(e) });
-          await this.send_outbound(provider, message, alias, final_text, { kind: "agent_reply", agent_alias: alias }, rendered.media);
+          await this.send_chunked(provider, message, alias, mention, rendered.content, max_len, { kind: "agent_reply", agent_alias: alias }, rendered.media);
         }
       }
       if (rendered.media.length > 0) {
@@ -571,17 +670,8 @@ export class ChannelManager implements ServiceLike {
       return;
     }
 
-    const outbound_meta: Record<string, unknown> = {
-      kind: "agent_reply", agent_alias: alias,
-      trigger_message_id: String((message.metadata as Record<string, unknown>)?.message_id || message.id || ""),
-      render_mode: rendered.render_mode, render_parse_mode: rendered.parse_mode || null,
-    };
-    if (result.parsed_output !== undefined) outbound_meta.parsed_output = result.parsed_output;
-    if (result.run_id) outbound_meta.run_id = result.run_id;
-    if (result.usage) outbound_meta.usage = result.usage;
-
     if (provider === "web") this.on_web_stream?.(message.chat_id, "", true);
-    await this.send_outbound(provider, message, alias, final_text, outbound_meta, rendered.media);
+    await this.send_chunked(provider, message, alias, mention, rendered.content, max_len, build_meta(), rendered.media);
     await this.recorder.record_assistant(provider, message, alias, rendered.markdown, record_meta);
   }
 
@@ -635,6 +725,41 @@ export class ChannelManager implements ServiceLike {
     state.last_update = now;
   }
 
+  /** status mode: 상태 인디케이터 메시지 최초 생성. */
+  private async send_status_message(
+    provider: ChannelProvider, message: InboundMessage, alias: string,
+    status_text: string,
+    state: { message_id: string; last_update: number },
+  ): Promise<void> {
+    const result = await this.dispatch.send(provider, {
+      id: `status-${Date.now()}`, provider, channel: provider, sender_id: alias,
+      chat_id: message.chat_id, content: status_text, at: now_iso(),
+      reply_to: resolve_reply_to(provider, message), thread_id: message.thread_id,
+      metadata: { kind: "agent_status", agent_alias: alias },
+    });
+    if (result.ok && result.message_id) {
+      state.message_id = result.message_id;
+      state.last_update = Date.now();
+    }
+  }
+
+  /** status mode: 상태 인디케이터 메시지 편집 (1.5초 throttle). */
+  private async update_status_message(
+    provider: ChannelProvider, message: InboundMessage,
+    state: { message_id: string; last_update: number },
+    status_text: string,
+  ): Promise<void> {
+    if (!state.message_id) return;
+    const now = Date.now();
+    if (now - state.last_update < 1500) return;
+    try {
+      await this.registry.edit_message(provider, message.chat_id, state.message_id, status_text);
+      state.last_update = now;
+    } catch (e) {
+      this.logger.debug("status_edit_failed", { error: error_message(e) });
+    }
+  }
+
   private render_reply(raw: string, provider: ChannelProvider, chat_id: string): {
     content: string; markdown: string; media: MediaItem[]; parse_mode?: "HTML"; render_mode: RenderMode;
   } {
@@ -644,8 +769,8 @@ export class ChannelManager implements ServiceLike {
     const fallback = text_content || (media.length > 0 ? "첨부 파일을 확인해주세요." : "");
     const rendered = render_agent_output(fallback, profile);
     return {
-      content: String(rendered.content || "").slice(0, 1600),
-      markdown: String(rendered.markdown || "").slice(0, 1600),
+      content: String(rendered.content || ""),
+      markdown: String(rendered.markdown || ""),
       media: media.slice(0, 4),
       parse_mode: rendered.parse_mode,
       render_mode: profile.mode,
@@ -661,7 +786,14 @@ export class ChannelManager implements ServiceLike {
   private async send_error_reply(provider: ChannelProvider, message: InboundMessage, alias: string, error: string, run_id?: string): Promise<void> {
     const mention = format_mention(provider, message.sender_id);
     const reason = strip_secret_reference_tokens(normalize_error_detail(error));
-    const content = `${mention}${alias} 작업 처리에 실패했습니다. (${reason})`.trim();
+    const content = [
+      `${mention}❌ **작업 실패**`,
+      "",
+      `${alias} 작업 처리에 실패했습니다.`,
+      `사유: ${reason}`,
+      "",
+      "_이 메시지에 답장하면 추가 정보를 포함하여 재시도합니다._",
+    ].join("\n").trim();
     await this.send_outbound(provider, message, alias, content, { kind: "agent_error", agent_alias: alias });
     await this.recorder.record_assistant(provider, message, alias, content, { run_id });
   }
@@ -669,12 +801,40 @@ export class ChannelManager implements ServiceLike {
   private async send_command_reply(provider: ChannelProvider, message: InboundMessage, content: string): Promise<void> {
     const profile = this.effective_render_profile(provider, message.chat_id);
     const rendered = render_agent_output(content, profile);
-    const text = String(rendered.content || "").slice(0, 1600);
-    await this.send_outbound(provider, message, this.config.defaultAlias, text, {
-      kind: "command_reply", render_parse_mode: rendered.parse_mode || null,
-    });
-    const markdown = String(rendered.markdown || "").slice(0, 1600);
-    await this.recorder.record_assistant(provider, message, this.config.defaultAlias, markdown);
+    const max_len = get_provider_max_length(provider);
+    const meta = { kind: "command_reply", render_parse_mode: rendered.parse_mode || null };
+    await this.send_chunked(provider, message, this.config.defaultAlias, "", rendered.content, max_len, meta);
+    await this.recorder.record_assistant(provider, message, this.config.defaultAlias, rendered.markdown);
+  }
+
+  /** TTL 만료로 취소된 태스크에 대해 해당 채널에 알림 발송. */
+  private async notify_expired_tasks(provider: ChannelProvider): Promise<void> {
+    const expired = this.task_resume.expire_stale();
+    for (const task of expired) {
+      const objective = String(task.memory?.objective || task.title || "").slice(0, 200);
+      const content = [
+        "⏰ **작업 시간 초과**",
+        "",
+        `작업 \`${task.taskId.slice(0, 8)}\`이 응답 대기 시간을 초과하여 자동 취소되었습니다.`,
+        objective ? `작업 내용: ${objective}` : "",
+        "",
+        "_같은 요청을 다시 보내면 새로운 작업이 시작됩니다._",
+      ].filter(Boolean).join("\n");
+      const outbound = {
+        id: `expired-${Date.now()}-${task.taskId.slice(0, 8)}`,
+        provider,
+        instance_id: task.channel || provider,
+        channel: task.channel || provider,
+        sender_id: this.config.defaultAlias,
+        chat_id: task.chatId,
+        content,
+        at: now_iso(),
+        metadata: { kind: "task_expired", task_id: task.taskId },
+      };
+      this.dispatch.send(provider, outbound).catch((e) =>
+        this.logger.error("expired task notification failed", { task_id: task.taskId, error: error_message(e) }),
+      );
+    }
   }
 
   private async send_outbound(
@@ -692,6 +852,23 @@ export class ChannelManager implements ServiceLike {
     }
     const result = await this.dispatch.send(provider, outbound);
     return result.message_id;
+  }
+
+  /** 긴 메시지를 채널 한도에 맞게 분할 전송. 첫 청크에만 멘션 + 미디어 포함. */
+  private async send_chunked(
+    provider: ChannelProvider, message: InboundMessage, alias: string,
+    mention: string, content: string, max_len: number,
+    metadata: Record<string, unknown>, media?: MediaItem[],
+  ): Promise<void> {
+    const mention_len = mention.length;
+    const chunks = split_markdown(content, max_len - mention_len);
+    for (let i = 0; i < chunks.length; i++) {
+      const prefix = i === 0 ? mention : "";
+      const text = `${prefix}${chunks[i]}`.trim();
+      const chunk_media = i === 0 ? media : undefined;
+      const chunk_meta = i === 0 ? metadata : { ...metadata, kind: "agent_reply_cont", chunk_index: i };
+      await this.send_outbound(provider, message, alias, text, chunk_meta, chunk_media);
+    }
   }
 
   private async try_read_ack(channel_id: string, message: InboundMessage): Promise<void> {
@@ -782,6 +959,13 @@ export class ChannelManager implements ServiceLike {
           if (!sender_id || sender_id === "unknown") continue;
           const content = String(last.content || "").trim();
           if (!content) continue;
+
+          // 세션에 이미 후속 메시지가 있으면 orphan이 아님 (사용자가 다른 요청으로 넘어감)
+          const msg_count = session.messages.length;
+          if (msg_count >= 3) {
+            const prev = session.messages[msg_count - 2];
+            if (prev && prev.role === "assistant") continue;
+          }
 
           // 결정적 ID 사용: seen cache에서 원본 메시지와 매칭되도록
           const last_meta = (last as Record<string, unknown>).metadata as Record<string, unknown> | undefined;
@@ -931,5 +1115,15 @@ function normalize_error_detail(raw: string): string {
   const m = RE_PROVIDER_ERROR.exec(text);
   if (m) return `${String(m[1]).toLowerCase()}:${String(m[2] || "error").trim()}`.slice(0, 180);
   return text.slice(0, 180);
+}
+
+/** AbortSignal로 즉시 중단 가능한 sleep. abort 시 조용히 resolve. */
+function abortable_sleep(ms: number, signal: AbortSignal): Promise<void> {
+  if (signal.aborted) return Promise.resolve();
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, Math.max(0, ms));
+    const on_abort = () => { clearTimeout(timer); resolve(); };
+    signal.addEventListener("abort", on_abort, { once: true });
+  });
 }
 

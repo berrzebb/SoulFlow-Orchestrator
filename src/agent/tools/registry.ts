@@ -6,6 +6,7 @@ import type {
   ToolExecutionContext,
   ToolLike,
 } from "./types.js";
+import type { AgentApprovalStatus } from "../runtime.types.js";
 
 const ERROR_HINT = "\n\n[Analyze the error and retry with a safer or narrower approach.]";
 
@@ -17,7 +18,7 @@ type ApprovalRequest = {
   context?: ToolExecutionContext;
   detail: string;
   created_at: string;
-  status: "pending" | "approved" | "denied" | "deferred" | "cancelled" | "clarify";
+  status: AgentApprovalStatus;
   response_text?: string;
   response_parsed?: ApprovalParseResult;
   /** true면 SDK 브리지 모드 — SDK가 도구 실행을 직접 관리하므로 execute_approved_request를 스킵. */
@@ -38,6 +39,8 @@ export class ToolRegistry {
   private readonly on_approval_request: ((request: ApprovalRequest) => Promise<void>) | null;
   private readonly pre_hooks: PreToolHook[];
   private readonly post_hooks: PostToolHook[];
+  /** "모두 승인" 시 세션 동안 자동 승인되는 도구 이름 집합. */
+  private readonly auto_approved_tools = new Set<string>();
 
   constructor(options?: ToolRegistryOptions) {
     this.on_approval_request = options?.on_approval_request || null;
@@ -86,6 +89,15 @@ export class ToolRegistry {
     return [...this.tools.values()].map((tool) => tool.to_schema() as Record<string, unknown>);
   }
 
+  /** 등록된 도구에서 name → category 매핑을 빌드. */
+  build_category_map(): Record<string, string> {
+    const map: Record<string, string> = {};
+    for (const tool of this.tools.values()) {
+      map[tool.name] = tool.category;
+    }
+    return map;
+  }
+
   async execute(name: string, params: Record<string, unknown>, context?: ToolExecutionContext): Promise<string> {
     const tool = this.tools.get(name);
     if (!tool) {
@@ -104,7 +116,7 @@ export class ToolRegistry {
         if (decision.permission === "deny") {
           return `Error: denied by policy — ${decision.reason || "blocked"}${ERROR_HINT}`;
         }
-        if (decision.permission === "ask") {
+        if (decision.permission === "ask" && !this.auto_approved_tools.has(name)) {
           return this.trigger_approval_from_hook(name, effective_params, context, decision.reason || "hook_requires_approval");
         }
         if (decision.updated_params) {
@@ -121,12 +133,16 @@ export class ToolRegistry {
       }
 
       if (result.startsWith("Error: approval_required")) {
+        // "모두 승인"으로 등록된 도구면 즉시 재실행
+        if (this.auto_approved_tools.has(name)) {
+          return tool.execute({ ...effective_params, __approved: true }, context);
+        }
         const request = this.create_approval_request(name, effective_params, context, result);
         await this.notify_approval_required(request);
         const response_hint = [
           "",
           `approval_request_id: ${request.request_id}`,
-          "approval_reply_examples: ✅ / 👍 / yes / 승인 / 허용 / go | ❌ / 👎 / no / 거절 / 불가 / stop | ⏸️ / 보류 / later | ? / 이유",
+          "approval_reply_examples: 승인 / 모두 승인 / 거부 / 보류",
         ].join("\n");
         return `${result}\n${response_hint}`;
       }
@@ -238,6 +254,10 @@ export class ToolRegistry {
     const parsed = parse_approval_response(response_text);
     let status: ApprovalRequest["status"] = "pending";
     if (parsed.decision === "approve") status = "approved";
+    else if (parsed.decision === "approve_all") {
+      status = "approved";
+      this.auto_approved_tools.add(req.tool_name);
+    }
     else if (parsed.decision === "deny") status = "denied";
     else if (parsed.decision === "defer") status = "deferred";
     else if (parsed.decision === "cancel") status = "cancelled";

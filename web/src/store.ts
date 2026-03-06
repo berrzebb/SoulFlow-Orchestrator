@@ -9,6 +9,14 @@ interface WebStream {
   done?: boolean;
 }
 
+export interface MirrorMessageEvent {
+  session_key: string;
+  direction: string;
+  sender_id: string;
+  content: string;
+  at: string;
+}
+
 interface DashboardStore {
   connection: ConnectionState;
   set_connection: (s: ConnectionState) => void;
@@ -19,6 +27,8 @@ interface DashboardStore {
   close_sidebar: () => void;
   web_stream: WebStream | null;
   set_web_stream: (s: WebStream | null) => void;
+  mirror_event: MirrorMessageEvent | null;
+  set_mirror_event: (e: MirrorMessageEvent | null) => void;
   theme: Theme;
   toggle_theme: () => void;
 }
@@ -41,6 +51,8 @@ export const useDashboardStore = create<DashboardStore>((set) => ({
   close_sidebar: () => set({ sidebar_open: false }),
   web_stream: null,
   set_web_stream: (web_stream) => set({ web_stream }),
+  mirror_event: null,
+  set_mirror_event: (mirror_event) => set({ mirror_event }),
   theme: load_theme(),
   toggle_theme: () => set((s) => {
     const next: Theme = s.theme === "dark" ? "light" : "dark";

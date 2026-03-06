@@ -10,6 +10,8 @@ export type SessionListEntry = { key: string; created_at: string; updated_at: st
 
 export interface SessionStoreLike {
   get_or_create(key: string): Promise<Session>;
+  /** 메시지 1건을 DB에 즉시 append. watch 재시작에도 메시지가 유실되지 않는다. */
+  append_message(key: string, message: SessionMessage): Promise<void>;
   save(session: Session): Promise<void>;
   prune_expired?(max_age_ms: number): Promise<number>;
   delete?(key: string): Promise<boolean>;
@@ -217,6 +219,47 @@ export class SessionStore implements SessionStoreLike {
       updated_at: header.updated_at,
       metadata,
       last_consolidated: Number(header.last_consolidated || 0),
+    });
+  }
+
+  async append_message(key: string, message: SessionMessage): Promise<void> {
+    await this.initialized;
+    await this.resolve_write_lane(key).enqueue(async () => {
+      const now = now_iso();
+      this.with_sqlite((db) => {
+        // 세션 헤더가 없으면 생성
+        db.prepare(`
+          INSERT INTO sessions (key, created_at, updated_at, metadata_json, last_consolidated)
+          VALUES (?, ?, ?, '{}', 0)
+          ON CONFLICT(key) DO UPDATE SET updated_at = excluded.updated_at
+        `).run(key, now, now);
+
+        // 현재 최대 idx 조회 후 +1
+        const row = db.prepare(
+          "SELECT COALESCE(MAX(idx), -1) AS max_idx FROM session_messages WHERE session_key = ?",
+        ).get(key) as { max_idx: number };
+        const next_idx = row.max_idx + 1;
+
+        db.prepare(`
+          INSERT INTO session_messages (session_key, idx, role, content, timestamp, message_json)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `).run(
+          key,
+          next_idx,
+          String(message.role || ""),
+          typeof message.content === "string" ? message.content : "",
+          typeof message.timestamp === "string" ? message.timestamp : now,
+          JSON.stringify(message),
+        );
+        return true;
+      });
+
+      // 메모리 캐시에도 반영
+      const cached = this.cache.get(key);
+      if (cached) {
+        cached.messages.push(message);
+        cached.updated_at = now;
+      }
     });
   }
 

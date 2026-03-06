@@ -8,6 +8,7 @@ import { useToast } from "../components/toast";
 import { useTestMutation } from "../hooks/use-test-mutation";
 import { useT } from "../i18n";
 import { PROVIDER_TYPE_LABELS as TYPE_LABELS } from "../utils/constants";
+import { time_ago } from "../utils/format";
 
 interface ProviderInstance {
   instance_id: string;
@@ -36,12 +37,13 @@ export default function ProvidersPage() {
 
   const { data: instances, isLoading } = useQuery<ProviderInstance[]>({
     queryKey: ["agent-providers"],
-    queryFn: () => api.get("/api/agent-providers"),
+    queryFn: () => api.get("/api/agents/providers"),
     refetchInterval: 10_000,
+    staleTime: 5_000,
   });
 
   const remove = useMutation({
-    mutationFn: (id: string) => api.del("/api/agent-providers", { id }),
+    mutationFn: (id: string) => api.del(`/api/agents/providers/${encodeURIComponent(id)}`),
     onSuccess: () => { toast(t("providers.removed"), "ok"); void qc.invalidateQueries({ queryKey: ["agent-providers"] }); },
     onError: (err) => toast(t("providers.remove_failed", { error: err.message }), "err"),
   });
@@ -61,9 +63,12 @@ export default function ProvidersPage() {
           <div className="skeleton skeleton-card" />
         </div>
       ) : !instances?.length ? (
-        <p className="empty">{t("providers.no_instances")}</p>
+        <div className="empty-state">
+          <div className="empty-state__icon">🔌</div>
+          <div className="empty-state__text">{t("providers.no_instances")}</div>
+        </div>
       ) : (
-        <div className="stat-grid stat-grid--wide">
+        <div className="stat-grid stat-grid--wide fade-in">
           {instances.map((inst) => (
             <ProviderCard
               key={inst.instance_id}
@@ -113,22 +118,24 @@ function ProviderCard({ instance, onEdit, onRemove }: {
   onRemove: () => void;
 }) {
   const t = useT();
+  const [expanded, setExpanded] = useState(false);
 
   const { testing, testResult, test } = useTestMutation({
-    url: "/api/agent-providers",
-    body: { action: "test", id: instance.instance_id },
+    url: `/api/agents/providers/${encodeURIComponent(instance.instance_id)}/test`,
     onOk: (r) => `${instance.label}: ${r.detail || t("providers.available")}`,
     onFail: (r) => `${instance.label}: ${r.error || ""}`,
     onError: () => t("providers.test_failed"),
   });
 
   const status_cls = instance.available ? "ok" : instance.enabled ? "warn" : "off";
+  const has_details = instance.supported_modes.length > 0
+    || (instance.capabilities && Object.keys(instance.capabilities).length > 0);
 
   return (
     <div className={`stat-card desk--${status_cls}`}>
       <div className="stat-card__header stat-card__header--wrap">
         <Badge status={TYPE_LABELS[instance.provider_type] || instance.provider_type} variant="info" />
-        <span className="stat-card__tags" style={{ margin: 0 }}>
+        <span className="stat-card__tags mt-0 mb-0">
           <Badge status={instance.enabled ? t("providers.on") : t("providers.off")} variant={instance.enabled ? "ok" : "off"} />
           {instance.available && <Badge status={t("providers.available")} variant="ok" />}
           {instance.circuit_state !== "closed" && (
@@ -147,11 +154,35 @@ function ProviderCard({ instance, onEdit, onRemove }: {
         }
         {" · "}
         <span className="text-muted">{t("providers.priority")}: {instance.priority}</span>
+        {has_details && (
+          <button
+            className="provider-card__expand"
+            onClick={() => setExpanded((v) => !v)}
+            aria-expanded={expanded}
+            aria-label={expanded ? t("common.collapse") : t("common.expand")}
+          >
+            {expanded ? "▾" : "▸"} {t("providers.details")}
+          </button>
+        )}
       </div>
-      {instance.supported_modes.length > 0 && (
-        <div className="stat-card__tags">
-          {instance.supported_modes.map((m) => <Badge key={m} status={m} variant="info" />)}
-        </div>
+      {expanded && (
+        <>
+          {instance.supported_modes.length > 0 && (
+            <div className="stat-card__tags">
+              {instance.supported_modes.map((m) => <Badge key={m} status={m} variant="info" />)}
+            </div>
+          )}
+          {instance.capabilities && Object.keys(instance.capabilities).length > 0 && (
+            <div className="stat-card__tags">
+              {Object.entries(instance.capabilities).map(([cap, ok]) => (
+                <Badge key={cap} status={cap} variant={ok ? "ok" : "off"} />
+              ))}
+            </div>
+          )}
+        </>
+      )}
+      {instance.updated_at && (
+        <div className="text-xs text-muted" title={instance.updated_at}>{time_ago(instance.updated_at)}</div>
       )}
       {testResult && (
         <div className="stat-card__tags">
@@ -192,33 +223,34 @@ function CliAuthSection() {
 
   const { data: statuses, refetch } = useQuery<CliAuthStatus[]>({
     queryKey: ["cli-auth-status"],
-    queryFn: () => api.get("/api/cli-auth/status"),
+    queryFn: () => api.get("/api/auth/cli/status"),
     refetchInterval: 30_000,
   });
 
   const checkAll = useMutation({
-    mutationFn: () => api.post<CliAuthStatus[]>("/api/cli-auth/check-all"),
+    mutationFn: () => api.post<CliAuthStatus[]>("/api/auth/cli/check"),
     onSuccess: (data) => {
       void refetch();
       for (const s of data) {
         toast(`${s.cli}: ${s.authenticated ? t("cli_auth.authenticated") : t("cli_auth.not_authenticated")}`, s.authenticated ? "ok" : "err");
       }
     },
+    onError: () => toast(t("providers.check_failed"), "err"),
   });
 
   const login = useMutation({
-    mutationFn: (cli: string) => api.post<LoginResult>("/api/cli-auth/login", { cli }),
+    mutationFn: (cli: string) => api.post<LoginResult>("/api/auth/cli/sessions", { cli }),
   });
 
   const cancel = useMutation({
-    mutationFn: (cli: string) => api.post("/api/cli-auth/cancel", { cli }),
+    mutationFn: (cli: string) => api.del(`/api/auth/cli/sessions/${encodeURIComponent(cli)}`),
     onSuccess: () => { login.reset(); void refetch(); },
   });
 
   const loginResult = login.data;
 
   return (
-    <div style={{ marginTop: "var(--sp-6)" }}>
+    <div className="cli-auth-section">
       <div className="section-header">
         <h3>{t("cli_auth.title")}</h3>
         <button
@@ -231,7 +263,7 @@ function CliAuthSection() {
       </div>
 
       {!statuses?.length ? (
-        <p className="empty">{t("cli_auth.no_agents")}</p>
+        <div className="empty-state"><div className="empty-state__icon">🤖</div><div className="empty-state__text">{t("cli_auth.no_agents")}</div></div>
       ) : (
         <div className="stat-grid stat-grid--wide">
           {statuses.map((s) => (
@@ -243,16 +275,16 @@ function CliAuthSection() {
                   variant={s.authenticated ? "ok" : "warn"}
                 />
               </div>
-              <div className="stat-card__value" style={{ fontSize: "var(--fs-md)" }}>
+              <div className="stat-card__value stat-card__value--md">
                 {s.account || s.cli}
               </div>
               {s.error && (
-                <div className="stat-card__label" style={{ color: "var(--warn)" }}>
+                <div className="stat-card__label text-warn">
                   {s.error}
                 </div>
               )}
               {!s.authenticated && (
-                <div style={{ marginTop: "var(--sp-2)" }}>
+                <div className="mt-2">
                   <button
                     className="btn btn--sm btn--accent"
                     onClick={() => login.mutate(s.cli)}
@@ -268,19 +300,19 @@ function CliAuthSection() {
       )}
 
       {loginResult?.login_url && (
-        <div className="stat-card" style={{ marginTop: "var(--sp-4)", padding: "var(--sp-4)" }}>
-          <p style={{ marginBottom: "var(--sp-2)" }}>
+        <div className="stat-card cli-auth-section__result">
+          <p className="mb-2">
             <strong>{loginResult.cli}</strong> — {t("cli_auth.open_url")}
           </p>
           <a
+            className="cli-auth-section__url"
             href={loginResult.login_url}
             target="_blank"
             rel="noopener noreferrer"
-            style={{ wordBreak: "break-all", color: "var(--accent)" }}
           >
             {loginResult.login_url}
           </a>
-          <div style={{ marginTop: "var(--sp-2)", display: "flex", gap: "var(--sp-2)" }}>
+          <div className="cli-auth-section__actions">
             <button className="btn btn--sm" onClick={() => cancel.mutate(loginResult.cli)}>
               {t("cli_auth.cancel_login")}
             </button>
@@ -292,7 +324,7 @@ function CliAuthSection() {
       )}
 
       {loginResult?.state === "failed" && loginResult.error && (
-        <div className="stat-card desk--err" style={{ marginTop: "var(--sp-4)", padding: "var(--sp-4)" }}>
+        <div className="stat-card desk--err cli-auth-section__result">
           <p>{t("cli_auth.login_failed", { error: loginResult.error })}</p>
         </div>
       )}
@@ -316,7 +348,7 @@ function ProviderModal({ mode, onClose, onSaved }: {
 
   const { data: types = [] } = useQuery<string[]>({
     queryKey: ["agent-provider-types"],
-    queryFn: () => api.get("/api/agent-providers/types"),
+    queryFn: () => api.get("/api/agents/providers/types"),
   });
 
   const [providerType, setProviderType] = useState(initial?.provider_type || "claude_sdk");
@@ -375,9 +407,9 @@ function ProviderModal({ mode, onClose, onSaved }: {
         ...(token ? { token } : {}),
       };
       if (isEdit) {
-        await api.put("/api/agent-providers", { id, ...body });
+        await api.put(`/api/agents/providers/${encodeURIComponent(id)}`, body);
       } else {
-        await api.post("/api/agent-providers", { instance_id: id, ...body });
+        await api.post("/api/agents/providers", { instance_id: id, ...body });
       }
       toast(isEdit ? t("providers.updated") : t("providers.added"), "ok");
       onSaved();
@@ -429,7 +461,7 @@ function ProviderModal({ mode, onClose, onSaved }: {
       </div>
 
       <div className="form-group form-group--row">
-        <label className="form-label" style={{ margin: 0 }}>{t("common.enabled")}</label>
+        <label className="form-label">{t("common.enabled")}</label>
         <ToggleSwitch checked={enabled} onChange={setEnabled} aria-label={t("common.enabled")} />
       </div>
 

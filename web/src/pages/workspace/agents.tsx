@@ -6,11 +6,12 @@ import { Modal } from "../../components/modal";
 import { SendAgentModal } from "../../components/send-agent-modal";
 import { useToast } from "../../components/toast";
 import { classify_agent } from "../../utils/classify";
-import { fmt_time } from "../../utils/format";
+import { fmt_time, time_ago } from "../../utils/format";
 import { useT } from "../../i18n";
 
 interface Agent {
   id: string; label: string; role: string; model: string; status: string;
+  session_id?: string; created_at?: string; updated_at?: string;
   last_error?: string; last_message?: string;
 }
 
@@ -42,15 +43,21 @@ const STATUS_ICON: Record<string, string> = {
   waiting_approval: "🔐", waiting_user_input: "💬", stopped: "⏹️", max_turns_reached: "⚠️",
 };
 
-const MODE_COLOR: Record<string, string> = {
-  once: "var(--muted)", agent: "var(--accent)", task: "#16a34a",
-};
+function TurnBar({ current, max }: { current: number; max: number }) {
+  const pct = max > 0 ? Math.min(100, Math.round((current / max) * 100)) : 0;
+  return (
+    <div className="turn-bar" title={`${current}/${max} (${pct}%)`} style={{ "--bar-w": `${pct}%` } as React.CSSProperties}>
+      <div className="turn-bar__fill" />
+      <span className="turn-bar__label">{current}/{max}</span>
+    </div>
+  );
+}
 
 function ChannelRef({ channelId, messageId }: { channelId: string; messageId?: string }) {
   return (
     <span className="li-flex text-xs">
       <Badge status={channelId} variant="info" />
-      {messageId && <span className="text-muted" style={{ fontSize: 10 }}>#{messageId.slice(-6)}</span>}
+      {messageId && <span className="text-xs text-muted">#{messageId.slice(-6)}</span>}
     </span>
   );
 }
@@ -60,11 +67,11 @@ export function AgentsTab() {
   const qc = useQueryClient();
   const { toast } = useToast();
 
-  const { data: agents = [] } = useQuery<Agent[]>({ queryKey: ["agents"], queryFn: () => api.get("/api/agents"), refetchInterval: 5000 });
-  const { data: agent_loops = [] } = useQuery<AgentLoop[]>({ queryKey: ["loops"], queryFn: () => api.get("/api/loops"), refetchInterval: 5000 });
-  const { data: task_loops = [] } = useQuery<TaskLoop[]>({ queryKey: ["tasks"], queryFn: () => api.get("/api/tasks"), refetchInterval: 5000 });
+  const { data: agents = [] } = useQuery<Agent[]>({ queryKey: ["agents"], queryFn: () => api.get("/api/agents"), refetchInterval: 15_000, staleTime: 5_000 });
+  const { data: agent_loops = [] } = useQuery<AgentLoop[]>({ queryKey: ["loops"], queryFn: () => api.get("/api/loops"), refetchInterval: 15_000, staleTime: 5_000 });
+  const { data: task_loops = [] } = useQuery<TaskLoop[]>({ queryKey: ["tasks"], queryFn: () => api.get("/api/tasks"), refetchInterval: 15_000, staleTime: 5_000 });
   const { data: processes_data } = useQuery<{ active: ProcessEntry[]; recent: ProcessEntry[] }>(
-    { queryKey: ["processes"], queryFn: () => api.get("/api/processes"), refetchInterval: 3000 }
+    { queryKey: ["processes"], queryFn: () => api.get("/api/processes"), refetchInterval: 15_000, staleTime: 5_000 }
   );
 
   const [sendTarget, setSendTarget] = useState<string | null>(null);
@@ -84,15 +91,6 @@ export function AgentsTab() {
 
   const active_tasks = task_loops.filter((t) => ACTIVE_STATUSES.has(t.status));
   const completed_tasks = task_loops.filter((t) => !ACTIVE_STATUSES.has(t.status));
-  const completed_statuses = [...new Set(completed_tasks.map((t) => t.status))];
-  const filtered_completed = completed_tasks.filter((task) => {
-    if (completedStatusFilter !== "all" && task.status !== completedStatusFilter) return false;
-    if (completedSearch) {
-      const q = completedSearch.toLowerCase();
-      return (task.title || "").toLowerCase().includes(q) || task.taskId.toLowerCase().includes(q);
-    }
-    return true;
-  });
 
   const active_processes = processes_data?.active ?? [];
   const recent_processes = processes_data?.recent ?? [];
@@ -108,15 +106,15 @@ export function AgentsTab() {
     }
   };
 
-  const cancel_agent = (id: string) => void safe_action(() => api.del("/api/agents", { agent_id: id }), t("agents.cancelled"));
-  const handle_send = (agentId: string, text: string) => void safe_action(() => api.post("/api/agents", { agent_id: agentId, text }), t("agents.message_sent"), () => setSendTarget(null));
-  const stop_loop = (loopId: string) => void safe_action(() => api.del("/api/loops", { loop_id: loopId, reason: "stopped_from_dashboard" }), t("agents.loop_stopped"));
-  const cancel_task = (taskId: string) => void safe_action(() => api.del("/api/tasks", { task_id: taskId }), t("agents.task_cancelled"));
-  const cancel_process = (run_id: string) => void safe_action(() => api.del("/api/processes", { run_id }), t("agents.process_cancelled"));
+  const cancel_agent = (id: string) => void safe_action(() => api.del(`/api/agents/${encodeURIComponent(id)}`), t("agents.cancelled"));
+  const handle_send = (agentId: string, text: string) => void safe_action(() => api.post(`/api/agents/${encodeURIComponent(agentId)}/input`, { text }), t("agents.message_sent"), () => setSendTarget(null));
+  const stop_loop = (loopId: string) => void safe_action(() => api.del(`/api/loops/${encodeURIComponent(loopId)}`), t("agents.loop_stopped"));
+  const cancel_task = (taskId: string) => void safe_action(() => api.del(`/api/tasks/${encodeURIComponent(taskId)}`), t("agents.task_cancelled"));
+  const cancel_process = (run_id: string) => void safe_action(() => api.del(`/api/processes/${encodeURIComponent(run_id)}`), t("agents.process_cancelled"));
   const confirm_resume = () => {
     if (!resumeTarget) return;
     void safe_action(
-      () => api.put("/api/tasks", { task_id: resumeTarget, text: resumeText || undefined }),
+      () => api.put(`/api/tasks/${encodeURIComponent(resumeTarget)}`, { text: resumeText || undefined }),
       t("agents.task_resumed"),
       () => { setResumeTarget(null); setResumeText(""); },
     );
@@ -128,7 +126,7 @@ export function AgentsTab() {
 
       <Modal open={!!resumeTarget} title={t("agents.resume_task")} onClose={() => { setResumeTarget(null); setResumeText(""); }} onConfirm={() => void confirm_resume()} confirmLabel={t("agents.resume")}>
         <label className="form-label">{t("agents.user_input")}</label>
-        <textarea className="form-input" value={resumeText} onChange={(e) => setResumeText(e.target.value)} rows={3} style={{ resize: "vertical" }} />
+        <textarea className="form-input resize-y" value={resumeText} onChange={(e) => setResumeText(e.target.value)} rows={3} />
       </Modal>
 
       {/* 실행 프로세스 */}
@@ -143,7 +141,7 @@ export function AgentsTab() {
       </div>
 
       {!active_processes.length ? (
-        <p className="empty">{t("agents.no_processes")}</p>
+        <div className="empty-state"><div className="empty-state__icon">⚡</div><div className="empty-state__text">{t("agents.no_processes")}</div></div>
       ) : (
         <div className="table-scroll">
           <table className="data-table">
@@ -159,7 +157,7 @@ export function AgentsTab() {
                 <tr key={p.run_id}>
                   <td className="text-xs text-muted">{p.run_id}</td>
                   <td>
-                    <span className="mode-badge" style={{ color: MODE_COLOR[p.mode] ?? "var(--muted)", background: "color-mix(in srgb, currentColor 10%, transparent)", border: "1px solid currentColor" }}>
+                    <span className={`mode-badge mode-badge--${p.mode}`}>
                       {p.mode}
                     </span>
                   </td>
@@ -177,13 +175,13 @@ export function AgentsTab() {
       )}
 
       {recent_processes.length > 0 && (
-        <div style={{ marginTop: "var(--sp-2)" }}>
-          <button className="btn btn--sm toggle-btn" onClick={() => setShowRecentProcesses((v) => !v)}>
+        <div className="mt-2">
+          <button className="btn btn--sm toggle-btn" aria-expanded={showRecentProcesses} onClick={() => setShowRecentProcesses((v) => !v)}>
             {showRecentProcesses ? t("agents.hide_recent") : t("agents.show_recent", { count: recent_processes.length })}
           </button>
           {showRecentProcesses && (
-            <div className="table-scroll" style={{ marginTop: 8, opacity: 0.75 }}>
-              <table className="data-table" style={{ fontSize: 11 }}>
+            <div className="table-scroll mt-2">
+              <table className="data-table data-table--xs">
                 <thead>
                   <tr><th>Run ID</th><th>{t("agents.mode")}</th><th>{t("agents.provider")}</th><th>{t("agents.executor")}</th><th>{t("agents.tools")}</th><th>{t("common.status")}</th><th>{t("agents.started")}</th><th>{t("agents.ended")}</th></tr>
                 </thead>
@@ -191,11 +189,11 @@ export function AgentsTab() {
                   {recent_processes.map((p) => (
                     <tr key={p.run_id}>
                       <td className="text-xs text-muted">{p.run_id}</td>
-                      <td><span className="mode-badge" style={{ color: MODE_COLOR[p.mode] ?? "var(--muted)" }}>{p.mode}</span></td>
+                      <td><span className={`mode-badge mode-badge--${p.mode}`}>{p.mode}</span></td>
                       <td>{p.provider} / {p.alias}</td>
                       <td>{p.executor_provider || "-"}</td>
                       <td>{p.tool_calls_count}</td>
-                      <td>{STATUS_ICON[p.status] || ""} <Badge status={p.status} />{p.error && <span className="text-xs" style={{ color: "var(--err)", marginLeft: 4 }}>⚠ {p.error}</span>}</td>
+                      <td>{STATUS_ICON[p.status] || ""} <Badge status={p.status} />{p.error && <span className="text-xs text-err ml-1">⚠ {p.error}</span>}</td>
                       <td>{fmt_time(p.started_at)}</td>
                       <td>{p.ended_at ? fmt_time(p.ended_at) : "-"}</td>
                     </tr>
@@ -215,7 +213,7 @@ export function AgentsTab() {
         </h2>
       </div>
       {!agent_loops.length ? (
-        <p className="empty">{t("agents.no_agent_loops")}</p>
+        <div className="empty-state"><div className="empty-state__icon">🔄</div><div className="empty-state__text">{t("agents.no_agent_loops")}</div></div>
       ) : (
         <div className="table-scroll">
           <table className="data-table">
@@ -224,10 +222,10 @@ export function AgentsTab() {
             </thead>
             <tbody>
               {agent_loops.map((l) => (
-                <tr key={l.loopId} style={WAITING_STATUSES.has(l.status) ? { background: "color-mix(in srgb, var(--accent) 8%, transparent)" } : undefined}>
-                  <td className="text-xs text-muted">{l.loopId.slice(0, 12)}</td>
-                  <td className="truncate" style={{ maxWidth: "40%" }}>{l.objective || "-"}</td>
-                  <td style={{ whiteSpace: "nowrap" }}>{l.currentTurn}/{l.maxTurns}</td>
+                <tr key={l.loopId} className={WAITING_STATUSES.has(l.status) ? "row--waiting" : undefined}>
+                  <td className="text-xs text-muted" title={l.loopId}>{l.loopId.slice(0, 12)}</td>
+                  <td className="truncate td--wide">{l.objective || "-"}</td>
+                  <td><TurnBar current={l.currentTurn} max={l.maxTurns} /></td>
                   <td>{l.channelId ? <ChannelRef channelId={l.channelId} messageId={l.messageId} /> : <span className="text-muted">-</span>}</td>
                   <td><Badge status={l.status} /></td>
                   <td><button className="btn btn--xs btn--danger" onClick={() => void stop_loop(l.loopId)}>{t("agents.stop")}</button></td>
@@ -246,7 +244,7 @@ export function AgentsTab() {
         </h2>
       </div>
       {!active_tasks.length ? (
-        <p className="empty">{t("agents.no_task_loops")}</p>
+        <div className="empty-state"><div className="empty-state__icon">⚙️</div><div className="empty-state__text">{t("agents.no_task_loops")}</div></div>
       ) : (
         <div className="table-scroll">
           <table className="data-table">
@@ -255,13 +253,13 @@ export function AgentsTab() {
             </thead>
             <tbody>
               {active_tasks.map((task) => (
-                <tr key={task.taskId} style={WAITING_STATUSES.has(task.status) ? { background: "color-mix(in srgb, var(--accent) 8%, transparent)" } : undefined}>
+                <tr key={task.taskId} className={WAITING_STATUSES.has(task.status) ? "row--waiting" : undefined}>
                   <td>
                     <b>{task.title || task.taskId.slice(0, 14)}</b>
                     <br /><span className="text-xs text-muted">{task.taskId.slice(0, 16)}</span>
                   </td>
-                  <td className="truncate" style={{ maxWidth: "40%" }}>{task.objective || "-"}</td>
-                  <td style={{ whiteSpace: "nowrap" }}>{task.currentTurn}/{task.maxTurns}</td>
+                  <td className="truncate td--wide">{task.objective || "-"}</td>
+                  <td><TurnBar current={task.currentTurn} max={task.maxTurns} /></td>
                   <td>{task.channel ? <ChannelRef channelId={task.channel} messageId={task.chat_id} /> : <span className="text-muted">-</span>}</td>
                   <td><Badge status={task.status} /></td>
                   <td>
@@ -281,49 +279,60 @@ export function AgentsTab() {
 
       {/* 완료 목록 */}
       {completed_tasks.length > 0 && (
-        <div style={{ marginTop: "var(--sp-5, 20px)" }}>
-          <button className="btn btn--sm toggle-btn" onClick={() => setShowCompleted((v) => !v)}>
+        <div className="mt-3">
+          <button className="btn btn--sm toggle-btn" aria-expanded={showCompleted} onClick={() => setShowCompleted((v) => !v)}>
             {showCompleted ? t("agents.hide_completed") : t("agents.show_completed", { count: completed_tasks.length })}
           </button>
-          {showCompleted && (
-            <div style={{ marginTop: "var(--sp-2)" }}>
-              <div className="filter-bar">
-                <input type="search" className="filter-input" value={completedSearch} onChange={(e) => setCompletedSearch(e.target.value)} placeholder={t("agents.filter_placeholder")} />
-                <div style={{ display: "flex", flexWrap: "wrap" as const, gap: 4 }}>
-                  {(["all", ...completed_statuses] as string[]).map((s) => (
-                    <button key={s} className={`btn btn--xs ${completedStatusFilter === s ? "filter-btn--active" : "filter-btn"}`} onClick={() => setCompletedStatusFilter(s)}>
-                      {s === "all" ? t("agents.filter_all") : s}
-                    </button>
-                  ))}
+          {showCompleted && (() => {
+            const completed_statuses = [...new Set(completed_tasks.map((ct) => ct.status))];
+            const filtered = completed_tasks.filter((task) => {
+              if (completedStatusFilter !== "all" && task.status !== completedStatusFilter) return false;
+              if (completedSearch) {
+                const q = completedSearch.toLowerCase();
+                return (task.title || "").toLowerCase().includes(q) || task.taskId.toLowerCase().includes(q);
+              }
+              return true;
+            });
+            return (
+              <div className="mt-2">
+                <div className="filter-bar">
+                  <input type="search" className="filter-input" value={completedSearch} onChange={(e) => setCompletedSearch(e.target.value)} placeholder={t("agents.filter_placeholder")} />
+                  <div className="ws-chip-bar">
+                    {(["all", ...completed_statuses] as string[]).map((s) => (
+                      <button key={s} className={`btn btn--xs ${completedStatusFilter === s ? "filter-btn--active" : "filter-btn"}`} onClick={() => setCompletedStatusFilter(s)}>
+                        {s === "all" ? t("agents.filter_all") : s}
+                      </button>
+                    ))}
+                  </div>
+                  {(completedSearch || completedStatusFilter !== "all") && (
+                    <span className="text-xs text-muted">{filtered.length} / {completed_tasks.length}</span>
+                  )}
                 </div>
-                {(completedSearch || completedStatusFilter !== "all") && (
-                  <span className="text-xs text-muted">{filtered_completed.length} / {completed_tasks.length}</span>
+                {filtered.length === 0 ? (
+                  <div className="empty-state"><div className="empty-state__icon">🔍</div><div className="empty-state__text">{t("agents.filter_no_match")}</div></div>
+                ) : (
+                  <div className="table-scroll">
+                    <table className="data-table data-table--xs">
+                      <thead>
+                        <tr><th>{t("decisions.task")}</th><th>{t("common.status")}</th><th>{t("agents.turn")}</th><th>{t("agents.exit_reason")}</th><th>{t("agents.updated")}</th></tr>
+                      </thead>
+                      <tbody>
+                        {filtered.map((task) => (
+                          <tr key={task.taskId}>
+                            <td>{STATUS_ICON[task.status] || "❓"} {task.title || task.taskId}<br /><span className="text-xs text-muted">{task.taskId.slice(0, 16)}</span></td>
+                            <td><Badge status={task.status} /></td>
+                            <td>{task.currentTurn}/{task.maxTurns}</td>
+                            <td>{task.exitReason || "-"}</td>
+                            <td className="text-sm text-muted" title={task.updatedAt || ""}>{task.updatedAt ? time_ago(task.updatedAt) : "-"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 )}
               </div>
-              {filtered_completed.length === 0 ? (
-                <p className="empty" style={{ fontSize: 12 }}>{t("agents.filter_no_match")}</p>
-              ) : (
-                <div className="table-scroll" style={{ opacity: 0.8 }}>
-                  <table className="data-table" style={{ fontSize: 11 }}>
-                    <thead>
-                      <tr><th>{t("decisions.task")}</th><th>{t("common.status")}</th><th>{t("agents.turn")}</th><th>{t("agents.exit_reason")}</th><th>{t("agents.updated")}</th></tr>
-                    </thead>
-                    <tbody>
-                      {filtered_completed.map((task) => (
-                        <tr key={task.taskId}>
-                          <td>{STATUS_ICON[task.status] || "❓"} {task.title || task.taskId}<br /><span className="text-xs text-muted">{task.taskId.slice(0, 16)}</span></td>
-                          <td><Badge status={task.status} /></td>
-                          <td>{task.currentTurn}/{task.maxTurns}</td>
-                          <td>{task.exitReason || "-"}</td>
-                          <td className="text-sm text-muted">{task.updatedAt || "-"}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          )}
+            );
+          })()}
         </div>
       )}
 
@@ -331,7 +340,7 @@ export function AgentsTab() {
       {agents.length > 0 && (
         <>
           <div className="section-header section-header--spaced">
-            <h2 style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <h2 className="li-flex">
               <span className="section-header__icon">🤖</span>
               {t("agents.once_title", { count: agents.length })}
             </h2>
@@ -344,11 +353,15 @@ export function AgentsTab() {
                   <div className="desk__name">{a.label || a.id}</div>
                   <div className="desk__role">{a.role || "-"} · {a.model || "-"}</div>
                   <div className={`desk__status desk__status--${cls}`}>{cls.toUpperCase()}</div>
-                  {a.last_message && <div className="text-sm text-muted truncate" style={{ marginTop: 4 }}>{a.last_message}</div>}
-                  {a.last_error && <div className="text-xs" style={{ color: "var(--err)", marginTop: 2 }}>{a.last_error}</div>}
+                  {a.last_message && <div className="text-sm text-muted truncate mt-1">{a.last_message}</div>}
+                  {a.last_error && <div className="text-xs text-err mt-1">{a.last_error}</div>}
                   <div className="desk__actions">
-                    <button className="btn btn--xs btn--danger" onClick={() => void cancel_agent(a.id)}>{t("common.cancel")}</button>
-                    <button className="btn btn--xs" onClick={() => setSendTarget(a.id)}>{t("common.send")}</button>
+                    {cls === "working" && (
+                      <>
+                        <button className="btn btn--xs btn--danger" onClick={() => void cancel_agent(a.id)}>{t("common.cancel")}</button>
+                        <button className="btn btn--xs" onClick={() => setSendTarget(a.id)}>{t("common.send")}</button>
+                      </>
+                    )}
                   </div>
                 </article>
               );

@@ -28,7 +28,12 @@ function CodeEditPanel({ node, update, t }: EditPanelProps) {
       </div>
       <div className="builder-row">
         <label className="label">Code <span className="builder-hint--inline">({lang})</span></label>
-        <textarea className="input code-textarea" rows={14} value={String(node.code || "")} onChange={(e) => update({ code: e.target.value })} spellCheck={false} style={{ resize: "vertical", minHeight: 160 }} />
+        <textarea className="input code-textarea code-textarea--tall" rows={14} value={String(node.code || "")} onChange={(e) => update({ code: e.target.value })} spellCheck={false} />
+      </div>
+      <div className="builder-row">
+        <label className="label">{t("workflows.timeout_ms")}</label>
+        <input className="input input--sm" type="number" min={100} max={120000} step={1000} value={String(node.timeout_ms ?? 10000)} onChange={(e) => update({ timeout_ms: Number(e.target.value) || 10000 })} />
+        <span className="builder-hint">{t("workflows.timeout_ms_hint")}</span>
       </div>
       {is_container && (
         <>
@@ -36,12 +41,12 @@ function CodeEditPanel({ node, update, t }: EditPanelProps) {
             <label className="label">{t("workflows.container_image_override")}</label>
             <input className="input input--sm" placeholder="e.g. python:3.11-slim" value={String(node.container_image || "")} onChange={(e) => update({ container_image: e.target.value || undefined })} />
           </div>
-          <div className="builder-row" style={{ display: "flex", gap: "1rem" }}>
-            <label style={{ display: "flex", alignItems: "center", gap: "0.25rem" }}>
+          <div className="builder-row builder-checkbox-row">
+            <label className="builder-checkbox-label">
               <input type="checkbox" checked={!!node.network_access} onChange={(e) => update({ network_access: e.target.checked })} />
               {t("workflows.network_access")}
             </label>
-            <label style={{ display: "flex", alignItems: "center", gap: "0.25rem" }}>
+            <label className="builder-checkbox-label">
               <input type="checkbox" checked={!!node.keep_container} onChange={(e) => update({ keep_container: e.target.checked })} />
               {t("workflows.keep_container")}
             </label>
@@ -58,6 +63,7 @@ export const code_descriptor: FrontendNodeDescriptor = {
   color: "#2ecc71",
   shape: "rect",
   toolbar_label: "+ Code",
+  category: "data",
   output_schema: [
     { name: "result", type: "unknown", description: "Return value / stdout" },
     { name: "logs",   type: "array",   description: "Console output" },

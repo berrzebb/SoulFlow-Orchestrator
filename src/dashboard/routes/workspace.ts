@@ -2,15 +2,19 @@ import type { RouteContext } from "../route-context.js";
 
 export async function handle_workspace(ctx: RouteContext): Promise<boolean> {
   const { req, url, res, options, json } = ctx;
+  const path = url.pathname;
 
-  if (url.pathname === "/api/workspace/ls" && req.method === "GET") {
+  // GET /api/workspace/entries?path=
+  if (path === "/api/workspace/entries" && req.method === "GET") {
     if (!options.workspace_ops) { json(res, 503, { error: "workspace_unavailable" }); return true; }
     const rel = url.searchParams.get("path") ?? "";
     const entries = await options.workspace_ops.list_files(rel);
     json(res, 200, { entries });
     return true;
   }
-  if (url.pathname === "/api/workspace/read" && req.method === "GET") {
+
+  // GET /api/workspace/content?path=
+  if (path === "/api/workspace/content" && req.method === "GET") {
     if (!options.workspace_ops) { json(res, 503, { error: "workspace_unavailable" }); return true; }
     const rel = url.searchParams.get("path") ?? "";
     const content = await options.workspace_ops.read_file(rel);

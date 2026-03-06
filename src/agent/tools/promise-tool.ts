@@ -15,6 +15,7 @@ export class PromiseTool extends PolicyTool {
   constructor(promises: PromiseService) {
     super(adapt(promises), {
       tool_name: "promise",
+      category: "promise",
       description: "약속(제약 조건) 조회·설정. action=list|set|get_effective",
       default_source: "agent",
       labels: {

@@ -26,11 +26,12 @@ function split_text(text: string, chunk_size: number, overlap: number, separator
   }
 
   // 구분자 없으면 고정 크기 분할
+  const safe_overlap = Math.min(overlap, chunk_size - 1);
   const chunks: string[] = [];
   let start = 0;
   while (start < text.length) {
     chunks.push(text.slice(start, start + chunk_size));
-    start += chunk_size - overlap;
+    start += chunk_size - safe_overlap;
   }
   return chunks;
 }

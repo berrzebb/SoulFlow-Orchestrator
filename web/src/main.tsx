@@ -7,10 +7,16 @@ import { I18nProvider } from "./i18n";
 import { router } from "./router";
 import "./styles/global.css";
 import "./styles/layout.css";
-import "highlight.js/styles/github-dark.min.css";
 
 const queryClient = new QueryClient({
-  defaultOptions: { queries: { refetchOnWindowFocus: false, retry: 1 } },
+  defaultOptions: {
+    queries: {
+      refetchOnWindowFocus: false,
+      retry: 1,
+      staleTime: 2_000,
+      gcTime: 5 * 60_000,
+    },
+  },
 });
 
 createRoot(document.getElementById("root")!).render(

@@ -18,6 +18,8 @@ const DEFAULT_MAX_CHARS = 8_000;
 
 export class OAuthFetchTool extends Tool {
   readonly name = "oauth_fetch";
+  readonly category = "web" as const;
+  readonly policy_flags = { network: true } as const;
   readonly description =
     "OAuth 인증된 외부 API 호출 및 연동 관리.\n" +
     "Actions:\n" +

@@ -17,7 +17,7 @@ import type { AgentSession } from "../agent/agent.types.js";
 export type GatewayDecision =
   | { action: "builtin"; command: string; args?: string }
   | { action: "inquiry"; summary: string }
-  | { action: "execute"; mode: ExecutionMode; executor: ExecutorProvider; workflow_id?: string };
+  | { action: "execute"; mode: ExecutionMode; executor: ExecutorProvider; workflow_id?: string; tool_categories?: string[]; node_categories?: string[] };
 
 export type GatewayDeps = {
   providers: ProviderRegistry;
@@ -53,7 +53,8 @@ export async function resolve_gateway(
   if (classification.mode === "phase") {
     const executor = resolve_executor_provider(deps.executor_preference, deps.provider_caps);
     const workflow_id = "workflow_id" in classification ? classification.workflow_id : undefined;
-    return { action: "execute", mode: "phase", executor, workflow_id };
+    const node_categories = "nodes" in classification ? classification.nodes : undefined;
+    return { action: "execute", mode: "phase", executor, workflow_id, node_categories };
   }
 
   // 실행 모드 결정
@@ -66,5 +67,6 @@ export async function resolve_gateway(
     mode = "once";
   }
 
-  return { action: "execute", mode, executor };
+  const tool_categories = "tools" in classification ? classification.tools : undefined;
+  return { action: "execute", mode, executor, tool_categories };
 }

@@ -95,7 +95,7 @@ export class SubagentRegistry {
     this.workspace = args?.workspace || process.cwd();
     this.providers = args?.providers || null;
     this.bus = args?.bus || null;
-    this.build_tools = args?.build_tools || (() => create_default_tool_registry({ workspace: this.workspace, bus: this.bus }));
+    this.build_tools = args?.build_tools || (() => create_default_tool_registry({ workspace: this.workspace, bus: this.bus }).registry);
     this.context_builder = args?.context_builder || null;
     this.logger = args?.logger || null;
     this.agent_backends = args?.agent_backends || null;
@@ -297,6 +297,7 @@ export class SubagentRegistry {
     const label = options.label || options.task.slice(0, 40);
     const handoff_emitted = new Set<string>();
     this._fire(options, id, label, (s) => ({ type: "init", source: s, at: now_iso() }), backend_id);
+    this.logger?.info("subagent_start", { subagent_id: id, label, backend: backend_id, max_iterations, task: options.task.slice(0, 120) });
     try {
       // skip_controller: executor 직접 호출 (Phase Loop 등 외부 orchestrator용)
       if (options.skip_controller) {
@@ -311,6 +312,7 @@ export class SubagentRegistry {
       for (let iteration = 0; iteration < max_iterations; iteration += 1) {
         if (abort.signal.aborted) {
           this._update_status(id, "cancelled");
+          this.logger?.info("subagent_end", { subagent_id: id, label, status: "cancelled", finish_reason: "cancelled", iterations: loop_iteration });
           this._fire(options, id, label, (s) => ({ type: "complete", source: s, at: now_iso(), finish_reason: "cancelled", content: "" }), backend_id);
           return;
         }
@@ -443,6 +445,7 @@ export class SubagentRegistry {
           }
           if (agent_result.finish_reason === "cancelled") {
             this._update_status(id, "cancelled");
+            this.logger?.info("subagent_end", { subagent_id: id, label, status: "cancelled", finish_reason: "cancelled", iterations: loop_iteration });
             this._fire(options, id, label, (s) => ({ type: "complete", source: s, at: now_iso(), finish_reason: "cancelled", content: "" }), backend_id);
             return;
           }
@@ -569,6 +572,7 @@ export class SubagentRegistry {
         clear_stream_buffer: () => { stream_buffer = ""; },
       });
       this._update_status(id, "completed", undefined, final_content);
+      this.logger?.info("subagent_end", { subagent_id: id, label, status: "completed", finish_reason: actual_finish_reason, iterations: loop_iteration });
       this._fire(options, id, label, (s) => ({ type: "complete", source: s, at: now_iso(), finish_reason: actual_finish_reason, content: final_content }), backend_id);
       if (options.announce !== false) {
         await this._announce_result({
@@ -583,6 +587,7 @@ export class SubagentRegistry {
     } catch (error) {
       const message = error_message(error);
       this._update_status(id, "failed", message);
+      this.logger?.error("subagent_failed", { subagent_id: id, label, error: message, iterations: loop_iteration });
       this._fire(options, id, label, (s) => ({ type: "error", source: s, at: now_iso(), error: message }), backend_id);
       if (options.announce !== false) {
         await this._announce_result({
@@ -592,6 +597,7 @@ export class SubagentRegistry {
           content: `Error: ${message}`,
           origin_channel: options.origin_channel,
           origin_chat_id: options.origin_chat_id,
+          is_error: true,
         });
       }
     }
@@ -738,18 +744,20 @@ export class SubagentRegistry {
     content: string;
     origin_channel?: string;
     origin_chat_id?: string;
+    is_error?: boolean;
   }): Promise<void> {
     if (!this.bus) return;
     const channel = String(args.origin_channel || "").trim();
     const chat_id = String(args.origin_chat_id || "").trim();
     if (!channel || !chat_id) return;
+    const icon = args.is_error ? "❌" : "✅";
     await this.bus.publish_outbound({
       id: short_id(),
       provider: channel,
       channel,
       sender_id: `subagent:${args.subagent_id}`,
       chat_id,
-      content: `✅ ${args.label}: ${args.content.slice(0, 800)}`,
+      content: `${icon} ${args.label}: ${args.content.slice(0, 800)}`,
       at: now_iso(),
       metadata: {
         kind: "subagent_result",

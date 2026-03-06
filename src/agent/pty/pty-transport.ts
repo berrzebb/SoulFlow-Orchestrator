@@ -23,14 +23,14 @@ type PtyConnection = {
 export class PtyTransport implements AgentTransport {
   private readonly pool: ContainerPool;
   private readonly adapter: CliAdapter;
-  private readonly logger: Logger;
+  private readonly _logger: Logger;
   private readonly connections = new Map<string, PtyConnection>();
   private readonly output_handlers = new Set<(key: string, msg: AgentOutputMessage) => void>();
 
   constructor(options: PtyTransportOptions) {
     this.pool = options.pool;
     this.adapter = options.adapter;
-    this.logger = options.logger;
+    this._logger = options.logger;
   }
 
   async send(

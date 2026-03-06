@@ -13,7 +13,7 @@ import { randomBytes } from "node:crypto";
 import { createInterface } from "node:readline";
 import type { Logger } from "../../logger.js";
 import type { McpClientManager } from "../../mcp/client-manager.js";
-import type { McpToolEntry, McpCallResult } from "../../mcp/types.js";
+import type { McpToolEntry } from "../../mcp/types.js";
 
 const IS_WIN = process.platform === "win32";
 

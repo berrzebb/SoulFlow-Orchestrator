@@ -18,6 +18,7 @@ import {
   AgentHandler,
   StatsHandler,
   VerifyHandler,
+  GuardHandler,
 } from "./commands/index.js";
 import type { ChannelProvider } from "./types.js";
 import type { AgentDomain } from "../agent/index.js";
@@ -29,6 +30,7 @@ import type { ProviderRegistry } from "../providers/index.js";
 import type { AgentBackendRegistry } from "../agent/agent-registry.js";
 import type { McpClientManager } from "../mcp/index.js";
 import type { Logger } from "../logger.js";
+import type { ConfirmationGuard } from "../orchestration/confirmation-guard.js";
 
 export type CommandRouterDeps = {
   cancel_active_runs: (key: string) => number;
@@ -49,6 +51,7 @@ export type CommandRouterDeps = {
   decisions: DecisionService;
   default_alias: string;
   logger?: Logger | null;
+  confirmation_guard?: ConfirmationGuard | null;
 };
 
 export function create_command_router(deps: CommandRouterDeps): CommandRouter {
@@ -141,5 +144,6 @@ export function create_command_router(deps: CommandRouterDeps): CommandRouter {
         deps.session_recorder.get_last_assistant_content(provider as ChannelProvider, chat_id, deps.default_alias),
       run_verification: (task) => agent_runtime.spawn_and_wait({ task, max_turns: 5, timeout_ms: 60_000 }),
     }),
+    ...(deps.confirmation_guard ? [new GuardHandler(deps.confirmation_guard)] : []),
   ]);
 }

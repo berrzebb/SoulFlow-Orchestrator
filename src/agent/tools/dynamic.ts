@@ -33,6 +33,7 @@ function interpolate(template: string, params: Record<string, unknown>): string 
 
 export class DynamicShellTool extends Tool {
   readonly name: string;
+  readonly category = "external" as const;
   readonly description: string;
   readonly parameters: JsonSchema;
   private readonly command_template: string;

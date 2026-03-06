@@ -39,6 +39,7 @@ export const embedding_descriptor: FrontendNodeDescriptor = {
   color: "#7c4dff",
   shape: "rect",
   toolbar_label: "+ Embed",
+  category: "ai",
   output_schema: [
     { name: "embeddings",  type: "array",  description: "Generated embedding vectors" },
     { name: "model",       type: "string", description: "Model used" },

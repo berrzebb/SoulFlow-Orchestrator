@@ -1,15 +1,15 @@
 import type { MessageBusLike, OutboundMessage } from "../../bus/index.js";
 import type { CronScheduler } from "../../cron/contracts.js";
-import { now_iso } from "../../utils/common.js";
 import { CronTool } from "./cron.js";
-import { EditFileTool, ListDirTool, ReadFileTool, WriteFileTool } from "./filesystem.js";
+import { EditFileTool, ListDirTool, ReadFileTool, SearchFilesTool, WriteFileTool } from "./filesystem.js";
+import { AskUserTool } from "./ask-user.js";
 import { FileRequestTool } from "./file-request.js";
 import { MessageTool } from "./message.js";
 import { SendFileTool } from "./send-file.js";
 import { SpawnTool, type SpawnRequest } from "./spawn.js";
 import { ToolRegistry } from "./registry.js";
 import { ExecTool } from "./shell.js";
-import { WebBrowserTool, WebFetchTool, WebSearchTool } from "./web.js";
+import { WebBrowserTool, WebExtractTool, WebFetchTool, WebMonitorTool, WebPdfTool, WebSearchTool, WebSnapshotTool } from "./web.js";
 import { ChainTool } from "./chain.js";
 import { DiagramRenderTool } from "./diagram.js";
 import { DynamicToolRuntimeLoader, ToolRuntimeReloader } from "./runtime-loader.js";
@@ -30,23 +30,26 @@ import { WorkflowTool } from "./workflow.js";
 import type { AppendWorkflowEventInput, AppendWorkflowEventResult } from "../../events/types.js";
 import type { RuntimeExecutionPolicy } from "../../providers/types.js";
 import type { PreToolHook, PostToolHook } from "./types.js";
-import { redact_sensitive_unknown } from "../../security/sensitive.js";
+import { build_approval_notifier } from "./approval-notifier.js";
 
-const WRITE_TOOLS = new Set(["exec", "write_file", "edit_file", "send_file", "message"]);
-const NETWORK_TOOLS = new Set(["web_search", "web_fetch", "web_browser"]);
 const DANGEROUS_COMMANDS = ["rm -rf", "drop table", "format c:", "mkfs", "dd if="];
 
-/** RuntimeExecutionPolicy.sandbox 기반 PreToolHook. fs_access/network_access/approval에 따라 allow/deny/ask 결정. */
-export function create_policy_pre_hook(policy: RuntimeExecutionPolicy): PreToolHook {
+/** RuntimeExecutionPolicy.sandbox 기반 PreToolHook. 도구의 policy_flags 메타데이터로 write/network 판정. */
+export function create_policy_pre_hook(policy: RuntimeExecutionPolicy, registry?: ToolRegistry | null): PreToolHook {
   return (tool_name, params) => {
     const sandbox = policy.sandbox;
     if (!sandbox || sandbox.approval === "auto-approve") return { permission: "allow" };
 
-    if (!sandbox.network_access && NETWORK_TOOLS.has(tool_name)) {
+    const tool = registry?.get(tool_name) ?? null;
+    const flags = tool?.policy_flags;
+    const is_write = !!flags?.write;
+    const is_network = !!flags?.network;
+
+    if (!sandbox.network_access && is_network) {
       return { permission: "deny", reason: `network access disabled: ${tool_name} blocked` };
     }
 
-    if (sandbox.fs_access === "read-only" && WRITE_TOOLS.has(tool_name)) {
+    if (sandbox.fs_access === "read-only" && is_write) {
       return { permission: "ask", reason: `read-only policy: ${tool_name} requires approval` };
     }
 
@@ -57,11 +60,11 @@ export function create_policy_pre_hook(policy: RuntimeExecutionPolicy): PreToolH
       }
     }
 
-    if (sandbox.approval === "always-ask" && WRITE_TOOLS.has(tool_name)) {
+    if (sandbox.approval === "always-ask" && is_write) {
       return { permission: "ask", reason: `approval required: ${tool_name}` };
     }
 
-    if (sandbox.approval === "trusted-only" && WRITE_TOOLS.has(tool_name)) {
+    if (sandbox.approval === "trusted-only" && is_write) {
       const cmd = String(params.command || "").toLowerCase();
       const is_dangerous = tool_name === "exec" && DANGEROUS_COMMANDS.some((d) => cmd.includes(d));
       if (is_dangerous) {
@@ -80,11 +83,17 @@ export {
   WriteFileTool,
   EditFileTool,
   ListDirTool,
+  SearchFilesTool,
   ExecTool,
   WebSearchTool,
   WebFetchTool,
   WebBrowserTool,
+  WebSnapshotTool,
+  WebExtractTool,
+  WebPdfTool,
+  WebMonitorTool,
   DiagramRenderTool,
+  AskUserTool,
   MessageTool,
   FileRequestTool,
   SendFileTool,
@@ -113,6 +122,8 @@ export type {
   JsonSchema,
   ToolSchema,
   ToolLike,
+  ToolCategory,
+  ToolPolicyFlags,
   ToolExecuteResult,
   ToolExecutionContext,
   ToolHookDecision,
@@ -128,10 +139,10 @@ export { execute_chain, type ChainStep, type ChainResult } from "./chain.js";
 export { PolicyTool, type PolicyStoreLike } from "./policy-tool.js";
 export { validate_url, normalize_headers, serialize_body, format_response, timed_fetch, type HttpResponseSummary } from "./http-utils.js";
 
-export function create_default_tool_registry(args?: {
+/** create_default_tool_registry 옵션. */
+export type ToolRegistryFactoryOptions = {
   workspace?: string;
   allowed_dir?: string | null;
-  dynamic_manifest_path?: string;
   dynamic_store_path?: string;
   dynamic_store?: DynamicToolStoreLike;
   cron?: CronScheduler | null;
@@ -143,86 +154,27 @@ export function create_default_tool_registry(args?: {
   runtime_policy?: RuntimeExecutionPolicy;
   pre_hooks?: PreToolHook[];
   post_hooks?: PostToolHook[];
-}): ToolRegistry {
+};
+
+/** 팩토리 반환 번들 — 호출자가 내부 서비스를 재사용할 수 있도록 노출. */
+export type ToolRegistryBundle = {
+  registry: ToolRegistry;
+  installer: ToolInstallerService;
+  dynamic_loader: DynamicToolRuntimeLoader;
+};
+
+export function create_default_tool_registry(args?: ToolRegistryFactoryOptions): ToolRegistryBundle {
   const pre_hooks: PreToolHook[] = [...(args?.pre_hooks || [])];
-  if (args?.runtime_policy) {
-    pre_hooks.unshift(create_policy_pre_hook(args.runtime_policy));
-  }
   const registry = new ToolRegistry({
     pre_hooks,
     post_hooks: args?.post_hooks || [],
     on_approval_request: args?.bus
-      ? async (request) => {
-          const channel = String(request.context?.channel || "");
-          const chat_id = String(request.context?.chat_id || "");
-          if (!channel || !chat_id) return;
-          const safe_params = redact_sensitive_unknown(request.params) as Record<string, unknown>;
-          const message: OutboundMessage = {
-            id: `approval-${request.request_id}`,
-            provider: channel,
-            channel,
-            sender_id: "approval-bot",
-            chat_id,
-            at: now_iso(),
-            content: [
-              "🔐 Approval Required",
-              `request_id: ${request.request_id}`,
-              `tool: ${request.tool_name}`,
-              `reason: ${request.detail.split("\n")[0] || "restricted operation"}`,
-              "",
-              "Respond with:",
-              "✅ / 👍 / yes / 승인 / 허용 / go",
-              "❌ / 👎 / no / 거절 / 불가 / stop",
-              "⏸️ / 보류 / later",
-              "? / 이유 / explain",
-            ].join("\n"),
-            metadata: {
-              kind: "approval_request",
-              orchestrator_event: {
-                event_id: request.request_id,
-                run_id: String(request.context?.task_id || `run-${Date.now()}`),
-                task_id: String(request.context?.task_id || "task-unspecified"),
-                agent_id: String(request.context?.sender_id || "agent"),
-                phase: "approval",
-                summary: `${request.tool_name} approval required`,
-                payload: { tool: request.tool_name, params: safe_params },
-                provider: channel,
-                channel,
-                chat_id,
-                source: "outbound",
-                at: now_iso(),
-              },
-              request_id: request.request_id,
-              tool_name: request.tool_name,
-              params: safe_params,
-              created_at: request.created_at,
-            },
-          };
-          if (args?.event_recorder) {
-            try {
-              await args.event_recorder({
-                event_id: request.request_id,
-                run_id: String(request.context?.task_id || `run-${Date.now()}`),
-                task_id: String(request.context?.task_id || "task-unspecified"),
-                agent_id: String(request.context?.sender_id || "agent"),
-                phase: "approval",
-                summary: `${request.tool_name} approval required`,
-                payload: { tool: request.tool_name, params: safe_params },
-                provider: channel,
-                channel,
-                chat_id,
-                source: "outbound",
-                at: now_iso(),
-                detail: request.detail,
-              });
-            } catch {
-              // keep approval flow non-blocking even if event storage fails
-            }
-          }
-          await args.bus?.publish_outbound(message);
-        }
+      ? build_approval_notifier({ bus: args.bus, event_recorder: args.event_recorder })
       : undefined,
   });
+  if (args?.runtime_policy) {
+    pre_hooks.unshift(create_policy_pre_hook(args.runtime_policy, registry));
+  }
   const workspace = args?.workspace || process.cwd();
   const allowed_dir = args?.allowed_dir ?? workspace;
   let sender: ((message: OutboundMessage) => Promise<void>) | null = null;
@@ -231,10 +183,15 @@ export function create_default_tool_registry(args?: {
   registry.register(new WriteFileTool({ workspace, allowed_dir }));
   registry.register(new EditFileTool({ workspace, allowed_dir }));
   registry.register(new ListDirTool({ workspace, allowed_dir }));
+  registry.register(new SearchFilesTool({ workspace, allowed_dir }));
   registry.register(new ExecTool({ working_dir: workspace, restrict_to_working_dir: true }));
   registry.register(new WebSearchTool());
   registry.register(new WebFetchTool());
   registry.register(new WebBrowserTool());
+  registry.register(new WebSnapshotTool({ workspace }));
+  registry.register(new WebExtractTool());
+  registry.register(new WebPdfTool({ workspace }));
+  registry.register(new WebMonitorTool({ workspace }));
   registry.register(new DiagramRenderTool());
   registry.register(new DateTimeTool());
   registry.register(new HttpRequestTool());
@@ -252,6 +209,7 @@ export function create_default_tool_registry(args?: {
       event_recorder: args?.event_recorder || null,
       workspace,
     }));
+    registry.register(new AskUserTool({ send_callback: sender }));
     registry.register(new FileRequestTool({ send_callback: sender }));
     registry.register(new SendFileTool({ send_callback: sender, workspace }));
   }
@@ -262,7 +220,7 @@ export function create_default_tool_registry(args?: {
     registry.register(new CronTool(args.cron));
   }
 
-  const dynamic_store_path = args?.dynamic_store_path || args?.dynamic_manifest_path;
+  const dynamic_store_path = args?.dynamic_store_path;
   const dynamic_store = args?.dynamic_store || new SqliteDynamicToolStore(workspace, dynamic_store_path);
   const dynamic_loader = new DynamicToolRuntimeLoader(workspace, dynamic_store_path, dynamic_store);
   registry.set_dynamic_tools(dynamic_loader.load_tools());
@@ -279,5 +237,5 @@ export function create_default_tool_registry(args?: {
     },
   }));
 
-  return registry;
+  return { registry, installer, dynamic_loader };
 }

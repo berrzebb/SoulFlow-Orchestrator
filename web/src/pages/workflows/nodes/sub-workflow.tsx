@@ -1,7 +1,17 @@
+import { useState } from "react";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
 function SubWorkflowEditPanel({ node, update, t, options }: EditPanelProps) {
   const templates = options?.workflow_templates || [];
+  const [mappingRaw, setMappingRaw] = useState(node.input_mapping ? JSON.stringify(node.input_mapping, null, 2) : "");
+  const [mappingErr, setMappingErr] = useState("");
+
+  const handleMapping = (val: string) => {
+    setMappingRaw(val);
+    if (!val.trim()) { setMappingErr(""); update({ input_mapping: undefined }); return; }
+    try { update({ input_mapping: JSON.parse(val) }); setMappingErr(""); }
+    catch { setMappingErr("Invalid JSON"); }
+  };
   return (
     <>
       <div className="builder-row">
@@ -17,7 +27,15 @@ function SubWorkflowEditPanel({ node, update, t, options }: EditPanelProps) {
       </div>
       <div className="builder-row">
         <label className="label">{t("workflows.sub_input_mapping")}</label>
-        <textarea className="input code-textarea" rows={3} value={node.input_mapping ? JSON.stringify(node.input_mapping, null, 2) : ""} onChange={(e) => { try { update({ input_mapping: e.target.value ? JSON.parse(e.target.value) : undefined }); } catch { /* ignore */ } }} spellCheck={false} placeholder='{"prompt": "{{memory.prev.result}}"}' />
+        <textarea
+          className={`input code-textarea${mappingErr ? " input--err" : ""}`}
+          rows={3}
+          value={mappingRaw}
+          onChange={(e) => handleMapping(e.target.value)}
+          spellCheck={false}
+          placeholder='{"prompt": "{{memory.prev.result}}"}'
+        />
+        {mappingErr && <span className="field-error">{mappingErr}</span>}
       </div>
     </>
   );
@@ -29,6 +47,7 @@ export const sub_workflow_descriptor: FrontendNodeDescriptor = {
   color: "#673ab7",
   shape: "rect",
   toolbar_label: "+ Sub",
+  category: "integration",
   output_schema: [
     { name: "result", type: "object", description: "Sub-workflow final output" },
     { name: "phases", type: "array",  description: "Phase results array" },

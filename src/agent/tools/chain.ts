@@ -8,7 +8,7 @@
  *   $steps[N]       — N번째 단계의 출력 전체
  */
 
-import type { ToolLike, ToolSchema, JsonSchema, ToolExecutionContext } from "./types.js";
+import type { ToolLike, ToolSchema, JsonSchema, ToolCategory, ToolExecutionContext } from "./types.js";
 import type { ToolRegistry } from "./registry.js";
 
 export type ChainStep = {
@@ -118,7 +118,8 @@ function extract_json_path(raw: string, path: string): string {
 /** 에이전트가 사용할 chain 메타 도구. */
 export class ChainTool implements ToolLike {
   readonly name = "chain";
-  readonly description = "Execute a pipeline of tools sequentially. Each step can reference previous outputs via $prev or $steps[N] templates.";
+  readonly category: ToolCategory = "admin";
+  readonly description = "Execute a pipeline of tools sequentially. Each step can reference previous outputs via $prev or $steps[N] templates. Set abort_on_error=false on a step to skip errors and continue.";
   readonly parameters: JsonSchema = {
     type: "object",
     properties: {

@@ -292,23 +292,51 @@ The workflow resumes automatically when a response is received.
 
 ## Graph Editor
 
-The visual editor provides a node-edge canvas for designing workflows.
+The visual editor provides an SVG-based DAG canvas for designing workflows with 42 node types.
 
 ### Layout
 
-- **Nodes** represent phases, arranged in topological layers based on `depends_on`
+- **Nodes** represent phases or orchestration nodes, arranged in topological layers based on `depends_on`
 - **Solid edges** — sequential flow / `depends_on` dependencies
 - **Dashed edges** — `goto` links (critic rollback jumps)
 - **Mode badges** — each node shows its execution mode (∥ parallel, 🔄 interactive, 🔁 loop)
+- **Field ports** — input/output ports for memory-based data flow between nodes
+
+### Node Types (42 across 6 categories)
+
+| Category | Node Types |
+|----------|-----------|
+| **Flow** (12) | if, switch, loop, merge, gate, wait, error-handler, filter, split, batch, assert, retry |
+| **Data** (8) | template, transform, code, aggregate, set, cache, db, file |
+| **AI** (8) | llm, ai-agent, analyzer, spawn-agent, embedding, vector-store, text-splitter, retriever |
+| **Integration** (6) | http, oauth, webhook, notify, send-file, sub-workflow |
+| **Interaction** (4) | hitl, approval, form, escalation |
+| **Advanced** (4) | decision, promise, task, tool-invoke |
+
+### Node Inspector
+
+Clicking a node opens the **Node Inspector** side panel with:
+- **Parameters tab** — edit node-specific fields (type-aware inputs, dropdowns, code editors)
+- **Output tab** — view field schema and output mapping
+- Drag-and-drop field port connections for data flow
+
+### Node Picker
+
+The **Node Picker** palette provides:
+- Category-based browsing (flow, data, AI, integration, interaction, advanced)
+- Search by keyword
+- Drag-and-drop from palette to canvas
+- Preset templates (e.g., Python CSV processing, REST API call, LLM chain)
 
 ### Interactions
 
 | Action | Effect |
 |--------|--------|
-| Click node | Open inline property panel (agents, critic, mode) |
+| Click node | Open Node Inspector side panel |
 | Drag node | Reposition on canvas |
-| Add phase | New node appears in the graph |
-| Set depends_on | Edge drawn between nodes |
+| Add node | Drag from Node Picker or click + button |
+| Connect ports | Drag from output port to input port |
+| Set depends_on | Edge drawn between phase nodes |
 | Set goto_phase | Dashed edge drawn |
 
 ### Builder Tabs
@@ -317,11 +345,34 @@ The template editor provides three synchronized views:
 
 | Tab | Description |
 |-----|-------------|
-| **Graph** | Visual node-edge editor |
+| **Graph** | Visual SVG-based DAG editor with Node Inspector |
 | **Form** | Structured form with dropdowns and inputs |
 | **YAML** | Raw YAML editor with syntax highlighting |
 
 Changes in any tab sync to the others in real-time.
+
+---
+
+## WorkflowTool (Agent-Driven CRUD)
+
+Agents can manage workflows programmatically via the `workflow` tool with these actions:
+
+| Action | Description |
+|--------|-------------|
+| `create` | Create a new workflow from YAML definition |
+| `list` | List all workflow templates |
+| `get` | Get a specific template by name |
+| `run` | Execute a workflow with variable substitution |
+| `update` | Update an existing template |
+| `delete` | Delete a template |
+| `export` | Export template as YAML |
+| `node_types` | List available node types (filtered by category) |
+
+This enables natural-language workflow management:
+```
+User: "Create a market research workflow with 3 analysts"
+→ Agent uses workflow tool to create YAML template → presents for approval → executes
+```
 
 ---
 

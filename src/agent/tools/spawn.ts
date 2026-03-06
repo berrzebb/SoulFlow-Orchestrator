@@ -18,6 +18,7 @@ export type SpawnCallback = (request: SpawnRequest) => Promise<{ subagent_id: st
 
 export class SpawnTool extends Tool {
   readonly name = "spawn";
+  readonly category = "spawn" as const;
   readonly description = "Spawn a headless subagent to run a background task.";
   readonly parameters: JsonSchema = {
     type: "object",

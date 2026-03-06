@@ -55,6 +55,7 @@ export const retriever_descriptor: FrontendNodeDescriptor = {
   color: "#00bcd4",
   shape: "rect",
   toolbar_label: "+ Retrieve",
+  category: "ai",
   output_schema: [
     { name: "results", type: "array",  description: "Retrieved results" },
     { name: "count",   type: "number", description: "Result count" },

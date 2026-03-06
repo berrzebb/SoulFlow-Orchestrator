@@ -15,6 +15,7 @@ export class DecisionTool extends PolicyTool {
   constructor(decisions: DecisionService) {
     super(adapt(decisions), {
       tool_name: "decision",
+      category: "decision",
       description: "결정사항 조회·설정. action=list|set|get_effective",
       default_source: "system",
       labels: {

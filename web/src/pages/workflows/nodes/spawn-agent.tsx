@@ -38,6 +38,16 @@ function SpawnAgentEditPanel({ node, update, t, options }: EditPanelProps) {
           <input className="input input--sm" type="number" min={1} max={100} value={String(node.max_iterations ?? 10)} onChange={(e) => update({ max_iterations: Number(e.target.value) || 10 })} />
         </div>
       </div>
+      <div className="builder-row-pair">
+        <div className="builder-row">
+          <label className="label">{t("workflows.spawn_origin_channel") || "Origin Channel"}</label>
+          <input className="input input--sm" value={String(node.origin_channel || "")} onChange={(e) => update({ origin_channel: e.target.value || undefined })} placeholder="{{memory.origin.channel}}" />
+        </div>
+        <div className="builder-row">
+          <label className="label">{t("workflows.spawn_origin_chat") || "Origin Chat ID"}</label>
+          <input className="input input--sm" value={String(node.origin_chat_id || "")} onChange={(e) => update({ origin_chat_id: e.target.value || undefined })} placeholder="{{memory.origin.chat_id}}" />
+        </div>
+      </div>
     </>
   );
 }
@@ -48,6 +58,7 @@ export const spawn_agent_descriptor: FrontendNodeDescriptor = {
   color: "#ff9800",
   shape: "rect",
   toolbar_label: "+ Spawn",
+  category: "ai",
   output_schema: [
     { name: "agent_id", type: "string", description: "Spawned agent ID" },
     { name: "status",   type: "string", description: "Agent status" },

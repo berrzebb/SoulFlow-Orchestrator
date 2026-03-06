@@ -94,6 +94,14 @@ Control commands you can type directly in any chat channel.
 | `/cron add <expr> <command>` | Register a job |
 | `/cron remove <id>` | Delete a job |
 
+## Confirmation Guard
+
+| Command | Description |
+|---------|-------------|
+| `/guard` | Show guard status (enabled/disabled, pending count) |
+| `/guard on` | Enable confirmation guard — prompts for confirmation before cron and long-running operations |
+| `/guard off` | Disable confirmation guard |
+
 ## Hot Reload
 
 | Command | Description |

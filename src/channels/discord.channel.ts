@@ -53,6 +53,8 @@ function to_inbound_message(channel: DiscordChannel, raw: Record<string, unknown
   };
 }
 
+const FETCH_TIMEOUT_MS = 30_000;
+
 export class DiscordChannel extends BaseChannel {
   private readonly bot_token: string;
   private readonly default_channel: string;
@@ -106,6 +108,7 @@ export class DiscordChannel extends BaseChannel {
             Authorization: `Bot ${this.bot_token}`,
           },
           body: form,
+          signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
         });
       } else {
         response = await fetch(`${this.api_base}/channels/${chat_id}/messages`, {
@@ -115,6 +118,7 @@ export class DiscordChannel extends BaseChannel {
             "Content-Type": "application/json",
           },
           body: JSON.stringify(payload),
+          signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
         });
       }
       const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
@@ -137,6 +141,7 @@ export class DiscordChannel extends BaseChannel {
         headers: {
           Authorization: `Bot ${this.bot_token}`,
         },
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
       });
       if (!response.ok) return [];
       const rows = (await response.json().catch(() => [])) as unknown;
@@ -162,6 +167,7 @@ export class DiscordChannel extends BaseChannel {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ content: String(content || "") }),
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
       });
       const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
       if (!response.ok) return { ok: false, error: String(data.message || `http_${response.status}`) };
@@ -188,7 +194,7 @@ export class DiscordChannel extends BaseChannel {
       const emoji = encodeURIComponent(reaction.replace(/:/g, ""));
       const response = await fetch(
         `${this.api_base}/channels/${chat_id}/messages/${message_id}/reactions/${emoji}/@me`,
-        { method, headers: { Authorization: `Bot ${this.bot_token}` } },
+        { method, headers: { Authorization: `Bot ${this.bot_token}` }, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) },
       );
       if (!response.ok && response.status !== 204) {
         const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
@@ -208,6 +214,7 @@ export class DiscordChannel extends BaseChannel {
       headers: {
         Authorization: `Bot ${this.bot_token}`,
       },
-    });
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    }).catch(() => {/* typing 실패는 무시 */});
   }
 }

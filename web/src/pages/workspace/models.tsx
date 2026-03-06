@@ -1,9 +1,10 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import { Badge } from "../../components/badge";
 import { useToast } from "../../components/toast";
 import { useT } from "../../i18n";
+import { time_ago } from "../../utils/format";
 
 interface PullProgress {
   status: string;
@@ -61,36 +62,38 @@ export function ModelsTab() {
   const { data: runtime, isLoading: runtimeLoading } = useQuery<RuntimeStatus>({
     queryKey: ["models-runtime"],
     queryFn: () => api.get("/api/models/runtime"),
-    refetchInterval: 5_000,
+    refetchInterval: 10_000,
+    staleTime: 4_000,
   });
 
   const { data: models, isLoading: modelsLoading } = useQuery<ModelInfo[]>({
     queryKey: ["models"],
     queryFn: () => api.get("/api/models"),
-    refetchInterval: 10_000,
+    refetchInterval: 30_000,
+    staleTime: 10_000,
   });
 
   const { data: active } = useQuery<RunningModelInfo[]>({
     queryKey: ["models-active"],
     queryFn: () => api.get("/api/models/active"),
-    refetchInterval: 5_000,
+    refetchInterval: 10_000,
+    staleTime: 4_000,
   });
 
-  const startPull = useCallback(async (name: string) => {
+  const startPull = async (name: string) => {
     if (pulling) return;
     setPulling(true);
     setPullProgress({ status: "connecting" });
     const ac = new AbortController();
     abortRef.current = ac;
     try {
-      const res = await fetch("/api/models", {
+      const res = await fetch(`/api/models/${encodeURIComponent(name)}/pull`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name }),
         signal: ac.signal,
       });
       if (!res.ok || !res.body) {
-        toast(t("models.pull_failed"));
+        toast(t("models.pull_failed"), "err");
         setPullProgress(null);
         setPulling(false);
         return;
@@ -117,51 +120,58 @@ export function ModelsTab() {
         if (errored) break;
       }
       if (errored) {
-        toast(t("models.pull_failed"));
+        toast(t("models.pull_failed"), "err");
       } else {
-        toast(t("models.pull_complete"));
+        toast(t("models.pull_complete"), "ok");
         setPullName("");
       }
-      qc.invalidateQueries({ queryKey: ["models"] });
-      qc.invalidateQueries({ queryKey: ["models-active"] });
+      void qc.invalidateQueries({ queryKey: ["models"] });
+      void qc.invalidateQueries({ queryKey: ["models-active"] });
     } catch (err) {
-      if ((err as Error).name !== "AbortError") toast(t("models.pull_failed"));
+      if ((err as Error).name !== "AbortError") toast(t("models.pull_failed"), "err");
     } finally {
       setPullProgress(null);
       setPulling(false);
       abortRef.current = null;
     }
-  }, [pulling, qc, toast, t]);
+  };
 
   const deleteMut = useMutation({
-    mutationFn: (name: string) => api.del("/api/models", { name }),
-    onSuccess: () => { toast("Deleted"); qc.invalidateQueries({ queryKey: ["models"] }); setDeleteTarget(null); },
-    onError: () => toast("Delete failed"),
+    mutationFn: (name: string) => api.del(`/api/models/${encodeURIComponent(name)}`),
+    onSuccess: () => { toast(t("models.deleted"), "ok"); qc.invalidateQueries({ queryKey: ["models"] }); setDeleteTarget(null); },
+    onError: () => toast(t("models.delete_failed"), "err"),
   });
 
   const switchMut = useMutation({
     mutationFn: (name: string) => api.patch("/api/models/runtime", { name }),
-    onSuccess: () => { toast("Model switched"); qc.invalidateQueries({ queryKey: ["models-runtime"] }); },
-    onError: () => toast("Switch failed"),
+    onSuccess: () => { toast(t("models.switched"), "ok"); qc.invalidateQueries({ queryKey: ["models-runtime"] }); },
+    onError: () => toast(t("models.switch_failed"), "err"),
   });
 
-  if (runtimeLoading || modelsLoading) return <p className="empty">{t("models.loading")}</p>;
+  if (runtimeLoading || modelsLoading) return (
+    <div className="ws-skeleton-col">
+      <div className="skeleton skeleton--card" />
+      <div className="skeleton skeleton--row" />
+      <div className="skeleton skeleton--row" />
+      <div className="skeleton skeleton--row" />
+    </div>
+  );
 
   const runtimeStatus = runtime?.running ? t("models.running") : runtime?.enabled ? t("models.stopped") : t("models.disabled");
   const runtimeVariant = runtime?.running ? "ok" as const : runtime?.enabled ? "warn" as const : "off" as const;
 
   return (
     <div>
-      <p style={{ fontSize: "var(--fs-xs)", color: "var(--muted)", marginBottom: "var(--sp-4)" }}>
+      <p className="text-xs text-muted mb-3">
         {t("models.description")}
       </p>
 
       {/* Runtime Status */}
-      <section style={{ marginBottom: "var(--sp-6)" }}>
+      <section className="mb-4">
         <h3>{t("models.runtime_status")}</h3>
-        <div className="card stat-grid" style={{ padding: "var(--sp-4)" }}>
+        <div className="card stat-grid p-3">
           <div>
-            <span className="label">Status</span>
+            <span className="label">{t("models.status")}</span>
             <Badge status={runtimeStatus} variant={runtimeVariant} />
           </div>
           {runtime?.engine && (
@@ -169,27 +179,32 @@ export function ModelsTab() {
           )}
           <div>
             <span className="label">{t("models.current_model")}</span>
-            <span style={{ fontWeight: 600 }}>{runtime?.model ?? "-"}</span>
+            <span className="fw-600">{runtime?.model ?? "-"}</span>
           </div>
           {runtime?.gpu_percent != null && (
-            <div><span className="label">GPU</span> <span>{runtime.gpu_percent}%</span></div>
+            <div>
+              <span className="label">GPU</span>
+              <div className="turn-bar gpu-bar ml-1" style={{ "--bar-w": `${Math.min(100, runtime.gpu_percent)}%`, "--bar-c": runtime.gpu_percent >= 90 ? "var(--err)" : runtime.gpu_percent >= 70 ? "var(--warn)" : "var(--ok)" } as React.CSSProperties}>
+                <div className="turn-bar__fill" />
+                <span className="turn-bar__label">{runtime.gpu_percent}%</span>
+              </div>
+            </div>
           )}
           {runtime?.last_error && (
-            <div style={{ gridColumn: "1 / -1", color: "var(--err)" }}>{runtime.last_error}</div>
+            <div className="text-err grid-span-full">{runtime.last_error}</div>
           )}
         </div>
       </section>
 
       {/* Pull Model */}
-      <section style={{ marginBottom: "var(--sp-6)" }}>
+      <section className="mb-4">
         <h3>{t("models.pull")}</h3>
         <form
           onSubmit={(e) => { e.preventDefault(); if (pullName.trim()) startPull(pullName.trim()); }}
-          style={{ display: "flex", flexWrap: "wrap" as const, gap: "var(--sp-2)", maxWidth: 480 }}
+          className="pull-form"
         >
           <input
-            className="input"
-            style={{ flex: 1 }}
+            className="input flex-fill"
             placeholder={t("models.pull_placeholder")}
             value={pullName}
             onChange={(e) => setPullName(e.target.value)}
@@ -205,61 +220,55 @@ export function ModelsTab() {
           )}
         </form>
         {pullProgress && (
-          <div style={{ marginTop: "var(--sp-2)", maxWidth: 480 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "var(--fs-xs)", marginBottom: 4 }}>
+          <div className="pull-progress mt-2">
+            <div className="pull-progress__header">
               <span>{pullProgress.status}</span>
               {pullProgress.total != null && pullProgress.total > 0 && (
                 <span>{Math.round(((pullProgress.completed ?? 0) / pullProgress.total) * 100)}%</span>
               )}
             </div>
             {pullProgress.total != null && pullProgress.total > 0 && (
-              <div style={{ width: "100%", height: 6, background: "var(--line)", borderRadius: 3, overflow: "hidden" }}>
-                <div
-                  style={{
-                    width: `${Math.min(100, ((pullProgress.completed ?? 0) / pullProgress.total) * 100)}%`,
-                    height: "100%",
-                    background: pullProgress.status.startsWith("error") ? "var(--err)" : "var(--accent)",
-                    transition: "width 0.3s ease",
-                    borderRadius: 3,
-                  }}
-                />
+              <div className="pull-progress__track" style={{ "--bar-w": `${Math.min(100, ((pullProgress.completed ?? 0) / pullProgress.total) * 100)}%` } as React.CSSProperties}>
+                <div className={`pull-progress__fill${pullProgress.status.startsWith("error") ? " pull-progress__fill--err" : ""}`} />
               </div>
             )}
             {pullProgress.error && (
-              <div style={{ color: "var(--err)", fontSize: "var(--fs-xs)", marginTop: 4 }}>{pullProgress.error}</div>
+              <div className="text-xs text-err mt-1">{pullProgress.error}</div>
             )}
           </div>
         )}
       </section>
 
       {/* Installed Models */}
-      <section style={{ marginBottom: "var(--sp-6)" }}>
+      <section className="mb-4">
         <h3>{t("models.installed")}</h3>
         {!models?.length ? (
-          <p className="empty">{t("models.empty")}</p>
+          <div className="empty-state"><div className="empty-state__icon">🧠</div><div className="empty-state__text">{t("models.empty")}</div></div>
         ) : (
           <div className="table-scroll">
-          <table className="table">
+          <table className="data-table">
             <thead>
               <tr>
-                <th>Name</th>
+                <th>{t("common.name")}</th>
                 <th>{t("models.size")}</th>
-                <th>Params</th>
-                <th>Quant</th>
+                <th>{t("models.params")}</th>
+                <th>{t("models.quant")}</th>
+                <th>{t("models.modified")}</th>
                 <th></th>
               </tr>
             </thead>
             <tbody>
               {models.map((m) => (
                 <tr key={m.digest}>
-                  <td style={{ fontWeight: m.name === runtime?.model ? 700 : 400 }}>
+                  <td className={m.name === runtime?.model ? "fw-600" : ""}>
                     {m.name}
                     {m.name === runtime?.model && <Badge status="active" variant="ok" />}
                   </td>
                   <td>{fmt_size(m.size)}</td>
                   <td>{m.parameter_size ?? "-"}</td>
                   <td>{m.quantization_level ?? "-"}</td>
-                  <td style={{ display: "flex", flexWrap: "wrap" as const, gap: "var(--sp-2)" }}>
+                  <td className="text-xs text-muted" title={m.modified_at}>{m.modified_at ? time_ago(m.modified_at) : "-"}</td>
+                  <td className="li-flex">
                     {m.name !== runtime?.model && (
                       <button
                         className="btn btn--sm"
@@ -276,9 +285,9 @@ export function ModelsTab() {
                           onClick={() => deleteMut.mutate(m.name)}
                           disabled={deleteMut.isPending}
                         >
-                          {deleteMut.isPending ? t("models.deleting") : "Confirm"}
+                          {deleteMut.isPending ? t("models.deleting") : t("common.confirm")}
                         </button>
-                        <button className="btn btn--sm" onClick={() => setDeleteTarget(null)}>Cancel</button>
+                        <button className="btn btn--sm" onClick={() => setDeleteTarget(null)}>{t("common.cancel")}</button>
                       </>
                     ) : (
                       <button className="btn btn--sm btn--danger" onClick={() => setDeleteTarget(m.name)}>
@@ -299,13 +308,13 @@ export function ModelsTab() {
         <section>
           <h3>{t("models.active")}</h3>
           <div className="table-scroll">
-          <table className="table">
+          <table className="data-table">
             <thead>
               <tr>
-                <th>Name</th>
+                <th>{t("common.name")}</th>
                 <th>{t("models.size")}</th>
                 <th>{t("models.vram")}</th>
-                <th>Expires</th>
+                <th>{t("models.expires")}</th>
               </tr>
             </thead>
             <tbody>
@@ -314,7 +323,7 @@ export function ModelsTab() {
                   <td>{m.name}</td>
                   <td>{fmt_size(m.size)}</td>
                   <td>{fmt_size(m.size_vram)}</td>
-                  <td>{m.expires_at ? new Date(m.expires_at).toLocaleString() : "-"}</td>
+                  <td className="text-xs" title={m.expires_at}>{m.expires_at ? time_ago(m.expires_at) : "-"}</td>
                 </tr>
               ))}
             </tbody>

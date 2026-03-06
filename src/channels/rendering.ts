@@ -355,3 +355,57 @@ function collapse_blank_lines(input: string): string {
 function escape_html_attr(input: string): string {
   return escape_html(input).replace(/'/g, "&#39;");
 }
+
+// ── 채널별 메시지 길이 한도 + 마크다운 분할 ──
+
+const PROVIDER_MAX_LENGTH: Record<string, number> = {
+  discord: 1950,   // 2000 - 멘션 여유
+  slack: 3800,     // ~4000
+  telegram: 4000,  // 4096 - 태그 여유
+  web: 20_000,
+};
+const DEFAULT_MAX_LENGTH = 1950;
+
+/** 채널 프로바이더별 최대 메시지 길이. */
+export function get_provider_max_length(provider: string): number {
+  return PROVIDER_MAX_LENGTH[provider.toLowerCase()] ?? DEFAULT_MAX_LENGTH;
+}
+
+/**
+ * 마크다운 텍스트를 max_length 이하의 청크로 분할.
+ * 단락 → 줄바꿈 → 공백 → 하드 컷 순으로 경계를 찾는다.
+ */
+export function split_markdown(text: string, max_length: number): string[] {
+  if (!text || text.length <= max_length) return [text];
+
+  const chunks: string[] = [];
+  let remaining = text;
+
+  while (remaining.length > max_length) {
+    const cut = find_split_point(remaining, max_length);
+    chunks.push(remaining.slice(0, cut).trimEnd());
+    remaining = remaining.slice(cut).trimStart();
+  }
+  if (remaining.trim()) chunks.push(remaining.trimEnd());
+
+  return chunks;
+}
+
+function find_split_point(text: string, max: number): number {
+  const window = text.slice(0, max);
+
+  // 1. 코드 블록 내부에서 자르지 않도록 마지막 완전한 코드블록 이후 단락 경계 검색
+  const para = window.lastIndexOf("\n\n");
+  if (para > max * 0.3) return para + 1;
+
+  // 2. 줄바꿈
+  const nl = window.lastIndexOf("\n");
+  if (nl > max * 0.3) return nl + 1;
+
+  // 3. 공백
+  const sp = window.lastIndexOf(" ");
+  if (sp > max * 0.3) return sp + 1;
+
+  // 4. 하드 컷
+  return max;
+}

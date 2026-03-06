@@ -5,6 +5,7 @@ import { readFile } from "node:fs/promises";
 import { extname, isAbsolute, join, resolve } from "node:path";
 import type { ContextMessage } from "./context.types.js";
 import { DecisionService, PromiseService } from "../decision/index.js";
+import { filter_tool_sections } from "../orchestration/tool-description-filter.js";
 
 async function try_read_first_file(candidates: string[]): Promise<string> {
   for (const path of candidates) {
@@ -60,9 +61,10 @@ export class ContextBuilder {
     skill_names: string[] = [],
     decision_context?: { team_id?: string | null; agent_id?: string | null },
     session_context?: { channel?: string | null; chat_id?: string | null },
+    tool_categories?: ReadonlySet<string>,
   ): Promise<string> {
     const security_override = this._security_override_policy();
-    const bootstrap = await this._load_bootstrap_files();
+    const bootstrap = await this._load_bootstrap_files(tool_categories);
     const memory_context = await this._build_memory_context();
     const decision_ctx = { team_id: decision_context?.team_id || null, agent_id: decision_context?.agent_id || null };
     const decisions = await this.decision_service.build_compact_injection(decision_ctx);
@@ -127,15 +129,19 @@ export class ContextBuilder {
     ].join("\n");
   }
 
-  async _load_bootstrap_files(): Promise<string> {
+  async _load_bootstrap_files(tool_categories?: ReadonlySet<string>): Promise<string> {
     const names = ["AGENTS.md", "SOUL.md", "HEART.md", "USER.md", "TOOLS.md"];
     const parts: string[] = [];
     for (const name of names) {
-      const raw = await try_read_first_file([
+      let raw = await try_read_first_file([
         join(this.workspace, "templates", name),
         join(this.workspace, name),
       ]);
-      if (raw) parts.push(`# ${name}\n${raw}`);
+      if (!raw) continue;
+      if (name === "TOOLS.md" && tool_categories && tool_categories.size > 0) {
+        raw = filter_tool_sections(raw, tool_categories);
+      }
+      parts.push(`# ${name}\n${raw}`);
     }
     return parts.join("\n\n");
   }

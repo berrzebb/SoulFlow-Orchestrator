@@ -38,7 +38,7 @@ export class AgentInspectorAdapter implements AgentInspectorLike {
   }
 
   list_approval_requests(status?: AgentApprovalStatus) {
-    return this.domain.tools.list_approval_requests(status as never).map(parse_approval_row);
+    return this.domain.tools.list_approval_requests(status).map(parse_approval_row);
   }
 
   get_approval_request(request_id: string) {

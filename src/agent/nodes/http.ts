@@ -4,7 +4,6 @@ import type { NodeHandler } from "../node-registry.js";
 import type { HttpNodeDefinition, OrcheNodeDefinition } from "../workflow-node.types.js";
 import type { OrcheNodeExecutorContext, OrcheNodeExecuteResult, OrcheNodeTestResult } from "../orche-node-executor.js";
 import { resolve_templates, resolve_deep } from "../orche-node-executor.js";
-import { error_message } from "../../utils/common.js";
 
 const PRIVATE_HOST_RE =
   /^(localhost|127\.\d+\.\d+\.\d+|::1|0\.0\.0\.0|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+|169\.254\.\d+\.\d+)$/i;

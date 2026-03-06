@@ -4,12 +4,12 @@ import { get_command_descriptors, format_help_text } from "@src/channels/command
 describe("CommandDescriptor registry", () => {
   it("returns all command descriptors", () => {
     const descriptors = get_command_descriptors();
-    expect(descriptors).toHaveLength(16);
+    expect(descriptors).toHaveLength(17);
     const names = descriptors.map((d) => d.name);
     expect(names).toEqual([
       "help", "stop", "render", "secret", "memory",
       "decision", "promise", "cron", "reload", "task", "status",
-      "skill", "doctor", "agent", "stats", "verify",
+      "skill", "doctor", "agent", "stats", "verify", "guard",
     ]);
   });
 

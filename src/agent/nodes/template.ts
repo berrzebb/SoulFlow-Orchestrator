@@ -18,9 +18,11 @@ export const template_handler: NodeHandler = {
   ],
   create_default: () => ({ template: "{{input}}" }),
 
-  async execute(): Promise<OrcheNodeExecuteResult> {
-    // 스텁: 실제 template 렌더링은 추후 구현
-    return { output: { text: "" } };
+  async execute(node: OrcheNodeDefinition, ctx: OrcheNodeExecutorContext): Promise<OrcheNodeExecuteResult> {
+    const n = node as TemplateNodeDefinition;
+    const tpl_ctx = { memory: ctx.memory };
+    const text = resolve_templates(n.template || "", tpl_ctx);
+    return { output: { text } };
   },
 
   test(node: OrcheNodeDefinition, ctx: OrcheNodeExecutorContext): OrcheNodeTestResult {

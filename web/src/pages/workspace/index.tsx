@@ -1,19 +1,37 @@
-import { useState } from "react";
+import { Suspense, useEffect, useRef } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useT } from "../../i18n";
-import { MemoryTab } from "./memory";
-import { SessionsTab } from "./sessions";
-import { SkillsTab } from "./skills";
-import { CronTab } from "./cron";
-import { ToolsTab } from "./tools";
-import { AgentsTab } from "./agents";
-import { TemplatesTab } from "./templates";
-import { ModelsTab } from "./models";
-import { OAuthTab } from "./oauth";
+import { lazyRetryNamed } from "../../utils/lazy-retry";
+
+const MemoryTab = lazyRetryNamed(() => import("./memory"), "MemoryTab");
+const SessionsTab = lazyRetryNamed(() => import("./sessions"), "SessionsTab");
+const SkillsTab = lazyRetryNamed(() => import("./skills"), "SkillsTab");
+const CronTab = lazyRetryNamed(() => import("./cron"), "CronTab");
+const ToolsTab = lazyRetryNamed(() => import("./tools"), "ToolsTab");
+const AgentsTab = lazyRetryNamed(() => import("./agents"), "AgentsTab");
+const TemplatesTab = lazyRetryNamed(() => import("./templates"), "TemplatesTab");
+const ModelsTab = lazyRetryNamed(() => import("./models"), "ModelsTab");
+const OAuthTab = lazyRetryNamed(() => import("./oauth"), "OAuthTab");
 
 type TabKey = "memory" | "sessions" | "skills" | "cron" | "tools" | "agents" | "templates" | "models" | "oauth";
 
+const TAB_KEYS = new Set<string>(["memory", "sessions", "skills", "cron", "tools", "agents", "templates", "models", "oauth"]);
+
+function useTabParam(): [TabKey, (t: TabKey) => void] {
+  const [params, setParams] = useSearchParams();
+  const raw = params.get("tab") ?? "";
+  const tab: TabKey = TAB_KEYS.has(raw) ? (raw as TabKey) : "memory";
+
+  const setTab = (next: TabKey) => {
+    setParams({ tab: next }, { replace: true });
+  };
+
+  return [tab, setTab];
+}
+
 function TabBar({ active, onChange }: { active: TabKey; onChange: (t: TabKey) => void }) {
   const t = useT();
+  const barRef = useRef<HTMLDivElement>(null);
   const tabs: { key: TabKey; label: string }[] = [
     { key: "memory", label: t("workspace.tab.memory") },
     { key: "sessions", label: t("workspace.tab.sessions") },
@@ -25,19 +43,23 @@ function TabBar({ active, onChange }: { active: TabKey; onChange: (t: TabKey) =>
     { key: "models", label: t("workspace.tab.models") },
     { key: "oauth", label: t("workspace.tab.oauth") },
   ];
+
+  useEffect(() => {
+    const bar = barRef.current;
+    if (!bar) return;
+    const activeEl = bar.querySelector(".ws-tab--active") as HTMLElement | null;
+    activeEl?.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
+  }, [active]);
+
   return (
-    <div style={{ display: "flex", borderBottom: "1px solid var(--line)", marginBottom: 16, gap: 0, overflowX: "auto" }}>
+    <div className="ws-tab-bar" ref={barRef} role="tablist">
       {tabs.map((tab) => (
         <button
           key={tab.key}
+          role="tab"
+          aria-selected={active === tab.key}
+          className={`ws-tab ${active === tab.key ? "ws-tab--active" : ""}`}
           onClick={() => onChange(tab.key)}
-          style={{
-            padding: "8px 16px", fontSize: 13, fontWeight: active === tab.key ? 600 : 400,
-            border: "none", background: "none", cursor: "pointer",
-            borderBottom: active === tab.key ? "2px solid var(--accent)" : "2px solid transparent",
-            color: active === tab.key ? "var(--accent)" : "var(--muted)",
-            whiteSpace: "nowrap", flexShrink: 0,
-          }}
         >
           {tab.label}
         </button>
@@ -48,21 +70,23 @@ function TabBar({ active, onChange }: { active: TabKey; onChange: (t: TabKey) =>
 
 export default function WorkspacePage() {
   const t = useT();
-  const [tab, setTab] = useState<TabKey>("memory");
+  const [tab, setTab] = useTabParam();
 
   return (
     <div className="page">
-      <h2 style={{ marginBottom: 12 }}>{t("workspace.title")}</h2>
+      <h2 className="mt-0 mb-3">{t("workspace.title")}</h2>
       <TabBar active={tab} onChange={setTab} />
-      {tab === "memory" && <MemoryTab />}
-      {tab === "sessions" && <SessionsTab />}
-      {tab === "skills" && <SkillsTab />}
-      {tab === "cron" && <CronTab />}
-      {tab === "tools" && <ToolsTab />}
-      {tab === "agents" && <AgentsTab />}
-      {tab === "templates" && <TemplatesTab />}
-      {tab === "models" && <ModelsTab />}
-      {tab === "oauth" && <OAuthTab />}
+      <Suspense fallback={<div className="skeleton skeleton-card" />}>
+        {tab === "memory" && <MemoryTab />}
+        {tab === "sessions" && <SessionsTab />}
+        {tab === "skills" && <SkillsTab />}
+        {tab === "cron" && <CronTab />}
+        {tab === "tools" && <ToolsTab />}
+        {tab === "agents" && <AgentsTab />}
+        {tab === "templates" && <TemplatesTab />}
+        {tab === "models" && <ModelsTab />}
+        {tab === "oauth" && <OAuthTab />}
+      </Suspense>
     </div>
   );
 }

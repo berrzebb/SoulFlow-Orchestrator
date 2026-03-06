@@ -18,10 +18,8 @@ function AiAgentEditPanel({ node, update, t, options }: EditPanelProps) {
       <div className="builder-row-pair">
         <div className="builder-row">
           <label className="label">{t("workflows.llm_backend") || "Backend"}</label>
-          <select className="input input--sm" value={String(node.backend || "openrouter")} onChange={(e) => update({ backend: e.target.value })}>
-            <option value="openrouter">OpenRouter</option>
-            <option value="claude_sdk">Claude SDK</option>
-            <option value="claude_cli">Claude CLI</option>
+          <select className="input input--sm" value={String(node.backend || "")} onChange={(e) => update({ backend: e.target.value })}>
+            {(options?.backends || []).map((b) => <option key={b.value} value={b.value}>{b.label}</option>)}
           </select>
         </div>
         <div className="builder-row">
@@ -87,6 +85,7 @@ export const ai_agent_descriptor: FrontendNodeDescriptor = {
   color: "#673ab7",
   shape: "rect",
   toolbar_label: "+ Agent",
+  category: "ai",
   output_schema: [
     { name: "result",      type: "string",  description: "Agent final output" },
     { name: "tool_calls",  type: "array",   description: "Tool call history" },
@@ -99,7 +98,7 @@ export const ai_agent_descriptor: FrontendNodeDescriptor = {
     { name: "tools",         type: "array",  description: "Available tool node IDs" },
   ],
   create_default: () => ({
-    backend: "openrouter",
+    backend: "",
     system_prompt: "You are a helpful assistant.",
     user_prompt: "{{input}}",
     tool_nodes: [],

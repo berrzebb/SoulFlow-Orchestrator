@@ -170,6 +170,8 @@ The runtime engine is auto-detected in `auto` mode:
 
 Manage Phase Loop workflows and chat with agents. Phase Loop differs from Agent Loop (1:1 single agent) and Task Loop (sequential N:1) by implementing a **2-dimensional execution model: parallel agents within a phase + critic review → next phase**.
 
+The Workflows page includes a **Graph Editor** with 42 node types across 6 categories (flow, data, AI, integration, interaction, advanced), a **Node Inspector** for editing node properties, and a **Node Picker** palette for drag-and-drop workflow construction.
+
 ### Comparison with Other Loops
 
 | | Agent Loop | Task Loop | Phase Loop |
@@ -341,6 +343,8 @@ Additional events during Phase Loop execution:
 | `agent_started` / `agent_completed` / `agent_failed` | Agent start/completion/failure |
 | `agent_message` | Agent conversation message (real-time) |
 | `critic_started` / `critic_completed` / `critic_rejected` | Critic review start/completion/rejection |
+| `node_waiting` | Interaction node paused (approval, HITL, form) |
+| `node_retry` | Node retry attempt (attempt count, max attempts, error) |
 | `workflow_completed` / `workflow_failed` | Workflow completion/failure |
 
 ## Backend Architecture

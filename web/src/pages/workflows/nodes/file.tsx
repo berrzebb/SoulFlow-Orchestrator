@@ -43,6 +43,7 @@ export const file_descriptor: FrontendNodeDescriptor = {
   color: "#7f8c8d",
   shape: "rect",
   toolbar_label: "+ File",
+  category: "data",
   output_schema: [
     { name: "content", type: "string",  description: "File content" },
     { name: "data",    type: "unknown", description: "Parsed data (extract)" },

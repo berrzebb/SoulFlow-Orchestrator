@@ -25,6 +25,10 @@ export class ClaudeCliAdapter implements CliAdapter {
   readonly stdin_mode: StdinMode = "close";
   readonly supports_system_prompt_flag = true;
   readonly supports_tool_filtering = true;
+  readonly supports_structured_output = true;
+  readonly supports_budget_tracking = true;
+  readonly supports_approval = false;
+  readonly supports_thinking = false;
   session_id: string | null = null;
 
   build_args(options: BuildArgsOptions): string[] {
@@ -142,6 +146,10 @@ export class CodexCliAdapter implements CliAdapter {
   readonly supports_system_prompt_flag = true;
   /** 프롬프트 기반 도구 필터링. developer_instructions로 화이트/블랙리스트 주입. */
   readonly supports_tool_filtering = true;
+  readonly supports_structured_output = true;
+  readonly supports_budget_tracking = false;
+  readonly supports_approval = false;
+  readonly supports_thinking = false;
   session_id: string | null = null;
 
   /** 턴 내 마지막 agent_message를 누적. turn.completed에서 complete로 반환. */
@@ -336,6 +344,10 @@ export class GeminiCliAdapter implements CliAdapter {
   readonly supports_system_prompt_flag = false;
   /** --allowed-tools 지원 (deprecated이지만 동작함). */
   readonly supports_tool_filtering = true;
+  readonly supports_structured_output = false;
+  readonly supports_budget_tracking = false;
+  readonly supports_approval = false;
+  readonly supports_thinking = false;
   session_id: string | null = null;
 
   /** 마지막 assistant message를 누적. result 이벤트에 응답 텍스트가 없으므로 직접 추적. */

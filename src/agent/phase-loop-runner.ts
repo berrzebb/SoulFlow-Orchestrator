@@ -26,8 +26,11 @@ import {
   node_to_phase,
   type PhaseNodeDefinition,
   type IfNodeDefinition,
+  type SwitchNodeDefinition,
+  type OrcheNodeDefinition,
 } from "./workflow-node.types.js";
-import { execute_orche_node } from "./orche-node-executor.js";
+import { execute_orche_node, apply_preset } from "./orche-node-executor.js";
+import { get_node_handler, type RunnerContext } from "./node-registry.js";
 import {
   create_worktree,
   create_isolated_directory,
@@ -41,6 +44,26 @@ export type PhaseLoopRunnerDeps = {
   store: PhaseWorkflowStoreLike;
   logger: Logger;
   on_event?: (event: PhaseLoopEvent) => void;
+  /** 워크플로우 템플릿 로더 (sub_workflow 노드용). */
+  load_template?: (name: string) => import("./phase-loop.types.js").WorkflowDefinition | null;
+  /** LLM provider 레지스트리 (llm, analyzer 노드용). */
+  providers?: import("../providers/service.js").ProviderRegistry | null;
+  /** DecisionService (decision 노드용). */
+  decision_service?: import("../decision/service.js").DecisionService | null;
+  /** PromiseService (promise 노드용). */
+  promise_service?: import("../decision/promise.service.js").PromiseService | null;
+  /** 텍스트 → 벡터 (embedding 노드용). */
+  embed?: (texts: string[], opts: { model?: string; dimensions?: number }) => Promise<{ embeddings: number[][]; token_usage?: number }>;
+  /** 벡터 스토어 CRUD (vector_store 노드용). */
+  vector_store?: (op: string, opts: Record<string, unknown>) => Promise<Record<string, unknown>>;
+  /** OAuth HTTP fetch (oauth 노드용). */
+  oauth_fetch?: (service_id: string, opts: { url: string; method: string; headers?: Record<string, string>; body?: unknown }) => Promise<{ status: number; body: unknown; headers: Record<string, string> }>;
+  /** Webhook 수신 데이터 조회 (webhook 노드용). */
+  get_webhook_data?: (path: string) => Promise<{ method: string; headers: Record<string, string>; body: unknown; query: Record<string, string> } | null>;
+  /** 태스크 생성/실행 (task 노드용). */
+  create_task?: (opts: { title: string; objective: string; channel?: string; chat_id?: string; max_turns?: number; initial_memory?: Record<string, unknown> }) => Promise<{ task_id: string; status: string; result?: unknown; error?: string }>;
+  /** DB 쿼리 (db 노드용). */
+  query_db?: (datasource: string, query: string, params?: Record<string, unknown>) => Promise<{ rows: unknown[]; affected_rows: number }>;
 };
 
 /** 페이즈 루프 메인 실행 함수. */
@@ -135,11 +158,46 @@ export async function run_phase_loop(
         emit(on_event, { type: "node_started", workflow_id: state.workflow_id, node_id: node.node_id, node_type: node.node_type });
 
         try {
-          const result = await execute_orche_node(node, {
-            memory: state.memory,
-            abort_signal: options.abort_signal,
-            workspace: undefined,
-          });
+          // preset_id 적용 → runner_execute 또는 기본 executor
+          const resolved = apply_preset(node);
+          const handler = get_node_handler(resolved.node_type);
+          const exec_ctx = { memory: state.memory, abort_signal: options.abort_signal, workspace: undefined };
+          const runner_ctx: RunnerContext = {
+            state, options, logger,
+            emit: (evt) => emit(on_event, evt),
+            all_nodes, skipped_nodes,
+            execute_node: async (n, ctx) => {
+              const r = apply_preset(n);
+              const h = get_node_handler(r.node_type);
+              if (h?.runner_execute) return h.runner_execute(r, ctx, runner_ctx);
+              return execute_orche_node(r, ctx);
+            },
+            run_sub_workflow: deps.load_template
+              ? async (workflow_name, input) => {
+                  const def = deps.load_template!(workflow_name);
+                  if (!def) throw new Error(`sub_workflow template '${workflow_name}' not found`);
+                  const sub_result = await run_phase_loop({
+                    workflow_id: `${state.workflow_id}__sub_${workflow_name}_${Date.now()}`,
+                    title: def.title,
+                    objective: def.objective || "",
+                    channel: options.channel,
+                    chat_id: options.chat_id,
+                    phases: def.phases || [],
+                    nodes: def.nodes,
+                    initial_memory: { ...input },
+                    abort_signal: options.abort_signal,
+                    send_message: options.send_message,
+                    ask_channel: options.ask_channel,
+                    invoke_tool: options.invoke_tool,
+                  }, deps);
+                  return { result: sub_result.memory, phases: sub_result.phases };
+                }
+              : undefined,
+            services: build_runner_services(deps, state, subagents),
+          };
+          const result = handler?.runner_execute
+            ? await handler.runner_execute(resolved, exec_ctx, runner_ctx)
+            : await execute_orche_node(resolved, exec_ctx);
           state.memory[node.node_id] = result.output;
 
           // IF 분기 스킵 처리
@@ -147,6 +205,19 @@ export async function run_phase_loop(
             const if_node = node as IfNodeDefinition;
             const inactive = result.branch === "true" ? if_node.outputs.false_branch : if_node.outputs.true_branch;
             for (const skip_id of inactive) skipped_nodes.add(skip_id);
+          }
+
+          // Switch 분기 스킵 처리: 매칭되지 않은 case의 targets를 스킵
+          if (node.node_type === "switch" && result.branch) {
+            const sw = node as SwitchNodeDefinition;
+            const matched = sw.cases?.find((c) => c.value === result.branch);
+            const active_targets = new Set(matched ? matched.targets : (sw.default_targets || []));
+            const all_targets = new Set<string>();
+            for (const c of sw.cases || []) for (const t of c.targets) all_targets.add(t);
+            for (const t of sw.default_targets || []) all_targets.add(t);
+            for (const t of all_targets) {
+              if (!active_targets.has(t)) skipped_nodes.add(t);
+            }
           }
 
           if (orche_state) {
@@ -206,7 +277,7 @@ export async function run_phase_loop(
       const agent_deps: AgentRunDeps = { subagents, store, logger, on_event, options };
 
       if (mode === "interactive") {
-        await run_interactive_phase(state, phase_def, phase_state, prev_context, agent_deps);
+        await run_looping_phase(state, phase_def, phase_state, prev_context, agent_deps, INTERACTIVE_CONFIG);
         phase_state.status = "completed";
         state.updated_at = now_iso();
         merge_phase_results_to_memory(state, phase_state);
@@ -218,7 +289,7 @@ export async function run_phase_loop(
       }
 
       if (mode === "sequential_loop") {
-        await run_sequential_loop_phase(state, phase_def, phase_state, prev_context, agent_deps);
+        await run_looping_phase(state, phase_def, phase_state, prev_context, agent_deps, SEQUENTIAL_LOOP_CONFIG);
       }
 
       // parallel 또는 sequential_loop 후
@@ -458,7 +529,7 @@ async function run_phase_agents(
         : "";
 
       const { subagent_id } = await subagents.spawn({
-        task: build_agent_task(agent_def, state.objective, prev_context, merge_tools(agent_def.tools, phase_def.tools)) + isolation_instruction,
+        task: build_agent_task(agent_def, state.objective, prev_context, merge_tools(agent_def.tools, phase_def.tools), state.memory) + isolation_instruction,
         role: agent_def.role,
         label: agent_def.label,
         model: agent_def.model,
@@ -567,7 +638,7 @@ async function run_critic(
   try {
     const agent_summaries = phase_state.agents
       .filter((a) => a.status === "completed")
-      .map((a) => `### ${a.label} (${a.role})\n${a.result || "(no result)"}`)
+      .map((a) => `### ${a.label} (${a.role})\n${truncate_for_critic(a.result)}`)
       .join("\n\n");
 
     const failed_agents = phase_state.agents.filter((a) => a.status === "failed");
@@ -625,114 +696,52 @@ async function run_critic(
   }
 }
 
-// ── Interactive Phase ─────────────────────────────────
+// ── Looping Phase (interactive + sequential_loop 통합) ──
 
-/** 에이전트가 사용자와 대화하며 명세를 작성. [ASK_USER]로 질문, [SPEC_COMPLETE]로 종료. */
-async function run_interactive_phase(
-  state: PhaseLoopState,
-  phase_def: PhaseDefinition,
-  phase_state: PhaseState,
-  prev_context: string,
-  deps: AgentRunDeps,
-): Promise<void> {
-  const agent_def = phase_def.agents[0];
-  const agent_state = phase_state.agents[0];
-  const max = phase_def.max_loop_iterations || 20;
-
-  phase_state.loop_results = [];
-  phase_state.loop_iteration = 0;
-
-  for (let i = 0; i < max; i++) {
-    if (deps.options.abort_signal?.aborted) break;
-
-    const conversation_history = phase_state.loop_results.join("\n---\n");
-    const merged = merge_tools(agent_def.tools, phase_def.tools);
-    const task = build_agent_task(agent_def, state.objective, prev_context, merged);
-    const full_task = conversation_history
-      ? `${task}\n\n## Conversation History\n${conversation_history}\n\n## Current Turn: ${i + 1}/${max}`
-      : task;
-
-    agent_state.status = "running";
-    emit(deps.on_event, { type: "agent_started", workflow_id: state.workflow_id, phase_id: phase_def.phase_id, agent_id: agent_def.agent_id });
-
-    const { subagent_id } = await deps.subagents.spawn({
-      task: full_task,
-      role: agent_def.role,
-      label: agent_def.label,
-      model: agent_def.model,
-      provider_id: backend_to_provider(agent_def.backend),
-      max_iterations: agent_def.max_turns === 0 ? 999 : (agent_def.max_turns || 10),
-      origin_channel: state.channel,
-      origin_chat_id: state.chat_id,
-      announce: false,
-      parent_id: `workflow:${state.workflow_id}`,
-      skip_controller: true,
-      skill_names: phase_def.skills,
-    });
-    agent_state.subagent_id = subagent_id;
-
-    const result = await deps.subagents.wait_for_completion(subagent_id, 5 * 60_000);
-    const content = result?.content || "";
-    const msg: PhaseMessage = { role: "assistant", content, at: now_iso() };
-    agent_state.messages.push(msg);
-    await deps.store.insert_message(state.workflow_id, phase_def.phase_id, agent_def.agent_id, msg);
-
-    // [SPEC_COMPLETE] → Phase 종료
-    if (content.includes("[SPEC_COMPLETE]")) {
-      agent_state.result = content.replace("[SPEC_COMPLETE]", "").trim();
-      agent_state.status = "completed";
-      emit(deps.on_event, {
-        type: "agent_completed", workflow_id: state.workflow_id,
-        phase_id: phase_def.phase_id, agent_id: agent_def.agent_id,
-        result: agent_state.result.slice(0, 500),
-      });
-      break;
-    }
-
-    // [ASK_USER] → 사용자 질문
-    if (content.includes("[ASK_USER]") && deps.options.ask_user) {
-      const question = content.replace(/\[ASK_USER\]/g, "").trim();
-      state.status = "waiting_user_input";
-      phase_state.pending_user_input = true;
-      await deps.store.upsert(state);
-      emit(deps.on_event, { type: "user_input_requested", workflow_id: state.workflow_id, phase_id: phase_def.phase_id, question });
-
-      const user_response = await deps.options.ask_user(question);
-
-      state.status = "running";
-      phase_state.pending_user_input = false;
-      emit(deps.on_event, { type: "user_input_received", workflow_id: state.workflow_id, phase_id: phase_def.phase_id });
-      phase_state.loop_results.push(`Agent: ${question}\nUser: ${user_response}`);
-    } else {
-      phase_state.loop_results.push(content);
-    }
-
-    phase_state.loop_iteration = i + 1;
-    emit(deps.on_event, { type: "loop_iteration", workflow_id: state.workflow_id, phase_id: phase_def.phase_id, iteration: i + 1 });
-    state.updated_at = now_iso();
-    await deps.store.upsert(state);
-  }
-
-  // max iterations 도달 시 마지막 결과를 최종 결과로 사용
-  if (agent_state.status !== "completed") {
-    agent_state.result = phase_state.loop_results.at(-1) || "";
-    agent_state.status = "completed";
-  }
+interface LoopPhaseConfig {
+  /** 루프 종료 토큰. */
+  done_token: string;
+  /** 최대 반복 기본값. */
+  default_max: number;
+  /** 누적 컨텍스트 제목. */
+  history_header: string;
+  /** 현재 반복 라벨. */
+  iteration_label: string;
+  /** 누적 히스토리 포맷터. */
+  format_history: (results: string[]) => string;
+  /** ASK_USER 응답 기록 포맷터. */
+  format_ask_entry: (iteration: number, content: string, user_response: string) => string;
 }
 
-// ── Sequential Loop Phase (Fresh Context) ────────────
+const INTERACTIVE_CONFIG: LoopPhaseConfig = {
+  done_token: "[SPEC_COMPLETE]",
+  default_max: 20,
+  history_header: "Conversation History",
+  iteration_label: "Current Turn",
+  format_history: (results) => results.join("\n---\n"),
+  format_ask_entry: (_i, content, response) => `Agent: ${content.replace(/\[ASK_USER\]/g, "").trim()}\nUser: ${response}`,
+};
 
-/** 같은 에이전트를 매 반복 fresh context로 spawn. [DONE]으로 종료. */
-async function run_sequential_loop_phase(
+const SEQUENTIAL_LOOP_CONFIG: LoopPhaseConfig = {
+  done_token: "[DONE]",
+  default_max: 50,
+  history_header: "Previous Iterations",
+  iteration_label: "Current Iteration",
+  format_history: (results) => results.map((r, idx) => `### Iteration ${idx + 1}\n${r}`).join("\n\n"),
+  format_ask_entry: (i, content, response) => `[Iteration ${i}]\n${content}\n\nUser: ${response}`,
+};
+
+async function run_looping_phase(
   state: PhaseLoopState,
   phase_def: PhaseDefinition,
   phase_state: PhaseState,
   prev_context: string,
   deps: AgentRunDeps,
+  config: LoopPhaseConfig,
 ): Promise<void> {
   const agent_def = phase_def.agents[0];
   const agent_state = phase_state.agents[0];
-  const max = phase_def.max_loop_iterations || 50;
+  const max = phase_def.max_loop_iterations || config.default_max;
 
   phase_state.loop_results = [];
   phase_state.loop_iteration = 0;
@@ -740,15 +749,11 @@ async function run_sequential_loop_phase(
   for (let i = 0; i < max; i++) {
     if (deps.options.abort_signal?.aborted) break;
 
-    // 누적 결과를 컨텍스트로 주입
-    const loop_context = phase_state.loop_results
-      .map((r, idx) => `### Iteration ${idx + 1}\n${r}`)
-      .join("\n\n");
-
+    const history = config.format_history(phase_state.loop_results);
     const merged = merge_tools(agent_def.tools, phase_def.tools);
-    const task = build_agent_task(agent_def, state.objective, prev_context, merged);
-    const full_task = loop_context
-      ? `${task}\n\n## Previous Iterations\n${loop_context}\n\n## Current Iteration: ${i + 1}/${max}`
+    const task = build_agent_task(agent_def, state.objective, prev_context, merged, state.memory);
+    const full_task = history
+      ? `${task}\n\n## ${config.history_header}\n${history}\n\n## ${config.iteration_label}: ${i + 1}/${max}`
       : task;
 
     agent_state.status = "running";
@@ -776,9 +781,8 @@ async function run_sequential_loop_phase(
     agent_state.messages.push(msg);
     await deps.store.insert_message(state.workflow_id, phase_def.phase_id, agent_def.agent_id, msg);
 
-    // [DONE] → 루프 종료
-    if (content.includes("[DONE]")) {
-      agent_state.result = content.replace("[DONE]", "").trim();
+    if (content.includes(config.done_token)) {
+      agent_state.result = content.replace(config.done_token, "").trim();
       agent_state.status = "completed";
       emit(deps.on_event, {
         type: "agent_completed", workflow_id: state.workflow_id,
@@ -788,7 +792,6 @@ async function run_sequential_loop_phase(
       break;
     }
 
-    // [ASK_USER] → 사용자 질문
     if (content.includes("[ASK_USER]") && deps.options.ask_user) {
       const question = content.replace(/\[ASK_USER\]/g, "").trim();
       state.status = "waiting_user_input";
@@ -801,7 +804,7 @@ async function run_sequential_loop_phase(
       state.status = "running";
       phase_state.pending_user_input = false;
       emit(deps.on_event, { type: "user_input_received", workflow_id: state.workflow_id, phase_id: phase_def.phase_id });
-      phase_state.loop_results.push(`[Iteration ${i + 1}]\n${content}\n\nUser: ${user_response}`);
+      phase_state.loop_results.push(config.format_ask_entry(i + 1, content, user_response));
     } else {
       phase_state.loop_results.push(content);
     }
@@ -812,7 +815,6 @@ async function run_sequential_loop_phase(
     await deps.store.upsert(state);
   }
 
-  // max iterations 도달 시 마지막 결과를 최종 결과로 사용
   if (agent_state.status !== "completed") {
     agent_state.result = phase_state.loop_results.at(-1) || "";
     agent_state.status = "completed";
@@ -868,10 +870,11 @@ function merge_tools(agent_tools?: string[], phase_tools?: string[]): string[] |
   return [...new Set([...(agent_tools || []), ...(phase_tools || [])])];
 }
 
-function build_agent_task(agent_def: PhaseAgentDefinition, objective: string, prev_context: string, tools?: string[]): string {
+function build_agent_task(agent_def: PhaseAgentDefinition, objective: string, prev_context: string, tools?: string[], memory?: Record<string, unknown>): string {
   const parts = [agent_def.system_prompt];
   if (tools?.length) parts.push(`\n## Available Tools\n${tools.join(", ")}`);
   if (prev_context) parts.push(`\n## Previous Phase Context\n${prev_context}`);
+  if (memory?.origin) parts.push(`\n## Origin Channel\n${JSON.stringify(memory.origin)}`);
   parts.push(`\n## Objective\n${objective}`);
   return parts.join("\n");
 }
@@ -882,7 +885,7 @@ function build_phase_context(prev_phase: PhaseState, template?: string): string 
     let result = template;
     const agent_block = prev_phase.agents
       .filter((a) => a.status === "completed")
-      .map((a) => `### ${a.label}\n${a.result || ""}`)
+      .map((a) => `### ${a.label}\n${truncate_for_critic(a.result)}`)
       .join("\n\n");
     result = result.replace(/\{\{#each prev_phase\.agents\}\}[\s\S]*?\{\{\/each\}\}/g, agent_block);
     result = result.replace(/\{\{prev_phase\.critic\.review\}\}/g, prev_phase.critic?.review || "(no review)");
@@ -893,7 +896,7 @@ function build_phase_context(prev_phase: PhaseState, template?: string): string 
   const parts = [`## ${prev_phase.title} Results`];
   for (const agent of prev_phase.agents) {
     if (agent.status === "completed") {
-      parts.push(`### ${agent.label}\n${agent.result || ""}`);
+      parts.push(`### ${agent.label}\n${truncate_for_critic(agent.result)}`);
     }
   }
   if (prev_phase.critic?.review) {
@@ -912,6 +915,29 @@ function merge_phase_results_to_memory(state: PhaseLoopState, phase: PhaseState)
     critic_review: phase.critic?.review || null,
     critic_approved: phase.critic?.approved ?? null,
   };
+}
+
+/** 에이전트 결과를 critic 프롬프트 크기 내로 제한. JSON은 구조 보존, 텍스트는 끝부분 우선. */
+const CRITIC_MAX_CHARS = 3000;
+
+function truncate_for_critic(result: string | undefined): string {
+  if (!result) return "(no result)";
+  if (result.length <= CRITIC_MAX_CHARS) return result;
+
+  // JSON 응답이면 구조를 보존하며 value 잘라내기
+  try {
+    const parsed = JSON.parse(result);
+    const compact = JSON.stringify(parsed, (_k, v) =>
+      typeof v === "string" && v.length > 500 ? v.slice(0, 500) + "…[truncated]" : v,
+    );
+    if (compact.length <= CRITIC_MAX_CHARS) return compact;
+    return compact.slice(0, CRITIC_MAX_CHARS) + "\n…[truncated, total " + result.length + " chars]";
+  } catch { /* not JSON */ }
+
+  // 텍스트: 마지막 부분이 보통 최종 결론이므로 끝부분 우선
+  const head = result.slice(0, 800);
+  const tail = result.slice(-(CRITIC_MAX_CHARS - 800 - 60));
+  return head + "\n\n…[middle truncated, total " + result.length + " chars]…\n\n" + tail;
 }
 
 function parse_critic_response(content: string): CriticReview {
@@ -967,3 +993,109 @@ function backend_to_provider(backend?: string): import("../providers/types.js").
   };
   return (map[backend] ?? backend) as import("../providers/types.js").ProviderId;
 }
+
+/** deps에서 RunnerServices 구성. */
+function build_runner_services(
+  deps: PhaseLoopRunnerDeps,
+  state: PhaseLoopState,
+  subagents: SubagentRegistry,
+): import("./node-registry.js").RunnerServices {
+  const services: import("./node-registry.js").RunnerServices = {};
+
+  // LLM 호출
+  if (deps.providers) {
+    const providers = deps.providers;
+    services.invoke_llm = async (opts) => {
+      const provider_id = backend_to_provider(opts.provider_id) || "openrouter";
+      const messages: import("../providers/types.js").ChatMessage[] = [];
+      if (opts.system) messages.push({ role: "system", content: opts.system });
+
+      let user_content = opts.prompt;
+      if (opts.output_json_schema) {
+        user_content += `\n\nRespond with valid JSON matching this schema:\n${JSON.stringify(opts.output_json_schema)}`;
+      }
+      messages.push({ role: "user", content: user_content });
+
+      const result = await providers.run_headless({
+        provider_id,
+        messages,
+        model: opts.model,
+        temperature: opts.temperature,
+        max_tokens: opts.max_tokens,
+        abort_signal: opts.abort_signal,
+      });
+      const content = result.content || "";
+      let parsed: unknown = undefined;
+      if (opts.output_json_schema && content) {
+        try { parsed = JSON.parse(content); } catch { /* not JSON */ }
+      }
+      return { content, parsed, usage: result.usage as Record<string, number> | undefined };
+    };
+  }
+
+  // 에이전트 스폰 + 대기
+  services.spawn_agent = async (opts) => {
+    const result = await subagents.spawn({
+      ...opts,
+      provider_id: backend_to_provider(opts.provider_id as string | undefined),
+      parent_id: opts.parent_id || `workflow:${state.workflow_id}`,
+    });
+    return { agent_id: result.subagent_id, status: result.status };
+  };
+  services.wait_agent = (agent_id, timeout_ms) => subagents.wait_for_completion(agent_id, timeout_ms).then((r) => ({
+    status: r?.status ?? "failed",
+    result: r?.content ?? null,
+    error: r?.error,
+  }));
+
+  // Decision/Promise
+  if (deps.decision_service) {
+    const ds = deps.decision_service;
+    services.decision = {
+      append: (input) => ds.append_decision({
+        ...input,
+        scope: input.scope as "global" | "team" | "agent",
+        priority: (input.priority ?? 1) as 0 | 1 | 2 | 3,
+        source: (input.source ?? "system") as "user" | "leader" | "system" | "agent",
+      }),
+      list: (filter) => ds.list_decisions(filter as Parameters<typeof ds.list_decisions>[0]),
+      get_effective: (ctx) => ds.get_effective_decisions(ctx),
+      archive: (id) => ds.archive_decision(id),
+    };
+  }
+  if (deps.promise_service) {
+    const ps = deps.promise_service;
+    services.promise = {
+      append: (input) => ps.append_promise({
+        ...input,
+        scope: input.scope as "global" | "team" | "agent",
+        priority: (input.priority ?? 1) as 0 | 1 | 2 | 3,
+        source: (input.source ?? "system") as "user" | "leader" | "system" | "agent",
+      }),
+      list: (filter) => ps.list_promises(filter as Parameters<typeof ps.list_promises>[0]),
+      get_effective: (ctx) => ps.get_effective_promises(ctx),
+      archive: (id) => ps.archive_promise(id),
+    };
+  }
+
+  // Embedding
+  if (deps.embed) services.embed = deps.embed;
+
+  // Vector Store
+  if (deps.vector_store) services.vector_store = deps.vector_store;
+
+  // OAuth fetch
+  if (deps.oauth_fetch) services.oauth_fetch = deps.oauth_fetch;
+
+  // Webhook data
+  if (deps.get_webhook_data) services.get_webhook_data = deps.get_webhook_data;
+
+  // Task 생성
+  if (deps.create_task) services.create_task = deps.create_task;
+
+  // DB 쿼리
+  if (deps.query_db) services.query_db = deps.query_db;
+
+  return services;
+}
+

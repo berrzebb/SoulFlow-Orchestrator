@@ -19,10 +19,8 @@ function LlmEditPanel({ node, update, t, options }: EditPanelProps) {
       <div className="builder-row-pair">
         <div className="builder-row">
           <label className="label">{t("workflows.llm_backend")}</label>
-          <select className="input input--sm" value={String(node.backend || "openrouter")} onChange={(e) => update({ backend: e.target.value })}>
-            <option value="openrouter">OpenRouter</option>
-            <option value="claude_sdk">Claude SDK</option>
-            <option value="claude_cli">Claude CLI</option>
+          <select className="input input--sm" value={String(node.backend || "")} onChange={(e) => update({ backend: e.target.value })}>
+            {(options?.backends || []).map((b) => <option key={b.value} value={b.value}>{b.label}</option>)}
           </select>
         </div>
         <div className="builder-row">
@@ -57,7 +55,7 @@ function LlmEditPanel({ node, update, t, options }: EditPanelProps) {
           <span className="builder-hint">{temp ?? 0.7}</span>
         </div>
         <div className="builder-row">
-          <label className="label">{t("workflows.max_turns")}</label>
+          <label className="label">{t("providers.max_tokens")}</label>
           <input className="input input--sm" type="number" min={1} value={String(node.max_tokens ?? "")} onChange={(e) => update({ max_tokens: e.target.value ? Number(e.target.value) : undefined })} />
         </div>
       </div>
@@ -83,6 +81,7 @@ export const llm_descriptor: FrontendNodeDescriptor = {
   color: "#e91e63",
   shape: "rect",
   toolbar_label: "+ LLM",
+  category: "ai",
   output_schema: [
     { name: "response", type: "string",  description: "LLM response text" },
     { name: "parsed",   type: "object",  description: "Parsed JSON (if output_json_schema)" },
@@ -92,6 +91,6 @@ export const llm_descriptor: FrontendNodeDescriptor = {
     { name: "prompt",  type: "string", description: "Input prompt / context" },
     { name: "context", type: "object", description: "Template variables" },
   ],
-  create_default: () => ({ backend: "openrouter", prompt_template: "{{prompt}}" }),
+  create_default: () => ({ backend: "", prompt_template: "{{prompt}}" }),
   EditPanel: LlmEditPanel,
 };

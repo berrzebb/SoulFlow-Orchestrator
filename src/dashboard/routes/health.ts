@@ -12,13 +12,13 @@ export async function handle_health(ctx: RouteContext): Promise<boolean> {
   const { req, url, res, options, json } = ctx;
 
   // Stats API
-  if (url.pathname === "/api/stats/cd-score" && req.method === "GET") {
+  if (url.pathname === "/api/stats/cdscore" && req.method === "GET") {
     const stats = options.stats_ops;
     if (!stats) { json(res, 503, { error: "stats_unavailable" }); return true; }
     json(res, 200, stats.get_cd_score());
     return true;
   }
-  if (url.pathname === "/api/stats/cd-score/reset" && req.method === "POST") {
+  if (url.pathname === "/api/stats/cdscore" && req.method === "DELETE") {
     const stats = options.stats_ops;
     if (!stats) { json(res, 503, { error: "stats_unavailable" }); return true; }
     stats.reset_cd_score();
@@ -36,7 +36,7 @@ export async function handle_health(ctx: RouteContext): Promise<boolean> {
   }
 
   // Workflow Events API
-  if (url.pathname === "/api/workflow-events" && req.method === "GET") {
+  if (url.pathname === "/api/workflow/events" && req.method === "GET") {
     const limit = Math.max(1, Math.min(500, Number(url.searchParams.get("limit") || 100)));
     const offset = Math.max(0, Number(url.searchParams.get("offset") || 0));
     const filter: import("../../events/index.js").ListWorkflowEventsFilter = { limit, offset };

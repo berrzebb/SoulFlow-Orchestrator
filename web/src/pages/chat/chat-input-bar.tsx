@@ -10,8 +10,8 @@ interface ChatInputBarProps {
   can_send: boolean;
   onSend: () => void;
   pending_media: ChatMediaItem[];
-  onAttach: () => void;
-  onRemoveMedia: (idx: number) => void;
+  onAttach?: () => void;
+  onRemoveMedia?: (idx: number) => void;
 }
 
 export function ChatInputBar(props: ChatInputBarProps) {
@@ -26,25 +26,29 @@ export function ChatInputBar(props: ChatInputBarProps) {
   }, [props.input]);
 
   const handle_key_down = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
+    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
-      props.onSend();
+      if (props.can_send) props.onSend();
     }
   };
 
   return (
     <div className="chat-input-bar">
-      <MediaPreviewBar items={props.pending_media} onRemove={props.onRemoveMedia} />
+      {props.pending_media.length > 0 && props.onRemoveMedia && (
+        <MediaPreviewBar items={props.pending_media} onRemove={props.onRemoveMedia} />
+      )}
       <div className="chat-input-bar__pill">
-        <button
-          className="chat-input-bar__btn"
-          onClick={props.onAttach}
-          disabled={props.sending}
-          title={t("chat.attach_file")}
-          aria-label={t("chat.attach_file")}
-        >
-          +
-        </button>
+        {props.onAttach && (
+          <button
+            className="chat-input-bar__btn"
+            onClick={props.onAttach}
+            disabled={props.sending}
+            title={t("chat.attach_file")}
+            aria-label={t("chat.attach_file")}
+          >
+            +
+          </button>
+        )}
         <textarea
           ref={textarea_ref}
           className="chat-input-bar__textarea"
@@ -63,6 +67,9 @@ export function ChatInputBar(props: ChatInputBarProps) {
         >
           {props.sending ? "…" : "↑"}
         </button>
+      </div>
+      <div className="chat-input-bar__hint text-xs text-muted">
+        Enter {t("chat.send_hint")} · Shift+Enter {t("chat.newline_hint")}
       </div>
     </div>
   );

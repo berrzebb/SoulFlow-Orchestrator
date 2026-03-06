@@ -61,6 +61,7 @@ export const task_descriptor: FrontendNodeDescriptor = {
   color: "#4caf50",
   shape: "rect",
   toolbar_label: "+ Task",
+  category: "advanced",
   output_schema: [
     { name: "task_id",     type: "string", description: "Created task ID" },
     { name: "status",      type: "string", description: "Task completion status" },

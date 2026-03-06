@@ -1,8 +1,10 @@
 /** Sub-workflow (하위 워크플로우 호출) 노드 핸들러. */
 
-import type { NodeHandler } from "../node-registry.js";
+import type { NodeHandler, RunnerContext } from "../node-registry.js";
 import type { SubWorkflowNodeDefinition, OrcheNodeDefinition } from "../workflow-node.types.js";
-import type { OrcheNodeExecuteResult, OrcheNodeTestResult } from "../orche-node-executor.js";
+import type { OrcheNodeExecutorContext, OrcheNodeExecuteResult, OrcheNodeTestResult } from "../orche-node-executor.js";
+import { resolve_deep } from "../orche-node-executor.js";
+import { error_message } from "../../utils/common.js";
 
 export const sub_workflow_handler: NodeHandler = {
   node_type: "sub_workflow",
@@ -18,9 +20,63 @@ export const sub_workflow_handler: NodeHandler = {
   ],
   create_default: () => ({ workflow_name: "" }),
 
-  async execute(): Promise<OrcheNodeExecuteResult> {
-    // 스텁: 실제 하위 워크플로우 호출은 추후 구현
-    return { output: { result: null, phases: [] } };
+  async execute(node: OrcheNodeDefinition, ctx: OrcheNodeExecutorContext): Promise<OrcheNodeExecuteResult> {
+    const n = node as SubWorkflowNodeDefinition;
+    const tpl_ctx = { memory: ctx.memory };
+    const input_mapping = n.input_mapping
+      ? resolve_deep(n.input_mapping, tpl_ctx) as Record<string, string>
+      : undefined;
+
+    return {
+      output: {
+        result: null,
+        phases: [],
+        _meta: {
+          workflow_name: n.workflow_name,
+          input_mapping,
+          timeout_ms: n.timeout_ms,
+          resolved: true,
+        },
+      },
+    };
+  },
+
+  async runner_execute(node: OrcheNodeDefinition, ctx: OrcheNodeExecutorContext, runner: RunnerContext): Promise<OrcheNodeExecuteResult> {
+    const n = node as SubWorkflowNodeDefinition;
+
+    if (!runner.run_sub_workflow) {
+      return { output: { result: null, phases: [], error: "sub_workflow execution not available in this context" } };
+    }
+
+    if (!n.workflow_name?.trim()) {
+      return { output: { result: null, phases: [], error: "workflow_name is required" } };
+    }
+
+    const tpl_ctx = { memory: ctx.memory };
+    const input = n.input_mapping
+      ? resolve_deep(n.input_mapping, tpl_ctx) as Record<string, unknown>
+      : {};
+
+    runner.emit({
+      type: "node_started",
+      workflow_id: runner.state.workflow_id,
+      node_id: n.node_id,
+      node_type: "sub_workflow",
+    });
+
+    try {
+      const timeout = n.timeout_ms ?? 300_000;
+      const result = await Promise.race([
+        runner.run_sub_workflow(n.workflow_name, input),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error(`sub_workflow '${n.workflow_name}' timed out after ${timeout}ms`)), timeout),
+        ),
+      ]);
+      return { output: { result: result.result, phases: result.phases } };
+    } catch (err) {
+      runner.logger.warn("sub_workflow_error", { workflow_name: n.workflow_name, error: error_message(err) });
+      return { output: { result: null, phases: [], error: error_message(err) } };
+    }
   },
 
   test(node: OrcheNodeDefinition): OrcheNodeTestResult {

@@ -21,6 +21,7 @@ export const split_descriptor: FrontendNodeDescriptor = {
   color: "#16a085",
   shape: "diamond",
   toolbar_label: "+ Split",
+  category: "flow",
   output_schema: [
     { name: "item",  type: "unknown", description: "Individual array item" },
     { name: "index", type: "number",  description: "Current item index" },

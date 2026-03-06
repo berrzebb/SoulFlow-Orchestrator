@@ -2,11 +2,10 @@ import type { RouteContext } from "../route-context.js";
 
 export async function handle_secret(ctx: RouteContext): Promise<boolean> {
   const { req, url, res, options, json, read_body } = ctx;
+  const path = url.pathname;
 
-  if (url.pathname !== "/api/secrets") return false;
-
-  // GET /api/secrets — 이름 목록
-  if (req.method === "GET") {
+  // GET /api/secrets
+  if (path === "/api/secrets" && req.method === "GET") {
     const vault = options.secrets;
     if (!vault) { json(res, 503, { error: "secrets_unavailable" }); return true; }
     const names = await vault.list_names();
@@ -14,8 +13,8 @@ export async function handle_secret(ctx: RouteContext): Promise<boolean> {
     return true;
   }
 
-  // POST /api/secrets { name, value } — 생성/갱신
-  if (req.method === "POST") {
+  // POST /api/secrets { name, value }
+  if (path === "/api/secrets" && req.method === "POST") {
     const vault = options.secrets;
     if (!vault) { json(res, 503, { error: "secrets_unavailable" }); return true; }
     const body = await read_body(req);
@@ -27,13 +26,12 @@ export async function handle_secret(ctx: RouteContext): Promise<boolean> {
     return true;
   }
 
-  // DELETE /api/secrets { name } — 삭제
-  if (req.method === "DELETE") {
+  // DELETE /api/secrets/:name
+  const del_match = path.match(/^\/api\/secrets\/([^/]+)$/);
+  if (del_match && req.method === "DELETE") {
     const vault = options.secrets;
     if (!vault) { json(res, 503, { error: "secrets_unavailable" }); return true; }
-    const body = await read_body(req);
-    const name = String(body?.name || "").trim();
-    if (!name) { json(res, 400, { error: "name_required" }); return true; }
+    const name = decodeURIComponent(del_match[1]);
     const removed = await vault.remove_secret(name);
     json(res, removed ? 200 : 404, { removed });
     return true;

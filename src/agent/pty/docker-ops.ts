@@ -1,6 +1,6 @@
 /** DockerOps — Docker CLI 래핑 추상화. `docker` 명령으로 컨테이너 조작. */
 
-import { execFile, spawn, type ChildProcess } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import type { Writable, Readable } from "node:stream";
 
 export type ContainerCreateOpts = {

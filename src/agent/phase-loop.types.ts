@@ -241,6 +241,35 @@ export interface FieldMapping {
 
 // ── Run Options / Result ─────────────────────────────
 
+/** 채널 메시지 전송 요청. */
+export interface ChannelSendRequest {
+  /** 대상 채널 타입. origin이면 트리거 채널 사용. */
+  target: "origin" | "specified";
+  channel?: string;
+  chat_id?: string;
+  content: string;
+  /** Approval/Form 등에서 사용하는 구조화 데이터. */
+  structured?: {
+    type: "approval" | "form";
+    payload: Record<string, unknown>;
+  };
+  parse_mode?: string;
+}
+
+/** 채널 응답 결과. */
+export interface ChannelResponse {
+  response: string;
+  responded_by?: { user_id?: string; username?: string; channel?: string; chat_id?: string };
+  responded_at: string;
+  timed_out: boolean;
+  /** Approval 전용. */
+  approved?: boolean;
+  comment?: string;
+  votes?: Array<Record<string, unknown>>;
+  /** Form 전용. */
+  fields?: Record<string, unknown>;
+}
+
 export interface PhaseLoopRunOptions {
   workflow_id: string;
   title: string;
@@ -248,12 +277,20 @@ export interface PhaseLoopRunOptions {
   channel: string;
   chat_id: string;
   phases: PhaseDefinition[];
+  /** 통합 노드 배열 (Phase + 오케스트레이션). 있으면 phases[]보다 우선. */
+  nodes?: WorkflowNodeDefinition[];
   initial_memory?: Record<string, unknown>;
   on_phase_change?: (state: PhaseLoopState) => void;
   on_agent_update?: (phase_id: string, agent_id: string, state: PhaseAgentState) => void;
   abort_signal?: AbortSignal;
   /** Interactive/sequential_loop 모드에서 사용자에게 질문하고 응답을 받는 콜백. */
   ask_user?: (question: string) => Promise<string>;
+  /** 채널에 메시지 전송 (fire-and-forget). Notify, Escalation, SendFile 등. */
+  send_message?: (req: ChannelSendRequest) => Promise<{ ok: boolean; message_id?: string }>;
+  /** 채널로 질문 전송 + 응답 대기. HITL, Approval, Form 등. */
+  ask_channel?: (req: ChannelSendRequest, timeout_ms: number) => Promise<ChannelResponse>;
+  /** 도구 호출 (Tool Invoke 노드용). tool_id + params → 결과 문자열. */
+  invoke_tool?: (tool_id: string, params: Record<string, unknown>) => Promise<string>;
 }
 
 export interface PhaseLoopRunResult {
@@ -284,4 +321,7 @@ export type PhaseLoopEvent =
   | { type: "phase_goto"; workflow_id: string; from_phase: string; to_phase: string; reason: string }
   | { type: "node_started"; workflow_id: string; node_id: string; node_type: string }
   | { type: "node_completed"; workflow_id: string; node_id: string; node_type: string; output_preview?: string }
-  | { type: "node_skipped"; workflow_id: string; node_id: string; reason: string };
+  | { type: "node_skipped"; workflow_id: string; node_id: string; reason: string }
+  | { type: "node_waiting"; workflow_id: string; node_id: string; node_type: string; reason: string }
+  | { type: "node_retry"; workflow_id: string; node_id: string; attempt: number; max_attempts: number; error: string }
+  | { type: "node_error"; workflow_id: string; node_id: string; error: string };

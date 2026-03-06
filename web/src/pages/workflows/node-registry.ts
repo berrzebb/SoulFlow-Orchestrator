@@ -8,13 +8,14 @@ import type { OutputField } from "./output-schema";
 
 export type NodeShape = "rect" | "diamond";
 
-export type NodeCategory = "flow" | "data" | "ai" | "integration" | "advanced";
+export type NodeCategory = "flow" | "data" | "ai" | "integration" | "interaction" | "advanced";
 
 export const NODE_CATEGORIES: { id: NodeCategory; label: string; icon: string }[] = [
   { id: "flow", label: "Flow", icon: "⑆" },
   { id: "data", label: "Data", icon: "⛁" },
   { id: "ai", label: "AI", icon: "🤖" },
   { id: "integration", label: "I/O", icon: "↗" },
+  { id: "interaction", label: "Human", icon: "🙋" },
   { id: "advanced", label: "More", icon: "⚙" },
 ];
 
@@ -34,10 +35,14 @@ export interface FrontendNodeDescriptor {
 
 /** 노드 편집 패널에서 사용 가능한 동적 옵션 (API에서 가져온 기존 리소스 목록). */
 export interface NodeOptions {
+  backends?: { value: string; label: string }[];
   models?: { name: string }[];
   oauth_integrations?: { instance_id: string; label: string; service_type: string; enabled: boolean }[];
   workflow_templates?: { title: string; slug: string }[];
   channels?: { provider: string; channel_id: string; label: string; enabled: boolean }[];
+  available_tools?: string[];
+  tool_definitions?: Array<Record<string, unknown>>;
+  available_skills?: string[];
 }
 
 export interface EditPanelProps {

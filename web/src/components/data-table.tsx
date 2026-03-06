@@ -17,8 +17,9 @@ interface Props<T> {
 
 export function DataTable<T>({ columns, rows, rowKey, empty }: Props<T>) {
   const t = useT();
-  if (!rows.length) return <p className="empty">{empty || t("common.no_data")}</p>;
+  if (!rows.length) return <div className="empty-state"><div className="empty-state__icon">📋</div><div className="empty-state__text">{empty || t("common.no_data")}</div></div>;
   return (
+    <div className="table-scroll">
     <table className="data-table">
       <thead>
         <tr>
@@ -37,5 +38,6 @@ export function DataTable<T>({ columns, rows, rowKey, empty }: Props<T>) {
         ))}
       </tbody>
     </table>
+    </div>
   );
 }

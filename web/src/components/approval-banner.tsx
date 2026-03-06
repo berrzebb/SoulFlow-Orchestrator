@@ -35,11 +35,11 @@ export function ApprovalBanner({ approval, onResolve }: {
         <Badge status={approval.tool_name} variant="warn" />
         {approval.context?.channel && <Badge status={approval.context.channel} variant="info" />}
         {approval.context?.task_id && (
-          <span className="text-muted" style={{ fontSize: "var(--fs-xs)" }}>
+          <span className="text-muted text-xs">
             task:{approval.context.task_id.slice(0, 10)}
           </span>
         )}
-        <span className="text-muted" style={{ fontSize: "var(--fs-xs)", marginLeft: "auto" }}>
+        <span className="chat-approval__time text-muted text-xs">
           {new Date(approval.created_at).toLocaleTimeString("sv-SE")}
         </span>
       </div>
@@ -48,6 +48,7 @@ export function ApprovalBanner({ approval, onResolve }: {
         <div className="chat-approval__params">
           <button
             className="chat-approval__params-btn"
+            aria-expanded={show_params}
             onClick={() => setShowParams((v) => !v)}
           >
             {show_params ? "▼" : "▶"} {t("chat.params_toggle")} ({Object.keys(approval.params!).length})
@@ -63,11 +64,10 @@ export function ApprovalBanner({ approval, onResolve }: {
       {custom_mode ? (
         <div className="chat-approval__custom">
           <textarea
-            autoFocus
             className="chat-approval__custom-textarea"
             value={custom_text}
             onChange={(e) => setCustomText(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handle_custom(); } }}
+            onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing && custom_text.trim()) { e.preventDefault(); handle_custom(); } }}
             placeholder={t("chat.custom_response_hint")}
             rows={2}
           />
@@ -82,13 +82,13 @@ export function ApprovalBanner({ approval, onResolve }: {
         </div>
       ) : (
         <div className="chat-approval__actions">
-          <button className="btn btn--xs btn--ok" onClick={() => onResolve("approve")} style={{ fontWeight: 600 }}>
+          <button className="btn btn--xs btn--ok fw-600" onClick={() => onResolve("approve")}>
             ✅ {t("chat.approve")}
           </button>
           <button className="btn btn--xs btn--danger" onClick={() => onResolve("deny")}>
             ❌ {t("chat.deny")}
           </button>
-          <button className="btn btn--xs" onClick={() => setCustomMode(true)} style={{ color: "var(--muted)" }}>
+          <button className="btn btn--xs text-muted" onClick={() => setCustomMode(true)}>
             💬 {t("chat.custom_response")}
           </button>
         </div>

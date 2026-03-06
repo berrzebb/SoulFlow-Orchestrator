@@ -20,6 +20,7 @@ services:
     image: ollama/ollama:latest
     container_name: orchestrator-llm
     restart: unless-stopped
+    profiles: [gpu]                        # docker compose --profile gpu up
     ports:
       - "11434:11434"
     volumes:
@@ -39,8 +40,6 @@ services:
     container_name: soulflow-orchestrator
     restart: unless-stopped
     depends_on:
-      ollama:
-        condition: service_started
       docker-proxy:
         condition: service_started
     ports:

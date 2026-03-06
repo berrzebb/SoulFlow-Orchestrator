@@ -10,6 +10,8 @@ export type SendFileCallback = (message: OutboundMessage) => Promise<void>;
 
 export class SendFileTool extends Tool {
   readonly name = "send_file";
+  readonly category = "file_transfer" as const;
+  readonly policy_flags = { write: true } as const;
   readonly description = "Send a local file (PDF, image, document, etc.) to the current channel/chat.";
   readonly parameters: JsonSchema = {
     type: "object",

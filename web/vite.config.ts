@@ -3,7 +3,13 @@ import react from "@vitejs/plugin-react";
 import { resolve } from "node:path";
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react({
+      babel: {
+        plugins: [["babel-plugin-react-compiler", {}]],
+      },
+    }),
+  ],
   base: "./",
   resolve: {
     alias: { "@": resolve(__dirname, "src") },
@@ -12,6 +18,15 @@ export default defineConfig({
     outDir: "../dist/web",
     emptyOutDir: true,
     sourcemap: false,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          "vendor-react": ["react", "react-dom", "react-router-dom"],
+          "vendor-query": ["@tanstack/react-query"],
+          "vendor-markdown": ["react-markdown", "remark-gfm", "rehype-highlight", "rehype-sanitize"],
+        },
+      },
+    },
   },
   server: {
     proxy: {

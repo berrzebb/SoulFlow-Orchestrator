@@ -33,9 +33,10 @@ import { WorkflowEventService } from "./events/index.js";
 import { HeartbeatService } from "./heartbeat/index.js";
 import { create_logger } from "./logger.js";
 import { OpsRuntimeService } from "./ops/index.js";
-import { OrchestrationService } from "./orchestration/service.js";
+import { OrchestrationService, format_hitl_prompt, detect_hitl_type } from "./orchestration/service.js";
 import { resolve_reply_to } from "./orchestration/service.js";
 import { ProcessTracker } from "./orchestration/process-tracker.js";
+import { ConfirmationGuard } from "./orchestration/confirmation-guard.js";
 import { parse_executor_preference, resolve_executor_provider, type ProviderCapabilities } from "./providers/executor.js";
 import { OrchestratorLlmRuntime, ProviderRegistry } from "./providers/index.js";
 import { OrchestratorLlmServiceAdapter } from "./providers/orchestrator-llm-service.adapter.js";
@@ -61,6 +62,11 @@ import {
   create_workflow_ops,
 } from "./dashboard/ops-factory.js";
 import { PhaseWorkflowStore } from "./agent/phase-workflow-store.js";
+import { create_embed_service } from "./services/embed.service.js";
+import { create_vector_store_service } from "./services/vector-store.service.js";
+import { WebhookStore } from "./services/webhook-store.service.js";
+import { create_task_service } from "./services/create-task.service.js";
+import { create_query_db_service } from "./services/query-db.service.js";
 
 export interface RuntimeApp {
   agent: AgentDomain;
@@ -125,6 +131,15 @@ export async function createRuntime(): Promise<RuntimeApp> {
   const oauth_flow = new OAuthFlowService(oauth_store);
   oauth_flow.load_custom_presets();
 
+  // 워크플로우 노드용 서비스 인프라
+  const embed_service = create_embed_service({
+    get_api_key: () => provider_store.get_token("openrouter"),
+    api_base: provider_store.get("openrouter")?.settings?.api_base as string | undefined,
+  });
+  const vector_store_service = create_vector_store_service(data_dir);
+  const webhook_store = new WebhookStore();
+  const query_db_service = create_query_db_service(data_dir);
+
   // vault에서 API 키 읽기
   const openrouter_config = provider_store.get("openrouter");
   const openrouter_key = await provider_store.get_token("openrouter");
@@ -181,8 +196,11 @@ export async function createRuntime(): Promise<RuntimeApp> {
   // CLI 인증 서비스: container_cli 백엔드의 OAuth 상태 관리
   const cli_auth = new CliAuthService({ logger: logger.child("cli-auth") });
 
+  // MCP 클라이언트: CLI 백엔드의 ToolBridge에서 오케스트레이터 도구 중계에 사용
+  const mcp = new McpClientManager({ logger: logger.child("mcp") });
+
   // 팩토리 기반 백엔드 생성
-  const factory_deps = { provider_registry: providers, workspace, cli_auth_service: cli_auth };
+  const factory_deps = { provider_registry: providers, workspace, cli_auth_service: cli_auth, mcp };
   const agent_backends: import("./agent/agent.types.js").AgentBackend[] = [];
   for (const config of provider_store.list()) {
     if (!config.enabled) continue;
@@ -217,7 +235,36 @@ export async function createRuntime(): Promise<RuntimeApp> {
     openrouter_available: Boolean(openrouter_key),
   };
 
-  const agent = new AgentDomain(workspace, { providers, bus, data_dir, events, agent_backends: agent_backend_registry, secret_vault: providers.get_secret_vault(), logger: logger.child("agent"), provider_caps, on_task_change: (task) => dashboard?.sse.broadcast_task_event("status_change", task), app_root });
+  const agent = new AgentDomain(workspace, {
+    providers, bus, data_dir, events, agent_backends: agent_backend_registry,
+    secret_vault: providers.get_secret_vault(), logger: logger.child("agent"),
+    provider_caps, app_root,
+    on_task_change: (task) => {
+      dashboard?.sse.broadcast_task_event("status_change", task);
+      // HITL 상태를 채널에 알림 (최상위 + 서브태스크 모두)
+      if (task.status === "waiting_user_input" || task.status === "max_turns_reached") {
+        const channel = task.channel || String(task.memory?.channel || "");
+        const chat_id = task.chatId || String(task.memory?.chat_id || "");
+        if (!channel || !chat_id) return;
+        const raw_prompt = String(task.memory?.last_output || "").trim();
+        // ask_user 도구가 이미 채널에 질문을 직접 전송한 경우 중복 발송 방지
+        if (raw_prompt.includes("ask_user_sent:")) return;
+        const prompt = raw_prompt || build_hitl_fallback_body(task);
+        const hitl_type = task.status === "max_turns_reached" ? "error" as const : detect_hitl_type(prompt);
+        const body = task.status === "max_turns_reached"
+          ? prompt || `최대 실행 횟수(${task.maxTurns}턴)에 도달하여 작업이 일시 중지되었습니다.`
+          : prompt;
+        const content = format_hitl_prompt(body, task.taskId, hitl_type);
+        const reply_to = String(task.memory?.__trigger_message_id || "").trim() || undefined;
+        bus.publish_outbound({
+          id: `hitl-${task.taskId}-${Date.now()}`,
+          provider: channel, channel, sender_id: "agent",
+          chat_id, content, reply_to, at: now_iso(),
+          metadata: { kind: "task_hitl_notify", task_id: task.taskId, status: task.status },
+        }).catch(() => { /* bus 발행 실패가 태스크 실행을 차단하면 안 됨 */ });
+      }
+    },
+  });
   agent.context.set_oauth_summary_provider(async () => {
     const configs = oauth_store.list();
     const results = [];
@@ -234,7 +281,7 @@ export async function createRuntime(): Promise<RuntimeApp> {
     }
     return results;
   });
-  const phase_workflow_store = new PhaseWorkflowStore(join(workspace, "runtime", "workflows", "phase-workflows.db"));
+  const phase_workflow_store = new PhaseWorkflowStore(join(workspace, "runtime", "workflows"));
   const agent_inspector = create_agent_inspector(agent);
   const agent_runtime = create_agent_runtime(agent, { phase_workflow_store });
   const sessions = new SessionStore(workspace, sessions_dir);
@@ -243,7 +290,7 @@ export async function createRuntime(): Promise<RuntimeApp> {
     config: {
       agent_loop_max_turns: app_config.agentLoopMaxTurns,
       default_alias: app_config.channel.defaultAlias,
-      executor_provider: app_config.orchestration.executorProvider || "chatgpt",
+      executor_provider: app_config.orchestration.executorProvider,
       provider_caps,
       resolve_default_target: () => {
         if (!default_chat_id) return null;
@@ -294,6 +341,7 @@ export async function createRuntime(): Promise<RuntimeApp> {
     daily_memory: agent_runtime,
     sanitize_for_storage: sanitize_provider_output,
     logger: logger.child("session"),
+    on_mirror_message: (event) => dashboard?.sse.broadcast_mirror_message(event),
   });
 
   const slack_token = await instance_store.get_token("slack") || "";
@@ -316,8 +364,6 @@ export async function createRuntime(): Promise<RuntimeApp> {
     logger: logger.child("approval"),
   });
 
-  const mcp = new McpClientManager({ logger: logger.child("mcp") });
-
   let channel_manager_ref: ChannelManager | null = null;
   let dashboard: DashboardService | null = null;
 
@@ -335,6 +381,50 @@ export async function createRuntime(): Promise<RuntimeApp> {
     on_change: (type, entry) => dashboard?.sse.broadcast_process_event(type, entry),
   });
 
+  const confirmation_guard = new ConfirmationGuard();
+
+  // oauth_fetch 서비스: 워크플로우 노드에서 OAuth 인증 HTTP 호출 지원
+  const oauth_fetch_service = async (
+    service_id: string,
+    opts: { url: string; method: string; headers?: Record<string, string>; body?: unknown },
+  ): Promise<{ status: number; body: unknown; headers: Record<string, string> }> => {
+    const { normalize_headers, serialize_body, timed_fetch } = await import("./agent/tools/http-utils.js");
+    const integration = oauth_store.get(service_id);
+    if (!integration) throw new Error(`OAuth integration "${service_id}" not found`);
+    if (!integration.enabled) throw new Error(`OAuth integration "${service_id}" is disabled`);
+
+    const { token, error } = await oauth_flow.get_valid_access_token(service_id);
+    if (!token) throw new Error(`No valid token for "${service_id}": ${error || "not configured"}`);
+
+    const method = (opts.method || "GET").toUpperCase();
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/json",
+      ...normalize_headers(opts.headers),
+    };
+    const body = serialize_body(opts.body, headers);
+
+    let res = await timed_fetch(opts.url, { method, headers, body, timeout_ms: 15_000 });
+
+    // 401 → 토큰 갱신 후 재시도
+    if (res.status === 401) {
+      const refresh_result = await oauth_flow.refresh_token(service_id);
+      if (refresh_result.ok) {
+        const new_token = await oauth_store.get_access_token(service_id);
+        if (new_token) {
+          headers.Authorization = `Bearer ${new_token}`;
+          res = await timed_fetch(opts.url, { method, headers, body, timeout_ms: 15_000 });
+        }
+      }
+    }
+
+    const res_headers: Record<string, string> = {};
+    res.headers.forEach((v, k) => { res_headers[k] = v; });
+    const content_type = res.headers.get("content-type") || "";
+    const res_body = content_type.includes("json") ? await res.json() : await res.text();
+    return { status: res.status, body: res_body, headers: res_headers };
+  };
+
   const orchestration = new OrchestrationService({
     providers,
     agent_runtime,
@@ -342,7 +432,7 @@ export async function createRuntime(): Promise<RuntimeApp> {
     runtime_policy_resolver: new DefaultRuntimePolicyResolver(),
     config: {
       executor_provider: resolve_executor_provider(
-        parse_executor_preference(app_config.orchestration.executorProvider || "chatgpt"),
+        parse_executor_preference(app_config.orchestration.executorProvider),
         provider_caps,
       ),
       agent_loop_max_turns: app_config.agentLoopMaxTurns,
@@ -362,7 +452,49 @@ export async function createRuntime(): Promise<RuntimeApp> {
     subagents: agent.subagents,
     phase_workflow_store,
     get_sse_broadcaster: () => dashboard?.sse ?? null,
+    confirmation_guard,
+    bus,
+    decision_service: decisions,
+    promise_service: agent.context.promise_service,
+    oauth_fetch: oauth_fetch_service,
+    embed: embed_service,
+    vector_store: vector_store_service,
+    get_webhook_data: (path) => webhook_store.get(path),
+    query_db: query_db_service,
   });
+
+  // create_task: orchestration 초기화 후 lazy 바인딩 (순환 참조 회피)
+  const create_task_fn = create_task_service(() => ({
+    execute: async (opts) => {
+      const run_id = `task_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      const result = await orchestration.execute({
+        message: {
+          id: run_id,
+          provider: opts.channel,
+          channel: opts.channel,
+          sender_id: "workflow",
+          chat_id: opts.chat_id,
+          content: opts.objective,
+          at: now_iso(),
+        },
+        alias: "default",
+        provider: opts.channel,
+        media_inputs: [],
+        session_history: [],
+        run_id,
+      });
+      const has_error = !!result.error;
+      return {
+        task_id: result.run_id || run_id,
+        status: has_error ? "failed" : "completed",
+        result: result.reply ?? undefined,
+        error: has_error ? (result.error || result.reply || undefined) : undefined,
+      };
+    },
+  }));
+
+  // OrchestrationService에 create_task late-inject (순환 참조 회피)
+  orchestration.set_create_task(create_task_fn);
 
   const command_router = create_command_router({
     cancel_active_runs: (key) => channel_manager_ref?.cancel_active_runs(key) ?? 0,
@@ -374,6 +506,7 @@ export async function createRuntime(): Promise<RuntimeApp> {
     agent, agent_runtime, process_tracker, orchestration, providers,
     agent_backend_registry, mcp, session_recorder, cron, decisions,
     default_alias: app_config.channel.defaultAlias,
+    confirmation_guard,
   });
 
   const task_resume = new TaskResumeService({
@@ -413,6 +546,7 @@ export async function createRuntime(): Promise<RuntimeApp> {
     bot_identity,
     on_agent_event: (event) => dashboard?.sse.broadcast_agent_event(event),
     on_web_stream: (chat_id, content, done) => dashboard?.sse.broadcast_web_stream(chat_id, content, done),
+    confirmation_guard,
   });
   channel_manager_ref = channel_manager;
 
@@ -470,8 +604,25 @@ export async function createRuntime(): Promise<RuntimeApp> {
     store: phase_workflow_store, subagents: agent.subagents, workspace, logger, bus,
     skills_loader: agent.context.skills_loader,
     on_workflow_event: (e) => dashboard?.sse.broadcast_workflow_event(e),
+    invoke_tool: (tool_id, params) => agent.tools.execute(tool_id, params),
+    providers,
+    decision_service: decisions,
+    promise_service: agent.context.promise_service,
+    oauth_fetch: oauth_fetch_service,
+    embed: embed_service,
+    vector_store: vector_store_service,
+    get_webhook_data: (path) => webhook_store.get(path),
+    create_task: create_task_fn,
+    query_db: query_db_service,
   });
-  channel_manager.set_workflow_hitl(workflow_ops_result.hitl_bridge);
+  // 두 HITL bridge 결합: ops-factory (대시보드 경유) + orchestration (채널 경유)
+  const orch_hitl = orchestration.get_phase_hitl_bridge();
+  const ops_hitl = workflow_ops_result.hitl_bridge;
+  channel_manager.set_workflow_hitl({
+    async try_resolve(chat_id, content) {
+      return await ops_hitl.try_resolve(chat_id, content) || await orch_hitl.try_resolve(chat_id, content);
+    },
+  });
 
   if (app_config.dashboard.enabled) {
 
@@ -521,6 +672,7 @@ export async function createRuntime(): Promise<RuntimeApp> {
       workspace,
     });
     dashboard.set_oauth_callback_handler((code, state) => oauth_flow.handle_callback(code, state));
+    dashboard.set_webhook_store(webhook_store);
     bus.on_publish((dir, msg) => {
       dashboard?.sse.broadcast_message_event(dir, msg.sender_id, msg.content, msg.chat_id);
       if (dir === "outbound" && msg.provider === "web" && msg.chat_id) {
@@ -536,7 +688,7 @@ export async function createRuntime(): Promise<RuntimeApp> {
       const event = await bus.consume_progress({ timeout_ms: 5000 });
       if (event) dashboard?.sse.broadcast_progress_event(event);
     }
-  })().catch(() => {});
+  })().catch((e) => logger.error("[progress_relay] unhandled:", e));
 
   if (!agent_runtime.has_tool("cron")) {
     agent_runtime.register_tool(new CronTool(cron));
@@ -677,6 +829,16 @@ async function register_mcp_tools(
   if (adapters.length > 0) {
     logger.info(`mcp tools registered count=${adapters.length}`);
   }
+}
+
+/** last_output이 비어있을 때 task 상태에서 유용한 컨텍스트를 조합. */
+function build_hitl_fallback_body(task: import("./contracts.js").TaskState): string {
+  const parts: string[] = [];
+  const objective = String(task.objective || "").trim();
+  if (objective) parts.push(`**작업:** ${objective.slice(0, 300)}`);
+  const reason = String(task.exitReason || "").trim();
+  if (reason && reason !== "waiting_user_input") parts.push(`**상태:** ${reason}`);
+  return parts.join("\n") || "";
 }
 
 /** WORKSPACE/workflows/ 가 비어있으면 빌트인 기본 템플릿을 시드. */

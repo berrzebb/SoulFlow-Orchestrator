@@ -2,29 +2,92 @@
 
 ## Requirements
 
-| Item | Version/Condition |
-|------|------------------|
-| Node.js | 20 or above |
+| Item | Condition |
+|------|-----------|
+| Docker or Podman | Container runtime (recommended) |
 | Channel Bot Token | At least one of Slack · Telegram · Discord |
-| Claude API Key (optional) | Required for `claude_sdk` backend |
+| AI Provider API Key | Claude, OpenAI, OpenRouter, etc. |
+| (Optional) GPU | For local Ollama orchestrator LLM classifier |
 
-## Install
+## Docker (Recommended)
+
+The recommended way to run SoulFlow is via Docker Compose. The `full` image includes Claude Code, Codex CLI, and Gemini CLI pre-installed.
+
+### Production
+
+```bash
+docker compose up -d
+```
+
+This starts 3 services:
+- **orchestrator** — SoulFlow runtime + dashboard (port 4200)
+- **ollama** — Local LLM for request classification (GPU-accelerated)
+- **docker-proxy** — Secure Docker socket proxy for container agent isolation
+
+### Development (Live Reload)
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+```
+
+Source files are mounted via volume — code changes are reflected automatically.
+
+### Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DASHBOARD_PORT` | `4200` | Dashboard port mapping |
+| `WORKSPACE_PATH` | `./workspace2` | Host path for persistent workspace data |
+
+### Container Architecture
+
+```
+docker-compose.yml
+  ├─ docker-proxy     ← Secure Docker socket proxy (POST-only, containers-only)
+  ├─ ollama           ← Orchestrator LLM (GPU passthrough, 6GB memory limit)
+  └─ orchestrator     ← SoulFlow runtime (full image with CLI agents)
+       ├─ /data       ← Workspace volume (config, runtime DBs, skills)
+       ├─ cli-auth-*  ← CLI OAuth token persistence (Claude, Codex, Gemini)
+       └─ port 4200   ← Dashboard + API
+```
+
+### Dockerfile Stages
+
+| Stage | Purpose |
+|-------|---------|
+| `deps` | Install Node.js dependencies + native builds (better-sqlite3) |
+| `build` | Compile TypeScript + Vite frontend build |
+| `production` | Minimal runtime image (node:22-slim + python3 + tini) |
+| `full` | Production + Claude Code, Codex CLI, Gemini CLI pre-installed |
+| `dev` | Development image with devDependencies + watch mode |
+
+---
+
+## Local (Not Recommended)
+
+> Local installation is not recommended. Container deployment provides CLI agent isolation, consistent environments, and simpler setup. Use local only for development or when containers are unavailable.
+
+### Requirements
+
+| Item | Version |
+|------|---------|
+| Node.js | 20 or above |
+
+### Install & Run
 
 ```bash
 cd next
 npm install
-```
 
-## Run
-
-```bash
 # Development (hot reload)
-cd next && npm run dev
+npm run dev
 
 # Production
 npm run build
 cd workspace && node ../dist/main.js
 ```
+
+---
 
 ## Initial Setup via Setup Wizard
 
@@ -39,7 +102,7 @@ The wizard guides you through:
 2. **Channels** — Enter Slack/Telegram/Discord Bot Token
 3. **Agent Settings** — Select default role and backend
 
-All configuration is handled through the Wizard.
+All configuration is handled through the Wizard — no `.env` file needed.
 
 ## Verify It Works
 
@@ -76,8 +139,10 @@ All configuration is handled through the Wizard.
 |---------|-------|
 | `another instance is active` | Stop other process using the same token |
 | No response | Verify token/chat ID, run `/doctor` |
-| Dashboard unreachable | Change port in Settings or stop the conflicting process |
+| Dashboard unreachable | Check `DASHBOARD_PORT`, or stop the conflicting process |
 | SDK backend fails | Check log for `backend_fallback` (auto-fallback to CLI) |
+| Container won't start | Verify Docker/Podman daemon is running, check `docker compose logs` |
+| Ollama not responding | Check GPU availability, run `docker compose logs ollama` |
 
 ## Next Steps
 

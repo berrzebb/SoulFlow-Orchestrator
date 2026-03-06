@@ -6,19 +6,59 @@ import { set_no_cache } from "../route-context.js";
 export async function handle_models(ctx: RouteContext): Promise<boolean> {
   const { req, url, res, options, json, read_body } = ctx;
   const ops = options.model_ops;
+  const path = url.pathname;
 
-  if (url.pathname === "/api/models" && req.method === "GET") {
+  // GET /api/models
+  if (path === "/api/models" && req.method === "GET") {
     if (!ops) { json(res, 503, { error: "model_ops_unavailable" }); return true; }
     json(res, 200, await ops.list());
     return true;
   }
 
-  /** POST /api/models — SSE 스트리밍 pull. 각 이벤트는 PullProgress JSON. */
-  if (url.pathname === "/api/models" && req.method === "POST") {
+  // GET /api/models/active
+  if (path === "/api/models/active" && req.method === "GET") {
+    if (!ops) { json(res, 503, { error: "model_ops_unavailable" }); return true; }
+    json(res, 200, await ops.list_active());
+    return true;
+  }
+
+  // GET /api/models/runtime
+  if (path === "/api/models/runtime" && req.method === "GET") {
+    if (!ops) { json(res, 503, { error: "model_ops_unavailable" }); return true; }
+    json(res, 200, await ops.get_runtime_status());
+    return true;
+  }
+
+  // PATCH /api/models/runtime { name }
+  if (path === "/api/models/runtime" && req.method === "PATCH") {
     if (!ops) { json(res, 503, { error: "model_ops_unavailable" }); return true; }
     const body = await read_body(req);
     const name = String(body?.name || "").trim();
     if (!name) { json(res, 400, { error: "name_required" }); return true; }
+    json(res, 200, await ops.switch_model(name));
+    return true;
+  }
+
+  // /api/models/:name
+  const name_match = path.match(/^\/api\/models\/([^/]+)$/);
+  if (name_match) {
+    const name = decodeURIComponent(name_match[1]);
+    if (!ops) { json(res, 503, { error: "model_ops_unavailable" }); return true; }
+
+    // POST /api/models/:name/pull — SSE 스트리밍 pull
+    // (prefix match로 /api/models/:name/pull도 이 핸들러에 도달)
+    if (req.method === "DELETE") {
+      const ok = await ops.delete(name);
+      json(res, ok ? 200 : 500, { ok });
+      return true;
+    }
+  }
+
+  // POST /api/models/:name/pull — SSE 스트리밍 pull
+  const pull_match = path.match(/^\/api\/models\/([^/]+)\/pull$/);
+  if (pull_match && req.method === "POST") {
+    if (!ops) { json(res, 503, { error: "model_ops_unavailable" }); return true; }
+    const name = decodeURIComponent(pull_match[1]);
 
     set_no_cache(res);
     res.writeHead(200, {
@@ -49,37 +89,6 @@ export async function handle_models(ctx: RouteContext): Promise<boolean> {
       }
       res.end();
     }
-    return true;
-  }
-
-  if (url.pathname === "/api/models" && req.method === "DELETE") {
-    if (!ops) { json(res, 503, { error: "model_ops_unavailable" }); return true; }
-    const body = await read_body(req);
-    const name = String(body?.name || "").trim();
-    if (!name) { json(res, 400, { error: "name_required" }); return true; }
-    const ok = await ops.delete(name);
-    json(res, ok ? 200 : 500, { ok });
-    return true;
-  }
-
-  if (url.pathname === "/api/models/active" && req.method === "GET") {
-    if (!ops) { json(res, 503, { error: "model_ops_unavailable" }); return true; }
-    json(res, 200, await ops.list_active());
-    return true;
-  }
-
-  if (url.pathname === "/api/models/runtime" && req.method === "GET") {
-    if (!ops) { json(res, 503, { error: "model_ops_unavailable" }); return true; }
-    json(res, 200, await ops.get_runtime_status());
-    return true;
-  }
-
-  if (url.pathname === "/api/models/runtime" && req.method === "PATCH") {
-    if (!ops) { json(res, 503, { error: "model_ops_unavailable" }); return true; }
-    const body = await read_body(req);
-    const name = String(body?.name || "").trim();
-    if (!name) { json(res, 400, { error: "name_required" }); return true; }
-    json(res, 200, await ops.switch_model(name));
     return true;
   }
 

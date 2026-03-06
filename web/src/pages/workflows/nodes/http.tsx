@@ -41,6 +41,11 @@ function HttpEditPanel({ node, update, t }: EditPanelProps) {
         <label className="label">{t("workflows.http_body")}</label>
         <textarea className="input" rows={3} value={typeof node.body === "string" ? node.body : JSON.stringify(node.body || "", null, 2)} onChange={(e) => update({ body: e.target.value })} />
       </div>
+      <div className="builder-row">
+        <label className="label">{t("workflows.timeout_ms")}</label>
+        <input className="input input--sm" type="number" min={100} max={30000} step={1000} value={String(node.timeout_ms ?? 10000)} onChange={(e) => update({ timeout_ms: Number(e.target.value) || 10000 })} />
+        <span className="builder-hint">{t("workflows.timeout_ms_hint")}</span>
+      </div>
     </>
   );
 }
@@ -51,6 +56,7 @@ export const http_descriptor: FrontendNodeDescriptor = {
   color: "#3498db",
   shape: "rect",
   toolbar_label: "+ HTTP",
+  category: "integration",
   output_schema: [
     { name: "status",       type: "number",  description: "HTTP status code" },
     { name: "body",         type: "object",  description: "Response body" },

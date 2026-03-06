@@ -12,12 +12,19 @@ SoulFlow의 에이전트 시스템은 두 계층으로 구성됩니다: **백엔
 | `claude_cli` | Headless CLI 래퍼 | 안정적, 범용 | — |
 | `codex_appserver` | 네이티브 AppServer | 병렬 실행, tool loop 내장 | → `codex_cli` |
 | `codex_cli` | Headless CLI 래퍼 | 샌드박스 모드 지원 | — |
+| `gemini_cli` | Headless CLI 래퍼 | Gemini CLI 통합 | — |
+| `openai_compatible` | OpenAI 호환 API | vLLM · Ollama · LM Studio · Together AI · Gemini 등 로컬/원격 모델 | — |
+| `openrouter` | OpenRouter API | 멀티 모델 라우팅 · 100+ 모델 접근 | — |
+| `container_cli` | 컨테이너 CLI 래퍼 | Docker/Podman 샌드박스 격리 실행 | — |
 
 ### 백엔드 선택 기준
 
 - **스트리밍이 중요하다** → `claude_sdk` (가장 빠른 첫 응답)
 - **안정성이 우선이다** → `claude_cli` (배치/프로덕션 환경)
 - **Codex/OpenAI를 쓴다** → `codex_appserver` 또는 `codex_cli`
+- **로컬/오픈소스 모델** → `openai_compatible` (vLLM, Ollama 등)
+- **멀티 모델 접근** → `openrouter` (단일 API로 100+ 모델)
+- **샌드박스 실행** → `container_cli` (Docker/Podman 격리)
 
 대시보드 → **Providers** 페이지에서 여러 백엔드를 동시에 등록하고 우선순위를 설정할 수 있습니다.
 

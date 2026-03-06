@@ -8,6 +8,7 @@ import { useToast } from "../components/toast";
 import { useTestMutation } from "../hooks/use-test-mutation";
 import { useT } from "../i18n";
 import { PROVIDER_COLORS } from "../utils/constants";
+import { time_ago } from "../utils/format";
 
 interface ChannelInstance {
   provider: string;
@@ -30,7 +31,7 @@ function ProviderIcon({ provider }: { provider: string }) {
   const color = PROVIDER_COLORS[provider] ?? "var(--accent)";
   const label = provider.charAt(0).toUpperCase();
   return (
-    <span className="provider-icon" style={{ background: color }}>
+    <span className="provider-icon" style={{ "--icon-c": color } as React.CSSProperties}>
       {label}
     </span>
   );
@@ -51,10 +52,12 @@ interface ConfigResponse {
 function GlobalSettingsSection() {
   const t = useT();
   const qc = useQueryClient();
+  const { toast } = useToast();
 
   const { data } = useQuery<ConfigResponse>({
     queryKey: ["config"],
     queryFn: () => api.get("/api/config"),
+    staleTime: 30_000,
   });
 
   const sections = Array.isArray(data?.sections) ? data.sections : [];
@@ -68,8 +71,10 @@ function GlobalSettingsSection() {
   };
 
   const toggle = async (path: string, current: boolean) => {
-    await api.put("/api/config/values", { path, value: !current });
-    void qc.invalidateQueries({ queryKey: ["config"] });
+    try {
+      await api.put("/api/config/values", { path, value: !current });
+      void qc.invalidateQueries({ queryKey: ["config"] });
+    } catch { toast(t("channels.toggle_failed"), "err"); }
   };
 
   const streaming = get_value("channel.streaming.enabled");
@@ -92,7 +97,7 @@ function GlobalSettingsSection() {
 
   return (
     <section className="panel">
-      <h2 style={{ margin: "0 0 12px" }}>{t("channels.global_settings")}</h2>
+      <h2 className="mt-0 mb-3">{t("channels.global_settings")}</h2>
       <div className="stat-grid stat-grid--wide">
         {settings.map((s) => (
           <div key={s.key} className="settings-row">
@@ -100,7 +105,7 @@ function GlobalSettingsSection() {
               <div className="settings-row__label">{s.label}</div>
               <div className="settings-row__desc">{s.desc}</div>
             </div>
-            <ToggleSwitch checked={s.value} onChange={() => void toggle(s.key, s.value)} />
+            <ToggleSwitch checked={s.value} onChange={() => void toggle(s.key, s.value)} aria-label={s.label} />
           </div>
         ))}
       </div>
@@ -117,19 +122,20 @@ export default function ChannelsPage() {
 
   const { data: instances, isLoading } = useQuery<ChannelInstance[]>({
     queryKey: ["channel-instances"],
-    queryFn: () => api.get("/api/channel-instances"),
+    queryFn: () => api.get("/api/channels/instances"),
     refetchInterval: 10_000,
+    staleTime: 5_000,
   });
 
   const remove = useMutation({
-    mutationFn: (id: string) => api.del("/api/channel-instances", { id }),
+    mutationFn: (id: string) => api.del(`/api/channels/instances/${encodeURIComponent(id)}`),
     onSuccess: () => { toast(t("channels.removed"), "ok"); void qc.invalidateQueries({ queryKey: ["channel-instances"] }); },
     onError: (err) => toast(t("channels.remove_failed", { error: err.message }), "err"),
   });
 
   const toggle_enabled = useMutation({
     mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) =>
-      api.put("/api/channel-instances", { id, enabled }),
+      api.put(`/api/channels/instances/${encodeURIComponent(id)}`, { enabled }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ["channel-instances"] }),
     onError: (err) => toast(t("channels.save_failed", { error: err.message }), "err"),
   });
@@ -146,14 +152,18 @@ export default function ChannelsPage() {
       <GlobalSettingsSection />
 
       {isLoading ? (
-        <div className="stat-grid stat-grid--wide" style={{ marginTop: 16 }}>
+        <div className="stat-grid stat-grid--wide mt-3">
           <div className="skeleton skeleton-card" />
           <div className="skeleton skeleton-card" />
         </div>
       ) : !instances?.length ? (
-        <p className="empty">{t("channels.no_instances")}</p>
+        <div className="empty-state">
+          <div className="empty-state__icon">📡</div>
+          <div className="empty-state__text">{t("channels.no_instances")}</div>
+          <button className="btn btn--sm btn--accent empty-state__action" onClick={() => setModal({ kind: "add" })}>{t("channels.add")}</button>
+        </div>
       ) : (
-        <div className="stat-grid stat-grid--wide" style={{ marginTop: 16 }}>
+        <div className="stat-grid stat-grid--wide fade-in mt-3">
           {instances.map((inst) => (
             <InstanceCard
               key={inst.instance_id}
@@ -205,8 +215,7 @@ function InstanceCard({ instance, onEdit, onRemove, onToggle }: {
   const t = useT();
 
   const { testing, testResult, test } = useTestMutation({
-    url: "/api/channel-instances",
-    body: { action: "test", id: instance.instance_id },
+    url: `/api/channels/instances/${encodeURIComponent(instance.instance_id)}/test`,
     onOk: (r) => `${instance.label}: ${r.detail || t("channels.connected")}`,
     onFail: (r) => `${instance.label}: ${r.error || ""}`,
     onError: () => t("channels.test_failed"),
@@ -215,10 +224,10 @@ function InstanceCard({ instance, onEdit, onRemove, onToggle }: {
   const status_cls = instance.running ? "ok" : "off";
 
   return (
-    <div className={`stat-card desk--${status_cls}`} style={{ opacity: instance.enabled ? 1 : 0.7 }}>
+    <div className={`stat-card desk--${status_cls}${instance.enabled ? "" : " stat-card--disabled"}`}>
       <div className="stat-card__header">
         <ProviderIcon provider={instance.provider} />
-        <ToggleSwitch checked={instance.enabled} onChange={onToggle} />
+        <ToggleSwitch checked={instance.enabled} onChange={onToggle} aria-label={t("common.enabled")} />
       </div>
       <div className="stat-card__value stat-card__value--md">
         {instance.label || instance.instance_id}
@@ -235,7 +244,10 @@ function InstanceCard({ instance, onEdit, onRemove, onToggle }: {
         )}
       </div>
       {instance.last_error && (
-        <div className="text-xs text-err">{instance.last_error}</div>
+        <div className="text-xs text-err truncate" title={instance.last_error}>{instance.last_error}</div>
+      )}
+      {instance.updated_at && (
+        <div className="text-xs text-muted" title={instance.updated_at}>{time_ago(instance.updated_at)}</div>
       )}
       {testResult && (
         <div className="stat-card__tags">
@@ -301,12 +313,12 @@ function InstanceModal({ mode, onClose, onSaved }: {
     try {
       const id = isEdit ? initial!.instance_id : (instanceId || provider);
       if (isEdit) {
-        await api.put("/api/channel-instances", {
-          id, label, enabled, settings: build_settings(),
+        await api.put(`/api/channels/instances/${encodeURIComponent(id)}`, {
+          label, enabled, settings: build_settings(),
           ...(token ? { token } : {}),
         });
       } else {
-        await api.post("/api/channel-instances", {
+        await api.post("/api/channels/instances", {
           instance_id: id, provider, label: label || id, enabled, settings: build_settings(),
           ...(token ? { token } : {}),
         });
@@ -358,8 +370,8 @@ function InstanceModal({ mode, onClose, onSaved }: {
       </div>
 
       <div className="form-group form-group--row">
-        <label className="form-label" style={{ margin: 0 }}>{t("common.enabled")}</label>
-        <ToggleSwitch checked={enabled} onChange={setEnabled} />
+        <label className="form-label">{t("common.enabled")}</label>
+        <ToggleSwitch checked={enabled} onChange={setEnabled} aria-label={t("common.enabled")} />
       </div>
 
       <div className="form-group">

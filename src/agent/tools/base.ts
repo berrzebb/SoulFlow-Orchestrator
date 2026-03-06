@@ -1,4 +1,4 @@
-import type { JsonSchema, ToolExecutionContext, ToolLike, ToolSchema } from "./types.js";
+import type { JsonSchema, ToolCategory, ToolExecutionContext, ToolLike, ToolPolicyFlags, ToolSchema } from "./types.js";
 import { get_shared_secret_vault } from "../../security/secret-vault-factory.js";
 
 const TRUTHY = new Set(["true", "yes", "on", "1", "ok", "y", "예", "네"]);
@@ -28,6 +28,8 @@ export abstract class Tool implements ToolLike {
   abstract readonly name: string;
   abstract readonly description: string;
   abstract readonly parameters: JsonSchema;
+  abstract readonly category: ToolCategory;
+  readonly policy_flags?: ToolPolicyFlags;
   protected abstract run(params: Record<string, unknown>, context?: ToolExecutionContext): Promise<string>;
   private readonly _param_secret_vault = get_shared_secret_vault(process.cwd());
 

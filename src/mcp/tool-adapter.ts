@@ -9,6 +9,7 @@ import type { McpToolEntry } from "./types.js";
 
 export class McpToolAdapter implements ToolLike {
   readonly name: string;
+  readonly category = "external" as const;
   readonly description: string;
   readonly parameters: JsonSchema;
 

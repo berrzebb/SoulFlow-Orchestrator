@@ -8,6 +8,7 @@ import {
   BRIDGE_SCRIPT_CONTAINER_PATH,
   BRIDGE_MCP_CONFIG_CONTAINER_PATH,
 } from "./tool-bridge-config.js";
+import { swallow } from "../../utils/common.js";
 
 export type ContainerSecurityOptions = {
   memory?: string;
@@ -163,8 +164,8 @@ export class DockerPty implements Pty {
     if (this.exited) return;
     this.exited = true;
     // 비동기 정리. fire-and-forget — kill + rm.
-    void this.docker.kill(this.pid).catch(() => {});
-    void this.docker.rm(this.pid).catch(() => {});
+    swallow(this.docker.kill(this.pid));
+    swallow(this.docker.rm(this.pid));
     this.emit_exit(137); // SIGKILL
   }
 

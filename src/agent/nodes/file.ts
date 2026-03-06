@@ -6,7 +6,6 @@ import type { NodeHandler } from "../node-registry.js";
 import type { FileNodeDefinition, OrcheNodeDefinition } from "../workflow-node.types.js";
 import type { OrcheNodeExecutorContext, OrcheNodeExecuteResult, OrcheNodeTestResult } from "../orche-node-executor.js";
 import { resolve_templates } from "../orche-node-executor.js";
-import { error_message } from "../../utils/common.js";
 
 export const file_handler: NodeHandler = {
   node_type: "file",

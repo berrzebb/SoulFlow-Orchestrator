@@ -31,6 +31,7 @@ export const text_splitter_descriptor: FrontendNodeDescriptor = {
   color: "#ff5722",
   shape: "rect",
   toolbar_label: "+ Split✂",
+  category: "ai",
   output_schema: [
     { name: "chunks",      type: "array",  description: "Text chunks" },
     { name: "chunk_count", type: "number", description: "Number of chunks" },

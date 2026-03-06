@@ -33,6 +33,10 @@ function PromiseEditPanel({ node, update, t }: EditPanelProps) {
             <label className="label">{t("workflows.promise_value") || "Value"}</label>
             <textarea className="input" rows={2} value={String(node.value || "")} onChange={(e) => update({ value: e.target.value })} placeholder="I will always create a backup before deleting data" />
           </div>
+          <div className="builder-row">
+            <label className="label">{t("workflows.promise_rationale") || "Rationale"}</label>
+            <input className="input input--sm" value={String(node.rationale || "")} onChange={(e) => update({ rationale: e.target.value || undefined })} placeholder="Why this promise is important" />
+          </div>
           <div className="builder-row-pair">
             <div className="builder-row">
               <label className="label">{t("workflows.decision_priority") || "Priority"}</label>
@@ -50,6 +54,12 @@ function PromiseEditPanel({ node, update, t }: EditPanelProps) {
           </div>
         </>
       )}
+      {(op === "list" || op === "get_effective") && (
+        <div className="builder-row">
+          <label className="label">{t("workflows.promise_scope_id") || "Scope ID"}</label>
+          <input className="input input--sm" value={String(node.scope_id || "")} onChange={(e) => update({ scope_id: e.target.value || undefined })} placeholder="team-123" />
+        </div>
+      )}
       {op === "archive" && (
         <div className="builder-row">
           <label className="label">{t("workflows.promise_target") || "Target ID"}</label>
@@ -66,6 +76,7 @@ export const promise_descriptor: FrontendNodeDescriptor = {
   color: "#009688",
   shape: "rect",
   toolbar_label: "+ Promise",
+  category: "advanced",
   output_schema: [
     { name: "action",  type: "string", description: "Result action" },
     { name: "record",  type: "object", description: "Promise record" },

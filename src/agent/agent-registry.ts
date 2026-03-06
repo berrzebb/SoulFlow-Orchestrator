@@ -51,7 +51,7 @@ export class AgentBackendRegistry {
   private readonly provider_registry: ProviderRegistry;
   private readonly config: AgentBackendConfig;
   private readonly session_store: AgentSessionStore | null;
-  private readonly provider_store: AgentProviderStore | null;
+  private readonly _provider_store: AgentProviderStore | null;
   private readonly logger: Logger | null;
 
   constructor(deps: {
@@ -65,7 +65,7 @@ export class AgentBackendRegistry {
     this.provider_registry = deps.provider_registry;
     this.config = deps.config || DEFAULT_CONFIG;
     this.session_store = deps.session_store || null;
-    this.provider_store = deps.provider_store || null;
+    this._provider_store = deps.provider_store ?? null;
     this.logger = deps.logger || null;
     for (const backend of deps.backends ?? []) {
       this.backends.set(backend.id, backend);
@@ -248,7 +248,7 @@ export class AgentBackendRegistry {
 
   /** FailoverError reason에 따라 circuit breaker를 차등 적용. */
   private _handle_failover_circuit(
-    backend_id: AgentBackendId,
+    _backend_id: AgentBackendId,
     breaker: CircuitBreaker | undefined,
     meta: FailoverError["meta"],
   ): void {

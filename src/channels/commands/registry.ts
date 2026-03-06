@@ -22,6 +22,7 @@ const DESCRIPTORS: readonly CommandDescriptor[] = [
   { name: "agent", description: "서브에이전트 관리", usage: "[running|status <id>|cancel <id|all>]" },
   { name: "stats", description: "CD 점수 및 세션 메트릭", usage: "[cd|reset]" },
   { name: "verify", description: "출력물 검증", usage: "[<criteria>]" },
+  { name: "guard", description: "실행 확인 가드 토글", usage: "on|off" },
 ] as const;
 
 /** 등록된 모든 커맨드의 메타데이터를 반환. */

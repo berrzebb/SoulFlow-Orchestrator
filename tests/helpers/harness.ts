@@ -134,6 +134,7 @@ export class FakeApprovalService {
 
 export class FakeTaskResumeService {
   async try_resume(): Promise<null> { return null; }
+  expire_stale(): import("../../src/contracts.js").TaskState[] { return []; }
 }
 
 // --- Default Channel Config ---
@@ -161,6 +162,7 @@ export function create_test_channel_config(): AppConfig["channel"] {
     reactionActionTtlMs: 86_400_000,
     streaming: {
       enabled: false,
+      mode: "live" as const,
       intervalMs: 1400,
       minChars: 48,
       suppressFinalAfterStream: false,

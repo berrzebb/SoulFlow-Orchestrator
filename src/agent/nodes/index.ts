@@ -28,6 +28,21 @@ import { decision_handler } from "./decision.js";
 import { promise_handler } from "./promise.js";
 import { embedding_handler } from "./embedding.js";
 import { vector_store_handler } from "./vector-store.js";
+import { notify_handler } from "./notify.js";
+import { aggregate_handler } from "./aggregate.js";
+import { send_file_handler } from "./send-file.js";
+import { error_handler_handler } from "./error-handler.js";
+import { webhook_handler } from "./webhook.js";
+import { hitl_handler } from "./hitl.js";
+import { approval_handler } from "./approval.js";
+import { form_handler } from "./form.js";
+import { tool_invoke_handler } from "./tool-invoke.js";
+import { gate_handler } from "./gate.js";
+import { escalation_handler } from "./escalation.js";
+import { cache_handler } from "./cache.js";
+import { retry_handler } from "./retry.js";
+import { batch_handler } from "./batch.js";
+import { assert_handler } from "./assert.js";
 
 const ALL_HANDLERS = [
   http_handler,
@@ -57,6 +72,21 @@ const ALL_HANDLERS = [
   promise_handler,
   embedding_handler,
   vector_store_handler,
+  notify_handler,
+  aggregate_handler,
+  send_file_handler,
+  error_handler_handler,
+  webhook_handler,
+  hitl_handler,
+  approval_handler,
+  form_handler,
+  tool_invoke_handler,
+  gate_handler,
+  escalation_handler,
+  cache_handler,
+  retry_handler,
+  batch_handler,
+  assert_handler,
 ];
 
 let registered = false;

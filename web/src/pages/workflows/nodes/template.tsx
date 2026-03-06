@@ -6,6 +6,7 @@ function TemplateEditPanel({ node, update, t }: EditPanelProps) {
       <div className="builder-row">
         <label className="label">{t("workflows.template_body")}</label>
         <textarea className="input code-textarea" rows={6} value={String(node.template || "")} onChange={(e) => update({ template: e.target.value })} spellCheck={false} placeholder="Hello {{input.name}}, your order #{{input.order_id}} is ready." />
+        <span className="builder-hint">{t("workflows.template_hint") || "Mustache syntax: {{input.*}}, {{memory.*}}"}</span>
       </div>
       <div className="builder-row">
         <label className="label">Output Field</label>
@@ -21,6 +22,7 @@ export const template_descriptor: FrontendNodeDescriptor = {
   color: "#00bcd4",
   shape: "rect",
   toolbar_label: "+ Tmpl",
+  category: "data",
   output_schema: [
     { name: "text", type: "string", description: "Rendered template output" },
   ],

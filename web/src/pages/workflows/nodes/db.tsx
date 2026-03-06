@@ -1,6 +1,17 @@
+import { useState } from "react";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
 function DbEditPanel({ node, update, t }: EditPanelProps) {
+  const [paramsRaw, setParamsRaw] = useState(node.params ? JSON.stringify(node.params, null, 2) : "");
+  const [paramsErr, setParamsErr] = useState("");
+
+  const handleParams = (val: string) => {
+    setParamsRaw(val);
+    if (!val.trim()) { setParamsErr(""); update({ params: undefined }); return; }
+    try { update({ params: JSON.parse(val) }); setParamsErr(""); }
+    catch { setParamsErr("Invalid JSON"); }
+  };
+
   return (
     <>
       <div className="builder-row-pair">
@@ -21,10 +32,19 @@ function DbEditPanel({ node, update, t }: EditPanelProps) {
       <div className="builder-row">
         <label className="label">{t("workflows.db_query") || "Query"}</label>
         <textarea className="input code-textarea" rows={4} value={String(node.query || "")} onChange={(e) => update({ query: e.target.value })} spellCheck={false} placeholder="SELECT * FROM users WHERE id = {{memory.user_id}}" />
+        <span className="builder-hint">{t("workflows.db_query_hint") || "Use {{memory.*}} for template variables"}</span>
       </div>
       <div className="builder-row">
         <label className="label">{t("workflows.db_params") || "Params"}</label>
-        <textarea className="input code-textarea" rows={2} value={node.params ? JSON.stringify(node.params, null, 2) : ""} onChange={(e) => { try { update({ params: e.target.value ? JSON.parse(e.target.value) : undefined }); } catch { /* ignore */ } }} spellCheck={false} placeholder='{"user_id": 42}' />
+        <textarea
+          className={`input code-textarea${paramsErr ? " input--err" : ""}`}
+          rows={2}
+          value={paramsRaw}
+          onChange={(e) => handleParams(e.target.value)}
+          spellCheck={false}
+          placeholder='{"user_id": 42}'
+        />
+        {paramsErr && <span className="field-error">{paramsErr}</span>}
       </div>
     </>
   );
@@ -36,6 +56,7 @@ export const db_descriptor: FrontendNodeDescriptor = {
   color: "#e74c3c",
   shape: "rect",
   toolbar_label: "+ DB",
+  category: "data",
   output_schema: [
     { name: "rows",          type: "array",  description: "Query result rows" },
     { name: "affected_rows", type: "number", description: "Affected row count" },

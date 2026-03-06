@@ -19,23 +19,23 @@ import { seal_inbound_sensitive_text } from "../security/inbound-seal.js";
 import { redact_sensitive_text } from "../security/sensitive.js";
 import { is_local_reference } from "../utils/local-ref.js";
 import { resolve_executor_provider, type ExecutorProvider, type ProviderCapabilities } from "../providers/executor.js";
-import { select_tools_for_request, TOOL_CATEGORIES } from "./tool-selector.js";
+import { select_tools_for_request } from "./tool-selector.js";
 import type { AgentBackendRegistry } from "../agent/agent-registry.js";
 import type { AgentRunResult, AgentSession } from "../agent/agent.types.js";
 import type { ToolSchema } from "../agent/tools/types.js";
 import { create_cd_observer } from "../agent/cd-scoring.js";
 import type { ProcessTrackerLike } from "./process-tracker.js";
 import type { WorkflowEventService, AppendWorkflowEventInput } from "../events/index.js";
-import { join } from "node:path";
 import { now_iso, now_ms, error_message, short_id } from "../utils/common.js";
 // ── 추출 모듈 ──
 import {
   ONCE_MODE_OVERLAY, AGENT_MODE_OVERLAY, AGENT_TOOL_NUDGE,
-  format_secret_notice,
+  format_secret_notice, GUARD_SUMMARY_PROMPT,
 } from "./prompts.js";
+import { ConfirmationGuard, format_guard_prompt } from "./confirmation-guard.js";
 import { FINISH_REASON_WARNINGS } from "../agent/finish-reason-warnings.js";
 import { detect_escalation, is_once_escalation } from "./classifier.js";
-import { resolve_gateway, type GatewayDecision } from "./gateway.js";
+import { resolve_gateway } from "./gateway.js";
 import {
   create_tool_call_handler, type ToolCallState, type ToolCallHandlerDeps,
 } from "./tool-call-handler.js";
@@ -94,6 +94,19 @@ export type OrchestrationServiceDeps = {
   phase_workflow_store?: import("../agent/phase-workflow-store.js").PhaseWorkflowStoreLike | null;
   /** SSE 브로드캐스트 (Phase Loop 이벤트 전파). lazy 참조 지원. */
   get_sse_broadcaster?: () => { broadcast_workflow_event(event: import("../agent/phase-loop.types.js").PhaseLoopEvent): void } | null;
+  /** 실행 전 확인 가드. */
+  confirmation_guard?: ConfirmationGuard | null;
+  /** 메시지 버스 (Phase Loop 내 interaction 노드용). */
+  bus?: import("../bus/types.js").MessageBusLike | null;
+  /** Decision/Promise 서비스 (워크플로우 노드용). */
+  decision_service?: import("../decision/service.js").DecisionService | null;
+  promise_service?: import("../decision/promise.service.js").PromiseService | null;
+  embed?: (texts: string[], opts: { model?: string; dimensions?: number }) => Promise<{ embeddings: number[][]; token_usage?: number }>;
+  vector_store?: (op: string, opts: Record<string, unknown>) => Promise<Record<string, unknown>>;
+  oauth_fetch?: (service_id: string, opts: { url: string; method: string; headers?: Record<string, string>; body?: unknown }) => Promise<{ status: number; body: unknown; headers: Record<string, string> }>;
+  get_webhook_data?: (path: string) => Promise<{ method: string; headers: Record<string, string>; body: unknown; query: Record<string, string> } | null>;
+  create_task?: (opts: { title: string; objective: string; channel?: string; chat_id?: string; max_turns?: number; initial_memory?: Record<string, unknown> }) => Promise<{ task_id: string; status: string; result?: unknown; error?: string }>;
+  query_db?: (datasource: string, query: string, params?: Record<string, unknown>) => Promise<{ rows: unknown[]; affected_rows: number }>;
 };
 
 
@@ -112,11 +125,14 @@ export class OrchestrationService {
   private readonly process_tracker: ProcessTrackerLike | null;
   private readonly get_mcp_configs: (() => Record<string, { command: string; args?: string[]; env?: Record<string, string>; cwd?: string }>) | null;
   private readonly events: WorkflowEventService | null;
+  private readonly guard: ConfirmationGuard | null;
   private readonly deps: OrchestrationServiceDeps;
   private readonly session_cd = create_cd_observer();
   private readonly streaming_cfg: { enabled: boolean; interval_ms: number; min_chars: number };
   private readonly hooks_deps: AgentHooksBuilderDeps;
   private readonly tool_deps: ToolCallHandlerDeps;
+  /** Phase Loop interaction 노드 HITL 응답 대기 맵. */
+  private readonly phase_pending_responses = new Map<string, { resolve: (response: string) => void; chat_id: string }>();
 
   constructor(deps: OrchestrationServiceDeps) {
     this.providers = deps.providers;
@@ -129,6 +145,7 @@ export class OrchestrationService {
     this.process_tracker = deps.process_tracker || null;
     this.get_mcp_configs = deps.get_mcp_configs || null;
     this.events = deps.events || null;
+    this.guard = deps.confirmation_guard || null;
     this.deps = deps;
 
     this.streaming_cfg = {
@@ -150,6 +167,23 @@ export class OrchestrationService {
       execute_tool: (name: string, params: Record<string, unknown>, ctx?: ToolExecutionContext) =>
         this.runtime.execute_tool(name, params, ctx),
       log_event: (e: AppendWorkflowEventInput) => this.log_event(e),
+    };
+  }
+
+  /** Phase Loop HITL bridge — ChannelManager에서 사용자 응답을 라우팅. */
+  get_phase_hitl_bridge(): import("../channels/manager.js").WorkflowHitlBridge {
+    const pending = this.phase_pending_responses;
+    return {
+      async try_resolve(chat_id: string, content: string): Promise<boolean> {
+        for (const [wf_id, entry] of pending) {
+          if (entry.chat_id === chat_id) {
+            pending.delete(wf_id);
+            entry.resolve(content);
+            return true;
+          }
+        }
+        return false;
+      },
     };
   }
 
@@ -175,6 +209,28 @@ export class OrchestrationService {
   /** 세션 CD 점수 초기화. */
   reset_cd_score(): void {
     this.session_cd.reset();
+  }
+
+  /** 가드 확인용 요약 생성. 오케스트레이터 LLM 사용, 실패 시 텍스트 슬라이스 폴백. */
+  private async _generate_guard_summary(task_text: string): Promise<string> {
+    try {
+      const result = await this.providers.run_orchestrator({
+        messages: [
+          { role: "system", content: GUARD_SUMMARY_PROMPT },
+          { role: "user", content: task_text.slice(0, 500) },
+        ],
+        max_tokens: 150,
+        temperature: 0,
+      });
+      const summary = String(result.content || "").trim();
+      if (summary) return summary;
+    } catch { /* 오케스트레이터 미설정 시 폴백 */ }
+    return task_text.slice(0, 200) + (task_text.length > 200 ? "..." : "");
+  }
+
+  /** create_task 서비스 late-inject (순환 참조 회피). */
+  set_create_task(fn: OrchestrationServiceDeps["create_task"]): void {
+    (this.deps as { create_task?: OrchestrationServiceDeps["create_task"] }).create_task = fn;
   }
 
   /** 워크플로우 이벤트 기록. events 서비스가 없으면 무시. */
@@ -236,7 +292,11 @@ export class OrchestrationService {
     const active_tasks_in_chat = this.runtime.list_active_tasks().filter(
       (t) => String(t.memory?.chat_id || "") === String(req.message.chat_id),
     );
-    const tool_categories = [...new Set(Object.values(TOOL_CATEGORIES))];
+    const category_map: Record<string, string> = {};
+    for (const tool of this.runtime.get_tool_executors()) {
+      category_map[tool.name] = tool.category;
+    }
+    const tool_categories = [...new Set(Object.values(category_map))];
     const skill_provider_prefs = this._collect_skill_provider_preferences(skill_names);
 
     // Gateway: 분류 + 라우팅 결정
@@ -296,12 +356,22 @@ export class OrchestrationService {
     if (mode === "phase") {
       this.log_event({ ...evt_base, phase: "progress", summary: "executing: phase", payload: { mode, executor } });
       const workflow_hint = decision.workflow_id;
-      return finalize(await this.run_phase_loop(req, task_with_media, workflow_hint));
+      const node_cats = decision.node_categories;
+      return finalize(await this.run_phase_loop(req, task_with_media, workflow_hint, node_cats));
     }
 
-    const { tools: tool_definitions } = select_tools_for_request(all_tool_definitions, task_with_media, mode, skill_tool_names);
-    const system_base = await this._build_system_prompt(skill_names, req.provider, req.message.chat_id);
+    const classifier_cats = decision.action === "execute" ? decision.tool_categories : undefined;
+    const { tools: tool_definitions, categories } = select_tools_for_request(all_tool_definitions, task_with_media, mode, skill_tool_names, classifier_cats, category_map);
+    const system_base = await this._build_system_prompt(skill_names, req.provider, req.message.chat_id, new Set(categories));
     this.logger.info("dispatch", { mode, executor, skills: skill_names, tool_count: tool_definitions.length });
+
+    // ── Confirmation Guard: 중요 작업 실행 전 사용자 확인 ──
+    if (this.guard?.needs_confirmation(mode, categories, req.provider, req.message.chat_id)) {
+      const summary = await this._generate_guard_summary(task_with_media);
+      this.guard.store(req.provider, req.message.chat_id, task_with_media, summary, mode, categories);
+      this.logger.info("guard_confirmation_pending", { mode, categories, provider: req.provider, chat_id: req.message.chat_id });
+      return { reply: format_guard_prompt(summary, mode, categories), mode: "once", tool_calls_count: 0, streamed: false };
+    }
 
     if (req.run_id) {
       this.process_tracker?.set_mode(req.run_id, mode);
@@ -563,6 +633,14 @@ export class OrchestrationService {
     emit_execution_info(stream, args.req.on_stream, "task", args.executor, this.logger);
     const task_id = `task:${args.req.provider}:${args.req.message.chat_id}:${args.req.alias}:${args.request_scope}`.toLowerCase();
     if (args.req.run_id) this.process_tracker?.link_task(args.req.run_id, task_id);
+    this.log_event({
+      run_id: args.req.run_id || `task-${Date.now()}`,
+      task_id, agent_id: args.req.alias,
+      provider: args.req.provider, channel: args.req.provider, chat_id: args.req.message.chat_id,
+      source: "inbound",
+      phase: "progress", summary: `task_started: ${task_id}`,
+      payload: { mode: "task", executor: args.executor },
+    });
     const FILE_WAIT_MARKER = "__file_request_waiting__";
     let total_tool_count = 0;
 
@@ -593,6 +671,9 @@ export class OrchestrationService {
             }
             if (native_result.finish_reason === "approval_required") {
               return { status: "waiting_approval", memory_patch: { ...memory, last_output: final }, current_step: "execute", exit_reason: "waiting_approval" };
+            }
+            if (final.includes("__request_user_choice__")) {
+              return { status: "waiting_user_input" as const, memory_patch: { ...memory, last_output: final }, current_step: "execute", exit_reason: "waiting_user_input" };
             }
             return { memory_patch: { ...memory, last_output: final }, next_step_index: 2, current_step: "execute" };
           }
@@ -667,6 +748,8 @@ export class OrchestrationService {
       max_turns: this.config.task_loop_max_turns,
       initial_memory: {
         alias: args.req.alias,
+        channel: args.req.provider,
+        chat_id: args.req.message.chat_id,
         __trigger_message_id: raw_message_id(args.req.message),
       },
       abort_signal: args.req.signal,
@@ -685,11 +768,17 @@ export class OrchestrationService {
         provider: args.req.provider, channel: args.req.provider, chat_id: args.req.message.chat_id, source: "inbound",
         phase: "approval", summary: "waiting_approval", payload: { mode: "task", tool_calls_count: total_tool_count },
       });
-      return { reply: "승인 대기 상태입니다. 승인 응답 후 같은 작업을 재개합니다.", mode: "task", tool_calls_count: total_tool_count, streamed: stream.has_streamed() };
+      // 승인 알림은 approval-notifier가 별도 발송하므로 오케스트레이션 응답은 suppress
+      return { ...suppress_result("task", stream, total_tool_count), run_id: args.req.run_id };
     }
-    if (result.state.status === "waiting_user_input") {
-      const prompt_text = sanitize_provider_output(output_raw).trim();
-      return { reply: prompt_text || "선택을 기다리고 있습니다.", mode: "task", tool_calls_count: total_tool_count, streamed: stream.has_streamed() };
+    // waiting_user_input / max_turns_reached: HITL 알림은 on_task_change 콜백에서 bus로 발송
+    if (result.state.status === "waiting_user_input" || result.state.status === "max_turns_reached") {
+      return { ...suppress_result("task", stream, total_tool_count), run_id: args.req.run_id };
+    }
+    if (result.state.status === "failed" || result.state.status === "cancelled") {
+      const reason = result.state.exitReason || result.state.status;
+      this.logger.warn("task_loop_terminal", { task_id, status: result.state.status, exit_reason: reason, turns: result.state.currentTurn });
+      return error_result("task", stream, `task_${result.state.status}:${reason}`, total_tool_count);
     }
 
     const output = sanitize_provider_output(output_raw).trim();
@@ -715,7 +804,10 @@ export class OrchestrationService {
     req: OrchestrationRequest,
   ): OrchestrationResult {
     if (result.finish_reason === "error") {
-      return error_result(mode, stream, String(result.metadata?.error || "agent_backend_error"), result.tool_calls_count);
+      const err_detail = String(result.metadata?.error || "")
+        || String(result.content || "").slice(0, 200)
+        || "agent_backend_error";
+      return error_result(mode, stream, err_detail, result.tool_calls_count);
     }
     if (result.finish_reason === "cancelled") {
       return suppress_result(mode, stream, result.tool_calls_count);
@@ -749,11 +841,11 @@ export class OrchestrationService {
     return prefs;
   }
 
-  /** 시스템 프롬프트를 빌드. butler 역할 힌트 포함. */
-  private async _build_system_prompt(skill_names: string[], provider: string, chat_id: string): Promise<string> {
+  /** 시스템 프롬프트를 빌드. butler 역할 힌트 포함. tool_categories로 TOOLS.md 필터링. */
+  private async _build_system_prompt(skill_names: string[], provider: string, chat_id: string, tool_categories?: ReadonlySet<string>): Promise<string> {
     const context_builder = this.runtime.get_context_builder();
     const system = await context_builder.build_system_prompt(
-      skill_names, undefined, { channel: provider, chat_id },
+      skill_names, undefined, { channel: provider, chat_id }, tool_categories,
     );
     const butler_skill = context_builder.skills_loader.get_role_skill("butler");
     const active_role_hint = butler_skill?.heart
@@ -768,7 +860,7 @@ export class OrchestrationService {
     stream: StreamBuffer,
     task_tool_ctx: ToolExecutionContext,
     task_id: string,
-    objective: string,
+    _objective: string,
     seed_prompt: string,
     resume_session?: AgentSession,
   ): Promise<AgentRunResult | null> {
@@ -926,6 +1018,9 @@ export class OrchestrationService {
             if (native_result.finish_reason === "approval_required") {
               return { status: "waiting_approval" as const, memory_patch: clear_patch, current_step: "execute", exit_reason: "waiting_approval" };
             }
+            if (final.includes("__request_user_choice__")) {
+              return { status: "waiting_user_input" as const, memory_patch: clear_patch, current_step: "execute", exit_reason: "waiting_user_input" };
+            }
             return { status: "completed" as const, memory_patch: clear_patch, current_step: "execute", exit_reason: "workflow_completed" };
           }
 
@@ -1003,11 +1098,16 @@ export class OrchestrationService {
         provider: req.provider, channel: req.provider, chat_id: req.message.chat_id, source: "inbound",
         phase: "approval", summary: "waiting_approval (resume)", payload: { mode: "task", tool_calls_count: total_tool_count },
       });
-      return { reply: "승인 대기 상태입니다. 승인 응답 후 같은 작업을 재개합니다.", mode: "task", tool_calls_count: total_tool_count, streamed: stream.has_streamed(), run_id: req.run_id };
+      return { ...suppress_result("task", stream, total_tool_count), run_id: req.run_id };
     }
-    if (result.state.status === "waiting_user_input") {
-      const prompt_text = sanitize_provider_output(output_raw).trim();
-      return { reply: prompt_text || "선택을 기다리고 있습니다.", mode: "task", tool_calls_count: total_tool_count, streamed: stream.has_streamed(), run_id: req.run_id };
+    // waiting_user_input / max_turns_reached: HITL 알림은 on_task_change 콜백에서 bus로 발송
+    if (result.state.status === "waiting_user_input" || result.state.status === "max_turns_reached") {
+      return { ...suppress_result("task", stream, total_tool_count), run_id: req.run_id };
+    }
+    if (result.state.status === "failed" || result.state.status === "cancelled") {
+      const reason = result.state.exitReason || result.state.status;
+      this.logger.warn("resume_task_terminal", { task_id: task.taskId, status: result.state.status, exit_reason: reason, turns: result.state.currentTurn });
+      return { ...error_result("task", stream, `task_${result.state.status}:${reason}`, total_tool_count), run_id: req.run_id };
     }
 
     const output = sanitize_provider_output(output_raw).trim();
@@ -1016,7 +1116,7 @@ export class OrchestrationService {
   }
 
   /** phase 모드: Phase Loop Runner에 위임. */
-  private async run_phase_loop(req: OrchestrationRequest, task_with_media: string, workflow_hint?: string): Promise<OrchestrationResult> {
+  private async run_phase_loop(req: OrchestrationRequest, task_with_media: string, workflow_hint?: string, node_categories?: string[]): Promise<OrchestrationResult> {
     const { run_phase_loop: exec } = await import("../agent/phase-loop-runner.js");
     const { load_workflow_templates, load_workflow_template, substitute_variables } = await import("./workflow-loader.js");
     const workspace = this.deps.workspace || process.cwd();
@@ -1053,24 +1153,38 @@ export class OrchestrationService {
       const workflow_id = `wf-${short_id(12)}`;
       // 대기 상태로 저장 → 대시보드에서 승인 후 실행
       if (store) {
-        void store.upsert({
+        store.upsert({
           workflow_id, title: dynamic.title, objective: task_with_media,
           channel: req.provider, chat_id: req.message.chat_id,
           status: "waiting_user_input", current_phase: 0, phases: [],
-          memory: {}, created_at: now_iso(), updated_at: now_iso(),
+          memory: { origin: { channel: req.provider, chat_id: req.message.chat_id, sender_id: req.message.sender_id } },
+          created_at: now_iso(), updated_at: now_iso(),
           definition: dynamic,
-        });
+        }).catch((e) => this.logger.error("workflow_upsert_failed", { workflow_id, error: error_message(e) }));
       }
       return { reply: preview, mode: "phase", tool_calls_count: 0, streamed: false, run_id: req.run_id };
     }
 
-    const definition = substitute_variables(template, { objective: task_with_media, channel: req.provider });
+    const origin = { channel: req.provider, chat_id: req.message.chat_id, sender_id: req.message.sender_id };
+    const definition = substitute_variables(template, {
+      // 워크플로우 YAML variables 섹션 (기본값)
+      ...(template.variables || {}),
+      // 런타임 변수 (override)
+      objective: task_with_media,
+      channel: req.provider,
+      origin_channel: origin.channel,
+      origin_chat_id: origin.chat_id,
+      origin_sender_id: origin.sender_id,
+    });
     const workflow_id = `wf-${short_id(12)}`;
 
     // ProcessTracker 연결
     if (req.run_id) {
       this.process_tracker?.link_workflow(req.run_id, workflow_id);
     }
+
+    const bus = this.deps.bus;
+    const channel_callbacks = bus ? this.build_phase_channel_callbacks(bus, workflow_id, req.provider, req.message.chat_id) : {};
 
     const result = await exec({
       workflow_id,
@@ -1079,7 +1193,11 @@ export class OrchestrationService {
       channel: req.provider,
       chat_id: req.message.chat_id,
       phases: definition.phases,
+      nodes: definition.nodes,
+      initial_memory: { origin, ...(node_categories?.length ? { node_categories } : {}) },
       abort_signal: req.signal,
+      invoke_tool: (tool_id, params) => this.runtime.execute_tool(tool_id, params),
+      ...channel_callbacks,
       on_phase_change: (state) => {
         req.on_progress?.({ task_id: workflow_id, step: state.current_phase + 1, total_steps: state.phases.length, description: `phase ${state.current_phase + 1}/${state.phases.length}`, provider: req.provider, chat_id: req.message.chat_id, at: now_iso() });
       },
@@ -1087,17 +1205,47 @@ export class OrchestrationService {
       subagents,
       store,
       logger: this.logger,
+      load_template: (name) => load_workflow_template(workspace, name),
+      providers: this.deps.providers,
+      decision_service: this.deps.decision_service,
+      promise_service: this.deps.promise_service,
+      embed: this.deps.embed,
+      vector_store: this.deps.vector_store,
+      oauth_fetch: this.deps.oauth_fetch,
+      get_webhook_data: this.deps.get_webhook_data,
+      create_task: this.deps.create_task,
+      query_db: this.deps.query_db,
       on_event: (event) => {
         this.deps.get_sse_broadcaster?.()?.broadcast_workflow_event(event);
         req.on_agent_event?.({ type: "content_delta", source: { backend: "phase_loop", task_id: workflow_id }, at: now_iso(), text: `[phase] ${event.type}` });
       },
     });
-    const reply = result.status === "completed"
-      ? `워크플로우 \`${definition.title}\` 완료.\n\n${this.format_phase_summary(result)}`
-      : result.status === "waiting_user_input"
-        ? `워크플로우가 사용자 입력을 대기 중입니다. 대시보드에서 확인하세요.\nWorkflow ID: \`${workflow_id}\``
-        : `워크플로우 실패: ${result.error || result.status}`;
-    return { reply, mode: "phase", tool_calls_count: 0, streamed: false, run_id: req.run_id };
+    if (result.status === "completed") {
+      return { reply: `워크플로우 \`${definition.title}\` 완료.\n\n${this.format_phase_summary(result)}`, mode: "phase", tool_calls_count: 0, streamed: false, run_id: req.run_id };
+    }
+    if (result.status === "waiting_user_input") {
+      const pending_phase = result.phases.find((p) => p.pending_user_input);
+      if (pending_phase) {
+        // [ASK_USER]: 에이전트가 명시적으로 질문한 경우
+        const last_agent_result = pending_phase.agents.filter((a) => a.result).pop()?.result || "";
+        const context = `워크플로우 \`${definition.title}\` → **${pending_phase.phase_id}**\n\n${last_agent_result.slice(0, 500)}`;
+        return { reply: format_hitl_prompt(context, workflow_id, "question"), mode: "phase", tool_calls_count: 0, streamed: false, run_id: req.run_id };
+      }
+      // escalation: critic 반복 실패로 사용자 판단 필요
+      const failed_phase = result.phases.find((p) => p.critic && !p.critic.approved);
+      const critic_review = failed_phase?.critic?.review || "";
+      const agent_output = failed_phase?.agents.filter((a) => a.result).pop()?.result || "";
+      const context = [
+        `워크플로우 \`${definition.title}\` → **${failed_phase?.phase_id || "단계"}**`,
+        "",
+        agent_output ? `**에이전트 결과:**\n${agent_output.slice(0, 400)}` : "",
+        critic_review ? `**검토 의견:**\n${critic_review.slice(0, 300)}` : "",
+      ].filter(Boolean).join("\n\n");
+      return { reply: format_hitl_prompt(context, workflow_id, "escalation"), mode: "phase", tool_calls_count: 0, streamed: false, run_id: req.run_id };
+    }
+    const phase_error = result.error || result.status;
+    this.logger.warn("phase_loop_terminal", { workflow_id, status: result.status, error: phase_error });
+    return { reply: null, error: `phase_${result.status}:${phase_error}`, mode: "phase", tool_calls_count: 0, streamed: false, run_id: req.run_id };
   }
 
   /** 동적 워크플로우 생성: 오케스트레이터 LLM에게 워크플로우 구조 설계 요청. */
@@ -1106,18 +1254,30 @@ export class OrchestrationService {
     _workspace: string,
   ): Promise<import("../agent/phase-loop.types.js").WorkflowDefinition | null> {
     try {
+      const { get_agent_role_presets } = await import("../agent/node-presets.js");
+      const role_presets = get_agent_role_presets();
+      const preset_catalog = role_presets.map((p) =>
+        `  - preset_id: "${p.preset_id}" (${p.label}): ${p.description}`,
+      ).join("\n");
+
       const planner_prompt = [
         "Design a multi-agent workflow for the following objective.",
         `Objective: "${objective}"`,
         "",
+        "## Available Agent Role Presets",
+        "Use these preset_ids when they match the needed role. The preset provides system_prompt and optimal settings automatically.",
+        preset_catalog,
+        "",
         "Constraints:",
         "- Maximum 3 phases",
         "- Maximum 4 agents per phase",
-        "- Each agent needs: agent_id (snake_case), role, label, backend (use \"openrouter\"), system_prompt",
+        "- Each agent needs: agent_id (snake_case), role, label, backend (use \"openrouter\")",
+        "- If a preset matches the role, add preset_id to the agent definition (system_prompt will be auto-filled)",
+        "- If no preset matches, provide a custom system_prompt",
         "- Add a critic to each phase with gate=true",
         "",
         "Return ONLY valid JSON matching this schema:",
-        '{ "title": string, "objective": string, "phases": [{ "phase_id": string, "title": string, "agents": [...], "critic": { "backend": "openrouter", "system_prompt": string, "gate": true } }] }',
+        '{ "title": string, "objective": string, "phases": [{ "phase_id": string, "title": string, "agents": [{ "agent_id": string, "role": string, "label": string, "backend": "openrouter", "preset_id"?: string, "system_prompt"?: string }], "critic": { "backend": "openrouter", "system_prompt": string, "gate": true } }] }',
       ].join("\n");
 
       const llm_response = await this.providers.run_orchestrator({
@@ -1156,8 +1316,68 @@ export class OrchestrationService {
     return lines.join("\n");
   }
 
+  /** Phase Loop 내 interaction 노드용 채널 콜백 빌더. */
+  private build_phase_channel_callbacks(
+    bus: import("../bus/types.js").MessageBusLike,
+    workflow_id: string,
+    origin_channel: string,
+    origin_chat_id: string,
+  ) {
+    const logger = this.logger;
+
+    const send_message: import("../agent/phase-loop.types.js").PhaseLoopRunOptions["send_message"] = async (req) => {
+      const channel = req.target === "origin" ? origin_channel : (req.channel || origin_channel);
+      const chat_id = req.target === "origin" ? origin_chat_id : (req.chat_id || origin_chat_id);
+      const msg_id = `wf-msg-${short_id(8)}`;
+      try {
+        await bus.publish_outbound({
+          id: msg_id, provider: channel, channel,
+          sender_id: "system", chat_id, content: req.content,
+          at: now_iso(),
+          metadata: { workflow_id, type: "workflow_notification", ...(req.structured ? { structured: req.structured } : {}) },
+        });
+        return { ok: true, message_id: msg_id };
+      } catch (e) {
+        logger.error("workflow_send_message_failed", { workflow_id, error: error_message(e) });
+        return { ok: false };
+      }
+    };
+
+    const pending = this.phase_pending_responses;
+    const ask_channel: import("../agent/phase-loop.types.js").PhaseLoopRunOptions["ask_channel"] = (req, timeout_ms) => {
+      const channel = req.target === "origin" ? origin_channel : (req.channel || origin_channel);
+      const chat_id = req.target === "origin" ? origin_chat_id : (req.chat_id || origin_chat_id);
+
+      bus.publish_outbound({
+        id: `wf-ask-${short_id(8)}`, provider: channel, channel,
+        sender_id: "system", chat_id, content: req.content,
+        at: now_iso(),
+        metadata: { workflow_id, type: "workflow_ask_channel", ...(req.structured ? { structured: req.structured } : {}) },
+      }).catch((e) => logger.error("workflow_ask_channel_send_failed", { workflow_id, error: error_message(e) }));
+
+      return new Promise<import("../agent/phase-loop.types.js").ChannelResponse>((resolve) => {
+        const timer = setTimeout(() => {
+          pending.delete(workflow_id);
+          resolve({ response: "", responded_at: now_iso(), timed_out: true });
+        }, timeout_ms);
+
+        pending.set(workflow_id, {
+          resolve: (content: string) => {
+            clearTimeout(timer);
+            resolve({ response: content, responded_by: { channel, chat_id }, responded_at: now_iso(), timed_out: false });
+          },
+          chat_id,
+        });
+      });
+    };
+
+    return { send_message, ask_channel };
+  }
+
   private format_phase_summary(result: import("../agent/phase-loop.types.js").PhaseLoopRunResult): string {
     const lines: string[] = [];
+
+    // Phase 기반 요약
     for (const phase of result.phases) {
       lines.push(`**${phase.title}** (${phase.status})`);
       for (const agent of phase.agents) {
@@ -1168,6 +1388,19 @@ export class OrchestrationService {
         lines.push(`  Critic: ${phase.critic.approved ? "Approved" : "Rejected"} — ${phase.critic.review.slice(0, 200)}`);
       }
     }
+
+    // nodes-only 워크플로우: memory에서 마지막 노드 결과 추출
+    if (lines.length === 0 && result.memory) {
+      const mem = result.memory;
+      const keys = Object.keys(mem).filter((k) => k !== "origin" && k !== "node_categories");
+      const last_key = keys[keys.length - 1];
+      if (last_key) {
+        const val = mem[last_key];
+        const text = typeof val === "string" ? val : JSON.stringify(val);
+        lines.push(text.slice(0, 500));
+      }
+    }
+
     return lines.join("\n");
   }
 }
@@ -1179,6 +1412,7 @@ function build_tool_context(req: OrchestrationRequest, task_id: string): ToolExe
     channel: req.provider,
     chat_id: req.message.chat_id,
     sender_id: req.message.sender_id,
+    reply_to: resolve_reply_to(req.provider, req.message) || undefined,
   };
 }
 
@@ -1195,6 +1429,77 @@ function reply_result(mode: ExecutionMode, stream: StreamBuffer, reply: string |
 }
 
 /** agent 모드에서 도구를 한 번도 사용하지 않은 경우 응답 끝에 완료 안내를 추가. */
+export type HitlType = "choice" | "confirmation" | "question" | "escalation" | "error";
+
+/** HITL 대기 상태를 채널 사용자에게 명확히 알리는 프롬프트. */
+export function format_hitl_prompt(agent_prompt: string, task_id: string, type: HitlType = "choice"): string {
+  const cleaned = (agent_prompt || "")
+    .replace(/__request_user_choice__/g, "")
+    .replace(/\[ASK_USER\]/g, "")
+    .replace(/^ask_user_sent:\S+$/gm, "")
+    .replace(/^question:\s.+$/gm, "")
+    .trim();
+  const body = cleaned || "추가 정보가 필요합니다.";
+  const guide = HITL_GUIDE[type];
+  return [
+    guide.header,
+    "",
+    body,
+    "",
+    guide.instruction,
+    "",
+    "_이 메시지에 답장하면 작업이 자동으로 재개됩니다._",
+  ].join("\n");
+}
+
+const HITL_GUIDE: Record<HitlType, { header: string; instruction: string }> = {
+  choice: {
+    header: "💬 **선택 요청**",
+    instruction: "위 선택지 중 하나를 골라 답장해주세요.",
+  },
+  confirmation: {
+    header: "💬 **확인 요청**",
+    instruction: "`예` 또는 `아니오`로 답장해주세요.",
+  },
+  question: {
+    header: "💬 **질문**",
+    instruction: "질문에 대한 답변을 답장해주세요.",
+  },
+  escalation: {
+    header: "⚠️ **판단 필요**",
+    instruction: [
+      "다음 중 하나를 답장해주세요:",
+      "• 구체적인 지시사항을 입력하면 해당 내용으로 재시도합니다",
+      "• `계속` — 현재 결과를 수용하고 다음 단계로 진행",
+      "• `취소` — 워크플로우를 중단합니다",
+    ].join("\n"),
+  },
+  error: {
+    header: "❌ **작업 실패**",
+    instruction: [
+      "다음 중 하나를 답장해주세요:",
+      "• 추가 정보나 수정 지시를 입력하면 해당 내용을 포함하여 재시도합니다",
+      "• `재시도` — 동일 조건으로 다시 실행합니다",
+      "• `취소` — 작업을 종료합니다",
+    ].join("\n"),
+  },
+};
+
+/** 에이전트 출력에서 HITL 유형을 추론. */
+export function detect_hitl_type(prompt: string): HitlType {
+  if (!prompt) return "question";
+  const lower = prompt.toLowerCase();
+  // 확인 요청: yes/no, 예/아니오 패턴
+  if (/진행할까요|계속할까요|실행할까요|괜찮을까요|할까요\?|맞나요\?|맞습니까\?/.test(prompt)
+    || /\b(yes\s*\/\s*no|y\s*\/\s*n)\b/i.test(prompt)) {
+    return "confirmation";
+  }
+  // 번호 목록 (1. / 1) / ① 등) 또는 불릿 목록 (- / • / * )이 2개 이상이면 선택지
+  const numbered = prompt.match(/(?:^|\n)\s*(?:\d+[.)]\s|[①-⑳]\s|[-•*]\s)/g);
+  if (numbered && numbered.length >= 2) return "choice";
+  return "question";
+}
+
 function append_no_tool_notice(reply: string): string {
   return `${reply}\n\n_(작업이 완료되었습니다. 추가 요청이 있으면 말씀해주세요.)_`;
 }

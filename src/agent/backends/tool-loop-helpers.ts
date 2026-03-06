@@ -1,9 +1,9 @@
-/** tool loop 공유 헬퍼. CliAgent, OpenAiCompatibleAgent 등이 공용으로 사용. */
+/** tool loop 공유 헬퍼. OpenAiCompatibleAgent 등이 공용으로 사용. */
 
 import type { ToolExecutionContext, ToolLike } from "../tools/types.js";
 import type { AgentEvent, AgentEventSource, AgentFinishReason, AgentHooks } from "../agent.types.js";
 import type { LlmUsage } from "../../providers/types.js";
-import { now_iso, error_message} from "../../utils/common.js";
+import { now_iso, error_message, swallow } from "../../utils/common.js";
 
 export type UsageAccumulator = {
   input: number;
@@ -53,7 +53,7 @@ export async function execute_single_tool(
   }
 
   if (hooks?.post_tool_use) {
-    void Promise.resolve(hooks.post_tool_use(name, params, text, ctx, is_error)).catch(() => {});
+    swallow(hooks.post_tool_use(name, params, text, ctx, is_error));
   }
 
   return { text, is_error };
@@ -70,7 +70,7 @@ export function fire(
   event: AgentEvent,
 ): void {
   if (!emit) return;
-  void Promise.resolve(emit(event)).catch(() => {});
+  swallow(emit(event));
 }
 
 export function accum_usage(acc: UsageAccumulator, u: LlmUsage): void {

@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../api/client";
@@ -88,8 +88,8 @@ export default function WorkflowDetailPage() {
 
   const { data: wf, isLoading } = useQuery<PhaseLoopState>({
     queryKey: ["workflow", id],
-    queryFn: () => api.get(`/api/workflows/${id}`),
-    refetchInterval: 3_000,
+    queryFn: () => api.get(`/api/workflow/runs/${id}`),
+    refetchInterval: 10_000, staleTime: 3_000,
     enabled: !!id,
   });
 
@@ -110,13 +110,13 @@ export default function WorkflowDetailPage() {
     <div className="page">
       <div className="wf-detail">
         <div className="wf-detail__main">
-          <button className="btn btn--sm" onClick={() => navigate("/workflows")} style={{ marginBottom: "var(--sp-3)" }}>
+          <button className="btn btn--sm mb-3" onClick={() => navigate("/workflows")}>
             ← {t("workflows.back")}
           </button>
 
           <div className="wf-detail__hero">
             <div>
-              <h2 style={{ margin: 0 }}>{wf.title}</h2>
+              <h2 className="mt-0 mb-0">{wf.title}</h2>
               <p className="wf-detail__objective">
                 {wf.objective.length > 200 ? wf.objective.slice(0, 200) + "…" : wf.objective}
               </p>
@@ -196,7 +196,7 @@ function PhaseCard({ phase, index, isCurrent, maxIterations, workflowId, onChat 
   return (
     <section className={`wf-phase ${DESK_CLS[phase.status] || "desk--off"}${isCurrent ? " wf-phase--current" : ""}`}>
       {/* Phase Header — 클릭으로 접기/펼치기 */}
-      <div className="wf-phase__header" onClick={() => setCollapsed((c) => !c)} style={{ cursor: "pointer", userSelect: "none" }}>
+      <div className="wf-phase__header" role="button" tabIndex={0} onClick={() => setCollapsed((c) => !c)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setCollapsed((c) => !c); } }}>
         <div className="wf-phase__title-group">
           <span className="wf-phase__collapse-icon">{collapsed ? "▸" : "▾"}</span>
           <span className="wf-phase__index">Phase {index + 1}</span>
@@ -207,13 +207,13 @@ function PhaseCard({ phase, index, isCurrent, maxIterations, workflowId, onChat 
             </span>
           )}
         </div>
-        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+        <div className="wf-phase__header-right">
           <Badge status={phase.status} variant={STATUS_VARIANT[phase.status] || "off"} />
           {phase.pending_user_input && (
             <Badge status={t("workflows.awaiting_input")} variant="warn" />
           )}
           {collapsed && (
-            <span style={{ fontSize: "var(--fs-xs)", color: "var(--muted)" }}>
+            <span className="text-xs text-muted">
               {phase.agents.length} agents
             </span>
           )}
@@ -272,17 +272,18 @@ function AgentCard({ agent, onChat }: {
   onChat: (agent_id: string, label: string, model?: string, status?: string) => void;
 }) {
   const t = useT();
+  const { toast } = useToast();
   const [errorExpanded, setErrorExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  const copyResult = useCallback(() => {
+  const copyResult = () => {
     const text = agent.result || agent.error || "";
     if (!text) return;
     navigator.clipboard.writeText(text).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
-    });
-  }, [agent.result, agent.error]);
+    }).catch(() => toast(t("workflows.copy_failed"), "err"));
+  };
 
   return (
     <div className={`stat-card stat-card--compact ${DESK_CLS[agent.status] || "desk--off"}`}>
@@ -307,9 +308,11 @@ function AgentCard({ agent, onChat }: {
       )}
       {agent.error && (
         <div
-          className="stat-card__extra wf-agent__error"
+          className={`stat-card__extra wf-agent__error${agent.error.length > 80 ? " wf-agent__error--expandable" : ""}`}
+          role={agent.error.length > 80 ? "button" : undefined}
+          tabIndex={agent.error.length > 80 ? 0 : undefined}
           onClick={() => setErrorExpanded((e) => !e)}
-          style={{ cursor: agent.error.length > 80 ? "pointer" : undefined }}
+          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setErrorExpanded((v) => !v); } }}
         >
           {errorExpanded ? agent.error : (agent.error.length > 80 ? agent.error.slice(0, 80) + "… ▸" : agent.error)}
         </div>
@@ -345,9 +348,9 @@ function InteractivePhaseBody({ phase, workflowId, maxIterations }: {
   const { data: messages } = useQuery<PhaseMessage[]>({
     queryKey: msgKey,
     queryFn: () => api.get(
-      `/api/workflows/${workflowId}/messages?phase_id=${phase.phase_id}&agent_id=${agent.agent_id}`,
+      `/api/workflow/runs/${workflowId}/messages?phase_id=${phase.phase_id}&agent_id=${agent.agent_id}`,
     ),
-    refetchInterval: 3_000,
+    refetchInterval: 10_000, staleTime: 3_000,
   });
 
   useEffect(() => {
@@ -356,7 +359,7 @@ function InteractivePhaseBody({ phase, workflowId, maxIterations }: {
 
   const sendMut = useMutation({
     mutationFn: (content: string) =>
-      api.post(`/api/workflows/${workflowId}/messages`, {
+      api.post(`/api/workflow/runs/${workflowId}/messages`, {
         phase_id: phase.phase_id,
         agent_id: agent.agent_id,
         content,
@@ -365,7 +368,7 @@ function InteractivePhaseBody({ phase, workflowId, maxIterations }: {
       setInput("");
       qc.invalidateQueries({ queryKey: msgKey });
     },
-    onError: () => toast(t("workflows.send_failed")),
+    onError: () => toast(t("workflows.send_failed"), "err"),
   });
 
   const iteration = phase.loop_iteration || 0;
@@ -375,7 +378,7 @@ function InteractivePhaseBody({ phase, workflowId, maxIterations }: {
       <div className="wf-interactive__messages">
         {messages?.map((msg, i) => (
           <MessageBubble
-            key={i}
+            key={`${msg.role}-${msg.at}-${i}`}
             role={msg.role}
             content={msg.content.slice(0, 2000)}
             at={msg.at}
@@ -392,8 +395,7 @@ function InteractivePhaseBody({ phase, workflowId, maxIterations }: {
           className="wf-interactive__input"
         >
           <input
-            className="input"
-            style={{ flex: 1 }}
+            className="input flex-fill"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder={t("workflows.chat_placeholder")}
@@ -409,7 +411,7 @@ function InteractivePhaseBody({ phase, workflowId, maxIterations }: {
         <span className="wf-interactive__turn">
           {t("workflows.turn")} {iteration}/{maxIterations}
         </span>
-        <span style={{ fontSize: "var(--fs-xs)", color: "var(--muted)" }}>
+        <span className="text-xs text-muted">
           {agent.label} · {agent.model || "default"}
         </span>
       </div>
@@ -491,12 +493,12 @@ function ResumeButton({ workflowId }: { workflowId: string }) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const mut = useMutation({
-    mutationFn: () => api.post(`/api/workflows/${workflowId}/resume`, {}),
+    mutationFn: () => api.post(`/api/workflow/runs/${workflowId}/resume`, {}),
     onSuccess: () => {
-      toast(t("workflows.resumed"));
+      toast(t("workflows.resumed"), "ok");
       qc.invalidateQueries({ queryKey: ["workflow", workflowId] });
     },
-    onError: () => toast(t("workflows.resume_failed")),
+    onError: () => toast(t("workflows.resume_failed"), "err"),
   });
   return (
     <button className="btn btn--primary btn--sm" onClick={() => mut.mutate()} disabled={mut.isPending}>
@@ -510,9 +512,9 @@ function CriticCard({ critic }: { critic: PhaseCriticState }) {
     <div className={`wf-critic ${critic.approved === true ? "desk--ok" : critic.approved === false ? "desk--err" : "desk--off"}`}>
       <div className="wf-critic__header">
         <span className="wf-critic__label">Critic</span>
-        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+        <div className="wf-critic__header-right">
           <Badge status={critic.status} variant={STATUS_VARIANT[critic.status] || "off"} />
-          {critic.model && <span style={{ fontSize: "var(--fs-xs)", color: "var(--muted)" }}>{critic.model}</span>}
+          {critic.model && <span className="text-xs text-muted">{critic.model}</span>}
         </div>
       </div>
       {critic.review && (
@@ -550,8 +552,8 @@ function AgentChatPanel({ workflow_id, phase_id, agent_id, label, model, status,
 
   const { data: messages } = useQuery<PhaseMessage[]>({
     queryKey: msg_query_key,
-    queryFn: () => api.get(`/api/workflows/${workflow_id}/messages?phase_id=${phase_id}&agent_id=${agent_id}`),
-    refetchInterval: 3_000,
+    queryFn: () => api.get(`/api/workflow/runs/${workflow_id}/messages?phase_id=${phase_id}&agent_id=${agent_id}`),
+    refetchInterval: 10_000, staleTime: 3_000,
   });
 
   const { pending: pending_approvals, resolve: resolve_approval } = useApprovals({
@@ -564,12 +566,12 @@ function AgentChatPanel({ workflow_id, phase_id, agent_id, label, model, status,
 
   const sendMut = useMutation({
     mutationFn: (content: string) =>
-      api.post(`/api/workflows/${workflow_id}/messages`, { phase_id, agent_id, content }),
+      api.post(`/api/workflow/runs/${workflow_id}/messages`, { phase_id, agent_id, content }),
     onSuccess: () => {
       setInput("");
       qc.invalidateQueries({ queryKey: msg_query_key });
     },
-    onError: () => toast(t("workflows.send_failed")),
+    onError: () => toast(t("workflows.send_failed"), "err"),
   });
 
   return (
@@ -592,7 +594,7 @@ function AgentChatPanel({ workflow_id, phase_id, agent_id, label, model, status,
       <div className="wf-chat__messages">
         {messages?.map((msg, i) => (
           <MessageBubble
-            key={i}
+            key={`${msg.role}-${msg.at}-${i}`}
             role={msg.role}
             content={msg.content.slice(0, 2000)}
             at={msg.at}
@@ -617,8 +619,7 @@ function AgentChatPanel({ workflow_id, phase_id, agent_id, label, model, status,
         className="wf-chat__input"
       >
         <input
-          className="input"
-          style={{ flex: 1 }}
+          className="input flex-fill"
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder={t("workflows.chat_placeholder")}

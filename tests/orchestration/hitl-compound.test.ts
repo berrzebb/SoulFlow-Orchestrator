@@ -293,7 +293,8 @@ describe("HITL 복합 워크플로우 E2E", () => {
     // 2단계: 사용자 선택 입력 → TaskResumeService가 resume → orchestration에 resumed_task_id 전달
     await harness.manager.handle_inbound_message(msg("2번"));
 
-    expect(harness.dispatch.sent).toHaveLength(2);
+    // 3개: (1) 첫 번째 응답 + (2) resume ACK "✅ 입력을 받았습니다" + (3) 두 번째 응답
+    expect(harness.dispatch.sent).toHaveLength(3);
     const second_reply = last_reply(harness.dispatch.sent);
     expect(second_reply).toContain("Hotel California");
     expect(second_reply).toContain("재생");
@@ -401,7 +402,8 @@ describe("HITL 복합 워크플로우 E2E", () => {
 
     await harness.manager.handle_inbound_message(msg("파일을 다시 첨부합니다, 재시도해주세요"));
 
-    expect(harness.dispatch.sent).toHaveLength(1);
+    // 2개: (1) resume ACK "✅ 입력을 받았습니다" + (2) 완료 응답
+    expect(harness.dispatch.sent).toHaveLength(2);
     expect(last_reply(harness.dispatch.sent)).toContain("완료");
     expect(harness.orchestration.calls[0]!.resumed_task_id).toBe("task:telegram:chat-1:failed");
   });

@@ -24,6 +24,7 @@ export type AgentApprovalStatus =
 
 export type AgentApprovalDecision =
   | "approve"
+  | "approve_all"
   | "deny"
   | "defer"
   | "cancel"
@@ -130,8 +131,8 @@ export interface AgentRuntimeLike {
   run_task_loop(options: TaskLoopRunOptions): Promise<TaskLoopRunResult>;
   /** headless 에이전트를 spawn하여 도구 실행이 필요한 작업을 위임하고 완료를 대기. */
   spawn_and_wait(options: SpawnAndWaitOptions): Promise<SpawnAndWaitResult>;
-  /** 대기 중인 Task을 재개하고 사용자 입력을 memory에 주입. */
-  resume_task(task_id: string, user_input?: string, reason?: string): Promise<import("../contracts.js").TaskState | null>;
+  /** 대기 중인 Task을 재개하고 사용자 입력을 memory에 주입. channel_context가 있으면 유실된 채널 정보를 복원. */
+  resume_task(task_id: string, user_input?: string, reason?: string, channel_context?: { channel: string; chat_id: string }): Promise<import("../contracts.js").TaskState | null>;
   /** 특정 채팅에서 사용자 입력/승인을 대기 중인 Task을 조회. */
   find_waiting_task(provider: string, chat_id: string): Promise<import("../contracts.js").TaskState | null>;
   /** 트리거 메시지 ID로 연결된 Task을 역조회. */

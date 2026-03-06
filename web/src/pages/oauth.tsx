@@ -6,6 +6,7 @@ import { Modal, FormModal } from "../components/modal";
 import { useToast } from "../components/toast";
 import { useTestMutation } from "../hooks/use-test-mutation";
 import { useT } from "../i18n";
+import { time_ago } from "../utils/format";
 
 interface OAuthIntegration {
   instance_id: string;
@@ -53,22 +54,24 @@ export default function OAuthPage() {
   const { data: integrations, isLoading } = useQuery<OAuthIntegration[]>({
     queryKey: ["oauth-integrations"],
     queryFn: () => api.get("/api/oauth/integrations"),
-    refetchInterval: 10_000,
+    refetchInterval: 30_000,
+    staleTime: 10_000,
   });
 
   const { data: presets = [] } = useQuery<OAuthPreset[]>({
     queryKey: ["oauth-presets"],
     queryFn: () => api.get("/api/oauth/presets"),
+    staleTime: 60_000,
   });
 
   const remove = useMutation({
-    mutationFn: (id: string) => api.del("/api/oauth/integrations", { id }),
+    mutationFn: (id: string) => api.del(`/api/oauth/integrations/${encodeURIComponent(id)}`),
     onSuccess: () => { toast(t("oauth.removed"), "ok"); void qc.invalidateQueries({ queryKey: ["oauth-integrations"] }); },
     onError: (err) => toast(t("oauth.remove_failed", { error: err.message }), "err"),
   });
 
   const removePreset = useMutation({
-    mutationFn: (type: string) => api.del("/api/oauth/presets", { service_type: type }),
+    mutationFn: (type: string) => api.del(`/api/oauth/presets/${encodeURIComponent(type)}`),
     onSuccess: () => { toast(t("oauth.preset_removed"), "ok"); void qc.invalidateQueries({ queryKey: ["oauth-presets"] }); },
     onError: (err) => toast(t("oauth.preset_remove_failed", { error: err.message }), "err"),
   });
@@ -92,7 +95,7 @@ export default function OAuthPage() {
           <div className="skeleton skeleton-card" />
         </div>
       ) : !integrations?.length ? (
-        <p className="empty">{t("oauth.no_integrations")}</p>
+        <div className="empty-state"><div className="empty-state__icon">🔗</div><div className="empty-state__text">{t("oauth.no_integrations")}</div></div>
       ) : (
         <div className="stat-grid stat-grid--wide">
           {integrations.map((inst) => (
@@ -128,7 +131,7 @@ export default function OAuthPage() {
           />
         ))}
         {custom_presets.length === 0 && builtin_presets.length === presets.filter((p) => p.service_type !== "custom").length && (
-          <p className="empty" style={{ gridColumn: "1 / -1" }}>{t("oauth.no_custom_presets")}</p>
+          <div className="empty-state empty-state--span-all"><div className="empty-state__icon">🔧</div><div className="empty-state__text">{t("oauth.no_custom_presets")}</div></div>
         )}
       </div>
 
@@ -143,7 +146,7 @@ export default function OAuthPage() {
         confirmLabel={t("common.remove")}
         danger
       >
-        <p style={{ fontSize: "var(--fs-sm)" }}>
+        <p className="text-sm">
           {t("oauth.remove_confirm", { label: deleteTarget?.label || deleteTarget?.instance_id || "" })}
         </p>
       </Modal>
@@ -159,7 +162,7 @@ export default function OAuthPage() {
         confirmLabel={t("common.remove")}
         danger
       >
-        <p style={{ fontSize: "var(--fs-sm)" }}>
+        <p className="text-sm">
           {t("oauth.preset_remove_confirm", { label: deletePresetTarget?.label || "" })}
         </p>
       </Modal>
@@ -249,8 +252,8 @@ function OAuthCard({ instance, presets, onEdit, onRemove }: {
 
   const connect = useMutation({
     mutationFn: (client_secret?: string) => api.post<{ ok: boolean; auth_url?: string; error?: string }>(
-      "/api/oauth/integrations",
-      { action: "auth", id: instance.instance_id, ...(client_secret ? { client_secret } : {}) },
+      `/api/oauth/integrations/${encodeURIComponent(instance.instance_id)}/auth`,
+      client_secret ? { client_secret } : undefined,
     ),
     onSuccess: (r) => {
       if (r.ok && r.auth_url) {
@@ -273,8 +276,7 @@ function OAuthCard({ instance, presets, onEdit, onRemove }: {
 
   const refresh = useMutation({
     mutationFn: () => api.post<{ ok: boolean; error?: string }>(
-      "/api/oauth/integrations",
-      { action: "refresh", id: instance.instance_id },
+      `/api/oauth/integrations/${encodeURIComponent(instance.instance_id)}/refresh`,
     ),
     onSuccess: (r) => {
       toast(r.ok ? t("oauth.refreshed") : t("oauth.refresh_failed", { error: r.error || "" }), r.ok ? "ok" : "err");
@@ -284,8 +286,7 @@ function OAuthCard({ instance, presets, onEdit, onRemove }: {
   });
 
   const { testing, testResult, test } = useTestMutation({
-    url: "/api/oauth/integrations",
-    body: { action: "test", id: instance.instance_id },
+    url: `/api/oauth/integrations/${encodeURIComponent(instance.instance_id)}/test`,
     onOk: () => t("oauth.test_passed"),
     onFail: (r) => t("oauth.test_failed", { error: r.error || "" }),
     onError: (err) => t("oauth.test_failed", { error: err.message }),
@@ -313,6 +314,17 @@ function OAuthCard({ instance, presets, onEdit, onRemove }: {
           {instance.scopes.map((s) => <Badge key={s} status={s} variant="info" />)}
         </div>
       )}
+      <div className="text-xs text-muted">
+        {instance.expires_at && (
+          <span title={instance.expires_at} className={instance.expired ? "text-warn" : ""}>
+            {instance.expired ? t("oauth.expired_at") : t("oauth.expires_at")} {time_ago(instance.expires_at)}
+          </span>
+        )}
+        {instance.expires_at && instance.updated_at && " · "}
+        {instance.updated_at && (
+          <span title={instance.updated_at}>{time_ago(instance.updated_at)}</span>
+        )}
+      </div>
       {testResult && (
         <div className="stat-card__tags">
           <Badge status={testResult.ok ? "pass" : "fail"} variant={testResult.ok ? "ok" : "err"} />
@@ -374,7 +386,8 @@ function OAuthModal({ mode, presets, onClose, onSaved }: {
   const is_custom = serviceType === "custom";
   const is_basic_auth = active_preset?.token_auth_method === "basic";
 
-  const is_scope_selected = (s: string) => parse_csv(scopeText).includes(s);
+  const selected_scopes = new Set(parse_csv(scopeText));
+  const is_scope_selected = (s: string) => selected_scopes.has(s);
 
   const handle_service_change = (type: string) => {
     setServiceType(type);
@@ -399,8 +412,7 @@ function OAuthModal({ mode, presets, onClose, onSaved }: {
     setSaving(true);
     try {
       if (isEdit) {
-        await api.put("/api/oauth/integrations", {
-          id: initial!.instance_id,
+        await api.put(`/api/oauth/integrations/${encodeURIComponent(initial!.instance_id)}`, {
           label: label || initial!.instance_id,
           enabled,
           scopes: parse_csv(scopeText),
@@ -501,7 +513,7 @@ function OAuthModal({ mode, presets, onClose, onSaved }: {
       <div className="form-group">
         <label className="form-label">{t("oauth.scopes")}</label>
         {available_scopes.length > 0 && (
-          <div className="checkbox-group" style={{ marginBottom: 6 }}>
+          <div className="checkbox-group mb-2">
             {available_scopes.map((s) => (
               <label key={s} className="checkbox-label">
                 <input type="checkbox" checked={is_scope_selected(s)} onChange={() => toggle_scope(s)} />
@@ -544,8 +556,7 @@ function PresetModal({ initial, onClose, onSaved }: {
     setSaving(true);
     try {
       if (isEdit) {
-        await api.put("/api/oauth/presets", {
-          service_type: initial.service_type,
+        await api.put(`/api/oauth/presets/${encodeURIComponent(initial.service_type)}`, {
           auth_url: authUrl.trim(),
           token_url: tokenUrl.trim(),
           token_auth_method: tokenAuthMethod,

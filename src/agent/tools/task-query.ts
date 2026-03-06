@@ -17,6 +17,7 @@ export type TaskQueryCallback = (task_id: string) => Promise<TaskQueryResult | n
 /** 스폰된 서브에이전트/백그라운드 작업의 현재 상태를 조회하는 도구. */
 export class TaskQueryTool extends Tool {
   readonly name = "task_query";
+  readonly category = "admin" as const;
   readonly description = "spawn 도구로 실행한 서브에이전트/작업의 현재 상태 조회.";
   readonly parameters: JsonSchema = {
     type: "object",

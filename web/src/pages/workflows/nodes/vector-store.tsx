@@ -58,6 +58,11 @@ function VectorStoreEditPanel({ node, update, t }: EditPanelProps) {
           <input className="input input--sm" value={String(node.ids_field || "")} onChange={(e) => update({ ids_field: e.target.value })} placeholder="memory.delete_ids" />
         </div>
       )}
+      <div className="builder-row">
+        <label className="label">{t("workflows.vs_filter") || "Metadata Filter"}</label>
+        <input className="input input--sm" value={String(node.filter || "")} onChange={(e) => update({ filter: e.target.value || undefined })} placeholder='{"category": "docs"}' />
+        <span className="builder-hint">{t("workflows.vs_filter_hint") || "JSON metadata filter (optional)"}</span>
+      </div>
     </>
   );
 }
@@ -68,6 +73,7 @@ export const vector_store_descriptor: FrontendNodeDescriptor = {
   color: "#00897b",
   shape: "rect",
   toolbar_label: "+ VecStore",
+  category: "ai",
   output_schema: [
     { name: "action",  type: "string", description: "Operation performed" },
     { name: "results", type: "array",  description: "Query results (with score)" },

@@ -17,7 +17,8 @@ import type { CronScheduler } from "../cron/index.js";
 import type { DispatchDlqStoreLike } from "../channels/dlq-store.js";
 import type { SecretVaultLike } from "../security/secret-vault.js";
 import type { SessionStoreLike } from "../session/index.js";
-import { now_iso, error_message, short_id } from "../utils/common.js";
+import { now_iso, error_message } from "../utils/common.js";
+import type { WebhookStore, WebhookPayload } from "../services/webhook-store.service.js";
 import { set_no_cache } from "./route-context.js";
 import { SystemMetricsCollector } from "./system-metrics.js";
 import type { RouteContext, RouteHandler } from "./route-context.js";
@@ -261,7 +262,7 @@ export interface DashboardWorkflowOps {
   cancel(workflow_id: string): Promise<boolean>;
   get_messages(workflow_id: string, phase_id: string, agent_id: string): Promise<import("../agent/phase-loop.types.js").PhaseMessage[]>;
   send_message(workflow_id: string, phase_id: string, agent_id: string, content: string): Promise<{ ok: boolean; error?: string }>;
-  list_templates(): import("../agent/phase-loop.types.js").WorkflowDefinition[];
+  list_templates(): import("../orchestration/workflow-loader.js").TemplateWithSlug[];
   get_template(name: string): import("../agent/phase-loop.types.js").WorkflowDefinition | null;
   save_template(name: string, definition: import("../agent/phase-loop.types.js").WorkflowDefinition): string;
   delete_template(name: string): boolean;
@@ -464,7 +465,7 @@ export class DashboardService implements ServiceLike {
     this.route_map.set("/api/bootstrap", handle_bootstrap);
     this.route_map.set("/api/state", handle_state);
     this.route_map.set("/api/events", handle_state);
-    this.route_map.set("/api/system-metrics", handle_state);
+    this.route_map.set("/api/system/metrics", handle_state);
     this.route_map.set("/api/processes", handle_process);
     this.route_map.set("/api/agents", handle_agent);
     this.route_map.set("/api/approvals", handle_approval);
@@ -476,25 +477,23 @@ export class DashboardService implements ServiceLike {
     this.route_map.set("/api/skills", handle_skill);
     this.route_map.set("/api/tools", handle_health);
     this.route_map.set("/api/templates", handle_template);
-    this.route_map.set("/api/channel-instances", handle_channel);
-    this.route_map.set("/api/channel-status", handle_channel);
-    this.route_map.set("/api/agent-providers", handle_agent_provider);
+    this.route_map.set("/api/channels", handle_channel);
+    this.route_map.set("/api/agents/providers", handle_agent_provider);
     this.route_map.set("/api/promises", handle_promise);
     this.route_map.set("/api/memory", handle_memory);
     this.route_map.set("/api/workspace", handle_workspace);
     this.route_map.set("/api/chat", handle_chat);
     this.route_map.set("/api/sessions", handle_session);
     this.route_map.set("/api/oauth", handle_oauth);
-    this.route_map.set("/api/cli-auth", handle_cli_auth);
+    this.route_map.set("/api/auth/cli", handle_cli_auth);
     this.route_map.set("/api/models", handle_models);
-    this.route_map.set("/api/workflows", handle_workflow);
-    this.route_map.set("/api/workflow-roles", handle_workflow);
-    this.route_map.set("/api/workflow-templates", handle_workflow);
-    this.route_map.set("/api/workflow-node-runs", handle_workflow_node);
-    this.route_map.set("/api/workflow-node-tests", handle_workflow_node);
+    this.route_map.set("/api/workflow/runs", handle_workflow);
+    this.route_map.set("/api/workflow/roles", handle_workflow);
+    this.route_map.set("/api/workflow/templates", handle_workflow);
+    this.route_map.set("/api/workflow/node", handle_workflow_node);
     this.route_map.set("/api/stats", handle_health);
     this.route_map.set("/api/dlq", handle_health);
-    this.route_map.set("/api/workflow-events", handle_health);
+    this.route_map.set("/api/workflow/events", handle_health);
     this.fallback_routes.push(handle_health);
   }
 
@@ -554,6 +553,42 @@ export class DashboardService implements ServiceLike {
   }
 
   /** SessionStore 키 생성 (session-recorder.ts의 session_key 형식과 일치). */
+  /** Webhook 스토어 등록. main.ts에서 WebhookStore를 바인딩. */
+  private _webhook_store?: WebhookStore;
+
+  set_webhook_store(store: WebhookStore): void {
+    this._webhook_store = store;
+    // /hooks/* 경로를 fallback 라우트로 등록
+    this.fallback_routes.unshift(async (ctx) => {
+      if (!ctx.url.pathname.startsWith("/hooks/")) return false;
+      const hook_path = ctx.url.pathname.slice(6); // "/hooks/foo" → "/foo"
+      if (ctx.req.method === "GET" || ctx.req.method === "POST" || ctx.req.method === "PUT" || ctx.req.method === "DELETE") {
+        const headers: Record<string, string> = {};
+        for (const [k, v] of Object.entries(ctx.req.headers)) {
+          if (typeof v === "string") headers[k] = v;
+        }
+        const query: Record<string, string> = {};
+        ctx.url.searchParams.forEach((v, k) => { query[k] = v; });
+
+        let body: unknown = null;
+        if (ctx.req.method !== "GET") {
+          body = await ctx.read_body(ctx.req);
+        }
+
+        store.push(hook_path, {
+          method: ctx.req.method,
+          headers,
+          body,
+          query,
+          received_at: now_iso(),
+        });
+        ctx.json(ctx.res, 200, { ok: true, path: hook_path });
+        return true;
+      }
+      return false;
+    });
+  }
+
   /** OAuth 콜백 핸들러 등록. main.ts에서 OAuthFlowService.handle_callback을 바인딩. */
   _oauth_callback_handler?: (code: string, state: string) => Promise<{ ok: boolean; instance_id?: string; error?: string }>;
 

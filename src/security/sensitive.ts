@@ -96,7 +96,7 @@ function keyword_is_sensitive(name: string): boolean {
   return SECRET_KEYWORDS.some((token) => key.includes(token));
 }
 
-function mask_assignment(match: string, keyRaw: string): string {
+function mask_assignment(_match: string, keyRaw: string): string {
   const key = String(keyRaw || "").trim();
   if (!key) return REDACTED;
   return `${key}=${REDACTED}`;

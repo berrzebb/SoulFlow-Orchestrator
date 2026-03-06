@@ -3,7 +3,7 @@
  * 동일한 list/set/get_effective 패턴을 공유하므로 설정만 바꿔 인스턴스화.
  */
 import { Tool } from "./base.js";
-import type { JsonSchema } from "./types.js";
+import type { JsonSchema, ToolCategory } from "./types.js";
 import type {
   AppendDecisionInput,
   AppendDecisionResult,
@@ -22,6 +22,7 @@ export interface PolicyStoreLike {
 
 type PolicyToolConfig = {
   tool_name: string;
+  category: ToolCategory;
   description: string;
   default_source: DecisionSource;
   labels: {
@@ -33,6 +34,7 @@ type PolicyToolConfig = {
 
 export class PolicyTool extends Tool {
   readonly name: string;
+  readonly category: ToolCategory;
   readonly description: string;
   readonly parameters: JsonSchema = {
     type: "object",
@@ -54,6 +56,7 @@ export class PolicyTool extends Tool {
   constructor(store: PolicyStoreLike, config: PolicyToolConfig) {
     super();
     this.name = config.tool_name;
+    this.category = config.category;
     this.description = config.description;
     this.store = store;
     this.config = config;

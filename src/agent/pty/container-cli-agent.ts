@@ -8,7 +8,7 @@ import type {
 import type { AgentOutputMessage, CliAdapter, BuildArgsOptions } from "./types.js";
 import { classify_error, FailoverError } from "./types.js";
 import { AgentBus } from "./agent-bus.js";
-import { now_iso, error_message } from "../../utils/common.js";
+import { now_iso, error_message, swallow } from "../../utils/common.js";
 import type { CliAuthService, CliType } from "../cli-auth.service.js";
 import { AuthProfileTracker } from "./auth-profile-tracker.js";
 import { evaluate_context_window_guard } from "./context-window-guard.js";
@@ -82,10 +82,10 @@ export class ContainerCliAgent implements AgentBackend {
 
     // 어댑터 능력에 따라 동적 설정
     this.capabilities = {
-      approval: false,
-      structured_output: false,
-      thinking: false,
-      budget_tracking: false,
+      approval: this.adapter.supports_approval,
+      structured_output: this.adapter.supports_structured_output,
+      thinking: this.adapter.supports_thinking,
+      budget_tracking: this.adapter.supports_budget_tracking,
       tool_filtering: this.adapter.supports_tool_filtering,
       tool_result_events: true,
       send_input: true,
@@ -320,7 +320,7 @@ export class ContainerCliAgent implements AgentBackend {
 
   stop(): void {
     void this.bus.shutdown();
-    if (this.tool_bridge) void this.tool_bridge.stop().catch(() => {});
+    if (this.tool_bridge) swallow(this.tool_bridge.stop());
   }
 
   private relay_output_event(

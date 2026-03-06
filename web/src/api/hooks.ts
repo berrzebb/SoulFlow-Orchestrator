@@ -8,5 +8,5 @@ export function useApi<T>(key: string[], path: string, opts?: Omit<UseQueryOptio
 
 /* 주요 데이터 훅 */
 export function useStatus() {
-  return useApi<Record<string, unknown>>(["state"], "/api/state", { refetchInterval: 10_000 });
+  return useApi<Record<string, unknown>>(["state"], "/api/state", { refetchInterval: 10_000, staleTime: 5_000 });
 }

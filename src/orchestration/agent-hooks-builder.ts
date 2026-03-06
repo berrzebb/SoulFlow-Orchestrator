@@ -192,19 +192,27 @@ export function build_agent_hooks(
   if (stream_handler) hooks.on_stream = stream_handler;
 
   const approval = runtime_policy?.sandbox?.approval || "auto-approve";
-  if (approval !== "auto-approve" && channel_context) {
-    hooks.on_approval = async (request) => {
-      deps.logger.info("approval_bridge_request", { tool: request.tool_name, type: request.type });
-      const { decision } = deps.runtime.register_approval_with_callback(
-        request.tool_name || "unknown",
-        request.detail || `tool: ${request.tool_name}`,
-        { channel: channel_context.channel, chat_id: channel_context.chat_id },
-      );
-      const resolved = await decision;
-      if (resolved === "approve") return "accept";
-      if (resolved === "deny") return "deny";
-      return "cancel";
-    };
+  if (channel_context) {
+    if (approval === "auto-approve") {
+      // auto-approve: 자동 수락하되 이벤트 기록 (silent failure 방지)
+      hooks.on_approval = async (request) => {
+        deps.logger.info("approval_auto_accepted", { tool: request.tool_name, type: request.type });
+        return "accept";
+      };
+    } else {
+      hooks.on_approval = async (request) => {
+        deps.logger.info("approval_bridge_request", { tool: request.tool_name, type: request.type });
+        const { decision } = deps.runtime.register_approval_with_callback(
+          request.tool_name || "unknown",
+          request.detail || `tool: ${request.tool_name}`,
+          { channel: channel_context.channel, chat_id: channel_context.chat_id },
+        );
+        const resolved = await decision;
+        if (resolved === "approve") return "accept";
+        if (resolved === "deny") return "deny";
+        return "cancel";
+      };
+    }
   }
 
   if (runtime_policy) {

@@ -55,6 +55,8 @@ const WRITE_APPROVAL_PATTERNS = [
 
 export class ExecTool extends Tool {
   readonly name = "exec";
+  readonly category = "shell" as const;
+  readonly policy_flags = { write: true } as const;
   readonly description = "Execute a shell command and return stdout/stderr.";
   readonly parameters: JsonSchema = {
     type: "object",

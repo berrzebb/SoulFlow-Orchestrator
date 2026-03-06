@@ -60,7 +60,7 @@ describe("TaskResumeService", () => {
     expect(result!.resumed).toBe(true);
     expect(result!.task_id).toBe("task-1");
     expect(result!.previous_status).toBe("waiting_user_input");
-    expect(runtime.resume_task).toHaveBeenCalledWith("task-1", "3번", "user_input_received");
+    expect(runtime.resume_task).toHaveBeenCalledWith("task-1", "3번", "user_input_received", { channel: "telegram", chat_id: "chat-1" });
   });
 
   it("대기 Task이 없으면 null 반환", async () => {
@@ -108,7 +108,7 @@ describe("TaskResumeService", () => {
 
     expect(result).not.toBeNull();
     expect(result!.previous_status).toBe("failed");
-    expect(runtime.resume_task).toHaveBeenCalledWith("task-1", "파일 다시 첨부합니다", "retry_with_enrichment");
+    expect(runtime.resume_task).toHaveBeenCalledWith("task-1", "파일 다시 첨부합니다", "retry_with_enrichment", { channel: "telegram", chat_id: "chat-1" });
   });
 
   it("failed Task이 TTL 초과하면 무시", async () => {
@@ -159,6 +159,7 @@ describe("TaskResumeService.resume_after_approval", () => {
       "task-1",
       expect.stringContaining("도구 실행 결과"),
       "approval_resolved",
+      undefined,
     );
   });
 

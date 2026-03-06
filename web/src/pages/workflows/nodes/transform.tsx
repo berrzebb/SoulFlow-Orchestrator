@@ -10,6 +10,7 @@ function TransformEditPanel({ node, update, t }: EditPanelProps) {
       <div className="builder-row">
         <label className="label">{t("workflows.transform_expression") || "Expression"}</label>
         <textarea className="input code-textarea" rows={4} value={String(node.expression || "")} onChange={(e) => update({ expression: e.target.value })} spellCheck={false} placeholder="({ name: item.first + ' ' + item.last, email: item.email })" />
+        <span className="builder-hint">{t("workflows.transform_hint") || "JS expression per item. Return transformed value. Available: item, index"}</span>
       </div>
     </>
   );
@@ -21,6 +22,7 @@ export const transform_descriptor: FrontendNodeDescriptor = {
   color: "#2980b9",
   shape: "rect",
   toolbar_label: "+ Map",
+  category: "data",
   output_schema: [
     { name: "items", type: "array",  description: "Transformed items" },
     { name: "count", type: "number", description: "Item count" },

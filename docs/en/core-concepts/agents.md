@@ -12,12 +12,19 @@ The execution engines that actually process messages.
 | `claude_cli` | Headless CLI wrapper | Stable, general-purpose | — |
 | `codex_appserver` | Native AppServer | Parallel execution, built-in tool loop | → `codex_cli` |
 | `codex_cli` | Headless CLI wrapper | Sandbox mode support | — |
+| `gemini_cli` | Headless CLI wrapper | Gemini CLI integration | — |
+| `openai_compatible` | OpenAI-compatible API | vLLM · Ollama · LM Studio · Together AI · Gemini and other local/remote models | — |
+| `openrouter` | OpenRouter API | Multi-model routing · 100+ model access | — |
+| `container_cli` | Container CLI wrapper | Docker/Podman sandboxed isolation | — |
 
 ### Choosing a Backend
 
 - **Streaming matters** → `claude_sdk` (fastest first token)
 - **Stability first** → `claude_cli` (batch/production)
 - **Using Codex/OpenAI** → `codex_appserver` or `codex_cli`
+- **Local/open models** → `openai_compatible` (vLLM, Ollama, etc.)
+- **Multi-model access** → `openrouter` (100+ models via single API)
+- **Sandboxed execution** → `container_cli` (Docker/Podman isolation)
 
 Register multiple backends with priorities in the dashboard → **Providers** page.
 

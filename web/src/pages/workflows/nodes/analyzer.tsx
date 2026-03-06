@@ -1,20 +1,38 @@
+import { useState } from "react";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
-function AnalyzerEditPanel({ node, update, t }: EditPanelProps) {
+function AnalyzerEditPanel({ node, update, t, options }: EditPanelProps) {
+  const models = options?.models || [];
+  const [schemaRaw, setSchemaRaw] = useState(node.output_json_schema ? JSON.stringify(node.output_json_schema, null, 2) : "");
+  const [schemaErr, setSchemaErr] = useState("");
+  const temp = node.temperature as number | undefined;
+
+  const handleSchema = (val: string) => {
+    setSchemaRaw(val);
+    if (!val.trim()) { setSchemaErr(""); update({ output_json_schema: undefined }); return; }
+    try { update({ output_json_schema: JSON.parse(val) }); setSchemaErr(""); }
+    catch { setSchemaErr("Invalid JSON"); }
+  };
+
   return (
     <>
       <div className="builder-row-pair">
         <div className="builder-row">
           <label className="label">{t("workflows.llm_backend") || "Backend"}</label>
-          <select className="input input--sm" value={String(node.backend || "openrouter")} onChange={(e) => update({ backend: e.target.value })}>
-            <option value="openrouter">OpenRouter</option>
-            <option value="claude_sdk">Claude SDK</option>
-            <option value="claude_cli">Claude CLI</option>
+          <select className="input input--sm" value={String(node.backend || "")} onChange={(e) => update({ backend: e.target.value })}>
+            {(options?.backends || []).map((b) => <option key={b.value} value={b.value}>{b.label}</option>)}
           </select>
         </div>
         <div className="builder-row">
           <label className="label">{t("workflows.llm_model") || "Model"}</label>
-          <input className="input input--sm" value={String(node.model || "")} onChange={(e) => update({ model: e.target.value })} placeholder="auto" />
+          {models.length > 0 ? (
+            <select className="input input--sm" value={String(node.model || "")} onChange={(e) => update({ model: e.target.value })}>
+              <option value="">auto</option>
+              {models.map((m) => <option key={m.name} value={m.name}>{m.name}</option>)}
+            </select>
+          ) : (
+            <input className="input input--sm" value={String(node.model || "")} onChange={(e) => update({ model: e.target.value })} placeholder="auto" />
+          )}
         </div>
       </div>
       <div className="builder-row">
@@ -31,11 +49,25 @@ function AnalyzerEditPanel({ node, update, t }: EditPanelProps) {
       </div>
       <div className="builder-row">
         <label className="label">{t("workflows.llm_schema") || "Output Schema"}</label>
-        <textarea className="input code-textarea" rows={3} value={node.output_json_schema ? JSON.stringify(node.output_json_schema, null, 2) : ""} onChange={(e) => { try { update({ output_json_schema: e.target.value ? JSON.parse(e.target.value) : undefined }); } catch { /* ignore */ } }} spellCheck={false} placeholder='{"type": "object", "properties": {"score": {"type": "number"}, "category": {"type": "string"}}}' />
+        <textarea
+          className={`input code-textarea${schemaErr ? " input--err" : ""}`}
+          rows={3}
+          value={schemaRaw}
+          onChange={(e) => handleSchema(e.target.value)}
+          spellCheck={false}
+          placeholder='{"type": "object", "properties": {"score": {"type": "number"}, "category": {"type": "string"}}}'
+        />
+        {schemaErr && <span className="field-error">{schemaErr}</span>}
       </div>
       <div className="builder-row">
-        <label className="label">{t("workflows.llm_temperature") || "Temperature"}</label>
-        <input className="input input--sm" type="number" min={0} max={2} step={0.1} value={String(node.temperature ?? "")} onChange={(e) => update({ temperature: e.target.value ? Number(e.target.value) : undefined })} />
+        <label className="label">
+          {t("workflows.llm_temperature") || "Temperature"}
+          <span className="builder-hint--inline">
+            {temp == null ? "" : temp <= 0.3 ? " (precise)" : temp <= 0.7 ? " (balanced)" : " (creative)"}
+          </span>
+        </label>
+        <input className="input input--sm" type="range" min={0} max={2} step={0.1} value={String(temp ?? 0.7)} onChange={(e) => update({ temperature: Number(e.target.value) })} />
+        <span className="builder-hint">{temp ?? 0.7}</span>
       </div>
     </>
   );
@@ -47,6 +79,7 @@ export const analyzer_descriptor: FrontendNodeDescriptor = {
   color: "#e91e63",
   shape: "rect",
   toolbar_label: "+ Analyzer",
+  category: "ai",
   output_schema: [
     { name: "analysis",   type: "object",  description: "Structured analysis result" },
     { name: "category",   type: "string",  description: "Classification category" },
@@ -59,7 +92,7 @@ export const analyzer_descriptor: FrontendNodeDescriptor = {
     { name: "schema", type: "object",  description: "Expected output structure" },
   ],
   create_default: () => ({
-    backend: "openrouter",
+    backend: "",
     prompt_template: "Analyze the following:\n\n{{input}}",
     input_field: "input",
     categories: [],

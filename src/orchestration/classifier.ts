@@ -107,9 +107,17 @@ export function parse_execution_mode(raw: string): ClassificationResult | null {
       if (v === "inquiry") return { mode: "inquiry" };
       if (v === "phase") {
         const wid = obj.workflow_id ? String(obj.workflow_id) : undefined;
-        return { mode: "phase", workflow_id: wid };
+        const nodes = Array.isArray(obj.nodes)
+          ? (obj.nodes as unknown[]).filter((t): t is string => typeof t === "string")
+          : undefined;
+        return { mode: "phase", workflow_id: wid, ...(nodes?.length ? { nodes } : {}) };
       }
-      if (v === "once" || v === "task" || v === "agent") return { mode: v };
+      if (v === "once" || v === "task" || v === "agent") {
+        const tools = Array.isArray(obj.tools)
+          ? (obj.tools as unknown[]).filter((t): t is string => typeof t === "string")
+          : undefined;
+        return tools?.length ? { mode: v, tools } : { mode: v };
+      }
     } catch { /* ignore */ }
   }
   const word = text.toLowerCase().match(RE_MODE_WORD);

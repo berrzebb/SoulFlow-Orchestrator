@@ -8,11 +8,10 @@ import { SubagentRegistry } from "./subagents.js";
 import { TaskStore } from "./task-store.js";
 import { join } from "node:path";
 import {
-  ToolInstallerService,
-  DynamicToolRuntimeLoader,
   ToolRuntimeReloader,
   ToolSelfTestService,
   ToolRegistry,
+  ToolInstallerService,
   create_default_tool_registry,
 } from "./tools/index.js";
 import type { WorkflowEventService } from "../events/index.js";
@@ -68,7 +67,7 @@ export class AgentDomain implements ServiceLike {
       on_task_change: args?.on_task_change,
     });
     const dynamic_store_path = join(data_dir, "custom-tools", "tools.db");
-    this.tools = create_default_tool_registry({
+    const bundle = create_default_tool_registry({
       workspace,
       bus: args?.bus || null,
       event_recorder: args?.events
@@ -111,8 +110,9 @@ export class AgentDomain implements ServiceLike {
       },
       dynamic_store_path,
     });
-    this.tool_installer = new ToolInstallerService(workspace, dynamic_store_path);
-    this.tool_reloader = new ToolRuntimeReloader(new DynamicToolRuntimeLoader(workspace, dynamic_store_path), this.tools);
+    this.tools = bundle.registry;
+    this.tool_installer = bundle.installer;
+    this.tool_reloader = new ToolRuntimeReloader(bundle.dynamic_loader, this.tools);
     this.tool_self_test = new ToolSelfTestService(this.tools);
   }
 

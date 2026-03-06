@@ -12,6 +12,7 @@ export function RootLayout() {
   const connection = useDashboardStore((s) => s.connection);
   const open_sidebar = useDashboardStore((s) => s.open_sidebar);
   const set_web_stream = useDashboardStore((s) => s.set_web_stream);
+  const set_mirror_event = useDashboardStore((s) => s.set_mirror_event);
   const theme = useDashboardStore((s) => s.theme);
 
   useEffect(() => {
@@ -39,6 +40,7 @@ export function RootLayout() {
       msg_timer = setTimeout(() => {
         void qc.invalidateQueries({ queryKey: ["state"] });
         void qc.invalidateQueries({ queryKey: ["chat-session"] });
+        void qc.invalidateQueries({ queryKey: ["chat-sessions"] });
       }, 300);
     };
     const sse = create_sse("/api/events", {
@@ -57,6 +59,10 @@ export function RootLayout() {
         }
         if (d.chat_id) set_web_stream({ chat_id: d.chat_id, content: d.content ?? "" });
       },
+      mirror_message: (data: unknown) => {
+        const d = data as { session_key?: string; direction?: string; sender_id?: string; content?: string; at?: string };
+        if (d.session_key) set_mirror_event({ session_key: d.session_key, direction: d.direction ?? "", sender_id: d.sender_id ?? "", content: d.content ?? "", at: d.at ?? "" });
+      },
       task: () => void qc.invalidateQueries({ queryKey: ["state"] }),
       agent: () => void qc.invalidateQueries({ queryKey: ["state"] }),
       progress: () => void qc.invalidateQueries({ queryKey: ["state"] }),
@@ -67,10 +73,11 @@ export function RootLayout() {
 
   return (
     <div className="app">
+      <a className="skip-to-content" href="#main-content">{t("a11y.skip_to_content")}</a>
       <Sidebar />
       <div className="app__main">
         <header className="topbar">
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div className="topbar__left">
             <button className="topbar__hamburger" onClick={open_sidebar} aria-label={t("sidebar.expand")}>
               ☰
             </button>
@@ -78,9 +85,8 @@ export function RootLayout() {
           </div>
           <div className="topbar__meta">
             <button
-              className="btn btn--xs"
+              className="btn btn--xs topbar__locale-btn"
               onClick={toggle_locale}
-              style={{ fontSize: "var(--fs-xs)", letterSpacing: "0.03em", padding: "4px 12px", minHeight: 32 }}
               aria-label={t("sidebar.toggle_language")}
             >
               {locale === "en" ? "한국어" : "English"}
@@ -90,7 +96,7 @@ export function RootLayout() {
             </span>
           </div>
         </header>
-        <main className="app__content">
+        <main className="app__content" id="main-content">
           <Outlet />
         </main>
       </div>

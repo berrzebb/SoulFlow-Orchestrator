@@ -30,6 +30,7 @@ function make_deps(overrides?: any) {
   const session = make_session();
   const sessions = {
     get_or_create: vi.fn(async () => session),
+    append_message: vi.fn(async () => {}),
     save: vi.fn(async () => {}),
   };
   const daily_memory = {
@@ -65,13 +66,10 @@ describe("SessionRecorder", () => {
 
     await recorder.record_user("slack", make_message(), "bot");
 
-    expect(deps.sessions.get_or_create).toHaveBeenCalledWith("slack:C123:bot:main");
-    expect(deps.session.add_message).toHaveBeenCalledWith(
-      "user",
-      "hello world",
-      expect.objectContaining({ sender_id: "user1" }),
+    expect(deps.sessions.append_message).toHaveBeenCalledWith(
+      "slack:C123:bot:main",
+      expect.objectContaining({ role: "user", content: "hello world", sender_id: "user1" }),
     );
-    expect(deps.sessions.save).toHaveBeenCalled();
     expect(deps.daily_memory.append_daily_memory).toHaveBeenCalledWith(
       expect.stringContaining("USER(user1): hello world"),
     );
@@ -88,10 +86,9 @@ describe("SessionRecorder", () => {
 
     await recorder.record_assistant("slack", make_message(), "bot", "I can help!");
 
-    expect(deps.session.add_message).toHaveBeenCalledWith(
-      "assistant",
-      "I can help!",
-      expect.objectContaining({ sender_id: "bot" }),
+    expect(deps.sessions.append_message).toHaveBeenCalledWith(
+      "slack:C123:bot:main",
+      expect.objectContaining({ role: "assistant", content: "I can help!", sender_id: "bot" }),
     );
     expect(deps.daily_memory.append_daily_memory).toHaveBeenCalledWith(
       expect.stringContaining("ASSISTANT(bot): I can help!"),
@@ -110,7 +107,10 @@ describe("SessionRecorder", () => {
     const msg = make_message({ thread_id: "T456" });
     await recorder.record_user("slack", msg, "bot");
 
-    expect(deps.sessions.get_or_create).toHaveBeenCalledWith("slack:C123:bot:T456");
+    expect(deps.sessions.append_message).toHaveBeenCalledWith(
+      "slack:C123:bot:T456",
+      expect.objectContaining({ role: "user" }),
+    );
   });
 
   it("does nothing when sessions is null", async () => {
@@ -128,7 +128,7 @@ describe("SessionRecorder", () => {
 
   it("does not throw on session error", async () => {
     const deps = make_deps();
-    deps.sessions.get_or_create.mockRejectedValue(new Error("db_error"));
+    deps.sessions.append_message.mockRejectedValue(new Error("db_error"));
     const recorder = new SessionRecorder({
       sessions: deps.sessions as any,
       daily_memory: deps.daily_memory,
@@ -151,10 +151,9 @@ describe("SessionRecorder", () => {
     });
 
     await recorder.record_user("slack", make_message({ content: "secret data" }), "bot");
-    expect(deps.session.add_message).toHaveBeenCalledWith(
-      "user",
-      "SECRET DATA",
-      expect.anything(),
+    expect(deps.sessions.append_message).toHaveBeenCalledWith(
+      "slack:C123:bot:main",
+      expect.objectContaining({ role: "user", content: "SECRET DATA" }),
     );
   });
 

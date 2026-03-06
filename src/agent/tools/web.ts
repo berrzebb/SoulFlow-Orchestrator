@@ -2,6 +2,8 @@ import { error_message } from "../../utils/common.js";
 import { sanitize_untrusted_text } from "../../security/content-sanitizer.js";
 import { execFile, spawnSync } from "node:child_process";
 import { promisify } from "node:util";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join, resolve, isAbsolute, dirname } from "node:path";
 import { Tool } from "./base.js";
 import type { JsonSchema, ToolExecutionContext } from "./types.js";
 
@@ -16,9 +18,10 @@ function validate_url(url: string): string | null {
     const host = parsed.hostname.toLowerCase();
     if (
       host === "localhost" ||
-      host === "127.0.0.1" ||
+      host === "0.0.0.0" ||
       host === "::1" ||
       host.endsWith(".local") ||
+      /^127\.\d+\.\d+\.\d+$/.test(host) ||
       /^10\.\d+\.\d+\.\d+$/.test(host) ||
       /^192\.168\.\d+\.\d+$/.test(host) ||
       /^169\.254\.\d+\.\d+$/.test(host) ||
@@ -198,6 +201,8 @@ function extract_search_results(snapshot: string, count: number): Array<{ rank: 
 
 export class WebSearchTool extends Tool {
   readonly name = "web_search";
+  readonly category = "web" as const;
+  readonly policy_flags = { network: true } as const;
   readonly description = "Search web results using agent-browser snapshot workflow.";
   readonly parameters: JsonSchema = {
     type: "object",
@@ -256,6 +261,8 @@ export class WebSearchTool extends Tool {
 
 export class WebFetchTool extends Tool {
   readonly name = "web_fetch";
+  readonly category = "web" as const;
+  readonly policy_flags = { network: true } as const;
   readonly description = "Fetch a web page using agent-browser and return extracted text.";
   readonly parameters: JsonSchema = {
     type: "object",
@@ -315,6 +322,8 @@ export class WebFetchTool extends Tool {
 
 export class WebBrowserTool extends Tool {
   readonly name = "web_browser";
+  readonly category = "web" as const;
+  readonly policy_flags = { network: true } as const;
   readonly description = "Explore dynamic websites via agent-browser CLI (open/snapshot/click/fill/wait/get/screenshot/close).";
   readonly parameters: JsonSchema = {
     type: "object",
@@ -329,6 +338,8 @@ export class WebBrowserTool extends Tool {
       wait_ms: { type: "integer", minimum: 1, maximum: 120000 },
       session: { type: "string" },
       path: { type: "string" },
+      full_page: { type: "boolean", description: "Full page screenshot (default false)" },
+      annotate: { type: "boolean", description: "Add numbered labels to elements (default false)" },
       max_chars: { type: "integer", minimum: 100, maximum: 500000 },
     },
     required: ["action"],
@@ -419,8 +430,11 @@ export class WebBrowserTool extends Tool {
     if (action === "screenshot") {
       const path = String(params.path || "").trim();
       const args = path
-        ? [...base, "screenshot", path, "--json"]
-        : [...base, "screenshot", "--json"];
+        ? [...base, "screenshot", path]
+        : [...base, "screenshot"];
+      if (Boolean(params.full_page)) args.push("--full");
+      if (Boolean(params.annotate)) args.push("--annotate");
+      args.push("--json");
       const result = await run_agent_browser_cli(args, context);
       if (!result.ok) return `Error: ${result.stderr || result.stdout || "agent_browser_screenshot_failed"}`;
       return JSON.stringify({
@@ -438,5 +452,285 @@ export class WebBrowserTool extends Tool {
     }
 
     return `Error: unsupported action '${action}'`;
+  }
+}
+
+/** one-shot 브라우저 세션: open → wait → action → close. */
+async function with_browser_session(
+  url: string,
+  context: ToolExecutionContext | undefined,
+  options: { wait_ms?: number; session?: string },
+  action: (base: string[], session: string) => Promise<string>,
+): Promise<string> {
+  const err = validate_url(url);
+  if (err) return `Error: ${err}`;
+  if (context?.signal?.aborted) return "Error: cancelled";
+  const session = compact_session_name(context, options.session);
+  const base = ["--session", session];
+
+  const open_r = await run_agent_browser_cli([...base, "open", url, "--json"], context);
+  if (!open_r.ok) return agent_browser_error(open_r, "open_failed");
+  await run_agent_browser_cli([...base, "wait", "--load", "domcontentloaded", "--json"], context, 15_000);
+  if (options.wait_ms && options.wait_ms > 0) {
+    await run_agent_browser_cli([...base, "wait", String(options.wait_ms), "--json"], context);
+  }
+
+  try {
+    return await action(base, session);
+  } finally {
+    await run_agent_browser_cli([...base, "close", "--json"], context).catch(() => {});
+  }
+}
+
+function resolve_output_path(requested: string | undefined, workspace: string, prefix: string, ext: string): string {
+  if (requested) {
+    const abs = isAbsolute(requested) ? requested : resolve(workspace, requested);
+    mkdirSync(dirname(abs), { recursive: true });
+    return abs;
+  }
+  const dir = join(workspace, "runtime", "web-output");
+  mkdirSync(dir, { recursive: true });
+  return join(dir, `${prefix}-${Date.now()}${ext}`);
+}
+
+export class WebSnapshotTool extends Tool {
+  readonly name = "web_snapshot";
+  readonly category = "web" as const;
+  readonly policy_flags = { network: true } as const;
+  readonly description = "Take a screenshot of a web page (one-shot). Returns file path; use send_file to deliver.";
+  readonly parameters: JsonSchema = {
+    type: "object",
+    properties: {
+      url: { type: "string", description: "Target URL" },
+      path: { type: "string", description: "Save path (default: workspace temp)" },
+      full_page: { type: "boolean", description: "Capture full page (default false)" },
+      annotate: { type: "boolean", description: "Add numbered labels to interactive elements (default false). Useful for identifying click targets." },
+      wait_ms: { type: "integer", minimum: 0, maximum: 30000, description: "Extra wait after load (ms)" },
+    },
+    required: ["url"],
+    additionalProperties: false,
+  };
+
+  private readonly workspace: string;
+  constructor(args?: { workspace?: string }) {
+    super();
+    this.workspace = args?.workspace || process.cwd();
+  }
+
+  protected async run(params: Record<string, unknown>, context?: ToolExecutionContext): Promise<string> {
+    const url = String(params.url || "").trim();
+    if (!url) return "Error: url is required";
+    const wait_ms = Number(params.wait_ms || 0);
+    const full_page = Boolean(params.full_page);
+    const annotate = Boolean(params.annotate);
+    const out_path = resolve_output_path(
+      params.path ? String(params.path) : undefined,
+      this.workspace,
+      "snapshot",
+      ".png",
+    );
+
+    return with_browser_session(url, context, { wait_ms }, async (base) => {
+      const args = [...base, "screenshot", out_path];
+      if (full_page) args.push("--full");
+      if (annotate) args.push("--annotate");
+      args.push("--json");
+      const result = await run_agent_browser_cli(args, context);
+      if (!result.ok) return agent_browser_error(result, "screenshot_failed");
+      return JSON.stringify({ ok: true, url, path: out_path, full_page, annotate });
+    });
+  }
+}
+
+export class WebExtractTool extends Tool {
+  readonly name = "web_extract";
+  readonly category = "web" as const;
+  readonly policy_flags = { network: true } as const;
+  readonly description = "Extract structured text from a web page using CSS selectors.";
+  readonly parameters: JsonSchema = {
+    type: "object",
+    properties: {
+      url: { type: "string", description: "Target URL" },
+      selectors: { type: "object", description: "Key-to-CSS-selector mapping, e.g. { title: 'h1', body: '.content' }" },
+      wait_ms: { type: "integer", minimum: 0, maximum: 30000, description: "Extra wait after load (ms)" },
+      max_chars: { type: "integer", minimum: 100, maximum: 500000, description: "Max characters per field" },
+    },
+    required: ["url", "selectors"],
+    additionalProperties: false,
+  };
+
+  protected async run(params: Record<string, unknown>, context?: ToolExecutionContext): Promise<string> {
+    const url = String(params.url || "").trim();
+    if (!url) return "Error: url is required";
+    const selectors = params.selectors;
+    if (!selectors || typeof selectors !== "object" || Array.isArray(selectors)) {
+      return "Error: selectors must be an object { key: css_selector }";
+    }
+    const entries = Object.entries(selectors as Record<string, unknown>);
+    if (entries.length === 0) return "Error: selectors must have at least one entry";
+    if (entries.length > 20) return "Error: max 20 selectors";
+    const wait_ms = Number(params.wait_ms || 0);
+    const max_chars = Math.max(100, Math.min(500_000, Number(params.max_chars || 50_000)));
+
+    return with_browser_session(url, context, { wait_ms }, async (base, session) => {
+      const extracted: Record<string, string> = {};
+      let injection_suspected = false;
+
+      for (const [key, sel] of entries) {
+        const selector = String(sel || "").trim();
+        if (!selector) { extracted[key] = ""; continue; }
+        const result = await run_agent_browser_cli([...base, "get", "text", selector, "--json"], context);
+        if (!result.ok) { extracted[key] = `(error: ${result.stderr || "not found"})`; continue; }
+        const data = parsed_browser_data(result);
+        const raw = String(data.text || data.value || "").trim();
+        const sanitized = clip_and_sanitize_text(raw, max_chars, url);
+        if (sanitized.security.prompt_injection_suspected) injection_suspected = true;
+        extracted[key] = sanitized.text;
+      }
+
+      return JSON.stringify({
+        url,
+        session,
+        extracted,
+        security: { prompt_injection_suspected: injection_suspected },
+      }, null, 2);
+    });
+  }
+}
+
+export class WebPdfTool extends Tool {
+  readonly name = "web_pdf";
+  readonly category = "web" as const;
+  readonly policy_flags = { network: true } as const;
+  readonly description = "Save a web page as PDF (one-shot). Returns file path; use send_file to deliver.";
+  readonly parameters: JsonSchema = {
+    type: "object",
+    properties: {
+      url: { type: "string", description: "Target URL" },
+      path: { type: "string", description: "Save path (default: workspace temp)" },
+      wait_ms: { type: "integer", minimum: 0, maximum: 30000, description: "Extra wait after load (ms)" },
+    },
+    required: ["url"],
+    additionalProperties: false,
+  };
+
+  private readonly workspace: string;
+  constructor(args?: { workspace?: string }) {
+    super();
+    this.workspace = args?.workspace || process.cwd();
+  }
+
+  protected async run(params: Record<string, unknown>, context?: ToolExecutionContext): Promise<string> {
+    const url = String(params.url || "").trim();
+    if (!url) return "Error: url is required";
+    const wait_ms = Number(params.wait_ms || 0);
+    const out_path = resolve_output_path(
+      params.path ? String(params.path) : undefined,
+      this.workspace,
+      "page",
+      ".pdf",
+    );
+
+    return with_browser_session(url, context, { wait_ms }, async (base) => {
+      const result = await run_agent_browser_cli([...base, "pdf", out_path, "--json"], context);
+      if (!result.ok) return agent_browser_error(result, "pdf_failed");
+      return JSON.stringify({ ok: true, url, path: out_path });
+    });
+  }
+}
+
+export class WebMonitorTool extends Tool {
+  readonly name = "web_monitor";
+  readonly category = "web" as const;
+  readonly policy_flags = { network: true } as const;
+  readonly description = "Monitor a web page for changes. Compares current snapshot with stored version. Combine with cron for periodic monitoring.";
+  readonly parameters: JsonSchema = {
+    type: "object",
+    properties: {
+      url: { type: "string", description: "Target URL" },
+      label: { type: "string", description: "Monitor identifier (used as storage key)" },
+      selector: { type: "string", description: "CSS selector to monitor specific area" },
+      max_chars: { type: "integer", minimum: 100, maximum: 500000, description: "Max snapshot chars" },
+      wait_ms: { type: "integer", minimum: 0, maximum: 30000, description: "Extra wait after load (ms)" },
+    },
+    required: ["url", "label"],
+    additionalProperties: false,
+  };
+
+  private readonly workspace: string;
+  constructor(args?: { workspace?: string }) {
+    super();
+    this.workspace = args?.workspace || process.cwd();
+  }
+
+  protected async run(params: Record<string, unknown>, context?: ToolExecutionContext): Promise<string> {
+    const url = String(params.url || "").trim();
+    if (!url) return "Error: url is required";
+    const label = String(params.label || "").trim().replace(/[^A-Za-z0-9._-]+/g, "-");
+    if (!label) return "Error: label is required";
+    const selector = String(params.selector || "").trim();
+    const max_chars = Math.max(100, Math.min(500_000, Number(params.max_chars || 100_000)));
+    const wait_ms = Number(params.wait_ms || 0);
+
+    const store_dir = join(this.workspace, "runtime", "web-monitor");
+    mkdirSync(store_dir, { recursive: true });
+    const store_path = join(store_dir, `${label}.json`);
+
+    return with_browser_session(url, context, { wait_ms }, async (base, session) => {
+      let current_text: string;
+      if (selector) {
+        const r = await run_agent_browser_cli([...base, "get", "text", selector, "--json"], context);
+        if (!r.ok) return agent_browser_error(r, "get_text_failed");
+        const data = parsed_browser_data(r);
+        current_text = String(data.text || data.value || "").trim();
+      } else {
+        const r = await run_agent_browser_cli([...base, "snapshot", "-c", "-d", "6", "--json"], context);
+        if (!r.ok) return agent_browser_error(r, "snapshot_failed");
+        const data = parsed_browser_data(r);
+        current_text = String(data.snapshot || "").trim();
+      }
+
+      if (current_text.length > max_chars) {
+        current_text = current_text.slice(0, max_chars);
+      }
+
+      const now = new Date().toISOString();
+      let previous: { snapshot: string; captured_at: string } | null = null;
+      try {
+        const raw = readFileSync(store_path, "utf-8");
+        previous = JSON.parse(raw) as { snapshot: string; captured_at: string };
+      } catch { /* first run */ }
+
+      writeFileSync(store_path, JSON.stringify({ url, label, snapshot: current_text, captured_at: now }), "utf-8");
+
+      if (!previous) {
+        return JSON.stringify({
+          url, label, session, changed: false, first_run: true,
+          snapshot_length: current_text.length, current_at: now,
+        });
+      }
+
+      const prev_lines = previous.snapshot.split(/\r?\n/);
+      const curr_lines = current_text.split(/\r?\n/);
+      const prev_set = new Set(prev_lines);
+      const curr_set = new Set(curr_lines);
+      const added = curr_lines.filter((l) => !prev_set.has(l));
+      const removed = prev_lines.filter((l) => !curr_set.has(l));
+      const changed = added.length > 0 || removed.length > 0;
+
+      return JSON.stringify({
+        url, label, session, changed,
+        diff: {
+          added: added.length,
+          removed: removed.length,
+          preview: [
+            ...added.slice(0, 5).map((l) => `+ ${l.slice(0, 200)}`),
+            ...removed.slice(0, 5).map((l) => `- ${l.slice(0, 200)}`),
+          ],
+        },
+        previous_at: previous.captured_at,
+        current_at: now,
+      }, null, 2);
+    });
   }
 }

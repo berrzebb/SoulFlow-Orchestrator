@@ -8,10 +8,15 @@ import type { JsonSchema, ToolExecutionContext } from "./types.js";
 import type { DashboardWorkflowOps } from "../../dashboard/service.js";
 import { normalize_workflow_definition, slugify } from "../../orchestration/workflow-loader.js";
 import { build_node_catalog } from "./workflow-catalog.js";
+import { select_nodes_for_request } from "../../orchestration/node-selector.js";
+import { get_all_handlers } from "../node-registry.js";
+import { register_all_nodes } from "../nodes/index.js";
 
 export class WorkflowTool extends Tool {
   readonly name = "workflow";
+  readonly category = "external" as const;
   readonly description =
+    "IMPORTANT: Always use this tool to create/update/delete workflows. Never use write_file to create workflow YAML files directly.\n" +
     "Create, list, run, get, update, delete workflow templates.\n" +
     "Use 'create' with a structured definition (title + phases/orche_nodes) to build a new workflow.\n" +
     "Use 'run' with a template name to execute, or with an inline definition.\n" +
@@ -33,6 +38,11 @@ export class WorkflowTool extends Tool {
       variables: {
         type: "object",
         description: "Variable overrides when running a workflow (for run action)",
+      },
+      node_categories: {
+        type: "array",
+        items: { type: "string" },
+        description: "Filter node_types by category: flow, data, ai, integration, advanced",
       },
     },
     required: ["action"],
@@ -58,7 +68,7 @@ export class WorkflowTool extends Tool {
       case "update": return this.handle_update(params);
       case "delete": return this.handle_delete(params);
       case "export": return this.handle_export(params);
-      case "node_types": return this.handle_node_types();
+      case "node_types": return this.handle_node_types(params);
       default: return `Error: unsupported action '${action}'. Use: create, list, get, run, update, delete, export, node_types`;
     }
   }
@@ -112,7 +122,8 @@ export class WorkflowTool extends Tool {
     const templates = this.ops.list_templates();
     const summary = templates.map((t) => ({
       title: t.title,
-      slug: slugify(t.title),
+      slug: (t as { slug?: string }).slug || slugify(t.title),
+      aliases: (t as { aliases?: string[] }).aliases || [],
       phases: t.phases?.length ?? 0,
       orche_nodes: t.orche_nodes?.length ?? 0,
       trigger: t.trigger ?? null,
@@ -189,8 +200,14 @@ export class WorkflowTool extends Tool {
     return yaml;
   }
 
-  /** 노드 카탈로그를 lazy 생성하여 반환. */
-  private handle_node_types(): string {
+  /** 노드 카탈로그 반환. 카테고리 지정 시 필터링된 카탈로그 생성. */
+  private handle_node_types(params: Record<string, unknown>): string {
+    const cats = Array.isArray(params.node_categories) ? params.node_categories.filter((c): c is string => typeof c === "string") : undefined;
+    if (cats?.length) {
+      register_all_nodes();
+      const { handlers } = select_nodes_for_request(get_all_handlers(), cats);
+      return build_node_catalog(handlers);
+    }
     if (!this.catalog_cache) {
       this.catalog_cache = build_node_catalog();
     }

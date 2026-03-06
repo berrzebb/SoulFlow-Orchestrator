@@ -61,6 +61,7 @@ function parse_skill_name(raw: string): string {
 
 export class RuntimeAdminTool extends Tool {
   readonly name = "runtime_admin";
+  readonly category = "admin" as const;
   readonly description = "Manage runtime capabilities: upsert/list skills, install/uninstall/list dynamic tools, and manage MCP servers.";
   readonly parameters: JsonSchema = {
     type: "object",

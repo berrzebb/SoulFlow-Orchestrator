@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, type ReactNode } from "react";
+import { createContext, useContext, useState, type ReactNode } from "react";
 import { en } from "./en";
 import { ko } from "./ko";
 
@@ -27,13 +27,13 @@ const I18nContext = createContext<I18nContextValue>(null!);
 export function I18nProvider({ children }: { children: ReactNode }) {
   const [locale, setLocale] = useState<Locale>(get_initial_locale);
 
-  const set_locale = useCallback((l: Locale) => {
+  const set_locale = (l: Locale) => {
     setLocale(l);
     try { localStorage.setItem(STORAGE_KEY, l); } catch { /* noop */ }
     document.documentElement.lang = l;
-  }, []);
+  };
 
-  const t = useCallback((key: string, vars?: Record<string, string | number>): string => {
+  const t = (key: string, vars?: Record<string, string | number>): string => {
     let text = DICTS[locale][key] ?? DICTS.en[key] ?? key;
     if (vars) {
       for (const [k, v] of Object.entries(vars)) {
@@ -41,7 +41,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
       }
     }
     return text;
-  }, [locale]);
+  };
 
   return (
     <I18nContext.Provider value={{ locale, set_locale, t }}>

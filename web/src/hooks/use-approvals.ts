@@ -30,7 +30,7 @@ export function useApprovals(options: UseApprovalsOptions = {}) {
 
   const resolve = async (request_id: string, text: string) => {
     try {
-      await api.post("/api/approvals", { approval_id: request_id, text });
+      await api.post(`/api/approvals/${encodeURIComponent(request_id)}/resolve`, { text });
       toast(t("chat.approval_done"), "ok");
       void qc.invalidateQueries({ queryKey: ["approvals-pending"] });
       for (const key of related_query_keys) {

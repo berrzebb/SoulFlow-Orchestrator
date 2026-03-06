@@ -28,15 +28,11 @@ export function SendAgentModal({ agentId, onClose, onSend }: Props) {
     >
       <input
         autoFocus
+        className="form-input"
         value={text}
         onChange={(e) => setText(e.target.value)}
-        onKeyDown={(e) => { if (e.key === "Enter") submit(); }}
+        onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) submit(); }}
         placeholder={t("agents.message_placeholder")}
-        style={{
-          width: "100%", background: "var(--bg)", color: "var(--text)",
-          border: "1px solid var(--line)", padding: "8px 12px",
-          fontFamily: "inherit", fontSize: 12, borderRadius: 4,
-        }}
       />
     </Modal>
   );

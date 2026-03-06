@@ -2,16 +2,42 @@ import { NavLink } from "react-router-dom";
 import { useDashboardStore } from "../store";
 import { useI18n } from "../i18n";
 
-const NAV_ITEMS = [
-  { to: "/", key: "nav.overview", icon: "\u25c8" },
-  { to: "/workspace", key: "nav.workspace", icon: "\u25a6" },
-  { to: "/chat", key: "nav.chat", icon: "\ud83d\udcac" },
-  { to: "/channels", key: "nav.channels", icon: "\u21cc" },
-  { to: "/providers", key: "nav.providers", icon: "\u2b21" },
-  { to: "/workflows", key: "nav.workflows", icon: "\u25b7" },
-  { to: "/secrets", key: "nav.secrets", icon: "\u26bf" },
-  { to: "/settings", key: "nav.settings", icon: "\u229e" },
-] as const;
+type NavItem = { to: string; key: string; icon: string };
+type NavGroup = { label_key: string; items: NavItem[] };
+
+const NAV_GROUPS: NavGroup[] = [
+  {
+    label_key: "nav.group.main",
+    items: [
+      { to: "/", key: "nav.overview", icon: "\u25c8" },
+      { to: "/chat", key: "nav.chat", icon: "\ud83d\udcac" },
+    ],
+  },
+  {
+    label_key: "nav.group.build",
+    items: [
+      { to: "/workflows", key: "nav.workflows", icon: "\u25b7" },
+      { to: "/workspace", key: "nav.workspace", icon: "\u25a6" },
+    ],
+  },
+  {
+    label_key: "nav.group.connect",
+    items: [
+      { to: "/channels", key: "nav.channels", icon: "\u21cc" },
+      { to: "/providers", key: "nav.providers", icon: "\u2b21" },
+    ],
+  },
+  {
+    label_key: "nav.group.system",
+    items: [
+      { to: "/secrets", key: "nav.secrets", icon: "\u26bf" },
+      { to: "/settings", key: "nav.settings", icon: "\u229e" },
+    ],
+  },
+];
+
+const ALL_NAV_ITEMS = NAV_GROUPS.flatMap((g) => g.items);
+const BOTTOM_NAV_KEYS = new Set(["/", "/chat", "/workflows", "/workspace", "/settings"]);
 
 export function Sidebar() {
   const collapsed = useDashboardStore((s) => s.sidebar_collapsed);
@@ -48,43 +74,68 @@ export function Sidebar() {
           </button>
         </div>
         <ul className="sidebar__nav">
-          {NAV_ITEMS.map((item) => {
-            const label = t(item.key);
-            return (
-              <li key={item.to}>
-                <NavLink
-                  to={item.to}
-                  end={item.to === "/"}
-                  className={({ isActive }) => `sidebar__link ${isActive ? "sidebar__link--active" : ""}`}
-                  onClick={handle_nav}
-                >
-                  <span className="sidebar__icon" data-tooltip={label}>{item.icon}</span>
-                  {!collapsed && <span className="sidebar__label">{label}</span>}
-                </NavLink>
-              </li>
-            );
-          })}
+          {NAV_GROUPS.map((group) => (
+            <li key={group.label_key} className="sidebar__group">
+              {!collapsed && <span className="sidebar__group-label">{t(group.label_key)}</span>}
+              <ul className="sidebar__group-items">
+                {group.items.map((item) => {
+                  const label = t(item.key);
+                  return (
+                    <li key={item.to}>
+                      <NavLink
+                        to={item.to}
+                        end={item.to === "/"}
+                        className={({ isActive }) => `sidebar__link ${isActive ? "sidebar__link--active" : ""}`}
+                        onClick={handle_nav}
+                      >
+                        <span className="sidebar__icon" data-tooltip={label}>{item.icon}</span>
+                        {!collapsed && <span className="sidebar__label">{label}</span>}
+                      </NavLink>
+                    </li>
+                  );
+                })}
+              </ul>
+            </li>
+          ))}
         </ul>
-        <div style={{ padding: "var(--sp-2) var(--sp-3)", borderTop: "1px solid var(--line)", display: "flex", flexDirection: collapsed ? "column" : "row", gap: 6 }}>
+        <div className="sidebar__footer">
           <button
-            className="btn btn--xs"
+            className="btn btn--xs sidebar__footer-btn sidebar__footer-btn--theme"
             onClick={toggle_theme}
-            style={{ flex: collapsed ? undefined : "0 0 auto", fontSize: 14, lineHeight: 1, padding: "4px 8px" }}
             aria-label={t("sidebar.toggle_theme")}
             title={t("sidebar.toggle_theme")}
           >
             {theme === "dark" ? "\u2600\ufe0f" : "\ud83c\udf19"}
           </button>
           <button
-            className="btn btn--xs"
+            className="btn btn--xs sidebar__footer-btn"
             onClick={toggle_locale}
-            style={{ flex: 1, fontSize: "var(--fs-xs)", letterSpacing: "0.04em" }}
             aria-label={t("sidebar.toggle_language")}
           >
             {collapsed ? (locale === "en" ? "KO" : "EN") : (locale === "en" ? "한국어" : "English")}
           </button>
         </div>
       </nav>
+      <BottomNav />
     </>
+  );
+}
+
+function BottomNav() {
+  const { t } = useI18n();
+  return (
+    <nav className="bottom-nav" aria-label="Mobile navigation">
+      {ALL_NAV_ITEMS.filter((item) => BOTTOM_NAV_KEYS.has(item.to)).map((item) => (
+        <NavLink
+          key={item.to}
+          to={item.to}
+          end={item.to === "/"}
+          className={({ isActive }) => `bottom-nav__item ${isActive ? "bottom-nav__item--active" : ""}`}
+        >
+          <span className="bottom-nav__icon">{item.icon}</span>
+          <span className="bottom-nav__label">{t(item.key)}</span>
+        </NavLink>
+      ))}
+    </nav>
   );
 }

@@ -2,36 +2,32 @@ import type { RouteContext } from "../route-context.js";
 
 export async function handle_template(ctx: RouteContext): Promise<boolean> {
   const { req, url, res, options, json, read_body } = ctx;
+  const path = url.pathname;
 
-  if (url.pathname !== "/api/templates") return false;
+  const ops = options.template_ops;
 
-  // GET /api/templates — 목록
-  if (req.method === "GET") {
-    const ops = options.template_ops;
+  // GET /api/templates
+  if (path === "/api/templates" && req.method === "GET") {
     if (!ops) { json(res, 503, { error: "templates_unavailable" }); return true; }
     json(res, 200, ops.list());
     return true;
   }
 
-  // POST /api/templates { name } — 단건 조회
-  if (req.method === "POST") {
-    const ops = options.template_ops;
+  // GET /api/templates/:name
+  const name_match = path.match(/^\/api\/templates\/([^/]+)$/);
+  if (name_match && req.method === "GET") {
     if (!ops) { json(res, 503, { error: "templates_unavailable" }); return true; }
-    const body = await read_body(req);
-    const name = String(body?.name || "").trim();
-    if (!name) { json(res, 400, { error: "name_required" }); return true; }
+    const name = decodeURIComponent(name_match[1]);
     const content = ops.read(name);
     json(res, content !== null ? 200 : 404, { name, content });
     return true;
   }
 
-  // PUT /api/templates { name, content } — 수정
-  if (req.method === "PUT") {
-    const ops = options.template_ops;
+  // PUT /api/templates/:name { content }
+  if (name_match && req.method === "PUT") {
     if (!ops) { json(res, 503, { error: "templates_unavailable" }); return true; }
+    const name = decodeURIComponent(name_match[1]);
     const body = await read_body(req);
-    const name = String(body?.name || "").trim();
-    if (!name) { json(res, 400, { error: "name_required" }); return true; }
     const content = String(body?.content ?? "");
     const result = ops.write(name, content);
     json(res, result.ok ? 200 : 400, result);

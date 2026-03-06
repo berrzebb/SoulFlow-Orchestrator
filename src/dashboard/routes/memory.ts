@@ -2,14 +2,17 @@ import type { RouteContext } from "../route-context.js";
 
 export async function handle_memory(ctx: RouteContext): Promise<boolean> {
   const { req, url, res, options, json, read_body } = ctx;
+  const path = url.pathname;
 
-  if (url.pathname === "/api/memory/longterm" && req.method === "GET") {
+  // GET /api/memory/longterm
+  if (path === "/api/memory/longterm" && req.method === "GET") {
     if (!options.memory_ops) { json(res, 503, { error: "memory_unavailable" }); return true; }
     const content = await options.memory_ops.read_longterm();
     json(res, 200, { content });
     return true;
   }
-  if (url.pathname === "/api/memory/longterm" && req.method === "PUT") {
+  // PUT /api/memory/longterm { content }
+  if (path === "/api/memory/longterm" && req.method === "PUT") {
     if (!options.memory_ops) { json(res, 503, { error: "memory_unavailable" }); return true; }
     const body = await read_body(req);
     const content = String(body?.content ?? "");
@@ -17,30 +20,30 @@ export async function handle_memory(ctx: RouteContext): Promise<boolean> {
     json(res, 200, { ok: true });
     return true;
   }
-  if (url.pathname === "/api/memory/daily" && req.method === "GET") {
+
+  // GET /api/memory/daily
+  if (path === "/api/memory/daily" && req.method === "GET") {
     if (!options.memory_ops) { json(res, 503, { error: "memory_unavailable" }); return true; }
     const days = await options.memory_ops.list_daily();
     json(res, 200, { days });
     return true;
   }
 
-  // POST /api/memory/daily { day } — 단건 조회
-  if (url.pathname === "/api/memory/daily" && req.method === "POST") {
+  // GET /api/memory/daily/:day
+  const day_match = path.match(/^\/api\/memory\/daily\/([^/]+)$/);
+  if (day_match && req.method === "GET") {
     if (!options.memory_ops) { json(res, 503, { error: "memory_unavailable" }); return true; }
-    const body = await read_body(req);
-    const day = String(body?.day || "").trim();
-    if (!day) { json(res, 400, { error: "day_required" }); return true; }
+    const day = decodeURIComponent(day_match[1]);
     const content = await options.memory_ops.read_daily(day);
     json(res, 200, { content, day });
     return true;
   }
 
-  // PUT /api/memory/daily { day, content } — 수정
-  if (url.pathname === "/api/memory/daily" && req.method === "PUT") {
+  // PUT /api/memory/daily/:day { content }
+  if (day_match && req.method === "PUT") {
     if (!options.memory_ops) { json(res, 503, { error: "memory_unavailable" }); return true; }
+    const day = decodeURIComponent(day_match[1]);
     const body = await read_body(req);
-    const day = String(body?.day || "").trim();
-    if (!day) { json(res, 400, { error: "day_required" }); return true; }
     const content = String(body?.content ?? "");
     await options.memory_ops.write_daily(content, day);
     json(res, 200, { ok: true });

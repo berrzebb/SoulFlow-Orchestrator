@@ -1,6 +1,6 @@
 /** Phase Loop 워크플로우 + 에이전트 메시지 SQLite 영속화. TaskStore 패턴 준용. */
 
-import { mkdir } from "node:fs/promises";
+import { mkdir, rename, rmdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { now_iso } from "../utils/common.js";
 import { with_sqlite } from "../utils/sqlite-helper.js";
@@ -28,6 +28,7 @@ export class PhaseWorkflowStore implements PhaseWorkflowStoreLike {
 
   private async ensure_initialized(): Promise<void> {
     await mkdir(this.dir, { recursive: true });
+    await this.recover_if_dir(this.sqlite_path);
     with_sqlite(this.sqlite_path, (db) => {
       db.exec(`
         CREATE TABLE IF NOT EXISTS phase_workflows (
@@ -55,6 +56,28 @@ export class PhaseWorkflowStore implements PhaseWorkflowStoreLike {
       `);
       return true;
     });
+  }
+
+  /** sqlite_path가 디렉토리로 잘못 생성된 경우 내부 DB 파일을 꺼내 복구. */
+  private async recover_if_dir(p: string): Promise<void> {
+    try {
+      const s = await stat(p);
+      if (!s.isDirectory()) return;
+      const base = p.split(/[\\/]/).pop() || "phase-workflows.db";
+      const inner = join(p, base);
+      const tmp = p + ".recovering";
+      try {
+        await stat(inner);
+        await rename(inner, tmp);
+        await rmdir(p);
+        await rename(tmp, p);
+      } catch {
+        // inner DB 없으면 디렉토리만 제거 — with_sqlite가 새 DB 생성
+        try { await rmdir(p); } catch { /* non-empty dir → skip */ }
+      }
+    } catch {
+      // stat 실패 = 경로 미존재 → 정상
+    }
   }
 
   private row_to_state(row: { payload_json: string } | undefined | null): PhaseLoopState | null {

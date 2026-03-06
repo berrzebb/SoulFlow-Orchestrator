@@ -40,7 +40,7 @@ export function create_bridge_mcp_config(): BridgeMcpConfig {
 }
 
 /** MCP config를 임시 파일에 기록. 반환: 호스트 경로. */
-export async function write_bridge_mcp_config(session_key: string): Promise<{ host_dir: string; host_path: string }> {
+export async function write_bridge_mcp_config(_session_key: string): Promise<{ host_dir: string; host_path: string }> {
   const host_dir = await mkdtemp(join(tmpdir(), `sf-mcp-cfg-`));
   const host_path = join(host_dir, "bridge-mcp.json");
   const config = create_bridge_mcp_config();

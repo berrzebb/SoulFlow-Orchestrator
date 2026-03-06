@@ -5,10 +5,10 @@ export type ExecutionMode = "once" | "agent" | "task" | "phase";
 
 /** 오케스트레이터 LLM 분류기 전체 출력. builtin/inquiry는 실행 전에 해소되는 라우팅 신호. */
 export type ClassificationResult =
-  | { mode: ExecutionMode }
+  | { mode: ExecutionMode; tools?: string[] }
   | { mode: "inquiry" }
   | { mode: "builtin"; command: string; args?: string }
-  | { mode: "phase"; workflow_id?: string };
+  | { mode: "phase"; workflow_id?: string; nodes?: string[] };
 
 export type OrchestrationRequest = {
   message: InboundMessage;

@@ -1,3 +1,17 @@
+/** 도구 카테고리. 실행 정책 및 도구 필터링에 사용. */
+export type ToolCategory =
+  | "filesystem" | "shell" | "web" | "messaging" | "file_transfer"
+  | "scheduling" | "memory" | "decision" | "promise" | "secret"
+  | "diagram" | "admin" | "spawn" | "external";
+
+/** 도구의 정책 플래그. sandbox 정책 판정에 사용. */
+export type ToolPolicyFlags = {
+  /** true면 쓰기 작업 — 승인 정책 대상. */
+  write?: boolean;
+  /** true면 네트워크 접근 — sandbox network 정책 대상. */
+  network?: boolean;
+};
+
 export type JsonSchema = {
   type?: "object" | "string" | "number" | "integer" | "boolean" | "array";
   properties?: Record<string, JsonSchema>;
@@ -29,12 +43,15 @@ export type ToolExecutionContext = {
   channel?: string;
   chat_id?: string;
   sender_id?: string;
+  reply_to?: string;
 };
 
 export interface ToolLike {
   readonly name: string;
   readonly description: string;
   readonly parameters: JsonSchema;
+  readonly category: ToolCategory;
+  readonly policy_flags?: ToolPolicyFlags;
   execute(params: Record<string, unknown>, context?: ToolExecutionContext): Promise<ToolExecuteResult>;
   validate_params(params: Record<string, unknown>): string[];
   to_schema(): ToolSchema;

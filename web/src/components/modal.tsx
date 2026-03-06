@@ -1,5 +1,20 @@
-import type { ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { useT } from "../i18n";
+
+/** body 스크롤 락 + Esc 키 바인딩 */
+export function useModalEffects(open: boolean, onClose: () => void) {
+  useEffect(() => {
+    if (!open) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const handle = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", handle);
+    return () => {
+      document.body.style.overflow = prev;
+      document.removeEventListener("keydown", handle);
+    };
+  }, [open, onClose]);
+}
 
 interface Props {
   open: boolean;
@@ -13,10 +28,13 @@ interface Props {
 
 export function Modal({ open, title, children, onClose, onConfirm, confirmLabel, danger }: Props) {
   const t = useT();
+  const modalRef = useRef<HTMLDivElement>(null);
+  useModalEffects(open, onClose);
+  useEffect(() => { if (open) modalRef.current?.focus(); }, [open]);
   if (!open) return null;
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+    <div className="modal-overlay" onClick={onClose} role="dialog" aria-modal="true" aria-label={title}>
+      <div className="modal" ref={modalRef} tabIndex={-1} onClick={(e) => e.stopPropagation()}>
         <div className="modal__header">
           <h3 className="modal__title">{title}</h3>
           <button className="modal__close" onClick={onClose} aria-label={t("common.close_modal")}>✕</button>
@@ -49,10 +67,13 @@ interface FormModalProps {
 
 export function FormModal({ open, title, children, onClose, onSubmit, submitLabel, saving, wide }: FormModalProps) {
   const t = useT();
+  const modalRef = useRef<HTMLDivElement>(null);
+  useModalEffects(open, onClose);
+  useEffect(() => { if (open) modalRef.current?.focus(); }, [open]);
   if (!open) return null;
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className={`modal${wide ? " modal--wide" : ""}`} onClick={(e) => e.stopPropagation()}>
+    <div className="modal-overlay" onClick={onClose} role="dialog" aria-modal="true" aria-label={title}>
+      <div className={`modal${wide ? " modal--wide" : ""}`} ref={modalRef} tabIndex={-1} onClick={(e) => e.stopPropagation()}>
         <div className="modal__header">
           <h3 className="modal__title">{title}</h3>
           <button className="modal__close" onClick={onClose} aria-label={t("common.close_modal")}>✕</button>

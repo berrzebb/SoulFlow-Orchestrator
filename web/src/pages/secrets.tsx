@@ -9,61 +9,116 @@ export default function SecretsPage() {
   const t = useT();
   const qc = useQueryClient();
   const { toast } = useToast();
-  const { data } = useQuery<{ names: string[] }>({ queryKey: ["secrets"], queryFn: () => api.get("/api/secrets"), refetchInterval: 10_000 });
+  const { data } = useQuery<{ names: string[] }>({ queryKey: ["secrets"], queryFn: () => api.get("/api/secrets"), refetchInterval: 30_000, staleTime: 10_000 });
   const names = data?.names ?? [];
 
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState("");
   const [newValue, setNewValue] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+
+  const filtered = names.filter((n) => !search || n.toLowerCase().includes(search.toLowerCase()));
+
+  const copy_usage = (name: string) => {
+    navigator.clipboard.writeText(`{{secret:${name}}}`)
+      .then(() => toast(t("secrets.copied"), "ok"))
+      .catch(() => toast(t("secrets.copy_failed"), "err"));
+  };
 
   const refresh = () => void qc.invalidateQueries({ queryKey: ["secrets"] });
 
   const add = async () => {
     if (!newName.trim()) return;
-    await api.post("/api/secrets", { name: newName, value: newValue });
-    toast(t("secrets.saved"), "ok");
-    setAdding(false);
-    setNewName("");
-    setNewValue("");
-    refresh();
+    try {
+      await api.post("/api/secrets", { name: newName, value: newValue });
+      toast(t("secrets.saved"), "ok");
+      setAdding(false);
+      setNewName("");
+      setNewValue("");
+      refresh();
+    } catch {
+      toast(t("secrets.save_failed"), "err");
+    }
   };
 
   const confirm_remove = async () => {
     if (!deleteTarget) return;
-    await api.del("/api/secrets", { name: deleteTarget });
-    toast(t("secrets.removed"), "ok");
-    setDeleteTarget(null);
-    refresh();
+    try {
+      await api.del(`/api/secrets/${encodeURIComponent(deleteTarget)}`);
+      toast(t("secrets.removed"), "ok");
+      setDeleteTarget(null);
+      refresh();
+    } catch {
+      toast(t("secrets.remove_failed"), "err");
+    }
   };
 
   return (
     <div className="page">
       <div className="section-header">
         <h2>{t("secrets.title", { count: names.length })}</h2>
-        <button className="btn btn--sm btn--ok" onClick={() => setAdding(true)}>{t("secrets.add")}</button>
+        <div className="section-header__actions">
+          <input
+            className="input input--sm section-header__search"
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder={t("secrets.search") || "Search..."}
+          />
+          <button className="btn btn--sm btn--ok" onClick={() => setAdding(true)}>{t("secrets.add")}</button>
+        </div>
       </div>
 
       {!names.length ? (
-        <p className="empty">{t("secrets.no_secrets")}</p>
-      ) : (
-        <div className="table-scroll">
-        <table className="data-table">
-          <thead><tr><th>{t("common.name")}</th><th>{t("secrets.usage")}</th><th>{t("common.actions")}</th></tr></thead>
-          <tbody>
-            {names.map((name) => (
-              <tr key={name}>
-                <td><b>{name}</b></td>
-                <td className="text-xs text-muted">{`{{secret:${name}}}`}</td>
-                <td>
-                  <button className="btn btn--xs" onClick={() => { setNewName(name); setNewValue(""); setAdding(true); }}>{t("secrets.update")}</button>{" "}
-                  <button className="btn btn--xs btn--danger" onClick={() => setDeleteTarget(name)}>{t("common.delete")}</button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="empty-state">
+          <div className="empty-state__icon">🔐</div>
+          <div className="empty-state__text">{t("secrets.no_secrets")}</div>
+          <button className="btn btn--sm btn--ok empty-state__action" onClick={() => setAdding(true)}>{t("secrets.add")}</button>
         </div>
+      ) : !filtered.length ? (
+        <div className="empty-state">
+          <div className="empty-state__icon">🔍</div>
+          <div className="empty-state__text">{t("secrets.no_match")}</div>
+        </div>
+      ) : (
+        <>
+          <div className="table-scroll secret-table-view">
+            <table className="data-table">
+              <thead><tr><th>{t("common.name")}</th><th>{t("secrets.usage")}</th><th>{t("common.actions")}</th></tr></thead>
+              <tbody>
+                {filtered.map((name) => (
+                  <tr key={name}>
+                    <td><b>{name}</b></td>
+                    <td className="text-xs text-muted break-all">
+                      <code>{`{{secret:${name}}}`}</code>
+                      <button className="btn btn--xs ml-1" onClick={() => copy_usage(name)} title={t("secrets.copy_usage")}>
+                        {t("common.copy")}
+                      </button>
+                    </td>
+                    <td>
+                      <button className="btn btn--xs" onClick={() => { setNewName(name); setNewValue(""); setAdding(true); }}>{t("secrets.update")}</button>{" "}
+                      <button className="btn btn--xs btn--danger" onClick={() => setDeleteTarget(name)}>{t("common.delete")}</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="secret-card-list">
+            {filtered.map((name) => (
+              <div key={name} className="secret-card">
+                <div className="secret-card__name">{name}</div>
+                <code className="secret-card__usage">{`{{secret:${name}}}`}</code>
+                <div className="secret-card__actions">
+                  <button className="btn btn--xs" onClick={() => copy_usage(name)}>{t("common.copy")}</button>
+                  <button className="btn btn--xs" onClick={() => { setNewName(name); setNewValue(""); setAdding(true); }}>{t("secrets.update")}</button>
+                  <button className="btn btn--xs btn--danger" onClick={() => setDeleteTarget(name)}>{t("common.delete")}</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
       )}
 
       <Modal

@@ -10,6 +10,7 @@ function FilterEditPanel({ node, update, t }: EditPanelProps) {
       <div className="builder-row">
         <label className="label">{t("workflows.filter_condition") || "Condition"}</label>
         <textarea className="input code-textarea" rows={3} value={String(node.condition || "")} onChange={(e) => update({ condition: e.target.value })} spellCheck={false} placeholder="item.active === true" />
+        <span className="builder-hint">{t("workflows.filter_hint") || "JS expression per item. Available: item, index"}</span>
       </div>
     </>
   );
@@ -21,6 +22,7 @@ export const filter_descriptor: FrontendNodeDescriptor = {
   color: "#1abc9c",
   shape: "rect",
   toolbar_label: "+ Filter",
+  category: "flow",
   output_schema: [
     { name: "items",    type: "array",  description: "Filtered items" },
     { name: "count",    type: "number", description: "Filtered item count" },

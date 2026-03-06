@@ -1,9 +1,14 @@
 /** Retriever (검색/조회) 노드 핸들러. */
 
-import type { NodeHandler } from "../node-registry.js";
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
+import type { NodeHandler, RunnerContext } from "../node-registry.js";
 import type { RetrieverNodeDefinition, OrcheNodeDefinition } from "../workflow-node.types.js";
 import type { OrcheNodeExecutorContext, OrcheNodeExecuteResult, OrcheNodeTestResult } from "../orche-node-executor.js";
 import { resolve_templates } from "../orche-node-executor.js";
+
+const PRIVATE_HOST_RE =
+  /^(localhost|127\.\d+\.\d+\.\d+|::1|0\.0\.0\.0|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+|169\.254\.\d+\.\d+)$/i;
 
 export const retriever_handler: NodeHandler = {
   node_type: "retriever",
@@ -32,10 +37,9 @@ export const retriever_handler: NodeHandler = {
         const url = resolve_templates(n.url || "", tpl_ctx);
         if (!url) throw new Error("retriever: url is required for http source");
 
-        // SSRF 방지
         const parsed = new URL(url);
-        if (parsed.hostname === "localhost" || parsed.hostname.startsWith("127.") || parsed.hostname === "0.0.0.0") {
-          throw new Error("retriever: localhost access blocked");
+        if (PRIVATE_HOST_RE.test(parsed.hostname)) {
+          throw new Error(`retriever: private/loopback host blocked "${parsed.hostname}"`);
         }
 
         const method = n.method || "GET";
@@ -54,7 +58,6 @@ export const retriever_handler: NodeHandler = {
       }
 
       case "memory": {
-        // memory 내에서 키워드 매칭 검색
         const results: Array<{ key: string; value: unknown }> = [];
         const lower = query.toLowerCase();
         for (const [key, value] of Object.entries(ctx.memory)) {
@@ -68,12 +71,47 @@ export const retriever_handler: NodeHandler = {
       }
 
       case "file": {
-        // 스텁: 파일 검색은 workspace context 필요
         return { output: { results: [], count: 0, query, _meta: { file_path: n.file_path, source: "file" } } };
       }
 
       default:
         throw new Error(`retriever: unknown source type: ${n.source}`);
+    }
+  },
+
+  async runner_execute(node: OrcheNodeDefinition, ctx: OrcheNodeExecutorContext, runner: RunnerContext): Promise<OrcheNodeExecuteResult> {
+    const n = node as RetrieverNodeDefinition;
+    if (n.source !== "file") return this.execute(node, ctx);
+
+    const tpl_ctx = { memory: ctx.memory };
+    const query = resolve_templates(n.query, tpl_ctx);
+    const file_path = resolve_templates(n.file_path || "", tpl_ctx);
+    const top_k = n.top_k ?? 5;
+
+    if (!file_path) {
+      return { output: { results: [], count: 0, query, error: "file_path is required" } };
+    }
+
+    try {
+      const workspace = runner.options.initial_memory?.workspace as string | undefined || process.cwd();
+      const abs = resolve(workspace, file_path);
+      // 경로 순회 방지
+      if (!abs.startsWith(resolve(workspace))) {
+        return { output: { results: [], count: 0, query, error: "path traversal blocked" } };
+      }
+
+      const content = await readFile(abs, "utf-8");
+      const lower = query.toLowerCase();
+      const lines = content.split("\n");
+      const results: Array<{ line: number; text: string }> = [];
+      for (let i = 0; i < lines.length && results.length < top_k; i++) {
+        if (lines[i].toLowerCase().includes(lower)) {
+          results.push({ line: i + 1, text: lines[i] });
+        }
+      }
+      return { output: { results, count: results.length, query } };
+    } catch (err) {
+      return { output: { results: [], count: 0, query, error: String((err as Error)?.message || err) } };
     }
   },
 

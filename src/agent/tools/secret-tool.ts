@@ -5,6 +5,7 @@ import type { JsonSchema } from "./types.js";
 /** 오케스트레이터가 시크릿을 조회·등록할 수 있는 도구. reveal은 보안상 제외. */
 export class SecretTool extends Tool {
   readonly name = "secret";
+  readonly category = "secret" as const;
   readonly description = "시크릿 저장소 관리. action=list|get|set|remove|status";
   readonly parameters: JsonSchema = {
     type: "object",

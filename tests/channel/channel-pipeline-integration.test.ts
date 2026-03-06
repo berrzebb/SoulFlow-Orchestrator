@@ -2031,8 +2031,9 @@ describe("E2E: 프로바이더 에러 응답 검출", () => {
     try {
       await h.manager.handle_inbound_message(inbound("test"));
       const out = last_sent(h.registry.sent);
-      // normalize_error_detail이 180자로 제한
-      const error_portion = out.content.replace(/^.*실패했습니다\.\s*\(/, "").replace(/\)\s*$/, "");
+      // normalize_error_detail이 180자로 제한 — "사유: ..." 라인에서 추출
+      const reason_match = out.content.match(/사유:\s*(.+)/);
+      const error_portion = reason_match?.[1]?.trim() || "";
       expect(error_portion.length).toBeLessThanOrEqual(180);
     } finally { await h.cleanup(); }
   });

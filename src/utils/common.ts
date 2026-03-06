@@ -112,4 +112,9 @@ export function parse_bool_like(raw: string | undefined, fallback: boolean): boo
   return fallback;
 }
 
+/** 의도적 fire-and-forget. Promise 결과/에러를 무시한다. */
+export function swallow(p: void | Promise<unknown>): void {
+  if (p instanceof Promise) void p.catch(() => {});
+}
+
 

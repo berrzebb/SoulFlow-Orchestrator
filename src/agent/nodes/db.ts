@@ -1,9 +1,10 @@
 /** DB (데이터베이스) 노드 핸들러. */
 
-import type { NodeHandler } from "../node-registry.js";
+import type { NodeHandler, RunnerContext } from "../node-registry.js";
 import type { DbNodeDefinition, OrcheNodeDefinition } from "../workflow-node.types.js";
 import type { OrcheNodeExecutorContext, OrcheNodeExecuteResult, OrcheNodeTestResult } from "../orche-node-executor.js";
 import { resolve_templates } from "../orche-node-executor.js";
+import { error_message } from "../../utils/common.js";
 
 export const db_handler: NodeHandler = {
   node_type: "db",
@@ -27,8 +28,6 @@ export const db_handler: NodeHandler = {
     const query = resolve_templates(n.query, tpl_ctx);
     const datasource = resolve_templates(n.datasource, tpl_ctx);
 
-    // 스텁: 실제 DB 연결은 datasource 설정 기반으로 런타임에서 주입.
-    // phase-loop-runner가 datasource resolver를 통해 실제 실행.
     return {
       output: {
         rows: [],
@@ -36,6 +35,24 @@ export const db_handler: NodeHandler = {
         _meta: { operation: n.operation, datasource, query, resolved: true },
       },
     };
+  },
+
+  async runner_execute(node: OrcheNodeDefinition, ctx: OrcheNodeExecutorContext, runner: RunnerContext): Promise<OrcheNodeExecuteResult> {
+    const qdb = runner.services?.query_db;
+    if (!qdb) return this.execute(node, ctx);
+
+    const n = node as DbNodeDefinition;
+    const tpl_ctx = { memory: ctx.memory };
+    const query = resolve_templates(n.query, tpl_ctx);
+    const datasource = resolve_templates(n.datasource, tpl_ctx);
+
+    try {
+      const result = await qdb(datasource, query, n.params as Record<string, unknown> | undefined);
+      return { output: { rows: result.rows, affected_rows: result.affected_rows } };
+    } catch (err) {
+      runner.logger.warn("db_node_error", { node_id: n.node_id, error: error_message(err) });
+      return { output: { rows: [], affected_rows: 0, error: error_message(err) } };
+    }
   },
 
   test(node: OrcheNodeDefinition): OrcheNodeTestResult {

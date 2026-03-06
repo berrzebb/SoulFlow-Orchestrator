@@ -22,11 +22,11 @@ export type AgentBusOptions = {
 export class AgentBus {
   private readonly transport: AgentTransport;
   private readonly lanes: LaneQueue;
-  private readonly logger: Logger;
+  private readonly _logger: Logger;
   private readonly permission_guard?: CommPermissionGuard;
 
   constructor(options: AgentBusOptions) {
-    this.logger = options.logger;
+    this._logger = options.logger;
     this.lanes = new LaneQueue(options.lane_options);
     this.permission_guard = options.permission_guard;
     this.transport = options.transport ?? new PtyTransport({

@@ -1,6 +1,6 @@
 /** 도구/스킬 검색 가능한 Command Palette 팝오버. */
 
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useT } from "../i18n";
 
 interface McpServer {
@@ -104,23 +104,20 @@ export function NodePalette({ tools, skills, onSelectTool, onSelectSkill, onClos
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
-  const { items, groups } = useMemo(() => build_items(tools, skills), [tools, skills]);
+  const { items, groups } = build_items(tools, skills);
 
-  const filtered = useMemo(() => {
+  const filtered = (() => {
     if (!query) return items;
     const q = query.toLowerCase();
     return items.filter((it) => it.id.toLowerCase().includes(q) || it.description.toLowerCase().includes(q));
-  }, [items, query]);
+  })();
 
-  const visible_groups = useMemo(() => {
+  const visible_groups = (() => {
     const set = new Set(filtered.map((it) => it.group));
     return groups.filter((g) => set.has(g));
-  }, [filtered, groups]);
+  })();
 
-  // 펼쳐진 그룹의 아이템만 flat list로
-  const flat_items = useMemo(() => {
-    return filtered.filter((it) => !collapsed.has(it.group));
-  }, [filtered, collapsed]);
+  const flat_items = filtered.filter((it) => !collapsed.has(it.group));
 
   useEffect(() => { inputRef.current?.focus(); }, []);
   useEffect(() => { setCursor(-1); }, [query]);
@@ -161,11 +158,11 @@ export function NodePalette({ tools, skills, onSelectTool, onSelectSkill, onClos
   };
 
   // MCP 연결 상태 맵
-  const mcp_status = useMemo(() => {
+  const mcp_status = (() => {
     const m = new Map<string, boolean>();
     for (const srv of tools.mcp_servers) m.set(`MCP: ${srv.name}`, srv.connected);
     return m;
-  }, [tools.mcp_servers]);
+  })();
 
   let item_idx = 0;
 

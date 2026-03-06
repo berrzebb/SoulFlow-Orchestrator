@@ -10,6 +10,8 @@ export type MessageEventRecordCallback = (event: AppendWorkflowEventInput) => Pr
 
 export class MessageTool extends Tool {
   readonly name = "message";
+  readonly category = "messaging" as const;
+  readonly policy_flags = { write: true } as const;
   readonly description = "Send a phase event message (`assign/progress/blocked/done/approval`) through channel callback.";
   readonly parameters: JsonSchema = {
     type: "object",

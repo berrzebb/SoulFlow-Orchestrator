@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import { useToast } from "../components/toast";
@@ -21,33 +21,33 @@ export default function SetupPage() {
   const [step, setStep] = useState(0);
   const [providerTypes, setProviderTypes] = useState<string[]>([]);
   const [providers, setProviders] = useState<Record<string, ProviderEntry>>({});
-  const [executor, setExecutor] = useState("codex_cli");
-  const [orchestrator, setOrchestrator] = useState("orchestrator_llm");
+  const [executor, setExecutor] = useState("");
+  const [orchestrator, setOrchestrator] = useState("");
   const [alias, setAlias] = useState("assistant");
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    api.get<string[]>("/api/agent-providers/types").then(setProviderTypes).catch(() => {});
+    api.get<string[]>("/api/agents/providers/types").then(setProviderTypes).catch(() => toast(t("setup.load_failed"), "err"));
   }, []);
 
   const selected = Object.entries(providers).filter(([, v]) => v.enabled);
 
-  const toggle_provider = useCallback((type: string) => {
+  const toggle_provider = (type: string) => {
     setProviders((prev) => {
       const existing = prev[type];
       if (existing) return { ...prev, [type]: { ...existing, enabled: !existing.enabled } };
       return { ...prev, [type]: { type, enabled: true, token: "" } };
     });
-  }, []);
+  };
 
-  const set_token = useCallback((type: string, token: string) => {
+  const set_token = (type: string, token: string) => {
     setProviders((prev) => {
       const existing = prev[type] || { type, enabled: true, token: "" };
       return { ...prev, [type]: { ...existing, token } };
     });
-  }, []);
+  };
 
-  const finish = useCallback(async () => {
+  const finish = async () => {
     setSubmitting(true);
     try {
       const payload = {
@@ -71,33 +71,38 @@ export default function SetupPage() {
     } finally {
       setSubmitting(false);
     }
-  }, [selected, executor, orchestrator, alias, navigate, toast, t]);
+  };
 
   return (
-    <div className="page" style={{ maxWidth: 640, margin: "var(--sp-8) auto" }}>
+    <div className="page setup">
       <h2>{t("setup.title")}</h2>
-      <p className="text-muted" style={{ marginBottom: "var(--sp-4)" }}>{t("setup.subtitle")}</p>
+      <div className="setup__steps">
+        {[0, 1, 2].map((s) => (
+          <div key={s} className={`setup__step-dot${s === step ? " setup__step-dot--active" : ""}${s < step ? " setup__step-dot--done" : ""}`} />
+        ))}
+      </div>
+      <p className="text-muted mb-3">{t("setup.subtitle")}</p>
 
       {/* Step 0: Provider Selection */}
       {step === 0 && (
         <section>
           <h2>{t("setup.step.providers")}</h2>
-          <p className="text-sm text-muted" style={{ marginBottom: "var(--sp-3)" }}>
+          <p className="text-sm text-muted mb-3">
             {t("setup.step.providers.desc")}
           </p>
-          <div style={{ display: "flex", flexDirection: "column", gap: "var(--sp-3)" }}>
+          <div className="setup__provider-list">
             {providerTypes.map((type) => {
               const entry = providers[type];
               const checked = entry?.enabled ?? false;
               const needs_token = NEEDS_TOKEN.has(type);
               return (
-                <div key={type} style={{ border: "1px solid var(--line)", borderRadius: "var(--radius-md)", padding: "var(--sp-3)" }}>
-                  <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+                <div key={type} className="setup__provider-card">
+                  <label className="setup__provider-label">
                     <input type="checkbox" checked={checked} onChange={() => toggle_provider(type)} />
                     <strong>{TYPE_LABELS[type] || type}</strong>
                   </label>
                   {checked && needs_token && (
-                    <div style={{ marginTop: "var(--sp-2)" }}>
+                    <div className="mt-2">
                       <input
                         type="password"
                         placeholder={t("setup.api_key")}
@@ -111,8 +116,13 @@ export default function SetupPage() {
               );
             })}
           </div>
-          <div style={{ marginTop: "var(--sp-4)", display: "flex", justifyContent: "flex-end" }}>
-            <button className="btn btn--primary" disabled={selected.length === 0} onClick={() => setStep(1)}>
+          <div className="setup__nav setup__nav--end">
+            <button className="btn btn--primary" disabled={selected.length === 0} onClick={() => {
+              const first = selected[0]?.[0] || "";
+              if (!executor) setExecutor(first);
+              if (!orchestrator) setOrchestrator(first);
+              setStep(1);
+            }}>
               {t("setup.next")}
             </button>
           </div>
@@ -123,10 +133,10 @@ export default function SetupPage() {
       {step === 1 && (
         <section>
           <h2>{t("setup.step.defaults")}</h2>
-          <p className="text-sm text-muted" style={{ marginBottom: "var(--sp-3)" }}>
+          <p className="text-sm text-muted mb-3">
             {t("setup.step.defaults.desc")}
           </p>
-          <div style={{ display: "flex", flexDirection: "column", gap: "var(--sp-4)" }}>
+          <div className="setup__field-group">
             <label>
               <div className="form-label">{t("setup.executor")}</div>
               <select value={executor} onChange={(e) => setExecutor(e.target.value)} className="form-input">
@@ -138,14 +148,13 @@ export default function SetupPage() {
             <label>
               <div className="form-label">{t("setup.orchestrator")}</div>
               <select value={orchestrator} onChange={(e) => setOrchestrator(e.target.value)} className="form-input">
-                <option value="orchestrator_llm">Orchestrator LLM</option>
                 {selected.map(([type]) => (
                   <option key={type} value={type}>{TYPE_LABELS[type] || type}</option>
                 ))}
               </select>
             </label>
           </div>
-          <div style={{ marginTop: "var(--sp-4)", display: "flex", justifyContent: "space-between" }}>
+          <div className="setup__nav">
             <button className="btn" onClick={() => setStep(0)}>{t("setup.back")}</button>
             <button className="btn btn--primary" onClick={() => setStep(2)}>{t("setup.next")}</button>
           </div>
@@ -156,7 +165,7 @@ export default function SetupPage() {
       {step === 2 && (
         <section>
           <h2>{t("setup.step.identity")}</h2>
-          <p className="text-sm text-muted" style={{ marginBottom: "var(--sp-3)" }}>
+          <p className="text-sm text-muted mb-3">
             {t("setup.step.identity.desc")}
           </p>
           <label>
@@ -168,7 +177,7 @@ export default function SetupPage() {
               className="form-input"
             />
           </label>
-          <div style={{ marginTop: "var(--sp-4)", display: "flex", justifyContent: "space-between" }}>
+          <div className="setup__nav">
             <button className="btn" onClick={() => setStep(1)}>{t("setup.back")}</button>
             <button className="btn btn--primary" disabled={submitting || !alias.trim()} onClick={finish}>
               {t("setup.finish")}
@@ -179,7 +188,7 @@ export default function SetupPage() {
 
       {/* Step 3: Done */}
       {step === 3 && (
-        <section style={{ textAlign: "center", padding: "var(--sp-8) 0" }}>
+        <section className="setup__complete">
           <h2>{t("setup.step.complete")}</h2>
           <p className="text-muted">{t("setup.step.complete.desc")}</p>
         </section>

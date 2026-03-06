@@ -3,6 +3,7 @@ import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import type { Components } from "react-markdown";
+import "highlight.js/styles/github-dark.min.css";
 
 /** highlight.js가 추가하는 클래스명을 sanitize에서 허용 */
 const SANITIZE_SCHEMA = {
@@ -43,12 +44,15 @@ const COMPONENTS: Components = {
   img: SafeImage as Components["img"],
 };
 
+const REMARK_PLUGINS = [remarkGfm] as const;
+const REHYPE_PLUGINS = [rehypeHighlight, [rehypeSanitize, SANITIZE_SCHEMA]] as const;
+
 export function MarkdownContent({ content }: { content: string }) {
   return (
     <div className="chat-md">
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        rehypePlugins={[rehypeHighlight, [rehypeSanitize, SANITIZE_SCHEMA]]}
+        remarkPlugins={REMARK_PLUGINS}
+        rehypePlugins={REHYPE_PLUGINS}
         components={COMPONENTS}
       >
         {content}

@@ -1,6 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
-import { parse_bool_like } from "../utils/common.js";
 
 export type McpLoaderConfig = {
   enable_all_project?: boolean | null;

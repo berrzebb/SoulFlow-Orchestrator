@@ -10,11 +10,20 @@ export interface DailyMemoryWriter {
   append_daily_memory(line: string): Promise<void>;
 }
 
+export type MirrorMessageEvent = {
+  session_key: string;
+  direction: "user" | "assistant";
+  sender_id: string;
+  content: string;
+  at: string;
+};
+
 export type SessionRecorderDeps = {
   sessions: SessionStoreLike | null;
   daily_memory: DailyMemoryWriter | null;
   sanitize_for_storage: (text: string) => string;
   logger: Logger;
+  on_mirror_message?: (event: MirrorMessageEvent) => void;
 };
 
 export class SessionRecorder {
@@ -22,26 +31,32 @@ export class SessionRecorder {
   private readonly daily_memory: DailyMemoryWriter | null;
   private readonly sanitize: (text: string) => string;
   private readonly logger: Logger;
+  private readonly on_mirror: ((event: MirrorMessageEvent) => void) | null;
 
   constructor(deps: SessionRecorderDeps) {
     this.sessions = deps.sessions;
     this.daily_memory = deps.daily_memory;
     this.sanitize = deps.sanitize_for_storage;
     this.logger = deps.logger;
+    this.on_mirror = deps.on_mirror_message || null;
   }
 
   async record_user(provider: ChannelProvider, message: InboundMessage, alias: string): Promise<void> {
     if (!this.sessions) return;
     try {
       const key = session_key(provider, message.chat_id, alias, message.thread_id);
-      const session = await this.sessions.get_or_create(key);
       const safe = this.sanitize(String(message.content || ""));
-      session.add_message("user", safe, {
+      const ts = now_iso();
+      const msg = {
+        role: "user" as const,
+        content: safe,
+        timestamp: ts,
         sender_id: message.sender_id,
         at: message.at,
         thread_id: message.thread_id,
-      });
-      await this.sessions.save(session);
+      };
+      await this.sessions.append_message(key, msg);
+      this.emit_mirror(key, "user", message.sender_id, safe, ts);
       await this.append_daily("user", provider, message.chat_id, message.thread_id, message.sender_id, safe);
     } catch (e) {
       this.logger.debug("record_user failed", { error: error_message(e) });
@@ -55,19 +70,23 @@ export class SessionRecorder {
     if (!this.sessions) return;
     try {
       const key = session_key(provider, message.chat_id, alias, message.thread_id);
-      const session = await this.sessions.get_or_create(key);
       const safe = this.sanitize(String(content || ""));
-      session.add_message("assistant", safe, {
+      const ts = now_iso();
+      const msg = {
+        role: "assistant" as const,
+        content: safe,
+        timestamp: ts,
         sender_id: alias,
-        at: now_iso(),
+        at: ts,
         thread_id: message.thread_id,
         ...(metadata?.stream_full_content ? { stream_full_content: metadata.stream_full_content } : {}),
         ...(metadata?.parsed_output !== undefined ? { parsed_output: metadata.parsed_output } : {}),
         ...(metadata?.tool_calls_count ? { tool_calls_count: metadata.tool_calls_count } : {}),
         ...(metadata?.run_id ? { run_id: metadata.run_id } : {}),
         ...(metadata?.usage ? { usage: metadata.usage } : {}),
-      });
-      await this.sessions.save(session);
+      };
+      await this.sessions.append_message(key, msg);
+      this.emit_mirror(key, "assistant", alias, safe, ts);
       await this.append_daily("assistant", provider, message.chat_id, message.thread_id, alias, safe);
     } catch (e) {
       this.logger.debug("record_assistant failed", { error: error_message(e) });
@@ -85,6 +104,7 @@ export class SessionRecorder {
     if (!this.sessions) return [];
     try {
       const key = session_key(provider, chat_id, alias, thread_id);
+      // DB에서 직접 로드하여 재시작 후에도 최신 데이터 보장
       const session = await this.sessions.get_or_create(key);
       const now = Date.now();
       return session.messages
@@ -121,6 +141,11 @@ export class SessionRecorder {
     } catch {
       return null;
     }
+  }
+
+  private emit_mirror(session_key: string, direction: "user" | "assistant", sender_id: string, content: string, at: string): void {
+    if (!this.on_mirror) return;
+    try { this.on_mirror({ session_key, direction, sender_id, content, at }); } catch { /* observer failure won't block recording */ }
   }
 
   private async append_daily(

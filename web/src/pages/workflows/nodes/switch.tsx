@@ -45,6 +45,7 @@ export const switch_descriptor: FrontendNodeDescriptor = {
   color: "#ff9800",
   shape: "diamond",
   toolbar_label: "+ Switch",
+  category: "flow",
   output_schema: [
     { name: "matched_case", type: "string", description: "Matched case value" },
   ],

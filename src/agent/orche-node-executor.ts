@@ -18,8 +18,8 @@ export interface OrcheNodeExecutorContext {
 
 export interface OrcheNodeExecuteResult {
   output: unknown;
-  /** IF 노드 전용: 어떤 분기가 선택되었는지. */
-  branch?: "true" | "false";
+  /** 분기 선택: IF("true"/"false"), Switch(case value), 기타 라우팅. */
+  branch?: string;
 }
 
 export interface OrcheNodeTestResult {
@@ -64,6 +64,31 @@ export function resolve_deep(value: unknown, context: Record<string, unknown>): 
   return value;
 }
 
+// ── Channel Request Builder (특수 노드 공유 유틸) ──
+
+import type { ChannelSendRequest } from "./phase-loop.types.js";
+import type { PhaseLoopState } from "./phase-loop.types.js";
+
+/** 채널 전송 요청 빌드. target=origin이면 워크플로우 채널 사용. */
+export function build_channel_req(
+  target: "origin" | "specified",
+  content: string,
+  specified_channel?: string,
+  specified_chat_id?: string,
+  state?: PhaseLoopState,
+  structured?: ChannelSendRequest["structured"],
+  parse_mode?: string,
+): ChannelSendRequest {
+  return {
+    target,
+    channel: target === "specified" ? specified_channel : state?.channel,
+    chat_id: target === "specified" ? specified_chat_id : state?.chat_id,
+    content,
+    structured,
+    parse_mode,
+  };
+}
+
 // ── Lazy Registration ───────────────────────────────
 
 let initialized = false;
@@ -74,6 +99,28 @@ function ensure_registered(): void {
   }
 }
 
+// ── Preset 적용 ────────────────────────────────────
+
+import { get_preset } from "./node-presets.js";
+
+/** preset_id가 있는 노드에 프리셋 defaults를 머지 (노드 명시 값 우선). */
+export function apply_preset(node: OrcheNodeDefinition): OrcheNodeDefinition {
+  const raw = node as unknown as Record<string, unknown>;
+  const preset_id = raw.preset_id as string | undefined;
+  if (!preset_id) return node;
+
+  const preset = get_preset(preset_id);
+  if (!preset) return node;
+
+  // preset defaults를 밑바닥에 깔고 노드 명시 값으로 덮어씀
+  const merged = { ...preset.defaults } as Record<string, unknown>;
+  for (const [key, value] of Object.entries(raw)) {
+    if (key === "preset_id") continue;
+    if (value !== undefined && value !== "") merged[key] = value;
+  }
+  return merged as unknown as OrcheNodeDefinition;
+}
+
 // ── Dispatcher (Registry 기반) ──────────────────────
 
 export async function execute_orche_node(
@@ -81,9 +128,10 @@ export async function execute_orche_node(
   ctx: OrcheNodeExecutorContext,
 ): Promise<OrcheNodeExecuteResult> {
   ensure_registered();
-  const handler = get_node_handler(node.node_type);
-  if (!handler) throw new Error(`unknown node type: ${node.node_type}`);
-  return handler.execute(node, ctx);
+  const resolved = apply_preset(node);
+  const handler = get_node_handler(resolved.node_type);
+  if (!handler) throw new Error(`unknown node type: ${resolved.node_type}`);
+  return handler.execute(resolved, ctx);
 }
 
 /** 노드 설정을 검증하고 실행 미리보기를 반환 (실제 실행 없음). */

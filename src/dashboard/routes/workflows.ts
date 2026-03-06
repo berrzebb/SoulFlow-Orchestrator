@@ -1,25 +1,27 @@
-/** /api/workflows 라우트 핸들러. */
+/** /api/workflow/* 라우트 핸들러. */
 
-import type { RouteContext, RouteHandler } from "../route-context.js";
+import type { RouteHandler } from "../route-context.js";
 import type { DashboardWorkflowOps } from "../service.js";
 
 export const handle_workflow: RouteHandler = async (ctx) => {
   const { req, res, url, json, read_body, options } = ctx;
-  const ops: DashboardWorkflowOps | null = (options as unknown as { workflow_ops?: DashboardWorkflowOps | null }).workflow_ops ?? null;
+  const ops: DashboardWorkflowOps | null = options.workflow_ops ?? null;
   if (!ops) { json(res, 501, { error: "workflow_ops_not_configured" }); return true; }
 
   const path = url.pathname;
   const method = req.method || "GET";
 
-  // GET /api/workflows — 목록
-  if (path === "/api/workflows" && method === "GET") {
+  // ── Runs (실행 인스턴스) ──
+
+  // GET /api/workflow/runs — 목록
+  if (path === "/api/workflow/runs" && method === "GET") {
     const list = await ops.list();
     json(res, 200, list);
     return true;
   }
 
-  // POST /api/workflows — 생성 및 실행
-  if (path === "/api/workflows" && method === "POST") {
+  // POST /api/workflow/runs — 생성 및 실행
+  if (path === "/api/workflow/runs" && method === "POST") {
     const body = await read_body(req);
     if (!body) { json(res, 400, { error: "invalid_body" }); return true; }
     const result = await ops.create(body);
@@ -27,8 +29,8 @@ export const handle_workflow: RouteHandler = async (ctx) => {
     return true;
   }
 
-  // GET /api/workflows/:id
-  const detail_match = path.match(/^\/api\/workflows\/([^/]+)$/);
+  // GET /api/workflow/runs/:id
+  const detail_match = path.match(/^\/api\/workflow\/runs\/([^/]+)$/);
   if (detail_match && method === "GET") {
     const workflow = await ops.get(detail_match[1]);
     if (!workflow) { json(res, 404, { error: "not_found" }); return true; }
@@ -36,23 +38,23 @@ export const handle_workflow: RouteHandler = async (ctx) => {
     return true;
   }
 
-  // DELETE /api/workflows/:id
+  // DELETE /api/workflow/runs/:id
   if (detail_match && method === "DELETE") {
     const ok = await ops.cancel(detail_match[1]);
     json(res, ok ? 200 : 404, { ok });
     return true;
   }
 
-  // POST /api/workflows/:id/resume — 중단된 워크플로우 재개
-  const resume_match = path.match(/^\/api\/workflows\/([^/]+)\/resume$/);
+  // POST /api/workflow/runs/:id/resume
+  const resume_match = path.match(/^\/api\/workflow\/runs\/([^/]+)\/resume$/);
   if (resume_match && method === "POST") {
     const result = await ops.resume(resume_match[1]);
     json(res, result.ok ? 200 : 400, result);
     return true;
   }
 
-  // GET /api/workflows/:id/messages?phase_id=&agent_id=
-  const msg_match = path.match(/^\/api\/workflows\/([^/]+)\/messages$/);
+  // GET /api/workflow/runs/:id/messages?phase_id=&agent_id=
+  const msg_match = path.match(/^\/api\/workflow\/runs\/([^/]+)\/messages$/);
   if (msg_match && method === "GET") {
     const phase_id = url.searchParams.get("phase_id") || "";
     const agent_id = url.searchParams.get("agent_id") || "";
@@ -62,7 +64,7 @@ export const handle_workflow: RouteHandler = async (ctx) => {
     return true;
   }
 
-  // POST /api/workflows/:id/messages — 에이전트에 메시지 전송
+  // POST /api/workflow/runs/:id/messages
   if (msg_match && method === "POST") {
     const body = await read_body(req);
     if (!body) { json(res, 400, { error: "invalid_body" }); return true; }
@@ -76,22 +78,26 @@ export const handle_workflow: RouteHandler = async (ctx) => {
     return true;
   }
 
-  // GET /api/workflow-roles — 역할 프리셋 목록
-  if (path === "/api/workflow-roles" && method === "GET") {
+  // ── Roles ──
+
+  // GET /api/workflow/roles
+  if (path === "/api/workflow/roles" && method === "GET") {
     const roles = ops.list_roles();
     json(res, 200, roles);
     return true;
   }
 
-  // GET /api/workflow-templates
-  if (path === "/api/workflow-templates" && method === "GET") {
+  // ── Templates ──
+
+  // GET /api/workflow/templates
+  if (path === "/api/workflow/templates" && method === "GET") {
     const templates = ops.list_templates();
     json(res, 200, templates);
     return true;
   }
 
-  // POST /api/workflow-templates/import — YAML 텍스트 import
-  if (path === "/api/workflow-templates/import" && method === "POST") {
+  // POST /api/workflow/templates — YAML 텍스트 import
+  if (path === "/api/workflow/templates" && method === "POST") {
     const body = await read_body(req);
     if (!body?.yaml || typeof body.yaml !== "string") { json(res, 400, { error: "yaml_required" }); return true; }
     const result = ops.import_template(body.yaml);
@@ -99,8 +105,8 @@ export const handle_workflow: RouteHandler = async (ctx) => {
     return true;
   }
 
-  // /api/workflow-templates/:name
-  const tpl_match = path.match(/^\/api\/workflow-templates\/([^/]+)$/);
+  // /api/workflow/templates/:name
+  const tpl_match = path.match(/^\/api\/workflow\/templates\/([^/]+)$/);
   if (tpl_match) {
     const name = decodeURIComponent(tpl_match[1]);
 
@@ -129,8 +135,8 @@ export const handle_workflow: RouteHandler = async (ctx) => {
     }
   }
 
-  // GET /api/workflow-templates/:name/export — YAML 텍스트 export
-  const export_match = path.match(/^\/api\/workflow-templates\/([^/]+)\/export$/);
+  // GET /api/workflow/templates/:name/export — YAML 텍스트 export
+  const export_match = path.match(/^\/api\/workflow\/templates\/([^/]+)\/export$/);
   if (export_match && method === "GET") {
     const yaml_text = ops.export_template(decodeURIComponent(export_match[1]));
     if (!yaml_text) { json(res, 404, { error: "template_not_found" }); return true; }
@@ -142,17 +148,17 @@ export const handle_workflow: RouteHandler = async (ctx) => {
   return false;
 };
 
-/** POST /api/workflow-node-runs, /api/workflow-node-tests — 노드 단독 실행/테스트. */
+/** POST /api/workflow/node/runs, /api/workflow/node/tests — 노드 단독 실행/테스트. */
 export const handle_workflow_node: RouteHandler = async (ctx) => {
   const { req, res, url, json, read_body, options } = ctx;
-  const ops: DashboardWorkflowOps | null = (options as unknown as { workflow_ops?: DashboardWorkflowOps | null }).workflow_ops ?? null;
+  const ops: DashboardWorkflowOps | null = options.workflow_ops ?? null;
   if (!ops) { json(res, 501, { error: "workflow_ops_not_configured" }); return true; }
 
   const path = url.pathname;
   const method = req.method || "GET";
 
-  // POST /api/workflow-node-runs — 노드 실행
-  if (path === "/api/workflow-node-runs" && method === "POST") {
+  // POST /api/workflow/node/runs
+  if (path === "/api/workflow/node/runs" && method === "POST") {
     if (!ops.run_single_node) { json(res, 501, { error: "not_implemented" }); return true; }
     const body = await read_body(req);
     if (!body?.node) { json(res, 400, { error: "node_required" }); return true; }
@@ -162,8 +168,8 @@ export const handle_workflow_node: RouteHandler = async (ctx) => {
     return true;
   }
 
-  // POST /api/workflow-node-tests — 노드 Dry-run 테스트
-  if (path === "/api/workflow-node-tests" && method === "POST") {
+  // POST /api/workflow/node/tests
+  if (path === "/api/workflow/node/tests" && method === "POST") {
     if (!ops.test_single_node) { json(res, 501, { error: "not_implemented" }); return true; }
     const body = await read_body(req);
     if (!body?.node) { json(res, 400, { error: "node_required" }); return true; }

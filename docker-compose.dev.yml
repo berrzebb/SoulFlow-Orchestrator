@@ -5,7 +5,7 @@ services:
       context: .
       target: dev                       # deps(devDeps 포함) + CLI 바이너리
     working_dir: /build
-    command: sh -c "npm install --prefer-offline 2>/dev/null; (cd web && npm install --prefer-offline 2>/dev/null && npx vite build --watch) & npx nodemon --watch src --ext ts,json --exec 'npx tsx src/main.ts' --legacy-watch"
+    command: sh -c "npm install --prefer-offline 2>/dev/null; (cd web && npm install --prefer-offline 2>/dev/null && npx vite build --watch) & npx tsx watch --clear-screen=false src/main.ts"
     volumes:
       - .:/build
       - /build/node_modules
@@ -23,7 +23,6 @@ services:
       - CHOKIDAR_USEPOLLING=true
       - WATCHPACK_POLLING=true
 volumes:
-  ollama-data:
   cli-auth-claude:
   cli-auth-codex:
   cli-auth-gemini:

@@ -292,23 +292,51 @@ implement → review → validate ──PASS──→ 완료
 
 ## 그래프 에디터
 
-비주얼 에디터는 워크플로우를 설계하기 위한 노드-엣지 캔버스를 제공합니다.
+SVG 기반 DAG 캔버스로 42종 노드 타입을 사용해 워크플로우를 설계합니다.
 
 ### 레이아웃
 
-- **노드**는 페이즈를 나타내며, `depends_on` 기반 위상 레이어로 배치
+- **노드**는 페이즈 또는 오케스트레이션 노드를 나타내며, `depends_on` 기반 위상 레이어로 배치
 - **실선 엣지** — 순차 흐름 / `depends_on` 의존성
 - **점선 엣지** — `goto` 링크 (critic 롤백 점프)
 - **모드 배지** — 각 노드에 실행 모드 표시 (∥ parallel, 🔄 interactive, 🔁 loop)
+- **필드 포트** — 노드 간 메모리 기반 데이터 흐름을 위한 입출력 포트
+
+### 노드 타입 (42종, 6개 카테고리)
+
+| 카테고리 | 노드 타입 |
+|----------|----------|
+| **Flow** (12) | if, switch, loop, merge, gate, wait, error-handler, filter, split, batch, assert, retry |
+| **Data** (8) | template, transform, code, aggregate, set, cache, db, file |
+| **AI** (8) | llm, ai-agent, analyzer, spawn-agent, embedding, vector-store, text-splitter, retriever |
+| **Integration** (6) | http, oauth, webhook, notify, send-file, sub-workflow |
+| **Interaction** (4) | hitl, approval, form, escalation |
+| **Advanced** (4) | decision, promise, task, tool-invoke |
+
+### 노드 인스펙터
+
+노드를 클릭하면 **노드 인스펙터** 사이드 패널이 열립니다:
+- **Parameters 탭** — 노드별 필드 편집 (타입 인식 입력, 드롭다운, 코드 에디터)
+- **Output 탭** — 필드 스키마 및 출력 매핑 확인
+- 드래그앤드롭으로 필드 포트 연결하여 데이터 흐름 구성
+
+### 노드 피커
+
+**노드 피커** 팔레트는 다음을 제공합니다:
+- 카테고리별 노드 탐색 (flow, data, AI, integration, interaction, advanced)
+- 키워드 검색
+- 팔레트에서 캔버스로 드래그앤드롭
+- 프리셋 템플릿 (예: Python CSV 처리, REST API 호출, LLM 체인)
 
 ### 인터랙션
 
 | 동작 | 효과 |
 |------|------|
-| 노드 클릭 | 인라인 프로퍼티 패널 열기 (에이전트, critic, 모드) |
+| 노드 클릭 | 노드 인스펙터 사이드 패널 열기 |
 | 노드 드래그 | 캔버스에서 위치 조정 |
-| 페이즈 추가 | 그래프에 새 노드 생성 |
-| depends_on 설정 | 노드 간 엣지 생성 |
+| 노드 추가 | 노드 피커에서 드래그 또는 + 버튼 클릭 |
+| 포트 연결 | 출력 포트에서 입력 포트로 드래그 |
+| depends_on 설정 | 페이즈 노드 간 엣지 생성 |
 | goto_phase 설정 | 점선 엣지 생성 |
 
 ### 빌더 탭
@@ -317,11 +345,34 @@ implement → review → validate ──PASS──→ 완료
 
 | 탭 | 설명 |
 |----|------|
-| **Graph** | 비주얼 노드-엣지 에디터 |
+| **Graph** | SVG 기반 DAG 에디터 + 노드 인스펙터 |
 | **Form** | 드롭다운과 입력 필드의 구조화된 폼 |
 | **YAML** | 구문 강조가 적용된 원시 YAML 에디터 |
 
 어느 탭에서든 변경하면 나머지 탭에 실시간으로 동기화됩니다.
+
+---
+
+## WorkflowTool (에이전트 기반 CRUD)
+
+에이전트가 `workflow` 도구를 통해 워크플로우를 프로그래밍 방식으로 관리할 수 있습니다:
+
+| 액션 | 설명 |
+|------|------|
+| `create` | YAML 정의로 새 워크플로우 생성 |
+| `list` | 모든 워크플로우 템플릿 목록 |
+| `get` | 이름으로 특정 템플릿 조회 |
+| `run` | 변수 치환으로 워크플로우 실행 |
+| `update` | 기존 템플릿 수정 |
+| `delete` | 템플릿 삭제 |
+| `export` | YAML로 템플릿 내보내기 |
+| `node_types` | 사용 가능한 노드 타입 목록 (카테고리별 필터링) |
+
+자연어로 워크플로우 관리가 가능합니다:
+```
+사용자: "분석가 3명이 참여하는 시장 조사 워크플로우 만들어줘"
+→ 에이전트가 workflow 도구로 YAML 템플릿 생성 → 사용자 승인 후 실행
+```
 
 ---
 

@@ -91,7 +91,7 @@ export class AgentRuntimeAdapter implements AgentRuntimeLike {
   }
 
   list_approval_requests(status?: AgentApprovalStatus): AgentApprovalRequest[] {
-    return this.domain.tools.list_approval_requests(status as never).map(parse_approval_row);
+    return this.domain.tools.list_approval_requests(status).map(parse_approval_row);
   }
 
   get_approval_request(request_id: string): AgentApprovalRequest | null {
@@ -128,8 +128,8 @@ export class AgentRuntimeAdapter implements AgentRuntimeLike {
     return this.domain.loop.run_task_loop(options);
   }
 
-  async resume_task(task_id: string, user_input?: string, reason?: string): Promise<import("../contracts.js").TaskState | null> {
-    return this.domain.loop.resume_task(task_id, user_input, reason);
+  async resume_task(task_id: string, user_input?: string, reason?: string, channel_context?: { channel: string; chat_id: string }): Promise<import("../contracts.js").TaskState | null> {
+    return this.domain.loop.resume_task(task_id, user_input, reason, channel_context);
   }
 
   async find_waiting_task(provider: string, chat_id: string): Promise<import("../contracts.js").TaskState | null> {

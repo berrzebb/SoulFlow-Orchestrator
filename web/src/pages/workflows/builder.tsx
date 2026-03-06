@@ -1,20 +1,25 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import yaml from "js-yaml";
 import { api } from "../../api/client";
-import { NodePalette, type ToolsData, type SkillItem } from "../../components/node-palette";
+
 import { useToast } from "../../components/toast";
+import { useModalEffects } from "../../components/modal";
 import { useT } from "../../i18n";
-import { GraphEditor, type WorkflowDef as GraphWorkflowDef, type ToolNodeDef, type SkillNodeDef, type OrcheNodeDef, type TriggerNodeDef } from "./graph-editor";
+import { GraphEditor, type WorkflowDef, type AgentDef, type CriticDef, type PhaseDef, type ToolNodeDef, type SkillNodeDef, type OrcheNodeDef, type TriggerNodeDef } from "./graph-editor";
 import { get_frontend_node } from "./node-registry";
+import { NodeInspector, type UpstreamRef } from "./node-inspector";
+import { get_output_fields } from "./output-schema";
 
 /** /api/tools 응답. */
 type ToolsApiResponse = { names: string[]; definitions: Array<Record<string, unknown>>; mcp_servers: Array<{ name: string; tools: string[] }> };
 /** /api/skills 응답 (간략). */
 type SkillListItem = { name: string; summary?: string; source?: string };
-/** /api/channel-instances 응답 항목. */
+/** /api/channels/instances 응답 항목. */
 type ChannelInstanceInfo = { instance_id: string; provider: string; label: string; enabled: boolean; running: boolean };
+/** /api/agents/providers 응답 항목 (간략). */
+type ProviderInfo = { instance_id: string; label: string; enabled: boolean; available: boolean };
 
 interface RolePreset {
   id: string;
@@ -25,62 +30,12 @@ interface RolePreset {
   tools: string[];
 }
 
-// ── Types ──
+// Types: AgentDef, CriticDef, PhaseDef, WorkflowDef → graph-editor.tsx에서 import
 
-interface AgentDef {
-  agent_id: string;
-  role: string;
-  label: string;
-  backend: string;
-  model?: string;
-  system_prompt: string;
-  tools?: string[];
-  max_turns?: number;
-}
-
-interface CriticDef {
-  backend: string;
-  model?: string;
-  system_prompt: string;
-  gate: boolean;
-  on_rejection?: string;
-  max_retries?: number;
-}
-
-interface PhaseDef {
-  phase_id: string;
-  title: string;
-  agents: AgentDef[];
-  critic?: CriticDef;
-  context_template?: string;
-  failure_policy?: string;
-  mode?: "parallel" | "interactive" | "sequential_loop";
-  max_loop_iterations?: number;
-  loop_until?: string;
-  depends_on?: string[];
-  tools?: string[];
-  skills?: string[];
-}
-
-interface WorkflowDef {
-  title: string;
-  objective: string;
-  variables?: Record<string, string>;
-  phases: PhaseDef[];
-  orche_nodes?: OrcheNodeDef[];
-  tool_nodes?: ToolNodeDef[];
-  skill_nodes?: SkillNodeDef[];
-  /** @deprecated trigger_nodes 사용. */
-  trigger?: { type: "cron"; schedule: string; timezone?: string };
-  trigger_nodes?: TriggerNodeDef[];
-  hitl_channel?: { channel_type: string; chat_id?: string };
-}
-
-const BACKENDS = ["claude_cli", "codex_cli", "gemini_cli", "openrouter"];
 const REJECTION_POLICIES = ["retry_all", "retry_targeted", "escalate"];
 
-function empty_agent(index: number): AgentDef {
-  return { agent_id: `agent-${index + 1}`, role: "", label: "", backend: "openrouter", system_prompt: "", max_turns: 3 };
+function empty_agent(index: number, defaultBackend = ""): AgentDef {
+  return { agent_id: `agent-${index + 1}`, role: "", label: "", backend: defaultBackend, system_prompt: "", max_turns: 3 };
 }
 
 function empty_phase(index: number): PhaseDef {
@@ -106,7 +61,7 @@ export default function WorkflowBuilderPage() {
   // Undo/Redo 히스토리
   const historyRef = useRef<{ past: string[]; future: string[] }>({ past: [], future: [] });
   const MAX_HISTORY = 50;
-  const setWorkflow = useCallback((next: WorkflowDef) => {
+  const setWorkflow = (next: WorkflowDef) => {
     setWorkflowRaw((prev) => {
       const h = historyRef.current;
       h.past.push(JSON.stringify(prev));
@@ -114,8 +69,8 @@ export default function WorkflowBuilderPage() {
       h.future = [];
       return next;
     });
-  }, []);
-  const undo = useCallback(() => {
+  };
+  const undo = () => {
     const h = historyRef.current;
     if (!h.past.length) return;
     setWorkflowRaw((prev) => {
@@ -123,8 +78,8 @@ export default function WorkflowBuilderPage() {
       const restored = JSON.parse(h.past.pop()!) as WorkflowDef;
       return restored;
     });
-  }, []);
-  const redo = useCallback(() => {
+  };
+  const redo = () => {
     const h = historyRef.current;
     if (!h.future.length) return;
     setWorkflowRaw((prev) => {
@@ -132,7 +87,7 @@ export default function WorkflowBuilderPage() {
       const restored = JSON.parse(h.future.pop()!) as WorkflowDef;
       return restored;
     });
-  }, []);
+  };
   const [yamlText, setYamlText] = useState("");
   const [yamlError, setYamlError] = useState("");
   const [templateName, setTemplateName] = useState(name || "");
@@ -146,7 +101,8 @@ export default function WorkflowBuilderPage() {
   const [editSubNodeId, setEditSubNodeId] = useState<string | null>(null);
   const [editTriggerNodeId, setEditTriggerNodeId] = useState<string | null>(null);
   const [nodeRunResult, setNodeRunResult] = useState<{ id: string; mode: string; result?: Record<string, unknown>; error?: string; loading: boolean } | null>(null);
-  const [paletteOpen, setPaletteOpen] = useState(false);
+  /** 우측 인스펙터 패널 대상 노드. */
+  const [inspectorNodeId, setInspectorNodeId] = useState<string | null>(null);
 
   // Ctrl+Z / Ctrl+Y 바인딩
   useEffect(() => {
@@ -175,11 +131,16 @@ export default function WorkflowBuilderPage() {
   });
   const { data: channelsData } = useQuery<ChannelInstanceInfo[]>({
     queryKey: ["registered-channels"],
-    queryFn: () => api.get("/api/channel-instances"),
+    queryFn: () => api.get("/api/channels/instances"),
     staleTime: 60_000,
   });
 
   // 노드 편집 패널용 추가 리소스 fetch
+  const { data: providersData } = useQuery<ProviderInfo[]>({
+    queryKey: ["agent-providers"],
+    queryFn: () => api.get("/api/agents/providers"),
+    staleTime: 60_000,
+  });
   const { data: modelsData } = useQuery<{ name: string }[]>({
     queryKey: ["models"],
     queryFn: () => api.get("/api/models"),
@@ -192,7 +153,7 @@ export default function WorkflowBuilderPage() {
   });
   const { data: wfTemplatesData } = useQuery<{ title: string; slug: string }[]>({
     queryKey: ["workflow-templates-list"],
-    queryFn: () => api.get("/api/workflow-templates"),
+    queryFn: () => api.get("/api/workflow/templates"),
     staleTime: 60_000,
   });
 
@@ -202,18 +163,22 @@ export default function WorkflowBuilderPage() {
 
   /** 노드 편집 패널에 전달할 동적 옵션. */
   const nodeOptions = {
+    backends: (providersData || []).filter((p) => p.enabled).map((p) => ({ value: p.instance_id, label: p.label || p.instance_id })),
     models: modelsData || [],
     oauth_integrations: (oauthData || []).filter((o) => o.enabled),
     workflow_templates: wfTemplatesData || [],
     channels: (channelsData || []).filter((c) => c.enabled).map((c) => ({
       provider: c.provider, channel_id: c.instance_id, label: c.label, enabled: c.enabled,
     })),
+    available_tools: availableTools,
+    tool_definitions: (toolsData?.definitions || []) as Array<Record<string, unknown>>,
+    available_skills: availableSkills,
   };
 
   // 기존 템플릿 로드
   const { data: existing } = useQuery<WorkflowDef>({
     queryKey: ["workflow-template", name],
-    queryFn: () => api.get(`/api/workflow-templates/${encodeURIComponent(name!)}`),
+    queryFn: () => api.get(`/api/workflow/templates/${encodeURIComponent(name!)}`),
     enabled: !isNew,
   });
 
@@ -227,14 +192,14 @@ export default function WorkflowBuilderPage() {
   }, [existing, name]);
 
   // YAML ↔ 폼 동기화
-  const sync_yaml_from_form = useCallback(() => {
+  const sync_yaml_from_form = () => {
     try {
       setYamlText(yaml.dump(workflow, { lineWidth: -1, noRefs: true }));
       setYamlError("");
     } catch { /* ignore */ }
-  }, [workflow]);
+  };
 
-  const sync_form_from_yaml = useCallback(() => {
+  const sync_form_from_yaml = () => {
     try {
       const parsed = yaml.load(yamlText) as WorkflowDef;
       if (!parsed || typeof parsed !== "object" || typeof parsed.title !== "string" || !Array.isArray(parsed.phases) || parsed.phases.length === 0) {
@@ -269,13 +234,13 @@ export default function WorkflowBuilderPage() {
       setYamlError(String(e));
       return false;
     }
-  }, [yamlText]);
+  };
 
   const handleTabSwitch = (newTab: "graph" | "builder" | "yaml") => {
     if (newTab === "yaml" && tab !== "yaml") sync_yaml_from_form();
     if (newTab !== "yaml" && tab === "yaml") {
       if (!sync_form_from_yaml()) {
-        toast(t("workflows.yaml_parse_error") || "YAML parsing failed. Fix errors before switching tabs.");
+        toast(t("workflows.yaml_parse_error") || "YAML parsing failed. Fix errors before switching tabs.", "err");
         return;
       }
     }
@@ -285,13 +250,13 @@ export default function WorkflowBuilderPage() {
   // 저장
   const saveMut = useMutation({
     mutationFn: (data: { name: string; def: WorkflowDef }) =>
-      api.put<{ ok: boolean; name: string }>(`/api/workflow-templates/${encodeURIComponent(data.name)}`, data.def),
+      api.put<{ ok: boolean; name: string }>(`/api/workflow/templates/${encodeURIComponent(data.name)}`, data.def),
     onSuccess: (result) => {
-      toast(t("workflows.template_saved"));
+      toast(t("workflows.template_saved"), "ok");
       qc.invalidateQueries({ queryKey: ["workflow-templates"] });
       if (isNew && result.name) navigate(`/workflows/edit/${encodeURIComponent(result.name)}`, { replace: true });
     },
-    onError: () => toast("Save failed"),
+    onError: () => toast(t("workflows.save_failed"), "err"),
   });
 
   const handleSave = () => {
@@ -300,51 +265,15 @@ export default function WorkflowBuilderPage() {
     saveMut.mutate({ name: slug, def: workflow });
   };
 
-  // ── 보조 노드 추가 핸들러 ──
-
-  const addToolFromPalette = (tool_id: string, description: string) => {
-    const idx = (workflow.tool_nodes?.length || 0) + 1;
-    const id = `tool-${idx}`;
-    const first_phase = workflow.phases[0]?.phase_id;
-    const node: ToolNodeDef = { id, tool_id, description, attach_to: first_phase ? [first_phase] : [] };
-    setWorkflow({ ...workflow, tool_nodes: [...(workflow.tool_nodes || []), node] });
-    setPaletteOpen(false);
-  };
-
-  const addSkillFromPalette = (skill_name: string, description: string) => {
-    const idx = (workflow.skill_nodes?.length || 0) + 1;
-    const id = `skill-${idx}`;
-    const first_phase = workflow.phases[0]?.phase_id;
-    const node: SkillNodeDef = { id, skill_name, description, attach_to: first_phase ? [first_phase] : [] };
-    setWorkflow({ ...workflow, skill_nodes: [...(workflow.skill_nodes || []), node] });
-    setPaletteOpen(false);
-  };
-
-  const toggleCron = () => {
-    if (workflow.trigger) {
-      const { trigger: _, ...rest } = workflow;
-      setWorkflow(rest as WorkflowDef);
-    } else {
-      setWorkflow({ ...workflow, trigger: { type: "cron", schedule: "0 9 * * *" } });
-    }
-  };
-
-  const toggleChannel = () => {
-    if (workflow.hitl_channel) {
-      const { hitl_channel: _, ...rest } = workflow;
-      setWorkflow(rest as WorkflowDef);
-    } else {
-      setWorkflow({ ...workflow, hitl_channel: { channel_type: "slack" } });
-    }
-  };
 
   // 실행
   const runMut = useMutation({
     mutationFn: (body: Record<string, unknown>) =>
-      api.post<{ ok: boolean; workflow_id?: string }>("/api/workflows", body),
+      api.post<{ ok: boolean; workflow_id?: string }>("/api/workflow/runs", body),
     onSuccess: (data) => {
       if (data.ok && data.workflow_id) navigate(`/workflows/${data.workflow_id}`);
     },
+    onError: () => toast(t("workflows.run_failed"), "err"),
   });
 
   const handleRun = () => {
@@ -360,21 +289,21 @@ export default function WorkflowBuilderPage() {
   const [runInputPrompt, setRunInputPrompt] = useState<{ id: string; node: Record<string, unknown> } | null>(null);
 
   /** 노드 실행 API 호출. */
-  const executeNode = useCallback(async (id: string, mode: "run" | "test", node: Record<string, unknown>, input_memory: Record<string, unknown>) => {
+  const executeNode = async (id: string, mode: "run" | "test", node: Record<string, unknown>, input_memory: Record<string, unknown>) => {
     setNodeRunResult({ id, mode, loading: true });
     try {
-      const endpoint = mode === "test" ? "/api/workflow-node-tests" : "/api/workflow-node-runs";
+      const endpoint = mode === "test" ? "/api/workflow/node/tests" : "/api/workflow/node/runs";
       const result = await api.post<Record<string, unknown>>(endpoint, { node, input_memory });
       setNodeRunResult({ id, mode, result, loading: false });
-      toast(mode === "test" ? t("workflows.test_node_done") : t("workflows.run_node_done"));
+      toast(mode === "test" ? t("workflows.test_node_done") : t("workflows.run_node_done"), "ok");
     } catch (e) {
       setNodeRunResult({ id, mode, error: String(e), loading: false });
-      toast(t("workflows.node_run_error"));
+      toast(t("workflows.node_run_error"), "err");
     }
-  }, [toast, t]);
+  };
 
   /** 노드 단독 실행 (▶ 버튼). Phase Run → 입력 프롬프트, 나머지 → 즉시 실행. */
-  const handleRunNode = useCallback((id: string, mode: "run" | "test") => {
+  const handleRunNode = (id: string, mode: "run" | "test") => {
     const phase = workflow.phases.find((p) => p.phase_id === id);
     const orche = (workflow.orche_nodes || []).find((n) => n.node_id === id);
     const node: Record<string, unknown> | undefined = phase
@@ -389,25 +318,165 @@ export default function WorkflowBuilderPage() {
     }
     // Test 모드 또는 오케 노드 → 즉시 실행
     void executeNode(id, mode, node, {});
-  }, [workflow, executeNode]);
+  };
+
+  /** inspectorNodeId에서 노드 데이터·타입·라벨·update 콜백을 resolve. */
+  const resolveInspectorNode = (id: string): {
+    node: Record<string, unknown>; node_type: string; node_label: string;
+    onUpdate: (partial: Record<string, unknown>) => void;
+  } | null => {
+    // Sub-node: "{phaseId}__{agentId}" 또는 "{phaseId}__critic"
+    const sep = id.indexOf("__");
+    if (sep >= 0) {
+      const phaseId = id.slice(0, sep);
+      const subId = id.slice(sep + 2);
+      const phase = workflow.phases.find((p) => p.phase_id === phaseId);
+      if (!phase) return null;
+      // Tool sub-node
+      if (subId.startsWith("tool_")) {
+        const toolNodeId = subId.slice(5); // "tool_xxx" → "xxx"
+        const toolNode = (workflow.tool_nodes || []).find((n) => n.id === toolNodeId);
+        if (!toolNode) return null;
+        return {
+          node: toolNode as unknown as Record<string, unknown>,
+          node_type: "tool_sub",
+          node_label: toolNode.tool_id || toolNode.id,
+          onUpdate: () => {},
+        };
+      }
+      // Skill sub-node
+      if (subId.startsWith("skill_")) {
+        const skillNodeId = subId.slice(6); // "skill_xxx" → "xxx"
+        const skillNode = (workflow.skill_nodes || []).find((n) => n.id === skillNodeId);
+        if (!skillNode) return null;
+        return {
+          node: skillNode as unknown as Record<string, unknown>,
+          node_type: "skill_sub",
+          node_label: skillNode.skill_name || skillNode.id,
+          onUpdate: () => {},
+        };
+      }
+      if (subId === "critic" && phase.critic) {
+        return {
+          node: phase.critic as unknown as Record<string, unknown>,
+          node_type: "critic",
+          node_label: `Critic — ${phase.title}`,
+          onUpdate: () => {},
+        };
+      }
+      const agent = phase.agents.find((a) => a.agent_id === subId);
+      if (agent) {
+        return {
+          node: agent as unknown as Record<string, unknown>,
+          node_type: "agent",
+          node_label: agent.label || agent.agent_id,
+          onUpdate: () => {},
+        };
+      }
+    }
+    // Trigger node
+    const tn = (workflow.trigger_nodes || []).find((n) => n.id === id);
+    if (tn) {
+      return {
+        node: tn as unknown as Record<string, unknown>,
+        node_type: `trigger_${tn.trigger_type}`,
+        node_label: `Trigger: ${tn.trigger_type}`,
+        onUpdate: (partial) => {
+          const nodes = (workflow.trigger_nodes || []).map((n) => n.id === id ? { ...n, ...partial } as TriggerNodeDef : n);
+          setWorkflow({ ...workflow, trigger_nodes: nodes });
+        },
+      };
+    }
+    // Orche node
+    const on = (workflow.orche_nodes || []).find((n) => n.node_id === id);
+    if (on) {
+      return {
+        node: on as unknown as Record<string, unknown>,
+        node_type: on.node_type,
+        node_label: on.title || on.node_type,
+        onUpdate: (partial) => {
+          const nodes = (workflow.orche_nodes || []).map((n) => n.node_id === id ? { ...n, ...partial } as OrcheNodeDef : n);
+          setWorkflow({ ...workflow, orche_nodes: nodes });
+        },
+      };
+    }
+    // Phase node
+    const pi = workflow.phases.findIndex((p) => p.phase_id === id);
+    if (pi >= 0) {
+      const phase = workflow.phases[pi]!;
+      return {
+        node: phase as unknown as Record<string, unknown>,
+        node_type: "phase",
+        node_label: phase.title || phase.phase_id,
+        onUpdate: (partial) => {
+          const phases = [...workflow.phases];
+          phases[pi] = { ...phases[pi]!, ...partial } as PhaseDef;
+          setWorkflow({ ...workflow, phases });
+        },
+      };
+    }
+    return null;
+  };
+
+  const inspectorData = inspectorNodeId ? resolveInspectorNode(inspectorNodeId) : null;
+
+  /** 선택된 노드의 상류 노드들 출력 필드 (드래그 참조용). */
+  const upstreamRefs: UpstreamRef[] = (() => {
+    if (!inspectorNodeId) return [];
+    const refs: UpstreamRef[] = [];
+    // Phase의 depends_on (명시적) 또는 배열 순서 기반 암시적 의존성
+    const phase = workflow.phases.find((p) => p.phase_id === inspectorNodeId);
+    const orcheNode = (workflow.orche_nodes || []).find((n) => n.node_id === inspectorNodeId);
+    let deps: string[] = phase?.depends_on || (orcheNode?.depends_on as string[] | undefined) || [];
+    // Phase에 depends_on이 없으면 배열에서 이전 Phase를 암시적 의존성으로 추가
+    if (phase && !deps.length) {
+      const pi = workflow.phases.indexOf(phase);
+      if (pi > 0) deps = [workflow.phases[pi - 1]!.phase_id];
+    }
+    for (const depId of deps) {
+      const depPhase = workflow.phases.find((p) => p.phase_id === depId);
+      if (depPhase) {
+        refs.push({ node_id: depId, node_label: depPhase.title || depId, fields: get_output_fields(depPhase) });
+        continue;
+      }
+      const depOrche = (workflow.orche_nodes || []).find((n) => n.node_id === depId);
+      if (depOrche) {
+        refs.push({ node_id: depId, node_label: depOrche.title || depId, fields: get_output_fields(depOrche) });
+      }
+    }
+    // field_mappings에서 이 노드를 to_node로 참조하는 소스들
+    for (const m of workflow.field_mappings || []) {
+      if (m.to_node !== inspectorNodeId) continue;
+      if (refs.some((r) => r.node_id === m.from_node)) continue;
+      const srcPhase = workflow.phases.find((p) => p.phase_id === m.from_node);
+      if (srcPhase) {
+        refs.push({ node_id: m.from_node, node_label: srcPhase.title || m.from_node, fields: get_output_fields(srcPhase) });
+        continue;
+      }
+      const srcOrche = (workflow.orche_nodes || []).find((n) => n.node_id === m.from_node);
+      if (srcOrche) {
+        refs.push({ node_id: m.from_node, node_label: srcOrche.title || m.from_node, fields: get_output_fields(srcOrche) });
+      }
+    }
+    return refs;
+  })();
 
   return (
-    <div className="page">
+    <div className="page page--full-height">
       {/* 헤더 */}
       <div className="section-header">
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <div className="builder-header__left">
           <button className="btn btn--sm" onClick={() => navigate("/workflows")}>
             ← {t("workflows.back")}
           </button>
           <input
-            className="input"
-            style={{ width: 260, fontWeight: 600 }}
+            className="input builder-name-input"
             value={templateName}
             onChange={(e) => setTemplateName(e.target.value)}
             placeholder={t("workflows.template_name")}
           />
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
+        <div className="builder-header__right">
           <button className="btn btn--sm btn--accent" onClick={handleSave} disabled={saveMut.isPending}>
             {t("workflows.save_template")}
           </button>
@@ -418,20 +487,21 @@ export default function WorkflowBuilderPage() {
       </div>
 
       {/* 탭 */}
-      <div className="builder-tabs">
-        <button className={`builder-tab${tab === "graph" ? " active" : ""}`} onClick={() => handleTabSwitch("graph")}>
+      <div className="builder-tabs" role="tablist">
+        <button className={`builder-tab${tab === "graph" ? " active" : ""}`} role="tab" aria-selected={tab === "graph"} onClick={() => handleTabSwitch("graph")}>
           {t("workflows.graph_tab")}
         </button>
-        <button className={`builder-tab${tab === "builder" ? " active" : ""}`} onClick={() => handleTabSwitch("builder")}>
+        <button className={`builder-tab${tab === "builder" ? " active" : ""}`} role="tab" aria-selected={tab === "builder"} onClick={() => handleTabSwitch("builder")}>
           {t("workflows.builder_tab")}
         </button>
-        <button className={`builder-tab${tab === "yaml" ? " active" : ""}`} onClick={() => handleTabSwitch("yaml")}>
+        <button className={`builder-tab${tab === "yaml" ? " active" : ""}`} role="tab" aria-selected={tab === "yaml"} onClick={() => handleTabSwitch("yaml")}>
           {t("workflows.yaml_tab")}
         </button>
         {tab === "graph" && (
           <button
             className={`builder-tab builder-tab--yaml-toggle${yamlSideOpen ? " active" : ""}`}
             onClick={() => { if (!yamlSideOpen) { sync_yaml_from_form(); setYamlSideDirty(false); } setYamlSideOpen(!yamlSideOpen); }}
+            aria-expanded={yamlSideOpen}
             title="Toggle YAML panel"
           >
             {yamlSideOpen ? "◀" : "▶"} YAML
@@ -458,47 +528,22 @@ export default function WorkflowBuilderPage() {
           </div>
           {/* 메인 그래프 영역 */}
           <div className="graph-layout__main">
-            {/* 보조 노드 즉시 추가 툴바 */}
-            <div className="graph-aux-toolbar">
-              <div style={{ position: "relative" }}>
-                <button className="btn btn--xs" onClick={() => setPaletteOpen(!paletteOpen)} title={t("palette.title")}>
-                  + {t("workflows.node_tool")} / {t("workflows.node_skill")} ▾
-                </button>
-                {paletteOpen && toolsData && (
-                  <NodePalette
-                    tools={toolsData as ToolsData}
-                    skills={(skillsData || []) as SkillItem[]}
-                    onSelectTool={addToolFromPalette}
-                    onSelectSkill={addSkillFromPalette}
-                    onClose={() => setPaletteOpen(false)}
-                  />
-                )}
-              </div>
-              <button className={`btn btn--xs${workflow.trigger ? " btn--active" : ""}`} onClick={() => { if (!workflow.trigger) toggleCron(); setCronModalOpen(true); }} title={t("workflows.add_cron")}>
-                {workflow.trigger ? "✓ " : "+ "}{t("workflows.node_cron")}
-              </button>
-              <button className={`btn btn--xs${workflow.hitl_channel ? " btn--active" : ""}`} onClick={() => { if (!workflow.hitl_channel) toggleChannel(); setChannelModalOpen(true); }} title={t("workflows.add_channel")}>
-                {workflow.hitl_channel ? "✓ " : "+ "}{t("workflows.node_channel")}
-              </button>
-            </div>
+            {/* 보조 노드 추가는 GraphEditor 내 NodePicker로 통합 */}
             <GraphEditor
-              workflow={workflow as GraphWorkflowDef}
-              onChange={(w) => setWorkflow(w as WorkflowDef)}
+              workflow={workflow}
+              onChange={setWorkflow}
               selectedPhaseId={selectedPhaseId}
-              onSelectPhase={setSelectedPhaseId}
-              onEditPhase={(id) => {
-                // Trigger → 오케 → Phase 순서로 판별
-                if ((workflow.trigger_nodes || []).some((n) => n.id === id)) {
-                  setEditTriggerNodeId(id);
-                } else if ((workflow.orche_nodes || []).some((n) => n.node_id === id)) {
-                  setEditOrcheNodeId(id);
-                } else {
-                  setEditPhaseId(id);
-                }
-              }}
+              onSelectPhase={(id) => { setSelectedPhaseId(id); if (id) setInspectorNodeId(id); }}
+              onEditPhase={(id) => setInspectorNodeId(id)}
               onRunNode={handleRunNode}
-              onEditSubNode={setEditSubNodeId}
+              onEditSubNode={(id) => {
+                setInspectorNodeId(id);
+              }}
               runningNodeId={nodeRunResult?.loading ? nodeRunResult.id : null}
+              orcheStates={nodeRunResult ? [{
+                node_id: nodeRunResult.id,
+                status: nodeRunResult.loading ? "running" : nodeRunResult.error ? "failed" : "completed",
+              }] : undefined}
             />
             {runInputPrompt && (
               <NodeRunInputBar
@@ -513,8 +558,31 @@ export default function WorkflowBuilderPage() {
             )}
           </div>
           {/* 우측 아웃풋 사이드 패널 */}
-          {nodeRunResult && (
+          {nodeRunResult && !inspectorNodeId && (
             <NodeRunOutputPanel result={nodeRunResult} onClose={() => setNodeRunResult(null)} />
+          )}
+          {/* 우측 노드 인스펙터 패널 */}
+          {inspectorNodeId && inspectorData && (
+            <NodeInspector
+              node={inspectorData.node}
+              node_id={inspectorNodeId}
+              node_type={inspectorData.node_type}
+              node_label={inspectorData.node_label}
+              execution_state={nodeRunResult && nodeRunResult.id === inspectorNodeId ? {
+                node_id: nodeRunResult.id,
+                node_type: inspectorData.node_type,
+                status: nodeRunResult.loading ? "running" : nodeRunResult.error ? "failed" : "completed",
+                result: nodeRunResult.result,
+                error: nodeRunResult.error,
+              } : undefined}
+              onUpdate={inspectorData.onUpdate}
+              onClose={() => setInspectorNodeId(null)}
+              t={t}
+              options={nodeOptions}
+              workflow={workflow}
+              onWorkflowChange={setWorkflow}
+              upstream_refs={upstreamRefs}
+            />
           )}
           {editPhaseId && (
             <PhaseEditModal
@@ -563,38 +631,21 @@ export default function WorkflowBuilderPage() {
               nodeId={editOrcheNodeId}
               onChange={setWorkflow}
               onClose={() => setEditOrcheNodeId(null)}
+              nodeOptions={nodeOptions}
             />
           )}
-          {editSubNodeId && editSubNodeId.includes("__tool_") && (
-            <ToolNodeEditModal
-              workflow={workflow}
-              subNodeId={editSubNodeId}
-              onChange={setWorkflow}
-              onClose={() => setEditSubNodeId(null)}
-              availableTools={availableTools}
-              toolDefinitions={(toolsData?.definitions || []) as Array<Record<string, unknown>>}
-            />
-          )}
-          {editSubNodeId && editSubNodeId.includes("__skill_") && (
-            <SkillNodeEditModal
-              workflow={workflow}
-              subNodeId={editSubNodeId}
-              onChange={setWorkflow}
-              onClose={() => setEditSubNodeId(null)}
-              availableSkills={availableSkills}
-            />
-          )}
-          {editSubNodeId && !editSubNodeId.includes("__tool_") && !editSubNodeId.includes("__skill_") && (
+          {editSubNodeId && (
             <AgentEditModal
               workflow={workflow}
               subNodeId={editSubNodeId}
               onChange={setWorkflow}
               onClose={() => setEditSubNodeId(null)}
+              backends={nodeOptions.backends}
             />
           )}
         </div>
       ) : tab === "builder" ? (
-        <FormBuilder workflow={workflow} onChange={setWorkflow} />
+        <FormBuilder workflow={workflow} onChange={setWorkflow} backends={nodeOptions.backends} />
       ) : (
         <YamlEditor
           value={yamlText}
@@ -628,7 +679,7 @@ function YamlEditor({ value, onChange, error, workflow }: {
         {error && <div className="yaml-error">{error}</div>}
       </div>
       <div className="yaml-preview-pane">
-        <h4 style={{ margin: "0 0 8px" }}>{t("workflows.preview")}</h4>
+        <h4 className="builder-preview-title">{t("workflows.preview")}</h4>
         <WorkflowPreview workflow={workflow} />
       </div>
     </div>
@@ -675,6 +726,7 @@ function PhaseEditModal({ workflow, phaseId, onChange, onClose }: {
   onClose: () => void;
 }) {
   const t = useT();
+  useModalEffects(true, onClose);
   const pi = workflow.phases.findIndex((p) => p.phase_id === phaseId);
   if (pi < 0) return null;
   const phase = workflow.phases[pi]!;
@@ -691,13 +743,13 @@ function PhaseEditModal({ workflow, phaseId, onChange, onClose }: {
   };
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 480 }}>
+    <div className="modal-overlay" onClick={onClose} role="dialog" aria-modal="true">
+      <div className="modal modal--md" onClick={(e) => e.stopPropagation()}>
         <div className="modal__header">
           <h3 className="modal__title">{phase.title || phase.phase_id}</h3>
           <button className="modal__close" onClick={onClose} aria-label="close">✕</button>
         </div>
-        <div className="modal__body" style={{ display: "flex", flexDirection: "column", gap: "var(--sp-2)" }}>
+        <div className="modal__body">
           <div className="builder-row">
             <label className="label">{t("workflows.phase_id")}</label>
             <input className="input input--sm" value={phase.phase_id} onChange={(e) => updatePhase({ phase_id: e.target.value })} />
@@ -730,7 +782,7 @@ function PhaseEditModal({ workflow, phaseId, onChange, onClose }: {
               />
             </div>
           )}
-          <div style={{ fontSize: "var(--fs-xs)", color: "var(--muted)" }}>
+          <div className="builder-meta-hint">
             {phase.agents.length} agent{phase.agents.length !== 1 ? "s" : ""}
             {phase.critic ? " + critic" : ""}
           </div>
@@ -760,6 +812,7 @@ function CronEditModal({ trigger, onChange, onRemove, onClose }: {
   onClose: () => void;
 }) {
   const t = useT();
+  useModalEffects(true, onClose);
   const [schedule, setSchedule] = useState(trigger?.schedule || "0 9 * * *");
   const [timezone, setTimezone] = useState(trigger?.timezone || "");
 
@@ -771,13 +824,13 @@ function CronEditModal({ trigger, onChange, onRemove, onClose }: {
   };
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 400 }}>
+    <div className="modal-overlay" onClick={onClose} role="dialog" aria-modal="true">
+      <div className="modal modal--sm" onClick={(e) => e.stopPropagation()}>
         <div className="modal__header">
           <h3 className="modal__title">{t("workflows.node_cron")}</h3>
           <button className="modal__close" onClick={onClose} aria-label="close">✕</button>
         </div>
-        <div className="modal__body" style={{ display: "flex", flexDirection: "column", gap: "var(--sp-2)" }}>
+        <div className="modal__body">
           <div className="builder-row">
             <label className="label">{t("workflows.cron_schedule")}</label>
             <input className="input input--sm" value={schedule} onChange={(e) => setSchedule(e.target.value)} placeholder="0 9 * * *" />
@@ -815,6 +868,7 @@ function TriggerNodeEditModal({ node, onChange, onRemove, onClose }: {
   onClose: () => void;
 }) {
   const t = useT();
+  useModalEffects(true, onClose);
   const [triggerType, setTriggerType] = useState<TriggerType>(node.trigger_type);
   const [schedule, setSchedule] = useState(node.schedule || "0 9 * * *");
   const [timezone, setTimezone] = useState(node.timezone || "");
@@ -832,16 +886,16 @@ function TriggerNodeEditModal({ node, onChange, onRemove, onClose }: {
   };
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 420 }}>
+    <div className="modal-overlay" onClick={onClose} role="dialog" aria-modal="true">
+      <div className="modal modal--sm" onClick={(e) => e.stopPropagation()}>
         <div className="modal__header">
           <h3 className="modal__title">{t("workflows.trigger_node")}</h3>
           <button className="modal__close" onClick={onClose} aria-label="close">✕</button>
         </div>
-        <div className="modal__body" style={{ display: "flex", flexDirection: "column", gap: "var(--sp-2)" }}>
+        <div className="modal__body">
           <div className="builder-row">
             <label className="label">{t("workflows.trigger_type")}</label>
-            <div style={{ display: "flex", gap: 4 }}>
+            <div className="builder-btn-row">
               {TRIGGER_TYPES.map((tt) => (
                 <button key={tt} className={`btn btn--sm${triggerType === tt ? " btn--accent" : ""}`}
                   onClick={() => setTriggerType(tt)}>{TRIGGER_LABELS[tt]}</button>
@@ -900,6 +954,7 @@ function ChannelEditModal({ channel, onChange, onRemove, onClose, channels }: {
   channels: ChannelInstanceInfo[];
 }) {
   const t = useT();
+  useModalEffects(true, onClose);
   const [selectedId, setSelectedId] = useState(channel ? `${channel.channel_type}:${channel.chat_id || ""}` : "");
   const [chatId, setChatId] = useState(channel?.chat_id || "");
 
@@ -921,13 +976,13 @@ function ChannelEditModal({ channel, onChange, onRemove, onClose, channels }: {
   };
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 400 }}>
+    <div className="modal-overlay" onClick={onClose} role="dialog" aria-modal="true">
+      <div className="modal modal--sm" onClick={(e) => e.stopPropagation()}>
         <div className="modal__header">
           <h3 className="modal__title">{t("workflows.node_channel")}</h3>
           <button className="modal__close" onClick={onClose} aria-label="close">✕</button>
         </div>
-        <div className="modal__body" style={{ display: "flex", flexDirection: "column", gap: "var(--sp-2)" }}>
+        <div className="modal__body">
           <div className="builder-row">
             <label className="label">{t("workflows.node_channel")}</label>
             <select className="input input--sm" value={selectedId} onChange={(e) => handleSelect(e.target.value)}>
@@ -959,13 +1014,15 @@ function ChannelEditModal({ channel, onChange, onRemove, onClose, channels }: {
 
 // ── 오케스트레이션 노드 편집 모달 ──
 
-function OrcheNodeEditModal({ workflow, nodeId, onChange, onClose }: {
+function OrcheNodeEditModal({ workflow, nodeId, onChange, onClose, nodeOptions }: {
   workflow: WorkflowDef;
   nodeId: string;
   onChange: (w: WorkflowDef) => void;
   onClose: () => void;
+  nodeOptions?: Record<string, unknown>;
 }) {
   const t = useT();
+  useModalEffects(true, onClose);
   const nodes = workflow.orche_nodes || [];
   const idx = nodes.findIndex((n) => n.node_id === nodeId);
   if (idx < 0) return null;
@@ -983,13 +1040,13 @@ function OrcheNodeEditModal({ workflow, nodeId, onChange, onClose }: {
   };
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 520 }}>
+    <div className="modal-overlay" onClick={onClose} role="dialog" aria-modal="true">
+      <div className="modal modal--lg" onClick={(e) => e.stopPropagation()}>
         <div className="modal__header">
           <h3 className="modal__title">{node.node_type.toUpperCase()}: {node.title}</h3>
           <button className="modal__close" onClick={onClose} aria-label="close">✕</button>
         </div>
-        <div className="modal__body" style={{ display: "flex", flexDirection: "column", gap: "var(--sp-2)" }}>
+        <div className="modal__body">
           <div className="builder-row">
             <label className="label">Node ID</label>
             <input className="input input--sm" value={node.node_id} onChange={(e) => update({ node_id: e.target.value })} />
@@ -1027,16 +1084,20 @@ function OrcheNodeEditModal({ workflow, nodeId, onChange, onClose }: {
 
 // ── 클러스터 Sub-node (Agent/Critic) 편집 모달 ──
 
-function AgentEditModal({ workflow, subNodeId, onChange, onClose }: {
+type BackendOption = { value: string; label: string };
+
+function AgentEditModal({ workflow, subNodeId, onChange, onClose, backends }: {
   workflow: WorkflowDef;
   subNodeId: string;
   onChange: (w: WorkflowDef) => void;
   onClose: () => void;
+  backends?: BackendOption[];
 }) {
   const t = useT();
+  useModalEffects(true, onClose);
   const { data: roles } = useQuery<RolePreset[]>({
     queryKey: ["workflow-roles"],
-    queryFn: () => api.get("/api/workflow-roles"),
+    queryFn: () => api.get("/api/workflow/roles"),
     staleTime: 60_000,
   });
 
@@ -1060,18 +1121,18 @@ function AgentEditModal({ workflow, subNodeId, onChange, onClose }: {
       onChange({ ...workflow, phases });
     };
     return (
-      <div className="modal-overlay" onClick={onClose}>
-        <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 520 }}>
+      <div className="modal-overlay" onClick={onClose} role="dialog" aria-modal="true">
+        <div className="modal modal--lg" onClick={(e) => e.stopPropagation()}>
           <div className="modal__header">
             <h3 className="modal__title">Critic — {phase.title}</h3>
             <button className="modal__close" onClick={onClose} aria-label="close">✕</button>
           </div>
-          <div className="modal__body" style={{ display: "flex", flexDirection: "column", gap: "var(--sp-2)" }}>
+          <div className="modal__body">
             <div className="builder-row-pair">
               <div className="builder-row">
                 <label className="label">{t("workflows.backend")}</label>
                 <select className="input input--sm" value={critic.backend} onChange={(e) => updateCritic({ backend: e.target.value })}>
-                  {BACKENDS.map((b) => <option key={b} value={b}>{b}</option>)}
+                  {(backends || []).map((b) => <option key={b.value} value={b.value}>{b.label}</option>)}
                 </select>
               </div>
               <div className="builder-row">
@@ -1136,13 +1197,13 @@ function AgentEditModal({ workflow, subNodeId, onChange, onClose }: {
   };
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 560 }}>
+    <div className="modal-overlay" onClick={onClose} role="dialog" aria-modal="true">
+      <div className="modal modal--xl" onClick={(e) => e.stopPropagation()}>
         <div className="modal__header">
           <h3 className="modal__title">Agent: {agent.label || agent.agent_id}</h3>
           <button className="modal__close" onClick={onClose} aria-label="close">✕</button>
         </div>
-        <div className="modal__body" style={{ display: "flex", flexDirection: "column", gap: "var(--sp-2)" }}>
+        <div className="modal__body">
           <div className="builder-row-pair">
             <div className="builder-row">
               <label className="label">Agent ID</label>
@@ -1177,7 +1238,7 @@ function AgentEditModal({ workflow, subNodeId, onChange, onClose }: {
               />
             </div>
             {roles?.some((r) => r.id === agent.role) && (
-              <div style={{ fontSize: "var(--fs-xs)", color: "var(--accent)", marginTop: 4 }}>
+              <div className="builder-accent-hint">
                 {t("workflows.role_auto_prompt")}
               </div>
             )}
@@ -1186,7 +1247,7 @@ function AgentEditModal({ workflow, subNodeId, onChange, onClose }: {
             <div className="builder-row">
               <label className="label">{t("workflows.backend")}</label>
               <select className="input input--sm" value={agent.backend} onChange={(e) => updateAgent({ backend: e.target.value })}>
-                {BACKENDS.map((b) => <option key={b} value={b}>{b}</option>)}
+                {(backends || []).map((b) => <option key={b.value} value={b.value}>{b.label}</option>)}
               </select>
             </div>
             <div className="builder-row">
@@ -1195,17 +1256,16 @@ function AgentEditModal({ workflow, subNodeId, onChange, onClose }: {
             </div>
             <div className="builder-row">
               <label className="label">Max Turns</label>
-              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <div className="builder-inline-row">
                 <input
-                  className="input input--sm"
+                  className="input input--sm flex-1"
                   type="number"
                   min={0}
                   value={agent.max_turns ?? 3}
                   onChange={(e) => updateAgent({ max_turns: Number(e.target.value) })}
                   disabled={agent.max_turns === 0}
-                  style={{ flex: 1 }}
                 />
-                <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: "var(--fs-xs)", whiteSpace: "nowrap", cursor: "pointer" }}>
+                <label className="builder-checkbox-label">
                   <input
                     type="checkbox"
                     checked={agent.max_turns === 0}
@@ -1218,7 +1278,7 @@ function AgentEditModal({ workflow, subNodeId, onChange, onClose }: {
           </div>
           <div className="builder-row">
             <label className="label">{t("workflows.system_prompt")}</label>
-            <div style={{ fontSize: "var(--fs-xs)", color: "var(--accent)", marginBottom: 4 }}>
+            <div className="builder-accent-hint--mb">
               {t(`workflows.prompt_hint_${phase.mode || "parallel"}`)}
             </div>
             <textarea className="input input--sm" rows={5} value={agent.system_prompt} onChange={(e) => updateAgent({ system_prompt: e.target.value })} />
@@ -1242,10 +1302,9 @@ function NodeRunInputBar({ nodeId, onSubmit, onCancel }: {
   const [value, setValue] = useState("");
   return (
     <div className="node-run-input-bar">
-      <strong style={{ fontSize: "var(--fs-sm)", whiteSpace: "nowrap" }}>Run: {nodeId}</strong>
+      <strong className="builder-run-label">Run: {nodeId}</strong>
       <input
-        className="input input--sm"
-        style={{ flex: 1 }}
+        className="input input--sm flex-1"
         placeholder={t("workflows.run_objective_placeholder")}
         value={value}
         onChange={(e) => setValue(e.target.value)}
@@ -1265,6 +1324,8 @@ function NodeRunOutputPanel({ result, onClose }: {
   result: { id: string; mode: string; result?: Record<string, unknown>; error?: string; loading: boolean };
   onClose: () => void;
 }) {
+  const { toast } = useToast();
+  const t = useT();
   const [copied, setCopied] = useState(false);
   const isTest = result.mode === "test";
   const isError = !!result.error || (result.result && !result.result.ok);
@@ -1284,24 +1345,24 @@ function NodeRunOutputPanel({ result, onClose }: {
     navigator.clipboard.writeText(displayContent).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
-    });
+    }).catch(() => toast(t("workflows.copy_failed"), "err"));
   };
 
   return (
     <div className="node-output-panel">
       <div className="node-output-panel__header">
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <div className="builder-header__left">
           <span className={`badge ${isError ? "badge--err" : "badge--ok"}`}>
             {result.loading ? "Running..." : isError ? "Error" : "OK"}
           </span>
-          <strong style={{ fontSize: "var(--fs-sm)" }}>
+          <strong className="builder-run-title">
             {isTest ? "Test" : "Run"}: {result.id}
           </strong>
           {duration != null && (
-            <span style={{ fontSize: "var(--fs-xs)", color: "var(--muted)" }}>{duration}ms</span>
+            <span className="builder-run-duration">{duration}ms</span>
           )}
         </div>
-        <div style={{ display: "flex", gap: 4 }}>
+        <div className="builder-btn-row">
           <button className="btn btn--xs" onClick={handleCopy} title="Copy output">
             {copied ? "✓" : "⧉"}
           </button>
@@ -1309,7 +1370,7 @@ function NodeRunOutputPanel({ result, onClose }: {
         </div>
       </div>
       {warnings.length > 0 && (
-        <div style={{ padding: "4px 12px", fontSize: "var(--fs-xs)", color: "var(--warn)" }}>
+        <div className="builder-warnings">
           {warnings.map((w, i) => <div key={i}>{w}</div>)}
         </div>
       )}
@@ -1327,9 +1388,8 @@ function TagSearchInput({ value, options, onChange, placeholder }: {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const filtered = options.filter((o) => o.toLowerCase().includes(query.toLowerCase()));
-  const display = value || query;
   return (
-    <div className="tag-search" style={{ position: "relative" }}>
+    <div className="tag-search">
       <div className="tag-search__row">
         {value && (
           <span className="tag-chip tag-chip--active">
@@ -1378,7 +1438,7 @@ function MultiTagSelect({ selected, options, onChange }: {
           );
         })}
         {unselected.length > 0 && (
-          <div style={{ position: "relative", display: "inline-block" }}>
+          <div className="inline-dropdown">
             <button className="tag-chip tag-chip--add" onClick={() => setOpen(!open)}>+</button>
             {open && (
               <div className="tag-search__dropdown">
@@ -1403,6 +1463,7 @@ function ToolNodeEditModal({ workflow, subNodeId, onChange, onClose, availableTo
   toolDefinitions: Array<Record<string, unknown>>;
 }) {
   const t = useT();
+  useModalEffects(true, onClose);
   // subNodeId: "{phaseId}__tool_{toolNodeId}"
   const match = subNodeId.match(/^(.+)__tool_(.+)$/);
   if (!match) return null;
@@ -1433,13 +1494,13 @@ function ToolNodeEditModal({ workflow, subNodeId, onChange, onClose, availableTo
   const phaseOptions = workflow.phases.map((p) => ({ id: p.phase_id, label: p.title || p.phase_id }));
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 520 }}>
+    <div className="modal-overlay" onClick={onClose} role="dialog" aria-modal="true">
+      <div className="modal modal--lg" onClick={(e) => e.stopPropagation()}>
         <div className="modal__header">
           <h3 className="modal__title">🔧 {t("workflows.edit_tool_node")}</h3>
           <button className="modal__close" onClick={onClose} aria-label="close">✕</button>
         </div>
-        <div className="modal__body" style={{ display: "flex", flexDirection: "column", gap: "var(--sp-2)" }}>
+        <div className="modal__body">
           <label className="form-label">{t("workflows.tool_id")}</label>
           <TagSearchInput value={node.tool_id} options={availableTools} onChange={(v) => update({ tool_id: v })} placeholder={t("workflows.search_tool")} />
 
@@ -1452,12 +1513,12 @@ function ToolNodeEditModal({ workflow, subNodeId, onChange, onClose, availableTo
           {Object.keys(paramSchema).length > 0 && (
             <>
               <label className="form-label">{t("workflows.tool_params")}</label>
-              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <div className="builder-param-list">
                 {Object.entries(paramSchema).map(([key, schema]) => (
-                  <div key={key} style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                    <span style={{ fontSize: "var(--fs-xs)", minWidth: 100 }} title={schema.description}>{key}</span>
+                  <div key={key} className="builder-param-row">
+                    <span className="builder-param-key" title={schema.description}>{key}</span>
                     {schema.enum ? (
-                      <select className="input input--sm" style={{ flex: 1 }}
+                      <select className="input input--sm flex-1"
                         value={String(params[key] ?? "")}
                         onChange={(e) => update({ params: { ...params, [key]: e.target.value } })}>
                         <option value="">—</option>
@@ -1466,7 +1527,7 @@ function ToolNodeEditModal({ workflow, subNodeId, onChange, onClose, availableTo
                     ) : schema.type === "boolean" ? (
                       <input type="checkbox" checked={!!params[key]} onChange={(e) => update({ params: { ...params, [key]: e.target.checked } })} />
                     ) : (
-                      <input className="input input--sm" style={{ flex: 1 }}
+                      <input className="input input--sm flex-1"
                         type={schema.type === "number" || schema.type === "integer" ? "number" : "text"}
                         value={String(params[key] ?? "")}
                         placeholder={schema.description}
@@ -1478,7 +1539,7 @@ function ToolNodeEditModal({ workflow, subNodeId, onChange, onClose, availableTo
             </>
           )}
         </div>
-        <div className="modal__footer" style={{ display: "flex", justifyContent: "space-between" }}>
+        <div className="modal__footer modal__footer--spread">
           <button className="btn btn--sm btn--danger" onClick={remove}>{t("workflows.delete")}</button>
           <button className="btn btn--sm" onClick={onClose}>Close</button>
         </div>
@@ -1493,6 +1554,7 @@ function SkillNodeEditModal({ workflow, subNodeId, onChange, onClose, availableS
   availableSkills: string[];
 }) {
   const t = useT();
+  useModalEffects(true, onClose);
   const match = subNodeId.match(/^(.+)__skill_(.+)$/);
   if (!match) return null;
   const skillNodeId = match[2]!;
@@ -1515,13 +1577,13 @@ function SkillNodeEditModal({ workflow, subNodeId, onChange, onClose, availableS
   const phaseOptions = workflow.phases.map((p) => ({ id: p.phase_id, label: p.title || p.phase_id }));
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 480 }}>
+    <div className="modal-overlay" onClick={onClose} role="dialog" aria-modal="true">
+      <div className="modal modal--md" onClick={(e) => e.stopPropagation()}>
         <div className="modal__header">
           <h3 className="modal__title">⚡ {t("workflows.edit_skill_node")}</h3>
           <button className="modal__close" onClick={onClose} aria-label="close">✕</button>
         </div>
-        <div className="modal__body" style={{ display: "flex", flexDirection: "column", gap: "var(--sp-2)" }}>
+        <div className="modal__body">
           <label className="form-label">{t("workflows.skill_name")}</label>
           <TagSearchInput value={node.skill_name} options={availableSkills} onChange={(v) => update({ skill_name: v })} placeholder={t("workflows.search_skill")} />
 
@@ -1531,7 +1593,7 @@ function SkillNodeEditModal({ workflow, subNodeId, onChange, onClose, availableS
           <label className="form-label">{t("workflows.attach_to_phases")}</label>
           <MultiTagSelect selected={node.attach_to || []} options={phaseOptions} onChange={(ids) => update({ attach_to: ids })} />
         </div>
-        <div className="modal__footer" style={{ display: "flex", justifyContent: "space-between" }}>
+        <div className="modal__footer modal__footer--spread">
           <button className="btn btn--sm btn--danger" onClick={remove}>{t("workflows.delete")}</button>
           <button className="btn btn--sm" onClick={onClose}>Close</button>
         </div>
@@ -1542,12 +1604,13 @@ function SkillNodeEditModal({ workflow, subNodeId, onChange, onClose, availableS
 
 // ── 폼 빌더 탭 ──
 
-function FormBuilder({ workflow, onChange }: { workflow: WorkflowDef; onChange: (w: WorkflowDef) => void }) {
+function FormBuilder({ workflow, onChange, backends }: { workflow: WorkflowDef; onChange: (w: WorkflowDef) => void; backends?: BackendOption[] }) {
   const t = useT();
 
   const { data: roles } = useQuery<RolePreset[]>({
     queryKey: ["workflow-roles"],
-    queryFn: () => api.get("/api/workflow-roles"),
+    queryFn: () => api.get("/api/workflow/roles"),
+    staleTime: 60_000,
   });
 
   const update = (patch: Partial<WorkflowDef>) => onChange({ ...workflow, ...patch });
@@ -1608,7 +1671,7 @@ function FormBuilder({ workflow, onChange }: { workflow: WorkflowDef; onChange: 
   const toggleCritic = (phaseIndex: number) => {
     const phases = [...workflow.phases];
     const p = phases[phaseIndex]!;
-    phases[phaseIndex] = { ...p, critic: p.critic ? undefined : { backend: "openrouter", system_prompt: "", gate: true } };
+    phases[phaseIndex] = { ...p, critic: p.critic ? undefined : { backend: "", system_prompt: "", gate: true } };
     update({ phases });
   };
 
@@ -1730,7 +1793,7 @@ function FormBuilder({ workflow, onChange }: { workflow: WorkflowDef; onChange: 
                 </div>
               )}
               {roles?.some((r) => r.id === agent.role) && (
-                <div style={{ fontSize: "var(--fs-xs)", color: "var(--muted)", marginBottom: 8 }}>
+                <div className="builder-meta-hint--mb">
                   {t("workflows.role_auto_prompt")}
                 </div>
               )}
@@ -1738,7 +1801,7 @@ function FormBuilder({ workflow, onChange }: { workflow: WorkflowDef; onChange: 
                 <div className="builder-row">
                   <label className="label">{t("workflows.backend")}</label>
                   <select className="input input--sm" value={agent.backend} onChange={(e) => updateAgent(pi, ai, { backend: e.target.value })}>
-                    {BACKENDS.map((b) => <option key={b} value={b}>{b}</option>)}
+                    {(backends || []).map((b) => <option key={b.value} value={b.value}>{b.label}</option>)}
                   </select>
                 </div>
                 <div className="builder-row">
@@ -1747,17 +1810,16 @@ function FormBuilder({ workflow, onChange }: { workflow: WorkflowDef; onChange: 
                 </div>
                 <div className="builder-row">
                   <label className="label">{t("workflows.max_turns")}</label>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <div className="builder-inline-row">
                     <input
-                      className="input input--sm"
+                      className="input input--sm flex-1"
                       type="number"
                       min={0}
                       value={agent.max_turns ?? 3}
                       onChange={(e) => updateAgent(pi, ai, { max_turns: Number(e.target.value) })}
                       disabled={agent.max_turns === 0}
-                      style={{ flex: 1 }}
                     />
-                    <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: "var(--fs-xs)", whiteSpace: "nowrap", cursor: "pointer" }}>
+                    <label className="builder-checkbox-label">
                       <input
                         type="checkbox"
                         checked={agent.max_turns === 0}
@@ -1781,7 +1843,7 @@ function FormBuilder({ workflow, onChange }: { workflow: WorkflowDef; onChange: 
 
           {/* Critic */}
           <div className="builder-critic-toggle">
-            <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+            <label className="builder-toggle-label">
               <input type="checkbox" checked={!!phase.critic} onChange={() => toggleCritic(pi)} />
               {t("workflows.enable_critic")}
             </label>
@@ -1793,7 +1855,7 @@ function FormBuilder({ workflow, onChange }: { workflow: WorkflowDef; onChange: 
                 <div className="builder-row">
                   <label className="label">{t("workflows.backend")}</label>
                   <select className="input input--sm" value={phase.critic.backend} onChange={(e) => updateCritic(pi, { backend: e.target.value })}>
-                    {BACKENDS.map((b) => <option key={b} value={b}>{b}</option>)}
+                    {(backends || []).map((b) => <option key={b.value} value={b.value}>{b.label}</option>)}
                   </select>
                 </div>
                 <div className="builder-row">
@@ -1820,7 +1882,7 @@ function FormBuilder({ workflow, onChange }: { workflow: WorkflowDef; onChange: 
         </div>
       ))}
 
-      <button className="btn btn--sm btn--accent" onClick={addPhase} style={{ marginTop: 8 }}>
+      <button className="btn btn--sm btn--accent builder-add-phase" onClick={addPhase}>
         + {t("workflows.add_phase")}
       </button>
     </div>

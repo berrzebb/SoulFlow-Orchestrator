@@ -1,11 +1,11 @@
 /** 워크플로우 통합 목록 — Templates 카탈로그 + Running 탭. */
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { api } from "../../api/client";
 import { Badge } from "../../components/badge";
-import { Modal } from "../../components/modal";
+import { Modal, useModalEffects } from "../../components/modal";
 import { useToast } from "../../components/toast";
 import { useT } from "../../i18n";
 import { time_ago } from "../../utils/format";
@@ -30,6 +30,7 @@ interface PhaseLoopState {
 }
 
 interface WorkflowTemplate {
+  slug: string;
   title: string;
   objective: string;
   variables?: Record<string, string>;
@@ -53,14 +54,15 @@ const DESK_CLS: Record<string, string> = {
   waiting_user_input: "desk--warn", pending: "desk--off", reviewing: "desk--warn",
 };
 
+/** 상태 우선순위: 실행 중 > 대기 > 실패 > 완료 > 취소. */
+const STATUS_ORDER: Record<string, number> = {
+  running: 0, waiting_user_input: 1, reviewing: 2, failed: 3, pending: 4, completed: 5, cancelled: 6,
+};
+
 function progress_percent(wf: PhaseLoopState): number {
   const total = wf.phases.length;
   if (total === 0) return 0;
   return Math.round((wf.phases.filter((p) => p.status === "completed").length / total) * 100);
-}
-
-function slugify(text: string): string {
-  return text.toLowerCase().replace(/[^a-z0-9가-힣\-_\s]/g, "").replace(/[\s]+/g, "-").replace(/^-|-$/g, "") || "untitled";
 }
 
 // ── Page ──
@@ -79,24 +81,34 @@ export default function WorkflowsPage() {
 
   const { data: workflows, isLoading: wfLoading } = useQuery<PhaseLoopState[]>({
     queryKey: ["workflows"],
-    queryFn: () => api.get("/api/workflows"),
-    refetchInterval: 5_000,
+    queryFn: () => api.get("/api/workflow/runs"),
+    refetchInterval: 10_000,
+    staleTime: 3_000,
   });
 
   const { data: templates, isLoading: tplLoading } = useQuery<WorkflowTemplate[]>({
     queryKey: ["workflow-templates"],
-    queryFn: () => api.get("/api/workflow-templates"),
+    staleTime: 30_000,
+    queryFn: async () => {
+      const raw = await api.get<WorkflowTemplate[]>("/api/workflow/templates");
+      // slug 없는 레거시 응답 방어: title 기반 slug 생성
+      return raw.map((tpl, i) => ({
+        ...tpl,
+        slug: tpl.slug || tpl.title?.toLowerCase().replace(/[^a-z0-9가-힣\-_]/g, "-").replace(/-+/g, "-") || `tpl-${i}`,
+      }));
+    },
   });
 
   const cancelMut = useMutation({
-    mutationFn: (id: string) => api.del(`/api/workflows/${id}`),
-    onSuccess: () => { toast(t("workflows.cancelled")); qc.invalidateQueries({ queryKey: ["workflows"] }); },
+    mutationFn: (id: string) => api.del(`/api/workflow/runs/${id}`),
+    onSuccess: () => { toast(t("workflows.cancelled"), "ok"); qc.invalidateQueries({ queryKey: ["workflows"] }); },
+    onError: () => toast(t("workflows.cancel_failed"), "err"),
   });
 
   const deleteMut = useMutation({
-    mutationFn: (name: string) => api.del(`/api/workflow-templates/${encodeURIComponent(name)}`),
+    mutationFn: (name: string) => api.del(`/api/workflow/templates/${encodeURIComponent(name)}`),
     onSuccess: () => {
-      toast(t("workflows.template_deleted"));
+      toast(t("workflows.template_deleted"), "ok");
       qc.invalidateQueries({ queryKey: ["workflow-templates"] });
       setDeleteTarget(null);
     },
@@ -104,34 +116,34 @@ export default function WorkflowsPage() {
 
   const quickRunMut = useMutation({
     mutationFn: (objective: string) =>
-      api.post<{ ok: boolean; workflow_id?: string; error?: string }>("/api/workflows", { objective, title: objective.slice(0, 60) }),
+      api.post<{ ok: boolean; workflow_id?: string; error?: string }>("/api/workflow/runs", { objective, title: objective.slice(0, 60) }),
     onSuccess: (data) => {
       if (data.ok && data.workflow_id) {
         setQuickObjective("");
         qc.invalidateQueries({ queryKey: ["workflows"] });
-        toast(t("workflows.created"));
+        toast(t("workflows.created"), "ok");
         navigate(`/workflows/${data.workflow_id}`);
       } else {
-        toast(data.error || "Failed");
+        toast(data.error || "Failed", "err");
       }
     },
-    onError: () => toast(t("workflows.create_failed")),
+    onError: () => toast(t("workflows.create_failed"), "err"),
   });
 
   const runFromTplMut = useMutation({
     mutationFn: (body: { template_name: string; title: string; objective: string }) =>
-      api.post<{ ok: boolean; workflow_id?: string; error?: string }>("/api/workflows", body),
+      api.post<{ ok: boolean; workflow_id?: string; error?: string }>("/api/workflow/runs", body),
     onSuccess: (data) => {
       if (data.ok && data.workflow_id) {
         setSelectedTpl(null);
         qc.invalidateQueries({ queryKey: ["workflows"] });
-        toast(t("workflows.created"));
+        toast(t("workflows.created"), "ok");
         navigate(`/workflows/${data.workflow_id}`);
       } else {
-        toast(data.error || "Failed");
+        toast(data.error || "Failed", "err");
       }
     },
-    onError: () => toast(t("workflows.create_failed")),
+    onError: () => toast(t("workflows.create_failed"), "err"),
   });
 
   const handleQuickRun = (e: React.FormEvent) => {
@@ -140,10 +152,6 @@ export default function WorkflowsPage() {
     quickRunMut.mutate(quickObjective.trim());
   };
 
-  /** 상태 우선순위: 실행 중 > 대기 > 실패 > 완료 > 취소. */
-  const STATUS_ORDER: Record<string, number> = {
-    running: 0, waiting_user_input: 1, reviewing: 2, failed: 3, pending: 4, completed: 5, cancelled: 6,
-  };
   const sortedWorkflows = (workflows || []).slice().sort((a, b) => {
     const sa = STATUS_ORDER[a.status] ?? 9;
     const sb = STATUS_ORDER[b.status] ?? 9;
@@ -160,11 +168,11 @@ export default function WorkflowsPage() {
       <div className="section-header">
         <div>
           <h2>{t("workflows.title")}</h2>
-          <p style={{ fontSize: "var(--fs-xs)", color: "var(--muted)", margin: 0 }}>
+          <p className="text-xs text-muted mt-0 mb-0">
             {t("workflows.description")}
           </p>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
+        <div className="section-header__actions">
           {tab === "templates" && (
             <button className="btn btn--sm" onClick={() => setShowImport(true)}>
               {t("workflows.import")}
@@ -177,10 +185,9 @@ export default function WorkflowsPage() {
       </div>
 
       {/* Quick Run — objective만 입력하여 즉시 실행 */}
-      <form className="quick-run-bar" onSubmit={handleQuickRun} style={{ display: "flex", gap: 8, marginBottom: "var(--sp-3)" }}>
+      <form className="quick-run-bar" onSubmit={handleQuickRun}>
         <input
-          className="input"
-          style={{ flex: 1 }}
+          className="input flex-fill"
           value={quickObjective}
           onChange={(e) => setQuickObjective(e.target.value)}
           placeholder={t("workflows.quick_run_placeholder")}
@@ -191,11 +198,11 @@ export default function WorkflowsPage() {
       </form>
 
       {/* 탭 */}
-      <div className="builder-tabs" style={{ marginBottom: "var(--sp-3)" }}>
-        <button className={`builder-tab${tab === "templates" ? " active" : ""}`} onClick={() => setTab("templates")}>
+      <div className="builder-tabs mb-3" role="tablist">
+        <button role="tab" aria-selected={tab === "templates"} className={`builder-tab${tab === "templates" ? " active" : ""}`} onClick={() => setTab("templates")}>
           {t("workflows.templates")} ({tplCount})
         </button>
-        <button className={`builder-tab${tab === "running" ? " active" : ""}`} onClick={() => setTab("running")}>
+        <button role="tab" aria-selected={tab === "running"} className={`builder-tab${tab === "running" ? " active" : ""}`} onClick={() => setTab("running")}>
           {t("workflows.running_tab")} ({runningCount})
         </button>
       </div>
@@ -225,12 +232,15 @@ export default function WorkflowsPage() {
               <div className="stat-grid stat-grid--wide">
                 {templates.map((tpl) => {
                   const agent_count = tpl.phases.reduce((n, p) => n + p.agents.length, 0);
-                  const selected = selectedTpl === tpl.title;
+                  const selected = selectedTpl === tpl.slug;
                   return (
                     <div
-                      key={tpl.title}
+                      key={tpl.slug}
+                      role="button"
+                      tabIndex={0}
                       className={`stat-card desk--info tpl-catalog__card${selected ? " tpl-catalog__card--selected" : ""}`}
-                      onClick={() => setSelectedTpl(selected ? null : tpl.title)}
+                      onClick={() => setSelectedTpl(selected ? null : tpl.slug)}
+                      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSelectedTpl(selected ? null : tpl.slug); } }}
                     >
                       <div className="stat-card__header">
                         <Badge status={`${tpl.phases.length} phases`} variant="info" />
@@ -255,15 +265,15 @@ export default function WorkflowsPage() {
                 })}
               </div>
 
-              {selectedTpl && templates.find((t) => t.title === selectedTpl) && (
+              {selectedTpl && templates.find((t) => t.slug === selectedTpl) && (
                 <TemplateDetailPanel
-                  template={templates.find((t) => t.title === selectedTpl)!}
+                  template={templates.find((t) => t.slug === selectedTpl)!}
                   onClose={() => setSelectedTpl(null)}
                   onRun={(body) => {
                     runFromTplMut.mutate(body);
                   }}
-                  onEdit={() => navigate(`/workflows/edit/${encodeURIComponent(slugify(selectedTpl))}`)}
-                  onDelete={() => setDeleteTarget(slugify(selectedTpl))}
+                  onEdit={() => navigate(`/workflows/edit/${encodeURIComponent(selectedTpl)}`)}
+                  onDelete={() => setDeleteTarget(selectedTpl)}
                   running={runFromTplMut.isPending}
                 />
               )}
@@ -276,7 +286,7 @@ export default function WorkflowsPage() {
             onImported={() => {
               setShowImport(false);
               qc.invalidateQueries({ queryKey: ["workflow-templates"] });
-              toast(t("workflows.import_success"));
+              toast(t("workflows.import_success"), "ok");
             }}
           />
 
@@ -316,7 +326,7 @@ export default function WorkflowsPage() {
                   <div key={wf.workflow_id} className={`stat-card ${DESK_CLS[wf.status] || "desk--off"}`}>
                     <div className="stat-card__header">
                       <Badge status={wf.status} variant={STATUS_VARIANT[wf.status] || "off"} />
-                      <span style={{ fontSize: "var(--fs-xs)", color: "var(--muted)" }} title={new Date(wf.updated_at).toLocaleString()}>
+                      <span className="text-xs text-muted" title={new Date(wf.updated_at).toLocaleString()}>
                         {time_ago(wf.updated_at)}
                       </span>
                     </div>
@@ -375,9 +385,11 @@ function TemplateDetailPanel({ template, onClose, onRun, onEdit, onDelete, runni
   const [title, setTitle] = useState(template.title);
   const [objective, setObjective] = useState(template.objective);
 
+  useEffect(() => { setTitle(template.title); setObjective(template.objective); }, [template.slug]);
+
   const handleRun = (e: React.FormEvent) => {
     e.preventDefault();
-    onRun({ template_name: template.title, title: title || template.title, objective });
+    onRun({ template_name: template.slug, title: title || template.title, objective });
   };
 
   const agent_count = template.phases.reduce((n, p) => n + p.agents.length, 0);
@@ -386,7 +398,7 @@ function TemplateDetailPanel({ template, onClose, onRun, onEdit, onDelete, runni
   return (
     <div className="tpl-detail">
       <div className="tpl-detail__header">
-        <h3 style={{ margin: 0 }}>{template.title}</h3>
+        <h3 className="mt-0 mb-0">{template.title}</h3>
         <button className="tpl-detail__close" onClick={onClose} aria-label="close">✕</button>
       </div>
 
@@ -439,7 +451,7 @@ function TemplateDetailPanel({ template, onClose, onRun, onEdit, onDelete, runni
           <button type="button" className="btn btn--sm btn--danger" onClick={onDelete}>
             {t("workflows.delete_template")}
           </button>
-          <div style={{ flex: 1 }} />
+          <div className="flex-fill" />
           <button type="submit" className="btn btn--accent" disabled={running}>
             {running ? t("workflows.creating") : `▶ ${t("workflows.run_template")}`}
           </button>
@@ -457,17 +469,21 @@ function ImportModal({ open, onClose, onImported }: {
   onImported: () => void;
 }) {
   const t = useT();
+  useModalEffects(open, onClose);
   const { toast } = useToast();
+  const modalRef = useRef<HTMLDivElement>(null);
   const [yamlText, setYamlText] = useState("");
+
+  useEffect(() => { if (open) modalRef.current?.focus(); }, [open]);
 
   const importMut = useMutation({
     mutationFn: (yaml_str: string) =>
-      api.post<{ ok: boolean; name?: string; error?: string }>("/api/workflow-templates/import", { yaml: yaml_str }),
+      api.post<{ ok: boolean; name?: string; error?: string }>("/api/workflow/templates", { yaml: yaml_str }),
     onSuccess: (data) => {
       if (data.ok) { setYamlText(""); onImported(); }
-      else toast(data.error || t("workflows.import_error"));
+      else toast(data.error || t("workflows.import_error"), "err");
     },
-    onError: () => toast(t("workflows.import_error")),
+    onError: () => toast(t("workflows.import_error"), "err"),
   });
 
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -479,15 +495,15 @@ function ImportModal({ open, onClose, onImported }: {
   if (!open) return null;
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal modal--wide" onClick={(e) => e.stopPropagation()}>
+    <div className="modal-overlay" onClick={onClose} role="dialog" aria-modal="true">
+      <div className="modal modal--wide" ref={modalRef} tabIndex={-1} onClick={(e) => e.stopPropagation()}>
         <div className="modal__header">
           <h3 className="modal__title">{t("workflows.import_yaml")}</h3>
           <button className="modal__close" onClick={onClose} aria-label="close">✕</button>
         </div>
         <div className="modal__body">
           <label className="label">{t("workflows.upload_file")}</label>
-          <input type="file" accept=".yaml,.yml,.json" onChange={handleFile} style={{ marginBottom: 12 }} />
+          <input type="file" accept=".yaml,.yml,.json" onChange={handleFile} className="mb-2" />
           <label className="label">YAML</label>
           <textarea
             className="input code-textarea"

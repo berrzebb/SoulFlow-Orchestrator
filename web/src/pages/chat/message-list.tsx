@@ -22,7 +22,7 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(function
     <div className="chat-messages" ref={ref}>
       <div className="chat-messages__inner">
         {!props.messages.length && !props.pending_approvals.length && (
-          <p className="empty">{t("chat.no_messages")}</p>
+          <div className="empty-state"><div className="empty-state__icon">💬</div><div className="empty-state__text">{t("chat.no_messages")}</div></div>
         )}
 
         {props.messages.map((m, i) => (
@@ -45,8 +45,10 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(function
           <div className="chat-msg chat-msg--assistant">
             <div className="chat-msg__avatar">{t("chat.avatar")}</div>
             <div className="chat-msg__body">
-              <div className="chat-msg__content">
-                <span style={{ color: "var(--muted)" }}>{t("chat.thinking")}</span>
+              <div className="chat-msg__content chat-typing">
+                <span className="chat-typing__dot" />
+                <span className="chat-typing__dot" />
+                <span className="chat-typing__dot" />
               </div>
             </div>
           </div>

@@ -6,7 +6,7 @@
 
 Slack · Telegram · Discord 메시지를 **헤드리스 에이전트**로 처리하는 비동기 오케스트레이션 런타임.
 
-8개 에이전트 백엔드(Claude/Codex/Gemini × CLI/SDK + OpenAI 호환 + 컨테이너), 8개 역할 기반 스킬 시스템, CircuitBreaker 기반 프로바이더 복원력, AES-256-GCM 보안 Vault, OAuth 2.0 연동, React + Vite 웹 대시보드(i18n, 마크다운 렌더링)를 내장한 올인원 솔루션입니다.
+8개 에이전트 백엔드(Claude/Codex/Gemini × CLI/SDK + OpenAI 호환 + OpenRouter + 컨테이너), 8개 역할 기반 스킬 시스템, CircuitBreaker 기반 프로바이더 복원력, AES-256-GCM 보안 Vault, OAuth 2.0 연동, 42종 노드 워크플로우 그래프 에디터, 에이전트 기반 WorkflowTool CRUD, React + Vite 웹 대시보드(i18n, 마크다운 렌더링)를 내장한 올인원 솔루션입니다.
 
 ## 목차
 
@@ -104,6 +104,7 @@ flowchart TD
 | `codex_cli` | Headless CLI 래퍼 | 샌드박스 모드 지원 | — |
 | `gemini_cli` | Headless CLI 래퍼 | Gemini CLI 연동 | — |
 | `openai_compatible` | OpenAI 호환 API | vLLM · Ollama · LM Studio · Together AI · Gemini 등 로컬/원격 모델 | — |
+| `openrouter` | OpenRouter API | 멀티 모델 라우팅 · 100+ 모델 접근 | — |
 | `container_cli` | 컨테이너 CLI 래퍼 | Podman/Docker 샌드박스 실행 | — |
 
 ### 역할 스킬
@@ -123,12 +124,24 @@ flowchart TD
 
 ### 요구사항
 
-- **Node.js** 20+
+- **Docker** 또는 **Podman** (권장)
 - 최소 1개 채널 Bot Token (Slack · Telegram · Discord)
-- (선택) `@anthropic-ai/claude-code` SDK — `claude_sdk` 백엔드 사용 시
-- (선택) Podman/Docker + Ollama — `orchestrator_llm` 분류기 사용 시
+- AI 프로바이더 API 키 (Claude, OpenAI, OpenRouter 등)
+- (선택) GPU — 로컬 Ollama 오케스트레이터 LLM 분류기 사용 시
 
-### 설치 및 실행
+### Docker (권장)
+
+```bash
+# 프로덕션 (orchestrator + ollama + docker-proxy)
+docker compose up -d
+
+# 개발 (라이브 리로드)
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+```
+
+`full` 이미지에 Claude Code, Codex CLI, Gemini CLI가 사전 설치되어 있습니다.
+
+### 로컬 (비권장)
 
 ```bash
 cd next
@@ -136,23 +149,7 @@ npm install
 npm run dev      # 개발 모드 (핫리로드)
 ```
 
-프로덕션:
-```bash
-npm run build
-cd workspace && node ../dist/main.js
-```
-
-### Docker
-
-```bash
-# 프로덕션 (orchestrator + ollama)
-docker compose up -d
-
-# 개발 (라이브 리로드)
-docker compose -f docker-compose.dev.yml up
-```
-
-`full` 이미지에 Claude Code, Codex, Gemini CLI가 사전 설치되어 있습니다.
+> 컨테이너 배포가 CLI 에이전트 격리와 일관된 환경을 제공하므로 권장됩니다. 자세한 내용은 [설치 가이드](ko/getting-started/installation.md)를 참조하세요.
 
 ### Setup Wizard
 
@@ -184,7 +181,7 @@ Wizard에서 다음을 순서대로 설정합니다:
 | Providers | `/providers` | 에이전트 프로바이더 CRUD · Circuit Breaker 상태 |
 | Secrets | `/secrets` | AES-256-GCM 시크릿 관리 |
 | Models | `/models` | 오케스트레이터 LLM 런타임 · 모델 pull/삭제/전환 |
-| Workflows | `/workflows` | Phase Loop 워크플로우 관리 · 에이전트 채팅 |
+| Workflows | `/workflows` | Phase Loop 워크플로우 관리 · 42종 노드 그래프 에디터 · 에이전트 채팅 |
 | Settings | `/settings` | 글로벌 런타임 설정 |
 
 → 상세: [대시보드 가이드](ko/guide/dashboard.md) · [워크플로우 가이드](ko/guide/workflows.md)
@@ -208,12 +205,56 @@ GitHub · Google · Custom OAuth 2.0 외부 서비스 연동. 대시보드 Works
 → butler → debugger 활성화 → 근본 원인 분석 → 응답
 ```
 
+**다중 에이전트 Phase Loop** (병렬 전문가 + 크리틱 품질 게이트):
+
+```
+사용자: AI 인프라 시장 조사 전체 분석해줘
+→ 분류기가 "phase" 모드 감지
+→ Phase 1: 시장 분석가 + 기술 분석가 + 전략가 병렬 실행
+→ 크리틱이 전체 결과를 검토, 누락 데이터 요청
+→ Phase 2: 전략가가 결과를 종합
+→ 각 에이전트에 독립 채팅 — 💬 클릭으로 후속 질문 가능
+```
+
+**자율 개발 파이프라인** (대화형 스펙 → 순차 구현):
+
+```
+사용자: 사용자 인증 REST API 만들어줘
+→ Phase 1 (Interactive): PM이 대화로 스펙 공동 작성
+   PM: "어떤 프레임워크 선호하세요?" → 사용자: "Express"
+   PM: "OAuth 지원 필요한가요?" → 사용자: "네, Google OAuth"
+→ Phase 2 (Parallel): PL이 스펙을 원자적 태스크로 분해
+→ Phase 3 (Sequential Loop): Implementer가 태스크를 하나씩 실행
+   매 반복마다 fresh context로 context rot 방지
+   막히면: [ASK_USER] "어떤 DB 드라이버?" → 사용자: "PostgreSQL"
+→ Phase 4: Reviewer가 코드 품질 검토
+→ Phase 5: Validator가 테스트 — 실패 시 Phase 3으로 goto (수정 루프)
+```
+
+**워크플로우 자동화** (자연어 기반 에이전트 CRUD):
+
+```
+사용자: 매일 아침 9시에 RSS 크롤링해서 요약해줘
+→ 에이전트가 DAG 추론: HTTP 노드(RSS 수집) → LLM 노드(요약) → Template 노드(포맷)
+→ WorkflowTool: "daily-rss" 생성 + 크론 트리거 등록
+→ 매일 아침 9시 자동 실행
+
+사용자: 내 워크플로우 보여줘
+→ WorkflowTool: list → "daily-rss (cron: 0 9 * * *), competitor-monitor, ..."
+```
+
+**컨테이너 샌드박스 코드 실행** (7개 언어):
+
+```
+사용자: 이 Python 데이터 분석 스크립트 실행해줘
+→ Code 노드가 격리 컨테이너 스폰 (python:3.12-slim)
+→ --network=none, --read-only, --memory=256m
+→ stdout/stderr 반환 → 다음 워크플로우 노드로 결과 전달
+```
+
 **태스크 실행** (단계형 실행/승인):
 
 ```
-사용자: /task list
-→ 실행 중인 태스크 목록 반환
-
 사용자: 사용자 인증 API 구현해줘
 → pm 기획 → pl 설계 → implementer 구현 → reviewer 검토
 ```
@@ -258,6 +299,7 @@ GitHub · Google · Custom OAuth 2.0 외부 서비스 연동. 대시보드 Works
 | `/skill list\|info\|suggest` | 스킬 목록/상세/추천 |
 | `/stats` | 런타임 통계 (CD 점수·세션 메트릭) |
 | `/verify` | 출력물 검증 |
+| `/guard on\|off` | 위험 작업 확인 게이트 토글 |
 | `/doctor` | 런타임 자가진단 (서비스 건강 상태 점검) |
 
 ## 디렉터리 구조
@@ -270,20 +312,22 @@ next/
   .devcontainer/          ← VS Code Dev Container 설정
   src/
     agent/
-      backends/     ← SDK/CLI/OpenAI 백엔드 어댑터
+      backends/     ← SDK/CLI/OpenAI 백엔드 어댑터 (8개 백엔드)
+      nodes/        ← 42종 워크플로우 노드 핸들러 (OCP 플러그인 아키텍처)
       pty/          ← PTY 기반 CLI 통합 (ContainerPool, AgentBus, MCP 브릿지, NDJSON 와이어)
-      tools/        ← 에이전트 도구 구현 (oauth_fetch 포함)
+      tools/        ← 에이전트 도구 구현 (oauth_fetch, workflow, ask-user, approval-notifier 포함)
     bus/            ← MessageBus (inbound/outbound pub/sub)
-    channels/       ← 채널 매니저 · 커맨드 · 디스패치 · 승인
+    channels/       ← 채널 매니저 · 커맨드 · 디스패치 · 승인 · 확인 가드
     config/         ← Zod 기반 설정 스키마 + config-meta
     cron/           ← 크론 스케줄러 (SQLite)
     dashboard/
-      routes/       ← 22개 라우트 핸들러 (state, config, chat, cron 등)
+      routes/       ← 22개 라우트 핸들러 (state, config, chat, cron, workflows 등)
       service.ts    ← HTTP 서버 + 라우트 등록
     decision/       ← 결정사항 서비스
     mcp/            ← MCP 클라이언트 매니저
     oauth/          ← OAuth 2.0 연동 (flow-service, integration-store)
-    orchestration/  ← Gateway · Classifier · Prompts · ToolCallHandler · AgentHooksBuilder
+    orchestration/  ← Gateway · Classifier · Prompts · ToolCallHandler · NodeSelector · ToolDescriptionFilter · ConfirmationGuard
+    services/       ← 도메인 서비스 (embed, vector-store, query-db, webhook-store, create-task)
     security/       ← Secret Vault (AES-256-GCM)
     session/        ← 세션 저장소
     skills/
@@ -295,9 +339,10 @@ next/
     skills/         ← 사용자 정의 스킬
     runtime/        ← SQLite DB 모음 (sessions, tasks, events, decisions, cron, dlq)
   web/              ← 대시보드 프론트엔드 (React + Vite + i18n + Zustand)
+    src/pages/workflows/  ← 그래프 에디터, 노드 인스펙터, 노드 피커, 42종 노드 UI 컴포넌트
   docs/
-    */guide/        ← 사용자 가이드 (dashboard, oauth, providers, heartbeat)
-    */design/       ← 아키텍처 설계 문서 (pty-agent-backend, loop-continuity, phase-loop, orchestrator-llm)
+    */guide/        ← 사용자 가이드 (dashboard, oauth, providers, heartbeat, workflows)
+    */design/       ← 아키텍처 설계 문서 (phase-loop, pty-agent-backend, node-registry, workflow-tool 등)
   diagrams/         ← SVG 아키텍처 다이어그램
 ```
 

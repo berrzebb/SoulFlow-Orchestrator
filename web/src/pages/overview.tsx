@@ -3,9 +3,11 @@ import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useStatus } from "../api/hooks";
 import { Badge } from "../components/badge";
+import { Modal } from "../components/modal";
+import { useToast } from "../components/toast";
 import { api } from "../api/client";
 import { classify_agent } from "../utils/classify";
-import { fmt_time } from "../utils/format";
+import { fmt_time, time_ago } from "../utils/format";
 import { useT } from "../i18n";
 import { PROVIDER_COLORS } from "../utils/constants";
 
@@ -39,14 +41,15 @@ function fmt_kbps(kbps: number): string {
 function MetricBar({ label, percent, used, total, unit = "MB", color = "var(--accent)" }: {
   label: string; percent: number; used: number; total: number; unit?: string; color?: string;
 }) {
+  const vars = { "--bar-w": `${Math.min(percent, 100)}%`, "--bar-c": color } as React.CSSProperties;
   return (
-    <div className="metric-bar">
+    <div className="metric-bar" style={vars}>
       <div className="metric-bar__header">
         <span className="text-muted">{label}</span>
         <span className="fw-600">{used.toLocaleString()} / {total.toLocaleString()} {unit} <span className="text-muted">({percent}%)</span></span>
       </div>
-      <div className="metric-bar__track">
-        <div className="metric-bar__fill" style={{ width: `${Math.min(percent, 100)}%`, background: color }} />
+      <div className="metric-bar__track" role="progressbar" aria-valuenow={percent} aria-valuemin={0} aria-valuemax={100} aria-label={label}>
+        <div className="metric-bar__fill" />
       </div>
     </div>
   );
@@ -101,21 +104,14 @@ interface DashboardState {
 
 const ACTIVE_TASK_STATUSES = new Set(["running", "waiting_approval", "waiting_user_input"]);
 
-const MODE_STYLE: Record<string, { color: string; bg: string }> = {
-  once:  { color: "var(--muted)",   bg: "rgba(145,164,183,0.1)" },
-  agent: { color: "var(--accent)",  bg: "rgba(74,158,255,0.1)" },
-  task:  { color: "var(--ok)",      bg: "rgba(47,177,113,0.1)" },
-};
-
 const PHASE_VARIANT: Record<string, "ok" | "warn" | "err" | "info" | undefined> = {
   done: "ok", start: "info", error: "err", fail: "err", warn: "warn",
 };
 
-
 function ModeBadge({ mode }: { mode: string }) {
-  const s = MODE_STYLE[mode] ?? { color: "var(--muted)", bg: "rgba(145,164,183,0.1)" };
+  const variant = `mode-badge--${mode}` as string;
   return (
-    <span className="mode-badge" style={{ color: s.color, background: s.bg, border: `1px solid ${s.color}` }}>
+    <span className={`mode-badge ${variant}`}>
       {mode.toUpperCase()}
     </span>
   );
@@ -127,22 +123,32 @@ function PulseDot({ active }: { active: boolean }) {
 }
 
 function StatusDot({ ok }: { ok: boolean }) {
-  return <span className={`status-dot ${ok ? "status-dot--ok" : "status-dot--err"}`} />;
+  return <span className={`status-dot ${ok ? "status-dot--ok status-dot--pulse" : "status-dot--err"}`} />;
 }
 
 export default function OverviewPage() {
   const t = useT();
+  const { toast } = useToast();
   const { data, refetch, isLoading } = useStatus();
   const s = data as DashboardState | undefined;
   const [showRecentProc, setShowRecentProc] = useState(false);
+  const [cancellingIds, setCancellingIds] = useState<Set<string>>(new Set());
+  const [cancelConfirmId, setCancelConfirmId] = useState<string | null>(null);
   const { data: metrics } = useQuery<SystemMetrics>({
     queryKey: ["system-metrics"],
-    queryFn: () => api.get("/api/system-metrics"),
-    refetchInterval: 3000,
-    staleTime: 2000,
+    queryFn: () => api.get("/api/system/metrics"),
+    refetchInterval: 10_000,
+    staleTime: 5_000,
   });
 
-  const cancel_process = (id: string) => void api.del("/api/processes", { run_id: id }).then(() => refetch());
+  const cancel_process = (id: string) => {
+    if (cancellingIds.has(id)) return;
+    setCancellingIds((prev) => new Set(prev).add(id));
+    void api.del(`/api/processes/${encodeURIComponent(id)}`)
+      .then(() => refetch())
+      .catch(() => toast(t("overview.cancel_failed"), "err"))
+      .finally(() => setCancellingIds((prev) => { const next = new Set(prev); next.delete(id); return next; }));
+  };
 
   if (isLoading || !s) {
     return (
@@ -167,7 +173,7 @@ export default function OverviewPage() {
   const enabled_channels = s.channels?.enabled ?? [];
 
   return (
-    <div className="overview">
+    <div className="overview fade-in">
       {/* ── 1행: 시스템 상태 카드 — Channels/Processes는 아래 섹션에서 표시 ── */}
       <div className="stat-grid">
         <div className="stat-card">
@@ -254,8 +260,8 @@ export default function OverviewPage() {
                 const health = s.channels?.health?.[ch];
                 return (
                   <div key={ch} className="overview-row">
-                    <span className="channel-dot" style={{ background: PROVIDER_COLORS[ch] ?? "var(--accent)" }} />
-                    <span className="overview-row__name" style={{ textTransform: "capitalize" }}>{ch}</span>
+                    <span className="channel-dot" style={{ "--dot-c": PROVIDER_COLORS[ch] ?? "var(--accent)" } as React.CSSProperties} />
+                    <span className="overview-row__name">{ch}</span>
                     {health != null ? (
                       <Badge status={health.running ? t("channels.running") : health.healthy ? "ready" : "stopped"} variant={health.running ? "ok" : health.healthy ? "info" : "err"} />
                     ) : (
@@ -265,7 +271,7 @@ export default function OverviewPage() {
                 );
               })}
               {s.channels?.mention_loop_running && (
-                <div className="text-xs text-ok" style={{ marginTop: 4 }}>↺ {t("overview.mention_loop")}</div>
+                <div className="text-xs text-ok mt-2">↺ {t("overview.mention_loop")}</div>
               )}
             </div>
           )}
@@ -283,42 +289,44 @@ export default function OverviewPage() {
         </div>
 
         {active_processes.length === 0 ? (
-          <p className="empty">{t("overview.no_active_processes")}</p>
+          <div className="empty-state"><div className="empty-state__icon">⚡</div><div className="empty-state__text">{t("overview.no_active_processes")}</div></div>
         ) : (
           <div className="grid-stack">
             {active_processes.map((p) => (
               <div key={p.run_id} className="process-row">
                 <PulseDot active={p.status === "running"} />
                 <ModeBadge mode={p.mode} />
-                <span className="settings-row__label truncate" style={{ flex: 1, minWidth: 0 }}>{p.alias}</span>
+                <span className="settings-row__label truncate flex-fill">{p.alias}</span>
                 {p.provider && <span className="text-xs text-muted">{p.provider}</span>}
-                {p.executor_provider && <span className="text-xs" style={{ color: "var(--accent)" }}>{p.executor_provider}</span>}
-                <span className="text-xs text-muted" style={{ marginLeft: "auto" }}>{t("overview.tool_prefix")}{p.tool_calls_count}</span>
-                {p.started_at && <span className="text-xs text-muted">{fmt_time(new Date(p.started_at).getTime())}</span>}
-                <button className="btn btn--xs btn--danger" onClick={() => cancel_process(p.run_id)}>{t("common.cancel")}</button>
+                {p.executor_provider && <span className="text-xs text-accent">{p.executor_provider}</span>}
+                <span className="text-xs text-muted ml-auto">{t("overview.tool_prefix")}{p.tool_calls_count}</span>
+                {p.started_at && <span className="text-xs text-muted" title={p.started_at}>{time_ago(p.started_at)}</span>}
+                <button className="btn btn--xs btn--danger" disabled={cancellingIds.has(p.run_id)} onClick={() => setCancelConfirmId(p.run_id)}>{t("common.cancel")}</button>
               </div>
             ))}
           </div>
         )}
 
         {recent_processes.length > 0 && (
-          <div style={{ marginTop: "var(--sp-2)" }}>
+          <div className="mt-2">
             <button
               className="toggle-btn text-muted"
+              aria-expanded={showRecentProc}
               onClick={() => setShowRecentProc((v) => !v)}
             >
               {showRecentProc ? "▾" : "▸"} {t("overview.recent_processes")} ({recent_processes.length})
             </button>
             {showRecentProc && (
-              <div className="grid-stack" style={{ marginTop: 6, opacity: 0.65 }}>
+              <div className="grid-stack mt-2">
                 {recent_processes.slice(0, 8).map((p) => (
                   <div key={p.run_id} className="process-row process-row--recent">
                     <Badge status={p.status} />
                     <ModeBadge mode={p.mode} />
-                    <span>{p.alias}</span>
+                    <span className="truncate flex-fill">{p.alias}</span>
                     {p.executor_provider && <span className="text-muted">{p.executor_provider}</span>}
-                    <span className="text-muted" style={{ marginLeft: "auto" }}>{t("overview.tool_prefix")}{p.tool_calls_count}</span>
-                    {p.error && <span className="text-err text-xs">⚠ {p.error}</span>}
+                    <span className="text-muted ml-auto">{t("overview.tool_prefix")}{p.tool_calls_count}</span>
+                    {p.ended_at && <span className="text-xs text-muted" title={p.ended_at}>{time_ago(p.ended_at)}</span>}
+                    {p.error && <span className="text-err text-xs truncate proc-error" title={p.error}>⚠ {p.error}</span>}
                   </div>
                 ))}
               </div>
@@ -336,7 +344,7 @@ export default function OverviewPage() {
               <Link to="/workspace" className="btn btn--xs">{t("common.view_all")}</Link>
             </div>
             <div className="grid-stack">
-              <div className="kv" style={{ margin: 0 }}>
+              <div className="kv mt-0 mb-0">
                 <Badge status={s.cron.paused ? t("overview.paused") : t("overview.active")} variant={s.cron.paused ? "warn" : "ok"} />
                 <span className="text-sm text-muted">{t("overview.enabled_fmt", { enabled: enabled_jobs, total: total_jobs })}</span>
                 {running_jobs > 0 && <Badge status={t("overview.running_fmt", { count: running_jobs })} variant="ok" />}
@@ -354,12 +362,12 @@ export default function OverviewPage() {
           <ul className="list list--compact">
             {!s.messages?.length && <li className="empty">-</li>}
             {s.messages?.map((m, i) => (
-              <li key={i}>
+              <li key={`${m.direction}-${m.sender_id}-${i}`}>
                 <span className="li-text li-flex li-flex--baseline">
-                  <span className="fw-600 truncate" style={{ color: m.direction === "inbound" ? "var(--accent)" : "var(--muted)", flexShrink: 0, fontSize: "var(--fs-xs)", maxWidth: "40%" }}>
+                  <span className={`fw-600 truncate msg-sender ${m.direction === "inbound" ? "msg-sender--in" : "msg-sender--out"}`}>
                     {m.direction === "inbound" ? t("overview.msg_in") : t("overview.msg_out")} {m.sender_id}
                   </span>
-                  <span className="truncate text-sm text-muted" style={{ flex: 1, minWidth: 0 }}>{m.content}</span>
+                  <span className="truncate text-sm text-muted flex-fill">{m.content}</span>
                 </span>
               </li>
             ))}
@@ -377,8 +385,8 @@ export default function OverviewPage() {
               <li key={e.event_id}>
                 <span className="li-text li-flex">
                   <Badge status={e.phase} variant={PHASE_VARIANT[e.phase]} />
-                  <span className="text-xs text-muted truncate" style={{ flexShrink: 0, maxWidth: "30%" }}>{e.task_id || e.agent_id || "-"}</span>
-                  <span className="truncate text-sm" style={{ flex: 1, minWidth: 0 }}>{e.summary || ""}</span>
+                  <span className="text-xs text-muted truncate event-id">{e.task_id || e.agent_id || "-"}</span>
+                  <span className="truncate text-sm flex-fill">{e.summary || ""}</span>
                 </span>
               </li>
             ))}
@@ -457,7 +465,7 @@ export default function OverviewPage() {
                 {metrics.net_tx_kbps !== null && (
                   <div className="net-row">
                     <span className="text-xs text-muted">↑ {t("overview.net_tx")}</span>
-                    <span className="fw-700" style={{ color: "var(--accent)" }}>{fmt_kbps(metrics.net_tx_kbps)}</span>
+                    <span className="fw-700 text-accent">{fmt_kbps(metrics.net_tx_kbps)}</span>
                   </div>
                 )}
               </div>
@@ -466,7 +474,21 @@ export default function OverviewPage() {
         </div>
       )}
 
-      <div className="text-xs text-muted" style={{ textAlign: "right", paddingTop: 4 }}>{s.now || "-"}</div>
+      <div className="overview__timestamp text-xs text-muted">{s.now || "-"}</div>
+
+      <Modal
+        open={!!cancelConfirmId}
+        title={t("overview.cancel_process_title")}
+        onClose={() => setCancelConfirmId(null)}
+        onConfirm={() => {
+          if (cancelConfirmId) cancel_process(cancelConfirmId);
+          setCancelConfirmId(null);
+        }}
+        confirmLabel={t("common.cancel")}
+        danger
+      >
+        <p className="text-sm">{t("overview.cancel_process_confirm")}</p>
+      </Modal>
     </div>
   );
 }

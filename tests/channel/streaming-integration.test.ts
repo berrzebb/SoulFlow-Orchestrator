@@ -10,6 +10,7 @@ import type { OrchestrationRequest } from "@src/orchestration/types.ts";
 const STREAMING_CONFIG = {
   streaming: {
     enabled: true,
+    mode: "live" as const,
     intervalMs: 0,      // 즉시 플러시 (테스트용)
     minChars: 1,        // 최소 1자면 플러시
     suppressFinalAfterStream: false,
@@ -64,7 +65,7 @@ describe("ChannelManager — 스트리밍 기본 동작", () => {
   it("스트리밍 비활성화 시 on_stream이 전달되지만 스트림 메시지를 보내지 않는다", async () => {
     harness = await create_harness({
       config_patch: {
-        streaming: { enabled: false, intervalMs: 1400, minChars: 48, suppressFinalAfterStream: false },
+        streaming: { enabled: false, mode: "live" as const, intervalMs: 1400, minChars: 48, suppressFinalAfterStream: false },
       },
       orchestration_handler: async (req) => {
         // on_stream은 항상 전달되지만, 사용해도 enabled=false면 처리 안 됨

@@ -4,7 +4,7 @@
 
 An asynchronous orchestration runtime that processes Slack · Telegram · Discord messages through **headless agents**.
 
-The batteries-included solution featuring 8 agent backends (Claude/Codex/Gemini × CLI/SDK + OpenAI-compatible + container), an 8-role skill system, CircuitBreaker-based provider resilience, AES-256-GCM security vault, OAuth 2.0 integrations, and a React + Vite web dashboard with i18n and markdown rendering.
+The batteries-included solution featuring 8 agent backends (Claude/Codex/Gemini × CLI/SDK + OpenAI-compatible + OpenRouter + container), an 8-role skill system, CircuitBreaker-based provider resilience, AES-256-GCM security vault, OAuth 2.0 integrations, a 42-node workflow graph editor, WorkflowTool for agent-driven CRUD, and a React + Vite web dashboard with i18n and markdown rendering.
 
 ## Table of Contents
 
@@ -102,6 +102,7 @@ An **orchestration runtime** that receives messages from chat channels and dispa
 | `codex_cli` | Headless CLI wrapper | Sandbox mode support | — |
 | `gemini_cli` | Headless CLI wrapper | Gemini CLI integration | — |
 | `openai_compatible` | OpenAI-compatible API | vLLM · Ollama · LM Studio · Together AI · Gemini and other local/remote models | — |
+| `openrouter` | OpenRouter API | Multi-model routing · 100+ model access | — |
 | `container_cli` | Container CLI wrapper | Podman/Docker sandboxed execution | — |
 
 ### Role Skills
@@ -121,12 +122,24 @@ An **orchestration runtime** that receives messages from chat channels and dispa
 
 ### Prerequisites
 
-- **Node.js** 20+
+- **Docker** or **Podman** (recommended)
 - At least 1 channel Bot Token (Slack · Telegram · Discord)
-- (Optional) `@anthropic-ai/claude-code` SDK — for `claude_sdk` backend
-- (Optional) Podman/Docker + Ollama — for `orchestrator_llm` classifier
+- AI Provider API Key (Claude, OpenAI, OpenRouter, etc.)
+- (Optional) GPU — for local Ollama orchestrator LLM classifier
 
-### Install & Run
+### Docker (Recommended)
+
+```bash
+# Production (orchestrator + ollama + docker-proxy)
+docker compose up -d
+
+# Development (live reload)
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+```
+
+The `full` image includes Claude Code, Codex CLI, and Gemini CLI pre-installed.
+
+### Local (Not Recommended)
 
 ```bash
 cd next
@@ -134,23 +147,7 @@ npm install
 npm run dev      # Development mode (hot reload)
 ```
 
-Production:
-```bash
-npm run build
-cd workspace && node ../dist/main.js
-```
-
-### Docker
-
-```bash
-# Production (orchestrator + ollama)
-docker compose up -d
-
-# Development (live reload)
-docker compose -f docker-compose.dev.yml up
-```
-
-The `full` image includes Claude Code, Codex, and Gemini CLIs pre-installed.
+> Container deployment is recommended for CLI agent isolation and consistent environments. See [Installation Guide](en/getting-started/installation.md) for details.
 
 ### Setup Wizard
 
@@ -182,7 +179,7 @@ No need to create a `.env` file manually — the Wizard handles all configuratio
 | Providers | `/providers` | Agent provider CRUD · Circuit Breaker state |
 | Secrets | `/secrets` | AES-256-GCM secret management |
 | Models | `/models` | Orchestrator LLM runtime · model pull/delete/switch |
-| Workflows | `/workflows` | Phase Loop workflow management · agent chat |
+| Workflows | `/workflows` | Phase Loop workflow management · 42-node graph editor · agent chat |
 | Settings | `/settings` | Global runtime settings |
 
 → Details: [Dashboard Guide](en/guide/dashboard.md) · [Workflows Guide](en/guide/workflows.md)
@@ -206,12 +203,56 @@ User: Find the bug in this code
 → butler → debugger activates → root cause analysis → response
 ```
 
+**Multi-agent Phase Loop** (parallel specialists + critic quality gate):
+
+```
+User: Do a full market research on AI infrastructure
+→ Classifier detects "phase" mode
+→ Phase 1: Market Analyst + Tech Analyst + Strategist run in parallel
+→ Critic reviews all results, requests missing data
+→ Phase 2: Strategist synthesizes findings
+→ Each agent has independent chat — click 💬 to follow up
+```
+
+**Autonomous development pipeline** (interactive spec → sequential implementation):
+
+```
+User: Build a REST API for user authentication
+→ Phase 1 (Interactive): PM co-creates spec via conversation
+   PM: "Which framework do you prefer?" → User: "Express"
+   PM: "Need OAuth support?" → User: "Yes, Google OAuth"
+→ Phase 2 (Parallel): PL breaks spec into atomic tasks
+→ Phase 3 (Sequential Loop): Implementer executes tasks one-by-one
+   Each iteration uses fresh context to prevent context rot
+   If blocked: [ASK_USER] "Which DB driver?" → User: "PostgreSQL"
+→ Phase 4: Reviewer checks code quality
+→ Phase 5: Validator runs tests — if fails, goto Phase 3 (fix loop)
+```
+
+**Workflow automation** (agent-driven CRUD via natural language):
+
+```
+User: Crawl RSS every morning at 9 and summarize
+→ Agent infers DAG: HTTP node (fetch RSS) → LLM node (summarize) → Template node (format)
+→ WorkflowTool: create "daily-rss" with cron trigger
+→ Runs automatically every day at 9 AM
+
+User: Show my workflows
+→ WorkflowTool: list → "daily-rss (cron: 0 9 * * *), competitor-monitor, ..."
+```
+
+**Container sandbox code execution** (7 languages):
+
+```
+User: Run this Python data analysis script
+→ Code node spawns isolated container (python:3.12-slim)
+→ --network=none, --read-only, --memory=256m
+→ Returns stdout/stderr → passes result to next workflow node
+```
+
 **Task execution** (phased execution with approval):
 
 ```
-User: /task list
-→ Returns list of active tasks
-
 User: Implement a user authentication API
 → pm plans → pl designs → implementer builds → reviewer validates
 ```
@@ -256,6 +297,7 @@ User: Call the API using MY_API_KEY
 | `/skill list\|info\|suggest` | Skill list/detail/suggest |
 | `/stats` | Runtime statistics (CD score · session metrics) |
 | `/verify` | Output verification |
+| `/guard on\|off` | Toggle confirmation gate for risky operations |
 | `/doctor` | Runtime self-diagnosis (service health check) |
 
 ## Directory Structure
@@ -268,20 +310,22 @@ next/
   .devcontainer/          ← VS Code Dev Container setup
   src/
     agent/
-      backends/     ← SDK/CLI/OpenAI backend adapters
+      backends/     ← SDK/CLI/OpenAI backend adapters (8 backends)
+      nodes/        ← 42 workflow node handlers (OCP plugin architecture)
       pty/          ← PTY-based CLI integration (ContainerPool, AgentBus, MCP bridge, NDJSON wire)
-      tools/        ← Agent tool implementations (incl. oauth_fetch)
+      tools/        ← Agent tool implementations (incl. oauth_fetch, workflow, ask-user, approval-notifier)
     bus/            ← MessageBus (inbound/outbound pub/sub)
-    channels/       ← Channel manager · commands · dispatch · approval
+    channels/       ← Channel manager · commands · dispatch · approval · confirmation guard
     config/         ← Zod-based config schema + config-meta
     cron/           ← Cron scheduler (SQLite)
     dashboard/
-      routes/       ← 22 route handlers (state, config, chat, cron, etc.)
+      routes/       ← 22 route handlers (state, config, chat, cron, workflows, etc.)
       service.ts    ← HTTP server + route registration
     decision/       ← Decision service
     mcp/            ← MCP client manager
     oauth/          ← OAuth 2.0 integration (flow-service, integration-store)
-    orchestration/  ← Gateway · Classifier · Prompts · ToolCallHandler · AgentHooksBuilder
+    orchestration/  ← Gateway · Classifier · Prompts · ToolCallHandler · NodeSelector · ToolDescriptionFilter · ConfirmationGuard
+    services/       ← Domain services (embed, vector-store, query-db, webhook-store, create-task)
     security/       ← Secret Vault (AES-256-GCM)
     session/        ← Session store
     skills/
@@ -293,9 +337,10 @@ next/
     skills/         ← User-defined skills
     runtime/        ← SQLite DBs (sessions, tasks, events, decisions, cron, dlq)
   web/              ← Dashboard frontend (React + Vite + i18n + Zustand)
+    src/pages/workflows/  ← Graph editor, Node Inspector, Node Picker, 42 node UI components
   docs/
-    */guide/        ← User guides (dashboard, oauth, providers, heartbeat)
-    */design/       ← Architecture design documents (pty-agent-backend, loop-continuity, phase-loop, orchestrator-llm)
+    */guide/        ← User guides (dashboard, oauth, providers, heartbeat, workflows)
+    */design/       ← Architecture design documents (phase-loop, pty-agent-backend, node-registry, workflow-tool, etc.)
   diagrams/         ← SVG architecture diagrams
 ```
 

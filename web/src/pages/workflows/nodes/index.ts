@@ -1,6 +1,6 @@
 /** 모든 프론트엔드 노드 descriptor를 registry에 등록. */
 
-import { register_frontend_node, type NodeCategory } from "../node-registry";
+import { register_frontend_node } from "../node-registry";
 import { http_descriptor } from "./http";
 import { code_descriptor } from "./code";
 import { if_descriptor } from "./if";
@@ -28,6 +28,21 @@ import { decision_descriptor } from "./decision";
 import { promise_descriptor } from "./promise";
 import { embedding_descriptor } from "./embedding";
 import { vector_store_descriptor } from "./vector-store";
+import { notify_descriptor } from "./notify";
+import { aggregate_descriptor } from "./aggregate";
+import { send_file_descriptor } from "./send-file";
+import { error_handler_descriptor } from "./error-handler";
+import { webhook_descriptor } from "./webhook";
+import { hitl_descriptor } from "./hitl";
+import { approval_descriptor } from "./approval";
+import { form_descriptor } from "./form";
+import { tool_invoke_descriptor } from "./tool-invoke";
+import { gate_descriptor } from "./gate";
+import { escalation_descriptor } from "./escalation";
+import { cache_descriptor } from "./cache";
+import { retry_descriptor } from "./retry";
+import { batch_descriptor } from "./batch";
+import { assert_descriptor } from "./assert";
 
 const ALL_DESCRIPTORS = [
   http_descriptor,
@@ -57,24 +72,22 @@ const ALL_DESCRIPTORS = [
   promise_descriptor,
   embedding_descriptor,
   vector_store_descriptor,
+  notify_descriptor,
+  aggregate_descriptor,
+  send_file_descriptor,
+  error_handler_descriptor,
+  webhook_descriptor,
+  hitl_descriptor,
+  approval_descriptor,
+  form_descriptor,
+  tool_invoke_descriptor,
+  gate_descriptor,
+  escalation_descriptor,
+  cache_descriptor,
+  retry_descriptor,
+  batch_descriptor,
+  assert_descriptor,
 ];
-
-/** 노드 타입 → 카테고리 매핑. */
-const CATEGORY_MAP: Record<string, NodeCategory> = {
-  // Flow: 분기/반복/합류/대기
-  if: "flow", switch: "flow", split: "flow", merge: "flow",
-  loop: "flow", filter: "flow", wait: "flow",
-  // Data: 데이터 변환/저장
-  set: "data", template: "data", transform: "data", code: "data",
-  db: "data", file: "data",
-  // AI: LLM/에이전트/분석
-  llm: "ai", ai_agent: "ai", spawn_agent: "ai", analyzer: "ai",
-  text_splitter: "ai", embedding: "ai", vector_store: "ai", retriever: "ai",
-  // Integration: 외부 연동
-  http: "integration", oauth: "integration", sub_workflow: "integration",
-  // Advanced
-  task: "advanced", decision: "advanced", promise: "advanced",
-};
 
 let registered = false;
 
@@ -82,7 +95,7 @@ export function register_all_frontend_nodes(): void {
   if (registered) return;
   registered = true;
   for (const desc of ALL_DESCRIPTORS) {
-    desc.category = CATEGORY_MAP[desc.node_type] || "advanced";
+    if (!desc.category) desc.category = "advanced";
     register_frontend_node(desc);
   }
 }

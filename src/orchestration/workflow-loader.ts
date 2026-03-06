@@ -3,6 +3,7 @@
 import { readdirSync, readFileSync, writeFileSync, unlinkSync, existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { WorkflowDefinition, PhaseDefinition, ToolNodeDefinition, SkillNodeDefinition, WorkflowTriggerDefinition, HitlChannelDefinition, OrcheNodeRecord, FieldMapping, TriggerNodeRecord } from "../agent/phase-loop.types.js";
+import type { WorkflowNodeDefinition } from "../agent/workflow-node.types.js";
 
 /** YAML 의존성 없이 간단한 YAML-like 파싱 (JSON 직렬화된 YAML 지원). */
 let yaml_parse: ((text: string) => unknown) | null = null;
@@ -21,29 +22,38 @@ function parse_yaml(text: string): unknown {
   return JSON.parse(text);
 }
 
+/** 템플릿 + 파일명 slug + 별칭. */
+export type TemplateWithSlug = WorkflowDefinition & { slug: string; aliases?: string[] };
+
 /** workspace/workflows/ 디렉토리에서 모든 .yaml/.yml 파일을 로드. */
-export function load_workflow_templates(workspace: string): WorkflowDefinition[] {
+export function load_workflow_templates(workspace: string): TemplateWithSlug[] {
   const dir = join(workspace, "workflows");
   if (!existsSync(dir)) return [];
 
   const files = readdirSync(dir).filter((f) => f.endsWith(".yaml") || f.endsWith(".yml"));
-  const templates: WorkflowDefinition[] = [];
+  const templates: TemplateWithSlug[] = [];
 
   for (const file of files) {
     try {
       const content = readFileSync(join(dir, file), "utf-8");
       const raw = parse_yaml(content) as Record<string, unknown>;
       const def = normalize_workflow_definition(raw);
-      if (def) templates.push(def);
+      if (def) {
+        const aliases = Array.isArray(raw.aliases) ? raw.aliases.map(String) : undefined;
+        templates.push({ ...def, slug: file.replace(/\.(yaml|yml)$/, ""), aliases });
+      }
     } catch { /* skip malformed files */ }
   }
 
   return templates;
 }
 
-/** 특정 워크플로우 템플릿을 이름으로 로드. */
+/** 특정 워크플로우 템플릿을 이름(slug) 또는 title로 로드. */
 export function load_workflow_template(workspace: string, name: string): WorkflowDefinition | null {
   const dir = join(workspace, "workflows");
+  if (!existsSync(dir)) return null;
+
+  // 1차: 파일명(slug) exact match
   for (const ext of [".yaml", ".yml"]) {
     const path = join(dir, `${name}${ext}`);
     if (!existsSync(path)) continue;
@@ -53,6 +63,29 @@ export function load_workflow_template(workspace: string, name: string): Workflo
       return normalize_workflow_definition(raw);
     } catch { return null; }
   }
+
+  // 2차: title + aliases 매칭 (대소문자 무시, 부분 일치)
+  const lower = name.toLowerCase();
+  const files = readdirSync(dir).filter((f) => f.endsWith(".yaml") || f.endsWith(".yml"));
+  for (const file of files) {
+    try {
+      const content = readFileSync(join(dir, file), "utf-8");
+      const raw = parse_yaml(content) as Record<string, unknown>;
+
+      // title 매칭
+      const title = String(raw.title || "").toLowerCase();
+      if (title && (title === lower || title.includes(lower) || lower.includes(title))) {
+        return normalize_workflow_definition(raw);
+      }
+
+      // aliases 매칭
+      const aliases = Array.isArray(raw.aliases) ? raw.aliases.map((a) => String(a).toLowerCase()) : [];
+      if (aliases.some((a) => a === lower || a.includes(lower) || lower.includes(a))) {
+        return normalize_workflow_definition(raw);
+      }
+    } catch { /* skip */ }
+  }
+
   return null;
 }
 
@@ -119,46 +152,67 @@ export { normalize_workflow_definition };
 
 /** raw YAML 객체를 WorkflowDefinition으로 정규화. */
 function normalize_workflow_definition(raw: Record<string, unknown>): WorkflowDefinition | null {
-  if (!raw.title || !raw.phases || !Array.isArray(raw.phases)) return null;
+  if (!raw.title) return null;
 
+  const has_phases = Array.isArray(raw.phases);
+  const has_nodes = Array.isArray(raw.nodes);
+  if (!has_phases && !has_nodes) return null;
+
+  // ── nodes 배열 파싱 (통합 DAG: phase + orche + trigger) ──
+  const nodes: WorkflowNodeDefinition[] | undefined = has_nodes
+    ? (raw.nodes as Array<Record<string, unknown>>).filter(
+        (n) => n.node_id && n.node_type,
+      ).map((n) => ({
+        ...n,
+        node_id: String(n.node_id),
+        node_type: String(n.node_type),
+        title: String(n.title || n.node_id || ""),
+        depends_on: Array.isArray(n.depends_on) ? n.depends_on.map(String) : undefined,
+      }) as WorkflowNodeDefinition)
+    : undefined;
+
+  // ── phases 배열 파싱 (레거시 또는 병행) ──
   const phases: PhaseDefinition[] = [];
-  for (const p of raw.phases as Array<Record<string, unknown>>) {
-    if (!p.phase_id || !Array.isArray(p.agents)) continue;
-    phases.push({
-      phase_id: String(p.phase_id),
-      title: String(p.title || p.phase_id),
-      agents: (p.agents as Array<Record<string, unknown>>).map((a) => ({
-        agent_id: String(a.agent_id || a.role || `agent-${Math.random().toString(36).slice(2, 8)}`),
-        role: String(a.role || ""),
-        label: String(a.label || a.role || ""),
-        backend: String(a.backend || "codex_cli"),
-        model: a.model ? String(a.model) : undefined,
-        system_prompt: String(a.system_prompt || ""),
-        tools: Array.isArray(a.tools) ? a.tools.map(String) : undefined,
-        max_turns: a.max_turns ? Number(a.max_turns) : undefined,
-      })),
-      critic: p.critic ? {
-        backend: String((p.critic as Record<string, unknown>).backend || "codex_cli"),
-        model: (p.critic as Record<string, unknown>).model ? String((p.critic as Record<string, unknown>).model) : undefined,
-        system_prompt: String((p.critic as Record<string, unknown>).system_prompt || ""),
-        gate: Boolean((p.critic as Record<string, unknown>).gate ?? true),
-        on_rejection: ((p.critic as Record<string, unknown>).on_rejection as PhaseDefinition["critic"] extends { on_rejection?: infer R } ? R : undefined) || undefined,
-        max_retries: (p.critic as Record<string, unknown>).max_retries ? Number((p.critic as Record<string, unknown>).max_retries) : undefined,
-        goto_phase: (p.critic as Record<string, unknown>).goto_phase ? String((p.critic as Record<string, unknown>).goto_phase) : undefined,
-      } : undefined,
-      context_template: p.context_template ? String(p.context_template) : undefined,
-      failure_policy: (p.failure_policy as PhaseDefinition["failure_policy"]) || undefined,
-      quorum_count: p.quorum_count ? Number(p.quorum_count) : undefined,
-      mode: (p.mode as PhaseDefinition["mode"]) || undefined,
-      loop_until: p.loop_until ? String(p.loop_until) : undefined,
-      max_loop_iterations: p.max_loop_iterations ? Number(p.max_loop_iterations) : undefined,
-      depends_on: Array.isArray(p.depends_on) ? p.depends_on.map(String) : undefined,
-      tools: Array.isArray(p.tools) ? p.tools.map(String) : undefined,
-      skills: Array.isArray(p.skills) ? p.skills.map(String) : undefined,
-    });
+  if (has_phases) {
+    for (const p of raw.phases as Array<Record<string, unknown>>) {
+      if (!p.phase_id || !Array.isArray(p.agents)) continue;
+      phases.push({
+        phase_id: String(p.phase_id),
+        title: String(p.title || p.phase_id),
+        agents: (p.agents as Array<Record<string, unknown>>).map((a) => ({
+          agent_id: String(a.agent_id || a.role || `agent-${Math.random().toString(36).slice(2, 8)}`),
+          role: String(a.role || ""),
+          label: String(a.label || a.role || ""),
+          backend: String(a.backend || "codex_cli"),
+          model: a.model ? String(a.model) : undefined,
+          system_prompt: String(a.system_prompt || ""),
+          tools: Array.isArray(a.tools) ? a.tools.map(String) : undefined,
+          max_turns: a.max_turns ? Number(a.max_turns) : undefined,
+        })),
+        critic: p.critic ? {
+          backend: String((p.critic as Record<string, unknown>).backend || "codex_cli"),
+          model: (p.critic as Record<string, unknown>).model ? String((p.critic as Record<string, unknown>).model) : undefined,
+          system_prompt: String((p.critic as Record<string, unknown>).system_prompt || ""),
+          gate: Boolean((p.critic as Record<string, unknown>).gate ?? true),
+          on_rejection: ((p.critic as Record<string, unknown>).on_rejection as PhaseDefinition["critic"] extends { on_rejection?: infer R } ? R : undefined) || undefined,
+          max_retries: (p.critic as Record<string, unknown>).max_retries ? Number((p.critic as Record<string, unknown>).max_retries) : undefined,
+          goto_phase: (p.critic as Record<string, unknown>).goto_phase ? String((p.critic as Record<string, unknown>).goto_phase) : undefined,
+        } : undefined,
+        context_template: p.context_template ? String(p.context_template) : undefined,
+        failure_policy: (p.failure_policy as PhaseDefinition["failure_policy"]) || undefined,
+        quorum_count: p.quorum_count ? Number(p.quorum_count) : undefined,
+        mode: (p.mode as PhaseDefinition["mode"]) || undefined,
+        loop_until: p.loop_until ? String(p.loop_until) : undefined,
+        max_loop_iterations: p.max_loop_iterations ? Number(p.max_loop_iterations) : undefined,
+        depends_on: Array.isArray(p.depends_on) ? p.depends_on.map(String) : undefined,
+        tools: Array.isArray(p.tools) ? p.tools.map(String) : undefined,
+        skills: Array.isArray(p.skills) ? p.skills.map(String) : undefined,
+      });
+    }
   }
 
-  if (phases.length === 0) return null;
+  // nodes도 없고 파싱된 phases도 비어있으면 무효
+  if (!nodes?.length && phases.length === 0) return null;
 
   // 보조 노드 파싱
   const tool_nodes: ToolNodeDefinition[] | undefined = Array.isArray(raw.tool_nodes)
@@ -244,6 +298,7 @@ function normalize_workflow_definition(raw: Record<string, unknown>): WorkflowDe
     title: String(raw.title),
     objective: String(raw.objective || ""),
     phases,
+    nodes,
     variables: raw.variables && typeof raw.variables === "object"
       ? Object.fromEntries(Object.entries(raw.variables as Record<string, unknown>).map(([k, v]) => [k, String(v)]))
       : undefined,

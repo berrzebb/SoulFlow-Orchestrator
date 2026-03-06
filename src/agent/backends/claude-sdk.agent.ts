@@ -13,7 +13,7 @@ import type {
 } from "../agent.types.js";
 import type { PreToolHook, PostToolHook } from "../tools/types.js";
 import type { LlmUsage, ModelUsageEntry } from "../../providers/types.js";
-import { now_iso, error_message, short_id, safe_stringify } from "../../utils/common.js";
+import { now_iso, error_message, short_id, safe_stringify, swallow } from "../../utils/common.js";
 import { sandbox_to_sdk_permission, sdk_result_subtype_to_finish_reason } from "./convert.js";
 import { sandbox_from_preset } from "../../providers/types.js";
 import { create_sdk_tool_server } from "./sdk-tool-bridge.js";
@@ -197,7 +197,7 @@ export class ClaudeSdkAgent implements AgentBackend {
 
     // abort → interrupt() (graceful) → abort_controller (강제)
     const abort_relay = () => {
-      void sdk_query_instance.interrupt?.()?.catch(() => {});
+      swallow(sdk_query_instance.interrupt?.()!);
       abort_controller.abort();
     };
     if (options.abort_signal) {
@@ -214,7 +214,7 @@ export class ClaudeSdkAgent implements AgentBackend {
           parent_tool_use_id: null,
           session_id: session_id || "",
         };
-        void si((async function* () { yield msg; })()).catch(() => {});
+        swallow(si((async function* () { yield msg; })()));
       });
     }
 
@@ -245,7 +245,7 @@ export class ClaudeSdkAgent implements AgentBackend {
             trigger: "auto", pre_tokens: 0,
           });
           if (options.hooks?.on_stream) {
-            void Promise.resolve(options.hooks.on_stream("\n📦 컨텍스트 압축 중...")).catch(() => {});
+            swallow(options.hooks.on_stream("\n📦 컨텍스트 압축 중..."));
           }
           continue;
         }
@@ -331,7 +331,7 @@ export class ClaudeSdkAgent implements AgentBackend {
           const elapsed = Number(message.elapsed_time_seconds || 0);
           if (options.hooks?.on_stream && elapsed > 0) {
             const label = `\n⏳ ${tool_name} (${Math.round(elapsed)}s)`;
-            void Promise.resolve(options.hooks.on_stream(label)).catch(() => {});
+            swallow(options.hooks.on_stream(label));
           }
           continue;
         }
@@ -431,7 +431,7 @@ export class ClaudeSdkAgent implements AgentBackend {
               turn_text += text;
               fire(emit, { type: "content_delta", source, at: now_iso(), text });
               if (options.hooks?.on_stream) {
-                void Promise.resolve(options.hooks.on_stream(text)).catch(() => {});
+                swallow(options.hooks.on_stream(text));
               }
             }
           }
@@ -459,7 +459,7 @@ export class ClaudeSdkAgent implements AgentBackend {
           const text = safe_stringify(message.content);
           fire(emit, { type: "content_delta", source, at: now_iso(), text });
           if (options.hooks?.on_stream) {
-            void Promise.resolve(options.hooks.on_stream(text)).catch(() => {});
+            swallow(options.hooks.on_stream(text));
           }
         }
       }
@@ -491,7 +491,7 @@ export class ClaudeSdkAgent implements AgentBackend {
       return this._error_result(msg, tool_calls_count);
     } finally {
       options.abort_signal?.removeEventListener("abort", abort_relay);
-      void Promise.resolve(sdk_query_instance.close?.()).catch(() => {});
+      swallow(sdk_query_instance.close?.());
     }
   }
 
@@ -577,9 +577,9 @@ function _create_pre_tool_hook(
         tool_input: Object.keys(tool_input).length > 0 ? tool_input : undefined,
       };
       if (emit) {
-        void Promise.resolve(emit({
+        swallow(emit({
           type: "approval_request", source, at: now_iso(), request,
-        })).catch(() => {});
+        }));
       }
       const decision = await on_approval(request);
       if (decision === "deny" || decision === "cancel") {
@@ -660,11 +660,11 @@ function _create_post_tool_hook(
     const tool_response = _extract_tool_response_text(input.tool_response);
 
     if (emit) {
-      void Promise.resolve(emit({
+      swallow(emit({
         type: "tool_result", source, at: now_iso(),
         tool_name, tool_id, result: tool_response,
         params: tool_input,
-      })).catch(() => {});
+      }));
     }
 
     await post_tool(tool_name, tool_input, tool_response, ctx, false);
@@ -686,11 +686,11 @@ function _create_post_tool_failure_hook(
     const error_msg = _extract_tool_response_text(input.error) || "unknown error";
 
     if (emit) {
-      void Promise.resolve(emit({
+      swallow(emit({
         type: "tool_result", source, at: now_iso(),
         tool_name, tool_id, result: error_msg, is_error: true,
         params: tool_input,
-      })).catch(() => {});
+      }));
     }
 
     await post_tool(tool_name, tool_input, error_msg, ctx, true);

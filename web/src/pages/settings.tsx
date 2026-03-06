@@ -37,24 +37,51 @@ export default function SettingsPage() {
   const { data, isLoading } = useQuery<ConfigResponse>({
     queryKey: ["config"],
     queryFn: () => api.get("/api/config"),
+    staleTime: 30_000,
   });
   const [active, setActive] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
 
   const t = useT();
 
-  if (isLoading || !data) return <p className="empty">{t("settings.loading")}</p>;
+  if (isLoading || !data) return (
+    <div className="page">
+      <div className="skeleton skeleton--row" />
+      <div className="skeleton skeleton--row" />
+      <div className="skeleton skeleton--row" />
+    </div>
+  );
 
   const sections = (data.sections ?? []).filter((s) => !CHANNEL_SECTIONS.has(s.id));
+  const q = search.toLowerCase();
+  const filtered_sections = sections
+    .filter((s) => !active || s.id === active)
+    .map((s) => ({
+      ...s,
+      fields: q ? s.fields.filter((f) => f.path.toLowerCase().includes(q) || f.label.toLowerCase().includes(q)) : s.fields,
+    }))
+    .filter((s) => s.fields.length > 0);
 
   return (
     <div className="page">
-      <h2>{t("settings.title")}</h2>
-      <p style={{ fontSize: "var(--fs-xs)", color: "var(--muted)", marginBottom: "var(--sp-4)" }}>
+      <div className="section-header">
+        <h2>{t("settings.title")}</h2>
+        <input
+          className="input input--sm section-header__search"
+          type="search"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder={t("settings.search") || "Search settings..."}
+        />
+      </div>
+      <p className="text-xs text-muted mb-3">
         {t("settings.description")}
       </p>
 
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: "var(--sp-4)" }}>
+      <div className="settings__filters" role="tablist">
         <button
+          role="tab"
+          aria-selected={!active}
           className={`btn btn--sm ${!active ? "btn--primary" : ""}`}
           onClick={() => setActive(null)}
         >
@@ -63,20 +90,23 @@ export default function SettingsPage() {
         {sections.map((s) => (
           <button
             key={s.id}
+            role="tab"
+            aria-selected={active === s.id}
             className={`btn btn--sm ${active === s.id ? "btn--primary" : ""}`}
             onClick={() => setActive(s.id)}
           >
             {t(`cfg.section.${s.id}`)}
-            <span style={{ marginLeft: 4, fontSize: "var(--fs-xs)", opacity: 0.6 }}>{s.fields.length}</span>
+            <span className="settings__filter-count">{s.fields.length}</span>
           </button>
         ))}
       </div>
 
-      {sections
-        .filter((s) => !active || s.id === active)
-        .map((s) => (
-          <SectionPanel key={s.id} section={s} />
-        ))}
+      {filtered_sections.map((s) => (
+        <SectionPanel key={s.id} section={s} />
+      ))}
+      {search && filtered_sections.length === 0 && (
+        <div className="empty-state"><div className="empty-state__icon">🔍</div><div className="empty-state__text">{t("settings.no_match")}</div></div>
+      )}
     </div>
   );
 }
@@ -84,9 +114,9 @@ export default function SettingsPage() {
 function SectionPanel({ section }: { section: SectionInfo }) {
   const t = useT();
   return (
-    <section className="panel" style={{ marginBottom: "var(--sp-3)" }}>
+    <section className="panel mb-3">
       <h2>{t(`cfg.section.${section.id}`)}</h2>
-      <div style={{ display: "grid", gap: 2 }}>
+      <div className="settings__field-list">
         {section.fields.map((f) => (
           <FieldCard key={f.path} field={f} />
         ))}
@@ -152,6 +182,9 @@ function FieldCard({ field }: { field: FieldInfo }) {
         {field.description && (
           <div className="cfg-field__desc">{t(`cfg.${field.path}.desc`)}</div>
         )}
+        {field.default_value !== undefined && field.default_value !== null && field.default_value !== "" && !field.sensitive && (
+          <div className="cfg-field__default">{t("settings.default")}: {String(field.default_value)}</div>
+        )}
       </div>
 
       <div className="cfg-field__value">
@@ -190,11 +223,13 @@ function ValueDisplay({ field, onClick }: { field: FieldInfo; onClick: () => voi
     );
   }
 
+  const kb = (e: React.KeyboardEvent) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); } };
+
   if (field.sensitive) {
     return (
       <span
-        style={{ cursor: "pointer", color: field.sensitive_set ? "var(--text)" : "var(--off)", fontSize: "var(--fs-sm)" }}
-        onClick={onClick}
+        className={`cfg-value cfg-value--clickable ${field.sensitive_set ? "" : "cfg-value--empty"}`}
+        role="button" tabIndex={0} onClick={onClick} onKeyDown={kb}
         title={t("settings.click_to_edit")}
       >
         {field.sensitive_set ? "••••••••" : t("settings.not_set")}
@@ -205,34 +240,22 @@ function ValueDisplay({ field, onClick }: { field: FieldInfo; onClick: () => voi
   if (field.type === "select") {
     const has_value = field.value !== undefined && field.value !== null && field.value !== "";
     return (
-      <span
-        onClick={onClick}
-        title={t("settings.click_to_edit")}
-        style={{ cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }}
-      >
-        <span style={{
-          fontSize: "var(--fs-xs)", fontFamily: "var(--font-mono)",
-          background: "rgba(74,158,255,0.1)", color: "var(--accent)",
-          border: "1px solid rgba(74,158,255,0.25)",
-          borderRadius: 4, padding: "1px 6px",
-        }}>
-          {has_value ? String(field.value) : <span style={{ fontStyle: "italic", opacity: 0.5 }}>{t("settings.empty_value")}</span>}
+      <span className="cfg-value cfg-value--clickable li-flex" role="button" tabIndex={0} onClick={onClick} onKeyDown={kb} title={t("settings.click_to_edit")}>
+        <span className="cfg-value__chip">
+          {has_value ? String(field.value) : <span className="cfg-value--empty-italic">{t("settings.empty_value")}</span>}
         </span>
-        <span style={{ fontSize: 9, color: "var(--muted)", opacity: 0.6 }}>▾</span>
+        <span className="text-xs text-muted">▾</span>
       </span>
     );
   }
 
   return (
     <span
-      style={{
-        cursor: "pointer", fontSize: "var(--fs-sm)", fontFamily: "var(--font-mono)",
-        color: field.value ? "var(--text)" : "var(--off)",
-      }}
-      onClick={onClick}
+      className={`cfg-value cfg-value--clickable cfg-value--mono ${field.value ? "" : "cfg-value--empty"}`}
+      role="button" tabIndex={0} onClick={onClick} onKeyDown={kb}
       title={t("settings.click_to_edit")}
     >
-      {String(field.value ?? "") || <span style={{ fontStyle: "italic", color: "var(--off)" }}>{t("settings.empty_value")}</span>}
+      {String(field.value ?? "") || <span className="cfg-value--empty-italic">{t("settings.empty_value")}</span>}
     </span>
   );
 }
@@ -249,7 +272,7 @@ function EditInline({
 }) {
   const t = useT();
   const on_key = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") onCommit();
+    if (e.key === "Enter" && !e.nativeEvent.isComposing) onCommit();
     if (e.key === "Escape") onCancel();
   };
 
@@ -278,7 +301,6 @@ function EditInline({
         onChange={(e) => setDraft(e.target.value)}
         onKeyDown={on_key}
         placeholder={field.sensitive ? t("settings.enter_new_value") : String(field.default_value ?? "")}
-        style={{ fontSize: "var(--fs-sm)" }}
         autoFocus
         disabled={isPending}
       />

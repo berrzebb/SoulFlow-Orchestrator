@@ -735,7 +735,7 @@ import type { PhaseWorkflowStoreLike } from "../agent/phase-workflow-store.js";
 import type { SubagentRegistry } from "../agent/subagents.js";
 import type { SkillsLoader } from "../agent/skills.service.js";
 import type { DashboardWorkflowOps } from "./service.js";
-import type { PhaseLoopRunOptions, WorkflowDefinition } from "../agent/phase-loop.types.js";
+import type { PhaseLoopRunOptions, WorkflowDefinition, ChannelSendRequest, ChannelResponse } from "../agent/phase-loop.types.js";
 import {
   load_workflow_templates, load_workflow_template,
   substitute_variables, save_workflow_template,
@@ -754,21 +754,43 @@ export function create_workflow_ops(deps: {
   on_workflow_event?: (event: import("../agent/phase-loop.types.js").PhaseLoopEvent) => void;
   bus?: import("../bus/types.js").MessageBusLike;
   cron?: import("../cron/service.js").CronService;
+  /** Tool Invoke 노드용: 도구 실행 콜백. */
+  invoke_tool?: (tool_id: string, params: Record<string, unknown>) => Promise<string>;
+  /** LLM provider (llm, analyzer 노드용). */
+  providers?: import("../providers/service.js").ProviderRegistry | null;
+  /** Decision/Promise 서비스 (워크플로우 노드용). */
+  decision_service?: import("../decision/service.js").DecisionService | null;
+  promise_service?: import("../decision/promise.service.js").PromiseService | null;
+  embed?: (texts: string[], opts: { model?: string; dimensions?: number }) => Promise<{ embeddings: number[][]; token_usage?: number }>;
+  vector_store?: (op: string, opts: Record<string, unknown>) => Promise<Record<string, unknown>>;
+  oauth_fetch?: (service_id: string, opts: { url: string; method: string; headers?: Record<string, string>; body?: unknown }) => Promise<{ status: number; body: unknown; headers: Record<string, string> }>;
+  get_webhook_data?: (path: string) => Promise<{ method: string; headers: Record<string, string>; body: unknown; query: Record<string, string> } | null>;
+  create_task?: (opts: { title: string; objective: string; channel?: string; chat_id?: string; max_turns?: number; initial_memory?: Record<string, unknown> }) => Promise<{ task_id: string; status: string; result?: unknown; error?: string }>;
+  query_db?: (datasource: string, query: string, params?: Record<string, unknown>) => Promise<{ rows: unknown[]; affected_rows: number }>;
 }): DashboardWorkflowOps & { hitl_bridge: import("../channels/manager.js").WorkflowHitlBridge } {
   const { store, subagents, workspace, logger, skills_loader, on_workflow_event, bus, cron } = deps;
 
   /** HITL: 워크플로우별 사용자 응답 대기 Promise resolver. 키: workflow_id, 값의 chat_id도 추적. */
   const pending_responses = new Map<string, { resolve: (response: string) => void; chat_id: string }>();
 
-  /** HITL ask_user 콜백 빌더. hitl_channel 지정 시 해당 채널로 전송. */
+  /** HITL ask_user 콜백 빌더. 항상 워크플로우 실행 채널/대화로 전송. */
   function build_ask_user(workflow_id: string, target_channel: string, target_chat_id: string) {
     return (question: string): Promise<string> => {
       on_workflow_event?.({ type: "user_input_requested", workflow_id, phase_id: "", question });
 
       if (bus && target_channel !== "dashboard" && target_channel !== "web") {
+        const formatted = [
+          "💬 **질문**",
+          "",
+          question,
+          "",
+          "질문에 대한 답변을 답장해주세요.",
+          "",
+          "_이 메시지에 답장하면 워크플로우가 자동으로 재개됩니다._",
+        ].join("\n");
         bus.publish_outbound({
           id: `wf-ask-${short_id(8)}`, provider: target_channel, channel: target_channel,
-          sender_id: "system", chat_id: target_chat_id, content: question,
+          sender_id: "system", chat_id: target_chat_id, content: formatted,
           at: new Date().toISOString(),
           metadata: { workflow_id, type: "workflow_ask_user" },
         }).catch((e) => logger.error("workflow_ask_user_send_failed", { workflow_id, error: String(e) }));
@@ -776,6 +798,67 @@ export function create_workflow_ops(deps: {
 
       return new Promise<string>((resolve) => {
         pending_responses.set(workflow_id, { resolve, chat_id: target_chat_id });
+      });
+    };
+  }
+
+  /** Interaction 노드용: 채널 메시지 전송 (fire-and-forget). */
+  function build_send_message(workflow_id: string, origin_channel: string, origin_chat_id: string) {
+    return async (req: ChannelSendRequest): Promise<{ ok: boolean; message_id?: string }> => {
+      if (!bus) return { ok: false };
+      const channel = req.target === "origin" ? origin_channel : (req.channel || origin_channel);
+      const chat_id = req.target === "origin" ? origin_chat_id : (req.chat_id || origin_chat_id);
+      const msg_id = `wf-msg-${short_id(8)}`;
+      try {
+        await bus.publish_outbound({
+          id: msg_id, provider: channel, channel,
+          sender_id: "system", chat_id, content: req.content,
+          at: new Date().toISOString(),
+          metadata: { workflow_id, type: "workflow_notification", ...(req.structured ? { structured: req.structured } : {}) },
+        });
+        return { ok: true, message_id: msg_id };
+      } catch (e) {
+        logger.error("workflow_send_message_failed", { workflow_id, error: String(e) });
+        return { ok: false };
+      }
+    };
+  }
+
+  /** Interaction 노드용: 채널 질문 전송 + 응답 대기. */
+  function build_ask_channel(workflow_id: string, origin_channel: string, origin_chat_id: string) {
+    return (req: ChannelSendRequest, timeout_ms: number): Promise<ChannelResponse> => {
+      const channel = req.target === "origin" ? origin_channel : (req.channel || origin_channel);
+      const chat_id = req.target === "origin" ? origin_chat_id : (req.chat_id || origin_chat_id);
+
+      if (bus && channel !== "dashboard" && channel !== "web") {
+        bus.publish_outbound({
+          id: `wf-ask-${short_id(8)}`, provider: channel, channel,
+          sender_id: "system", chat_id, content: req.content,
+          at: new Date().toISOString(),
+          metadata: { workflow_id, type: "workflow_ask_channel", ...(req.structured ? { structured: req.structured } : {}) },
+        }).catch((e) => logger.error("workflow_ask_channel_send_failed", { workflow_id, error: String(e) }));
+      }
+
+      return new Promise<ChannelResponse>((resolve) => {
+        const timer = setTimeout(() => {
+          pending_responses.delete(workflow_id);
+          resolve({
+            response: "", responded_at: new Date().toISOString(), timed_out: true,
+          });
+        }, timeout_ms);
+
+        pending_responses.set(workflow_id, {
+          resolve: (content: string) => {
+            clearTimeout(timer);
+            resolve({
+              response: content,
+              responded_by: { channel, chat_id: chat_id },
+              responded_at: new Date().toISOString(),
+              timed_out: false,
+            });
+          },
+          chat_id,
+        });
       });
     };
   }
@@ -806,39 +889,43 @@ export function create_workflow_ops(deps: {
       const chat_id = String(input.chat_id || "web");
 
       let phases: PhaseLoopRunOptions["phases"];
-      let hitl_channel: WorkflowDefinition["hitl_channel"];
+      let nodes: PhaseLoopRunOptions["nodes"];
       if (input.template_name) {
         const template = load_workflow_templates(workspace)
           .find((t) => t.title.toLowerCase().includes(String(input.template_name).toLowerCase()));
         if (!template) return { ok: false, error: "template_not_found" };
-        const substituted = substitute_variables(template, { objective, channel });
+        const user_vars = input.variables && typeof input.variables === "object"
+          ? Object.fromEntries(Object.entries(input.variables as Record<string, unknown>).map(([k, v]) => [k, String(v)]))
+          : {};
+        const substituted = substitute_variables(template, { ...(template.variables || {}), ...user_vars, objective, channel });
         phases = substituted.phases;
-        hitl_channel = substituted.hitl_channel;
+        nodes = substituted.nodes;
       } else if (Array.isArray(input.phases)) {
         phases = input.phases as PhaseLoopRunOptions["phases"];
-        hitl_channel = input.hitl_channel as WorkflowDefinition["hitl_channel"];
       } else {
         // objective만 있으면 기본 파이프라인 템플릿으로 폴백
         const fallback = load_workflow_template(workspace, "autonomous-dev-pipeline")
           || load_workflow_templates(workspace)[0];
         if (!fallback) return { ok: false, error: "no_default_template" };
-        const substituted = substitute_variables(fallback, { objective, channel });
+        const substituted = substitute_variables(fallback, { ...(fallback.variables || {}), objective, channel });
         phases = substituted.phases;
-        hitl_channel = substituted.hitl_channel;
+        nodes = substituted.nodes;
       }
 
       const workflow_id = `wf-${short_id(12)}`;
 
-      // hitl_channel 지정 시 해당 채널로 질문 전송, 미지정 시 원래 채널 사용
-      const hitl_ch = hitl_channel?.channel_type || channel;
-      const hitl_cid = hitl_channel?.chat_id || chat_id;
+      const ask_user = build_ask_user(workflow_id, channel, chat_id);
 
-      const ask_user = build_ask_user(workflow_id, hitl_ch, hitl_cid);
+      const origin = { channel, chat_id, sender_id: String(input.sender_id || "") };
 
       // 비동기 실행 (즉시 반환)
       void run_phase_loop({
-        workflow_id, title, objective, channel, chat_id, phases, ask_user,
-      }, { subagents, store, logger, on_event: on_workflow_event }).catch((err) => {
+        workflow_id, title, objective, channel, chat_id, phases, nodes, ask_user,
+        send_message: build_send_message(workflow_id, channel, chat_id),
+        ask_channel: build_ask_channel(workflow_id, channel, chat_id),
+        invoke_tool: deps.invoke_tool,
+        initial_memory: { origin },
+      }, { subagents, store, logger, load_template: (name) => load_workflow_template(workspace, name), providers: deps.providers, decision_service: deps.decision_service, promise_service: deps.promise_service, embed: deps.embed, vector_store: deps.vector_store, oauth_fetch: deps.oauth_fetch, get_webhook_data: deps.get_webhook_data, create_task: deps.create_task, query_db: deps.query_db, on_event: on_workflow_event }).catch((err) => {
         logger.error("workflow_create_run_error", { workflow_id, error: String(err) });
       });
 
@@ -964,10 +1051,7 @@ export function create_workflow_ops(deps: {
       }
 
       const { channel, chat_id } = state;
-      const hitl = state.definition.hitl_channel;
-      const hitl_ch = hitl?.channel_type || channel;
-      const hitl_cid = hitl?.chat_id || chat_id;
-      const ask_user = build_ask_user(workflow_id, hitl_ch, hitl_cid);
+      const ask_user = build_ask_user(workflow_id, channel, chat_id);
 
       // 이미 완료된 Phase는 run_phase_loop 내부에서 skip됨 (상태머신 로직)
       state.status = "running";
@@ -976,7 +1060,10 @@ export function create_workflow_ops(deps: {
       void run_phase_loop({
         workflow_id, title: state.title, objective: state.objective,
         channel, chat_id, phases: state.definition.phases, ask_user,
-      }, { subagents, store, logger, on_event: on_workflow_event }).catch((err) => {
+        send_message: build_send_message(workflow_id, channel, chat_id),
+        ask_channel: build_ask_channel(workflow_id, channel, chat_id),
+        invoke_tool: deps.invoke_tool,
+      }, { subagents, store, logger, load_template: (name) => load_workflow_template(workspace, name), providers: deps.providers, decision_service: deps.decision_service, promise_service: deps.promise_service, embed: deps.embed, vector_store: deps.vector_store, oauth_fetch: deps.oauth_fetch, get_webhook_data: deps.get_webhook_data, create_task: deps.create_task, query_db: deps.query_db, on_event: on_workflow_event }).catch((err) => {
         logger.error("workflow_resume_run_error", { workflow_id, error: String(err) });
       });
 

@@ -10,6 +10,7 @@ function parse_iso_date_ms(text: string): number | null {
 
 export class CronTool extends Tool {
   readonly name = "cron";
+  readonly category = "scheduling" as const;
   readonly description = "Manage scheduled jobs. action: add|list|remove|enable|disable|run|status";
   readonly parameters: JsonSchema = {
     type: "object",

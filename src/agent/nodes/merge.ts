@@ -17,13 +17,23 @@ export const merge_handler: NodeHandler = {
 
   async execute(node: OrcheNodeDefinition, ctx: OrcheNodeExecutorContext): Promise<OrcheNodeExecuteResult> {
     const n = node as MergeNodeDefinition;
+    const deps = n.depends_on || [];
+
+    if (n.merge_mode === "collect") {
+      const collected: unknown[] = [];
+      for (const dep_id of deps) {
+        if (ctx.memory[dep_id] !== undefined) collected.push(ctx.memory[dep_id]);
+      }
+      return { output: { merged: collected } };
+    }
+
     const merged: Record<string, unknown> = {};
-    for (const dep_id of n.depends_on || []) {
+    for (const dep_id of deps) {
       if (ctx.memory[dep_id] !== undefined) {
         merged[dep_id] = ctx.memory[dep_id];
       }
     }
-    return { output: merged };
+    return { output: { merged } };
   },
 
   test(node: OrcheNodeDefinition, ctx: OrcheNodeExecutorContext): OrcheNodeTestResult {

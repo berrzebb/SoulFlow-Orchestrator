@@ -127,6 +127,8 @@ function to_reaction_message(
   };
 }
 
+const FETCH_TIMEOUT_MS = 30_000;
+
 export class TelegramChannel extends BaseChannel {
   private readonly bot_token: string;
   private readonly default_chat_id: string;
@@ -185,6 +187,7 @@ export class TelegramChannel extends BaseChannel {
           const response = await fetch(url, {
             method: "POST",
             body: form,
+            signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
           });
           const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
           if (!response.ok || data.ok !== true) {
@@ -217,6 +220,7 @@ export class TelegramChannel extends BaseChannel {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload),
+            signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
           });
           const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
           if (!response.ok || data.ok !== true) {
@@ -248,6 +252,7 @@ export class TelegramChannel extends BaseChannel {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify(payload),
+              signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
             });
             const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
             if (!response.ok || data.ok !== true) {
@@ -281,7 +286,7 @@ export class TelegramChannel extends BaseChannel {
       const offset_qs = this.last_update_id > 0 ? `&offset=${this.last_update_id + 1}` : "";
       const allowed = encodeURIComponent(JSON.stringify(["message", "message_reaction"]));
       const url = `${this.api_base}/bot${this.bot_token}/getUpdates?limit=${n}&timeout=0&allowed_updates=${allowed}${offset_qs}`;
-      const response = await fetch(url);
+      const response = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
       const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
       if (!response.ok || data.ok !== true) {
         const desc = as_string(data.description || `http_${response.status}`);
@@ -339,6 +344,7 @@ export class TelegramChannel extends BaseChannel {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
       });
       const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
       if (!response.ok || data.ok !== true) {
@@ -363,6 +369,7 @@ export class TelegramChannel extends BaseChannel {
           message_id: Number(message_id),
           reaction: [{ type: "emoji", emoji: reaction }],
         }),
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
       });
       const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
       if (!response.ok || data.ok !== true) {
@@ -382,6 +389,7 @@ export class TelegramChannel extends BaseChannel {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ chat_id, message_id: Number(message_id), reaction: [] }),
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
       });
       const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
       if (!response.ok || data.ok !== true) {
@@ -405,6 +413,7 @@ export class TelegramChannel extends BaseChannel {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ commands }),
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
       });
       const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
       if (!response.ok || data.ok !== true) {
@@ -427,7 +436,8 @@ export class TelegramChannel extends BaseChannel {
         chat_id,
         action: "typing",
       }),
-    });
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    }).catch(() => {/* typing 실패는 무시 */});
   }
 
   private async send_text_document(
@@ -449,6 +459,7 @@ export class TelegramChannel extends BaseChannel {
     const response = await fetch(url, {
       method: "POST",
       body: form,
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
     const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
     if (!response.ok || data.ok !== true) {

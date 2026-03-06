@@ -2,6 +2,8 @@ import { z } from "zod";
 
 const ChannelStreamingSchema = z.object({
   enabled: z.boolean(),
+  /** 스트리밍 모드: live(부분 텍스트 축적 편집), status(상태 인디케이터 순환 → 최종 답변 새 메시지). */
+  mode: z.enum(["live", "status"]).default("live"),
   intervalMs: z.number().min(500),
   minChars: z.number().min(16),
   suppressFinalAfterStream: z.boolean(),
@@ -61,8 +63,8 @@ const OrchestratorLlmSchema = z.object({
 const OrchestrationSchema = z.object({
   maxToolResultChars: z.number().min(50),
   orchestratorMaxTokens: z.number().min(256),
-  orchestratorProvider: z.string().default("orchestrator_llm"),
-  executorProvider: z.string().default("chatgpt"),
+  orchestratorProvider: z.string().default(""),
+  executorProvider: z.string().default(""),
 });
 
 const DashboardSchema = z.object({
@@ -140,6 +142,7 @@ export function get_config_defaults(): AppConfig {
       reactionActionTtlMs: 86_400_000,
       streaming: {
         enabled: true,
+        mode: "status" as const,
         intervalMs: 1400,
         minChars: 48,
         suppressFinalAfterStream: false,
@@ -162,8 +165,8 @@ export function get_config_defaults(): AppConfig {
     orchestration: {
       maxToolResultChars: 500,
       orchestratorMaxTokens: 4096,
-      orchestratorProvider: "orchestrator_llm",
-      executorProvider: "chatgpt",
+      orchestratorProvider: "",
+      executorProvider: "",
     },
     orchestratorLlm: {
       enabled: false,

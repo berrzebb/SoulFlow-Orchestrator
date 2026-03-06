@@ -8,6 +8,7 @@ import { ConsecutiveToolCallGuard, type ToolCallGuard } from "./tool-call-guard.
 
 const TERMINAL_TASK_STATUSES = new Set(["waiting_approval", "waiting_user_input", "failed", "cancelled", "completed"]);
 const MAX_TASK_TURNS = 500;
+const MAX_RESUME_COUNT = 3;
 
 export type CascadeCancelFn = (parent_id: string) => void;
 
@@ -119,24 +120,46 @@ export class AgentLoopStore {
     return msgs;
   }
 
-  /** waiting_approval/waiting_user_input 상태에서 TTL을 초과한 작업을 자동 취소. */
+  /** waiting_approval/waiting_user_input 상태에서 TTL을 초과한 작업을 자동 취소. 이미 종료된 엔트리도 Map에서 제거. */
   expire_stale_tasks(ttl_ms = 600_000): TaskState[] {
     const now = Date.now();
     const expired: TaskState[] = [];
-    for (const state of this.tasks.values()) {
-      if (state.status !== "waiting_approval" && state.status !== "waiting_user_input") continue;
+    const terminal_to_remove: string[] = [];
+
+    for (const [id, state] of this.tasks) {
       const updated = state.memory?.__updated_at_seoul as string | undefined;
-      if (!updated) continue;
-      const updated_ms = new Date(updated).getTime();
-      if (Number.isNaN(updated_ms) || now - updated_ms < ttl_ms) continue;
+      const updated_ms = updated ? new Date(updated).getTime() : 0;
+
+      // 이미 종료된 작업 — DB에 persist 완료됐으므로 메모리에서 제거
+      if (state.status === "completed" || state.status === "cancelled") {
+        if (updated_ms && !Number.isNaN(updated_ms) && now - updated_ms > ttl_ms) {
+          terminal_to_remove.push(id);
+        }
+        continue;
+      }
+
+      if (state.status !== "waiting_approval" && state.status !== "waiting_user_input") continue;
+      if (!updated_ms || Number.isNaN(updated_ms) || now - updated_ms < ttl_ms) continue;
       state.status = "cancelled";
       state.exitReason = "expired_stale";
-      this.tasks.set(state.taskId, state);
+      this.tasks.set(id, state);
       this.persist_task(state).catch((e) => {
-        this.logger?.error("expire_stale persist failed", { task_id: state.taskId, error: error_message(e) });
+        this.logger?.error("expire_stale persist failed", { task_id: id, error: error_message(e) });
       });
+      try { this.on_task_change?.({ ...state }); } catch { /* broadcast 실패가 만료 처리를 차단하면 안 됨 */ }
       expired.push(state);
     }
+
+    for (const id of terminal_to_remove) this.tasks.delete(id);
+
+    // 종료된 루프도 정리
+    for (const [id, loop] of this.loops) {
+      if (loop.status === "stopped" || loop.status === "failed") {
+        this.loops.delete(id);
+        this.loop_mailbox.delete(id);
+      }
+    }
+
     return expired;
   }
 
@@ -151,13 +174,39 @@ export class AgentLoopStore {
     this.persist_task(state).catch((e) => {
       this.logger?.error("cancel_task persist failed", { task_id, error: error_message(e) });
     });
+    try { this.on_task_change?.({ ...state }); } catch { /* broadcast 실패가 취소를 차단하면 안 됨 */ }
     return state;
   }
 
-  async resume_task(task_id: string, user_input?: string, reason = "resumed"): Promise<TaskState | null> {
+  async resume_task(task_id: string, user_input?: string, reason = "resumed", channel_context?: { channel: string; chat_id: string }): Promise<TaskState | null> {
     const state = this.tasks.get(task_id) ?? await this.task_store?.get(task_id) ?? null;
     if (!state) return null;
     if (state.status === "completed" || state.status === "cancelled") return state;
+
+    // 채널 정보 복원: 핫 리로드 등으로 유실된 경우 현재 요청의 채널 정보로 재연결
+    if (channel_context) {
+      if (!state.channel && channel_context.channel) {
+        state.channel = channel_context.channel;
+        state.memory.channel = channel_context.channel;
+      }
+      if (!state.chatId && channel_context.chat_id) {
+        state.chatId = channel_context.chat_id;
+        state.memory.chat_id = channel_context.chat_id;
+      }
+    }
+
+    // 무한 재시도 방지: MAX_RESUME_COUNT 초과 시 강제 종료
+    const resume_count = Number(state.memory.__resume_count || 0) + 1;
+    if (resume_count > MAX_RESUME_COUNT) {
+      this.logger?.warn("task_resume_max_exceeded", { task_id, resume_count, reason });
+      state.status = "cancelled";
+      state.exitReason = "max_resume_exceeded";
+      this.tasks.set(task_id, state);
+      await this.persist_task(state);
+      return state;
+    }
+    state.memory.__resume_count = resume_count;
+
     if (state.currentTurn >= state.maxTurns) {
       const extend_by = Math.max(1, Math.ceil(Math.max(1, state.maxTurns) * 0.25));
       state.maxTurns = Math.min(state.currentTurn + extend_by, MAX_TASK_TURNS);
@@ -168,7 +217,7 @@ export class AgentLoopStore {
     }
     state.status = "running";
     state.exitReason = reason;
-    this.logger?.info("task_resume", { task_id, reason, has_input: user_input !== undefined });
+    this.logger?.info("task_resume", { task_id, reason, resume_count, has_input: user_input !== undefined });
     this.tasks.set(task_id, state);
     await this.persist_task(state);
     return state;
@@ -310,11 +359,19 @@ export class AgentLoopStore {
       exitReason: undefined,
       memory: { ...(options.initial_memory || {}) },
     };
+    // 기존 TaskState의 channel/chatId가 빈 경우 options 값으로 복원 (핫 리로드 후 DB 복원 시 유실 대응)
+    if (!state.channel && options.channel) state.channel = options.channel;
+    if (!state.chatId && options.chat_id) state.chatId = options.chat_id;
     if (!existing) {
       state.memory.__step_index = Number(options.start_step_index || 0);
       this.tasks.set(state.taskId, state);
       await this.persist_task(state);
+    } else if (Number(state.memory.__step_index || 0) >= options.nodes.length) {
+      // 재개 시 노드 배열이 축소된 경우 (continue_task_loop: 1노드 vs 원래 3노드)
+      // __step_index가 범위를 벗어나면 0으로 리셋하여 즉시 completed 방지
+      state.memory.__step_index = 0;
     }
+    this.logger?.info("task_loop_start", { task_id: state.taskId, title: state.title, max_turns: state.maxTurns, node_count: options.nodes.length, channel: state.channel });
 
     while (state.currentTurn < state.maxTurns && state.status === "running") {
       if (options.abort_signal?.aborted) {
@@ -336,6 +393,7 @@ export class AgentLoopStore {
       const node = options.nodes[current_index];
       state.currentTurn += 1;
       state.currentStep = node.id;
+      this.logger?.debug("task_node_start", { task_id: state.taskId, turn: state.currentTurn, node_id: node.id });
 
       try {
         const result = await node.run({ task_state: state, memory: state.memory });
@@ -361,6 +419,7 @@ export class AgentLoopStore {
       } catch (error) {
         state.status = "failed";
         state.exitReason = error_message(error);
+        this.logger?.error("task_node_failed", { task_id: state.taskId, turn: state.currentTurn, node_id: state.currentStep, error: state.exitReason });
       }
 
       await this.save_task_snapshot(state);
@@ -374,6 +433,7 @@ export class AgentLoopStore {
     }
 
     await this.save_task_snapshot(state);
+    this.logger?.info("task_loop_end", { task_id: state.taskId, status: state.status, exit_reason: state.exitReason, turns: state.currentTurn });
     return { state: { ...state, memory: { ...state.memory } } };
   }
 

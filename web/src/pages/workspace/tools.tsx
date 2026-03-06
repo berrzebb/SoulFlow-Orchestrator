@@ -28,50 +28,46 @@ function extract_params(parameters: Record<string, unknown>): ParamInfo[] {
 }
 
 function ToolIcon({ name, is_mcp }: { name: string; is_mcp: boolean }) {
-  const color = is_mcp ? "var(--ok)" : "var(--accent)";
   return (
-    <span className="tool-card__icon" style={{ background: `${color}22`, color }}>
+    <span className={`tool-card__icon tool-card__icon--${is_mcp ? "mcp" : "native"}`}>
       {name.charAt(0).toUpperCase()}
     </span>
   );
 }
 
-function ToolCard({ name, description, params, is_mcp, is_open, onToggle }: {
-  name: string; description: string; params: ParamInfo[]; is_mcp: boolean; is_open: boolean; onToggle: (name: string) => void;
+function ToolCard({ name, description, parameters, is_mcp, is_open, onToggle }: {
+  name: string; description: string; parameters: Record<string, unknown>; is_mcp: boolean; is_open: boolean; onToggle: (name: string) => void;
 }) {
   const t = useT();
   const { locale } = useI18n();
   const i18n = is_mcp ? undefined : tool_i18n[locale]?.[name];
   const loc_desc = i18n?.desc ?? description;
   const loc_param = (p_name: string, fallback: string) => i18n?.params?.[p_name] ?? fallback;
+  const params = extract_params(parameters);
 
   return (
     <div className="tool-card">
       <div className="tool-card__header">
         <ToolIcon name={name} is_mcp={is_mcp} />
-        <div style={{ flex: 1, minWidth: 0 }}>
+        <div className="tool-card__body">
           <div className="tool-card__name">{name}</div>
-          {is_mcp && <div style={{ marginTop: 2 }}><Badge status="mcp" variant="ok" /></div>}
+          {is_mcp && <div className="mt-1"><Badge status="mcp" variant="ok" /></div>}
         </div>
       </div>
       {loc_desc && <div className="tool-card__desc">{loc_desc}</div>}
       {params.length > 0 && (
         <div className="tool-card__tags">
           {params.slice(0, 4).map((p) => (
-            <span key={p.name} style={{
-              padding: "1px 6px", borderRadius: "var(--radius-pill)", fontSize: 10,
-              background: p.required ? "rgba(217,164,65,0.12)" : "rgba(74,158,255,0.08)",
-              color: p.required ? "var(--warn)" : "var(--muted)",
-            }}>
+            <span key={p.name} className={`param-chip${p.required ? " param-chip--required" : ""}`}>
               {p.name}
             </span>
           ))}
-          {params.length > 4 && <span className="text-xs text-muted" style={{ alignSelf: "center" }}>+{params.length - 4}</span>}
+          {params.length > 4 && <span className="text-xs text-muted">+{params.length - 4}</span>}
         </div>
       )}
       {params.length > 0 && (
         <>
-          <button className="btn btn--xs" style={{ alignSelf: "flex-start" }} onClick={() => onToggle(name)}>
+          <button className="btn btn--xs tool-card__toggle" aria-expanded={is_open} onClick={() => onToggle(name)}>
             {is_open ? "▾" : "▸"} {t("tools.params")} ({params.length})
           </button>
           {is_open && (
@@ -81,11 +77,11 @@ function ToolCard({ name, description, params, is_mcp, is_open, onToggle }: {
                 return (
                   <div key={p.name} className="tool-card__param">
                     <div className="tool-card__param-header">
-                      <code style={{ color: "var(--accent)" }} className="fw-600">{p.name}</code>
+                      <code className="fw-600 text-accent">{p.name}</code>
                       <Badge status={p.type} variant="info" />
                       {p.required && <Badge status={t("tools.required")} variant="warn" />}
                     </div>
-                    {p_desc && <span className="text-muted" style={{ lineHeight: 1.4, wordBreak: "break-word" }}>{p_desc}</span>}
+                    {p_desc && <span className="text-muted tool-card__param-desc">{p_desc}</span>}
                   </div>
                 );
               })}
@@ -113,7 +109,7 @@ function ToolGrid({ tools, is_mcp }: { tools: ToolSchema[]; is_mcp: boolean }) {
             key={fn.name}
             name={fn.name}
             description={fn.description}
-            params={extract_params(fn.parameters)}
+            parameters={fn.parameters}
             is_mcp={is_mcp}
             is_open={expanded.has(fn.name)}
             onToggle={toggle}
@@ -126,23 +122,42 @@ function ToolGrid({ tools, is_mcp }: { tools: ToolSchema[]; is_mcp: boolean }) {
 
 export function ToolsTab() {
   const t = useT();
-  const { data, isLoading } = useQuery<ToolsResponse>({ queryKey: ["tools"], queryFn: () => api.get("/api/tools") });
+  const [search, setSearch] = useState("");
+  const { data, isLoading } = useQuery<ToolsResponse>({ queryKey: ["tools"], queryFn: () => api.get("/api/tools"), staleTime: 30_000 });
 
-  if (isLoading || !data) return <p className="empty">{t("tools.loading")}</p>;
+  if (isLoading || !data) return (
+    <div className="ws-skeleton-col">
+      <div className="skeleton skeleton--card" />
+      <div className="skeleton skeleton--card" />
+    </div>
+  );
 
   const mcp_tool_names = new Set((data.mcp_servers ?? []).flatMap((s) => s.tools));
-  const builtin = (data.definitions ?? []).filter((d) => !mcp_tool_names.has(d.function.name));
-  const mcp_tools = (data.definitions ?? []).filter((d) => mcp_tool_names.has(d.function.name));
+  const q = search.toLowerCase();
+  const match = (d: ToolSchema) => !q || d.function.name.toLowerCase().includes(q) || d.function.description.toLowerCase().includes(q);
+  const builtin = (data.definitions ?? []).filter((d) => !mcp_tool_names.has(d.function.name) && match(d));
+  const mcp_tools = (data.definitions ?? []).filter((d) => mcp_tool_names.has(d.function.name) && match(d));
   const servers = data.mcp_servers ?? [];
+  const total_shown = builtin.length + mcp_tools.length;
 
   return (
-    <>
-      <h2>{t("tools.title", { count: data.names.length })}</h2>
+    <div className="fade-in">
+      <div className="section-header">
+        <h2>{t("tools.title", { count: data.names.length })}</h2>
+        <input
+          className="input input--sm tool-search"
+          type="search"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder={t("tools.search") || "Search tools..."}
+        />
+      </div>
+      {search && <div className="text-xs text-muted mb-2">{t("tools.search_result", { count: total_shown })}</div>}
 
       {servers.length > 0 && (
         <section className="panel">
           <h3>{t("tools.mcp_servers", { count: servers.length })}</h3>
-          <div className="ws-chip-row" style={{ gap: 8 }}>
+          <div className="ws-chip-row">
             {servers.map((s) => (
               <div key={s.name} className="mcp-server">
                 <span className={`status-dot status-dot--${s.connected ? "ok" : "err"}`} />
@@ -164,6 +179,6 @@ export function ToolsTab() {
 
       <h3 className="text-muted">{t("tools.builtin", { count: builtin.length })}</h3>
       <ToolGrid tools={builtin} is_mcp={false} />
-    </>
+    </div>
   );
 }

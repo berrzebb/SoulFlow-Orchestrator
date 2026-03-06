@@ -5,6 +5,7 @@ import { Badge } from "../../components/badge";
 import { Modal } from "../../components/modal";
 import { useToast } from "../../components/toast";
 import { useT } from "../../i18n";
+import { time_ago } from "../../utils/format";
 import { SplitPane } from "./split-pane";
 
 interface DailyListResponse { days: string[] }
@@ -39,6 +40,7 @@ export function MemoryTab() {
     queryKey: ["state"],
     queryFn: () => api.get("/api/state"),
     refetchInterval: 10_000,
+    staleTime: 5_000,
   });
 
   const is_text_view = view === "longterm" || typeof view === "object";
@@ -48,7 +50,7 @@ export function MemoryTab() {
     queryFn: () =>
       view === "longterm"
         ? api.get("/api/memory/longterm")
-        : api.post("/api/memory/daily", { day: (view as { day: string }).day }),
+        : api.get(`/api/memory/daily/${encodeURIComponent((view as { day: string }).day)}`),
     enabled: is_text_view,
   });
 
@@ -56,7 +58,7 @@ export function MemoryTab() {
     mutationFn: (text: string) =>
       view === "longterm"
         ? api.put("/api/memory/longterm", { content: text })
-        : api.put("/api/memory/daily", { day: (view as { day: string }).day, content: text }),
+        : api.put(`/api/memory/daily/${encodeURIComponent((view as { day: string }).day)}`, { content: text }),
     onSuccess: () => {
       toast(t("workspace.memory.saved"), "ok");
       setEditing(false);
@@ -77,22 +79,26 @@ export function MemoryTab() {
 
   const add_promise = async () => {
     if (!newKey.trim() || !newValue.trim()) return;
-    await api.post("/api/promises", { key: newKey.trim(), value: newValue.trim(), priority: newPriority });
-    reset_form();
-    setShowAddPromise(false);
-    toast(t("promises.added"), "ok");
-    void qc.invalidateQueries({ queryKey: ["state"] });
+    try {
+      await api.post("/api/promises", { key: newKey.trim(), value: newValue.trim(), priority: newPriority });
+      reset_form();
+      setShowAddPromise(false);
+      toast(t("promises.added"), "ok");
+      void qc.invalidateQueries({ queryKey: ["state"] });
+    } catch { toast(t("promises.add_failed"), "err"); }
   };
 
   const delete_promise = async (id: string) => {
-    await api.del("/api/promises", { id });
-    setDeleteTarget(null);
-    toast(t("promises.deleted"), "ok");
-    void qc.invalidateQueries({ queryKey: ["state"] });
+    try {
+      await api.del(`/api/promises/${encodeURIComponent(id)}`);
+      setDeleteTarget(null);
+      toast(t("promises.deleted"), "ok");
+      void qc.invalidateQueries({ queryKey: ["state"] });
+    } catch { toast(t("promises.delete_failed"), "err"); }
   };
 
   const nav_item = (active: boolean, onClick: () => void, children: React.ReactNode) => (
-    <div onClick={onClick} className={`ws-item${active ? " ws-item--active" : ""}`}>{children}</div>
+    <div role="button" tabIndex={0} onClick={onClick} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); } }} className={`ws-item${active ? " ws-item--active" : ""}`}>{children}</div>
   );
 
   const section_label = (label: string) => (
@@ -103,7 +109,7 @@ export function MemoryTab() {
 
   const right_header = (title: string, action?: React.ReactNode) => (
     <div className="ws-detail-header">
-      <span className="fw-600" style={{ fontSize: "var(--fs-sm)" }}>{title}</span>
+      <span className="fw-600 text-sm">{title}</span>
       {action}
     </div>
   );
@@ -115,21 +121,24 @@ export function MemoryTab() {
           {right_header(t("workspace.memory.decisions"))}
           <div className="ws-preview">
             {!decisions.length ? (
-              <p className="empty">{t("decisions.no_decisions")}</p>
+              <div className="empty-state"><div className="empty-state__icon">📋</div><div className="empty-state__text">{t("decisions.no_decisions")}</div></div>
             ) : (
               <div className="table-scroll">
               <table className="data-table">
                 <thead><tr><th>{t("decisions.priority")}</th><th>{t("decisions.key")}</th><th>{t("decisions.value")}</th></tr></thead>
                 <tbody>
-                  {decisions.map((d) => (
-                    <tr key={d.id}>
-                      <td><Badge status={`p${d.priority}`} variant="info" /></td>
-                      <td><b>{d.canonical_key}</b></td>
-                      <td style={{ maxWidth: "50%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {typeof d.value === "object" ? JSON.stringify(d.value) : String(d.value)}
-                      </td>
-                    </tr>
-                  ))}
+                  {decisions.map((d) => {
+                    const val_str = typeof d.value === "object" ? JSON.stringify(d.value, null, 2) : String(d.value);
+                    return (
+                      <tr key={d.id}>
+                        <td><Badge status={`p${d.priority}`} variant="info" /></td>
+                        <td><b>{d.canonical_key}</b></td>
+                        <td className="expandable-cell" title={val_str}>
+                          {val_str}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
               </div>
@@ -147,18 +156,18 @@ export function MemoryTab() {
           )}
           <div className="ws-preview">
             {!promises.length ? (
-              <p className="empty">{t("promises.no_promises")}</p>
+              <div className="empty-state"><div className="empty-state__icon">🤝</div><div className="empty-state__text">{t("promises.no_promises")}</div></div>
             ) : (
               <div className="table-scroll">
               <table className="data-table">
-                <thead><tr><th>{t("decisions.priority")}</th><th>{t("decisions.key")}</th><th>{t("decisions.value")}</th><th style={{ width: 60 }}></th></tr></thead>
+                <thead><tr><th>{t("decisions.priority")}</th><th>{t("decisions.key")}</th><th>{t("decisions.value")}</th><th className="th--actions"></th></tr></thead>
                 <tbody>
                   {promises.map((p) => (
                     <tr key={p.id}>
                       <td><Badge status={`p${p.priority}`} variant="warn" /></td>
                       <td><b>{p.canonical_key}</b></td>
-                      <td style={{ maxWidth: "50%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.value}</td>
-                      <td><button className="btn btn--xs btn--danger" onClick={() => setDeleteTarget(p.id)}>✕</button></td>
+                      <td className="expandable-cell" title={p.value}>{p.value}</td>
+                      <td><button className="btn btn--xs btn--danger" onClick={() => setDeleteTarget(p.id)} aria-label={t("common.delete")}>✕</button></td>
                     </tr>
                   ))}
                 </tbody>
@@ -176,7 +185,7 @@ export function MemoryTab() {
           {right_header(t("workspace.memory.events"))}
           <div className="ws-preview">
             {!events.length ? (
-              <p className="empty">{t("decisions.no_events")}</p>
+              <div className="empty-state"><div className="empty-state__icon">📊</div><div className="empty-state__text">{t("decisions.no_events")}</div></div>
             ) : (
               <div className="table-scroll">
               <table className="data-table">
@@ -187,8 +196,8 @@ export function MemoryTab() {
                       <td><Badge status={e.phase} /></td>
                       <td className="text-xs">{e.task_id || "-"}</td>
                       <td className="text-xs">{e.agent_id || "-"}</td>
-                      <td style={{ maxWidth: "40%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.summary || "-"}</td>
-                      <td className="text-xs text-muted">{e.at || "-"}</td>
+                      <td className="truncate td--wide">{e.summary || "-"}</td>
+                      <td className="text-xs text-muted" title={e.at}>{e.at ? time_ago(e.at) : "-"}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -203,7 +212,7 @@ export function MemoryTab() {
     // 텍스트 뷰 (longterm / daily)
     const label = view === "longterm" ? t("workspace.memory.longterm") : view_day;
     return (
-      <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+      <div className="ws-col">
         {right_header(label ?? "",
           !editing ? (
             <button className="btn btn--xs" onClick={() => { setEditText(content_data?.content ?? ""); setEditing(true); }}>
@@ -218,9 +227,13 @@ export function MemoryTab() {
             </div>
           )
         )}
-        <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+        <div className="ws-col flex-fill">
           {content_loading ? (
-            <p className="empty">{t("common.loading")}</p>
+            <div className="ws-skeleton-col">
+              <div className="skeleton skeleton--text" />
+              <div className="skeleton skeleton--text" />
+              <div className="skeleton skeleton--text-sm" />
+            </div>
           ) : editing ? (
             <textarea className="ws-editor ws-editor--editing" value={editText} onChange={(e) => setEditText(e.target.value)} />
           ) : (
@@ -246,12 +259,16 @@ export function MemoryTab() {
             {nav_item(typeof view === "object" && (view as { day: string }).day === today, () => { setView({ day: today }); setEditing(false); },
               <>{today} <Badge status={t("workspace.memory.today")} variant="ok" /></>
             )}
-            {days.filter((d) => d !== today).map((day) => (
-              <div key={day} onClick={() => { setView({ day }); setEditing(false); }}
-                className={`ws-item${typeof view === "object" && (view as { day: string }).day === day ? " ws-item--active" : ""}`}>
-                {day}
-              </div>
-            ))}
+            {days.filter((d) => d !== today).map((day) => {
+              const active = typeof view === "object" && (view as { day: string }).day === day;
+              const click = () => { setView({ day }); setEditing(false); };
+              return (
+                <div key={day} role="button" tabIndex={0} onClick={click} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); click(); } }}
+                  className={`ws-item${active ? " ws-item--active" : ""}`}>
+                  {day}
+                </div>
+              );
+            })}
             {days.length === 0 && (
               <div className="ws-item text-muted">{t("workspace.memory.no_daily")}</div>
             )}

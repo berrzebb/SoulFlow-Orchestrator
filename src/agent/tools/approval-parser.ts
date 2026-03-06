@@ -1,6 +1,6 @@
 import { normalize_text } from "../../utils/common.js";
 
-export type ApprovalDecision = "approve" | "deny" | "defer" | "cancel" | "clarify" | "unknown";
+export type ApprovalDecision = "approve" | "approve_all" | "deny" | "defer" | "cancel" | "clarify" | "unknown";
 
 export type ApprovalParseResult = {
   decision: ApprovalDecision;
@@ -49,9 +49,19 @@ function score(patterns: RegExp[], text: string): number {
   return s;
 }
 
+const APPROVE_ALL_PATTERNS: RegExp[] = [
+  /\b(approve\s*all|allow\s*all|yes\s*all)\b/i,
+  ko("모두 승인|전부 승인|일괄 승인|모두 허용|전부 허용"),
+];
+
 export function parse_approval_response(input: string): ApprovalParseResult {
   const text = normalize_text(input);
   if (!text) return { decision: "unknown", confidence: 0, normalized: "" };
+
+  // "모두 승인"은 일반 승인보다 우선 감지 (approve_all 패턴이 approve 패턴의 상위 집합)
+  if (score(APPROVE_ALL_PATTERNS, text) > 0) {
+    return { decision: "approve_all", confidence: 0.9, normalized: text.toLowerCase() };
+  }
 
   const scores: Array<{ decision: ApprovalDecision; score: number }> = [
     { decision: "approve", score: score(APPROVE_PATTERNS, text) },

@@ -1,6 +1,6 @@
 # Design: Node Registry — OCP-Based Node Architecture
 
-> **Status**: Implementation complete · 27 node types registered + container sandbox code execution
+> **Status**: Implementation complete · 47 node types registered + container sandbox code execution + interaction nodes
 
 ## Overview
 
@@ -134,6 +134,9 @@ src/agent/
     analyzer.ts, retriever.ts, ai-agent.ts, text-splitter.ts,
     task.ts, spawn-agent.ts, decision.ts, promise.ts,
     embedding.ts, vector-store.ts,
+    notify.ts, aggregate.ts, send-file.ts, error-handler.ts, webhook.ts,
+    hitl.ts, approval.ts, form.ts, tool-invoke.ts, gate.ts,
+    escalation.ts, cache.ts, retry.ts, batch.ts, assert.ts,
     container-code-runner.ts   # Container sandbox runner (python, ruby, go, ...)
 
 web/src/pages/workflows/
@@ -145,7 +148,10 @@ web/src/pages/workflows/
     filter.tsx, loop.tsx, transform.tsx, db.tsx, file.tsx,
     analyzer.tsx, retriever.tsx, ai-agent.tsx, text-splitter.tsx,
     task.tsx, spawn-agent.tsx, decision.tsx, promise.tsx,
-    embedding.tsx, vector-store.tsx
+    embedding.tsx, vector-store.tsx,
+    notify.tsx, aggregate.tsx, send-file.tsx, error-handler.tsx, webhook.tsx,
+    hitl.tsx, approval.tsx, form.tsx, tool-invoke.tsx, gate.tsx,
+    escalation.tsx, cache.tsx, retry.tsx, batch.tsx, assert.tsx
 ```
 
 ## Type Safety

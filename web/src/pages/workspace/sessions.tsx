@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import { Badge } from "../../components/badge";
 import { useT } from "../../i18n";
+import { time_ago } from "../../utils/format";
 import { SplitPane } from "./split-pane";
 
 interface SessionEntry {
@@ -27,75 +28,87 @@ export function SessionsTab() {
   const t = useT();
   const [selected, setSelected] = useState<string | null>(null);
   const [provider_filter, setProviderFilter] = useState<string>("");
+  const [search, setSearch] = useState("");
 
   const { data: sessions = [] } = useQuery<SessionEntry[]>({
     queryKey: ["ws-sessions", provider_filter],
     queryFn: () => api.get(`/api/sessions${provider_filter ? `?provider=${encodeURIComponent(provider_filter)}` : ""}`),
     refetchInterval: 15_000,
+    staleTime: 5_000,
   });
 
   const { data: detail } = useQuery<SessionDetail>({
     queryKey: ["ws-session-detail", selected],
-    queryFn: () => api.post("/api/sessions", { key: selected! }),
+    queryFn: () => api.get(`/api/sessions/${encodeURIComponent(selected!)}`),
     enabled: !!selected,
+    staleTime: 5_000,
   });
 
-  // 전체 세션에서 프로바이더 목록 추출 (필터 칩 표시용)
-  const { data: all_sessions = [] } = useQuery<SessionEntry[]>({
-    queryKey: ["ws-sessions-providers"],
-    queryFn: () => api.get("/api/sessions"),
-    staleTime: 30_000,
+  // 필터 없는 세션 데이터에서 프로바이더 목록 캐시 (별도 API 호출 제거)
+  const providersRef = useRef<string[]>([]);
+  if (!provider_filter && sessions.length > 0) {
+    providersRef.current = Array.from(new Set(sessions.map((s) => s.provider))).sort();
+  }
+  const providers = providersRef.current;
+
+  const filtered_sessions = sessions.filter((s) => {
+    if (!search) return true;
+    const q = search.toLowerCase();
+    return s.chat_id.toLowerCase().includes(q) || s.alias.toLowerCase().includes(q) || s.provider.toLowerCase().includes(q);
   });
-  const providers = Array.from(new Set(all_sessions.map((s) => s.provider))).sort();
 
   const selected_session = sessions.find((s) => s.key === selected);
 
   return (
     <SplitPane
+      showRight={!!selected}
       left={
         <div className="ws-col">
-          <div className="ws-chip-bar" style={{ flexDirection: "row", flexWrap: "wrap" }}>
-            <span
+          <div className="ws-search-bar">
+            <input
+              className="input input--sm ws-search-bar__input"
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder={t("workspace.sessions.search") || "Search sessions..."}
+            />
+          </div>
+          <div className="ws-chip-bar">
+            <button
+              type="button"
+              className={`filter-chip${!provider_filter ? " filter-chip--active" : ""}`}
               onClick={() => { setProviderFilter(""); setSelected(null); }}
-              style={{
-                cursor: "pointer", padding: "2px 8px", borderRadius: "var(--radius-pill)", fontSize: 10,
-                background: !provider_filter ? "rgba(74,158,255,0.15)" : "rgba(255,255,255,0.04)",
-                color: !provider_filter ? "var(--accent)" : "var(--muted)",
-                border: `1px solid ${!provider_filter ? "rgba(74,158,255,0.3)" : "transparent"}`,
-                userSelect: "none",
-              }}
             >
               {t("workspace.sessions.all_channels")}
-            </span>
+            </button>
             {providers.map((p) => (
-              <span
+              <button
                 key={p}
+                type="button"
+                className={`filter-chip${provider_filter === p ? " filter-chip--active" : ""}`}
                 onClick={() => { setProviderFilter(p); setSelected(null); }}
-                style={{
-                  cursor: "pointer", padding: "2px 8px", borderRadius: "var(--radius-pill)", fontSize: 10,
-                  background: provider_filter === p ? "rgba(74,158,255,0.15)" : "rgba(255,255,255,0.04)",
-                  color: provider_filter === p ? "var(--accent)" : "var(--muted)",
-                  border: `1px solid ${provider_filter === p ? "rgba(74,158,255,0.3)" : "transparent"}`,
-                  userSelect: "none",
-                }}
               >
                 {p}
-              </span>
+              </button>
             ))}
           </div>
           <div className="ws-scroll">
-            {sessions.length === 0 ? (
-              <p className="empty" style={{ padding: 14 }}>{t("workspace.sessions.no_sessions")}</p>
-            ) : sessions.map((s) => (
-              <div key={s.key} onClick={() => setSelected(s.key)} className={`ws-item${selected === s.key ? " ws-item--active" : ""}`} style={{ padding: "10px 14px" }}>
-                <div className="li-flex" style={{ marginBottom: 2 }}>
+            {filtered_sessions.length === 0 ? (
+              <div className="empty-state">
+                <div className="empty-state__icon">{search ? "🔍" : "💬"}</div>
+                <div className="empty-state__text">{search ? (t("workspace.sessions.no_match") || "No matching sessions") : t("workspace.sessions.no_sessions")}</div>
+              </div>
+            ) : filtered_sessions.map((s) => (
+              <div key={s.key} role="button" tabIndex={0} onClick={() => setSelected(s.key)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSelected(s.key); } }} className={`ws-item${selected === s.key ? " ws-item--active" : ""}`}>
+                <div className="li-flex mb-0">
                   <Badge status={s.provider} variant="info" />
-                  <span className="fw-600 truncate" style={{ flex: 1 }}>{s.chat_id}</span>
+                  <span className="fw-600 truncate flex-fill">{s.chat_id}</span>
+                  <span className="text-xs text-muted">{s.message_count}</span>
                 </div>
                 <div className="text-xs text-muted">
-                  {s.alias && s.alias !== s.provider && <span style={{ marginRight: 6 }}>{s.alias}</span>}
-                  {s.thread && s.thread !== "main" && <span style={{ marginRight: 6 }}>#{s.thread}</span>}
-                  {t("workspace.sessions.msgs_fmt", { count: s.message_count })} · {s.updated_at.slice(0, 10)}
+                  {s.alias && s.alias !== s.provider && <span className="mr-1">{s.alias}</span>}
+                  {s.thread && s.thread !== "main" && <span className="mr-1">#{s.thread}</span>}
+                  <span title={s.updated_at}>{time_ago(s.updated_at)}</span>
                 </div>
               </div>
             ))}
@@ -105,32 +118,37 @@ export function SessionsTab() {
       right={
         <div className="ws-col">
           <div className="ws-detail-header">
+            <button className="ws-back-btn" onClick={() => setSelected(null)}>{t("common.back")}</button>
             {selected_session ? (
               <>
                 <Badge status={selected_session.provider} variant="info" />
-                <span className="fw-600" style={{ fontSize: "var(--fs-sm)" }}>{selected_session.chat_id}</span>
+                <span className="fw-600 text-sm">{selected_session.chat_id}</span>
                 {selected_session.thread !== "main" && (
                   <span className="text-xs text-muted">#{selected_session.thread}</span>
                 )}
               </>
             ) : (
-              <span className="fw-600" style={{ fontSize: "var(--fs-sm)" }}>{t("workspace.select_item")}</span>
+              <span className="fw-600 text-sm">{t("workspace.select_item")}</span>
             )}
           </div>
-          <div className="ws-preview" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <div className="ws-preview ws-msg-list">
             {!selected ? (
-              <p className="empty">{t("workspace.select_item")}</p>
+              <div className="empty-state">
+                <div className="empty-state__icon">💬</div>
+                <div className="empty-state__text">{t("workspace.select_item")}</div>
+              </div>
             ) : !detail ? (
-              <p className="empty">{t("common.loading")}</p>
+              <div className="ws-skeleton-col">
+                <div className="skeleton skeleton--row" />
+                <div className="skeleton skeleton--row" />
+                <div className="skeleton skeleton--row" />
+              </div>
             ) : detail.messages.map((m, i) => (
-              <div key={i} className={`ws-msg ws-msg--${m.direction}`} style={{
-                alignSelf: m.direction === "user" ? "flex-end" : "flex-start",
-                maxWidth: "80%", borderRadius: 8,
-              }}>
+              <div key={i} className={`ws-msg ws-msg--${m.direction}`}>
                 <div className="ws-msg__header">
-                  {m.direction === "user" ? t("chat.you") : t("chat.assistant")} · {m.at.slice(0, 16)}
+                  {m.direction === "user" ? t("chat.you") : t("chat.assistant")} · <span title={m.at}>{time_ago(m.at)}</span>
                 </div>
-                <pre style={{ margin: 0, whiteSpace: "pre-wrap", fontFamily: "inherit" }}>{m.content}</pre>
+                <pre className="ws-msg__content">{m.content}</pre>
               </div>
             ))}
           </div>

@@ -115,6 +115,14 @@ export interface CliAdapter {
   readonly supports_system_prompt_flag: boolean;
   /** CLI가 --allowedTools/--disallowedTools를 지원하는지 여부. */
   readonly supports_tool_filtering: boolean;
+  /** CLI가 구조화된 출력(JSON Schema)을 지원하는지 여부. Claude: --json-schema, Codex: --output-schema. */
+  readonly supports_structured_output: boolean;
+  /** CLI가 비용 상한 추적을 지원하는지 여부. Claude: --max-budget-usd. */
+  readonly supports_budget_tracking: boolean;
+  /** CLI가 도구 실행 전 승인 흐름을 지원하는지 여부. Claude: --permission-prompt-tool. */
+  readonly supports_approval: boolean;
+  /** CLI가 확장 사고(extended thinking)를 지원하는지 여부. */
+  readonly supports_thinking: boolean;
   /** CLI에서 캡처한 세션 ID (init 이벤트). resume에 사용. */
   readonly session_id: string | null;
   build_args(options: BuildArgsOptions): string[];

@@ -6,10 +6,12 @@ function LoopEditPanel({ node, update, t }: EditPanelProps) {
       <div className="builder-row">
         <label className="label">{t("workflows.loop_array") || "Array Field"}</label>
         <input className="input input--sm" value={String(node.array_field || "")} onChange={(e) => update({ array_field: e.target.value })} placeholder="items" />
+        <span className="builder-hint">{t("workflows.loop_array_hint") || "Field name from input containing the array to iterate"}</span>
       </div>
       <div className="builder-row">
         <label className="label">{t("workflows.loop_body") || "Body Nodes"}</label>
         <input className="input input--sm" value={Array.isArray(node.body_nodes) ? (node.body_nodes as string[]).join(", ") : ""} onChange={(e) => update({ body_nodes: e.target.value.split(",").map((s: string) => s.trim()).filter(Boolean) })} placeholder="code-1, http-1" />
+        <span className="builder-hint">{t("workflows.loop_body_hint") || "Comma-separated node IDs to execute per iteration"}</span>
       </div>
       <div className="builder-row">
         <label className="label">{t("workflows.loop_max") || "Max Iterations"}</label>
@@ -25,6 +27,7 @@ export const loop_descriptor: FrontendNodeDescriptor = {
   color: "#8e44ad",
   shape: "rect",
   toolbar_label: "+ Loop",
+  category: "flow",
   output_schema: [
     { name: "item",    type: "unknown", description: "Current iteration item" },
     { name: "index",   type: "number",  description: "Current iteration index" },

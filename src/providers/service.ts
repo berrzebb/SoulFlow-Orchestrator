@@ -206,7 +206,12 @@ export class ProviderRegistry {
   private resolve_default_orchestrator_provider(override?: string): ProviderId {
     const preferred = parse_provider_id(override || "");
     if (preferred && this.providers.has(preferred)) return preferred;
-    return "orchestrator_llm";
+    // 설정 안 됨 → CLI 프로바이더 우선, API 프로바이더 후순위
+    const priority: ProviderId[] = ["chatgpt", "claude_code", "gemini", "openrouter", "orchestrator_llm"];
+    for (const id of priority) {
+      if (this.providers.has(id)) return id;
+    }
+    return this.providers.keys().next().value as ProviderId;
   }
 
   /** 지정 ID의 LlmProvider 인스턴스 반환. AgentBackendRegistry에서 래핑 시 사용. */

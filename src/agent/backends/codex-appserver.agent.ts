@@ -2,7 +2,6 @@ import { execFileSync } from "node:child_process";
 import type {
   AgentBackend,
   AgentBackendId,
-  AgentEvent,
   AgentEventSource,
   AgentFinishReason,
   AgentRunOptions,
@@ -11,7 +10,7 @@ import type {
   ApprovalBridgeRequest,
   BackendCapabilities,
 } from "../agent.types.js";
-import { now_iso, error_message, short_id } from "../../utils/common.js";
+import { now_iso, error_message, short_id, swallow } from "../../utils/common.js";
 import { sandbox_to_codex_policy, effort_to_codex } from "./convert.js";
 import { fire } from "./tool-loop-helpers.js";
 import { sandbox_from_preset, type LlmUsage } from "../../providers/types.js";
@@ -221,11 +220,11 @@ export class CodexAppServerAgent implements AgentBackend {
       options.register_send_input((text) => {
         // turn/steer: 진행 중인 턴에 능동적으로 입력 추가
         if (turn_id) {
-          rpc.request("turn/steer", {
+          swallow(rpc.request("turn/steer", {
             threadId: thread_id,
             expectedTurnId: turn_id,
             input: [{ type: "text", text }],
-          }).catch(() => {});
+          }));
         }
         // requestUserInput 버퍼링도 유지 (서버 요청 시 사용)
         if (pending_input_resolve) {
@@ -263,7 +262,7 @@ export class CodexAppServerAgent implements AgentBackend {
           if (delta) {
             fire(emit, { type: "content_delta", source, at: now_iso(), text: delta });
             if (on_stream) {
-              void Promise.resolve(on_stream(delta)).catch(() => {});
+              swallow(on_stream(delta));
             }
           }
           return;
@@ -280,7 +279,7 @@ export class CodexAppServerAgent implements AgentBackend {
               trigger: "auto", pre_tokens: 0,
             });
             if (on_stream) {
-              void Promise.resolve(on_stream("\n📦 컨텍스트 압축 중...")).catch(() => {});
+              swallow(on_stream("\n📦 컨텍스트 압축 중..."));
             }
             return;
           }
@@ -305,7 +304,7 @@ export class CodexAppServerAgent implements AgentBackend {
         if (method === "item/commandExecution/outputDelta" && params.threadId === thread_id) {
           const delta = String(params.delta || "");
           if (delta && on_stream) {
-            void Promise.resolve(on_stream(`\n${delta}`)).catch(() => {});
+            swallow(on_stream(`\n${delta}`));
           }
           return;
         }
@@ -315,7 +314,7 @@ export class CodexAppServerAgent implements AgentBackend {
           if (params.delta && on_stream) {
             const d = params.delta as Record<string, unknown>;
             const label = d.path ? `📄 ${d.path}` : JSON.stringify(d);
-            void Promise.resolve(on_stream(`\n${label}`)).catch(() => {});
+            swallow(on_stream(`\n${label}`));
           }
           return;
         }
@@ -346,11 +345,11 @@ export class CodexAppServerAgent implements AgentBackend {
             const post_tool = options.hooks?.post_tool_use;
             if (post_tool && !is_dynamic) {
               const ctx = { task_id: options.task_id, signal: options.abort_signal, ...options.tool_context };
-              void Promise.resolve(post_tool(
+              swallow(post_tool(
                 tool_name,
                 (item.arguments as Record<string, unknown>) ?? {},
                 tool_result, ctx, is_error,
-              )).catch(() => {});
+              ));
             }
           }
           return;
@@ -432,7 +431,7 @@ export class CodexAppServerAgent implements AgentBackend {
         if (method === "item/reasoning/summaryTextDelta" && params.threadId === thread_id) {
           const delta = String(params.delta || "");
           if (delta && on_stream) {
-            void Promise.resolve(on_stream(`\n💭 ${delta}`)).catch(() => {});
+            swallow(on_stream(`\n💭 ${delta}`));
           }
           return;
         }
@@ -458,7 +457,7 @@ export class CodexAppServerAgent implements AgentBackend {
               const icon = s.status === "completed" ? "✅" : s.status === "inProgress" ? "⏳" : "○";
               return `${icon} ${s.step || ""}`;
             }).join("\n");
-            void Promise.resolve(on_stream(`\n📋 Plan:\n${summary}`)).catch(() => {});
+            swallow(on_stream(`\n📋 Plan:\n${summary}`));
           }
           return;
         }
@@ -467,7 +466,7 @@ export class CodexAppServerAgent implements AgentBackend {
         if (method === "item/plan/delta" && params.threadId === thread_id) {
           const delta = String(params.delta || "");
           if (delta && on_stream) {
-            void Promise.resolve(on_stream(delta)).catch(() => {});
+            swallow(on_stream(delta));
           }
           return;
         }
@@ -517,7 +516,7 @@ export class CodexAppServerAgent implements AgentBackend {
       };
 
       const on_abort = () => {
-        rpc.request("turn/interrupt", { threadId: thread_id, turnId: turn_id }).catch(() => {});
+        swallow(rpc.request("turn/interrupt", { threadId: thread_id, turnId: turn_id }));
         fire(emit, { type: "complete", source, at: now_iso(), finish_reason: "cancelled", content });
         cleanup();
         resolve({ content, tools: tool_count, finish_reason: "cancelled", usage: {} });
@@ -555,11 +554,11 @@ export class CodexAppServerAgent implements AgentBackend {
             try {
               const result = await executor.execute(args, tool_ctx);
               rpc.respond(req.id, { success: true, contentItems: [{ type: "inputText", text: result }] });
-              if (post_tool) void Promise.resolve(post_tool(tool_name, args, result, tool_ctx, false)).catch(() => {});
+              if (post_tool) swallow(post_tool(tool_name, args, result, tool_ctx, false));
             } catch (err) {
               const err_msg = error_message(err);
               rpc.respond(req.id, { success: false, contentItems: [{ type: "inputText", text: err_msg }] });
-              if (post_tool) void Promise.resolve(post_tool(tool_name, args, err_msg, tool_ctx, true)).catch(() => {});
+              if (post_tool) swallow(post_tool(tool_name, args, err_msg, tool_ctx, true));
             }
           };
           void run_tool();

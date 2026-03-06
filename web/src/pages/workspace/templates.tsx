@@ -12,7 +12,7 @@ export function TemplatesTab() {
   const t = useT();
   const qc = useQueryClient();
   const { toast } = useToast();
-  const { data: templates = [] } = useQuery<TemplateEntry[]>({ queryKey: ["templates"], queryFn: () => api.get("/api/templates") });
+  const { data: templates = [] } = useQuery<TemplateEntry[]>({ queryKey: ["templates"], queryFn: () => api.get("/api/templates"), staleTime: 30_000 });
 
   const [selected, setSelected] = useState<string | null>(null);
   const [content, setContent] = useState("");
@@ -23,16 +23,16 @@ export function TemplatesTab() {
     if (!selected) return;
     let cancelled = false;
     setLoading(true);
-    api.post<{ content: string | null }>("/api/templates", { name: selected })
+    api.get<{ content: string | null }>(`/api/templates/${encodeURIComponent(selected!)}`)
       .then((res) => { if (!cancelled) { setContent(res.content ?? ""); setDirty(false); } })
-      .catch(() => { if (!cancelled) setContent(""); })
+      .catch(() => { if (!cancelled) { setContent(""); toast(t("templates.load_failed"), "err"); } })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [selected]);
 
   const save = async () => {
     if (!selected) return;
-    await api.put("/api/templates", { name: selected, content });
+    await api.put(`/api/templates/${encodeURIComponent(selected!)}`, { content });
     toast(t("templates.saved_fmt", { name: selected }), "ok");
     setDirty(false);
     void qc.invalidateQueries({ queryKey: ["templates"] });
@@ -40,14 +40,17 @@ export function TemplatesTab() {
 
   return (
     <SplitPane
+      showRight={!!selected}
       left={
-        <div style={{ overflowY: "auto", flex: 1 }}>
+        <div className="ws-scroll">
           {templates.map((tmpl) => (
             <div
               key={tmpl.name}
+              role="button"
+              tabIndex={0}
               onClick={() => setSelected(tmpl.name)}
-              className={`ws-item${selected === tmpl.name ? " ws-item--active" : ""}`}
-              style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}
+              onKeyDown={(e) => e.key === "Enter" && setSelected(tmpl.name)}
+              className={`ws-item ws-item--spread${selected === tmpl.name ? " ws-item--active" : ""}`}
             >
               <span>{tmpl.name}.md</span>
               <Badge status={tmpl.exists ? "✓" : "—"} variant={tmpl.exists ? "ok" : "off"} />
@@ -56,13 +59,14 @@ export function TemplatesTab() {
         </div>
       }
       right={
-        <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+        <div className="ws-col">
           <div className="ws-detail-header">
-            <span className="fw-600" style={{ fontSize: "var(--fs-sm)" }}>
+            <button className="ws-back-btn" onClick={() => { setSelected(null); setDirty(false); }}>{t("common.back")}</button>
+            <span className="fw-600 text-sm">
               {selected ? (
                 <>
                   <b>{selected}.md</b>
-                  {dirty && <span className="text-xs" style={{ color: "var(--warn)", marginLeft: "var(--sp-2)" }}>● {t("templates.unsaved")}</span>}
+                  {dirty && <span className="text-xs text-warn ml-1">● {t("templates.unsaved")}</span>}
                 </>
               ) : t("templates.select")}
             </span>
@@ -70,20 +74,20 @@ export function TemplatesTab() {
               <button className="btn btn--sm btn--ok" onClick={() => void save()} disabled={!dirty}>{t("common.save")}</button>
             )}
           </div>
-          <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+          <div className="ws-col flex-fill">
             {!selected ? (
-              <p className="empty">{t("templates.select")}</p>
+              <div className="empty-state"><div className="empty-state__icon">📝</div><div className="empty-state__text">{t("templates.select")}</div></div>
             ) : loading ? (
-              <p className="empty">{t("common.loading")}</p>
+              <div className="ws-skeleton-col">
+                <div className="skeleton skeleton--text" />
+                <div className="skeleton skeleton--text" />
+                <div className="skeleton skeleton--text-sm" />
+              </div>
             ) : (
               <textarea
+                className="ws-editor ws-editor--editing"
                 value={content}
                 onChange={(e) => { setContent(e.target.value); setDirty(true); }}
-                style={{
-                  flex: 1, resize: "none", border: "none", background: "var(--bg)",
-                  color: "var(--text)", fontFamily: "var(--font-mono)", fontSize: "var(--fs-xs)",
-                  lineHeight: 1.6, padding: "var(--sp-3)", outline: "none",
-                }}
               />
             )}
           </div>

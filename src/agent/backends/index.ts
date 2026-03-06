@@ -1,4 +1,3 @@
-export { CliAgent } from "./cli-agent.js";
 export { ClaudeSdkAgent } from "./claude-sdk.agent.js";
 export { CodexAppServerAgent } from "./codex-appserver.agent.js";
 export { OpenAiCompatibleAgent } from "./openai-compatible.agent.js";

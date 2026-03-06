@@ -7,6 +7,7 @@ export type FileRequestCallback = (message: OutboundMessage) => Promise<void>;
 
 export class FileRequestTool extends Tool {
   readonly name = "request_file";
+  readonly category = "file_transfer" as const;
   readonly description = "Request file upload from user in current channel/chat.";
   readonly parameters: JsonSchema = {
     type: "object",

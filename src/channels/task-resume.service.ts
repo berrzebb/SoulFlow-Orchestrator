@@ -16,6 +16,8 @@ export type TaskResumeResult = {
   previous_status: TaskState["status"];
   /** 완료 작업의 컨텍스트 요약 — 새 오케스트레이션 시 메시지에 포함. */
   referenced_context?: string;
+  /** TTL 만료로 취소된 태스크 목록 — 호출자가 채널 알림 발송에 사용. */
+  expired_tasks?: TaskState[];
 };
 
 export type TaskResumeServiceDeps = {
@@ -53,11 +55,7 @@ export class TaskResumeService {
     if (!text) return null;
     if (SKIP_PATTERNS.some((p) => p.test(text))) return null;
 
-    // 만료된 대기 작업 자동 정리 (10분 TTL)
-    const expired = this.runtime.expire_stale_tasks();
-    if (expired.length > 0) {
-      this.logger.info("expired_stale_tasks", { count: expired.length, ids: expired.map((t) => t.taskId) });
-    }
+    this.expire_stale();
 
     // 레퍼런스 메시지가 있으면 연결된 Task를 우선 탐색 (thread_id → reply_to 순서)
     const ref_id = String(message.thread_id || message.reply_to || "").trim();
@@ -74,7 +72,7 @@ export class TaskResumeService {
             reason,
             ref_id,
           });
-          const resumed = await this.runtime.resume_task(referenced.taskId, text, reason);
+          const resumed = await this.runtime.resume_task(referenced.taskId, text, reason, { channel: provider, chat_id: message.chat_id });
           if (!resumed || resumed.status !== "running") return null;
           return { resumed: true, task_id: referenced.taskId, previous_status };
         }
@@ -115,7 +113,7 @@ export class TaskResumeService {
       chat_id: message.chat_id,
     });
 
-    const resumed = await this.runtime.resume_task(waiting.taskId, text, reason);
+    const resumed = await this.runtime.resume_task(waiting.taskId, text, reason, { channel: provider, chat_id: message.chat_id });
     if (!resumed || resumed.status !== "running") return null;
 
     return { resumed: true, task_id: waiting.taskId, previous_status };
@@ -133,7 +131,10 @@ export class TaskResumeService {
     }
 
     const input = `[승인됨] 도구 실행 결과:\n${tool_result}`;
-    const resumed = await this.runtime.resume_task(task_id, input, "approval_resolved");
+    const ch = task.channel || String(task.memory?.channel || "");
+    const cid = task.chatId || String(task.memory?.chat_id || "");
+    const ctx = ch && cid ? { channel: ch, chat_id: cid } : undefined;
+    const resumed = await this.runtime.resume_task(task_id, input, "approval_resolved", ctx);
     if (!resumed || resumed.status !== "running") {
       this.logger.warn("resume_after_approval: resume_task failed", { task_id, status: resumed?.status });
       return false;
@@ -147,6 +148,15 @@ export class TaskResumeService {
   async cancel_task(task_id: string, reason: string): Promise<void> {
     const result = await this.runtime.cancel_task(task_id, reason);
     if (result) this.logger.info("task cancelled", { task_id, reason, status: result.status });
+  }
+
+  /** 만료된 대기 작업을 정리하고 반환. 호출자가 채널 알림 발송에 사용. */
+  expire_stale(): TaskState[] {
+    const expired = this.runtime.expire_stale_tasks();
+    if (expired.length > 0) {
+      this.logger.info("expired_stale_tasks", { count: expired.length, ids: expired.map((t) => t.taskId) });
+    }
+    return expired;
   }
 
   private is_within_ttl(iso_date: string, ttl_ms: number): boolean {

@@ -175,6 +175,8 @@ Slack/Telegram 없이 웹에서 에이전트와 직접 대화합니다.
 
 Phase Loop 워크플로우를 관리하고 에이전트와 대화합니다. Phase Loop는 Agent Loop(1:1 단일 에이전트)·Task Loop(순차 N:1)와 달리, **페이즈 내 병렬 에이전트 + critic 검토 → 다음 페이즈**의 2차원 실행 모델입니다.
 
+Workflows 페이지에는 6개 카테고리 42종 노드 타입을 지원하는 **그래프 에디터**, 노드 속성 편집을 위한 **노드 인스펙터**, 드래그앤드롭 워크플로우 구성을 위한 **노드 피커** 팔레트가 포함됩니다.
+
 ### 기존 루프와의 비교
 
 | | Agent Loop | Task Loop | Phase Loop |
@@ -346,6 +348,8 @@ Phase Loop 실행 시 추가 이벤트:
 | `agent_started` / `agent_completed` / `agent_failed` | 에이전트 시작/완료/실패 |
 | `agent_message` | 에이전트 대화 메시지 (실시간) |
 | `critic_started` / `critic_completed` / `critic_rejected` | critic 검토 시작/완료/거절 |
+| `node_waiting` | 인터랙션 노드 일시정지 (approval, HITL, form) |
+| `node_retry` | 노드 재시도 (시도 횟수, 최대 횟수, 에러) |
 | `workflow_completed` / `workflow_failed` | 워크플로우 완료/실패 |
 
 ## 백엔드 아키텍처
