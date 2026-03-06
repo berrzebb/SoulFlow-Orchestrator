@@ -663,6 +663,166 @@ export interface WebhookNodeDefinition extends NodeBase {
   response_body?: string;
 }
 
+// ── Git Node ─────────────────────────────────────────
+
+export interface GitNodeDefinition extends NodeBase {
+  node_type: "git";
+  /** Git 오퍼레이션 (status, diff, log, commit, push 등). */
+  operation: string;
+  /** 추가 인자 (템플릿 지원). */
+  args?: string;
+  /** 작업 디렉토리. */
+  working_dir?: string;
+}
+
+// ── Shell Node ───────────────────────────────────────
+
+export interface ShellNodeDefinition extends NodeBase {
+  node_type: "shell";
+  /** 실행할 쉘 명령 (템플릿 지원). */
+  command: string;
+  /** 작업 디렉토리. */
+  working_dir?: string;
+  /** 타임아웃 (ms). */
+  timeout_ms?: number;
+}
+
+// ── Web Search Node ──────────────────────────────────
+
+export interface WebSearchNodeDefinition extends NodeBase {
+  node_type: "web_search";
+  /** 검색 쿼리 (템플릿 지원). */
+  query: string;
+  /** 최대 결과 수. */
+  max_results?: number;
+  /** 검색 엔진. */
+  search_engine?: string;
+}
+
+// ── Web Scrape Node ──────────────────────────────────
+
+export interface WebScrapeNodeDefinition extends NodeBase {
+  node_type: "web_scrape";
+  /** 스크래핑 URL (템플릿 지원). */
+  url: string;
+  /** CSS 셀렉터 힌트. */
+  selector?: string;
+  /** 최대 문자 수. */
+  max_chars?: number;
+}
+
+// ── Archive Node ─────────────────────────────────────
+
+export interface ArchiveNodeDefinition extends NodeBase {
+  node_type: "archive";
+  /** create / extract / list. */
+  operation: string;
+  /** 아카이브 포맷. */
+  format?: "tar.gz" | "zip";
+  /** 아카이브 파일 경로 (템플릿 지원). */
+  archive_path: string;
+  /** 포함할 파일/디렉토리 (create 시, 템플릿 지원). */
+  files?: string;
+  /** 추출 출력 디렉토리. */
+  output_dir?: string;
+}
+
+// ── Process Node ─────────────────────────────────────
+
+export interface ProcessNodeDefinition extends NodeBase {
+  node_type: "process";
+  /** list / start / stop / info. */
+  operation: string;
+  /** 시작할 명령 (start 시, 템플릿 지원). */
+  command?: string;
+  /** 프로세스 ID (stop/info 시). */
+  pid?: number;
+  /** 시그널 (stop 시). */
+  signal?: string;
+  /** 프로세스 이름 필터 (list 시). */
+  filter?: string;
+}
+
+// ── Docker Node ──────────────────────────────────────
+
+export interface DockerNodeDefinition extends NodeBase {
+  node_type: "docker";
+  /** ps / run / stop / rm / logs / exec / images / inspect. */
+  operation: string;
+  /** 컨테이너 이름/ID. */
+  container?: string;
+  /** 이미지 이름 (run 시). */
+  image?: string;
+  /** 컨테이너 내부 명령 (run/exec 시). */
+  command?: string;
+  /** 추가 docker 인자. */
+  args?: string;
+  /** 로그 줄 수 (logs 시). */
+  tail?: number;
+}
+
+// ── Web Table Node ───────────────────────────────────
+
+export interface WebTableNodeDefinition extends NodeBase {
+  node_type: "web_table";
+  /** 대상 URL (템플릿 지원). */
+  url: string;
+  /** 테이블 CSS 셀렉터 (기본: 'table'). */
+  selector?: string;
+  /** 최대 행 수. */
+  max_rows?: number;
+}
+
+// ── Network Node ─────────────────────────────────────
+
+export interface NetworkNodeDefinition extends NodeBase {
+  node_type: "network";
+  /** ping / dns / port_check / http_head / netstat. */
+  operation: string;
+  /** 대상 호스트 (템플릿 지원). */
+  host?: string;
+  /** 포트 번호 (port_check 시). */
+  port?: number;
+  /** ping 횟수. */
+  count?: number;
+}
+
+// ── Web Form Node (Workflow) ─────────────────────────
+
+export interface WebFormNodeDefinition extends NodeBase {
+  node_type: "web_form";
+  /** 폼 페이지 URL (템플릿 지원). */
+  url: string;
+  /** CSS 셀렉터 → 값 매핑. */
+  fields: Record<string, unknown>;
+  /** 제출 버튼 셀렉터. */
+  submit_selector?: string;
+  /** 제출 후 대기 (ms). */
+  wait_after_ms?: number;
+}
+
+// ── System Info Node ─────────────────────────────────
+
+export interface SystemInfoNodeDefinition extends NodeBase {
+  node_type: "system_info";
+  /** disk / memory / cpu / os / uptime / network / all. */
+  category?: string;
+}
+
+// ── Package Manager Node ─────────────────────────────
+
+export interface PackageManagerNodeDefinition extends NodeBase {
+  node_type: "package_manager";
+  /** list / install / uninstall / audit / outdated / info. */
+  operation: string;
+  /** npm / pip / cargo. */
+  manager?: string;
+  /** 패키지 이름. */
+  package_name?: string;
+  /** 추가 플래그. */
+  flags?: string;
+}
+
 // ── Union Types ─────────────────────────────────────
 
 export type OrcheNodeType = "http" | "code" | "if" | "merge" | "set" | "split"
@@ -673,7 +833,9 @@ export type OrcheNodeType = "http" | "code" | "if" | "merge" | "set" | "split"
   | "embedding" | "vector_store"
   | "notify" | "aggregate" | "send_file" | "error_handler" | "webhook"
   | "hitl" | "approval" | "form" | "tool_invoke" | "gate" | "escalation"
-  | "cache" | "retry" | "batch" | "assert";
+  | "cache" | "retry" | "batch" | "assert"
+  | "git" | "shell" | "web_search" | "web_scrape" | "archive" | "process"
+  | "docker" | "web_table" | "network" | "web_form" | "system_info" | "package_manager";
 
 export type OrcheNodeDefinition =
   | HttpNodeDefinition
@@ -717,7 +879,19 @@ export type OrcheNodeDefinition =
   | CacheNodeDefinition
   | RetryNodeDefinition
   | BatchNodeDefinition
-  | AssertNodeDefinition;
+  | AssertNodeDefinition
+  | GitNodeDefinition
+  | ShellNodeDefinition
+  | WebSearchNodeDefinition
+  | WebScrapeNodeDefinition
+  | ArchiveNodeDefinition
+  | ProcessNodeDefinition
+  | DockerNodeDefinition
+  | WebTableNodeDefinition
+  | NetworkNodeDefinition
+  | WebFormNodeDefinition
+  | SystemInfoNodeDefinition
+  | PackageManagerNodeDefinition;
 
 export type WorkflowNodeDefinition = PhaseNodeDefinition | OrcheNodeDefinition | TriggerNodeDefinition;
 

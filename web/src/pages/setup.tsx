@@ -78,7 +78,7 @@ export default function SetupPage() {
       <h2>{t("setup.title")}</h2>
       <div className="setup__steps">
         {[0, 1, 2].map((s) => (
-          <div key={s} className={`setup__step-dot${s === step ? " setup__step-dot--active" : ""}${s < step ? " setup__step-dot--done" : ""}`} />
+          <div key={s} className={`setup__step-dot${s === step ? " setup__step-dot--active" : ""}${s < step ? " setup__step-dot--done" : ""}`} aria-current={s === step ? "step" : undefined} aria-label={t("setup.step_n", { n: s + 1 })} />
         ))}
       </div>
       <p className="text-muted mb-3">{t("setup.subtitle")}</p>

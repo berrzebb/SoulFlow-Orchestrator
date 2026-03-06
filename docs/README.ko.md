@@ -35,11 +35,11 @@ flowchart TD
     subgraph Pipeline["처리 파이프라인"]
         direction TB
         SEAL[민감정보 Sealing]
-        CMD[슬래시 커맨드]
-        ORCH[오케스트레이터]
+        CMD[슬래시 커맨드 · 가드]
+        ORCH[오케스트레이터 · 분류기]
     end
 
-    subgraph Backends["에이전트 백엔드"]
+    subgraph Backends["에이전트 백엔드 (8)"]
         direction LR
         CSDK[claude_sdk]
         CCLI[claude_cli]
@@ -51,6 +51,13 @@ flowchart TD
         CTR[container_cli]
     end
 
+    subgraph Workflows["워크플로우 엔진"]
+        direction TB
+        PL[Phase Loop · Agent/Task Loop]
+        DAG[DAG 실행기 · 42종 노드]
+        INTERACT[인터랙션 · HITL · 승인 · 폼]
+    end
+
     subgraph PTY["PTY / Docker 격리"]
         direction LR
         POOL[ContainerPool]
@@ -58,7 +65,7 @@ flowchart TD
         BRIDGE[MCP 브릿지]
     end
 
-    subgraph Skills["역할 스킬"]
+    subgraph Skills["역할 스킬 (8)"]
         direction TB
         BT[butler]
         PM[pm · pl]
@@ -66,13 +73,23 @@ flowchart TD
         DBG[debugger · validator]
     end
 
-    DASH[대시보드 · OAuth]
+    subgraph Services["도메인 서비스"]
+        direction LR
+        EMBED[Embed · VectorStore]
+        WEBHOOK[Webhook · Task]
+    end
+
+    DASH[대시보드 · OAuth · SSE]
 
     Channels --> Pipeline
     Pipeline --> Backends
+    Pipeline --> Workflows
+    Workflows --> Backends
+    INTERACT -.->|ASK_USER · 승인| Channels
     CTR --> PTY
     Backends --> Skills
     Skills --> OUT([응답 · 스트리밍])
+    Workflows --> Services
     DASH -.-> Pipeline
 ```
 
@@ -90,6 +107,8 @@ flowchart TD
 | **역할 스킬** | 8개 역할 계층적 분담 | butler → pm/pl → implementer/reviewer/validator/debugger |
 | **보안 Vault** | AES-256-GCM 민감정보 관리 | 인바운드 자동 sealing · 도구 경로 복호화만 허용 |
 | **OAuth 연동** | 외부 서비스 인증 | GitHub · Google · Custom OAuth 2.0 |
+| **워크플로우 엔진** | Phase Loop · DAG 실행 | 42종 노드 그래프 에디터 · 6개 카테고리 · HITL 인터랙션 노드 |
+| **도메인 서비스** | 임베딩 · 벡터 스토어 · 웹훅 | 상태 유지 파이프라인 · 영속 태스크 실행 |
 | **대시보드** | 웹 기반 실시간 모니터링 | SSE 피드 · 에이전트/태스크/결정/프로바이더 관리 |
 | **MCP 통합** | 외부 도구 서버 연결 | stdio/SSE · 자동 CLI 주입 |
 | **크론** | 정기 작업 스케줄 | SQLite 기반 · 핫 리로드 |

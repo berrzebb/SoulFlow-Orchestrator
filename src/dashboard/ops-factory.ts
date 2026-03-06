@@ -1,7 +1,7 @@
 /** Dashboard ops 팩토리. main.ts에서 분리된 7개 _create_*_ops() 함수. */
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { error_message } from "../utils/common.js";
 import { create_logger } from "../logger.js";
 import { SECTION_ORDER, SECTION_LABELS, type ConfigSection } from "../config/config-meta.js";
@@ -48,7 +48,19 @@ async function activate_provider(
 
 /** workspace 내부 상대 경로 sanitize. 디렉토리 탈출 방지. */
 function sanitize_rel_path(rel_path: string): string {
-  return rel_path.replace(/\.\./g, "").replace(/^\/+/, "");
+  return rel_path.replace(/\.\./g, "").replace(/^[/\\]+/, "");
+}
+
+/** 파일명만 허용 (경로 구분자 금지). */
+function sanitize_filename(name: string): string {
+  return name.replace(/[\\/]/g, "").replace(/\.\./g, "");
+}
+
+/** resolve 결과가 base 디렉토리 내부인지 검증. */
+function is_inside(base: string, target: string): boolean {
+  const norm_base = resolve(base).toLowerCase();
+  const norm_target = resolve(target).toLowerCase();
+  return norm_target === norm_base || norm_target.startsWith(`${norm_base}/`) || norm_target.startsWith(`${norm_base}\\`);
 }
 
 // ─── Templates ─────────────────────────────────────────────────────────────
@@ -59,10 +71,12 @@ export function create_template_ops(workspace: string): DashboardTemplateOps {
   const templates_dir = join(workspace, "templates");
 
   function resolve_path(name: string): string | null {
-    const in_templates = join(templates_dir, `${name}.md`);
-    if (existsSync(in_templates)) return in_templates;
-    const in_root = join(workspace, `${name}.md`);
-    if (existsSync(in_root)) return in_root;
+    const safe_name = sanitize_filename(name);
+    if (!safe_name) return null;
+    const in_templates = join(templates_dir, `${safe_name}.md`);
+    if (is_inside(templates_dir, in_templates) && existsSync(in_templates)) return in_templates;
+    const in_root = join(workspace, `${safe_name}.md`);
+    if (is_inside(workspace, in_root) && existsSync(in_root)) return in_root;
     return null;
   }
 
@@ -76,8 +90,11 @@ export function create_template_ops(workspace: string): DashboardTemplateOps {
       return readFileSync(p, "utf-8");
     },
     write(name: string, content: string) {
+      const safe_name = sanitize_filename(name);
+      if (!safe_name) return { ok: false };
       if (!mkdirSync(templates_dir, { recursive: true }) && !existsSync(templates_dir)) return { ok: false };
-      const target = join(templates_dir, `${name}.md`);
+      const target = join(templates_dir, `${safe_name}.md`);
+      if (!is_inside(templates_dir, target)) return { ok: false };
       writeFileSync(target, content, "utf-8");
       return { ok: true };
     },
@@ -631,9 +648,13 @@ export function create_skill_ops(deps: {
         const meta = skills_loader.get_skill_metadata(name);
         if (!meta?.path) return { ok: false, error: "skill_not_found" };
         if (String(meta.source ?? "").toLowerCase() === "builtin") return { ok: false, error: "builtin_readonly" };
-        const target = file === "SKILL.md"
+        const safe_file = sanitize_filename(file);
+        if (!safe_file) return { ok: false, error: "invalid_filename" };
+        const skill_base = join(String(meta.path), "..");
+        const target = safe_file === "SKILL.md"
           ? String(meta.path)
-          : join(String(meta.path), "..", "references", file);
+          : join(skill_base, "references", safe_file);
+        if (!is_inside(skill_base, target)) return { ok: false, error: "path_traversal_blocked" };
         writeFileSync(target, content, "utf-8");
         skills_loader.refresh();
         return { ok: true };
@@ -652,9 +673,10 @@ export function create_skill_ops(deps: {
         const strip_prefix = top_dirs.size === 1 ? `${[...top_dirs][0]}/` : "";
         for (const entry of entries) {
           if (entry.isDirectory) continue;
-          const rel = strip_prefix ? entry.entryName.replace(strip_prefix, "") : entry.entryName;
+          const rel = sanitize_rel_path(strip_prefix ? entry.entryName.replace(strip_prefix, "") : entry.entryName);
           if (!rel) continue;
           const target = join(skill_dir, rel);
+          if (!is_inside(skill_dir, target)) continue;
           mkdirSync(join(target, ".."), { recursive: true });
           writeFileSync(target, entry.getData());
         }

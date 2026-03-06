@@ -33,11 +33,11 @@ flowchart TD
     subgraph Pipeline["Processing Pipeline"]
         direction TB
         SEAL[Sensitive Data Sealing]
-        CMD[Slash Commands]
-        ORCH[Orchestrator]
+        CMD[Slash Commands · Guard]
+        ORCH[Orchestrator · Classifier]
     end
 
-    subgraph Backends["Agent Backends"]
+    subgraph Backends["Agent Backends (8)"]
         direction LR
         CSDK[claude_sdk]
         CCLI[claude_cli]
@@ -49,6 +49,13 @@ flowchart TD
         CTR[container_cli]
     end
 
+    subgraph Workflows["Workflow Engine"]
+        direction TB
+        PL[Phase Loop · Agent/Task Loop]
+        DAG[DAG Executor · 42 Nodes]
+        INTERACT[Interaction · HITL · Approval · Form]
+    end
+
     subgraph PTY["PTY / Docker Isolation"]
         direction LR
         POOL[ContainerPool]
@@ -56,7 +63,7 @@ flowchart TD
         BRIDGE[MCP Bridge]
     end
 
-    subgraph Skills["Role Skills"]
+    subgraph Skills["Role Skills (8)"]
         direction TB
         BT[butler]
         PM[pm · pl]
@@ -64,13 +71,23 @@ flowchart TD
         DBG[debugger · validator]
     end
 
-    DASH[Dashboard · OAuth]
+    subgraph Services["Domain Services"]
+        direction LR
+        EMBED[Embed · VectorStore]
+        WEBHOOK[Webhook · Task]
+    end
+
+    DASH[Dashboard · OAuth · SSE]
 
     Channels --> Pipeline
     Pipeline --> Backends
+    Pipeline --> Workflows
+    Workflows --> Backends
+    INTERACT -.->|ASK_USER · Approval| Channels
     CTR --> PTY
     Backends --> Skills
     Skills --> OUT([Response · Streaming])
+    Workflows --> Services
     DASH -.-> Pipeline
 ```
 
@@ -88,6 +105,8 @@ An **orchestration runtime** that receives messages from chat channels and dispa
 | **Role Skills** | 8-role hierarchical delegation | butler → pm/pl → implementer/reviewer/validator/debugger |
 | **Security Vault** | AES-256-GCM secret management | Auto inbound sealing · decrypt only in tool path |
 | **OAuth Integration** | External service authentication | GitHub · Google · Custom OAuth 2.0 |
+| **Workflow Engine** | Phase Loop · DAG execution | 42-node graph editor · 6 categories · HITL interaction nodes |
+| **Domain Services** | Embedding · vector store · webhook | Stateful pipelines · persistent task execution |
 | **Dashboard** | Web-based real-time monitoring | SSE feed · agent/task/decision/provider management |
 | **MCP Integration** | External tool server connections | stdio/SSE · auto CLI injection |
 | **Cron** | Recurring task scheduling | SQLite-backed · hot reload |

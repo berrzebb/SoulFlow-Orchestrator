@@ -184,7 +184,7 @@ export function ModelsTab() {
           {runtime?.gpu_percent != null && (
             <div>
               <span className="label">GPU</span>
-              <div className="turn-bar gpu-bar ml-1" style={{ "--bar-w": `${Math.min(100, runtime.gpu_percent)}%`, "--bar-c": runtime.gpu_percent >= 90 ? "var(--err)" : runtime.gpu_percent >= 70 ? "var(--warn)" : "var(--ok)" } as React.CSSProperties}>
+              <div className="turn-bar gpu-bar ml-1" style={{ "--bar-w": `${Math.min(100, runtime.gpu_percent)}%`, "--bar-c": runtime.gpu_percent >= 90 ? "var(--err)" : runtime.gpu_percent >= 70 ? "var(--warn)" : "var(--ok)" } as React.CSSProperties} role="progressbar" aria-valuenow={runtime.gpu_percent} aria-valuemin={0} aria-valuemax={100} aria-label="GPU">
                 <div className="turn-bar__fill" />
                 <span className="turn-bar__label">{runtime.gpu_percent}%</span>
               </div>
@@ -228,7 +228,7 @@ export function ModelsTab() {
               )}
             </div>
             {pullProgress.total != null && pullProgress.total > 0 && (
-              <div className="pull-progress__track" style={{ "--bar-w": `${Math.min(100, ((pullProgress.completed ?? 0) / pullProgress.total) * 100)}%` } as React.CSSProperties}>
+              <div className="pull-progress__track" style={{ "--bar-w": `${Math.min(100, ((pullProgress.completed ?? 0) / pullProgress.total) * 100)}%` } as React.CSSProperties} role="progressbar" aria-valuenow={pullProgress.completed ?? 0} aria-valuemin={0} aria-valuemax={pullProgress.total} aria-label={t("models.pull")}>
                 <div className={`pull-progress__fill${pullProgress.status.startsWith("error") ? " pull-progress__fill--err" : ""}`} />
               </div>
             )}

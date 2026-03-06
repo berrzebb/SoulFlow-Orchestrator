@@ -32,10 +32,14 @@ export function TemplatesTab() {
 
   const save = async () => {
     if (!selected) return;
-    await api.put(`/api/templates/${encodeURIComponent(selected!)}`, { content });
-    toast(t("templates.saved_fmt", { name: selected }), "ok");
-    setDirty(false);
-    void qc.invalidateQueries({ queryKey: ["templates"] });
+    try {
+      await api.put(`/api/templates/${encodeURIComponent(selected!)}`, { content });
+      toast(t("templates.saved_fmt", { name: selected }), "ok");
+      setDirty(false);
+      void qc.invalidateQueries({ queryKey: ["templates"] });
+    } catch {
+      toast(t("templates.save_failed"), "err");
+    }
   };
 
   return (
@@ -49,7 +53,7 @@ export function TemplatesTab() {
               role="button"
               tabIndex={0}
               onClick={() => setSelected(tmpl.name)}
-              onKeyDown={(e) => e.key === "Enter" && setSelected(tmpl.name)}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSelected(tmpl.name); } }}
               className={`ws-item ws-item--spread${selected === tmpl.name ? " ws-item--active" : ""}`}
             >
               <span>{tmpl.name}.md</span>

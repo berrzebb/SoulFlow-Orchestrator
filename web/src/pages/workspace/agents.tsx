@@ -46,7 +46,7 @@ const STATUS_ICON: Record<string, string> = {
 function TurnBar({ current, max }: { current: number; max: number }) {
   const pct = max > 0 ? Math.min(100, Math.round((current / max) * 100)) : 0;
   return (
-    <div className="turn-bar" title={`${current}/${max} (${pct}%)`} style={{ "--bar-w": `${pct}%` } as React.CSSProperties}>
+    <div className="turn-bar" title={`${current}/${max} (${pct}%)`} style={{ "--bar-w": `${pct}%` } as React.CSSProperties} role="progressbar" aria-valuenow={current} aria-valuemin={0} aria-valuemax={max}>
       <div className="turn-bar__fill" />
       <span className="turn-bar__label">{current}/{max}</span>
     </div>
@@ -77,6 +77,7 @@ export function AgentsTab() {
   const [sendTarget, setSendTarget] = useState<string | null>(null);
   const [resumeTarget, setResumeTarget] = useState<string | null>(null);
   const [resumeText, setResumeText] = useState("");
+  const [cancelConfirm, setCancelConfirm] = useState<{ kind: string; id: string; label: string } | null>(null);
   const [showCompleted, setShowCompleted] = useState(false);
   const [showRecentProcesses, setShowRecentProcesses] = useState(false);
   const [completedSearch, setCompletedSearch] = useState("");
@@ -106,11 +107,17 @@ export function AgentsTab() {
     }
   };
 
-  const cancel_agent = (id: string) => void safe_action(() => api.del(`/api/agents/${encodeURIComponent(id)}`), t("agents.cancelled"));
   const handle_send = (agentId: string, text: string) => void safe_action(() => api.post(`/api/agents/${encodeURIComponent(agentId)}/input`, { text }), t("agents.message_sent"), () => setSendTarget(null));
-  const stop_loop = (loopId: string) => void safe_action(() => api.del(`/api/loops/${encodeURIComponent(loopId)}`), t("agents.loop_stopped"));
-  const cancel_task = (taskId: string) => void safe_action(() => api.del(`/api/tasks/${encodeURIComponent(taskId)}`), t("agents.task_cancelled"));
-  const cancel_process = (run_id: string) => void safe_action(() => api.del(`/api/processes/${encodeURIComponent(run_id)}`), t("agents.process_cancelled"));
+
+  const confirm_cancel = () => {
+    if (!cancelConfirm) return;
+    const { kind, id } = cancelConfirm;
+    setCancelConfirm(null);
+    if (kind === "agent") void safe_action(() => api.del(`/api/agents/${encodeURIComponent(id)}`), t("agents.cancelled"));
+    else if (kind === "loop") void safe_action(() => api.del(`/api/loops/${encodeURIComponent(id)}`), t("agents.loop_stopped"));
+    else if (kind === "task") void safe_action(() => api.del(`/api/tasks/${encodeURIComponent(id)}`), t("agents.task_cancelled"));
+    else if (kind === "process") void safe_action(() => api.del(`/api/processes/${encodeURIComponent(id)}`), t("agents.process_cancelled"));
+  };
   const confirm_resume = () => {
     if (!resumeTarget) return;
     void safe_action(
@@ -123,6 +130,10 @@ export function AgentsTab() {
   return (
     <>
       <SendAgentModal agentId={sendTarget} onClose={() => setSendTarget(null)} onSend={(id, text) => void handle_send(id, text)} />
+
+      <Modal open={!!cancelConfirm} title={t("agents.cancel_confirm_title")} onClose={() => setCancelConfirm(null)} onConfirm={confirm_cancel} confirmLabel={t("common.confirm")} danger>
+        <p className="text-sm">{t("agents.cancel_confirm_desc", { label: cancelConfirm?.label ?? "" })}</p>
+      </Modal>
 
       <Modal open={!!resumeTarget} title={t("agents.resume_task")} onClose={() => { setResumeTarget(null); setResumeText(""); }} onConfirm={() => void confirm_resume()} confirmLabel={t("agents.resume")}>
         <label className="form-label">{t("agents.user_input")}</label>
@@ -166,7 +177,7 @@ export function AgentsTab() {
                   <td className="text-sm">{p.tool_calls_count}</td>
                   <td className="text-xs text-muted">{fmt_time(p.started_at)}</td>
                   <td><Badge status={p.status} /></td>
-                  <td><button className="btn btn--xs btn--danger" onClick={() => void cancel_process(p.run_id)}>{t("agents.process_cancel")}</button></td>
+                  <td><button className="btn btn--xs btn--danger" onClick={() => setCancelConfirm({ kind: "process", id: p.run_id, label: p.alias })}>{t("agents.process_cancel")}</button></td>
                 </tr>
               ))}
             </tbody>
@@ -228,7 +239,7 @@ export function AgentsTab() {
                   <td><TurnBar current={l.currentTurn} max={l.maxTurns} /></td>
                   <td>{l.channelId ? <ChannelRef channelId={l.channelId} messageId={l.messageId} /> : <span className="text-muted">-</span>}</td>
                   <td><Badge status={l.status} /></td>
-                  <td><button className="btn btn--xs btn--danger" onClick={() => void stop_loop(l.loopId)}>{t("agents.stop")}</button></td>
+                  <td><button className="btn btn--xs btn--danger" onClick={() => setCancelConfirm({ kind: "loop", id: l.loopId, label: l.loopId.slice(0, 12) })}>{t("agents.stop")}</button></td>
                 </tr>
               ))}
             </tbody>
@@ -264,7 +275,7 @@ export function AgentsTab() {
                   <td><Badge status={task.status} /></td>
                   <td>
                     <div className="li-flex">
-                      <button className="btn btn--xs btn--danger" onClick={() => void cancel_task(task.taskId)}>{t("common.cancel")}</button>
+                      <button className="btn btn--xs btn--danger" onClick={() => setCancelConfirm({ kind: "task", id: task.taskId, label: task.title || task.taskId.slice(0, 14) })}>{t("common.cancel")}</button>
                       {WAITING_STATUSES.has(task.status) && (
                         <button className="btn btn--xs btn--ok" onClick={() => setResumeTarget(task.taskId)}>{t("agents.resume")}</button>
                       )}
@@ -358,7 +369,7 @@ export function AgentsTab() {
                   <div className="desk__actions">
                     {cls === "working" && (
                       <>
-                        <button className="btn btn--xs btn--danger" onClick={() => void cancel_agent(a.id)}>{t("common.cancel")}</button>
+                        <button className="btn btn--xs btn--danger" onClick={() => setCancelConfirm({ kind: "agent", id: a.id, label: a.label || a.id })}>{t("common.cancel")}</button>
                         <button className="btn btn--xs" onClick={() => setSendTarget(a.id)}>{t("common.send")}</button>
                       </>
                     )}

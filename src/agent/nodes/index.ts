@@ -43,6 +43,18 @@ import { cache_handler } from "./cache.js";
 import { retry_handler } from "./retry.js";
 import { batch_handler } from "./batch.js";
 import { assert_handler } from "./assert.js";
+import { git_handler } from "./git.js";
+import { shell_handler } from "./shell.js";
+import { web_search_handler } from "./web-search.js";
+import { web_scrape_handler } from "./web-scrape.js";
+import { archive_handler } from "./archive.js";
+import { process_handler } from "./process.js";
+import { docker_handler } from "./docker.js";
+import { web_table_handler } from "./web-table.js";
+import { network_handler } from "./network.js";
+import { web_form_handler } from "./web-form.js";
+import { system_info_handler } from "./system-info.js";
+import { package_manager_handler } from "./package-manager.js";
 
 const ALL_HANDLERS = [
   http_handler,
@@ -87,6 +99,18 @@ const ALL_HANDLERS = [
   retry_handler,
   batch_handler,
   assert_handler,
+  git_handler,
+  shell_handler,
+  web_search_handler,
+  web_scrape_handler,
+  archive_handler,
+  process_handler,
+  docker_handler,
+  web_table_handler,
+  network_handler,
+  web_form_handler,
+  system_info_handler,
+  package_manager_handler,
 ];
 
 let registered = false;

@@ -192,6 +192,8 @@ export const ko: TranslationDict = {
   "agents.updated": "업데이트됨",
   "agents.send_to": "{id}에게 전송",
   "agents.message_placeholder": "메시지 텍스트...",
+  "agents.cancel_confirm_title": "취소 확인",
+  "agents.cancel_confirm_desc": "{label}을(를) 취소하시겠습니까?",
 
   // ── Cron ──
   "cron.title": "크론 작업 ({count})",
@@ -337,6 +339,7 @@ export const ko: TranslationDict = {
   "templates.unsaved": "미저장",
   "templates.saved_fmt": "{name}.md 저장됨",
   "templates.load_failed": "템플릿 로드 실패",
+  "templates.save_failed": "템플릿 저장 실패",
 
   // ── Tools ──
   "tools.title": "도구 ({count})",
@@ -660,6 +663,7 @@ export const ko: TranslationDict = {
   "setup.step.identity.desc": "봇의 기본 별칭을 선택하세요.",
   "setup.step.complete": "설정 완료",
   "setup.step.complete.desc": "오케스트레이터가 준비되었습니다. 대시보드로 이동합니다...",
+  "setup.step_n": "{n}단계",
   "setup.executor": "실행기 프로바이더",
   "setup.orchestrator": "오케스트레이터 프로바이더",
   "setup.alias": "봇 별칭",

@@ -77,6 +77,7 @@ export default function WorkflowsPage() {
   const [selectedTpl, setSelectedTpl] = useState<string | null>(null);
   const [showImport, setShowImport] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [cancelTarget, setCancelTarget] = useState<string | null>(null);
   const [quickObjective, setQuickObjective] = useState("");
 
   const { data: workflows, isLoading: wfLoading } = useQuery<PhaseLoopState[]>({
@@ -101,7 +102,7 @@ export default function WorkflowsPage() {
 
   const cancelMut = useMutation({
     mutationFn: (id: string) => api.del(`/api/workflow/runs/${id}`),
-    onSuccess: () => { toast(t("workflows.cancelled"), "ok"); qc.invalidateQueries({ queryKey: ["workflows"] }); },
+    onSuccess: () => { toast(t("workflows.cancelled"), "ok"); qc.invalidateQueries({ queryKey: ["workflows"] }); setCancelTarget(null); },
     onError: () => toast(t("workflows.cancel_failed"), "err"),
   });
 
@@ -265,18 +266,21 @@ export default function WorkflowsPage() {
                 })}
               </div>
 
-              {selectedTpl && templates.find((t) => t.slug === selectedTpl) && (
+              {(() => {
+                const tplMatch = selectedTpl ? templates.find((t) => t.slug === selectedTpl) : undefined;
+                return tplMatch ? (
                 <TemplateDetailPanel
-                  template={templates.find((t) => t.slug === selectedTpl)!}
+                  template={tplMatch}
                   onClose={() => setSelectedTpl(null)}
                   onRun={(body) => {
                     runFromTplMut.mutate(body);
                   }}
-                  onEdit={() => navigate(`/workflows/edit/${encodeURIComponent(selectedTpl)}`)}
+                  onEdit={() => navigate(`/workflows/edit/${encodeURIComponent(selectedTpl!)}`)}
                   onDelete={() => setDeleteTarget(selectedTpl)}
                   running={runFromTplMut.isPending}
                 />
-              )}
+                ) : null;
+              })()}
             </>
           )}
 
@@ -302,6 +306,18 @@ export default function WorkflowsPage() {
           </Modal>
         </>
       )}
+
+      {/* Cancel Workflow Confirm */}
+      <Modal
+        open={!!cancelTarget}
+        title={t("workflows.cancel_confirm_title")}
+        onClose={() => setCancelTarget(null)}
+        onConfirm={() => cancelTarget && cancelMut.mutate(cancelTarget)}
+        confirmLabel={t("workflows.cancel")}
+        danger
+      >
+        <p className="text-sm">{t("workflows.cancel_confirm_desc")}</p>
+      </Modal>
 
       {/* Running 탭 */}
       {tab === "running" && (
@@ -339,7 +355,7 @@ export default function WorkflowsPage() {
                       <Badge status={`${agent_count} agents`} variant="off" />
                       {critic_count > 0 && <Badge status={`${critic_count} critics`} variant="off" />}
                     </div>
-                    <div className="wf-progress" title={`${pct}%`}>
+                    <div className="wf-progress" title={`${pct}%`} role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label={t("workflows.progress")}>
                       <div
                         className={`wf-progress__bar${wf.status === "failed" ? " wf-progress__bar--err" : ""}`}
                         style={{ width: `${pct}%` }}
@@ -353,8 +369,7 @@ export default function WorkflowsPage() {
                       {(wf.status === "running" || wf.status === "waiting_user_input") && (
                         <button
                           className="btn btn--sm btn--danger"
-                          onClick={() => cancelMut.mutate(wf.workflow_id)}
-                          disabled={cancelMut.isPending}
+                          onClick={() => setCancelTarget(wf.workflow_id)}
                         >
                           {t("workflows.cancel")}
                         </button>

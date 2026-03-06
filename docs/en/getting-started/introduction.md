@@ -39,10 +39,16 @@ It receives messages from chat channels, routes them to specialized agents, and 
 Channel message received
   → Sensitive data Sealing
   → Slash command routing (if applicable)
-  → Orchestrator routing
-  → Agent backend execution (claude_sdk / claude_cli / ...)
-  → Role skill applied (butler → expert delegation)
-  → Streaming response
+  → Confirmation Guard check
+  → Orchestrator Classifier (once / agent / task / phase)
+  ├─ once/agent/task → Agent backend execution (claude_sdk / claude_cli / ...)
+  │    → Role skill applied (butler → expert delegation)
+  │    → Streaming response
+  └─ phase → Workflow Engine
+       → Phase Loop (parallel agents + critic gate)
+       → DAG Executor (42 node types)
+       → Interaction nodes (HITL / Approval / Form) ←→ Channel feedback
+       → Streaming response
 ```
 
 ## Next Steps

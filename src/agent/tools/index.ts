@@ -31,6 +31,19 @@ import type { AppendWorkflowEventInput, AppendWorkflowEventResult } from "../../
 import type { RuntimeExecutionPolicy } from "../../providers/types.js";
 import type { PreToolHook, PostToolHook } from "./types.js";
 import { build_approval_notifier } from "./approval-notifier.js";
+import { GitTool } from "./git.js";
+import { ArchiveTool } from "./archive.js";
+import { ProcessManagerTool } from "./process-manager.js";
+import { ClipboardTool } from "./clipboard.js";
+import { NotificationTool } from "./notification.js";
+import { DockerTool } from "./docker.js";
+import { WebTableTool } from "./web-table.js";
+import { NetworkTool } from "./network.js";
+import { WebFormTool } from "./web-form.js";
+import { SystemInfoTool } from "./system-info.js";
+import { PackageManagerTool as PkgManagerTool } from "./package-manager.js";
+import { WebAuthTool } from "./web-auth.js";
+import { CronShellTool } from "./cron-shell.js";
 
 const DANGEROUS_COMMANDS = ["rm -rf", "drop table", "format c:", "mkfs", "dd if="];
 
@@ -116,6 +129,19 @@ export {
   FileMcpServerStore,
   ToolSelfTestService,
   RuntimeAdminTool,
+  GitTool,
+  ArchiveTool,
+  ProcessManagerTool,
+  ClipboardTool,
+  NotificationTool,
+  DockerTool,
+  WebTableTool,
+  NetworkTool,
+  WebFormTool,
+  SystemInfoTool,
+  PkgManagerTool,
+  WebAuthTool,
+  CronShellTool,
 };
 export { Tool } from "./base.js";
 export type {
@@ -196,6 +222,19 @@ export function create_default_tool_registry(args?: ToolRegistryFactoryOptions):
   registry.register(new DateTimeTool());
   registry.register(new HttpRequestTool());
   registry.register(new ChainTool(registry));
+  registry.register(new GitTool({ workspace }));
+  registry.register(new ArchiveTool({ workspace }));
+  registry.register(new ProcessManagerTool({ workspace }));
+  registry.register(new ClipboardTool());
+  registry.register(new NotificationTool());
+  registry.register(new DockerTool({ workspace }));
+  registry.register(new WebTableTool());
+  registry.register(new NetworkTool({ workspace }));
+  registry.register(new WebFormTool());
+  registry.register(new SystemInfoTool({ workspace }));
+  registry.register(new PkgManagerTool({ workspace }));
+  registry.register(new WebAuthTool());
+  registry.register(new CronShellTool({ workspace }));
 
   if (args?.task_query_callback) {
     registry.register(new TaskQueryTool(args.task_query_callback));

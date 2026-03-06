@@ -43,6 +43,18 @@ import { cache_descriptor } from "./cache";
 import { retry_descriptor } from "./retry";
 import { batch_descriptor } from "./batch";
 import { assert_descriptor } from "./assert";
+import { git_descriptor } from "./git";
+import { shell_descriptor } from "./shell";
+import { web_search_descriptor } from "./web-search";
+import { web_scrape_descriptor } from "./web-scrape";
+import { archive_descriptor } from "./archive";
+import { process_descriptor } from "./process";
+import { docker_descriptor } from "./docker";
+import { web_table_descriptor } from "./web-table";
+import { network_descriptor } from "./network";
+import { web_form_descriptor } from "./web-form";
+import { system_info_descriptor } from "./system-info";
+import { package_manager_descriptor } from "./package-manager";
 
 const ALL_DESCRIPTORS = [
   http_descriptor,
@@ -87,6 +99,18 @@ const ALL_DESCRIPTORS = [
   retry_descriptor,
   batch_descriptor,
   assert_descriptor,
+  git_descriptor,
+  shell_descriptor,
+  web_search_descriptor,
+  web_scrape_descriptor,
+  archive_descriptor,
+  process_descriptor,
+  docker_descriptor,
+  web_table_descriptor,
+  network_descriptor,
+  web_form_descriptor,
+  system_info_descriptor,
+  package_manager_descriptor,
 ];
 
 let registered = false;

@@ -192,6 +192,8 @@ export const en: TranslationDict = {
   "agents.updated": "Updated",
   "agents.send_to": "Send to {id}",
   "agents.message_placeholder": "Message text...",
+  "agents.cancel_confirm_title": "Confirm Cancel",
+  "agents.cancel_confirm_desc": "Are you sure you want to cancel {label}?",
 
   // ── Cron ──
   "cron.title": "Cron Jobs ({count})",
@@ -337,6 +339,7 @@ export const en: TranslationDict = {
   "templates.unsaved": "unsaved",
   "templates.saved_fmt": "{name}.md saved",
   "templates.load_failed": "Failed to load template",
+  "templates.save_failed": "Failed to save template",
 
   // ── Tools ──
   "tools.title": "Tools ({count})",
@@ -660,6 +663,7 @@ export const en: TranslationDict = {
   "setup.step.identity.desc": "Choose a default alias for the bot.",
   "setup.step.complete": "Setup Complete",
   "setup.step.complete.desc": "Your orchestrator is ready. Redirecting to the dashboard...",
+  "setup.step_n": "Step {n}",
   "setup.executor": "Executor Provider",
   "setup.orchestrator": "Orchestrator Provider",
   "setup.alias": "Bot Alias",
