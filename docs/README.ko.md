@@ -35,8 +35,8 @@ flowchart TD
     subgraph Pipeline["처리 파이프라인"]
         direction TB
         SEAL[민감정보 Sealing]
-        CMD[슬래시 커맨드 · 가드]
-        ORCH[오케스트레이터 · 분류기]
+        CMD[슬래시 커맨드 · 가드 · 23종 핸들러]
+        ORCH[오케스트레이터 · 분류기 · ToolIndex FTS5]
     end
 
     subgraph Backends["에이전트 백엔드 (8)"]
@@ -77,9 +77,10 @@ flowchart TD
         direction LR
         EMBED[Embed · VectorStore · sqlite-vec]
         WEBHOOK[Webhook · Task · Kanban]
+        CATALOG[ModelCatalog · ReferenceStore]
     end
 
-    DASH[대시보드 · OAuth · SSE]
+    DASH[대시보드 · OAuth · SSE · i18n]
 
     Channels --> Pipeline
     Pipeline --> Backends

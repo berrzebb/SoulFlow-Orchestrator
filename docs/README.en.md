@@ -33,8 +33,8 @@ flowchart TD
     subgraph Pipeline["Processing Pipeline"]
         direction TB
         SEAL[Sensitive Data Sealing]
-        CMD[Slash Commands · Guard]
-        ORCH[Orchestrator · Classifier]
+        CMD[Slash Commands · Guard · 23 Handlers]
+        ORCH[Orchestrator · Classifier · ToolIndex FTS5]
     end
 
     subgraph Backends["Agent Backends (8)"]
@@ -75,9 +75,10 @@ flowchart TD
         direction LR
         EMBED[Embed · VectorStore · sqlite-vec]
         WEBHOOK[Webhook · Task · Kanban]
+        CATALOG[ModelCatalog · ReferenceStore]
     end
 
-    DASH[Dashboard · OAuth · SSE]
+    DASH[Dashboard · OAuth · SSE · i18n]
 
     Channels --> Pipeline
     Pipeline --> Backends
