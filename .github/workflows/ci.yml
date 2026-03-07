@@ -32,7 +32,8 @@ jobs:
 
       - name: Test with coverage
         run: npm run test:coverage 2>&1 | tee test-output.txt
-
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096 # 4GB로 설정, 필요시 8192 등으로 상향
       - name: Upload coverage artifact
         if: always()
         uses: actions/upload-artifact@v4
