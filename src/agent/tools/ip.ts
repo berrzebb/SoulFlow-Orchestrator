@@ -136,10 +136,10 @@ export class IpTool extends Tool {
 
   private expand_v6(ip: string): string | null {
     if (!ip.includes(":")) return null;
-    let parts = ip.split("::");
+    const parts = ip.split("::");
     if (parts.length > 2) return null;
-    let left = parts[0]!.split(":").filter(Boolean);
-    let right = parts.length === 2 ? parts[1]!.split(":").filter(Boolean) : [];
+    const left = parts[0]!.split(":").filter(Boolean);
+    const right = parts.length === 2 ? parts[1]!.split(":").filter(Boolean) : [];
     const missing = 8 - left.length - right.length;
     if (missing < 0) return null;
     const middle = Array(missing).fill("0000");

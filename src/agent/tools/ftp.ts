@@ -44,7 +44,6 @@ export class FtpTool extends Tool {
           resolve("Error: connection timeout");
         }, 10000);
 
-        const responses: string[] = [];
         let buffer = "";
 
         const send = (cmd: string): Promise<string> =>

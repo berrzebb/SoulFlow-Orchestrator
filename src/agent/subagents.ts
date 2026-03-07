@@ -531,7 +531,7 @@ export class SubagentRegistry {
           // executor tool-use loop: 다중 라운드 tool call 지원
           const MAX_TOOL_ROUNDS = 5;
           let current_response = response;
-          let tool_messages: ChatMessage[] = [
+          const tool_messages: ChatMessage[] = [
             { role: "system", content: this._build_executor_prompt(options, id, contextual_system) },
             { role: "user", content: plan.executor_prompt },
           ];

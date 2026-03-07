@@ -184,7 +184,7 @@ export class SlackChannel extends BaseChannel {
       }
 
       const threadedParents = messages
-        .filter((m): m is Record<string, unknown> => m != null && typeof m === "object")
+        .filter((m): m is Record<string, unknown> => m !== null && m !== undefined && typeof m === "object")
         .filter((m) => Number(m.reply_count || 0) > 0 && typeof m.thread_ts === "string" && is_valid_slack_ts(String(m.thread_ts)))
         .slice(0, SlackChannel.MAX_THREAD_FETCHES_PER_READ);
 

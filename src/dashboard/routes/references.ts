@@ -1,8 +1,8 @@
 /** Reference 문서 관리 REST API. */
 
-import { createReadStream, existsSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { writeFile, unlink, mkdir } from "node:fs/promises";
-import { join, extname } from "node:path";
+import { join } from "node:path";
 import type { RouteContext } from "../route-context.js";
 
 export async function handle_references(ctx: RouteContext): Promise<boolean> {
@@ -42,7 +42,7 @@ export async function handle_references(ctx: RouteContext): Promise<boolean> {
   // POST /api/references/upload — 파일 업로드 (multipart 대신 JSON base64)
   if (path === "/api/references/upload" && req.method === "POST") {
     const body = await read_body(req);
-    const filename = String(body?.filename || "").replace(/[\/\\:*?"<>|]/g, "_");
+    const filename = String(body?.filename || "").replace(/[/\\:*?"<>|]/g, "_");
     const content = String(body?.content || "");
     if (!filename || !content) { json(res, 400, { error: "filename and content required" }); return true; }
 

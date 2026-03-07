@@ -107,7 +107,7 @@ export class ContainerCliAgent implements AgentBackend {
 
     let iteration = 0;
     let compaction_attempts = 0;
-    let total_usage = { input: 0, output: 0 };
+    const total_usage = { input: 0, output: 0 };
     let last_content = "";
     let tool_calls_count = 0;
 

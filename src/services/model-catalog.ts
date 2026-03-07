@@ -39,7 +39,7 @@ function to_cache(key: string, models: ModelInfo[]): void {
 }
 
 function compute_cost_score(input?: number, output?: number): number | undefined {
-  if (input == null) return undefined;
+  if (input === null || input === undefined) return undefined;
   return Math.round(((input + (output ?? 0)) / 2) * 1000) / 1000;
 }
 

@@ -92,7 +92,6 @@ export class LdapTool extends Tool {
 
   private build_search_request(msg_id: number, base_dn: string, scope: string, filter: string, attrs: string[]): Buffer {
     const scope_val = scope === "base" ? 0 : scope === "one" ? 1 : 2;
-    const filter_buf = this.ber_string(0x87, filter.replace(/^\(|\)$/g, "").split("=")[1] || "*");
     const filter_attr = filter.replace(/^\(|\)$/g, "").split("=")[0] || "objectClass";
     const eq_filter = this.ber_sequence(0xA3, this.ber_string(0x04, filter_attr), this.ber_string(0x04, filter.replace(/^\(|\)$/g, "").split("=")[1] || "*"));
     const attr_bufs = attrs.map((a) => this.ber_string(0x04, a));

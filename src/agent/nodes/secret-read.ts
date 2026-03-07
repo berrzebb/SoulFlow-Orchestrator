@@ -4,7 +4,6 @@ import type { NodeHandler } from "../node-registry.js";
 import type { SecretReadNodeDefinition, OrcheNodeDefinition } from "../workflow-node.types.js";
 import type { OrcheNodeExecutorContext, OrcheNodeExecuteResult, OrcheNodeTestResult } from "../orche-node-executor.js";
 import { resolve_templates } from "../orche-node-executor.js";
-import { error_message } from "../../utils/common.js";
 
 export const secret_read_handler: NodeHandler = {
   node_type: "secret_read",
@@ -31,7 +30,7 @@ export const secret_read_handler: NodeHandler = {
       const env_key = ns ? `${ns.toUpperCase()}_${key.toUpperCase()}` : key.toUpperCase();
       const env_val = process.env[env_key];
       return { output: { value: env_val || "", success: !!env_val } };
-    } catch (err) {
+    } catch (_err) {
       return { output: { value: "", success: false } };
     }
   },

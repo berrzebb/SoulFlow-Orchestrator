@@ -44,7 +44,7 @@ function get_nested(obj: unknown, path: string): unknown {
   const parts = path.replace(/\[(\d+)\]/g, ".$1").split(".");
   let current: unknown = obj;
   for (const part of parts) {
-    if (current == null || typeof current !== "object") return undefined;
+    if (current === null || current === undefined || typeof current !== "object") return undefined;
     current = (current as Record<string, unknown>)[part];
   }
   return current;

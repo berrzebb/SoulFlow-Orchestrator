@@ -6,7 +6,7 @@
 import type { NodeDescriptor } from "./node-descriptors.js";
 import type { OrcheNodeDefinition } from "./workflow-node.types.js";
 import type { OrcheNodeExecutorContext, OrcheNodeExecuteResult, OrcheNodeTestResult } from "./orche-node-executor.js";
-import type { PhaseLoopState, PhaseLoopRunOptions, ChannelSendRequest, ChannelResponse, PhaseLoopEvent } from "./phase-loop.types.js";
+import type { PhaseLoopState, PhaseLoopRunOptions, PhaseLoopEvent } from "./phase-loop.types.js";
 import type { Logger } from "../logger.js";
 
 /** LLM 단일 호출 옵션. */

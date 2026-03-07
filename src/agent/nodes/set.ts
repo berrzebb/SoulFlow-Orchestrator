@@ -11,7 +11,7 @@ function set_nested(obj: Record<string, unknown>, path: string, value: unknown):
   let current: Record<string, unknown> = obj;
   for (let i = 0; i < parts.length - 1; i++) {
     const part = parts[i]!;
-    if (current[part] == null || typeof current[part] !== "object") {
+    if (current[part] === null || current[part] === undefined || typeof current[part] !== "object") {
       current[part] = {};
     }
     current = current[part] as Record<string, unknown>;

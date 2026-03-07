@@ -1,5 +1,5 @@
 import { slash_name_in } from "../slash-command.js";
-import { format_subcommand_guide, format_subcommand_usage } from "./registry.js";
+import { format_subcommand_guide } from "./registry.js";
 import { format_mention, type CommandContext, type CommandHandler } from "./types.js";
 import type { ConfirmationGuard } from "../../orchestration/confirmation-guard.js";
 

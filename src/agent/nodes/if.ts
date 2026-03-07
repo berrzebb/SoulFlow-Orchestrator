@@ -31,7 +31,7 @@ export const if_handler: NodeHandler = {
         branch: branch ? "true" : "false",
       };
     } catch (e) {
-      throw new Error(`if condition evaluation failed: ${error_message(e)}`);
+      throw new Error(`if condition evaluation failed: ${error_message(e)}`, { cause: e });
     }
   },
 
@@ -41,7 +41,7 @@ export const if_handler: NodeHandler = {
     try {
       const sandbox = createContext({ memory: ctx.memory });
       const result = runInNewContext(n.condition, sandbox, { timeout: 500 });
-      return { preview: { condition: n.condition, would_take: Boolean(result) ? "true" : "false" }, warnings };
+      return { preview: { condition: n.condition, would_take: result ? "true" : "false" }, warnings };
     } catch (e) {
       warnings.push(`condition evaluation error: ${error_message(e)}`);
       return { preview: { condition: n.condition, would_take: "unknown" }, warnings };

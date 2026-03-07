@@ -1,6 +1,6 @@
 /** PDF 도구 — PDF 텍스트 추출 + HTML→PDF 생성 (순수 Node.js, 외부 의존성 없음). */
 
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { Tool } from "./base.js";
 import type { JsonSchema } from "./types.js";

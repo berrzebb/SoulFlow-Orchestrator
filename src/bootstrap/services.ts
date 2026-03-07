@@ -2,7 +2,6 @@
 
 import { error_message } from "../utils/common.js";
 import type { AgentDomain } from "../agent/index.js";
-import type { create_agent_runtime } from "../agent/runtime.service.js";
 import type { AgentBackend } from "../agent/agent.types.js";
 import type { AgentSessionStore } from "../agent/agent-session-store.js";
 import type { ChannelManager } from "../channels/manager.js";
@@ -11,12 +10,10 @@ import type { DispatchService } from "../channels/dispatch.service.js";
 import type { create_command_router } from "../channels/create-command-router.js";
 import type { MessageBusRuntime } from "../bus/types.js";
 import type { CronService } from "../cron/index.js";
-import type { DecisionService } from "../decision/index.js";
-import type { WorkflowEventService } from "../events/index.js";
 import type { HeartbeatService } from "../heartbeat/index.js";
 import type { McpClientManager } from "../mcp/index.js";
 import type { OpsRuntimeService } from "../ops/index.js";
-import type { OrchestratorLlmRuntime, ProviderRegistry } from "../providers/index.js";
+import type { OrchestratorLlmRuntime } from "../providers/index.js";
 import type { CliAuthService } from "../agent/cli-auth.service.js";
 import type { MemoryConsolidationService } from "../agent/memory-consolidation.service.js";
 import type { MutableBroadcaster } from "../dashboard/broadcaster.js";

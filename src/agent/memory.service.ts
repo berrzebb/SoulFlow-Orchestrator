@@ -744,7 +744,7 @@ function chunk_age_days(kind: string, day: string): number | null {
 }
 
 /** 간단한 content hash (FNV-1a 32bit). crypto 의존 없이 빠른 변경 감지. */
-function simple_hash(text: string): string {
+function _simple_hash(text: string): string {
   let h = 0x811c9dc5;
   for (let i = 0; i < text.length; i++) {
     h ^= text.charCodeAt(i);

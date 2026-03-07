@@ -154,7 +154,7 @@ export class CodexJsonRpcClient extends EventEmitter {
 
   /** 응답, 서버 요청, 알림을 분류하여 처리. */
   private _dispatch(msg: Record<string, unknown>): void {
-    const has_id = msg.id != null;
+    const has_id = msg.id !== null && msg.id !== undefined;
     const has_method = typeof msg.method === "string";
 
     // 응답: id가 있고 pending에 매칭

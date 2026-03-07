@@ -93,7 +93,7 @@ export class CrontabTool extends Tool {
       case "validate": {
         const expr = String(params.expression || "");
         const parts = expr.trim().split(/\s+/);
-        const valid = parts.length === 5 && parts.every((p) => /^[\d,\-\*\/]+$/.test(p));
+        const valid = parts.length === 5 && parts.every((p) => /^[\d,*/-]+$/.test(p));
         return JSON.stringify({ expression: expr, valid, fields: parts.length });
       }
       case "is_due": {

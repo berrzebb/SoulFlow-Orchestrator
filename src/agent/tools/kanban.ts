@@ -2,7 +2,7 @@
 
 import { Tool } from "./base.js";
 import type { JsonSchema, ToolExecutionContext } from "./types.js";
-import type { KanbanStoreLike, RelationType, ScopeType, Priority, KanbanRule, FilterCriteria } from "../../services/kanban-store.js";
+import type { KanbanStoreLike, RelationType, ScopeType, Priority, KanbanRule } from "../../services/kanban-store.js";
 import type { KanbanRuleExecutor } from "../../services/kanban-rule-executor.js";
 
 const ACTIONS = [

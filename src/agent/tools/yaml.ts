@@ -225,7 +225,7 @@ export class YamlTool extends Tool {
     if (typeof val === "boolean" || typeof val === "number") return `${pad}${val}`;
     if (typeof val === "string") {
       if (val.includes("\n")) return `${pad}|\n${val.split("\n").map((l) => " ".repeat(indent + spaces) + l).join("\n")}`;
-      if (/[:{}\[\],&*#?|>!%@`]/.test(val) || val === "") return `${pad}"${val.replace(/"/g, '\\"')}"`;
+      if (val === "" || /[:{},&*#?|>!%@`]/.test(val) || val.includes("[") || val.includes("]")) return `${pad}"${val.replace(/"/g, '\\"')}"`;
       return `${pad}${val}`;
     }
     if (Array.isArray(val)) {

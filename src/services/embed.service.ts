@@ -1,7 +1,6 @@
 /** OpenAI 호환 embedding 서비스 (OpenRouter, Ollama, vLLM 등). */
 
 import { create_logger } from "../logger.js";
-import { error_message } from "../utils/common.js";
 
 const log = create_logger("embed-service");
 

@@ -7,8 +7,6 @@ import type { JsonSchema, ToolExecutionContext } from "./types.js";
 
 type GitOperation = "status" | "diff" | "log" | "commit" | "push" | "pull" | "branch" | "checkout" | "stash" | "tag";
 
-const SAFE_OPS = new Set<GitOperation>(["status", "diff", "log", "branch", "stash", "tag"]);
-
 export class GitTool extends Tool {
   readonly name = "git";
   readonly category = "shell" as const;

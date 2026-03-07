@@ -120,7 +120,7 @@ export class DockerPty implements Pty {
         stdin.write(data);
       }
       this.write_buffer.length = 0;
-    } catch (err) {
+    } catch (_err) {
       this.emit_exit(1);
     }
   }

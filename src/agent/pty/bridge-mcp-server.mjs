@@ -12,6 +12,7 @@
  */
 
 import { createConnection } from "node:net";
+import process from "node:process";
 import { createInterface } from "node:readline";
 
 const SOCKET_PATH = process.env.BRIDGE_SOCKET_PATH;

@@ -46,7 +46,7 @@ class ConsoleLogger implements Logger {
       line = JSON.stringify({ ts: new Date().toISOString(), level, name: this.name, msg, _ctx_error: true });
     }
     if (level === "error") {
-      // eslint-disable-next-line no-console
+       
       console.error(line);
     } else {
       // eslint-disable-next-line no-console

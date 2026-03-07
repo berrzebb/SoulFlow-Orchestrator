@@ -81,7 +81,7 @@ export function ensure_json_object(v: unknown): Record<string, unknown> | null {
 
 /** unknown 값을 안전하게 문자열로 변환. JSON 직렬화 실패 시 String() 폴백. */
 export function safe_stringify(value: unknown): string {
-  if (value == null) return "";
+  if (value === null || value === undefined) return "";
   if (typeof value === "string") return value;
   try { return JSON.stringify(value, null, 2); }
   catch { return String(value); }

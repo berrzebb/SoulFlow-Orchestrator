@@ -40,7 +40,7 @@ export function create_config_ops(deps: {
       const keys = path.split(".");
       let def: unknown = fresh as unknown as Record<string, unknown>;
       for (const k of keys) {
-        if (def == null || typeof def !== "object") { def = undefined; break; }
+        if (def === null || def === undefined || typeof def !== "object") { def = undefined; break; }
         def = (def as Record<string, unknown>)[k];
       }
       set_nested(app_config as unknown as Record<string, unknown>, path, def);

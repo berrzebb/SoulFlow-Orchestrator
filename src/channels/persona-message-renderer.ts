@@ -1,3 +1,6 @@
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
+
 /**
  * PersonaMessageRenderer — 모든 사용자-facing 발화를 페르소나 규칙에 맞게 렌더링.
  *
@@ -278,8 +281,8 @@ function status_started(s: PersonaStyleSnapshot): string {
   return "분석 중입니다.";
 }
 
-function status_progress(label: string, tool_count: number | undefined, s: PersonaStyleSnapshot): string {
-  const tc = tool_count != null && tool_count > 0 ? ` (도구 ${tool_count}회)` : "";
+function status_progress(label: string, tool_count: number | undefined, _s: PersonaStyleSnapshot): string {
+  const tc = tool_count !== null && tool_count !== undefined && tool_count > 0 ? ` (도구 ${tool_count}회)` : "";
   return `${label}${tc}`;
 }
 
@@ -391,7 +394,6 @@ export class TonePreferenceStore {
 
   private load(): void {
     try {
-      const { readFileSync } = require("fs") as typeof import("fs");
       const data = JSON.parse(readFileSync(this.file_path, "utf-8"));
       if (data && typeof data === "object") {
         for (const [k, v] of Object.entries(data)) {
@@ -404,8 +406,6 @@ export class TonePreferenceStore {
   private flush(): void {
     if (!this.dirty) return;
     try {
-      const { writeFileSync, mkdirSync } = require("fs") as typeof import("fs");
-      const { dirname } = require("path") as typeof import("path");
       mkdirSync(dirname(this.file_path), { recursive: true });
       writeFileSync(this.file_path, JSON.stringify(Object.fromEntries(this.cache), null, 2));
       this.dirty = false;

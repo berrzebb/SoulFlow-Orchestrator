@@ -49,7 +49,7 @@ export class FilterTool extends Tool {
   private get_path(obj: unknown, path: string): unknown {
     let current: unknown = obj;
     for (const key of path.split(".")) {
-      if (current == null || typeof current !== "object") return undefined;
+      if (current === null || current === undefined || typeof current !== "object") return undefined;
       current = (current as Record<string, unknown>)[key];
     }
     return current;
@@ -59,7 +59,7 @@ export class FilterTool extends Tool {
     if (op === "exists") return field !== undefined && field !== null;
     if (op === "not_exists") return field === undefined || field === null;
 
-    const f = field == null ? "" : String(field);
+    const f = field === null || field === undefined ? "" : String(field);
     const v = value ?? "";
     const fn = Number(f), vn = Number(v);
     const both_num = f !== "" && v !== "" && !isNaN(fn) && !isNaN(vn);

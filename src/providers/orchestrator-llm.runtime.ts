@@ -350,8 +350,8 @@ export class OrchestratorLlmRuntime {
       if (data.error) return { status: `error: ${String(data.error)}` };
       return {
         status: String(data.status || "unknown"),
-        completed: data.completed != null ? Number(data.completed) : undefined,
-        total: data.total != null ? Number(data.total) : undefined,
+        completed: data.completed !== null && data.completed !== undefined ? Number(data.completed) : undefined,
+        total: data.total !== null && data.total !== undefined ? Number(data.total) : undefined,
       };
     } catch (error) {
       return { status: `error: ${error_message(error)}` };
@@ -395,8 +395,8 @@ export class OrchestratorLlmRuntime {
           }
           yield {
             status: String(data.status || "unknown"),
-            completed: data.completed != null ? Number(data.completed) : undefined,
-            total: data.total != null ? Number(data.total) : undefined,
+            completed: data.completed !== null && data.completed !== undefined ? Number(data.completed) : undefined,
+            total: data.total !== null && data.total !== undefined ? Number(data.total) : undefined,
           };
         } catch { /* malformed line skip */ }
       }
@@ -410,8 +410,8 @@ export class OrchestratorLlmRuntime {
         }
         yield {
           status: String(data.status || "done"),
-          completed: data.completed != null ? Number(data.completed) : undefined,
-          total: data.total != null ? Number(data.total) : undefined,
+          completed: data.completed !== null && data.completed !== undefined ? Number(data.completed) : undefined,
+          total: data.total !== null && data.total !== undefined ? Number(data.total) : undefined,
         };
       } catch { /* ignore */ }
     }

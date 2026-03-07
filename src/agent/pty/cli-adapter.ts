@@ -44,12 +44,12 @@ export class ClaudeCliAdapter implements CliAdapter {
     if (options.session_key && is_uuid(options.session_key)) args.push("--session-id", options.session_key);
     if (options.system_prompt) args.push("--append-system-prompt", options.system_prompt);
     if (options.model) args.push("--model", options.model);
-    if (options.max_turns != null) args.push("--max-turns", String(options.max_turns));
+    if (options.max_turns !== null && options.max_turns !== undefined) args.push("--max-turns", String(options.max_turns));
     if (options.allowed_tools?.length) args.push("--allowedTools", ...options.allowed_tools);
     if (options.disallowed_tools?.length) args.push("--disallowedTools", ...options.disallowed_tools);
     if (options.add_dirs?.length) args.push("--add-dir", ...options.add_dirs);
     if (options.ephemeral) args.push("--no-session-persistence");
-    if (options.max_budget_usd != null) args.push("--max-budget-usd", String(options.max_budget_usd));
+    if (options.max_budget_usd !== null && options.max_budget_usd !== undefined) args.push("--max-budget-usd", String(options.max_budget_usd));
     if (options.json_schema) args.push("--json-schema", options.json_schema);
     if (options.mcp_config) args.push("--mcp-config", options.mcp_config);
     return args;

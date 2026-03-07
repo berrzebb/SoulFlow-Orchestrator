@@ -1,7 +1,6 @@
 /** S3 도구 — S3호환 오브젝트 스토리지 (AWS S3 / MinIO / R2 등). */
 
 import { readFile, writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
 import { createHmac, createHash } from "node:crypto";
 import { Tool } from "./base.js";
 import type { JsonSchema } from "./types.js";
@@ -69,7 +68,7 @@ export class S3Tool extends Tool {
             body_buf = Buffer.from(String(params.body || ""));
           }
           const url = `${endpoint}/${bucket}/${key}`;
-          const resp = await this.s3_fetch("PUT", url, region, access_key, secret_key, body_buf);
+          await this.s3_fetch("PUT", url, region, access_key, secret_key, body_buf);
           return JSON.stringify({ success: true, key, size: body_buf.length });
         }
         case "delete": {

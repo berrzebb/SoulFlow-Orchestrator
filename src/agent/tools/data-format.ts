@@ -1,7 +1,7 @@
 /** DataFormat 도구 — JSON/CSV/YAML/TOML 변환 + jq-style 쿼리 + 스키마 검증. */
 
 import { Tool } from "./base.js";
-import type { JsonSchema, ToolExecutionContext } from "./types.js";
+import type { JsonSchema } from "./types.js";
 import { error_message } from "../../utils/common.js";
 
 type FormatType = "json" | "csv" | "yaml" | "toml";
@@ -205,7 +205,7 @@ export class DataFormatTool extends Tool {
     if (arr.length === 0) return "";
     const keys = [...new Set(arr.flatMap((r) => (r && typeof r === "object" ? Object.keys(r) : [])))];
     const escape = (v: unknown): string => {
-      const s = v == null ? "" : String(v);
+      const s = v === null || v === undefined ? "" : String(v);
       return s.includes(delim) || s.includes('"') || s.includes("\n") ? `"${s.replace(/"/g, '""')}"` : s;
     };
     const header = keys.map(escape).join(delim);

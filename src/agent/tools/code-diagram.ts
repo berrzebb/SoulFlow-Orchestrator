@@ -651,14 +651,11 @@ export class CodeDiagramTool extends Tool {
     }
 
     const lines: string[] = [`graph ${direction}`];
-    let sub_id = 0;
-
     for (const [folder, group] of folders) {
       const id = this.safe_id(folder);
       lines.push(`  subgraph ${id}_sub["${folder}"]`);
       lines.push(`    ${id}_info["${group.files.length} files, ${group.exports.size} exports"]`);
       lines.push("  end");
-      sub_id++;
     }
 
     // 폴더 간 의존성 엣지
@@ -924,7 +921,7 @@ export class CodeDiagramTool extends Tool {
   }
 
   private base_type_name(type: string): string {
-    return type.replace(/[\[\]<>?|&\s]/g, " ").split(" ").filter(Boolean)[0] || type;
+    return type.replace(/\[|\]|[<>?|&\s]/g, " ").split(" ").filter(Boolean)[0] || type;
   }
 
   private er_type(ts_type: string): string {

@@ -4,7 +4,7 @@ import type { PhaseWorkflowStoreLike } from "../../agent/phase-workflow-store.js
 import type { SubagentRegistry } from "../../agent/subagents.js";
 import type { SkillsLoader } from "../../agent/skills.service.js";
 import type { DashboardWorkflowOps } from "../service.js";
-import type { PhaseLoopRunOptions, WorkflowDefinition, ChannelSendRequest, ChannelResponse } from "../../agent/phase-loop.types.js";
+import type { PhaseLoopRunOptions, ChannelSendRequest, ChannelResponse } from "../../agent/phase-loop.types.js";
 import {
   load_workflow_templates, load_workflow_template,
   substitute_variables, save_workflow_template,

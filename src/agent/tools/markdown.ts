@@ -75,7 +75,7 @@ export class MarkdownTool extends Tool {
     const body = rows.map((row) => {
       const cells = cols.map((c) => {
         const v = row[c];
-        return v == null ? "" : String(v).replace(/\|/g, "\\|").replace(/\n/g, " ");
+        return v === null || v === undefined ? "" : String(v).replace(/\|/g, "\\|").replace(/\n/g, " ");
       });
       return `| ${cells.join(" | ")} |`;
     });

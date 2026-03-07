@@ -70,9 +70,9 @@ export class TableTool extends Tool {
     const dir = order === "desc" ? -1 : 1;
     const sorted = [...data].sort((a, b) => {
       const av = a[field], bv = b[field];
-      if (av == null && bv == null) return 0;
-      if (av == null) return 1;
-      if (bv == null) return -1;
+      if ((av === null || av === undefined) && (bv === null || bv === undefined)) return 0;
+      if (av === null || av === undefined) return 1;
+      if (bv === null || bv === undefined) return -1;
       if (typeof av === "number" && typeof bv === "number") return (av - bv) * dir;
       return String(av).localeCompare(String(bv)) * dir;
     });

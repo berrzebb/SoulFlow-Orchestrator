@@ -111,7 +111,7 @@ function get_array(memory: Record<string, unknown>, path: string): unknown[] {
   const parts = path.split(".");
   let current: unknown = memory;
   for (const p of parts) {
-    if (current == null || typeof current !== "object") return [];
+    if (current === null || current === undefined || typeof current !== "object") return [];
     current = (current as Record<string, unknown>)[p];
   }
   return Array.isArray(current) ? current : [];

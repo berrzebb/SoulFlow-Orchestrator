@@ -1,4 +1,4 @@
-import type { MessageBusLike, MessageBusRuntime, OutboundMessage, ReliableMessageBus } from "../bus/types.js";
+import type { MessageBusLike, OutboundMessage, ReliableMessageBus } from "../bus/types.js";
 import type { Logger } from "../logger.js";
 import type { ServiceLike } from "../runtime/service.types.js";
 import type { AppConfig } from "../config/schema.js";

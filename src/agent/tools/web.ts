@@ -433,8 +433,8 @@ export class WebBrowserTool extends Tool {
       const args = path
         ? [...base, "screenshot", path]
         : [...base, "screenshot"];
-      if (Boolean(params.full_page)) args.push("--full");
-      if (Boolean(params.annotate)) args.push("--annotate");
+      if (params.full_page) args.push("--full");
+      if (params.annotate) args.push("--annotate");
       args.push("--json");
       const result = await run_agent_browser_cli(args, context);
       if (!result.ok) return `Error: ${result.stderr || result.stdout || "agent_browser_screenshot_failed"}`;

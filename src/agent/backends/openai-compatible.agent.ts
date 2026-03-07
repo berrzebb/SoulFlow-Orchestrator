@@ -183,8 +183,8 @@ export class OpenAiCompatibleAgent implements AgentBackend {
 
     const max_tokens = options?.max_tokens ?? this.config.max_tokens;
     const temperature = options?.temperature ?? this.config.temperature;
-    if (max_tokens != null) body.max_tokens = max_tokens;
-    if (temperature != null) body.temperature = temperature;
+    if (max_tokens !== null && max_tokens !== undefined) body.max_tokens = max_tokens;
+    if (temperature !== null && temperature !== undefined) body.temperature = temperature;
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.config.request_timeout_ms ?? 120_000);

@@ -198,7 +198,8 @@ export class ClaudeSdkAgent implements AgentBackend {
 
     // abort → interrupt() (graceful) → abort_controller (강제)
     const abort_relay = () => {
-      swallow(sdk_query_instance.interrupt?.()!);
+      const interrupt = sdk_query_instance.interrupt?.();
+      if (interrupt) swallow(interrupt);
       abort_controller.abort();
     };
     if (options.abort_signal) {
@@ -617,7 +618,7 @@ function _deny_hook(reason: string): Record<string, unknown> {
 
 /** 객체/배열을 렌더링 가능한 문자열로 변환. 마크다운 코드블록으로 래핑. */
 function _stringify_for_render(value: unknown): string {
-  if (value == null) return "";
+  if (value === null || value === undefined) return "";
   if (typeof value === "string") return value;
   const text = safe_stringify(value);
   return text.startsWith("{") || text.startsWith("[") ? "```json\n" + text + "\n```" : text;
@@ -628,7 +629,7 @@ function _stringify_for_render(value: unknown): string {
  * MCP 프로토콜 형식 `{ content: [{ type: "text", text }] }` 또는 plain string 모두 처리.
  */
 function _extract_tool_response_text(response: unknown): string {
-  if (response == null) return "";
+  if (response === null || response === undefined) return "";
   if (typeof response === "string") return response;
   if (typeof response === "object") {
     const rec = response as Record<string, unknown>;

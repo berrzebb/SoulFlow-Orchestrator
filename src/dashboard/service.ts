@@ -18,7 +18,7 @@ import type { DispatchDlqStoreLike } from "../channels/dlq-store.js";
 import type { SecretVaultLike } from "../security/secret-vault.js";
 import type { SessionStoreLike } from "../session/index.js";
 import { now_iso, error_message } from "../utils/common.js";
-import type { WebhookStore, WebhookPayload } from "../services/webhook-store.service.js";
+import type { WebhookStore } from "../services/webhook-store.service.js";
 import { set_no_cache } from "./route-context.js";
 import { SystemMetricsCollector } from "./system-metrics.js";
 import type { RouteContext, RouteHandler } from "./route-context.js";

@@ -1,7 +1,7 @@
 /** SQLite datasource 쿼리 서비스. 워크플로우 노드에서 DB 조회/조작 지원. */
 
 import { join } from "node:path";
-import { existsSync, mkdirSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import { with_sqlite } from "../utils/sqlite-helper.js";
 import { create_logger } from "../logger.js";
 

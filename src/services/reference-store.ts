@@ -8,7 +8,7 @@
 
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { join, extname, relative } from "node:path";
+import { join, extname } from "node:path";
 import Database from "better-sqlite3";
 import * as sqliteVec from "sqlite-vec";
 import type { EmbedFn } from "../agent/memory.service.js";
@@ -16,7 +16,6 @@ import type { EmbedFn } from "../agent/memory.service.js";
 const VEC_DIMENSIONS = 256;
 const MAX_EMBED_CHARS = 1500;
 const CHUNK_SIZE = 1200;
-const CHUNK_OVERLAP = 200;
 const SYNC_DEBOUNCE_MS = 60_000;
 const MAX_SEARCH_RESULTS = 8;
 
@@ -268,7 +267,7 @@ export class ReferenceStore implements ReferenceStoreLike {
     this.ensure_init();
     const db = new Database(this.db_path, { readonly: true });
     try {
-      return db.prepare("SELECT path, chunk_count as chunks, file_size as size, updated_at FROM ref_documents ORDER BY updated_at DESC").all() as any[];
+      return db.prepare("SELECT path, chunk_count as chunks, file_size as size, updated_at FROM ref_documents ORDER BY updated_at DESC").all() as Array<{ path: string; chunks: number; size: number; updated_at: string }>;
     } finally {
       db.close();
     }
@@ -278,8 +277,8 @@ export class ReferenceStore implements ReferenceStoreLike {
     this.ensure_init();
     const db = new Database(this.db_path, { readonly: true });
     try {
-      const docs = (db.prepare("SELECT COUNT(*) as c FROM ref_documents").get() as any)?.c ?? 0;
-      const chunks = (db.prepare("SELECT COUNT(*) as c FROM ref_chunks").get() as any)?.c ?? 0;
+      const docs = (db.prepare("SELECT COUNT(*) as c FROM ref_documents").get() as { c: number } | undefined)?.c ?? 0;
+      const chunks = (db.prepare("SELECT COUNT(*) as c FROM ref_chunks").get() as { c: number } | undefined)?.c ?? 0;
       return { total_docs: docs, total_chunks: chunks, last_sync: this.last_sync ? new Date(this.last_sync).toISOString() : null };
     } finally {
       db.close();

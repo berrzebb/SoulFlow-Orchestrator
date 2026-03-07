@@ -4,7 +4,6 @@ import type { NodeHandler } from "../node-registry.js";
 import type { JwtNodeDefinition, OrcheNodeDefinition } from "../workflow-node.types.js";
 import type { OrcheNodeExecutorContext, OrcheNodeExecuteResult, OrcheNodeTestResult } from "../orche-node-executor.js";
 import { resolve_templates } from "../orche-node-executor.js";
-import { error_message } from "../../utils/common.js";
 
 export const jwt_handler: NodeHandler = {
   node_type: "jwt",
@@ -39,7 +38,7 @@ export const jwt_handler: NodeHandler = {
       });
       const parsed = result.startsWith("{") ? JSON.parse(result) : {};
       return { output: { token: parsed.token || "", payload: JSON.stringify(parsed.payload || {}), valid: parsed.valid ?? !result.startsWith("Error:") } };
-    } catch (err) {
+    } catch (_err) {
       return { output: { token: "", payload: "{}", valid: false } };
     }
   },

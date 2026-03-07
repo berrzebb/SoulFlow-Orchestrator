@@ -27,7 +27,6 @@ import {
   type PhaseNodeDefinition,
   type IfNodeDefinition,
   type SwitchNodeDefinition,
-  type OrcheNodeDefinition,
 } from "./workflow-node.types.js";
 import { execute_orche_node, apply_preset } from "./orche-node-executor.js";
 import { get_node_handler, type RunnerContext } from "./node-registry.js";
@@ -1206,7 +1205,7 @@ function resolve_field(obj: unknown, path: string): unknown {
   const parts = path.replace(/\[(\d+)]/g, ".$1").split(".");
   let current: unknown = obj;
   for (const key of parts) {
-    if (current == null || typeof current !== "object") return undefined;
+    if (current === null || current === undefined || typeof current !== "object") return undefined;
     current = (current as Record<string, unknown>)[key];
   }
   return current;
@@ -1218,7 +1217,7 @@ function set_nested_field(obj: Record<string, unknown>, path: string, value: unk
   let current: Record<string, unknown> = obj;
   for (let i = 0; i < parts.length - 1; i++) {
     const key = parts[i];
-    if (current[key] == null || typeof current[key] !== "object") {
+    if (current[key] === null || current[key] === undefined || typeof current[key] !== "object") {
       current[key] = {};
     }
     current = current[key] as Record<string, unknown>;

@@ -82,7 +82,7 @@ export async function create_agent_core(deps: AgentCoreDeps): Promise<AgentCoreR
   const {
     workspace, data_dir, sessions_dir, app_root, app_config,
     providers, bus, events, agent_backend_registry, provider_caps,
-    embed_service, oauth_store, oauth_flow, broadcaster, logger,
+    embed_service, oauth_store, broadcaster, logger,
   } = deps;
 
   const tone_pref_store = new TonePreferenceStore(join(workspace, "runtime", "tone-preferences.json"));

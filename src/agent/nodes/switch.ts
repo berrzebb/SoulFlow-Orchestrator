@@ -30,7 +30,7 @@ export const switch_handler: NodeHandler = {
         branch: matched ? matched.value : "default",
       };
     } catch (e) {
-      throw new Error(`switch expression evaluation failed: ${error_message(e)}`);
+      throw new Error(`switch expression evaluation failed: ${error_message(e)}`, { cause: e });
     }
   },
 

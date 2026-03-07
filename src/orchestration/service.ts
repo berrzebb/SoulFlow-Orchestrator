@@ -1600,7 +1600,6 @@ const HITL_GUIDE: Record<HitlType, { header: string; instruction: string }> = {
 /** 에이전트 출력에서 HITL 유형을 추론. */
 export function detect_hitl_type(prompt: string): HitlType {
   if (!prompt) return "question";
-  const lower = prompt.toLowerCase();
   // 확인 요청: yes/no, 예/아니오 패턴
   if (/진행할까요|계속할까요|실행할까요|괜찮을까요|할까요\?|맞나요\?|맞습니까\?/.test(prompt)
     || /\b(yes\s*\/\s*no|y\s*\/\s*n)\b/i.test(prompt)) {

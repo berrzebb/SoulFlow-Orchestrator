@@ -201,8 +201,8 @@ export class JsonSchemaTool extends Tool {
     const type = schema.type as string;
     switch (type) {
       case "string": return schema.enum ? (schema.enum as unknown[])[0] : "example";
-      case "number": return schema.minimum != null ? schema.minimum : 0;
-      case "integer": return schema.minimum != null ? schema.minimum : 0;
+      case "number": return schema.minimum !== null && schema.minimum !== undefined ? schema.minimum : 0;
+      case "integer": return schema.minimum !== null && schema.minimum !== undefined ? schema.minimum : 0;
       case "boolean": return true;
       case "null": return null;
       case "array": {

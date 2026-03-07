@@ -4,7 +4,6 @@ import type { NodeHandler } from "../node-registry.js";
 import type { GraphqlNodeDefinition, OrcheNodeDefinition } from "../workflow-node.types.js";
 import type { OrcheNodeExecutorContext, OrcheNodeExecuteResult, OrcheNodeTestResult } from "../orche-node-executor.js";
 import { resolve_templates } from "../orche-node-executor.js";
-import { error_message } from "../../utils/common.js";
 
 export const graphql_handler: NodeHandler = {
   node_type: "graphql",
@@ -39,7 +38,7 @@ export const graphql_handler: NodeHandler = {
       });
       const parsed = result.startsWith("{") ? JSON.parse(result) : {};
       return { output: { data: JSON.stringify(parsed.data ?? {}), status: parsed.status ?? 0, success: !result.startsWith("Error:") } };
-    } catch (err) {
+    } catch (_err) {
       return { output: { data: "{}", status: 0, success: false } };
     }
   },

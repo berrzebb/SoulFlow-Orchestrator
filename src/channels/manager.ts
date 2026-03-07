@@ -24,7 +24,6 @@ import { resolve_reply_to } from "../orchestration/service.js";
 import { get_command_descriptors } from "./commands/registry.js";
 import { parse_slash_command_from_message, parse_slash_command } from "./slash-command.js";
 import {
-  default_render_profile,
   render_agent_output,
   split_markdown,
   get_provider_max_length,

@@ -77,7 +77,7 @@ async function execute_javascript(
     const result = await runInNewContext(wrapped, sandbox, { timeout: timeout_ms });
     return { output: { result, logs } };
   } catch (e) {
-    throw new Error(`js execution failed: ${error_message(e)}`);
+    throw new Error(`js execution failed: ${error_message(e)}`, { cause: e });
   }
 }
 
@@ -92,7 +92,7 @@ async function execute_shell(
     });
     return { output: { stdout: result.stdout, stderr: result.stderr } };
   } catch (e) {
-    throw new Error(`shell execution failed: ${error_message(e)}`);
+    throw new Error(`shell execution failed: ${error_message(e)}`, { cause: e });
   }
 }
 

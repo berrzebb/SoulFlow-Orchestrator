@@ -4,7 +4,6 @@ import type { NodeHandler } from "../node-registry.js";
 import type { EmailNodeDefinition, OrcheNodeDefinition } from "../workflow-node.types.js";
 import type { OrcheNodeExecutorContext, OrcheNodeExecuteResult, OrcheNodeTestResult } from "../orche-node-executor.js";
 import { resolve_templates } from "../orche-node-executor.js";
-import { error_message } from "../../utils/common.js";
 
 export const email_handler: NodeHandler = {
   node_type: "email",
@@ -42,7 +41,7 @@ export const email_handler: NodeHandler = {
       });
       const parsed = result.startsWith("{") ? JSON.parse(result) : {};
       return { output: { message_id: parsed.message_id || "", success: parsed.ok ?? !result.startsWith("Error:") } };
-    } catch (err) {
+    } catch (_err) {
       return { output: { message_id: "", success: false } };
     }
   },

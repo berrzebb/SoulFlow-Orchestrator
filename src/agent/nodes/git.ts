@@ -1,6 +1,6 @@
 /** Git 노드 핸들러. */
 
-import type { NodeHandler, RunnerContext } from "../node-registry.js";
+import type { NodeHandler } from "../node-registry.js";
 import type { GitNodeDefinition, OrcheNodeDefinition } from "../workflow-node.types.js";
 import type { OrcheNodeExecutorContext, OrcheNodeExecuteResult, OrcheNodeTestResult } from "../orche-node-executor.js";
 import { resolve_templates } from "../orche-node-executor.js";

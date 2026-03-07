@@ -7,7 +7,8 @@
 export function normalize_for_detection(text: string): string {
   return text
     .normalize("NFKC")
-    .replace(/[\u00AD\u034F\u180E\u200B-\u200F\u2028-\u202F\u2060-\u206F\uFEFF]/g, "");
+    .replace(/\u034F/g, "")
+    .replace(/[\u00AD\u180E\u200B-\u200F\u2028-\u202F\u2060-\u206F\uFEFF]/g, "");
 }
 
 export const PROMPT_INJECTION_PATTERNS: readonly RegExp[] = [

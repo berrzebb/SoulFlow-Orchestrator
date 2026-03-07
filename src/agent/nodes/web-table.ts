@@ -74,7 +74,6 @@ function parse_html_table(html: string, _selector: string, max_rows: number): { 
   const rows: Record<string, string>[] = [];
   const tr_re = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
   let tr_m: RegExpExecArray | null;
-  let row_idx = 0;
   while ((tr_m = tr_re.exec(table_html)) !== null && rows.length < max_rows) {
     const cells: string[] = [];
     const td_re = /<td[^>]*>([\s\S]*?)<\/td>/gi;
@@ -82,11 +81,10 @@ function parse_html_table(html: string, _selector: string, max_rows: number): { 
     while ((td_m = td_re.exec(tr_m[1])) !== null) {
       cells.push(td_m[1].replace(/<[^>]+>/g, "").trim());
     }
-    if (cells.length === 0) { row_idx++; continue; }
+    if (cells.length === 0) continue;
     const row: Record<string, string> = {};
     cells.forEach((c, j) => { row[headers[j] || `col_${j}`] = c; });
     rows.push(row);
-    row_idx++;
   }
 
   return { headers, rows, total: rows.length };

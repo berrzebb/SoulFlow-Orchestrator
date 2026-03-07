@@ -109,7 +109,7 @@ export class GeoTool extends Tool {
 
   private geohash_encode(lat: number, lon: number, precision: number): string {
     const base32 = "0123456789bcdefghjkmnpqrstuvwxyz";
-    let lat_range = [-90, 90], lon_range = [-180, 180];
+    const lat_range = [-90, 90], lon_range = [-180, 180];
     let hash = "", bits = 0, ch = 0, even = true;
     while (hash.length < precision) {
       const range = even ? lon_range : lat_range;
@@ -126,7 +126,7 @@ export class GeoTool extends Tool {
 
   private geohash_decode(hash: string): { lat: number; lon: number; lat_err: number; lon_err: number } {
     const base32 = "0123456789bcdefghjkmnpqrstuvwxyz";
-    let lat_range = [-90, 90], lon_range = [-180, 180];
+    const lat_range = [-90, 90], lon_range = [-180, 180];
     let even = true;
     for (const c of hash) {
       const val = base32.indexOf(c);

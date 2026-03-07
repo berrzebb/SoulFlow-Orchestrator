@@ -90,7 +90,7 @@ export class MathTool extends Tool {
   }
 
   private temp_convert(v: number, from: string, to: string): number {
-    let celsius = from === "c" ? v : from === "f" ? (v - 32) * 5 / 9 : v - 273.15;
+    const celsius = from === "c" ? v : from === "f" ? (v - 32) * 5 / 9 : v - 273.15;
     if (to === "c") return this.rnd(celsius);
     if (to === "f") return this.rnd(celsius * 9 / 5 + 32);
     return this.rnd(celsius + 273.15);

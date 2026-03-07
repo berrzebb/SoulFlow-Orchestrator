@@ -198,7 +198,7 @@ export class CodexAppServerAgent implements AgentBackend {
         });
       } catch (err) {
         const detail = stderr_buf.trim();
-        throw new Error(`codex_init_failed: ${error_message(err)}${detail ? ` | stderr: ${detail.slice(0, 500)}` : ""}`);
+        throw new Error(`codex_init_failed: ${error_message(err)}${detail ? ` | stderr: ${detail.slice(0, 500)}` : ""}`, { cause: err });
       }
       this.client.notify("initialized");
       this.initialized = true;

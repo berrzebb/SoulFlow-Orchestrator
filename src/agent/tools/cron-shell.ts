@@ -3,7 +3,7 @@
 import { Tool } from "./base.js";
 import { run_shell_command } from "./shell-runtime.js";
 import { error_message } from "../../utils/common.js";
-import type { JsonSchema, ToolExecutionContext } from "./types.js";
+import type { JsonSchema } from "./types.js";
 
 interface CronEntry {
   id: string;

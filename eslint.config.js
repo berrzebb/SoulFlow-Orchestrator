@@ -20,7 +20,7 @@ export default tseslint.config(
       }],
       "@typescript-eslint/no-explicit-any": "error",
       "@typescript-eslint/no-empty-function": "off",
-      "@typescript-eslint/no-non-null-assertion": "warn",
+      "@typescript-eslint/no-non-null-assertion": "off",
       "@typescript-eslint/no-unnecessary-type-assertion": "off",
       "@typescript-eslint/no-dynamic-delete": "off",
       "@typescript-eslint/no-empty-interface": "off",
@@ -38,8 +38,8 @@ export default tseslint.config(
 
       // ANSI 제어문자 정규식 허용 (output-sanitizer, media-collector)
       "no-control-regex": "off",
-      // try/catch 패턴에서 재할당 후 미사용 허용
-      "no-useless-assignment": "warn",
+      // 현재 코드베이스에서는 try/catch 상태 전이를 위해 재할당 패턴을 사용한다.
+      "no-useless-assignment": "off",
     },
   },
   {
