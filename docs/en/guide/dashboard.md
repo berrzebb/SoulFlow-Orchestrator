@@ -6,7 +6,7 @@ Built with **React + Vite**. Supports **Korean/English i18n** (auto-detected fro
 
 Global state management via Zustand (`store.ts`) — SSE connection status, sidebar, theme, web streaming.
 
-Navigate between 9 sections via the sidebar. Toggle dark/light theme with the button at the bottom of the sidebar.
+Navigate between 10 sections via the sidebar. Toggle dark/light theme with the button at the bottom of the sidebar.
 
 ## Setup Wizard
 
@@ -30,7 +30,8 @@ On first launch with no providers configured, the dashboard auto-redirects to `/
 | Providers | `/providers` | Agent provider CRUD |
 | Secrets | `/secrets` | AES-256-GCM secret management |
 | Models | `/models` | Orchestrator LLM runtime · model pull/delete/switch |
-| Workflows | `/workflows` | Phase Loop workflow management · agent chat |
+| Workflows | `/workflows` | Phase Loop workflow management · 87-node graph editor · agent chat |
+| Kanban | `/kanban` | Task board with drag-and-drop columns |
 | Settings | `/settings` | Global runtime settings (section tabs, inline edit, ToggleSwitch) |
 
 ## Overview
@@ -170,7 +171,7 @@ The runtime engine is auto-detected in `auto` mode:
 
 Manage Phase Loop workflows and chat with agents. Phase Loop differs from Agent Loop (1:1 single agent) and Task Loop (sequential N:1) by implementing a **2-dimensional execution model: parallel agents within a phase + critic review → next phase**.
 
-The Workflows page includes a **Graph Editor** with 42 node types across 6 categories (flow, data, AI, integration, interaction, advanced), a **Node Inspector** for editing node properties, and a **Node Picker** palette for drag-and-drop workflow construction.
+The Workflows page includes a **Graph Editor** with 87 node types across 6 categories (flow, data, AI, integration, interaction, advanced), a **Node Inspector** for editing node properties, and a **Node Picker** palette for drag-and-drop workflow construction.
 
 ### Comparison with Other Loops
 
@@ -358,9 +359,9 @@ The dashboard backend is split into these services:
 | `StateBuilder` | Pure functions for dashboard state assembly (`build_dashboard_state`, `build_merged_tasks`) |
 | `StaticServer` | SPA static asset serving + `index.html` fallback (html: no-store, others: immutable) |
 | `MediaTokenStore` | Token-based media serving (workspace path validation, 1-hour TTL) |
-| `OpsFactory` | 11 domain ops factories (template, channel, agent-provider, bootstrap, memory, workspace, oauth, config, skill, tool, cli-auth) |
+| `OpsFactory` | 13 domain ops factories (template, channel, agent-provider, bootstrap, memory, workspace, oauth, config, skill, tool, cli-auth, model, workflow) |
 
-22 route handlers in `src/dashboard/routes/` — each follows the `async (ctx: RouteContext) => boolean` pattern.
+26 route handlers in `src/dashboard/routes/` — each follows the `async (ctx: RouteContext) => boolean` pattern.
 
 ## Access Control
 

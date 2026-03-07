@@ -6,7 +6,7 @@
 
 전역 상태 관리는 Zustand (`store.ts`) — SSE 연결 상태, 사이드바, 테마, 웹 스트리밍.
 
-사이드바에서 9개 섹션으로 이동합니다. 하단 버튼으로 다크/라이트 테마를 전환할 수 있습니다.
+사이드바에서 10개 섹션으로 이동합니다. 하단 버튼으로 다크/라이트 테마를 전환할 수 있습니다.
 
 ## Setup Wizard
 
@@ -30,7 +30,8 @@
 | Providers | `/providers` | 에이전트 프로바이더 CRUD |
 | Secrets | `/secrets` | AES-256-GCM 시크릿 관리 |
 | Models | `/models` | 오케스트레이터 LLM 런타임 · 모델 pull/delete/switch |
-| Workflows | `/workflows` | Phase Loop 워크플로우 관리 · 에이전트 채팅 |
+| Workflows | `/workflows` | Phase Loop 워크플로우 관리 · 87종 노드 그래프 에디터 · 에이전트 채팅 |
+| Kanban | `/kanban` | 드래그앤드롭 칸반 태스크 보드 |
 | Settings | `/settings` | 글로벌 런타임 설정 (섹션 탭, 인라인 편집, ToggleSwitch) |
 
 ## Overview
@@ -175,7 +176,7 @@ Slack/Telegram 없이 웹에서 에이전트와 직접 대화합니다.
 
 Phase Loop 워크플로우를 관리하고 에이전트와 대화합니다. Phase Loop는 Agent Loop(1:1 단일 에이전트)·Task Loop(순차 N:1)와 달리, **페이즈 내 병렬 에이전트 + critic 검토 → 다음 페이즈**의 2차원 실행 모델입니다.
 
-Workflows 페이지에는 6개 카테고리 42종 노드 타입을 지원하는 **그래프 에디터**, 노드 속성 편집을 위한 **노드 인스펙터**, 드래그앤드롭 워크플로우 구성을 위한 **노드 피커** 팔레트가 포함됩니다.
+Workflows 페이지에는 6개 카테고리 87종 노드 타입을 지원하는 **그래프 에디터**, 노드 속성 편집을 위한 **노드 인스펙터**, 드래그앤드롭 워크플로우 구성을 위한 **노드 피커** 팔레트가 포함됩니다.
 
 ### 기존 루프와의 비교
 
@@ -363,9 +364,9 @@ Phase Loop 실행 시 추가 이벤트:
 | `StateBuilder` | 대시보드 상태 순수 조립 함수 (`build_dashboard_state`, `build_merged_tasks`) |
 | `StaticServer` | SPA 정적 자산 서빙 + `index.html` fallback (html: no-store, 나머지: immutable) |
 | `MediaTokenStore` | 토큰 기반 미디어 서빙 (workspace 외부 경로 차단, 1시간 TTL) |
-| `OpsFactory` | 11개 도메인별 ops 객체 팩토리 (template, channel, agent-provider, bootstrap, memory, workspace, oauth, config, skill, tool, cli-auth) |
+| `OpsFactory` | 13개 도메인별 ops 객체 팩토리 (template, channel, agent-provider, bootstrap, memory, workspace, oauth, config, skill, tool, cli-auth, model, workflow) |
 
-22개 라우트 핸들러가 `src/dashboard/routes/`에 분리되어 있으며, 각 라우트는 `async (ctx: RouteContext) => boolean` 패턴을 따릅니다.
+26개 라우트 핸들러가 `src/dashboard/routes/`에 분리되어 있으며, 각 라우트는 `async (ctx: RouteContext) => boolean` 패턴을 따릅니다.
 
 ## 접근 제한
 

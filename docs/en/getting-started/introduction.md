@@ -21,7 +21,7 @@ It receives messages from chat channels, routes them to specialized agents, and 
 **Good fit:**
 - **Multi-agent collaboration** — Parallel specialists (market analyst + tech analyst + strategist) with critic quality gates, where each agent has its own conversation context
 - **Autonomous development pipelines** — Spec creation through interactive conversation → planning → sequential implementation with fresh context per task → code review → validation with automatic fix loops
-- **Visual workflow automation** — Designing DAGs with 42 node types (HTTP, Code, LLM, IF, Merge, Approval, HITL, Form, etc.) via a graph editor, or letting agents create workflows from natural language ("crawl RSS every morning and summarize")
+- **Visual workflow automation** — Designing DAGs with 120 node types (HTTP, Code, LLM, IF, Merge, Approval, HITL, Form, etc.) via a graph editor, or letting agents create workflows from natural language ("crawl RSS every morning and summarize")
 - **Sandboxed code execution** — Running Python, Go, Rust, Ruby, and 3 other languages in isolated containers with strict resource limits as part of workflow pipelines
 - **24/7 chat-driven operations** — Running Claude/Codex/Gemini agents from Slack · Telegram · Discord with 8 backend options, CircuitBreaker auto-fallback, and auth profile rotation
 - **Multi-channel agent sharing** — One orchestrator serving Slack + Telegram + Discord simultaneously with per-channel configuration
@@ -46,7 +46,7 @@ Channel message received
   │    → Streaming response
   └─ phase → Workflow Engine
        → Phase Loop (parallel agents + critic gate)
-       → DAG Executor (42 node types)
+       → DAG Executor (120 node types)
        → Interaction nodes (HITL / Approval / Form) ←→ Channel feedback
        → Streaming response
 ```

@@ -292,7 +292,7 @@ The workflow resumes automatically when a response is received.
 
 ## Graph Editor
 
-The visual editor provides an SVG-based DAG canvas for designing workflows with 42 node types.
+The visual editor provides an SVG-based DAG canvas for designing workflows with 87 node types.
 
 ### Layout
 
@@ -302,16 +302,16 @@ The visual editor provides an SVG-based DAG canvas for designing workflows with 
 - **Mode badges** — each node shows its execution mode (∥ parallel, 🔄 interactive, 🔁 loop)
 - **Field ports** — input/output ports for memory-based data flow between nodes
 
-### Node Types (42 across 6 categories)
+### Node Types (87 across 6 categories)
 
-| Category | Node Types |
-|----------|-----------|
-| **Flow** (12) | if, switch, loop, merge, gate, wait, error-handler, filter, split, batch, assert, retry |
-| **Data** (8) | template, transform, code, aggregate, set, cache, db, file |
-| **AI** (8) | llm, ai-agent, analyzer, spawn-agent, embedding, vector-store, text-splitter, retriever |
-| **Integration** (6) | http, oauth, webhook, notify, send-file, sub-workflow |
-| **Interaction** (4) | hitl, approval, form, escalation |
-| **Advanced** (4) | decision, promise, task, tool-invoke |
+| Category | Count | Node Types |
+|----------|-------|-----------|
+| **Flow** | 13 | assert, batch, end, error-handler, filter, gate, if, loop, merge, retry, split, switch, wait |
+| **Data** | 32 | aggregate, cache, code, crypto, data-format, date-calc, db, diff, encoding, eval, file, format, hash, jwt, lookup, markdown, math, media, memory-rw, queue, regex, secret-read, set, set-ops, stats, table, template, template-engine, text, transform, ttl-cache, validator |
+| **AI** | 8 | ai-agent, analyzer, embedding, llm, retriever, spawn-agent, text-splitter, vector-store |
+| **Integration** | 25 | archive, compress, database, docker, email, git, graphql, http, image, kanban-trigger, network, notify, oauth, package-manager, process, screenshot, send-file, shell, sub-workflow, system-info, web-form, web-scrape, web-search, web-table, webhook |
+| **Interaction** | 4 | approval, escalation, form, hitl |
+| **Advanced** | 5 | decision, diagram, promise, task, tool-invoke |
 
 ### Node Inspector
 

@@ -6,7 +6,7 @@
 
 Slack · Telegram · Discord 메시지를 **헤드리스 에이전트**로 처리하는 비동기 오케스트레이션 런타임.
 
-8개 에이전트 백엔드(Claude/Codex/Gemini × CLI/SDK + OpenAI 호환 + OpenRouter + 컨테이너), 8개 역할 기반 스킬 시스템, CircuitBreaker 기반 프로바이더 복원력, AES-256-GCM 보안 Vault, OAuth 2.0 연동, 42종 노드 워크플로우 그래프 에디터, 에이전트 기반 WorkflowTool CRUD, React + Vite 웹 대시보드(i18n, 마크다운 렌더링)를 내장한 올인원 솔루션입니다.
+8개 에이전트 백엔드(Claude/Codex/Gemini × CLI/SDK + OpenAI 호환 + OpenRouter + 컨테이너), 8개 역할 기반 스킬 시스템, CircuitBreaker 기반 프로바이더 복원력, AES-256-GCM 보안 Vault, OAuth 2.0 연동, 120종 노드 워크플로우 그래프 에디터, 에이전트 기반 WorkflowTool CRUD, React + Vite 웹 대시보드(i18n, 마크다운 렌더링)를 내장한 올인원 솔루션입니다.
 
 ## 목차
 
@@ -54,7 +54,7 @@ flowchart TD
     subgraph Workflows["워크플로우 엔진"]
         direction TB
         PL[Phase Loop · Agent/Task Loop]
-        DAG[DAG 실행기 · 42종 노드]
+        DAG[DAG 실행기 · 120종 노드]
         INTERACT[인터랙션 · HITL · 승인 · 폼]
     end
 
@@ -75,8 +75,8 @@ flowchart TD
 
     subgraph Services["도메인 서비스"]
         direction LR
-        EMBED[Embed · VectorStore]
-        WEBHOOK[Webhook · Task]
+        EMBED[Embed · VectorStore · sqlite-vec]
+        WEBHOOK[Webhook · Task · Kanban]
     end
 
     DASH[대시보드 · OAuth · SSE]
@@ -107,8 +107,8 @@ flowchart TD
 | **역할 스킬** | 8개 역할 계층적 분담 | butler → pm/pl → implementer/reviewer/validator/debugger |
 | **보안 Vault** | AES-256-GCM 민감정보 관리 | 인바운드 자동 sealing · 도구 경로 복호화만 허용 |
 | **OAuth 연동** | 외부 서비스 인증 | GitHub · Google · Custom OAuth 2.0 |
-| **워크플로우 엔진** | Phase Loop · DAG 실행 | 42종 노드 그래프 에디터 · 6개 카테고리 · HITL 인터랙션 노드 |
-| **도메인 서비스** | 임베딩 · 벡터 스토어 · 웹훅 | 상태 유지 파이프라인 · 영속 태스크 실행 |
+| **워크플로우 엔진** | Phase Loop · DAG 실행 | 120종 노드 그래프 에디터 · 6개 카테고리 · HITL 인터랙션 노드 |
+| **도메인 서비스** | 임베딩 · 벡터 스토어 · 웹훅 · 칸반 | sqlite-vec KNN · 하이브리드 검색 · 태스크 보드 |
 | **대시보드** | 웹 기반 실시간 모니터링 | SSE 피드 · 에이전트/태스크/결정/프로바이더 관리 |
 | **MCP 통합** | 외부 도구 서버 연결 | stdio/SSE · 자동 CLI 주입 |
 | **크론** | 정기 작업 스케줄 | SQLite 기반 · 핫 리로드 |
@@ -200,7 +200,8 @@ Wizard에서 다음을 순서대로 설정합니다:
 | Providers | `/providers` | 에이전트 프로바이더 CRUD · Circuit Breaker 상태 |
 | Secrets | `/secrets` | AES-256-GCM 시크릿 관리 |
 | Models | `/models` | 오케스트레이터 LLM 런타임 · 모델 pull/삭제/전환 |
-| Workflows | `/workflows` | Phase Loop 워크플로우 관리 · 42종 노드 그래프 에디터 · 에이전트 채팅 |
+| Workflows | `/workflows` | Phase Loop 워크플로우 관리 · 120종 노드 그래프 에디터 · 에이전트 채팅 |
+| Kanban | `/kanban` | 드래그앤드롭 칸반 태스크 보드 |
 | Settings | `/settings` | 글로벌 런타임 설정 |
 
 → 상세: [대시보드 가이드](ko/guide/dashboard.md) · [워크플로우 가이드](ko/guide/workflows.md)
@@ -332,7 +333,7 @@ next/
   src/
     agent/
       backends/     ← SDK/CLI/OpenAI 백엔드 어댑터 (8개 백엔드)
-      nodes/        ← 42종 워크플로우 노드 핸들러 (OCP 플러그인 아키텍처)
+      nodes/        ← 120종 워크플로우 노드 핸들러 (OCP 플러그인 아키텍처)
       pty/          ← PTY 기반 CLI 통합 (ContainerPool, AgentBus, MCP 브릿지, NDJSON 와이어)
       tools/        ← 에이전트 도구 구현 (oauth_fetch, workflow, ask-user, approval-notifier 포함)
     bus/            ← MessageBus (inbound/outbound pub/sub)
@@ -340,13 +341,14 @@ next/
     config/         ← Zod 기반 설정 스키마 + config-meta
     cron/           ← 크론 스케줄러 (SQLite)
     dashboard/
-      routes/       ← 22개 라우트 핸들러 (state, config, chat, cron, workflows 등)
+      routes/       ← 26개 라우트 핸들러 (state, config, chat, cron, workflows, kanban 등)
       service.ts    ← HTTP 서버 + 라우트 등록
     decision/       ← 결정사항 서비스
     mcp/            ← MCP 클라이언트 매니저
     oauth/          ← OAuth 2.0 연동 (flow-service, integration-store)
-    orchestration/  ← Gateway · Classifier · Prompts · ToolCallHandler · NodeSelector · ToolDescriptionFilter · ConfirmationGuard
-    services/       ← 도메인 서비스 (embed, vector-store, query-db, webhook-store, create-task)
+    i18n/           ← 공유 i18n 프로토콜 + JSON 로케일 (en, ko)
+    orchestration/  ← Gateway · Classifier · Prompts · ToolCallHandler · NodeSelector · ToolIndex · ConfirmationGuard
+    services/       ← 도메인 서비스 (embed, vector-store, query-db, webhook-store, create-task, kanban-store)
     security/       ← Secret Vault (AES-256-GCM)
     session/        ← 세션 저장소
     skills/
@@ -358,7 +360,7 @@ next/
     skills/         ← 사용자 정의 스킬
     runtime/        ← SQLite DB 모음 (sessions, tasks, events, decisions, cron, dlq)
   web/              ← 대시보드 프론트엔드 (React + Vite + i18n + Zustand)
-    src/pages/workflows/  ← 그래프 에디터, 노드 인스펙터, 노드 피커, 42종 노드 UI 컴포넌트
+    src/pages/workflows/  ← 그래프 에디터, 노드 인스펙터, 노드 피커, 87종 노드 UI 컴포넌트
   docs/
     */guide/        ← 사용자 가이드 (dashboard, oauth, providers, heartbeat, workflows)
     */design/       ← 아키텍처 설계 문서 (phase-loop, pty-agent-backend, node-registry, workflow-tool 등)

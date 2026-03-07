@@ -41,6 +41,19 @@ New fact discovered
 /memory search <query>         → keyword search
 ```
 
+## Hybrid Search
+
+The memory system supports hybrid search combining multiple retrieval strategies:
+
+| Strategy | Technology | Strength |
+|----------|-----------|----------|
+| **Keyword (FTS5)** | SQLite FTS5 full-text index | Exact term matching, fast |
+| **Semantic (sqlite-vec)** | Native KNN vector search | Meaning-based similarity |
+
+When an embedding model is available (Ollama or external), memory entries are automatically chunked and vectorized. Search results are merged using **Reciprocal Rank Fusion (RRF)** with temporal decay and **MMR (Maximal Marginal Relevance)** reranking to balance relevance and diversity.
+
+Without an embedding model, search falls back to FTS5 keyword matching only.
+
 ## Memory Consolidation
 
 During long sessions, older conversation history is automatically compressed — only important information is preserved in long-term memory.

@@ -4,7 +4,7 @@
 
 An asynchronous orchestration runtime that processes Slack · Telegram · Discord messages through **headless agents**.
 
-The batteries-included solution featuring 8 agent backends (Claude/Codex/Gemini × CLI/SDK + OpenAI-compatible + OpenRouter + container), an 8-role skill system, CircuitBreaker-based provider resilience, AES-256-GCM security vault, OAuth 2.0 integrations, a 42-node workflow graph editor, WorkflowTool for agent-driven CRUD, and a React + Vite web dashboard with i18n and markdown rendering.
+The batteries-included solution featuring 8 agent backends (Claude/Codex/Gemini × CLI/SDK + OpenAI-compatible + OpenRouter + container), an 8-role skill system, CircuitBreaker-based provider resilience, AES-256-GCM security vault, OAuth 2.0 integrations, a 120-node workflow graph editor, WorkflowTool for agent-driven CRUD, and a React + Vite web dashboard with i18n and markdown rendering.
 
 ## Table of Contents
 
@@ -52,7 +52,7 @@ flowchart TD
     subgraph Workflows["Workflow Engine"]
         direction TB
         PL[Phase Loop · Agent/Task Loop]
-        DAG[DAG Executor · 42 Nodes]
+        DAG[DAG Executor · 120 Nodes]
         INTERACT[Interaction · HITL · Approval · Form]
     end
 
@@ -73,8 +73,8 @@ flowchart TD
 
     subgraph Services["Domain Services"]
         direction LR
-        EMBED[Embed · VectorStore]
-        WEBHOOK[Webhook · Task]
+        EMBED[Embed · VectorStore · sqlite-vec]
+        WEBHOOK[Webhook · Task · Kanban]
     end
 
     DASH[Dashboard · OAuth · SSE]
@@ -105,8 +105,8 @@ An **orchestration runtime** that receives messages from chat channels and dispa
 | **Role Skills** | 8-role hierarchical delegation | butler → pm/pl → implementer/reviewer/validator/debugger |
 | **Security Vault** | AES-256-GCM secret management | Auto inbound sealing · decrypt only in tool path |
 | **OAuth Integration** | External service authentication | GitHub · Google · Custom OAuth 2.0 |
-| **Workflow Engine** | Phase Loop · DAG execution | 42-node graph editor · 6 categories · HITL interaction nodes |
-| **Domain Services** | Embedding · vector store · webhook | Stateful pipelines · persistent task execution |
+| **Workflow Engine** | Phase Loop · DAG execution | 120-node graph editor · 6 categories · HITL interaction nodes |
+| **Domain Services** | Embedding · vector store · webhook · kanban | sqlite-vec KNN · hybrid search · task boards |
 | **Dashboard** | Web-based real-time monitoring | SSE feed · agent/task/decision/provider management |
 | **MCP Integration** | External tool server connections | stdio/SSE · auto CLI injection |
 | **Cron** | Recurring task scheduling | SQLite-backed · hot reload |
@@ -198,7 +198,8 @@ No need to create a `.env` file manually — the Wizard handles all configuratio
 | Providers | `/providers` | Agent provider CRUD · Circuit Breaker state |
 | Secrets | `/secrets` | AES-256-GCM secret management |
 | Models | `/models` | Orchestrator LLM runtime · model pull/delete/switch |
-| Workflows | `/workflows` | Phase Loop workflow management · 42-node graph editor · agent chat |
+| Workflows | `/workflows` | Phase Loop workflow management · 120-node graph editor · agent chat |
+| Kanban | `/kanban` | Task board with drag-and-drop columns |
 | Settings | `/settings` | Global runtime settings |
 
 → Details: [Dashboard Guide](en/guide/dashboard.md) · [Workflows Guide](en/guide/workflows.md)
@@ -330,7 +331,7 @@ next/
   src/
     agent/
       backends/     ← SDK/CLI/OpenAI backend adapters (8 backends)
-      nodes/        ← 42 workflow node handlers (OCP plugin architecture)
+      nodes/        ← 120 workflow node handlers (OCP plugin architecture)
       pty/          ← PTY-based CLI integration (ContainerPool, AgentBus, MCP bridge, NDJSON wire)
       tools/        ← Agent tool implementations (incl. oauth_fetch, workflow, ask-user, approval-notifier)
     bus/            ← MessageBus (inbound/outbound pub/sub)
@@ -338,13 +339,14 @@ next/
     config/         ← Zod-based config schema + config-meta
     cron/           ← Cron scheduler (SQLite)
     dashboard/
-      routes/       ← 22 route handlers (state, config, chat, cron, workflows, etc.)
+      routes/       ← 26 route handlers (state, config, chat, cron, workflows, kanban, etc.)
       service.ts    ← HTTP server + route registration
     decision/       ← Decision service
     mcp/            ← MCP client manager
     oauth/          ← OAuth 2.0 integration (flow-service, integration-store)
-    orchestration/  ← Gateway · Classifier · Prompts · ToolCallHandler · NodeSelector · ToolDescriptionFilter · ConfirmationGuard
-    services/       ← Domain services (embed, vector-store, query-db, webhook-store, create-task)
+    i18n/           ← Shared i18n protocol + JSON locales (en, ko)
+    orchestration/  ← Gateway · Classifier · Prompts · ToolCallHandler · NodeSelector · ToolIndex · ConfirmationGuard
+    services/       ← Domain services (embed, vector-store, query-db, webhook-store, create-task, kanban-store)
     security/       ← Secret Vault (AES-256-GCM)
     session/        ← Session store
     skills/
@@ -356,7 +358,7 @@ next/
     skills/         ← User-defined skills
     runtime/        ← SQLite DBs (sessions, tasks, events, decisions, cron, dlq)
   web/              ← Dashboard frontend (React + Vite + i18n + Zustand)
-    src/pages/workflows/  ← Graph editor, Node Inspector, Node Picker, 42 node UI components
+    src/pages/workflows/  ← Graph editor, Node Inspector, Node Picker, 87 node UI components
   docs/
     */guide/        ← User guides (dashboard, oauth, providers, heartbeat, workflows)
     */design/       ← Architecture design documents (phase-loop, pty-agent-backend, node-registry, workflow-tool, etc.)

@@ -7,7 +7,7 @@ This guide covers SoulFlow's core capabilities and recommended patterns for gett
 SoulFlow is not just a chatbot wrapper. It is a **multi-agent orchestration runtime** that enables:
 
 1. **Parallel specialist collaboration** with quality gates
-2. **Visual workflow automation** with 42 node types across 6 categories
+2. **Visual workflow automation** with 120 node types across 6 categories
 3. **Sandboxed execution** in isolated containers
 4. **Human-in-the-loop** workflows via chat channels
 5. **Auto-recovery** with error classification and failover chains
@@ -153,7 +153,7 @@ Each iteration receives accumulated results from previous iterations but starts 
 
 ## Visual Workflow DAG
 
-The graph editor supports 42 node types across 6 categories (flow, data, AI, integration, interaction, advanced). Use it for deterministic automation pipelines that don't require LLM reasoning at every step.
+The graph editor supports 120 node types across 6 categories (flow, data, AI, integration, interaction, advanced). Use it for deterministic automation pipelines that don't require LLM reasoning at every step.
 
 ### Recommended Node Combinations
 

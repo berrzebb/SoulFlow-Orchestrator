@@ -292,7 +292,7 @@ implement → review → validate ──PASS──→ 완료
 
 ## 그래프 에디터
 
-SVG 기반 DAG 캔버스로 42종 노드 타입을 사용해 워크플로우를 설계합니다.
+SVG 기반 DAG 캔버스로 87종 노드 타입을 사용해 워크플로우를 설계합니다.
 
 ### 레이아웃
 
@@ -302,16 +302,16 @@ SVG 기반 DAG 캔버스로 42종 노드 타입을 사용해 워크플로우를 
 - **모드 배지** — 각 노드에 실행 모드 표시 (∥ parallel, 🔄 interactive, 🔁 loop)
 - **필드 포트** — 노드 간 메모리 기반 데이터 흐름을 위한 입출력 포트
 
-### 노드 타입 (42종, 6개 카테고리)
+### 노드 타입 (87종, 6개 카테고리)
 
-| 카테고리 | 노드 타입 |
-|----------|----------|
-| **Flow** (12) | if, switch, loop, merge, gate, wait, error-handler, filter, split, batch, assert, retry |
-| **Data** (8) | template, transform, code, aggregate, set, cache, db, file |
-| **AI** (8) | llm, ai-agent, analyzer, spawn-agent, embedding, vector-store, text-splitter, retriever |
-| **Integration** (6) | http, oauth, webhook, notify, send-file, sub-workflow |
-| **Interaction** (4) | hitl, approval, form, escalation |
-| **Advanced** (4) | decision, promise, task, tool-invoke |
+| 카테고리 | 수량 | 노드 타입 |
+|----------|------|----------|
+| **Flow** | 13 | assert, batch, end, error-handler, filter, gate, if, loop, merge, retry, split, switch, wait |
+| **Data** | 32 | aggregate, cache, code, crypto, data-format, date-calc, db, diff, encoding, eval, file, format, hash, jwt, lookup, markdown, math, media, memory-rw, queue, regex, secret-read, set, set-ops, stats, table, template, template-engine, text, transform, ttl-cache, validator |
+| **AI** | 8 | ai-agent, analyzer, embedding, llm, retriever, spawn-agent, text-splitter, vector-store |
+| **Integration** | 25 | archive, compress, database, docker, email, git, graphql, http, image, kanban-trigger, network, notify, oauth, package-manager, process, screenshot, send-file, shell, sub-workflow, system-info, web-form, web-scrape, web-search, web-table, webhook |
+| **Interaction** | 4 | approval, escalation, form, hitl |
+| **Advanced** | 5 | decision, diagram, promise, task, tool-invoke |
 
 ### 노드 인스펙터
 
