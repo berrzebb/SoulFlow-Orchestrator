@@ -4,10 +4,10 @@ import type { InboundMessage } from "../bus/types.js";
 import type { ChannelProvider } from "../channels/types.js";
 import type { AgentRuntimeLike } from "../agent/runtime.types.js";
 import type { ProviderRegistry } from "../providers/service.js";
-import type { ChatMessage, RuntimeExecutionPolicy } from "../providers/types.js";
+import type { RuntimeExecutionPolicy } from "../providers/types.js";
 import type { RuntimePolicyResolver } from "../channels/runtime-policy.js";
 import type { SecretVaultService } from "../security/secret-vault.js";
-import type { TaskNode, CompactionFlushConfig } from "../agent/loop.js";
+import type { CompactionFlushConfig } from "../agent/loop.js";
 import type { Logger } from "../logger.js";
 import type { ToolExecutionContext } from "../agent/tools/types.js";
 import type { ExecutionMode, OrchestrationRequest, OrchestrationResult } from "./types.js";
@@ -23,16 +23,15 @@ import { is_local_reference } from "../utils/local-ref.js";
 import { resolve_executor_provider, type ExecutorProvider, type ProviderCapabilities } from "../providers/executor.js";
 import { select_tools_for_request, rebuild_tool_index } from "./tool-selector.js";
 import type { AgentBackendRegistry } from "../agent/agent-registry.js";
-import type { AgentRunResult, AgentSession } from "../agent/agent.types.js";
+import type { AgentRunResult } from "../agent/agent.types.js";
 import type { ToolSchema } from "../agent/tools/types.js";
-import { create_cd_observer } from "../agent/cd-scoring.js";
+import type { CDObserver } from "../agent/cd-scoring.js";
 import type { ProcessTrackerLike } from "./process-tracker.js";
 import type { WorkflowEventService, AppendWorkflowEventInput } from "../events/index.js";
-import { now_iso, now_ms, error_message, short_id } from "../utils/common.js";
+import { now_ms, error_message } from "../utils/common.js";
 // ── 추출 모듈 ──
 import {
   build_once_overlay, build_agent_overlay, build_bootstrap_overlay,
-  AGENT_TOOL_NUDGE,
   format_secret_notice, GUARD_SUMMARY_PROMPT,
 } from "./prompts.js";
 import { ConfirmationGuard, format_guard_prompt } from "./confirmation-guard.js";
@@ -40,16 +39,22 @@ import { FINISH_REASON_WARNINGS } from "../agent/finish-reason-warnings.js";
 import { detect_escalation, is_once_escalation, is_agent_escalation } from "./classifier.js";
 import { resolve_gateway } from "./gateway.js";
 import {
-  create_tool_call_handler, type ToolCallState, type ToolCallHandlerDeps,
+  type ToolCallHandlerDeps,
 } from "./tool-call-handler.js";
 import {
-  build_agent_hooks, create_stream_handler, flush_remaining, emit_execution_info,
+  build_agent_hooks,
   type AgentHooksBuilderDeps,
 } from "./agent-hooks-builder.js";
 import { PersonaMessageRenderer, type PersonaMessageRendererLike } from "../channels/persona-message-renderer.js";
 import { HitlPendingStore } from "./hitl-pending-store.js";
+// ── 실행 runner 모듈 ──
+import { run_once as _run_once } from "./execution/run-once.js";
+import { run_agent_loop as _run_agent_loop } from "./execution/run-agent-loop.js";
+import { run_task_loop as _run_task_loop } from "./execution/run-task-loop.js";
+import { continue_task_loop as _continue_task_loop, type ContinueTaskDeps } from "./execution/continue-task-loop.js";
+import { run_phase_loop as _run_phase_loop, type PhaseWorkflowDeps } from "./execution/phase-workflow.js";
 
-/** run_once / run_agent_loop / run_task_loop / _try_native_task_execute 공통 인수. */
+/** run_once / run_agent_loop / run_task_loop 공통 인수. */
 type RunExecutionArgs = {
   req: OrchestrationRequest;
   executor: ExecutorProvider;
@@ -117,6 +122,8 @@ export type OrchestrationServiceDeps = {
   renderer?: PersonaMessageRendererLike | null;
   /** HITL pending 응답 공유 store. */
   hitl_pending_store: HitlPendingStore;
+  /** 세션 CD 관찰자. collaborator로 외부에서 주입. */
+  session_cd: import("../agent/cd-scoring.js").CDObserver;
   /** 도구 인덱스. 미지정 시 키워드 인덱스 미사용. */
   tool_index?: import("./tool-index.js").ToolIndex | null;
 };
@@ -139,7 +146,7 @@ export class OrchestrationService {
   private readonly events: WorkflowEventService | null;
   private readonly guard: ConfirmationGuard | null;
   private readonly deps: OrchestrationServiceDeps;
-  private readonly session_cd = create_cd_observer();
+  private readonly session_cd: CDObserver;
   private readonly streaming_cfg: { enabled: boolean; interval_ms: number; min_chars: number };
   private readonly hooks_deps: AgentHooksBuilderDeps;
   private readonly tool_deps: ToolCallHandlerDeps;
@@ -161,6 +168,7 @@ export class OrchestrationService {
     this.events = deps.events || null;
     this.guard = deps.confirmation_guard || null;
     this.hitl_store = deps.hitl_pending_store;
+    this.session_cd = deps.session_cd;
     this.tool_index = deps.tool_index ?? null;
     this.deps = deps;
 
@@ -256,6 +264,72 @@ export class OrchestrationService {
   private log_event(input: AppendWorkflowEventInput): void {
     if (!this.events) return;
     this.events.append(input).catch(() => { /* 이벤트 로깅 실패가 실행을 차단하면 안 됨 */ });
+  }
+
+  /** runner 함수에 전달할 공유 의존성 조립. */
+  private _runner_deps() {
+    return {
+      providers: this.providers,
+      runtime: this.runtime,
+      config: {
+        agent_loop_max_turns: this.config.agent_loop_max_turns,
+        task_loop_max_turns: this.config.task_loop_max_turns,
+        executor_provider: this.config.executor_provider,
+        max_tool_result_chars: this.config.max_tool_result_chars,
+      },
+      logger: this.logger,
+      agent_backends: this.agent_backends,
+      process_tracker: this.process_tracker,
+      get_mcp_configs: this.get_mcp_configs,
+      streaming_cfg: this.streaming_cfg,
+      hooks_deps: this.hooks_deps,
+      tool_deps: this.tool_deps,
+      session_cd: this.session_cd,
+      workspace: this.deps.workspace,
+      build_overlay: (mode: "once" | "agent") => this._build_overlay(mode),
+      hooks_for: (stream: StreamBuffer, args: { req: OrchestrationRequest; runtime_policy: RuntimeExecutionPolicy }, backend_id: string, task_id?: string) => this._hooks_for(stream, args, backend_id, task_id),
+      log_event: (input: AppendWorkflowEventInput) => this.log_event(input),
+      convert_agent_result: (result: AgentRunResult, mode: ExecutionMode, stream: StreamBuffer, req: OrchestrationRequest) => this._convert_agent_result(result, mode, stream, req),
+      build_persona_followup: (heart: string) => this.build_persona_followup(heart),
+      build_compaction_flush: () => this.build_compaction_flush(),
+    } as const;
+  }
+
+  /** continue_task_loop 전용 추가 의존성 포함 조립. */
+  private _continue_deps(): ContinueTaskDeps {
+    return {
+      ...this._runner_deps(),
+      policy_resolver: this.policy_resolver,
+      caps: () => this._caps(),
+      build_system_prompt: (names, prov, chat, cats, alias) => this._build_system_prompt(names, prov, chat, cats, alias),
+      collect_skill_provider_preferences: (names) => this._collect_skill_provider_preferences(names),
+    };
+  }
+
+  /** phase workflow 실행용 의존성 조립. */
+  private _phase_deps(): PhaseWorkflowDeps {
+    return {
+      providers: this.providers,
+      runtime: this.runtime,
+      logger: this.logger,
+      process_tracker: this.process_tracker,
+      workspace: this.deps.workspace || "",
+      subagents: this.deps.subagents || null,
+      phase_workflow_store: this.deps.phase_workflow_store || null,
+      bus: this.deps.bus ?? null,
+      hitl_store: this.hitl_store,
+      get_sse_broadcaster: this.deps.get_sse_broadcaster,
+      render_hitl: (body, type) => this._render_hitl(body, type),
+      decision_service: this.deps.decision_service || null,
+      promise_service: this.deps.promise_service || null,
+      embed: this.deps.embed,
+      vector_store: this.deps.vector_store,
+      oauth_fetch: this.deps.oauth_fetch,
+      get_webhook_data: this.deps.get_webhook_data,
+      wait_kanban_event: this.deps.wait_kanban_event,
+      create_task: this.deps.create_task,
+      query_db: this.deps.query_db,
+    };
   }
 
   async execute(req: OrchestrationRequest): Promise<OrchestrationResult> {
@@ -468,108 +542,7 @@ export class OrchestrationService {
 
   /** executor에게 1회 질의. 오케스트레이터 LLM은 분류만 수행하고 실제 응답은 executor가 생성. */
   private async run_once(args: RunExecutionArgs): Promise<OrchestrationResult> {
-    const stream = new StreamBuffer();
-    emit_execution_info(stream, args.req.on_stream, "once", args.executor, this.logger);
-    const { system_base } = args;
-    const messages: ChatMessage[] = [
-      { role: "system", content: `${system_base}\n\n${this._build_overlay("once")}` },
-      { role: "user", content: args.context_block },
-    ];
-
-    // native_tool_loop 백엔드: 스마트 라우팅 우선, 레거시 폴백.
-    if (this.agent_backends) {
-      const backend = this.agent_backends.resolve_for_mode("once", args.skill_provider_prefs)
-        ?? this.agent_backends.resolve_backend(args.executor);
-      if (backend?.native_tool_loop) {
-        try {
-          const caps = backend.capabilities;
-          const result = await this.agent_backends.run(backend.id, {
-            task: args.context_block,
-            task_id: `once:${args.req.provider}:${args.req.message.chat_id}`,
-            system_prompt: String(messages[0].content || ""),
-            tools: args.tool_definitions as ToolSchema[],
-            tool_executors: this.runtime.get_tool_executors(),
-            runtime_policy: args.runtime_policy,
-            max_tokens: 1600,
-            temperature: 0.3,
-            max_turns: this.config.agent_loop_max_turns,
-            effort: "medium",
-            ...(caps.thinking ? { enable_thinking: true, max_thinking_tokens: 10000 } : {}),
-            hooks: this._hooks_for(stream, args, backend.id, args.tool_ctx.task_id),
-            abort_signal: args.req.signal,
-            cwd: this.deps.workspace,
-            mcp_server_configs: this.get_mcp_configs?.() ?? undefined,
-            tool_context: args.tool_ctx,
-          });
-          flush_remaining(stream, args.req.on_stream);
-          return this._convert_agent_result(result, "once", stream, args.req);
-        } catch (e) {
-          const msg = error_message(e);
-          this.logger.warn("native_tool_loop run_once error", { error: msg });
-          return error_result("once", stream, msg);
-        }
-      }
-    }
-
-    try {
-      const response = await this.providers.run_headless({
-        provider_id: args.executor,
-        messages,
-        tools: args.tool_definitions,
-        max_tokens: 1600,
-        temperature: 0.3,
-        runtime_policy: args.runtime_policy,
-        abort_signal: args.req.signal,
-        on_stream: create_stream_handler(this.streaming_cfg, stream, args.req.on_stream),
-      });
-
-      const err = extract_provider_error(String(response.content || ""));
-      if (err) return error_result("once", stream, err);
-
-      if (response.has_tool_calls) {
-        this.logger.debug("once: tool calls", { count: response.tool_calls.length });
-        const tool_state: ToolCallState = { suppress: false, tool_count: 0 };
-        const handler = create_tool_call_handler(this.tool_deps, args.tool_ctx, tool_state, {
-          buffer: stream, on_stream: args.req.on_stream, on_tool_block: args.req.on_tool_block,
-          on_tool_event: (e) => this.session_cd.observe(e),
-          log_ctx: args.req.run_id ? { run_id: args.req.run_id, agent_id: String(args.executor), provider: args.req.provider, chat_id: args.req.message.chat_id } : undefined,
-        });
-        const tool_output = await handler({ tool_calls: response.tool_calls });
-
-        if (tool_state.suppress) return suppress_result("once", stream, tool_state.tool_count);
-
-        const followup = await this.providers.run_headless({
-          provider_id: args.executor,
-          messages: [
-            ...messages,
-            { role: "assistant", content: `[TOOL_RESULTS]\n${tool_output}` },
-            { role: "user", content: this.build_persona_followup(this.runtime.get_context_builder().skills_loader.get_role_skill("concierge")?.heart || "") },
-          ],
-          max_tokens: 800,
-          temperature: 0.2,
-          abort_signal: args.req.signal,
-          on_stream: create_stream_handler(this.streaming_cfg, stream, args.req.on_stream),
-        });
-        flush_remaining(stream, args.req.on_stream);
-        const followup_text = sanitize_provider_output(String(followup.content || "")).trim();
-        const final_text = followup_text || tool_output;
-        return reply_result("once", stream, normalize_agent_reply(final_text, args.req.alias, args.req.message.sender_id), tool_state.tool_count);
-      }
-
-      flush_remaining(stream, args.req.on_stream);
-      const content = sanitize_provider_output(String(response.content || ""));
-      const final = content.trim();
-      if (!final) return error_result("once", stream, "executor_once_empty");
-
-      const escalation = detect_escalation(final);
-      if (escalation) return error_result("once", stream, escalation);
-
-      return reply_result("once", stream, normalize_agent_reply(final, args.req.alias, args.req.message.sender_id), 0);
-    } catch (e) {
-      const msg = error_message(e);
-      this.logger.warn("run_once error", { error: msg });
-      return error_result("once", stream, msg);
-    }
+    return _run_once(this._runner_deps(), args);
   }
 
   /** 컨텍스트 압축 전 메모리 자동 저장 설정 생성. 200K 컨텍스트 기준. */
@@ -585,266 +558,11 @@ export class OrchestrationService {
   }
 
   private async run_agent_loop(args: RunExecutionArgs & { media: string[]; history_lines: string[] }): Promise<OrchestrationResult> {
-    const stream = new StreamBuffer();
-    emit_execution_info(stream, args.req.on_stream, "agent", args.executor, this.logger);
-
-    // native backend 우선: 스마트 라우팅 → 레거시 폴백
-    if (this.agent_backends) {
-      const backend = this.agent_backends.resolve_for_mode("agent", args.skill_provider_prefs)
-        ?? this.agent_backends.resolve_backend(args.executor);
-      if (backend?.native_tool_loop) {
-        try {
-          const system = args.system_base;
-          const caps = backend.capabilities;
-          const result = await this.agent_backends.run(backend.id, {
-            task: args.context_block,
-            task_id: `agent:${args.req.provider}:${args.req.message.chat_id}:${args.req.alias}`,
-            system_prompt: `${system}\n\n${this._build_overlay("agent")}`,
-            tools: args.tool_definitions as ToolSchema[],
-            tool_executors: this.runtime.get_tool_executors(),
-            runtime_policy: args.runtime_policy,
-            max_tokens: 1800,
-            temperature: 0.3,
-            max_turns: this.config.agent_loop_max_turns,
-            effort: "high",
-            ...(caps.thinking ? { enable_thinking: true, max_thinking_tokens: 16000 } : {}),
-            hooks: this._hooks_for(stream, args, backend.id, args.tool_ctx.task_id),
-            abort_signal: args.req.signal,
-            cwd: this.deps.workspace,
-            mcp_server_configs: this.get_mcp_configs?.() ?? undefined,
-            tool_context: args.tool_ctx,
-          });
-          flush_remaining(stream, args.req.on_stream);
-          return this._convert_agent_result(result, "agent", stream, args.req);
-        } catch (e) {
-          const msg = error_message(e);
-          this.logger.warn("native_tool_loop run_agent_loop error, falling back to legacy", { error: msg });
-          // fallback: legacy headless 경로
-        }
-      }
-    }
-
-    // legacy headless 경로
-    const state: ToolCallState = { suppress: false, tool_count: 0 };
-
-    const loop_id = `loop-${now_ms()}-${short_id(8)}`;
-    if (args.req.run_id) this.process_tracker?.link_loop(args.req.run_id, loop_id);
-
-    const response = await this.runtime.run_agent_loop({
-      loop_id,
-      agent_id: args.req.alias,
-      objective: args.task_with_media || "handle inbound request",
-      context_builder: this.runtime.get_context_builder(),
-      providers: this.providers,
-      tools: args.tool_definitions,
-      provider_id: args.executor,
-      runtime_policy: args.runtime_policy,
-      current_message: `${this._build_overlay("agent")}\n\n${args.context_block}`,
-      history_days: [],
-      skill_names: args.skill_names,
-      media: args.media,
-      channel: args.req.provider,
-      chat_id: args.req.message.chat_id,
-      max_turns: this.config.agent_loop_max_turns,
-      model: undefined,
-      max_tokens: 1800,
-      temperature: 0.3,
-      abort_signal: args.req.signal,
-      on_stream: create_stream_handler(this.streaming_cfg, stream, args.req.on_stream),
-      check_should_continue: async ({ state }) => {
-        if (state.currentTurn >= (this.config.agent_loop_max_turns ?? 10)) return false;
-        return AGENT_TOOL_NUDGE;
-      },
-      on_tool_calls: create_tool_call_handler(this.tool_deps, args.tool_ctx, state, {
-        buffer: stream, on_stream: args.req.on_stream, on_tool_block: args.req.on_tool_block,
-        on_tool_event: (e) => this.session_cd.observe(e),
-        log_ctx: args.req.run_id ? { run_id: args.req.run_id, agent_id: String(args.executor), provider: args.req.provider, chat_id: args.req.message.chat_id } : undefined,
-      }),
-      compaction_flush: this.build_compaction_flush(),
-    });
-
-    flush_remaining(stream, args.req.on_stream);
-
-    if (state.suppress) return suppress_result("agent", stream, state.tool_count);
-
-    const content = sanitize_provider_output(String(response.final_content || ""));
-    if (!content) return error_result("agent", stream, "empty_provider_response", state.tool_count);
-
-    // agent → task 에스컬레이션 감지 (legacy 경로)
-    const escalation = detect_escalation(content, "agent");
-    if (escalation) return error_result("agent", stream, escalation, state.tool_count);
-
-    const err = extract_provider_error(content);
-    if (err) return error_result("agent", stream, err, state.tool_count);
-
-    const reply = normalize_agent_reply(content, args.req.alias, args.req.message.sender_id);
-    if (!reply) return error_result("agent", stream, "empty_provider_response", state.tool_count);
-    const final_reply = state.tool_count === 0 ? append_no_tool_notice(reply) : reply;
-    return reply_result("agent", stream, final_reply, state.tool_count);
+    return _run_agent_loop(this._runner_deps(), args);
   }
 
   private async run_task_loop(args: RunExecutionArgs & { media: string[] }): Promise<OrchestrationResult> {
-    const stream = new StreamBuffer();
-    emit_execution_info(stream, args.req.on_stream, "task", args.executor, this.logger);
-    const task_id = `task:${args.req.provider}:${args.req.message.chat_id}:${args.req.alias}:${args.request_scope}`.toLowerCase();
-    if (args.req.run_id) this.process_tracker?.link_task(args.req.run_id, task_id);
-    this.log_event({
-      run_id: args.req.run_id || `task-${Date.now()}`,
-      task_id, agent_id: args.req.alias,
-      provider: args.req.provider, channel: args.req.provider, chat_id: args.req.message.chat_id,
-      source: "inbound",
-      phase: "progress", summary: `task_started: ${task_id}`,
-      payload: { mode: "task", executor: args.executor },
-    });
-    const FILE_WAIT_MARKER = "__file_request_waiting__";
-    let total_tool_count = 0;
-
-    const nodes: TaskNode[] = [
-      {
-        id: "plan",
-        run: async ({ memory }) => ({
-          memory_patch: { ...memory, seed_prompt: args.context_block, mode: "task_loop" },
-          next_step_index: 1,
-          current_step: "plan",
-        }),
-      },
-      {
-        id: "execute",
-        run: async ({ task_state, memory }) => {
-          const task_tool_ctx: ToolExecutionContext = { ...args.tool_ctx, task_id };
-          const objective = task_state.objective || String(memory.objective || args.task_with_media);
-          const seed_prompt = String(memory.seed_prompt || args.context_block);
-
-          // native backend 우선: 전체 tool loop를 백엔드에 위임
-          const native_result = await this._try_native_task_execute(args, stream, task_tool_ctx, task_id, objective, seed_prompt);
-          if (native_result) {
-            flush_remaining(stream, args.req.on_stream);
-            const final = sanitize_provider_output(String(native_result.content || "")).trim();
-            total_tool_count += native_result.tool_calls_count;
-            if (native_result.finish_reason === "cancelled") {
-              return { status: "completed", memory_patch: { ...memory, suppress_final_reply: true, last_output: final }, current_step: "execute", exit_reason: "cancelled" };
-            }
-            if (native_result.finish_reason === "approval_required") {
-              return { status: "waiting_approval", memory_patch: { ...memory, last_output: final }, current_step: "execute", exit_reason: "waiting_approval" };
-            }
-            if (final.includes("__request_user_choice__")) {
-              return { status: "waiting_user_input" as const, memory_patch: { ...memory, last_output: final }, current_step: "execute", exit_reason: "waiting_user_input" };
-            }
-            return { memory_patch: { ...memory, last_output: final }, next_step_index: 2, current_step: "execute" };
-          }
-
-          // legacy headless 경로
-          const state: ToolCallState = { suppress: false, file_requested: false, done_sent: false, tool_count: 0 };
-
-          const nested_loop_id = `nested-${now_ms()}-${short_id(8)}`;
-          if (args.req.run_id) this.process_tracker?.link_loop(args.req.run_id, nested_loop_id);
-
-          const response = await this.runtime.run_agent_loop({
-            loop_id: nested_loop_id,
-            agent_id: args.req.alias,
-            objective,
-            context_builder: this.runtime.get_context_builder(),
-            providers: this.providers,
-            tools: args.tool_definitions,
-            provider_id: args.executor,
-            runtime_policy: args.runtime_policy,
-            current_message: `${this._build_overlay("agent")}\n\n${seed_prompt}`,
-            history_days: [],
-            skill_names: args.skill_names,
-            media: args.media,
-            channel: args.req.provider,
-            chat_id: args.req.message.chat_id,
-            max_turns: this.config.agent_loop_max_turns,
-            model: undefined,
-            max_tokens: 1800,
-            temperature: 0.3,
-            abort_signal: args.req.signal,
-            on_stream: create_stream_handler(this.streaming_cfg, stream, args.req.on_stream),
-            check_should_continue: async () => false,
-            on_tool_calls: create_tool_call_handler(this.tool_deps,task_tool_ctx, state, {
-              buffer: stream, on_stream: args.req.on_stream, on_tool_block: args.req.on_tool_block,
-              on_tool_event: (e) => this.session_cd.observe(e),
-              log_ctx: args.req.run_id ? { run_id: args.req.run_id, agent_id: String(args.executor), provider: args.req.provider, chat_id: args.req.message.chat_id } : undefined,
-            }),
-            compaction_flush: this.build_compaction_flush(),
-          });
-
-          flush_remaining(stream, args.req.on_stream);
-          const final = sanitize_provider_output(String(response.final_content || "")).trim();
-
-          if (state.file_requested) {
-            return { status: "completed", memory_patch: { ...memory, file_request_waiting: true, last_output: FILE_WAIT_MARKER }, current_step: "execute", exit_reason: "file_request_waiting" };
-          }
-          if (state.done_sent) {
-            return { status: "completed", memory_patch: { ...memory, suppress_final_reply: true, last_output: final }, current_step: "execute", exit_reason: "message_done_sent" };
-          }
-          if (final.includes("approval_required")) {
-            return { status: "waiting_approval", memory_patch: { ...memory, last_output: final }, current_step: "execute", exit_reason: "waiting_approval" };
-          }
-          if (final.includes("__request_user_choice__")) {
-            return { status: "waiting_user_input" as const, memory_patch: { ...memory, last_output: final }, current_step: "execute", exit_reason: "waiting_user_input" };
-          }
-          total_tool_count += state.tool_count;
-          return { memory_patch: { ...memory, last_output: final }, next_step_index: 2, current_step: "execute" };
-        },
-      },
-      {
-        id: "finalize",
-        run: async ({ memory }) => ({ status: "completed", memory_patch: memory, current_step: "finalize", exit_reason: "workflow_completed" }),
-      },
-    ];
-
-    const result = await this.runtime.run_task_loop({
-      task_id,
-      title: `ChannelTask:${args.req.alias}`,
-      objective: args.task_with_media,
-      channel: args.req.provider,
-      chat_id: args.req.message.chat_id,
-      nodes,
-      max_turns: args.req.max_turns ?? this.config.task_loop_max_turns,
-      initial_memory: {
-        ...args.req.initial_memory,
-        alias: args.req.alias,
-        channel: args.req.provider,
-        chat_id: args.req.message.chat_id,
-        __trigger_message_id: raw_message_id(args.req.message),
-      },
-      abort_signal: args.req.signal,
-    });
-
-    const output_raw = String(result.state.memory?.last_output || "").trim();
-    if (result.state.memory?.file_request_waiting === true || output_raw === FILE_WAIT_MARKER) {
-      return suppress_result("task", stream, total_tool_count);
-    }
-    if (result.state.memory?.suppress_final_reply === true) {
-      return suppress_result("task", stream, total_tool_count);
-    }
-    if (result.state.status === "waiting_approval") {
-      this.log_event({
-        run_id: args.req.run_id || `task-${now_ms()}`, task_id: task_id, agent_id: args.req.alias,
-        provider: args.req.provider, channel: args.req.provider, chat_id: args.req.message.chat_id, source: "inbound",
-        phase: "approval", summary: "waiting_approval", payload: { mode: "task", tool_calls_count: total_tool_count },
-      });
-      // 승인 알림은 approval-notifier가 별도 발송하므로 오케스트레이션 응답은 suppress
-      return { ...suppress_result("task", stream, total_tool_count), run_id: args.req.run_id };
-    }
-    // waiting_user_input / max_turns_reached: HITL 알림은 on_task_change 콜백에서 bus로 발송
-    if (result.state.status === "waiting_user_input" || result.state.status === "max_turns_reached") {
-      return { ...suppress_result("task", stream, total_tool_count), run_id: args.req.run_id };
-    }
-    if (result.state.status === "failed" || result.state.status === "cancelled") {
-      const reason = result.state.exitReason || result.state.status;
-      this.logger.warn("task_loop_terminal", { task_id, status: result.state.status, exit_reason: reason, turns: result.state.currentTurn });
-      return error_result("task", stream, `task_${result.state.status}:${reason}`, total_tool_count);
-    }
-
-    const output = sanitize_provider_output(output_raw).trim();
-    if (!output) return error_result("task", stream, `task_loop_no_output:${result.state.status}`, total_tool_count);
-
-    const err = extract_provider_error(output);
-    if (err) return error_result("task", stream, err, total_tool_count);
-
-    return reply_result("task", stream, normalize_agent_reply(output, args.req.alias, args.req.message.sender_id), total_tool_count);
+    return _run_task_loop(this._runner_deps(), args);
   }
 
   private _get_renderer(): PersonaMessageRendererLike {
@@ -967,52 +685,6 @@ export class OrchestrationService {
     return `${system}${active_role_hint}`;
   }
 
-  /** task execute 노드에서 네이티브 백엔드로 실행 시도. 성공 시 AgentRunResult, 불가 시 null. */
-  private async _try_native_task_execute(
-    args: RunExecutionArgs & { media: string[] },
-    stream: StreamBuffer,
-    task_tool_ctx: ToolExecutionContext,
-    task_id: string,
-    _objective: string,
-    seed_prompt: string,
-    resume_session?: AgentSession,
-  ): Promise<AgentRunResult | null> {
-    if (!this.agent_backends) return null;
-    const backend = this.agent_backends.resolve_for_mode("task", args.skill_provider_prefs)
-      ?? this.agent_backends.resolve_backend(args.executor);
-    if (!backend?.native_tool_loop) return null;
-
-    try {
-      const system = args.system_base;
-      const caps = backend.capabilities;
-      return await this.agent_backends.run(backend.id, {
-        task: seed_prompt,
-        task_id: `task:${task_id}`,
-        system_prompt: `${system}\n\n${this._build_overlay("agent")}`,
-        tools: args.tool_definitions as ToolSchema[],
-        tool_executors: this.runtime.get_tool_executors(),
-        runtime_policy: args.runtime_policy,
-        max_tokens: 1800,
-        temperature: 0.3,
-        max_turns: this.config.agent_loop_max_turns,
-        effort: "high",
-        ...(caps.thinking ? { enable_thinking: true, max_thinking_tokens: 16000 } : {}),
-        hooks: this._hooks_for(stream, args, backend.id, task_tool_ctx.task_id),
-        abort_signal: args.req.signal,
-        cwd: this.deps.workspace,
-        mcp_server_configs: this.get_mcp_configs?.() ?? undefined,
-        tool_context: task_tool_ctx,
-        ...(resume_session ? { resume_session } : {}),
-        ...(args.req.register_send_input ? { register_send_input: args.req.register_send_input } : {}),
-        wait_for_input_ms: 30_000,
-      });
-    } catch (e) {
-      const msg = error_message(e);
-      this.logger.warn("native_tool_loop task_execute error, falling back to legacy", { error: msg });
-      return null;
-    }
-  }
-
   private async seal_text(provider: ChannelProvider, chat_id: string, raw: string): Promise<string> {
     if (!raw.trim()) return "";
     try {
@@ -1074,446 +746,13 @@ export class OrchestrationService {
     task_with_media: string,
     media: string[],
   ): Promise<OrchestrationResult> {
-    const stream = new StreamBuffer();
-    const always_skills = this.runtime.get_always_skills();
-    const skill_names = this.resolve_context_skills(task_with_media, always_skills);
-    const runtime_policy = this.policy_resolver.resolve(task_with_media, media);
-    const all_tool_definitions = this.runtime.get_tool_definitions();
-    const tool_ctx = build_tool_context(req, task.taskId);
-    const executor = resolve_executor_provider(this.config.executor_provider, this._caps());
-    const system_base = await this._build_system_prompt(skill_names, req.provider, req.message.chat_id, undefined, req.alias);
-    emit_execution_info(stream, req.on_stream, "task (재개)", executor, this.logger);
-    let total_tool_count = 0;
-
-    // ProcessTracker에 재개된 task를 연결
-    if (req.run_id) {
-      this.process_tracker?.set_mode(req.run_id, "task");
-      this.process_tracker?.set_executor(req.run_id, executor);
-      this.process_tracker?.link_task(req.run_id, task.taskId);
-    }
-
-    const user_input = String(task.memory.__user_input || task_with_media);
-    const history_lines = req.session_history.slice(-8).map((r) => `[${r.role}] ${r.content}`);
-    const context_block = build_context_message(user_input, history_lines);
-
-    // 재개 시 이전 SDK 세션 조회 → resume 지원 백엔드에서 대화 이력 유지
-    const prior_session = this.agent_backends?.get_session_store()?.find_by_task(`task:${task.taskId}`) ?? undefined;
-
-    const nodes: TaskNode[] = [
-      {
-        id: "execute",
-        run: async ({ task_state, memory }) => {
-          const base_objective = task_state.objective || String(memory.objective || task_with_media);
-          const objective = memory.__user_input
-            ? `${base_objective}\n\n[사용자 응답] ${String(memory.__user_input)}`
-            : base_objective;
-
-          // native backend 우선
-          const skill_provider_prefs = this._collect_skill_provider_preferences(skill_names);
-          const native_result = await this._try_native_task_execute(
-            { req, executor, task_with_media, media, context_block, skill_names, system_base, runtime_policy, tool_definitions: all_tool_definitions, tool_ctx, skill_provider_prefs, request_scope: inbound_scope_id(req.message) },
-            stream, tool_ctx, task.taskId, objective, context_block,
-            prior_session,
-          );
-          if (native_result) {
-            flush_remaining(stream, req.on_stream);
-            const final = sanitize_provider_output(String(native_result.content || "")).trim();
-            total_tool_count += native_result.tool_calls_count;
-            const clear_patch = { ...memory, last_output: final, __user_input: undefined };
-            if (native_result.finish_reason === "cancelled") {
-              return { status: "completed" as const, memory_patch: { ...clear_patch, suppress_final_reply: true }, current_step: "execute", exit_reason: "cancelled" };
-            }
-            if (native_result.finish_reason === "approval_required") {
-              return { status: "waiting_approval" as const, memory_patch: clear_patch, current_step: "execute", exit_reason: "waiting_approval" };
-            }
-            if (final.includes("__request_user_choice__")) {
-              return { status: "waiting_user_input" as const, memory_patch: clear_patch, current_step: "execute", exit_reason: "waiting_user_input" };
-            }
-            return { status: "completed" as const, memory_patch: clear_patch, current_step: "execute", exit_reason: "workflow_completed" };
-          }
-
-          // legacy headless 경로
-          const state: ToolCallState = { suppress: false, file_requested: false, done_sent: false, tool_count: 0 };
-          const resumed_loop_id = `resumed-${now_ms()}-${short_id(8)}`;
-          if (req.run_id) this.process_tracker?.link_loop(req.run_id, resumed_loop_id);
-          const response = await this.runtime.run_agent_loop({
-            loop_id: resumed_loop_id,
-            agent_id: req.alias,
-            objective,
-            context_builder: this.runtime.get_context_builder(),
-            providers: this.providers,
-            tools: all_tool_definitions,
-            provider_id: executor,
-            runtime_policy,
-            current_message: `${this._build_overlay("agent")}\n\n${context_block}`,
-            history_days: [],
-            skill_names,
-            media,
-            channel: req.provider,
-            chat_id: req.message.chat_id,
-            max_turns: this.config.agent_loop_max_turns,
-            model: undefined,
-            max_tokens: 1800,
-            temperature: 0.3,
-            abort_signal: req.signal,
-            on_stream: create_stream_handler(this.streaming_cfg, stream, req.on_stream),
-            check_should_continue: async () => false,
-            on_tool_calls: create_tool_call_handler(this.tool_deps,tool_ctx, state, {
-              buffer: stream, on_stream: req.on_stream, on_tool_block: req.on_tool_block,
-              on_tool_event: (e) => this.session_cd.observe(e),
-              log_ctx: req.run_id ? { run_id: req.run_id, agent_id: String(executor), provider: req.provider, chat_id: req.message.chat_id } : undefined,
-            }),
-            compaction_flush: this.build_compaction_flush(),
-          });
-
-          flush_remaining(stream, req.on_stream);
-          const final = sanitize_provider_output(String(response.final_content || "")).trim();
-          total_tool_count += state.tool_count;
-
-          const clear_patch = { ...memory, last_output: final, __user_input: undefined };
-
-          if (state.done_sent) {
-            return { status: "completed" as const, memory_patch: { ...clear_patch, suppress_final_reply: true }, current_step: "execute", exit_reason: "message_done_sent" };
-          }
-          if (final.includes("approval_required")) {
-            return { status: "waiting_approval" as const, memory_patch: clear_patch, current_step: "execute", exit_reason: "waiting_approval" };
-          }
-          if (final.includes("__request_user_choice__")) {
-            return { status: "waiting_user_input" as const, memory_patch: clear_patch, current_step: "execute", exit_reason: "waiting_user_input" };
-          }
-          return { status: "completed" as const, memory_patch: clear_patch, current_step: "execute", exit_reason: "workflow_completed" };
-        },
-      },
-    ];
-
-    const result = await this.runtime.run_task_loop({
-      task_id: task.taskId,
-      title: task.title,
-      objective: task.objective || String(task.memory.objective || task_with_media),
-      channel: task.channel || req.provider,
-      chat_id: task.chatId || req.message.chat_id,
-      nodes,
-      max_turns: this.config.task_loop_max_turns,
-      abort_signal: req.signal,
-    });
-
-    const output_raw = String(result.state.memory?.last_output || "").trim();
-    if (result.state.memory?.suppress_final_reply === true) {
-      return { ...suppress_result("task", stream, total_tool_count), run_id: req.run_id };
-    }
-    if (result.state.status === "waiting_approval") {
-      this.log_event({
-        run_id: req.run_id || `resume-${now_ms()}`, task_id: task.taskId, agent_id: req.alias,
-        provider: req.provider, channel: req.provider, chat_id: req.message.chat_id, source: "inbound",
-        phase: "approval", summary: "waiting_approval (resume)", payload: { mode: "task", tool_calls_count: total_tool_count },
-      });
-      return { ...suppress_result("task", stream, total_tool_count), run_id: req.run_id };
-    }
-    // waiting_user_input / max_turns_reached: HITL 알림은 on_task_change 콜백에서 bus로 발송
-    if (result.state.status === "waiting_user_input" || result.state.status === "max_turns_reached") {
-      return { ...suppress_result("task", stream, total_tool_count), run_id: req.run_id };
-    }
-    if (result.state.status === "failed" || result.state.status === "cancelled") {
-      const reason = result.state.exitReason || result.state.status;
-      this.logger.warn("resume_task_terminal", { task_id: task.taskId, status: result.state.status, exit_reason: reason, turns: result.state.currentTurn });
-      return { ...error_result("task", stream, `task_${result.state.status}:${reason}`, total_tool_count), run_id: req.run_id };
-    }
-
-    const output = sanitize_provider_output(output_raw).trim();
-    if (!output) return { ...error_result("task", stream, `resume_task_no_output:${result.state.status}`, total_tool_count), run_id: req.run_id };
-    return { ...reply_result("task", stream, normalize_agent_reply(output, req.alias, req.message.sender_id), total_tool_count), run_id: req.run_id };
+    return _continue_task_loop(this._continue_deps(), req, task, task_with_media, media);
   }
 
   /** phase 모드: Phase Loop Runner에 위임. */
+  /** Phase 워크플로우 실행: 템플릿 또는 동적 생성 워크플로우를 실행하고 결과 반환. */
   private async run_phase_loop(req: OrchestrationRequest, task_with_media: string, workflow_hint?: string, node_categories?: string[]): Promise<OrchestrationResult> {
-    const { run_phase_loop: exec } = await import("../agent/phase-loop-runner.js");
-    const { load_workflow_templates, load_workflow_template, substitute_variables } = await import("./workflow-loader.js");
-    if (!this.deps.workspace) throw new Error("workspace is required for run_phase_loop");
-    const workspace = this.deps.workspace;
-    const store = this.deps.phase_workflow_store;
-    const subagents = this.deps.subagents;
-    if (!subagents || !store) {
-      return error_result("phase", null, "phase_loop_deps_not_configured");
-    }
-
-    // 분류기가 workflow_id를 힌트로 전달했으면 해당 템플릿 로드
-    const hint_id = workflow_hint;
-
-    let template: import("../agent/phase-loop.types.js").WorkflowDefinition | null = null;
-    if (hint_id) {
-      template = load_workflow_template(workspace, hint_id);
-    }
-    if (!template) {
-      // 키워드 매칭: 사용자 메시지에 포함된 키워드로 템플릿 탐색
-      const templates = load_workflow_templates(workspace);
-      const lower = task_with_media.toLowerCase();
-      template = templates.find((t) =>
-        lower.includes(t.title.toLowerCase()) ||
-        t.title.toLowerCase().split(/\s+/).some((word) => word.length > 2 && lower.includes(word)),
-      ) || null;
-    }
-    if (!template) {
-      // 동적 워크플로우 생성: 오케스트레이터 LLM에게 워크플로우 설계 요청
-      const dynamic = await this.generate_dynamic_workflow(task_with_media, workspace);
-      if (!dynamic) {
-        return error_result("phase", null, "no_matching_workflow_template");
-      }
-      // 동적 생성 워크플로우는 사용자 확인 후 실행 (비용 통제)
-      const preview = this.format_workflow_preview(dynamic);
-      const workflow_id = `wf-${short_id(12)}`;
-      // 대기 상태로 저장 → 대시보드에서 승인 후 실행
-      if (store) {
-        store.upsert({
-          workflow_id, title: dynamic.title, objective: task_with_media,
-          channel: req.provider, chat_id: req.message.chat_id,
-          status: "waiting_user_input", current_phase: 0, phases: [],
-          memory: { origin: { channel: req.provider, chat_id: req.message.chat_id, sender_id: req.message.sender_id } },
-          created_at: now_iso(), updated_at: now_iso(),
-          definition: dynamic,
-        }).catch((e) => this.logger.error("workflow_upsert_failed", { workflow_id, error: error_message(e) }));
-      }
-      return { reply: preview, mode: "phase", tool_calls_count: 0, streamed: false, run_id: req.run_id };
-    }
-
-    const origin = { channel: req.provider, chat_id: req.message.chat_id, sender_id: req.message.sender_id };
-    const definition = substitute_variables(template, {
-      // 워크플로우 YAML variables 섹션 (기본값)
-      ...(template.variables || {}),
-      // 런타임 변수 (override)
-      objective: task_with_media,
-      channel: req.provider,
-      origin_channel: origin.channel,
-      origin_chat_id: origin.chat_id,
-      origin_sender_id: origin.sender_id,
-    });
-    const workflow_id = `wf-${short_id(12)}`;
-
-    // ProcessTracker 연결
-    if (req.run_id) {
-      this.process_tracker?.link_workflow(req.run_id, workflow_id);
-    }
-
-    const bus = this.deps.bus;
-    const channel_callbacks = bus ? this.build_phase_channel_callbacks(bus, workflow_id, req.provider, req.message.chat_id) : {};
-
-    const result = await exec({
-      workflow_id,
-      title: definition.title,
-      objective: task_with_media,
-      channel: req.provider,
-      chat_id: req.message.chat_id,
-      phases: definition.phases,
-      nodes: definition.nodes,
-      workspace,
-      initial_memory: { origin, ...(node_categories?.length ? { node_categories } : {}) },
-      abort_signal: req.signal,
-      invoke_tool: (tool_id, params, ctx) => this.runtime.execute_tool(tool_id, params, ctx ? { channel: ctx.channel, chat_id: ctx.chat_id, sender_id: ctx.sender_id, task_id: ctx.workflow_id } : undefined),
-      ...channel_callbacks,
-      on_phase_change: (state) => {
-        req.on_progress?.({ task_id: workflow_id, step: state.current_phase + 1, total_steps: state.phases.length, description: `phase ${state.current_phase + 1}/${state.phases.length}`, provider: req.provider, chat_id: req.message.chat_id, at: now_iso() });
-      },
-    }, {
-      subagents,
-      store,
-      logger: this.logger,
-      load_template: (name) => load_workflow_template(workspace, name),
-      providers: this.deps.providers,
-      decision_service: this.deps.decision_service,
-      promise_service: this.deps.promise_service,
-      embed: this.deps.embed,
-      vector_store: this.deps.vector_store,
-      oauth_fetch: this.deps.oauth_fetch,
-      get_webhook_data: this.deps.get_webhook_data,
-      wait_kanban_event: this.deps.wait_kanban_event,
-      create_task: this.deps.create_task,
-      query_db: this.deps.query_db,
-      on_event: (event) => {
-        this.deps.get_sse_broadcaster?.()?.broadcast_workflow_event(event);
-        req.on_agent_event?.({ type: "content_delta", source: { backend: "phase_loop", task_id: workflow_id }, at: now_iso(), text: `[phase] ${event.type}` });
-      },
-    });
-    if (result.status === "completed") {
-      return { reply: `워크플로우 \`${definition.title}\` 완료.\n\n${this.format_phase_summary(result)}`, mode: "phase", tool_calls_count: 0, streamed: false, run_id: req.run_id };
-    }
-    if (result.status === "waiting_user_input") {
-      const pending_phase = result.phases.find((p) => p.pending_user_input);
-      if (pending_phase) {
-        // [ASK_USER]: 에이전트가 명시적으로 질문한 경우
-        const last_agent_result = pending_phase.agents.filter((a) => a.result).pop()?.result || "";
-        const context = `워크플로우 \`${definition.title}\` → **${pending_phase.phase_id}**\n\n${last_agent_result.slice(0, 500)}`;
-        return { reply: this._render_hitl(context, "question"), mode: "phase", tool_calls_count: 0, streamed: false, run_id: req.run_id };
-      }
-      // escalation: critic 반복 실패로 사용자 판단 필요
-      const failed_phase = result.phases.find((p) => p.critic && !p.critic.approved);
-      const critic_review = failed_phase?.critic?.review || "";
-      const agent_output = failed_phase?.agents.filter((a) => a.result).pop()?.result || "";
-      const context = [
-        `워크플로우 \`${definition.title}\` → **${failed_phase?.phase_id || "단계"}**`,
-        "",
-        agent_output ? `**에이전트 결과:**\n${agent_output.slice(0, 400)}` : "",
-        critic_review ? `**검토 의견:**\n${critic_review.slice(0, 300)}` : "",
-      ].filter(Boolean).join("\n\n");
-      return { reply: this._render_hitl(context, "escalation"), mode: "phase", tool_calls_count: 0, streamed: false, run_id: req.run_id };
-    }
-    const phase_error = result.error || result.status;
-    this.logger.warn("phase_loop_terminal", { workflow_id, status: result.status, error: phase_error });
-    return { reply: null, error: `phase_${result.status}:${phase_error}`, mode: "phase", tool_calls_count: 0, streamed: false, run_id: req.run_id };
-  }
-
-  /** 동적 워크플로우 생성: 오케스트레이터 LLM에게 워크플로우 구조 설계 요청. */
-  private async generate_dynamic_workflow(
-    objective: string,
-    _workspace: string,
-  ): Promise<import("../agent/phase-loop.types.js").WorkflowDefinition | null> {
-    try {
-      const { get_agent_role_presets } = await import("../agent/node-presets.js");
-      const role_presets = get_agent_role_presets();
-      const preset_catalog = role_presets.map((p) =>
-        `  - preset_id: "${p.preset_id}" (${p.label}): ${p.description}`,
-      ).join("\n");
-
-      const planner_prompt = [
-        "Design a multi-agent workflow for the following objective.",
-        `Objective: "${objective}"`,
-        "",
-        "## Available Agent Role Presets",
-        "Use these preset_ids when they match the needed role. The preset provides system_prompt and optimal settings automatically.",
-        preset_catalog,
-        "",
-        "Constraints:",
-        "- Maximum 3 phases",
-        "- Maximum 4 agents per phase",
-        "- Each agent needs: agent_id (snake_case), role, label, backend (use \"openrouter\")",
-        "- If a preset matches the role, add preset_id to the agent definition (system_prompt will be auto-filled)",
-        "- If no preset matches, provide a custom system_prompt",
-        "- Add a critic to each phase with gate=true",
-        "",
-        "Return ONLY valid JSON matching this schema:",
-        '{ "title": string, "objective": string, "phases": [{ "phase_id": string, "title": string, "agents": [{ "agent_id": string, "role": string, "label": string, "backend": "openrouter", "preset_id"?: string, "system_prompt"?: string }], "critic": { "backend": "openrouter", "system_prompt": string, "gate": true } }] }',
-      ].join("\n");
-
-      const llm_response = await this.providers.run_orchestrator({
-        messages: [{ role: "user", content: planner_prompt }],
-        max_tokens: 4096,
-        temperature: 0.3,
-      });
-      const response = llm_response?.content;
-      if (!response) return null;
-
-      const json_match = response.match(/\{[\s\S]*"phases"[\s\S]*\}/);
-      if (!json_match) return null;
-
-      const raw = JSON.parse(json_match[0]) as Record<string, unknown>;
-      if (!raw.title || !Array.isArray(raw.phases)) return null;
-
-      return raw as unknown as import("../agent/phase-loop.types.js").WorkflowDefinition;
-    } catch (err) {
-      this.logger.warn("dynamic_workflow_generation_failed", { error: error_message(err) });
-      return null;
-    }
-  }
-
-  /** 동적 생성 워크플로우 미리보기 텍스트. */
-  private format_workflow_preview(def: import("../agent/phase-loop.types.js").WorkflowDefinition): string {
-    const lines = [`다음 워크플로우를 생성했습니다:\n`];
-    for (let i = 0; i < def.phases.length; i++) {
-      const p = def.phases[i];
-      const critic_note = p.critic ? " + critic" : "";
-      lines.push(`**Phase ${i + 1}: ${p.title}** (${p.agents.length} agents${critic_note})`);
-      for (const a of p.agents) {
-        lines.push(`  - ${a.label}: ${a.system_prompt.slice(0, 80)}`);
-      }
-    }
-    lines.push(`\n대시보드에서 워크플로우를 승인하거나 수정하세요.`);
-    return lines.join("\n");
-  }
-
-  /** Phase Loop 내 interaction 노드용 채널 콜백 빌더. */
-  private build_phase_channel_callbacks(
-    bus: import("../bus/types.js").MessageBusLike,
-    workflow_id: string,
-    origin_channel: string,
-    origin_chat_id: string,
-  ) {
-    const logger = this.logger;
-
-    const send_message: import("../agent/phase-loop.types.js").PhaseLoopRunOptions["send_message"] = async (req) => {
-      const channel = req.target === "origin" ? origin_channel : (req.channel || origin_channel);
-      const chat_id = req.target === "origin" ? origin_chat_id : (req.chat_id || origin_chat_id);
-      const msg_id = `wf-msg-${short_id(8)}`;
-      try {
-        await bus.publish_outbound({
-          id: msg_id, provider: channel, channel,
-          sender_id: "system", chat_id, content: req.content,
-          at: now_iso(),
-          metadata: { workflow_id, type: "workflow_notification", ...(req.structured ? { structured: req.structured } : {}) },
-        });
-        return { ok: true, message_id: msg_id };
-      } catch (e) {
-        logger.error("workflow_send_message_failed", { workflow_id, error: error_message(e) });
-        return { ok: false };
-      }
-    };
-
-    const hitl = this.hitl_store;
-    const ask_channel: import("../agent/phase-loop.types.js").PhaseLoopRunOptions["ask_channel"] = (req, timeout_ms) => {
-      const channel = req.target === "origin" ? origin_channel : (req.channel || origin_channel);
-      const chat_id = req.target === "origin" ? origin_chat_id : (req.chat_id || origin_chat_id);
-
-      bus.publish_outbound({
-        id: `wf-ask-${short_id(8)}`, provider: channel, channel,
-        sender_id: "system", chat_id, content: req.content,
-        at: now_iso(),
-        metadata: { workflow_id, type: "workflow_ask_channel", ...(req.structured ? { structured: req.structured } : {}) },
-      }).catch((e) => logger.error("workflow_ask_channel_send_failed", { workflow_id, error: error_message(e) }));
-
-      return new Promise<import("../agent/phase-loop.types.js").ChannelResponse>((resolve) => {
-        const timer = setTimeout(() => {
-          hitl.delete(workflow_id);
-          resolve({ response: "", responded_at: now_iso(), timed_out: true });
-        }, timeout_ms);
-
-        hitl.set(workflow_id, {
-          resolve: (content: string) => {
-            clearTimeout(timer);
-            resolve({ response: content, responded_by: { channel, chat_id }, responded_at: now_iso(), timed_out: false });
-          },
-          chat_id,
-        });
-      });
-    };
-
-    return { send_message, ask_channel };
-  }
-
-  private format_phase_summary(result: import("../agent/phase-loop.types.js").PhaseLoopRunResult): string {
-    const lines: string[] = [];
-
-    // Phase 기반 요약
-    for (const phase of result.phases) {
-      lines.push(`**${phase.title}** (${phase.status})`);
-      for (const agent of phase.agents) {
-        const icon = agent.status === "completed" ? "o" : agent.status === "failed" ? "x" : "-";
-        lines.push(`  ${icon} ${agent.label}: ${(agent.result || agent.error || "").slice(0, 200)}`);
-      }
-      if (phase.critic?.review) {
-        lines.push(`  Critic: ${phase.critic.approved ? "Approved" : "Rejected"} — ${phase.critic.review.slice(0, 200)}`);
-      }
-    }
-
-    // nodes-only 워크플로우: memory에서 마지막 노드 결과 추출
-    if (lines.length === 0 && result.memory) {
-      const mem = result.memory;
-      const keys = Object.keys(mem).filter((k) => k !== "origin" && k !== "node_categories");
-      const last_key = keys[keys.length - 1];
-      if (last_key) {
-        const val = mem[last_key];
-        const text = typeof val === "string" ? val : JSON.stringify(val);
-        lines.push(text.slice(0, 500));
-      }
-    }
-
-    return lines.join("\n");
+    return _run_phase_loop(this._phase_deps(), req, task_with_media, workflow_hint, node_categories);
   }
 }
 
@@ -1656,12 +895,6 @@ export function resolve_reply_to(provider: ChannelProvider, message: InboundMess
     return String(meta.message_id || message.id || "").trim();
   }
   if (provider === "telegram") return "";
-  return String(meta.message_id || message.id || "").trim();
-}
-
-/** trigger_message_id 역조회용 — 정규화 없이 원본 메시지 ID 반환. */
-function raw_message_id(message: InboundMessage): string {
-  const meta = (message.metadata || {}) as Record<string, unknown>;
   return String(meta.message_id || message.id || "").trim();
 }
 

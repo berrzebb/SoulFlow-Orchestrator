@@ -32,6 +32,7 @@ import { OrchestrationService } from "../orchestration/service.js";
 import { create_cron_job_handler, CronService } from "../cron/index.js";
 import { create_task_service } from "../services/create-task.service.js";
 import { create_logger } from "../logger.js";
+import { create_cd_observer } from "../agent/cd-scoring.js";
 
 export interface OrchestrationBundleDeps {
   workspace: string;
@@ -228,6 +229,7 @@ export async function create_orchestration_bundle(deps: OrchestrationBundleDeps)
     query_db: query_db_service,
     renderer: persona_renderer,
     hitl_pending_store,
+    session_cd: create_cd_observer(),
     tool_index,
     create_task: create_task_fn,
   });

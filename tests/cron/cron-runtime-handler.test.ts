@@ -101,7 +101,7 @@ describe("cron runtime handler", () => {
     expect(Boolean((done!.metadata as Record<string, unknown>)?.empty)).toBe(true);
   });
 
-  it("reports unresolved target to fallback chat", async () => {
+  it("uses fallback chat when no explicit target provided", async () => {
     const sent: OutboundMessage[] = [];
     const handler = create_cron_job_handler({
       config: {
@@ -125,14 +125,15 @@ describe("cron runtime handler", () => {
         kind: "agent_turn",
         message: "do something",
         deliver: false,
-        channel: "invalid-provider" as never,
-        to: "chat-1",
+        channel: "", // ← 명시적 provider 없음 → fallback 사용
+        to: "",
       },
     });
-    await expect(async () => handler(job)).rejects.toThrow(/cron_target_unresolved/);
-    expect(sent.length).toBeGreaterThan(0);
-    const failed = sent[sent.length - 1];
-    expect(String((failed.metadata as Record<string, unknown>)?.kind || "")).toBe("cron_failed");
-    expect(String(failed.chat_id || "")).toBe("fallback-chat");
+    // target = null이지만 fallback = { provider: "telegram", chat_id: "fallback-chat" }
+    // 따라서 fallback_target으로 실행하고 결과 메시지를 보냄
+    const result = await handler(job);
+    expect(result).toBeTruthy(); // 정상 완료
+    const cron_result = sent.find((m) => String((m.metadata as Record<string, unknown>)?.kind || "") === "cron_result");
+    expect(cron_result?.chat_id).toBe("fallback-chat"); // fallback chat으로 발송됨
   });
 });

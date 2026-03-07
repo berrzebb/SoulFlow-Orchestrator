@@ -253,6 +253,10 @@ async function create_approval_harness(handler: OrchestrationHandler): Promise<A
     config,
     workspace_dir: workspace,
     logger,
+    bot_identity: {
+      get_bot_self_id: () => "bot-id-1",
+      get_default_target: () => "default-target",
+    },
   });
 
   const cleanup = async () => {
