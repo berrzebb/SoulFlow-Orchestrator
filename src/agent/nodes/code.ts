@@ -85,7 +85,7 @@ async function execute_javascript(
 async function execute_shell(
   n: CodeNodeDefinition, ctx: OrcheNodeExecutorContext, timeout_ms: number,
 ): Promise<OrcheNodeExecuteResult> {
-  const cwd = ctx.workspace || process.cwd();
+  const cwd = ctx.workspace;
   try {
     const result = await run_shell_command(n.code, {
       cwd, timeout_ms, max_buffer_bytes: 1024 * 256, signal: ctx.abort_signal,

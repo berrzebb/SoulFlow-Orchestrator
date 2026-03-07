@@ -13,7 +13,7 @@ import { register_all_nodes } from "./nodes/index.js";
 export interface OrcheNodeExecutorContext {
   memory: Record<string, unknown>;
   abort_signal?: AbortSignal;
-  workspace?: string;
+  workspace: string;
 }
 
 export interface OrcheNodeExecuteResult {

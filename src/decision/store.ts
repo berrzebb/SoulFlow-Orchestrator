@@ -28,7 +28,7 @@ export class DecisionStore {
   private readonly initialized: Promise<void>;
   private write_queue: Promise<void> = Promise.resolve();
 
-  constructor(root = process.cwd(), decisions_dir_override?: string) {
+  constructor(root: string, decisions_dir_override?: string) {
     this.root = root;
     this.decisions_dir = decisions_dir_override || join(root, "runtime", "decisions");
     this.sqlite_path = join(this.decisions_dir, "decisions.db");

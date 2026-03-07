@@ -231,7 +231,7 @@ export async function create_real_harness(options?: {
 
   const bus = new MessageBus();
   const vault = new SecretVaultService(workspace);
-  const providers = new ProviderRegistry({ orchestrator_llm_model: "qwen3:4b" });
+  const providers = new ProviderRegistry({ secret_vault: vault, orchestrator_llm_model: "qwen3:4b" });
   const agent_domain = new AgentDomain(workspace, { providers, bus });
 
   await Promise.all([
@@ -257,6 +257,7 @@ export async function create_real_harness(options?: {
       max_tool_result_chars: 4000,
     },
     logger,
+    hitl_pending_store: new (await import("@src/orchestration/hitl-pending-store.ts")).HitlPendingStore(),
   });
 
   const channel = new TestChannel(provider);

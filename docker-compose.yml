@@ -16,11 +16,36 @@ services:
           memory: 128M
           cpus: "0.5"
 
+  redis:
+    image: redis:7-alpine
+    container_name: soulflow-redis
+    restart: unless-stopped
+    profiles: [redis]                          # docker compose --profile redis up
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    command: >
+      redis-server
+      --appendonly yes
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+          cpus: "0.5"
+
   ollama:
     image: ollama/ollama:latest
     container_name: orchestrator-llm
     restart: unless-stopped
-    profiles: [gpu]                        # docker compose --profile gpu up
+    profiles: [gpu]                            # docker compose --profile gpu up
     ports:
       - "11434:11434"
     volumes:
@@ -36,7 +61,7 @@ services:
   orchestrator:
     build:
       context: .
-      target: full                        # CLI 에이전트(Claude, Codex, Gemini) 포함
+      target: full                             # CLI 에이전트(Claude, Codex, Gemini) 포함
     container_name: soulflow-orchestrator
     restart: unless-stopped
     depends_on:
@@ -46,7 +71,7 @@ services:
       - "${DASHBOARD_PORT:-4200}:4200"
     volumes:
       - ${WORKSPACE_PATH:-./workspace2}:/data
-      - cli-auth-claude:/root/.claude      # 컨테이너 내부 CLI OAuth 토큰 영속
+      - cli-auth-claude:/root/.claude
       - cli-auth-codex:/root/.codex
       - cli-auth-gemini:/root/.gemini
     environment:
@@ -54,6 +79,8 @@ services:
       - NODE_ENV=production
       - SKIP_INSTANCE_LOCK=1
       - DOCKER_HOST=tcp://docker-proxy:2375
+      - BUS_BACKEND=${BUS_BACKEND:-redis}
+      - BUS_REDIS_URL=${BUS_REDIS_URL:-redis://redis:6379}
     deploy:
       resources:
         limits:
@@ -61,6 +88,7 @@ services:
           cpus: "2"
 
 volumes:
+  redis-data:
   ollama-data:
   cli-auth-claude:
   cli-auth-codex:

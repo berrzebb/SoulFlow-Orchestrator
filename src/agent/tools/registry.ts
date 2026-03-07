@@ -7,6 +7,7 @@ import type {
   ToolLike,
 } from "./types.js";
 import type { AgentApprovalStatus } from "../runtime.types.js";
+import type { ParamSecretResolver } from "./base.js";
 
 const ERROR_HINT = "\n\n[Analyze the error and retry with a safer or narrower approach.]";
 
@@ -48,8 +49,23 @@ export class ToolRegistry {
     this.post_hooks = options?.post_hooks || [];
   }
 
+  private _secret_resolver: ParamSecretResolver | null = null;
+
   register(tool: ToolLike): void {
     this.tools.set(tool.name, tool);
+    if (this._secret_resolver) this.inject_resolver(tool);
+  }
+
+  /** 등록된 모든 도구에 파라미터 시크릿 해석기를 주입. */
+  set_secret_resolver(resolver: ParamSecretResolver): void {
+    this._secret_resolver = resolver;
+    for (const tool of this.tools.values()) this.inject_resolver(tool);
+  }
+
+  private inject_resolver(tool: ToolLike): void {
+    if (this._secret_resolver && "set_secret_resolver" in tool && typeof (tool as Record<string, unknown>).set_secret_resolver === "function") {
+      (tool as { set_secret_resolver(r: ParamSecretResolver): void }).set_secret_resolver(this._secret_resolver);
+    }
   }
 
   unregister(name: string): void {
@@ -82,11 +98,25 @@ export class ToolRegistry {
     for (const tool of tools) {
       this.tools.set(tool.name, tool);
       this.dynamic_tool_names.add(tool.name);
+      if (this._secret_resolver) this.inject_resolver(tool);
     }
   }
 
   get_definitions(): Array<Record<string, unknown>> {
     return [...this.tools.values()].map((tool) => tool.to_schema() as Record<string, unknown>);
+  }
+
+  /** allowed_tools 기반 필터링된 래퍼. definitions와 execute 모두 allowlist를 적용. */
+  filtered(allowed: string[]): Pick<ToolRegistry, "get_definitions" | "execute" | "tool_names"> {
+    const allow_set = new Set(allowed);
+    return {
+      get_definitions: () => this.get_definitions().filter((d) => allow_set.has(String((d as Record<string, unknown>).name ?? ""))),
+      execute: (name, params, ctx) => {
+        if (!allow_set.has(name)) return Promise.resolve(`Error: Tool '${name}' is not allowed. Allowed: ${allowed.join(", ")}`);
+        return this.execute(name, params, ctx);
+      },
+      tool_names: () => this.tool_names().filter((n) => allow_set.has(n)),
+    };
   }
 
   /** 등록된 도구에서 name → category 매핑을 빌드. */

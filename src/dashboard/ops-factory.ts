@@ -10,13 +10,13 @@ import { DEFAULT_TEMPLATES } from "../bootstrap-templates.js";
 import { create_agent_provider, list_registered_provider_types } from "../agent/provider-factory.js";
 import {
   fetch_openrouter_models, fetch_openai_models, fetch_anthropic_models,
-  fetch_gemini_models, fetch_ollama_models,
+  fetch_gemini_models, fetch_ollama_models, get_static_openai_models,
 } from "../services/model-catalog.js";
 import { get_preset as get_oauth_preset, list_presets as list_oauth_presets } from "../oauth/presets.js";
 import { create_channel_instance, type ChannelRegistryLike } from "../channels/index.js";
 import type {
   DashboardTemplateOps, DashboardChannelOps, ChannelStatusInfo,
-  DashboardAgentProviderOps, BootstrapOps, DashboardOAuthOps, OAuthIntegrationInfo,
+  DashboardAgentProviderOps, ProviderConnectionInfo, BootstrapOps, DashboardOAuthOps, OAuthIntegrationInfo,
   DashboardMemoryOps, DashboardWorkspaceOps,
   DashboardSkillOps, DashboardConfigOps, DashboardToolOps, DashboardCliAuthOps,
   DashboardModelOps,
@@ -45,9 +45,19 @@ async function activate_provider(
   if (token) await store.set_token(instance_id, token);
   const config = store.get(instance_id);
   if (!config) return;
-  const resolved_token = await store.get_token(instance_id);
-  const backend = create_agent_provider(config, resolved_token, { provider_registry: registry, workspace });
-  if (backend?.is_available()) backends.register(backend, config);
+  const resolved_token = await store.resolve_token(instance_id);
+  const effective_config = apply_connection_api_base(store, config);
+  const backend = create_agent_provider(effective_config, resolved_token, { provider_registry: registry, workspace });
+  if (backend?.is_available()) backends.register(backend, effective_config);
+}
+
+/** connection의 api_base를 settings에 머지한 config를 반환. */
+function apply_connection_api_base(store: AgentProviderStore, config: import("../agent/agent.types.js").AgentProviderConfig): import("../agent/agent.types.js").AgentProviderConfig {
+  const resolved = store.resolve_api_base(config.instance_id);
+  if (resolved && resolved !== config.settings.api_base) {
+    return { ...config, settings: { ...config.settings, api_base: resolved } };
+  }
+  return config;
 }
 
 /** workspace 내부 상대 경로 sanitize. 디렉토리 탈출 방지. */
@@ -297,11 +307,54 @@ export function create_agent_provider_ops(deps: {
   const { provider_store, agent_backends, provider_registry, workspace } = deps;
   const log = create_logger("provider-ops");
 
+  async function build_connection_info(conn: import("../agent/agent.types.js").ProviderConnection): Promise<ProviderConnectionInfo> {
+    const has_token = await provider_store.has_connection_token(conn.connection_id);
+    const preset_count = provider_store.count_presets_for_connection(conn.connection_id);
+    return { ...conn, token_configured: has_token, preset_count };
+  }
+
+  /** provider_type에 해당하는 connection 토큰을 자동 탐색. */
+  async function resolve_connection_key(provider_type: string): Promise<string | undefined> {
+    const conns = provider_store.list_connections().filter((c) => c.provider_type === provider_type && c.enabled);
+    for (const conn of conns) {
+      const token = await provider_store.get_connection_token(conn.connection_id);
+      if (token) return token;
+    }
+    return undefined;
+  }
+
+  async function do_list_models(provider_type: string, opts?: { api_key?: string; api_base?: string }) {
+    const api_key = opts?.api_key || await resolve_connection_key(provider_type);
+    const api_base = opts?.api_base;
+    switch (provider_type) {
+      case "openrouter":
+        return fetch_openrouter_models(api_key);
+      case "openai_compatible":
+        return fetch_openai_models(api_base || "https://api.openai.com/v1", api_key);
+      case "claude_sdk":
+      case "claude_cli":
+        return fetch_anthropic_models(api_key);
+      case "gemini_cli":
+        return fetch_gemini_models(api_key);
+      case "codex_cli":
+      case "codex_appserver":
+        if (api_key) return fetch_openai_models("https://api.openai.com/v1", api_key);
+        return get_static_openai_models();
+      case "container_cli": {
+        const [a, g, o] = await Promise.all([fetch_anthropic_models(), fetch_gemini_models(), Promise.resolve(get_static_openai_models())]);
+        return [...a, ...g, ...o];
+      }
+      default:
+        if (api_base) return fetch_ollama_models(api_base);
+        return [];
+    }
+  }
+
   return {
     async list() {
       const configs = provider_store.list();
       const status_map = new Map(agent_backends.list_backend_status().map((s) => [s.id, s]));
-      const token_checks = await Promise.all(configs.map((c) => provider_store.has_token(c.instance_id)));
+      const token_checks = await Promise.all(configs.map((c) => provider_store.has_resolved_token(c.instance_id)));
       return configs.map((c, i) => {
         const s = status_map.get(c.instance_id);
         return { ...c, available: s?.available ?? false, circuit_state: s?.circuit_state ?? "closed", capabilities: s?.capabilities ?? null, token_configured: token_checks[i] };
@@ -312,7 +365,7 @@ export function create_agent_provider_ops(deps: {
       const config = provider_store.get(instance_id);
       if (!config) return null;
       const status = agent_backends.list_backend_status().find((s) => s.id === instance_id);
-      const has_token = await provider_store.has_token(instance_id);
+      const has_token = await provider_store.has_resolved_token(instance_id);
       return { ...config, available: status?.available ?? false, circuit_state: status?.circuit_state ?? "closed", capabilities: status?.capabilities ?? null, token_configured: has_token };
     },
 
@@ -328,9 +381,10 @@ export function create_agent_provider_ops(deps: {
         model_purpose: (input.model_purpose === "embedding" ? "embedding" : "chat") as import("../agent/agent.types.js").ModelPurpose,
         supported_modes: (input.supported_modes ?? ["once", "agent", "task"]) as import("../orchestration/types.js").ExecutionMode[],
         settings: input.settings || {},
+        connection_id: input.connection_id,
       });
-      await activate_provider(provider_store, agent_backends, provider_registry, workspace, input.instance_id, input.token);
-      log.info("provider_create", { id: input.instance_id, provider_type: input.provider_type });
+      await activate_provider(provider_store, agent_backends, provider_registry, workspace, input.instance_id, input.token || null);
+      log.info("provider_create", { id: input.instance_id, provider_type: input.provider_type, connection_id: input.connection_id });
       return { ok: true };
     },
 
@@ -342,6 +396,7 @@ export function create_agent_provider_ops(deps: {
         model_purpose: patch.model_purpose as import("../agent/agent.types.js").ModelPurpose | undefined,
         supported_modes: patch.supported_modes as import("../orchestration/types.js").ExecutionMode[] | undefined,
         settings: patch.settings,
+        connection_id: patch.connection_id,
       });
       if (patch.token !== undefined) {
         if (patch.token) await provider_store.set_token(instance_id, patch.token);
@@ -349,9 +404,10 @@ export function create_agent_provider_ops(deps: {
       }
       const updated_config = provider_store.get(instance_id);
       if (updated_config) {
-        const token = await provider_store.get_token(instance_id);
-        const backend = create_agent_provider(updated_config, token, { provider_registry, workspace });
-        if (backend) agent_backends.register(backend, updated_config);
+        const token = await provider_store.resolve_token(instance_id);
+        const effective = apply_connection_api_base(provider_store, updated_config);
+        const backend = create_agent_provider(effective, token, { provider_registry, workspace });
+        if (backend) agent_backends.register(backend, effective);
       }
       log.info("provider_update", { id: instance_id, fields: Object.keys(patch) });
       return { ok: true };
@@ -368,8 +424,9 @@ export function create_agent_provider_ops(deps: {
     async test_availability(instance_id) {
       const config = provider_store.get(instance_id);
       if (!config) return { ok: false, error: "instance_not_found" };
-      const token = await provider_store.get_token(instance_id);
-      const backend = create_agent_provider(config, token, { provider_registry, workspace });
+      const token = await provider_store.resolve_token(instance_id);
+      const effective = apply_connection_api_base(provider_store, config);
+      const backend = create_agent_provider(effective, token, { provider_registry, workspace });
       if (!backend) return { ok: false, error: "unknown_provider_type" };
       try {
         const available = backend.is_available();
@@ -384,23 +441,78 @@ export function create_agent_provider_ops(deps: {
       return list_registered_provider_types();
     },
 
-    async list_models(provider_type, opts) {
-      const api_key = opts?.api_key;
-      const api_base = opts?.api_base;
-      switch (provider_type) {
-        case "openrouter":
-          return fetch_openrouter_models(api_key);
-        case "openai_compatible":
-          return fetch_openai_models(api_base || "https://api.openai.com/v1", api_key);
-        case "claude_sdk":
-        case "claude_cli":
-          return fetch_anthropic_models(api_key);
-        case "gemini_cli":
-          return fetch_gemini_models(api_key);
-        default:
-          // Ollama 등 로컬 서비스: api_base가 있으면 시도
-          if (api_base) return fetch_ollama_models(api_base);
-          return [];
+    list_models: do_list_models,
+
+    // ── Connection CRUD ──
+
+    async list_connections() {
+      const conns = provider_store.list_connections();
+      return Promise.all(conns.map(build_connection_info));
+    },
+
+    async get_connection(connection_id) {
+      const conn = provider_store.get_connection(connection_id);
+      if (!conn) return null;
+      return build_connection_info(conn);
+    },
+
+    async create_connection(input) {
+      if (!input.connection_id || !input.provider_type) return { ok: false, error: "connection_id_and_provider_type_required" };
+      if (provider_store.get_connection(input.connection_id)) return { ok: false, error: "connection_already_exists" };
+      provider_store.upsert_connection({
+        connection_id: input.connection_id,
+        provider_type: input.provider_type,
+        label: input.label || input.connection_id,
+        enabled: input.enabled ?? true,
+        api_base: input.api_base,
+      });
+      if (input.token) await provider_store.set_connection_token(input.connection_id, input.token);
+      log.info("connection_create", { id: input.connection_id, provider_type: input.provider_type });
+      return { ok: true };
+    },
+
+    async update_connection(connection_id, patch) {
+      const existing = provider_store.get_connection(connection_id);
+      if (!existing) return { ok: false, error: "not_found" };
+      provider_store.update_connection(connection_id, {
+        label: patch.label,
+        enabled: patch.enabled,
+        api_base: patch.api_base,
+      });
+      if (patch.token !== undefined) {
+        if (patch.token) await provider_store.set_connection_token(connection_id, patch.token);
+        else await provider_store.remove_connection_token(connection_id);
+      }
+      // connection이 변경되면 참조하는 모든 provider를 재활성화
+      for (const config of provider_store.list()) {
+        if (config.connection_id !== connection_id) continue;
+        const token = await provider_store.resolve_token(config.instance_id);
+        const effective = apply_connection_api_base(provider_store, config);
+        const backend = create_agent_provider(effective, token, { provider_registry, workspace });
+        if (backend) agent_backends.register(backend, effective);
+      }
+      log.info("connection_update", { id: connection_id, fields: Object.keys(patch) });
+      return { ok: true };
+    },
+
+    async remove_connection(connection_id) {
+      await provider_store.remove_connection_token(connection_id);
+      const removed = provider_store.remove_connection(connection_id);
+      if (removed) log.info("connection_remove", { id: connection_id });
+      return { ok: removed, error: removed ? undefined : "not_found" };
+    },
+
+    async test_connection(connection_id) {
+      const conn = provider_store.get_connection(connection_id);
+      if (!conn) return { ok: false, error: "connection_not_found" };
+      const token = await provider_store.get_connection_token(connection_id);
+      if (!token) return { ok: false, error: "token_not_configured" };
+      // 연결 테스트: 해당 provider_type으로 모델 목록 조회 시도
+      try {
+        const models = await do_list_models(conn.provider_type, { api_key: token, api_base: conn.api_base });
+        return { ok: true, detail: `${models.length} models available` };
+      } catch (e) {
+        return { ok: false, error: error_message(e) };
       }
     },
   };
@@ -429,7 +541,8 @@ export function create_bootstrap_ops(deps: {
         provider_store.upsert({
           instance_id: p.instance_id, provider_type: p.provider_type,
           label: p.label || p.instance_id, enabled: p.enabled ?? true,
-          priority: p.priority ?? 100, supported_modes: ["once", "agent", "task"],
+          priority: p.priority ?? 100, model_purpose: "chat",
+          supported_modes: ["once", "agent", "task"],
           settings: p.settings || {},
         });
         await activate_provider(provider_store, agent_backends, provider_registry, workspace, p.instance_id, p.token);
@@ -801,8 +914,95 @@ import {
   delete_workflow_template, parse_workflow_yaml, serialize_to_yaml,
 } from "../orchestration/workflow-loader.js";
 import { run_phase_loop } from "../agent/phase-loop-runner.js";
+import { build_node_catalog } from "../agent/tools/workflow-catalog.js";
 import { short_id } from "../utils/common.js";
 import type { Logger } from "../logger.js";
+
+const WORKFLOW_SCHEMA_REFERENCE = `## Full Workflow Definition Schema
+\`\`\`
+WorkflowDefinition {
+  title: string,
+  objective?: string,
+  variables?: { [key]: string },       // runtime substitution: {{key}}
+
+  // ── Node-based (preferred) ──
+  nodes?: WorkflowNodeDefinition[],     // unified array (phase + orche nodes)
+
+  // ── Legacy arrays (used when nodes[] absent) ──
+  phases?: PhaseDefinition[],
+  orche_nodes?: OrcheNodeRecord[],
+
+  field_mappings?: FieldMapping[],
+  tool_nodes?: ToolNodeDefinition[],
+  skill_nodes?: SkillNodeDefinition[],
+  trigger_nodes?: TriggerNodeRecord[],
+  hitl_channel?: { channel_type: string, chat_id?: string },
+}
+\`\`\`
+
+### PhaseDefinition (agent execution unit)
+\`\`\`
+{
+  phase_id: string,
+  title: string,
+  mode?: "parallel" | "interactive" | "sequential_loop",  // default: parallel
+  agents: [{
+    agent_id: string,
+    role: string,
+    label: string,
+    backend: string,           // provider instance_id from backends list
+    model?: string,
+    system_prompt: string,
+    tools?: string[],          // tool_node ids
+    max_turns?: number,
+    filesystem_isolation?: "none" | "directory" | "worktree",
+  }],
+  critic?: {
+    backend: string,
+    model?: string,
+    system_prompt: string,
+    gate?: boolean,
+    on_rejection?: "retry_all" | "retry_targeted" | "escalate" | "goto",
+    goto_phase?: string,
+    max_retries?: number,
+  },
+  failure_policy?: "fail_fast" | "best_effort" | "quorum",
+  depends_on?: string[],       // phase_ids (fork-join)
+  tools?: string[],            // tool_node ids bound to all agents
+  skills?: string[],           // skill names
+  loop_until?: string,         // sequential_loop exit condition
+  max_loop_iterations?: number,
+}
+\`\`\`
+
+### FieldMapping (connect node outputs to inputs)
+\`\`\`
+{ from_node: string, from_field: string, to_node: string, to_field: string }
+\`\`\`
+Example: { from_node: "fetch-1", from_field: "body.items[0].id", to_node: "set-2", to_field: "value" }
+
+### TriggerNodeRecord
+\`\`\`
+{
+  id: string,
+  trigger_type: "cron" | "webhook" | "manual" | "channel_message",
+  schedule?: string,           // cron expression (for cron)
+  timezone?: string,
+  webhook_path?: string,       // (for webhook)
+  channel_type?: string,       // (for channel_message)
+  chat_id?: string,
+}
+\`\`\`
+
+### ToolNodeDefinition
+\`\`\`
+{ id: string, tool_id: string, description: string, attach_to?: string[] }
+\`\`\`
+
+### SkillNodeDefinition
+\`\`\`
+{ id: string, skill_name: string, description: string, attach_to?: string[] }
+\`\`\``;
 
 export function create_workflow_ops(deps: {
   store: PhaseWorkflowStoreLike;
@@ -814,9 +1014,13 @@ export function create_workflow_ops(deps: {
   bus?: import("../bus/types.js").MessageBusLike;
   cron?: import("../cron/service.js").CronService;
   /** Tool Invoke 노드용: 도구 실행 콜백. */
-  invoke_tool?: (tool_id: string, params: Record<string, unknown>) => Promise<string>;
+  invoke_tool?: (tool_id: string, params: Record<string, unknown>, context?: { workflow_id?: string; channel?: string; chat_id?: string; sender_id?: string }) => Promise<string>;
   /** LLM provider (llm, analyzer 노드용). */
   providers?: import("../providers/service.js").ProviderRegistry | null;
+  /** suggest용: 등록된 도구 이름·설명 목록. */
+  get_tool_summaries?: () => Array<{ name: string; description: string; category: string }>;
+  /** suggest용: 사용 가능한 백엔드/모델 요약. */
+  get_provider_summaries?: () => Array<{ backend: string; label: string; provider_type: string; models: string[] }>;
   /** Decision/Promise 서비스 (워크플로우 노드용). */
   decision_service?: import("../decision/service.js").DecisionService | null;
   promise_service?: import("../decision/promise.service.js").PromiseService | null;
@@ -827,11 +1031,16 @@ export function create_workflow_ops(deps: {
   wait_kanban_event?: (board_id: string, filter: { actions?: string[]; column_id?: string }) => Promise<{ card_id: string; board_id: string; action: string; actor: string; detail: Record<string, unknown>; created_at: string } | null>;
   create_task?: (opts: { title: string; objective: string; channel?: string; chat_id?: string; max_turns?: number; initial_memory?: Record<string, unknown> }) => Promise<{ task_id: string; status: string; result?: unknown; error?: string }>;
   query_db?: (datasource: string, query: string, params?: Record<string, unknown>) => Promise<{ rows: unknown[]; affected_rows: number }>;
+  on_kanban_trigger_waiting?: (workflow_id: string) => void;
+  /** 공유 HITL pending store. */
+  hitl_pending_store: import("../orchestration/hitl-pending-store.js").HitlPendingStore;
+  /** 페르소나 메시지 렌더러. */
+  renderer?: import("../channels/persona-message-renderer.js").PersonaMessageRendererLike | null;
 }): DashboardWorkflowOps & { hitl_bridge: import("../channels/manager.js").WorkflowHitlBridge } {
   const { store, subagents, workspace, logger, skills_loader, on_workflow_event, bus, cron } = deps;
+  let suggest_node_catalog_cache: string | null = null;
 
-  /** HITL: 워크플로우별 사용자 응답 대기 Promise resolver. 키: workflow_id, 값의 chat_id도 추적. */
-  const pending_responses = new Map<string, { resolve: (response: string) => void; chat_id: string }>();
+  const pending_responses = deps.hitl_pending_store;
 
   /** HITL ask_user 콜백 빌더. 항상 워크플로우 실행 채널/대화로 전송. */
   function build_ask_user(workflow_id: string, target_channel: string, target_chat_id: string) {
@@ -839,15 +1048,13 @@ export function create_workflow_ops(deps: {
       on_workflow_event?.({ type: "user_input_requested", workflow_id, phase_id: "", question });
 
       if (bus && target_channel !== "dashboard" && target_channel !== "web") {
-        const formatted = [
-          "💬 **질문**",
-          "",
-          question,
-          "",
-          "질문에 대한 답변을 답장해주세요.",
-          "",
-          "_이 메시지에 답장하면 워크플로우가 자동으로 재개됩니다._",
-        ].join("\n");
+        const formatted = deps.renderer
+          ? deps.renderer.render({ kind: "workflow_ask", question })
+          : [
+              "💬 **질문**", "", question, "",
+              "질문에 대한 답변을 답장해주세요.", "",
+              "_이 메시지에 답장하면 워크플로우가 자동으로 재개됩니다._",
+            ].join("\n");
         bus.publish_outbound({
           id: `wf-ask-${short_id(8)}`, provider: target_channel, channel: target_channel,
           sender_id: "system", chat_id: target_chat_id, content: formatted,
@@ -926,14 +1133,7 @@ export function create_workflow_ops(deps: {
   /** chat_id로 활성 워크플로우 HITL 응답 시도. */
   const hitl_bridge: import("../channels/manager.js").WorkflowHitlBridge = {
     async try_resolve(chat_id: string, content: string): Promise<boolean> {
-      for (const [wf_id, entry] of pending_responses) {
-        if (entry.chat_id === chat_id) {
-          pending_responses.delete(wf_id);
-          entry.resolve(content);
-          return true;
-        }
-      }
-      return false;
+      return pending_responses.try_resolve(chat_id, content);
     },
   };
 
@@ -950,6 +1150,7 @@ export function create_workflow_ops(deps: {
 
       let phases: PhaseLoopRunOptions["phases"];
       let nodes: PhaseLoopRunOptions["nodes"];
+      let field_mappings: PhaseLoopRunOptions["field_mappings"];
       if (input.template_name) {
         const template = load_workflow_templates(workspace)
           .find((t) => t.title.toLowerCase().includes(String(input.template_name).toLowerCase()));
@@ -960,8 +1161,14 @@ export function create_workflow_ops(deps: {
         const substituted = substitute_variables(template, { ...(template.variables || {}), ...user_vars, objective, channel });
         phases = substituted.phases;
         nodes = substituted.nodes;
+        field_mappings = substituted.field_mappings;
+      } else if (Array.isArray(input.nodes)) {
+        nodes = input.nodes as PhaseLoopRunOptions["nodes"];
+        phases = Array.isArray(input.phases) ? input.phases as PhaseLoopRunOptions["phases"] : [];
+        field_mappings = Array.isArray(input.field_mappings) ? input.field_mappings as PhaseLoopRunOptions["field_mappings"] : undefined;
       } else if (Array.isArray(input.phases)) {
         phases = input.phases as PhaseLoopRunOptions["phases"];
+        field_mappings = Array.isArray(input.field_mappings) ? input.field_mappings as PhaseLoopRunOptions["field_mappings"] : undefined;
       } else {
         // objective만 있으면 기본 파이프라인 템플릿으로 폴백
         const fallback = load_workflow_template(workspace, "autonomous-dev-pipeline")
@@ -970,6 +1177,19 @@ export function create_workflow_ops(deps: {
         const substituted = substitute_variables(fallback, { ...(fallback.variables || {}), objective, channel });
         phases = substituted.phases;
         nodes = substituted.nodes;
+        field_mappings = substituted.field_mappings;
+      }
+
+      // orche_nodes → nodes 병합: UI에서 추가한 오케스트레이션 노드를 실행 가능한 nodes 배열에 통합
+      if (Array.isArray(input.orche_nodes) && input.orche_nodes.length) {
+        const orche_as_nodes = (input.orche_nodes as Array<Record<string, unknown>>).map((n) => ({
+          ...n,
+          node_id: String(n.node_id),
+          node_type: String(n.node_type),
+          title: String(n.title || n.node_id || ""),
+          depends_on: Array.isArray(n.depends_on) ? n.depends_on.map(String) : undefined,
+        }));
+        nodes = [...(nodes || []), ...orche_as_nodes] as PhaseLoopRunOptions["nodes"];
       }
 
       const workflow_id = `wf-${short_id(12)}`;
@@ -985,7 +1205,9 @@ export function create_workflow_ops(deps: {
         ask_channel: build_ask_channel(workflow_id, channel, chat_id),
         invoke_tool: deps.invoke_tool,
         initial_memory: { origin },
-      }, { subagents, store, logger, load_template: (name) => load_workflow_template(workspace, name), providers: deps.providers, decision_service: deps.decision_service, promise_service: deps.promise_service, embed: deps.embed, vector_store: deps.vector_store, oauth_fetch: deps.oauth_fetch, get_webhook_data: deps.get_webhook_data, wait_kanban_event: deps.wait_kanban_event, create_task: deps.create_task, query_db: deps.query_db, on_event: on_workflow_event }).catch((err) => {
+        workspace,
+        field_mappings,
+      }, { subagents, store, logger, load_template: (name) => load_workflow_template(workspace, name), providers: deps.providers, decision_service: deps.decision_service, promise_service: deps.promise_service, embed: deps.embed, vector_store: deps.vector_store, oauth_fetch: deps.oauth_fetch, get_webhook_data: deps.get_webhook_data, wait_kanban_event: deps.wait_kanban_event, create_task: deps.create_task, query_db: deps.query_db, on_kanban_trigger_waiting: deps.on_kanban_trigger_waiting, on_event: on_workflow_event }).catch((err) => {
         logger.error("workflow_create_run_error", { workflow_id, error: String(err) });
       });
 
@@ -1027,10 +1249,16 @@ export function create_workflow_ops(deps: {
 
       // 실행 중인 에이전트에 메시지 전달
       if (agent.subagent_id) {
-        try { subagents.send_input(agent.subagent_id, content); } catch { /* agent may have completed */ }
+        try {
+          const accepted = subagents.send_input(agent.subagent_id, content);
+          if (!accepted) return { ok: false, error: "agent_not_accepting_input" };
+          return { ok: true };
+        } catch {
+          return { ok: false, error: "agent_not_accepting_input" };
+        }
       }
 
-      return { ok: true };
+      return { ok: false, error: "agent_has_no_input_channel" };
     },
 
     list_templates: () => load_workflow_templates(workspace),
@@ -1106,24 +1334,28 @@ export function create_workflow_ops(deps: {
       }
 
       // definition이 없으면 재실행 불가
-      if (!state.definition?.phases?.length) {
+      if (!state.definition?.phases?.length && !state.definition?.nodes?.length) {
         return { ok: false, error: "no_definition_for_resume" };
       }
 
       const { channel, chat_id } = state;
       const ask_user = build_ask_user(workflow_id, channel, chat_id);
 
-      // 이미 완료된 Phase는 run_phase_loop 내부에서 skip됨 (상태머신 로직)
-      state.status = "running";
-      await store.upsert(state);
-
+      // 기존 state를 resume_state로 전달 → runner가 완료된 노드를 skip하고 이어서 실행
       void run_phase_loop({
         workflow_id, title: state.title, objective: state.objective,
-        channel, chat_id, phases: state.definition.phases, ask_user,
+        channel, chat_id,
+        phases: state.definition.phases || [],
+        nodes: state.definition.nodes,
+        field_mappings: state.definition.field_mappings,
+        ask_user,
         send_message: build_send_message(workflow_id, channel, chat_id),
         ask_channel: build_ask_channel(workflow_id, channel, chat_id),
         invoke_tool: deps.invoke_tool,
-      }, { subagents, store, logger, load_template: (name) => load_workflow_template(workspace, name), providers: deps.providers, decision_service: deps.decision_service, promise_service: deps.promise_service, embed: deps.embed, vector_store: deps.vector_store, oauth_fetch: deps.oauth_fetch, get_webhook_data: deps.get_webhook_data, wait_kanban_event: deps.wait_kanban_event, create_task: deps.create_task, query_db: deps.query_db, on_event: on_workflow_event }).catch((err) => {
+        workspace,
+        initial_memory: state.memory,
+        resume_state: state,
+      }, { subagents, store, logger, load_template: (name) => load_workflow_template(workspace, name), providers: deps.providers, decision_service: deps.decision_service, promise_service: deps.promise_service, embed: deps.embed, vector_store: deps.vector_store, oauth_fetch: deps.oauth_fetch, get_webhook_data: deps.get_webhook_data, wait_kanban_event: deps.wait_kanban_event, create_task: deps.create_task, query_db: deps.query_db, on_kanban_trigger_waiting: deps.on_kanban_trigger_waiting, on_event: on_workflow_event }).catch((err) => {
         logger.error("workflow_resume_run_error", { workflow_id, error: String(err) });
       });
 
@@ -1206,12 +1438,38 @@ export function create_workflow_ops(deps: {
     async suggest(instruction, workflow) {
       if (!deps.providers) return { ok: false, error: "providers_not_configured" };
       try {
+        if (!suggest_node_catalog_cache) suggest_node_catalog_cache = build_node_catalog();
+        const node_catalog = suggest_node_catalog_cache;
+
+        const tool_section = deps.get_tool_summaries
+          ? deps.get_tool_summaries()
+              .map((t) => `- ${t.name} [${t.category}]: ${t.description}`)
+              .join("\n")
+          : "";
+
+        const provider_section = deps.get_provider_summaries
+          ? deps.get_provider_summaries()
+              .map((p) => `- ${p.backend} (${p.provider_type}): ${p.models.join(", ") || "(no models)"}`)
+              .join("\n")
+          : "";
+
+        const skill_section = skills_loader
+          ? skills_loader.list_skills(true).map((s) => `- ${s.name}: ${s.summary}`).join("\n")
+          : "";
+
         const system = [
-          "You are a workflow editor. You receive a workflow definition (JSON) and an edit instruction from the user.",
+          "You are a workflow editor agent. You receive a workflow definition (JSON) and an edit instruction from the user.",
           "Return ONLY the modified workflow definition as valid JSON — no markdown fences, no explanation.",
           "Preserve all existing fields unless the instruction explicitly asks to change them.",
           "If the instruction is unclear or impossible, return the original workflow unchanged.",
-        ].join("\n");
+          "",
+          node_catalog,
+          "",
+          WORKFLOW_SCHEMA_REFERENCE,
+          tool_section ? `\n## Available Tools (for tool_invoke / tool_nodes)\n${tool_section}` : "",
+          provider_section ? `\n## Available Backends & Models (for ai_agent/llm nodes)\n${provider_section}` : "",
+          skill_section ? `\n## Available Skills (for skill_nodes / phase skills)\n${skill_section}` : "",
+        ].filter(Boolean).join("\n");
         const prompt = [
           "## Current Workflow",
           JSON.stringify(workflow, null, 2),
@@ -1245,7 +1503,8 @@ export function create_workflow_ops(deps: {
         // 동적 import 대신 sync 접근 (test는 동기 함수)
         // eslint-disable-next-line @typescript-eslint/no-require-imports
         const { test_orche_node } = require("../agent/orche-node-executor.js") as typeof import("../agent/orche-node-executor.js");
-        const result = test_orche_node(node as import("../agent/workflow-node.types.js").OrcheNodeDefinition, { memory: { ...input_memory } });
+        if (!workspace) throw new Error("workspace is required for test_single_node");
+        const result = test_orche_node(node as import("../agent/workflow-node.types.js").OrcheNodeDefinition, { memory: { ...input_memory }, workspace });
         return { ok: true, preview: result.preview, warnings: result.warnings };
       }
 

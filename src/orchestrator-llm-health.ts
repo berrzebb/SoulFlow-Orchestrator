@@ -1,12 +1,15 @@
 import { error_message } from "./utils/common.js";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { OrchestratorLlmRuntime } from "./providers/index.js";
 import { ConfigStore } from "./config/config-store.js";
 import { get_shared_secret_vault } from "./security/secret-vault-factory.js";
 import { load_config_merged } from "./config/schema.js";
 
 async function main(): Promise<void> {
-  const workspace = process.cwd();
+  const workspace = process.env.WORKSPACE
+    ? resolve(process.env.WORKSPACE)
+    : join(resolve(fileURLToPath(new URL(".", import.meta.url)), ".."), "workspace");
   const bootstrap_data_dir = join(workspace, "runtime");
   const shared_vault = get_shared_secret_vault(workspace);
   const config_store = new ConfigStore(join(bootstrap_data_dir, "config", "config.db"), shared_vault);

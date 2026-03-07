@@ -14,6 +14,8 @@ export interface MemoryStoreLike {
   ): Promise<Array<{ file: string; line: number; text: string }>>;
   /** 임베딩 함수 주입 (벡터 시멘틱 검색 활성화). */
   set_embed?(fn: (texts: string[], opts: { model?: string; dimensions?: number }) => Promise<{ embeddings: number[][] }>): void;
+  /** 메모리 압축. 구현체가 제공하지 않으면 consolidation service가 fallback 로직을 사용. */
+  consolidate?(options?: MemoryConsolidateOptions): Promise<MemoryConsolidateResult>;
 }
 
 export type MemoryConsolidateOptions = {

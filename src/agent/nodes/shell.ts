@@ -40,7 +40,7 @@ export const shell_handler: NodeHandler = {
       if (pat.test(command)) return { output: { stdout: "", stderr: "", exit_code: 1, error: "blocked by safety policy" } };
     }
 
-    const cwd = resolve_templates(n.working_dir || "", tpl) || process.cwd();
+    const cwd = resolve_templates(n.working_dir || "", tpl) || ctx.workspace;
     const timeout_ms = Math.min(120_000, Math.max(1000, n.timeout_ms || 30_000));
 
     try {

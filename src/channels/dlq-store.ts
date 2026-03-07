@@ -46,7 +46,8 @@ export class SqliteDispatchDlqStore implements DispatchDlqStoreLike {
   private write_queue: Promise<void> = Promise.resolve();
 
   constructor(sqlite_path: string) {
-    this.sqlite_path = resolve(String(sqlite_path || "runtime/dlq/dlq.db"));
+    if (!sqlite_path) throw new Error("dlq sqlite_path is required");
+    this.sqlite_path = resolve(String(sqlite_path));
     this.initialized = this.ensure_initialized();
   }
 

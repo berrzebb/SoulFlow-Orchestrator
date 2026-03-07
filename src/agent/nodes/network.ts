@@ -36,7 +36,7 @@ export const network_handler: NodeHandler = {
 
     try {
       const { stdout, stderr } = await run_shell_command(cmd, {
-        cwd: process.cwd(),
+        cwd: ctx.workspace,
         timeout_ms: 15_000,
         max_buffer_bytes: 1024 * 256,
         signal: ctx.abort_signal,

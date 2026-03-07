@@ -202,67 +202,100 @@ function gen_interface(): string {
   ].join("\n");
 }
 
-function patch_node_types(src: string): string {
+function patch_node_types(src: string): { patched: string; errors: string[] } {
   let patched = src;
+  const errors: string[] = [];
 
   // 1) OrcheNodeType 리터럴에 추가: 마지막 | "end"; 앞에
+  const before1 = patched;
   patched = patched.replace(
     /(\| "end";)/,
     `| "${node_type}"\n  $1`,
   );
+  if (patched === before1) errors.push('OrcheNodeType anchor not found: \'| "end";\' pattern missing');
 
   // 2) OrcheNodeDefinition union에 추가: | EndNodeDefinition; 앞에
+  const before2 = patched;
   patched = patched.replace(
     /(\| EndNodeDefinition;)/,
     `| ${iface_name}\n  $1`,
   );
+  if (patched === before2) errors.push("OrcheNodeDefinition anchor not found: '| EndNodeDefinition;' pattern missing");
 
   // 3) 인터페이스 삽입: "// ── Union Types" 마커 앞에
   const marker = "// ── Union Types";
   const marker_idx = patched.indexOf(marker);
   if (marker_idx < 0) {
-    console.error("Warning: could not find Union Types marker in workflow-node.types.ts");
-    return patched;
+    errors.push("interface marker not found: '// ── Union Types' missing");
+  } else {
+    const iface_block = gen_interface() + "\n\n";
+    patched = patched.slice(0, marker_idx) + iface_block + patched.slice(marker_idx);
   }
-  const iface_block = gen_interface() + "\n\n";
-  patched = patched.slice(0, marker_idx) + iface_block + patched.slice(marker_idx);
 
-  return patched;
+  return { patched, errors };
 }
 
 // ── 4. Patch backend nodes/index.ts ──
 
-function patch_backend_index(src: string): string {
+function patch_backend_index(src: string): { patched: string; errors: string[] } {
   const import_line = `import { ${handler_name} } from "./${file_name}.js";`;
+  const errors: string[] = [];
 
   // import 삽입: 마지막 import 뒤
   const last_import_idx = src.lastIndexOf("\nimport ");
+  if (last_import_idx < 0) {
+    errors.push("backend index: no import lines found");
+    return { patched: src, errors };
+  }
   const end_of_last_import = src.indexOf("\n", last_import_idx + 1);
   let patched = src.slice(0, end_of_last_import + 1) + import_line + "\n" + src.slice(end_of_last_import + 1);
 
   // ALL_HANDLERS 배열 마지막 항목 뒤
-  const closing_bracket = patched.indexOf("];", patched.indexOf("const ALL_HANDLERS"));
+  const handlers_idx = patched.indexOf("const ALL_HANDLERS");
+  if (handlers_idx < 0) {
+    errors.push("backend index: 'const ALL_HANDLERS' not found");
+    return { patched, errors };
+  }
+  const closing_bracket = patched.indexOf("];", handlers_idx);
+  if (closing_bracket < 0) {
+    errors.push("backend index: closing ']' for ALL_HANDLERS not found");
+    return { patched, errors };
+  }
   patched = patched.slice(0, closing_bracket) + `  ${handler_name},\n` + patched.slice(closing_bracket);
 
-  return patched;
+  return { patched, errors };
 }
 
 // ── 4. Patch frontend nodes/index.ts ──
 
-function patch_index(src: string): string {
+function patch_index(src: string): { patched: string; errors: string[] } {
   const import_line = `import { ${descriptor_name} } from "./${file_name}";`;
   const array_entry = `  ${descriptor_name},`;
+  const errors: string[] = [];
 
   // import 삽입: 마지막 import 뒤
   const last_import_idx = src.lastIndexOf("\nimport ");
+  if (last_import_idx < 0) {
+    errors.push("frontend index: no import lines found");
+    return { patched: src, errors };
+  }
   const end_of_last_import = src.indexOf("\n", last_import_idx + 1);
   let patched = src.slice(0, end_of_last_import + 1) + import_line + "\n" + src.slice(end_of_last_import + 1);
 
   // ALL_DESCRIPTORS 배열 마지막 항목 뒤
-  const closing_bracket = patched.indexOf("];", patched.indexOf("const ALL_DESCRIPTORS"));
+  const descriptors_idx = patched.indexOf("const ALL_DESCRIPTORS");
+  if (descriptors_idx < 0) {
+    errors.push("frontend index: 'const ALL_DESCRIPTORS' not found");
+    return { patched, errors };
+  }
+  const closing_bracket = patched.indexOf("];", descriptors_idx);
+  if (closing_bracket < 0) {
+    errors.push("frontend index: closing ']' for ALL_DESCRIPTORS not found");
+    return { patched, errors };
+  }
   patched = patched.slice(0, closing_bracket) + array_entry + "\n" + patched.slice(closing_bracket);
 
-  return patched;
+  return { patched, errors };
 }
 
 // ── 3. Patch i18n JSON ──
@@ -320,9 +353,34 @@ if (WITH_BACKEND) {
   }
 }
 
-const patched_index = patch_index(index_src);
+// 모든 패치를 사전 계산 — 앵커 실패 시 쓰기 전에 중단
+const all_errors: string[] = [];
+
+const { patched: patched_index, errors: fe_index_errors } = patch_index(index_src);
+all_errors.push(...fe_index_errors);
+
 const patched_en = patch_json(EN_JSON, build_i18n_keys("en"));
 const patched_ko = patch_json(KO_JSON, build_i18n_keys("ko"));
+
+let patched_backend_index = "";
+let patched_node_types = "";
+if (WITH_BACKEND) {
+  const backend_index_src = readFileSync(BACKEND_INDEX_FILE, "utf-8");
+  const be_result = patch_backend_index(backend_index_src);
+  all_errors.push(...be_result.errors);
+  patched_backend_index = be_result.patched;
+
+  const node_types_src = readFileSync(NODE_TYPES_FILE, "utf-8");
+  const nt_result = patch_node_types(node_types_src);
+  all_errors.push(...nt_result.errors);
+  patched_node_types = nt_result.patched;
+}
+
+if (all_errors.length > 0) {
+  console.error("Error: patch anchors not found — no files written:");
+  for (const e of all_errors) console.error(`  - ${e}`);
+  process.exit(1);
+}
 
 if (DRY_RUN) {
   console.log("[dry-run] Would create:", tsx_path);
@@ -339,25 +397,28 @@ if (DRY_RUN) {
     console.log("\n--- Generated .ts (backend) ---\n" + gen_backend_ts());
   }
 } else {
-  writeFileSync(tsx_path, tsx_content, "utf-8");
-  writeFileSync(INDEX_FILE, patched_index, "utf-8");
-  writeFileSync(EN_JSON, patched_en, "utf-8");
-  writeFileSync(KO_JSON, patched_ko, "utf-8");
+  // all-or-nothing: 모든 패치 계산 완료 후 일괄 쓰기
+  const writes: Array<[string, string]> = [
+    [tsx_path, tsx_content],
+    [INDEX_FILE, patched_index],
+    [EN_JSON, patched_en],
+    [KO_JSON, patched_ko],
+  ];
+  if (WITH_BACKEND) {
+    writes.push(
+      [backend_ts_path, gen_backend_ts()],
+      [BACKEND_INDEX_FILE, patched_backend_index],
+      [NODE_TYPES_FILE, patched_node_types],
+    );
+  }
+  for (const [path, content] of writes) writeFileSync(path, content, "utf-8");
+
   console.log(`Created: web/src/pages/workflows/nodes/${file_name}.tsx`);
   console.log(`Patched: frontend nodes/index.ts (+import, +descriptor)`);
-
   if (WITH_BACKEND) {
-    const backend_index_src = readFileSync(BACKEND_INDEX_FILE, "utf-8");
-    const patched_backend_index = patch_backend_index(backend_index_src);
-    const node_types_src = readFileSync(NODE_TYPES_FILE, "utf-8");
-    const patched_node_types = patch_node_types(node_types_src);
-    writeFileSync(backend_ts_path, gen_backend_ts(), "utf-8");
-    writeFileSync(BACKEND_INDEX_FILE, patched_backend_index, "utf-8");
-    writeFileSync(NODE_TYPES_FILE, patched_node_types, "utf-8");
     console.log(`Created: src/agent/nodes/${file_name}.ts`);
     console.log(`Patched: backend nodes/index.ts (+import, +handler)`);
     console.log(`Patched: workflow-node.types.ts (+${iface_name}, +OrcheNodeType, +union)`);
   }
-
   console.log(`Patched: en.json, ko.json (+${Object.keys(build_i18n_keys("en")).length} keys each)`);
 }

@@ -45,7 +45,7 @@ export class HealthcheckTool extends Tool {
       case "multi": {
         let endpoints: { type: string; url?: string; host?: string; port?: number }[];
         try { endpoints = JSON.parse(String(params.endpoints || "[]")); } catch { return JSON.stringify({ error: "invalid endpoints JSON" }); }
-        const results = await Promise.all(endpoints.map(async (ep) => {
+        const results = await Promise.all(endpoints.map(async (ep): Promise<Record<string, unknown>> => {
           if (ep.type === "http" && ep.url) return { ...ep, ...(await this.check_http(ep.url, timeout, 200)) };
           if (ep.type === "tcp" && ep.host) return { ...ep, ...(await this.check_tcp(ep.host, ep.port || 80, timeout)) };
           if (ep.type === "dns" && ep.host) return { ...ep, ...(await this.check_dns(ep.host)) };

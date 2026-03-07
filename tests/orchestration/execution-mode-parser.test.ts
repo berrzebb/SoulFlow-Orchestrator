@@ -15,6 +15,14 @@ describe("parse_execution_mode — ClassificationResult", () => {
     expect(parse_execution_mode('{"mode":"builtin"}')).toBeNull();
   });
 
+  // === identity 파싱 ===
+  it("parses identity from JSON", () => {
+    expect(parse_execution_mode('{"mode":"identity"}')).toEqual({ mode: "identity" });
+  });
+  it("parses identity from word fallback", () => {
+    expect(parse_execution_mode("identity")).toEqual({ mode: "identity" });
+  });
+
   // === inquiry 파싱 ===
   it("parses inquiry from JSON", () => {
     expect(parse_execution_mode('{"mode":"inquiry"}')).toEqual({ mode: "inquiry" });

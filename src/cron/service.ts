@@ -588,13 +588,11 @@ export class CronService implements CronScheduler, ServiceLike {
       job.state.running_started_at_ms = null;
       job.updated_at_ms = now_ms();
 
-      if (job.schedule.kind === "at") {
-        if (job.delete_after_run) {
-          store.jobs = store.jobs.filter((j) => j.id !== job.id);
-        } else {
-          job.enabled = false;
-          job.state.next_run_at_ms = null;
-        }
+      if (job.delete_after_run) {
+        store.jobs = store.jobs.filter((j) => j.id !== job.id);
+      } else if (job.schedule.kind === "at") {
+        job.enabled = false;
+        job.state.next_run_at_ms = null;
       } else {
         job.state.next_run_at_ms = _compute_next_run(job.schedule, now_ms(), (m) => this.logger?.warn(m));
       }

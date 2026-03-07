@@ -113,9 +113,21 @@ Web-based agent conversation for testing without Slack/Telegram.
 
 ## Providers Page
 
-Add, edit, delete, and test agent backends.
+Manage agent backends with a two-level architecture: **Connections** (shared API base/auth) and **Provider Instances** (per-model configuration).
 
-1. **Add** — new provider (type, token, priority, supported modes)
+### Connections
+
+A connection represents a shared API endpoint (e.g., one OpenRouter account). Multiple provider instances can share a single connection.
+
+1. **Add** — new connection (provider type, label, API base URL)
+2. **Edit** — modify connection settings
+3. **Remove** — delete connection (cascades to linked providers)
+
+### Provider Instances
+
+Each instance configures a specific model within a connection.
+
+1. **Add** — new provider (connection, model, priority, purpose, supported modes)
 2. **Edit** — modify existing provider settings
 3. **Test** — verify connection with a live API call
 4. **Remove** — delete provider
@@ -313,6 +325,27 @@ When no matching YAML template exists, the classifier auto-generates a workflow:
 | `POST /api/workflows/:id/phases/:pid/agents/:aid/messages` | Send message to agent |
 | `POST /api/workflows/:id/phases/:pid/agents/:aid/retry` | Retry agent |
 | `POST /api/workflows/:id/phases/:pid/critic/messages` | Send message to critic |
+
+## Kanban Page
+
+Manage task boards with drag-and-drop columns and automation rules.
+
+- **Board management** — create/delete boards with customizable column layouts
+- **Card operations** — create, move, archive cards with drag-and-drop
+- **Real-time sync** — SSE-based live updates across all connected clients
+- **Automation rules** — trigger actions on card events (e.g., auto-create task when card moves to "In Progress")
+- **View modes** — board view (columns) or list view (table)
+- **Filters** — active / all / backlog / done
+
+### Automation Rules
+
+Rules can trigger workflow executions or task creation based on Kanban events:
+
+| Trigger | Description |
+|---------|-------------|
+| `card_moved` | Card moved to a specific column |
+| `subtasks_done` | All subtasks on a card completed |
+| `card_stale` | Card idle for a configured duration |
 
 ## Secrets Page
 

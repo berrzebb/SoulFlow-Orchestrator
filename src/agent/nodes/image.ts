@@ -25,7 +25,7 @@ export const image_handler: NodeHandler = {
     const n = node as ImageNodeDefinition;
     try {
       const { ImageTool } = await import("../tools/image.js");
-      const tool = new ImageTool({ workspace: ctx.workspace || process.cwd() });
+      const tool = new ImageTool({ workspace: ctx.workspace });
       const tpl = { memory: ctx.memory };
       const result = await tool.execute({
         operation: n.operation || "info",

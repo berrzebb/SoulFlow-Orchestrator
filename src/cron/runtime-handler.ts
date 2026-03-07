@@ -13,8 +13,9 @@ import { seal_inbound_sensitive_text } from "../security/inbound-seal.js";
 import { redact_sensitive_text } from "../security/sensitive.js";
 import type { SecretVaultService } from "../security/secret-vault.js";
 import type { CronJob, CronOnJob } from "./types.js";
+import type { MessageProvider } from "../bus/types.js";
 
-type CronTarget = { provider: "slack" | "discord" | "telegram"; chat_id: string };
+type CronTarget = { provider: MessageProvider; chat_id: string };
 
 const CRON_BLOCKED_TOOL_NAMES = new Set(["spawn", "cron"]);
 
@@ -43,22 +44,19 @@ export type CronRuntimeHandlerDeps = {
 function resolve_fallback_target(config: CronConfig): CronTarget | null {
   const result = config.resolve_default_target();
   if (!result) return null;
-  return { provider: result.provider as CronTarget["provider"], chat_id: result.chat_id };
+  return { provider: result.provider, chat_id: result.chat_id };
 }
 
 function resolve_cron_target(config: CronConfig, job: CronJob): CronTarget | null {
   const explicit_provider = String(job.payload.channel || "").trim().toLowerCase();
   const explicit_to = String(job.payload.to || "").trim();
   if (explicit_provider && explicit_to) {
-    if (explicit_provider === "slack" || explicit_provider === "discord" || explicit_provider === "telegram") {
-      return { provider: explicit_provider, chat_id: explicit_to };
-    }
-    return null;
+    return { provider: explicit_provider, chat_id: explicit_to };
   }
   const fallback = resolve_fallback_target(config);
   if (!fallback) return null;
   return {
-    provider: (explicit_provider || fallback.provider) as CronTarget["provider"],
+    provider: explicit_provider || fallback.provider,
     chat_id: explicit_to || fallback.chat_id,
   };
 }
@@ -173,10 +171,6 @@ export function create_cron_job_handler(deps: CronRuntimeHandlerDeps): CronOnJob
 
       // 도구 준비
       const always_skills = deps.agent_runtime.get_always_skills();
-      deps.agent_runtime.apply_tool_runtime_context({
-        channel: target.provider,
-        chat_id: target.chat_id,
-      });
       const tool_definitions = deps.agent_runtime.get_tool_definitions();
       const tool_executors = deps.agent_runtime.get_tool_executors();
 

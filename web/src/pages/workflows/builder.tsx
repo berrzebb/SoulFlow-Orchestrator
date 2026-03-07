@@ -21,6 +21,8 @@ type SkillListItem = { name: string; summary?: string; source?: string };
 type ChannelInstanceInfo = { instance_id: string; provider: string; label: string; enabled: boolean; running: boolean };
 /** /api/agents/providers 응답 항목 (간략). */
 type ProviderInfo = { instance_id: string; label: string; enabled: boolean; available: boolean; provider_type?: string };
+/** /api/agents/providers/:id/models 응답 항목. */
+type ProviderModelInfo = { id: string; name: string; provider: string; purpose: "chat" | "embedding" | "both" };
 
 function empty_agent(index: number, defaultBackend = ""): AgentDef {
   return { agent_id: `agent-${index + 1}`, role: "", label: "", backend: defaultBackend, system_prompt: "", max_turns: 3 };
@@ -135,6 +137,18 @@ export default function WorkflowBuilderPage() {
     queryFn: () => api.get("/api/models"),
     staleTime: 60_000,
   });
+
+  /** 프로바이더 instance_id로 해당 프로바이더의 모델 목록을 조회. */
+  const providerModelsCache = useRef(new Map<string, { data: ProviderModelInfo[]; ts: number }>());
+  const fetchProviderModels = useRef(async (instance_id: string): Promise<ProviderModelInfo[]> => {
+    const cached = providerModelsCache.current.get(instance_id);
+    if (cached && Date.now() - cached.ts < 60_000) return cached.data;
+    try {
+      const models = await api.get<ProviderModelInfo[]>(`/api/agents/providers/${encodeURIComponent(instance_id)}/models`);
+      providerModelsCache.current.set(instance_id, { data: models, ts: Date.now() });
+      return models;
+    } catch { return []; }
+  }).current;
   const { data: oauthData } = useQuery<{ instance_id: string; label: string; service_type: string; enabled: boolean }[]>({
     queryKey: ["oauth-integrations"],
     queryFn: () => api.get("/api/oauth/integrations"),
@@ -154,6 +168,7 @@ export default function WorkflowBuilderPage() {
   const nodeOptions = {
     backends: (providersData || []).filter((p) => p.enabled).map((p) => ({ value: p.instance_id, label: p.label || p.instance_id, available: p.available, provider_type: p.provider_type })),
     models: modelsData || [],
+    fetch_provider_models: fetchProviderModels,
     oauth_integrations: (oauthData || []).filter((o) => o.enabled),
     workflow_templates: wfTemplatesData || [],
     channels: (channelsData || []).filter((c) => c.enabled).map((c) => ({
@@ -293,6 +308,7 @@ export default function WorkflowBuilderPage() {
   const handleRun = () => {
     runMut.mutate({
       title: workflow.title, objective: workflow.objective, phases: workflow.phases,
+      nodes: workflow.nodes, orche_nodes: workflow.orche_nodes, field_mappings: workflow.field_mappings,
       tool_nodes: workflow.tool_nodes, skill_nodes: workflow.skill_nodes,
       trigger: workflow.trigger, hitl_channel: workflow.hitl_channel,
     });

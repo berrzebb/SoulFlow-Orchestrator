@@ -153,12 +153,25 @@ export interface AgentProviderStatusInfo {
   model_purpose: "chat" | "embedding";
   supported_modes: string[];
   settings: Record<string, unknown>;
+  connection_id?: string;
   created_at: string;
   updated_at: string;
   available: boolean;
   circuit_state: string;
   capabilities: Record<string, boolean> | null;
   token_configured: boolean;
+}
+
+export interface ProviderConnectionInfo {
+  connection_id: string;
+  provider_type: string;
+  label: string;
+  enabled: boolean;
+  api_base?: string;
+  token_configured: boolean;
+  preset_count: number;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface DashboardAgentProviderOps {
@@ -174,6 +187,7 @@ export interface DashboardAgentProviderOps {
     supported_modes?: string[];
     settings?: Record<string, unknown>;
     token?: string;
+    connection_id?: string;
   }): Promise<{ ok: boolean; error?: string }>;
   update(instance_id: string, patch: {
     label?: string;
@@ -183,12 +197,33 @@ export interface DashboardAgentProviderOps {
     supported_modes?: string[];
     settings?: Record<string, unknown>;
     token?: string;
+    connection_id?: string;
   }): Promise<{ ok: boolean; error?: string }>;
   remove(instance_id: string): Promise<{ ok: boolean; error?: string }>;
   test_availability(instance_id: string): Promise<{ ok: boolean; detail?: string; error?: string }>;
   list_provider_types(): string[];
   /** 프로바이더 타입에 대해 사용 가능한 모델 목록을 동적 조회. */
   list_models(provider_type: string, opts?: { api_key?: string; api_base?: string }): Promise<import("../services/model-catalog.js").ModelInfo[]>;
+
+  // ── Connection (API 연결) ──
+  list_connections(): Promise<ProviderConnectionInfo[]>;
+  get_connection(connection_id: string): Promise<ProviderConnectionInfo | null>;
+  create_connection(input: {
+    connection_id: string;
+    provider_type: string;
+    label?: string;
+    enabled?: boolean;
+    api_base?: string;
+    token?: string;
+  }): Promise<{ ok: boolean; error?: string }>;
+  update_connection(connection_id: string, patch: {
+    label?: string;
+    enabled?: boolean;
+    api_base?: string;
+    token?: string;
+  }): Promise<{ ok: boolean; error?: string }>;
+  remove_connection(connection_id: string): Promise<{ ok: boolean; error?: string }>;
+  test_connection(connection_id: string): Promise<{ ok: boolean; detail?: string; error?: string }>;
 }
 
 export interface BootstrapOps {
@@ -328,6 +363,7 @@ export type DashboardOptions = {
   model_ops?: DashboardModelOps | null;
   workflow_ops?: DashboardWorkflowOps | null;
   kanban_store?: import("../services/kanban-store.js").KanbanStoreLike | null;
+  kanban_rule_executor?: import("../services/kanban-rule-executor.js").KanbanRuleExecutor | (() => import("../services/kanban-rule-executor.js").KanbanRuleExecutor | null) | null;
   reference_store?: import("../services/reference-store.js").ReferenceStoreLike | null;
   default_alias?: string;
   workspace?: string;
@@ -368,7 +404,8 @@ export class DashboardService implements ServiceLike {
     this.web_dir = resolve_web_dir();
     this.session_store = options.session_store ?? null;
     this.default_alias = options.default_alias || "default";
-    const workspace_dir = options.workspace ? resolve(options.workspace) : process.cwd();
+    if (!options.workspace) throw new Error("workspace is required for DashboardService");
+    const workspace_dir = resolve(options.workspace);
     this._media = new MediaTokenStore(workspace_dir);
     this._init_routes();
   }
@@ -491,6 +528,7 @@ export class DashboardService implements ServiceLike {
     this.route_map.set("/api/templates", handle_template);
     this.route_map.set("/api/channels", handle_channel);
     this.route_map.set("/api/agents/providers", handle_agent_provider);
+    this.route_map.set("/api/agents/connections", handle_agent_provider);
     this.route_map.set("/api/promises", handle_promise);
     this.route_map.set("/api/memory", handle_memory);
     this.route_map.set("/api/workspace", handle_workspace);

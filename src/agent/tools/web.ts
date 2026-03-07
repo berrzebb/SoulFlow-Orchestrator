@@ -513,9 +513,9 @@ export class WebSnapshotTool extends Tool {
   };
 
   private readonly workspace: string;
-  constructor(args?: { workspace?: string }) {
+  constructor(args: { workspace: string }) {
     super();
-    this.workspace = args?.workspace || process.cwd();
+    this.workspace = args.workspace;
   }
 
   protected async run(params: Record<string, unknown>, context?: ToolExecutionContext): Promise<string> {
@@ -616,9 +616,9 @@ export class WebPdfTool extends Tool {
   };
 
   private readonly workspace: string;
-  constructor(args?: { workspace?: string }) {
+  constructor(args: { workspace: string }) {
     super();
-    this.workspace = args?.workspace || process.cwd();
+    this.workspace = args.workspace;
   }
 
   protected async run(params: Record<string, unknown>, context?: ToolExecutionContext): Promise<string> {
@@ -659,9 +659,9 @@ export class WebMonitorTool extends Tool {
   };
 
   private readonly workspace: string;
-  constructor(args?: { workspace?: string }) {
+  constructor(args: { workspace: string }) {
     super();
-    this.workspace = args?.workspace || process.cwd();
+    this.workspace = args.workspace;
   }
 
   protected async run(params: Record<string, unknown>, context?: ToolExecutionContext): Promise<string> {

@@ -22,6 +22,8 @@ services:
       - DOCKER_HOST=                    # base의 tcp://docker-proxy:2375 해제 → 직접 마운트한 소켓 사용
       - CHOKIDAR_USEPOLLING=true
       - WATCHPACK_POLLING=true
+      - BUS_BACKEND=${BUS_BACKEND:-redis}
+      - BUS_REDIS_URL=${BUS_REDIS_URL:-redis://redis:6379}
 volumes:
   cli-auth-claude:
   cli-auth-codex:

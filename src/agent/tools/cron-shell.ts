@@ -43,9 +43,9 @@ export class CronShellTool extends Tool {
   private readonly timers = new Map<string, ReturnType<typeof setInterval>>();
   private readonly workspace: string;
 
-  constructor(options?: { workspace?: string }) {
+  constructor(options: { workspace: string }) {
     super();
-    this.workspace = options?.workspace || process.cwd();
+    this.workspace = options.workspace;
   }
 
   protected async run(params: Record<string, unknown>): Promise<string> {

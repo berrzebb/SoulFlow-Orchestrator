@@ -1,3 +1,4 @@
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { InboundMessage } from "../bus/types.js";
 import type { ChannelProvider } from "../channels/types.js";
@@ -45,6 +46,8 @@ import {
   build_agent_hooks, create_stream_handler, flush_remaining, emit_execution_info,
   type AgentHooksBuilderDeps,
 } from "./agent-hooks-builder.js";
+import { PersonaMessageRenderer, type PersonaMessageRendererLike } from "../channels/persona-message-renderer.js";
+import { HitlPendingStore } from "./hitl-pending-store.js";
 
 /** run_once / run_agent_loop / run_task_loop / _try_native_task_execute 공통 인수. */
 type RunExecutionArgs = {
@@ -110,6 +113,12 @@ export type OrchestrationServiceDeps = {
   wait_kanban_event?: (board_id: string, filter: { actions?: string[]; column_id?: string }) => Promise<{ card_id: string; board_id: string; action: string; actor: string; detail: Record<string, unknown>; created_at: string } | null>;
   create_task?: (opts: { title: string; objective: string; channel?: string; chat_id?: string; max_turns?: number; initial_memory?: Record<string, unknown> }) => Promise<{ task_id: string; status: string; result?: unknown; error?: string }>;
   query_db?: (datasource: string, query: string, params?: Record<string, unknown>) => Promise<{ rows: unknown[]; affected_rows: number }>;
+  /** 페르소나 메시지 렌더러. 없으면 내부에서 lazy 생성. */
+  renderer?: PersonaMessageRendererLike | null;
+  /** HITL pending 응답 공유 store. */
+  hitl_pending_store: HitlPendingStore;
+  /** 도구 인덱스. 미지정 시 키워드 인덱스 미사용. */
+  tool_index?: import("./tool-index.js").ToolIndex | null;
 };
 
 
@@ -134,10 +143,12 @@ export class OrchestrationService {
   private readonly streaming_cfg: { enabled: boolean; interval_ms: number; min_chars: number };
   private readonly hooks_deps: AgentHooksBuilderDeps;
   private readonly tool_deps: ToolCallHandlerDeps;
-  /** Phase Loop interaction 노드 HITL 응답 대기 맵. */
-  private readonly phase_pending_responses = new Map<string, { resolve: (response: string) => void; chat_id: string }>();
+  private readonly hitl_store: HitlPendingStore;
+  private readonly tool_index: import("./tool-index.js").ToolIndex | null;
+  private _renderer: PersonaMessageRendererLike | null;
 
   constructor(deps: OrchestrationServiceDeps) {
+    this._renderer = deps.renderer ?? null;
     this.providers = deps.providers;
     this.runtime = deps.agent_runtime;
     this.vault = deps.secret_vault;
@@ -149,6 +160,8 @@ export class OrchestrationService {
     this.get_mcp_configs = deps.get_mcp_configs || null;
     this.events = deps.events || null;
     this.guard = deps.confirmation_guard || null;
+    this.hitl_store = deps.hitl_pending_store;
+    this.tool_index = deps.tool_index ?? null;
     this.deps = deps;
 
     this.streaming_cfg = {
@@ -188,19 +201,12 @@ export class OrchestrationService {
     return mode === "once" ? build_once_overlay(ctx.name) : build_agent_overlay(ctx.name);
   }
 
-  /** Phase Loop HITL bridge — ChannelManager에서 사용자 응답을 라우팅. */
+/** Phase Loop HITL bridge — ChannelManager에서 사용자 응답을 라우팅. */
   get_phase_hitl_bridge(): import("../channels/manager.js").WorkflowHitlBridge {
-    const pending = this.phase_pending_responses;
+    const store = this.hitl_store;
     return {
       async try_resolve(chat_id: string, content: string): Promise<boolean> {
-        for (const [wf_id, entry] of pending) {
-          if (entry.chat_id === chat_id) {
-            pending.delete(wf_id);
-            entry.resolve(content);
-            return true;
-          }
-        }
-        return false;
+        return store.try_resolve(chat_id, content);
       },
     };
   }
@@ -246,12 +252,7 @@ export class OrchestrationService {
     return task_text.slice(0, 200) + (task_text.length > 200 ? "..." : "");
   }
 
-  /** create_task 서비스 late-inject (순환 참조 회피). */
-  set_create_task(fn: OrchestrationServiceDeps["create_task"]): void {
-    (this.deps as { create_task?: OrchestrationServiceDeps["create_task"] }).create_task = fn;
-  }
-
-  /** 워크플로우 이벤트 기록. events 서비스가 없으면 무시. */
+/** 워크플로우 이벤트 기록. events 서비스가 없으면 무시. */
   private log_event(input: AppendWorkflowEventInput): void {
     if (!this.events) return;
     this.events.append(input).catch(() => { /* 이벤트 로깅 실패가 실행을 차단하면 안 됨 */ });
@@ -296,12 +297,6 @@ export class OrchestrationService {
     };
     this.log_event({ ...evt_base, phase: "assign", summary: `channel request: ${req.alias}`, detail: task_with_media.slice(0, 500) });
 
-    this.runtime.apply_tool_runtime_context({
-      channel: req.provider,
-      chat_id: req.message.chat_id,
-      reply_to: resolve_reply_to(req.provider, req.message),
-    });
-
     const history_lines = req.session_history.slice(-8).map((r) => `[${r.role}] ${r.content}`);
     const context_block = build_context_message(task_with_media, history_lines);
     const tool_ctx = build_tool_context(req, request_task_id);
@@ -318,7 +313,7 @@ export class OrchestrationService {
     const tool_index_db = this.deps.workspace
       ? join(this.deps.workspace, "runtime", "tools", "tool-index.db")
       : undefined;
-    rebuild_tool_index(all_tool_definitions as ToolSchema[], category_map, tool_index_db);
+    rebuild_tool_index(all_tool_definitions as ToolSchema[], category_map, tool_index_db, this.tool_index);
     const skill_provider_prefs = this._collect_skill_provider_preferences(skill_names);
 
     // Gateway: 분류 + 라우팅 결정
@@ -344,6 +339,12 @@ export class OrchestrationService {
         logger: this.logger,
       },
     );
+
+    if (decision.action === "identity") {
+      const identity_reply = this._build_identity_reply();
+      this.log_event({ ...evt_base, phase: "done", summary: "identity shortcircuit", payload: { mode: "identity" } });
+      return { reply: identity_reply, mode: "once", tool_calls_count: 0, streamed: false };
+    }
 
     if (decision.action === "builtin") {
       this.log_event({ ...evt_base, phase: "done", summary: `builtin: ${decision.command}`, payload: { mode: "builtin", command: decision.command } });
@@ -383,8 +384,8 @@ export class OrchestrationService {
     }
 
     const classifier_cats = decision.action === "execute" ? decision.tool_categories : undefined;
-    const { tools: tool_definitions, categories } = await select_tools_for_request(all_tool_definitions, task_with_media, mode, skill_tool_names, classifier_cats, category_map, classifier_cats);
-    const system_base = await this._build_system_prompt(skill_names, req.provider, req.message.chat_id, new Set(categories));
+    const { tools: tool_definitions, categories } = await select_tools_for_request(all_tool_definitions, task_with_media, mode, skill_tool_names, classifier_cats, category_map, classifier_cats, this.tool_index);
+    const system_base = await this._build_system_prompt(skill_names, req.provider, req.message.chat_id, new Set(categories), req.alias);
     this.logger.info("dispatch", { mode, executor, skills: skill_names, tool_count: tool_definitions.length });
 
     // ── Confirmation Guard: 중요 작업 실행 전 사용자 확인 ──
@@ -496,6 +497,7 @@ export class OrchestrationService {
             ...(caps.thinking ? { enable_thinking: true, max_thinking_tokens: 10000 } : {}),
             hooks: this._hooks_for(stream, args, backend.id, args.tool_ctx.task_id),
             abort_signal: args.req.signal,
+            cwd: this.deps.workspace,
             mcp_server_configs: this.get_mcp_configs?.() ?? undefined,
             tool_context: args.tool_ctx,
           });
@@ -608,6 +610,7 @@ export class OrchestrationService {
             ...(caps.thinking ? { enable_thinking: true, max_thinking_tokens: 16000 } : {}),
             hooks: this._hooks_for(stream, args, backend.id, args.tool_ctx.task_id),
             abort_signal: args.req.signal,
+            cwd: this.deps.workspace,
             mcp_server_configs: this.get_mcp_configs?.() ?? undefined,
             tool_context: args.tool_ctx,
           });
@@ -798,8 +801,9 @@ export class OrchestrationService {
       channel: args.req.provider,
       chat_id: args.req.message.chat_id,
       nodes,
-      max_turns: this.config.task_loop_max_turns,
+      max_turns: args.req.max_turns ?? this.config.task_loop_max_turns,
       initial_memory: {
+        ...args.req.initial_memory,
         alias: args.req.alias,
         channel: args.req.provider,
         chat_id: args.req.message.chat_id,
@@ -843,6 +847,40 @@ export class OrchestrationService {
     return reply_result("task", stream, normalize_agent_reply(output, args.req.alias, args.req.message.sender_id), total_tool_count);
   }
 
+  private _get_renderer(): PersonaMessageRendererLike {
+    if (!this._renderer) {
+      const cb = this.runtime.get_context_builder();
+      this._renderer = new PersonaMessageRenderer({
+        get_persona_name: () => cb.get_persona_name(),
+        get_heart: () => {
+          try {
+            const ws = this.deps.workspace || ".";
+            for (const p of [join(ws, "templates", "HEART.md"), join(ws, "HEART.md")]) {
+              if (existsSync(p)) { const r = readFileSync(p, "utf-8").trim(); if (r) return r; }
+            }
+          } catch { /* no heart */ }
+          return "";
+        },
+      });
+    }
+    return this._renderer;
+  }
+
+  /** identity 질의에 대한 결정적 응답. executor/provider를 타지 않음. */
+  private _build_identity_reply(): string {
+    return this._get_renderer().render({ kind: "identity" });
+  }
+
+  /** 빈 응답 시 사용자-facing 안전 폴백. 내부 오류 메시지 노출 방지. */
+  private _build_safe_fallback_reply(): string {
+    return this._get_renderer().render({ kind: "safe_fallback" });
+  }
+
+  /** HITL 프롬프트를 renderer 기반으로 생성. renderer 없으면 format_hitl_prompt fallback. */
+  private _render_hitl(body: string, type: "choice" | "confirmation" | "question" | "escalation" | "error"): string {
+    return this._get_renderer().render({ kind: "hitl_prompt", hitl_type: type, body });
+  }
+
   /** concierge 페르소나 어투를 followup 지시에 포함. */
   private build_persona_followup(concierge_heart: string): string {
     const base = "위 실행 결과를 바탕으로 간결하게 한국어로 답하세요.";
@@ -866,7 +904,10 @@ export class OrchestrationService {
       return suppress_result(mode, stream, result.tool_calls_count);
     }
     const content = sanitize_provider_output(String(result.content || "")).trim();
-    if (!content) return error_result(mode, stream, "native_backend_empty", result.tool_calls_count);
+    if (!content) {
+      this.logger.warn("native_backend_empty", { mode, tool_calls: result.tool_calls_count });
+      return reply_result(mode, stream, this._build_safe_fallback_reply(), result.tool_calls_count);
+    }
     // agent 에스컬레이션 감지 (native 백엔드)
     if (mode === "agent") {
       const esc = detect_escalation(content, "agent");
@@ -876,7 +917,10 @@ export class OrchestrationService {
     if (provider_err) return error_result(mode, stream, provider_err, result.tool_calls_count);
     const usage = _extract_usage(result.usage);
     const reply = normalize_agent_reply(content, req.alias, req.message.sender_id);
-    if (!reply) return error_result(mode, stream, "native_backend_empty_after_normalize", result.tool_calls_count);
+    if (!reply) {
+      this.logger.warn("native_backend_empty_after_normalize", { mode, tool_calls: result.tool_calls_count });
+      return reply_result(mode, stream, this._build_safe_fallback_reply(), result.tool_calls_count);
+    }
     const warn = FINISH_REASON_WARNINGS[result.finish_reason];
     const with_warn = warn ? `${reply}\n\n⚠️ ${warn}` : reply;
     const final_reply = mode === "agent" && result.tool_calls_count === 0
@@ -899,9 +943,20 @@ export class OrchestrationService {
     return prefs;
   }
 
-  /** 시스템 프롬프트를 빌드. concierge 역할 힌트 포함. tool_categories로 TOOLS.md 필터링. */
-  private async _build_system_prompt(skill_names: string[], provider: string, chat_id: string, tool_categories?: ReadonlySet<string>): Promise<string> {
+  /** 시스템 프롬프트를 빌드. alias에 대응하는 role skill이 있으면 role persona를 적용하고, 없으면 concierge 힌트를 사용. */
+  private async _build_system_prompt(skill_names: string[], provider: string, chat_id: string, tool_categories?: ReadonlySet<string>, alias?: string): Promise<string> {
     const context_builder = this.runtime.get_context_builder();
+
+    // alias에 대응하는 role skill이 있으면 role persona 적용
+    const role = alias || "";
+    const role_skill = role ? context_builder.skills_loader.get_role_skill(role) : null;
+    if (role_skill) {
+      return context_builder.build_role_system_prompt(
+        role, skill_names, undefined, { channel: provider, chat_id },
+      );
+    }
+
+    // role skill 없으면 기본 시스템 프롬프트 + concierge 힌트
     const system = await context_builder.build_system_prompt(
       skill_names, undefined, { channel: provider, chat_id }, tool_categories,
     );
@@ -944,6 +999,7 @@ export class OrchestrationService {
         ...(caps.thinking ? { enable_thinking: true, max_thinking_tokens: 16000 } : {}),
         hooks: this._hooks_for(stream, args, backend.id, task_tool_ctx.task_id),
         abort_signal: args.req.signal,
+        cwd: this.deps.workspace,
         mcp_server_configs: this.get_mcp_configs?.() ?? undefined,
         tool_context: task_tool_ctx,
         ...(resume_session ? { resume_session } : {}),
@@ -1025,7 +1081,7 @@ export class OrchestrationService {
     const all_tool_definitions = this.runtime.get_tool_definitions();
     const tool_ctx = build_tool_context(req, task.taskId);
     const executor = resolve_executor_provider(this.config.executor_provider, this._caps());
-    const system_base = await this._build_system_prompt(skill_names, req.provider, req.message.chat_id);
+    const system_base = await this._build_system_prompt(skill_names, req.provider, req.message.chat_id, undefined, req.alias);
     emit_execution_info(stream, req.on_stream, "task (재개)", executor, this.logger);
     let total_tool_count = 0;
 
@@ -1035,12 +1091,6 @@ export class OrchestrationService {
       this.process_tracker?.set_executor(req.run_id, executor);
       this.process_tracker?.link_task(req.run_id, task.taskId);
     }
-
-    this.runtime.apply_tool_runtime_context({
-      channel: req.provider,
-      chat_id: req.message.chat_id,
-      reply_to: resolve_reply_to(req.provider, req.message),
-    });
 
     const user_input = String(task.memory.__user_input || task_with_media);
     const history_lines = req.session_history.slice(-8).map((r) => `[${r.role}] ${r.content}`);
@@ -1178,7 +1228,8 @@ export class OrchestrationService {
   private async run_phase_loop(req: OrchestrationRequest, task_with_media: string, workflow_hint?: string, node_categories?: string[]): Promise<OrchestrationResult> {
     const { run_phase_loop: exec } = await import("../agent/phase-loop-runner.js");
     const { load_workflow_templates, load_workflow_template, substitute_variables } = await import("./workflow-loader.js");
-    const workspace = this.deps.workspace || process.cwd();
+    if (!this.deps.workspace) throw new Error("workspace is required for run_phase_loop");
+    const workspace = this.deps.workspace;
     const store = this.deps.phase_workflow_store;
     const subagents = this.deps.subagents;
     if (!subagents || !store) {
@@ -1253,9 +1304,10 @@ export class OrchestrationService {
       chat_id: req.message.chat_id,
       phases: definition.phases,
       nodes: definition.nodes,
+      workspace,
       initial_memory: { origin, ...(node_categories?.length ? { node_categories } : {}) },
       abort_signal: req.signal,
-      invoke_tool: (tool_id, params) => this.runtime.execute_tool(tool_id, params),
+      invoke_tool: (tool_id, params, ctx) => this.runtime.execute_tool(tool_id, params, ctx ? { channel: ctx.channel, chat_id: ctx.chat_id, sender_id: ctx.sender_id, task_id: ctx.workflow_id } : undefined),
       ...channel_callbacks,
       on_phase_change: (state) => {
         req.on_progress?.({ task_id: workflow_id, step: state.current_phase + 1, total_steps: state.phases.length, description: `phase ${state.current_phase + 1}/${state.phases.length}`, provider: req.provider, chat_id: req.message.chat_id, at: now_iso() });
@@ -1289,7 +1341,7 @@ export class OrchestrationService {
         // [ASK_USER]: 에이전트가 명시적으로 질문한 경우
         const last_agent_result = pending_phase.agents.filter((a) => a.result).pop()?.result || "";
         const context = `워크플로우 \`${definition.title}\` → **${pending_phase.phase_id}**\n\n${last_agent_result.slice(0, 500)}`;
-        return { reply: format_hitl_prompt(context, workflow_id, "question"), mode: "phase", tool_calls_count: 0, streamed: false, run_id: req.run_id };
+        return { reply: this._render_hitl(context, "question"), mode: "phase", tool_calls_count: 0, streamed: false, run_id: req.run_id };
       }
       // escalation: critic 반복 실패로 사용자 판단 필요
       const failed_phase = result.phases.find((p) => p.critic && !p.critic.approved);
@@ -1301,7 +1353,7 @@ export class OrchestrationService {
         agent_output ? `**에이전트 결과:**\n${agent_output.slice(0, 400)}` : "",
         critic_review ? `**검토 의견:**\n${critic_review.slice(0, 300)}` : "",
       ].filter(Boolean).join("\n\n");
-      return { reply: format_hitl_prompt(context, workflow_id, "escalation"), mode: "phase", tool_calls_count: 0, streamed: false, run_id: req.run_id };
+      return { reply: this._render_hitl(context, "escalation"), mode: "phase", tool_calls_count: 0, streamed: false, run_id: req.run_id };
     }
     const phase_error = result.error || result.status;
     this.logger.warn("phase_loop_terminal", { workflow_id, status: result.status, error: phase_error });
@@ -1403,7 +1455,7 @@ export class OrchestrationService {
       }
     };
 
-    const pending = this.phase_pending_responses;
+    const hitl = this.hitl_store;
     const ask_channel: import("../agent/phase-loop.types.js").PhaseLoopRunOptions["ask_channel"] = (req, timeout_ms) => {
       const channel = req.target === "origin" ? origin_channel : (req.channel || origin_channel);
       const chat_id = req.target === "origin" ? origin_chat_id : (req.chat_id || origin_chat_id);
@@ -1417,11 +1469,11 @@ export class OrchestrationService {
 
       return new Promise<import("../agent/phase-loop.types.js").ChannelResponse>((resolve) => {
         const timer = setTimeout(() => {
-          pending.delete(workflow_id);
+          hitl.delete(workflow_id);
           resolve({ response: "", responded_at: now_iso(), timed_out: true });
         }, timeout_ms);
 
-        pending.set(workflow_id, {
+        hitl.set(workflow_id, {
           resolve: (content: string) => {
             clearTimeout(timer);
             resolve({ response: content, responded_by: { channel, chat_id }, responded_at: now_iso(), timed_out: false });

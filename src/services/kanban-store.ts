@@ -85,7 +85,7 @@ export interface KanbanRule {
   board_id: string;
   trigger: "card_moved" | "subtasks_done" | "card_stale";
   condition: Record<string, unknown>;
-  action_type: "move_card" | "assign" | "add_label" | "comment";
+  action_type: "move_card" | "assign" | "add_label" | "comment" | "run_workflow" | "create_task";
   action_params: Record<string, unknown>;
   enabled: boolean;
   created_at: string;
@@ -176,6 +176,8 @@ export interface UpdateCardInput {
   metadata?: Record<string, unknown>;
   task_id?: string | null;
   due_date?: string | null;
+  /** 변경 수행자 (activity 기록용). 미지정 시 "system". */
+  actor?: string;
 }
 
 /* ─── DB row 타입 ─── */
@@ -372,7 +374,7 @@ export interface KanbanStoreLike {
   create_card(input: CreateCardInput): Promise<KanbanCard>;
   get_card(card_id: string): Promise<KanbanCard | null>;
   list_cards(board_id: string, column_id?: string, limit?: number, assignee?: string): Promise<KanbanCard[]>;
-  move_card(card_id: string, column_id: string, position?: number): Promise<KanbanCard | null>;
+  move_card(card_id: string, column_id: string, position?: number, actor?: string): Promise<KanbanCard | null>;
   update_card(card_id: string, updates: UpdateCardInput): Promise<KanbanCard | null>;
   delete_card(card_id: string): Promise<boolean>;
 
@@ -537,7 +539,7 @@ export class KanbanStore implements KanbanStoreLike {
           board_id         TEXT NOT NULL REFERENCES kanban_boards(board_id) ON DELETE CASCADE,
           trigger          TEXT NOT NULL CHECK(trigger IN ('card_moved','subtasks_done','card_stale')),
           condition_json   TEXT NOT NULL DEFAULT '{}',
-          action_type      TEXT NOT NULL CHECK(action_type IN ('move_card','assign','add_label','comment')),
+          action_type      TEXT NOT NULL CHECK(action_type IN ('move_card','assign','add_label','comment','run_workflow','create_task')),
           action_params_json TEXT NOT NULL DEFAULT '{}',
           enabled          INTEGER NOT NULL DEFAULT 1,
           created_at       TEXT NOT NULL DEFAULT (datetime('now'))
@@ -731,7 +733,7 @@ export class KanbanStore implements KanbanStoreLike {
     return rows.map(r => row_to_card(r, r.comment_count));
   }
 
-  async move_card(card_id: string, column_id: string, position?: number): Promise<KanbanCard | null> {
+  async move_card(card_id: string, column_id: string, position?: number, actor?: string): Promise<KanbanCard | null> {
     await this.initialized;
     const ts = now_iso();
     const move_info = this.db((db) => {
@@ -755,7 +757,7 @@ export class KanbanStore implements KanbanStoreLike {
       }
     });
     if (move_info) {
-      this.log_activity(card_id, move_info.board_id, "system", "moved", { from: move_info.from, to: move_info.to }).catch(() => {});
+      this.log_activity(card_id, move_info.board_id, actor || "system", "moved", { from: move_info.from, to: move_info.to }).catch(() => {});
     }
     return this.get_card(card_id);
   }
@@ -791,7 +793,7 @@ export class KanbanStore implements KanbanStoreLike {
         : updates.assignee !== undefined ? "assigned"
         : updates.labels !== undefined ? "labels_changed"
         : "updated";
-      this.log_activity(card_id, board_id, "system", action, detail).catch(() => {});
+      this.log_activity(card_id, board_id, updates.actor || "system", action, detail).catch(() => {});
     }
     return this.get_card(card_id);
   }

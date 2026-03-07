@@ -1,8 +1,9 @@
 import { useState } from "react";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
+import { useProviderModels } from "../use-provider-models";
 
 function LlmEditPanel({ node, update, t, options }: EditPanelProps) {
-  const models = options?.models || [];
+  const { models, loading: modelsLoading } = useProviderModels(node.backend as string | undefined, options);
   const [schemaRaw, setSchemaRaw] = useState(node.output_json_schema ? JSON.stringify(node.output_json_schema, null, 2) : "");
   const [schemaErr, setSchemaErr] = useState("");
   const temp = node.temperature as number | undefined;
@@ -30,10 +31,12 @@ function LlmEditPanel({ node, update, t, options }: EditPanelProps) {
         </div>
         <div className="builder-row">
           <label className="label">{t("workflows.llm_model")}</label>
-          {models.length > 0 ? (
+          {modelsLoading ? (
+            <input className="input input--sm" disabled placeholder="loading..." />
+          ) : models.length > 0 ? (
             <select className="input input--sm" value={String(node.model || "")} onChange={(e) => update({ model: e.target.value })}>
               <option value="">auto</option>
-              {models.map((m) => <option key={m.name} value={m.name}>{m.name}</option>)}
+              {models.filter((m) => m.purpose !== "embedding").map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
             </select>
           ) : (
             <input className="input input--sm" value={String(node.model || "")} onChange={(e) => update({ model: e.target.value })} placeholder="auto" />

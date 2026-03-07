@@ -32,6 +32,8 @@ import type { AgentBackendRegistry } from "../agent/agent-registry.js";
 import type { McpClientManager } from "../mcp/index.js";
 import type { Logger } from "../logger.js";
 import type { ConfirmationGuard } from "../orchestration/confirmation-guard.js";
+import type { TonePreferenceStore } from "./persona-message-renderer.js";
+import { ToneHandler } from "./commands/tone.handler.js";
 
 export type CommandRouterDeps = {
   cancel_active_runs: (key: string) => number;
@@ -53,6 +55,7 @@ export type CommandRouterDeps = {
   default_alias: string;
   logger?: Logger | null;
   confirmation_guard?: ConfirmationGuard | null;
+  tone_store?: TonePreferenceStore | null;
 };
 
 export function create_command_router(deps: CommandRouterDeps): CommandRouter {
@@ -146,6 +149,7 @@ export function create_command_router(deps: CommandRouterDeps): CommandRouter {
       run_verification: (task) => agent_runtime.spawn_and_wait({ task, max_turns: 5, timeout_ms: 60_000 }),
     }),
     ...(deps.confirmation_guard ? [new GuardHandler(deps.confirmation_guard)] : []),
+    ...(deps.tone_store ? [new ToneHandler(deps.tone_store, (ctx) => `${ctx.provider}:${ctx.message.chat_id}`.toLowerCase())] : []),
     new McpHandler({
       list_servers: () => mcp.list_servers().map((s) => ({ name: s.name, connected: s.connected, tool_count: s.tools.length, error: s.error })),
       reconnect: async (name) => {

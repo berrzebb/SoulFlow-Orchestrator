@@ -65,7 +65,7 @@ export const retry_handler: NodeHandler = {
         const result = await runner.execute_node(target_node as OrcheNodeDefinition, {
           memory: runner.state.memory,
           abort_signal: runner.options.abort_signal,
-          workspace: undefined,
+          workspace: runner.options.workspace,
         });
 
         runner.state.memory[target_id] = result.output;

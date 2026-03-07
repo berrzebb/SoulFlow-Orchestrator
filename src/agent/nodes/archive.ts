@@ -39,7 +39,7 @@ export const archive_handler: NodeHandler = {
 
     try {
       const { stdout, stderr } = await run_shell_command(command, {
-        cwd: process.cwd(),
+        cwd: ctx.workspace,
         timeout_ms: 120_000,
         max_buffer_bytes: 1024 * 1024 * 4,
         signal: ctx.abort_signal,

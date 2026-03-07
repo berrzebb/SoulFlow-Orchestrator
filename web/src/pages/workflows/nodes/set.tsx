@@ -24,7 +24,7 @@ function SetEditPanel({ node, update, t }: EditPanelProps) {
         placeholder='[{"key": "result", "value": "{{memory.http-1.body}}"}]'
       />
       {err && <span className="field-error">{err}</span>}
-      <span className="builder-hint">{t("workflows.set_hint") || 'Array of {key, value} pairs. Use {{memory.*}} for references.'}</span>
+      <span className="builder-hint">{t("workflows.set_hint")}</span>
     </div>
   );
 }

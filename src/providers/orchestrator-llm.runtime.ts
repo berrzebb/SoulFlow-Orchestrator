@@ -347,6 +347,7 @@ export class OrchestratorLlmRuntime {
       });
       if (!res.ok) return { status: `error_${res.status}` };
       const data = (await res.json()) as Record<string, unknown>;
+      if (data.error) return { status: `error: ${String(data.error)}` };
       return {
         status: String(data.status || "unknown"),
         completed: data.completed != null ? Number(data.completed) : undefined,
@@ -367,7 +368,7 @@ export class OrchestratorLlmRuntime {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name, stream: true }),
-      signal: AbortSignal.timeout(600_000),
+      signal: AbortSignal.timeout(1_800_000),
     });
     if (!res.ok) {
       yield { status: `error_${res.status}` };
@@ -388,6 +389,10 @@ export class OrchestratorLlmRuntime {
         if (!trimmed) continue;
         try {
           const data = JSON.parse(trimmed) as Record<string, unknown>;
+          if (data.error) {
+            yield { status: `error: ${String(data.error)}` };
+            return;
+          }
           yield {
             status: String(data.status || "unknown"),
             completed: data.completed != null ? Number(data.completed) : undefined,
@@ -399,6 +404,10 @@ export class OrchestratorLlmRuntime {
     if (buffer.trim()) {
       try {
         const data = JSON.parse(buffer.trim()) as Record<string, unknown>;
+        if (data.error) {
+          yield { status: `error: ${String(data.error)}` };
+          return;
+        }
         yield {
           status: String(data.status || "done"),
           completed: data.completed != null ? Number(data.completed) : undefined,

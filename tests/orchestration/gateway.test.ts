@@ -33,6 +33,19 @@ function make_deps(overrides?: Partial<GatewayDeps>): GatewayDeps {
 const empty_ctx: ClassifierContext = {};
 
 describe("resolve_gateway", () => {
+  it("identity 분류 시 identity 결정을 반환", async () => {
+    mock_classify.mockResolvedValueOnce({ mode: "identity" });
+    const result = await resolve_gateway("너 누구야?", empty_ctx, [], make_deps());
+    expect(result).toEqual({ action: "identity" });
+  });
+
+  it("identity는 활성 태스크가 있어도 identity 반환", async () => {
+    mock_classify.mockResolvedValueOnce({ mode: "identity" });
+    const tasks = [{ id: "t1", status: "running" }] as unknown as TaskState[];
+    const result = await resolve_gateway("너 누구야?", empty_ctx, tasks, make_deps());
+    expect(result).toEqual({ action: "identity" });
+  });
+
   it("builtin 분류 시 builtin 결정을 반환", async () => {
     mock_classify.mockResolvedValueOnce({ mode: "builtin", command: "task", args: "list" });
     const result = await resolve_gateway("태스크 목록", empty_ctx, [], make_deps());

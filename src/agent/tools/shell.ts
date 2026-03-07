@@ -8,7 +8,7 @@ import type { SecretVaultService } from "../../security/secret-vault.js";
 import { redact_sensitive_text } from "../../security/sensitive.js";
 
 type ShellToolOptions = {
-  working_dir?: string;
+  working_dir: string;
   timeout_seconds?: number;
   deny_patterns?: string[];
   allow_patterns?: string[];
@@ -76,9 +76,9 @@ export class ExecTool extends Tool {
   private readonly restrict_to_working_dir: boolean;
   private readonly secret_vault: SecretVaultService;
 
-  constructor(options?: ShellToolOptions) {
+  constructor(options: ShellToolOptions) {
     super();
-    this.default_working_dir = options?.working_dir || process.cwd();
+    this.default_working_dir = options.working_dir;
     this.timeout_seconds = Math.max(1, Number(options?.timeout_seconds || 60));
     this.deny_patterns = (options?.deny_patterns || DEFAULT_DENY_PATTERNS).map((p) => new RegExp(p, "i"));
     this.write_approval_patterns = WRITE_APPROVAL_PATTERNS.map((p) => new RegExp(p, "i"));

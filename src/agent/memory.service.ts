@@ -58,7 +58,7 @@ export class MemoryStore implements MemoryStoreLike {
   private readonly initialized: Promise<void>;
   private embed_fn: EmbedFn | null = null;
 
-  constructor(workspace_root = process.cwd()) {
+  constructor(workspace_root: string) {
     this.root = workspace_root;
     this.memory_dir = join(this.root, "memory");
     this.sqlite_path = join(this.memory_dir, "memory.db");

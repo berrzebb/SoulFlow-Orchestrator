@@ -111,7 +111,7 @@ export function CronTab() {
                 <tr key={j.id}>
                   <td>
                     <div className="li-flex">
-                      {j.state?.running && <span className="cron-running-dot" title={t("cron.currently_running") || "Running now"} />}
+                      {j.state?.running && <span className="cron-running-dot" title={t("cron.currently_running")} />}
                       <b>{j.name}</b>
                     </div>
                     <span className="text-xs text-muted">{j.id.slice(0, 12)}</span>

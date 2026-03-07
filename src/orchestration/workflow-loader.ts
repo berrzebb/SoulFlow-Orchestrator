@@ -281,6 +281,9 @@ function normalize_workflow_definition(raw: Record<string, unknown>): WorkflowDe
         webhook_path: n.webhook_path ? String(n.webhook_path) : undefined,
         channel_type: n.channel_type ? String(n.channel_type) : undefined,
         chat_id: n.chat_id ? String(n.chat_id) : undefined,
+        kanban_board_id: n.kanban_board_id ? String(n.kanban_board_id) : undefined,
+        kanban_actions: Array.isArray(n.kanban_actions) ? n.kanban_actions.map(String) : undefined,
+        kanban_column_id: n.kanban_column_id ? String(n.kanban_column_id) : undefined,
       }))
     : undefined;
   // 레거시 trigger → trigger_nodes 자동 변환

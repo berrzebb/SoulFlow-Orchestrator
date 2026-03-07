@@ -64,7 +64,7 @@ export default function SecretsPage() {
             type="search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder={t("secrets.search") || "Search..."}
+            placeholder={t("secrets.search")}
           />
           <button className="btn btn--sm btn--ok" onClick={() => setAdding(true)}>{t("secrets.add")}</button>
         </div>

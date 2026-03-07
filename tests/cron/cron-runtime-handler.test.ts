@@ -42,7 +42,6 @@ function make_agent_runtime(): AgentRuntimeLike {
     register_tool: () => undefined,
     get_tool_definitions: () => [],
     get_tool_executors: () => [],
-    apply_tool_runtime_context: () => undefined,
     execute_tool: async () => "",
     append_daily_memory: async () => undefined,
     list_approval_requests: () => [],

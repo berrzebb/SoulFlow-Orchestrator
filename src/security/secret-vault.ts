@@ -46,8 +46,11 @@ export interface SecretVaultLike {
 }
 
 const STORE_FILE = "secrets.db";
+const KEYRING_FILE = "keyring.db";
 const LEGACY_KEY_FILE = "master.key";
 const CIPHERTEXT_TOKEN_RE = /\bsv1\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g;
+
+const MASK_CACHE_TTL_MS = 60_000;
 
 function b64url_encode(buffer: Buffer): string {
   return buffer.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
@@ -86,12 +89,18 @@ function is_valid_ciphertext_shape(token: string): boolean {
 export class SecretVaultService implements SecretVaultLike {
   private readonly root_dir: string;
   private readonly store_path: string;
+  private readonly keyring_path: string;
   private key_cache: Buffer | null = null;
   private key_lock: Promise<Buffer> | null = null;
+
+  /** mask_known_secrets 성능 캐시: name → plaintext. put/remove 시 무효화. */
+  private mask_cache: Map<string, string> | null = null;
+  private mask_cache_at = 0;
 
   constructor(workspace: string) {
     this.root_dir = join(workspace, "runtime", "security");
     this.store_path = join(this.root_dir, STORE_FILE);
+    this.keyring_path = join(this.root_dir, KEYRING_FILE);
   }
 
   get_paths(): { root_dir: string; store_path: string } {
@@ -101,8 +110,10 @@ export class SecretVaultService implements SecretVaultLike {
     };
   }
 
-  private ensure_store_db(): void {
-    with_sqlite_strict(this.store_path, (db) => {
+  /* ── DB 초기화 ── */
+
+  private ensure_keyring_db(): void {
+    with_sqlite_strict(this.keyring_path, (db) => {
       db.exec(`
         PRAGMA journal_mode=WAL;
         CREATE TABLE IF NOT EXISTS master_key (
@@ -110,6 +121,15 @@ export class SecretVaultService implements SecretVaultLike {
           key_b64url TEXT NOT NULL,
           created_at TEXT NOT NULL
         );
+      `);
+      return true;
+    });
+  }
+
+  private ensure_store_db(): void {
+    with_sqlite_strict(this.store_path, (db) => {
+      db.exec(`
+        PRAGMA journal_mode=WAL;
         CREATE TABLE IF NOT EXISTS secrets (
           name TEXT PRIMARY KEY,
           ciphertext TEXT NOT NULL,
@@ -124,9 +144,12 @@ export class SecretVaultService implements SecretVaultLike {
 
   async ensure_ready(): Promise<void> {
     await mkdir(this.root_dir, { recursive: true });
+    this.ensure_keyring_db();
     this.ensure_store_db();
     await this.get_or_create_key();
   }
+
+  /* ── 마스터 키 관리 (keyring.db 분리) ── */
 
   async get_or_create_key(): Promise<Buffer> {
     if (this.key_cache) return this.key_cache;
@@ -142,20 +165,50 @@ export class SecretVaultService implements SecretVaultLike {
   private async _load_or_generate_key(): Promise<Buffer> {
     if (this.key_cache) return this.key_cache;
     await mkdir(this.root_dir, { recursive: true });
+    this.ensure_keyring_db();
     this.ensure_store_db();
 
-    // DB에서 마스터 키 조회
-    const row = with_sqlite_strict(this.store_path, (db) =>
+    // 1. keyring.db에서 마스터 키 조회
+    const keyring_row = with_sqlite_strict(this.keyring_path, (db) =>
       db.prepare("SELECT key_b64url FROM master_key WHERE id = 1").get() as { key_b64url: string } | undefined
     );
-    if (row?.key_b64url) {
-      const bytes = b64url_decode(row.key_b64url);
-      if (bytes.length !== 32) throw new Error("invalid_master_key_in_db");
+    if (keyring_row?.key_b64url) {
+      const bytes = b64url_decode(keyring_row.key_b64url);
+      if (bytes.length !== 32) throw new Error("invalid_master_key_in_keyring");
       this.key_cache = bytes;
       return bytes;
     }
 
-    // 레거시 파일(master.key)이 있으면 마이그레이션 후 삭제
+    // 2. secrets.db에 레거시 마스터 키가 있으면 keyring.db로 마이그레이션
+    const legacy_db_row = with_sqlite_strict(this.store_path, (db) => {
+      const table_exists = db.prepare(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='master_key'"
+      ).get();
+      if (!table_exists) return undefined;
+      return db.prepare("SELECT key_b64url FROM master_key WHERE id = 1").get() as { key_b64url: string } | undefined;
+    });
+    if (legacy_db_row?.key_b64url) {
+      const bytes = b64url_decode(legacy_db_row.key_b64url);
+      if (bytes.length !== 32) throw new Error("invalid_master_key_in_legacy_db");
+
+      with_sqlite_strict(this.keyring_path, (db) => {
+        db.prepare(
+          "INSERT OR REPLACE INTO master_key(id, key_b64url, created_at) VALUES (1, ?, ?)"
+        ).run(legacy_db_row.key_b64url, now_iso());
+        return true;
+      });
+
+      with_sqlite_strict(this.store_path, (db) => {
+        db.exec("DROP TABLE IF EXISTS master_key");
+        return true;
+      });
+
+      log.info("master key migrated from secrets.db to keyring.db");
+      this.key_cache = bytes;
+      return bytes;
+    }
+
+    // 3. 레거시 파일(master.key)이 있으면 마이그레이션 후 삭제
     let key: Buffer;
     const legacy_path = join(this.root_dir, LEGACY_KEY_FILE);
     try {
@@ -173,8 +226,7 @@ export class SecretVaultService implements SecretVaultLike {
       log.info("master key generated");
     }
 
-    // DB에 저장 (파일에는 쓰지 않음)
-    with_sqlite_strict(this.store_path, (db) => {
+    with_sqlite_strict(this.keyring_path, (db) => {
       db.prepare(
         "INSERT OR REPLACE INTO master_key(id, key_b64url, created_at) VALUES (1, ?, ?)"
       ).run(b64url_encode(key), now_iso());
@@ -184,6 +236,8 @@ export class SecretVaultService implements SecretVaultLike {
     this.key_cache = key;
     return key;
   }
+
+  /* ── 암호화/복호화 ── */
 
   async encrypt_text(plaintext: string, aad?: string): Promise<string> {
     await this.ensure_ready();
@@ -210,6 +264,8 @@ export class SecretVaultService implements SecretVaultLike {
     const plain = Buffer.concat([decipher.update(content), decipher.final()]);
     return plain.toString("utf-8");
   }
+
+  /* ── 시크릿 저장소 ── */
 
   private async read_store_map(): Promise<Record<string, SecretEntry>> {
     await this.ensure_ready();
@@ -257,6 +313,7 @@ export class SecretVaultService implements SecretVaultLike {
       `).run(name, ciphertext, now_iso());
       return true;
     });
+    this.invalidate_mask_cache();
     const result = { ok: Boolean(ok), name };
     log.info("secret_put", { name, ok: result.ok });
     return result;
@@ -270,6 +327,7 @@ export class SecretVaultService implements SecretVaultLike {
       const r = db.prepare("DELETE FROM secrets WHERE name = ?").run(name);
       return Number(r.changes || 0) > 0;
     });
+    this.invalidate_mask_cache();
     log.info("secret_remove", { name, removed: Boolean(removed) });
     return Boolean(removed);
   }
@@ -306,6 +364,8 @@ export class SecretVaultService implements SecretVaultLike {
     }
   }
 
+  /* ── placeholder / inline secret 해석 ── */
+
   async resolve_placeholders(input: string): Promise<string> {
     const report = await this.resolve_placeholders_with_report(input);
     return report.text;
@@ -314,11 +374,7 @@ export class SecretVaultService implements SecretVaultLike {
   async resolve_placeholders_with_report(input: string): Promise<SecretResolveReport> {
     const text = String(input || "");
     if (!text || !text.includes("{{secret:")) {
-      return {
-        text,
-        missing_keys: [],
-        invalid_ciphertexts: [],
-      };
+      return { text, missing_keys: [], invalid_ciphertexts: [] };
     }
     const store = await this.read_store_map();
     const cache = new Map<string, string>();
@@ -341,11 +397,7 @@ export class SecretVaultService implements SecretVaultLike {
       return row.ciphertext;
     });
     if (!replaced.includes("sv1.")) {
-      return {
-        text: replaced,
-        missing_keys: [...missing.values()],
-        invalid_ciphertexts: [],
-      };
+      return { text: replaced, missing_keys: [...missing.values()], invalid_ciphertexts: [] };
     }
 
     let out = replaced;
@@ -379,7 +431,6 @@ export class SecretVaultService implements SecretVaultLike {
     const tokens = new Set<string>(report.text.match(CIPHERTEXT_TOKEN_RE) || []);
     for (const token of tokens.values()) {
       if (!token) continue;
-      // AAD 없이 decrypt — 인바운드 seal 등 AAD 없이 암호화된 토큰 대상
       const plain = await this.decrypt_text(token).catch(() => "");
       if (!plain) {
         invalid.add(token);
@@ -427,23 +478,45 @@ export class SecretVaultService implements SecretVaultLike {
     await this.ensure_ready();
     const cutoff = new Date(Date.now() - Math.max(max_age_ms, 60_000)).toISOString();
     const deleted = with_sqlite_strict(this.store_path, (db) => {
-      // inbound seal이 생성한 자동 시크릿(inbound. 접두사)만 정리, 사용자 시크릿은 유지
       const r = db.prepare("DELETE FROM secrets WHERE updated_at < ? AND name LIKE 'inbound.%'").run(cutoff);
       return Number(r.changes || 0);
     });
+    if (deleted) this.invalidate_mask_cache();
     return deleted ?? 0;
   }
 
-  async mask_known_secrets(input: string): Promise<string> {
-    const text = String(input || "");
-    if (!text) return "";
+  /* ── 마스킹 (plaintext 캐시 사용) ── */
+
+  private invalidate_mask_cache(): void {
+    this.mask_cache = null;
+    this.mask_cache_at = 0;
+  }
+
+  private async get_mask_plaintexts(): Promise<Map<string, string>> {
+    const now = Date.now();
+    if (this.mask_cache && now - this.mask_cache_at < MASK_CACHE_TTL_MS) {
+      return this.mask_cache;
+    }
     const store = await this.read_store_map();
-    let out = text;
+    const result = new Map<string, string>();
     for (const [name, row] of Object.entries(store)) {
       const cipher = String(row?.ciphertext || "").trim();
       if (!cipher) continue;
       const plain = await this.decrypt_text(cipher, `secret:${name}`).catch(() => "");
       if (!plain || plain.length < 4) continue;
+      result.set(name, plain);
+    }
+    this.mask_cache = result;
+    this.mask_cache_at = now;
+    return result;
+  }
+
+  async mask_known_secrets(input: string): Promise<string> {
+    const text = String(input || "");
+    if (!text) return "";
+    const plaintexts = await this.get_mask_plaintexts();
+    let out = text;
+    for (const plain of plaintexts.values()) {
       out = out.replaceAll(plain, "[REDACTED:SECRET]");
     }
     const redacted = redact_sensitive_text(out);

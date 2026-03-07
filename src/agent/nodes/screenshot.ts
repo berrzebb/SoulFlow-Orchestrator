@@ -30,7 +30,7 @@ export const screenshot_handler: NodeHandler = {
 
     try {
       const { ScreenshotTool } = await import("../tools/screenshot.js");
-      const tool = new ScreenshotTool({ workspace: ctx.workspace || process.cwd() });
+      const tool = new ScreenshotTool({ workspace: ctx.workspace });
       const result = await tool.execute({
         url,
         output_path: resolve_templates(n.output_path || "", tpl),

@@ -8,12 +8,6 @@ import type {
 import type { ToolExecutionContext, ToolLike } from "./tools/types.js";
 import type { ProviderId } from "../providers/types.js";
 
-export type AgentToolRuntimeContext = {
-  channel: string;
-  chat_id: string;
-  reply_to?: string | null;
-};
-
 export type AgentApprovalStatus =
   | "pending"
   | "approved"
@@ -111,7 +105,6 @@ export interface AgentRuntimeLike {
   get_tool_definitions(): Array<Record<string, unknown>>;
   /** ToolLike 인스턴스 목록. SDK 백엔드의 MCP 도구 브리지에 사용. */
   get_tool_executors(): ToolLike[];
-  apply_tool_runtime_context(context: AgentToolRuntimeContext): void;
   execute_tool(
     name: string,
     params: Record<string, unknown>,

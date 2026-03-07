@@ -17,6 +17,7 @@ import type { AgentSession } from "../agent/agent.types.js";
 export type GatewayDecision =
   | { action: "builtin"; command: string; args?: string }
   | { action: "inquiry"; summary: string }
+  | { action: "identity" }
   | { action: "execute"; mode: ExecutionMode; executor: ExecutorProvider; workflow_id?: string; tool_categories?: string[]; node_categories?: string[] };
 
 export type GatewayDeps = {
@@ -37,6 +38,12 @@ export async function resolve_gateway(
   const classification = await classify_execution_mode(
     task, ctx, deps.providers, deps.logger,
   );
+
+  // identity: 페르소나 질의 → 오케스트레이터가 직접 응답
+  if (classification.mode === "identity") {
+    deps.logger.info("identity_shortcircuit");
+    return { action: "identity" };
+  }
 
   // builtin: 커맨드 핸들러로 직접 위임
   if (classification.mode === "builtin") {

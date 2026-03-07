@@ -33,9 +33,9 @@ export class DatabaseTool extends Tool {
   };
 
   private readonly data_dir: string;
-  constructor(opts?: { workspace?: string }) {
+  constructor(opts: { workspace: string }) {
     super();
-    this.data_dir = join(opts?.workspace || process.cwd(), "workspace", "runtime", "datasources");
+    this.data_dir = join(opts.workspace, "runtime", "datasources");
   }
 
   protected async run(params: Record<string, unknown>): Promise<string> {

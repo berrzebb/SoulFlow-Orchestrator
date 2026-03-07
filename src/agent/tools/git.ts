@@ -31,9 +31,9 @@ export class GitTool extends Tool {
 
   private readonly workspace: string;
 
-  constructor(options?: { workspace?: string }) {
+  constructor(options: { workspace: string }) {
     super();
-    this.workspace = options?.workspace || process.cwd();
+    this.workspace = options.workspace;
   }
 
   protected async run(params: Record<string, unknown>, context?: ToolExecutionContext): Promise<string> {

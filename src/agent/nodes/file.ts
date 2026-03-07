@@ -27,10 +27,10 @@ export const file_handler: NodeHandler = {
     const n = node as FileNodeDefinition;
     const tpl_ctx = { memory: ctx.memory };
     const filePath = resolve_templates(n.file_path, tpl_ctx);
-    const resolved = ctx.workspace ? pathResolve(ctx.workspace, filePath) : filePath;
+    const resolved = pathResolve(ctx.workspace, filePath);
 
     // 경로 순회 방지: resolve() 후 workspace 경계 검증
-    if (ctx.workspace) {
+    {
       const ws = pathResolve(ctx.workspace);
       const norm = pathResolve(resolved);
       if (norm !== ws && !norm.startsWith(`${ws}/`) && !norm.startsWith(`${ws}\\`)) {

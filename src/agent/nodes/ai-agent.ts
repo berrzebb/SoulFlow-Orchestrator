@@ -71,6 +71,7 @@ export const ai_agent_handler: NodeHandler = {
         max_iterations: n.max_turns ?? 10,
         parent_id: `workflow:${runner.state.workflow_id}`,
         skip_controller: true,
+        allowed_tools: n.tool_nodes?.length ? n.tool_nodes : undefined,
       });
 
       runner.emit({ type: "node_started", workflow_id: runner.state.workflow_id, node_id: n.node_id, node_type: "ai_agent" });

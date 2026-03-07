@@ -70,7 +70,7 @@ export function SessionsTab() {
               type="search"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder={t("workspace.sessions.search") || "Search sessions..."}
+              placeholder={t("workspace.sessions.search")}
             />
           </div>
           <div className="ws-chip-bar">
@@ -96,7 +96,7 @@ export function SessionsTab() {
             {filtered_sessions.length === 0 ? (
               <div className="empty-state">
                 <div className="empty-state__icon">{search ? "🔍" : "💬"}</div>
-                <div className="empty-state__text">{search ? (t("workspace.sessions.no_match") || "No matching sessions") : t("workspace.sessions.no_sessions")}</div>
+                <div className="empty-state__text">{search ? (t("workspace.sessions.no_match")) : t("workspace.sessions.no_sessions")}</div>
               </div>
             ) : filtered_sessions.map((s) => (
               <div key={s.key} role="button" tabIndex={0} onClick={() => setSelected(s.key)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSelected(s.key); } }} className={`ws-item${selected === s.key ? " ws-item--active" : ""}`}>

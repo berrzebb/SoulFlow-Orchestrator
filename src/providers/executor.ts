@@ -16,11 +16,15 @@ export function parse_executor_preference(raw: string): ExecutorProvider {
   return "chatgpt";
 }
 
+const BUILTIN_PROVIDERS = new Set(["chatgpt", "claude_code", "openrouter", "orchestrator_llm", "gemini"]);
+
 export function resolve_executor_provider(
   preferred: ExecutorProvider,
   caps: ProviderCapabilities,
 ): ExecutorProvider {
+  if (!BUILTIN_PROVIDERS.has(preferred)) return preferred;
   if (preferred === "orchestrator_llm") return "orchestrator_llm";
+  if (preferred === "gemini") return "gemini";
   if (preferred === "openrouter") {
     if (caps.openrouter_available) return "openrouter";
     if (caps.chatgpt_available) return "chatgpt";

@@ -150,7 +150,7 @@ export function ToolsTab() {
           type="search"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder={t("tools.search") || "Search tools..."}
+          placeholder={t("tools.search")}
         />
       </div>
       {search && <div className="text-xs text-muted mb-2">{t("tools.search_result", { count: total_shown })}</div>}

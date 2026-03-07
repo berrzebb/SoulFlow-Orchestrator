@@ -1,5 +1,10 @@
 import type { JsonSchema, ToolCategory, ToolExecutionContext, ToolLike, ToolPolicyFlags, ToolSchema } from "./types.js";
-import { get_shared_secret_vault } from "../../security/secret-vault-factory.js";
+import type { SecretResolveReport } from "../../security/secret-vault.js";
+
+/** Tool 파라미터 시크릿 해석에 필요한 최소 계약. */
+export interface ParamSecretResolver {
+  resolve_inline_secrets_with_report(text: string): Promise<SecretResolveReport>;
+}
 
 const TRUTHY = new Set(["true", "yes", "on", "1", "ok", "y", "예", "네"]);
 const FALSY = new Set(["false", "no", "off", "0", "n", "아니오", "아니"]);
@@ -31,7 +36,12 @@ export abstract class Tool implements ToolLike {
   abstract readonly category: ToolCategory;
   readonly policy_flags?: ToolPolicyFlags;
   protected abstract run(params: Record<string, unknown>, context?: ToolExecutionContext): Promise<string>;
-  private readonly _param_secret_vault = get_shared_secret_vault(process.cwd());
+  private _secret_resolver: ParamSecretResolver | null = null;
+
+  /** 파라미터 시크릿 해석에 사용할 vault를 주입. */
+  set_secret_resolver(resolver: ParamSecretResolver): void {
+    this._secret_resolver = resolver;
+  }
 
   async execute(params: Record<string, unknown>, context?: ToolExecutionContext): Promise<string> {
     const state = {
@@ -70,7 +80,8 @@ export abstract class Tool implements ToolLike {
     state: { missing_keys: Set<string>; invalid_ciphertexts: Set<string> },
   ): Promise<unknown> {
     if (typeof value === "string") {
-      const report = await this._param_secret_vault.resolve_inline_secrets_with_report(value);
+      if (!this._secret_resolver) return value;
+      const report = await this._secret_resolver.resolve_inline_secrets_with_report(value);
       for (const key of report.missing_keys || []) state.missing_keys.add(String(key || "").trim());
       for (const token of report.invalid_ciphertexts || []) state.invalid_ciphertexts.add(String(token || "").trim());
       return report.text;

@@ -28,7 +28,7 @@ export const git_handler: NodeHandler = {
     const tpl = { memory: ctx.memory };
     const op = resolve_templates(n.operation || "status", tpl);
     const args = resolve_templates(n.args || "", tpl);
-    const cwd = resolve_templates(n.working_dir || "", tpl) || process.cwd();
+    const cwd = resolve_templates(n.working_dir || "", tpl) || ctx.workspace;
 
     const command = build_git_command(op, args);
     if (!command) return { output: { stdout: "", exit_code: 1, error: `unsupported operation: ${op}` } };

@@ -41,7 +41,6 @@ describe("channel manager agent runtime interface", () => {
         has_tool: () => true,
         register_tool: () => undefined,
         get_tool_definitions: () => [],
-        apply_tool_runtime_context: () => undefined,
         execute_tool: async () => "ok",
         append_daily_memory: async () => undefined,
         list_approval_requests: () => [{

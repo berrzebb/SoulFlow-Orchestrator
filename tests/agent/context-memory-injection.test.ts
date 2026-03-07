@@ -6,7 +6,7 @@ import { ContextBuilder } from "@src/agent/context.ts";
 import { MemoryStore } from "@src/agent/memory.ts";
 
 describe("context memory injection", () => {
-  it("system prompt does not inject recent daily memory into normal request", async () => {
+  it("system prompt injects recent daily memory alongside longterm memory", async () => {
     const workspace = await mkdtemp(join(tmpdir(), "context-memory-"));
     try {
       const memory = new MemoryStore(workspace);
@@ -17,9 +17,9 @@ describe("context memory injection", () => {
       const messages = await builder.build_messages([], "package.json 확인해줘");
       const system = messages.find((row) => row.role === "system");
       const content = String(system?.content || "");
-      expect(content.includes("## Recent Daily")).toBe(false);
-      expect(content.includes("Spotify 스킬")).toBe(false);
       expect(content.includes("장기 원칙")).toBe(true);
+      // daily_injection_days=1 이므로 최근 daily가 포함됨
+      expect(content.includes("## Recent Daily")).toBe(true);
     } finally {
       await rm(workspace, { recursive: true, force: true });
     }

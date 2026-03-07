@@ -44,7 +44,7 @@ function normalize_server_entry(value: unknown): McpServerEntry {
 export class FileMcpServerStore implements McpServerStoreLike {
   private readonly file_path: string;
 
-  constructor(workspace = process.cwd(), file_path_override?: string) {
+  constructor(workspace: string, file_path_override?: string) {
     this.file_path = resolve(String(file_path_override || join(workspace, ".mcp.json")));
   }
 

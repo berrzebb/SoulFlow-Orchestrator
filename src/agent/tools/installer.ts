@@ -46,7 +46,7 @@ export class ToolInstallerService {
   readonly store_path: string;
   readonly store: DynamicToolStoreLike;
 
-  constructor(workspace = process.cwd(), store_path_override?: string, store_override?: DynamicToolStoreLike) {
+  constructor(workspace: string, store_path_override?: string, store_override?: DynamicToolStoreLike) {
     this.workspace = workspace;
     this.store_path = store_path_override || join(workspace, "runtime", "custom-tools", "tools.db");
     this.store = store_override || new SqliteDynamicToolStore(workspace, this.store_path);

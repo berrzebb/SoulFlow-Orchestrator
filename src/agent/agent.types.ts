@@ -11,7 +11,24 @@ export type AgentProviderType = "claude_cli" | "codex_cli" | "claude_sdk" | "cod
 /** 모델 용도. chat = 대화/추론, embedding = 텍스트 벡터 변환. */
 export type ModelPurpose = "chat" | "embedding";
 
-/** 에이전트 프로바이더 인스턴스 설정. SQLite에 영속화되며 대시보드에서 CRUD. */
+/** 프로바이더 API 연결. 동일 API 키를 공유하는 여러 모델 프리셋의 부모. */
+export type ProviderConnection = {
+  connection_id: string;
+  provider_type: AgentProviderType;
+  label: string;
+  enabled: boolean;
+  /** OpenAI-compatible 등에서 사용하는 커스텀 API base URL. */
+  api_base?: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CreateProviderConnectionInput = Pick<
+  ProviderConnection,
+  "connection_id" | "provider_type" | "label" | "enabled"
+> & { api_base?: string };
+
+/** 에이전트 프로바이더 인스턴스 설정 (모델 프리셋). SQLite에 영속화되며 대시보드에서 CRUD. */
 export type AgentProviderConfig = {
   instance_id: string;
   provider_type: AgentProviderType;
@@ -25,6 +42,8 @@ export type AgentProviderConfig = {
   supported_modes: ExecutionMode[];
   /** 프로바이더 타입별 생성자 인자 (cwd, model, command 등). */
   settings: Record<string, unknown>;
+  /** 연결 참조. 설정 시 connection의 토큰 + api_base를 상속. */
+  connection_id?: string;
   created_at: string;
   updated_at: string;
 };
@@ -32,7 +51,7 @@ export type AgentProviderConfig = {
 export type CreateAgentProviderInput = Pick<
   AgentProviderConfig,
   "instance_id" | "provider_type" | "label" | "enabled" | "priority" | "model_purpose" | "supported_modes" | "settings"
->;
+> & { connection_id?: string };
 
 /** 백엔드가 제공하는 기능 선언. 오케스트레이터가 보상 전략을 결정하는 데 사용. */
 export type BackendCapabilities = {
@@ -209,6 +228,8 @@ export type AgentRunOptions = {
   /** 도구 실행 시 전달할 요청별 컨텍스트. set_context() 전역 뮤테이션 대신 사용. */
   tool_context?: Partial<import("./tools/types.js").ToolExecutionContext>;
 
+  /** 작업 디렉토리. config.cwd보다 우선. process.cwd() 사용 방지. */
+  cwd?: string;
   /** 에이전트 프로세스에 주입할 환경변수. */
   env?: Record<string, string>;
   /** SDK 설정 소스 (예: ["project"]). CLAUDE.md 등 로드. */

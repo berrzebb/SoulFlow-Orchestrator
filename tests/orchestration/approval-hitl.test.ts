@@ -120,6 +120,16 @@ class MockApprovalRuntime {
     return null;
   }
 
+  async find_task_by_trigger_message(_provider: string, trigger_message_id: string): Promise<TaskState | null> {
+    for (const t of this.tasks.values()) {
+      const mem = t.memory as Record<string, unknown>;
+      if (String(mem.__trigger_message_id || "") === trigger_message_id) {
+        return { ...t };
+      }
+    }
+    return null;
+  }
+
   async resume_task(task_id: string, user_input?: string, _reason?: string): Promise<TaskState | null> {
     const task = this.tasks.get(task_id);
     if (!task) return null;
@@ -695,6 +705,7 @@ describe("승인 + HITL 복합 시나리오", () => {
             channel: "telegram",
             chat_id: "chat-1",
             objective: "곡 추천 후 재생",
+            __trigger_message_id: "trigger-compound-1",
             __updated_at_seoul: new Date().toISOString(),
           },
         });
@@ -758,14 +769,14 @@ describe("승인 + HITL 복합 시나리오", () => {
     expect(harness.dispatch.sent).toHaveLength(1);
     expect(last_reply_content(harness.dispatch)).toContain("Song A");
 
-    // 2단계: 사용자 선택 → (2) resume ACK + (3) 승인 요청 응답
-    await harness.manager.handle_inbound_message(msg("2번"));
-    expect(harness.dispatch.sent).toHaveLength(3);
+    // 2단계: 사용자 선택 (thread_id로 task 참조) → 승인 요청 응답
+    await harness.manager.handle_inbound_message(msg("2번", { thread_id: "trigger-compound-1" }));
+    expect(harness.dispatch.sent).toHaveLength(2);
     expect(last_reply_content(harness.dispatch)).toContain("승인이 필요");
 
-    // 3단계: 승인 → (4) 승인 ACK + (5) 최종 응답
+    // 3단계: 승인 → (3) 승인 ACK + (4) 최종 응답
     await harness.manager.handle_inbound_message(msg("승인"));
-    expect(harness.dispatch.sent).toHaveLength(5);
+    expect(harness.dispatch.sent).toHaveLength(4);
     expect(last_reply_content(harness.dispatch)).toContain("재생을 시작");
 
     // 총 3번의 orchestration 호출
@@ -837,18 +848,19 @@ describe("승인 + HITL 복합 시나리오", () => {
       memory: {
         channel: "telegram",
         chat_id: "chat-1",
+        __trigger_message_id: "trigger-retry-1",
         __updated_at_seoul: new Date().toISOString(),
       },
     });
 
-    // 1단계: 사용자 보강 메시지로 재시도 → (1) resume ACK + (2) 승인 요청 응답
-    await harness.manager.handle_inbound_message(msg("네트워크 복구됨, 다시 시도해줘"));
-    expect(harness.dispatch.sent).toHaveLength(2);
+    // 1단계: 사용자 보강 메시지로 재시도 (thread_id로 task 참조) → 승인 요청 응답
+    await harness.manager.handle_inbound_message(msg("네트워크 복구됨, 다시 시도해줘", { thread_id: "trigger-retry-1" }));
+    expect(harness.dispatch.sent).toHaveLength(1);
     expect(last_reply_content(harness.dispatch)).toContain("승인이 필요");
 
-    // 2단계: 승인 → (3) 승인 ACK + (4) 최종 응답
+    // 2단계: 승인 → (2) 승인 ACK + (3) 최종 응답
     await harness.manager.handle_inbound_message(msg("승인"));
-    expect(harness.dispatch.sent).toHaveLength(4);
+    expect(harness.dispatch.sent).toHaveLength(3);
     expect(last_reply_content(harness.dispatch)).toContain("배포 완료");
   });
 });

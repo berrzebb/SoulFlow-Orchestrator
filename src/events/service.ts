@@ -50,7 +50,7 @@ export class WorkflowEventService {
   private readonly logger: Logger | null;
   private readonly task_loop_max_turns: number;
 
-  constructor(root = process.cwd(), events_dir_override?: string, logger?: Logger | null, task_loop_max_turns?: number) {
+  constructor(root: string, events_dir_override?: string, logger?: Logger | null, task_loop_max_turns?: number) {
     this.root = root;
     this.events_dir = events_dir_override || join(root, "runtime", "events");
     this.sqlite_path = join(this.events_dir, "events.db");

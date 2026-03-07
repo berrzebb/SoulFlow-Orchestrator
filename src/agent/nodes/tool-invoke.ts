@@ -57,7 +57,12 @@ export const tool_invoke_handler: NodeHandler = {
 
     const start = Date.now();
     try {
-      const result = await runner.options.invoke_tool(tool_id, params);
+      const result = await runner.options.invoke_tool(tool_id, params, {
+        workflow_id: runner.state.workflow_id,
+        channel: runner.state.channel,
+        chat_id: runner.state.chat_id,
+        sender_id: `workflow:${runner.state.workflow_id}`,
+      });
       return { output: { result, tool_id, duration: Date.now() - start, ok: true, error: "" } };
     } catch (err) {
       return { output: { result: null, tool_id, duration: Date.now() - start, ok: false, error: error_message(err) } };

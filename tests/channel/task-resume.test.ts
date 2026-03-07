@@ -4,7 +4,7 @@ import type { TaskState } from "@src/contracts.ts";
 import type { InboundMessage } from "@src/bus/types.ts";
 import type { AgentRuntimeLike } from "@src/agent/runtime.types.ts";
 
-function make_message(content: string, chat_id = "chat-1"): InboundMessage {
+function make_message(content: string, chat_id = "chat-1", thread_id?: string): InboundMessage {
   return {
     id: `msg-${Date.now()}`,
     provider: "telegram",
@@ -14,6 +14,7 @@ function make_message(content: string, chat_id = "chat-1"): InboundMessage {
     content,
     at: new Date().toISOString(),
     metadata: {},
+    ...(thread_id ? { thread_id } : {}),
   };
 }
 
@@ -33,6 +34,7 @@ function make_task(patch?: Partial<TaskState>): TaskState {
 function make_runtime(overrides?: Partial<AgentRuntimeLike>): AgentRuntimeLike {
   return {
     find_waiting_task: vi.fn().mockResolvedValue(null),
+    find_task_by_trigger_message: vi.fn().mockResolvedValue(null),
     resume_task: vi.fn().mockResolvedValue(null),
     get_task: vi.fn().mockResolvedValue(null),
     cancel_task: vi.fn().mockResolvedValue(null),
@@ -45,22 +47,34 @@ function make_runtime(overrides?: Partial<AgentRuntimeLike>): AgentRuntimeLike {
 const noop_logger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {}, child: () => noop_logger } as never;
 
 describe("TaskResumeService", () => {
-  it("대기 Task이 있으면 재개하고 결과 반환", async () => {
+  it("reference 메시지가 있는 대기 Task이 있으면 재개하고 결과 반환", async () => {
     const task = make_task();
     const resumed = make_task({ status: "running" });
     const runtime = make_runtime({
-      find_waiting_task: vi.fn().mockResolvedValue(task),
+      find_task_by_trigger_message: vi.fn().mockResolvedValue(task),
       resume_task: vi.fn().mockResolvedValue(resumed),
     });
 
     const service = new TaskResumeService({ agent_runtime: runtime, logger: noop_logger });
-    const result = await service.try_resume("telegram", make_message("3번"));
+    const result = await service.try_resume("telegram", make_message("3번", "chat-1", "trigger-msg-1"));
 
     expect(result).not.toBeNull();
     expect(result!.resumed).toBe(true);
     expect(result!.task_id).toBe("task-1");
     expect(result!.previous_status).toBe("waiting_user_input");
-    expect(runtime.resume_task).toHaveBeenCalledWith("task-1", "3번", "user_input_received", { channel: "telegram", chat_id: "chat-1" });
+    expect(runtime.resume_task).toHaveBeenCalledWith("task-1", "3번", "referenced_message_reply", { channel: "telegram", chat_id: "chat-1" });
+  });
+
+  it("reference 없는 일반 메시지는 대기 Task이 있어도 resume하지 않음", async () => {
+    const task = make_task();
+    const runtime = make_runtime({
+      find_waiting_task: vi.fn().mockResolvedValue(task),
+    });
+
+    const service = new TaskResumeService({ agent_runtime: runtime, logger: noop_logger });
+    const result = await service.try_resume("telegram", make_message("3번"));
+
+    expect(result).toBeNull();
   });
 
   it("대기 Task이 없으면 null 반환", async () => {
@@ -92,19 +106,19 @@ describe("TaskResumeService", () => {
     expect(result).toBeNull();
   });
 
-  it("failed Task은 TTL 이내면 retry_with_enrichment로 재개", async () => {
+  it("failed Task은 reference가 있으면 retry_with_enrichment로 재개", async () => {
     const task = make_task({
       status: "failed",
       memory: { __updated_at_seoul: new Date().toISOString() },
     });
     const resumed = make_task({ status: "running" });
     const runtime = make_runtime({
-      find_waiting_task: vi.fn().mockResolvedValue(task),
+      find_task_by_trigger_message: vi.fn().mockResolvedValue(task),
       resume_task: vi.fn().mockResolvedValue(resumed),
     });
 
     const service = new TaskResumeService({ agent_runtime: runtime, logger: noop_logger });
-    const result = await service.try_resume("telegram", make_message("파일 다시 첨부합니다"));
+    const result = await service.try_resume("telegram", make_message("파일 다시 첨부합니다", "chat-1", "trigger-msg-1"));
 
     expect(result).not.toBeNull();
     expect(result!.previous_status).toBe("failed");
@@ -118,11 +132,11 @@ describe("TaskResumeService", () => {
       memory: { __updated_at_seoul: old_time },
     });
     const runtime = make_runtime({
-      find_waiting_task: vi.fn().mockResolvedValue(task),
+      find_task_by_trigger_message: vi.fn().mockResolvedValue(task),
     });
 
     const service = new TaskResumeService({ agent_runtime: runtime, logger: noop_logger });
-    const result = await service.try_resume("telegram", make_message("재시도"));
+    const result = await service.try_resume("telegram", make_message("재시도", "chat-1", "trigger-msg-1"));
 
     expect(result).toBeNull();
     expect(runtime.resume_task).not.toHaveBeenCalled();
@@ -131,12 +145,12 @@ describe("TaskResumeService", () => {
   it("resume_task가 running 아닌 상태를 반환하면 null", async () => {
     const task = make_task();
     const runtime = make_runtime({
-      find_waiting_task: vi.fn().mockResolvedValue(task),
+      find_task_by_trigger_message: vi.fn().mockResolvedValue(task),
       resume_task: vi.fn().mockResolvedValue(make_task({ status: "cancelled" })),
     });
 
     const service = new TaskResumeService({ agent_runtime: runtime, logger: noop_logger });
-    const result = await service.try_resume("telegram", make_message("3번"));
+    const result = await service.try_resume("telegram", make_message("3번", "chat-1", "trigger-msg-1"));
 
     expect(result).toBeNull();
   });

@@ -2,10 +2,16 @@ import { z } from "zod";
 
 const ChannelStreamingSchema = z.object({
   enabled: z.boolean(),
-  /** 스트리밍 모드: live(부분 텍스트 축적 편집), status(상태 인디케이터 순환 → 최종 답변 새 메시지). */
+  /**
+   * 스트리밍 모드.
+   * - live: 부분 텍스트를 메시지 편집으로 축적 (실시간 타이핑 효과)
+   * - status: 상태 인디케이터 순환 후 최종 답변을 새 메시지로 전송
+   * 기본 정책: status + suppressFinalAfterStream=true로 중복 없는 UX 제공.
+   */
   mode: z.enum(["live", "status"]).default("live"),
   intervalMs: z.number().min(500),
   minChars: z.number().min(16),
+  /** status 모드에서 스트리밍 후 최종 답변 별도 전송을 억제. true면 스트리밍 결과가 곧 최종 답변. */
   suppressFinalAfterStream: z.boolean(),
   /** 도구 사용 표시: count(상단 카운트), inline(스트림 주입), separate(별도 메시지). */
   toolDisplay: z.enum(["count", "inline", "separate"]),
@@ -61,17 +67,23 @@ const OrchestratorLlmSchema = z.object({
 });
 
 const EmbeddingSchema = z.object({
-  /** Ollama API base URL. 설정 시 Ollama 우선 사용 (로컬, 무료). 비어있으면 OpenRouter 폴백. */
-  ollamaApiBase: z.string().default(""),
-  /** Ollama 임베딩 모델. */
-  ollamaModel: z.string().default("nomic-embed-text"),
+  /** 사용할 임베딩 프로바이더 인스턴스 ID. Providers 페이지에서 model_purpose=embedding으로 등록한 인스턴스. 빈 문자열이면 자동 선택 (첫 번째 활성 embedding 프로바이더). */
+  instanceId: z.string().default(""),
+  /** 임베딩 모델 오버라이드. 빈 문자열이면 인스턴스 기본 모델 사용. */
+  model: z.string().default(""),
 });
 
 const OrchestrationSchema = z.object({
   maxToolResultChars: z.number().min(50),
   orchestratorMaxTokens: z.number().min(256),
+  /** 오케스트레이터 프로바이더 인스턴스 ID (Providers 페이지에서 등록). */
   orchestratorProvider: z.string().default(""),
+  /** 오케스트레이터 모델 오버라이드. 빈 문자열이면 인스턴스/프로바이더 기본 모델. */
+  orchestratorModel: z.string().default(""),
+  /** 실행기 프로바이더 인스턴스 ID (Providers 페이지에서 등록). */
   executorProvider: z.string().default(""),
+  /** 실행기 모델 오버라이드. 빈 문자열이면 인스턴스/프로바이더 기본 모델. */
+  executorModel: z.string().default(""),
 });
 
 const DashboardSchema = z.object({
@@ -101,6 +113,42 @@ const LoggingSchema = z.object({
   level: z.enum(["debug", "info", "warn", "error"]),
 });
 
+const BusRedisSchema = z.object({
+  url: z.string(),
+  keyPrefix: z.string(),
+  blockMs: z.number().int().positive(),
+  claimIdleMs: z.number().int().positive(),
+  streamMaxlen: z.object({
+    inbound: z.number().int().positive(),
+    outbound: z.number().int().positive(),
+    progress: z.number().int().positive(),
+  }),
+});
+
+const BusSchema = z.object({
+  backend: z.enum(["memory", "redis"]),
+  redis: BusRedisSchema,
+});
+
+const MemorySchema = z.object({
+  consolidation: z.object({
+    enabled: z.boolean(),
+    trigger: z.enum(["idle", "cron"]),
+    /** idle trigger: 세션 비활성 후 압축까지 대기 시간 (ms). */
+    idleAfterMs: z.number().int().min(60_000),
+    /** cron trigger: 압축 실행 주기 (ms). 기본 24시간. */
+    intervalMs: z.number().int().min(60_000),
+    /** 압축 대상 daily memory 윈도우 (일). */
+    windowDays: z.number().int().min(1).max(365),
+    /** 압축 후 사용된 daily 엔트리 삭제 여부. */
+    archiveUsed: z.boolean(),
+  }),
+  /** daily memory 중 최근 N일을 system prompt에 자동 주입. 0이면 비활성. */
+  dailyInjectionDays: z.number().int().min(0).max(30),
+  /** 자동 주입 시 최대 글자 수 상한. 초과 시 최근 엔트리부터 우선 포함. */
+  dailyInjectionMaxChars: z.number().int().min(0),
+});
+
 const OpsSchema = z.object({
   healthLogEnabled: z.boolean(),
   healthLogOnChange: z.boolean(),
@@ -119,6 +167,8 @@ export const AppConfigSchema = z.object({
   dashboard: DashboardSchema,
   cli: CliSchema,
   mcp: McpSchema,
+  bus: BusSchema,
+  memory: MemorySchema,
   logging: LoggingSchema,
   ops: OpsSchema,
 });
@@ -153,7 +203,7 @@ export function get_config_defaults(): AppConfig {
         mode: "status" as const,
         intervalMs: 1400,
         minChars: 48,
-        suppressFinalAfterStream: false,
+        suppressFinalAfterStream: true,
         toolDisplay: "count" as const,
       },
       dispatch: {
@@ -190,8 +240,7 @@ export function get_config_defaults(): AppConfig {
       apiBase: "http://ollama:11434/v1",
     },
     embedding: {
-      ollamaApiBase: "",
-      ollamaModel: "nomic-embed-text",
+      instanceId: "",
     },
     dashboard: {
       enabled: true,
@@ -209,6 +258,32 @@ export function get_config_defaults(): AppConfig {
       serversFile: "",
       serversJson: "",
       serverNames: "",
+    },
+    bus: {
+      backend: (process.env.BUS_BACKEND || "memory") as "memory" | "redis",
+      redis: {
+        url: process.env.BUS_REDIS_URL || "redis://redis:6379",
+        keyPrefix: "sf:bus:",
+        blockMs: 5_000,
+        claimIdleMs: 30_000,
+        streamMaxlen: {
+          inbound: 10_000,
+          outbound: 10_000,
+          progress: 2_000,
+        },
+      },
+    },
+    memory: {
+      consolidation: {
+        enabled: false,
+        trigger: "idle" as const,
+        idleAfterMs: 300_000,
+        intervalMs: 86_400_000,
+        windowDays: 7,
+        archiveUsed: true,
+      },
+      dailyInjectionDays: 1,
+      dailyInjectionMaxChars: 4_000,
     },
     logging: {
       level: "info",

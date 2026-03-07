@@ -35,17 +35,10 @@ export class SpawnTool extends Tool {
     additionalProperties: false,
   };
   private readonly spawn_callback: SpawnCallback;
-  private origin_channel = "";
-  private origin_chat_id = "";
 
   constructor(spawn_callback: SpawnCallback) {
     super();
     this.spawn_callback = spawn_callback;
-  }
-
-  set_context(channel: string, chat_id: string): void {
-    this.origin_channel = channel;
-    this.origin_chat_id = chat_id;
   }
 
   protected async run(params: Record<string, unknown>, _context?: ToolExecutionContext): Promise<string> {
@@ -59,8 +52,8 @@ export class SpawnTool extends Tool {
       heart: params.heart ? String(params.heart) : undefined,
       model: params.model ? String(params.model) : undefined,
       max_turns: params.max_turns ? Number(params.max_turns) : undefined,
-      origin_channel: String(context.channel || this.origin_channel || "") || undefined,
-      origin_chat_id: String(context.chat_id || this.origin_chat_id || "") || undefined,
+      origin_channel: String(context.channel || "") || undefined,
+      origin_chat_id: String(context.chat_id || "") || undefined,
       metadata: {
         parent_id: context?.task_id || undefined,
       },

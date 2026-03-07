@@ -1,5 +1,13 @@
 # SoulFlow Orchestrator
 
+[![CI](https://github.com/berrzebb/SoulFlow-Orchestrator/actions/workflows/ci.yml/badge.svg)](https://github.com/berrzebb/SoulFlow-Orchestrator/actions/workflows/ci.yml)
+[![Coverage](https://img.shields.io/endpoint?url=https://berrzebb.github.io/SoulFlow-Orchestrator/badges/coverage.json)](https://github.com/berrzebb/SoulFlow-Orchestrator/actions/workflows/ci.yml)
+[![Tests](https://img.shields.io/endpoint?url=https://berrzebb.github.io/SoulFlow-Orchestrator/badges/tests.json)](https://github.com/berrzebb/SoulFlow-Orchestrator/actions/workflows/ci.yml)
+[![Lines of Code](https://img.shields.io/endpoint?url=https://berrzebb.github.io/SoulFlow-Orchestrator/badges/loc.json)](https://github.com/berrzebb/SoulFlow-Orchestrator)
+[![Node](https://img.shields.io/badge/node-%3E%3D22-brightgreen)](https://nodejs.org/)
+[![TypeScript](https://img.shields.io/badge/typescript-5.8-blue)](https://www.typescriptlang.org/)
+[![License](https://img.shields.io/github/license/berrzebb/SoulFlow-Orchestrator)](LICENSE)
+
 [한국어](README.ko.md) | English
 
 An asynchronous orchestration runtime that processes Slack · Telegram · Discord messages through **headless agents**.
@@ -100,14 +108,15 @@ An **orchestration runtime** that receives messages from chat channels and dispa
 
 | Component | Role | Key Features |
 |-----------|------|-------------|
-| **Channel Manager** | Slack · Telegram · Discord I/O | Streaming · grouping · typing updates |
+| **Channel Manager** | Slack · Telegram · Discord I/O | Streaming · grouping · persona tone rendering |
 | **Orchestrator** | Inbound → agent execution | Agent Loop · Task Loop · Phase Loop triple mode |
 | **Agent Backends** | Claude/Codex × CLI/SDK execution | CircuitBreaker · HealthScorer · auto-fallback |
 | **Role Skills** | 8-role hierarchical delegation | concierge → pm/pl → implementer/reviewer/validator/debugger |
 | **Security Vault** | AES-256-GCM secret management | Auto inbound sealing · decrypt only in tool path |
 | **OAuth Integration** | External service authentication | GitHub · Google · Custom OAuth 2.0 |
 | **Workflow Engine** | Phase Loop · DAG execution | 120-node graph editor · 6 categories · HITL interaction nodes |
-| **Domain Services** | Embedding · vector store · webhook · kanban | sqlite-vec KNN · hybrid search · task boards |
+| **Message Bus** | Internal event routing | In-memory (default) · Redis Streams (multi-instance) |
+| **Domain Services** | Embedding · vector store · webhook · kanban | sqlite-vec KNN · hybrid search · kanban automation rules |
 | **Dashboard** | Web-based real-time monitoring | SSE feed · agent/task/decision/provider management |
 | **MCP Integration** | External tool server connections | stdio/SSE · auto CLI injection |
 | **Cron** | Recurring task scheduling | SQLite-backed · hot reload |
@@ -323,6 +332,7 @@ User: Call the API using MY_API_KEY
 | `/workflow list\|create\|cancel <id>` | Phase Loop workflow management |
 | `/model list\|set <name>` | Orchestrator LLM model switch |
 | `/mcp list\|reconnect <name>` | MCP server status/reconnect |
+| `/tone <style>\|status\|reset` | Persona tone control (formal/casual/warm/cool/short/detailed) |
 
 ## Directory Structure
 
@@ -338,8 +348,8 @@ next/
       nodes/        ← 120 workflow node handlers (OCP plugin architecture)
       pty/          ← PTY-based CLI integration (ContainerPool, AgentBus, MCP bridge, NDJSON wire)
       tools/        ← Agent tool implementations (incl. oauth_fetch, workflow, ask-user, approval-notifier)
-    bus/            ← MessageBus (inbound/outbound pub/sub)
-    channels/       ← Channel manager · commands · dispatch · approval · confirmation guard
+    bus/            ← MessageBus (in-memory default · Redis Streams optional)
+    channels/       ← Channel manager · commands · dispatch · approval · persona tone rendering
     config/         ← Zod-based config schema + config-meta
     cron/           ← Cron scheduler (SQLite)
     dashboard/
@@ -351,7 +361,7 @@ next/
     i18n/           ← Shared i18n protocol + JSON locales (en, ko)
     orchestration/  ← Gateway · Classifier · Prompts · ToolCallHandler · NodeSelector · ToolIndex · ConfirmationGuard
     runtime/        ← Instance lock · ServiceManager · service types
-    services/       ← Domain services (embed, vector-store, query-db, webhook-store, kanban-store, model-catalog, reference-store)
+    services/       ← Domain services (embed, vector-store, query-db, webhook-store, kanban-store, kanban-rule-executor, model-catalog, reference-store)
     security/       ← Secret Vault (AES-256-GCM)
     session/        ← Session store
     skills/

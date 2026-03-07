@@ -80,7 +80,9 @@ export class CodexAppServerAgent implements AgentBackend {
 
       // thread 생성 또는 resume
       const sandbox_input = options.runtime_policy?.sandbox ?? sandbox_from_preset("full-auto");
-      const codex = sandbox_to_codex_policy(sandbox_input, this.config.cwd || process.cwd());
+      const effective_cwd = options.cwd || this.config.cwd;
+      if (!effective_cwd) throw new Error("cwd is required for CodexAppServerAgent");
+      const codex = sandbox_to_codex_policy(sandbox_input, effective_cwd);
       const model = options.model || this.config.model || undefined;
 
       // tool_executors → dynamicTools 스키마 등록 (item/tool/call로 실행)
@@ -96,7 +98,7 @@ export class CodexAppServerAgent implements AgentBackend {
           ...(model ? { model } : {}),
           sandbox: codex.sandbox,
           approvalPolicy: codex.approval_policy,
-          cwd: this.config.cwd,
+          cwd: effective_cwd,
         }) as { thread?: { id?: string } };
         thread_id = res?.thread?.id || options.resume_session.session_id;
       } else {
@@ -104,7 +106,7 @@ export class CodexAppServerAgent implements AgentBackend {
           model,
           sandbox: codex.sandbox,
           approvalPolicy: codex.approval_policy,
-          cwd: this.config.cwd,
+          cwd: effective_cwd,
           ...(dynamic_tools?.length ? { dynamicTools: dynamic_tools } : {}),
           ...(options.system_prompt ? { instructions: options.system_prompt } : {}),
         }) as { thread?: { id?: string } };
@@ -132,6 +134,11 @@ export class CodexAppServerAgent implements AgentBackend {
         });
       }
 
+      const metadata: Record<string, unknown> = thread_id ? { thread_id } : {};
+      if (turn_result.finish_reason === "error" && result_content) {
+        metadata.error = result_content;
+      }
+
       return {
         content: result_content || null,
         session: this._build_session(thread_id),
@@ -139,7 +146,7 @@ export class CodexAppServerAgent implements AgentBackend {
         usage: turn_result.usage,
         finish_reason: turn_result.finish_reason,
         parsed_output: turn_result.parsed_output,
-        metadata: thread_id ? { thread_id } : {},
+        metadata,
       };
     } catch (error) {
       const msg = error_message(error);
@@ -170,6 +177,12 @@ export class CodexAppServerAgent implements AgentBackend {
       request_timeout_ms: this.config.request_timeout_ms || 120_000,
     });
 
+    let stderr_buf = "";
+    this.client.on("stderr", (chunk: string) => {
+      stderr_buf += chunk;
+      if (stderr_buf.length > 2000) stderr_buf = stderr_buf.slice(-2000);
+    });
+
     this.client.on("error", () => {
       this.client = null;
       this.initialized = false;
@@ -178,10 +191,15 @@ export class CodexAppServerAgent implements AgentBackend {
     this.client.start();
 
     if (!this.initialized) {
-      await this.client.request("initialize", {
-        clientInfo: { name: "soulflow-orchestrator", title: "SoulFlow Orchestrator", version: "1.0.0" },
-        capabilities: { experimentalApi: true },
-      });
+      try {
+        await this.client.request("initialize", {
+          clientInfo: { name: "soulflow-orchestrator", title: "SoulFlow Orchestrator", version: "1.0.0" },
+          capabilities: { experimentalApi: true },
+        });
+      } catch (err) {
+        const detail = stderr_buf.trim();
+        throw new Error(`codex_init_failed: ${error_message(err)}${detail ? ` | stderr: ${detail.slice(0, 500)}` : ""}`);
+      }
       this.client.notify("initialized");
       this.initialized = true;
     }
@@ -238,10 +256,13 @@ export class CodexAppServerAgent implements AgentBackend {
     }
 
     return new Promise((resolve, reject) => {
+      const timeout_ms = this.config.request_timeout_ms || 120_000;
       const timeout = setTimeout(() => {
         cleanup();
-        resolve({ content, tools: tool_count, finish_reason, usage: {} });
-      }, this.config.request_timeout_ms || 120_000);
+        const phase = turn_id ? "turn_execution" : "turn_start";
+        fire(emit, { type: "error", source, at: now_iso(), error: `codex_timeout:${phase} (${timeout_ms}ms)`, code: "codex:Timeout" });
+        resolve({ content: content || `Error: codex_timeout:${phase}`, tools: tool_count, finish_reason: "error" as AgentFinishReason, usage: {} });
+      }, timeout_ms);
 
       const on_notification = (notification: { method: string; params: Record<string, unknown> }) => {
         const { method, params } = notification;

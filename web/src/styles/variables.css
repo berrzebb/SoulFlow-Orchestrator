@@ -1,4 +1,6 @@
 :root {
+  color-scheme: dark;
+
   /* Colors — dark (default) */
   --bg: #121619;
   --panel: #1b2228;
@@ -31,6 +33,7 @@
 
 /* Light theme */
 :root[data-theme="light"] {
+  color-scheme: light;
   --bg: #f4f6f9;
   --panel: #ffffff;
   --panel-hover: #f8f9fb;

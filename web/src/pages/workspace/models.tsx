@@ -102,6 +102,7 @@ export function ModelsTab() {
       const decoder = new TextDecoder();
       let buf = "";
       let errored = false;
+      let completed = false;
       for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -113,11 +114,11 @@ export function ModelsTab() {
           try {
             const p = JSON.parse(line.slice(6)) as PullProgress;
             setPullProgress(p);
-            if (p.status === "done") break;
+            if (p.status === "done" || p.status === "success") { completed = true; break; }
             if (p.status.startsWith("error") || p.error) { errored = true; break; }
           } catch { /* skip malformed */ }
         }
-        if (errored) break;
+        if (errored || completed) break;
       }
       if (errored) {
         toast(t("models.pull_failed"), "err");

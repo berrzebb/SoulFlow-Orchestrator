@@ -81,7 +81,7 @@ export class SessionStore implements SessionStoreLike {
   private readonly initialized: Promise<void>;
   private readonly logger: Logger | null;
 
-  constructor(workspace = process.cwd(), sessions_dir_override?: string, logger?: Logger | null) {
+  constructor(workspace: string, sessions_dir_override?: string, logger?: Logger | null) {
     this.workspace = workspace;
     this.sessions_dir = sessions_dir_override || join(this.workspace, "sessions");
     this.sqlite_path = join(this.sessions_dir, "sessions.db");

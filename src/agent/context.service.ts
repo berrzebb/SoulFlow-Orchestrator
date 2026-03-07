@@ -47,6 +47,8 @@ export class ContextBuilder {
   private readonly workspace: string;
   private _oauth_summary_provider: OAuthSummaryProvider | null = null;
   private _reference_store: ReferenceStoreLike | null = null;
+  private _daily_injection_days = 1;
+  private _daily_injection_max_chars = 4_000;
 
   constructor(workspace: string, args?: { memory_store?: MemoryStoreLike; promises_dir?: string; app_root?: string }) {
     this.workspace = workspace;
@@ -80,6 +82,11 @@ export class ContextBuilder {
     return "";
   }
 
+  set_daily_injection(days: number, max_chars?: number): void {
+    this._daily_injection_days = Math.max(0, Math.min(30, days));
+    if (max_chars !== undefined) this._daily_injection_max_chars = Math.max(0, max_chars);
+  }
+
   set_oauth_summary_provider(provider: OAuthSummaryProvider): void {
     this._oauth_summary_provider = provider;
   }
@@ -92,7 +99,7 @@ export class ContextBuilder {
   ): Promise<string> {
     const security_override = this._security_override_policy();
     const bootstrap = await this._load_bootstrap_files(tool_categories);
-    const memory_context = await this._build_memory_context();
+    const memory_context = await this._build_memory_context(session_context);
     const decision_ctx = { team_id: decision_context?.team_id || null, agent_id: decision_context?.agent_id || null };
     const decisions = await this.decision_service.build_compact_injection(decision_ctx);
     const promises = await this.promise_service.build_compact_injection(decision_ctx);
@@ -261,14 +268,60 @@ export class ContextBuilder {
     }
   }
 
-  private async _build_memory_context(): Promise<string> {
+  private async _build_memory_context(
+    session_context?: { channel?: string | null; chat_id?: string | null },
+  ): Promise<string> {
     const longterm = (await this.memory_store.read_longterm()).trim();
-    if (!longterm) return "";
+    const daily_section = await this._build_recent_daily_section(session_context);
+    if (!longterm && !daily_section) return "";
     return [
       "# Memory",
       "source: memory.db",
-      `## Longterm\n${longterm}`,
+      longterm ? `## Longterm\n${longterm}` : "",
+      daily_section,
     ].filter(Boolean).join("\n\n");
+  }
+
+  private async _build_recent_daily_section(
+    session_context?: { channel?: string | null; chat_id?: string | null },
+  ): Promise<string> {
+    if (this._daily_injection_days <= 0) return "";
+    const all_days = await this.memory_store.list_daily();
+    if (all_days.length === 0) return "";
+    const recent = all_days.slice(-this._daily_injection_days);
+
+    // session scope 필터: channel/chat_id가 있으면 해당 세션 엔트리만 포함
+    const scope_prefix = session_context?.chat_id
+      ? `${session_context.channel || ""}:${session_context.chat_id}:`
+      : null;
+
+    const max = this._daily_injection_max_chars;
+    let total = 0;
+    const chunks: string[] = [];
+
+    // 최근 날짜부터 역순으로 수집 (최신 우선)
+    for (let i = recent.length - 1; i >= 0; i--) {
+      const day = recent[i];
+      const raw = (await this.memory_store.read_daily(day)).trim();
+      if (!raw) continue;
+
+      const lines = raw.split("\n");
+      const filtered = scope_prefix
+        ? lines.filter((l) => l.includes(`[${scope_prefix}`) || !l.startsWith("- ["))
+        : lines;
+      if (filtered.length === 0) continue;
+      const text = filtered.join("\n");
+
+      if (max > 0 && total + text.length > max) {
+        const remaining = max - total;
+        if (remaining > 100) chunks.unshift(`### ${day}\n${text.slice(-remaining)}`);
+        break;
+      }
+      total += text.length;
+      chunks.unshift(`### ${day}\n${text}`);
+    }
+    if (chunks.length === 0) return "";
+    return `## Recent Daily\n${chunks.join("\n\n")}`;
   }
 
   private async _build_oauth_section(): Promise<string> {

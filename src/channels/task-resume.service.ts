@@ -25,14 +25,14 @@ export type TaskResumeServiceDeps = {
   logger: Logger;
 };
 
+/** failed task의 재시도 허용 시간 (30분). */
+const FAILED_TASK_TTL_MS = 30 * 60_000;
+
 /** 대기 Task 재개를 건너뛰어야 하는 메시지 패턴. */
 const SKIP_PATTERNS: RegExp[] = [
   /^\/\S/,          // 슬래시 명령
   /^!/,             // 관리 명령 접두사
 ];
-
-/** failed Task 재시도 시 최대 경과 시간 (ms). */
-const FAILED_TASK_TTL_MS = 30 * 60 * 1000; // 30분
 
 export class TaskResumeService {
   private readonly runtime: AgentRuntimeLike;
@@ -64,6 +64,12 @@ export class TaskResumeService {
       if (referenced) {
         const resumable = ["waiting_user_input", "waiting_approval", "failed", "max_turns_reached"];
         if (resumable.includes(referenced.status)) {
+          // failed task는 TTL 이내만 재시도 허용
+          if (referenced.status === "failed") {
+            const updated = String(referenced.memory?.__updated_at_seoul || "");
+            const elapsed = updated ? Date.now() - new Date(updated).getTime() : Infinity;
+            if (elapsed > FAILED_TASK_TTL_MS) return null;
+          }
           const previous_status = referenced.status;
           const reason = previous_status === "failed" ? "retry_with_enrichment" : "referenced_message_reply";
           this.logger.info("resuming task from referenced message", {
@@ -91,32 +97,8 @@ export class TaskResumeService {
       }
     }
 
-    // 폴백: 채팅 전체 대기 Task 조회
-    const waiting = await this.runtime.find_waiting_task(provider, message.chat_id);
-    if (!waiting) return null;
-
-    // failed Task은 TTL 이내만 재시도 대상
-    if (waiting.status === "failed") {
-      const updated = String(waiting.memory.__updated_at_seoul || "");
-      if (updated && !this.is_within_ttl(updated, FAILED_TASK_TTL_MS)) {
-        return null;
-      }
-    }
-
-    const previous_status = waiting.status;
-    const reason = previous_status === "failed" ? "retry_with_enrichment" : "user_input_received";
-
-    this.logger.info("resuming waiting task", {
-      task_id: waiting.taskId,
-      previous_status,
-      reason,
-      chat_id: message.chat_id,
-    });
-
-    const resumed = await this.runtime.resume_task(waiting.taskId, text, reason, { channel: provider, chat_id: message.chat_id });
-    if (!resumed || resumed.status !== "running") return null;
-
-    return { resumed: true, task_id: waiting.taskId, previous_status };
+    // reference가 없는 일반 메시지는 resume하지 않음 — 의도치 않은 가로채기 방지
+    return null;
   }
 
   /**
@@ -159,14 +141,6 @@ export class TaskResumeService {
     return expired;
   }
 
-  private is_within_ttl(iso_date: string, ttl_ms: number): boolean {
-    try {
-      const then = new Date(iso_date).getTime();
-      return Date.now() - then < ttl_ms;
-    } catch {
-      return false;
-    }
-  }
 }
 
 function build_task_context_summary(task: TaskState): string {

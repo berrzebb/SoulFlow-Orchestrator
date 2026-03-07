@@ -188,7 +188,8 @@ export function with_codex_permission_overrides(
     out = with_codex_global_option(out, "--sandbox", sandbox_mode);
   }
 
-  const workspace = config?.workspace_dir || process.cwd();
+  if (!config?.workspace_dir) throw new Error("workspace_dir is required in CLI permission config");
+  const workspace = config.workspace_dir;
   const policy_dirs = (sandbox.writable_roots || []).map((d) => resolve(d));
   const add_dirs_raw = config?.codex_add_dirs || "";
   const cfg_dirs = split_path_list(add_dirs_raw).map((d) => resolve(workspace, d));
@@ -275,7 +276,8 @@ export function with_codex_mcp_runtime_overrides(
   if (!enabled) return args;
   if (!is_codex_invocation(command, args)) return args;
   if (args.some((v) => /mcp_servers\./i.test(String(v || "")))) return args;
-  const cwd = resolve(config?.workspace_dir || process.cwd());
+  if (!config?.workspace_dir) throw new Error("workspace_dir is required in CLI permission config");
+  const cwd = resolve(config.workspace_dir);
   const runtime_allow = runtime_mcp_allowlist(runtime_policy?.mcp?.servers);
   const enable_all_project = typeof runtime_policy?.mcp?.enable_all_project === "boolean"
     ? runtime_policy.mcp.enable_all_project

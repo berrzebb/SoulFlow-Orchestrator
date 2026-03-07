@@ -15,7 +15,7 @@ import { DecisionService } from "./service.js";
 export class PromiseService {
   private readonly inner: DecisionService;
 
-  constructor(root = process.cwd(), promises_dir_override?: string) {
+  constructor(root: string, promises_dir_override?: string) {
     const dir = promises_dir_override || join(root, "runtime", "promises");
     this.inner = new DecisionService(root, dir);
   }

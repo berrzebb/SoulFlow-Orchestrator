@@ -58,6 +58,16 @@ class MockTaskRuntime {
     return null;
   }
 
+  async find_task_by_trigger_message(_provider: string, trigger_message_id: string): Promise<TaskState | null> {
+    for (const t of this.tasks.values()) {
+      const mem = t.memory as Record<string, unknown>;
+      if (String(mem.__trigger_message_id || "") === trigger_message_id) {
+        return { ...t };
+      }
+    }
+    return null;
+  }
+
   async resume_task(task_id: string, user_input?: string, reason?: string): Promise<TaskState | null> {
     const task = this.tasks.get(task_id);
     if (!task) return null;
@@ -254,6 +264,7 @@ describe("HITL 복합 워크플로우 E2E", () => {
             chat_id: "chat-1",
             objective: "추천곡 찾아서 재생",
             last_output: "다음 중 선택해주세요:\n1. Bohemian Rhapsody\n2. Hotel California\n3. Stairway to Heaven",
+            __trigger_message_id: "trigger-msg-1",
             __updated_at_seoul: new Date().toISOString(),
           },
         });
@@ -290,11 +301,11 @@ describe("HITL 복합 워크플로우 E2E", () => {
     expect(first_reply).toContain("선택");
     expect(first_reply).toContain("Bohemian Rhapsody");
 
-    // 2단계: 사용자 선택 입력 → TaskResumeService가 resume → orchestration에 resumed_task_id 전달
-    await harness.manager.handle_inbound_message(msg("2번"));
+    // 2단계: 사용자 선택 입력 (thread_id로 task 참조) → TaskResumeService가 resume → orchestration에 resumed_task_id 전달
+    await harness.manager.handle_inbound_message(msg("2번", { thread_id: "trigger-msg-1" }));
 
-    // 3개: (1) 첫 번째 응답 + (2) resume ACK "✅ 입력을 받았습니다" + (3) 두 번째 응답
-    expect(harness.dispatch.sent).toHaveLength(3);
+    // 2개: (1) 첫 번째 응답 + (2) 두 번째 응답 (ACK 없음)
+    expect(harness.dispatch.sent).toHaveLength(2);
     const second_reply = last_reply(harness.dispatch.sent);
     expect(second_reply).toContain("Hotel California");
     expect(second_reply).toContain("재생");
@@ -396,14 +407,15 @@ describe("HITL 복합 워크플로우 E2E", () => {
       memory: {
         channel: "telegram",
         chat_id: "chat-1",
+        __trigger_message_id: "trigger-failed-1",
         __updated_at_seoul: new Date().toISOString(),
       },
     });
 
-    await harness.manager.handle_inbound_message(msg("파일을 다시 첨부합니다, 재시도해주세요"));
+    await harness.manager.handle_inbound_message(msg("파일을 다시 첨부합니다, 재시도해주세요", { thread_id: "trigger-failed-1" }));
 
-    // 2개: (1) resume ACK "✅ 입력을 받았습니다" + (2) 완료 응답
-    expect(harness.dispatch.sent).toHaveLength(2);
+    // 1개: 완료 응답 (ACK 없음)
+    expect(harness.dispatch.sent).toHaveLength(1);
     expect(last_reply(harness.dispatch.sent)).toContain("완료");
     expect(harness.orchestration.calls[0]!.resumed_task_id).toBe("task:telegram:chat-1:failed");
   });

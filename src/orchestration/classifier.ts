@@ -85,7 +85,7 @@ export async function classify_execution_mode(
 }
 
 const RE_JSON_BLOCK = /\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/;
-const RE_MODE_WORD = /\b(?:once|task|agent|inquiry|phase)\b/;
+const RE_MODE_WORD = /\b(?:once|task|agent|inquiry|identity|phase)\b/;
 const RE_WHITESPACE_NORMALIZE = /[\s_-]+/g;
 const RE_NEED_TASK_LOOP = /NEED\s*TASK\s*LOOP/i;
 const RE_NEED_AGENT_LOOP = /NEED\s*AGENT\s*LOOP/i;
@@ -105,6 +105,7 @@ export function parse_execution_mode(raw: string): ClassificationResult | null {
         return null;
       }
       if (v === "inquiry") return { mode: "inquiry" };
+      if (v === "identity") return { mode: "identity" };
       if (v === "phase") {
         const wid = obj.workflow_id ? String(obj.workflow_id) : undefined;
         const nodes = Array.isArray(obj.nodes)
@@ -123,6 +124,7 @@ export function parse_execution_mode(raw: string): ClassificationResult | null {
   const word = text.toLowerCase().match(RE_MODE_WORD);
   if (word) {
     if (word[0] === "phase") return { mode: "phase" };
+    if (word[0] === "identity") return { mode: "identity" };
     return { mode: word[0] as "once" | "agent" | "task" | "inquiry" };
   }
   return null;

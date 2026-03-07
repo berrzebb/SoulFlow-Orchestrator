@@ -56,12 +56,15 @@ const PROVIDER_NOISE_PATTERNS: RegExp[] = [
 
 const PERSONA_LEAK_PATTERNS: RegExp[] = [
   /^<\s*\/?\s*instructions?\s*>$/i,
-  /^you are (?:codex|chatgpt|an ai assistant|a coding agent)\b/i,
+  /^you are (?:codex|chatgpt|claude|gemini|an ai assistant|a coding agent)\b/i,
   /^(?:developer|system)\s+(?:message|instruction|instructions)\b/i,
   /\b(?:agents|soul|heart|tools|user)\.md\b/i,
   /^(?:#\s*)?role:\s*/i,
   /^(?:#\s*)?(?:identity|mission|responsibilities|constraints|execution ethos|communication rules)\b/i,
   /\b(?:collaboration mode|approved command prefixes|sandbox_permissions)\b/i,
+  // 모델명 자기소개 라인 제거
+  /^(?:저는|나는)\s*(?:Codex|ChatGPT|GPT-?\d*|Claude|Gemini|AI\s*(?:코딩\s*)?(?:어시스턴트|에이전트|비서|도우미)|언어\s*모델)\b/i,
+  /^I\s*(?:am|'m)\s*(?:Codex|ChatGPT|GPT-?\d*|Claude|Gemini|an?\s*AI\s*(?:coding\s*)?(?:assistant|agent|helper)|a\s*language\s*model)\b/i,
 ];
 
 const SENSITIVE_COMMAND_PATTERNS: RegExp[] = [
@@ -231,6 +234,14 @@ export function sanitize_stream_chunk(raw: string): string {
 
 const RE_LEADING_MENTIONS = /^(\s*@[A-Za-z0-9._-]+\s*)+/;
 
+/** 모델명/AI 정체성 자기소개 패턴 — prose 첫 문장에서 제거. */
+const MODEL_IDENTITY_INTROS: RegExp[] = [
+  /^(?:안녕하세요[,!.\s]*)?(?:저는|나는)\s*(?:Codex|코덱스(?:\s*\(Codex\))?|ChatGPT|챗지피티|GPT-?\d*|Claude|클로드|Gemini|제미니|AI\s*(?:코딩\s*)?(?:어시스턴트|에이전트|비서|도우미)|언어\s*모델)[^.\n]*[.!]?\s*/i,
+  /^(?:hello[,!.\s]*)?i\s*(?:am|'m)\s*(?:Codex|ChatGPT|GPT-?\d*|Claude|Gemini|an?\s*AI\s*(?:coding\s*)?(?:assistant|agent|helper)|a\s*language\s*model)[^.\n]*[.!]?\s*/i,
+  /^(?:I\s*am|I'm)\s+(?:Codex|ChatGPT|Claude|Gemini)[^.\n]*[.!]?\s*/i,
+  /^(?:저는|나는)\s*(?:OpenAI|Anthropic|Google)\s*(?:에서|이|가)\s*(?:만든|개발한)[^.\n]*[.!]?\s*/i,
+];
+
 const MAX_REGEX_CACHE = 200;
 const normalize_regex_cache = new Map<string, { intro_ko: RegExp; intro_en: RegExp; sender: RegExp }>();
 
@@ -262,8 +273,11 @@ export function normalize_agent_reply(raw: string, alias: string, sender_id: str
   if (sender_id) {
     cleaned = cleaned.replace(re.sender, "").trim();
   }
+  for (const pattern of MODEL_IDENTITY_INTROS) {
+    cleaned = cleaned.replace(pattern, "").trim();
+  }
 
-  return cleaned || text || null;
+  return cleaned || null;
 }
 
 export const RE_PROVIDER_ERROR = /^Error calling ([A-Za-z0-9_-]+):\s*(.*)$/i;

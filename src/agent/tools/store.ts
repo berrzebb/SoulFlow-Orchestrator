@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, statSync, unlinkSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { with_sqlite } from "../../utils/sqlite-helper.js";
+import { with_sqlite, with_sqlite_strict } from "../../utils/sqlite-helper.js";
 import type { DynamicToolManifestEntry } from "./dynamic.js";
 
 type ToolRow = {
@@ -53,10 +53,19 @@ export interface DynamicToolStoreLike {
 export class SqliteDynamicToolStore implements DynamicToolStoreLike {
   readonly sqlite_path: string;
 
-  constructor(workspace = process.cwd(), sqlite_path_override?: string) {
+  constructor(workspace: string, sqlite_path_override?: string) {
     this.sqlite_path = resolve(String(sqlite_path_override || join(workspace, "runtime", "custom-tools", "tools.db")));
     mkdirSync(dirname(this.sqlite_path), { recursive: true });
+    this.remove_if_empty();
     this.ensure_initialized();
+  }
+
+  /** 0바이트 파일이 남아있으면 삭제 — 이전 초기화 실패의 잔해. */
+  private remove_if_empty(): void {
+    try {
+      const stat = statSync(this.sqlite_path);
+      if (stat.size === 0) unlinkSync(this.sqlite_path);
+    } catch { /* 파일 없음 — 정상 */ }
   }
 
   get_path(): string {
@@ -64,7 +73,7 @@ export class SqliteDynamicToolStore implements DynamicToolStoreLike {
   }
 
   private ensure_initialized(): void {
-    with_sqlite(this.sqlite_path,(db) => {
+    with_sqlite_strict(this.sqlite_path, (db) => {
       db.exec(`
         PRAGMA journal_mode=WAL;
         CREATE TABLE IF NOT EXISTS dynamic_tools (

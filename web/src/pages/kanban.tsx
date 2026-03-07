@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { api } from "../api/client";
+import { create_sse } from "../api/sse";
 import { useToast } from "../components/toast";
 import { Modal, FormModal } from "../components/modal";
 import { useT } from "../i18n";
@@ -22,6 +23,10 @@ interface Card {
 }
 interface Comment { comment_id: string; card_id: string; author: string; text: string; created_at: string }
 interface Relation { relation_id: string; source_card_id: string; target_card_id: string; type: string }
+interface Rule {
+  rule_id: string; board_id: string; trigger: string; condition: Record<string, unknown>;
+  action_type: string; action_params: Record<string, unknown>; enabled: boolean; created_at: string;
+}
 
 type ViewMode = "board" | "list";
 type Filter = "active" | "all" | "backlog" | "done";
@@ -35,6 +40,22 @@ const FILTER_I18N: Record<Filter, string> = {
   active: "kanban.filter_active", all: "kanban.filter_all",
   backlog: "kanban.filter_backlog", done: "kanban.filter_done",
 };
+
+/* ─── SSE 실시간 구독 ─── */
+
+function useKanbanSSE(board_id: string) {
+  const qc = useQueryClient();
+  useEffect(() => {
+    if (!board_id) return;
+    const sse = create_sse(`/api/kanban/boards/${encodeURIComponent(board_id)}/events`, {
+      activity: () => {
+        void qc.invalidateQueries({ queryKey: ["kanban-board", board_id] });
+        void qc.invalidateQueries({ queryKey: ["kanban-boards"] });
+      },
+    });
+    return () => sse.close();
+  }, [board_id, qc]);
+}
 
 /* ─── 헬퍼 ─── */
 
@@ -71,7 +92,11 @@ export default function KanbanPage() {
   const [selectedCard, setSelectedCard] = useState<string | null>(null);
   const [showBoardSelector, setShowBoardSelector] = useState(false);
   const [showCreateBoard, setShowCreateBoard] = useState(false);
+  const [showRules, setShowRules] = useState(false);
   const selectorRef = useRef<HTMLDivElement>(null);
+
+  /* SSE 실시간 구독 */
+  useKanbanSSE(board_id);
 
   const set_view = (v: ViewMode) => setParams((p) => { p.set("view", v); return p; }, { replace: true });
   const set_board = (id: string) => { setParams((p) => { p.set("board", id); return p; }, { replace: true }); setSelectedCard(null); };
@@ -250,6 +275,7 @@ export default function KanbanPage() {
             ))}
           </div>
           <input className="kanban-search" placeholder={t("kanban.search")} value={search} onChange={e => setSearch(e.target.value)} aria-label={t("kanban.search")} />
+          {board_id && <button className={`btn btn--sm ${showRules ? "btn--accent" : ""}`} onClick={() => setShowRules(!showRules)}>{t("kanban.rules")}</button>}
           <button className="btn btn--accent btn--sm" onClick={() => setShowCreateBoard(true)}>+ {t("kanban.new_board")}</button>
         </div>
       </div>
@@ -261,6 +287,9 @@ export default function KanbanPage() {
         confirmLabel={t("kanban.delete_board")}>
         <p>{deleteBoardTarget ? t("kanban.confirm_delete_board", { name: deleteBoardTarget.name }) : ""}</p>
       </Modal>
+
+      {/* Rules panel */}
+      {showRules && board_id && <RulesPanel board_id={board_id} onClose={() => setShowRules(false)} />}
 
       {/* Body */}
       <div className="kanban-body">
@@ -690,5 +719,122 @@ function CreateBoardModal({ open, onClose, onCreate }: {
       <input className="form-input" value={scopeId} onChange={e => setScopeId(e.target.value)}
         placeholder="e.g. my-workflow, #general" />
     </FormModal>
+  );
+}
+
+/* ═══ Rules Panel ═══ */
+
+const TRIGGER_OPTIONS = ["card_moved", "subtasks_done", "card_stale"] as const;
+const ACTION_TYPE_OPTIONS = ["move_card", "assign", "add_label", "comment", "run_workflow", "create_task"] as const;
+
+function RulesPanel({ board_id, onClose }: { board_id: string; onClose: () => void }) {
+  const t = useT();
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [showCreate, setShowCreate] = useState(false);
+
+  const { data: rules } = useQuery<Rule[]>({
+    queryKey: ["kanban-rules", board_id],
+    queryFn: () => api.get(`/api/kanban/boards/${encodeURIComponent(board_id)}/rules`),
+    enabled: !!board_id,
+  });
+
+  const toggle_rule = async (rule: Rule) => {
+    try {
+      await api.put(`/api/kanban/rules/${encodeURIComponent(rule.rule_id)}`, { enabled: !rule.enabled });
+      void qc.invalidateQueries({ queryKey: ["kanban-rules", board_id] });
+    } catch { toast(t("kanban.update_failed"), "err"); }
+  };
+
+  const delete_rule = async (rule_id: string) => {
+    try {
+      await api.del(`/api/kanban/rules/${encodeURIComponent(rule_id)}`);
+      void qc.invalidateQueries({ queryKey: ["kanban-rules", board_id] });
+      toast(t("kanban.rule_deleted"), "ok");
+    } catch { toast(t("kanban.delete_failed"), "err"); }
+  };
+
+  return (
+    <div className="kanban-rules">
+      <div className="kanban-rules__header">
+        <span className="kanban-rules__title">{t("kanban.rules")}</span>
+        <button className="btn btn--accent btn--sm" onClick={() => setShowCreate(true)}>+ {t("kanban.new_rule")}</button>
+        <button className="kanban-detail__close" onClick={onClose} aria-label={t("common.close")}>✕</button>
+      </div>
+      <div className="kanban-rules__list">
+        {(!rules || rules.length === 0) && <div className="kanban-rules__empty">{t("kanban.no_rules")}</div>}
+        {(rules ?? []).map(rule => (
+          <div key={rule.rule_id} className={`kanban-rules__item ${rule.enabled ? "" : "kanban-rules__item--disabled"}`}>
+            <label className="kanban-rules__toggle">
+              <input type="checkbox" checked={rule.enabled} onChange={() => toggle_rule(rule)} />
+            </label>
+            <div className="kanban-rules__info">
+              <span className="kanban-rules__trigger">{rule.trigger}</span>
+              <span className="kanban-rules__arrow">→</span>
+              <span className="kanban-rules__action">{rule.action_type}</span>
+              {Object.keys(rule.condition).length > 0 && (
+                <span className="kanban-rules__condition" title={JSON.stringify(rule.condition)}>
+                  {Object.entries(rule.condition).map(([k, v]) => `${k}=${v}`).join(", ")}
+                </span>
+              )}
+            </div>
+            <button className="kanban-rules__delete" onClick={() => delete_rule(rule.rule_id)} aria-label={t("kanban.delete_rule")}>✕</button>
+          </div>
+        ))}
+      </div>
+      {showCreate && <CreateRuleForm board_id={board_id} onClose={() => setShowCreate(false)} onCreated={() => {
+        setShowCreate(false);
+        void qc.invalidateQueries({ queryKey: ["kanban-rules", board_id] });
+      }} />}
+    </div>
+  );
+}
+
+function CreateRuleForm({ board_id, onClose, onCreated }: { board_id: string; onClose: () => void; onCreated: () => void }) {
+  const t = useT();
+  const { toast } = useToast();
+  const [trigger, setTrigger] = useState<string>("card_moved");
+  const [actionType, setActionType] = useState<string>("move_card");
+  const [conditionStr, setConditionStr] = useState("{}");
+  const [paramsStr, setParamsStr] = useState("{}");
+
+  const handle_submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    let condition: Record<string, unknown>;
+    let action_params: Record<string, unknown>;
+    try { condition = JSON.parse(conditionStr); } catch { toast(t("kanban.invalid_json"), "err"); return; }
+    try { action_params = JSON.parse(paramsStr); } catch { toast(t("kanban.invalid_json"), "err"); return; }
+    try {
+      await api.post(`/api/kanban/boards/${encodeURIComponent(board_id)}/rules`, { trigger, action_type: actionType, condition, action_params });
+      toast(t("kanban.rule_created"), "ok");
+      onCreated();
+    } catch { toast(t("kanban.create_failed"), "err"); }
+  };
+
+  return (
+    <form className="kanban-rules__form" onSubmit={handle_submit}>
+      <label className="form-label">{t("kanban.trigger")}</label>
+      <select className="form-input" value={trigger} onChange={e => setTrigger(e.target.value)}>
+        {TRIGGER_OPTIONS.map(tr => <option key={tr} value={tr}>{tr}</option>)}
+      </select>
+
+      <label className="form-label kanban-form__label--mt">{t("kanban.action_type")}</label>
+      <select className="form-input" value={actionType} onChange={e => setActionType(e.target.value)}>
+        {ACTION_TYPE_OPTIONS.map(a => <option key={a} value={a}>{a}</option>)}
+      </select>
+
+      <label className="form-label kanban-form__label--mt">{t("kanban.condition")}</label>
+      <textarea className="form-input kanban-rules__json" value={conditionStr} onChange={e => setConditionStr(e.target.value)}
+        placeholder='{"to_column": "done"}' />
+
+      <label className="form-label kanban-form__label--mt">{t("kanban.action_params")}</label>
+      <textarea className="form-input kanban-rules__json" value={paramsStr} onChange={e => setParamsStr(e.target.value)}
+        placeholder='{"column_id": "done"}' />
+
+      <div className="kanban-rules__form-actions">
+        <button type="submit" className="btn btn--accent btn--sm">{t("kanban.create_rule")}</button>
+        <button type="button" className="btn btn--sm" onClick={onClose}>{t("common.cancel")}</button>
+      </div>
+    </form>
   );
 }

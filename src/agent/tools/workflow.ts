@@ -5,7 +5,7 @@
 
 import { Tool } from "./base.js";
 import type { JsonSchema, ToolExecutionContext } from "./types.js";
-import type { DashboardWorkflowOps } from "../../dashboard/service.js";
+import type { DashboardWorkflowOps, DashboardAgentProviderOps } from "../../dashboard/service.js";
 import { normalize_workflow_definition, slugify } from "../../orchestration/workflow-loader.js";
 import { build_node_catalog } from "./workflow-catalog.js";
 import { select_nodes_for_request } from "../../orchestration/node-selector.js";
@@ -20,15 +20,16 @@ export class WorkflowTool extends Tool {
     "Create, list, run, get, update, delete workflow templates.\n" +
     "Use 'create' with a structured definition (title + phases/orche_nodes) to build a new workflow.\n" +
     "Use 'run' with a template name to execute, or with an inline definition.\n" +
-    "Use 'node_types' to discover available workflow node types and their schemas.";
+    "Use 'node_types' to discover available workflow node types and their schemas.\n" +
+    "Use 'models' to list available backends (providers) and their models — use these values for backend/model fields.";
 
   readonly parameters: JsonSchema = {
     type: "object",
     properties: {
       action: {
         type: "string",
-        enum: ["create", "list", "get", "run", "update", "delete", "export", "node_types"],
-        description: "Action to perform (node_types: show available node type catalog)",
+        enum: ["create", "list", "get", "run", "update", "delete", "export", "node_types", "models"],
+        description: "Action to perform (node_types: show available node type catalog, models: list backends and models)",
       },
       name: { type: "string", description: "Workflow template name or slug" },
       definition: {
@@ -50,11 +51,13 @@ export class WorkflowTool extends Tool {
   };
 
   private readonly ops: DashboardWorkflowOps;
+  private readonly provider_ops: DashboardAgentProviderOps | null;
   private catalog_cache: string | null = null;
 
-  constructor(ops: DashboardWorkflowOps) {
+  constructor(ops: DashboardWorkflowOps, provider_ops?: DashboardAgentProviderOps | null) {
     super();
     this.ops = ops;
+    this.provider_ops = provider_ops ?? null;
   }
 
   protected async run(params: Record<string, unknown>, context?: ToolExecutionContext): Promise<string> {
@@ -69,7 +72,8 @@ export class WorkflowTool extends Tool {
       case "delete": return this.handle_delete(params);
       case "export": return this.handle_export(params);
       case "node_types": return this.handle_node_types(params);
-      default: return `Error: unsupported action '${action}'. Use: create, list, get, run, update, delete, export, node_types`;
+      case "models": return this.handle_models();
+      default: return `Error: unsupported action '${action}'. Use: create, list, get, run, update, delete, export, node_types, models`;
     }
   }
 
@@ -175,6 +179,7 @@ export class WorkflowTool extends Tool {
       channel,
       chat_id,
       phases: def.phases,
+      nodes: def.nodes,
       orche_nodes: def.orche_nodes,
       field_mappings: def.field_mappings,
       hitl_channel: def.hitl_channel,
@@ -198,6 +203,45 @@ export class WorkflowTool extends Tool {
     const yaml = this.ops.export_template(name);
     if (!yaml) return `Error: template '${name}' not found`;
     return yaml;
+  }
+
+  /** 사용 가능한 backends(프로바이더)와 각 프로바이더의 모델 목록을 반환. */
+  private async handle_models(): Promise<string> {
+    if (!this.provider_ops) return JSON.stringify({ error: "provider_ops_unavailable", backends: [] });
+
+    const providers = await this.provider_ops.list();
+    const enabled = providers.filter((p) => p.enabled);
+
+    const results: Array<{
+      backend: string;
+      label: string;
+      provider_type: string;
+      available: boolean;
+      models: Array<{ id: string; name: string; purpose: string }>;
+    }> = [];
+
+    for (const p of enabled) {
+      let models: Array<{ id: string; name: string; purpose: string }> = [];
+      try {
+        // connection의 api_base를 우선 사용, 없으면 인스턴스 settings의 api_base
+        let api_base = typeof p.settings?.api_base === "string" ? p.settings.api_base : undefined;
+        if (p.connection_id) {
+          const conn = await this.provider_ops.get_connection(p.connection_id);
+          if (conn?.api_base) api_base = conn.api_base;
+        }
+        const raw = await this.provider_ops.list_models(p.provider_type, { api_base });
+        models = raw.map((m) => ({ id: m.id, name: m.name, purpose: m.purpose }));
+      } catch { /* skip if model fetch fails */ }
+      results.push({
+        backend: p.instance_id,
+        label: p.label,
+        provider_type: p.provider_type,
+        available: p.available,
+        models,
+      });
+    }
+
+    return JSON.stringify({ backends: results });
   }
 
   /** 노드 카탈로그 반환. 카테고리 지정 시 필터링된 카탈로그 생성. */

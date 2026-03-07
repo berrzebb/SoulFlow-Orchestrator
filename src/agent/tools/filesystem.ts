@@ -4,7 +4,7 @@ import { Tool } from "./base.js";
 import type { JsonSchema, ToolCategory, ToolExecutionContext, ToolPolicyFlags } from "./types.js";
 
 type FsToolOptions = {
-  workspace?: string;
+  workspace: string;
   allowed_dir?: string | null;
 };
 
@@ -12,8 +12,8 @@ function is_approved(params: Record<string, unknown>): boolean {
   return params.__approved === true || String(params.__approved || "").trim().toLowerCase() === "true";
 }
 
-function resolve_path(path: string, workspace?: string): string {
-  const base = workspace || process.cwd();
+function resolve_path(path: string, workspace: string): string {
+  const base = workspace;
   const raw = isAbsolute(path) ? path : join(base, path);
   return resolve(raw);
 }
@@ -41,7 +41,7 @@ function approval_required_for_path(original_path: string, resolved_path: string
 function resolve_path_with_approval(
   original_path: string,
   params: Record<string, unknown>,
-  workspace?: string,
+  workspace: string,
   allowed_dir?: string | null,
 ): { path: string | null; error?: string } {
   const resolved_path = resolve_path(original_path, workspace);
@@ -72,9 +72,9 @@ export class ReadFileTool extends Tool {
   private readonly workspace: string;
   private readonly allowed_dir: string | null;
 
-  constructor(options?: FsToolOptions) {
+  constructor(options: FsToolOptions) {
     super();
-    this.workspace = options?.workspace || process.cwd();
+    this.workspace = options.workspace;
     this.allowed_dir = options?.allowed_dir ?? null;
   }
 
@@ -107,9 +107,9 @@ export class WriteFileTool extends Tool {
   private readonly workspace: string;
   private readonly allowed_dir: string | null;
 
-  constructor(options?: FsToolOptions) {
+  constructor(options: FsToolOptions) {
     super();
-    this.workspace = options?.workspace || process.cwd();
+    this.workspace = options.workspace;
     this.allowed_dir = options?.allowed_dir ?? null;
   }
 
@@ -150,9 +150,9 @@ export class EditFileTool extends Tool {
   private readonly workspace: string;
   private readonly allowed_dir: string | null;
 
-  constructor(options?: FsToolOptions) {
+  constructor(options: FsToolOptions) {
     super();
-    this.workspace = options?.workspace || process.cwd();
+    this.workspace = options.workspace;
     this.allowed_dir = options?.allowed_dir ?? null;
   }
 
@@ -193,9 +193,9 @@ export class ListDirTool extends Tool {
   private readonly workspace: string;
   private readonly allowed_dir: string | null;
 
-  constructor(options?: FsToolOptions) {
+  constructor(options: FsToolOptions) {
     super();
-    this.workspace = options?.workspace || process.cwd();
+    this.workspace = options.workspace;
     this.allowed_dir = options?.allowed_dir ?? null;
   }
 
@@ -267,9 +267,9 @@ export class SearchFilesTool extends Tool {
   private readonly workspace: string;
   private readonly allowed_dir: string | null;
 
-  constructor(options?: FsToolOptions) {
+  constructor(options: FsToolOptions) {
     super();
-    this.workspace = options?.workspace || process.cwd();
+    this.workspace = options.workspace;
     this.allowed_dir = options?.allowed_dir ?? null;
   }
 

@@ -42,7 +42,7 @@ export class HeartbeatService implements ServiceLike {
   private _loop_abort: AbortController | null = null;
   private _loop_task: Promise<void> | null = null;
 
-  constructor(workspace = process.cwd(), options?: HeartbeatServiceOptions) {
+  constructor(workspace: string, options?: HeartbeatServiceOptions) {
     this.workspace = workspace;
     this.heartbeat_file = join(workspace, "HEARTBEAT.md");
     this.on_heartbeat = options?.on_heartbeat ?? null;

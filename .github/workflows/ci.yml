@@ -1,0 +1,107 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test & Coverage
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test with coverage
+        run: npm run test:coverage 2>&1 | tee test-output.txt
+
+      - name: Upload coverage artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: |
+            coverage/
+            test-output.txt
+          retention-days: 14
+
+      - name: Coverage summary
+        if: always()
+        run: |
+          node -e "
+            const s = require('./coverage/coverage-summary.json').total;
+            const fmt = (v) => v.pct.toFixed(1) + '%';
+            console.log('| Metric | Coverage |');
+            console.log('|--------|----------|');
+            console.log('| Lines | ' + fmt(s.lines) + ' |');
+            console.log('| Statements | ' + fmt(s.statements) + ' |');
+            console.log('| Functions | ' + fmt(s.functions) + ' |');
+            console.log('| Branches | ' + fmt(s.branches) + ' |');
+          " >> "$GITHUB_STEP_SUMMARY"
+
+  coverage-badge:
+    name: Update Coverage Badge
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: coverage-report
+          path: .artifact/
+
+      - name: Generate badge JSONs
+        run: |
+          # Coverage badge
+          PCT=$(node -e "console.log(require('./.artifact/coverage/coverage-summary.json').total.lines.pct)")
+          if (( $(echo "$PCT >= 80" | bc -l) )); then COLOR="brightgreen"
+          elif (( $(echo "$PCT >= 60" | bc -l) )); then COLOR="green"
+          elif (( $(echo "$PCT >= 40" | bc -l) )); then COLOR="yellow"
+          else COLOR="red"; fi
+          mkdir -p .badges
+          echo "{\"schemaVersion\":1,\"label\":\"coverage\",\"message\":\"${PCT}%\",\"color\":\"${COLOR}\"}" > .badges/coverage.json
+
+          # Lines of code badge (src only, exclude generated/locales)
+          LOC=$(find src -name '*.ts' -not -path '*/locales/*' -not -name '*.d.ts' | xargs wc -l | tail -1 | awk '{print $1}')
+          if [ "$LOC" -ge 1000 ]; then
+            LOC_LABEL=$(echo "scale=1; $LOC / 1000" | bc)"k"
+          else
+            LOC_LABEL="$LOC"
+          fi
+          echo "{\"schemaVersion\":1,\"label\":\"lines of code\",\"message\":\"${LOC_LABEL}\",\"color\":\"blue\"}" > .badges/loc.json
+
+          # Test count badge
+          TEST_COUNT=$(grep -oP '\d+ passed' .artifact/test-output.txt 2>/dev/null | tail -1 | grep -oP '\d+' || echo "?")
+          echo "{\"schemaVersion\":1,\"label\":\"tests\",\"message\":\"${TEST_COUNT} passed\",\"color\":\"brightgreen\"}" > .badges/tests.json
+
+      - name: Deploy badge to gh-pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: .badges
+          destination_dir: badges
+          keep_files: true
+          publish_branch: gh-pages

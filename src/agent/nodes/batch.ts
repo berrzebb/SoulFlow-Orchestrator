@@ -63,7 +63,7 @@ export const batch_handler: NodeHandler = {
           const result = await runner.execute_node(body_node as OrcheNodeDefinition, {
             memory: item_memory,
             abort_signal: runner.options.abort_signal,
-            workspace: undefined,
+            workspace: runner.options.workspace,
           });
           return { idx, output: result.output, error: null };
         } catch (err) {

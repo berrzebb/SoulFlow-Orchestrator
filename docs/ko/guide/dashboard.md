@@ -116,11 +116,23 @@ Slack/Telegram 없이 웹에서 에이전트와 직접 대화합니다.
 - **미디어 프리뷰**: 첨부파일 인라인 렌더링
 - **에이전트 선택**: 설정된 에이전트 간 전환
 
-## Providers 페이지 주요 기능
+## Providers 페이지
 
-에이전트 백엔드를 추가/수정/삭제하고 연결을 테스트합니다.
+2단계 구조로 에이전트 백엔드를 관리합니다: **Connections** (공유 API 베이스/인증)과 **Provider Instances** (모델별 설정).
 
-1. **Add** — 새 프로바이더 추가 (타입, 토큰, 우선순위, 지원 모드 설정)
+### Connections
+
+Connection은 공유 API 엔드포인트를 나타냅니다 (예: 하나의 OpenRouter 계정). 여러 프로바이더 인스턴스가 하나의 Connection을 공유할 수 있습니다.
+
+1. **Add** — 새 Connection 추가 (프로바이더 타입, 레이블, API 베이스 URL)
+2. **Edit** — Connection 설정 수정
+3. **Remove** — Connection 삭제 (연결된 프로바이더에 전파)
+
+### Provider Instances
+
+각 인스턴스는 Connection 내 특정 모델을 설정합니다.
+
+1. **Add** — 새 프로바이더 추가 (Connection, 모델, 우선순위, 용도, 지원 모드)
 2. **Edit** — 기존 프로바이더 설정 수정
 3. **Test** — 실제 API 호출로 연결 확인
 4. **Remove** — 프로바이더 삭제
@@ -318,6 +330,27 @@ Critic이 승인을 거절하면 per-critic 설정에 따라 동작합니다:
 | `POST /api/workflows/:id/phases/:pid/agents/:aid/messages` | 에이전트에 메시지 전송 |
 | `POST /api/workflows/:id/phases/:pid/agents/:aid/retry` | 에이전트 재실행 |
 | `POST /api/workflows/:id/phases/:pid/critic/messages` | critic에 메시지 전송 |
+
+## Kanban 페이지
+
+드래그앤드롭 칸반 보드로 태스크를 관리하고, 자동화 규칙을 설정합니다.
+
+- **보드 관리** — 커스텀 컬럼 레이아웃으로 보드 생성/삭제
+- **카드 관리** — 카드 생성, 이동, 아카이브 (드래그앤드롭)
+- **실시간 동기화** — SSE 기반 모든 연결된 클라이언트에 실시간 업데이트
+- **자동화 규칙** — 카드 이벤트에 따른 자동 액션 (예: "In Progress"로 이동 시 태스크 자동 생성)
+- **보기 모드** — 보드 뷰 (컬럼) 또는 리스트 뷰 (테이블)
+- **필터** — 활성 / 전체 / 백로그 / 완료
+
+### 자동화 규칙
+
+칸반 이벤트 기반으로 워크플로우 실행이나 태스크 생성을 트리거할 수 있습니다:
+
+| 트리거 | 설명 |
+|--------|------|
+| `card_moved` | 카드가 특정 컬럼으로 이동 |
+| `subtasks_done` | 카드의 모든 서브태스크 완료 |
+| `card_stale` | 설정된 기간 동안 카드 미갱신 |
 
 ## Secrets 페이지
 

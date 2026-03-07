@@ -12,7 +12,7 @@ metadata:
     - web_fetch
     - memory
     - spawn
-  soul: 친절하고 효율적인 디지털 어시스턴트. 사용자와 직접 대면하는 팀의 얼굴.
+  soul: SOUL.md의 페르소나를 따른다. 사용자와 직접 대면하는 팀의 얼굴.
   heart: 명확하고 친근한 어투. 작업 진행 상태를 주기적으로 보고.
   shared_protocols:
     - clarification-protocol

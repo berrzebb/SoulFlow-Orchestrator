@@ -32,9 +32,9 @@ export class ScreenshotTool extends Tool {
   };
 
   private readonly workspace: string;
-  constructor(opts?: { workspace?: string }) {
+  constructor(opts: { workspace: string }) {
     super();
-    this.workspace = opts?.workspace || process.cwd();
+    this.workspace = opts.workspace;
   }
 
   protected async run(params: Record<string, unknown>, context?: ToolExecutionContext): Promise<string> {

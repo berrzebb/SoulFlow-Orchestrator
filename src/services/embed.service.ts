@@ -75,29 +75,22 @@ export function create_embed_service(deps: EmbedServiceDeps) {
   };
 }
 
-/**
- * Ollama 또는 OpenRouter 중 사용 가능한 쪽으로 embed service 생성.
- * Ollama가 설정되어 있으면 우선 사용 (로컬, 무료, 빠름).
- */
-export function create_embed_service_auto(opts: {
-  openrouter_api_key: () => Promise<string | null>;
-  openrouter_api_base?: string;
-  ollama_api_base?: string;
-  ollama_embed_model?: string;
-}) {
-  // Ollama가 설정되어 있으면 우선 사용
-  if (opts.ollama_api_base) {
-    return create_embed_service({
-      get_api_key: async () => null,
-      api_base: opts.ollama_api_base,
-      skip_auth: true,
-      default_model: opts.ollama_embed_model || "nomic-embed-text",
-    });
-  }
+/** 등록된 프로바이더 인스턴스 정보로 embed service 생성. */
+export interface EmbedFromProviderOpts {
+  provider_type: string;
+  model?: string;
+  api_base?: string;
+  get_api_key: () => Promise<string | null>;
+}
 
-  // 폴백: OpenRouter
+const SKIP_AUTH_PROVIDERS = new Set(["ollama", "orchestrator_llm"]);
+
+export function create_embed_service_from_provider(opts: EmbedFromProviderOpts) {
+  const skip_auth = SKIP_AUTH_PROVIDERS.has(opts.provider_type);
   return create_embed_service({
-    get_api_key: opts.openrouter_api_key,
-    api_base: opts.openrouter_api_base,
+    get_api_key: opts.get_api_key,
+    api_base: opts.api_base,
+    skip_auth,
+    default_model: opts.model || DEFAULT_MODEL,
   });
 }

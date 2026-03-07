@@ -7,6 +7,7 @@ export type ExecutionMode = "once" | "agent" | "task" | "phase";
 export type ClassificationResult =
   | { mode: ExecutionMode; tools?: string[] }
   | { mode: "inquiry" }
+  | { mode: "identity" }
   | { mode: "builtin"; command: string; args?: string }
   | { mode: "phase"; workflow_id?: string; nodes?: string[] };
 
@@ -30,6 +31,10 @@ export type OrchestrationRequest = {
   run_id?: string;
   /** PTY HITL: 사용자 입력 전송 콜백 등록. */
   register_send_input?: (cb: (text: string) => void) => void;
+  /** Task 최대 턴 수 (create_task에서 전달). */
+  max_turns?: number;
+  /** Task 초기 메모리 (create_task에서 전달). */
+  initial_memory?: Record<string, unknown>;
 };
 
 /** 결과에 포함되는 토큰/비용 요약. */

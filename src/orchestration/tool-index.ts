@@ -215,16 +215,23 @@ export class ToolIndex {
     const db = new Database(this.db_path);
     try {
       db.pragma("journal_mode=WAL");
-      // 마이그레이션: 구 스키마에서 content 테이블이 tools_fts_content(사용자 정의)였던 경우 정리.
-      // FTS5 shadow 테이블(tools_fts가 자동 생성)과 구분: tool_docs가 없으면 구 스키마.
+      // 마이그레이션: 구 스키마 또는 손상된 FTS5 shadow 테이블 정리.
+      // tool_docs가 없으면 구 스키마 → 전체 정리 후 재생성.
+      // tool_docs가 있더라도 FTS5 shadow 테이블이 손상되었으면 FTS만 재생성.
       const has_tool_docs = db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='tool_docs'").get();
       if (!has_tool_docs) {
-        db.exec("DROP TABLE IF EXISTS tools_fts");
-        db.exec("DROP TABLE IF EXISTS tools_fts_content");
-        db.exec("DROP TABLE IF EXISTS tools_fts_data");
-        db.exec("DROP TABLE IF EXISTS tools_fts_idx");
-        db.exec("DROP TABLE IF EXISTS tools_fts_docsize");
-        db.exec("DROP TABLE IF EXISTS tools_fts_config");
+        for (const t of ["tools_fts", "tools_fts_content", "tools_fts_data", "tools_fts_idx", "tools_fts_docsize", "tools_fts_config"]) {
+          db.exec(`DROP TABLE IF EXISTS ${t}`);
+        }
+      } else {
+        // FTS5 무결성 검사 — shadow 테이블 손상 시 재생성
+        try {
+          db.prepare("SELECT 1 FROM tools_fts LIMIT 0").run();
+        } catch {
+          for (const t of ["tools_fts", "tools_fts_content", "tools_fts_data", "tools_fts_idx", "tools_fts_docsize", "tools_fts_config"]) {
+            db.exec(`DROP TABLE IF EXISTS ${t}`);
+          }
+        }
       }
       db.exec(INIT_SQL);
 
@@ -233,9 +240,16 @@ export class ToolIndex {
       db.exec(`CREATE VIRTUAL TABLE IF NOT EXISTS tools_vec USING vec0(embedding float[${VEC_DIMENSIONS}])`);
 
       // 기존 데이터 삭제 후 재삽입
+      // FTS5 external content 모드에서는 DELETE가 shadow 테이블 접근 오류를 유발하므로 DROP+CREATE
       db.exec("DELETE FROM tools");
       db.exec("DELETE FROM tool_docs");
-      db.exec("DELETE FROM tools_fts");
+      db.exec("DROP TABLE IF EXISTS tools_fts");
+      db.exec(`CREATE VIRTUAL TABLE IF NOT EXISTS tools_fts USING fts5(
+        name, description, tags,
+        content='tool_docs',
+        content_rowid='rowid',
+        tokenize='unicode61 remove_diacritics 2'
+      )`);
       db.exec("DELETE FROM tools_vec");
 
       const insert_tool = db.prepare(
@@ -284,8 +298,15 @@ export class ToolIndex {
     const max = opts?.max_tools ?? 30;
     const selected = new Set<string>();
 
-    const db = new Database(this.db_path, { readonly: true });
+    // DB 또는 테이블이 손상/누락된 경우 빈 셋 반환 (다음 build()에서 복구됨)
+    let db: InstanceType<typeof Database> | null = null;
     try {
+      db = new Database(this.db_path, { readonly: true });
+
+      // 스키마 무결성 확인: tools 테이블이 없으면 빈 셋 반환
+      const has_tools = db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='tools'").get();
+      if (!has_tools) return selected;
+
       // 1) Core 도구 항상 포함
       const core_rows = db.prepare("SELECT name FROM tools WHERE core = 1").all() as { name: string }[];
       for (const r of core_rows) selected.add(r.name);
@@ -333,8 +354,11 @@ export class ToolIndex {
           selected.add(r.name);
         }
       }
+    } catch {
+      // DB 파일 손상, 테이블 누락 등 — 빈 셋 반환, 다음 build()에서 복구
+      return selected;
     } finally {
-      db.close();
+      db?.close();
     }
 
     // 5) 벡터 시멘틱 보강 — FTS5 결과가 부족할 때 벡터 KNN으로 추가
@@ -484,10 +508,3 @@ function simple_hash(s: string): string {
   return (h >>> 0).toString(16);
 }
 
-/** 싱글톤 인덱스 인스턴스. */
-let _instance: ToolIndex | null = null;
-
-export function get_tool_index(): ToolIndex {
-  if (!_instance) _instance = new ToolIndex();
-  return _instance;
-}

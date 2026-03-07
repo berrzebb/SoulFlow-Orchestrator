@@ -21,3 +21,4 @@ export { GuardHandler } from "./guard.handler.js";
 export { WorkflowHandler, type WorkflowAccess } from "./workflow.handler.js";
 export { ModelHandler, type ModelAccess } from "./model.handler.js";
 export { McpHandler, type McpAccess } from "./mcp.handler.js";
+export { ToneHandler } from "./tone.handler.js";

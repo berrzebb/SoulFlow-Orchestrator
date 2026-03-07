@@ -21,12 +21,13 @@ import type { InboundMessage } from "@src/bus/types.js";
 let cleanup_dirs: string[] = [];
 const noop_logger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {}, child: () => noop_logger } as never;
 
-function make_message(content: string, chat_id = "chat-1", provider = "telegram"): InboundMessage {
+function make_message(content: string, chat_id = "chat-1", provider = "telegram", thread_id?: string): InboundMessage {
   return {
     id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
     provider, channel: provider,
     sender_id: "user-1", chat_id, content,
     at: new Date().toISOString(), metadata: {},
+    ...(thread_id ? { thread_id } : {}),
   };
 }
 
@@ -45,6 +46,8 @@ function make_runtime(loop_store: AgentLoopStore, task_store: TaskStore) {
   return {
     find_waiting_task: async (provider: string, chat_id: string) =>
       task_store.find_waiting_by_chat(provider, chat_id),
+    find_task_by_trigger_message: async (provider: string, trigger_message_id: string) =>
+      task_store.find_by_trigger_message_id(provider, trigger_message_id),
     resume_task: async (task_id: string, user_input?: string, reason?: string) =>
       loop_store.resume_task(task_id, user_input, reason),
     get_task: async (task_id: string) => loop_store.get_task(task_id),
@@ -55,6 +58,8 @@ function make_runtime(loop_store: AgentLoopStore, task_store: TaskStore) {
       loop_store.list_tasks().filter((t) => t.status !== "completed" && t.status !== "cancelled"),
   } as unknown as import("@src/agent/runtime.types.js").AgentRuntimeLike;
 }
+
+const DEFAULT_TRIGGER_MSG = "trigger-msg-1";
 
 /** 실제 task state를 직접 삽입 (에이전트 실행 없이 상태 시뮬레이션) */
 async function insert_task(task_store: TaskStore, patch?: Partial<TaskState>): Promise<TaskState> {
@@ -71,6 +76,7 @@ async function insert_task(task_store: TaskStore, patch?: Partial<TaskState>): P
       objective: "test objective",
       channel: "telegram",
       chat_id: "chat-1",
+      __trigger_message_id: DEFAULT_TRIGGER_MSG,
       __updated_at_seoul: new Date().toISOString(),
     },
     ...patch,
@@ -96,7 +102,7 @@ describe("TaskResumeService 통합 (실제 SQLite)", () => {
     const runtime = make_runtime(loop_store, task_store);
     const service = new TaskResumeService({ agent_runtime: runtime, logger: noop_logger });
 
-    const result = await service.try_resume("telegram", make_message("3번"));
+    const result = await service.try_resume("telegram", make_message("3번", "chat-1", "telegram", DEFAULT_TRIGGER_MSG));
     expect(result).not.toBeNull();
     expect(result!.resumed).toBe(true);
     expect(result!.task_id).toBe(task.taskId);
@@ -124,7 +130,7 @@ describe("TaskResumeService 통합 (실제 SQLite)", () => {
     const runtime = make_runtime(loop2, store2);
     const service = new TaskResumeService({ agent_runtime: runtime, logger: noop_logger });
 
-    const result = await service.try_resume("telegram", make_message("재시작 후 입력"));
+    const result = await service.try_resume("telegram", make_message("재시작 후 입력", "chat-1", "telegram", DEFAULT_TRIGGER_MSG));
     expect(result).not.toBeNull();
     expect(result!.resumed).toBe(true);
 
@@ -144,7 +150,7 @@ describe("TaskResumeService 통합 (실제 SQLite)", () => {
 
     // 3번 resume — 각각 running으로 전이 후 다시 waiting으로 되돌림
     for (let i = 0; i < 3; i++) {
-      const r = await service.try_resume("telegram", make_message(`입력-${i}`));
+      const r = await service.try_resume("telegram", make_message(`입력-${i}`, "chat-1", "telegram", DEFAULT_TRIGGER_MSG));
       expect(r?.resumed).toBe(true);
       // 다시 waiting 상태로 (실제로는 에이전트가 waiting으로 전이시킴)
       const current = loop_store.get_task(task.taskId)!;
@@ -160,7 +166,7 @@ describe("TaskResumeService 통합 (실제 SQLite)", () => {
     const runtime2 = make_runtime(loop2, task_store);
     const service2 = new TaskResumeService({ agent_runtime: runtime2, logger: noop_logger });
 
-    const result = await service2.try_resume("telegram", make_message("4번째"));
+    const result = await service2.try_resume("telegram", make_message("4번째", "chat-1", "telegram", DEFAULT_TRIGGER_MSG));
     // resume_task가 cancelled 상태를 반환 → TaskResumeService는 null 반환
     expect(result).toBeNull();
 
@@ -194,12 +200,13 @@ describe("TaskResumeService 통합 (실제 SQLite)", () => {
     expect(result).toBeNull();
   });
 
-  it("failed Task은 TTL 이내이면 retry_with_enrichment로 resume", async () => {
+  it("failed Task은 TTL 이내이고 reference가 있으면 retry_with_enrichment로 resume", async () => {
     const { task_store, loop_store } = await make_env();
     await insert_task(task_store, {
       status: "failed",
       memory: {
         channel: "telegram", chat_id: "chat-1",
+        __trigger_message_id: DEFAULT_TRIGGER_MSG,
         __updated_at_seoul: new Date().toISOString(),
       },
     });
@@ -208,7 +215,7 @@ describe("TaskResumeService 통합 (실제 SQLite)", () => {
     const runtime = make_runtime(loop_store, task_store);
     const service = new TaskResumeService({ agent_runtime: runtime, logger: noop_logger });
 
-    const result = await service.try_resume("telegram", make_message("재시도 데이터"));
+    const result = await service.try_resume("telegram", make_message("재시도 데이터", "chat-1", "telegram", DEFAULT_TRIGGER_MSG));
     expect(result).not.toBeNull();
     expect(result!.previous_status).toBe("failed");
   });
@@ -219,6 +226,7 @@ describe("TaskResumeService 통합 (실제 SQLite)", () => {
       status: "failed",
       memory: {
         channel: "telegram", chat_id: "chat-1",
+        __trigger_message_id: DEFAULT_TRIGGER_MSG,
         __updated_at_seoul: new Date(Date.now() - 31 * 60_000).toISOString(),
       },
     });
@@ -227,7 +235,7 @@ describe("TaskResumeService 통합 (실제 SQLite)", () => {
     const runtime = make_runtime(loop_store, task_store);
     const service = new TaskResumeService({ agent_runtime: runtime, logger: noop_logger });
 
-    const result = await service.try_resume("telegram", make_message("늦은 재시도"));
+    const result = await service.try_resume("telegram", make_message("늦은 재시도", "chat-1", "telegram", DEFAULT_TRIGGER_MSG));
     expect(result).toBeNull();
   });
 
@@ -241,8 +249,8 @@ describe("TaskResumeService 통합 (실제 SQLite)", () => {
 
     // 동시에 2개 resume 시도
     const [r1, r2] = await Promise.all([
-      service.try_resume("telegram", make_message("first")),
-      service.try_resume("telegram", make_message("second")),
+      service.try_resume("telegram", make_message("first", "chat-1", "telegram", DEFAULT_TRIGGER_MSG)),
+      service.try_resume("telegram", make_message("second", "chat-1", "telegram", DEFAULT_TRIGGER_MSG)),
     ]);
 
     // 하나만 성공, 나머지는 이미 running 상태

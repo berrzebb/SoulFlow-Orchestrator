@@ -216,6 +216,45 @@ textarea.input {
   background: color-mix(in srgb, var(--accent) 20%, transparent);
 }
 
+/* ===== Provider Tabs ===== */
+.provider-tabs {
+  display: flex;
+  gap: 0;
+  margin-bottom: var(--sp-4);
+  border-bottom: 1px solid var(--border);
+}
+.provider-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+.provider-tab:hover { color: var(--text); border-bottom-color: color-mix(in srgb, var(--accent) 40%, transparent); }
+.provider-tab--active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+.provider-tab__count {
+  font-size: 0.7rem;
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  border-radius: 8px;
+  padding: 1px 6px;
+  min-width: 18px;
+  text-align: center;
+}
+.provider-tab--active .provider-tab__count {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
 /* ===== Provider Section ===== */
 .provider-section { margin-bottom: var(--sp-4); }
 .provider-section__title {
@@ -259,6 +298,64 @@ textarea.input {
   font-size: var(--fs-xs);
 }
 .model-cost-info__item { display: inline-flex; gap: 4px; }
+
+/* ===== Combobox ===== */
+.combobox { position: relative; }
+.combobox__input { padding-right: 28px !important; }
+.combobox__clear {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 16px;
+  cursor: pointer;
+  line-height: 1;
+  padding: 2px;
+}
+.combobox__clear:hover { color: var(--text); }
+.combobox__list {
+  position: absolute;
+  z-index: 50;
+  top: 100%;
+  left: 0;
+  right: 0;
+  max-height: 260px;
+  overflow-y: auto;
+  margin: 2px 0 0;
+  padding: 4px 0;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  box-shadow: 0 4px 16px rgba(0,0,0,.18);
+  list-style: none;
+}
+.combobox__item {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 10px;
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+.combobox__item--hint {
+  color: var(--muted);
+  cursor: default;
+  font-style: italic;
+}
+.combobox__item--focus,
+.combobox__item:hover:not(.combobox__item--hint) {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.combobox__item--selected {
+  font-weight: 600;
+  color: var(--accent);
+}
+.combobox__item-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.combobox__item-detail { flex-shrink: 0; font-size: var(--fs-xs); color: var(--muted); white-space: nowrap; }
 
 /* ===== 모션 감소 접근성 ===== */
 @media (prefers-reduced-motion: reduce) {

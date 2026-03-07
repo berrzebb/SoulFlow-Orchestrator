@@ -24,26 +24,15 @@ export class SendFileTool extends Tool {
   };
 
   private send_callback: SendFileCallback | null;
-  private default_channel: string;
-  private default_chat_id: string;
   private readonly workspace_dir: string;
 
-  constructor(args?: {
+  constructor(args: {
     send_callback?: SendFileCallback | null;
-    default_channel?: string;
-    default_chat_id?: string;
-    workspace?: string;
+    workspace: string;
   }) {
     super();
-    this.send_callback = args?.send_callback || null;
-    this.default_channel = args?.default_channel || "";
-    this.default_chat_id = args?.default_chat_id || "";
-    this.workspace_dir = args?.workspace || process.cwd();
-  }
-
-  set_context(channel: string, chat_id: string): void {
-    this.default_channel = channel;
-    this.default_chat_id = chat_id;
+    this.send_callback = args.send_callback || null;
+    this.workspace_dir = args.workspace;
   }
 
   set_send_callback(callback: SendFileCallback): void {
@@ -53,8 +42,8 @@ export class SendFileTool extends Tool {
   protected async run(params: Record<string, unknown>, _context?: ToolExecutionContext): Promise<string> {
     if (!this.send_callback) return "Error: send callback is not configured";
     const context = _context || {};
-    const channel = String(context.channel || this.default_channel || "");
-    const chat_id = String(context.chat_id || this.default_chat_id || "");
+    const channel = String(context.channel || "");
+    const chat_id = String(context.chat_id || "");
     if (!channel || !chat_id) return "Error: channel and chat_id are required";
 
     const file_path = String(params.file_path || "").trim();

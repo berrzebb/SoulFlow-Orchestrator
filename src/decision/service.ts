@@ -46,7 +46,7 @@ function similarity(a: string, b: string): number {
 export class DecisionService {
   readonly store: DecisionStore;
 
-  constructor(root = process.cwd(), decisions_dir_override?: string) {
+  constructor(root: string, decisions_dir_override?: string) {
     this.store = new DecisionStore(root, decisions_dir_override);
   }
 

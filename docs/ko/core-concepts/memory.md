@@ -64,6 +64,28 @@ action=search              → 키워드로 과거 기억 검색
 3. `memory_update`로 장기 기억을 갱신
 4. `history_entry`로 일별 기록에 요약 추가
 
+### 설정
+
+대시보드 → **Settings** → `memory.consolidation`에서 설정합니다:
+
+| 설정 | 기본값 | 설명 |
+|------|--------|------|
+| `enabled` | `true` | 자동 압축 활성화/비활성화 |
+| `trigger` | `idle` | 트리거 모드: `idle` (세션 비활성 후) 또는 `cron` (주기적) |
+| `idleAfterMs` | 1800000 | idle 트리거: 마지막 활동 후 대기 시간 (ms) |
+| `intervalMs` | 86400000 | cron 트리거: 압축 주기 (ms, 기본 24시간) |
+| `windowDays` | 7 | 분석 대상 daily memory 윈도우 (일) |
+| `archiveUsed` | `false` | 압축 후 사용된 daily 엔트리 삭제 여부 |
+
+### Daily Memory 자동 주입
+
+최근 daily memory를 시스템 프롬프트에 자동 주입할 수 있습니다:
+
+| 설정 | 기본값 | 설명 |
+|------|--------|------|
+| `dailyInjectionDays` | `3` | 주입할 최근 일수 (0 = 비활성) |
+| `dailyInjectionMaxChars` | `4000` | 최대 주입 글자 수 |
+
 ## 민감정보 처리
 
 메모리 저장 전 자동으로 민감정보를 마스킹합니다. 실제 토큰/패스워드는 메모리에 기록되지 않습니다.

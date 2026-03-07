@@ -162,6 +162,13 @@ const DESCRIPTORS: readonly CommandDescriptor[] = [
       { name: "reconnect", usage: "<name>" },
     ],
   }),
+  cmd("tone", {
+    subcommands: [
+      { name: "status" },
+      { name: "reset" },
+    ],
+    usage: "<formal|casual|반말|짧게|...>",
+  }),
 ] as const;
 
 /** 등록된 모든 커맨드의 메타데이터를 반환. */

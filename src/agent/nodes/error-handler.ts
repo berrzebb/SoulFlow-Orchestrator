@@ -39,7 +39,7 @@ export const error_handler_handler: NodeHandler = {
         const result = await runner.execute_node(target as OrcheNodeDefinition, {
           memory: runner.state.memory,
           abort_signal: runner.options.abort_signal,
-          workspace: undefined,
+          workspace: runner.options.workspace,
         });
         runner.state.memory[node_id] = result.output;
         last_output = result.output;
@@ -95,7 +95,7 @@ async function run_fallback(
       const result = await runner.execute_node(fb_node as OrcheNodeDefinition, {
         memory: { ...runner.state.memory, _error: { node_id: error_node_id, message: error_msg } },
         abort_signal: runner.options.abort_signal,
-        workspace: undefined,
+        workspace: runner.options.workspace,
       });
       runner.state.memory[fb_id] = result.output;
       fallback_output = result.output;

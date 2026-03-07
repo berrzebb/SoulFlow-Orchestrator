@@ -42,33 +42,18 @@ export class MessageTool extends Tool {
   };
   private send_callback: MessageSendCallback | null;
   private event_recorder: MessageEventRecordCallback | null;
-  private default_channel: string;
-  private default_chat_id: string;
-  private default_reply_to: string | null;
   private readonly workspace_dir: string;
   private sent_in_turn = false;
 
-  constructor(args?: {
+  constructor(args: {
     send_callback?: MessageSendCallback | null;
     event_recorder?: MessageEventRecordCallback | null;
-    default_channel?: string;
-    default_chat_id?: string;
-    default_reply_to?: string | null;
-    workspace?: string;
+    workspace: string;
   }) {
     super();
-    this.send_callback = args?.send_callback || null;
-    this.event_recorder = args?.event_recorder || null;
-    this.default_channel = args?.default_channel || "";
-    this.default_chat_id = args?.default_chat_id || "";
-    this.default_reply_to = args?.default_reply_to || null;
-    this.workspace_dir = args?.workspace || process.cwd();
-  }
-
-  set_context(channel: string, chat_id: string, reply_to?: string | null): void {
-    this.default_channel = channel;
-    this.default_chat_id = chat_id;
-    this.default_reply_to = reply_to || null;
+    this.send_callback = args.send_callback || null;
+    this.event_recorder = args.event_recorder || null;
+    this.workspace_dir = args.workspace;
   }
 
   set_send_callback(callback: MessageSendCallback): void {
@@ -90,8 +75,8 @@ export class MessageTool extends Tool {
   protected async run(params: Record<string, unknown>, _context?: ToolExecutionContext): Promise<string> {
     if (!this.send_callback) return "Error: send callback is not configured";
     const context = _context || {};
-    const channel = String(params.channel || context.channel || this.default_channel || "");
-    const chat_id = String(params.chat_id || context.chat_id || this.default_chat_id || "");
+    const channel = String(params.channel || context.channel || "");
+    const chat_id = String(params.chat_id || context.chat_id || "");
     if (!channel || !chat_id) return "Error: channel and chat_id are required";
     const phase = normalize_phase(params.phase);
     const detail = String(params.detail || "").trim();
@@ -165,7 +150,7 @@ export class MessageTool extends Tool {
       chat_id,
       content,
       at: now_iso(),
-      reply_to: params.reply_to ? String(params.reply_to) : this.default_reply_to || undefined,
+      reply_to: params.reply_to ? String(params.reply_to) : (context.reply_to || undefined),
       media: media_items,
       metadata: {
         kind: "workflow_event",

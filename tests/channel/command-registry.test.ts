@@ -13,13 +13,13 @@ beforeAll(() => set_locale("ko"));
 describe("CommandDescriptor registry", () => {
   it("returns all command descriptors", () => {
     const descriptors = get_command_descriptors();
-    expect(descriptors).toHaveLength(20);
+    expect(descriptors).toHaveLength(21);
     const names = descriptors.map((d) => d.name);
     expect(names).toEqual([
       "help", "stop", "render", "secret", "memory",
       "decision", "promise", "cron", "reload", "task", "status",
       "skill", "doctor", "agent", "stats", "verify", "guard",
-      "workflow", "model", "mcp",
+      "workflow", "model", "mcp", "tone",
     ]);
   });
 

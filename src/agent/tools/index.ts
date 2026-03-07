@@ -29,6 +29,7 @@ import { TaskQueryTool, type TaskQueryCallback } from "./task-query.js";
 import { WorkflowTool } from "./workflow.js";
 import { KanbanTool } from "./kanban.js";
 import type { AppendWorkflowEventInput, AppendWorkflowEventResult } from "../../events/types.js";
+import { get_shared_secret_vault } from "../../security/secret-vault-factory.js";
 import type { RuntimeExecutionPolicy } from "../../providers/types.js";
 import type { PreToolHook, PostToolHook } from "./types.js";
 import { build_approval_notifier } from "./approval-notifier.js";
@@ -431,7 +432,8 @@ export function create_default_tool_registry(args?: ToolRegistryFactoryOptions):
   if (args?.runtime_policy) {
     pre_hooks.unshift(create_policy_pre_hook(args.runtime_policy, registry));
   }
-  const workspace = args?.workspace || process.cwd();
+  if (!args?.workspace) throw new Error("workspace is required for create_default_tool_registry");
+  const workspace = args.workspace;
   const allowed_dir = args?.allowed_dir ?? workspace;
   let sender: ((message: OutboundMessage) => Promise<void>) | null = null;
 
@@ -624,6 +626,11 @@ export function create_default_tool_registry(args?: ToolRegistryFactoryOptions):
       return tools.length;
     },
   }));
+
+  // 파라미터 시크릿 해석기 주입 — vault가 초기화된 후 호출해야 함
+  try {
+    registry.set_secret_resolver(get_shared_secret_vault(workspace));
+  } catch { /* vault 미초기화 — standalone/test 경로에서는 정상 */ }
 
   return { registry, installer, dynamic_loader };
 }

@@ -2,9 +2,16 @@
 
 import type { RouteContext } from "../route-context.js";
 import type { KanbanStoreLike, ScopeType, KanbanColumnDef, Priority, RelationType, KanbanRule, FilterCriteria, KanbanEvent } from "../../services/kanban-store.js";
+import type { KanbanRuleExecutor } from "../../services/kanban-rule-executor.js";
 
 function get_store(ctx: RouteContext): KanbanStoreLike | null {
   return (ctx.options as Record<string, unknown>).kanban_store as KanbanStoreLike | null ?? null;
+}
+
+function get_rule_executor(ctx: RouteContext): KanbanRuleExecutor | null {
+  const val = (ctx.options as Record<string, unknown>).kanban_rule_executor;
+  if (typeof val === "function") return (val as () => KanbanRuleExecutor | null)();
+  return val as KanbanRuleExecutor | null ?? null;
 }
 
 export async function handle_kanban(ctx: RouteContext): Promise<boolean> {
@@ -121,6 +128,7 @@ export async function handle_kanban(ctx: RouteContext): Promise<boolean> {
         assignee: body.assignee ? String(body.assignee) : undefined,
         created_by: "user:dashboard",
         parent_id: body.parent_id ? String(body.parent_id) : undefined,
+        task_id: body.task_id ? String(body.task_id) : undefined,
         metadata: body.metadata as Record<string, unknown> | undefined,
       });
       json(res, 201, card);
@@ -144,7 +152,7 @@ export async function handle_kanban(ctx: RouteContext): Promise<boolean> {
       const card = await store.move_card(card_id, String(body.column_id), typeof body.position === "number" ? body.position : undefined);
       if (!card) { json(res, 404, { error: "not_found" }); return true; }
       // move 후 추가 필드가 있으면 update
-      const has_update_fields = body.title || body.description !== undefined || body.priority || body.labels || body.assignee !== undefined || body.metadata;
+      const has_update_fields = body.title || body.description !== undefined || body.priority || body.labels || body.assignee !== undefined || body.metadata || body.task_id !== undefined;
       if (has_update_fields) {
         const updated = await store.update_card(card_id, {
           title: body.title ? String(body.title) : undefined,
@@ -152,6 +160,7 @@ export async function handle_kanban(ctx: RouteContext): Promise<boolean> {
           priority: body.priority as Priority | undefined,
           labels: body.labels as string[] | undefined,
           assignee: body.assignee !== undefined ? (body.assignee ? String(body.assignee) : null) : undefined,
+          task_id: body.task_id !== undefined ? (body.task_id ? String(body.task_id) : null) : undefined,
           metadata: body.metadata as Record<string, unknown> | undefined,
         });
         json(res, 200, updated);
@@ -165,6 +174,7 @@ export async function handle_kanban(ctx: RouteContext): Promise<boolean> {
         priority: body.priority as Priority | undefined,
         labels: body.labels as string[] | undefined,
         assignee: body.assignee !== undefined ? (body.assignee ? String(body.assignee) : null) : undefined,
+        task_id: body.task_id !== undefined ? (body.task_id ? String(body.task_id) : null) : undefined,
         metadata: body.metadata as Record<string, unknown> | undefined,
       });
       json(res, card ? 200 : 404, card ?? { error: "not_found" });
@@ -322,6 +332,7 @@ export async function handle_kanban(ctx: RouteContext): Promise<boolean> {
         action_type: String(body.action_type) as KanbanRule["action_type"],
         action_params: (body.action_params as Record<string, unknown>) ?? {},
       });
+      get_rule_executor(ctx)?.watch(board_id);
       json(res, 201, rule);
     } catch (e) {
       json(res, 400, { error: e instanceof Error ? e.message : "create_failed" });
@@ -341,6 +352,7 @@ export async function handle_kanban(ctx: RouteContext): Promise<boolean> {
       condition: body?.condition as Record<string, unknown> | undefined,
       action_params: body?.action_params as Record<string, unknown> | undefined,
     });
+    if (rule?.enabled) get_rule_executor(ctx)?.watch(rule.board_id);
     json(res, rule ? 200 : 404, rule ?? { error: "not_found" });
     return true;
   }

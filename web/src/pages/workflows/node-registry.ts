@@ -33,10 +33,20 @@ export interface FrontendNodeDescriptor {
   EditPanel: React.ComponentType<EditPanelProps>;
 }
 
+/** 프로바이더 모델 카탈로그 항목. */
+export interface ProviderModelInfo {
+  id: string;
+  name: string;
+  provider: string;
+  purpose: "chat" | "embedding" | "both";
+}
+
 /** 노드 편집 패널에서 사용 가능한 동적 옵션 (API에서 가져온 기존 리소스 목록). */
 export interface NodeOptions {
   backends?: { value: string; label: string; available?: boolean; provider_type?: string }[];
   models?: { name: string }[];
+  /** backend(provider instance_id)로 해당 프로바이더의 모델 목록을 조회. */
+  fetch_provider_models?: (instance_id: string) => Promise<ProviderModelInfo[]>;
   oauth_integrations?: { instance_id: string; label: string; service_type: string; enabled: boolean }[];
   workflow_templates?: { title: string; slug: string }[];
   channels?: { provider: string; channel_id: string; label: string; enabled: boolean }[];

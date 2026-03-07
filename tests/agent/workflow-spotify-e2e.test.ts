@@ -10,7 +10,10 @@
  * 5. 워크플로우 create → run 흐름이 정상 동작하는지
  */
 
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { WorkflowTool } from "../../src/agent/tools/workflow.js";
 import { build_node_catalog } from "../../src/agent/tools/workflow-catalog.js";
 import { normalize_workflow_definition } from "../../src/orchestration/workflow-loader.js";
@@ -243,14 +246,18 @@ describe("Spotify 워크플로우 E2E", () => {
   });
 
   describe("4. ToolRegistry — oauth_fetch 접근 가능성", () => {
+    let workspace: string;
+    beforeEach(async () => { workspace = await mkdtemp(join(tmpdir(), "spotify-tool-")); });
+    afterEach(async () => { await rm(workspace, { recursive: true, force: true }); });
+
     it("create_default_tool_registry에는 oauth_fetch가 없다 (의존성 필요)", () => {
-      const { registry } = create_default_tool_registry();
+      const { registry } = create_default_tool_registry({ workspace });
       const names = registry.tool_names();
       expect(names).not.toContain("oauth_fetch");
     });
 
     it("메인 레지스트리에 oauth_fetch를 등록하면 tool_names에 포함된다", () => {
-      const { registry } = create_default_tool_registry();
+      const { registry } = create_default_tool_registry({ workspace });
       // OAuthFetchTool은 oauth_store + oauth_flow 필요하므로 직접 등록 시뮬레이션
       const fake_tool = {
         name: "oauth_fetch",
@@ -264,7 +271,7 @@ describe("Spotify 워크플로우 E2E", () => {
 
     it("SubagentRegistry가 build_tools로 메인 레지스트리를 받으면 oauth_fetch 사용 가능", () => {
       // 이 테스트는 agent/index.ts의 build_tools: () => this.tools 변경을 검증
-      const { registry } = create_default_tool_registry();
+      const { registry } = create_default_tool_registry({ workspace });
       const fake_tool = {
         name: "oauth_fetch",
         description: "OAuth fetch",

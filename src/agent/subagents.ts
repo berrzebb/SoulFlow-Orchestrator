@@ -51,6 +51,8 @@ export type SpawnSubagentOptions = {
   hooks?: Pick<AgentHooks, "on_event" | "on_stream">;
   /** controller loop 생략 — executor 백엔드 직접 1회 호출. Phase Loop 등 외부 orchestrator가 있을 때 사용. */
   skip_controller?: boolean;
+  /** 허용된 도구 ID 목록. 지정 시 이 목록에 포함된 도구만 executor에 전달. */
+  allowed_tools?: string[];
 };
 
 type RunningSubagent = {
@@ -92,12 +94,13 @@ export class SubagentRegistry {
     agent_backends?: AgentBackendRegistry | null;
     provider_caps?: ProviderCapabilities;
   }) {
-    this.workspace = args?.workspace || process.cwd();
+    this.logger = args?.logger || null;
+    if (!args?.workspace) throw new Error("workspace is required for SubagentRegistry");
+    this.workspace = args.workspace;
     this.providers = args?.providers || null;
     this.bus = args?.bus || null;
     this.build_tools = args?.build_tools || (() => create_default_tool_registry({ workspace: this.workspace, bus: this.bus }).registry);
     this.context_builder = args?.context_builder || null;
-    this.logger = args?.logger || null;
     this.agent_backends = args?.agent_backends || null;
     this.provider_caps = args?.provider_caps || { chatgpt_available: false, claude_available: false, openrouter_available: false };
   }
@@ -271,6 +274,8 @@ export class SubagentRegistry {
     const temperature = options.temperature ?? 0.4;
 
     const tools = this.build_tools();
+    /** headless/manual tool loop용: allowed_tools 적용 시 definitions와 execute를 필터링. */
+    const headless_tools = options.allowed_tools?.length ? tools.filtered(options.allowed_tools) : tools;
     const always_skills = this.context_builder?.skills_loader.get_always_skills() || [];
     const merged_skills = [...new Set([...always_skills, ...(options.skill_names || [])])];
     const role = options.role || "";
@@ -284,7 +289,10 @@ export class SubagentRegistry {
       : "";
 
     // 백엔드 결정 (반복문 전에 1회만)
-    const executor_backend = this.agent_backends?.resolve_backend(executor_provider_id) ?? null;
+    // P1-9: custom instance_id를 직접 조회 → built-in resolve → fallback
+    const executor_backend = this.agent_backends?.get_backend(executor_provider_id as AgentBackendId)
+      ?? this.agent_backends?.resolve_backend(executor_provider_id)
+      ?? null;
     const backend_id: AgentBackendId = executor_backend?.id
       ?? (String(executor_provider_id).includes("codex") ? "codex_cli" : "claude_cli");
 
@@ -303,8 +311,8 @@ export class SubagentRegistry {
       if (options.skip_controller) {
         const direct_result = await this._run_direct_executor({
           options, id, label, backend_id, executor_provider_id, executor_backend,
-          contextual_system, model, max_tokens, temperature, tools, abort,
-          stream_buffer, last_stream_emit_at,
+          contextual_system, model, max_tokens, temperature, tools, headless_tools, abort,
+          stream_buffer, last_stream_emit_at, register_input,
         });
         final_content = direct_result.content;
         actual_finish_reason = direct_result.finish_reason;
@@ -438,7 +446,9 @@ export class SubagentRegistry {
             register_send_input: register_input,
             hooks: sa_hooks,
             abort_signal: abort.signal,
+            cwd: this.workspace,
             tool_context: { channel: options.origin_channel, chat_id: options.origin_chat_id, sender_id: `subagent:${id}` },
+            allowed_tools: options.allowed_tools,
           });
           if (agent_result.finish_reason === "error") {
             throw new Error(String(agent_result.metadata?.error || "agent_backend_error"));
@@ -477,7 +487,7 @@ export class SubagentRegistry {
                 content: plan.executor_prompt,
               },
             ],
-            tools: tools.get_definitions(),
+            tools: headless_tools.get_definitions(),
             model,
             max_tokens,
             temperature,
@@ -536,7 +546,7 @@ export class SubagentRegistry {
             for (const tc of effective) {
               if (abort.signal.aborted) { this._update_status(id, "cancelled"); return; }
               this._fire(options, id, label, (s) => ({ type: "tool_use", source: s, at: now_iso(), tool_name: tc.name, tool_id: tc.id, params: tc.arguments }), backend_id);
-              const result = await tools.execute(tc.name, tc.arguments, {
+              const result = await headless_tools.execute(tc.name, tc.arguments, {
                 signal: abort.signal,
                 channel: options.origin_channel,
                 chat_id: options.origin_chat_id,
@@ -879,11 +889,13 @@ export class SubagentRegistry {
     max_tokens: number;
     temperature: number;
     tools: ReturnType<SubagentRegistry["build_tools"]>;
+    headless_tools: Pick<ReturnType<SubagentRegistry["build_tools"]>, "get_definitions" | "execute" | "tool_names">;
     abort: AbortController;
     stream_buffer: string;
     last_stream_emit_at: number;
+    register_input?: (fn: (text: string) => void) => void;
   }): Promise<{ content: string; finish_reason: AgentFinishReason }> {
-    const { options, id, label, executor_provider_id, executor_backend, contextual_system, model, max_tokens, temperature, tools, abort } = ctx;
+    const { options, id, label, executor_provider_id, executor_backend, contextual_system, model, max_tokens, temperature, tools, headless_tools, abort, register_input } = ctx;
     let { stream_buffer, last_stream_emit_at } = ctx;
     const providers = this.providers!;
 
@@ -900,7 +912,10 @@ export class SubagentRegistry {
         tools: tools.get_definitions() as ToolSchema[],
         tool_executors: tools.get_all(),
         abort_signal: abort.signal,
+        cwd: this.workspace,
         tool_context: { channel: options.origin_channel, chat_id: options.origin_chat_id, sender_id: `subagent:${id}` },
+        allowed_tools: options.allowed_tools,
+        register_send_input: register_input,
         hooks: {
           on_event: (event: import("./agent.types.js").AgentEvent) => {
             options.hooks?.on_event?.(event);
@@ -933,7 +948,7 @@ export class SubagentRegistry {
         { role: "system", content: system_prompt },
         { role: "user", content: options.task },
       ],
-      tools: tools.get_definitions(),
+      tools: headless_tools.get_definitions(),
       model,
       max_tokens,
       temperature,

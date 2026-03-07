@@ -1,5 +1,13 @@
 # SoulFlow Orchestrator
 
+[![CI](https://github.com/berrzebb/SoulFlow-Orchestrator/actions/workflows/ci.yml/badge.svg)](https://github.com/berrzebb/SoulFlow-Orchestrator/actions/workflows/ci.yml)
+[![Coverage](https://img.shields.io/endpoint?url=https://berrzebb.github.io/SoulFlow-Orchestrator/badges/coverage.json)](https://github.com/berrzebb/SoulFlow-Orchestrator/actions/workflows/ci.yml)
+[![Tests](https://img.shields.io/endpoint?url=https://berrzebb.github.io/SoulFlow-Orchestrator/badges/tests.json)](https://github.com/berrzebb/SoulFlow-Orchestrator/actions/workflows/ci.yml)
+[![Lines of Code](https://img.shields.io/endpoint?url=https://berrzebb.github.io/SoulFlow-Orchestrator/badges/loc.json)](https://github.com/berrzebb/SoulFlow-Orchestrator)
+[![Node](https://img.shields.io/badge/node-%3E%3D22-brightgreen)](https://nodejs.org/)
+[![TypeScript](https://img.shields.io/badge/typescript-5.8-blue)](https://www.typescriptlang.org/)
+[![License](https://img.shields.io/github/license/berrzebb/SoulFlow-Orchestrator)](LICENSE)
+
 한국어 | [English](docs/README.en.md)
 
 Slack · Telegram · Discord 메시지를 **헤드리스 에이전트**로 처리하는 비동기 오케스트레이션 런타임.
@@ -100,14 +108,15 @@ flowchart TD
 
 | 구성 요소 | 역할 | 핵심 특징 |
 |----------|------|----------|
-| **채널 매니저** | Slack · Telegram · Discord 수신/응답 | 스트리밍 · 그룹핑 · typing 갱신 |
+| **채널 매니저** | Slack · Telegram · Discord 수신/응답 | 스트리밍 · 그룹핑 · 페르소나 톤 렌더링 |
 | **오케스트레이터** | 인바운드 → 에이전트 실행 | Agent Loop · Task Loop · Phase Loop 삼중 모드 |
 | **에이전트 백엔드** | Claude/Codex/Gemini × CLI/SDK 실행 | CircuitBreaker · HealthScorer · 자동 fallback |
 | **역할 스킬** | 8개 역할 계층적 분담 | concierge → pm/pl → implementer/reviewer/validator/debugger |
 | **보안 Vault** | AES-256-GCM 민감정보 관리 | 인바운드 자동 sealing · 도구 경로 복호화만 허용 |
 | **OAuth 연동** | 외부 서비스 인증 | GitHub · Google · Custom OAuth 2.0 |
 | **워크플로우 엔진** | Phase Loop · DAG 실행 | 120종 노드 그래프 에디터 · 6개 카테고리 · HITL 인터랙션 노드 |
-| **도메인 서비스** | 임베딩 · 벡터 스토어 · 웹훅 · 칸반 | sqlite-vec KNN · 하이브리드 검색 · 태스크 보드 |
+| **메시지 버스** | 내부 이벤트 라우팅 | 인메모리 (기본) · Redis Streams (다중 인스턴스) |
+| **도메인 서비스** | 임베딩 · 벡터 스토어 · 웹훅 · 칸반 | sqlite-vec KNN · 하이브리드 검색 · 칸반 자동화 규칙 |
 | **대시보드** | 웹 기반 실시간 모니터링 | SSE 피드 · 에이전트/태스크/결정/프로바이더 관리 |
 | **MCP 통합** | 외부 도구 서버 연결 | stdio/SSE · 자동 CLI 주입 |
 | **크론** | 정기 작업 스케줄 | SQLite 기반 · 핫 리로드 |
@@ -204,7 +213,7 @@ Wizard에서 다음을 순서대로 설정합니다:
 | Secrets | `/secrets` | AES-256-GCM 시크릿 관리 |
 | Models | `/models` | 오케스트레이터 LLM 런타임 · 모델 pull/삭제/전환 |
 | Workflows | `/workflows` | Phase Loop 워크플로우 관리 · 120종 노드 그래프 에디터 · 에이전트 채팅 |
-| Kanban | `/kanban` | 드래그앤드롭 칸반 태스크 보드 |
+| Kanban | `/kanban` | 드래그앤드롭 칸반 보드 · 자동화 규칙 |
 | Settings | `/settings` | 글로벌 런타임 설정 |
 
 → 상세: [대시보드 가이드](docs/ko/guide/dashboard.md)
@@ -292,6 +301,7 @@ GitHub · Google · Custom OAuth 2.0 외부 서비스 연동. 대시보드 Works
 | `/workflow list\|create\|cancel <id>` | Phase Loop 워크플로우 관리 |
 | `/model list\|set <name>` | 오케스트레이터 LLM 모델 전환 |
 | `/mcp list\|reconnect <name>` | MCP 서버 상태/재연결 |
+| `/tone <스타일>\|status\|reset` | 페르소나 톤 제어 (formal/casual/반말/따뜻/짧게/자세) |
 
 ## 디렉터리 구조
 
@@ -307,8 +317,8 @@ next/
       nodes/        ← 120종 워크플로우 노드 핸들러 (OCP 플러그인 아키텍처)
       pty/          ← PTY 기반 CLI 통합 (ContainerPool, AgentBus, MCP 브릿지, NDJSON 와이어)
       tools/        ← 에이전트 도구 구현 (oauth_fetch, workflow, ask-user, approval-notifier 포함)
-    bus/            ← MessageBus (inbound/outbound pub/sub)
-    channels/       ← 채널 매니저 · 커맨드 · 디스패치 · 승인 · 확인 가드
+    bus/            ← MessageBus (인메모리 기본 · Redis Streams 선택)
+    channels/       ← 채널 매니저 · 커맨드 · 디스패치 · 승인 · 페르소나 톤 렌더링
     config/         ← Zod 기반 설정 스키마 + config-meta
     cron/           ← 크론 스케줄러 (SQLite)
     dashboard/
@@ -320,7 +330,7 @@ next/
     i18n/           ← 공유 i18n 프로토콜 + JSON 로케일 (en, ko)
     orchestration/  ← Gateway · Classifier · Prompts · ToolCallHandler · NodeSelector · ToolIndex · ConfirmationGuard
     runtime/        ← 인스턴스 잠금 · ServiceManager · 서비스 타입
-    services/       ← 도메인 서비스 (embed, vector-store, query-db, webhook-store, kanban-store, model-catalog, reference-store)
+    services/       ← 도메인 서비스 (embed, vector-store, query-db, webhook-store, kanban-store, kanban-rule-executor, model-catalog, reference-store)
     security/       ← Secret Vault (AES-256-GCM)
     session/        ← 세션 저장소
     skills/

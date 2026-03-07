@@ -247,15 +247,35 @@ describe("normalize_agent_reply", () => {
     expect(result).toBe("무엇을 도와드릴까요?");
   });
 
-  it("returns original when self-intro is entire content", () => {
+  it("returns null when self-intro is entire content", () => {
     const result = normalize_agent_reply("안녕하세요, @mybot입니다!", "mybot", "sender");
-    // [^\n]* matches entire line, cleaned becomes "", fallback to original text
-    expect(result).toBe("안녕하세요, @mybot입니다!");
+    // self-intro만 있는 경우 persona leak 방지를 위해 null 반환
+    expect(result).toBeNull();
   });
 
   it("strips English self-intro (multiline)", () => {
     const result = normalize_agent_reply("Hello, I'm mybot!\nHow can I help?", "mybot", "sender");
     expect(result).toBe("How can I help?");
+  });
+
+  it("strips Korean model identity intro (코덱스)", () => {
+    const result = normalize_agent_reply("저는 코덱스(Codex)라는 AI 코딩 도우미예요. 무엇을 도와드릴까요?", "bot", "");
+    expect(result).toBe("무엇을 도와드릴까요?");
+  });
+
+  it("returns null when Korean model identity intro is entire content", () => {
+    expect(normalize_agent_reply("저는 코덱스(Codex)라는 AI 코딩 도우미입니다.", "bot", "")).toBeNull();
+  });
+
+  it("strips Korean variant model intros (챗지피티, 클로드, 제미니)", () => {
+    expect(normalize_agent_reply("저는 챗지피티라는 AI 도우미입니다. 도와드릴게요.", "bot", "")).toBe("도와드릴게요.");
+    expect(normalize_agent_reply("나는 클로드라는 AI 어시스턴트입니다. 질문하세요.", "bot", "")).toBe("질문하세요.");
+    expect(normalize_agent_reply("저는 제미니라는 AI 비서예요. 말씀하세요.", "bot", "")).toBe("말씀하세요.");
+  });
+
+  it("strips maker-based intro (OpenAI/Anthropic/Google에서 만든)", () => {
+    expect(normalize_agent_reply("저는 OpenAI에서 만든 AI입니다. 무엇을 도와드릴까요?", "bot", "")).toBe("무엇을 도와드릴까요?");
+    expect(normalize_agent_reply("나는 Anthropic이 개발한 AI 어시스턴트입니다. 질문하세요.", "bot", "")).toBe("질문하세요.");
   });
 
   it("strips sender mention echo", () => {

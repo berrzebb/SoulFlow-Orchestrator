@@ -26,23 +26,12 @@ export class FileRequestTool extends Tool {
   };
 
   private send_callback: FileRequestCallback | null;
-  private default_channel: string;
-  private default_chat_id: string;
 
   constructor(args?: {
     send_callback?: FileRequestCallback | null;
-    default_channel?: string;
-    default_chat_id?: string;
   }) {
     super();
     this.send_callback = args?.send_callback || null;
-    this.default_channel = args?.default_channel || "";
-    this.default_chat_id = args?.default_chat_id || "";
-  }
-
-  set_context(channel: string, chat_id: string): void {
-    this.default_channel = channel;
-    this.default_chat_id = chat_id;
   }
 
   set_send_callback(callback: FileRequestCallback): void {
@@ -52,8 +41,8 @@ export class FileRequestTool extends Tool {
   protected async run(params: Record<string, unknown>, _context?: ToolExecutionContext): Promise<string> {
     if (!this.send_callback) return "Error: send callback is not configured";
     const context = _context || {};
-    const channel = String(params.channel || context.channel || this.default_channel || "");
-    const chat_id = String(params.chat_id || context.chat_id || this.default_chat_id || "");
+    const channel = String(params.channel || context.channel || "");
+    const chat_id = String(params.chat_id || context.chat_id || "");
     const prompt = String(params.prompt || "").trim();
     const accept = Array.isArray(params.accept) ? params.accept.map((v) => String(v || "").trim()).filter(Boolean) : [];
     if (!channel || !chat_id) return "Error: channel and chat_id are required";

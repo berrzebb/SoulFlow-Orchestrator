@@ -6,6 +6,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import type { NodeOptions } from "./node-registry";
+import { useProviderModels } from "./use-provider-models";
 import { END_TARGET_PARAMS } from "./output-schema";
 import type { PhaseDef, AgentDef, CriticDef, ToolNodeDef, SkillNodeDef, WorkflowDef, RolePreset } from "./workflow-types";
 import type { TFunction } from "../../../../src/i18n/protocol";
@@ -192,6 +193,7 @@ export function AgentSummaryCard({ agent, index, phase, workflow, onChange, onNo
 }) {
   const [expanded, setExpanded] = useState(false);
   const pi = workflow.phases.findIndex((p) => p.phase_id === phase.phase_id);
+  const { models: providerModels, loading: modelsLoading } = useProviderModels(agent.backend, options);
 
   const { data: roles } = useQuery<RolePreset[]>({
     queryKey: ["workflow-roles"],
@@ -296,11 +298,13 @@ export function AgentSummaryCard({ agent, index, phase, workflow, onChange, onNo
             </div>
             <div className="builder-row">
               <label className="label">{t("workflows.model")}</label>
-              {(options?.models || []).length > 0 ? (
+              {modelsLoading ? (
+                <input className="input input--sm" disabled placeholder="loading..." />
+              ) : providerModels.length > 0 ? (
                 <select className="input input--sm" value={agent.model || ""}
                   onChange={(e) => updateAgent({ model: e.target.value || undefined })}>
                   <option value="">auto</option>
-                  {(options?.models || []).map((m) => <option key={m.name} value={m.name}>{m.name}</option>)}
+                  {providerModels.filter((m) => m.purpose !== "embedding").map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
                 </select>
               ) : (
                 <input className="input input--sm" value={agent.model || ""}
@@ -349,6 +353,7 @@ export function CriticSummaryCard({ critic, phase, workflow, onChange, t, option
 }) {
   const [expanded, setExpanded] = useState(false);
   const pi = workflow.phases.findIndex((p) => p.phase_id === phase.phase_id);
+  const { models: criticModels, loading: criticModelsLoading } = useProviderModels(critic.backend, options);
 
   const updateCritic = (patch: Partial<CriticDef>) => {
     const phases = [...workflow.phases];
@@ -381,11 +386,13 @@ export function CriticSummaryCard({ critic, phase, workflow, onChange, t, option
             </div>
             <div className="builder-row">
               <label className="label">{t("workflows.model")}</label>
-              {(options?.models || []).length > 0 ? (
+              {criticModelsLoading ? (
+                <input className="input input--sm" disabled placeholder="loading..." />
+              ) : criticModels.length > 0 ? (
                 <select className="input input--sm" value={critic.model || ""}
                   onChange={(e) => updateCritic({ model: e.target.value || undefined })}>
                   <option value="">auto</option>
-                  {(options?.models || []).map((m) => <option key={m.name} value={m.name}>{m.name}</option>)}
+                  {criticModels.filter((m) => m.purpose !== "embedding").map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
                 </select>
               ) : (
                 <input className="input input--sm" value={critic.model || ""}

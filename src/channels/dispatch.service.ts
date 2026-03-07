@@ -1,4 +1,4 @@
-import type { MessageBusLike, OutboundMessage } from "../bus/types.js";
+import type { MessageBusLike, MessageBusRuntime, OutboundMessage, ReliableMessageBus } from "../bus/types.js";
 import type { Logger } from "../logger.js";
 import type { ServiceLike } from "../runtime/service.types.js";
 import type { AppConfig } from "../config/schema.js";
@@ -90,18 +90,74 @@ export class DispatchService implements ServiceLike {
   }
 
   private async consume_loop(): Promise<void> {
+    const reliable = is_reliable_bus(this.bus);
     while (this.running) {
-      const msg = await this.bus.consume_outbound({ timeout_ms: 2000 });
-      if (!msg) continue;
-      const provider = resolve_provider(msg);
-      // "web" 아웃바운드는 on_publish 옵저버(capture_web_outbound)가 처리함.
-      // 디스패치 루프에서 재시도하면 옵저버가 중복 호출되어 채팅 응답이 N개로 늘어남.
-      if (!provider || provider === "web") continue;
-      const result = await this.send_with_retry(provider, msg, true);
+      if (reliable) {
+        await this.consume_loop_leased(reliable);
+      } else {
+        await this.consume_loop_basic();
+      }
+    }
+  }
+
+  private async consume_loop_basic(): Promise<void> {
+    const msg = await this.bus.consume_outbound({ timeout_ms: 2000 });
+    if (!msg) return;
+    this.dispatch_outbound(msg);
+  }
+
+  private async consume_loop_leased(bus: ReliableMessageBus): Promise<void> {
+    const lease = await bus.consume_outbound_lease({ timeout_ms: 2000 });
+    if (!lease) return;
+    const msg = lease.value;
+    const provider = resolve_provider(msg);
+    if (!provider || provider === "web") {
+      await lease.ack();
+      return;
+    }
+
+    // 영구 실패 메시지 방어: 이전 에러가 비-재시도 에러이면 즉시 drop
+    const prev_error = String((msg.metadata as Record<string, unknown>)?.dispatch_error || "");
+    if (prev_error && !is_retryable(prev_error)) {
+      this.logger.debug("dispatch non-retryable from metadata, dropping", { provider, error: prev_error });
+      await lease.ack();
+      await this.write_dlq(provider, msg, prev_error, get_retry_count(msg));
+      return;
+    }
+
+    // inline retry만 수행 (app-level requeue/DLQ 비활성)
+    const result = await this.send_with_retry(provider, msg, false);
+    // 항상 ack — crash recovery는 ack 전 crash 시 XAUTOCLAIM이 담당
+    await lease.ack();
+
+    if (result.ok) return;
+
+    const last_error = result.error || "send_failed";
+    if (!is_retryable(last_error)) {
+      this.logger.debug("dispatch non-retryable, dropping", { provider, error: last_error });
+      await this.write_dlq(provider, msg, last_error, get_retry_count(msg));
+      return;
+    }
+
+    const dispatch_retry = get_retry_count(msg);
+    if (dispatch_retry >= this.retry_config.retryMax) {
+      this.logger.debug("dispatch max retries reached", { provider, retry: dispatch_retry, error: last_error });
+      await this.write_dlq(provider, msg, last_error, dispatch_retry);
+      return;
+    }
+
+    // retryable + under limit → 새 메시지로 delayed requeue
+    this.schedule_retry(provider, msg, dispatch_retry + 1, last_error);
+  }
+
+  private dispatch_outbound(msg: OutboundMessage): void {
+    const provider = resolve_provider(msg);
+    if (!provider || provider === "web") return;
+    this.send_with_retry(provider, msg, true).then((result) => {
       if (!result.ok) {
         this.logger.debug("dispatch failed", { provider, error: result.error });
       }
-    }
+    });
   }
 
   private async send_with_retry(
@@ -221,5 +277,11 @@ function get_retry_count(msg: OutboundMessage): number {
 
 function clone_outbound(msg: OutboundMessage): OutboundMessage {
   return { ...msg, media: [...(msg.media || [])], metadata: { ...(msg.metadata || {}) } };
+}
+
+function is_reliable_bus(bus: MessageBusLike): ReliableMessageBus | null {
+  const rb = bus as Partial<ReliableMessageBus>;
+  if (typeof rb.consume_outbound_lease === "function") return rb as ReliableMessageBus;
+  return null;
 }
 

@@ -66,6 +66,8 @@ export type PhaseLoopRunnerDeps = {
   create_task?: (opts: { title: string; objective: string; channel?: string; chat_id?: string; max_turns?: number; initial_memory?: Record<string, unknown> }) => Promise<{ task_id: string; status: string; result?: unknown; error?: string }>;
   /** DB 쿼리 (db 노드용). */
   query_db?: (datasource: string, query: string, params?: Record<string, unknown>) => Promise<{ rows: unknown[]; affected_rows: number }>;
+  /** kanban_trigger waiting 전환 시 즉시 알림 (watcher 30초 지연 제거). */
+  on_kanban_trigger_waiting?: (workflow_id: string) => void;
 };
 
 /** 페이즈 루프 메인 실행 함수. */
@@ -80,33 +82,59 @@ export async function run_phase_loop(
   const all_nodes = normalized.nodes;
   const phase_defs = normalized.phase_defs;
 
-  const state: PhaseLoopState = {
-    workflow_id: options.workflow_id,
-    title: options.title,
-    objective: options.objective,
-    channel: options.channel,
-    chat_id: options.chat_id,
-    status: "running",
-    current_phase: 0,
-    phases: phase_defs.map((p) => build_initial_phase_state(p)),
-    orche_states: all_nodes.filter(is_orche_node).map((n) => ({
-      node_id: n.node_id,
-      node_type: n.node_type,
-      status: "pending" as const,
-    })),
-    memory: { ...(options.initial_memory || {}) },
-    created_at: now_iso(),
-    updated_at: now_iso(),
-  };
+  // resume: 기존 state가 있으면 재사용, 없으면 새로 생성
+  const is_resume = !!options.resume_state;
+  const state: PhaseLoopState = options.resume_state
+    ? { ...options.resume_state, status: "running", updated_at: now_iso() }
+    : {
+        workflow_id: options.workflow_id,
+        title: options.title,
+        objective: options.objective,
+        channel: options.channel,
+        chat_id: options.chat_id,
+        status: "running",
+        current_phase: 0,
+        phases: phase_defs.map((p) => build_initial_phase_state(p)),
+        orche_states: all_nodes.filter(is_orche_node).map((n) => ({
+          node_id: n.node_id,
+          node_type: n.node_type,
+          status: "pending" as const,
+        })),
+        memory: { ...(options.initial_memory || {}) },
+        created_at: now_iso(),
+        updated_at: now_iso(),
+        definition: {
+          title: options.title,
+          objective: options.objective,
+          phases: phase_defs,
+          nodes: options.nodes,
+          field_mappings: options.field_mappings,
+        },
+      };
 
   await store.upsert(state);
   emit(on_event, { type: "workflow_started", workflow_id: state.workflow_id });
-  logger.info("phase_loop_start", { workflow_id: state.workflow_id, nodes: all_nodes.length, phases: state.phases.length });
+  logger.info("phase_loop_start", { workflow_id: state.workflow_id, nodes: all_nodes.length, phases: state.phases.length, resume: is_resume });
 
   /** goto 루프 카운터: phase_id별 goto 횟수 추적. */
   const goto_counts = new Map<string, number>();
   /** IF 분기에 의해 스킵된 노드 ID 집합. */
   const skipped_nodes = new Set<string>();
+
+  // resume 시 이미 완료된 노드를 추적 (skip 대상)
+  const completed_node_ids = new Set<string>();
+  if (is_resume && state.orche_states) {
+    for (const os of state.orche_states) {
+      if (os.status === "completed" || os.status === "skipped") {
+        completed_node_ids.add(os.node_id);
+      }
+    }
+  }
+  if (is_resume) {
+    for (const ps of state.phases) {
+      if (ps.status === "completed") completed_node_ids.add(ps.phase_id);
+    }
+  }
 
   try {
     let node_idx = 0;
@@ -117,6 +145,13 @@ export async function run_phase_loop(
       }
 
       const node = all_nodes[node_idx]!;
+
+      // resume 시 이미 완료된 노드 skip
+      if (completed_node_ids.has(node.node_id)) {
+        emit(on_event, { type: "node_skipped", workflow_id: state.workflow_id, node_id: node.node_id, reason: "already_completed" });
+        node_idx++;
+        continue;
+      }
 
       // IF 분기에 의해 스킵된 노드
       if (skipped_nodes.has(node.node_id)) {
@@ -163,7 +198,7 @@ export async function run_phase_loop(
           // preset_id 적용 → runner_execute 또는 기본 executor
           const resolved = apply_preset(node);
           const handler = get_node_handler(resolved.node_type);
-          const exec_ctx = { memory: state.memory, abort_signal: options.abort_signal, workspace: undefined };
+          const exec_ctx = { memory: state.memory, abort_signal: options.abort_signal, workspace: options.workspace };
           const runner_ctx: RunnerContext = {
             state, options, logger,
             emit: (evt) => emit(on_event, evt),
@@ -187,6 +222,7 @@ export async function run_phase_loop(
                     phases: def.phases || [],
                     nodes: def.nodes,
                     initial_memory: { ...input },
+                    workspace: options.workspace,
                     abort_signal: options.abort_signal,
                     send_message: options.send_message,
                     ask_channel: options.ask_channel,
@@ -201,6 +237,11 @@ export async function run_phase_loop(
             ? await handler.runner_execute(resolved, exec_ctx, runner_ctx)
             : await execute_orche_node(resolved, exec_ctx);
           state.memory[node.node_id] = result.output;
+
+          // field_mappings 적용: 현재 노드의 출력 필드를 타겟 노드 메모리에 매핑
+          if (options.field_mappings?.length) {
+            apply_field_mappings(state.memory, node.node_id, result.output, options.field_mappings);
+          }
 
           // IF 분기 스킵 처리
           if (node.node_type === "if" && result.branch) {
@@ -220,6 +261,33 @@ export async function run_phase_loop(
             for (const t of all_targets) {
               if (!active_targets.has(t)) skipped_nodes.add(t);
             }
+          }
+
+          // waiting 시그널: trigger 노드가 이벤트 대기 상태 → 워크플로우 일시 중단
+          const is_waiting = result.output && typeof result.output === "object" && !Array.isArray(result.output) && (result.output as Record<string, unknown>).waiting === true;
+          if (is_waiting) {
+            if (orche_state) {
+              orche_state.status = "pending";
+              orche_state.result = result.output;
+            }
+            // P0-6: trigger 메타를 memory에 기록 → 영속 watcher가 resume 시 활용
+            if ((node as unknown as Record<string, unknown>).node_type === "kanban_trigger") {
+              const tn = node as unknown as Record<string, unknown>;
+              state.memory.__pending_kanban_trigger = {
+                node_id: tn.node_id,
+                board_id: tn.kanban_board_id,
+                actions: tn.kanban_actions,
+                column_id: tn.kanban_column_id,
+              };
+            }
+            state.status = "waiting_user_input";
+            state.updated_at = now_iso();
+            await store.upsert(state);
+            emit(on_event, { type: "node_waiting", workflow_id: state.workflow_id, node_id: node.node_id, node_type: node.node_type, reason: "trigger_timeout" });
+            if (state.memory.__pending_kanban_trigger) {
+              deps.on_kanban_trigger_waiting?.(state.workflow_id);
+            }
+            break;
           }
 
           if (orche_state) {
@@ -490,12 +558,14 @@ async function run_phase_agents(
   // 격리 준비: worktree/directory 핸들 수집
   const worktree_handles: WorktreeHandle[] = [];
   const isolation_paths = new Map<string, string>();
+  const ws = options.workspace;
+  if (!ws) throw new Error("workspace is required for phase agent execution");
 
   for (const agent_def of phase_def.agents) {
     const isolation = agent_def.filesystem_isolation || "none";
     if (isolation === "worktree") {
       const handle = await create_worktree({
-        workspace: process.cwd(),
+        workspace: ws,
         workflow_id: state.workflow_id,
         agent_id: agent_def.agent_id,
       });
@@ -508,7 +578,7 @@ async function run_phase_agents(
       }
     } else if (isolation === "directory") {
       const dir = await create_isolated_directory({
-        workspace: process.cwd(),
+        workspace: ws,
         workflow_id: state.workflow_id,
         agent_id: agent_def.agent_id,
       });
@@ -543,6 +613,7 @@ async function run_phase_agents(
         parent_id: `workflow:${state.workflow_id}`,
         skip_controller: true,
         skill_names: phase_def.skills,
+        allowed_tools: merge_tools(agent_def.tools, phase_def.tools),
       });
       agent_state.subagent_id = subagent_id;
 
@@ -589,7 +660,7 @@ async function run_phase_agents(
 
   // Phase 완료 후 worktree 병합 + 정리
   if (worktree_handles.length > 0) {
-    const merge_results = await merge_worktrees(process.cwd(), worktree_handles);
+    const merge_results = await merge_worktrees(ws, worktree_handles);
     for (const mr of merge_results) {
       if (mr.conflict) {
         logger.warn("worktree_merge_conflict", { agent_id: mr.agent_id, error: mr.error });
@@ -602,7 +673,7 @@ async function run_phase_agents(
         logger.info("worktree_merged", { agent_id: mr.agent_id, files_changed: mr.files_changed });
       }
     }
-    await cleanup_worktrees(process.cwd(), worktree_handles);
+    await cleanup_worktrees(ws, worktree_handles);
   }
 
   return agent_results;
@@ -774,6 +845,7 @@ async function run_looping_phase(
       parent_id: `workflow:${state.workflow_id}`,
       skip_controller: true,
       skill_names: phase_def.skills,
+      allowed_tools: merged?.length ? merged : undefined,
     });
     agent_state.subagent_id = subagent_id;
 
@@ -1104,3 +1176,52 @@ function build_runner_services(
   return services;
 }
 
+/** field_mappings 적용: from_node의 출력 필드를 to_node 메모리 슬롯에 매핑. */
+function apply_field_mappings(
+  memory: Record<string, unknown>,
+  from_node_id: string,
+  output: unknown,
+  mappings: import("./phase-loop.types.js").FieldMapping[],
+): void {
+  for (const m of mappings) {
+    if (m.from_node !== from_node_id) continue;
+    const value = resolve_field(output, m.from_field);
+    if (value === undefined) continue;
+
+    // to_node 메모리 슬롯에 필드 주입 (기존 객체에 머지, 없으면 생성)
+    const target = memory[m.to_node];
+    if (m.to_field) {
+      const obj = (target && typeof target === "object" && !Array.isArray(target) ? target : {}) as Record<string, unknown>;
+      set_nested_field(obj, m.to_field, value);
+      memory[m.to_node] = obj;
+    } else {
+      memory[m.to_node] = value;
+    }
+  }
+}
+
+/** dot-notation 경로로 중첩 값 조회. "body.data[0].id" 형태 지원. */
+function resolve_field(obj: unknown, path: string): unknown {
+  if (!path) return obj;
+  const parts = path.replace(/\[(\d+)]/g, ".$1").split(".");
+  let current: unknown = obj;
+  for (const key of parts) {
+    if (current == null || typeof current !== "object") return undefined;
+    current = (current as Record<string, unknown>)[key];
+  }
+  return current;
+}
+
+/** dot-notation 경로로 중첩 값 설정. */
+function set_nested_field(obj: Record<string, unknown>, path: string, value: unknown): void {
+  const parts = path.replace(/\[(\d+)]/g, ".$1").split(".");
+  let current: Record<string, unknown> = obj;
+  for (let i = 0; i < parts.length - 1; i++) {
+    const key = parts[i];
+    if (current[key] == null || typeof current[key] !== "object") {
+      current[key] = {};
+    }
+    current = current[key] as Record<string, unknown>;
+  }
+  current[parts[parts.length - 1]] = value;
+}

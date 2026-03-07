@@ -128,8 +128,9 @@ ${params.length > 0 ? params.map((p) => `    const ${p.name} = ${p.type === "str
 
 // ── 2. Patch index.ts ──
 
-function patch_index(src: string): string {
+function patch_index(src: string): { patched: string; errors: string[] } {
   let patched = src;
+  const errors: string[] = [];
 
   // import 삽입: 마지막 tool import 뒤
   const import_line = `import { ${class_name} } from "./${file_name}.js";`;
@@ -140,21 +141,27 @@ function patch_index(src: string): string {
   if (last_match) {
     const pos = last_match.index + last_match[0].length;
     patched = patched.slice(0, pos) + "\n" + import_line + patched.slice(pos);
+  } else {
+    errors.push("import anchor not found: no relative import lines in index.ts");
   }
 
   // export 블록에 추가: "MarkdownTool," 뒤
+  const before_export = patched;
   patched = patched.replace(
     /(  MarkdownTool,\n)(};)/,
     `$1  ${class_name},\n$2`,
   );
+  if (patched === before_export) errors.push("export anchor not found: 'MarkdownTool,' pattern missing");
 
   // registry.register 추가: "new MarkdownTool()" 뒤
+  const before_register = patched;
   patched = patched.replace(
     /(registry\.register\(new MarkdownTool\(\)\);)/,
     `$1\n  registry.register(new ${class_name}());`,
   );
+  if (patched === before_register) errors.push("register anchor not found: 'new MarkdownTool()' pattern missing");
 
-  return patched;
+  return { patched, errors };
 }
 
 // ── 3. Patch i18n JSON ──
@@ -191,7 +198,13 @@ if (index_src.includes(class_name)) {
   process.exit(1);
 }
 
-const patched_index = patch_index(index_src);
+const { patched: patched_index, errors: patch_errors } = patch_index(index_src);
+if (patch_errors.length > 0) {
+  console.error("Error: index.ts patch failed:");
+  for (const e of patch_errors) console.error(`  - ${e}`);
+  process.exit(1);
+}
+
 const patched_en = patch_json(EN_JSON, build_i18n_keys("en"));
 const patched_ko = patch_json(KO_JSON, build_i18n_keys("ko"));
 
@@ -202,10 +215,14 @@ if (DRY_RUN) {
   console.log("[dry-run] i18n keys (ko):", Object.keys(build_i18n_keys("ko")).join(", "));
   console.log("\n--- Generated .ts ---\n" + ts_content);
 } else {
-  writeFileSync(ts_path, ts_content, "utf-8");
-  writeFileSync(INDEX_FILE, patched_index, "utf-8");
-  writeFileSync(EN_JSON, patched_en, "utf-8");
-  writeFileSync(KO_JSON, patched_ko, "utf-8");
+  // all-or-nothing: 모든 패치를 계산한 뒤 일괄 쓰기
+  const writes: Array<[string, string]> = [
+    [ts_path, ts_content],
+    [INDEX_FILE, patched_index],
+    [EN_JSON, patched_en],
+    [KO_JSON, patched_ko],
+  ];
+  for (const [path, content] of writes) writeFileSync(path, content, "utf-8");
   console.log(`Created: src/agent/tools/${file_name}.ts`);
   console.log(`Patched: tools/index.ts (+import, +export, +register)`);
   console.log(`Patched: en.json, ko.json (+${Object.keys(build_i18n_keys("en")).length} keys each)`);

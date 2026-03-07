@@ -40,7 +40,7 @@ export const system_info_handler: NodeHandler = {
       if (!cmd) continue;
       try {
         const { stdout } = await run_shell_command(cmd, {
-          cwd: process.cwd(),
+          cwd: ctx.workspace,
           timeout_ms: 10_000,
           max_buffer_bytes: 1024 * 256,
           signal: ctx.abort_signal,

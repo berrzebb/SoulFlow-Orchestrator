@@ -64,6 +64,28 @@ During consolidation the agent:
 3. Updates long-term memory via `memory_update`
 4. Adds a summary to daily memory via `history_entry`
 
+### Configuration
+
+Configure via dashboard → **Settings** → `memory.consolidation`:
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `enabled` | `true` | Enable/disable automatic consolidation |
+| `trigger` | `idle` | Trigger mode: `idle` (after session inactivity) or `cron` (periodic) |
+| `idleAfterMs` | 1800000 | Idle trigger: wait time after last activity (ms) |
+| `intervalMs` | 86400000 | Cron trigger: consolidation interval (ms, default 24h) |
+| `windowDays` | 7 | Number of daily memory days to analyze |
+| `archiveUsed` | `false` | Delete consumed daily entries after consolidation |
+
+### Daily Memory Injection
+
+Recent daily memory can be automatically injected into the system prompt:
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `dailyInjectionDays` | `3` | Number of recent days to inject (0 = disabled) |
+| `dailyInjectionMaxChars` | `4000` | Maximum characters to inject |
+
 ## Sensitive Data Handling
 
 Sensitive information is automatically masked before being written to memory. Actual tokens/passwords are never recorded in memory.

@@ -1,6 +1,6 @@
 import { error_message, now_iso} from "./utils/common.js";
 import { join, resolve } from "node:path";
-import { mkdirSync, readdirSync, copyFileSync, existsSync } from "node:fs";
+import { mkdirSync, readdirSync, copyFileSync, existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { AgentDomain } from "./agent/index.js";
 import { create_agent_inspector } from "./agent/inspector.service.js";
@@ -8,7 +8,9 @@ import { create_agent_runtime } from "./agent/runtime.service.js";
 import { CronTool, MemoryTool, DecisionTool, SecretTool, PromiseTool, TaskQueryTool, WorkflowTool } from "./agent/tools/index.js";
 import { KanbanTool } from "./agent/tools/kanban.js";
 import { KanbanStore, type KanbanStoreLike, type KanbanEvent } from "./services/kanban-store.js";
-import { MessageBus } from "./bus/index.js";
+import { KanbanAutomationRuntime } from "./services/kanban-automation-runtime.js";
+import { create_message_bus } from "./bus/index.js";
+import type { MessageBusRuntime } from "./bus/index.js";
 import {
   ChannelManager,
   SqliteDispatchDlqStore,
@@ -16,6 +18,8 @@ import {
   create_channels_from_store,
   type ChannelRegistryLike,
 } from "./channels/index.js";
+import { ActiveRunController } from "./channels/active-run-controller.js";
+import { InMemoryRenderProfileStore } from "./channels/commands/render.handler.js";
 import { ApprovalService } from "./channels/approval.service.js";
 import { create_command_router } from "./channels/create-command-router.js";
 import { TaskResumeService } from "./channels/task-resume.service.js";
@@ -23,23 +27,29 @@ import { DispatchService } from "./channels/dispatch.service.js";
 import { MediaCollector } from "./channels/media-collector.js";
 import { DefaultOutboundDedupePolicy } from "./channels/outbound-dedupe.js";
 import { sanitize_provider_output } from "./channels/output-sanitizer.js";
+import { PersonaMessageRenderer, TonePreferenceStore } from "./channels/persona-message-renderer.js";
 import { DefaultRuntimePolicyResolver } from "./channels/runtime-policy.js";
 import { SessionRecorder } from "./channels/session-recorder.js";
 import { load_config_merged } from "./config/schema.js";
 import { ConfigStore } from "./config/config-store.js";
-import { get_shared_secret_vault } from "./security/secret-vault-factory.js";
+import { get_shared_secret_vault, set_default_vault_workspace } from "./security/secret-vault-factory.js";
 import { create_cron_job_handler, CronService } from "./cron/index.js";
+import { sync_all_workflow_triggers } from "./cron/workflow-trigger-sync.js";
+import { MemoryConsolidationService } from "./agent/memory-consolidation.service.js";
 import { DashboardService } from "./dashboard/service.js";
-import { get_tool_index } from "./orchestration/tool-index.js";
+import { MutableBroadcaster } from "./dashboard/broadcaster.js";
+import { ToolIndex } from "./orchestration/tool-index.js";
 import { DecisionService } from "./decision/index.js";
 import { WorkflowEventService } from "./events/index.js";
 import { HeartbeatService } from "./heartbeat/index.js";
 import { create_logger } from "./logger.js";
 import { OpsRuntimeService } from "./ops/index.js";
-import { OrchestrationService, format_hitl_prompt, detect_hitl_type } from "./orchestration/service.js";
+import { OrchestrationService, detect_hitl_type } from "./orchestration/service.js";
 import { resolve_reply_to } from "./orchestration/service.js";
+import { extract_persona_name } from "./orchestration/prompts.js";
 import { ProcessTracker } from "./orchestration/process-tracker.js";
 import { ConfirmationGuard } from "./orchestration/confirmation-guard.js";
+import { HitlPendingStore } from "./orchestration/hitl-pending-store.js";
 import { parse_executor_preference, resolve_executor_provider, type ProviderCapabilities } from "./providers/executor.js";
 import { OrchestratorLlmRuntime, ProviderRegistry } from "./providers/index.js";
 import { OrchestratorLlmServiceAdapter } from "./providers/orchestrator-llm-service.adapter.js";
@@ -65,7 +75,7 @@ import {
   create_workflow_ops,
 } from "./dashboard/ops-factory.js";
 import { PhaseWorkflowStore } from "./agent/phase-workflow-store.js";
-import { create_embed_service_auto } from "./services/embed.service.js";
+import { create_embed_service_from_provider } from "./services/embed.service.js";
 import { create_vector_store_service } from "./services/vector-store.service.js";
 import { WebhookStore } from "./services/webhook-store.service.js";
 import { create_task_service } from "./services/create-task.service.js";
@@ -74,7 +84,7 @@ import { ReferenceStore } from "./services/reference-store.js";
 
 export interface RuntimeApp {
   agent: AgentDomain;
-  bus: MessageBus;
+  bus: MessageBusRuntime;
   channels: ChannelRegistryLike;
   channel_manager: ChannelManager;
   cron: CronService;
@@ -95,19 +105,31 @@ export interface RuntimeApp {
 
 /** KanbanStore subscribe를 Promise 기반 one-shot 대기로 변환. */
 function make_wait_kanban_event(store: KanbanStoreLike) {
-  return (board_id: string, filter: { actions?: string[]; column_id?: string }) =>
-    new Promise<{ card_id: string; board_id: string; action: string; actor: string; detail: Record<string, unknown>; created_at: string } | null>((resolve) => {
+  return async (raw_board_id: string, filter: { actions?: string[]; column_id?: string }) => {
+    // P1-8: scope:type:id 형식을 실제 board_id로 resolve
+    let board_id = raw_board_id;
+    const scope_match = raw_board_id.match(/^scope:(\w+):(.+)$/);
+    if (scope_match) {
+      const boards = await store.list_boards(scope_match[1] as import("./services/kanban-store.js").ScopeType, scope_match[2]);
+      if (boards.length > 0) board_id = boards[0].board_id;
+    }
+    return new Promise<{ card_id: string; board_id: string; action: string; actor: string; detail: Record<string, unknown>; created_at: string } | null>((resolve) => {
       const timeout = setTimeout(() => { store.unsubscribe(board_id, handler); resolve(null); }, 60_000);
       const handler = (event: KanbanEvent) => {
         const act = event.data;
         if (filter.actions?.length && !filter.actions.includes(act.action)) return;
-        if (filter.column_id && (act.detail as Record<string, unknown>).column_id !== filter.column_id) return;
+        if (filter.column_id) {
+          const d = act.detail as Record<string, unknown>;
+          const matches = d.column_id === filter.column_id || d.to === filter.column_id;
+          if (!matches) return;
+        }
         clearTimeout(timeout);
         store.unsubscribe(board_id, handler);
         resolve({ card_id: act.card_id, board_id: act.board_id, action: act.action, actor: act.actor, detail: act.detail, created_at: act.created_at });
       };
       store.subscribe(board_id, handler);
     });
+  };
 }
 
 function resolve_from_workspace(workspace: string, path_value: string, fallback: string): string {
@@ -123,6 +145,9 @@ export async function createRuntime(): Promise<RuntimeApp> {
   // 기본 워크플로우 템플릿 시드 (WORKSPACE/workflows/ 가 비어있으면 default-workflows/ 에서 복사)
   seed_default_workflows(workspace, app_root);
 
+  // vault default workspace 설정 — 이후 인자 없이 get_shared_secret_vault() 호출 가능
+  set_default_vault_workspace(workspace);
+
   // ConfigStore: 하드코딩 기본값 위에 영속 오버라이드 + vault 민감 설정 병합
   const bootstrap_data_dir = join(workspace, "runtime");
   const shared_vault = get_shared_secret_vault(workspace);
@@ -136,7 +161,16 @@ export async function createRuntime(): Promise<RuntimeApp> {
   const decisions_dir = join(data_dir, "decisions");
   const events_dir = join(data_dir, "events");
   const sessions_dir = join(data_dir, "sessions");
-  const bus = new MessageBus();
+  const bus = await create_message_bus({
+    backend: app_config.bus.backend,
+    redis: {
+      url: app_config.bus.redis.url,
+      keyPrefix: app_config.bus.redis.keyPrefix,
+      blockMs: app_config.bus.redis.blockMs,
+      claimIdleMs: app_config.bus.redis.claimIdleMs,
+      streamMaxlen: app_config.bus.redis.streamMaxlen,
+    },
+  });
   const decisions = new DecisionService(workspace, decisions_dir);
   const events = new WorkflowEventService(workspace, events_dir, null, app_config.taskLoopMaxTurns);
   // 에이전트 프로바이더 스토어: SQLite 영속화 + vault 토큰 관리
@@ -153,16 +187,19 @@ export async function createRuntime(): Promise<RuntimeApp> {
   oauth_flow.load_custom_presets();
 
   // 워크플로우 노드용 서비스 인프라
-  // Ollama 임베딩: embedding.ollamaApiBase 직접 설정 우선, 없으면 orchestratorLlm 활성 시 해당 API base 폴백
-  const ollama_embed_base = app_config.embedding.ollamaApiBase
-    || (app_config.orchestratorLlm.enabled ? app_config.orchestratorLlm.apiBase : "")
-    || undefined;
-  const embed_service = create_embed_service_auto({
-    openrouter_api_key: () => provider_store.get_token("openrouter"),
-    openrouter_api_base: provider_store.get("openrouter")?.settings?.api_base as string | undefined,
-    ollama_api_base: ollama_embed_base,
-    ollama_embed_model: app_config.embedding.ollamaModel || undefined,
-  });
+  // 등록된 embedding 프로바이더 인스턴스에서 embed service 생성
+  const embed_instance_id = app_config.embedding.instanceId
+    || provider_store.list_for_purpose("embedding")[0]?.instance_id;
+  const embed_provider = embed_instance_id ? provider_store.get(embed_instance_id) : null;
+  const embed_model_override = app_config.embedding.model || undefined;
+  const embed_service = embed_provider
+    ? create_embed_service_from_provider({
+      provider_type: embed_provider.provider_type,
+      model: embed_model_override || (typeof embed_provider.settings.model === "string" ? embed_provider.settings.model : undefined),
+      api_base: provider_store.resolve_api_base(embed_instance_id!),
+      get_api_key: () => provider_store.resolve_token(embed_instance_id!),
+    })
+    : undefined;
   const vector_store_service = create_vector_store_service(data_dir);
   const webhook_store = new WebhookStore();
   const query_db_service = create_query_db_service(data_dir);
@@ -187,9 +224,18 @@ export async function createRuntime(): Promise<RuntimeApp> {
   const claude_settings = (provider_store.get("claude_cli")?.settings || {}) as Record<string, unknown>;
   const gemini_settings = (provider_store.get("gemini_cli")?.settings || {}) as Record<string, unknown>;
 
+  // 인스턴스 ID에서 provider_type 해석 (instance_id → provider_type, 없으면 원본 문자열 그대로 사용)
+  const resolve_instance_to_type = (id: string): string => {
+    if (!id) return "";
+    const inst = provider_store.get(id);
+    return inst?.provider_type || id;
+  };
+
   const providers = new ProviderRegistry({
+    secret_vault: shared_vault,
     orchestrator_max_tokens: app_config.orchestration.orchestratorMaxTokens,
-    orchestrator_provider: app_config.orchestration.orchestratorProvider,
+    orchestrator_provider: resolve_instance_to_type(app_config.orchestration.orchestratorProvider),
+    orchestrator_model_override: app_config.orchestration.orchestratorModel || undefined,
     openrouter_api_key: openrouter_key,
     openrouter_api_base: (openrouter_config?.settings.api_base as string) || undefined,
     openrouter_model: (openrouter_config?.settings.model as string) || undefined,
@@ -231,8 +277,13 @@ export async function createRuntime(): Promise<RuntimeApp> {
   const agent_backends: import("./agent/agent.types.js").AgentBackend[] = [];
   for (const config of provider_store.list()) {
     if (!config.enabled) continue;
-    const token = await provider_store.get_token(config.instance_id);
-    const backend = create_agent_provider(config, token, factory_deps);
+    const token = await provider_store.resolve_token(config.instance_id);
+    // connection의 api_base를 settings에 머지 (connection 우선)
+    const resolved_api_base = provider_store.resolve_api_base(config.instance_id);
+    const effective_config = resolved_api_base && resolved_api_base !== config.settings.api_base
+      ? { ...config, settings: { ...config.settings, api_base: resolved_api_base } }
+      : config;
+    const backend = create_agent_provider(effective_config, token, factory_deps);
     if (backend) agent_backends.push(backend);
   }
 
@@ -262,12 +313,33 @@ export async function createRuntime(): Promise<RuntimeApp> {
     openrouter_available: Boolean(openrouter_key),
   };
 
+  const tone_pref_store = new TonePreferenceStore(join(workspace, "runtime", "tone-preferences.json"));
+  const persona_renderer = new PersonaMessageRenderer({
+    get_persona_name: () => {
+      try {
+        for (const p of [join(workspace, "templates", "SOUL.md"), join(workspace, "SOUL.md")]) {
+          if (existsSync(p)) { const r = readFileSync(p, "utf-8").trim(); if (r) return extract_persona_name(r); }
+        }
+      } catch { /* no soul */ }
+      return "assistant";
+    },
+    get_heart: () => {
+      try {
+        for (const p of [join(workspace, "templates", "HEART.md"), join(workspace, "HEART.md")]) {
+          if (existsSync(p)) { const r = readFileSync(p, "utf-8").trim(); if (r) return r; }
+        }
+      } catch { /* no heart */ }
+      return "";
+    },
+    get_tone_preference: (chat_key) => tone_pref_store.get(chat_key),
+  });
+
   const agent = new AgentDomain(workspace, {
     providers, bus, data_dir, events, agent_backends: agent_backend_registry,
     secret_vault: providers.get_secret_vault(), logger: logger.child("agent"),
     provider_caps, app_root,
     on_task_change: (task) => {
-      dashboard?.sse.broadcast_task_event("status_change", task);
+      broadcaster.broadcast_task_event("status_change", task);
       // HITL 상태를 채널에 알림 (최상위 + 서브태스크 모두)
       if (task.status === "waiting_user_input" || task.status === "max_turns_reached") {
         const channel = task.channel || String(task.memory?.channel || "");
@@ -281,7 +353,7 @@ export async function createRuntime(): Promise<RuntimeApp> {
         const body = task.status === "max_turns_reached"
           ? prompt || `최대 실행 횟수(${task.maxTurns}턴)에 도달하여 작업이 일시 중지되었습니다.`
           : prompt;
-        const content = format_hitl_prompt(body, task.taskId, hitl_type);
+        const content = persona_renderer.render({ kind: "hitl_prompt", hitl_type: hitl_type, body });
         const reply_to = String(task.memory?.__trigger_message_id || "").trim() || undefined;
         bus.publish_outbound({
           id: `hitl-${task.taskId}-${Date.now()}`,
@@ -310,37 +382,39 @@ export async function createRuntime(): Promise<RuntimeApp> {
   });
   const phase_workflow_store = new PhaseWorkflowStore(join(workspace, "runtime", "workflows"));
   const kanban_store = new KanbanStore(join(workspace, "runtime"));
+  const kanban_tool = new KanbanTool(kanban_store);
+  const kanban_automation = new KanbanAutomationRuntime();
   const agent_inspector = create_agent_inspector(agent);
   const agent_runtime = create_agent_runtime(agent, { phase_workflow_store });
+  // 도구 인덱스: runtime-owned instance (global singleton 대신 명시적 주입)
+  const tool_index = new ToolIndex();
   // 임베딩 서비스 연결 (벡터 시멘틱 검색 활성화)
-  agent.context.memory_store.set_embed?.(embed_service);
-  get_tool_index().set_embed(embed_service);
+  if (embed_service) {
+    agent.context.memory_store.set_embed?.(embed_service);
+    tool_index.set_embed(embed_service);
+  }
+  agent.context.set_daily_injection(app_config.memory.dailyInjectionDays, app_config.memory.dailyInjectionMaxChars);
   // Reference 문서 스토어 (workspace/references/ → 자동 임베딩 + 컨텍스트 주입)
   const reference_store = new ReferenceStore(workspace);
-  reference_store.set_embed(embed_service);
+  if (embed_service) reference_store.set_embed(embed_service);
   agent.context.set_reference_store(reference_store);
   const sessions = new SessionStore(workspace, sessions_dir);
 
-  const cron = new CronService(join(data_dir, "cron"), create_cron_job_handler({
-    config: {
-      agent_loop_max_turns: app_config.agentLoopMaxTurns,
-      default_alias: app_config.channel.defaultAlias,
-      executor_provider: app_config.orchestration.executorProvider,
-      provider_caps,
-      resolve_default_target: () => {
-        if (!default_chat_id) return null;
-        return { provider: primary_provider, chat_id: default_chat_id };
-      },
-    },
-    bus,
-    events,
-    agent_runtime,
-    agent_backends: agent_backend_registry,
-    secret_vault: providers.get_secret_vault(),
-  }), {
-    on_change: (type, job_id) => dashboard?.sse.broadcast_cron_event(type, job_id),
-  });
   events.bind_task_store(agent.task_store);
+
+  // 메모리 압축 서비스
+  const memory_consolidation = new MemoryConsolidationService({
+    memory_store: agent.context.memory_store,
+    config: {
+      enabled: app_config.memory.consolidation.enabled,
+      trigger: app_config.memory.consolidation.trigger,
+      idle_after_ms: app_config.memory.consolidation.idleAfterMs,
+      interval_ms: app_config.memory.consolidation.intervalMs,
+      window_days: app_config.memory.consolidation.windowDays,
+      archive_used: app_config.memory.consolidation.archiveUsed,
+    },
+    logger,
+  });
 
   const instance_store = new ChannelInstanceStore(join(data_dir, "channels", "instances.db"), shared_vault);
 
@@ -358,7 +432,7 @@ export async function createRuntime(): Promise<RuntimeApp> {
     : "";
 
   const dlq_store = app_config.channel.dispatch.dlqEnabled
-    ? new SqliteDispatchDlqStore(app_config.channel.dispatch.dlqPath)
+    ? new SqliteDispatchDlqStore(resolve_from_workspace(workspace, app_config.channel.dispatch.dlqPath, join(data_dir, "dlq", "dlq.db")))
     : null;
   const dispatch = new DispatchService({
     bus,
@@ -368,7 +442,7 @@ export async function createRuntime(): Promise<RuntimeApp> {
     dlq_store,
     dedupe_policy: new DefaultOutboundDedupePolicy(),
     logger: logger.child("dispatch"),
-    on_direct_send: (msg) => dashboard?.sse.broadcast_message_event("outbound", msg.sender_id, msg.content, msg.chat_id),
+    on_direct_send: (msg) => broadcaster.broadcast_message_event("outbound", msg.sender_id, msg.content, msg.chat_id),
   });
 
   const session_recorder = new SessionRecorder({
@@ -376,7 +450,7 @@ export async function createRuntime(): Promise<RuntimeApp> {
     daily_memory: agent_runtime,
     sanitize_for_storage: sanitize_provider_output,
     logger: logger.child("session"),
-    on_mirror_message: (event) => dashboard?.sse.broadcast_mirror_message(event),
+    on_mirror_message: (event) => broadcaster.broadcast_mirror_message(event),
   });
 
   const slack_token = await instance_store.get_token("slack") || "";
@@ -399,24 +473,27 @@ export async function createRuntime(): Promise<RuntimeApp> {
     logger: logger.child("approval"),
   });
 
-  let channel_manager_ref: ChannelManager | null = null;
-  let dashboard: DashboardService | null = null;
+  const active_run_controller = new ActiveRunController();
+  const render_profile_store = new InMemoryRenderProfileStore();
+  const dashboard: { current: DashboardService | null } = { current: null };
+  const broadcaster = new MutableBroadcaster();
 
   const process_tracker = new ProcessTracker({
     max_history: 100,
     cancel_strategy: {
       abort_run: (provider, chat_id, alias) => {
         const key = `${provider}:${chat_id}:${alias}`.toLowerCase();
-        return (channel_manager_ref?.cancel_active_runs(key) ?? 0) > 0;
+        return active_run_controller.cancel(key) > 0;
       },
       stop_loop: (loop_id) => !!agent_runtime.stop_loop(loop_id),
       cancel_task: async (task_id) => !!(await agent_runtime.cancel_task(task_id)),
       cancel_subagent: (id) => agent.subagents.cancel(id),
     },
-    on_change: (type, entry) => dashboard?.sse.broadcast_process_event(type, entry),
+    on_change: (type, entry) => broadcaster.broadcast_process_event(type, entry),
   });
 
   const confirmation_guard = new ConfirmationGuard();
+  const hitl_pending_store = new HitlPendingStore();
 
   // oauth_fetch 서비스: 워크플로우 노드에서 OAuth 인증 HTTP 호출 지원
   const oauth_fetch_service = async (
@@ -460,6 +537,38 @@ export async function createRuntime(): Promise<RuntimeApp> {
     return { status: res.status, body: res_body, headers: res_headers };
   };
 
+  // create_task: lazy thunk — 클로저 내부에서 orchestration을 참조하지만, 호출 시점에만 resolve됨
+  const create_task_fn = create_task_service(() => ({
+    execute: async (opts) => {
+      const run_id = `task_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      const result = await orchestration.execute({
+        message: {
+          id: run_id,
+          provider: opts.channel,
+          channel: opts.channel,
+          sender_id: "workflow",
+          chat_id: opts.chat_id,
+          content: opts.objective,
+          at: now_iso(),
+        },
+        alias: opts.title || "default",
+        provider: opts.channel,
+        media_inputs: [],
+        session_history: [],
+        run_id,
+        max_turns: opts.max_turns,
+        initial_memory: opts.initial_memory,
+      });
+      const has_error = !!result.error;
+      return {
+        task_id: result.run_id || run_id,
+        status: has_error ? "failed" : "completed",
+        result: result.reply ?? undefined,
+        error: has_error ? (result.error || result.reply || undefined) : undefined,
+      };
+    },
+  }));
+
   const orchestration = new OrchestrationService({
     providers,
     agent_runtime,
@@ -467,7 +576,7 @@ export async function createRuntime(): Promise<RuntimeApp> {
     runtime_policy_resolver: new DefaultRuntimePolicyResolver(),
     config: {
       executor_provider: resolve_executor_provider(
-        parse_executor_preference(app_config.orchestration.executorProvider),
+        parse_executor_preference(resolve_instance_to_type(app_config.orchestration.executorProvider) || app_config.orchestration.executorProvider),
         provider_caps,
       ),
       agent_loop_max_turns: app_config.agentLoopMaxTurns,
@@ -486,7 +595,7 @@ export async function createRuntime(): Promise<RuntimeApp> {
     workspace,
     subagents: agent.subagents,
     phase_workflow_store,
-    get_sse_broadcaster: () => dashboard?.sse ?? null,
+    get_sse_broadcaster: () => broadcaster,
     confirmation_guard,
     bus,
     decision_service: decisions,
@@ -497,52 +606,60 @@ export async function createRuntime(): Promise<RuntimeApp> {
     get_webhook_data: (path) => webhook_store.get(path),
     wait_kanban_event: make_wait_kanban_event(kanban_store),
     query_db: query_db_service,
+    renderer: persona_renderer,
+    hitl_pending_store,
+    tool_index,
+    create_task: create_task_fn,
   });
 
-  // create_task: orchestration 초기화 후 lazy 바인딩 (순환 참조 회피)
-  const create_task_fn = create_task_service(() => ({
-    execute: async (opts) => {
-      const run_id = `task_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-      const result = await orchestration.execute({
-        message: {
-          id: run_id,
-          provider: opts.channel,
-          channel: opts.channel,
-          sender_id: "workflow",
-          chat_id: opts.chat_id,
-          content: opts.objective,
-          at: now_iso(),
-        },
-        alias: "default",
-        provider: opts.channel,
-        media_inputs: [],
-        session_history: [],
-        run_id,
-      });
-      const has_error = !!result.error;
-      return {
-        task_id: result.run_id || run_id,
-        status: has_error ? "failed" : "completed",
-        result: result.reply ?? undefined,
-        error: has_error ? (result.error || result.reply || undefined) : undefined,
-      };
+  const cron = new CronService(join(data_dir, "cron"), create_cron_job_handler({
+    config: {
+      agent_loop_max_turns: app_config.agentLoopMaxTurns,
+      default_alias: app_config.channel.defaultAlias,
+      executor_provider: resolve_instance_to_type(app_config.orchestration.executorProvider) || app_config.orchestration.executorProvider,
+      provider_caps,
+      resolve_default_target: () => {
+        if (!default_chat_id) return null;
+        return { provider: primary_provider, chat_id: default_chat_id };
+      },
     },
-  }));
-
-  // OrchestrationService에 create_task late-inject (순환 참조 회피)
-  orchestration.set_create_task(create_task_fn);
+    bus,
+    events,
+    agent_runtime,
+    agent_backends: agent_backend_registry,
+    secret_vault: providers.get_secret_vault(),
+    on_workflow_trigger: async (slug, channel, chat_id) => {
+      try {
+        const { load_workflow_template, substitute_variables } = await import("./orchestration/workflow-loader.js");
+        const template = load_workflow_template(workspace, slug);
+        if (!template) return { ok: false, error: `template not found: ${slug}` };
+        const substituted = substitute_variables(template, { ...template.variables, channel });
+        const run_id = `wf-cron_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+        const result = await orchestration.execute({
+          message: { id: run_id, provider: channel, channel, sender_id: "cron", chat_id, content: substituted.objective || substituted.title, at: now_iso() },
+          alias: app_config.channel.defaultAlias,
+          provider: channel,
+          media_inputs: [],
+          session_history: [],
+          run_id,
+        });
+        return { ok: !result.error, workflow_id: result.run_id || run_id, error: result.error || undefined };
+      } catch (e) {
+        return { ok: false, error: error_message(e) };
+      }
+    },
+  }), {
+    on_change: (type, job_id) => broadcaster.broadcast_cron_event(type, job_id),
+  });
 
   const command_router = create_command_router({
-    cancel_active_runs: (key) => channel_manager_ref?.cancel_active_runs(key) ?? 0,
-    render_profile: {
-      get: (p, c) => channel_manager_ref!.get_render_profile(p, c),
-      set: (p, c, patch) => channel_manager_ref!.set_render_profile(p, c, patch),
-      reset: (p, c) => channel_manager_ref!.reset_render_profile(p, c),
-    },
+    cancel_active_runs: (key) => active_run_controller.cancel(key),
+    render_profile: render_profile_store,
     agent, agent_runtime, process_tracker, orchestration, providers,
     agent_backend_registry, mcp, session_recorder, cron, decisions,
     default_alias: app_config.channel.defaultAlias,
     confirmation_guard,
+    tone_store: tone_pref_store,
   });
 
   const task_resume = new TaskResumeService({
@@ -580,11 +697,17 @@ export async function createRuntime(): Promise<RuntimeApp> {
     workspace_dir: workspace,
     logger: app_config.channel.debug ? create_logger("channels", "debug") : logger.child("channels"),
     bot_identity,
-    on_agent_event: (event) => dashboard?.sse.broadcast_agent_event(event),
-    on_web_stream: (chat_id, content, done) => dashboard?.sse.broadcast_web_stream(chat_id, content, done),
+    on_agent_event: (event) => broadcaster.broadcast_agent_event(event),
+    on_web_stream: (chat_id, content, done) => broadcaster.broadcast_web_stream(chat_id, content, done),
     confirmation_guard,
+    on_activity_start: () => memory_consolidation.touch_start(),
+    on_activity_end: () => memory_consolidation.touch_end(),
+    renderer: persona_renderer,
+    active_run_controller,
+    render_profile_store,
   });
-  channel_manager_ref = channel_manager;
+  // ActiveRunController에 ProcessTracker 연결 (cancel 시 run 종료 기록)
+  active_run_controller.set_tracker(process_tracker);
 
   const orchestrator_llm_runtime = new OrchestratorLlmRuntime({
     enabled: app_config.orchestratorLlm.enabled,
@@ -637,11 +760,23 @@ export async function createRuntime(): Promise<RuntimeApp> {
 
   // WorkflowOps는 대시보드 + WorkflowTool 양쪽에서 사용
   const workflow_ops_result = create_workflow_ops({
+    hitl_pending_store, renderer: persona_renderer,
     store: phase_workflow_store, subagents: agent.subagents, workspace, logger, bus,
     skills_loader: agent.context.skills_loader,
-    on_workflow_event: (e) => dashboard?.sse.broadcast_workflow_event(e),
-    invoke_tool: (tool_id, params) => agent.tools.execute(tool_id, params),
+    on_workflow_event: (e) => broadcaster.broadcast_workflow_event(e),
+    invoke_tool: (tool_id, params, ctx) => agent.tools.execute(tool_id, params, ctx ? { channel: ctx.channel, chat_id: ctx.chat_id, sender_id: ctx.sender_id, task_id: ctx.workflow_id } : undefined),
     providers,
+    get_tool_summaries: () => agent.tools.get_all().map((t) => ({
+      name: t.name, description: t.description, category: t.category,
+    })),
+    get_provider_summaries: () => {
+      try {
+        return provider_store.list().filter((p) => p.enabled).map((p) => ({
+          backend: p.instance_id, label: p.label, provider_type: p.provider_type,
+          models: [String(p.settings?.model || "")].filter(Boolean),
+        }));
+      } catch { return []; }
+    },
     decision_service: decisions,
     promise_service: agent.context.promise_service,
     oauth_fetch: oauth_fetch_service,
@@ -651,15 +786,44 @@ export async function createRuntime(): Promise<RuntimeApp> {
     wait_kanban_event: make_wait_kanban_event(kanban_store),
     create_task: create_task_fn,
     query_db: query_db_service,
+    on_kanban_trigger_waiting: (wf_id) => kanban_automation.notify_workflow_waiting(wf_id),
   });
-  // 두 HITL bridge 결합: ops-factory (대시보드 경유) + orchestration (채널 경유)
-  const orch_hitl = orchestration.get_phase_hitl_bridge();
-  const ops_hitl = workflow_ops_result.hitl_bridge;
+  // HITL bridge: 공유 store 기반 단일 bridge
   channel_manager.set_workflow_hitl({
     async try_resolve(chat_id, content) {
-      return await ops_hitl.try_resolve(chat_id, content) || await orch_hitl.try_resolve(chat_id, content);
+      return hitl_pending_store.try_resolve(chat_id, content);
     },
   });
+
+  // kanban automation: trigger watcher + rule executor 초기화
+  await kanban_automation.init_trigger_watcher({
+    kanban_store,
+    workflow_store: phase_workflow_store,
+    resumer: workflow_ops_result,
+  });
+  await kanban_automation.init_rule_executor(kanban_store, {
+    async run_workflow(params) {
+      const result = await workflow_ops_result.create({
+        template_name: params.template,
+        title: params.title,
+        objective: params.objective,
+        channel: params.channel || "dashboard",
+        chat_id: params.chat_id || "kanban-rule",
+      });
+      return { ok: result.ok, workflow_id: result.workflow_id, error: result.error };
+    },
+    async create_task(params) {
+      const result = await create_task_fn({
+        title: params.prompt,
+        objective: params.prompt,
+        channel: params.channel,
+        chat_id: params.chat_id,
+      });
+      return { ok: !!result.task_id, task_id: result.task_id, error: result.error };
+    },
+  });
+  const rule_executor = kanban_automation.get_rule_executor();
+  if (rule_executor) kanban_tool.set_rule_executor(rule_executor);
 
   // late-inject: /workflow, /model 커맨드
   const { WorkflowHandler, ModelHandler } = await import("./channels/commands/index.js");
@@ -694,9 +858,13 @@ export async function createRuntime(): Promise<RuntimeApp> {
     }));
   }
 
-  if (app_config.dashboard.enabled) {
+  const agent_provider_ops_result = create_agent_provider_ops({
+    provider_store, agent_backends: agent_backend_registry,
+    provider_registry: providers, workspace,
+  });
 
-    dashboard = new DashboardService({
+  if (app_config.dashboard.enabled) {
+    const dash = new DashboardService({
       host: app_config.dashboard.host,
       port: app_config.dashboard.port,
       port_fallback: app_config.dashboard.portFallback,
@@ -726,10 +894,7 @@ export async function createRuntime(): Promise<RuntimeApp> {
       tool_ops: create_tool_ops({ tool_names: () => agent.tools.tool_names(), get_definitions: () => agent.tools.get_definitions(), mcp }),
       template_ops: create_template_ops(workspace),
       channel_ops: create_channel_ops({ channels, instance_store, app_config }),
-      agent_provider_ops: create_agent_provider_ops({
-        provider_store, agent_backends: agent_backend_registry,
-        provider_registry: providers, workspace,
-      }),
+      agent_provider_ops: agent_provider_ops_result,
       bootstrap_ops: create_bootstrap_ops({ provider_store, config_store, provider_registry: providers, agent_backends: agent_backend_registry, workspace }),
       session_store: sessions,
       memory_ops: create_memory_ops(agent.context.memory_store),
@@ -739,17 +904,20 @@ export async function createRuntime(): Promise<RuntimeApp> {
       model_ops: orchestrator_llm_runtime ? create_model_ops(orchestrator_llm_runtime) : null,
       workflow_ops: workflow_ops_result,
       kanban_store,
+      kanban_rule_executor: () => kanban_automation.get_rule_executor(),
       reference_store,
       default_alias: app_config.channel.defaultAlias,
       workspace,
     });
-    dashboard.set_oauth_callback_handler((code, state) => oauth_flow.handle_callback(code, state));
-    dashboard.set_webhook_store(webhook_store);
+    dashboard.current = dash;
+    broadcaster.attach(dash.sse);
+    dash.set_oauth_callback_handler((code: string, state: string) => oauth_flow.handle_callback(code, state));
+    dash.set_webhook_store(webhook_store);
     bus.on_publish((dir, msg) => {
-      dashboard?.sse.broadcast_message_event(dir, msg.sender_id, msg.content, msg.chat_id);
+      broadcaster.broadcast_message_event(dir, msg.sender_id, msg.content, msg.chat_id);
       if (dir === "outbound" && msg.provider === "web" && msg.chat_id) {
         const media = msg.media?.map((m) => ({ type: m.type as string, url: m.url, mime: m.mime, name: m.name }));
-        dashboard?.capture_web_outbound(msg.chat_id, msg.content, media);
+        dash.capture_web_outbound(msg.chat_id, msg.content, media);
       }
     });
   }
@@ -758,7 +926,7 @@ export async function createRuntime(): Promise<RuntimeApp> {
   (async function progress_relay() {
     while (!bus.is_closed()) {
       const event = await bus.consume_progress({ timeout_ms: 5000 });
-      if (event) dashboard?.sse.broadcast_progress_event(event);
+      if (event) broadcaster.broadcast_progress_event(event);
     }
   })().catch((e) => logger.error("[progress_relay] unhandled:", e));
 
@@ -796,10 +964,10 @@ export async function createRuntime(): Promise<RuntimeApp> {
     agent_runtime.register_tool(new OAuthFetchTool(oauth_store, oauth_flow));
   }
   if (!agent_runtime.has_tool("workflow")) {
-    agent_runtime.register_tool(new WorkflowTool(workflow_ops_result));
+    agent_runtime.register_tool(new WorkflowTool(workflow_ops_result, agent_provider_ops_result));
   }
   if (!agent_runtime.has_tool("kanban")) {
-    agent_runtime.register_tool(new KanbanTool(kanban_store));
+    agent_runtime.register_tool(kanban_tool);
   }
 
   services.register(agent, { required: true });
@@ -808,9 +976,10 @@ export async function createRuntime(): Promise<RuntimeApp> {
   services.register(cron, { required: true });
   services.register(heartbeat, { required: false });
   services.register(ops, { required: false });
-  if (dashboard) services.register(dashboard, { required: false });
+  if (dashboard.current) services.register(dashboard.current, { required: false });
   services.register(mcp, { required: false });
   services.register(new OrchestratorLlmServiceAdapter(orchestrator_llm_runtime), { required: false });
+  if (app_config.memory.consolidation.enabled) services.register(memory_consolidation, { required: false });
 
   const enabled_channels = instance_store.list().filter((c) => c.enabled).map((c) => c.provider);
   logger.info(`channels=${enabled_channels.join(",")} primary=${primary_provider}`);
@@ -824,6 +993,48 @@ export async function createRuntime(): Promise<RuntimeApp> {
   logger.info(`session_id=${session_id}`);
 
   await services.start();
+
+  // 워크플로우 trigger_nodes → 런타임 서비스 동기화 (cron/webhook/channel_message)
+  const trigger_sync_deps = {
+    cron,
+    bus,
+    webhook_store: webhook_store,
+    kanban_store: kanban_store as import("./services/kanban-store.js").KanbanStoreLike,
+    execute: async (slug: string, channel: string, chat_id: string, trigger_data?: Record<string, unknown>) => {
+      try {
+        const { load_workflow_template, substitute_variables } = await import("./orchestration/workflow-loader.js");
+        const template = load_workflow_template(workspace, slug);
+        if (!template) return { ok: false, error: `template not found: ${slug}` };
+        const substituted = substitute_variables(template, { ...template.variables, channel });
+        const run_id = `wf-trigger_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+        const content = trigger_data
+          ? `${substituted.objective || substituted.title}\n\n[trigger data]\n${JSON.stringify(trigger_data, null, 2)}`
+          : substituted.objective || substituted.title;
+        const result = await orchestration.execute({
+          message: { id: run_id, provider: channel, channel, sender_id: "trigger", chat_id, content, at: now_iso() },
+          alias: app_config.channel.defaultAlias,
+          provider: channel,
+          media_inputs: [],
+          session_history: [],
+          run_id,
+        });
+        return { ok: !result.error, workflow_id: result.run_id || run_id, error: result.error || undefined };
+      } catch (e) {
+        return { ok: false, error: error_message(e) };
+      }
+    },
+    default_channel: primary_provider,
+    default_chat_id: default_chat_id || "",
+  };
+  try {
+    const { load_workflow_templates } = await import("./orchestration/workflow-loader.js");
+    const templates = load_workflow_templates(workspace);
+    const sync_result = await sync_all_workflow_triggers(templates, trigger_sync_deps);
+    const total = sync_result.cron.added + sync_result.webhook.registered + sync_result.channel_message.registered + sync_result.kanban_event.registered;
+    if (total > 0) logger.info(`workflow triggers synced: cron=${sync_result.cron.added} webhook=${sync_result.webhook.registered} channel=${sync_result.channel_message.registered} kanban=${sync_result.kanban_event.registered}`);
+  } catch (e) {
+    logger.warn(`workflow trigger sync failed: ${error_message(e)}`);
+  }
 
   // 만료된 에이전트 세션 정리: 시작 시 즉시 + 1시간 간격
   try { agent_session_store.prune_expired(); } catch { /* noop */ }
@@ -847,7 +1058,7 @@ export async function createRuntime(): Promise<RuntimeApp> {
     logger.warn(`cli-auth check failed: ${error_message(err)}`);
   });
 
-  if (dashboard) logger.info(`dashboard ${dashboard.get_url()}`);
+  if (dashboard.current) logger.info(`dashboard ${dashboard.current.get_url()}`);
   const orch_llm_status = orchestrator_llm_runtime.get_status();
   if (orch_llm_status.enabled) {
     logger.info(`orchestrator-llm running=${orch_llm_status.running} engine=${orch_llm_status.engine || "n/a"} base=${orch_llm_status.api_base}`);
@@ -865,7 +1076,7 @@ export async function createRuntime(): Promise<RuntimeApp> {
     agent_backends: agent_backend_registry,
     orchestrator_llm_runtime,
     sessions,
-    dashboard,
+    dashboard: dashboard.current,
     decisions,
     events,
     ops,

@@ -1,7 +1,7 @@
 /** 도구를 키워드 매칭 + 카테고리로 분류하여 요청에 필요한 서브셋만 선택. */
 
 import type { ToolCategory, ToolSchema } from "../agent/tools/types.js";
-import { get_tool_index } from "./tool-index.js";
+import type { ToolIndex } from "./tool-index.js";
 
 export type { ToolCategory };
 
@@ -93,12 +93,13 @@ export async function select_tools_for_request(
   classifier_categories?: string[],
   tool_category_map?: Record<string, string>,
   classifier_tools?: string[],
+  tool_index?: ToolIndex | null,
 ): Promise<ToolSelectionResult> {
   const effective_map = tool_category_map ?? TOOL_CATEGORIES;
 
   // 키워드 인덱스가 빌드되어 있고 도구 수가 충분하면 키워드 매칭 사용
-  const index = get_tool_index();
-  if (index.size >= KEYWORD_SELECTION_THRESHOLD && all_tools.length >= KEYWORD_SELECTION_THRESHOLD) {
+  const index = tool_index;
+  if (index && index.size >= KEYWORD_SELECTION_THRESHOLD && all_tools.length >= KEYWORD_SELECTION_THRESHOLD) {
     return select_with_keyword_index(
       all_tools, request_text, mode, skill_tool_names,
       classifier_categories, classifier_tools, effective_map, index,
@@ -181,6 +182,7 @@ export function rebuild_tool_index(
   schemas: ToolSchema[],
   category_map: Record<string, string>,
   db_path?: string,
+  tool_index?: ToolIndex | null,
 ): void {
-  get_tool_index().build(schemas, category_map, db_path);
+  tool_index?.build(schemas, category_map, db_path);
 }

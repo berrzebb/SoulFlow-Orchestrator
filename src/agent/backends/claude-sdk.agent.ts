@@ -108,7 +108,8 @@ export class ClaudeSdkAgent implements AgentBackend {
       permissionMode: permission_mode,
     };
 
-    if (this.config?.cwd) sdk_options.cwd = this.config.cwd;
+    const effective_cwd = options.cwd || this.config?.cwd;
+    if (effective_cwd) sdk_options.cwd = effective_cwd;
     if (options.system_prompt) sdk_options.systemPrompt = options.system_prompt;
     if (options.max_turns) sdk_options.maxTurns = options.max_turns;
     if (dangerous_skip) sdk_options.allowDangerouslySkipPermissions = true;
@@ -272,6 +273,7 @@ export class ClaudeSdkAgent implements AgentBackend {
             is_error: Boolean(error_msg),
           });
           if (error_msg) {
+            result_finish_reason = "error";
             fire(emit, {
               type: "error", source, at: now_iso(),
               error: `auth_failed: ${error_msg}`, code: "auth_failed",
@@ -403,6 +405,7 @@ export class ClaudeSdkAgent implements AgentBackend {
         // assistant 메시지의 에러 필드 — 문자열 리터럴 유니온 (authentication_failed, billing_error, rate_limit 등)
         if (message.type === "assistant" && message.error) {
           const err_type = String(message.error);
+          result_finish_reason = "error";
           fire(emit, {
             type: "error", source, at: now_iso(),
             error: err_type, code: `sdk:${err_type}`,

@@ -7,7 +7,6 @@ import {
   type AgentApprovalResolveResult,
   type AgentApprovalStatus,
   type AgentRuntimeLike,
-  type AgentToolRuntimeContext,
   type SpawnAndWaitOptions,
   type SpawnAndWaitResult,
 } from "./runtime.types.js";
@@ -20,10 +19,6 @@ import type {
 } from "./loop.js";
 import type { ContextBuilder } from "./context.js";
 import type { ToolLike } from "./tools/types.js";
-
-type ToolContextSetter = {
-  set_context?: (...args: string[]) => void;
-};
 
 export class AgentRuntimeAdapter implements AgentRuntimeLike {
   private readonly domain: AgentDomain;
@@ -64,22 +59,6 @@ export class AgentRuntimeAdapter implements AgentRuntimeLike {
 
   get_tool_executors(): ToolLike[] {
     return this.domain.tools.get_all();
-  }
-
-  apply_tool_runtime_context(context: AgentToolRuntimeContext): void {
-    const channel = String(context.channel || "").trim();
-    const chat_id = String(context.chat_id || "").trim();
-    if (!channel || !chat_id) return;
-    const reply_to = String(context.reply_to || "").trim() || null;
-
-    for (const tool_name of ["message", "spawn", "request_file", "send_file"] as const) {
-      const tool = this.domain.tools.get(tool_name) as ToolContextSetter | null;
-      if (tool_name === "message") {
-        tool?.set_context?.(channel, chat_id, reply_to || "");
-      } else {
-        tool?.set_context?.(channel, chat_id);
-      }
-    }
   }
 
   execute_tool(name: string, params: Record<string, unknown>, context?: ToolExecutionContext): Promise<string> {

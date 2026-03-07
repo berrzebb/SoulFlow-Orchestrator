@@ -4205,6 +4205,10 @@ g:hover > .graph-add-handle circle {
 .chat-msg:hover .chat-msg__time,
 .chat-msg:focus-within .chat-msg__time { opacity: 1; }
 .chat-msg--user .chat-msg__time { text-align: right; }
+/* 터치 디바이스: 타임스탬프 항상 표시 */
+@media (hover: none) {
+  .chat-msg__time { opacity: 0.6; }
+}
 
 /* Streaming cursor */
 .chat-cursor {
@@ -4508,6 +4512,14 @@ g:hover > .graph-add-handle circle {
 .cfg-field:hover .cfg-field__reset,
 .cfg-field--editing .cfg-field__reset { opacity: 1; }
 .cfg-field__reset:hover { color: var(--err); background: color-mix(in srgb, var(--err) 10%, transparent); }
+/* 터치 디바이스: 리셋 버튼 항상 표시 */
+@media (hover: none) {
+  .cfg-field__reset { opacity: 0.5; }
+  .wf-agent__copy { opacity: 0.7; }
+  .field-drag-handle { opacity: 0.6; }
+  .tag-chip__x { padding: 4px; min-width: 28px; min-height: 28px; display: inline-flex; align-items: center; justify-content: center; }
+  .output-tree__toggle { width: 28px; height: 28px; }
+}
 
 /* cfg-value: 설정값 표시 */
 .cfg-value { font-size: var(--fs-sm); }
@@ -4532,6 +4544,75 @@ g:hover > .graph-add-handle circle {
   flex-wrap: wrap;
 }
 .cfg-edit-row .form-input { flex: 1 1 120px; min-width: 0; padding: 3px 8px; }
+.cfg-edit-row--col { flex-direction: column; align-items: stretch; }
+.cfg-edit-row--col > .cfg-edit-row { flex-direction: row; }
+
+/* Provider instance + model picker */
+.instance-picker__list {
+  max-height: 180px;
+  overflow-y: auto;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius);
+  background: var(--c-bg);
+}
+.instance-picker__item {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  padding: 4px 8px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+  font-size: var(--fs-sm);
+  color: var(--c-text);
+}
+.instance-picker__item:hover { background: var(--c-hover); }
+.instance-picker__item--selected { background: var(--c-accent-muted); font-weight: 600; }
+.instance-picker__id { font-family: var(--font-mono); font-size: var(--fs-xs); }
+.instance-picker__meta { color: var(--c-text-muted); font-size: var(--fs-xs); }
+.instance-picker__section { margin-top: 6px; }
+.instance-picker__section-label {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--c-text-muted);
+  padding: 4px 8px 2px;
+}
+.instance-picker__model-search {
+  width: 100%;
+  padding: 4px 8px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius);
+  background: var(--c-bg);
+  color: var(--c-text);
+  font-size: var(--fs-xs);
+  margin-bottom: 4px;
+}
+.instance-picker__model-list {
+  max-height: 160px;
+  overflow-y: auto;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius);
+  background: var(--c-bg);
+}
+.instance-picker__model-item {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  padding: 3px 8px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+  font-size: var(--fs-xs);
+  color: var(--c-text);
+}
+.instance-picker__model-item:hover { background: var(--c-hover); }
+.instance-picker__model-item--selected { background: var(--c-accent-muted); font-weight: 600; }
+.instance-picker__model-name { font-family: var(--font-mono); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.instance-picker__model-meta { color: var(--c-text-muted); font-size: 10px; white-space: nowrap; }
 
 @media (max-width: 768px) {
   .cfg-field {

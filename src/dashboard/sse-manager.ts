@@ -6,6 +6,7 @@ import type { TaskState } from "../contracts.js";
 import type { ProgressEvent } from "../bus/types.js";
 import type { AgentEvent } from "../agent/agent.types.js";
 import type { RecentMessage } from "./service.js";
+import type { SseBroadcasterLike } from "./broadcaster.js";
 import { now_iso, short_id } from "../utils/common.js";
 import { set_no_cache } from "./route-context.js";
 import { pick_agent_event_fields } from "./state-builder.js";
@@ -14,7 +15,7 @@ type SseClient = { id: string; res: ServerResponse };
 
 const MAX_RECENT_MESSAGES = 40;
 
-export class SseManager {
+export class SseManager implements SseBroadcasterLike {
   private readonly clients = new Map<string, SseClient>();
   readonly recent_messages: RecentMessage[] = [];
 

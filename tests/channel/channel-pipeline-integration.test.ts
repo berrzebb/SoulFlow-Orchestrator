@@ -1165,7 +1165,7 @@ describe("E2E: 에러 메시지 정규화", () => {
       await h.manager.handle_inbound_message(inbound("작업 요청"));
       const out = last_sent(h.registry.sent);
       expect(out.content).toContain("실패");
-      expect(out.content).toContain("assistant");
+      expect(out.content).toContain("connection refused");
     } finally { await h.cleanup(); }
   });
 
@@ -1490,6 +1490,29 @@ describe("E2E: 아웃바운드 메시지 메타데이터", () => {
       await h.manager.handle_inbound_message(inbound("/help"));
       const out = last_sent(h.registry.sent);
       expect((out.metadata as Record<string, unknown>).kind).toBe("command_reply");
+    } finally { await h.cleanup(); }
+  });
+
+  it("커맨드 응답이 PersonaMessageRenderer를 경유한다", async () => {
+    const rendered_calls: string[] = [];
+    const spy_renderer: import("@src/channels/persona-message-renderer.js").PersonaMessageRendererLike = {
+      render(intent) {
+        if (intent.kind === "command_reply") {
+          rendered_calls.push(intent.body);
+          return `[persona] ${intent.body}`;
+        }
+        return intent.kind;
+      },
+      resolve_style() {
+        return { persona_name: "테스트", language: "ko", politeness: "formal", warmth: "warm", brevity: "short" };
+      },
+    };
+    const h = await create_harness({ command_handlers: [new HelpHandler()], renderer: spy_renderer });
+    try {
+      await h.manager.handle_inbound_message(inbound("/help"));
+      expect(rendered_calls.length).toBeGreaterThan(0);
+      const out = last_sent(h.registry.sent);
+      expect(String(out.content)).toContain("[persona]");
     } finally { await h.cleanup(); }
   });
 
@@ -1857,16 +1880,32 @@ describe("E2E: 채널별 마크업 규칙 위반 검출", () => {
  * ═══════════════════════════════════════════════════════ */
 
 describe("E2E: 중복 메시지 방지", () => {
-  it("같은 message_id로 두 번 처리해도 커맨드 응답은 2회 나간다 (handle_inbound는 seen 미적용)", async () => {
-    // handle_inbound_message는 직접 호출 시 seen 캐시를 타지 않음
-    // (seen 캐시는 poll loop에서만 적용)
-    // 따라서 이 테스트는 handle_inbound_message가 멱등하지 않음을 확인
+  it("같은 message_id로 두 번 처리하면 ingress dedupe로 1회만 응답한다", async () => {
     const h = await create_harness({ command_handlers: [new HelpHandler()] });
     try {
       const msg = inbound("/help", { id: "dup-1", metadata: { message_id: "dup-1" } });
       await h.manager.handle_inbound_message(msg);
       await h.manager.handle_inbound_message(msg);
-      // 직접 호출이므로 2회 응답됨 — poll loop의 is_duplicate와 다름
+      expect(h.registry.sent.length).toBe(1);
+    } finally { await h.cleanup(); }
+  });
+
+  it("recovery 메시지(is_recovery)는 dedupe를 우회한다", async () => {
+    const h = await create_harness({ command_handlers: [new HelpHandler()] });
+    try {
+      const msg = inbound("/help", { id: "rec-1", metadata: { message_id: "rec-1" } });
+      await h.manager.handle_inbound_message(msg);
+      const recovery_msg = inbound("/help", { id: "rec-1", metadata: { message_id: "rec-1", is_recovery: true } });
+      await h.manager.handle_inbound_message(recovery_msg);
+      expect(h.registry.sent.length).toBe(2);
+    } finally { await h.cleanup(); }
+  });
+
+  it("다른 message_id는 dedupe에 걸리지 않는다", async () => {
+    const h = await create_harness({ command_handlers: [new HelpHandler()] });
+    try {
+      await h.manager.handle_inbound_message(inbound("/help", { id: "a-1", metadata: { message_id: "a-1" } }));
+      await h.manager.handle_inbound_message(inbound("/help", { id: "a-2", metadata: { message_id: "a-2" } }));
       expect(h.registry.sent.length).toBe(2);
     } finally { await h.cleanup(); }
   });

@@ -44,6 +44,8 @@ export type ProgressEvent = {
 
 export type MessageBusObserver = (direction: "inbound" | "outbound", message: Message) => void;
 
+/* ── 기본 publish/consume 인터페이스 ── */
+
 export interface MessageBusLike {
   publish_inbound(message: InboundMessage): Promise<void>;
   publish_outbound(message: OutboundMessage): Promise<void>;
@@ -56,3 +58,49 @@ export interface MessageBusLike {
   close(): Promise<void>;
   is_closed(): boolean;
 }
+
+/* ── observer/tap 포트 (concrete leak 제거) ── */
+
+export interface MessageBusTap {
+  on_publish(observer: MessageBusObserver): void;
+}
+
+/* ── lease/ack 인터페이스 (Redis Streams 지원) ── */
+
+export interface MessageLease<T> {
+  value: T;
+  ack(): Promise<void>;
+  retry(delay_ms?: number): Promise<void>;
+  release(): Promise<void>;
+}
+
+export interface ReliableMessageBus extends MessageBusLike {
+  consume_inbound_lease(options?: ConsumeMessageOptions): Promise<MessageLease<InboundMessage> | null>;
+  consume_outbound_lease(options?: ConsumeMessageOptions): Promise<MessageLease<OutboundMessage> | null>;
+  consume_progress_lease(options?: ConsumeMessageOptions): Promise<MessageLease<ProgressEvent> | null>;
+}
+
+/* ── 메트릭 ── */
+
+export type BusQueueStats = {
+  depth: number;
+  overflow: number;
+};
+
+export type BusMetrics = {
+  inbound: BusQueueStats;
+  outbound: BusQueueStats;
+  progress: BusQueueStats;
+  capacity: number;
+  /** Redis 전용 — pending count, oldest age 등. */
+  pending_count?: number;
+  oldest_pending_age_ms?: number;
+  consumer_lag?: number;
+};
+
+/* ── 런타임 통합 타입 ── */
+
+export type MessageBusRuntime = MessageBusLike & MessageBusTap & {
+  readonly kind: "memory" | "redis";
+  get_metrics(): BusMetrics;
+};

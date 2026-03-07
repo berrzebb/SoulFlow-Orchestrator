@@ -96,12 +96,12 @@ async function try_acquire_lock(lock_path: string, key: string): Promise<{ ok: b
   return { ok: false, holder_pid };
 }
 
-export async function acquire_runtime_instance_lock(args?: {
-  workspace?: string;
+export async function acquire_runtime_instance_lock(args: {
+  workspace: string;
   retries?: number;
   retry_ms?: number;
 }): Promise<RuntimeInstanceLockHandle> {
-  const workspace = String(args?.workspace || process.cwd());
+  const workspace = args.workspace;
   const retries = Math.max(1, Number(args?.retries || 20));
   const retry_ms = Math.max(50, Number(args?.retry_ms || 200));
   const key = build_lock_key(workspace);

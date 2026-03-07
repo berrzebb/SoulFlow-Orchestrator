@@ -102,6 +102,36 @@ Control commands you can type directly in any chat channel.
 | `/guard on` | Enable confirmation guard — prompts for confirmation before cron and long-running operations |
 | `/guard off` | Disable confirmation guard |
 
+## Workflows
+
+| Command | Description |
+|---------|-------------|
+| `/workflow list` | List active workflows |
+| `/workflow create` | Create a new workflow |
+| `/workflow cancel <id>` | Cancel a running workflow |
+
+## Models
+
+| Command | Description |
+|---------|-------------|
+| `/model list` | List installed orchestrator LLM models |
+| `/model set <name>` | Switch the active classifier model |
+
+## MCP
+
+| Command | Description |
+|---------|-------------|
+| `/mcp list` | List connected MCP servers and status |
+| `/mcp reconnect <name>` | Reconnect a specific MCP server |
+
+## Tone
+
+| Command | Description |
+|---------|-------------|
+| `/tone <style>` | Set persona tone (e.g., `formal`, `casual`, `warm`, `cool`, `short`, `detailed`) |
+| `/tone status` | Show current tone settings |
+| `/tone reset` | Reset to default tone |
+
 ## Hot Reload
 
 | Command | Description |

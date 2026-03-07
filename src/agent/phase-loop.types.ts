@@ -224,12 +224,15 @@ export interface OrcheNodeRecord {
 /** 트리거 노드 레코드. */
 export interface TriggerNodeRecord {
   id: string;
-  trigger_type: "cron" | "webhook" | "manual" | "channel_message";
+  trigger_type: "cron" | "webhook" | "manual" | "channel_message" | "kanban_event";
   schedule?: string;
   timezone?: string;
   webhook_path?: string;
   channel_type?: string;
   chat_id?: string;
+  kanban_board_id?: string;
+  kanban_actions?: string[];
+  kanban_column_id?: string;
 }
 
 /** 노드 간 필드 레벨 데이터 매핑. */
@@ -284,14 +287,20 @@ export interface PhaseLoopRunOptions {
   on_phase_change?: (state: PhaseLoopState) => void;
   on_agent_update?: (phase_id: string, agent_id: string, state: PhaseAgentState) => void;
   abort_signal?: AbortSignal;
+  /** 런타임 워크스페이스 경로. 노드 실행·worktree 격리의 기준 디렉터리. */
+  workspace: string;
   /** Interactive/sequential_loop 모드에서 사용자에게 질문하고 응답을 받는 콜백. */
   ask_user?: (question: string) => Promise<string>;
   /** 채널에 메시지 전송 (fire-and-forget). Notify, Escalation, SendFile 등. */
   send_message?: (req: ChannelSendRequest) => Promise<{ ok: boolean; message_id?: string }>;
   /** 채널로 질문 전송 + 응답 대기. HITL, Approval, Form 등. */
   ask_channel?: (req: ChannelSendRequest, timeout_ms: number) => Promise<ChannelResponse>;
-  /** 도구 호출 (Tool Invoke 노드용). tool_id + params → 결과 문자열. */
-  invoke_tool?: (tool_id: string, params: Record<string, unknown>) => Promise<string>;
+  /** 도구 호출 (Tool Invoke 노드용). tool_id + params + context → 결과 문자열. */
+  invoke_tool?: (tool_id: string, params: Record<string, unknown>, context?: { workflow_id?: string; channel?: string; chat_id?: string; sender_id?: string }) => Promise<string>;
+  /** 노드 간 필드 매핑 (from_node.from_field → to_node.to_field). */
+  field_mappings?: FieldMapping[];
+  /** resume 시 기존 상태 전달. 있으면 새 state 대신 이 state에서 이어서 실행. */
+  resume_state?: PhaseLoopState;
 }
 
 export interface PhaseLoopRunResult {

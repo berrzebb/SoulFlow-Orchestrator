@@ -40,6 +40,14 @@ export const kanban_trigger_handler: NodeHandler = {
       return { output: { card_id: "", board_id: "", action: "", actor: "", detail: {}, created_at: "", error: "kanban_board_id is required" } };
     }
 
+    // P0-6: resume 시 이미 주입된 이벤트가 있으면 wait 없이 즉시 반환
+    const injected = runner.state?.memory?.__pending_kanban_trigger_event;
+    if (injected && typeof injected === "object") {
+      delete runner.state!.memory.__pending_kanban_trigger;
+      delete runner.state!.memory.__pending_kanban_trigger_event;
+      return { output: injected as Record<string, unknown> };
+    }
+
     try {
       const event = await wait(board_id, {
         actions: n.kanban_actions?.length ? n.kanban_actions : undefined,

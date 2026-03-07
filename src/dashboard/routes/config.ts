@@ -39,6 +39,41 @@ export async function handle_config(ctx: RouteContext): Promise<boolean> {
     return true;
   }
 
+  // GET /api/config/provider-instances?purpose=chat|embedding — 등록된 프로바이더 인스턴스 목록
+  if (path === "/api/config/provider-instances" && req.method === "GET") {
+    const provider_ops = options.agent_provider_ops;
+    if (!provider_ops) { json(res, 503, { error: "agent_provider_ops_unavailable" }); return true; }
+    const purpose = url.searchParams.get("purpose") || "chat";
+    const all = await provider_ops.list();
+    const filtered = all.filter((p) => p.model_purpose === purpose && p.enabled);
+    json(res, 200, filtered.map((p) => ({
+      instance_id: p.instance_id,
+      label: p.label || p.instance_id,
+      provider_type: p.provider_type,
+      connection_id: p.connection_id || "",
+      model: p.settings?.model || "",
+      available: p.available,
+    })));
+    return true;
+  }
+
+  // 하위 호환: /api/config/embed-instances → provider-instances?purpose=embedding 리다이렉트
+  if (path === "/api/config/embed-instances" && req.method === "GET") {
+    const provider_ops = options.agent_provider_ops;
+    if (!provider_ops) { json(res, 503, { error: "agent_provider_ops_unavailable" }); return true; }
+    const all = await provider_ops.list();
+    const embed = all.filter((p) => p.model_purpose === "embedding" && p.enabled);
+    json(res, 200, embed.map((p) => ({
+      instance_id: p.instance_id,
+      label: p.label || p.instance_id,
+      provider_type: p.provider_type,
+      connection_id: p.connection_id || "",
+      model: p.settings?.model || "",
+      available: p.available,
+    })));
+    return true;
+  }
+
   if (!path.startsWith("/api/config/values")) return false;
 
   // PUT /api/config/values { path, value }

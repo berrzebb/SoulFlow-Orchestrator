@@ -19,10 +19,19 @@ SoulFlow를 실행하는 권장 방법은 Docker Compose입니다. `full` 이미
 docker compose up -d
 ```
 
-3개 서비스가 시작됩니다:
+기본 2개 서비스가 시작됩니다:
 - **orchestrator** — SoulFlow 런타임 + 대시보드 (포트 4200)
-- **ollama** — 요청 분류용 로컬 LLM (GPU 가속)
 - **docker-proxy** — 컨테이너 에이전트 격리를 위한 보안 Docker 소켓 프록시
+
+선택적 프로필로 추가 서비스를 활성화할 수 있습니다:
+
+```bash
+# GPU 가속 로컬 LLM 분류기 포함
+docker compose --profile gpu up -d
+
+# Redis 메시지 버스 포함 (다중 인스턴스 배포)
+docker compose --profile redis up -d
+```
 
 ### 개발 (라이브 리로드)
 
@@ -38,13 +47,16 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up
 |------|--------|------|
 | `DASHBOARD_PORT` | `4200` | 대시보드 포트 매핑 |
 | `WORKSPACE_PATH` | `./workspace2` | 영속 워크스페이스 데이터의 호스트 경로 |
+| `BUS_BACKEND` | `memory` | 메시지 버스 백엔드 (`memory` 또는 `redis`) |
+| `BUS_REDIS_URL` | `redis://redis:6379` | Redis 연결 URL (`BUS_BACKEND=redis` 시) |
 
 ### 컨테이너 아키텍처
 
 ```
 docker-compose.yml
   ├─ docker-proxy     ← 보안 Docker 소켓 프록시 (POST 전용, 컨테이너 전용)
-  ├─ ollama           ← 오케스트레이터 LLM (GPU 패스스루, 6GB 메모리 제한)
+  ├─ ollama           ← 오케스트레이터 LLM [프로필: gpu] (GPU 패스스루, 6GB 메모리 제한)
+  ├─ redis            ← Redis 메시지 버스 [프로필: redis] (256MB, AOF 영속)
   └─ orchestrator     ← SoulFlow 런타임 (CLI 에이전트 포함 full 이미지)
        ├─ /data       ← 워크스페이스 볼륨 (설정, 런타임 DB, 스킬)
        ├─ cli-auth-*  ← CLI OAuth 토큰 영속 (Claude, Codex, Gemini)

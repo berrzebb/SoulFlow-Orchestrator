@@ -19,10 +19,19 @@ The recommended way to run SoulFlow is via Docker Compose. The `full` image incl
 docker compose up -d
 ```
 
-This starts 3 services:
+This starts 2 services by default:
 - **orchestrator** — SoulFlow runtime + dashboard (port 4200)
-- **ollama** — Local LLM for request classification (GPU-accelerated)
 - **docker-proxy** — Secure Docker socket proxy for container agent isolation
+
+Optional profiles enable additional services:
+
+```bash
+# With GPU-accelerated local LLM classifier
+docker compose --profile gpu up -d
+
+# With Redis message bus (multi-instance deployment)
+docker compose --profile redis up -d
+```
 
 ### Development (Live Reload)
 
@@ -38,13 +47,16 @@ Source files are mounted via volume — code changes are reflected automatically
 |----------|---------|-------------|
 | `DASHBOARD_PORT` | `4200` | Dashboard port mapping |
 | `WORKSPACE_PATH` | `./workspace2` | Host path for persistent workspace data |
+| `BUS_BACKEND` | `memory` | Message bus backend (`memory` or `redis`) |
+| `BUS_REDIS_URL` | `redis://redis:6379` | Redis connection URL (when `BUS_BACKEND=redis`) |
 
 ### Container Architecture
 
 ```
 docker-compose.yml
   ├─ docker-proxy     ← Secure Docker socket proxy (POST-only, containers-only)
-  ├─ ollama           ← Orchestrator LLM (GPU passthrough, 6GB memory limit)
+  ├─ ollama           ← Orchestrator LLM [profile: gpu] (GPU passthrough, 6GB memory limit)
+  ├─ redis            ← Redis message bus [profile: redis] (256MB, AOF persistence)
   └─ orchestrator     ← SoulFlow runtime (full image with CLI agents)
        ├─ /data       ← Workspace volume (config, runtime DBs, skills)
        ├─ cli-auth-*  ← CLI OAuth token persistence (Claude, Codex, Gemini)

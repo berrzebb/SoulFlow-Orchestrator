@@ -213,6 +213,7 @@ export type HarnessOptions = {
   task_resume_service?: TaskResumeService | FakeTaskResumeService;
   config_patch?: Partial<AppConfig["channel"]>;
   bot_identity?: BotIdentitySource;
+  renderer?: import("@src/channels/persona-message-renderer.js").PersonaMessageRendererLike | null;
 };
 
 export type Harness = {
@@ -275,6 +276,7 @@ export async function create_harness(options: HarnessOptions = {}): Promise<Harn
     workspace_dir: workspace,
     logger,
     bot_identity,
+    renderer: options.renderer ?? null,
   });
 
   const cleanup = async (): Promise<void> => {

@@ -56,7 +56,7 @@ export const loop_handler: NodeHandler = {
           const result = await runner.execute_node(body_node as OrcheNodeDefinition, {
             memory: runner.state.memory,
             abort_signal: runner.options.abort_signal,
-            workspace: undefined,
+            workspace: runner.options.workspace,
           });
           runner.state.memory[body_id] = result.output;
           iteration_output = result.output;

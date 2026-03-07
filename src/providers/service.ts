@@ -4,7 +4,6 @@ import { OrchestratorLlmProvider } from "./orchestrator-llm.provider.js";
 import type { ChatMessage, ChatOptions, LlmProvider, LlmResponse, ProviderId } from "./types.js";
 import type { ContextBuilder } from "../agent/context.js";
 import { redact_sensitive_text, redact_sensitive_unknown } from "../security/sensitive.js";
-import { get_shared_secret_vault } from "../security/secret-vault-factory.js";
 import type { SecretVaultService } from "../security/secret-vault.js";
 import { CircuitBreaker, type CircuitBreakerOptions } from "./circuit-breaker.js";
 import { ProviderHealthScorer, type HealthScorerOptions } from "./health-scorer.js";
@@ -60,9 +59,10 @@ export class ProviderRegistry {
   private active_provider_id: ProviderId = "chatgpt";
   private orchestrator_provider_id: ProviderId = "orchestrator_llm";
   private readonly orchestrator_max_tokens: number;
+  private readonly orchestrator_model_override?: string;
   private readonly secret_vault: SecretVaultService;
 
-  constructor(options?: {
+  constructor(options: {
     openrouter_api_key?: string | null;
     openrouter_api_base?: string;
     openrouter_model?: string;
@@ -73,11 +73,15 @@ export class ProviderRegistry {
     orchestrator_llm_model?: string;
     orchestrator_max_tokens?: number;
     orchestrator_provider?: string;
+    /** 오케스트레이터 모델 오버라이드 (설정에서 지정). */
+    orchestrator_model_override?: string;
     circuit_breaker?: CircuitBreakerOptions;
     health_scorer?: HealthScorerOptions;
     cli_configs?: Record<string, { command?: string; args?: string; timeout_ms?: number; permission_config?: import("./cli-permission.js").CliPermissionConfig }>;
+    /** 명시적 vault 주입. */
+    secret_vault: SecretVaultService;
   }) {
-    this.secret_vault = get_shared_secret_vault(process.cwd());
+    this.secret_vault = options.secret_vault;
     const cli = options?.cli_configs || {};
     this.providers.set(
       "chatgpt",
@@ -131,6 +135,7 @@ export class ProviderRegistry {
     this.health_scorer = new ProviderHealthScorer(options?.health_scorer);
 
     this.orchestrator_max_tokens = options?.orchestrator_max_tokens ?? 4096;
+    this.orchestrator_model_override = options?.orchestrator_model_override;
     this.orchestrator_provider_id = this.resolve_default_orchestrator_provider(options?.orchestrator_provider);
   }
 
@@ -370,6 +375,7 @@ export class ProviderRegistry {
     return this.run_headless({
       ...args,
       provider_id: args.provider_id || this.orchestrator_provider_id,
+      model: args.model || this.orchestrator_model_override,
       max_tokens: args.max_tokens ?? this.orchestrator_max_tokens,
       temperature: args.temperature ?? 0.2,
     });

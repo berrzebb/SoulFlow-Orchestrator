@@ -32,7 +32,7 @@ export const database_handler: NodeHandler = {
 
     try {
       const { DatabaseTool } = await import("../tools/database.js");
-      const tool = new DatabaseTool({ workspace: ctx.workspace || process.cwd() });
+      const tool = new DatabaseTool({ workspace: ctx.workspace });
       const result = await tool.execute({
         operation: n.operation || "query",
         datasource,

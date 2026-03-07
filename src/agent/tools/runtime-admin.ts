@@ -111,7 +111,7 @@ export class RuntimeAdminTool extends Tool {
 
   constructor(args: RuntimeAdminArgs) {
     super();
-    this.workspace = resolve(String(args.workspace || process.cwd()));
+    this.workspace = resolve(args.workspace);
     this.installer = args.installer;
     this.refresh_dynamic_tools = args.refresh_dynamic_tools || null;
     this.refresh_skills = args.refresh_skills || null;

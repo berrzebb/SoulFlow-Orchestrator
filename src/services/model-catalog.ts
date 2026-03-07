@@ -62,7 +62,53 @@ function detect_openrouter_purpose(
   return "chat";
 }
 
-/** OpenRouter: /models API → 모델 목록 + 가격. */
+/** OpenRouter /api/v1/models 응답 파싱. */
+function parse_openrouter_v1(data: Array<{
+  id: string; name: string; context_length?: number;
+  pricing?: { prompt?: string; completion?: string };
+  architecture?: { modality?: string; input_modalities?: string[]; output_modalities?: string[] };
+}>): ModelInfo[] {
+  return data.map((m) => {
+    const input = m.pricing?.prompt ? parseFloat(m.pricing.prompt) * 1_000_000 : undefined;
+    const output = m.pricing?.completion ? parseFloat(m.pricing.completion) * 1_000_000 : undefined;
+    return {
+      id: m.id,
+      name: m.name || m.id,
+      provider: "openrouter",
+      purpose: detect_openrouter_purpose(m.id, m.architecture),
+      context_length: m.context_length,
+      pricing_input: input,
+      pricing_output: output,
+      cost_score: compute_cost_score(input, output),
+    };
+  });
+}
+
+/** OpenRouter /api/frontend/models 응답 파싱 (embedding 모델 포함). */
+function parse_openrouter_frontend(data: Array<{
+  slug: string; name?: string; context_length?: number;
+  endpoint?: { pricing?: { prompt?: string; completion?: string } };
+}>): ModelInfo[] {
+  return data
+    .filter((m) => EMBED_PATTERNS.some((p) => p.test(m.slug)))
+    .map((m) => {
+      const pricing = m.endpoint?.pricing;
+      const input = pricing?.prompt ? parseFloat(pricing.prompt) * 1_000_000 : undefined;
+      const output = pricing?.completion ? parseFloat(pricing.completion) * 1_000_000 : undefined;
+      return {
+        id: m.slug,
+        name: m.name || m.slug,
+        provider: "openrouter",
+        purpose: "embedding" as const,
+        context_length: m.context_length,
+        pricing_input: input,
+        pricing_output: output,
+        cost_score: compute_cost_score(input, output),
+      };
+    });
+}
+
+/** OpenRouter: /api/v1/models + /api/frontend/models (embedding 보충). */
 export async function fetch_openrouter_models(api_key?: string): Promise<ModelInfo[]> {
   const cached = from_cache("openrouter");
   if (cached) return cached;
@@ -71,41 +117,24 @@ export async function fetch_openrouter_models(api_key?: string): Promise<ModelIn
   if (api_key) headers.Authorization = `Bearer ${api_key}`;
 
   try {
-    const res = await fetch("https://openrouter.ai/api/v1/models", {
-      headers,
-      signal: AbortSignal.timeout(TIMEOUT_MS),
-    });
-    if (!res.ok) { log.warn("openrouter /models failed", { status: res.status }); return []; }
+    const [v1_res, fe_res] = await Promise.all([
+      fetch("https://openrouter.ai/api/v1/models", { headers, signal: AbortSignal.timeout(TIMEOUT_MS) }),
+      fetch("https://openrouter.ai/api/frontend/models", { signal: AbortSignal.timeout(TIMEOUT_MS) }).catch(() => null),
+    ]);
 
-    const json = await res.json() as {
-      data: Array<{
-        id: string;
-        name: string;
-        context_length?: number;
-        pricing?: { prompt?: string; completion?: string };
-        architecture?: {
-          modality?: string;
-          input_modalities?: string[];
-          output_modalities?: string[];
-        };
-      }>;
-    };
+    if (!v1_res.ok) { log.warn("openrouter /models failed", { status: v1_res.status }); return []; }
+    const v1_json = await v1_res.json() as { data: Parameters<typeof parse_openrouter_v1>[0] };
+    const models = parse_openrouter_v1(v1_json.data);
 
-    const models: ModelInfo[] = json.data.map((m) => {
-      const input = m.pricing?.prompt ? parseFloat(m.pricing.prompt) * 1_000_000 : undefined;
-      const output = m.pricing?.completion ? parseFloat(m.pricing.completion) * 1_000_000 : undefined;
-      const purpose = detect_openrouter_purpose(m.id, m.architecture);
-      return {
-        id: m.id,
-        name: m.name || m.id,
-        provider: "openrouter",
-        purpose,
-        context_length: m.context_length,
-        pricing_input: input,
-        pricing_output: output,
-        cost_score: compute_cost_score(input, output),
-      };
-    });
+    // /api/v1/models에 없는 embedding 모델을 frontend API에서 보충
+    if (fe_res?.ok) {
+      try {
+        const fe_json = await fe_res.json() as { data: Parameters<typeof parse_openrouter_frontend>[0] };
+        const existing_ids = new Set(models.map((m) => m.id));
+        const embed_models = parse_openrouter_frontend(fe_json.data).filter((m) => !existing_ids.has(m.id));
+        models.push(...embed_models);
+      } catch { /* frontend API 파싱 실패 시 무시 */ }
+    }
 
     to_cache("openrouter", models);
     log.info("openrouter models fetched", { count: models.length });
@@ -151,12 +180,43 @@ export async function fetch_openai_models(api_base: string, api_key?: string): P
   }
 }
 
-/** Anthropic: /v1/models API. */
+/** API 키 없이도 사용할 수 있는 잘 알려진 모델 정적 카탈로그. */
+const STATIC_ANTHROPIC_MODELS: ModelInfo[] = [
+  { id: "claude-opus-4-6", name: "Claude Opus 4.6", provider: "anthropic", purpose: "chat" as const, context_length: 200000, pricing_input: 5, pricing_output: 25 },
+  { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6", provider: "anthropic", purpose: "chat" as const, context_length: 200000, pricing_input: 3, pricing_output: 15 },
+  { id: "claude-haiku-4-5-20251001", name: "Claude Haiku 4.5", provider: "anthropic", purpose: "chat" as const, context_length: 200000, pricing_input: 1, pricing_output: 5 },
+  { id: "claude-sonnet-4-5", name: "Claude Sonnet 4.5", provider: "anthropic", purpose: "chat" as const, context_length: 200000, pricing_input: 3, pricing_output: 15 },
+  { id: "claude-opus-4-5", name: "Claude Opus 4.5", provider: "anthropic", purpose: "chat" as const, context_length: 200000, pricing_input: 5, pricing_output: 25 },
+].map((m) => ({ ...m, cost_score: compute_cost_score(m.pricing_input, m.pricing_output) }));
+
+const STATIC_GEMINI_MODELS: ModelInfo[] = [
+  { id: "gemini-2.5-pro", name: "Gemini 2.5 Pro", provider: "gemini", purpose: "chat", context_length: 1048576 },
+  { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash", provider: "gemini", purpose: "chat", context_length: 1048576 },
+  { id: "gemini-2.5-flash-lite", name: "Gemini 2.5 Flash Lite", provider: "gemini", purpose: "chat", context_length: 1048576 },
+  { id: "gemini-2.0-flash", name: "Gemini 2.0 Flash", provider: "gemini", purpose: "chat", context_length: 1048576 },
+  { id: "gemini-embedding-001", name: "Gemini Embedding 001", provider: "gemini", purpose: "embedding" },
+];
+
+const STATIC_OPENAI_MODELS: ModelInfo[] = [
+  { id: "gpt-5.4", name: "GPT-5.4", provider: "openai", purpose: "chat" as const, context_length: 272000, pricing_input: 2.5, pricing_output: 15 },
+  { id: "gpt-5", name: "GPT-5", provider: "openai", purpose: "chat" as const, pricing_input: 1.25, pricing_output: 10 },
+  { id: "gpt-5-mini", name: "GPT-5 Mini", provider: "openai", purpose: "chat" as const, pricing_input: 0.25, pricing_output: 2 },
+  { id: "gpt-5-nano", name: "GPT-5 Nano", provider: "openai", purpose: "chat" as const, pricing_input: 0.05, pricing_output: 0.4 },
+  { id: "o3", name: "o3", provider: "openai", purpose: "chat" as const, context_length: 200000, pricing_input: 2, pricing_output: 8 },
+  { id: "o4-mini", name: "o4-mini", provider: "openai", purpose: "chat" as const, context_length: 200000, pricing_input: 1.1, pricing_output: 4.4 },
+  { id: "gpt-4.1", name: "GPT-4.1", provider: "openai", purpose: "chat" as const, context_length: 1047576, pricing_input: 2, pricing_output: 8 },
+  { id: "gpt-4.1-mini", name: "GPT-4.1 Mini", provider: "openai", purpose: "chat" as const, context_length: 1047576, pricing_input: 0.4, pricing_output: 1.6 },
+  { id: "gpt-4.1-nano", name: "GPT-4.1 Nano", provider: "openai", purpose: "chat" as const, context_length: 1047576, pricing_input: 0.1, pricing_output: 0.4 },
+  { id: "text-embedding-3-large", name: "Text Embedding 3 Large", provider: "openai", purpose: "embedding" as const, pricing_input: 0.13 },
+  { id: "text-embedding-3-small", name: "Text Embedding 3 Small", provider: "openai", purpose: "embedding" as const, pricing_input: 0.02 },
+].map((m) => ({ ...m, cost_score: compute_cost_score(m.pricing_input, m.pricing_output) }));
+
+/** Anthropic: /v1/models API. API 키 없으면 정적 카탈로그 반환. */
 export async function fetch_anthropic_models(api_key?: string): Promise<ModelInfo[]> {
   const cached = from_cache("anthropic");
   if (cached) return cached;
 
-  if (!api_key) return [];
+  if (!api_key) return STATIC_ANTHROPIC_MODELS;
 
   try {
     const res = await fetch("https://api.anthropic.com/v1/models", {
@@ -187,12 +247,12 @@ export async function fetch_anthropic_models(api_key?: string): Promise<ModelInf
   }
 }
 
-/** Google Gemini: /v1beta/models API. */
+/** Google Gemini: /v1beta/models API. API 키 없으면 정적 카탈로그 반환. */
 export async function fetch_gemini_models(api_key?: string): Promise<ModelInfo[]> {
   const cached = from_cache("gemini");
   if (cached) return cached;
 
-  if (!api_key) return [];
+  if (!api_key) return STATIC_GEMINI_MODELS;
 
   try {
     const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${api_key}`, {
@@ -261,6 +321,11 @@ export async function fetch_ollama_models(ollama_base: string): Promise<ModelInf
     log.warn("ollama models fetch error", { base: ollama_base, error: String(e) });
     return [];
   }
+}
+
+/** OpenAI 정적 카탈로그 (API 키 없을 때 사용). */
+export function get_static_openai_models(): ModelInfo[] {
+  return STATIC_OPENAI_MODELS;
 }
 
 /** 캐시 무효화. */

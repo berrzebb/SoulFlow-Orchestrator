@@ -3,6 +3,7 @@
 import { Tool } from "./base.js";
 import type { JsonSchema, ToolExecutionContext } from "./types.js";
 import type { KanbanStoreLike, RelationType, ScopeType, Priority, KanbanRule, FilterCriteria } from "../../services/kanban-store.js";
+import type { KanbanRuleExecutor } from "../../services/kanban-rule-executor.js";
 
 const ACTIONS = [
   "create_board", "list_boards",
@@ -65,7 +66,7 @@ export class KanbanTool extends Tool {
       /* rule */
       trigger: { type: "string", enum: ["card_moved", "subtasks_done", "card_stale"], description: "규칙 트리거" },
       condition: { type: "object", description: "규칙 조건 (예: {to_column: 'done'})" },
-      action_type: { type: "string", enum: ["move_card", "assign", "add_label", "comment"], description: "규칙 실행 액션" },
+      action_type: { type: "string", enum: ["move_card", "assign", "add_label", "comment", "run_workflow", "create_task"], description: "규칙 실행 액션" },
       action_params: { type: "object", description: "규칙 액션 파라미터" },
       rule_id: { type: "string", description: "규칙 ID (remove_rule, toggle_rule)" },
       enabled: { type: "boolean", description: "규칙 활성화 여부 (toggle_rule)" },
@@ -88,10 +89,16 @@ export class KanbanTool extends Tool {
   };
 
   private readonly store: KanbanStoreLike;
+  private rule_executor?: KanbanRuleExecutor;
 
   constructor(store: KanbanStoreLike) {
     super();
     this.store = store;
+  }
+
+  /** Rule executor 주입 — rule 생성/활성화 시 동적 watch 활성화. */
+  set_rule_executor(executor: KanbanRuleExecutor): void {
+    this.rule_executor = executor;
   }
 
   protected async run(params: Record<string, unknown>, context?: ToolExecutionContext): Promise<string> {
@@ -103,8 +110,8 @@ export class KanbanTool extends Tool {
         case "create_board": return await this.handle_create_board(params);
         case "list_boards": return await this.handle_list_boards(params);
         case "create_card": return await this.handle_create_card(params, agent_id);
-        case "move_card": return await this.handle_move_card(params);
-        case "update_card": return await this.handle_update_card(params);
+        case "move_card": return await this.handle_move_card(params, agent_id);
+        case "update_card": return await this.handle_update_card(params, agent_id);
         case "archive_card": return await this.handle_archive_card(params);
         case "list_cards": return await this.handle_list_cards(params);
         case "get_card": return await this.handle_get_card(params);
@@ -171,23 +178,24 @@ export class KanbanTool extends Tool {
       created_by: agent_id,
       parent_id: str(p.parent_id) || undefined,
       due_date: str(p.due_date) || undefined,
+      task_id: str(p.task_id) || undefined,
       metadata: p.metadata as Record<string, unknown> | undefined,
     });
     const parent_note = str(p.parent_id) ? ` (child of ${str(p.parent_id)})` : "";
     return `${card.card_id} created${parent_note}: "${card.title}" in ${card.column_id}`;
   }
 
-  private async handle_move_card(p: Record<string, unknown>): Promise<string> {
+  private async handle_move_card(p: Record<string, unknown>, agent_id: string): Promise<string> {
     const card_id = str(p.card_id);
     const column_id = str(p.column_id);
     if (!card_id || !column_id) return "Error: card_id and column_id are required";
     const pos = typeof p.position === "number" ? p.position : undefined;
-    const card = await this.store.move_card(card_id, column_id, pos);
+    const card = await this.store.move_card(card_id, column_id, pos, agent_id);
     if (!card) return `Error: card not found: ${card_id}`;
     return `${card_id} moved to ${column_id}`;
   }
 
-  private async handle_update_card(p: Record<string, unknown>): Promise<string> {
+  private async handle_update_card(p: Record<string, unknown>, agent_id: string): Promise<string> {
     const card_id = str(p.card_id);
     if (!card_id) return "Error: card_id is required";
     const card = await this.store.update_card(card_id, {
@@ -197,7 +205,9 @@ export class KanbanTool extends Tool {
       labels: p.labels as string[] | undefined,
       assignee: p.assignee !== undefined ? (str(p.assignee) || null) : undefined,
       due_date: p.due_date !== undefined ? (str(p.due_date) || null) : undefined,
+      task_id: p.task_id !== undefined ? (str(p.task_id) || null) : undefined,
       metadata: p.metadata as Record<string, unknown> | undefined,
+      actor: agent_id,
     });
     if (!card) return `Error: card not found: ${card_id}`;
     return `${card_id} updated`;
@@ -351,6 +361,7 @@ export class KanbanTool extends Tool {
       action_type,
       action_params: (p.action_params as Record<string, unknown>) ?? {},
     });
+    this.rule_executor?.watch(board_id);
     return `rule created: ${rule.rule_id} (${trigger} → ${action_type})`;
   }
 
@@ -375,6 +386,7 @@ export class KanbanTool extends Tool {
     const enabled = typeof p.enabled === "boolean" ? p.enabled : true;
     const rule = await this.store.update_rule(rule_id, { enabled });
     if (!rule) return "Error: rule not found";
+    if (rule.enabled) this.rule_executor?.watch(rule.board_id);
     return `rule ${rule_id} ${rule.enabled ? "enabled" : "disabled"}`;
   }
 

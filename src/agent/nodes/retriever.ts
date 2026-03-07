@@ -95,7 +95,8 @@ export const retriever_handler: NodeHandler = {
     }
 
     try {
-      const workspace = runner.options.initial_memory?.workspace as string | undefined || process.cwd();
+      const workspace = runner.options.workspace;
+      if (!workspace) throw new Error("workspace is required for retriever node");
       const abs = resolve(workspace, file_path);
       // 경로 순회 방지
       if (!abs.startsWith(resolve(workspace))) {
