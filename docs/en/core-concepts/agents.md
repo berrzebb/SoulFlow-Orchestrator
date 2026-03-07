@@ -44,7 +44,7 @@ Specialized roles each agent can take on. The appropriate role is selected autom
 
 | Role | Specialization | Delegates To |
 |------|---------------|--------------|
-| `butler` | Request intake · routing · single tool execution | → pm/pl/generalist |
+| `concierge` | Request intake · routing · single tool execution | → pm/pl/generalist |
 | `pm` | Requirements analysis · task decomposition | → implementer |
 | `pl` | Tech lead · architecture design | → implementer/reviewer |
 | `implementer` | Code writing · feature implementation | — |
@@ -57,8 +57,8 @@ Specialized roles each agent can take on. The appropriate role is selected autom
 
 ```
 User message
-  → butler (classify/route)
-      → Simple Q&A / tool execution: butler handles directly
+  → concierge (classify/route)
+      → Simple Q&A / tool execution: concierge handles directly
       → Complex implementation: pm → implementer → reviewer
       → Bug fix: debugger → validator
       → Architecture decision: pl → implementer

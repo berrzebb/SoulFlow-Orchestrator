@@ -7,13 +7,17 @@ export function MediaDisplay({ media }: { media: ChatMediaItem[] }) {
       {media.map((m, i) => {
         const is_image = m.type === "image" || (m.mime ?? "").startsWith("image/");
         if (is_image && m.url) {
+          const open = () => window.open(m.url, "_blank");
           return (
             <img
               key={i}
               src={m.url}
               alt={m.name ?? "image"}
               className="chat-media__img"
-              onClick={() => window.open(m.url, "_blank")}
+              role="button"
+              tabIndex={0}
+              onClick={open}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); } }}
               title={m.name ?? "image"}
             />
           );
@@ -49,6 +53,7 @@ export function MediaPreviewBar({ items, onRemove }: { items: ChatMediaItem[]; o
               className="chat-media-preview__remove"
               onClick={() => onRemove(i)}
               title={t("chat.remove_attachment")}
+              aria-label={t("chat.remove_attachment")}
             >
               ✕
             </button>

@@ -29,9 +29,13 @@ export const file_handler: NodeHandler = {
     const filePath = resolve_templates(n.file_path, tpl_ctx);
     const resolved = ctx.workspace ? pathResolve(ctx.workspace, filePath) : filePath;
 
-    // 경로 순회 방지
-    if (resolved.includes("..")) {
-      throw new Error("path traversal not allowed");
+    // 경로 순회 방지: resolve() 후 workspace 경계 검증
+    if (ctx.workspace) {
+      const ws = pathResolve(ctx.workspace);
+      const norm = pathResolve(resolved);
+      if (norm !== ws && !norm.startsWith(`${ws}/`) && !norm.startsWith(`${ws}\\`)) {
+        throw new Error("path traversal not allowed: resolved path is outside workspace");
+      }
     }
 
     switch (n.operation) {

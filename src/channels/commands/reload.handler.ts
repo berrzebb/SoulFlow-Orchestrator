@@ -1,5 +1,6 @@
 import { error_message } from "../../utils/common.js";
 import { slash_name_in } from "../slash-command.js";
+import { format_subcommand_guide } from "./registry.js";
 import type { CommandContext, CommandHandler } from "./types.js";
 import type { Logger } from "../../logger.js";
 
@@ -24,6 +25,10 @@ export class ReloadHandler implements CommandHandler {
   }
 
   async handle(ctx: CommandContext): Promise<boolean> {
+    if (!ctx.command?.args?.length) {
+      const guide = format_subcommand_guide("reload");
+      if (guide) { await ctx.send_reply(guide); return true; }
+    }
     const results: Record<string, { ok: boolean; count?: number; error?: string }> = {};
     const lines: string[] = [];
     try {

@@ -11,10 +11,10 @@ function MergeEditPanel({ node, update, t }: EditPanelProps) {
       </select>
       <span className="builder-hint">
         {String(node.merge_mode || "wait_all") === "collect"
-          ? (t("workflows.merge_collect_hint") || "Collect all upstream outputs into an array")
+          ? (t("workflows.merge_collect_hint"))
           : String(node.merge_mode || "wait_all") === "first_completed"
-            ? (t("workflows.merge_first_hint") || "Continue as soon as any upstream branch completes")
-            : (t("workflows.merge_wait_all_hint") || "Wait for all upstream branches to complete")}
+            ? (t("workflows.merge_first_hint"))
+            : (t("workflows.merge_wait_all_hint"))}
       </span>
     </div>
   );
@@ -25,10 +25,10 @@ export const merge_descriptor: FrontendNodeDescriptor = {
   icon: "⊕",
   color: "#9b59b6",
   shape: "diamond",
-  toolbar_label: "+ Merge",
+  toolbar_label: "node.merge.label",
   category: "flow",
   output_schema: [
-    { name: "merged", type: "object", description: "Collected upstream outputs" },
+    { name: "merged", type: "object", description: "node.merge.output.merged" },
   ],
   input_schema: [],
   create_default: () => ({ merge_mode: "wait_all" }),

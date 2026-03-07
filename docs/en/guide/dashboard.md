@@ -24,7 +24,7 @@ On first launch with no providers configured, the dashboard auto-redirects to `/
 | Page | Path | Function |
 |------|------|----------|
 | Overview | `/` | Runtime status summary, system metrics, SSE live feed |
-| Workspace | `/workspace` | Memory · sessions · skills · cron · tools · agents · templates · OAuth (8 tabs) |
+| Workspace | `/workspace` | Memory · sessions · skills · cron · tools · agents · templates · OAuth · models · references (10 tabs) |
 | Chat | `/chat` | Web-based agent conversation (markdown rendering + code highlighting) |
 | Channels | `/channels` | Channel connection status · global settings |
 | Providers | `/providers` | Agent provider CRUD |
@@ -51,7 +51,7 @@ View the entire runtime at a glance.
 
 ## Workspace Tabs
 
-Workspace is organized in 8 tabs.
+Workspace is organized in 10 tabs.
 
 ### Memory
 View and edit the agent's memory and DB-backed records.

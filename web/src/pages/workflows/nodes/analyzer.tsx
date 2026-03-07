@@ -11,20 +11,25 @@ function AnalyzerEditPanel({ node, update, t, options }: EditPanelProps) {
     setSchemaRaw(val);
     if (!val.trim()) { setSchemaErr(""); update({ output_json_schema: undefined }); return; }
     try { update({ output_json_schema: JSON.parse(val) }); setSchemaErr(""); }
-    catch { setSchemaErr("Invalid JSON"); }
+    catch { setSchemaErr(t("workflows.invalid_json")); }
   };
 
   return (
     <>
       <div className="builder-row-pair">
         <div className="builder-row">
-          <label className="label">{t("workflows.llm_backend") || "Backend"}</label>
+          <label className="label">{t("workflows.llm_backend")}</label>
           <select className="input input--sm" value={String(node.backend || "")} onChange={(e) => update({ backend: e.target.value })}>
-            {(options?.backends || []).map((b) => <option key={b.value} value={b.value}>{b.label}</option>)}
+            <option value="">-</option>
+            {(options?.backends || []).map((b) => (
+              <option key={b.value} value={b.value}>
+                {b.available === false ? "\u26AA " : "\uD83D\uDFE2 "}{b.label}{b.provider_type ? ` (${b.provider_type})` : ""}
+              </option>
+            ))}
           </select>
         </div>
         <div className="builder-row">
-          <label className="label">{t("workflows.llm_model") || "Model"}</label>
+          <label className="label">{t("workflows.llm_model")}</label>
           {models.length > 0 ? (
             <select className="input input--sm" value={String(node.model || "")} onChange={(e) => update({ model: e.target.value })}>
               <option value="">auto</option>
@@ -36,19 +41,19 @@ function AnalyzerEditPanel({ node, update, t, options }: EditPanelProps) {
         </div>
       </div>
       <div className="builder-row">
-        <label className="label">{t("workflows.analyzer_input") || "Input Field"}</label>
+        <label className="label">{t("workflows.analyzer_input")}</label>
         <input className="input input--sm" value={String(node.input_field || "")} onChange={(e) => update({ input_field: e.target.value })} placeholder="memory.resume_text" />
       </div>
       <div className="builder-row">
-        <label className="label">{t("workflows.analyzer_prompt") || "Analysis Prompt"}</label>
+        <label className="label">{t("workflows.analyzer_prompt")}</label>
         <textarea className="input code-textarea" rows={4} value={String(node.prompt_template || "")} onChange={(e) => update({ prompt_template: e.target.value })} spellCheck={false} placeholder="Analyze the following resume and extract key skills, experience level, and fit score..." />
       </div>
       <div className="builder-row">
-        <label className="label">{t("workflows.analyzer_categories") || "Categories"}</label>
+        <label className="label">{t("workflows.analyzer_categories")}</label>
         <input className="input input--sm" value={Array.isArray(node.categories) ? (node.categories as string[]).join(", ") : ""} onChange={(e) => update({ categories: e.target.value.split(",").map((s: string) => s.trim()).filter(Boolean) })} placeholder="qualified, unqualified, maybe" />
       </div>
       <div className="builder-row">
-        <label className="label">{t("workflows.llm_schema") || "Output Schema"}</label>
+        <label className="label">{t("workflows.llm_schema")}</label>
         <textarea
           className={`input code-textarea${schemaErr ? " input--err" : ""}`}
           rows={3}
@@ -61,9 +66,9 @@ function AnalyzerEditPanel({ node, update, t, options }: EditPanelProps) {
       </div>
       <div className="builder-row">
         <label className="label">
-          {t("workflows.llm_temperature") || "Temperature"}
+          {t("workflows.llm_temperature")}
           <span className="builder-hint--inline">
-            {temp == null ? "" : temp <= 0.3 ? " (precise)" : temp <= 0.7 ? " (balanced)" : " (creative)"}
+            {temp == null ? "" : ` (${temp <= 0.3 ? t("workflows.temp_precise") : temp <= 0.7 ? t("workflows.temp_balanced") : t("workflows.temp_creative")})`}
           </span>
         </label>
         <input className="input input--sm" type="range" min={0} max={2} step={0.1} value={String(temp ?? 0.7)} onChange={(e) => update({ temperature: Number(e.target.value) })} />
@@ -78,18 +83,18 @@ export const analyzer_descriptor: FrontendNodeDescriptor = {
   icon: "🔍",
   color: "#e91e63",
   shape: "rect",
-  toolbar_label: "+ Analyzer",
+  toolbar_label: "node.analyzer.label",
   category: "ai",
   output_schema: [
-    { name: "analysis",   type: "object",  description: "Structured analysis result" },
-    { name: "category",   type: "string",  description: "Classification category" },
-    { name: "confidence", type: "number",  description: "Confidence score (0-1)" },
-    { name: "raw_output", type: "string",  description: "Raw LLM output" },
+    { name: "analysis",   type: "object",  description: "node.analyzer.output.analysis" },
+    { name: "category",   type: "string",  description: "node.analyzer.output.category" },
+    { name: "confidence", type: "number",  description: "node.analyzer.output.confidence" },
+    { name: "raw_output", type: "string",  description: "node.analyzer.output.raw_output" },
   ],
   input_schema: [
-    { name: "input",  type: "unknown", description: "Data to analyze" },
-    { name: "prompt", type: "string",  description: "Analysis instructions" },
-    { name: "schema", type: "object",  description: "Expected output structure" },
+    { name: "input",  type: "unknown", description: "node.analyzer.input.input" },
+    { name: "prompt", type: "string",  description: "node.analyzer.input.prompt" },
+    { name: "schema", type: "object",  description: "node.analyzer.input.schema" },
   ],
   create_default: () => ({
     backend: "",

@@ -12,6 +12,8 @@ export interface MemoryStoreLike {
     query: string,
     args?: { kind?: "all" | MemoryKind; day?: string; limit?: number; case_sensitive?: boolean },
   ): Promise<Array<{ file: string; line: number; text: string }>>;
+  /** 임베딩 함수 주입 (벡터 시멘틱 검색 활성화). */
+  set_embed?(fn: (texts: string[], opts: { model?: string; dimensions?: number }) => Promise<{ embeddings: number[][] }>): void;
 }
 
 export type MemoryConsolidateOptions = {

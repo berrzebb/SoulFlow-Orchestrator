@@ -1,25 +1,39 @@
 # Container Basics
 
-## 런타임 선택
+## 런타임 감지
+
+### Linux / macOS / 컨테이너 내부 (bash)
+
+```bash
+R=$(command -v podman >/dev/null 2>&1 && echo podman || echo docker)
+N="sbx-$(head -c4 /dev/urandom | xxd -p)"
+```
+
+### Windows (PowerShell)
 
 ```powershell
 $R = if (Get-Command podman -EA 0) { "podman" } else { "docker" }
+$N = "sbx-$([guid]::NewGuid().ToString('N').Substring(0,8))"
 ```
 
 podman 우선, 없으면 docker. 둘 다 없으면 에러 — 호스트 폴백 없음.
 
-## 컨테이너 이름 생성
+## 환경 자동 판별
 
-```powershell
-$N = "sbx-$([guid]::NewGuid().ToString('N').Substring(0,8))"
-```
+에이전트의 `exec` 도구 실행 환경에 따라 문법을 선택:
 
-충돌 방지용 랜덤 suffix. 강제 정리 시 `& $R rm -f $N` 에서 사용.
+| 환경 | 판별 기준 | 사용할 문법 |
+|------|-----------|-------------|
+| 오케스트레이터 컨테이너 | `uname` 존재, `/bin/sh` | bash |
+| Windows 호스트 (직접 실행) | `$env:OS -eq "Windows_NT"` | PowerShell |
+| macOS / Linux 호스트 | `uname` 존재 | bash |
+
+**기본값: bash** — 오케스트레이터는 보통 Linux 컨테이너에서 실행됨.
 
 ## 볼륨 마운트
 
-```powershell
--v "${PWD}:/workspace:rw" -w /workspace
+```bash
+-v "$PWD:/workspace:rw" -w /workspace
 ```
 
 - 호스트 `PWD` ↔ 컨테이너 `/workspace` 양방향 마운트
@@ -44,16 +58,16 @@ $N = "sbx-$([guid]::NewGuid().ToString('N').Substring(0,8))"
 
 ### One-shot (즉시 실행 + 자동 제거)
 
-```powershell
-& $R run --rm -v "${PWD}:/workspace:rw" -w /workspace python:3.12-slim python script.py
+```bash
+$R run --rm -v "$PWD:/workspace:rw" -w /workspace python:3.12-slim python script.py
 ```
 
 ### Detached (백그라운드 서버, 수동 정리 필요)
 
-```powershell
-& $R run -d --rm --name $N -p "55432:5432" postgres:16
+```bash
+$R run -d --rm --name "$N" -p "55432:5432" postgres:16
 # ... 작업 ...
-& $R stop $N   # 또는 rm -f $N
+$R stop "$N"   # 또는 rm -f "$N"
 ```
 
 ## 정리 패턴
@@ -61,13 +75,13 @@ $N = "sbx-$([guid]::NewGuid().ToString('N').Substring(0,8))"
 | 상황 | 명령 |
 |------|------|
 | `--rm` one-shot | 자동 제거 |
-| detached 정상 종료 | `& $R stop $N` |
-| 강제 종료 | `& $R rm -f $N` |
-| 이미지 제거 | `& $R rmi <image>` |
+| detached 정상 종료 | `$R stop "$N"` |
+| 강제 종료 | `$R rm -f "$N"` |
+| 이미지 제거 | `$R rmi <image>` |
 
 ## stdin 파이프
 
-```powershell
+```bash
 # SQL 파일을 psql에 stdin으로 전달
-Get-Content query.sql -Raw | & $R exec -i $N psql -U postgres -d appdb
+cat query.sql | $R exec -i "$N" psql -U postgres -d appdb
 ```

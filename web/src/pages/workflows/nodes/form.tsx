@@ -78,7 +78,9 @@ function FormEditPanel({ node, update, t, options }: EditPanelProps) {
             <span className="builder-nested-toggle">{expanded === i ? "▾" : "▸"}</span>
             <strong>{f.name || `Field ${i + 1}`}</strong>
             <span className="muted" style={{ marginLeft: 8 }}>{f.type}{f.required ? " *" : ""}</span>
-            <button className="btn btn--xs btn--danger" style={{ marginLeft: "auto" }} onClick={(e) => { e.stopPropagation(); removeField(i); }}>✕</button>
+            <button className="btn btn--xs btn--danger ml-auto" onClick={(e) => { e.stopPropagation(); removeField(i); }} aria-label={`${t("workflows.remove_item")} ${f.name || `Field ${i + 1}`}`}>
+              <svg width={12} height={12} viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round"><line x1={2} y1={2} x2={10} y2={10} /><line x1={10} y1={2} x2={2} y2={10} /></svg>
+            </button>
           </div>
           {expanded === i && (
             <>
@@ -89,18 +91,18 @@ function FormEditPanel({ node, update, t, options }: EditPanelProps) {
                 </div>
                 <div className="builder-row">
                   <label className="label">{t("workflows.form_field_label")}</label>
-                  <input className="input input--sm" value={f.label} onChange={(e) => updateField(i, { label: e.target.value })} placeholder="Display Label" />
+                  <input className="input input--sm" value={f.label} onChange={(e) => updateField(i, { label: e.target.value })} placeholder={t("workflows.field_label")} />
                 </div>
               </div>
               <div className="builder-row-pair">
                 <div className="builder-row">
                   <label className="label">{t("workflows.form_field_type")}</label>
                   <select className="input input--sm" value={f.type} onChange={(e) => updateField(i, { type: e.target.value as FormFieldDef["type"] })}>
-                    <option value="text">Text</option>
-                    <option value="number">Number</option>
-                    <option value="textarea">Textarea</option>
-                    <option value="select">Select</option>
-                    <option value="boolean">Boolean</option>
+                    <option value="text">{t("workflows.opt_text")}</option>
+                    <option value="number">{t("workflows.opt_number")}</option>
+                    <option value="textarea">{t("workflows.opt_textarea")}</option>
+                    <option value="select">{t("workflows.opt_select")}</option>
+                    <option value="boolean">{t("workflows.opt_boolean")}</option>
                   </select>
                 </div>
                 <div className="builder-row">
@@ -134,17 +136,17 @@ export const form_descriptor: FrontendNodeDescriptor = {
   icon: "📋",
   color: "#ff9800",
   shape: "rect",
-  toolbar_label: "+ Form",
+  toolbar_label: "node.form.label",
   category: "interaction",
   output_schema: [
-    { name: "fields",       type: "object",  description: "Submitted field values" },
-    { name: "submitted_by", type: "object",  description: "Submitter info" },
-    { name: "submitted_at", type: "string",  description: "Submission timestamp" },
-    { name: "timed_out",    type: "boolean", description: "Whether the form timed out" },
+    { name: "fields",       type: "object",  description: "node.form.output.fields" },
+    { name: "submitted_by", type: "object",  description: "node.form.output.submitted_by" },
+    { name: "submitted_at", type: "string",  description: "node.form.output.submitted_at" },
+    { name: "timed_out",    type: "boolean", description: "node.form.output.timed_out" },
   ],
   input_schema: [
-    { name: "prefill", type: "object", description: "Pre-fill values (override)" },
-    { name: "context", type: "object", description: "Additional context data" },
+    { name: "prefill", type: "object", description: "node.form.input.prefill" },
+    { name: "context", type: "object", description: "node.form.input.context" },
   ],
   create_default: () => ({ title: "", description: "", target: "origin", fields: [], timeout_ms: 600000 }),
   EditPanel: FormEditPanel,

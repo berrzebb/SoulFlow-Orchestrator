@@ -129,9 +129,11 @@ export function parse_execution_mode(raw: string): ClassificationResult | null {
 }
 
 /** @internal — exported for unit testing. */
-export function detect_escalation(text: string): string | null {
+export function detect_escalation(text: string, source_mode: "once" | "agent" = "once"): string | null {
   const normalized = text.replace(RE_WHITESPACE_NORMALIZE, " ").toUpperCase().trim();
-  if (RE_NEED_TASK_LOOP.test(normalized)) return "once_requires_task_loop";
+  if (RE_NEED_TASK_LOOP.test(normalized)) {
+    return source_mode === "agent" ? "agent_requires_task_loop" : "once_requires_task_loop";
+  }
   if (RE_NEED_AGENT_LOOP.test(normalized)) return "once_requires_agent_loop";
   return null;
 }
@@ -143,4 +145,10 @@ function has_orchestrator(providers: unknown): boolean {
 export function is_once_escalation(error?: string | null): boolean {
   if (!error) return false;
   return error === "once_requires_task_loop" || error === "once_requires_agent_loop";
+}
+
+/** agent 모드에서 task 에스컬레이션이 필요한지 판별. */
+export function is_agent_escalation(error?: string | null): boolean {
+  if (!error) return false;
+  return error === "agent_requires_task_loop";
 }

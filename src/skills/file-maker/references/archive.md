@@ -21,9 +21,9 @@ with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as zf:
 print(f"saved: {output}")
 ```
 
-```powershell
-$R = if (Get-Command podman -EA 0) { "podman" } else { "docker" }
-& $R run --rm -v "${PWD}:/workspace:rw" -w /workspace python:3.12-slim sh -lc "
+```bash
+R=$(command -v podman >/dev/null 2>&1 && echo podman || echo docker)
+$R run --rm -v "$PWD:/workspace:rw" -w /workspace python:3.12-slim sh -lc "
   python script.py
 "
 ```

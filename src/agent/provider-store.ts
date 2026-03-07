@@ -8,7 +8,7 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { with_sqlite } from "../utils/sqlite-helper.js";
 import type { SecretVaultLike } from "../security/secret-vault.js";
-import type { AgentProviderConfig, CreateAgentProviderInput } from "./agent.types.js";
+import type { AgentProviderConfig, CreateAgentProviderInput, ModelPurpose } from "./agent.types.js";
 import type { ExecutionMode } from "../orchestration/types.js";
 
 const INIT_SQL = `
@@ -19,11 +19,16 @@ const INIT_SQL = `
     label           TEXT NOT NULL DEFAULT '',
     enabled         INTEGER NOT NULL DEFAULT 1,
     priority        INTEGER NOT NULL DEFAULT 100,
+    model_purpose   TEXT NOT NULL DEFAULT 'chat' CHECK(model_purpose IN ('chat','embedding')),
     supported_modes TEXT NOT NULL DEFAULT '["once","agent","task"]',
     settings_json   TEXT NOT NULL DEFAULT '{}',
     created_at      TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
   );
+`;
+
+const MIGRATE_SQL = `
+  ALTER TABLE agent_providers ADD COLUMN model_purpose TEXT NOT NULL DEFAULT 'chat' CHECK(model_purpose IN ('chat','embedding'));
 `;
 
 const PRAGMAS = ["journal_mode=WAL"];
@@ -34,6 +39,7 @@ interface ProviderRow {
   label: string;
   enabled: number;
   priority: number;
+  model_purpose: string;
   supported_modes: string;
   settings_json: string;
   created_at: string;
@@ -47,6 +53,7 @@ function row_to_config(r: ProviderRow): AgentProviderConfig {
     label: r.label,
     enabled: r.enabled === 1,
     priority: r.priority,
+    model_purpose: (r.model_purpose === "embedding" ? "embedding" : "chat") as ModelPurpose,
     supported_modes: safe_parse_modes(r.supported_modes),
     settings: JSON.parse(r.settings_json),
     created_at: r.created_at,
@@ -74,7 +81,15 @@ export class AgentProviderStore {
   }
 
   private _ensure_initialized(): void {
-    with_sqlite(this.db_path, (db) => { db.exec(INIT_SQL); return true; }, { pragmas: PRAGMAS });
+    with_sqlite(this.db_path, (db) => {
+      db.exec(INIT_SQL);
+      // 마이그레이션: model_purpose 컬럼 추가 (기존 테이블 대응)
+      const col_exists = db.prepare(
+        "SELECT 1 FROM pragma_table_info('agent_providers') WHERE name='model_purpose'",
+      ).get();
+      if (!col_exists) db.exec(MIGRATE_SQL);
+      return true;
+    }, { pragmas: PRAGMAS });
   }
 
   // ── 조회 ──
@@ -102,6 +117,11 @@ export class AgentProviderStore {
     });
   }
 
+  /** enabled + 해당 용도의 프로바이더 목록. priority ASC 정렬. */
+  list_for_purpose(purpose: ModelPurpose): AgentProviderConfig[] {
+    return this.list().filter((c) => c.enabled && c.model_purpose === purpose);
+  }
+
   count(): number {
     return with_sqlite(this.db_path, (db) => {
       const row = db.prepare("SELECT COUNT(*) as cnt FROM agent_providers").get() as { cnt: number };
@@ -114,13 +134,14 @@ export class AgentProviderStore {
   upsert(input: CreateAgentProviderInput): void {
     with_sqlite(this.db_path, (db) => {
       db.prepare(`
-        INSERT INTO agent_providers (instance_id, provider_type, label, enabled, priority, supported_modes, settings_json, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+        INSERT INTO agent_providers (instance_id, provider_type, label, enabled, priority, model_purpose, supported_modes, settings_json, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
         ON CONFLICT(instance_id) DO UPDATE SET
           provider_type = excluded.provider_type,
           label = excluded.label,
           enabled = excluded.enabled,
           priority = excluded.priority,
+          model_purpose = excluded.model_purpose,
           supported_modes = excluded.supported_modes,
           settings_json = excluded.settings_json,
           updated_at = datetime('now')
@@ -130,6 +151,7 @@ export class AgentProviderStore {
         input.label,
         input.enabled ? 1 : 0,
         input.priority,
+        input.model_purpose || "chat",
         JSON.stringify(input.supported_modes),
         JSON.stringify(input.settings),
       );
@@ -139,7 +161,7 @@ export class AgentProviderStore {
 
   update_settings(
     instance_id: string,
-    patch: Partial<Pick<AgentProviderConfig, "label" | "enabled" | "priority" | "supported_modes" | "settings">>,
+    patch: Partial<Pick<AgentProviderConfig, "label" | "enabled" | "priority" | "model_purpose" | "supported_modes" | "settings">>,
   ): boolean {
     const existing = this.get(instance_id);
     if (!existing) return false;
@@ -147,15 +169,16 @@ export class AgentProviderStore {
     const label = patch.label ?? existing.label;
     const enabled = patch.enabled ?? existing.enabled;
     const priority = patch.priority ?? existing.priority;
+    const model_purpose = patch.model_purpose ?? existing.model_purpose;
     const supported_modes = patch.supported_modes ?? existing.supported_modes;
     const settings = patch.settings ? { ...existing.settings, ...patch.settings } : existing.settings;
 
     with_sqlite(this.db_path, (db) => {
       db.prepare(`
         UPDATE agent_providers
-        SET label = ?, enabled = ?, priority = ?, supported_modes = ?, settings_json = ?, updated_at = datetime('now')
+        SET label = ?, enabled = ?, priority = ?, model_purpose = ?, supported_modes = ?, settings_json = ?, updated_at = datetime('now')
         WHERE instance_id = ?
-      `).run(label, enabled ? 1 : 0, priority, JSON.stringify(supported_modes), JSON.stringify(settings), instance_id);
+      `).run(label, enabled ? 1 : 0, priority, model_purpose, JSON.stringify(supported_modes), JSON.stringify(settings), instance_id);
       return true;
     }, { pragmas: PRAGMAS });
     return true;

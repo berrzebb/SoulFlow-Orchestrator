@@ -2,7 +2,8 @@
 export type ToolCategory =
   | "filesystem" | "shell" | "web" | "messaging" | "file_transfer"
   | "scheduling" | "memory" | "decision" | "promise" | "secret"
-  | "diagram" | "admin" | "spawn" | "external";
+  | "diagram" | "admin" | "spawn" | "external"
+  | "security" | "ai" | "data";
 
 /** 도구의 정책 플래그. sandbox 정책 판정에 사용. */
 export type ToolPolicyFlags = {

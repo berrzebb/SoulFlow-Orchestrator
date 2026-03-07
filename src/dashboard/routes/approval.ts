@@ -23,6 +23,17 @@ export async function handle_approval(ctx: RouteContext): Promise<boolean> {
     if (result.decision === "approve") {
       const exec = await options.agent.execute_approved_request(approval_id);
       json(res, 200, { ...result, execution: exec });
+      // 비동기 task 재개: bridge가 아닌 경우 task loop를 재시작
+      const request = options.agent.get_approval_request(approval_id);
+      const task_id = request?.context?.task_id;
+      if (task_id && exec.ok && options.channels) {
+        options.channels.resume_after_dashboard_approval({
+          task_id,
+          tool_result: String(exec.result || ""),
+          provider: String(request?.context?.channel || "web"),
+          chat_id: String(request?.context?.chat_id || ""),
+        }).catch(() => { /* best-effort: 실패 시 ChannelManager가 내부 로깅 처리 */ });
+      }
       return true;
     }
     if (result.status === "denied" || result.status === "cancelled") {

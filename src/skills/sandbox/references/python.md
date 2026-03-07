@@ -4,9 +4,9 @@
 
 ## 표준 실행 (requirements.txt)
 
-```powershell
-$R = if (Get-Command podman -EA 0) { "podman" } else { "docker" }
-& $R run --rm -v "${PWD}:/workspace:rw" -w /workspace python:3.12-slim sh -lc "
+```bash
+R=$(command -v podman >/dev/null 2>&1 && echo podman || echo docker)
+$R run --rm -v "$PWD:/workspace:rw" -w /workspace python:3.12-slim sh -lc "
   pip install -q -r requirements.txt &&
   python script.py
 "
@@ -16,8 +16,8 @@ $R = if (Get-Command podman -EA 0) { "podman" } else { "docker" }
 
 ## 인라인 pip 설치 (requirements.txt 없이)
 
-```powershell
-& $R run --rm -v "${PWD}:/workspace:rw" -w /workspace python:3.12-slim sh -lc "
+```bash
+$R run --rm -v "$PWD:/workspace:rw" -w /workspace python:3.12-slim sh -lc "
   pip install -q pandas openpyxl requests &&
   python script.py
 "
@@ -69,8 +69,8 @@ print("saved: output.json")
 
 ## 한글 폰트 (PDF 생성 시)
 
-```powershell
-& $R run --rm -v "${PWD}:/workspace:rw" -w /workspace python:3.12-slim sh -lc "
+```bash
+$R run --rm -v "$PWD:/workspace:rw" -w /workspace python:3.12-slim sh -lc "
   apt-get update -qq && apt-get install -y -q fonts-nanum &&
   pip install -q weasyprint &&
   python script.py
@@ -96,8 +96,8 @@ result.to_csv("output.csv", index=False)
 print("saved: output.csv")
 ```
 
-```powershell
-& $R run --rm -v "${PWD}:/workspace:rw" -w /workspace python:3.12-slim sh -lc "
+```bash
+$R run --rm -v "$PWD:/workspace:rw" -w /workspace python:3.12-slim sh -lc "
   pip install -q duckdb &&
   python script.py
 "

@@ -190,6 +190,18 @@ export function extract_reaction_names(message: InboundMessage): string[] {
     return emoji_list.map((e) => EMOJI_TO_REACTION[e] || e).filter(Boolean);
   }
 
+  // Discord: metadata.discord.reactions
+  const discord = (meta.discord && typeof meta.discord === "object") ? meta.discord as Record<string, unknown> : null;
+  if (discord) {
+    const reactions = Array.isArray(discord.reactions) ? discord.reactions as Array<Record<string, unknown>> : [];
+    return reactions
+      .map((r) => {
+        const emoji = (r.emoji && typeof r.emoji === "object") ? r.emoji as Record<string, unknown> : null;
+        return String(emoji?.name || "").trim().toLowerCase();
+      })
+      .filter(Boolean);
+  }
+
   return [];
 }
 

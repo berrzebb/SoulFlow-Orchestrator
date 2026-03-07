@@ -2,6 +2,15 @@
 
 import type { OutputField } from "./output-schema";
 
+export interface RolePreset {
+  id: string;
+  name: string;
+  description: string;
+  soul: string | null;
+  heart: string | null;
+  tools: string[];
+}
+
 export interface AgentDef {
   agent_id: string;
   role: string;
@@ -26,6 +35,7 @@ export interface CriticDef {
 export interface PhaseDef {
   phase_id: string;
   title: string;
+  description?: string;
   agents: AgentDef[];
   critic?: CriticDef;
   context_template?: string;
@@ -47,7 +57,8 @@ export type OrcheNodeType = "http" | "code" | "if" | "merge" | "set" | "split"
   | "embedding" | "vector_store"
   | "notify" | "aggregate" | "send_file" | "error_handler" | "webhook"
   | "hitl" | "approval" | "form" | "tool_invoke" | "gate" | "escalation"
-  | "cache" | "retry" | "batch" | "assert";
+  | "cache" | "retry" | "batch" | "assert"
+  | "end";
 
 /** 오케스트레이션 노드 정의. */
 export interface OrcheNodeDef {
@@ -116,13 +127,26 @@ export interface WorkflowDef {
   trigger_nodes?: TriggerNodeDef[];
   field_mappings?: FieldMapping[];
   groups?: NodeGroup[];
+  /** 터미널 End 노드들. 분기별 독립 출력 가능. */
+  end_nodes?: EndNodeDef[];
 }
 
-export type NodeType = "phase" | "tool" | "skill" | "cron" | "channel" | "trigger"
+export type EndOutputTarget = "channel" | "media" | "webhook" | "http";
+
+export interface EndNodeDef {
+  node_id: string;
+  /** 이 End 노드에 연결되는 소스 노드들. */
+  depends_on?: string[];
+  output_targets: EndOutputTarget[];
+  target_config?: Record<string, Record<string, unknown>>;
+}
+
+export type NodeType = "phase" | "tool" | "skill" | "cron" | "channel" | "trigger" | "end"
   | OrcheNodeType
   | "sub_node";
 
-export type SubNodeType = "agent" | "critic" | "tool" | "skill";
+export type SubNodeType = "agent" | "critic" | "tool" | "skill"
+  | "end_channel" | "end_media" | "end_webhook" | "end_http";
 
 export interface GraphNode {
   id: string;
@@ -134,5 +158,7 @@ export interface GraphNode {
   output_fields?: OutputField[];
   sub_type?: SubNodeType;
   parent_phase_id?: string;
+  /** End 서브노드: 부모 End 노드 ID. */
+  parent_end_id?: string;
   trigger_detail?: string;
 }

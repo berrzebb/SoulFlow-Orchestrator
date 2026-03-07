@@ -6,49 +6,49 @@ function PromiseEditPanel({ node, update, t }: EditPanelProps) {
     <>
       <div className="builder-row-pair">
         <div className="builder-row">
-          <label className="label">{t("workflows.promise_op") || "Operation"}</label>
+          <label className="label">{t("workflows.promise_op")}</label>
           <select className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
-            <option value="append">Append</option>
-            <option value="list">List</option>
-            <option value="get_effective">Get Effective</option>
-            <option value="archive">Archive</option>
+            <option value="append">{t("workflows.opt_append")}</option>
+            <option value="list">{t("workflows.opt_list")}</option>
+            <option value="get_effective">{t("workflows.opt_get_effective")}</option>
+            <option value="archive">{t("workflows.opt_archive")}</option>
           </select>
         </div>
         <div className="builder-row">
-          <label className="label">{t("workflows.promise_scope") || "Scope"}</label>
+          <label className="label">{t("workflows.promise_scope")}</label>
           <select className="input input--sm" value={String(node.scope || "global")} onChange={(e) => update({ scope: e.target.value })}>
-            <option value="global">Global</option>
-            <option value="team">Team</option>
-            <option value="agent">Agent</option>
+            <option value="global">{t("workflows.opt_global")}</option>
+            <option value="team">{t("workflows.opt_team")}</option>
+            <option value="agent">{t("workflows.opt_agent")}</option>
           </select>
         </div>
       </div>
       {op === "append" && (
         <>
           <div className="builder-row">
-            <label className="label">{t("workflows.promise_key") || "Key"}</label>
+            <label className="label">{t("workflows.promise_key")}</label>
             <input className="input input--sm" value={String(node.key || "")} onChange={(e) => update({ key: e.target.value })} placeholder="never_delete_without_backup" />
           </div>
           <div className="builder-row">
-            <label className="label">{t("workflows.promise_value") || "Value"}</label>
+            <label className="label">{t("workflows.promise_value")}</label>
             <textarea className="input" rows={2} value={String(node.value || "")} onChange={(e) => update({ value: e.target.value })} placeholder="I will always create a backup before deleting data" />
           </div>
           <div className="builder-row">
-            <label className="label">{t("workflows.promise_rationale") || "Rationale"}</label>
+            <label className="label">{t("workflows.promise_rationale")}</label>
             <input className="input input--sm" value={String(node.rationale || "")} onChange={(e) => update({ rationale: e.target.value || undefined })} placeholder="Why this promise is important" />
           </div>
           <div className="builder-row-pair">
             <div className="builder-row">
-              <label className="label">{t("workflows.decision_priority") || "Priority"}</label>
+              <label className="label">{t("workflows.decision_priority")}</label>
               <select className="input input--sm" value={String(node.priority ?? 1)} onChange={(e) => update({ priority: Number(e.target.value) })}>
-                <option value="0">P0 (Critical)</option>
-                <option value="1">P1 (Normal)</option>
-                <option value="2">P2 (Low)</option>
-                <option value="3">P3 (Info)</option>
+                <option value="0">{t("workflows.opt_p0")}</option>
+                <option value="1">{t("workflows.opt_p1")}</option>
+                <option value="2">{t("workflows.opt_p2")}</option>
+                <option value="3">{t("workflows.opt_p3")}</option>
               </select>
             </div>
             <div className="builder-row">
-              <label className="label">{t("workflows.decision_tags") || "Tags"}</label>
+              <label className="label">{t("workflows.decision_tags")}</label>
               <input className="input input--sm" value={Array.isArray(node.tags) ? (node.tags as string[]).join(", ") : ""} onChange={(e) => update({ tags: e.target.value.split(",").map((s: string) => s.trim()).filter(Boolean) })} placeholder="safety, data" />
             </div>
           </div>
@@ -56,13 +56,13 @@ function PromiseEditPanel({ node, update, t }: EditPanelProps) {
       )}
       {(op === "list" || op === "get_effective") && (
         <div className="builder-row">
-          <label className="label">{t("workflows.promise_scope_id") || "Scope ID"}</label>
+          <label className="label">{t("workflows.promise_scope_id")}</label>
           <input className="input input--sm" value={String(node.scope_id || "")} onChange={(e) => update({ scope_id: e.target.value || undefined })} placeholder="team-123" />
         </div>
       )}
       {op === "archive" && (
         <div className="builder-row">
-          <label className="label">{t("workflows.promise_target") || "Target ID"}</label>
+          <label className="label">{t("workflows.promise_target")}</label>
           <input className="input input--sm" value={String(node.target_id || "")} onChange={(e) => update({ target_id: e.target.value })} placeholder="promise-id-456" />
         </div>
       )}
@@ -75,18 +75,18 @@ export const promise_descriptor: FrontendNodeDescriptor = {
   icon: "🤝",
   color: "#009688",
   shape: "rect",
-  toolbar_label: "+ Promise",
+  toolbar_label: "node.promise.label",
   category: "advanced",
   output_schema: [
-    { name: "action",  type: "string", description: "Result action" },
-    { name: "record",  type: "object", description: "Promise record" },
-    { name: "records", type: "array",  description: "Listed records" },
-    { name: "count",   type: "number", description: "Record count" },
+    { name: "action",  type: "string", description: "node.promise.output.action" },
+    { name: "record",  type: "object", description: "node.promise.output.record" },
+    { name: "records", type: "array",  description: "node.promise.output.records" },
+    { name: "count",   type: "number", description: "node.promise.output.count" },
   ],
   input_schema: [
-    { name: "operation", type: "string", description: "append | list | get_effective | archive" },
-    { name: "key",       type: "string", description: "Promise key" },
-    { name: "value",     type: "string", description: "Promise value" },
+    { name: "operation", type: "string", description: "node.promise.input.operation" },
+    { name: "key",       type: "string", description: "node.promise.input.key" },
+    { name: "value",     type: "string", description: "node.promise.input.value" },
   ],
   create_default: () => ({ operation: "append", scope: "global", key: "", value: "" }),
   EditPanel: PromiseEditPanel,

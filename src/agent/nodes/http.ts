@@ -35,7 +35,9 @@ export const http_handler: NodeHandler = {
     if (parsed_url.protocol !== "http:" && parsed_url.protocol !== "https:") {
       throw new Error(`unsupported protocol "${parsed_url.protocol}"`);
     }
-    if (PRIVATE_HOST_RE.test(parsed_url.hostname)) {
+    // Node.js URL.hostname은 IPv6를 브래킷 포함으로 반환 (예: [::1])
+    const hostname = parsed_url.hostname.replace(/^\[|\]$/g, "");
+    if (PRIVATE_HOST_RE.test(hostname)) {
       throw new Error(`private/loopback host blocked "${parsed_url.hostname}"`);
     }
 

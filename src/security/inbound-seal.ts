@@ -22,9 +22,9 @@ export type SensitiveSealResult = {
 
 const PRIVATE_KEY_BLOCK_RE = /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z0-9 ]*PRIVATE KEY-----/gi;
 const ASSIGNMENT_RE = /\b([A-Za-z0-9_.-]{2,80})\s*([:=])\s*("[^"\n]{1,400}"|'[^'\n]{1,400}'|[^\s,;]{4,400})/g;
-const CARD_ASSIGNMENT_RE = /\b(card|card_number|credit_card|카드(?:번호)?)\s*([:=])\s*([0-9][0-9 -]{11,30}[0-9])\b/gi;
-const ACCOUNT_ASSIGNMENT_RE = /\b(account|acct|iban|routing|bank_account|계좌(?:번호)?)\s*([:=])\s*([0-9][0-9 -]{6,40}[0-9])\b/gi;
-const ACCOUNT_LINE_RE = /\b(?:account|acct|iban|routing|bank|계좌(?:번호)?)\s*[:=]?\s*([0-9][0-9 -]{6,29}[0-9])\b/gi;
+const CARD_ASSIGNMENT_RE = /(?:^|\b|(?<=\s))(card|card_number|credit_card|카드(?:번호)?)\s*([:=])\s*([0-9][0-9 -]{11,30}[0-9])(?:\b|$)/gi;
+const ACCOUNT_ASSIGNMENT_RE = /(?:^|\b|(?<=\s))(account|acct|iban|routing|bank_account|계좌(?:번호)?)\s*([:=])\s*([0-9][0-9 -]{6,40}[0-9])(?:\b|$)/gi;
+const ACCOUNT_LINE_RE = /(?:^|\b|(?<=\s))(?:account|acct|iban|routing|bank|계좌(?:번호)?)\s*[:=]?\s*([0-9][0-9 -]{6,29}[0-9])(?:\b|$)/gi;
 const CARD_NUMBER_RE = /\b\d(?:[ -]?\d){12,18}\b/g;
 
 const TOKEN_PATTERNS: Array<{ kind: SensitiveKind; re: RegExp }> = [

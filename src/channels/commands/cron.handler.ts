@@ -5,6 +5,7 @@ import type { InboundMessage } from "../../bus/types.js";
 import type { ParsedSlashCommand } from "../slash-command.js";
 import type { CronScheduler } from "../../cron/contracts.js";
 import type { CronSchedule } from "../../cron/types.js";
+import { format_subcommand_guide } from "./registry.js";
 import { format_mention, type CommandContext, type CommandHandler } from "./types.js";
 
 type CronQuickAction = "status" | "list" | "add" | "remove" | "pause" | "resume" | "stop" | "nuke";
@@ -31,8 +32,9 @@ function parse_action(message: InboundMessage, command: ParsedSlashCommand | nul
   const arg0 = String(command?.args_lower?.[0] || "");
 
   if (slash_name_in(cmd, ROOT_ALIASES)) {
+    if (!arg0) return null;
     if (slash_token_in(arg0, LIST_ARG_ALIASES)) return "list";
-    if (!arg0 || slash_token_in(arg0, STATUS_ARG_ALIASES)) return "status";
+    if (slash_token_in(arg0, STATUS_ARG_ALIASES)) return "status";
     if (slash_token_in(arg0, ADD_ARG_ALIASES)) return "add";
     if (slash_token_in(arg0, REMOVE_ARG_ALIASES)) return "remove";
     if (slash_token_in(arg0, PAUSE_ARG_ALIASES)) return "pause";
@@ -250,15 +252,26 @@ export class CronHandler implements CommandHandler {
 
   can_handle(ctx: CommandContext): boolean {
     if (!this.cron) return false;
-    return !!parse_action(ctx.message, ctx.command);
+    const cmd = String(ctx.command?.name || "");
+    return slash_name_in(cmd, ROOT_ALIASES)
+      || !!parse_action(ctx.message, ctx.command);
   }
 
   async handle(ctx: CommandContext): Promise<boolean> {
     if (!this.cron) return false;
     const { provider, message, command } = ctx;
     const action = parse_action(message, command);
-    const natural_add = action ? null : parse_natural_add_spec(message);
     const mention = format_mention(provider, message.sender_id);
+
+    if (!action) {
+      const natural_add = parse_natural_add_spec(message);
+      if (!natural_add) {
+        const guide = format_subcommand_guide("cron");
+        if (guide) { await ctx.send_reply(`${mention}${guide}`); return true; }
+        return false;
+      }
+      return this.handle_add(ctx, mention, natural_add);
+    }
 
     try {
       if (action === "status") {
@@ -331,8 +344,8 @@ export class CronHandler implements CommandHandler {
         return true;
       }
 
-      // add (structured or natural)
-      const spec = natural_add || parse_structured_add_spec(message, command);
+      // add (structured)
+      const spec = parse_structured_add_spec(message, command);
       if (!spec) {
         await ctx.send_reply([
           `${mention}cron add 형식`,
@@ -362,6 +375,29 @@ export class CronHandler implements CommandHandler {
     } catch (error) {
       const reason = error_message(error);
       await ctx.send_reply(`${mention}cron ${action || "add"} 처리 실패: ${reason}`);
+      return true;
+    }
+  }
+
+  private async handle_add(ctx: CommandContext, mention: string, spec: AddSpec): Promise<boolean> {
+    try {
+      const job = await this.cron!.add_job(
+        spec.name, spec.schedule, spec.message,
+        spec.deliver, ctx.provider, ctx.message.chat_id, spec.delete_after_run,
+      );
+      const j = job as unknown as Record<string, unknown>;
+      const state = (j.state && typeof j.state === "object") ? j.state as Record<string, unknown> : {};
+      await ctx.send_reply([
+        `${mention}cron 등록 완료`,
+        `- id: ${j.id || "(unknown)"}`,
+        `- name: ${j.name || "(no-name)"}`,
+        `- schedule: ${render_schedule(j.schedule)}`,
+        `- next_run: ${format_time_kr(state.next_run_at_ms)}`,
+        `- auto_remove: ${j.delete_after_run === true ? "yes" : "no"}`,
+      ].join("\n"));
+      return true;
+    } catch (error) {
+      await ctx.send_reply(`${mention}cron add 처리 실패: ${error_message(error)}`);
       return true;
     }
   }

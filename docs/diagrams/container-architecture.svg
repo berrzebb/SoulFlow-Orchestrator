@@ -82,7 +82,7 @@
 <text x="313.712" y="904.6" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;Gateway&lt;br/&gt;lightweight classifier&quot;</text>
 <text x="642.6239999999999" y="425" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;AgentBus&lt;br/&gt;inter-agent comm · permission matrix&quot;</text>
 <text x="801.104" y="1137.8000000000002" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;ContainerPool&lt;br/&gt;lifecycle management&quot;</text>
-<text x="1415.576" y="1371" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;🏠 butler container&quot;</text>
+<text x="1415.576" y="1371" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;🏠 concierge container&quot;</text>
 <text x="1279.56" y="904.6" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;⚡ implementer container&quot;</text>
 <text x="1607.176" y="904.6" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;🔍 reviewer container&quot;</text>
 <text x="1230.64" y="210.6" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;--cap-drop ALL&quot;</text>

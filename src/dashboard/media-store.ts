@@ -65,7 +65,8 @@ export class MediaTokenStore {
       const data = await readFile(entry.abs_path);
       res.statusCode = 200;
       res.setHeader("Content-Type", entry.mime);
-      res.setHeader("Content-Disposition", `attachment; filename="${entry.name}"`);
+      const safe_name = entry.name.replace(/["\r\n\\]/g, "_");
+      res.setHeader("Content-Disposition", `attachment; filename="${safe_name}"`);
       res.setHeader("Cache-Control", "no-store");
       res.end(data);
     } catch {

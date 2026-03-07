@@ -90,8 +90,8 @@ export function AgentsTab() {
     void qc.invalidateQueries({ queryKey: ["processes"] });
   };
 
-  const active_tasks = task_loops.filter((t) => ACTIVE_STATUSES.has(t.status));
-  const completed_tasks = task_loops.filter((t) => !ACTIVE_STATUSES.has(t.status));
+  const active_tasks = task_loops.filter((tl) => ACTIVE_STATUSES.has(tl.status));
+  const completed_tasks = task_loops.filter((tl) => !ACTIVE_STATUSES.has(tl.status));
 
   const active_processes = processes_data?.active ?? [];
   const recent_processes = processes_data?.recent ?? [];

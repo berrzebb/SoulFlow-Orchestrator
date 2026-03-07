@@ -262,7 +262,9 @@ function is_private_url(url: string): boolean {
   try {
     const parsed = new URL(url);
     if (!["http:", "https:"].includes(parsed.protocol)) return true;
-    return PRIVATE_HOST_RE.test(parsed.hostname);
+    // Node.js URL.hostname은 IPv6를 브래킷 포함으로 반환 (예: [::1])
+    const hostname = parsed.hostname.replace(/^\[|\]$/g, "");
+    return PRIVATE_HOST_RE.test(hostname);
   } catch {
     return true;
   }

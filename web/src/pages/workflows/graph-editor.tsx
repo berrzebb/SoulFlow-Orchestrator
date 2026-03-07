@@ -1,1317 +1,23 @@
 /**
- * Graph Editor — SVG 기반 노드-엣지 워크플로우 편집기.
- * 메인 뷰: 노드(Phase) 배치 + 엣지(depends_on, goto) 연결.
- * 노드 클릭 → 인라인 프로퍼티 패널, 드래그로 위치 조정.
+ * Graph Editor — SVG 기반 노드-엣지 워크플로우 편집기 (메인 컴포넌트).
+ * 레이아웃 계산: graph-layout.ts, 노드 컴포넌트: graph-nodes.tsx
  */
 
 import { useState, useRef, useEffect } from "react";
 import { useT } from "../../i18n";
-import { get_output_fields, get_input_fields, PHASE_OUTPUT, PHASE_INPUT, TRIGGER_OUTPUT, CHANNEL_OUTPUT, CHANNEL_INPUT, FIELD_TYPE_COLORS, type OutputField } from "./output-schema";
-import { get_frontend_node } from "./node-registry";
+import { useConfirm } from "../../components/modal";
 import { NodePicker } from "./node-picker";
 import type { NodePreset } from "./node-presets";
 
 // ── Types (workflow-types.ts에서 re-export) ──
-export type { AgentDef, CriticDef, PhaseDef, OrcheNodeType, OrcheNodeDef, NodeGroup, WorkflowDef, NodeType, SubNodeType, ToolNodeDef, SkillNodeDef, TriggerType, TriggerNodeDef, FieldMapping, GraphNode } from "./workflow-types";
-import type { PhaseDef, OrcheNodeDef, NodeGroup, WorkflowDef, NodeType, SubNodeType, TriggerType, TriggerNodeDef, GraphNode } from "./workflow-types";
-
-// ── Layout ──
-
-type NodePos = { x: number; y: number; width: number; height: number };
-
-const NODE_W = 200;
-const NODE_H = 72;
-const AUX_W = 140;
-const GAP_X = 120; // 레이어 간 가로 간격
-const GAP_Y = 40;  // 같은 레이어 내 세로 간격
-const PADDING = 40;
-const SUB_D = 40;         // 클러스터 Sub-node 지름
-const SUB_GAP = 12;       // Sub-node 간 간격
-const SUB_OFFSET_Y = 24;  // Phase 하단으로부터의 거리
-
-// ── 필드 포트 레이아웃 상수 ──
-const FIELD_PORT_R = 4;       // 필드 포트 반지름
-const FIELD_PORT_H = 18;      // 필드 포트 1개당 높이
-const FIELD_PORT_TOP = 32;    // 첫 필드 포트의 Y 오프셋 (노드 상단 기준)
-const ORCHE_MIN_H = 60;       // 오케 노드 최소 높이
-
-/** 출력 필드 수에 따라 오케 노드 높이 계산. */
-function compute_orche_node_height(field_count: number): number {
-  return Math.max(ORCHE_MIN_H, FIELD_PORT_TOP + field_count * FIELD_PORT_H + 12);
-}
-
-/** Topological layer 할당: depends_on 기반 + 암묵적 순차 배치. */
-function compute_layers(phases: PhaseDef[]): Map<string, number> {
-  const layers = new Map<string, number>();
-  const id_set = new Set(phases.map((p) => p.phase_id));
-  const has_explicit_deps = new Set<string>();
-
-  function get_layer(id: string, visited: Set<string>): number {
-    if (layers.has(id)) return layers.get(id)!;
-    if (visited.has(id)) return 0;
-    visited.add(id);
-    const phase = phases.find((p) => p.phase_id === id);
-    const deps = phase?.depends_on?.filter((d) => id_set.has(d)) || [];
-    if (!deps.length) return -1; // 아직 미결정 — 암묵적 순서로 배치
-    has_explicit_deps.add(id);
-    const max_dep = Math.max(...deps.map((d) => get_layer(d, visited)));
-    const layer = (max_dep < 0 ? 0 : max_dep) + 1;
-    layers.set(id, layer);
-    return layer;
-  }
-
-  for (const p of phases) get_layer(p.phase_id, new Set());
-
-  // depends_on이 없는 Phase는 YAML 순서대로 순차 레이어 배치
-  let seq = 0;
-  for (const p of phases) {
-    if (!has_explicit_deps.has(p.phase_id)) {
-      layers.set(p.phase_id, seq);
-      seq++;
-    } else {
-      seq = Math.max(seq, layers.get(p.phase_id)! + 1);
-    }
-  }
-
-  return layers;
-}
-
-/** Phase의 Sub-node를 포함한 유효 높이: Phase + 슬롯 + Sub-node. */
-function phase_effective_height(phase: PhaseDef): number {
-  const sub_count = phase.agents.length + (phase.critic ? 1 : 0);
-  return sub_count > 0 ? NODE_H + SUB_OFFSET_Y + SUB_D : NODE_H;
-}
-
-/** 노드 위치 계산 — 좌→우 가로 흐름. 레이어가 x축, 같은 레이어 노드는 y축 나열. */
-function compute_positions(phases: PhaseDef[]): Map<string, NodePos> {
-  const layers = compute_layers(phases);
-  const positions = new Map<string, NodePos>();
-  const phase_map = new Map(phases.map((p) => [p.phase_id, p]));
-
-  const layer_groups = new Map<number, string[]>();
-  for (const [id, layer] of layers) {
-    if (!layer_groups.has(layer)) layer_groups.set(layer, []);
-    layer_groups.get(layer)!.push(id);
-  }
-
-  // 레이어별 유효 높이 합산 (Sub-node 포함)
-  const layer_heights = new Map<number, number>();
-  for (const [layer, ids] of layer_groups) {
-    const total = ids.reduce((sum, id) => sum + phase_effective_height(phase_map.get(id)!), 0) + (ids.length - 1) * GAP_Y;
-    layer_heights.set(layer, total);
-  }
-  const max_h = Math.max(1, ...layer_heights.values());
-  const max_layer = Math.max(0, ...layer_groups.keys());
-
-  for (let layer = 0; layer <= max_layer; layer++) {
-    const ids = layer_groups.get(layer) || [];
-    const total_h = layer_heights.get(layer) || 0;
-    const offset_y = (max_h - total_h) / 2;
-
-    let cum_y = 0;
-    ids.forEach((id) => {
-      positions.set(id, {
-        x: PADDING + layer * (NODE_W + GAP_X),
-        y: PADDING + offset_y + cum_y,
-        width: NODE_W,
-        height: NODE_H,
-      });
-      cum_y += phase_effective_height(phase_map.get(id)!) + GAP_Y;
-    });
-  }
-
-  return positions;
-}
-
-/** 보조 노드 + 클러스터 Sub-node 위치 계산. */
-function compute_aux_positions(
-  workflow: WorkflowDef,
-  phase_positions: Map<string, NodePos>,
-): { nodes: GraphNode[]; positions: Map<string, NodePos> } {
-  const nodes: GraphNode[] = [];
-  const positions = new Map<string, NodePos>();
-  const tool_nodes = workflow.tool_nodes || [];
-  const skill_nodes = workflow.skill_nodes || [];
-
-  // 클러스터 Sub-node: Phase 하단에 Agent/Critic/Tool/Skill 배치
-  for (const phase of workflow.phases) {
-    const pp = phase_positions.get(phase.phase_id);
-    if (!pp) continue;
-
-    const sub_items: { id: string; sub_type: SubNodeType; label: string }[] = [
-      ...phase.agents.map((a) => ({ id: `${phase.phase_id}__${a.agent_id}`, sub_type: "agent" as const, label: a.label || a.agent_id })),
-      ...(phase.critic ? [{ id: `${phase.phase_id}__critic`, sub_type: "critic" as const, label: "Critic" }] : []),
-      ...tool_nodes.filter((t) => t.attach_to?.includes(phase.phase_id)).map((t) => ({ id: `${phase.phase_id}__tool_${t.id}`, sub_type: "tool" as const, label: t.tool_id })),
-      ...skill_nodes.filter((s) => s.attach_to?.includes(phase.phase_id)).map((s) => ({ id: `${phase.phase_id}__skill_${s.id}`, sub_type: "skill" as const, label: s.skill_name })),
-    ];
-    if (!sub_items.length) continue;
-
-    const total_w = sub_items.length * SUB_D + (sub_items.length - 1) * SUB_GAP;
-    const start_x = pp.x + (pp.width - total_w) / 2;
-    const y = pp.y + pp.height + SUB_OFFSET_Y;
-
-    sub_items.forEach((item, i) => {
-      nodes.push({ id: item.id, type: "sub_node", label: item.label, sub_type: item.sub_type, parent_phase_id: phase.phase_id });
-      positions.set(item.id, { x: start_x + i * (SUB_D + SUB_GAP), y, width: SUB_D, height: SUB_D });
-    });
-  }
-
-  // Trigger 노드 배치 (trigger_nodes[] 또는 레거시 trigger 필드)
-  const effective_triggers: TriggerNodeDef[] = workflow.trigger_nodes?.length
-    ? workflow.trigger_nodes
-    : workflow.trigger?.type === "cron"
-      ? [{ id: "__cron__", trigger_type: "cron" as const, schedule: workflow.trigger.schedule, timezone: workflow.trigger.timezone }]
-      : [];
-  const trigger_out = TRIGGER_OUTPUT;
-  const trigger_w = 160, trigger_h = compute_orche_node_height(trigger_out.length);
-  effective_triggers.forEach((tn, ti) => {
-    const first_phase = workflow.phases[0];
-    const anchor = first_phase ? phase_positions.get(first_phase.phase_id) : null;
-    const x = anchor ? anchor.x - trigger_w - GAP_X : PADDING;
-    const y = anchor ? anchor.y + ti * (trigger_h + GAP_Y) : PADDING + ti * (trigger_h + GAP_Y);
-    const label = tn.trigger_type === "cron" ? (tn.schedule || "cron") : tn.trigger_type;
-    const trigger_detail = tn.trigger_type === "cron" ? tn.schedule
-      : tn.trigger_type === "webhook" ? tn.webhook_path
-      : undefined;
-    nodes.push({ id: tn.id, type: "trigger", label, sub_label: tn.trigger_type, output_fields: trigger_out, trigger_detail });
-    positions.set(tn.id, { x, y, width: trigger_w, height: trigger_h });
-  });
-
-  // 오케스트레이션 노드 → depends_on 기반으로 위치 계산
-  const orche_nodes = workflow.orche_nodes || [];
-  const all_positions = new Map(phase_positions);
-  // 앵커별 배치된 자식 수 추적 (겹침 방지)
-  const anchor_child_count = new Map<string, number>();
-  let unanchored_idx = 0;
-  for (const on of orche_nodes) {
-    const orche_type = on.node_type as NodeType;
-    const is_diamond = orche_type === "if" || orche_type === "merge";
-    const fields = get_output_fields(on);
-    const inputs = get_input_fields(on);
-    const w = is_diamond ? 120 : 200;
-    const h = is_diamond ? 80 : compute_orche_node_height(Math.max(fields.length, inputs.length));
-    nodes.push({ id: on.node_id, type: orche_type, label: on.title || on.node_id, orche_data: on, input_fields: inputs, output_fields: fields });
-
-    // depends_on에서 앵커 탐색
-    let anchor: NodePos | null = null;
-    let anchor_id: string | null = null;
-    for (const dep of on.depends_on || []) {
-      const pos = all_positions.get(dep);
-      if (pos) { anchor = pos; anchor_id = dep; break; }
-    }
-
-    if (anchor && anchor_id) {
-      const child_idx = anchor_child_count.get(anchor_id) || 0;
-      anchor_child_count.set(anchor_id, child_idx + 1);
-      const y_offset = child_idx * (h + GAP_Y);
-      const placed = { x: anchor.x + anchor.width + GAP_X, y: anchor.y + y_offset, width: w, height: h };
-      positions.set(on.node_id, placed);
-      all_positions.set(on.node_id, placed);
-    } else {
-      const max_y = Math.max(PADDING, ...[...phase_positions.values()].map((p) => p.y + p.height));
-      const placed = {
-        x: PADDING + unanchored_idx * (w + GAP_X),
-        y: max_y + GAP_Y * 2,
-        width: w, height: h,
-      };
-      positions.set(on.node_id, placed);
-      all_positions.set(on.node_id, placed);
-      unanchored_idx++;
-    }
-  }
-
-  // Channel 노드 → 마지막 Phase 우측 위에 배치
-  if (workflow.hitl_channel) {
-    const last_phase = workflow.phases[workflow.phases.length - 1];
-    const anchor = last_phase ? phase_positions.get(last_phase.phase_id) : null;
-    const x = anchor ? anchor.x + anchor.width + 40 : PADDING + NODE_W + 40;
-    const y = anchor ? anchor.y - 40 : PADDING;
-    const ch_inputs = CHANNEL_INPUT;
-    const ch_outputs = CHANNEL_OUTPUT;
-    const ch_h = compute_orche_node_height(Math.max(ch_inputs.length, ch_outputs.length));
-    nodes.push({ id: "__channel__", type: "channel", label: workflow.hitl_channel.channel_type, sub_label: workflow.hitl_channel.chat_id, input_fields: ch_inputs, output_fields: ch_outputs });
-    positions.set("__channel__", { x, y, width: AUX_W, height: ch_h });
-  }
-
-  return { nodes, positions };
-}
-
-/** 보조 엣지 계산 (클러스터 attach + 오케 flow + trigger/config + field mapping). */
-function compute_aux_edges(workflow: WorkflowDef): Edge[] {
-  const edges: Edge[] = [];
-
-  // 클러스터 Sub-node 엣지: Phase → Agent/Critic/Tool/Skill
-  for (const phase of workflow.phases) {
-    for (const a of phase.agents) {
-      edges.push({ from: phase.phase_id, to: `${phase.phase_id}__${a.agent_id}`, type: "attach" });
-    }
-    if (phase.critic) {
-      edges.push({ from: phase.phase_id, to: `${phase.phase_id}__critic`, type: "attach" });
-    }
-    for (const tn of workflow.tool_nodes || []) {
-      if (tn.attach_to?.includes(phase.phase_id)) {
-        edges.push({ from: phase.phase_id, to: `${phase.phase_id}__tool_${tn.id}`, type: "attach" });
-      }
-    }
-    for (const sn of workflow.skill_nodes || []) {
-      if (sn.attach_to?.includes(phase.phase_id)) {
-        edges.push({ from: phase.phase_id, to: `${phase.phase_id}__skill_${sn.id}`, type: "attach" });
-      }
-    }
-  }
-
-  // 오케스트레이션 노드의 depends_on 엣지
-  for (const on of workflow.orche_nodes || []) {
-    for (const dep of on.depends_on || []) {
-      edges.push({ from: dep, to: on.node_id, type: "flow" });
-    }
-  }
-
-  // Trigger → 첫 번째 Phase
-  const eff_triggers: TriggerNodeDef[] = workflow.trigger_nodes?.length
-    ? workflow.trigger_nodes
-    : workflow.trigger?.type === "cron" && workflow.phases[0]
-      ? [{ id: "__cron__", trigger_type: "cron" as const, schedule: workflow.trigger.schedule }]
-      : [];
-  for (const tn of eff_triggers) {
-    if (workflow.phases[0]) {
-      edges.push({ from: tn.id, to: workflow.phases[0].phase_id, type: "trigger", from_port: "payload", to_port: "prompt" });
-    }
-  }
-
-  // Channel → interactive/sequential_loop Phase
-  if (workflow.hitl_channel) {
-    for (const p of workflow.phases) {
-      if (p.mode === "interactive" || p.mode === "sequential_loop") {
-        edges.push({ from: "__channel__", to: p.phase_id, type: "config", to_port: "channel" });
-      }
-    }
-  }
-
-  // 필드 매핑 엣지 (from_port/to_port 포함)
-  for (const m of workflow.field_mappings || []) {
-    edges.push({ from: m.from_node, to: m.to_node, from_port: m.from_field, to_port: m.to_field, type: "mapping", label: m.from_field });
-  }
-
-  return edges;
-}
-
-// ── Edge types ──
-
-type EdgeType = "flow" | "goto" | "attach" | "trigger" | "config" | "mapping";
-
-type Edge = {
-  from: string;
-  to: string;
-  from_port?: string;
-  to_port?: string;
-  type: EdgeType;
-  label?: string;
-};
-
-function compute_edges(phases: PhaseDef[]): Edge[] {
-  const edges: Edge[] = [];
-  const id_set = new Set(phases.map((p) => p.phase_id));
-
-  for (let i = 0; i < phases.length; i++) {
-    const phase = phases[i]!;
-
-    // depends_on 엣지 (result 출력 → prompt 입력)
-    if (phase.depends_on?.length) {
-      for (const dep of phase.depends_on) {
-        if (id_set.has(dep)) edges.push({ from: dep, to: phase.phase_id, type: "flow", from_port: "result", to_port: "prompt" });
-      }
-    } else if (i > 0) {
-      edges.push({ from: phases[i - 1]!.phase_id, to: phase.phase_id, type: "flow", from_port: "result", to_port: "prompt" });
-    }
-
-    // goto 엣지 (critic)
-    if (phase.critic?.on_rejection === "goto" && phase.critic.goto_phase && id_set.has(phase.critic.goto_phase)) {
-      edges.push({
-        from: phase.phase_id,
-        to: phase.critic.goto_phase,
-        type: "goto",
-        label: "FAIL",
-      });
-    }
-  }
-
-  return edges;
-}
-
-// ── Mode icons/colors ──
-
-const MODE_ICON: Record<string, string> = {
-  parallel: "||",
-  interactive: "🔄",
-  sequential_loop: "🔁",
-};
-
-// ── SVG Edge Renderer ──
-
-function EdgePath({ from, to, from_port, to_port, positions, type, label, onDelete, onInsert, graphNodes, phases }: Edge & {
-  positions: Map<string, NodePos>; onDelete?: () => void;
-  onInsert?: (from_id: string, to_id: string) => void;
-  graphNodes?: GraphNode[]; phases?: PhaseDef[];
-}) {
-  const p1 = positions.get(from);
-  const p2 = positions.get(to);
-  if (!p1 || !p2) return null;
-
-  // 포트 Y 오프셋 계산: 포트 이름 → 필드 인덱스, 없으면 첫 번째 포트 위치
-  const resolvePortY = (nodeId: string, portName: string | undefined, side: "out" | "in", pos: NodePos): number => {
-    const phase = phases?.find((p) => p.phase_id === nodeId);
-    const gn = graphNodes?.find((n) => n.id === nodeId);
-    const fields = side === "out"
-      ? (phase ? (PHASE_OUTPUT) : (gn?.output_fields || []))
-      : (phase ? (PHASE_INPUT) : (gn?.input_fields || []));
-    if (portName) {
-      const idx = fields.findIndex((f) => f.name === portName);
-      return idx >= 0 ? FIELD_PORT_TOP + idx * FIELD_PORT_H : pos.height / 2;
-    }
-    // 포트 이름 없으면 첫 번째 포트 위치 (필드가 있을 때)
-    return fields.length > 0 ? FIELD_PORT_TOP : pos.height / 2;
-  };
-
-  // 좌→우 흐름: 출력 = 우측, 입력 = 좌측
-  const x1 = p1.x + p1.width;
-  const x2 = p2.x;
-  // 모든 엣지: 포트 위치 기반 Y 좌표
-  const y1 = p1.y + resolvePortY(from, from_port, "out", p1);
-  const y2 = p2.y + resolvePortY(to, to_port, "in", p2);
-
-  if (type === "goto") {
-    // goto: 아래로 우회하는 커브 (역방향 가능)
-    const belowY = Math.max(p1.y + p1.height, p2.y + p2.height) + 50;
-    const d = `M ${p1.x + p1.width / 2} ${p1.y + p1.height} C ${p1.x + p1.width / 2} ${belowY}, ${p2.x + p2.width / 2} ${belowY}, ${p2.x + p2.width / 2} ${p2.y + p2.height}`;
-    const labelX = (p1.x + p2.x) / 2 + NODE_W / 2;
-    return (
-      <g>
-        <path
-          d={d}
-          fill="none"
-          stroke="var(--err, #e74c3c)"
-          strokeWidth={2}
-          strokeDasharray="6 4"
-          markerEnd="url(#arrow-goto)"
-        />
-        {label && (
-          <text
-            x={labelX}
-            y={belowY - 6}
-            fill="var(--err, #e74c3c)"
-            fontSize={11}
-            fontWeight={600}
-            textAnchor="middle"
-          >
-            {label}
-          </text>
-        )}
-      </g>
-    );
-  }
-
-  // attach: Phase → Sub-node (클러스터 연결: 세로 직선)
-  if (type === "attach") {
-    const sx = p1.x + p1.width / 2;
-    const sy = p1.y + p1.height;
-    const ex = p2.x + p2.width / 2;
-    const ey = p2.y;
-    // Sub-node가 Phase 바로 아래면 단순 직선, 아니면 커브
-    const isVertical = Math.abs(sx - ex) < p1.width;
-    if (isVertical) {
-      return <line x1={sx} y1={sy} x2={ex} y2={ey} stroke="var(--muted, #6c7086)" strokeWidth={1} strokeDasharray="3 3" />;
-    }
-    const midY = (sy + ey) / 2;
-    const d = `M ${sx} ${sy} C ${sx} ${midY}, ${ex} ${midY}, ${ex} ${ey}`;
-    return (
-      <path d={d} fill="none" stroke="var(--muted, #6c7086)" strokeWidth={1.2}
-        strokeDasharray="3 3" />
-    );
-  }
-
-  // trigger: Cron → Phase (주황 대시선)
-  if (type === "trigger") {
-    const midX = (x1 + x2) / 2;
-    const d = `M ${x1} ${y1} C ${midX} ${y1}, ${midX} ${y2}, ${x2} ${y2}`;
-    return (
-      <path d={d} fill="none" stroke="var(--orange, #e67e22)" strokeWidth={1.5}
-        strokeDasharray="8 4" markerEnd="url(#arrow-trigger)" />
-    );
-  }
-
-  // config: Channel → Phase (노란 대시선)
-  if (type === "config") {
-    const midX = (x1 + x2) / 2;
-    const d = `M ${x1} ${y1} C ${midX} ${y1}, ${midX} ${y2}, ${x2} ${y2}`;
-    return (
-      <path d={d} fill="none" stroke="var(--yellow, #f1c40f)" strokeWidth={1.2}
-        strokeDasharray="5 3" markerEnd="url(#arrow-config)" />
-    );
-  }
-
-  // mapping: 필드 매핑 (보라색 점선)
-  if (type === "mapping") {
-    const midX = (x1 + x2) / 2;
-    const d = `M ${x1} ${y1} C ${midX} ${y1}, ${midX} ${y2}, ${x2} ${y2}`;
-    return (
-      <g className={onDelete ? "graph-edge graph-edge--deletable" : "graph-edge"}>
-        {onDelete && <path d={d} fill="none" stroke="transparent" strokeWidth={12} style={{ cursor: "pointer" }} onClick={onDelete} />}
-        <path d={d} fill="none" stroke="#9b59b6" strokeWidth={1.5}
-          strokeDasharray="4 3" markerEnd="url(#arrow-mapping)" pointerEvents="none" />
-        {label && (
-          <text x={midX} y={Math.min(y1, y2) - 4} textAnchor="middle" fill="#9b59b6" fontSize={9} fontWeight={600} pointerEvents="none">
-            {label}
-          </text>
-        )}
-      </g>
-    );
-  }
-
-  // flow: 가로 부드러운 커브 (우측→좌측)
-  const midX = (x1 + x2) / 2;
-  const d = `M ${x1} ${y1} C ${midX} ${y1}, ${midX} ${y2}, ${x2} ${y2}`;
-  // bezier 중점 근사: t=0.5 → (x1+3*midX+3*midX+x2)/8, (y1+3*y1+3*y2+y2)/8
-  const edgeMidX = (x1 + x2) / 2;
-  const edgeMidY = (y1 + y2) / 2;
-  return (
-    <g className={onDelete ? "graph-edge graph-edge--deletable" : "graph-edge"}>
-      {/* 투명 히트 영역 (클릭 감지용) */}
-      {onDelete && <path d={d} fill="none" stroke="transparent" strokeWidth={12} style={{ cursor: "pointer" }} onClick={onDelete} />}
-      <path d={d} fill="none" stroke="var(--line, #555)" strokeWidth={1.5} markerEnd="url(#arrow-flow)" pointerEvents="none" />
-      {/* 엣지 중간 + 삽입 버튼 */}
-      {onInsert && (
-        <g className="graph-edge-add"
-          transform={`translate(${edgeMidX}, ${edgeMidY})`}
-          onClick={(e) => { e.stopPropagation(); onInsert(from, to); }}
-          style={{ cursor: "pointer" }}
-        >
-          <circle r={10} fill="var(--panel, #1e1e2e)" stroke="var(--accent, #89b4fa)" strokeWidth={1.5} />
-          <text textAnchor="middle" dominantBaseline="central" fontSize={14} fill="var(--accent, #89b4fa)" pointerEvents="none">+</text>
-        </g>
-      )}
-    </g>
-  );
-}
-
-// ── Port Layout Helpers ──
-
-const PORT_R = 6;
-
-/** 입력 포트 목록 (좌측). */
-function InputPorts({ fields }: { fields: OutputField[] }) {
-  if (fields.length === 0) return null;
-  return (
-    <>
-      {fields.map((field, i) => {
-        const fy = FIELD_PORT_TOP + i * FIELD_PORT_H;
-        return (
-          <g key={`in-${field.name}`}>
-            <text x={12} y={fy + 4} fill="var(--muted, #6c7086)" fontSize={9}>{field.name}</text>
-            <rect x={-5} y={fy - 5} width={10} height={10} rx={5}
-              fill="var(--panel, #1e1e2e)" stroke="var(--line, #555)" strokeWidth={1.5}
-              className="graph-port graph-port--in"
-            >
-              <title>{field.name}: {field.type}{field.description ? ` — ${field.description}` : ""}</title>
-            </rect>
-          </g>
-        );
-      })}
-    </>
-  );
-}
-
-/** 출력 포트 목록 (우측). */
-function OutputPorts({ fields, nodeWidth, nodeId, onFieldDragStart }: {
-  fields: OutputField[];
-  nodeWidth: number;
-  nodeId: string;
-  onFieldDragStart?: (nodeId: string, fieldName: string, e: React.MouseEvent) => void;
-}) {
-  if (fields.length === 0) return null;
-  return (
-    <>
-      {fields.map((field, i) => {
-        const fy = FIELD_PORT_TOP + i * FIELD_PORT_H;
-        const fc = FIELD_TYPE_COLORS[field.type] || "#95a5a6";
-        return (
-          <g key={`out-${field.name}`}>
-            <text x={nodeWidth - 16} y={fy + 4} textAnchor="end" fill="var(--muted, #6c7086)" fontSize={9}>
-              {field.name.length > 14 ? field.name.slice(0, 14) + "…" : field.name}
-            </text>
-            <circle cx={nodeWidth} cy={fy} r={14} fill="transparent"
-              className="graph-port graph-port--field" data-port-name={field.name}
-              style={{ cursor: "crosshair" }}
-              onMouseDown={onFieldDragStart ? (e) => { e.stopPropagation(); onFieldDragStart(nodeId, field.name, e); } : undefined}
-            />
-            <circle cx={nodeWidth} cy={fy} r={FIELD_PORT_R} fill={fc} stroke={fc} strokeWidth={1} pointerEvents="none">
-              <title>{field.name}: {field.type}{field.description ? ` — ${field.description}` : ""}</title>
-            </circle>
-          </g>
-        );
-      })}
-    </>
-  );
-}
-
-
-// ── Phase Node ──
-
-function PhaseNode({
-  phase, pos, isSelected, isRunning, onClick, onDoubleClick, onPortDragStart, onNodeDragStart, onNodeTouchStart, onRunNode, subSlotCount,
-}: {
-  phase: PhaseDef;
-  pos: NodePos;
-  isSelected: boolean;
-  isRunning?: boolean;
-  onClick: () => void;
-  onDoubleClick: () => void;
-  onPortDragStart: (nodeId: string, portName: string) => void;
-  onNodeDragStart: (phase_id: string, e: React.MouseEvent) => void;
-  onNodeTouchStart: (phase_id: string, touch: { clientX: number; clientY: number }) => void;
-  onRunNode?: (id: string, mode: "run" | "test") => void;
-  /** 하단 클러스터 슬롯 수 (Agent + Critic + Tool + Skill). */
-  subSlotCount?: number;
-}) {
-  const mode = phase.mode || "parallel";
-  const borderColor = isRunning ? "var(--accent, #89b4fa)" : isSelected ? "var(--accent)" : "var(--line, #444)";
-  const slots = subSlotCount || 0;
-
-  return (
-    <g
-      transform={`translate(${pos.x}, ${pos.y})`}
-      data-node-id={phase.phase_id}
-      className="graph-node"
-      onClick={onClick}
-      onDoubleClick={onDoubleClick}
-      onMouseDown={(e) => { if (!(e.target as Element).closest(".graph-port")) onNodeDragStart(phase.phase_id, e); }}
-      onTouchStart={(e) => {
-        if (e.touches.length === 1 && !(e.target as Element).closest(".graph-port")) {
-          onNodeTouchStart(phase.phase_id, e.touches[0]!);
-        }
-      }}
-      style={{ cursor: "pointer" }}
-    >
-      {/* 선택 글로우 */}
-      {isSelected && !isRunning && (
-        <rect
-          x={-3} y={-3}
-          width={pos.width + 6} height={pos.height + 6}
-          rx={19}
-          fill="none"
-          stroke="var(--accent, #89b4fa)"
-          strokeWidth={1.5}
-          opacity={0.5}
-          strokeDasharray="6 3"
-        />
-      )}
-      {/* 실행 중 글로우 이펙트 */}
-      {isRunning && (
-        <rect
-          x={-4} y={-4}
-          width={pos.width + 8} height={pos.height + 8}
-          rx={20}
-          fill="none"
-          stroke="var(--accent, #89b4fa)"
-          strokeWidth={2}
-          opacity={0.6}
-          className="node-running-glow"
-        />
-      )}
-      <rect
-        width={pos.width}
-        height={pos.height}
-        rx={16}
-        fill={isSelected ? "color-mix(in srgb, var(--accent, #89b4fa) 8%, var(--panel, #1e1e2e))" : "var(--panel, #1e1e2e)"}
-        stroke={borderColor}
-        strokeWidth={isRunning ? 2.5 : isSelected ? 2.5 : 1}
-      />
-      {/* 아이콘 원 (좌측, accent 컬러 — 컬러바 대체) */}
-      <circle cx={24} cy={20} r={15} fill="var(--accent, #89b4fa)" opacity={0.15} />
-      <circle cx={24} cy={20} r={15} fill="none" stroke="var(--accent, #89b4fa)" strokeWidth={1.2} opacity={0.4} />
-      <text x={24} y={24} textAnchor="middle" fontSize={12}>⚙</text>
-
-      {/* Phase 제목 */}
-      <text
-        x={46}
-        y={16}
-        fill="var(--text, #cdd6f4)"
-        fontSize={13}
-        fontWeight={600}
-      >
-        {(phase.title || phase.phase_id).length > 14 ? (phase.title || phase.phase_id).slice(0, 14) + "…" : (phase.title || phase.phase_id)}
-      </text>
-
-      {/* 부제: Agent 수 + mode */}
-      <text
-        x={46}
-        y={28}
-        fill="var(--muted, #6c7086)"
-        fontSize={9}
-      >
-        {phase.agents.length} agent{phase.agents.length !== 1 ? "s" : ""}
-        {phase.critic ? " · critic" : ""}
-        {mode !== "parallel" ? ` · ${MODE_ICON[mode]}` : ""}
-      </text>
-
-      {/* depends_on 표시 */}
-      {phase.depends_on?.length ? (
-        <text
-          x={46}
-          y={40}
-          fill="var(--muted, #6c7086)"
-          fontSize={8}
-          opacity={0.7}
-        >
-          ← {phase.depends_on.join(", ")}
-        </text>
-      ) : null}
-
-      {/* 포트 영역 구분선 */}
-      <line x1={10} y1={FIELD_PORT_TOP - 4} x2={pos.width - 10} y2={FIELD_PORT_TOP - 4} stroke="var(--line, #555)" strokeWidth={0.5} opacity={0.4} />
-
-      {/* 입력 포트들 (좌측) */}
-      <InputPorts fields={get_input_fields(phase)} />
-
-      {/* 출력 포트들 (우측) */}
-      <OutputPorts fields={get_output_fields(phase)} nodeWidth={pos.width} nodeId={phase.phase_id}
-        onFieldDragStart={(_, fieldName) => onPortDragStart(phase.phase_id, fieldName)} />
-
-      {/* 하단 클러스터 슬롯 포트 (다이아몬드) */}
-      {slots > 0 && (() => {
-        const slot_gap = Math.min(20, (pos.width - 24) / slots);
-        const start_x = (pos.width - (slots - 1) * slot_gap) / 2;
-        return Array.from({ length: slots }, (_, i) => {
-          const sx = start_x + i * slot_gap;
-          return (
-            <polygon
-              key={`slot-${i}`}
-              points={`${sx},${pos.height - 4} ${sx + 4},${pos.height} ${sx},${pos.height + 4} ${sx - 4},${pos.height}`}
-              fill="var(--muted, #6c7086)"
-              opacity={0.5}
-            />
-          );
-        });
-      })()}
-
-      {/* ▶ Play 버튼 (Mode 뱃지 왼쪽) */}
-      {onRunNode && (
-        <g
-          transform={`translate(${pos.width - 46}, 15)`}
-          onClick={(e) => { e.stopPropagation(); onRunNode(phase.phase_id, e.shiftKey ? "test" : "run"); }}
-          style={{ cursor: "pointer" }}
-          className="graph-play-btn"
-        >
-          <circle r={9} fill="var(--accent, #89b4fa)" opacity={0.2} />
-          <text textAnchor="middle" dominantBaseline="central" fontSize={10} fill="var(--accent, #89b4fa)" style={{ pointerEvents: "none" }}>▶</text>
-        </g>
-      )}
-
-      {/* 선택 시 편집 버튼 (모바일 터치 대응) */}
-      {isSelected && (
-        <g
-          transform={`translate(${pos.width - 14}, ${pos.height - 14})`}
-          onClick={(e) => { e.stopPropagation(); onDoubleClick(); }}
-          className="graph-edit-btn"
-        >
-          <circle r={10} fill="var(--accent, #89b4fa)" opacity={0.9} />
-          <text
-            textAnchor="middle"
-            dominantBaseline="central"
-            fontSize={11}
-            fill="var(--bg, #1e1e2e)"
-            style={{ pointerEvents: "none" }}
-          >
-            ✎
-          </text>
-        </g>
-      )}
-    </g>
-  );
-}
-
-// ── Auxiliary Node Components ──
-
-const SUB_COLORS: Record<string, string> = { agent: "#3498db", critic: "#e74c3c", tool: "#6c7086", skill: "#27ae60" };
-const SUB_ICONS: Record<string, string> = { agent: "🤖", critic: "⚖", tool: "🔧", skill: "⚡" };
-
-/** 클러스터 Sub-node: n8n 스타일 원형 (r=18). Phase 하단에 배치. */
-function ClusterSubNode({ node, pos, onDoubleClick }: {
-  node: GraphNode; pos: NodePos;
-  onDoubleClick?: () => void;
-}) {
-  const color = SUB_COLORS[node.sub_type || "agent"] || "#888";
-  const icon = SUB_ICONS[node.sub_type || "agent"] || "?";
-  const r = pos.width / 2;
-  const cx = r, cy = r;
-  return (
-    <g
-      transform={`translate(${pos.x}, ${pos.y})`}
-      onDoubleClick={(e) => { e.stopPropagation(); onDoubleClick?.(); }}
-      style={{ cursor: "pointer" }}
-    >
-      <circle cx={cx} cy={cy} r={r - 2} fill="var(--panel, #1e1e2e)" stroke={color} strokeWidth={1.5} />
-      <text x={cx} y={cy - 2} textAnchor="middle" dominantBaseline="central" fontSize={14}>{icon}</text>
-      <text x={cx} y={cy + r + 10} textAnchor="middle" fill="var(--muted, #6c7086)" fontSize={8}>
-        {node.label.length > 10 ? node.label.slice(0, 10) + "…" : node.label}
-      </text>
-      {/* 상단 다이아몬드 입력 포트 → Phase 슬롯 연결 */}
-      <polygon points={`${cx},-4 ${cx + 4},0 ${cx},4 ${cx - 4},0`} fill={color} />
-    </g>
-  );
-}
-
-/** Trigger 노드: 둥근 사각형, 좌측 입력 없음, 우측 출력 포트. */
-const TRIGGER_COLORS: Record<string, string> = {
-  cron: "#e67e22", webhook: "#3498db", manual: "#2ecc71", channel_message: "#f1c40f",
-};
-const TRIGGER_ICONS: Record<string, string> = {
-  cron: "⏰", webhook: "↗", manual: "▶", channel_message: "💬",
-};
-function TriggerNode({ node, pos, onFieldDragStart }: {
-  node: GraphNode; pos: NodePos;
-  onFieldDragStart?: (nodeId: string, fieldName: string, e: React.MouseEvent) => void;
-}) {
-  const triggerType = node.sub_label || "manual";
-  const color = TRIGGER_COLORS[triggerType] || "#e67e22";
-  const icon = TRIGGER_ICONS[triggerType] || "▶";
-  const outFields = node.output_fields || [];
-  return (
-    <g transform={`translate(${pos.x}, ${pos.y})`}>
-      <rect width={pos.width} height={pos.height} rx={outFields.length > 0 ? 16 : pos.height / 2} fill="var(--panel, #1e1e2e)" stroke="var(--line, #555)" strokeWidth={1} />
-      {/* 아이콘 원 (좌측, 트리거 컬러) */}
-      <circle cx={22} cy={18} r={14} fill={color} opacity={0.15} />
-      <circle cx={22} cy={18} r={14} fill="none" stroke={color} strokeWidth={1.2} opacity={0.4} />
-      <text x={22} y={22} textAnchor="middle" fontSize={12}>{icon}</text>
-      {/* 제목 */}
-      <text x={42} y={16} fill="var(--text, #cdd6f4)" fontSize={11} fontWeight={600}>
-        {node.label.length > 12 ? node.label.slice(0, 12) + "…" : node.label}
-      </text>
-      {/* 부제 (schedule/path 등) */}
-      {node.trigger_detail && (
-        <text x={42} y={28} fill="var(--muted, #6c7086)" fontSize={8} fontFamily="monospace">
-          {node.trigger_detail.length > 18 ? node.trigger_detail.slice(0, 18) + "…" : node.trigger_detail}
-        </text>
-      )}
-      {/* 포트 영역 구분선 */}
-      {outFields.length > 0 && (
-        <line x1={10} y1={FIELD_PORT_TOP - 4} x2={pos.width - 10} y2={FIELD_PORT_TOP - 4} stroke="var(--line, #555)" strokeWidth={0.5} opacity={0.4} />
-      )}
-      {/* 출력 포트들 (우측) */}
-      <OutputPorts fields={outFields} nodeWidth={pos.width} nodeId={node.id} onFieldDragStart={onFieldDragStart} />
-    </g>
-  );
-}
-
-/** Channel 노드: 양방향 — 입력 포트(좌) + 출력 포트(우). */
-function ChannelNode({ node, pos, onFieldDragStart }: {
-  node: GraphNode; pos: NodePos;
-  onFieldDragStart?: (nodeId: string, fieldName: string, e: React.MouseEvent) => void;
-}) {
-  const w = pos.width, h = pos.height;
-  const inFields = node.input_fields || [];
-  const outFields = node.output_fields || [];
-  return (
-    <g transform={`translate(${pos.x}, ${pos.y})`}>
-      <rect width={w} height={h} rx={(inFields.length > 0 || outFields.length > 0) ? 16 : h / 2} fill="var(--panel, #1e1e2e)" stroke="var(--line, #555)" strokeWidth={1} />
-      {/* 아이콘 원 (좌측, 채널 컬러) */}
-      <circle cx={22} cy={18} r={14} fill="var(--yellow, #f1c40f)" opacity={0.15} />
-      <circle cx={22} cy={18} r={14} fill="none" stroke="var(--yellow, #f1c40f)" strokeWidth={1.2} opacity={0.4} />
-      <text x={22} y={22} textAnchor="middle" fontSize={12}>💬</text>
-      {/* 제목 */}
-      <text x={42} y={16} fill="var(--text, #cdd6f4)" fontSize={11} fontWeight={600}>
-        {node.label.length > 12 ? node.label.slice(0, 12) + "…" : node.label}
-      </text>
-      {node.sub_label && (
-        <text x={42} y={28} fill="var(--muted, #6c7086)" fontSize={9}>{node.sub_label}</text>
-      )}
-      {/* 포트 영역 구분선 */}
-      {(inFields.length > 0 || outFields.length > 0) && (
-        <line x1={10} y1={FIELD_PORT_TOP - 4} x2={w - 10} y2={FIELD_PORT_TOP - 4} stroke="var(--line, #555)" strokeWidth={0.5} opacity={0.4} />
-      )}
-      {/* 입력 포트들 (좌측) */}
-      <InputPorts fields={inFields} />
-      {/* 출력 포트들 (우측) */}
-      <OutputPorts fields={outFields} nodeWidth={w} nodeId={node.id} onFieldDragStart={onFieldDragStart} />
-    </g>
-  );
-}
-
-/** Split 노드: 다이아몬드 (teal). */
-function SplitDiamondNode({ node, pos, onRun, onFieldDragStart }: {
-  node: GraphNode; pos: NodePos;
-  onRun?: (id: string, mode: "run" | "test") => void;
-  onFieldDragStart?: (nodeId: string, fieldName: string, e: React.MouseEvent) => void;
-}) {
-  const w = pos.width, h = pos.height;
-  const color = orche_color("split");
-  const points = `${w / 2},0 ${w},${h / 2} ${w / 2},${h} 0,${h / 2}`;
-  const inFields = node.input_fields || [];
-  const outFields = node.output_fields || [];
-  return (
-    <g transform={`translate(${pos.x}, ${pos.y})`}>
-      <polygon points={points} fill="var(--panel, #1e1e2e)" stroke={color} strokeWidth={1.5} />
-      <text x={w / 2} y={h / 2 - 6} textAnchor="middle" fill={color} fontSize={16} fontWeight={700}>↕</text>
-      <text x={w / 2} y={h / 2 + 12} textAnchor="middle" fill="var(--text, #cdd6f4)" fontSize={10}>
-        {node.label.length > 10 ? node.label.slice(0, 10) + "…" : node.label}
-      </text>
-      {/* 입력 포트 (좌측) */}
-      {inFields.length > 0 ? inFields.map((field, i) => (
-        <rect key={`in-${field.name}`} x={-5} y={h / 2 - 5 + i * FIELD_PORT_H} width={10} height={10} rx={2}
-          fill="var(--panel, #1e1e2e)" stroke="var(--line, #555)" strokeWidth={1.5} className="graph-port graph-port--in"
-        />
-      )) : (
-        <rect x={-5} y={h / 2 - 5} width={10} height={10} rx={5} fill="var(--panel, #1e1e2e)" stroke="var(--line, #555)" strokeWidth={1.5} className="graph-port graph-port--in" />
-      )}
-      {/* 출력 포트들 (우측) */}
-      {outFields.map((field, i) => {
-        const fy = h * 0.3 + i * 14;
-        const fc = FIELD_TYPE_COLORS[field.type] || "#95a5a6";
-        return (
-          <g key={`out-${field.name}`}>
-            <circle cx={w} cy={fy} r={14} fill="transparent"
-              className="graph-port graph-port--field" data-port-name={field.name}
-              style={{ cursor: "crosshair" }}
-              onMouseDown={(e) => { e.stopPropagation(); onFieldDragStart?.(node.id, field.name, e); }}
-            />
-            <circle cx={w} cy={fy} r={FIELD_PORT_R} fill={fc} stroke={fc} strokeWidth={1} pointerEvents="none">
-              <title>{field.name}: {field.type}</title>
-            </circle>
-          </g>
-        );
-      })}
-      {onRun && (
-        <g transform={`translate(${w / 2 + 20}, 12)`}
-          onClick={(e) => { e.stopPropagation(); onRun(node.id, e.shiftKey ? "test" : "run"); }}
-          style={{ cursor: "pointer" }} className="graph-play-btn"
-        >
-          <circle r={7} fill={color} opacity={0.2} />
-          <text textAnchor="middle" dominantBaseline="central" fontSize={8} fill={color} style={{ pointerEvents: "none" }}>▶</text>
-        </g>
-      )}
-    </g>
-  );
-}
-
-/** Switch 노드: 다이아몬드 (amber) + N개 case 출력 포트. */
-function SwitchDiamondNode({ node, pos, onRun, onFieldDragStart }: {
-  node: GraphNode; pos: NodePos;
-  onRun?: (id: string, mode: "run" | "test") => void;
-  onFieldDragStart?: (nodeId: string, fieldName: string, e: React.MouseEvent) => void;
-}) {
-  const w = pos.width, h = pos.height;
-  const color = orche_color("switch");
-  const points = `${w / 2},0 ${w},${h / 2} ${w / 2},${h} 0,${h / 2}`;
-  const cases = ((node.orche_data as Record<string, unknown> | undefined)?.cases as Array<{ value: string }>) || [];
-  const outPorts = cases.length > 0
-    ? cases.map((c) => c.value)
-    : ["default"];
-  return (
-    <g transform={`translate(${pos.x}, ${pos.y})`}>
-      <polygon points={points} fill="var(--panel, #1e1e2e)" stroke={color} strokeWidth={1.5} />
-      <text x={w / 2} y={h / 2 - 6} textAnchor="middle" fill={color} fontSize={14} fontWeight={700}>⑆</text>
-      <text x={w / 2} y={h / 2 + 12} textAnchor="middle" fill="var(--text, #cdd6f4)" fontSize={10}>
-        {node.label.length > 10 ? node.label.slice(0, 10) + "…" : node.label}
-      </text>
-      {/* 입력 포트 (좌측) */}
-      <rect x={-5} y={h / 2 - 5} width={10} height={10} rx={2}
-        fill="var(--panel, #1e1e2e)" stroke="var(--line, #555)" strokeWidth={1.5} className="graph-port graph-port--in" />
-      {/* Case 출력 포트들 (우측) */}
-      {outPorts.map((label, i) => {
-        const fy = h * 0.25 + i * (h * 0.5 / Math.max(1, outPorts.length - 1 || 1));
-        return (
-          <g key={`case-${i}`}>
-            <circle cx={w} cy={fy} r={14} fill="transparent"
-              className="graph-port graph-port--field" data-port-name={label}
-              style={{ cursor: "crosshair" }}
-              onMouseDown={(e) => { e.stopPropagation(); onFieldDragStart?.(node.id, label, e); }}
-            />
-            <circle cx={w} cy={fy} r={FIELD_PORT_R} fill={color} stroke={color} strokeWidth={1} pointerEvents="none">
-              <title>case: {label}</title>
-            </circle>
-            <text x={w + 10} y={fy + 3} fill={color} fontSize={8}>{label.length > 8 ? label.slice(0, 8) + "…" : label}</text>
-          </g>
-        );
-      })}
-      {onRun && (
-        <g transform={`translate(${w / 2 + 20}, 12)`}
-          onClick={(e) => { e.stopPropagation(); onRun(node.id, e.shiftKey ? "test" : "run"); }}
-          style={{ cursor: "pointer" }} className="graph-play-btn"
-        >
-          <circle r={7} fill={color} opacity={0.2} />
-          <text textAnchor="middle" dominantBaseline="central" fontSize={8} fill={color} style={{ pointerEvents: "none" }}>▶</text>
-        </g>
-      )}
-    </g>
-  );
-}
-
-// ── Orchestration Node Components (registry 기반) ──
-
-/** Registry에서 색상 조회 (fallback: #888). */
-function orche_color(node_type: string): string {
-  return get_frontend_node(node_type)?.color || "#888";
-}
-
-/** Registry에서 아이콘 조회. */
-function orche_icon(node_type: string): string {
-  return get_frontend_node(node_type)?.icon || "";
-}
-
-/** 노드 타입별 부제: 핵심 설정값 한줄 요약. */
-function get_node_subtitle(node: GraphNode): string {
-  const d = node.orche_data || {};
-  switch (node.type) {
-    case "http": return `${d.method || "GET"} ${truncate_str(String(d.url || ""), 24)}`;
-    case "code": return String(d.language || "javascript");
-    case "llm": return String(d.model || "default model");
-    case "ai_agent": return String(d.model || "agent");
-    case "if": return truncate_str(String(d.condition || ""), 24);
-    case "set": return Object.keys((d.assignments as Record<string, unknown>) || {}).slice(0, 3).join(", ") || "variables";
-    case "db": return String(d.datasource || "query");
-    case "template": return "Mustache template";
-    case "loop": return `items: ${truncate_str(String(d.items_expression || "…"), 20)}`;
-    case "filter": return truncate_str(String(d.condition || "filter"), 24);
-    case "transform": return truncate_str(String(d.expression || "map"), 24);
-    case "switch": return `${((d.cases as unknown[]) || []).length || 0} cases`;
-    case "wait": return String(d.wait_type || d.delay_ms ? `${d.delay_ms}ms` : "await");
-    case "file": return String(d.operation || "read");
-    case "analyzer": return String(d.model || "structured output");
-    case "retriever": return String(d.source_type || "search");
-    case "embedding": return String(d.model || "embed");
-    case "vector_store": return String(d.operation || "query");
-    case "sub_workflow": return truncate_str(String(d.workflow_name || ""), 24);
-    case "oauth": return String(d.provider_name || "OAuth");
-    default: return node.sub_label || "";
-  }
-}
-function truncate_str(s: string, max: number): string { return s.length > max ? s.slice(0, max) + "…" : s; }
-
-/** 오케 노드 상태 배지 아이콘. */
-const STATUS_BADGE: Record<string, { icon: string; color: string }> = {
-  running: { icon: "⟳", color: "#3498db" },
-  completed: { icon: "✓", color: "#2ecc71" },
-  failed: { icon: "✗", color: "#e74c3c" },
-  skipped: { icon: "⊘", color: "#6c7086" },
-};
-
-/** HTTP/Code/Set 등 캡슐(pill) 오케 노드. */
-function OrcheRectNode({ node, pos, nodeStatus, onRun, onFieldDragStart }: {
-  node: GraphNode;
-  pos: NodePos;
-  nodeStatus?: string;
-  onRun?: (id: string, mode: "run" | "test") => void;
-  onFieldDragStart?: (nodeId: string, fieldName: string, e: React.MouseEvent) => void;
-}) {
-  const color = orche_color(node.type) || "#888";
-  const icon = orche_icon(node.type);
-  const outFields = node.output_fields || [];
-  const inFields = node.input_fields || [];
-  const subtitle = get_node_subtitle(node);
-  const badge = nodeStatus ? STATUS_BADGE[nodeStatus] : undefined;
-  const has_ports = inFields.length > 0 || outFields.length > 0;
-  const pill_rx = has_ports ? 16 : pos.height / 2;
-
-  return (
-    <g transform={`translate(${pos.x}, ${pos.y})`}>
-      {/* 캡슐 배경 */}
-      <rect width={pos.width} height={pos.height} rx={pill_rx} fill="var(--panel, #1e1e2e)" stroke="var(--line, #555)" strokeWidth={1} />
-      {/* 아이콘 원 (좌측, 노드 컬러 — 컬러바 대체) */}
-      <circle cx={24} cy={20} r={15} fill={color} opacity={0.15} />
-      <circle cx={24} cy={20} r={15} fill="none" stroke={color} strokeWidth={1.2} opacity={0.4} />
-      <text x={24} y={24} textAnchor="middle" fontSize={13}>{icon}</text>
-      {/* 제목 */}
-      <text x={46} y={16} fill="var(--text, #cdd6f4)" fontSize={12} fontWeight={600}>
-        {node.label.length > 14 ? node.label.slice(0, 14) + "…" : node.label}
-      </text>
-      {/* 부제 */}
-      {subtitle && (
-        <text x={46} y={28} fill="var(--muted, #6c7086)" fontSize={9}>
-          {subtitle.length > 20 ? subtitle.slice(0, 20) + "…" : subtitle}
-        </text>
-      )}
-      {/* 상태 배지 */}
-      {badge && (
-        <g transform={`translate(${pos.width - 18}, 8)`}>
-          <circle r={8} fill={badge.color} opacity={0.2} />
-          <text textAnchor="middle" dominantBaseline="central" fontSize={10} fill={badge.color} style={{ pointerEvents: "none" }}>{badge.icon}</text>
-        </g>
-      )}
-      {/* ▶ Play 버튼 */}
-      {onRun && !badge && (
-        <g
-          transform={`translate(${pos.width - 18}, 20)`}
-          onClick={(e) => { e.stopPropagation(); onRun(node.id, e.shiftKey ? "test" : "run"); }}
-          style={{ cursor: "pointer" }}
-          className="graph-play-btn"
-        >
-          <circle r={9} fill={color} opacity={0.15} />
-          <text textAnchor="middle" dominantBaseline="central" fontSize={9} fill={color} style={{ pointerEvents: "none" }}>▶</text>
-        </g>
-      )}
-      {/* 포트 영역 구분선 */}
-      {has_ports && (
-        <line x1={10} y1={FIELD_PORT_TOP - 4} x2={pos.width - 10} y2={FIELD_PORT_TOP - 4} stroke="var(--line, #555)" strokeWidth={0.5} opacity={0.4} />
-      )}
-      {/* 입력 포트들 (좌측) */}
-      {inFields.length > 0 ? (
-        <InputPorts fields={inFields} />
-      ) : (
-        <rect x={-5} y={pos.height / 2 - 5} width={10} height={10} rx={5} fill="var(--panel, #1e1e2e)" stroke="var(--line, #555)" strokeWidth={1.5} className="graph-port graph-port--in" />
-      )}
-      {/* 출력 포트들 (우측) */}
-      {outFields.length > 0 ? (
-        <OutputPorts fields={outFields} nodeWidth={pos.width} nodeId={node.id} onFieldDragStart={onFieldDragStart} />
-      ) : (
-        <circle cx={pos.width} cy={pos.height / 2} r={PORT_R} fill={color} stroke={color} strokeWidth={1.5} className="graph-port graph-port--out" />
-      )}
-    </g>
-  );
-}
-
-/** 노드 오른쪽 `+` 핸들 — hover 시 표시. */
-function AddHandle({ pos, onClick, onDragStart }: {
-  pos: NodePos;
-  onClick: () => void;
-  onDragStart?: (origin: { x: number; y: number }, e: React.MouseEvent | React.TouchEvent) => void;
-}) {
-  const cx = pos.x + pos.width + 16;
-  const cy = pos.y + pos.height / 2;
-  return (
-    <g className="graph-add-handle"
-      transform={`translate(${cx}, ${cy})`}
-      onClick={(e) => { e.stopPropagation(); onClick(); }}
-      onMouseDown={(e) => {
-        if (e.button !== 0) return;
-        e.stopPropagation();
-        e.preventDefault();
-        onDragStart?.({ x: cx, y: cy }, e);
-      }}
-      onTouchStart={(e) => {
-        if (e.touches.length !== 1) return;
-        e.stopPropagation();
-        onDragStart?.({ x: cx, y: cy }, e);
-      }}
-      style={{ cursor: "grab" }}
-    >
-      <circle r={12} fill="var(--panel, #1e1e2e)" stroke="var(--accent, #89b4fa)" strokeWidth={1.5} />
-      <text textAnchor="middle" dominantBaseline="central" fontSize={16} fill="var(--accent, #89b4fa)" pointerEvents="none">+</text>
-    </g>
-  );
-}
-
-/** 그룹 프레임: 노드 그루핑 시각화. */
-function GroupFrame({ group, positions, onUpdate, onDelete, onToggleCollapse }: {
-  group: NodeGroup;
-  positions: Map<string, NodePos>;
-  onUpdate: (patch: Partial<NodeGroup>) => void;
-  onDelete: () => void;
-  onToggleCollapse: () => void;
-}) {
-  const [hovered, setHovered] = useState(false);
-  // 그룹 내 노드들의 bounding box
-  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-  for (const id of group.node_ids) {
-    const p = positions.get(id);
-    if (!p) continue;
-    minX = Math.min(minX, p.x);
-    minY = Math.min(minY, p.y);
-    maxX = Math.max(maxX, p.x + p.width);
-    maxY = Math.max(maxY, p.y + p.height);
-  }
-  if (minX === Infinity) return null;
-  const pad = 20;
-  const headerH = 28;
-
-  return (
-    <g className="graph-group"
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-    >
-      <rect
-        x={minX - pad} y={minY - pad - headerH}
-        width={maxX - minX + pad * 2} height={maxY - minY + pad * 2 + headerH}
-        rx={12}
-        fill={group.color} fillOpacity={0.08}
-        stroke={group.color} strokeOpacity={0.3} strokeWidth={1.5}
-      />
-      <text
-        x={minX - pad + 12} y={minY - pad - 8}
-        fill={group.color} fontSize={13} fontWeight={600}
-      >
-        {group.label}
-      </text>
-      {hovered && (
-        <foreignObject
-          x={maxX - 80} y={minY - pad - headerH + 2}
-          width={100} height={24}
-        >
-          <div className="graph-group__toolbar" style={{ display: "flex", gap: 2 }}>
-            <button onClick={onToggleCollapse} title={group.collapsed ? "Expand" : "Collapse"}>
-              {group.collapsed ? "\u25B8" : "\u25BE"}
-            </button>
-            <button onClick={() => {
-              const name = prompt("Group name", group.label);
-              if (name) onUpdate({ label: name });
-            }}>
-              \u270E
-            </button>
-            <button onClick={onDelete} className="graph-ctx__item--danger">\u2715</button>
-          </div>
-        </foreignObject>
-      )}
-    </g>
-  );
-}
-
-/** IF 노드: 다이아몬드 + TRUE/FALSE 출력 포트. */
-function IfDiamondNode({ node, pos, onRun }: { node: GraphNode; pos: NodePos; onRun?: (id: string, mode: "run" | "test") => void }) {
-  const w = pos.width, h = pos.height;
-  const color = orche_color("if");
-  const points = `${w / 2},0 ${w},${h / 2} ${w / 2},${h} 0,${h / 2}`;
-  return (
-    <g transform={`translate(${pos.x}, ${pos.y})`}>
-      <polygon points={points} fill="var(--panel, #1e1e2e)" stroke={color} strokeWidth={1.5} />
-      <text x={w / 2} y={h / 2 - 6} textAnchor="middle" fill={color} fontSize={16} fontWeight={700}>?</text>
-      <text x={w / 2} y={h / 2 + 12} textAnchor="middle" fill="var(--text, #cdd6f4)" fontSize={10}>
-        {node.label.length > 10 ? node.label.slice(0, 10) + "…" : node.label}
-      </text>
-      {/* TRUE 출력 (우측) */}
-      <circle cx={w} cy={h * 0.35} r={PORT_R} fill="#2ecc71" stroke="#2ecc71" strokeWidth={1.5} className="graph-port graph-port--field" />
-      <text x={w + 12} y={h * 0.35 + 3} fill="#2ecc71" fontSize={8} fontWeight={600}>TRUE</text>
-      {/* FALSE 출력 (우측 하단) */}
-      <circle cx={w} cy={h * 0.65} r={PORT_R} fill="var(--err, #e74c3c)" stroke="var(--err, #e74c3c)" strokeWidth={1.5} className="graph-port graph-port--field" />
-      <text x={w + 12} y={h * 0.65 + 3} fill="var(--err, #e74c3c)" fontSize={8} fontWeight={600}>FALSE</text>
-      {/* ▶ Play 버튼 */}
-      {onRun && (
-        <g
-          transform={`translate(${w / 2 + 20}, 12)`}
-          onClick={(e) => { e.stopPropagation(); onRun(node.id, e.shiftKey ? "test" : "run"); }}
-          style={{ cursor: "pointer" }}
-          className="graph-play-btn"
-        >
-          <circle r={9} fill={color} opacity={0.2} />
-          <text textAnchor="middle" dominantBaseline="central" fontSize={10} fill={color} style={{ pointerEvents: "none" }}>▶</text>
-        </g>
-      )}
-      {/* 입력 포트 (사각형) */}
-      <rect x={-5} y={h / 2 - 5} width={10} height={10} rx={5} fill="var(--panel, #1e1e2e)" stroke="var(--line, #555)" strokeWidth={1.5} className="graph-port graph-port--in" />
-    </g>
-  );
-}
-
-/** Merge 노드: 소형 다이아몬드. */
-function MergeDiamondNode({ node, pos, onRun }: { node: GraphNode; pos: NodePos; onRun?: (id: string, mode: "run" | "test") => void }) {
-  const w = pos.width, h = pos.height;
-  const color = orche_color("merge");
-  const points = `${w / 2},0 ${w},${h / 2} ${w / 2},${h} 0,${h / 2}`;
-  return (
-    <g transform={`translate(${pos.x}, ${pos.y})`}>
-      <polygon points={points} fill="var(--panel, #1e1e2e)" stroke={color} strokeWidth={1.5} />
-      <text x={w / 2} y={h / 2 + 4} textAnchor="middle" fill={color} fontSize={16} fontWeight={700}>⊕</text>
-      {onRun && (
-        <g
-          transform={`translate(${w / 2 + 16}, 4)`}
-          onClick={(e) => { e.stopPropagation(); onRun(node.id, e.shiftKey ? "test" : "run"); }}
-          style={{ cursor: "pointer" }}
-          className="graph-play-btn"
-        >
-          <circle r={7} fill={color} opacity={0.2} />
-          <text textAnchor="middle" dominantBaseline="central" fontSize={8} fill={color} style={{ pointerEvents: "none" }}>▶</text>
-        </g>
-      )}
-      {/* 입력 포트 (사각형) */}
-      <rect x={-5} y={h / 2 - 5} width={10} height={10} rx={5} fill="var(--panel, #1e1e2e)" stroke="var(--line, #555)" strokeWidth={1.5} className="graph-port graph-port--in" />
-      <circle cx={w} cy={h / 2} r={PORT_R} fill={color} stroke={color} strokeWidth={1.5} className="graph-port graph-port--out" />
-    </g>
-  );
-}
-
-/** 오케 노드인지 판별 — registry 조회. */
-function is_orche_type(t: string): boolean {
-  return !!get_frontend_node(t);
-}
-
-/** 노드 타입에 따라 적절한 SVG 컴포넌트 렌더링. 오케 노드는 드래그 가능. */
-function AuxNode({ node, pos, isRunning, isSelected, nodeStatus, onRunNode, onDragStart, onTouchStart, onDoubleClick, onFieldDragStart, onClick }: {
-  node: GraphNode;
-  pos: NodePos;
-  isRunning?: boolean;
-  isSelected?: boolean;
-  /** 오케 노드 실행 상태 (pending/running/completed/failed/skipped). */
-  nodeStatus?: string;
-  onRunNode?: (id: string, mode: "run" | "test") => void;
-  onDragStart?: (id: string, e: React.MouseEvent) => void;
-  onTouchStart?: (id: string, touch: { clientX: number; clientY: number }) => void;
-  onDoubleClick?: (id: string) => void;
-  onFieldDragStart?: (nodeId: string, fieldName: string, e: React.MouseEvent) => void;
-  onClick?: (id: string) => void;
-}) {
-  const is_orche = is_orche_type(node.type);
-
-  const inner = (() => {
-    // 비-오케 노드: 전용 컴포넌트
-    switch (node.type) {
-      case "sub_node": return <ClusterSubNode node={node} pos={pos} onDoubleClick={() => onDoubleClick?.(node.id)} />;
-      case "trigger": return <TriggerNode node={node} pos={pos} onFieldDragStart={onFieldDragStart} />;
-      case "channel": return <ChannelNode node={node} pos={pos} onFieldDragStart={onFieldDragStart} />;
-    }
-    // 오케 노드: shape 기반 디스패치
-    const desc = get_frontend_node(node.type);
-    if (!desc) return null;
-    if (desc.shape === "rect") {
-      return <OrcheRectNode node={node} pos={pos} nodeStatus={nodeStatus || (isRunning ? "running" : undefined)} onRun={onRunNode} onFieldDragStart={onFieldDragStart} />;
-    }
-    // diamond 노드: 포트 레이아웃이 각각 다르므로 전용 컴포넌트
-    switch (node.type) {
-      case "if": return <IfDiamondNode node={node} pos={pos} onRun={onRunNode} />;
-      case "merge": return <MergeDiamondNode node={node} pos={pos} onRun={onRunNode} />;
-      case "split": return <SplitDiamondNode node={node} pos={pos} onRun={onRunNode} onFieldDragStart={onFieldDragStart} />;
-      case "switch": return <SwitchDiamondNode node={node} pos={pos} onRun={onRunNode} onFieldDragStart={onFieldDragStart} />;
-      default: return null;
-    }
-  })();
-
-  /* 모든 보조 노드: 드래그 + 더블클릭 래퍼 */
-  return (
-    <g
-      data-node-id={node.id}
-      className="graph-node"
-      style={{ cursor: "grab" }}
-      onClick={() => onClick?.(node.id)}
-      onMouseDown={(e) => { if (!(e.target as Element).closest(".graph-port, .graph-play-btn")) onDragStart?.(node.id, e); }}
-      onTouchStart={(e) => { if (e.touches.length === 1 && !(e.target as Element).closest(".graph-port, .graph-play-btn")) onTouchStart?.(node.id, e.touches[0]!); }}
-      onDoubleClick={() => onDoubleClick?.(node.id)}
-    >
-      {/* 선택 하이라이트 */}
-      {isSelected && (
-        <rect
-          x={pos.x - 3} y={pos.y - 3}
-          width={pos.width + 6} height={pos.height + 6}
-          rx={12}
-          fill="none"
-          stroke="var(--accent, #89b4fa)"
-          strokeWidth={1.5}
-          strokeDasharray="6 3"
-          opacity={0.5}
-        />
-      )}
-      {isRunning && is_orche && (
-        <rect
-          x={pos.x - 4} y={pos.y - 4}
-          width={pos.width + 8} height={pos.height + 8}
-          rx={14}
-          fill="none"
-          stroke={orche_color(node.type) || "var(--accent, #89b4fa)"}
-          strokeWidth={2}
-          opacity={0.6}
-          className="node-running-glow"
-        />
-      )}
-      {inner}
-    </g>
-  );
-}
+export type { AgentDef, CriticDef, PhaseDef, OrcheNodeType, OrcheNodeDef, NodeGroup, WorkflowDef, NodeType, SubNodeType, ToolNodeDef, SkillNodeDef, TriggerType, TriggerNodeDef, FieldMapping, GraphNode, EndNodeDef, EndOutputTarget } from "./workflow-types";
+export type { NodePos, Edge, EdgeType } from "./graph-layout";
+import type { PhaseDef, NodeGroup, WorkflowDef, OrcheNodeDef, TriggerType, TriggerNodeDef, EndNodeDef } from "./workflow-types";
+import { get_frontend_node } from "./node-registry";
+
+import { compute_positions, compute_aux_positions, compute_edges, compute_aux_edges, PADDING } from "./graph-layout";
+import type { NodePos, Edge } from "./graph-layout";
+import { EdgePath, PhaseNode, AuxNode, AddHandle, GroupFrame, is_orche_type, MODE_ICON, orche_icon } from "./graph-nodes";
 
 // ── Main Graph Editor Component ──
 
@@ -1353,6 +59,7 @@ export function GraphEditor({
   orcheStates?: Array<{ node_id: string; status: string }>;
 }) {
   const t = useT();
+  const { confirm: confirmAction, dialog: confirmDialog } = useConfirm();
   const svgRef = useRef<SVGSVGElement>(null);
   const [drag, setDrag] = useState<DragState>(null);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; nodeId: string } | null>(null);
@@ -1396,8 +103,9 @@ export function GraphEditor({
 
   /** 노드 수동 위치 오프셋 (자동 레이아웃 대비 delta). */
   const [nodeOffsets, setNodeOffsets] = useState<Record<string, { dx: number; dy: number }>>({});
-  const nodeDrag = useRef<{ id: string; startSvg: { x: number; y: number }; startOffset: { dx: number; dy: number }; moved: boolean } | null>(null);
+  const nodeDrag = useRef<{ id: string; startSvg: { x: number; y: number }; startOffset: { dx: number; dy: number }; moved: boolean; isTouch?: boolean } | null>(null);
   const DRAG_THRESHOLD = 5;
+  const TOUCH_DRAG_THRESHOLD = 12;
 
   const autoPositions = compute_positions(workflow.phases);
   /** 보조 노드 + 위치 계산. */
@@ -1508,7 +216,7 @@ export function GraphEditor({
     }
     const pt = svgPoint(touch.clientX, touch.clientY);
     const off = nodeOffsets[phase_id] || { dx: 0, dy: 0 };
-    nodeDrag.current = { id: phase_id, startSvg: pt, startOffset: off, moved: false };
+    nodeDrag.current = { id: phase_id, startSvg: pt, startOffset: off, moved: false, isTouch: true };
     // 롱프레스 → 다중 선택 모드 진입
     if (longPressTimer.current) clearTimeout(longPressTimer.current);
     longPressTimer.current = setTimeout(() => {
@@ -1519,20 +227,11 @@ export function GraphEditor({
   };
 
   const portDragStartRef = useRef<(nodeId: string, portName: string) => void>(undefined);
-  /** 출력 포트 드래그 시작 (통합: Phase/오케/트리거 모두 동일 인터페이스). */
+  /** 출력 포트 드래그 시작 (단일 포트 — 항상 노드 중앙). */
   const handlePortDragStart = (nodeId: string, portName: string) => {
     const pos = positions.get(nodeId);
     if (!pos) return;
-    // 포트 위치 계산: 노드의 출력 필드에서 인덱스 탐색
-    const phase = workflow.phases.find((p) => p.phase_id === nodeId);
-    const auxNode = auxData.nodes.find((n) => n.id === nodeId);
-    const outFields = phase
-      ? (PHASE_OUTPUT)
-      : (auxNode?.output_fields || []);
-    const idx = outFields.findIndex((f) => f.name === portName);
-    const fy = idx >= 0
-      ? FIELD_PORT_TOP + idx * FIELD_PORT_H
-      : pos.height / 2;
+    const fy = pos.height / 2;
     setDrag({ from_id: nodeId, from_port: portName, mouse: { x: pos.x + pos.width, y: pos.y + fy } });
   };
   portDragStartRef.current = handlePortDragStart;
@@ -1644,7 +343,7 @@ export function GraphEditor({
         const pt = svgPointRef.current(touch.clientX, touch.clientY);
         const dx = pt.x - nd.startSvg.x;
         const dy = pt.y - nd.startSvg.y;
-        if (!nd.moved && Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
+        if (!nd.moved && Math.hypot(dx, dy) < TOUCH_DRAG_THRESHOLD) return;
         nd.moved = true;
         setNodeOffsets((prev) => ({
           ...prev,
@@ -1841,33 +540,12 @@ export function GraphEditor({
 
     for (const [id, pos] of positions) {
       if (id === drag.from_id) continue;
-      // 해당 노드의 입력 포트들 조회
-      const phase = workflow.phases.find((p) => p.phase_id === id);
-      const auxNode = auxData.nodes.find((n) => n.id === id);
-      const inFields = phase
-        ? (PHASE_INPUT)
-        : (auxNode?.input_fields || []);
-
-      if (inFields.length > 0) {
-        for (let i = 0; i < inFields.length; i++) {
-          const fy = FIELD_PORT_TOP + i * FIELD_PORT_H;
-          const inX = pos.x;
-          const inY = pos.y + fy;
-          const dist = Math.hypot(drag.mouse.x - inX, drag.mouse.y - inY);
-          if (dist < min_dist) {
-            min_dist = dist;
-            target_id = id;
-            target_port = inFields[i]!.name;
-          }
-        }
-      } else {
-        // 입력 포트 없는 노드: 좌측 중앙
-        const dist = Math.hypot(drag.mouse.x - pos.x, drag.mouse.y - (pos.y + pos.height / 2));
-        if (dist < min_dist) {
-          min_dist = dist;
-          target_id = id;
-          target_port = null;
-        }
+      // 단일 입력 포트: 좌측 중앙
+      const dist = Math.hypot(drag.mouse.x - pos.x, drag.mouse.y - (pos.y + pos.height / 2));
+      if (dist < min_dist) {
+        min_dist = dist;
+        target_id = id;
+        target_port = "input";
       }
     }
 
@@ -1949,12 +627,27 @@ export function GraphEditor({
       return;
     }
 
+    // 특수 타입: End (Output) — 복수 인스턴스 가능
+    if (node_type === "end") {
+      const existing_ends = workflow.end_nodes || [];
+      const idx = existing_ends.length + 1;
+      const newEnd: EndNodeDef = {
+        node_id: `end-${idx}`,
+        output_targets: [],
+        depends_on: pickerSource?.type === "handle" ? [pickerSource.source_id] : undefined,
+      };
+      onChange({ ...workflow, end_nodes: [...existing_ends, newEnd] });
+      setPickerOpen(false);
+      setPickerSource(null);
+      return;
+    }
+
     const desc = get_frontend_node(node_type);
     if (!desc) { setPickerOpen(false); return; }
     const existing = workflow.orche_nodes || [];
     const idx = existing.length + 1;
     const defaults = preset ? preset.defaults : desc.create_default();
-    const label = preset ? preset.label : desc.toolbar_label.replace(/^\+\s*/, "");
+    const label = preset ? preset.label : t(desc.toolbar_label);
     const node_id = `${node_type}-${idx}`;
     const newNode: OrcheNodeDef = {
       node_id,
@@ -2033,20 +726,12 @@ export function GraphEditor({
     onChange({ ...workflow, trigger_nodes: [...existing, node] });
   };
 
-  /** 드래그 시작점 좌표: 출력 포트 위치. */
+  /** 드래그 시작점 좌표: 출력 포트 위치 (단일 포트 — 항상 중앙). */
   const dragStartPos = (() => {
     if (!drag) return null;
     const pos = positions.get(drag.from_id);
     if (!pos) return null;
-    // 해당 노드의 출력 필드에서 포트 인덱스 탐색
-    const phase = workflow.phases.find((p) => p.phase_id === drag.from_id);
-    const auxNode = auxData.nodes.find((n) => n.id === drag.from_id);
-    const outFields = phase
-      ? (PHASE_OUTPUT)
-      : (auxNode?.output_fields || []);
-    const idx = outFields.findIndex((f) => f.name === drag.from_port);
-    const fy = idx >= 0 ? FIELD_PORT_TOP + idx * FIELD_PORT_H : pos.height / 2;
-    return { x: pos.x + pos.width, y: pos.y + fy };
+    return { x: pos.x + pos.width, y: pos.y + pos.height / 2 };
   })();
 
   /** 피벗 기반 줌: 선택된 노드 중심 또는 뷰포트 중심. */
@@ -2112,6 +797,12 @@ export function GraphEditor({
 
   /** 노드 삭제 (ID 기반). */
   const deleteNode = (id: string) => {
+    // End 노드 삭제
+    if ((workflow.end_nodes || []).some((en) => en.node_id === id)) {
+      onChange({ ...workflow, end_nodes: (workflow.end_nodes || []).filter((en) => en.node_id !== id) });
+      onSelectPhase(null);
+      return;
+    }
     const isPhase = workflow.phases.some((p) => p.phase_id === id);
     if (isPhase) {
       const phases = workflow.phases.filter((p) => p.phase_id !== id)
@@ -2230,7 +921,7 @@ export function GraphEditor({
       if (e.key === "-") { zoomOut(); return; }
       if (e.key === "0") { zoomReset(); return; }
       if ((e.key === "Delete" || e.key === "Backspace") && selectedPhaseId) {
-        deleteNode(selectedPhaseId);
+        confirmAction(t("workflows.remove_confirm"), () => deleteNode(selectedPhaseId));
         return;
       }
     };
@@ -2255,23 +946,42 @@ export function GraphEditor({
         }}
       >
         <defs>
+          {/* 노드 드롭 섀도우 (이중 레이어) */}
+          <filter id="node-shadow" x="-10%" y="-10%" width="120%" height="130%">
+            <feDropShadow dx="0" dy="1" stdDeviation="2" floodColor="#000" floodOpacity="0.15" />
+            <feDropShadow dx="0" dy="4" stdDeviation="6" floodColor="#000" floodOpacity="0.08" />
+          </filter>
+          {/* 노드 accent 글로우 (선택/hover 시) */}
+          <filter id="node-glow" x="-20%" y="-20%" width="140%" height="140%">
+            <feGaussianBlur in="SourceGraphic" stdDeviation="4" result="blur" />
+            <feColorMatrix in="blur" type="matrix" values="0 0 0 0 0.29  0 0 0 0 0.62  0 0 0 0 1  0 0 0 0.3 0" result="glow" />
+            <feMerge><feMergeNode in="glow" /><feMergeNode in="SourceGraphic" /></feMerge>
+          </filter>
+          {/* 도트 그리드 배경 */}
+          <pattern id="grid-dots" width="20" height="20" patternUnits="userSpaceOnUse">
+            <circle cx="10" cy="10" r="0.7" fill="var(--canvas-dot, rgba(255,255,255,0.04))" />
+          </pattern>
+          <pattern id="grid-major" width="100" height="100" patternUnits="userSpaceOnUse">
+            <rect width="100" height="100" fill="url(#grid-dots)" />
+            <circle cx="0" cy="0" r="1" fill="var(--canvas-dot-major, rgba(255,255,255,0.08))" />
+          </pattern>
           <marker id="arrow-flow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth={8} markerHeight={8} orient="auto-start-reverse">
-            <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--line, #555)" />
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--edge-flow, var(--line, #555))" />
           </marker>
           <marker id="arrow-goto" viewBox="0 0 10 10" refX="10" refY="5" markerWidth={8} markerHeight={8} orient="auto-start-reverse">
-            <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--err, #e74c3c)" />
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--edge-goto, var(--err, #e74c3c))" />
           </marker>
           <marker id="arrow-attach" viewBox="0 0 10 10" refX="10" refY="5" markerWidth={6} markerHeight={6} orient="auto-start-reverse">
-            <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--muted, #6c7086)" />
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--edge-attach, var(--muted, #6c7086))" />
           </marker>
           <marker id="arrow-trigger" viewBox="0 0 10 10" refX="10" refY="5" markerWidth={7} markerHeight={7} orient="auto-start-reverse">
-            <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--orange, #e67e22)" />
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--edge-trigger, #e67e22)" />
           </marker>
           <marker id="arrow-config" viewBox="0 0 10 10" refX="10" refY="5" markerWidth={6} markerHeight={6} orient="auto-start-reverse">
-            <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--yellow, #f1c40f)" />
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--warn, #f1c40f)" />
           </marker>
           <marker id="arrow-mapping" viewBox="0 0 10 10" refX="10" refY="5" markerWidth={7} markerHeight={7} orient="auto-start-reverse">
-            <path d="M 0 0 L 10 5 L 0 10 z" fill="#9b59b6" />
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--edge-mapping, #9b59b6)" />
           </marker>
           <style>{`
             @keyframes node-pulse {
@@ -2283,6 +993,9 @@ export function GraphEditor({
             }
           `}</style>
         </defs>
+
+        {/* 도트 그리드 배경 */}
+        <rect x={viewBox.x} y={viewBox.y} width={viewBox.w} height={viewBox.h} fill="url(#grid-major)" />
 
         {/* 그룹 프레임 (노드보다 뒤에 렌더링) */}
         {(workflow.groups || []).map((group) => (
@@ -2325,7 +1038,7 @@ export function GraphEditor({
             y1={dragStartPos.y}
             x2={drag.mouse.x}
             y2={drag.mouse.y}
-            stroke="#9b59b6"
+            stroke="var(--edge-mapping, #9b59b6)"
             strokeWidth={2}
             strokeDasharray="4 3"
             opacity={0.7}
@@ -2372,7 +1085,6 @@ export function GraphEditor({
                 onPortDragStart={handlePortDragStart}
                 onNodeDragStart={handleNodeDragStart}
                 onNodeTouchStart={handleNodeTouchStart}
-                onRunNode={onRunNode}
                 subSlotCount={
                   phase.agents.length
                   + (phase.critic ? 1 : 0)
@@ -2399,7 +1111,6 @@ export function GraphEditor({
                 isRunning={runningNodeId === node.id}
                 isSelected={selectedPhaseId === node.id}
                 nodeStatus={orcheStates?.find((s) => s.node_id === node.id)?.status}
-                onRunNode={onRunNode}
                 onClick={(id) => {
                   if (multiSelectMode) {
                     setMultiSelected((prev) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
@@ -2410,9 +1121,10 @@ export function GraphEditor({
                 onDragStart={handleNodeDragStart}
                 onTouchStart={handleNodeTouchStart}
                 onDoubleClick={(id) => node.type === "sub_node" ? onEditSubNode?.(id) : onEditPhase?.(id)}
+                onSubNodeClick={node.type === "sub_node" ? onEditSubNode : undefined}
                 onFieldDragStart={(nodeId, fieldName) => handlePortDragStart(nodeId, fieldName)}
               />
-              {(isOrche || node.type === "trigger") && (
+              {(isOrche || node.type === "trigger") && node.type !== "end" && (
                 <AddHandle pos={pos} onClick={() => openPickerFromHandle(node.id)}
                   onDragStart={(origin) => setHandleDrag({ source_id: node.id, origin, mouse: origin })} />
               )}
@@ -2434,12 +1146,20 @@ export function GraphEditor({
               style={{ overflow: "visible" }}
             >
               <div className="graph-node-toolbar">
-                <button title={t("workflows.edit") || "Edit"} onClick={(e) => { e.stopPropagation(); onEditPhase?.(selectedPhaseId); }}>✎</button>
+                <button title={t("workflows.edit")} aria-label={t("workflows.edit")} onClick={(e) => { e.stopPropagation(); onEditPhase?.(selectedPhaseId); }}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                </button>
                 {onRunNode && (
-                  <button title={t("workflows.run_node") || "Run"} onClick={(e) => { e.stopPropagation(); onRunNode(selectedPhaseId, "run"); }}>▶</button>
+                  <button title={t("workflows.run_node")} aria-label={t("workflows.run_node")} onClick={(e) => { e.stopPropagation(); onRunNode(selectedPhaseId, "run"); }}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                  </button>
                 )}
-                <button title={t("workflows.duplicate") || "Duplicate"} onClick={(e) => { e.stopPropagation(); duplicateNode(selectedPhaseId); }}>⧉</button>
-                <button title={t("workflows.remove_phase") || "Delete"} className="graph-node-toolbar__danger" onClick={(e) => { e.stopPropagation(); deleteNode(selectedPhaseId); }}>✕</button>
+                <button title={t("workflows.duplicate")} aria-label={t("workflows.duplicate")} onClick={(e) => { e.stopPropagation(); duplicateNode(selectedPhaseId); }}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                </button>
+                <button title={t("workflows.delete")} aria-label={t("workflows.delete")} className="graph-node-toolbar__danger" onClick={(e) => { e.stopPropagation(); confirmAction(t("workflows.remove_confirm"), () => deleteNode(selectedPhaseId)); }}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+                </button>
               </div>
             </foreignObject>
           );
@@ -2457,30 +1177,86 @@ export function GraphEditor({
         )}
       </svg>
 
-      {/* 좌하단: 줌 컨트롤 */}
+      {/* 좌하단: 줌 컨트롤 + 미니맵 */}
       <div className="graph-editor__zoom-overlay">
-        <button className="btn btn--sm btn--icon" onClick={zoomReset} title="Fit">⌂</button>
-        <button className="btn btn--sm btn--icon" onClick={zoomIn} title="Zoom in">+</button>
-        <button className="btn btn--sm btn--icon" onClick={zoomOut} title="Zoom out">−</button>
+        <button className="btn btn--sm btn--icon" onClick={zoomReset} title={t("workflows.zoom_fit")} aria-label={t("workflows.zoom_fit")}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg>
+        </button>
+        <button className="btn btn--sm btn--icon" onClick={zoomOut} title={t("workflows.zoom_out")} aria-label={t("workflows.zoom_out")}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+        </button>
+        <span className="graph-editor__zoom-label">{Math.round(zoom * 100)}%</span>
+        <button className="btn btn--sm btn--icon" onClick={zoomIn} title={t("workflows.zoom_in")} aria-label={t("workflows.zoom_in")}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+        </button>
       </div>
 
-      {/* 우상단: + 노드 추가 버튼 */}
-      <button
-        className="graph-editor__add-btn"
-        title={t("workflows.add_node") || "Add node"}
-        onClick={() => { setPickerSource(null); setPickerDropPos(null); setPickerOpen(true); }}
-      >+</button>
+      {/* 미니맵 */}
+      {positions.size > 0 && (() => {
+        const MM_W = 160, MM_H = 100, MM_PAD = 8;
+        const cw = contentBox.w || 1, ch = contentBox.h || 1;
+        const scale = Math.min((MM_W - MM_PAD * 2) / cw, (MM_H - MM_PAD * 2) / ch);
+        const ox = MM_PAD - contentBox.x * scale, oy = MM_PAD - contentBox.y * scale;
+        // 뷰포트 영역
+        const vx = ox + viewBox.x * scale, vy = oy + viewBox.y * scale;
+        const vw = viewBox.w * scale, vh = viewBox.h * scale;
+        return (
+          <div className="graph-editor__minimap" aria-hidden="true"
+            onClick={(e) => {
+              const rect = e.currentTarget.getBoundingClientRect();
+              const mx = (e.clientX - rect.left - ox) / scale;
+              const my = (e.clientY - rect.top - oy) / scale;
+              setPan({ x: mx - viewBox.w / 2, y: my - viewBox.h / 2 });
+            }}
+          >
+            <svg width={MM_W} height={MM_H} viewBox={`0 0 ${MM_W} ${MM_H}`}>
+              {/* 노드 사각형 */}
+              {[...positions.entries()].map(([id, p]) => {
+                const phase = workflow.phases.find((ph) => ph.phase_id === id);
+                const isPhaseNode = !!phase;
+                return (
+                  <rect
+                    key={id}
+                    x={ox + p.x * scale} y={oy + p.y * scale}
+                    width={Math.max(2, p.width * scale)} height={Math.max(1, p.height * scale)}
+                    fill={isPhaseNode ? "var(--accent, #89b4fa)" : "var(--muted, #6c7086)"}
+                    opacity={selectedPhaseId === id ? 1 : 0.5}
+                    rx={1}
+                  />
+                );
+              })}
+              {/* 뷰포트 영역 */}
+              <rect x={vx} y={vy} width={vw} height={vh}
+                fill="none" stroke="var(--accent, #89b4fa)" strokeWidth={1} opacity={0.8} rx={1}
+              />
+            </svg>
+          </div>
+        );
+      })()}
+
+      {/* 우상단: + 노드 추가 버튼 (검색 열린 동안 숨김) */}
+      {!searchOpen && (
+        <button
+          className="graph-editor__add-btn"
+          title={t("workflows.add_node")}
+          onClick={() => { setPickerSource(null); setPickerDropPos(null); setPickerOpen(true); }}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+      )}
 
       {/* 다중 선택 모드 바 */}
       {(multiSelectMode || multiSelected.size >= 2) && (
         <div className="graph-editor__multi-toolbar">
-          <span>{multiSelected.size} {t("workflows.nodes_selected") || "nodes selected"}</span>
+          <span>{multiSelected.size} {t("workflows.nodes_selected")}</span>
           {multiSelected.size >= 2 && (
             <button className="btn btn--sm btn--accent" onClick={createGroup}>
-              {t("workflows.group_create") || "Group"}
+              {t("workflows.group_create")}
             </button>
           )}
-          <button className="btn btn--sm" onClick={() => { setMultiSelected(new Set()); setMultiSelectMode(false); }}>✕</button>
+          <button className="btn btn--sm" onClick={() => { setMultiSelected(new Set()); setMultiSelectMode(false); }}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
         </div>
       )}
 
@@ -2495,33 +1271,48 @@ export function GraphEditor({
       {/* 빈 캔버스 안내 */}
       {workflow.phases.length === 0 && (
         <div className="graph-editor__empty">
-          {t("workflows.empty_canvas")}
+          <div className="graph-editor__empty-icon">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--accent, #89b4fa)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><path d="M14 17.5h7"/><path d="M17.5 14v7"/></svg>
+          </div>
+          <p>{t("workflows.empty_canvas")}</p>
+          <button
+            className="btn btn--sm btn--accent"
+            onClick={() => { setPickerSource(null); setPickerDropPos(null); setPickerOpen(true); }}
+          >
+            + {t("workflows.empty_canvas_hint")}
+          </button>
+          <span className="graph-editor__empty-hint">{t("workflows.empty_canvas_dbl_click")}</span>
         </div>
       )}
 
       {/* 우클릭 컨텍스트 메뉴 */}
       {ctxMenu && (
         <>
-          <div className="graph-ctx__backdrop" onClick={() => setCtxMenu(null)} />
+          <div className="graph-ctx__backdrop" role="presentation" onClick={() => setCtxMenu(null)} />
           <div className="graph-ctx" style={{ left: ctxMenu.x, top: ctxMenu.y }}>
             <button className="graph-ctx__item" onClick={() => { onEditPhase?.(ctxMenu.nodeId); setCtxMenu(null); }}>
-              ✎ {t("workflows.edit") || "Edit"}
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+              {t("workflows.edit")}
             </button>
             {onRunNode && (
               <>
                 <button className="graph-ctx__item" onClick={() => { onRunNode(ctxMenu.nodeId, "run"); setCtxMenu(null); }}>
-                  ▶ {t("workflows.run_node") || "Run"}
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                  {t("workflows.run_node")}
                 </button>
                 <button className="graph-ctx__item" onClick={() => { onRunNode(ctxMenu.nodeId, "test"); setCtxMenu(null); }}>
-                  ◇ {t("workflows.test_node") || "Test"}
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg>
+                  {t("workflows.test_node")}
                 </button>
               </>
             )}
             <button className="graph-ctx__item" onClick={ctxDuplicate}>
-              ⧉ {t("workflows.duplicate") || "Duplicate"}
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+              {t("workflows.duplicate")}
             </button>
             <button className="graph-ctx__item graph-ctx__item--danger" onClick={ctxDelete}>
-              ✕ {t("workflows.remove_phase") || "Delete"}
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+              {t("workflows.remove_phase")}
             </button>
           </div>
         </>
@@ -2534,7 +1325,7 @@ export function GraphEditor({
             ref={searchRef}
             type="text"
             className="graph-editor__search-input"
-            placeholder={t("workflows.search_nodes") || "Search nodes… (Esc to close)"}
+            placeholder={t("workflows.search_nodes")}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             onKeyDown={(e) => {
@@ -2546,14 +1337,16 @@ export function GraphEditor({
           />
           {searchQuery && (
             <div className="graph-editor__search-results">
-              {searchResults.length === 0 && <div className="graph-editor__search-empty">No results</div>}
+              {searchResults.length === 0 && <div className="graph-editor__search-empty">{t("workflows.no_search_results")}</div>}
               {searchResults.slice(0, 8).map((id) => {
                 const phase = workflow.phases.find((p) => p.phase_id === id);
                 const aux = auxData.nodes.find((n) => n.id === id);
                 const label = phase?.title || aux?.label || id;
                 const type = phase ? "phase" : aux?.type || "";
+                const icon = phase ? (MODE_ICON[phase.mode || "parallel"] || "⚙") : (aux ? (orche_icon(aux.type) || "◆") : "");
                 return (
                   <button key={id} className="graph-editor__search-item" onClick={() => { focusNode(id); setSearchOpen(false); setSearchQuery(""); }}>
+                    <span className="graph-editor__search-icon">{icon}</span>
                     <span className="graph-editor__search-type">{type}</span>
                     <span>{label}</span>
                   </button>
@@ -2566,13 +1359,14 @@ export function GraphEditor({
 
       {/* 하단 단축키 힌트 */}
       <div className="graph-editor__hints">
-        <span>Scroll: Pan</span>
-        <span>Ctrl+Scroll: Zoom</span>
-        <span>Del: Delete</span>
-        <span>Ctrl+F: Search</span>
-        <span>Shift+Drag: Select</span>
-        <span>0: Fit</span>
+        <span>{t("workflows.hint_scroll")}</span>
+        <span>{t("workflows.hint_zoom")}</span>
+        <span>{t("workflows.hint_delete")}</span>
+        <span>{t("workflows.hint_search")}</span>
+        <span>{t("workflows.hint_select")}</span>
+        <span>{t("workflows.hint_fit")}</span>
       </div>
+      {confirmDialog}
     </div>
   );
 }

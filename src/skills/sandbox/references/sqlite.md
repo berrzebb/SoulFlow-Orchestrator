@@ -3,9 +3,9 @@
 SQLite는 Python 표준 라이브러리(`sqlite3`)에 내장 — pip 설치 없이 사용 가능.
 파일 기반 로컬 DB 작업에 적합. PostgreSQL/MySQL 연결이 필요하면 `temp-db` 스킬 사용.
 
-```powershell
-$R = if (Get-Command podman -EA 0) { "podman" } else { "docker" }
-& $R run --rm -v "${PWD}:/workspace:rw" -w /workspace python:3.12-slim python script.py
+```bash
+R=$(command -v podman >/dev/null 2>&1 && echo podman || echo docker)
+$R run --rm -v "$PWD:/workspace:rw" -w /workspace python:3.12-slim python script.py
 ```
 
 ---
@@ -93,8 +93,8 @@ print(df2.head())
 conn.close()
 ```
 
-```powershell
-& $R run --rm -v "${PWD}:/workspace:rw" -w /workspace python:3.12-slim sh -lc "
+```bash
+$R run --rm -v "$PWD:/workspace:rw" -w /workspace python:3.12-slim sh -lc "
   pip install -q pandas &&
   python script.py
 "

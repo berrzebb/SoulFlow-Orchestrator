@@ -8,6 +8,10 @@ import { SECTION_ORDER, SECTION_LABELS, type ConfigSection } from "../config/con
 import { get_config_defaults, set_nested } from "../config/schema.js";
 import { DEFAULT_TEMPLATES } from "../bootstrap-templates.js";
 import { create_agent_provider, list_registered_provider_types } from "../agent/provider-factory.js";
+import {
+  fetch_openrouter_models, fetch_openai_models, fetch_anthropic_models,
+  fetch_gemini_models, fetch_ollama_models,
+} from "../services/model-catalog.js";
 import { get_preset as get_oauth_preset, list_presets as list_oauth_presets } from "../oauth/presets.js";
 import { create_channel_instance, type ChannelRegistryLike } from "../channels/index.js";
 import type {
@@ -321,6 +325,7 @@ export function create_agent_provider_ops(deps: {
         label: input.label || input.instance_id,
         enabled: input.enabled ?? true,
         priority: input.priority ?? 100,
+        model_purpose: (input.model_purpose === "embedding" ? "embedding" : "chat") as import("../agent/agent.types.js").ModelPurpose,
         supported_modes: (input.supported_modes ?? ["once", "agent", "task"]) as import("../orchestration/types.js").ExecutionMode[],
         settings: input.settings || {},
       });
@@ -334,6 +339,7 @@ export function create_agent_provider_ops(deps: {
       if (!existing) return { ok: false, error: "not_found" };
       provider_store.update_settings(instance_id, {
         label: patch.label, enabled: patch.enabled, priority: patch.priority,
+        model_purpose: patch.model_purpose as import("../agent/agent.types.js").ModelPurpose | undefined,
         supported_modes: patch.supported_modes as import("../orchestration/types.js").ExecutionMode[] | undefined,
         settings: patch.settings,
       });
@@ -377,6 +383,26 @@ export function create_agent_provider_ops(deps: {
     list_provider_types() {
       return list_registered_provider_types();
     },
+
+    async list_models(provider_type, opts) {
+      const api_key = opts?.api_key;
+      const api_base = opts?.api_base;
+      switch (provider_type) {
+        case "openrouter":
+          return fetch_openrouter_models(api_key);
+        case "openai_compatible":
+          return fetch_openai_models(api_base || "https://api.openai.com/v1", api_key);
+        case "claude_sdk":
+        case "claude_cli":
+          return fetch_anthropic_models(api_key);
+        case "gemini_cli":
+          return fetch_gemini_models(api_key);
+        default:
+          // Ollama 등 로컬 서비스: api_base가 있으면 시도
+          if (api_base) return fetch_ollama_models(api_base);
+          return [];
+      }
+    },
   };
 }
 
@@ -416,6 +442,17 @@ export function create_bootstrap_ops(deps: {
       for (const [name, content] of Object.entries(DEFAULT_TEMPLATES)) {
         const target = join(templates_dir, `${name}.md`);
         if (!existsSync(target)) writeFileSync(target, content, "utf-8");
+      }
+      if (input.persona_name) {
+        const soul_path = join(templates_dir, "SOUL.md");
+        try {
+          let soul = readFileSync(soul_path, "utf-8");
+          soul = soul.replace(
+            /(-\s*이름\s*[:：]\s*).+/m,
+            `$1**${input.persona_name}**`,
+          );
+          writeFileSync(soul_path, soul, "utf-8");
+        } catch { /* SOUL.md 파싱 실패 — 첫 채팅 부트스트랩에서 재설정 */ }
       }
       return { ok: true };
     },
@@ -787,6 +824,7 @@ export function create_workflow_ops(deps: {
   vector_store?: (op: string, opts: Record<string, unknown>) => Promise<Record<string, unknown>>;
   oauth_fetch?: (service_id: string, opts: { url: string; method: string; headers?: Record<string, string>; body?: unknown }) => Promise<{ status: number; body: unknown; headers: Record<string, string> }>;
   get_webhook_data?: (path: string) => Promise<{ method: string; headers: Record<string, string>; body: unknown; query: Record<string, string> } | null>;
+  wait_kanban_event?: (board_id: string, filter: { actions?: string[]; column_id?: string }) => Promise<{ card_id: string; board_id: string; action: string; actor: string; detail: Record<string, unknown>; created_at: string } | null>;
   create_task?: (opts: { title: string; objective: string; channel?: string; chat_id?: string; max_turns?: number; initial_memory?: Record<string, unknown> }) => Promise<{ task_id: string; status: string; result?: unknown; error?: string }>;
   query_db?: (datasource: string, query: string, params?: Record<string, unknown>) => Promise<{ rows: unknown[]; affected_rows: number }>;
 }): DashboardWorkflowOps & { hitl_bridge: import("../channels/manager.js").WorkflowHitlBridge } {
@@ -947,7 +985,7 @@ export function create_workflow_ops(deps: {
         ask_channel: build_ask_channel(workflow_id, channel, chat_id),
         invoke_tool: deps.invoke_tool,
         initial_memory: { origin },
-      }, { subagents, store, logger, load_template: (name) => load_workflow_template(workspace, name), providers: deps.providers, decision_service: deps.decision_service, promise_service: deps.promise_service, embed: deps.embed, vector_store: deps.vector_store, oauth_fetch: deps.oauth_fetch, get_webhook_data: deps.get_webhook_data, create_task: deps.create_task, query_db: deps.query_db, on_event: on_workflow_event }).catch((err) => {
+      }, { subagents, store, logger, load_template: (name) => load_workflow_template(workspace, name), providers: deps.providers, decision_service: deps.decision_service, promise_service: deps.promise_service, embed: deps.embed, vector_store: deps.vector_store, oauth_fetch: deps.oauth_fetch, get_webhook_data: deps.get_webhook_data, wait_kanban_event: deps.wait_kanban_event, create_task: deps.create_task, query_db: deps.query_db, on_event: on_workflow_event }).catch((err) => {
         logger.error("workflow_create_run_error", { workflow_id, error: String(err) });
       });
 
@@ -1085,7 +1123,7 @@ export function create_workflow_ops(deps: {
         send_message: build_send_message(workflow_id, channel, chat_id),
         ask_channel: build_ask_channel(workflow_id, channel, chat_id),
         invoke_tool: deps.invoke_tool,
-      }, { subagents, store, logger, load_template: (name) => load_workflow_template(workspace, name), providers: deps.providers, decision_service: deps.decision_service, promise_service: deps.promise_service, embed: deps.embed, vector_store: deps.vector_store, oauth_fetch: deps.oauth_fetch, get_webhook_data: deps.get_webhook_data, create_task: deps.create_task, query_db: deps.query_db, on_event: on_workflow_event }).catch((err) => {
+      }, { subagents, store, logger, load_template: (name) => load_workflow_template(workspace, name), providers: deps.providers, decision_service: deps.decision_service, promise_service: deps.promise_service, embed: deps.embed, vector_store: deps.vector_store, oauth_fetch: deps.oauth_fetch, get_webhook_data: deps.get_webhook_data, wait_kanban_event: deps.wait_kanban_event, create_task: deps.create_task, query_db: deps.query_db, on_event: on_workflow_event }).catch((err) => {
         logger.error("workflow_resume_run_error", { workflow_id, error: String(err) });
       });
 
@@ -1133,13 +1171,71 @@ export function create_workflow_ops(deps: {
           const result = await subagents.wait_for_completion(subagent_id, 3 * 60_000);
           if (!result) return { ok: false, error: "subagent_not_found", duration_ms: Date.now() - start };
           if (result.status === "failed") return { ok: false, error: result.error || "subagent_failed", duration_ms: Date.now() - start };
-          return { ok: true, output: result.content || "", duration_ms: Date.now() - start };
+          // 에이전트가 구조화된 JSON으로 응답한 경우 객체로 반환
+          const raw = result.content || "";
+          let output: unknown = raw;
+          if (typeof raw === "string") {
+            const trimmed = raw.trim();
+            // 1) 직접 파싱
+            try { output = JSON.parse(trimmed); } catch {
+              // 2) ```json ... ``` 코드블록 내 JSON 추출
+              const cb = trimmed.match(/```(?:json)?\s*\n?([\s\S]*?)```/);
+              if (cb?.[1]) {
+                try { output = JSON.parse(cb[1].trim()); } catch { /* fall through */ }
+              }
+              // 3) 본문 내 첫 번째 JSON 블록 추출
+              if (output === raw) {
+                const braceIdx = trimmed.indexOf("{");
+                const bracketIdx = trimmed.indexOf("[");
+                const idx = braceIdx >= 0 && (bracketIdx < 0 || braceIdx < bracketIdx) ? braceIdx : bracketIdx;
+                if (idx >= 0) {
+                  try { output = JSON.parse(trimmed.slice(idx)); } catch { /* 평문 유지 */ }
+                }
+              }
+            }
+          }
+          return { ok: true, output, duration_ms: Date.now() - start };
         } catch (err) {
           return { ok: false, error: String(err), duration_ms: Date.now() - start };
         }
       }
 
       return { ok: false, error: "unknown_node_type" };
+    },
+
+    async suggest(instruction, workflow) {
+      if (!deps.providers) return { ok: false, error: "providers_not_configured" };
+      try {
+        const system = [
+          "You are a workflow editor. You receive a workflow definition (JSON) and an edit instruction from the user.",
+          "Return ONLY the modified workflow definition as valid JSON — no markdown fences, no explanation.",
+          "Preserve all existing fields unless the instruction explicitly asks to change them.",
+          "If the instruction is unclear or impossible, return the original workflow unchanged.",
+        ].join("\n");
+        const prompt = [
+          "## Current Workflow",
+          JSON.stringify(workflow, null, 2),
+          "",
+          "## Instruction",
+          instruction,
+        ].join("\n");
+        const res = await deps.providers.run_headless_prompt({ prompt, system, max_tokens: 8192, temperature: 0.2 });
+        const raw = String(res.content || "").trim();
+        // JSON 추출: 직접 파싱 → ```json 블록 → 첫 { 부터
+        let parsed: Record<string, unknown> | null = null;
+        try { parsed = JSON.parse(raw); } catch {
+          const cb = raw.match(/```(?:json)?\s*\n?([\s\S]*?)```/);
+          if (cb?.[1]) { try { parsed = JSON.parse(cb[1].trim()); } catch { /* */ } }
+          if (!parsed) {
+            const idx = raw.indexOf("{");
+            if (idx >= 0) { try { parsed = JSON.parse(raw.slice(idx)); } catch { /* */ } }
+          }
+        }
+        if (!parsed || typeof parsed !== "object") return { ok: false, error: "llm_returned_invalid_json" };
+        return { ok: true, workflow: parsed };
+      } catch (err) {
+        return { ok: false, error: String(err) };
+      }
     },
 
     test_single_node(node_raw, input_memory) {

@@ -16,6 +16,7 @@ function make_access(overrides?: Partial<AgentAccess>): AgentAccess {
     list_running: vi.fn().mockReturnValue([]),
     get: vi.fn().mockReturnValue(null),
     cancel: vi.fn().mockReturnValue(false),
+    send_input: vi.fn().mockReturnValue(false),
     get_running_count: vi.fn().mockReturnValue(0),
     ...overrides,
   };
@@ -47,27 +48,26 @@ describe("AgentHandler", () => {
     expect(handler.can_handle(ctx_kr)).toBe(true);
   });
 
-  it("/agent — 에이전트 없으면 안내", async () => {
+  it("/agent (인자 없음) — 세부 기능 가이드 표시", async () => {
     const handler = new AgentHandler(make_access());
     const ctx = make_ctx();
     await handler.handle(ctx);
 
-    expect(ctx.replies[0]).toContain("등록된 서브에이전트가 없습니다");
+    expect(ctx.replies[0]).toContain("/agent running");
+    expect(ctx.replies[0]).toContain("/agent status");
+    expect(ctx.replies[0]).toContain("/agent cancel");
   });
 
-  it("/agent — 에이전트 목록 표시", async () => {
+  it("/agent running — 에이전트 목록 표시", async () => {
     const a = make_agent_info();
     const handler = new AgentHandler(make_access({
-      list: vi.fn().mockReturnValue([a]),
-      get_running_count: vi.fn().mockReturnValue(1),
+      list_running: vi.fn().mockReturnValue([a]),
     }));
-    const ctx = make_ctx();
+    const ctx = make_ctx(["running"]);
     await handler.handle(ctx);
 
-    expect(ctx.replies[0]).toContain("서브에이전트 1개");
     expect(ctx.replies[0]).toContain("실행 중 1개");
     expect(ctx.replies[0]).toContain("sub-abc");
-    expect(ctx.replies[0]).toContain("implementer");
   });
 
   it("/agent running — 실행 중인 에이전트만", async () => {
@@ -108,7 +108,7 @@ describe("AgentHandler", () => {
     const ctx = make_ctx(["status"]);
     await handler.handle(ctx);
 
-    expect(ctx.replies[0]).toContain("사용법");
+    expect(ctx.replies[0]).toContain("/agent status");
   });
 
   it("/agent cancel <id> — 취소 성공", async () => {
@@ -157,7 +157,7 @@ describe("AgentHandler", () => {
       list: vi.fn().mockReturnValue(agents),
       get_running_count: vi.fn().mockReturnValue(0),
     }));
-    const ctx = make_ctx();
+    const ctx = make_ctx(["all-list"]);
     await handler.handle(ctx);
 
     expect(ctx.replies[0]).toContain("서브에이전트 25개");

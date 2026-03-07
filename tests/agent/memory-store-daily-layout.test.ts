@@ -57,7 +57,7 @@ describe("memory store daily layout", () => {
       await store.write_longterm("# MEMORY\n\n- 장기 규칙: sqlite fts5 우선\n");
       const rows = await store.search("sqlite fts5", { kind: "longterm", limit: 10 });
       expect(rows.length).toBeGreaterThan(0);
-      expect(rows.some((row) => row.file === "sqlite://memory/longterm")).toBe(true);
+      expect(rows.some((row) => row.file === "longterm/MEMORY")).toBe(true);
     } finally {
       await rm(workspace, { recursive: true, force: true });
     }

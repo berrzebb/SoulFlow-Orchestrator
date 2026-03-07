@@ -11,7 +11,7 @@ It receives messages from chat channels, routes them to specialized agents, and 
 | **Channels** | Receive and respond via Slack · Telegram · Discord · Web |
 | **Orchestrator** | Classify message → run agent → return result |
 | **Agent Backends** | 8 backends: Claude/Codex × CLI/SDK + Gemini CLI + OpenAI-compatible + OpenRouter + Container CLI |
-| **Role Skills** | butler → pm/pl → implementer/reviewer/debugger/validator |
+| **Role Skills** | concierge → pm/pl → implementer/reviewer/debugger/validator |
 | **Security Vault** | AES-256-GCM sensitive data management |
 | **OAuth Integration** | GitHub · Google · Custom OAuth 2.0 external service auth |
 | **Dashboard** | Web-based real-time monitoring and management |
@@ -42,7 +42,7 @@ Channel message received
   → Confirmation Guard check
   → Orchestrator Classifier (once / agent / task / phase)
   ├─ once/agent/task → Agent backend execution (claude_sdk / claude_cli / ...)
-  │    → Role skill applied (butler → expert delegation)
+  │    → Role skill applied (concierge → expert delegation)
   │    → Streaming response
   └─ phase → Workflow Engine
        → Phase Loop (parallel agents + critic gate)

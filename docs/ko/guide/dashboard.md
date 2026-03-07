@@ -24,7 +24,7 @@
 | 페이지 | 경로 | 기능 |
 |--------|------|------|
 | Overview | `/` | 런타임 상태 요약, 시스템 메트릭, SSE 실시간 피드 |
-| Workspace | `/workspace` | 메모리·세션·스킬·크론·도구·에이전트·템플릿·OAuth 관리 (8탭) |
+| Workspace | `/workspace` | 메모리·세션·스킬·크론·도구·에이전트·템플릿·OAuth·모델·레퍼런스 관리 (10탭) |
 | Chat | `/chat` | 웹 기반 에이전트 대화 (마크다운 렌더링 + 코드 하이라이팅) |
 | Channels | `/channels` | 채널 연결 상태 · 글로벌 설정 |
 | Providers | `/providers` | 에이전트 프로바이더 CRUD |
@@ -51,7 +51,7 @@
 
 ## Workspace 탭 상세
 
-Workspace는 8개 탭으로 구성됩니다.
+Workspace는 10개 탭으로 구성됩니다.
 
 ### Memory
 에이전트의 메모리와 DB 기반 기록을 조회/편집합니다.

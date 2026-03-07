@@ -26,10 +26,10 @@ function EscalationEditPanel({ node, update, t, options }: EditPanelProps) {
       <div className="builder-row">
         <label className="label">{t("workflows.escalation_priority")}</label>
         <select className="input input--sm" value={String(node.priority || "high")} onChange={(e) => update({ priority: e.target.value })}>
-          <option value="critical">Critical</option>
-          <option value="high">High</option>
-          <option value="medium">Medium</option>
-          <option value="low">Low</option>
+          <option value="critical">{t("workflows.opt_critical")}</option>
+          <option value="high">{t("workflows.opt_high")}</option>
+          <option value="medium">{t("workflows.opt_medium")}</option>
+          <option value="low">{t("workflows.opt_low")}</option>
         </select>
       </div>
       <div className="builder-row-pair">
@@ -54,17 +54,17 @@ export const escalation_descriptor: FrontendNodeDescriptor = {
   icon: "🚨",
   color: "#f44336",
   shape: "rect",
-  toolbar_label: "+ Escalation",
+  toolbar_label: "node.escalation.label",
   category: "interaction",
   output_schema: [
-    { name: "escalated",    type: "boolean", description: "Whether escalation was triggered" },
-    { name: "escalated_to", type: "object",  description: "Escalation target info" },
-    { name: "escalated_at", type: "string",  description: "Escalation timestamp" },
-    { name: "reason",       type: "string",  description: "Escalation reason" },
+    { name: "escalated",    type: "boolean", description: "node.escalation.output.escalated" },
+    { name: "escalated_to", type: "object",  description: "node.escalation.output.escalated_to" },
+    { name: "escalated_at", type: "string",  description: "node.escalation.output.escalated_at" },
+    { name: "reason",       type: "string",  description: "node.escalation.output.reason" },
   ],
   input_schema: [
-    { name: "trigger_data", type: "object", description: "Data that triggered escalation" },
-    { name: "context",      type: "object", description: "Additional context" },
+    { name: "trigger_data", type: "object", description: "node.escalation.input.trigger_data" },
+    { name: "context",      type: "object", description: "node.escalation.input.context" },
   ],
   create_default: () => ({ condition: "always", message: "", target_channel: "", target_chat_id: "", priority: "high" }),
   EditPanel: EscalationEditPanel,

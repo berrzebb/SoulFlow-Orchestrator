@@ -1,4 +1,5 @@
 import { slash_name_in } from "../slash-command.js";
+import { format_subcommand_guide, format_subcommand_usage } from "./registry.js";
 import { format_mention, type CommandContext, type CommandHandler } from "./types.js";
 import type { ConfirmationGuard } from "../../orchestration/confirmation-guard.js";
 
@@ -32,11 +33,12 @@ export class GuardHandler implements CommandHandler {
     }
 
     const status = this.guard.get_status();
+    const guide = format_subcommand_guide("guard");
     await ctx.send_reply([
       `${mention}확인 가드 상태`,
       `- 활성: ${status.enabled ? "✅ ON" : "🚫 OFF"}`,
       `- 대기 중: ${status.pending_count}건`,
-      "- 사용법: /guard on | /guard off",
+      ...(guide ? ["", guide] : []),
     ].join("\n"));
     return true;
   }

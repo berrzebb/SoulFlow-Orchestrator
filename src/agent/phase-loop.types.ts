@@ -138,6 +138,7 @@ export interface PhaseCriticDefinition {
 export interface PhaseDefinition {
   phase_id: string;
   title: string;
+  description?: string;
   agents: PhaseAgentDefinition[];
   critic?: PhaseCriticDefinition;
   context_template?: string;

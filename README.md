@@ -58,7 +58,7 @@ flowchart TD
 
     subgraph Skills["역할 스킬"]
         direction TB
-        BT[butler]
+        BT[concierge]
         PM[pm · pl]
         IMPL[implementer · reviewer]
         DBG[debugger · validator]
@@ -85,7 +85,7 @@ flowchart TD
 | **채널 매니저** | Slack · Telegram · Discord 수신/응답 | 스트리밍 · 그룹핑 · typing 갱신 |
 | **오케스트레이터** | 인바운드 → 에이전트 실행 | Agent Loop · Task Loop · Phase Loop 삼중 모드 |
 | **에이전트 백엔드** | Claude/Codex/Gemini × CLI/SDK 실행 | CircuitBreaker · HealthScorer · 자동 fallback |
-| **역할 스킬** | 8개 역할 계층적 분담 | butler → pm/pl → implementer/reviewer/validator/debugger |
+| **역할 스킬** | 8개 역할 계층적 분담 | concierge → pm/pl → implementer/reviewer/validator/debugger |
 | **보안 Vault** | AES-256-GCM 민감정보 관리 | 인바운드 자동 sealing · 도구 경로 복호화만 허용 |
 | **OAuth 연동** | 외부 서비스 인증 | GitHub · Google · Custom OAuth 2.0 |
 | **대시보드** | 웹 기반 실시간 모니터링 | SSE 피드 · 에이전트/태스크/결정/프로바이더 관리 |
@@ -108,7 +108,7 @@ flowchart TD
 
 | 역할 | 전문 분야 | 위임 방향 |
 |------|----------|----------|
-| `butler` | 요청 수신 · 역할 라우팅 | → pm/pl/generalist |
+| `concierge` | 요청 수신 · 역할 라우팅 | → pm/pl/generalist |
 | `pm` | 요구사항 분석 · 태스크 분해 | → implementer |
 | `pl` | 기술 리드 · 아키텍처 설계 | → implementer/reviewer |
 | `implementer` | 실제 구현 · 코드 작성 | — |
@@ -199,11 +199,11 @@ GitHub · Google · Custom OAuth 2.0 외부 서비스 연동. 대시보드 Works
 
 ## 사용 예시
 
-**단순 작업** (butler → 자동 역할 분배):
+**단순 작업** (concierge → 자동 역할 분배):
 
 ```
 사용자: 이 코드에서 버그 찾아줘
-→ butler → debugger 활성화 → 근본 원인 분석 → 응답
+→ concierge → debugger 활성화 → 근본 원인 분석 → 응답
 ```
 
 **태스크 실행** (단계형 실행/승인):

@@ -138,13 +138,13 @@ export function ModelsTab() {
 
   const deleteMut = useMutation({
     mutationFn: (name: string) => api.del(`/api/models/${encodeURIComponent(name)}`),
-    onSuccess: () => { toast(t("models.deleted"), "ok"); qc.invalidateQueries({ queryKey: ["models"] }); setDeleteTarget(null); },
+    onSuccess: () => { toast(t("models.deleted"), "ok"); void qc.invalidateQueries({ queryKey: ["models"] }); setDeleteTarget(null); },
     onError: () => toast(t("models.delete_failed"), "err"),
   });
 
   const switchMut = useMutation({
     mutationFn: (name: string) => api.patch("/api/models/runtime", { name }),
-    onSuccess: () => { toast(t("models.switched"), "ok"); qc.invalidateQueries({ queryKey: ["models-runtime"] }); },
+    onSuccess: () => { toast(t("models.switched"), "ok"); void qc.invalidateQueries({ queryKey: ["models-runtime"] }); },
     onError: () => toast(t("models.switch_failed"), "err"),
   });
 

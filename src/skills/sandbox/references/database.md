@@ -8,50 +8,49 @@
 
 ### 외부 서버 연결 (one-shot)
 
-```powershell
-$R = if (Get-Command podman -EA 0) { "podman" } else { "docker" }
+```bash
+R=$(command -v podman >/dev/null 2>&1 && echo podman || echo docker)
 
-& $R run --rm `
-  -e PGPASSWORD="$env:DB_PASSWORD" `
-  postgres:16 `
-  psql -h "$env:DB_HOST" -p "$env:DB_PORT" -U "$env:DB_USER" -d "$env:DB_NAME" `
+$R run --rm \
+  -e PGPASSWORD="$DB_PASSWORD" \
+  postgres:16 \
+  psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" \
   -v ON_ERROR_STOP=1 -c "SELECT now();"
 ```
 
 ### SQL 파일 실행
 
-```powershell
-Get-Content query.sql -Raw | & $R run --rm -i `
-  -e PGPASSWORD="$env:DB_PASSWORD" postgres:16 `
-  psql -h "$env:DB_HOST" -U "$env:DB_USER" -d "$env:DB_NAME" -v ON_ERROR_STOP=1
+```bash
+cat query.sql | $R run --rm -i \
+  -e PGPASSWORD="$DB_PASSWORD" postgres:16 \
+  psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" -v ON_ERROR_STOP=1
 ```
 
 ### 임시 로컬 PostgreSQL 서버
 
-```powershell
-$N = "pg-$([guid]::NewGuid().ToString('N').Substring(0,8))"
+```bash
+N="pg-$(head -c4 /dev/urandom | xxd -p)"
 
 # 서버 시작
-& $R run -d --rm --name $N `
-  -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=appdb `
+$R run -d --rm --name "$N" \
+  -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=appdb \
   postgres:16
 
 # 준비 대기
-for ($i = 0; $i -lt 30; $i++) {
-  & $R exec $N pg_isready -U postgres -d appdb *> $null
-  if ($LASTEXITCODE -eq 0) { break }
-  Start-Sleep -Seconds 1
-}
+for i in $(seq 1 30); do
+  $R exec "$N" pg_isready -U postgres -d appdb >/dev/null 2>&1 && break
+  sleep 1
+done
 
 # 쿼리 실행
-& $R exec -i $N psql -U postgres -d appdb -v ON_ERROR_STOP=1 -c "
+$R exec -i "$N" psql -U postgres -d appdb -v ON_ERROR_STOP=1 -c "
   CREATE TABLE test (id SERIAL PRIMARY KEY, name TEXT);
   INSERT INTO test (name) VALUES ('hello'), ('world');
   SELECT * FROM test;
 "
 
 # 정리
-& $R rm -f $N
+$R rm -f "$N"
 ```
 
 ---
@@ -60,39 +59,38 @@ for ($i = 0; $i -lt 30; $i++) {
 
 ### 외부 서버 연결 (one-shot)
 
-```powershell
-& $R run --rm mysql:8 `
-  mysql -h "$env:DB_HOST" -P "$env:DB_PORT" `
-  -u"$env:DB_USER" -p"$env:DB_PASSWORD" "$env:DB_NAME" `
+```bash
+$R run --rm mysql:8 \
+  mysql -h "$DB_HOST" -P "$DB_PORT" \
+  -u"$DB_USER" -p"$DB_PASSWORD" "$DB_NAME" \
   -e "SELECT now();"
 ```
 
 ### SQL 파일 실행
 
-```powershell
-Get-Content query.sql -Raw | & $R run --rm -i mysql:8 `
-  mysql -h "$env:DB_HOST" -u"$env:DB_USER" -p"$env:DB_PASSWORD" "$env:DB_NAME"
+```bash
+cat query.sql | $R run --rm -i mysql:8 \
+  mysql -h "$DB_HOST" -u"$DB_USER" -p"$DB_PASSWORD" "$DB_NAME"
 ```
 
 ### 임시 로컬 MySQL 서버
 
-```powershell
-$N = "my-$([guid]::NewGuid().ToString('N').Substring(0,8))"
+```bash
+N="my-$(head -c4 /dev/urandom | xxd -p)"
 
-& $R run -d --rm --name $N `
-  -e MYSQL_ROOT_PASSWORD=root -e MYSQL_DATABASE=appdb `
+$R run -d --rm --name "$N" \
+  -e MYSQL_ROOT_PASSWORD=root -e MYSQL_DATABASE=appdb \
   mysql:8
 
 # 준비 대기
-for ($i = 0; $i -lt 30; $i++) {
-  & $R exec $N mysqladmin ping -u root -proot *> $null
-  if ($LASTEXITCODE -eq 0) { break }
-  Start-Sleep -Seconds 2
-}
+for i in $(seq 1 30); do
+  $R exec "$N" mysqladmin ping -u root -proot >/dev/null 2>&1 && break
+  sleep 2
+done
 
-& $R exec -i $N mysql -u root -proot appdb -e "SELECT now();"
+$R exec -i "$N" mysql -u root -proot appdb -e "SELECT now();"
 
-& $R rm -f $N
+$R rm -f "$N"
 ```
 
 ---
@@ -115,15 +113,15 @@ conn.close()
 print(f"saved: orders.csv ({len(df)} rows)")
 ```
 
-```powershell
-& $R run --rm -v "${PWD}:/workspace:rw" -w /workspace python:3.12-slim sh -lc "
+```bash
+$R run --rm -v "$PWD:/workspace:rw" -w /workspace python:3.12-slim sh -lc "
   pip install -q psycopg2-binary pandas &&
   python script.py
-" `
-  -e DB_HOST="$env:DB_HOST" `
-  -e DB_USER="$env:DB_USER" `
-  -e DB_PASSWORD="$env:DB_PASSWORD" `
-  -e DB_NAME="$env:DB_NAME"
+" \
+  -e DB_HOST="$DB_HOST" \
+  -e DB_USER="$DB_USER" \
+  -e DB_PASSWORD="$DB_PASSWORD" \
+  -e DB_NAME="$DB_NAME"
 ```
 
 ---

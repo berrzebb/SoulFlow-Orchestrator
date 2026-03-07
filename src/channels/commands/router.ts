@@ -5,6 +5,11 @@ import { escape_regexp } from "../../utils/common.js";
 export class CommandRouter {
   constructor(private readonly handlers: CommandHandler[]) {}
 
+  /** 핸들러를 나중에 추가 (late-inject 패턴). */
+  add_handler(handler: CommandHandler): void {
+    this.handlers.push(handler);
+  }
+
   async try_handle(ctx: CommandContext): Promise<boolean> {
     // 1. 정확한 매칭
     for (const h of this.handlers) {

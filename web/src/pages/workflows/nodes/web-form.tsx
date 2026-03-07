@@ -9,7 +9,7 @@ function WebFormEditPanel({ node, update, t }: EditPanelProps) {
     setFieldsRaw(val);
     if (!val.trim()) { setFieldsErr(""); update({ fields: {} }); return; }
     try { update({ fields: JSON.parse(val) }); setFieldsErr(""); }
-    catch { setFieldsErr("Invalid JSON"); }
+    catch { setFieldsErr(t("workflows.invalid_json")); }
   };
 
   return (
@@ -48,16 +48,16 @@ export const web_form_descriptor: FrontendNodeDescriptor = {
   icon: "\u{1F4DD}",
   color: "#7b1fa2",
   shape: "rect",
-  toolbar_label: "+ Web Form",
+  toolbar_label: "node.web_form.label",
   category: "integration",
   output_schema: [
-    { name: "fields_filled", type: "array",   description: "Fill results" },
-    { name: "submitted",     type: "boolean",  description: "Whether submitted" },
-    { name: "snapshot",      type: "string",   description: "Page snapshot" },
+    { name: "fields_filled", type: "array",   description: "node.web_form.output.fields_filled" },
+    { name: "submitted",     type: "boolean",  description: "node.web_form.output.submitted" },
+    { name: "snapshot",      type: "string",   description: "node.web_form.output.snapshot" },
   ],
   input_schema: [
-    { name: "url",    type: "string", description: "Form URL" },
-    { name: "fields", type: "object", description: "Selector-to-value mapping" },
+    { name: "url",    type: "string", description: "node.web_form.input.url" },
+    { name: "fields", type: "object", description: "node.web_form.input.fields" },
   ],
   create_default: () => ({ url: "", fields: {}, submit_selector: "", wait_after_ms: 2000 }),
   EditPanel: WebFormEditPanel,

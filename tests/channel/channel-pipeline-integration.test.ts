@@ -21,7 +21,10 @@
  */
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeAll } from "vitest";
+import { set_locale } from "@src/i18n/index.js";
+
+beforeAll(() => set_locale("ko"));
 import type { OutboundMessage } from "@src/bus/types.ts";
 import type { OrchestrationRequest } from "@src/orchestration/types.ts";
 import { StatusHandler } from "@src/channels/commands/status.handler.ts";
@@ -823,12 +826,14 @@ describe("E2E: /secret 커맨드", () => {
     } finally { await h.cleanup(); }
   });
 
-  it("/secret (인자 없음) → status 출력", async () => {
+  it("/secret (인자 없음) → 세부 기능 가이드 표시", async () => {
     const h = await create_harness({ command_handlers: [create_secret_handler()] });
     try {
       await h.manager.handle_inbound_message(inbound("/secret"));
       const out = last_sent(h.registry.sent);
-      expect(out.content).toContain("vault 상태");
+      expect(out.content).toContain("/secret status");
+      expect(out.content).toContain("/secret list");
+      expect(out.content).toContain("/secret set");
     } finally { await h.cleanup(); }
   });
 });
@@ -934,13 +939,14 @@ describe("E2E: /decision 커맨드", () => {
     } finally { await h.cleanup(); }
   });
 
-  it("/decision (빈 목록) → empty 표시", async () => {
+  it("/decision (인자 없음) → 세부 기능 가이드 표시", async () => {
     const h = await create_harness({ command_handlers: [create_decision_handler()] });
     try {
       await h.manager.handle_inbound_message(inbound("/decision"));
       const out = last_sent(h.registry.sent);
-      expect(out.content).toContain("지침");
-      expect(out.content).toContain("active: 0");
+      expect(out.content).toContain("/decision status");
+      expect(out.content).toContain("/decision list");
+      expect(out.content).toContain("/decision set");
     } finally { await h.cleanup(); }
   });
 });
@@ -1023,12 +1029,25 @@ describe("E2E: /cron 커맨드", () => {
  * ═══════════════════════════════════════════════════════ */
 
 describe("E2E: /reload 커맨드", () => {
-  it("/reload → 전체 리로드 성공 결과 출력", async () => {
+  it("/reload (인자 없음) → 세부 기능 가이드 표시", async () => {
     const h = await create_harness({
       command_handlers: [create_reload_handler({ tools_count: 7, skills_count: 3 })],
     });
     try {
       await h.manager.handle_inbound_message(inbound("/reload"));
+      const out = last_sent(h.registry.sent);
+      expect(out.content).toContain("/reload config");
+      expect(out.content).toContain("/reload tools");
+      expect(out.content).toContain("/reload skills");
+    } finally { await h.cleanup(); }
+  });
+
+  it("/reload all → 전체 리로드 성공 결과 출력", async () => {
+    const h = await create_harness({
+      command_handlers: [create_reload_handler({ tools_count: 7, skills_count: 3 })],
+    });
+    try {
+      await h.manager.handle_inbound_message(inbound("/reload all"));
       const out = last_sent(h.registry.sent);
       expect(out.content).toContain("reload");
       expect(out.content).toContain("config");
@@ -1038,12 +1057,12 @@ describe("E2E: /reload 커맨드", () => {
     } finally { await h.cleanup(); }
   });
 
-  it("/reload (config 실패) → 부분 실패 결과 출력", async () => {
+  it("/reload all (config 실패) → 부분 실패 결과 출력", async () => {
     const h = await create_harness({
       command_handlers: [create_reload_handler({ config_error: "file not found" })],
     });
     try {
-      await h.manager.handle_inbound_message(inbound("/reload"));
+      await h.manager.handle_inbound_message(inbound("/reload all"));
       const out = last_sent(h.registry.sent);
       expect(out.content).toContain("failed");
       expect(out.content).toContain("file not found");
@@ -1057,25 +1076,30 @@ describe("E2E: /reload 커맨드", () => {
  * 17. 긴 응답 잘림 (1600 char)
  * ═══════════════════════════════════════════════════════ */
 
-describe("E2E: 긴 응답 잘림", () => {
-  it("1600자 초과 orchestration 응답이 잘린다", async () => {
-    const long_text = "이것은 반복 텍스트입니다. ".repeat(200);
+describe("E2E: 긴 응답 청크 분할", () => {
+  it("telegram 한도(4000) 초과 orchestration 응답이 분할된다", async () => {
+    const long_text = "이것은 반복 텍스트입니다. ".repeat(500);
     const h = await create_harness({ orchestration_handler: reply_with(long_text) });
     try {
       await h.manager.handle_inbound_message(inbound("긴 응답 테스트"));
-      const out = last_sent(h.registry.sent);
-      expect(out.content.length).toBeLessThanOrEqual(1700);
+      // send_chunked가 4000자 이하로 분할하므로 각 메시지는 한도 이하
+      for (const msg of h.registry.sent) {
+        expect(msg.content.length).toBeLessThanOrEqual(4100);
+      }
+      // 원본이 4000자를 초과하므로 2개 이상의 청크로 분할
+      expect(h.registry.sent.length).toBeGreaterThanOrEqual(2);
     } finally { await h.cleanup(); }
   });
 
-  it("1600자 초과 커맨드 응답이 잘린다", async () => {
+  it("telegram 한도(4000) 초과 커맨드 응답이 분할된다", async () => {
     const many_secrets: Record<string, string> = {};
-    for (let i = 0; i < 100; i++) many_secrets[`secret_${String(i).padStart(3, "0")}`] = `value_${i}`;
+    for (let i = 0; i < 200; i++) many_secrets[`secret_${String(i).padStart(3, "0")}`] = `value_${i}`;
     const h = await create_harness({ command_handlers: [create_secret_handler(many_secrets)] });
     try {
       await h.manager.handle_inbound_message(inbound("/secret list"));
-      const out = last_sent(h.registry.sent);
-      expect(out.content.length).toBeLessThanOrEqual(1700);
+      for (const msg of h.registry.sent) {
+        expect(msg.content.length).toBeLessThanOrEqual(4100);
+      }
     } finally { await h.cleanup(); }
   });
 });
@@ -1710,8 +1734,8 @@ describe("E2E: 시크릿 참조 및 암호문 누출 차단", () => {
  * 28. 셸 코드 블록 누출 차단
  * ═══════════════════════════════════════════════════════ */
 
-describe("E2E: 셸 코드 블록 누출 차단", () => {
-  it("```bash 코드 블록이 최종 출력에서 제거된다", async () => {
+describe("E2E: 코드 블록 보존", () => {
+  it("```bash 코드 블록이 최종 출력에 보존된다", async () => {
     const reply = [
       "작업 과정:",
       "```bash",
@@ -1723,14 +1747,12 @@ describe("E2E: 셸 코드 블록 누출 차단", () => {
     try {
       await h.manager.handle_inbound_message(inbound("test"));
       const out = last_sent(h.registry.sent);
-      // strip_sensitive_command_blocks가 ```bash 블록을 제거
-      expect(out.content).not.toContain("rm -rf");
-      expect(out.content).not.toContain("npm run build");
+      expect(out.content).toContain("rm -rf");
       expect(out.content).toContain("빌드가 성공");
     } finally { await h.cleanup(); }
   });
 
-  it("```powershell 코드 블록도 제거된다", async () => {
+  it("```powershell 코드 블록도 보존된다", async () => {
     const reply = [
       "실행 결과:",
       "```powershell",
@@ -1743,8 +1765,7 @@ describe("E2E: 셸 코드 블록 누출 차단", () => {
     try {
       await h.manager.handle_inbound_message(inbound("test"));
       const out = last_sent(h.registry.sent);
-      expect(out.content).not.toContain("$env:");
-      expect(out.content).not.toContain("dotnet build");
+      expect(out.content).toContain("dotnet build");
       expect(out.content).toContain("배포 완료");
     } finally { await h.cleanup(); }
   });
@@ -2394,7 +2415,7 @@ describe("E2E: 도구 결과의 민감정보 필터링", () => {
     } finally { await h.cleanup(); }
   });
 
-  it("도구가 생성한 bash 코드블록이 최종 응답에서 제거된다", async () => {
+  it("bash 코드블록은 보존하되 prose 영역의 노이즈는 제거된다", async () => {
     const h = await create_harness({
       orchestration_handler: reply_with(
         "설정 완료.\n```bash\nexport API_KEY=sk-secret-12345\ncurl -H \"Authorization: Bearer $API_KEY\" https://api.example.com\n```\n위 명령이 실행되었습니다.",
@@ -2403,8 +2424,9 @@ describe("E2E: 도구 결과의 민감정보 필터링", () => {
     try {
       await h.manager.handle_inbound_message(inbound("API 설정해줘"));
       const out = last_sent(h.registry.sent);
-      expect(out.content).not.toContain("sk-secret-12345");
-      expect(out.content).not.toContain("export API_KEY");
+      // 코드블록 내부는 보존
+      expect(out.content).toContain("curl");
+      expect(out.content).toContain("export API_KEY");
       expect(out.content).toContain("설정 완료");
     } finally { await h.cleanup(); }
   });
@@ -2778,7 +2800,7 @@ describe("E2E: 시크릿 키 사용 시 민감정보 보호", () => {
     } finally { await h.cleanup(); }
   });
 
-  it("시크릿 참조 + vault 암호문 + bash 코드블록이 동시에 있어도 모두 제거된다", async () => {
+  it("시크릿 참조 + vault 암호문은 코드블록 안에서도 치환된다", async () => {
     const h = await create_harness({
       orchestration_handler: reply_with(
         "로그인 후 결제를 진행했습니다.\n\n" +
@@ -2792,12 +2814,11 @@ describe("E2E: 시크릿 키 사용 시 민감정보 보호", () => {
         inbound("로그인하고 결제 진행해줘"),
       );
       const out = last_sent(h.registry.sent);
-      // bash 코드블록 제거
-      expect(out.content).not.toContain("curl");
-      expect(out.content).not.toContain("Authorization");
-      // vault 암호문 제거
+      // 코드블록 구조는 보존
+      expect(out.content).toContain("curl");
+      // vault 암호문은 치환
       expect(out.content).not.toMatch(/sv1\./);
-      // 시크릿 참조 제거
+      // 시크릿 참조는 치환
       expect(out.content).not.toContain("{{secret:");
       expect(out.content).not.toContain("API_TOKEN");
       // 결과 정보 보존

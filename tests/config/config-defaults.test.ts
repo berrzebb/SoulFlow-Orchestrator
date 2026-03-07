@@ -13,7 +13,7 @@ describe("get_config_defaults", () => {
 
     expect(defaults.agentLoopMaxTurns).toBe(20);
     expect(defaults.channel.streaming.enabled).toBe(true);
-    expect(defaults.orchestration.executorProvider).toBe("chatgpt");
+    expect(defaults.orchestration.executorProvider).toBe("");
     expect(defaults.orchestratorLlm.enabled).toBe(false);
     expect(defaults.orchestratorLlm.port).toBe(11434);
   });

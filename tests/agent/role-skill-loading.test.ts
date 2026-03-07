@@ -20,7 +20,7 @@ describe("SkillsLoader 역할 스킬", () => {
   });
 
   it("get_role_skill로 모든 역할을 조회할 수 있다", () => {
-    const roles = ["butler", "pm", "pl", "generalist", "implementer", "reviewer", "debugger", "validator"];
+    const roles = ["concierge", "pm", "pl", "generalist", "implementer", "reviewer", "debugger", "validator"];
     for (const role of roles) {
       const skill = loader.get_role_skill(role);
       expect(skill, `role:${role} should exist`).not.toBeNull();
@@ -81,7 +81,7 @@ describe("SkillsLoader 역할 스킬", () => {
   it("역할 스킬은 build_skill_summary에서 제외된다", () => {
     const summary = loader.build_skill_summary();
     expect(summary).not.toContain("role:implementer");
-    expect(summary).not.toContain("role:butler");
+    expect(summary).not.toContain("role:concierge");
   });
 
   it("list_skills에 type_filter 적용 시 역할만 반환된다", () => {

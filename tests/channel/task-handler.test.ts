@@ -75,9 +75,20 @@ describe("TaskHandler", () => {
     expect(handler.can_handle(ctx)).toBe(false);
   });
 
-  it("/task list — 활성 작업 없으면 안내 메시지", async () => {
+  it("/task (인자 없음) — 세부 기능 가이드 표시", async () => {
     const handler = new TaskHandler(make_access());
     const ctx = make_ctx();
+    await handler.handle(ctx);
+
+    expect(ctx.replies[0]).toContain("/task list");
+    expect(ctx.replies[0]).toContain("/task status");
+    expect(ctx.replies[0]).toContain("/task cancel");
+    expect(ctx.replies[0]).toContain("/task recent");
+  });
+
+  it("/task list — 활성 작업 없으면 안내 메시지", async () => {
+    const handler = new TaskHandler(make_access());
+    const ctx = make_ctx(["list"]);
     await handler.handle(ctx);
 
     expect(ctx.replies[0]).toContain("활성 작업이 없습니다");
@@ -89,7 +100,7 @@ describe("TaskHandler", () => {
       list_active_tasks: vi.fn().mockReturnValue([task]),
     }));
 
-    const ctx = make_ctx();
+    const ctx = make_ctx(["list"]);
     await handler.handle(ctx);
 
     expect(ctx.replies[0]).toContain("활성 작업 목록");
@@ -103,7 +114,7 @@ describe("TaskHandler", () => {
       list_active_loops: vi.fn().mockReturnValue([loop]),
     }));
 
-    const ctx = make_ctx();
+    const ctx = make_ctx(["list"]);
     await handler.handle(ctx);
 
     expect(ctx.replies[0]).toContain("활성 작업 목록");
@@ -162,7 +173,7 @@ describe("TaskHandler", () => {
     const ctx = make_ctx(["status"]);
     await handler.handle(ctx);
 
-    expect(ctx.replies[0]).toContain("사용법");
+    expect(ctx.replies[0]).toContain("/task status");
   });
 
   it("/task status <없는 id> — 작업 없음 안내", async () => {
@@ -204,7 +215,7 @@ describe("TaskHandler", () => {
     const ctx = make_ctx(["cancel"]);
     await handler.handle(ctx);
 
-    expect(ctx.replies[0]).toContain("사용법");
+    expect(ctx.replies[0]).toContain("/task cancel");
   });
 
   it("/task cancel <없는 id> — 취소 대상 없음 안내", async () => {
@@ -224,11 +235,11 @@ describe("TaskHandler", () => {
 
     const ctx_status = make_ctx(["상태"]);
     await handler.handle(ctx_status);
-    expect(ctx_status.replies[0]).toContain("사용법");
+    expect(ctx_status.replies[0]).toContain("/task status");
 
     const ctx_cancel = make_ctx(["취소"]);
     await handler.handle(ctx_cancel);
-    expect(ctx_cancel.replies[0]).toContain("사용법");
+    expect(ctx_cancel.replies[0]).toContain("/task cancel");
   });
 
   it("/task cancel all — 전체 작업 일괄 취소", async () => {
@@ -268,7 +279,7 @@ describe("TaskHandler", () => {
       list_active_loops: vi.fn().mockReturnValue([loop]),
     }));
 
-    const ctx = make_ctx();
+    const ctx = make_ctx(["list"]);
     await handler.handle(ctx);
 
     expect(ctx.replies[0]).toContain("AAA...");

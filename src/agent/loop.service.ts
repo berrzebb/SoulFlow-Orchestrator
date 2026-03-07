@@ -240,6 +240,13 @@ export class AgentLoopStore {
     let final_content: string | null = null;
     const tool_call_guard: ToolCallGuard = new ConsecutiveToolCallGuard(2);
 
+    // Compaction flush 상태 — 1 compaction 주기당 최대 1회
+    let compaction_flushed = false;
+    const flush_cfg = options.compaction_flush;
+    const flush_trigger = flush_cfg
+      ? flush_cfg.context_window - (flush_cfg.reserve_floor ?? 20_000) - (flush_cfg.soft_threshold ?? 4_000)
+      : Infinity;
+
     while (state.currentTurn < state.maxTurns && state.checkShouldContinue) {
       if (options.abort_signal?.aborted) {
         state.status = "stopped";
@@ -267,6 +274,15 @@ export class AgentLoopStore {
       });
 
       final_content = response.content ?? null;
+
+      // Compaction flush: 토큰 사용량이 임계점 도달 시 메모리 저장
+      if (!compaction_flushed && flush_cfg && (response.usage?.prompt_tokens ?? 0) >= flush_trigger) {
+        compaction_flushed = true;
+        try { await flush_cfg.flush(); } catch (e) {
+          this.logger?.warn("compaction_flush_failed", { loop_id: state.loopId, error: error_message(e) });
+        }
+      }
+
       if (options.on_turn) {
         await options.on_turn({ state, response, last_content: final_content });
       }

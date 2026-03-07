@@ -7,7 +7,6 @@ import {
   is_sensitive_command_line,
   strip_tool_protocol_leaks,
   strip_persona_leak_blocks,
-  strip_sensitive_command_blocks,
   sanitize_provider_output,
   sanitize_stream_chunk,
   normalize_agent_reply,
@@ -64,18 +63,19 @@ describe("is_stream_noise_line", () => {
 });
 
 describe("is_tool_protocol_leak_line", () => {
-  it("detects tool_calls JSON", () => {
+  it("detects tool_calls JSON at line start", () => {
     expect(is_tool_protocol_leak_line('"tool_calls": [')).toBe(true);
-    expect(is_tool_protocol_leak_line('"tool_call_id": "abc"')).toBe(true);
+    expect(is_tool_protocol_leak_line('  {"tool_call_id": "abc"}')).toBe(true);
   });
 
-  it("detects call IDs", () => {
-    expect(is_tool_protocol_leak_line('"id": "call_abc123"')).toBe(true);
-    expect(is_tool_protocol_leak_line('{"id":"call_xyz","type":"function"}')).toBe(true);
+  it("detects call IDs at line start", () => {
+    expect(is_tool_protocol_leak_line('"id": "call_abc123",')).toBe(true);
+    expect(is_tool_protocol_leak_line('"id": "call_abc123"}')).toBe(true);
   });
 
-  it("passes normal text", () => {
+  it("passes normal text and mid-line mentions", () => {
     expect(is_tool_protocol_leak_line("I'll search for that")).toBe(false);
+    expect(is_tool_protocol_leak_line('the "id" field contains "call_abc"')).toBe(false);
   });
 });
 
@@ -107,22 +107,19 @@ describe("is_persona_leak_line", () => {
 describe("is_sensitive_command_line", () => {
   it("detects shell prompts", () => {
     expect(is_sensitive_command_line("PS C:\\Users\\test>")).toBe(true);
-    expect(is_sensitive_command_line("$ npm install")).toBe(true);
+    expect(is_sensitive_command_line("$ git status")).toBe(true);
   });
 
-  it("detects common shell commands", () => {
-    expect(is_sensitive_command_line("cd /home/user")).toBe(true);
-    expect(is_sensitive_command_line("git commit -m 'fix'")).toBe(true);
-    expect(is_sensitive_command_line("npm run build")).toBe(true);
+  it("detects env variable assignments", () => {
+    expect(is_sensitive_command_line("$env:API_KEY=abc")).toBe(true);
+    expect(is_sensitive_command_line("export API_KEY=abc")).toBe(true);
   });
 
-  it("detects code block markers", () => {
-    expect(is_sensitive_command_line("```bash")).toBe(true);
-    expect(is_sensitive_command_line("```powershell")).toBe(true);
-  });
-
-  it("passes normal text", () => {
+  it("passes normal text and standalone command names", () => {
     expect(is_sensitive_command_line("The file contains data")).toBe(false);
+    expect(is_sensitive_command_line("git은 버전 관리 도구입니다")).toBe(false);
+    expect(is_sensitive_command_line("npm으로 설치하세요")).toBe(false);
+    expect(is_sensitive_command_line("```bash")).toBe(false);
   });
 });
 
@@ -191,6 +188,38 @@ describe("sanitize_provider_output", () => {
     const input = "첫 번째 단락\n\n두 번째 단락";
     const output = sanitize_provider_output(input);
     expect(output).toContain("\n\n");
+  });
+});
+
+describe("code block preservation", () => {
+  it("preserves tool protocol patterns inside code blocks", () => {
+    const input = 'Here is the JSON:\n```json\n{"tool_calls": [{"id": "call_abc123"}]}\n```\nDone.';
+    const output = sanitize_provider_output(input);
+    expect(output).toContain('"tool_calls"');
+    expect(output).toContain('"call_abc123"');
+  });
+
+  it("preserves shell commands inside code blocks", () => {
+    const input = "Run this:\n```bash\ngit commit -m 'fix'\nnpm run build\n```";
+    const output = sanitize_stream_chunk(input);
+    expect(output).toContain("git commit");
+    expect(output).toContain("npm run build");
+  });
+
+  it("preserves HTML inside code blocks", () => {
+    const input = "Example:\n```html\n<div><strong>bold</strong></div>\n```";
+    const output = sanitize_provider_output(input);
+    expect(output).toContain("<div>");
+    expect(output).toContain("<strong>");
+  });
+
+  it("still filters noise outside code blocks", () => {
+    const input = "Hello\norchestrator direct processing\n```\nsafe content\n```\nDone";
+    const output = sanitize_provider_output(input);
+    expect(output).not.toContain("orchestrator direct");
+    expect(output).toContain("safe content");
+    expect(output).toContain("Hello");
+    expect(output).toContain("Done");
   });
 });
 

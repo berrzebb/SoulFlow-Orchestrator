@@ -9,7 +9,7 @@ function SwitchEditPanel({ node, update, t }: EditPanelProps) {
     setCasesRaw(val);
     if (!val.trim()) { setCasesErr(""); update({ cases: [] }); return; }
     try { update({ cases: JSON.parse(val) }); setCasesErr(""); }
-    catch { setCasesErr("Invalid JSON"); }
+    catch { setCasesErr(t("workflows.invalid_json")); }
   };
 
   return (
@@ -17,7 +17,7 @@ function SwitchEditPanel({ node, update, t }: EditPanelProps) {
       <div className="builder-row">
         <label className="label">{t("workflows.switch_expression")}</label>
         <input className="input input--sm" value={String(node.expression || "")} onChange={(e) => update({ expression: e.target.value })} placeholder="memory.status" />
-        <span className="builder-hint">{t("workflows.expression_hint") || "Access previous results via memory.prev.*, input.*, or value"}</span>
+        <span className="builder-hint">{t("workflows.expression_hint")}</span>
       </div>
       <div className="builder-row">
         <label className="label">{t("workflows.switch_cases")}</label>
@@ -44,13 +44,13 @@ export const switch_descriptor: FrontendNodeDescriptor = {
   icon: "⑆",
   color: "#ff9800",
   shape: "diamond",
-  toolbar_label: "+ Switch",
+  toolbar_label: "node.switch.label",
   category: "flow",
   output_schema: [
-    { name: "matched_case", type: "string", description: "Matched case value" },
+    { name: "matched_case", type: "string", description: "node.switch.output.matched_case" },
   ],
   input_schema: [
-    { name: "value", type: "unknown", description: "Value to evaluate" },
+    { name: "value", type: "unknown", description: "node.switch.input.value" },
   ],
   create_default: () => ({ expression: "value", cases: [{ value: "a", targets: [] }] }),
   EditPanel: SwitchEditPanel,

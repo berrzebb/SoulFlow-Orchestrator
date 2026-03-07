@@ -24,7 +24,7 @@ function NetworkEditPanel({ node, update, t }: EditPanelProps) {
       )}
       {op === "ping" && (
         <div className="builder-row">
-          <label className="label">Count</label>
+          <label className="label">{t("workflows.field_count")}</label>
           <input className="input input--sm" type="number" min={1} max={10} value={String(node.count ?? 3)} onChange={(e) => update({ count: Number(e.target.value) || 3 })} />
         </div>
       )}
@@ -37,16 +37,16 @@ export const network_descriptor: FrontendNodeDescriptor = {
   icon: "\u{1F310}",
   color: "#00897b",
   shape: "rect",
-  toolbar_label: "+ Network",
+  toolbar_label: "node.network.label",
   category: "integration",
   output_schema: [
-    { name: "output",  type: "string",  description: "Command output" },
-    { name: "success", type: "boolean", description: "Success flag" },
+    { name: "output",  type: "string",  description: "node.network.output.output" },
+    { name: "success", type: "boolean", description: "node.network.output.success" },
   ],
   input_schema: [
-    { name: "operation", type: "string", description: "Network operation" },
-    { name: "host",      type: "string", description: "Target host" },
-    { name: "port",      type: "number", description: "Port number" },
+    { name: "operation", type: "string", description: "node.network.input.operation" },
+    { name: "host",      type: "string", description: "node.network.input.host" },
+    { name: "port",      type: "number", description: "node.network.input.port" },
   ],
   create_default: () => ({ operation: "ping", host: "", port: 0, count: 3 }),
   EditPanel: NetworkEditPanel,

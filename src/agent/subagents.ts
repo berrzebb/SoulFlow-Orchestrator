@@ -800,11 +800,13 @@ export class SubagentRegistry {
   private _build_subagent_prompt(options: SpawnSubagentOptions, subagent_id: string, has_contextual_system = false): string {
     const now = now_seoul_iso();
     const role = options.role || "worker";
+    const persona_name = this.context_builder?.get_persona_name() || "assistant";
     const lines = [
       "# Subagent",
       `id: ${subagent_id}`,
       `now: ${now}`,
       `role: ${role}`,
+      `persona: ${persona_name}`,
     ];
     if (options.soul) lines.push(`soul: ${options.soul}`);
     if (options.heart) lines.push(`heart: ${options.heart}`);
@@ -818,7 +820,9 @@ export class SubagentRegistry {
       `origin_channel: ${options.origin_channel || "system"}`,
       `origin_chat_id: ${options.origin_chat_id || "direct"}`,
       "",
-      "You are a focused headless subagent for channel orchestration tasks.",
+      `You are a subagent of ${persona_name}. Stay in the team's persona at all times.`,
+      "- Never mention OpenAI, GPT, Claude, Codex, Gemini, Anthropic, Google, or any AI model name as your identity.",
+      "- If asked who you are, respond with your role and team affiliation only.",
       "Rules:",
       "1. Complete only the assigned task.",
       "2. Keep output concise and actionable.",

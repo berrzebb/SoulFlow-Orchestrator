@@ -38,7 +38,7 @@ Current CLI backends (`claude_cli`, `codex_cli`) create and destroy a process pe
                        ┌─────────────┼─────────────┐
                        │             │             │
                   ┌────┴───┐   ┌────┴────┐   ┌───┴──────┐
-                  │ butler │   │  impl   │   │ reviewer │
+                  │ concierge │   │  impl   │   │ reviewer │
                   │ claude │   │  codex  │   │ claude   │
                   └────────┘   └─────────┘   └──────────┘
 ```
@@ -63,7 +63,7 @@ function spawn(
   file: string,                  // "claude", "codex"
   args: string[],                // ["--headless", "--session", key, "--output-format", "stream-json"]
   options: {
-    name: string;                // container name: "agent-slack-C123-butler"
+    name: string;                // container name: "agent-slack-C123-concierge"
     cols: number;                // terminal width (reference only in headless)
     rows: number;                // terminal height
     cwd: string;                 // working directory: "/workspace"
@@ -465,7 +465,7 @@ Layer 7 (Proxy)     : Docker socket — API whitelist
 
 ```yaml
 services:
-  agent-butler:
+  agent-concierge:
     secrets:
       - anthropic_api_key   # /run/secrets/ (in-memory tmpfs)
 ```

@@ -38,7 +38,9 @@ export const retriever_handler: NodeHandler = {
         if (!url) throw new Error("retriever: url is required for http source");
 
         const parsed = new URL(url);
-        if (PRIVATE_HOST_RE.test(parsed.hostname)) {
+        // Node.js URL.hostname은 IPv6를 브래킷 포함으로 반환 (예: [::1])
+        const hostname = parsed.hostname.replace(/^\[|\]$/g, "");
+        if (PRIVATE_HOST_RE.test(hostname)) {
           throw new Error(`retriever: private/loopback host blocked "${parsed.hostname}"`);
         }
 

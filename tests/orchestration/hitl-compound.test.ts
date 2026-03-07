@@ -333,8 +333,8 @@ describe("HITL 복합 워크플로우 E2E", () => {
       memory: { channel: "telegram", chat_id: "chat-1", __updated_at_seoul: new Date().toISOString() },
     });
 
-    // /task 명령 → CommandRouter로 라우팅, TaskResumeService 건너뜀
-    await harness.manager.handle_inbound_message(msg("/task"));
+    // /task list 명령 → CommandRouter로 라우팅, TaskResumeService 건너뜀
+    await harness.manager.handle_inbound_message(msg("/task list"));
 
     expect(harness.dispatch.sent).toHaveLength(1);
     const reply = last_reply(harness.dispatch.sent);

@@ -35,12 +35,16 @@ export const aggregate_handler: NodeHandler = {
       case "avg":
         result = items.length ? items.reduce((acc, v) => acc + (Number(v) || 0), 0) / items.length : 0;
         break;
-      case "min":
-        result = items.length ? Math.min(...items.map(Number).filter(Number.isFinite)) : null;
+      case "min": {
+        const nums = items.map(Number).filter(Number.isFinite);
+        result = nums.length ? Math.min(...nums) : null;
         break;
-      case "max":
-        result = items.length ? Math.max(...items.map(Number).filter(Number.isFinite)) : null;
+      }
+      case "max": {
+        const nums = items.map(Number).filter(Number.isFinite);
+        result = nums.length ? Math.max(...nums) : null;
         break;
+      }
       case "join":
         result = items.map(String).join(n.separator ?? "\n");
         break;

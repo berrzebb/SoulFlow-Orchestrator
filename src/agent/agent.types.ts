@@ -8,6 +8,9 @@ export type AgentBackendId = string;
 /** 빌트인 프로바이더 타입. 확장 시 register_agent_provider_factory()로 등록. */
 export type AgentProviderType = "claude_cli" | "codex_cli" | "claude_sdk" | "codex_appserver" | (string & {});
 
+/** 모델 용도. chat = 대화/추론, embedding = 텍스트 벡터 변환. */
+export type ModelPurpose = "chat" | "embedding";
+
 /** 에이전트 프로바이더 인스턴스 설정. SQLite에 영속화되며 대시보드에서 CRUD. */
 export type AgentProviderConfig = {
   instance_id: string;
@@ -16,6 +19,8 @@ export type AgentProviderConfig = {
   enabled: boolean;
   /** 낮을수록 높은 우선순위. */
   priority: number;
+  /** 모델 용도: chat(기본) 또는 embedding. */
+  model_purpose: ModelPurpose;
   /** 지원하는 실행 모드. 빈 배열 = 모든 모드. */
   supported_modes: ExecutionMode[];
   /** 프로바이더 타입별 생성자 인자 (cwd, model, command 등). */
@@ -26,7 +31,7 @@ export type AgentProviderConfig = {
 
 export type CreateAgentProviderInput = Pick<
   AgentProviderConfig,
-  "instance_id" | "provider_type" | "label" | "enabled" | "priority" | "supported_modes" | "settings"
+  "instance_id" | "provider_type" | "label" | "enabled" | "priority" | "model_purpose" | "supported_modes" | "settings"
 >;
 
 /** 백엔드가 제공하는 기능 선언. 오케스트레이터가 보상 전략을 결정하는 데 사용. */

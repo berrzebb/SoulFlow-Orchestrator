@@ -9,33 +9,33 @@ function DbEditPanel({ node, update, t }: EditPanelProps) {
     setParamsRaw(val);
     if (!val.trim()) { setParamsErr(""); update({ params: undefined }); return; }
     try { update({ params: JSON.parse(val) }); setParamsErr(""); }
-    catch { setParamsErr("Invalid JSON"); }
+    catch { setParamsErr(t("workflows.invalid_json")); }
   };
 
   return (
     <>
       <div className="builder-row-pair">
         <div className="builder-row">
-          <label className="label">{t("workflows.db_operation") || "Operation"}</label>
+          <label className="label">{t("workflows.db_operation")}</label>
           <select className="input input--sm" value={String(node.operation || "query")} onChange={(e) => update({ operation: e.target.value })}>
-            <option value="query">Query</option>
-            <option value="insert">Insert</option>
-            <option value="update">Update</option>
-            <option value="delete">Delete</option>
+            <option value="query">{t("workflows.opt_query")}</option>
+            <option value="insert">{t("workflows.opt_insert")}</option>
+            <option value="update">{t("workflows.opt_update")}</option>
+            <option value="delete">{t("workflows.opt_delete")}</option>
           </select>
         </div>
         <div className="builder-row">
-          <label className="label">{t("workflows.db_datasource") || "Datasource"}</label>
+          <label className="label">{t("workflows.db_datasource")}</label>
           <input className="input input--sm" value={String(node.datasource || "")} onChange={(e) => update({ datasource: e.target.value })} placeholder="main-db" />
         </div>
       </div>
       <div className="builder-row">
-        <label className="label">{t("workflows.db_query") || "Query"}</label>
+        <label className="label">{t("workflows.db_query")}</label>
         <textarea className="input code-textarea" rows={4} value={String(node.query || "")} onChange={(e) => update({ query: e.target.value })} spellCheck={false} placeholder="SELECT * FROM users WHERE id = {{memory.user_id}}" />
-        <span className="builder-hint">{t("workflows.db_query_hint") || "Use {{memory.*}} for template variables"}</span>
+        <span className="builder-hint">{t("workflows.db_query_hint")}</span>
       </div>
       <div className="builder-row">
-        <label className="label">{t("workflows.db_params") || "Params"}</label>
+        <label className="label">{t("workflows.db_params")}</label>
         <textarea
           className={`input code-textarea${paramsErr ? " input--err" : ""}`}
           rows={2}
@@ -55,16 +55,16 @@ export const db_descriptor: FrontendNodeDescriptor = {
   icon: "⛁",
   color: "#e74c3c",
   shape: "rect",
-  toolbar_label: "+ DB",
+  toolbar_label: "node.db.label",
   category: "data",
   output_schema: [
-    { name: "rows",          type: "array",  description: "Query result rows" },
-    { name: "affected_rows", type: "number", description: "Affected row count" },
+    { name: "rows",          type: "array",  description: "node.db.output.rows" },
+    { name: "affected_rows", type: "number", description: "node.db.output.affected_rows" },
   ],
   input_schema: [
-    { name: "query",      type: "string", description: "SQL or query expression" },
-    { name: "datasource", type: "string", description: "Datasource identifier" },
-    { name: "params",     type: "object", description: "Query parameters" },
+    { name: "query",      type: "string", description: "node.db.input.query" },
+    { name: "datasource", type: "string", description: "node.db.input.datasource" },
+    { name: "params",     type: "object", description: "node.db.input.params" },
   ],
   create_default: () => ({ operation: "query", datasource: "", query: "" }),
   EditPanel: DbEditPanel,

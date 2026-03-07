@@ -1,4 +1,5 @@
 import { slash_name_in } from "../slash-command.js";
+import { format_subcommand_guide } from "./registry.js";
 import { format_mention, type CommandContext, type CommandHandler } from "./types.js";
 
 const ALIASES = ["stats", "통계", "점수", "cd"] as const;
@@ -45,6 +46,10 @@ export class StatsHandler implements CommandHandler {
       return true;
     }
 
+    if (!action) {
+      const guide = format_subcommand_guide("stats");
+      if (guide) { await ctx.send_reply(`${mention}${guide}`); return true; }
+    }
     await ctx.send_reply(`${mention}${this.format_overview()}`);
     return true;
   }

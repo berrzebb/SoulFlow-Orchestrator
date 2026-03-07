@@ -44,7 +44,7 @@ closed (정상) → open (차단) → half_open (복구 시도) → closed
 
 | 역할 | 전문 분야 | 위임 방향 |
 |------|----------|----------|
-| `butler` | 요청 수신 · 라우팅 · 단일 도구 실행 | → pm/pl/generalist |
+| `concierge` | 요청 수신 · 라우팅 · 단일 도구 실행 | → pm/pl/generalist |
 | `pm` | 요구사항 분석 · 태스크 분해 | → implementer |
 | `pl` | 기술 리드 · 아키텍처 설계 | → implementer/reviewer |
 | `implementer` | 코드 작성 · 기능 구현 | — |
@@ -57,8 +57,8 @@ closed (정상) → open (차단) → half_open (복구 시도) → closed
 
 ```
 사용자 메시지
-  → butler (분류/라우팅)
-      → 단순 질문/도구 실행: butler가 직접 처리
+  → concierge (분류/라우팅)
+      → 단순 질문/도구 실행: concierge가 직접 처리
       → 복잡한 구현: pm → implementer → reviewer
       → 버그 수정: debugger → validator
       → 아키텍처 결정: pl → implementer

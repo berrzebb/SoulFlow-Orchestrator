@@ -27,7 +27,7 @@ import {
   type RenderProfile,
   type RenderMode,
 } from "./rendering.js";
-import { sanitize_provider_output, strip_sensitive_command_blocks, strip_secret_reference_tokens, RE_PROVIDER_ERROR } from "./output-sanitizer.js";
+import { sanitize_provider_output, strip_secret_reference_tokens, RE_PROVIDER_ERROR } from "./output-sanitizer.js";
 import { extract_media_items } from "./media-extractor.js";
 import { prune_ttl_map, sleep, error_message, now_iso, normalize_text } from "../utils/common.js";
 import { LaneQueue } from "../agent/pty/lane-queue.js";
@@ -263,6 +263,30 @@ export class ChannelManager implements ServiceLike {
   reset_render_profile(provider: ChannelProvider, chat_id: string): RenderProfile {
     this.render_profiles.delete(render_key(provider, chat_id));
     return default_render_profile(provider);
+  }
+
+  /** 대시보드 승인 후 task 재개. 비동기 fire-and-forget — 호출자는 await 불필요. */
+  async resume_after_dashboard_approval(info: {
+    task_id: string; tool_result: string; provider: string; chat_id: string;
+  }): Promise<boolean> {
+    const resumed = await this.task_resume.resume_after_approval(info.task_id, info.tool_result);
+    if (!resumed) {
+      this.logger.warn("dashboard_approval_resume_failed", { task_id: info.task_id });
+      return false;
+    }
+    const provider = (info.provider || "web") as ChannelProvider;
+    const msg: InboundMessage = {
+      id: `approval-resume-${Date.now()}`,
+      provider,
+      channel: provider,
+      sender_id: "dashboard",
+      chat_id: info.chat_id,
+      content: "",
+      at: now_iso(),
+    };
+    this.logger.info("task resumed after dashboard approval", { task_id: info.task_id });
+    await this.invoke_and_reply(provider, msg, this.config.defaultAlias, info.task_id);
+    return true;
   }
 
   async handle_inbound_message(message: InboundMessage): Promise<void> {
@@ -764,7 +788,7 @@ export class ChannelManager implements ServiceLike {
     content: string; markdown: string; media: MediaItem[]; parse_mode?: "HTML"; render_mode: RenderMode;
   } {
     const profile = this.effective_render_profile(provider, chat_id);
-    const cleaned = strip_sensitive_command_blocks(sanitize_provider_output(raw));
+    const cleaned = sanitize_provider_output(raw);
     const { content: text_content, media } = extract_media_items(cleaned, this.workspace_dir);
     const fallback = text_content || (media.length > 0 ? "첨부 파일을 확인해주세요." : "");
     const rendered = render_agent_output(fallback, profile);

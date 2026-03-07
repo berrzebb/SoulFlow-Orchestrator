@@ -26,7 +26,7 @@ type AgentHooksOptions = {
   buffer: StreamBuffer;
   on_stream?: (chunk: string) => void;
   runtime_policy: RuntimeExecutionPolicy;
-  channel_context?: { channel: string; chat_id: string };
+  channel_context?: { channel: string; chat_id: string; task_id?: string };
   on_tool_block?: (block: string) => void;
   backend_id?: AgentBackendId;
   on_progress?: OrchestrationRequest["on_progress"];
@@ -205,7 +205,7 @@ export function build_agent_hooks(
         const { decision } = deps.runtime.register_approval_with_callback(
           request.tool_name || "unknown",
           request.detail || `tool: ${request.tool_name}`,
-          { channel: channel_context.channel, chat_id: channel_context.chat_id },
+          { channel: channel_context.channel, chat_id: channel_context.chat_id, task_id: channel_context.task_id },
         );
         const resolved = await decision;
         if (resolved === "approve") return "accept";

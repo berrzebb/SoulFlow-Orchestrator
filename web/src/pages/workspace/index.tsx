@@ -12,10 +12,11 @@ const AgentsTab = lazyRetryNamed(() => import("./agents"), "AgentsTab");
 const TemplatesTab = lazyRetryNamed(() => import("./templates"), "TemplatesTab");
 const ModelsTab = lazyRetryNamed(() => import("./models"), "ModelsTab");
 const OAuthTab = lazyRetryNamed(() => import("./oauth"), "OAuthTab");
+const ReferencesTab = lazyRetryNamed(() => import("./references"), "ReferencesTab");
 
-type TabKey = "memory" | "sessions" | "skills" | "cron" | "tools" | "agents" | "templates" | "models" | "oauth";
+type TabKey = "memory" | "sessions" | "skills" | "cron" | "tools" | "agents" | "templates" | "models" | "oauth" | "references";
 
-const TAB_KEYS = new Set<string>(["memory", "sessions", "skills", "cron", "tools", "agents", "templates", "models", "oauth"]);
+const TAB_KEYS = new Set<string>(["memory", "sessions", "skills", "cron", "tools", "agents", "templates", "models", "oauth", "references"]);
 
 function useTabParam(): [TabKey, (t: TabKey) => void] {
   const [params, setParams] = useSearchParams();
@@ -42,6 +43,7 @@ function TabBar({ active, onChange }: { active: TabKey; onChange: (t: TabKey) =>
     { key: "templates", label: t("workspace.tab.templates") },
     { key: "models", label: t("workspace.tab.models") },
     { key: "oauth", label: t("workspace.tab.oauth") },
+    { key: "references", label: t("workspace.tab.references") },
   ];
 
   useEffect(() => {
@@ -86,6 +88,7 @@ export default function WorkspacePage() {
         {tab === "templates" && <TemplatesTab />}
         {tab === "models" && <ModelsTab />}
         {tab === "oauth" && <OAuthTab />}
+        {tab === "references" && <ReferencesTab />}
       </Suspense>
     </div>
   );

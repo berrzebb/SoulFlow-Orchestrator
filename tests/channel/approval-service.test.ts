@@ -288,6 +288,35 @@ describe("ApprovalService", () => {
     expect(seen.has("new-key")).toBe(true);
   });
 
+  it("try_handle_approval_reactions processes discord reactions", async () => {
+    const pending = [{
+      request_id: "dc-rxn-001",
+      tool_name: "exec",
+      params: {},
+      detail: "test",
+      created_at: new Date().toISOString(),
+      status: "pending",
+      context: { channel: "discord", chat_id: "C123" },
+    }];
+    const runtime = make_runtime(pending);
+    const deps = make_deps(runtime);
+    const service = new ApprovalService(deps);
+
+    const msg = make_message({
+      provider: "discord",
+      content: "",
+      metadata: {
+        is_reaction: true,
+        discord: {
+          reactions: [{ emoji: { name: "white_check_mark" }, count: 1 }],
+        },
+      },
+    });
+
+    const result = await service.try_handle_approval_reactions("discord", [msg]);
+    expect(result.handled).toBe(true);
+  });
+
   it("returns { handled: false } for empty message content", async () => {
     const runtime = make_runtime([{
       request_id: "r1",

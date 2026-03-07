@@ -17,6 +17,7 @@ const NAV_GROUPS: NavGroup[] = [
     label_key: "nav.group.build",
     items: [
       { to: "/workflows", key: "nav.workflows", icon: "\u25b7" },
+      { to: "/kanban", key: "nav.kanban", icon: "\u25a3" },
       { to: "/workspace", key: "nav.workspace", icon: "\u25a6" },
     ],
   },
@@ -44,9 +45,7 @@ export function Sidebar() {
   const toggle = useDashboardStore((s) => s.toggle_sidebar);
   const open = useDashboardStore((s) => s.sidebar_open);
   const close = useDashboardStore((s) => s.close_sidebar);
-  const theme = useDashboardStore((s) => s.theme);
-  const toggle_theme = useDashboardStore((s) => s.toggle_theme);
-  const { t, locale, set_locale } = useI18n();
+  const { t } = useI18n();
 
   const cls = [
     "sidebar",
@@ -58,12 +57,11 @@ export function Sidebar() {
     if (window.innerWidth <= 768) close();
   };
 
-  const toggle_locale = () => set_locale(locale === "en" ? "ko" : "en");
-
   return (
     <>
       <div
         className={`sidebar-backdrop ${open ? "sidebar-backdrop--visible" : ""}`}
+        role="presentation"
         onClick={close}
       />
       <nav className={cls}>
@@ -98,23 +96,6 @@ export function Sidebar() {
             </li>
           ))}
         </ul>
-        <div className="sidebar__footer">
-          <button
-            className="btn btn--xs sidebar__footer-btn sidebar__footer-btn--theme"
-            onClick={toggle_theme}
-            aria-label={t("sidebar.toggle_theme")}
-            title={t("sidebar.toggle_theme")}
-          >
-            {theme === "dark" ? "\u2600\ufe0f" : "\ud83c\udf19"}
-          </button>
-          <button
-            className="btn btn--xs sidebar__footer-btn"
-            onClick={toggle_locale}
-            aria-label={t("sidebar.toggle_language")}
-          >
-            {collapsed ? (locale === "en" ? "KO" : "EN") : (locale === "en" ? "한국어" : "English")}
-          </button>
-        </div>
       </nav>
       <BottomNav />
     </>

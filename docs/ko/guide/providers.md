@@ -74,7 +74,7 @@ Orchestrator
   ├─ AgentBus (에이전트 간 통신 · 권한 매트릭스)
   └─ ContainerPool (컨테이너 생명주기 관리)
        └─ Docker/Podman API
-            ├─ butler 컨테이너
+            ├─ concierge 컨테이너
             ├─ implementer 컨테이너
             └─ reviewer 컨테이너
 ```

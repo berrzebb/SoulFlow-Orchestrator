@@ -2,9 +2,9 @@
 
 `scripts/docx_builder.py`로 JSON 데이터 + 빌트인 템플릿으로 문서를 생성한다.
 
-```powershell
-$R = if (Get-Command podman -EA 0) { "podman" } else { "docker" }
-& $R run --rm -v "${PWD}:/workspace:rw" -w /workspace python:3.12-slim sh -lc "
+```bash
+R=$(command -v podman >/dev/null 2>&1 && echo podman || echo docker)
+$R run --rm -v "$PWD:/workspace:rw" -w /workspace python:3.12-slim sh -lc "
   pip install -q python-docx &&
   python scripts/docx_builder.py --content content.json --template report --output output.docx
 "
@@ -55,6 +55,6 @@ $R = if (Get-Command podman -EA 0) { "podman" } else { "docker" }
 }
 ```
 
-```powershell
+```bash
 python scripts/docx_builder.py --content content.json --template report --custom-theme theme.json --output output.docx
 ```

@@ -61,6 +61,8 @@ export interface RunnerServices {
   oauth_fetch?: (service_id: string, opts: { url: string; method: string; headers?: Record<string, string>; body?: unknown }) => Promise<{ status: number; body: unknown; headers: Record<string, string> }>;
   /** Webhook 수신 데이터 조회 (webhook 노드용). */
   get_webhook_data?: (path: string) => Promise<{ method: string; headers: Record<string, string>; body: unknown; query: Record<string, string> } | null>;
+  /** 칸반 이벤트 대기 (kanban_trigger 노드용). */
+  wait_kanban_event?: (board_id: string, filter: { actions?: string[]; column_id?: string }) => Promise<{ card_id: string; board_id: string; action: string; actor: string; detail: Record<string, unknown>; created_at: string } | null>;
 }
 
 /** 런너 레벨 실행에 필요한 컨텍스트. 채널 콜백, 로거, 이벤트 emitter 등. */

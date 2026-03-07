@@ -1,4 +1,5 @@
 import { slash_name_in } from "../slash-command.js";
+import { format_subcommand_guide, format_subcommand_usage } from "./registry.js";
 import { format_mention, type CommandContext, type CommandHandler } from "./types.js";
 
 const ALIASES = ["skill", "skills", "스킬", "스킬관리"] as const;
@@ -61,7 +62,11 @@ export class SkillHandler implements CommandHandler {
       return true;
     }
 
-    // 기본: 요약 목록
+    // 인자 없이 호출: 세부 기능 안내
+    if (!action) {
+      const guide = format_subcommand_guide("skill");
+      if (guide) { await ctx.send_reply(`${mention}${guide}`); return true; }
+    }
     await ctx.send_reply(`${mention}${this.format_list(false)}`);
     return true;
   }
@@ -84,7 +89,7 @@ export class SkillHandler implements CommandHandler {
   }
 
   private format_info(name: string): string {
-    if (!name) return "사용법: /skill info <name>";
+    if (!name) return format_subcommand_usage("skill", "info");
     const skill = this.access.get_skill(name);
     if (!skill) return `스킬을 찾을 수 없습니다: ${name}`;
 
@@ -111,7 +116,7 @@ export class SkillHandler implements CommandHandler {
   }
 
   private format_recommend(task: string): string {
-    if (!task) return "사용법: /skill recommend <작업 설명>";
+    if (!task) return format_subcommand_usage("skill", "recommend");
     const names = this.access.recommend(task, 5);
     if (!names.length) return "추천할 스킬이 없습니다.";
     const lines = names.map((n, i) => `${i + 1}. ${n}`);

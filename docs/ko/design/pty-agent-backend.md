@@ -38,7 +38,7 @@
                        ┌─────────────┼─────────────┐
                        │             │             │
                   ┌────┴───┐   ┌────┴────┐   ┌───┴──────┐
-                  │ butler │   │  impl   │   │ reviewer │
+                  │ concierge │   │  impl   │   │ reviewer │
                   │ claude │   │  codex  │   │ claude   │
                   └────────┘   └─────────┘   └──────────┘
 ```
@@ -63,7 +63,7 @@ function spawn(
   file: string,                  // "claude", "codex"
   args: string[],                // ["--headless", "--session", key, "--output-format", "ndjson"]
   options: {
-    name: string;                // 컨테이너명: "agent-slack-C123-butler"
+    name: string;                // 컨테이너명: "agent-slack-C123-concierge"
     cols: number;                // 터미널 폭 (headless에서는 참고용)
     rows: number;                // 터미널 높이
     cwd: string;                 // 작업 디렉토리: "/workspace"
@@ -422,7 +422,7 @@ interface DockerOps {
 ### 세션 키 → 컨테이너 네이밍
 
 ```
-session key: slack:C123:butler     → container: agent-slack-C123-butler
+session key: slack:C123:concierge     → container: agent-slack-C123-concierge
 session key: subagent:task-42      → container: agent-subagent-task-42
 ```
 
@@ -501,7 +501,7 @@ Layer 7 (Proxy)     : Docker socket — API 화이트리스트
 
 ```yaml
 services:
-  agent-butler:
+  agent-concierge:
     secrets:
       - anthropic_api_key   # /run/secrets/ (메모리 내 tmpfs)
 ```

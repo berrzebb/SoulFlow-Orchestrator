@@ -3,9 +3,9 @@
 HTML/CSS로 레이아웃을 잡고 PDF로 변환한다.
 표·이미지·한글 폰트가 포함된 보고서에 적합. Markdown 변환도 지원.
 
-```powershell
-$R = if (Get-Command podman -EA 0) { "podman" } else { "docker" }
-& $R run --rm -v "${PWD}:/workspace:rw" -w /workspace python:3.12-slim sh -lc "
+```bash
+R=$(command -v podman >/dev/null 2>&1 && echo podman || echo docker)
+$R run --rm -v "$PWD:/workspace:rw" -w /workspace python:3.12-slim sh -lc "
   pip install -q weasyprint && python script.py
 "
 ```
@@ -56,8 +56,8 @@ HTML(string=full_html).write_pdf("output.pdf")
 print("saved: output.pdf")
 ```
 
-```powershell
-& $R run --rm -v "${PWD}:/workspace:rw" -w /workspace python:3.12-slim sh -lc "
+```bash
+$R run --rm -v "$PWD:/workspace:rw" -w /workspace python:3.12-slim sh -lc "
   pip install -q weasyprint markdown2 && python script.py
 "
 ```

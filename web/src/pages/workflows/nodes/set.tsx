@@ -9,7 +9,7 @@ function SetEditPanel({ node, update, t }: EditPanelProps) {
     setRaw(val);
     if (!val.trim()) { setErr(""); update({ assignments: [] }); return; }
     try { update({ assignments: JSON.parse(val) }); setErr(""); }
-    catch { setErr("Invalid JSON"); }
+    catch { setErr(t("workflows.invalid_json")); }
   };
 
   return (
@@ -34,7 +34,7 @@ export const set_descriptor: FrontendNodeDescriptor = {
   icon: "=",
   color: "#1abc9c",
   shape: "rect",
-  toolbar_label: "+ Set",
+  toolbar_label: "node.set.label",
   category: "data",
   output_schema: [],  // 동적: assignments에서 추출
   input_schema: [],

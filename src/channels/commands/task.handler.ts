@@ -13,6 +13,7 @@ import type { TaskState, AgentLoopState } from "../../contracts.js";
 import type { ProcessEntry } from "../../orchestration/process-tracker.js";
 import { STATUS_EMOJI } from "../../orchestration/prompts.js";
 import { slash_name_in } from "../slash-command.js";
+import { format_subcommand_guide, format_subcommand_usage } from "./registry.js";
 import { format_mention, type CommandContext, type CommandHandler } from "./types.js";
 
 const ALIASES = ["task", "tasks", "작업"] as const;
@@ -45,6 +46,11 @@ export class TaskHandler implements CommandHandler {
     const action = resolve_action(command?.args || []);
 
     switch (action.type) {
+      case "guide": {
+        const guide = format_subcommand_guide("task");
+        await ctx.send_reply(`${mention}${guide}`);
+        return true;
+      }
       case "list": {
         const processes = this.access.list_active_processes();
         const tasks = this.access.list_active_tasks();
@@ -58,7 +64,7 @@ export class TaskHandler implements CommandHandler {
       }
       case "status": {
         if (!action.task_id) {
-          await ctx.send_reply(`${mention}사용법: /task status <id>`);
+          await ctx.send_reply(`${mention}${format_subcommand_usage("task", "status")}`);
           return true;
         }
         const process = this.access.get_process(action.task_id);
@@ -81,7 +87,7 @@ export class TaskHandler implements CommandHandler {
       }
       case "cancel": {
         if (!action.task_id) {
-          await ctx.send_reply(`${mention}사용법: /task cancel <id|all>`);
+          await ctx.send_reply(`${mention}${format_subcommand_usage("task", "cancel")}`);
           return true;
         }
         if (action.task_id === "all" || action.task_id === "전체") {
@@ -115,7 +121,7 @@ export class TaskHandler implements CommandHandler {
         return true;
       }
       default:
-        await ctx.send_reply(`${mention}사용법: /task [list|status <id>|cancel <id|all>|recent]`);
+        await ctx.send_reply(`${mention}${format_subcommand_guide("task")}`);
         return true;
     }
   }
@@ -150,6 +156,7 @@ export class TaskHandler implements CommandHandler {
 }
 
 type TaskAction =
+  | { type: "guide" }
   | { type: "list" }
   | { type: "status"; task_id: string | null }
   | { type: "cancel"; task_id: string | null }
@@ -157,7 +164,7 @@ type TaskAction =
   | { type: "unknown" };
 
 function resolve_action(args: string[]): TaskAction {
-  if (args.length === 0) return { type: "list" };
+  if (args.length === 0) return { type: "guide" };
   const sub = args[0]?.toLowerCase() || "";
   if (sub === "list" || sub === "목록") return { type: "list" };
   if (sub === "status" || sub === "상태") return { type: "status", task_id: args[1] || null };

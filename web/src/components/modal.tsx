@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import { useState, useEffect, useRef, type ReactNode } from "react";
 import { useT } from "../i18n";
 
 /** body 스크롤 락 + Esc 키 바인딩 */
@@ -33,8 +33,8 @@ export function Modal({ open, title, children, onClose, onConfirm, confirmLabel,
   useEffect(() => { if (open) modalRef.current?.focus(); }, [open]);
   if (!open) return null;
   return (
-    <div className="modal-overlay" onClick={onClose} role="dialog" aria-modal="true" aria-label={title}>
-      <div className="modal" ref={modalRef} tabIndex={-1} onClick={(e) => e.stopPropagation()}>
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" ref={modalRef} tabIndex={-1} onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label={title}>
         <div className="modal__header">
           <h3 className="modal__title">{title}</h3>
           <button className="modal__close" onClick={onClose} aria-label={t("common.close_modal")}>✕</button>
@@ -51,6 +51,28 @@ export function Modal({ open, title, children, onClose, onConfirm, confirmLabel,
       </div>
     </div>
   );
+}
+
+/** window.confirm 대체 훅 — 커스텀 모달 기반 확인 다이얼로그. */
+export function useConfirm(): {
+  confirm: (message: string, onOk: () => void) => void;
+  dialog: ReactNode;
+} {
+  const [state, setState] = useState<{ message: string; onOk: () => void } | null>(null);
+  const confirm = (message: string, onOk: () => void) => setState({ message, onOk });
+  const close = () => setState(null);
+  const dialog = (
+    <Modal
+      open={!!state}
+      title=""
+      onClose={close}
+      onConfirm={() => { state?.onOk(); close(); }}
+      danger
+    >
+      <p>{state?.message}</p>
+    </Modal>
+  );
+  return { confirm, dialog };
 }
 
 /** form 전용 모달 — onSubmit 핸들러를 래핑하고 Save/Cancel 푸터 제공 */
@@ -72,8 +94,8 @@ export function FormModal({ open, title, children, onClose, onSubmit, submitLabe
   useEffect(() => { if (open) modalRef.current?.focus(); }, [open]);
   if (!open) return null;
   return (
-    <div className="modal-overlay" onClick={onClose} role="dialog" aria-modal="true" aria-label={title}>
-      <div className={`modal${wide ? " modal--wide" : ""}`} ref={modalRef} tabIndex={-1} onClick={(e) => e.stopPropagation()}>
+    <div className="modal-overlay" onClick={onClose}>
+      <div className={`modal${wide ? " modal--wide" : ""}`} ref={modalRef} tabIndex={-1} onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label={title}>
         <div className="modal__header">
           <h3 className="modal__title">{title}</h3>
           <button className="modal__close" onClick={onClose} aria-label={t("common.close_modal")}>✕</button>

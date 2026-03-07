@@ -38,7 +38,7 @@ The skill format and metadata structure follow OpenClaw's conventions to maintai
 
 | Role | Name | Description |
 |------|------|-------------|
-| `butler` | `role:butler` | 범용 집사. 사용자 직접 대면, 개발 작업 감지 시 PM/PL에 위임 |
+| `concierge` | `role:concierge` | 사용자 직접 대면. 일상 작업 처리, 개발 작업 감지 시 PM/PL에 위임 |
 | `pm` | `role:pm` | 기획 전담. 요구사항 분석, 스펙 작성, 우선순위 결정 |
 | `pl` | `role:pl` | 실행 조율. 개발팀 spawn, 진행 감독, Phase Gate 판정 |
 | `generalist` | `role:generalist` | 범용 서브에이전트. 전문 역할이 불필요한 단일 작업 |
@@ -50,7 +50,7 @@ The skill format and metadata structure follow OpenClaw's conventions to maintai
 ### 위임 계층
 
 ```
-butler (사용자 대면)
+concierge (사용자 대면)
   ├── pm (기획 필요)
   │     └── pl (실행 위임)
   └── pl (즉시 실행)

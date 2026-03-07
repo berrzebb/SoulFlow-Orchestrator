@@ -26,7 +26,7 @@ workspace/skills/
 
 | 종류 | 위치 | 특징 |
 |------|------|------|
-| **builtin** | 소스 코드 내부 | 역할 스킬 (butler · pm · pl · implementer 등) — 읽기 전용 |
+| **builtin** | 소스 코드 내부 | 역할 스킬 (concierge · pm · pl · implementer 등) — 읽기 전용 |
 | **workspace** | `workspace/skills/` | 사용자 정의 스킬 — 대시보드에서 추가/편집/삭제 가능 |
 
 `workspace/skills/`의 모든 스킬은 사용자가 직접 추가하고 관리하는 커스텀 스킬입니다.

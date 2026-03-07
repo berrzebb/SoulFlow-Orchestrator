@@ -18,3 +18,6 @@ export { AgentHandler, type AgentAccess } from "./agent.handler.js";
 export { StatsHandler, type StatsAccess } from "./stats.handler.js";
 export { VerifyHandler, type VerifyAccess } from "./verify.handler.js";
 export { GuardHandler } from "./guard.handler.js";
+export { WorkflowHandler, type WorkflowAccess } from "./workflow.handler.js";
+export { ModelHandler, type ModelAccess } from "./model.handler.js";
+export { McpHandler, type McpAccess } from "./mcp.handler.js";

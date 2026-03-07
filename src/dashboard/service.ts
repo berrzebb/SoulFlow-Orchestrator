@@ -50,6 +50,8 @@ import { handle_oauth } from "./routes/oauth.js";
 import { handle_cli_auth } from "./routes/cli-auth.js";
 import { handle_models } from "./routes/models.js";
 import { handle_workflow, handle_workflow_node } from "./routes/workflows.js";
+import { handle_kanban } from "./routes/kanban.js";
+import { handle_references } from "./routes/references.js";
 
 const RE_MEDIA_TOKEN = /^\/media\/([a-z0-9]{16,})$/i;
 
@@ -148,6 +150,7 @@ export interface AgentProviderStatusInfo {
   label: string;
   enabled: boolean;
   priority: number;
+  model_purpose: "chat" | "embedding";
   supported_modes: string[];
   settings: Record<string, unknown>;
   created_at: string;
@@ -167,6 +170,7 @@ export interface DashboardAgentProviderOps {
     label?: string;
     enabled?: boolean;
     priority?: number;
+    model_purpose?: string;
     supported_modes?: string[];
     settings?: Record<string, unknown>;
     token?: string;
@@ -175,6 +179,7 @@ export interface DashboardAgentProviderOps {
     label?: string;
     enabled?: boolean;
     priority?: number;
+    model_purpose?: string;
     supported_modes?: string[];
     settings?: Record<string, unknown>;
     token?: string;
@@ -182,6 +187,8 @@ export interface DashboardAgentProviderOps {
   remove(instance_id: string): Promise<{ ok: boolean; error?: string }>;
   test_availability(instance_id: string): Promise<{ ok: boolean; detail?: string; error?: string }>;
   list_provider_types(): string[];
+  /** 프로바이더 타입에 대해 사용 가능한 모델 목록을 동적 조회. */
+  list_models(provider_type: string, opts?: { api_key?: string; api_base?: string }): Promise<import("../services/model-catalog.js").ModelInfo[]>;
 }
 
 export interface BootstrapOps {
@@ -191,6 +198,7 @@ export interface BootstrapOps {
     executor?: string;
     orchestrator?: string;
     alias?: string;
+    persona_name?: string;
   }): Promise<{ ok: boolean; error?: string }>;
 }
 
@@ -275,6 +283,8 @@ export interface DashboardWorkflowOps {
   run_single_node?(node: Record<string, unknown>, input_memory: Record<string, unknown>): Promise<{ ok: boolean; output?: unknown; duration_ms?: number; error?: string }>;
   /** 단일 노드 테스트 (Dry-run). */
   test_single_node?(node: Record<string, unknown>, input_memory: Record<string, unknown>): { ok: boolean; preview?: unknown; warnings?: string[] };
+  /** 자연어 instruction으로 워크플로우 수정 제안. */
+  suggest?(instruction: string, workflow: Record<string, unknown>): Promise<{ ok: boolean; workflow?: Record<string, unknown>; error?: string }>;
 }
 
 export interface DashboardCliAuthOps {
@@ -317,6 +327,8 @@ export type DashboardOptions = {
   cli_auth_ops?: DashboardCliAuthOps | null;
   model_ops?: DashboardModelOps | null;
   workflow_ops?: DashboardWorkflowOps | null;
+  kanban_store?: import("../services/kanban-store.js").KanbanStoreLike | null;
+  reference_store?: import("../services/reference-store.js").ReferenceStoreLike | null;
   default_alias?: string;
   workspace?: string;
   logger?: Logger | null;
@@ -490,7 +502,10 @@ export class DashboardService implements ServiceLike {
     this.route_map.set("/api/workflow/runs", handle_workflow);
     this.route_map.set("/api/workflow/roles", handle_workflow);
     this.route_map.set("/api/workflow/templates", handle_workflow);
+    this.route_map.set("/api/workflow/suggest", handle_workflow);
     this.route_map.set("/api/workflow/node", handle_workflow_node);
+    this.route_map.set("/api/kanban", handle_kanban);
+    this.route_map.set("/api/references", handle_references);
     this.route_map.set("/api/stats", handle_health);
     this.route_map.set("/api/dlq", handle_health);
     this.route_map.set("/api/workflow/events", handle_health);

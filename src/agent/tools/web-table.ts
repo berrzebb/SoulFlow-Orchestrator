@@ -3,34 +3,10 @@
 import { Tool } from "./base.js";
 import { error_message } from "../../utils/common.js";
 import type { JsonSchema, ToolExecutionContext } from "./types.js";
-import { execFile, spawnSync } from "node:child_process";
-import { promisify } from "node:util";
+import { run_agent_browser } from "./agent-browser-client.js";
 
-const exec_file_async = promisify(execFile);
-
-function detect_agent_browser(): string | null {
-  const bin = process.platform === "win32" ? "agent-browser.cmd" : "agent-browser";
-  const checker = process.platform === "win32" ? "where" : "which";
-  const r = spawnSync(checker, [bin], { stdio: "ignore", windowsHide: true, shell: false });
-  return r.status === 0 ? bin : null;
-}
-
-async function run_ab(args: string[], signal?: AbortSignal, timeout_ms = 30_000): Promise<{ ok: boolean; stdout: string; parsed: Record<string, unknown> | null }> {
-  const bin = detect_agent_browser();
-  if (!bin) return { ok: false, stdout: "", parsed: null };
-  try {
-    const cmd = process.platform === "win32" ? "cmd.exe" : bin;
-    const cmd_args = process.platform === "win32"
-      ? ["/d", "/s", "/c", [bin, ...args.map((a) => `"${a}"`)].join(" ")]
-      : args;
-    const r = await exec_file_async(cmd, cmd_args, { timeout: timeout_ms, maxBuffer: 1024 * 1024 * 16, signal, windowsHide: true });
-    const stdout = String(r.stdout || "");
-    const lines = stdout.split(/\r?\n/).filter(Boolean);
-    for (let i = lines.length - 1; i >= 0; i--) {
-      try { const p = JSON.parse(lines[i]); if (p && typeof p === "object") return { ok: true, stdout, parsed: p as Record<string, unknown> }; } catch { /* next */ }
-    }
-    return { ok: true, stdout, parsed: null };
-  } catch { return { ok: false, stdout: "", parsed: null }; }
+async function run_ab(args: string[], signal?: AbortSignal, timeout_ms = 30_000) {
+  return run_agent_browser(args, { signal, timeout_ms });
 }
 
 export class WebTableTool extends Tool {

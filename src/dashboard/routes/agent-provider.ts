@@ -12,6 +12,18 @@ export async function handle_agent_provider(ctx: RouteContext): Promise<boolean>
     return true;
   }
 
+  // GET /api/agents/providers/models/:provider_type — 프로바이더 타입별 모델 목록
+  const type_models_match = path.match(/^\/api\/agents\/providers\/models\/([^/]+)$/);
+  if (type_models_match && req.method === "GET") {
+    const ops = options.agent_provider_ops;
+    if (!ops) { json(res, 503, { error: "agent_provider_ops_unavailable" }); return true; }
+    const provider_type = decodeURIComponent(type_models_match[1]);
+    const api_base = url.searchParams.get("api_base") || undefined;
+    const models = await ops.list_models(provider_type, { api_base });
+    json(res, 200, models);
+    return true;
+  }
+
   // GET /api/agents/providers
   if (path === "/api/agents/providers" && req.method === "GET") {
     const ops = options.agent_provider_ops;
@@ -28,6 +40,31 @@ export async function handle_agent_provider(ctx: RouteContext): Promise<boolean>
     if (!body) { json(res, 400, { error: "invalid_body" }); return true; }
     const result = await ops.create(body as Parameters<typeof ops.create>[0]);
     json(res, result.ok ? 201 : 400, result);
+    return true;
+  }
+
+  // POST /api/agents/providers/:id/test
+  const test_match = path.match(/^\/api\/agents\/providers\/([^/]+)\/test$/);
+  if (test_match && req.method === "POST") {
+    const ops = options.agent_provider_ops;
+    if (!ops) { json(res, 503, { error: "agent_provider_ops_unavailable" }); return true; }
+    const id = decodeURIComponent(test_match[1]);
+    const result = await ops.test_availability(id);
+    json(res, result.ok ? 200 : 400, result);
+    return true;
+  }
+
+  // GET /api/agents/providers/:id/models — 인스턴스별 모델 목록
+  const inst_models_match = path.match(/^\/api\/agents\/providers\/([^/]+)\/models$/);
+  if (inst_models_match && req.method === "GET") {
+    const ops = options.agent_provider_ops;
+    if (!ops) { json(res, 503, { error: "agent_provider_ops_unavailable" }); return true; }
+    const id = decodeURIComponent(inst_models_match[1]);
+    const config = await ops.get(id);
+    if (!config) { json(res, 404, { error: "not_found" }); return true; }
+    const api_base = typeof config.settings?.api_base === "string" ? config.settings.api_base : undefined;
+    const models = await ops.list_models(config.provider_type, { api_base });
+    json(res, 200, models);
     return true;
   }
 
@@ -61,17 +98,6 @@ export async function handle_agent_provider(ctx: RouteContext): Promise<boolean>
     const id = decodeURIComponent(id_match[1]);
     const result = await ops.remove(id);
     json(res, result.ok ? 200 : 404, result);
-    return true;
-  }
-
-  // POST /api/agents/providers/:id/test
-  const test_match = path.match(/^\/api\/agents\/providers\/([^/]+)\/test$/);
-  if (test_match && req.method === "POST") {
-    const ops = options.agent_provider_ops;
-    if (!ops) { json(res, 503, { error: "agent_provider_ops_unavailable" }); return true; }
-    const id = decodeURIComponent(test_match[1]);
-    const result = await ops.test_availability(id);
-    json(res, result.ok ? 200 : 400, result);
     return true;
   }
 

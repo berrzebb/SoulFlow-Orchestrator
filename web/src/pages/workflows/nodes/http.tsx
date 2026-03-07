@@ -9,7 +9,7 @@ function HttpEditPanel({ node, update, t }: EditPanelProps) {
     setHeadersRaw(val);
     if (!val.trim()) { setHeadersErr(""); update({ headers: undefined }); return; }
     try { update({ headers: JSON.parse(val) }); setHeadersErr(""); }
-    catch { setHeadersErr("Invalid JSON"); }
+    catch { setHeadersErr(t("workflows.invalid_json")); }
   };
 
   return (
@@ -55,18 +55,18 @@ export const http_descriptor: FrontendNodeDescriptor = {
   icon: "↗",
   color: "#3498db",
   shape: "rect",
-  toolbar_label: "+ HTTP",
+  toolbar_label: "node.http.label",
   category: "integration",
   output_schema: [
-    { name: "status",       type: "number",  description: "HTTP status code" },
-    { name: "body",         type: "object",  description: "Response body" },
-    { name: "content_type", type: "string",  description: "Content-Type" },
-    { name: "headers",      type: "object",  description: "Response headers" },
+    { name: "status",       type: "number",  description: "node.http.output.status" },
+    { name: "body",         type: "object",  description: "node.http.output.body" },
+    { name: "content_type", type: "string",  description: "node.http.output.content_type" },
+    { name: "headers",      type: "object",  description: "node.http.output.headers" },
   ],
   input_schema: [
-    { name: "url",     type: "string", description: "Request URL" },
-    { name: "headers", type: "object", description: "Request headers" },
-    { name: "body",    type: "object", description: "Request body" },
+    { name: "url",     type: "string", description: "node.http.input.url" },
+    { name: "headers", type: "object", description: "node.http.input.headers" },
+    { name: "body",    type: "object", description: "node.http.input.body" },
   ],
   create_default: () => ({ url: "", method: "GET" }),
   EditPanel: HttpEditPanel,

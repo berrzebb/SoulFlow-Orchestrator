@@ -2,7 +2,7 @@
  * 3자 토론 E2E 테스트 — 실제 Claude, Codex, Gemini CLI.
  *
  * 실제 CLI를 LocalPty로 spawn하여 ContainerCliAgent 경유 토론.
- * butler(claude) → impl(codex) → reviewer(gemini) 순차 토론 시나리오.
+ * concierge(claude) → impl(codex) → reviewer(gemini) 순차 토론 시나리오.
  *
  * 실행: npx vitest run tests/agent/pty/e2e-3agent-discussion.test.ts
  * 환경변수:
@@ -34,7 +34,7 @@ function cli_available(cmd: string): boolean {
 }
 
 const ALL_ROLES: CliRole[] = [
-  { name: "butler", cli: "claude", adapter: new ClaudeCliAdapter() },
+  { name: "concierge", cli: "claude", adapter: new ClaudeCliAdapter() },
   { name: "impl", cli: "codex", adapter: new CodexCliAdapter() },
   { name: "reviewer", cli: "gemini", adapter: new GeminiCliAdapter() },
 ];

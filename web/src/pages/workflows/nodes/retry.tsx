@@ -16,9 +16,9 @@ function RetryEditPanel({ node, update, t }: EditPanelProps) {
         <div className="builder-row">
           <label className="label">{t("workflows.retry_backoff")}</label>
           <select className="input input--sm" value={String(node.backoff || "exponential")} onChange={(e) => update({ backoff: e.target.value })}>
-            <option value="exponential">Exponential</option>
-            <option value="linear">Linear</option>
-            <option value="fixed">Fixed</option>
+            <option value="exponential">{t("workflows.opt_exponential")}</option>
+            <option value="linear">{t("workflows.opt_linear")}</option>
+            <option value="fixed">{t("workflows.opt_fixed")}</option>
           </select>
         </div>
       </div>
@@ -43,17 +43,17 @@ export const retry_descriptor: FrontendNodeDescriptor = {
   icon: "🔄",
   color: "#ff5722",
   shape: "rect",
-  toolbar_label: "+ Retry",
+  toolbar_label: "node.retry.label",
   category: "flow",
   output_schema: [
-    { name: "result",     type: "unknown", description: "Final result (success or last attempt)" },
-    { name: "attempts",   type: "number",  description: "Total attempts made" },
-    { name: "succeeded",  type: "boolean", description: "Whether any attempt succeeded" },
-    { name: "last_error", type: "string",  description: "Last error message" },
+    { name: "result",     type: "unknown", description: "node.retry.output.result" },
+    { name: "attempts",   type: "number",  description: "node.retry.output.attempts" },
+    { name: "succeeded",  type: "boolean", description: "node.retry.output.succeeded" },
+    { name: "last_error", type: "string",  description: "node.retry.output.last_error" },
   ],
   input_schema: [
-    { name: "target_output", type: "unknown", description: "Output from target node" },
-    { name: "target_error",  type: "string",  description: "Error from target node" },
+    { name: "target_output", type: "unknown", description: "node.retry.input.target_output" },
+    { name: "target_error",  type: "string",  description: "node.retry.input.target_error" },
   ],
   create_default: () => ({ target_node: "", max_attempts: 3, backoff: "exponential", initial_delay_ms: 1000, max_delay_ms: 30000 }),
   EditPanel: RetryEditPanel,

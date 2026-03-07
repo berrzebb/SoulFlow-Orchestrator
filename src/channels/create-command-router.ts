@@ -19,6 +19,7 @@ import {
   StatsHandler,
   VerifyHandler,
   GuardHandler,
+  McpHandler,
 } from "./commands/index.js";
 import type { ChannelProvider } from "./types.js";
 import type { AgentDomain } from "../agent/index.js";
@@ -145,5 +146,14 @@ export function create_command_router(deps: CommandRouterDeps): CommandRouter {
       run_verification: (task) => agent_runtime.spawn_and_wait({ task, max_turns: 5, timeout_ms: 60_000 }),
     }),
     ...(deps.confirmation_guard ? [new GuardHandler(deps.confirmation_guard)] : []),
+    new McpHandler({
+      list_servers: () => mcp.list_servers().map((s) => ({ name: s.name, connected: s.connected, tool_count: s.tools.length, error: s.error })),
+      reconnect: async (name) => {
+        const configs = mcp.get_server_configs();
+        const config = configs[name];
+        if (!config) return false;
+        try { await mcp.connect_server(name, config); return true; } catch { return false; }
+      },
+    }),
   ]);
 }

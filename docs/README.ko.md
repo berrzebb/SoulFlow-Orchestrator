@@ -67,7 +67,7 @@ flowchart TD
 
     subgraph Skills["역할 스킬 (8)"]
         direction TB
-        BT[butler]
+        BT[concierge]
         PM[pm · pl]
         IMPL[implementer · reviewer]
         DBG[debugger · validator]
@@ -104,7 +104,7 @@ flowchart TD
 | **채널 매니저** | Slack · Telegram · Discord 수신/응답 | 스트리밍 · 그룹핑 · typing 갱신 |
 | **오케스트레이터** | 인바운드 → 에이전트 실행 | Agent Loop · Task Loop · Phase Loop 삼중 모드 |
 | **에이전트 백엔드** | Claude/Codex × CLI/SDK 실행 | CircuitBreaker · HealthScorer · 자동 fallback |
-| **역할 스킬** | 8개 역할 계층적 분담 | butler → pm/pl → implementer/reviewer/validator/debugger |
+| **역할 스킬** | 8개 역할 계층적 분담 | concierge → pm/pl → implementer/reviewer/validator/debugger |
 | **보안 Vault** | AES-256-GCM 민감정보 관리 | 인바운드 자동 sealing · 도구 경로 복호화만 허용 |
 | **OAuth 연동** | 외부 서비스 인증 | GitHub · Google · Custom OAuth 2.0 |
 | **워크플로우 엔진** | Phase Loop · DAG 실행 | 120종 노드 그래프 에디터 · 6개 카테고리 · HITL 인터랙션 노드 |
@@ -130,7 +130,7 @@ flowchart TD
 
 | 역할 | 전문 분야 | 위임 방향 |
 |------|----------|----------|
-| `butler` | 요청 수신 · 역할 라우팅 | → pm/pl/generalist |
+| `concierge` | 요청 수신 · 역할 라우팅 | → pm/pl/generalist |
 | `pm` | 요구사항 분석 · 태스크 분해 | → implementer |
 | `pl` | 기술 리드 · 아키텍처 설계 | → implementer/reviewer |
 | `implementer` | 실제 구현 · 코드 작성 | — |
@@ -194,7 +194,7 @@ Wizard에서 다음을 순서대로 설정합니다:
 | 페이지 | 경로 | 기능 |
 |--------|------|------|
 | Overview | `/` | 런타임 상태 요약, 시스템 메트릭, SSE 실시간 피드 |
-| Workspace | `/workspace` | 메모리 · 세션 · 스킬 · 크론 · 도구 · 에이전트 · 템플릿 · OAuth (8탭) |
+| Workspace | `/workspace` | 메모리 · 세션 · 스킬 · 크론 · 도구 · 에이전트 · 템플릿 · OAuth · 모델 · 레퍼런스 (10탭) |
 | Chat | `/chat` | 웹 기반 에이전트 대화 (마크다운 렌더링 + 코드 하이라이팅) |
 | Channels | `/channels` | 채널 연결 상태 · 글로벌 설정 |
 | Providers | `/providers` | 에이전트 프로바이더 CRUD · Circuit Breaker 상태 |
@@ -218,11 +218,11 @@ GitHub · Google · Custom OAuth 2.0 외부 서비스 연동. 대시보드 Works
 
 ## 사용 예시
 
-**단순 작업** (butler → 자동 역할 분배):
+**단순 작업** (concierge → 자동 역할 분배):
 
 ```
 사용자: 이 코드에서 버그 찾아줘
-→ butler → debugger 활성화 → 근본 원인 분석 → 응답
+→ concierge → debugger 활성화 → 근본 원인 분석 → 응답
 ```
 
 **다중 에이전트 Phase Loop** (병렬 전문가 + 크리틱 품질 게이트):
@@ -321,6 +321,9 @@ GitHub · Google · Custom OAuth 2.0 외부 서비스 연동. 대시보드 Works
 | `/verify` | 출력물 검증 |
 | `/guard on\|off` | 위험 작업 확인 게이트 토글 |
 | `/doctor` | 런타임 자가진단 (서비스 건강 상태 점검) |
+| `/workflow list\|create\|cancel <id>` | Phase Loop 워크플로우 관리 |
+| `/model list\|set <name>` | 오케스트레이터 LLM 모델 전환 |
+| `/mcp list\|reconnect <name>` | MCP 서버 상태/재연결 |
 
 ## 디렉터리 구조
 
@@ -348,13 +351,16 @@ next/
     oauth/          ← OAuth 2.0 연동 (flow-service, integration-store)
     i18n/           ← 공유 i18n 프로토콜 + JSON 로케일 (en, ko)
     orchestration/  ← Gateway · Classifier · Prompts · ToolCallHandler · NodeSelector · ToolIndex · ConfirmationGuard
-    services/       ← 도메인 서비스 (embed, vector-store, query-db, webhook-store, create-task, kanban-store)
+    runtime/        ← 인스턴스 잠금 · ServiceManager · 서비스 타입
+    services/       ← 도메인 서비스 (embed, vector-store, query-db, webhook-store, kanban-store, model-catalog, reference-store)
     security/       ← Secret Vault (AES-256-GCM)
     session/        ← 세션 저장소
     skills/
       _shared/      ← 공유 프로토콜
       roles/        ← 8개 역할 스킬
-  scripts/          ← oauth-relay.mjs (OAuth TCP 릴레이)
+  scripts/
+    scaffold/       ← 코드 생성기 (tool, node, handler, route, page)
+    i18n-sync.ts    ← i18n 키 동기화 (--check / --fix)
   workspace/
     templates/      ← 시스템 프롬프트 템플릿
     skills/         ← 사용자 정의 스킬

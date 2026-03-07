@@ -23,17 +23,26 @@ export function fmt_schedule(s: ScheduleLike | undefined): string {
   return s.kind;
 }
 
-/** 상대 시간 표시 (e.g., "3분 전", "2 hours ago"). */
-export function time_ago(date: string | number | Date): string {
+const rtf_cache = new Map<string, Intl.RelativeTimeFormat>();
+function get_rtf(locale: string): Intl.RelativeTimeFormat {
+  let rtf = rtf_cache.get(locale);
+  if (!rtf) { rtf = new Intl.RelativeTimeFormat(locale, { numeric: "auto", style: "narrow" }); rtf_cache.set(locale, rtf); }
+  return rtf;
+}
+
+/** 상대 시간 표시 — Intl.RelativeTimeFormat 기반 로케일 자동 대응. */
+export function time_ago(date: string | number | Date, locale?: string): string {
   const now = Date.now();
   const then = new Date(date).getTime();
   const diff = Math.max(0, now - then);
   const sec = Math.floor(diff / 1000);
-  if (sec < 60) return `${sec}s ago`;
+  const rtf = get_rtf(locale ?? navigator.language);
+
+  if (sec < 60) return rtf.format(-sec, "second");
   const min = Math.floor(sec / 60);
-  if (min < 60) return `${min}m ago`;
+  if (min < 60) return rtf.format(-min, "minute");
   const hr = Math.floor(min / 60);
-  if (hr < 24) return `${hr}h ago`;
+  if (hr < 24) return rtf.format(-hr, "hour");
   const day = Math.floor(hr / 24);
-  return `${day}d ago`;
+  return rtf.format(-day, "day");
 }

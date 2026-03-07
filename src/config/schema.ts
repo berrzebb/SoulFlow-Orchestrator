@@ -60,6 +60,13 @@ const OrchestratorLlmSchema = z.object({
   apiBase: z.string(),
 });
 
+const EmbeddingSchema = z.object({
+  /** Ollama API base URL. 설정 시 Ollama 우선 사용 (로컬, 무료). 비어있으면 OpenRouter 폴백. */
+  ollamaApiBase: z.string().default(""),
+  /** Ollama 임베딩 모델. */
+  ollamaModel: z.string().default("nomic-embed-text"),
+});
+
 const OrchestrationSchema = z.object({
   maxToolResultChars: z.number().min(50),
   orchestratorMaxTokens: z.number().min(256),
@@ -108,6 +115,7 @@ export const AppConfigSchema = z.object({
   channel: ChannelSchema,
   orchestration: OrchestrationSchema,
   orchestratorLlm: OrchestratorLlmSchema,
+  embedding: EmbeddingSchema,
   dashboard: DashboardSchema,
   cli: CliSchema,
   mcp: McpSchema,
@@ -180,6 +188,10 @@ export function get_config_defaults(): AppConfig {
       gpuEnabled: true,
       gpuArgs: [],
       apiBase: "http://ollama:11434/v1",
+    },
+    embedding: {
+      ollamaApiBase: "",
+      ollamaModel: "nomic-embed-text",
     },
     dashboard: {
       enabled: true,

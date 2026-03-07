@@ -40,6 +40,7 @@ export type ConfigSection =
   | "mcp"
   | "logging"
   | "orchestratorLlm"
+  | "embedding"
   | "ops";
 
 export const SECTION_LABELS: Record<ConfigSection, string> = {
@@ -54,6 +55,7 @@ export const SECTION_LABELS: Record<ConfigSection, string> = {
   mcp: "MCP Servers",
   logging: "Logging",
   orchestratorLlm: "Orchestrator LLM",
+  embedding: "Embedding",
   ops: "Operations",
 };
 
@@ -68,6 +70,7 @@ export const SECTION_ORDER: ConfigSection[] = [
   "cli",
   "mcp",
   "orchestratorLlm",
+  "embedding",
   "logging",
   "ops",
 ];
@@ -149,6 +152,10 @@ export const CONFIG_FIELDS: ConfigFieldMeta[] = [
   { path: "orchestratorLlm.autoStop", label: "Auto Stop", section: "orchestratorLlm", type: "boolean", env_key: "ORCHESTRATOR_LLM_AUTO_STOP", default_value: false, sensitive: false, restart_required: false, description: "Stop the container when the app shuts down" },
   { path: "orchestratorLlm.gpuEnabled", label: "GPU Enabled", section: "orchestratorLlm", type: "boolean", env_key: "ORCHESTRATOR_LLM_GPU_ENABLED", default_value: true, sensitive: false, restart_required: true, description: "Enable GPU acceleration for Ollama" },
   { path: "orchestratorLlm.apiBase", label: "API Base URL", section: "orchestratorLlm", type: "string", env_key: "ORCHESTRATOR_LLM_API_BASE", default_value: "http://ollama:11434/v1", sensitive: false, restart_required: true, description: "Ollama API base URL (OpenAI-compatible endpoint)" },
+
+  // ── Embedding ──
+  { path: "embedding.ollamaApiBase", label: "Ollama API Base", section: "embedding", type: "string", env_key: "EMBED_OLLAMA_API_BASE", default_value: "", sensitive: false, restart_required: true, description: "Ollama API base URL for embeddings. If set, Ollama is used instead of OpenRouter (local, free, fast)" },
+  { path: "embedding.ollamaModel", label: "Ollama Embed Model", section: "embedding", type: "string", env_key: "EMBED_OLLAMA_MODEL", default_value: "nomic-embed-text", sensitive: false, restart_required: true, description: "Embedding model name for Ollama (e.g. nomic-embed-text, mxbai-embed-large)" },
 
   // ── Logging ──
   { path: "logging.level", label: "Log Level", section: "logging", type: "select", env_key: "", default_value: "info", sensitive: false, restart_required: true, options: ["debug", "info", "warn", "error"], description: "Minimum log level for console output" },

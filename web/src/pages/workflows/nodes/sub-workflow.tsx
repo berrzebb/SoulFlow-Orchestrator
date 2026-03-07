@@ -10,7 +10,7 @@ function SubWorkflowEditPanel({ node, update, t, options }: EditPanelProps) {
     setMappingRaw(val);
     if (!val.trim()) { setMappingErr(""); update({ input_mapping: undefined }); return; }
     try { update({ input_mapping: JSON.parse(val) }); setMappingErr(""); }
-    catch { setMappingErr("Invalid JSON"); }
+    catch { setMappingErr(t("workflows.invalid_json")); }
   };
   return (
     <>
@@ -18,7 +18,7 @@ function SubWorkflowEditPanel({ node, update, t, options }: EditPanelProps) {
         <label className="label">{t("workflows.sub_workflow_name")}</label>
         {templates.length > 0 ? (
           <select className="input input--sm" value={String(node.workflow_name || "")} onChange={(e) => update({ workflow_name: e.target.value })}>
-            <option value="">{t("common.select") || "— Select —"}</option>
+            <option value="">{t("common.select")}</option>
             {templates.map((w) => <option key={w.slug} value={w.slug}>{w.title} ({w.slug})</option>)}
           </select>
         ) : (
@@ -46,14 +46,14 @@ export const sub_workflow_descriptor: FrontendNodeDescriptor = {
   icon: "↪",
   color: "#673ab7",
   shape: "rect",
-  toolbar_label: "+ Sub",
+  toolbar_label: "node.sub_workflow.label",
   category: "integration",
   output_schema: [
-    { name: "result", type: "object", description: "Sub-workflow final output" },
-    { name: "phases", type: "array",  description: "Phase results array" },
+    { name: "result", type: "object", description: "node.sub_workflow.output.result" },
+    { name: "phases", type: "array",  description: "node.sub_workflow.output.phases" },
   ],
   input_schema: [
-    { name: "variables", type: "object", description: "Input variables for sub-workflow" },
+    { name: "variables", type: "object", description: "node.sub_workflow.input.variables" },
   ],
   create_default: () => ({ workflow_name: "" }),
   EditPanel: SubWorkflowEditPanel,

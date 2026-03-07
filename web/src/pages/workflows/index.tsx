@@ -102,7 +102,7 @@ export default function WorkflowsPage() {
 
   const cancelMut = useMutation({
     mutationFn: (id: string) => api.del(`/api/workflow/runs/${id}`),
-    onSuccess: () => { toast(t("workflows.cancelled"), "ok"); qc.invalidateQueries({ queryKey: ["workflows"] }); setCancelTarget(null); },
+    onSuccess: () => { toast(t("workflows.cancelled"), "ok"); void qc.invalidateQueries({ queryKey: ["workflows"] }); setCancelTarget(null); },
     onError: () => toast(t("workflows.cancel_failed"), "err"),
   });
 
@@ -110,7 +110,7 @@ export default function WorkflowsPage() {
     mutationFn: (name: string) => api.del(`/api/workflow/templates/${encodeURIComponent(name)}`),
     onSuccess: () => {
       toast(t("workflows.template_deleted"), "ok");
-      qc.invalidateQueries({ queryKey: ["workflow-templates"] });
+      void qc.invalidateQueries({ queryKey: ["workflow-templates"] });
       setDeleteTarget(null);
     },
   });
@@ -121,7 +121,7 @@ export default function WorkflowsPage() {
     onSuccess: (data) => {
       if (data.ok && data.workflow_id) {
         setQuickObjective("");
-        qc.invalidateQueries({ queryKey: ["workflows"] });
+        void qc.invalidateQueries({ queryKey: ["workflows"] });
         toast(t("workflows.created"), "ok");
         navigate(`/workflows/${data.workflow_id}`);
       } else {
@@ -137,7 +137,7 @@ export default function WorkflowsPage() {
     onSuccess: (data) => {
       if (data.ok && data.workflow_id) {
         setSelectedTpl(null);
-        qc.invalidateQueries({ queryKey: ["workflows"] });
+        void qc.invalidateQueries({ queryKey: ["workflows"] });
         toast(t("workflows.created"), "ok");
         navigate(`/workflows/${data.workflow_id}`);
       } else {
@@ -165,45 +165,60 @@ export default function WorkflowsPage() {
 
   return (
     <div className="page">
-      {/* 헤더 */}
-      <div className="section-header">
-        <div>
-          <h2>{t("workflows.title")}</h2>
-          <p className="text-xs text-muted mt-0 mb-0">
-            {t("workflows.description")}
-          </p>
+      {/* 히어로 헤더 */}
+      <div className="wf-hero">
+        <div className="wf-hero__content">
+          <h1 className="wf-hero__title">{t("workflows.title")}</h1>
+          <p className="wf-hero__desc">{t("workflows.description")}</p>
+          {/* Quick Run */}
+          <form className="wf-hero__quick-run" onSubmit={handleQuickRun}>
+            <div className="wf-hero__input-wrap">
+              <svg className="wf-hero__input-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+              </svg>
+              <input
+                className="wf-hero__input"
+                value={quickObjective}
+                onChange={(e) => setQuickObjective(e.target.value)}
+                placeholder={t("workflows.quick_run_placeholder")}
+              />
+              <button className="wf-hero__run-btn" type="submit" disabled={!quickObjective.trim() || quickRunMut.isPending}>
+                {quickRunMut.isPending ? <span className="btn__spinner" /> : null}
+                {t("workflows.quick_run")}
+              </button>
+            </div>
+          </form>
         </div>
-        <div className="section-header__actions">
+        <div className="wf-hero__actions">
           {tab === "templates" && (
-            <button className="btn btn--sm" onClick={() => setShowImport(true)}>
+            <button className="btn btn--sm btn--ghost" onClick={() => setShowImport(true)}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
               {t("workflows.import")}
             </button>
           )}
           <button className="btn btn--sm btn--accent" onClick={() => navigate("/workflows/new")}>
-            + {t("workflows.new_workflow")}
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+            {t("workflows.new_workflow")}
           </button>
         </div>
       </div>
 
-      {/* Quick Run — objective만 입력하여 즉시 실행 */}
-      <form className="quick-run-bar" onSubmit={handleQuickRun}>
-        <input
-          className="input flex-fill"
-          value={quickObjective}
-          onChange={(e) => setQuickObjective(e.target.value)}
-          placeholder={t("workflows.quick_run_placeholder")}
-        />
-        <button className="btn btn--accent" type="submit" disabled={!quickObjective.trim() || quickRunMut.isPending}>
-          {t("workflows.quick_run")}
-        </button>
-      </form>
-
       {/* 탭 */}
       <div className="builder-tabs mb-3" role="tablist">
         <button role="tab" aria-selected={tab === "templates"} className={`builder-tab${tab === "templates" ? " active" : ""}`} onClick={() => setTab("templates")}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" />
+          </svg>
           {t("workflows.templates")} ({tplCount})
         </button>
         <button role="tab" aria-selected={tab === "running"} className={`builder-tab${tab === "running" ? " active" : ""}`} onClick={() => setTab("running")}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polygon points="5 3 19 12 5 21 5 3" />
+          </svg>
           {t("workflows.running_tab")} ({runningCount})
         </button>
       </div>
@@ -218,6 +233,12 @@ export default function WorkflowsPage() {
             </div>
           ) : !templates?.length ? (
             <div className="empty-state">
+              <div className="empty-state__icon" aria-hidden="true">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="8.5" y="14" width="7" height="7" rx="1.5" />
+                  <path d="M6.5 10v2.5a1.5 1.5 0 001.5 1.5h0M17.5 10v2.5a1.5 1.5 0 01-1.5 1.5h0" />
+                </svg>
+              </div>
               <p className="empty-state__text">{t("workflows.no_templates")}</p>
               <div className="empty-state__actions">
                 <button className="btn btn--sm btn--accent" onClick={() => navigate("/workflows/new")}>
@@ -289,7 +310,7 @@ export default function WorkflowsPage() {
             onClose={() => setShowImport(false)}
             onImported={() => {
               setShowImport(false);
-              qc.invalidateQueries({ queryKey: ["workflow-templates"] });
+              void qc.invalidateQueries({ queryKey: ["workflow-templates"] });
               toast(t("workflows.import_success"), "ok");
             }}
           />
@@ -329,8 +350,13 @@ export default function WorkflowsPage() {
             </div>
           ) : !sortedWorkflows.length ? (
             <div className="empty-state">
+              <div className="empty-state__icon" aria-hidden="true">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 3" />
+                </svg>
+              </div>
               <p className="empty-state__text">{t("workflows.empty")}</p>
-              <p className="empty-state__hint">{t("workflows.empty_hint") || "Use Quick Run above or create a workflow from a template."}</p>
+              <p className="empty-state__hint">{t("workflows.empty_hint")}</p>
             </div>
           ) : (
             <div className="stat-grid stat-grid--wide">
@@ -344,6 +370,9 @@ export default function WorkflowsPage() {
                       <Badge status={wf.status} variant={STATUS_VARIANT[wf.status] || "off"} />
                       <span className="text-xs text-muted" title={new Date(wf.updated_at).toLocaleString()}>
                         {time_ago(wf.updated_at)}
+                        {wf.status === "running" && wf.created_at && (
+                          <> · {time_ago(wf.created_at)} {t("workflows.elapsed")}</>
+                        )}
                       </span>
                     </div>
                     <div className="stat-card__value stat-card__value--md">{wf.title}</div>
@@ -357,13 +386,14 @@ export default function WorkflowsPage() {
                     </div>
                     <div className="wf-progress" title={`${pct}%`} role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label={t("workflows.progress")}>
                       <div
-                        className={`wf-progress__bar${wf.status === "failed" ? " wf-progress__bar--err" : ""}`}
-                        style={{ width: `${pct}%` }}
+                        className={`wf-progress__bar${wf.status === "failed" ? " wf-progress__bar--err" : wf.status === "running" ? " wf-progress__bar--running" : ""}`}
+                        style={{ width: `${Math.max(pct, 3)}%` }}
                       />
                       <span className="wf-progress__label">{pct}%</span>
                     </div>
                     <div className="stat-card__actions">
-                      <button className="btn btn--sm" onClick={() => navigate(`/workflows/${wf.workflow_id}`)}>
+                      <button className="btn btn--sm btn--ghost" onClick={() => navigate(`/workflows/${wf.workflow_id}`)}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                         {t("workflows.view_detail")}
                       </button>
                       {(wf.status === "running" || wf.status === "waiting_user_input") && (
@@ -371,6 +401,7 @@ export default function WorkflowsPage() {
                           className="btn btn--sm btn--danger"
                           onClick={() => setCancelTarget(wf.workflow_id)}
                         >
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
                           {t("workflows.cancel")}
                         </button>
                       )}
@@ -414,7 +445,9 @@ function TemplateDetailPanel({ template, onClose, onRun, onEdit, onDelete, runni
     <div className="tpl-detail">
       <div className="tpl-detail__header">
         <h3 className="mt-0 mb-0">{template.title}</h3>
-        <button className="tpl-detail__close" onClick={onClose} aria-label="close">✕</button>
+        <button className="btn btn--xs btn--ghost tpl-detail__close" onClick={onClose} aria-label="close">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
       </div>
 
       <p className="tpl-detail__objective">{template.objective}</p>
@@ -429,15 +462,26 @@ function TemplateDetailPanel({ template, onClose, onRun, onEdit, onDelete, runni
       <div className="tpl-detail__flow">
         {template.phases.map((p, i) => (
           <div key={p.phase_id} className="tpl-detail__phase-step">
-            {i > 0 && <span className="tpl-detail__flow-arrow">→</span>}
+            {i > 0 && (
+              <span className="tpl-detail__flow-arrow">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+              </span>
+            )}
             <div className="tpl-detail__phase-box">
-              <div className="tpl-detail__phase-title">{p.title}</div>
-              <div className="tpl-detail__phase-info">
-                {p.agents.length} {t("workflows.agents").toLowerCase()}
+              <span className="tpl-detail__phase-num">{i + 1}</span>
+              <div>
+                <div className="tpl-detail__phase-title">{p.title}</div>
+                <div className="tpl-detail__phase-info">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                  {p.agents.length} {t("workflows.agents").toLowerCase()}
+                  {p.critic && (
+                    <span className="tpl-detail__phase-critic">
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                      {t("workflows.critic")}
+                    </span>
+                  )}
+                </div>
               </div>
-              {p.critic && (
-                <div className="tpl-detail__phase-critic">{t("workflows.critic")}</div>
-              )}
             </div>
           </div>
         ))}
@@ -460,15 +504,22 @@ function TemplateDetailPanel({ template, onClose, onRun, onEdit, onDelete, runni
           />
         </div>
         <div className="tpl-detail__actions">
-          <button type="button" className="btn btn--sm" onClick={onEdit}>
+          <button type="button" className="btn btn--sm btn--ghost" onClick={onEdit}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
             {t("workflows.edit_template")}
           </button>
           <button type="button" className="btn btn--sm btn--danger" onClick={onDelete}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
             {t("workflows.delete_template")}
           </button>
           <div className="flex-fill" />
-          <button type="submit" className="btn btn--accent" disabled={running}>
-            {running ? t("workflows.creating") : `▶ ${t("workflows.run_template")}`}
+          <button type="submit" className="btn btn--ok" disabled={running}>
+            {running ? (
+              <span className="btn__spinner" />
+            ) : (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            )}
+            {running ? t("workflows.creating") : t("workflows.run_template")}
           </button>
         </div>
       </form>
@@ -514,7 +565,9 @@ function ImportModal({ open, onClose, onImported }: {
       <div className="modal modal--wide" ref={modalRef} tabIndex={-1} onClick={(e) => e.stopPropagation()}>
         <div className="modal__header">
           <h3 className="modal__title">{t("workflows.import_yaml")}</h3>
-          <button className="modal__close" onClick={onClose} aria-label="close">✕</button>
+          <button className="modal__close btn btn--xs btn--ghost" onClick={onClose} aria-label="close">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
         </div>
         <div className="modal__body">
           <label className="label">{t("workflows.upload_file")}</label>
@@ -529,12 +582,17 @@ function ImportModal({ open, onClose, onImported }: {
           />
         </div>
         <div className="modal__footer">
-          <button className="btn btn--sm" onClick={onClose}>{t("workflows.close")}</button>
+          <button className="btn btn--sm btn--ghost" onClick={onClose}>{t("workflows.close")}</button>
           <button
             className="btn btn--sm btn--accent"
             disabled={!yamlText.trim() || importMut.isPending}
             onClick={() => importMut.mutate(yamlText)}
           >
+            {importMut.isPending ? (
+              <span className="btn__spinner" />
+            ) : (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            )}
             {t("workflows.import")}
           </button>
         </div>

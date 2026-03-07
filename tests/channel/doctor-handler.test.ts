@@ -48,29 +48,13 @@ describe("DoctorHandler", () => {
     expect(handler.can_handle(ctx_health)).toBe(true);
   });
 
-  it("/doctor — 전체 진단 보고서", async () => {
+  it("/doctor (인자 없음) → 세부 기능 가이드 표시", async () => {
     const handler = new DoctorHandler(make_access());
     const ctx = make_ctx();
     await handler.handle(ctx);
 
-    expect(ctx.replies[0]).toContain("시스템 진단");
-    expect(ctx.replies[0]).toContain("도구: 12개");
-    expect(ctx.replies[0]).toContain("스킬: 8개");
-    expect(ctx.replies[0]).toContain("claude_cli");
-    expect(ctx.replies[0]).toContain("1/2개 연결");
-    expect(ctx.replies[0]).toContain("크론 작업: 3개");
-    expect(ctx.replies[0]).toContain("활성 태스크: 1개");
-    expect(ctx.replies[0]).toContain("활성 에이전트 루프: 2개");
-  });
-
-  it("/doctor — async cron job count 처리", async () => {
-    const handler = new DoctorHandler(make_access({
-      get_cron_job_count: vi.fn().mockResolvedValue(7),
-    }));
-    const ctx = make_ctx();
-    await handler.handle(ctx);
-
-    expect(ctx.replies[0]).toContain("크론 작업: 7개");
+    expect(ctx.replies[0]).toContain("/doctor providers");
+    expect(ctx.replies[0]).toContain("/doctor mcp");
   });
 
   it("/doctor mcp — MCP 서버 상태 상세", async () => {

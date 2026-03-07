@@ -85,6 +85,7 @@ export default function WorkflowDetailPage() {
   const [chatTarget, setChatTarget] = useState<{
     phase_id: string; agent_id: string; label: string; model?: string; status?: string; phase_title?: string;
   } | null>(null);
+  const [objectiveExpanded, setObjectiveExpanded] = useState(false);
 
   const { data: wf, isLoading } = useQuery<PhaseLoopState>({
     queryKey: ["workflow", id],
@@ -110,28 +111,44 @@ export default function WorkflowDetailPage() {
     <div className="page">
       <div className="wf-detail">
         <div className="wf-detail__main">
-          <button className="btn btn--sm mb-3" onClick={() => navigate("/workflows")}>
-            ← {t("workflows.back")}
+          <button className="btn btn--ghost btn--sm mb-3" onClick={() => navigate("/workflows")}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5"/><polyline points="12 19 5 12 12 5"/></svg>
+            {t("workflows.back")}
           </button>
 
           <div className="wf-detail__hero">
-            <div>
-              <h2 className="mt-0 mb-0">{wf.title}</h2>
-              <p className="wf-detail__objective">
-                {wf.objective.length > 200 ? wf.objective.slice(0, 200) + "…" : wf.objective}
-              </p>
+            <div className="wf-detail__hero-content">
+              <div className="wf-detail__hero-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              </div>
+              <div>
+                <h2 className="wf-detail__title">{wf.title}</h2>
+                <p className="wf-detail__objective">
+                  {!objectiveExpanded && wf.objective.length > 200
+                    ? wf.objective.slice(0, 200) + "… "
+                    : wf.objective + " "}
+                  {wf.objective.length > 200 && (
+                    <button className="btn-link text-xs" onClick={() => setObjectiveExpanded((v) => !v)}>
+                      {objectiveExpanded ? t("workflows.objective_show_less") : t("workflows.objective_show_more")}
+                    </button>
+                  )}
+                </p>
+              </div>
+            </div>
+            <div className="wf-detail__hero-meta">
               <div className="wf-detail__hero-tags">
                 <Badge status={wf.status} variant={STATUS_VARIANT[wf.status] || "off"} />
                 <Badge status={`${done_agents}/${total_agents} agents`} variant="info" />
                 <Badge status={`Phase ${wf.current_phase + 1}/${wf.phases.length}`} variant="off" />
                 <span className="wf-detail__time" title={new Date(wf.updated_at).toLocaleString()}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
                   {time_ago(wf.updated_at)}
                 </span>
               </div>
+              {(wf.status === "failed" || wf.status === "waiting_user_input") && (
+                <ResumeButton workflowId={wf.workflow_id} />
+              )}
             </div>
-            {(wf.status === "failed" || wf.status === "waiting_user_input") && (
-              <ResumeButton workflowId={wf.workflow_id} />
-            )}
           </div>
 
           {wf.phases.map((phase, i) => {
@@ -169,15 +186,20 @@ export default function WorkflowDetailPage() {
   );
 }
 
-const MODE_LABEL: Record<string, string> = {
-  interactive: "Interactive",
-  sequential_loop: "Loop",
+const MODE_LABEL_KEY: Record<string, string> = {
+  interactive: "workflows.mode_interactive",
+  sequential_loop: "workflows.mode_loop",
 };
 
-const MODE_ICON: Record<string, string> = {
-  interactive: "🔄",
-  sequential_loop: "🔁",
-};
+function ModeIcon({ mode }: { mode: string }) {
+  if (mode === "interactive") return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 11-6.2-8.56"/><polyline points="21 3 21 12 12 12"/></svg>
+  );
+  if (mode === "sequential_loop") return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+  );
+  return null;
+}
 
 function PhaseCard({ phase, index, isCurrent, maxIterations, workflowId, onChat }: {
   phase: PhaseState;
@@ -189,7 +211,7 @@ function PhaseCard({ phase, index, isCurrent, maxIterations, workflowId, onChat 
 }) {
   const t = useT();
   const mode = phase.mode || "parallel";
-  const modeLabel = MODE_LABEL[mode];
+  const modeLabel = MODE_LABEL_KEY[mode] ? t(MODE_LABEL_KEY[mode]) : undefined;
   const defaultCollapsed = phase.status === "completed" && !isCurrent;
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
 
@@ -198,12 +220,16 @@ function PhaseCard({ phase, index, isCurrent, maxIterations, workflowId, onChat 
       {/* Phase Header — 클릭으로 접기/펼치기 */}
       <div className="wf-phase__header" role="button" tabIndex={0} onClick={() => setCollapsed((c) => !c)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setCollapsed((c) => !c); } }}>
         <div className="wf-phase__title-group">
-          <span className="wf-phase__collapse-icon">{collapsed ? "▸" : "▾"}</span>
-          <span className="wf-phase__index">Phase {index + 1}</span>
+          <span className="wf-phase__collapse-icon">
+            <svg className={`wf-chevron${collapsed ? " wf-chevron--closed" : ""}`} width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="6 9 12 15 18 9"/>
+            </svg>
+          </span>
+          <span className="wf-phase__index-num">{index + 1}</span>
           <h3 className="wf-phase__title">{phase.title}</h3>
           {modeLabel && (
             <span className="wf-phase__mode-badge">
-              {MODE_ICON[mode]} {modeLabel}
+              <ModeIcon mode={mode} /> {modeLabel}
             </span>
           )}
         </div>
@@ -253,7 +279,7 @@ function ParallelPhaseBody({ phase, onChat }: {
 
   return (
     <>
-      <div className="wf-progress">
+      <div className="wf-progress" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label={`${completed}/${total} agents`}>
         <div className="wf-progress__bar" style={{ width: `${pct}%` }} />
       </div>
 
@@ -293,9 +319,14 @@ function AgentCard({ agent, onChat }: {
           <button
             className="btn btn--xs wf-agent__copy"
             onClick={copyResult}
-            title={copied ? "Copied!" : "Copy result"}
+            title={copied ? t("workflows.copied") : t("workflows.copy_result")}
+            aria-label={copied ? t("workflows.copied") : t("workflows.copy_result")}
           >
-            {copied ? "✓" : "⧉"}
+            {copied ? (
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--ok)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            ) : (
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+            )}
           </button>
         )}
       </div>
@@ -319,10 +350,11 @@ function AgentCard({ agent, onChat }: {
       )}
       <div className="stat-card__actions">
         <button
-          className="btn btn--xs"
+          className="btn btn--xs btn--ghost"
           onClick={() => onChat(agent.agent_id, agent.label, agent.model, agent.status)}
         >
-          💬 {t("workflows.chat")}
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+          {t("workflows.chat")}
         </button>
       </div>
     </div>
@@ -366,7 +398,7 @@ function InteractivePhaseBody({ phase, workflowId, maxIterations }: {
       }),
     onSuccess: () => {
       setInput("");
-      qc.invalidateQueries({ queryKey: msgKey });
+      void qc.invalidateQueries({ queryKey: msgKey });
     },
     onError: () => toast(t("workflows.send_failed"), "err"),
   });
@@ -433,7 +465,7 @@ function SequentialLoopPhaseBody({ phase, maxIterations, onChat }: {
 
   return (
     <>
-      <div className="wf-progress">
+      <div className="wf-progress" role="progressbar" aria-valuenow={iteration} aria-valuemin={0} aria-valuemax={maxIterations} aria-label={`${iteration}/${maxIterations} iterations`}>
         <div className="wf-progress__bar" style={{ width: `${Math.min(pct, 100)}%` }} />
       </div>
 
@@ -447,7 +479,14 @@ function SequentialLoopPhaseBody({ phase, maxIterations, onChat }: {
               className={`wf-loop-timeline__item${i === iteration - 1 && phase.status === "running" ? " wf-loop-timeline__item--active" : ""}`}
             >
               <span className="wf-loop-timeline__marker" title={isAskUser ? "Ask user for input" : isUserInput ? "User input" : "Completed"}>
-                {isAskUser ? "❓" : isUserInput ? "👤" : "✅"} #{i + 1}
+                {isAskUser ? (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--warn)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                ) : isUserInput ? (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                ) : (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--ok)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                )}
+                <span>#{i + 1}</span>
               </span>
               <span className="wf-loop-timeline__text">
                 {result.slice(0, 120)}{result.length > 120 ? "…" : ""}
@@ -458,14 +497,19 @@ function SequentialLoopPhaseBody({ phase, maxIterations, onChat }: {
 
         {iteration < maxIterations && phase.status === "running" && !phase.pending_user_input && (
           <div className="wf-loop-timeline__item wf-loop-timeline__item--active">
-            <span className="wf-loop-timeline__marker" title="Currently running">🔄 #{iteration + 1}</span>
+            <span className="wf-loop-timeline__marker" title="Currently running">
+              <svg className="wf-loop-timeline__spinner" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 11-6.2-8.56"/></svg>
+              <span>#{iteration + 1}</span>
+            </span>
             <span className="wf-loop-timeline__text">{t("workflows.loading")}...</span>
           </div>
         )}
 
         {iteration + 1 < maxIterations && (
           <div className="wf-loop-timeline__item wf-loop-timeline__item--remaining">
-            <span className="wf-loop-timeline__marker" title="Remaining iterations">⏳</span>
+            <span className="wf-loop-timeline__marker" title="Remaining iterations">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            </span>
             <span className="wf-loop-timeline__text">
               #{iteration + 2}–{maxIterations} {t("workflows.remaining")}
             </span>
@@ -477,10 +521,11 @@ function SequentialLoopPhaseBody({ phase, maxIterations, onChat }: {
         <span>{iteration}/{maxIterations} {t("workflows.iterations")}</span>
         {agent && (
           <button
-            className="btn btn--xs"
+            className="btn btn--xs btn--ghost"
             onClick={() => onChat(agent.agent_id, agent.label, agent.model, agent.status)}
           >
-            💬 {t("workflows.chat")}
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+            {t("workflows.chat")}
           </button>
         )}
       </div>
@@ -496,12 +541,17 @@ function ResumeButton({ workflowId }: { workflowId: string }) {
     mutationFn: () => api.post(`/api/workflow/runs/${workflowId}/resume`, {}),
     onSuccess: () => {
       toast(t("workflows.resumed"), "ok");
-      qc.invalidateQueries({ queryKey: ["workflow", workflowId] });
+      void qc.invalidateQueries({ queryKey: ["workflow", workflowId] });
     },
     onError: () => toast(t("workflows.resume_failed"), "err"),
   });
   return (
-    <button className="btn btn--primary btn--sm" onClick={() => mut.mutate()} disabled={mut.isPending}>
+    <button className="btn btn--ok btn--sm" onClick={() => mut.mutate()} disabled={mut.isPending}>
+      {mut.isPending ? (
+        <span className="btn__spinner" />
+      ) : (
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+      )}
       {mut.isPending ? t("workflows.loading") : t("workflows.resume")}
     </button>
   );
@@ -511,7 +561,10 @@ function CriticCard({ critic }: { critic: PhaseCriticState }) {
   return (
     <div className={`wf-critic ${critic.approved === true ? "desk--ok" : critic.approved === false ? "desk--err" : "desk--off"}`}>
       <div className="wf-critic__header">
-        <span className="wf-critic__label">Critic</span>
+        <span className="wf-critic__label">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          Critic
+        </span>
         <div className="wf-critic__header-right">
           <Badge status={critic.status} variant={STATUS_VARIANT[critic.status] || "off"} />
           {critic.model && <span className="text-xs text-muted">{critic.model}</span>}
@@ -569,7 +622,7 @@ function AgentChatPanel({ workflow_id, phase_id, agent_id, label, model, status,
       api.post(`/api/workflow/runs/${workflow_id}/messages`, { phase_id, agent_id, content }),
     onSuccess: () => {
       setInput("");
-      qc.invalidateQueries({ queryKey: msg_query_key });
+      void qc.invalidateQueries({ queryKey: msg_query_key });
     },
     onError: () => toast(t("workflows.send_failed"), "err"),
   });
@@ -588,7 +641,9 @@ function AgentChatPanel({ workflow_id, phase_id, agent_id, label, model, status,
           </div>
           {phase_title && <div className="wf-chat__id">{phase_title}</div>}
         </div>
-        <button className="btn btn--xs" onClick={onClose} aria-label="Close">✕</button>
+        <button className="btn btn--xs btn--ghost" onClick={onClose} aria-label={t("workflows.close")}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
       </div>
 
       <div className="wf-chat__messages">

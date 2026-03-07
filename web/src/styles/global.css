@@ -72,7 +72,7 @@ button {
 
 /* Selection */
 ::selection {
-  background: rgba(74, 158, 255, 0.25);
+  background: color-mix(in srgb, var(--accent) 25%, transparent);
   color: var(--text);
 }
 
@@ -90,6 +90,59 @@ button {
   color: var(--muted);
   font-size: var(--fs-sm);
   font-style: italic;
+}
+
+/* ===== Input / Select / Textarea 공통 ===== */
+.input,
+.input.input--sm,
+select.input,
+textarea.input {
+  display: block;
+  width: 100%;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-family: var(--font-sans);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.input:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+.input:focus:not(:focus-visible) { outline: none; }
+.input::placeholder { color: var(--muted); opacity: 0.6; }
+.input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+select.input {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2391a4b7' d='M3 4.5L6 8l3-3.5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  padding-right: 28px;
+}
+textarea.input {
+  resize: vertical;
+  min-height: 60px;
+}
+.input--sm {
+  padding: 5px 8px;
+  font-size: var(--fs-xs);
+}
+
+/* ===== Label 공통 ===== */
+.label {
+  display: block;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--muted);
+  margin-bottom: 4px;
 }
 
 /* skeleton, empty-state → layout.css로 통합 */
@@ -121,6 +174,91 @@ button {
   from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+/* ===== Filter Tabs ===== */
+.filter-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: var(--sp-3);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.filter-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+.filter-tab:hover { border-color: var(--accent); color: var(--text); }
+.filter-tab--active {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.filter-tab__count {
+  font-size: 0.7rem;
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  border-radius: 8px;
+  padding: 0 5px;
+  min-width: 18px;
+  text-align: center;
+}
+.filter-tab--active .filter-tab__count {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+/* ===== Provider Section ===== */
+.provider-section { margin-bottom: var(--sp-4); }
+.provider-section__title {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  margin: 0 0 var(--sp-2);
+  padding-bottom: var(--sp-1);
+  border-bottom: 1px solid var(--line);
+}
+
+/* ===== Chip Label (radio/toggle) ===== */
+.chip-label {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 14px;
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  color: var(--muted);
+}
+.chip-label:hover { border-color: var(--accent); }
+.chip-label--active {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* ===== Model Cost Info ===== */
+.model-cost-info {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 8px 12px;
+  margin-top: 4px;
+  background: color-mix(in srgb, var(--accent) 4%, transparent);
+  border-radius: 8px;
+  font-size: var(--fs-xs);
+}
+.model-cost-info__item { display: inline-flex; gap: 4px; }
 
 /* ===== 모션 감소 접근성 ===== */
 @media (prefers-reduced-motion: reduce) {

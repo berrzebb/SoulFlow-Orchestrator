@@ -1,4 +1,4 @@
-/** OpenRouter 기반 embedding 서비스. */
+/** OpenAI 호환 embedding 서비스 (OpenRouter, Ollama, vLLM 등). */
 
 import { create_logger } from "../logger.js";
 import { error_message } from "../utils/common.js";
@@ -12,20 +12,25 @@ const MAX_BATCH_SIZE = 96;
 export interface EmbedServiceDeps {
   get_api_key: () => Promise<string | null>;
   api_base?: string;
+  /** true이면 API 키 없이 요청 (Ollama 등 로컬 서비스). */
+  skip_auth?: boolean;
+  /** 기본 모델. */
+  default_model?: string;
 }
 
-/** OpenRouter /embeddings 엔드포인트를 호출하여 텍스트 → 벡터 변환. */
+/** OpenAI 호환 /embeddings 엔드포인트로 텍스트 → 벡터 변환. */
 export function create_embed_service(deps: EmbedServiceDeps) {
   const api_base = deps.api_base || "https://openrouter.ai/api/v1";
+  const default_model = deps.default_model || DEFAULT_MODEL;
 
   return async (
     texts: string[],
     opts: { model?: string; dimensions?: number },
   ): Promise<{ embeddings: number[][]; token_usage?: number }> => {
-    const api_key = await deps.get_api_key();
-    if (!api_key) throw new Error("embedding API key not configured");
+    const api_key = deps.skip_auth ? null : await deps.get_api_key();
+    if (!api_key && !deps.skip_auth) throw new Error("embedding API key not configured");
 
-    const model = opts.model || DEFAULT_MODEL;
+    const model = opts.model || default_model;
     const all_embeddings: number[][] = [];
     let total_tokens = 0;
 
@@ -36,19 +41,19 @@ export function create_embed_service(deps: EmbedServiceDeps) {
       const body: Record<string, unknown> = { model, input: batch };
       if (opts.dimensions) body.dimensions = opts.dimensions;
 
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (api_key) headers.Authorization = `Bearer ${api_key}`;
+
       const res = await fetch(`${api_base}/embeddings`, {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${api_key}`,
-          "Content-Type": "application/json",
-        },
+        headers,
         body: JSON.stringify(body),
         signal: AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
       });
 
       if (!res.ok) {
         const err = await res.text().catch(() => "");
-        log.warn("embedding API error", { status: res.status, model });
+        log.warn("embedding API error", { status: res.status, model, api_base });
         throw new Error(`Embedding API error (${res.status}): ${err.slice(0, 200)}`);
       }
 
@@ -65,7 +70,34 @@ export function create_embed_service(deps: EmbedServiceDeps) {
       total_tokens += json.usage?.total_tokens ?? 0;
     }
 
-    log.info("embed", { model, count: texts.length, tokens: total_tokens });
+    log.info("embed", { model, count: texts.length, tokens: total_tokens, api_base });
     return { embeddings: all_embeddings, token_usage: total_tokens || undefined };
   };
+}
+
+/**
+ * Ollama 또는 OpenRouter 중 사용 가능한 쪽으로 embed service 생성.
+ * Ollama가 설정되어 있으면 우선 사용 (로컬, 무료, 빠름).
+ */
+export function create_embed_service_auto(opts: {
+  openrouter_api_key: () => Promise<string | null>;
+  openrouter_api_base?: string;
+  ollama_api_base?: string;
+  ollama_embed_model?: string;
+}) {
+  // Ollama가 설정되어 있으면 우선 사용
+  if (opts.ollama_api_base) {
+    return create_embed_service({
+      get_api_key: async () => null,
+      api_base: opts.ollama_api_base,
+      skip_auth: true,
+      default_model: opts.ollama_embed_model || "nomic-embed-text",
+    });
+  }
+
+  // 폴백: OpenRouter
+  return create_embed_service({
+    get_api_key: opts.openrouter_api_key,
+    api_base: opts.openrouter_api_base,
+  });
 }

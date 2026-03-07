@@ -24,11 +24,12 @@ export default function SetupPage() {
   const [executor, setExecutor] = useState("");
   const [orchestrator, setOrchestrator] = useState("");
   const [alias, setAlias] = useState("assistant");
+  const [personaName, setPersonaName] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    api.get<string[]>("/api/agents/providers/types").then(setProviderTypes).catch(() => toast(t("setup.load_failed"), "err"));
-  }, []);
+    void api.get<string[]>("/api/agents/providers/types").then(setProviderTypes).catch(() => toast(t("setup.load_failed"), "err"));
+  }, [toast, t]);
 
   const selected = Object.entries(providers).filter(([, v]) => v.enabled);
 
@@ -62,6 +63,7 @@ export default function SetupPage() {
         executor,
         orchestrator,
         alias,
+        persona_name: personaName || undefined,
       };
       await api.post("/api/bootstrap", payload);
       setStep(3);
@@ -168,15 +170,28 @@ export default function SetupPage() {
           <p className="text-sm text-muted mb-3">
             {t("setup.step.identity.desc")}
           </p>
-          <label>
-            <div className="form-label">{t("setup.alias")}</div>
-            <input
-              type="text"
-              value={alias}
-              onChange={(e) => setAlias(e.target.value)}
-              className="form-input"
-            />
-          </label>
+          <div className="setup__field-group">
+            <label>
+              <div className="form-label">{t("setup.persona_name")}</div>
+              <input
+                type="text"
+                value={personaName}
+                onChange={(e) => setPersonaName(e.target.value)}
+                placeholder={t("setup.persona_name_placeholder")}
+                className="form-input"
+              />
+              <p className="text-xs text-muted mt-1">{t("setup.persona_name_hint")}</p>
+            </label>
+            <label>
+              <div className="form-label">{t("setup.alias")}</div>
+              <input
+                type="text"
+                value={alias}
+                onChange={(e) => setAlias(e.target.value)}
+                className="form-input"
+              />
+            </label>
+          </div>
           <div className="setup__nav">
             <button className="btn" onClick={() => setStep(1)}>{t("setup.back")}</button>
             <button className="btn btn--primary" disabled={submitting || !alias.trim()} onClick={finish}>

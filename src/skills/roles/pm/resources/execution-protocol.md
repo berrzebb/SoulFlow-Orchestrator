@@ -2,7 +2,7 @@
 
 ## 1. 요구사항 수집
 
-- 사용자/집사 요청 분석
+- 사용자/concierge 요청 분석
 - 불확실성 분류 (clarification-protocol)
 - HIGH 불확실성 → 즉시 질문
 

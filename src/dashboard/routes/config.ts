@@ -1,8 +1,24 @@
+import { set_locale, get_locale, parse_locale } from "../../i18n/index.js";
 import type { RouteContext } from "../route-context.js";
 
 export async function handle_config(ctx: RouteContext): Promise<boolean> {
   const { req, url, res, options, json, read_body } = ctx;
   const path = url.pathname;
+
+  // GET /api/locale
+  if (path === "/api/locale" && req.method === "GET") {
+    json(res, 200, { locale: get_locale() });
+    return true;
+  }
+
+  // PUT /api/locale { locale: "en" | "ko" }
+  if (path === "/api/locale" && req.method === "PUT") {
+    const body = await read_body(req);
+    const locale = parse_locale((body as Record<string, unknown>)?.locale);
+    set_locale(locale);
+    json(res, 200, { ok: true, locale });
+    return true;
+  }
 
   // GET /api/config
   if (path === "/api/config" && req.method === "GET") {

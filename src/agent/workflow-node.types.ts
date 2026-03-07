@@ -116,7 +116,7 @@ export interface SplitNodeDefinition extends NodeBase {
 
 // ── Trigger Node ────────────────────────────────────
 
-export type TriggerType = "cron" | "webhook" | "manual" | "channel_message";
+export type TriggerType = "cron" | "webhook" | "manual" | "channel_message" | "kanban_event";
 
 export interface TriggerNodeDefinition extends NodeBase {
   node_type: "trigger";
@@ -129,6 +129,10 @@ export interface TriggerNodeDefinition extends NodeBase {
   /** channel_message */
   channel_type?: string;
   chat_id?: string;
+  /** kanban_event */
+  kanban_board_id?: string;
+  kanban_actions?: string[];
+  kanban_column_id?: string;
 }
 
 // ── LLM Node ───────────────────────────────────────
@@ -823,6 +827,792 @@ export interface PackageManagerNodeDefinition extends NodeBase {
   flags?: string;
 }
 
+// ── DataFormat Node ─────────────────────────────────
+
+export interface DataFormatNodeDefinition extends NodeBase {
+  node_type: "data_format";
+  /** convert / query / validate / pretty / flatten / unflatten / merge / pick / omit. */
+  operation: string;
+  input?: string;
+  from?: string;
+  to?: string;
+  path?: string;
+  keys?: string;
+  input2?: string;
+  delimiter?: string;
+}
+
+// ── Encoding Node ───────────────────────────────────
+
+export interface EncodingNodeDefinition extends NodeBase {
+  node_type: "encoding";
+  /** encode / decode / hash / uuid. */
+  operation: string;
+  input?: string;
+  /** base64 / hex / url / sha256 / sha512 / md5. */
+  format?: string;
+  count?: number;
+}
+
+// ── Regex Node ──────────────────────────────────────
+
+export interface RegexNodeDefinition extends NodeBase {
+  node_type: "regex";
+  /** match / match_all / replace / extract / split / test. */
+  operation: string;
+  input?: string;
+  pattern?: string;
+  flags?: string;
+  replacement?: string;
+}
+
+// ── Diff Node ───────────────────────────────────────
+
+export interface DiffNodeDefinition extends NodeBase {
+  node_type: "diff";
+  /** compare / patch / stats. */
+  operation: string;
+  old_text?: string;
+  new_text?: string;
+  diff_text?: string;
+  context_lines?: number;
+}
+
+// ── Screenshot Node ─────────────────────────────────
+
+export interface ScreenshotNodeDefinition extends NodeBase {
+  node_type: "screenshot";
+  url?: string;
+  output_path?: string;
+  selector?: string;
+  full_page?: boolean;
+  width?: number;
+  height?: number;
+  delay_ms?: number;
+}
+
+// ── Database Node ───────────────────────────────────
+
+export interface DatabaseNodeDefinition extends NodeBase {
+  node_type: "database";
+  /** query / tables / schema / explain. */
+  operation: string;
+  datasource?: string;
+  sql?: string;
+  table?: string;
+  max_rows?: number;
+}
+
+// ── TemplateEngine Node ─────────────────────────────
+
+export interface TemplateEngineNodeDefinition extends NodeBase {
+  node_type: "template_engine";
+  template?: string;
+  data?: string;
+  partials?: string;
+}
+
+// ── Validator Node ──────────────────────────────────
+
+export interface ValidatorNodeDefinition extends NodeBase {
+  node_type: "validator";
+  /** schema / format / rules. */
+  operation: string;
+  input?: string;
+  format?: string;
+  schema?: string;
+  rules?: string;
+}
+
+// ── Queue Node ──────────────────────────────────────
+
+export interface QueueNodeDefinition extends NodeBase {
+  node_type: "queue";
+  /** enqueue / dequeue / peek / size / drain / list / clear / delete. */
+  operation: string;
+  queue?: string;
+  value?: string;
+  mode?: string;
+  priority?: number;
+  count?: number;
+}
+
+// ── TTL Cache Node ──────────────────────────────────
+
+export interface TtlCacheNodeDefinition extends NodeBase {
+  node_type: "ttl_cache";
+  /** set / get / invalidate / has / keys / stats / clear. */
+  operation: string;
+  key?: string;
+  value?: string;
+  ttl_ms?: number;
+}
+
+// ── Image Node ──────────────────────────────────────
+
+export interface ImageNodeDefinition extends NodeBase {
+  node_type: "image";
+  /** resize / crop / rotate / convert / info / thumbnail. */
+  operation: string;
+  input_path?: string;
+  output_path?: string;
+  width?: number;
+  height?: number;
+  angle?: number;
+  format?: string;
+  quality?: number;
+  gravity?: string;
+}
+
+// ── Media Node ──────────────────────────────────────
+
+export interface MediaNodeDefinition extends NodeBase {
+  node_type: "media";
+  /** detect_type / extract_metadata / transcode / generate_thumbnail / to_base64 / from_base64. */
+  operation: string;
+  input_path?: string;
+  output_path?: string;
+  /** 변환 대상 포맷 (transcode). */
+  target_format?: string;
+  /** 썸네일 크기 (generate_thumbnail). */
+  thumb_width?: number;
+  thumb_height?: number;
+  /** base64 인코딩/디코딩 시 MIME 타입. */
+  mime_type?: string;
+}
+
+// ── Stats Node ──────────────────────────────────────
+
+export interface StatsNodeDefinition extends NodeBase {
+  node_type: "stats";
+  /** summary / percentile / histogram / correlation / normalize / outliers. */
+  operation: string;
+  data?: string;
+  data2?: string;
+  percentile?: number;
+  bins?: number;
+  threshold?: number;
+}
+
+// ── Text Node ───────────────────────────────────────
+
+export interface TextNodeDefinition extends NodeBase {
+  node_type: "text";
+  /** upper/lower/title/camel/snake/kebab/slugify/truncate/pad/count/dedup/similarity/reverse/join/wrap/trim_lines. */
+  operation: string;
+  input?: string;
+  input2?: string;
+  max_length?: number;
+  width?: number;
+}
+
+// ── Compress Node ───────────────────────────────────
+
+export interface CompressNodeDefinition extends NodeBase {
+  node_type: "compress";
+  /** compress / decompress / compress_string / decompress_string. */
+  operation: string;
+  input_path?: string;
+  output_path?: string;
+  input?: string;
+  algorithm?: string;
+  level?: number;
+}
+
+// ── Math Node ───────────────────────────────────────
+
+export interface MathNodeDefinition extends NodeBase {
+  node_type: "math";
+  /** eval/convert/compound_interest/loan_payment/roi/percentage/round/gcd/lcm/factorial/fibonacci. */
+  operation: string;
+  expression?: string;
+  value?: number;
+  from?: string;
+  to?: string;
+  principal?: number;
+  rate?: number;
+  periods?: number;
+  cost?: number;
+  gain?: number;
+  decimals?: number;
+  a?: number;
+  b?: number;
+  n?: number;
+}
+
+// ── Table Node ──────────────────────────────────────
+
+export interface TableNodeDefinition extends NodeBase {
+  node_type: "table";
+  /** sort/filter/group_by/join/pivot/aggregate/distinct/slice/pluck/count_by. */
+  operation: string;
+  data?: string;
+  data2?: string;
+  field?: string;
+  fields?: string;
+  order?: string;
+  condition?: string;
+  join_field?: string;
+  join_type?: string;
+  agg?: string;
+  value_field?: string;
+  start?: number;
+  end?: number;
+}
+
+// ── Eval Node ───────────────────────────────────────
+
+export interface EvalNodeDefinition extends NodeBase {
+  node_type: "eval";
+  code?: string;
+  context?: string;
+}
+
+// ── DateCalc Node ───────────────────────────────────
+
+export interface DateCalcNodeDefinition extends NodeBase {
+  node_type: "date_calc";
+  /** now/add/diff/timezone/business_days/format/parse/day_info/range. */
+  operation: string;
+  date?: string;
+  date2?: string;
+  amount?: number;
+  unit?: string;
+  from_tz?: string;
+  to_tz?: string;
+  format?: string;
+  start_date?: string;
+  end_date?: string;
+  step_days?: number;
+}
+
+// ── Format Node ─────────────────────────────────────
+
+export interface FormatNodeDefinition extends NodeBase {
+  node_type: "format";
+  /** number/currency/percent/bytes/relative_time/mask/ordinal/plural/duration/pad/truncate. */
+  operation: string;
+  value?: string;
+  locale?: string;
+  currency?: string;
+  decimals?: number;
+  mask_type?: string;
+  mask_char?: string;
+  word?: string;
+  plural_word?: string;
+  width?: number;
+  fill?: string;
+  align?: string;
+  max_length?: number;
+  suffix?: string;
+}
+
+// ── SetOps Node ─────────────────────────────────────
+
+export interface SetOpsNodeDefinition extends NodeBase {
+  node_type: "set_ops";
+  /** union/intersection/difference/symmetric_difference/is_subset/is_superset/equals/power_set/cartesian_product. */
+  operation: string;
+  a?: string;
+  b?: string;
+}
+
+// ── Lookup Node ─────────────────────────────────────
+
+export interface LookupNodeDefinition extends NodeBase {
+  node_type: "lookup";
+  /** http_status/mime_type/country/currency_symbol. */
+  table: string;
+  key?: string;
+  reverse?: boolean;
+  list?: boolean;
+}
+
+// ── Markdown Node ───────────────────────────────────
+
+export interface MarkdownNodeDefinition extends NodeBase {
+  node_type: "markdown";
+  /** table/list/checklist/toc/html_to_md/badge/link/image/code_block/details/task_list. */
+  operation: string;
+  data?: string;
+  text?: string;
+  columns?: string;
+  align?: string;
+  ordered?: boolean;
+  label?: string;
+  url?: string;
+  color?: string;
+  alt?: string;
+  language?: string;
+  code?: string;
+  summary?: string;
+}
+
+// ── End (Output) Node ───────────────────────────────
+
+export type EndOutputTarget = "channel" | "media" | "webhook" | "http";
+
+export interface EndNodeDefinition extends NodeBase {
+  node_type: "end";
+  /** 선택된 아웃바운드 대상 목록. */
+  output_targets: EndOutputTarget[];
+  /** 각 대상별 추가 설정. */
+  target_config?: Record<string, Record<string, unknown>>;
+}
+
+export interface HashNodeDefinition extends NodeBase {
+  node_type: "hash";
+  action?: string;
+  input?: string;
+  algorithm?: string;
+  key?: string;
+  encoding?: string;
+  expected?: string;
+}
+
+export interface CryptoNodeDefinition extends NodeBase {
+  node_type: "crypto";
+  action?: string;
+  input?: string;
+  key?: string;
+}
+
+export interface JwtNodeDefinition extends NodeBase {
+  node_type: "jwt";
+  action?: string;
+  token?: string;
+  secret?: string;
+  payload?: string;
+  algorithm?: string;
+  expires_in?: string;
+}
+
+export interface GraphqlNodeDefinition extends NodeBase {
+  node_type: "graphql";
+  url?: string;
+  query?: string;
+  variables?: string;
+  headers?: string;
+  operation_name?: string;
+}
+
+export interface EmailNodeDefinition extends NodeBase {
+  node_type: "email";
+  action?: string;
+  to?: string;
+  from?: string;
+  subject?: string;
+  body?: string;
+  smtp_host?: string;
+  smtp_port?: number;
+  smtp_user?: string;
+  smtp_pass?: string;
+}
+
+export interface DiagramNodeDefinition extends NodeBase {
+  node_type: "diagram";
+  source?: string;
+  type?: string;
+  output_format?: string;
+}
+
+export interface MemoryRwNodeDefinition extends NodeBase {
+  node_type: "memory_rw";
+  action?: string;
+  key?: string;
+  value?: string;
+}
+
+export interface SecretReadNodeDefinition extends NodeBase {
+  node_type: "secret_read";
+  key?: string;
+  namespace?: string;
+}
+
+// ── CSV Node ────────────────────────────────────────
+
+export interface CsvNodeDefinition extends NodeBase {
+  node_type: "csv";
+  action?: string;
+  data?: string;
+  delimiter?: string;
+  has_header?: boolean;
+  columns?: string;
+}
+
+// ── WebSocket Node ──────────────────────────────────
+
+export interface WebSocketNodeDefinition extends NodeBase {
+  node_type: "websocket";
+  action?: string;
+  url?: string;
+  id?: string;
+  message?: string;
+  timeout_ms?: number;
+}
+
+// ── PDF Node ────────────────────────────────────────
+
+export interface PdfNodeDefinition extends NodeBase {
+  node_type: "pdf";
+  action?: string;
+  path?: string;
+  pages?: string;
+  max_chars?: number;
+}
+
+// ── Rate Limit Node ─────────────────────────────────
+
+export interface RateLimitNodeDefinition extends NodeBase {
+  node_type: "rate_limit";
+  action?: string;
+  key?: string;
+  max_requests?: number;
+  window_ms?: number;
+}
+
+// ── XML Node ────────────────────────────────────────
+
+export interface XmlNodeDefinition extends NodeBase {
+  node_type: "xml";
+  action?: string;
+  data?: string;
+  path?: string;
+}
+
+// ── YAML Node ───────────────────────────────────────
+
+export interface YamlNodeDefinition extends NodeBase {
+  node_type: "yaml";
+  action?: string;
+  data?: string;
+  data2?: string;
+  path?: string;
+  indent?: number;
+}
+
+// ── FTP Node ────────────────────────────────────────
+
+export interface FtpNodeDefinition extends NodeBase {
+  node_type: "ftp";
+  action?: string;
+  host?: string;
+  port?: number;
+  username?: string;
+  password?: string;
+  remote_path?: string;
+}
+
+// ── SSH Node ────────────────────────────────────────
+
+export interface SshNodeDefinition extends NodeBase {
+  node_type: "ssh";
+  action?: string;
+  host?: string;
+  command?: string;
+  port?: number;
+  identity_file?: string;
+  timeout_ms?: number;
+}
+
+// ── S3 Node ─────────────────────────────────────────
+
+export interface S3NodeDefinition extends NodeBase {
+  node_type: "s3";
+  action?: string;
+  bucket?: string;
+  key?: string;
+  region?: string;
+  endpoint?: string;
+  access_key?: string;
+  secret_key?: string;
+  prefix?: string;
+}
+
+// ── HTML Node ───────────────────────────────────────
+
+export interface HtmlNodeDefinition extends NodeBase {
+  node_type: "html";
+  action?: string;
+  html?: string;
+  selector?: string;
+}
+
+// ── QR Node ─────────────────────────────────────────
+
+export interface QrNodeDefinition extends NodeBase {
+  node_type: "qr";
+  action?: string;
+  data?: string;
+  format?: string;
+  size?: number;
+}
+
+// ── MQTT Node ───────────────────────────────────────
+
+export interface MqttNodeDefinition extends NodeBase {
+  node_type: "mqtt";
+  action?: string;
+  host?: string;
+  port?: number;
+  topic?: string;
+  message?: string;
+  username?: string;
+  password?: string;
+  qos?: number;
+}
+
+// ── Redis Node ──────────────────────────────────────
+
+export interface RedisNodeDefinition extends NodeBase {
+  node_type: "redis";
+  action?: string;
+  host?: string;
+  port?: number;
+  key?: string;
+  value?: string;
+  field?: string;
+  password?: string;
+  ttl?: number;
+}
+
+// ── SQL Builder Node ────────────────────────────────
+
+export interface SqlBuilderNodeDefinition extends NodeBase {
+  node_type: "sql_builder";
+  action?: string;
+  table?: string;
+  columns?: string;
+  where?: string;
+  values?: string;
+  order_by?: string;
+  limit?: number;
+  dialect?: string;
+}
+
+// ── Log Parser Node ─────────────────────────────────
+
+export interface LogParserNodeDefinition extends NodeBase {
+  node_type: "log_parser";
+  action?: string;
+  input?: string;
+  pattern?: string;
+  field?: string;
+  value?: string;
+  level?: string;
+}
+
+// ── RSS Node ────────────────────────────────────────
+
+export interface RssNodeDefinition extends NodeBase {
+  node_type: "rss";
+  action?: string;
+  url?: string;
+  input?: string;
+  feed_title?: string;
+  link?: string;
+  items?: string;
+}
+
+// ── Duration Node ───────────────────────────────────
+
+export interface DurationNodeDefinition extends NodeBase {
+  node_type: "duration";
+  action?: string;
+  duration?: string;
+  duration2?: string;
+  ms?: number;
+}
+
+// ── LDAP Node ───────────────────────────────────────
+
+export interface LdapNodeDefinition extends NodeBase {
+  node_type: "ldap";
+  action?: string;
+  host?: string;
+  port?: number;
+  bind_dn?: string;
+  password?: string;
+  base_dn?: string;
+  filter?: string;
+  scope?: string;
+}
+
+// ── JSON Schema Node ────────────────────────────────
+
+export interface JsonSchemaNodeDefinition extends NodeBase {
+  node_type: "json_schema";
+  action?: string;
+  schema?: string;
+  data?: string;
+  target_draft?: string;
+  schema2?: string;
+}
+
+// ── OpenAPI Node ────────────────────────────────────
+
+export interface OpenApiNodeDefinition extends NodeBase {
+  node_type: "openapi";
+  action?: string;
+  spec?: string;
+  path?: string;
+  method?: string;
+  language?: string;
+}
+
+// ── Barcode Node ────────────────────────────────────
+
+export interface BarcodeNodeDefinition extends NodeBase {
+  node_type: "barcode";
+  action?: string;
+  data?: string;
+  format?: string;
+  width?: number;
+  height?: number;
+}
+
+// ── Phone Node ──────────────────────────────────────
+
+export interface PhoneNodeDefinition extends NodeBase {
+  node_type: "phone";
+  action?: string;
+  number?: string;
+  number2?: string;
+  country?: string;
+  format_type?: string;
+}
+
+// ── Healthcheck Node ────────────────────────────────
+
+export interface HealthcheckNodeDefinition extends NodeBase {
+  node_type: "healthcheck";
+  action?: string;
+  url?: string;
+  host?: string;
+  port?: number;
+  timeout_ms?: number;
+  expected_status?: number;
+  endpoints?: string;
+}
+
+// ── Cookie Node ─────────────────────────────────────
+
+export interface CookieNodeDefinition extends NodeBase {
+  node_type: "cookie";
+  action?: string;
+  input?: string;
+  cookie_name?: string;
+  cookie_value?: string;
+}
+
+// ── Password Node ───────────────────────────────────
+
+export interface PasswordNodeDefinition extends NodeBase {
+  node_type: "password";
+  action?: string;
+  password_input?: string;
+  length?: number;
+  hash?: string;
+}
+
+// ── Changelog Node ──────────────────────────────────
+
+export interface ChangelogNodeDefinition extends NodeBase {
+  node_type: "changelog";
+  action?: string;
+  commits?: string;
+  version?: string;
+  commit_message?: string;
+}
+
+// ── Matrix Node ─────────────────────────────────────
+
+export interface MatrixNodeDefinition extends NodeBase {
+  node_type: "matrix";
+  action?: string;
+  a?: string;
+  b?: string;
+  scalar?: number;
+  size?: number;
+}
+
+// ── StateMachine Node ───────────────────────────────
+
+export interface StateMachineNodeDefinition extends NodeBase {
+  node_type: "state_machine";
+  action?: string;
+  machine?: string;
+  current?: string;
+  event?: string;
+  events?: string;
+}
+
+// ── CodeDiagram Node ────────────────────────────────
+
+export interface CodeDiagramNodeDefinition extends NodeBase {
+  node_type: "code_diagram";
+  action?: string;
+  source?: string;
+  sources?: string;
+  function_name?: string;
+  direction?: string;
+  show_private?: boolean;
+  group_by_folder?: boolean;
+  actors?: string;
+  messages?: string;
+}
+
+// ── Graph Node ──────────────────────────────────────
+
+export interface GraphNodeDefinition extends NodeBase {
+  node_type: "graph";
+  action?: string;
+  edges?: string;
+  start?: string;
+  end_node?: string;
+}
+
+// ── Tokenizer Node ──────────────────────────────────
+
+export interface TokenizerNodeDefinition extends NodeBase {
+  node_type: "tokenizer";
+  action?: string;
+  text?: string;
+  n?: number;
+  top_k?: number;
+}
+
+// ── Similarity Node ─────────────────────────────────
+
+export interface SimilarityNodeDefinition extends NodeBase {
+  node_type: "similarity";
+  action?: string;
+  a?: string;
+  b?: string;
+  mode?: string;
+}
+
+// ── DataMask Node ───────────────────────────────────
+
+export interface DataMaskNodeDefinition extends NodeBase {
+  node_type: "data_mask";
+  action?: string;
+  text?: string;
+  pattern?: string;
+  replacement?: string;
+}
+
+// ── CircuitBreaker Node ─────────────────────────────
+
+export interface CircuitBreakerNodeDefinition extends NodeBase {
+  node_type: "circuit_breaker";
+  action?: string;
+  name?: string;
+  threshold?: number;
+  timeout_ms?: number;
+  half_open_max?: number;
+}
+
 // ── Union Types ─────────────────────────────────────
 
 export type OrcheNodeType = "http" | "code" | "if" | "merge" | "set" | "split"
@@ -835,7 +1625,21 @@ export type OrcheNodeType = "http" | "code" | "if" | "merge" | "set" | "split"
   | "hitl" | "approval" | "form" | "tool_invoke" | "gate" | "escalation"
   | "cache" | "retry" | "batch" | "assert"
   | "git" | "shell" | "web_search" | "web_scrape" | "archive" | "process"
-  | "docker" | "web_table" | "network" | "web_form" | "system_info" | "package_manager";
+  | "docker" | "web_table" | "network" | "web_form" | "system_info" | "package_manager"
+  | "data_format" | "encoding" | "regex" | "diff" | "screenshot" | "database"
+  | "template_engine" | "validator" | "queue" | "ttl_cache"
+  | "image" | "stats" | "text" | "compress"
+  | "math" | "table" | "eval" | "date_calc" | "format" | "set_ops" | "lookup" | "markdown"
+  | "media" | "hash" | "crypto" | "jwt" | "graphql" | "email"
+  | "diagram" | "memory_rw" | "secret_read"
+  | "csv" | "websocket" | "pdf" | "rate_limit" | "xml" | "yaml" | "ftp"
+  | "ssh" | "s3" | "html" | "qr" | "mqtt" | "redis"
+  | "sql_builder" | "log_parser" | "rss" | "duration" | "ldap"
+  | "json_schema" | "openapi" | "barcode" | "phone" | "healthcheck"
+  | "cookie" | "password" | "changelog" | "matrix" | "state_machine"
+  | "code_diagram"
+  | "graph" | "tokenizer" | "similarity" | "data_mask" | "circuit_breaker"
+  | "end";
 
 export type OrcheNodeDefinition =
   | HttpNodeDefinition
@@ -891,7 +1695,73 @@ export type OrcheNodeDefinition =
   | NetworkNodeDefinition
   | WebFormNodeDefinition
   | SystemInfoNodeDefinition
-  | PackageManagerNodeDefinition;
+  | PackageManagerNodeDefinition
+  | DataFormatNodeDefinition
+  | EncodingNodeDefinition
+  | RegexNodeDefinition
+  | DiffNodeDefinition
+  | ScreenshotNodeDefinition
+  | DatabaseNodeDefinition
+  | TemplateEngineNodeDefinition
+  | ValidatorNodeDefinition
+  | QueueNodeDefinition
+  | TtlCacheNodeDefinition
+  | ImageNodeDefinition
+  | MediaNodeDefinition
+  | StatsNodeDefinition
+  | TextNodeDefinition
+  | CompressNodeDefinition
+  | MathNodeDefinition
+  | TableNodeDefinition
+  | EvalNodeDefinition
+  | DateCalcNodeDefinition
+  | FormatNodeDefinition
+  | SetOpsNodeDefinition
+  | LookupNodeDefinition
+  | MarkdownNodeDefinition
+  | HashNodeDefinition
+  | CryptoNodeDefinition
+  | JwtNodeDefinition
+  | GraphqlNodeDefinition
+  | EmailNodeDefinition
+  | DiagramNodeDefinition
+  | MemoryRwNodeDefinition
+  | SecretReadNodeDefinition
+  | CsvNodeDefinition
+  | WebSocketNodeDefinition
+  | PdfNodeDefinition
+  | RateLimitNodeDefinition
+  | XmlNodeDefinition
+  | YamlNodeDefinition
+  | FtpNodeDefinition
+  | SshNodeDefinition
+  | S3NodeDefinition
+  | HtmlNodeDefinition
+  | QrNodeDefinition
+  | MqttNodeDefinition
+  | RedisNodeDefinition
+  | SqlBuilderNodeDefinition
+  | LogParserNodeDefinition
+  | RssNodeDefinition
+  | DurationNodeDefinition
+  | LdapNodeDefinition
+  | JsonSchemaNodeDefinition
+  | OpenApiNodeDefinition
+  | BarcodeNodeDefinition
+  | PhoneNodeDefinition
+  | HealthcheckNodeDefinition
+  | CookieNodeDefinition
+  | PasswordNodeDefinition
+  | ChangelogNodeDefinition
+  | MatrixNodeDefinition
+  | StateMachineNodeDefinition
+  | CodeDiagramNodeDefinition
+  | GraphNodeDefinition
+  | TokenizerNodeDefinition
+  | SimilarityNodeDefinition
+  | DataMaskNodeDefinition
+  | CircuitBreakerNodeDefinition
+  | EndNodeDefinition;
 
 export type WorkflowNodeDefinition = PhaseNodeDefinition | OrcheNodeDefinition | TriggerNodeDefinition;
 

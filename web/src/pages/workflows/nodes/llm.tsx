@@ -11,7 +11,7 @@ function LlmEditPanel({ node, update, t, options }: EditPanelProps) {
     setSchemaRaw(val);
     if (!val.trim()) { setSchemaErr(""); update({ output_json_schema: undefined }); return; }
     try { update({ output_json_schema: JSON.parse(val) }); setSchemaErr(""); }
-    catch { setSchemaErr("Invalid JSON"); }
+    catch { setSchemaErr(t("workflows.invalid_json")); }
   };
 
   return (
@@ -20,7 +20,12 @@ function LlmEditPanel({ node, update, t, options }: EditPanelProps) {
         <div className="builder-row">
           <label className="label">{t("workflows.llm_backend")}</label>
           <select className="input input--sm" value={String(node.backend || "")} onChange={(e) => update({ backend: e.target.value })}>
-            {(options?.backends || []).map((b) => <option key={b.value} value={b.value}>{b.label}</option>)}
+            <option value="">-</option>
+            {(options?.backends || []).map((b) => (
+              <option key={b.value} value={b.value}>
+                {b.available === false ? "\u26AA " : "\uD83D\uDFE2 "}{b.label}{b.provider_type ? ` (${b.provider_type})` : ""}
+              </option>
+            ))}
           </select>
         </div>
         <div className="builder-row">
@@ -48,7 +53,7 @@ function LlmEditPanel({ node, update, t, options }: EditPanelProps) {
           <label className="label">
             {t("workflows.llm_temperature")}
             <span className="builder-hint--inline">
-              {temp == null ? "" : temp <= 0.3 ? " (precise)" : temp <= 0.7 ? " (balanced)" : " (creative)"}
+              {temp == null ? "" : ` (${temp <= 0.3 ? t("workflows.temp_precise") : temp <= 0.7 ? t("workflows.temp_balanced") : t("workflows.temp_creative")})`}
             </span>
           </label>
           <input className="input input--sm" type="range" min={0} max={2} step={0.1} value={String(temp ?? 0.7)} onChange={(e) => update({ temperature: Number(e.target.value) })} />
@@ -80,16 +85,16 @@ export const llm_descriptor: FrontendNodeDescriptor = {
   icon: "🤖",
   color: "#e91e63",
   shape: "rect",
-  toolbar_label: "+ LLM",
+  toolbar_label: "node.llm.label",
   category: "ai",
   output_schema: [
-    { name: "response", type: "string",  description: "LLM response text" },
-    { name: "parsed",   type: "object",  description: "Parsed JSON (if output_json_schema)" },
-    { name: "usage",    type: "object",  description: "Token usage stats" },
+    { name: "response", type: "string",  description: "node.llm.output.response" },
+    { name: "parsed",   type: "object",  description: "node.llm.output.parsed" },
+    { name: "usage",    type: "object",  description: "node.llm.output.usage" },
   ],
   input_schema: [
-    { name: "prompt",  type: "string", description: "Input prompt / context" },
-    { name: "context", type: "object", description: "Template variables" },
+    { name: "prompt",  type: "string", description: "node.llm.input.prompt" },
+    { name: "context", type: "object", description: "node.llm.input.context" },
   ],
   create_default: () => ({ backend: "", prompt_template: "{{prompt}}" }),
   EditPanel: LlmEditPanel,

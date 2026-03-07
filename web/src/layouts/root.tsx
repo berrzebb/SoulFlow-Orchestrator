@@ -14,6 +14,7 @@ export function RootLayout() {
   const set_web_stream = useDashboardStore((s) => s.set_web_stream);
   const set_mirror_event = useDashboardStore((s) => s.set_mirror_event);
   const theme = useDashboardStore((s) => s.theme);
+  const toggle_theme = useDashboardStore((s) => s.toggle_theme);
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
@@ -69,7 +70,7 @@ export function RootLayout() {
     });
     set_connection("reconnecting");
     return () => { if (msg_timer) clearTimeout(msg_timer); sse.close(); set_connection("disconnected"); };
-  }, [set_connection, qc]);
+  }, [set_connection, set_web_stream, set_mirror_event, qc]);
 
   return (
     <div className="app">
@@ -84,6 +85,13 @@ export function RootLayout() {
             <h1 className="topbar__title">{t("app.title")}</h1>
           </div>
           <div className="topbar__meta">
+            <button
+              className="btn btn--xs topbar__theme-btn"
+              onClick={toggle_theme}
+              aria-label={t("sidebar.toggle_theme")}
+            >
+              {theme === "dark" ? "☀️" : "🌙"}
+            </button>
             <button
               className="btn btn--xs topbar__locale-btn"
               onClick={toggle_locale}

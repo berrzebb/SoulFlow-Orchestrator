@@ -3,6 +3,7 @@ import {
   extract_decision_set_pair,
   normalize_common_command_text,
 } from "../command-intent.js";
+import { format_subcommand_guide, format_subcommand_usage } from "./registry.js";
 import { format_mention, type CommandContext, type CommandHandler } from "./types.js";
 
 type DecisionScope = "global" | "team" | "agent";
@@ -30,14 +31,6 @@ export interface DecisionAccess {
   get_decision_service(): DecisionServiceLike | null;
 }
 
-function format_usage(mention: string): string {
-  return [
-    `${mention}decision 명령 사용법`,
-    "- /decision status | list | set <key> <value>",
-    "- /decision set <key>=<value>",
-  ].join("\n");
-}
-
 export class DecisionHandler implements CommandHandler {
   readonly name = "decision";
 
@@ -51,9 +44,13 @@ export class DecisionHandler implements CommandHandler {
   async handle(ctx: CommandContext): Promise<boolean> {
     const { provider, message, command } = ctx;
     const normalized = normalize_common_command_text(String(message.content || ""));
+    const mention = format_mention(provider, message.sender_id);
+    if (command && !command.args.length) {
+      const guide = format_subcommand_guide("decision");
+      if (guide) { await ctx.send_reply(`${mention}${guide}`); return true; }
+    }
     const action = parse_decision_quick_action(normalized, command) || "status";
     const decisions = this.access.get_decision_service();
-    const mention = format_mention(provider, message.sender_id);
 
     if (!decisions) {
       await ctx.send_reply("decision service unavailable");
@@ -63,7 +60,7 @@ export class DecisionHandler implements CommandHandler {
     if (action === "set") {
       const pair = extract_decision_set_pair(normalized, command);
       if (!pair) {
-        await ctx.send_reply(format_usage(mention));
+        await ctx.send_reply(`${mention}${format_subcommand_usage("decision", "set")}`);
         return true;
       }
       const result = await decisions.append_decision({

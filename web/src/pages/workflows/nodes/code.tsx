@@ -27,7 +27,7 @@ function CodeEditPanel({ node, update, t }: EditPanelProps) {
         </select>
       </div>
       <div className="builder-row">
-        <label className="label">Code <span className="builder-hint--inline">({lang})</span></label>
+        <label className="label">{t("workflows.field_code")} <span className="builder-hint--inline">({lang})</span></label>
         <textarea className="input code-textarea code-textarea--tall" rows={14} value={String(node.code || "")} onChange={(e) => update({ code: e.target.value })} spellCheck={false} />
       </div>
       <div className="builder-row">
@@ -62,14 +62,14 @@ export const code_descriptor: FrontendNodeDescriptor = {
   icon: "</>",
   color: "#2ecc71",
   shape: "rect",
-  toolbar_label: "+ Code",
+  toolbar_label: "node.code.label",
   category: "data",
   output_schema: [
-    { name: "result", type: "unknown", description: "Return value / stdout" },
-    { name: "logs",   type: "array",   description: "Console output" },
+    { name: "result", type: "unknown", description: "node.code.output.result" },
+    { name: "logs",   type: "array",   description: "node.code.output.logs" },
   ],
   input_schema: [
-    { name: "input", type: "object", description: "Code input data" },
+    { name: "input", type: "object", description: "node.code.input.input" },
   ],
   create_default: () => ({ language: "javascript", code: "" }),
   EditPanel: CodeEditPanel,

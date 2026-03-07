@@ -3,9 +3,9 @@
 pptx_builder.py로 커버되지 않는 레이아웃이 필요할 때 사용한다.
 (ex: 커스텀 애니메이션 구조, 마스터 슬라이드 수정, 기존 파일 편집)
 
-```powershell
-$R = if (Get-Command podman -EA 0) { "podman" } else { "docker" }
-& $R run --rm -v "${PWD}:/workspace:rw" -w /workspace python:3.12-slim sh -lc "
+```bash
+R=$(command -v podman >/dev/null 2>&1 && echo podman || echo docker)
+$R run --rm -v "$PWD:/workspace:rw" -w /workspace python:3.12-slim sh -lc "
   pip install -q python-pptx && python script.py
 "
 ```

@@ -6,6 +6,8 @@ import { extname, isAbsolute, join, resolve } from "node:path";
 import type { ContextMessage } from "./context.types.js";
 import { DecisionService, PromiseService } from "../decision/index.js";
 import { filter_tool_sections } from "../orchestration/tool-description-filter.js";
+import { extract_persona_name } from "../orchestration/prompts.js";
+import type { ReferenceStoreLike } from "../services/reference-store.js";
 
 async function try_read_first_file(candidates: string[]): Promise<string> {
   for (const path of candidates) {
@@ -44,6 +46,7 @@ export class ContextBuilder {
   readonly promise_service: PromiseService;
   private readonly workspace: string;
   private _oauth_summary_provider: OAuthSummaryProvider | null = null;
+  private _reference_store: ReferenceStoreLike | null = null;
 
   constructor(workspace: string, args?: { memory_store?: MemoryStoreLike; promises_dir?: string; app_root?: string }) {
     this.workspace = workspace;
@@ -51,6 +54,30 @@ export class ContextBuilder {
     this.memory_store = args?.memory_store || new MemoryStore(workspace);
     this.decision_service = new DecisionService(workspace);
     this.promise_service = new PromiseService(workspace, args?.promises_dir);
+  }
+
+  set_reference_store(store: ReferenceStoreLike): void {
+    this._reference_store = store;
+  }
+
+  /** SOUL.md에서 페르소나 이름을 추출. 미설정 시 "assistant". */
+  get_persona_name(): string {
+    const soul = this._read_file_sync("SOUL.md");
+    return extract_persona_name(soul);
+  }
+
+  /** BOOTSTRAP.md 존재 여부 + 내용 반환. */
+  get_bootstrap(): { exists: boolean; content: string } {
+    const content = this._read_file_sync("BOOTSTRAP.md");
+    return { exists: content.length > 0, content };
+  }
+
+  private _read_file_sync(name: string): string {
+    for (const path of [join(this.workspace, "templates", name), join(this.workspace, name)]) {
+      if (!existsSync(path)) continue;
+      try { const raw = readFileSync(path, "utf-8").trim(); if (raw) return raw; } catch { /* skip */ }
+    }
+    return "";
   }
 
   set_oauth_summary_provider(provider: OAuthSummaryProvider): void {
@@ -170,6 +197,12 @@ export class ContextBuilder {
         content: history_block,
       });
     }
+    // Reference 문서 컨텍스트 주입 (사용자 메시지 기반 시멘틱 검색)
+    const ref_context = await this._build_reference_context(current_message);
+    if (ref_context) {
+      messages.push({ role: "system", content: ref_context });
+    }
+
     const user_content = this._build_user_content(current_message, media || []);
     messages.push({
       role: "user",
@@ -210,6 +243,22 @@ export class ContextBuilder {
       ch ? `Channel: ${ch}` : "",
       id ? `Chat ID: ${id}` : "",
     ].filter(Boolean).join("\n");
+  }
+
+  private async _build_reference_context(user_message: string): Promise<string> {
+    if (!this._reference_store) return "";
+    try {
+      // sync 후 검색 (debounce 내장)
+      await this._reference_store.sync();
+      const results = await this._reference_store.search(user_message, { limit: 5 });
+      if (results.length === 0) return "";
+      const sections = results.map((r) =>
+        `### ${r.doc_path}${r.heading ? ` — ${r.heading}` : ""}\n${r.content}`,
+      );
+      return `# Reference Documents\nsource: workspace/references/\nRelevance-ranked excerpts from project reference documents.\n\n${sections.join("\n\n---\n\n")}`;
+    } catch {
+      return "";
+    }
   }
 
   private async _build_memory_context(): Promise<string> {

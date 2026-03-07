@@ -60,6 +60,8 @@ export type PhaseLoopRunnerDeps = {
   oauth_fetch?: (service_id: string, opts: { url: string; method: string; headers?: Record<string, string>; body?: unknown }) => Promise<{ status: number; body: unknown; headers: Record<string, string> }>;
   /** Webhook 수신 데이터 조회 (webhook 노드용). */
   get_webhook_data?: (path: string) => Promise<{ method: string; headers: Record<string, string>; body: unknown; query: Record<string, string> } | null>;
+  /** 칸반 이벤트 대기 (kanban_trigger 노드용). */
+  wait_kanban_event?: (board_id: string, filter: { actions?: string[]; column_id?: string }) => Promise<{ card_id: string; board_id: string; action: string; actor: string; detail: Record<string, unknown>; created_at: string } | null>;
   /** 태스크 생성/실행 (task 노드용). */
   create_task?: (opts: { title: string; objective: string; channel?: string; chat_id?: string; max_turns?: number; initial_memory?: Record<string, unknown> }) => Promise<{ task_id: string; status: string; result?: unknown; error?: string }>;
   /** DB 쿼리 (db 노드용). */
@@ -1089,6 +1091,9 @@ function build_runner_services(
 
   // Webhook data
   if (deps.get_webhook_data) services.get_webhook_data = deps.get_webhook_data;
+
+  // Kanban event
+  if (deps.wait_kanban_event) services.wait_kanban_event = deps.wait_kanban_event;
 
   // Task 생성
   if (deps.create_task) services.create_task = deps.create_task;

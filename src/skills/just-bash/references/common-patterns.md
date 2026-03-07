@@ -2,11 +2,11 @@
 
 ## 파일 탐색
 
-```powershell
+```bash
 # 패턴으로 파일 찾기
-Get-ChildItem -Recurse -Filter "*.ts"
+find . -name "*.ts" -type f
 # 최근 수정 파일
-Get-ChildItem -Recurse | Sort-Object LastWriteTime -Descending | Select-Object -First 10
+find . -type f -printf '%T@ %p\n' | sort -rn | head -10
 # 내용 검색 (rg 선호)
 rg "pattern" src/ --type ts
 rg "TODO" . -l  # 파일 목록만
@@ -29,46 +29,48 @@ git diff --staged
 
 ## 텍스트 처리
 
-```powershell
+```bash
 # 파일 읽기
-Get-Content file.txt
-Get-Content file.txt | Select-Object -First 50
+cat file.txt
+head -50 file.txt
 # 라인 수
-(Get-Content file.txt).Count
+wc -l file.txt
 # 치환
-(Get-Content file.txt) -replace "old", "new" | Set-Content file.txt
+sed -i 's/old/new/g' file.txt
 ```
 
 ## 프로세스 / 시스템
 
-```powershell
+```bash
 # 프로세스 목록
-Get-Process | Sort-Object CPU -Descending | Select-Object -First 10
+ps aux --sort=-%cpu | head -10
 # 포트 사용 확인
-netstat -ano | findstr ":3000"
+ss -tlnp | grep ":3000"
 # 환경변수
-$env:PATH -split ";"
-[System.Environment]::GetEnvironmentVariables()
+echo "$PATH" | tr ':' '\n'
+env
 ```
 
 ## JSON 처리
 
-```powershell
-# 파싱
-$data = Get-Content data.json | ConvertFrom-Json
-$data.items | Where-Object { $_.active -eq $true }
+```bash
+# 파싱 (jq)
+jq '.items[] | select(.active == true)' data.json
+# 키 추출
+jq -r '.name' data.json
 # 생성
-@{ name = "Alice"; age = 30 } | ConvertTo-Json
+echo '{"name":"Alice","age":30}' | jq .
 ```
 
 ## 네트워크
 
-```powershell
+```bash
 # HTTP 요청
-Invoke-RestMethod "https://api.example.com/data"
-Invoke-WebRequest "https://example.com" -OutFile output.html
+curl -s "https://api.example.com/data" | jq .
+curl -o output.html "https://example.com"
 # 연결 테스트
-Test-NetConnection -ComputerName "example.com" -Port 443
+curl -s -o /dev/null -w "%{http_code}" "https://example.com"
+nc -zv example.com 443
 ```
 
 ## 원칙

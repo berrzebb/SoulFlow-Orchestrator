@@ -6,6 +6,8 @@ import { AgentDomain } from "./agent/index.js";
 import { create_agent_inspector } from "./agent/inspector.service.js";
 import { create_agent_runtime } from "./agent/runtime.service.js";
 import { CronTool, MemoryTool, DecisionTool, SecretTool, PromiseTool, TaskQueryTool, WorkflowTool } from "./agent/tools/index.js";
+import { KanbanTool } from "./agent/tools/kanban.js";
+import { KanbanStore, type KanbanStoreLike, type KanbanEvent } from "./services/kanban-store.js";
 import { MessageBus } from "./bus/index.js";
 import {
   ChannelManager,
@@ -28,6 +30,7 @@ import { ConfigStore } from "./config/config-store.js";
 import { get_shared_secret_vault } from "./security/secret-vault-factory.js";
 import { create_cron_job_handler, CronService } from "./cron/index.js";
 import { DashboardService } from "./dashboard/service.js";
+import { get_tool_index } from "./orchestration/tool-index.js";
 import { DecisionService } from "./decision/index.js";
 import { WorkflowEventService } from "./events/index.js";
 import { HeartbeatService } from "./heartbeat/index.js";
@@ -62,11 +65,12 @@ import {
   create_workflow_ops,
 } from "./dashboard/ops-factory.js";
 import { PhaseWorkflowStore } from "./agent/phase-workflow-store.js";
-import { create_embed_service } from "./services/embed.service.js";
+import { create_embed_service_auto } from "./services/embed.service.js";
 import { create_vector_store_service } from "./services/vector-store.service.js";
 import { WebhookStore } from "./services/webhook-store.service.js";
 import { create_task_service } from "./services/create-task.service.js";
 import { create_query_db_service } from "./services/query-db.service.js";
+import { ReferenceStore } from "./services/reference-store.js";
 
 export interface RuntimeApp {
   agent: AgentDomain;
@@ -87,6 +91,23 @@ export interface RuntimeApp {
   services: ServiceManager;
   session_prune_timer: ReturnType<typeof setInterval>;
   cli_auth: CliAuthService;
+}
+
+/** KanbanStore subscribe를 Promise 기반 one-shot 대기로 변환. */
+function make_wait_kanban_event(store: KanbanStoreLike) {
+  return (board_id: string, filter: { actions?: string[]; column_id?: string }) =>
+    new Promise<{ card_id: string; board_id: string; action: string; actor: string; detail: Record<string, unknown>; created_at: string } | null>((resolve) => {
+      const timeout = setTimeout(() => { store.unsubscribe(board_id, handler); resolve(null); }, 60_000);
+      const handler = (event: KanbanEvent) => {
+        const act = event.data;
+        if (filter.actions?.length && !filter.actions.includes(act.action)) return;
+        if (filter.column_id && (act.detail as Record<string, unknown>).column_id !== filter.column_id) return;
+        clearTimeout(timeout);
+        store.unsubscribe(board_id, handler);
+        resolve({ card_id: act.card_id, board_id: act.board_id, action: act.action, actor: act.actor, detail: act.detail, created_at: act.created_at });
+      };
+      store.subscribe(board_id, handler);
+    });
 }
 
 function resolve_from_workspace(workspace: string, path_value: string, fallback: string): string {
@@ -132,9 +153,15 @@ export async function createRuntime(): Promise<RuntimeApp> {
   oauth_flow.load_custom_presets();
 
   // 워크플로우 노드용 서비스 인프라
-  const embed_service = create_embed_service({
-    get_api_key: () => provider_store.get_token("openrouter"),
-    api_base: provider_store.get("openrouter")?.settings?.api_base as string | undefined,
+  // Ollama 임베딩: embedding.ollamaApiBase 직접 설정 우선, 없으면 orchestratorLlm 활성 시 해당 API base 폴백
+  const ollama_embed_base = app_config.embedding.ollamaApiBase
+    || (app_config.orchestratorLlm.enabled ? app_config.orchestratorLlm.apiBase : "")
+    || undefined;
+  const embed_service = create_embed_service_auto({
+    openrouter_api_key: () => provider_store.get_token("openrouter"),
+    openrouter_api_base: provider_store.get("openrouter")?.settings?.api_base as string | undefined,
+    ollama_api_base: ollama_embed_base,
+    ollama_embed_model: app_config.embedding.ollamaModel || undefined,
   });
   const vector_store_service = create_vector_store_service(data_dir);
   const webhook_store = new WebhookStore();
@@ -282,8 +309,16 @@ export async function createRuntime(): Promise<RuntimeApp> {
     return results;
   });
   const phase_workflow_store = new PhaseWorkflowStore(join(workspace, "runtime", "workflows"));
+  const kanban_store = new KanbanStore(join(workspace, "runtime"));
   const agent_inspector = create_agent_inspector(agent);
   const agent_runtime = create_agent_runtime(agent, { phase_workflow_store });
+  // 임베딩 서비스 연결 (벡터 시멘틱 검색 활성화)
+  agent.context.memory_store.set_embed?.(embed_service);
+  get_tool_index().set_embed(embed_service);
+  // Reference 문서 스토어 (workspace/references/ → 자동 임베딩 + 컨텍스트 주입)
+  const reference_store = new ReferenceStore(workspace);
+  reference_store.set_embed(embed_service);
+  agent.context.set_reference_store(reference_store);
   const sessions = new SessionStore(workspace, sessions_dir);
 
   const cron = new CronService(join(data_dir, "cron"), create_cron_job_handler({
@@ -460,6 +495,7 @@ export async function createRuntime(): Promise<RuntimeApp> {
     embed: embed_service,
     vector_store: vector_store_service,
     get_webhook_data: (path) => webhook_store.get(path),
+    wait_kanban_event: make_wait_kanban_event(kanban_store),
     query_db: query_db_service,
   });
 
@@ -612,6 +648,7 @@ export async function createRuntime(): Promise<RuntimeApp> {
     embed: embed_service,
     vector_store: vector_store_service,
     get_webhook_data: (path) => webhook_store.get(path),
+    wait_kanban_event: make_wait_kanban_event(kanban_store),
     create_task: create_task_fn,
     query_db: query_db_service,
   });
@@ -623,6 +660,39 @@ export async function createRuntime(): Promise<RuntimeApp> {
       return await ops_hitl.try_resolve(chat_id, content) || await orch_hitl.try_resolve(chat_id, content);
     },
   });
+
+  // late-inject: /workflow, /model 커맨드
+  const { WorkflowHandler, ModelHandler } = await import("./channels/commands/index.js");
+  command_router.add_handler(new WorkflowHandler({
+    list_runs: async () => {
+      const runs = await workflow_ops_result.list();
+      return runs.map((r) => ({
+        workflow_id: r.workflow_id,
+        title: r.title || "",
+        status: r.status,
+        created_at: r.created_at,
+        current_phase: r.current_phase,
+      }));
+    },
+    get_run: async (id) => {
+      const r = await workflow_ops_result.get(id);
+      if (!r) return null;
+      return { workflow_id: r.workflow_id, title: r.title || "", status: r.status, created_at: r.created_at, current_phase: r.current_phase };
+    },
+    create: (input) => workflow_ops_result.create(input),
+    cancel: (id) => workflow_ops_result.cancel(id),
+    list_templates: () => workflow_ops_result.list_templates(),
+  }));
+  if (orchestrator_llm_runtime.get_status().enabled) {
+    command_router.add_handler(new ModelHandler({
+      list: async () => {
+        try { return (await orchestrator_llm_runtime.list_models()).map((m) => ({ name: m.name })); }
+        catch { return []; }
+      },
+      get_default: () => orchestrator_llm_runtime.get_status().model || null,
+      set_default: (model) => { orchestrator_llm_runtime.switch_model(model); return true; },
+    }));
+  }
 
   if (app_config.dashboard.enabled) {
 
@@ -668,6 +738,8 @@ export async function createRuntime(): Promise<RuntimeApp> {
       cli_auth_ops: create_cli_auth_ops({ cli_auth }),
       model_ops: orchestrator_llm_runtime ? create_model_ops(orchestrator_llm_runtime) : null,
       workflow_ops: workflow_ops_result,
+      kanban_store,
+      reference_store,
       default_alias: app_config.channel.defaultAlias,
       workspace,
     });
@@ -725,6 +797,9 @@ export async function createRuntime(): Promise<RuntimeApp> {
   }
   if (!agent_runtime.has_tool("workflow")) {
     agent_runtime.register_tool(new WorkflowTool(workflow_ops_result));
+  }
+  if (!agent_runtime.has_tool("kanban")) {
+    agent_runtime.register_tool(new KanbanTool(kanban_store));
   }
 
   services.register(agent, { required: true });
@@ -916,7 +991,7 @@ if (is_main_entry()) {
         .then(() => app.agent_backends.close())
         .then(() => app.bus.close())
         .then(() => { if ("close" in app.sessions) (app.sessions as { close(): void }).close(); })
-        .catch((err) => { boot_logger.error(`shutdown error: ${error_message(err)}`); })
+        .catch((err: unknown) => { boot_logger.error(`shutdown error: ${error_message(err)}`); })
         .finally(() => {
           clearTimeout(force_exit);
           void release_lock().finally(() => {

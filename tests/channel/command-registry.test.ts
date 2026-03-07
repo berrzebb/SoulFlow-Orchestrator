@@ -1,15 +1,25 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { get_command_descriptors, format_help_text } from "@src/channels/commands/registry.js";
+import { describe, it, expect, vi, beforeEach, beforeAll } from "vitest";
+import {
+  get_command_descriptors,
+  get_command_descriptor,
+  format_help_text,
+  format_subcommand_usage,
+  format_subcommand_guide,
+} from "@src/channels/commands/registry.js";
+import { set_locale } from "@src/i18n/index.js";
+
+beforeAll(() => set_locale("ko"));
 
 describe("CommandDescriptor registry", () => {
   it("returns all command descriptors", () => {
     const descriptors = get_command_descriptors();
-    expect(descriptors).toHaveLength(17);
+    expect(descriptors).toHaveLength(20);
     const names = descriptors.map((d) => d.name);
     expect(names).toEqual([
       "help", "stop", "render", "secret", "memory",
       "decision", "promise", "cron", "reload", "task", "status",
       "skill", "doctor", "agent", "stats", "verify", "guard",
+      "workflow", "model", "mcp",
     ]);
   });
 
@@ -45,12 +55,67 @@ describe("format_help_text", () => {
     expect(text).toContain("- /test <arg1> <arg2>");
   });
 
-  it("omits usage when empty", () => {
+  it("shows description without usage when no subcommands", () => {
     const text = format_help_text([
-      { name: "ping", description: "핑", usage: "" },
+      { name: "ping", description: "핑" },
     ]);
     expect(text).toContain("- /ping");
-    expect(text).not.toContain("- /ping ");
+    expect(text).toContain("핑");
+  });
+
+  it("shows subcommand count for commands with subcommands", () => {
+    const text = format_help_text([
+      { name: "task", description: "작업 관리", subcommands: [
+        { name: "list", description: "목록" },
+        { name: "cancel", description: "취소" },
+      ]},
+    ]);
+    expect(text).toContain("세부 기능 2개");
+  });
+});
+
+describe("get_command_descriptor", () => {
+  it("존재하는 커맨드 반환", () => {
+    const desc = get_command_descriptor("task");
+    expect(desc).not.toBeNull();
+    expect(desc!.name).toBe("task");
+    expect(desc!.subcommands).toBeDefined();
+    expect(desc!.subcommands!.length).toBeGreaterThan(0);
+  });
+
+  it("없는 커맨드 → null", () => {
+    expect(get_command_descriptor("nonexistent")).toBeNull();
+  });
+});
+
+describe("format_subcommand_usage", () => {
+  it("존재하는 서브커맨드 사용법 반환", () => {
+    const text = format_subcommand_usage("task", "cancel");
+    expect(text).toContain("/task cancel");
+    expect(text).toContain("<id|all>");
+  });
+
+  it("없는 서브커맨드 → 기본 포맷", () => {
+    const text = format_subcommand_usage("task", "nonexistent");
+    expect(text).toBe("/task nonexistent");
+  });
+});
+
+describe("format_subcommand_guide", () => {
+  it("서브커맨드가 있는 명령 → 가이드 텍스트", () => {
+    const guide = format_subcommand_guide("task");
+    expect(guide).not.toBeNull();
+    expect(guide).toContain("/task list");
+    expect(guide).toContain("/task cancel");
+    expect(guide).toContain("/task status");
+  });
+
+  it("서브커맨드 없는 명령 → null", () => {
+    expect(format_subcommand_guide("help")).toBeNull();
+  });
+
+  it("없는 명령 → null", () => {
+    expect(format_subcommand_guide("nonexistent")).toBeNull();
   });
 });
 

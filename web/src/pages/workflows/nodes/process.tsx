@@ -25,7 +25,7 @@ function ProcessEditPanel({ node, update, t }: EditPanelProps) {
       {(op === "stop" || op === "info") && (
         <div className="builder-row-pair">
           <div className="builder-row">
-            <label className="label">PID</label>
+            <label className="label">{t("workflows.field_pid")}</label>
             <input className="input input--sm" type="number" min={1} value={String(node.pid ?? "")} onChange={(e) => update({ pid: Number(e.target.value) || 0 })} />
           </div>
           {op === "stop" && (
@@ -47,17 +47,17 @@ export const process_descriptor: FrontendNodeDescriptor = {
   icon: "\u{2699}",
   color: "#607d8b",
   shape: "rect",
-  toolbar_label: "+ Process",
+  toolbar_label: "node.process.label",
   category: "integration",
   output_schema: [
-    { name: "output",  type: "string",  description: "Command output" },
-    { name: "success", type: "boolean", description: "Success flag" },
-    { name: "pid",     type: "number",  description: "Process ID" },
+    { name: "output",  type: "string",  description: "node.process.output.output" },
+    { name: "success", type: "boolean", description: "node.process.output.success" },
+    { name: "pid",     type: "number",  description: "node.process.output.pid" },
   ],
   input_schema: [
-    { name: "operation", type: "string", description: "list / start / stop / info" },
-    { name: "command",   type: "string", description: "Command to start" },
-    { name: "pid",       type: "number", description: "Process ID" },
+    { name: "operation", type: "string", description: "node.process.input.operation" },
+    { name: "command",   type: "string", description: "node.process.input.command" },
+    { name: "pid",       type: "number", description: "node.process.input.pid" },
   ],
   create_default: () => ({ operation: "list", command: "", pid: 0, signal: "SIGTERM", filter: "" }),
   EditPanel: ProcessEditPanel,

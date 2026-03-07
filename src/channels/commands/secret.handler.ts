@@ -1,6 +1,7 @@
 import { error_message } from "../../utils/common.js";
 import { slash_name_in, slash_token_in } from "../slash-command.js";
 import type { SecretVaultLike } from "../../security/secret-vault.js";
+import { format_subcommand_guide, format_subcommand_usage } from "./registry.js";
 import { format_mention, type CommandContext, type CommandHandler } from "./types.js";
 
 const ROOT_ALIASES = ["secret", "secrets", "vault", "비밀"] as const;
@@ -30,7 +31,8 @@ function resolve_action(command_name: string, arg0: string): SecretAction | null
   const compound = COMPOUND_ALIASES.get(command_name.toLowerCase());
   if (compound) return compound as SecretAction;
   if (!slash_name_in(command_name, ROOT_ALIASES)) return null;
-  if (!arg0 || slash_token_in(arg0, STATUS_ALIASES)) return "status";
+  if (!arg0) return null;
+  if (slash_token_in(arg0, STATUS_ALIASES)) return "status";
   if (slash_token_in(arg0, LIST_ALIASES)) return "list";
   if (slash_token_in(arg0, SET_ALIASES)) return "set";
   if (slash_token_in(arg0, GET_ALIASES)) return "get";
@@ -41,14 +43,8 @@ function resolve_action(command_name: string, arg0: string): SecretAction | null
   return null;
 }
 
-function format_usage(mention: string): string {
-  return [
-    `${mention}secret 명령 사용법`,
-    "- /secret status | list | set <name> <value> | get <name>",
-    "- /secret reveal <name> | remove <name>",
-    "- /secret encrypt <text> | decrypt <cipher>",
-    "- exec에서 {{secret:name}} 형태로 참조 가능",
-  ].join("\n");
+function format_param_usage(mention: string, subcommand: string): string {
+  return `${mention}${format_subcommand_usage("secret", subcommand)}`;
 }
 
 export class SecretHandler implements CommandHandler {
@@ -67,11 +63,15 @@ export class SecretHandler implements CommandHandler {
     const args_lower = args.map((v) => v.toLowerCase());
     const cmd_name = String(command?.name || "");
     const is_root = slash_name_in(cmd_name, ROOT_ALIASES);
+    const mention = format_mention(provider, message.sender_id);
     const action = resolve_action(cmd_name, args_lower[0] || "");
-    if (!action) return false;
+    if (!action) {
+      const guide = format_subcommand_guide("secret");
+      if (guide) { await ctx.send_reply(`${mention}${guide}`); return true; }
+      return false;
+    }
 
     const payload_args = is_root ? args.slice(1) : args;
-    const mention = format_mention(provider, message.sender_id);
 
     switch (action) {
       case "status": return this.handle_status(ctx, mention);
@@ -113,7 +113,7 @@ export class SecretHandler implements CommandHandler {
     const name = args[0] || "";
     const value = args.slice(1).join(" ").trim();
     if (!name || !value) {
-      await ctx.send_reply(format_usage(mention));
+      await ctx.send_reply(format_param_usage(mention, "set"));
       return true;
     }
     const saved = await this.vault.put_secret(name, value);
@@ -127,7 +127,7 @@ export class SecretHandler implements CommandHandler {
 
   private async handle_get(ctx: CommandContext, mention: string, args: string[]): Promise<boolean> {
     const name = args[0] || "";
-    if (!name) { await ctx.send_reply(format_usage(mention)); return true; }
+    if (!name) { await ctx.send_reply(format_param_usage(mention, "get")); return true; }
     const cipher = await this.vault.get_secret_cipher(name);
     await ctx.send_reply(
       cipher
@@ -139,7 +139,7 @@ export class SecretHandler implements CommandHandler {
 
   private async handle_reveal(ctx: CommandContext, mention: string, args: string[]): Promise<boolean> {
     const name = args[0] || "";
-    if (!name) { await ctx.send_reply(format_usage(mention)); return true; }
+    if (!name) { await ctx.send_reply(format_param_usage(mention, "reveal")); return true; }
     const plain = await this.vault.reveal_secret(name);
     await ctx.send_reply(
       plain !== null
@@ -151,7 +151,7 @@ export class SecretHandler implements CommandHandler {
 
   private async handle_remove(ctx: CommandContext, mention: string, args: string[]): Promise<boolean> {
     const name = args[0] || "";
-    if (!name) { await ctx.send_reply(format_usage(mention)); return true; }
+    if (!name) { await ctx.send_reply(format_param_usage(mention, "remove")); return true; }
     const removed = await this.vault.remove_secret(name);
     await ctx.send_reply(
       removed
@@ -163,7 +163,7 @@ export class SecretHandler implements CommandHandler {
 
   private async handle_encrypt(ctx: CommandContext, mention: string, args: string[]): Promise<boolean> {
     const plain = args.join(" ").trim();
-    if (!plain) { await ctx.send_reply(format_usage(mention)); return true; }
+    if (!plain) { await ctx.send_reply(format_param_usage(mention, "encrypt")); return true; }
     const cipher = await this.vault.encrypt_text(plain, "adhoc:secret");
     await ctx.send_reply(`${mention}encrypt 완료\n${cipher}`);
     return true;
@@ -171,7 +171,7 @@ export class SecretHandler implements CommandHandler {
 
   private async handle_decrypt(ctx: CommandContext, mention: string, args: string[]): Promise<boolean> {
     const cipher = args.join(" ").trim();
-    if (!cipher) { await ctx.send_reply(format_usage(mention)); return true; }
+    if (!cipher) { await ctx.send_reply(format_param_usage(mention, "decrypt")); return true; }
     try {
       const plain = await this.vault.decrypt_text(cipher, "adhoc:secret");
       await ctx.send_reply(`${mention}decrypt 결과\n${plain}`);

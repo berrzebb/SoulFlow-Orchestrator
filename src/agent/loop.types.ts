@@ -16,6 +16,18 @@ export type AgentToolCallHandler = (args: {
   response: LlmResponse;
 }) => Promise<string | null>;
 
+/** Compaction flush 설정. 컨텍스트 윈도우 임계점 도달 시 메모리 자동 저장. */
+export type CompactionFlushConfig = {
+  /** 컨텍스트 윈도우 크기 (토큰). */
+  context_window: number;
+  /** 응답 생성을 위한 최소 보존 토큰. 기본 20,000. */
+  reserve_floor?: number;
+  /** 트리거 여유 토큰. 기본 4,000. */
+  soft_threshold?: number;
+  /** 임계점 도달 시 호출. 메모리 저장 등 수행. */
+  flush: () => Promise<void>;
+};
+
 export type AgentLoopRunOptions = {
   loop_id: string;
   agent_id: string;
@@ -41,6 +53,8 @@ export type AgentLoopRunOptions = {
   model?: string;
   max_tokens?: number;
   temperature?: number;
+  /** 컨텍스트 압축 전 메모리 자동 저장 설정. */
+  compaction_flush?: CompactionFlushConfig;
 };
 
 export type AgentLoopRunResult = {

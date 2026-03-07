@@ -41,14 +41,14 @@ export const aggregate_descriptor: FrontendNodeDescriptor = {
   icon: "∑",
   color: "#9c27b0",
   shape: "rect",
-  toolbar_label: "+ Aggregate",
+  toolbar_label: "node.aggregate.label",
   category: "data",
   output_schema: [
-    { name: "result", type: "unknown", description: "Aggregated result" },
-    { name: "count",  type: "number",  description: "Number of items processed" },
+    { name: "result", type: "unknown", description: "node.aggregate.output.result" },
+    { name: "count",  type: "number",  description: "node.aggregate.output.count" },
   ],
   input_schema: [
-    { name: "items", type: "array", description: "Items to aggregate" },
+    { name: "items", type: "array", description: "node.aggregate.input.items" },
   ],
   create_default: () => ({ operation: "collect", array_field: "" }),
   EditPanel: AggregateEditPanel,

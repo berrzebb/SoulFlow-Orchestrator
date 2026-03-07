@@ -64,6 +64,26 @@ describe("resolve_gateway", () => {
     expect(result).toEqual({ action: "execute", mode: "task", executor: "chatgpt" });
   });
 
+  it("phase 분류 시 phase 모드 + node_categories 전달", async () => {
+    mock_classify.mockResolvedValueOnce({ mode: "phase", workflow_id: "wf-1", nodes: ["data", "ai"] });
+    const result = await resolve_gateway("워크플로우 실행", empty_ctx, [], make_deps());
+    expect(result.action).toBe("execute");
+    if (result.action === "execute") {
+      expect(result.mode).toBe("phase");
+      expect(result.node_categories).toEqual(["data", "ai"]);
+      expect(result.workflow_id).toBe("wf-1");
+    }
+  });
+
+  it("분류 결과에 tools 필드가 있으면 tool_categories 전달", async () => {
+    mock_classify.mockResolvedValueOnce({ mode: "once", tools: ["web", "filesystem"] });
+    const result = await resolve_gateway("파일 검색", empty_ctx, [], make_deps());
+    expect(result.action).toBe("execute");
+    if (result.action === "execute") {
+      expect(result.tool_categories).toEqual(["web", "filesystem"]);
+    }
+  });
+
   it("tool_loop 미지원 시 once로 다운그레이드", async () => {
     mock_classify.mockResolvedValueOnce({ mode: "agent" });
     const deps = make_deps({

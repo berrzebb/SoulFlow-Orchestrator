@@ -98,7 +98,13 @@ export function substitute_variables(
   const substituted = json.replace(/\{\{(\w+)\}\}/g, (_, key: string) => {
     const value = vars[key];
     // JSON 문자열 내부이므로 특수문자 이스케이프
-    return value !== undefined ? value.replace(/["\\\n\r\t]/g, (c) => `\\${c}`) : `{{${key}}}`;
+    if (value === undefined) return `{{${key}}}`;
+    return value.replace(/["\\\n\r\t]/g, (c) => {
+      if (c === "\n") return "\\n";
+      if (c === "\r") return "\\r";
+      if (c === "\t") return "\\t";
+      return `\\${c}`;
+    });
   });
   return JSON.parse(substituted) as WorkflowDefinition;
 }

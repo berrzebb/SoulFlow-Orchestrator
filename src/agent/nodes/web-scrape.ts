@@ -7,7 +7,7 @@ import { resolve_templates } from "../orche-node-executor.js";
 import { error_message } from "../../utils/common.js";
 
 const PRIVATE_HOST_RE =
-  /^(localhost|127\.\d+\.\d+\.\d+|::1|0\.0\.0\.0|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+)$/i;
+  /^(localhost|127\.\d+\.\d+\.\d+|::1|0\.0\.0\.0|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+|169\.254\.\d+\.\d+)$/i;
 
 export const web_scrape_handler: NodeHandler = {
   node_type: "web_scrape",
@@ -38,7 +38,9 @@ export const web_scrape_handler: NodeHandler = {
       if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
         return { output: { text: "", title: "", status: 0, error: `unsupported protocol: ${parsed.protocol}` } };
       }
-      if (PRIVATE_HOST_RE.test(parsed.hostname)) {
+      // Node.js URL.hostname은 IPv6를 브래킷 포함으로 반환 (예: [::1])
+      const hostname = parsed.hostname.replace(/^\[|\]$/g, "");
+      if (PRIVATE_HOST_RE.test(hostname)) {
         return { output: { text: "", title: "", status: 0, error: `blocked private host: ${parsed.hostname}` } };
       }
     } catch {

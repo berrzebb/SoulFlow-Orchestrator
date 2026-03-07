@@ -11,12 +11,12 @@ export type NodeShape = "rect" | "diamond";
 export type NodeCategory = "flow" | "data" | "ai" | "integration" | "interaction" | "advanced";
 
 export const NODE_CATEGORIES: { id: NodeCategory; label: string; icon: string }[] = [
-  { id: "flow", label: "Flow", icon: "⑆" },
-  { id: "data", label: "Data", icon: "⛁" },
-  { id: "ai", label: "AI", icon: "🤖" },
-  { id: "integration", label: "I/O", icon: "↗" },
-  { id: "interaction", label: "Human", icon: "🙋" },
-  { id: "advanced", label: "More", icon: "⚙" },
+  { id: "flow", label: "cat.flow", icon: "⑆" },
+  { id: "data", label: "cat.data", icon: "⛁" },
+  { id: "ai", label: "cat.ai", icon: "🤖" },
+  { id: "integration", label: "cat.integration", icon: "↗" },
+  { id: "interaction", label: "cat.interaction", icon: "🙋" },
+  { id: "advanced", label: "cat.advanced", icon: "⚙" },
 ];
 
 export interface FrontendNodeDescriptor {
@@ -35,7 +35,7 @@ export interface FrontendNodeDescriptor {
 
 /** 노드 편집 패널에서 사용 가능한 동적 옵션 (API에서 가져온 기존 리소스 목록). */
 export interface NodeOptions {
-  backends?: { value: string; label: string }[];
+  backends?: { value: string; label: string; available?: boolean; provider_type?: string }[];
   models?: { name: string }[];
   oauth_integrations?: { instance_id: string; label: string; service_type: string; enabled: boolean }[];
   workflow_templates?: { title: string; slug: string }[];

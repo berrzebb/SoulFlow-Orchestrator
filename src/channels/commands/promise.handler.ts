@@ -1,4 +1,5 @@
 import { slash_name_in } from "../slash-command.js";
+import { format_subcommand_guide, format_subcommand_usage } from "./registry.js";
 import { format_mention, type CommandContext, type CommandHandler } from "./types.js";
 
 type PromiseScope = "global" | "team" | "agent";
@@ -40,8 +41,12 @@ export class PromiseHandler implements CommandHandler {
   async handle(ctx: CommandContext): Promise<boolean> {
     const { provider, message, command } = ctx;
     const args = (command?.args || []).join(" ").trim();
-    const promises = this.access.get_promise_service();
     const mention = format_mention(provider, message.sender_id);
+    if (!args) {
+      const guide = format_subcommand_guide("promise");
+      if (guide) { await ctx.send_reply(`${mention}${guide}`); return true; }
+    }
+    const promises = this.access.get_promise_service();
 
     if (!promises) {
       await ctx.send_reply("promise service unavailable");
@@ -53,7 +58,7 @@ export class PromiseHandler implements CommandHandler {
     if (action === "set") {
       const pair = parse_set_pair(args);
       if (!pair) {
-        await ctx.send_reply(`${mention}사용법: /promise set <key> <value> 또는 /promise set <key>=<value>`);
+        await ctx.send_reply(`${mention}${format_subcommand_usage("promise", "set")}`);
         return true;
       }
       const result = await promises.append_promise({

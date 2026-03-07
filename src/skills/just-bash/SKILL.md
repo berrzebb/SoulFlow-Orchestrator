@@ -20,14 +20,14 @@ metadata:
 |------|---------|
 | File search | `exec: rg "pattern" src/` |
 | Git operation | `exec: git log --oneline -10` |
-| System info | `exec: systeminfo` |
-| File list | `exec: Get-ChildItem -Recurse *.ts` |
+| System info | `exec: uname -a` |
+| File list | `exec: find . -name "*.ts" -type f` |
 
 `exec` automatically uses `just-bash` runtime when available, native shell as fallback.
 
 ## Recommended Flow
 
-1. Start with read-only inspection (`rg`, `Get-ChildItem`, `git status`).
+1. Start with read-only inspection (`rg`, `ls`, `git status`).
 2. Keep commands short, deterministic, single-purpose.
 3. For write operations, summarize intent first and verify results after.
 

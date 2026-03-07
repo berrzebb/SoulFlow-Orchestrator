@@ -2,8 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import { Badge } from "../../components/badge";
-import { useI18n, useT } from "../../i18n";
-import { tool_i18n } from "../../i18n/tool-descriptions";
+import { useT } from "../../i18n";
 
 interface ToolSchema {
   type: string;
@@ -39,10 +38,12 @@ function ToolCard({ name, description, parameters, is_mcp, is_open, onToggle }: 
   name: string; description: string; parameters: Record<string, unknown>; is_mcp: boolean; is_open: boolean; onToggle: (name: string) => void;
 }) {
   const t = useT();
-  const { locale } = useI18n();
-  const i18n = is_mcp ? undefined : tool_i18n[locale]?.[name];
-  const loc_desc = i18n?.desc ?? description;
-  const loc_param = (p_name: string, fallback: string) => i18n?.params?.[p_name] ?? fallback;
+  const loc_desc = (!is_mcp && t(`tool.${name}.desc`) !== `tool.${name}.desc`) ? t(`tool.${name}.desc`) : description;
+  const loc_param = (p_name: string, fallback: string) => {
+    const key = `tool.${name}.param.${p_name}`;
+    const val = t(key);
+    return val !== key ? val : fallback;
+  };
   const params = extract_params(parameters);
 
   return (

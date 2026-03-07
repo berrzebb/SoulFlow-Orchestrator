@@ -1,3 +1,10 @@
+# local mcp
+.claude/settings.local.json
+mcp-kanban-server.ts
+scripts/setup-project-kanban.ts
+scripts/kanban-cli.ts
+
+config.db
 # Dependencies
 node_modules/
 
@@ -14,9 +21,11 @@ dist/
 **/.env.*.local
 **/!.env.example
 
-# Runtime/generated state
-**/runtime/
-**/memory/
+# Runtime/generated state (루트 레벨만 — src/ 하위 제외)
+/runtime/
+/memory/
+/workspace/**/runtime/
+/workspace/**/memory/
 
 # Logs
 *.log

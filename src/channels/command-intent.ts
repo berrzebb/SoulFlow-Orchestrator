@@ -69,7 +69,7 @@ export function parse_memory_quick_action(
   if (/^(?:메모리|memory)\s*(?:목록|list|리스트)$/.test(text)) return "list";
   if (/^(?:오늘\s*메모리|메모리\s*오늘|memory\s*today)$/.test(text)) return "today";
   if (/^(?:장기\s*메모리|메모리\s*장기|memory\s*longterm|longterm\s*memory)$/.test(text)) return "longterm";
-  if (/^(?:메모리|memory)\s*(?:검색|search)\b/.test(text)) return "search";
+  if (/^(?:메모리|memory)\s*(?:검색|search)(?:\b|$|\s)/.test(text)) return "search";
   return null;
 }
 

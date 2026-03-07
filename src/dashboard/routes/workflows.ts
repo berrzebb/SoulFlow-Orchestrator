@@ -135,6 +135,17 @@ export const handle_workflow: RouteHandler = async (ctx) => {
     }
   }
 
+  // POST /api/workflow/suggest — LLM 기반 워크플로우 편집 제안
+  if (path === "/api/workflow/suggest" && method === "POST") {
+    if (!ops.suggest) { json(res, 501, { error: "not_implemented" }); return true; }
+    const body = await read_body(req);
+    if (!body?.instruction || typeof body.instruction !== "string") { json(res, 400, { error: "instruction_required" }); return true; }
+    if (!body.workflow || typeof body.workflow !== "object") { json(res, 400, { error: "workflow_required" }); return true; }
+    const result = await ops.suggest(body.instruction, body.workflow as Record<string, unknown>);
+    json(res, result.ok ? 200 : 400, result);
+    return true;
+  }
+
   // GET /api/workflow/templates/:name/export — YAML 텍스트 export
   const export_match = path.match(/^\/api\/workflow\/templates\/([^/]+)\/export$/);
   if (export_match && method === "GET") {

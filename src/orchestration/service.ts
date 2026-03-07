@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import type { InboundMessage } from "../bus/types.js";
 import type { ChannelProvider } from "../channels/types.js";
 import type { AgentRuntimeLike } from "../agent/runtime.types.js";
@@ -5,7 +6,7 @@ import type { ProviderRegistry } from "../providers/service.js";
 import type { ChatMessage, RuntimeExecutionPolicy } from "../providers/types.js";
 import type { RuntimePolicyResolver } from "../channels/runtime-policy.js";
 import type { SecretVaultService } from "../security/secret-vault.js";
-import type { TaskNode } from "../agent/loop.js";
+import type { TaskNode, CompactionFlushConfig } from "../agent/loop.js";
 import type { Logger } from "../logger.js";
 import type { ToolExecutionContext } from "../agent/tools/types.js";
 import type { ExecutionMode, OrchestrationRequest, OrchestrationResult } from "./types.js";
@@ -19,7 +20,7 @@ import { seal_inbound_sensitive_text } from "../security/inbound-seal.js";
 import { redact_sensitive_text } from "../security/sensitive.js";
 import { is_local_reference } from "../utils/local-ref.js";
 import { resolve_executor_provider, type ExecutorProvider, type ProviderCapabilities } from "../providers/executor.js";
-import { select_tools_for_request } from "./tool-selector.js";
+import { select_tools_for_request, rebuild_tool_index } from "./tool-selector.js";
 import type { AgentBackendRegistry } from "../agent/agent-registry.js";
 import type { AgentRunResult, AgentSession } from "../agent/agent.types.js";
 import type { ToolSchema } from "../agent/tools/types.js";
@@ -29,12 +30,13 @@ import type { WorkflowEventService, AppendWorkflowEventInput } from "../events/i
 import { now_iso, now_ms, error_message, short_id } from "../utils/common.js";
 // ── 추출 모듈 ──
 import {
-  ONCE_MODE_OVERLAY, AGENT_MODE_OVERLAY, AGENT_TOOL_NUDGE,
+  build_once_overlay, build_agent_overlay, build_bootstrap_overlay,
+  AGENT_TOOL_NUDGE,
   format_secret_notice, GUARD_SUMMARY_PROMPT,
 } from "./prompts.js";
 import { ConfirmationGuard, format_guard_prompt } from "./confirmation-guard.js";
 import { FINISH_REASON_WARNINGS } from "../agent/finish-reason-warnings.js";
-import { detect_escalation, is_once_escalation } from "./classifier.js";
+import { detect_escalation, is_once_escalation, is_agent_escalation } from "./classifier.js";
 import { resolve_gateway } from "./gateway.js";
 import {
   create_tool_call_handler, type ToolCallState, type ToolCallHandlerDeps,
@@ -105,6 +107,7 @@ export type OrchestrationServiceDeps = {
   vector_store?: (op: string, opts: Record<string, unknown>) => Promise<Record<string, unknown>>;
   oauth_fetch?: (service_id: string, opts: { url: string; method: string; headers?: Record<string, string>; body?: unknown }) => Promise<{ status: number; body: unknown; headers: Record<string, string> }>;
   get_webhook_data?: (path: string) => Promise<{ method: string; headers: Record<string, string>; body: unknown; query: Record<string, string> } | null>;
+  wait_kanban_event?: (board_id: string, filter: { actions?: string[]; column_id?: string }) => Promise<{ card_id: string; board_id: string; action: string; actor: string; detail: Record<string, unknown>; created_at: string } | null>;
   create_task?: (opts: { title: string; objective: string; channel?: string; chat_id?: string; max_turns?: number; initial_memory?: Record<string, unknown> }) => Promise<{ task_id: string; status: string; result?: unknown; error?: string }>;
   query_db?: (datasource: string, query: string, params?: Record<string, unknown>) => Promise<{ rows: unknown[]; affected_rows: number }>;
 };
@@ -170,6 +173,21 @@ export class OrchestrationService {
     };
   }
 
+  // ── 페르소나 + 부트스트랩 ──
+
+  /** SOUL.md에서 페르소나 이름 + BOOTSTRAP.md 존재 여부를 조회. */
+  private _get_persona_context(): { name: string; bootstrap: { exists: boolean; content: string } } {
+    const cb = this.runtime.get_context_builder();
+    return { name: cb.get_persona_name(), bootstrap: cb.get_bootstrap() };
+  }
+
+  /** 모드에 맞는 overlay를 생성. bootstrap 모드면 bootstrap overlay가 우선. */
+  private _build_overlay(mode: "once" | "agent", persona?: { name: string; bootstrap: { exists: boolean; content: string } }): string {
+    const ctx = persona ?? this._get_persona_context();
+    if (ctx.bootstrap.exists) return build_bootstrap_overlay(ctx.name, ctx.bootstrap.content);
+    return mode === "once" ? build_once_overlay(ctx.name) : build_agent_overlay(ctx.name);
+  }
+
   /** Phase Loop HITL bridge — ChannelManager에서 사용자 응답을 라우팅. */
   get_phase_hitl_bridge(): import("../channels/manager.js").WorkflowHitlBridge {
     const pending = this.phase_pending_responses;
@@ -192,10 +210,10 @@ export class OrchestrationService {
   }
 
   /** 공통 AgentHooks 구성. args.req + stream + backend_id 조합. */
-  private _hooks_for(stream: StreamBuffer, args: { req: OrchestrationRequest; runtime_policy: RuntimeExecutionPolicy }, backend_id: string) {
+  private _hooks_for(stream: StreamBuffer, args: { req: OrchestrationRequest; runtime_policy: RuntimeExecutionPolicy }, backend_id: string, task_id?: string) {
     return build_agent_hooks(this.hooks_deps, {
       buffer: stream, on_stream: args.req.on_stream, runtime_policy: args.runtime_policy,
-      channel_context: { channel: args.req.provider, chat_id: String(args.req.message.chat_id || "") },
+      channel_context: { channel: args.req.provider, chat_id: String(args.req.message.chat_id || ""), task_id },
       on_tool_block: args.req.on_tool_block, backend_id, on_progress: args.req.on_progress,
       run_id: args.req.run_id, on_agent_event: args.req.on_agent_event,
     }).hooks;
@@ -297,6 +315,10 @@ export class OrchestrationService {
       category_map[tool.name] = tool.category;
     }
     const tool_categories = [...new Set(Object.values(category_map))];
+    const tool_index_db = this.deps.workspace
+      ? join(this.deps.workspace, "runtime", "tools", "tool-index.db")
+      : undefined;
+    rebuild_tool_index(all_tool_definitions as ToolSchema[], category_map, tool_index_db);
     const skill_provider_prefs = this._collect_skill_provider_preferences(skill_names);
 
     // Gateway: 분류 + 라우팅 결정
@@ -361,7 +383,7 @@ export class OrchestrationService {
     }
 
     const classifier_cats = decision.action === "execute" ? decision.tool_categories : undefined;
-    const { tools: tool_definitions, categories } = select_tools_for_request(all_tool_definitions, task_with_media, mode, skill_tool_names, classifier_cats, category_map);
+    const { tools: tool_definitions, categories } = await select_tools_for_request(all_tool_definitions, task_with_media, mode, skill_tool_names, classifier_cats, category_map, classifier_cats);
     const system_base = await this._build_system_prompt(skill_names, req.provider, req.message.chat_id, new Set(categories));
     this.logger.info("dispatch", { mode, executor, skills: skill_names, tool_count: tool_definitions.length });
 
@@ -411,6 +433,19 @@ export class OrchestrationService {
       };
 
       const first = await run_loop(executor);
+
+      // agent → task 에스컬레이션: agent 루프가 approval 필요 상황을 감지한 경우
+      if (loop_mode === "agent" && is_agent_escalation(first.error)) {
+        this.logger.info("agent_escalation_to_task", { error: first.error, run_id: req.run_id });
+        if (req.run_id) this.process_tracker?.set_mode(req.run_id, "task");
+        const task_args = {
+          req, executor, task_with_media, media, context_block,
+          skill_names, system_base, runtime_policy, tool_definitions, tool_ctx, skill_provider_prefs, request_scope,
+        };
+        const escalated = await this.run_task_loop(task_args);
+        return finalize(escalated);
+      }
+
       if (first.reply || first.suppress_reply) return finalize(first);
 
       if (executor === "claude_code") {
@@ -436,7 +471,7 @@ export class OrchestrationService {
     emit_execution_info(stream, args.req.on_stream, "once", args.executor, this.logger);
     const { system_base } = args;
     const messages: ChatMessage[] = [
-      { role: "system", content: `${system_base}\n\n${ONCE_MODE_OVERLAY}` },
+      { role: "system", content: `${system_base}\n\n${this._build_overlay("once")}` },
       { role: "user", content: args.context_block },
     ];
 
@@ -459,7 +494,7 @@ export class OrchestrationService {
             max_turns: this.config.agent_loop_max_turns,
             effort: "medium",
             ...(caps.thinking ? { enable_thinking: true, max_thinking_tokens: 10000 } : {}),
-            hooks: this._hooks_for(stream, args, backend.id),
+            hooks: this._hooks_for(stream, args, backend.id, args.tool_ctx.task_id),
             abort_signal: args.req.signal,
             mcp_server_configs: this.get_mcp_configs?.() ?? undefined,
             tool_context: args.tool_ctx,
@@ -506,7 +541,7 @@ export class OrchestrationService {
           messages: [
             ...messages,
             { role: "assistant", content: `[TOOL_RESULTS]\n${tool_output}` },
-            { role: "user", content: this.build_persona_followup(this.runtime.get_context_builder().skills_loader.get_role_skill("butler")?.heart || "") },
+            { role: "user", content: this.build_persona_followup(this.runtime.get_context_builder().skills_loader.get_role_skill("concierge")?.heart || "") },
           ],
           max_tokens: 800,
           temperature: 0.2,
@@ -535,6 +570,18 @@ export class OrchestrationService {
     }
   }
 
+  /** 컨텍스트 압축 전 메모리 자동 저장 설정 생성. 200K 컨텍스트 기준. */
+  private build_compaction_flush(): CompactionFlushConfig | undefined {
+    const mem = this.runtime.get_context_builder()?.memory_store;
+    if (!mem) return undefined;
+    return {
+      context_window: 200_000,
+      flush: async () => {
+        try { await mem.append_daily(`[auto-flush] Session nearing compaction — durable memories preserved.\n`); } catch { /* best-effort */ }
+      },
+    };
+  }
+
   private async run_agent_loop(args: RunExecutionArgs & { media: string[]; history_lines: string[] }): Promise<OrchestrationResult> {
     const stream = new StreamBuffer();
     emit_execution_info(stream, args.req.on_stream, "agent", args.executor, this.logger);
@@ -550,7 +597,7 @@ export class OrchestrationService {
           const result = await this.agent_backends.run(backend.id, {
             task: args.context_block,
             task_id: `agent:${args.req.provider}:${args.req.message.chat_id}:${args.req.alias}`,
-            system_prompt: `${system}\n\n${AGENT_MODE_OVERLAY}`,
+            system_prompt: `${system}\n\n${this._build_overlay("agent")}`,
             tools: args.tool_definitions as ToolSchema[],
             tool_executors: this.runtime.get_tool_executors(),
             runtime_policy: args.runtime_policy,
@@ -559,7 +606,7 @@ export class OrchestrationService {
             max_turns: this.config.agent_loop_max_turns,
             effort: "high",
             ...(caps.thinking ? { enable_thinking: true, max_thinking_tokens: 16000 } : {}),
-            hooks: this._hooks_for(stream, args, backend.id),
+            hooks: this._hooks_for(stream, args, backend.id, args.tool_ctx.task_id),
             abort_signal: args.req.signal,
             mcp_server_configs: this.get_mcp_configs?.() ?? undefined,
             tool_context: args.tool_ctx,
@@ -589,7 +636,7 @@ export class OrchestrationService {
       tools: args.tool_definitions,
       provider_id: args.executor,
       runtime_policy: args.runtime_policy,
-      current_message: `${AGENT_MODE_OVERLAY}\n\n${args.context_block}`,
+      current_message: `${this._build_overlay("agent")}\n\n${args.context_block}`,
       history_days: [],
       skill_names: args.skill_names,
       media: args.media,
@@ -610,6 +657,7 @@ export class OrchestrationService {
         on_tool_event: (e) => this.session_cd.observe(e),
         log_ctx: args.req.run_id ? { run_id: args.req.run_id, agent_id: String(args.executor), provider: args.req.provider, chat_id: args.req.message.chat_id } : undefined,
       }),
+      compaction_flush: this.build_compaction_flush(),
     });
 
     flush_remaining(stream, args.req.on_stream);
@@ -618,6 +666,10 @@ export class OrchestrationService {
 
     const content = sanitize_provider_output(String(response.final_content || ""));
     if (!content) return error_result("agent", stream, "empty_provider_response", state.tool_count);
+
+    // agent → task 에스컬레이션 감지 (legacy 경로)
+    const escalation = detect_escalation(content, "agent");
+    if (escalation) return error_result("agent", stream, escalation, state.tool_count);
 
     const err = extract_provider_error(content);
     if (err) return error_result("agent", stream, err, state.tool_count);
@@ -693,7 +745,7 @@ export class OrchestrationService {
             tools: args.tool_definitions,
             provider_id: args.executor,
             runtime_policy: args.runtime_policy,
-            current_message: `${AGENT_MODE_OVERLAY}\n\n${seed_prompt}`,
+            current_message: `${this._build_overlay("agent")}\n\n${seed_prompt}`,
             history_days: [],
             skill_names: args.skill_names,
             media: args.media,
@@ -711,6 +763,7 @@ export class OrchestrationService {
               on_tool_event: (e) => this.session_cd.observe(e),
               log_ctx: args.req.run_id ? { run_id: args.req.run_id, agent_id: String(args.executor), provider: args.req.provider, chat_id: args.req.message.chat_id } : undefined,
             }),
+            compaction_flush: this.build_compaction_flush(),
           });
 
           flush_remaining(stream, args.req.on_stream);
@@ -790,10 +843,10 @@ export class OrchestrationService {
     return reply_result("task", stream, normalize_agent_reply(output, args.req.alias, args.req.message.sender_id), total_tool_count);
   }
 
-  /** butler 페르소나 어투를 followup 지시에 포함. */
-  private build_persona_followup(butler_heart: string): string {
+  /** concierge 페르소나 어투를 followup 지시에 포함. */
+  private build_persona_followup(concierge_heart: string): string {
     const base = "위 실행 결과를 바탕으로 간결하게 한국어로 답하세요.";
-    return butler_heart ? `[응답 어투] ${butler_heart}\n\n${base}` : base;
+    return concierge_heart ? `[응답 어투] ${concierge_heart}\n\n${base}` : base;
   }
 
   /** AgentRunResult → OrchestrationResult 변환. native_tool_loop 백엔드 결과를 통합 형식으로 변환. */
@@ -814,6 +867,11 @@ export class OrchestrationService {
     }
     const content = sanitize_provider_output(String(result.content || "")).trim();
     if (!content) return error_result(mode, stream, "native_backend_empty", result.tool_calls_count);
+    // agent 에스컬레이션 감지 (native 백엔드)
+    if (mode === "agent") {
+      const esc = detect_escalation(content, "agent");
+      if (esc) return error_result("agent", stream, esc, result.tool_calls_count);
+    }
     const provider_err = extract_provider_error(content);
     if (provider_err) return error_result(mode, stream, provider_err, result.tool_calls_count);
     const usage = _extract_usage(result.usage);
@@ -841,15 +899,15 @@ export class OrchestrationService {
     return prefs;
   }
 
-  /** 시스템 프롬프트를 빌드. butler 역할 힌트 포함. tool_categories로 TOOLS.md 필터링. */
+  /** 시스템 프롬프트를 빌드. concierge 역할 힌트 포함. tool_categories로 TOOLS.md 필터링. */
   private async _build_system_prompt(skill_names: string[], provider: string, chat_id: string, tool_categories?: ReadonlySet<string>): Promise<string> {
     const context_builder = this.runtime.get_context_builder();
     const system = await context_builder.build_system_prompt(
       skill_names, undefined, { channel: provider, chat_id }, tool_categories,
     );
-    const butler_skill = context_builder.skills_loader.get_role_skill("butler");
-    const active_role_hint = butler_skill?.heart
-      ? `\n\n# Active Role: butler\n${butler_skill.heart}`
+    const concierge_skill = context_builder.skills_loader.get_role_skill("concierge");
+    const active_role_hint = concierge_skill?.heart
+      ? `\n\n# Active Role: concierge\n${concierge_skill.heart}`
       : "";
     return `${system}${active_role_hint}`;
   }
@@ -875,7 +933,7 @@ export class OrchestrationService {
       return await this.agent_backends.run(backend.id, {
         task: seed_prompt,
         task_id: `task:${task_id}`,
-        system_prompt: `${system}\n\n${AGENT_MODE_OVERLAY}`,
+        system_prompt: `${system}\n\n${this._build_overlay("agent")}`,
         tools: args.tool_definitions as ToolSchema[],
         tool_executors: this.runtime.get_tool_executors(),
         runtime_policy: args.runtime_policy,
@@ -884,7 +942,7 @@ export class OrchestrationService {
         max_turns: this.config.agent_loop_max_turns,
         effort: "high",
         ...(caps.thinking ? { enable_thinking: true, max_thinking_tokens: 16000 } : {}),
-        hooks: this._hooks_for(stream, args, backend.id),
+        hooks: this._hooks_for(stream, args, backend.id, task_tool_ctx.task_id),
         abort_signal: args.req.signal,
         mcp_server_configs: this.get_mcp_configs?.() ?? undefined,
         tool_context: task_tool_ctx,
@@ -1037,7 +1095,7 @@ export class OrchestrationService {
             tools: all_tool_definitions,
             provider_id: executor,
             runtime_policy,
-            current_message: `${AGENT_MODE_OVERLAY}\n\n${context_block}`,
+            current_message: `${this._build_overlay("agent")}\n\n${context_block}`,
             history_days: [],
             skill_names,
             media,
@@ -1055,6 +1113,7 @@ export class OrchestrationService {
               on_tool_event: (e) => this.session_cd.observe(e),
               log_ctx: req.run_id ? { run_id: req.run_id, agent_id: String(executor), provider: req.provider, chat_id: req.message.chat_id } : undefined,
             }),
+            compaction_flush: this.build_compaction_flush(),
           });
 
           flush_remaining(stream, req.on_stream);
@@ -1213,6 +1272,7 @@ export class OrchestrationService {
       vector_store: this.deps.vector_store,
       oauth_fetch: this.deps.oauth_fetch,
       get_webhook_data: this.deps.get_webhook_data,
+      wait_kanban_event: this.deps.wait_kanban_event,
       create_task: this.deps.create_task,
       query_db: this.deps.query_db,
       on_event: (event) => {

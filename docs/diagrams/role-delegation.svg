@@ -74,7 +74,7 @@
 <rect x="1302.464" y="596.8" width="337.536" height="67.2" rx="6" ry="6" fill="#6a2d2d" stroke="#bf5a5a" stroke-width="0.75" />
 <rect x="1679.9999999999998" y="596.8" width="327.552" height="67.2" rx="6" ry="6" fill="#4a4a4a" stroke="#8a8a8a" stroke-width="0.75" />
 <text x="872.48" y="113.6" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;User Message&quot;</text>
-<text x="872.48" y="230.8" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;🏠 butler&lt;br/&gt;사용자 대면 · 비개발 처리&quot;</text>
+<text x="872.48" y="230.8" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;🏠 concierge&lt;br/&gt;사용자 대면 · 비개발 처리&quot;</text>
 <text x="977.972" y="364" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;📋 pm&lt;br/&gt;요구사항 분석 · 스펙 작성&quot;</text>
 <text x="872.48" y="497.20000000000005" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;🔧 pl&lt;br/&gt;실행 조율 · Phase Gate&quot;</text>
 <text x="268.736" y="630.4" text-anchor="middle" dy="0.35em" font-size="19.2" font-weight="400" letter-spacing="-0.384" fill="var(--_text)">&quot;⚡ implementer&lt;br/&gt;코드 구현 · 셀프 검증&quot;</text>

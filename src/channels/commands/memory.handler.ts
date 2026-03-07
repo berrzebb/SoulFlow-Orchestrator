@@ -4,6 +4,7 @@ import {
   normalize_common_command_text,
 } from "../command-intent.js";
 import { strip_memory_uri } from "../../agent/tools/memory-format.js";
+import { format_subcommand_guide, format_subcommand_usage } from "./registry.js";
 import { format_mention, type CommandContext, type CommandHandler } from "./types.js";
 
 export interface MemoryStoreLike {
@@ -25,13 +26,6 @@ function kst_today_key(now = Date.now()): string {
   return `${y}-${m}-${d}`;
 }
 
-function format_usage(mention: string): string {
-  return [
-    `${mention}memory 명령 사용법`,
-    "- /memory status | list | today | longterm | search <query>",
-  ].join("\n");
-}
-
 export class MemoryHandler implements CommandHandler {
   readonly name = "memory";
 
@@ -46,9 +40,13 @@ export class MemoryHandler implements CommandHandler {
   async handle(ctx: CommandContext): Promise<boolean> {
     const { provider, message, command } = ctx;
     const normalized = normalize_common_command_text(String(message.content || ""));
+    const mention = format_mention(provider, message.sender_id);
+    if (command && !command.args.length) {
+      const guide = format_subcommand_guide("memory");
+      if (guide) { await ctx.send_reply(`${mention}${guide}`); return true; }
+    }
     const action = parse_memory_quick_action(normalized, command) || "status";
     const memory = this.access.get_memory_store();
-    const mention = format_mention(provider, message.sender_id);
 
     if (!memory) {
       await ctx.send_reply("memory service unavailable");
@@ -58,7 +56,7 @@ export class MemoryHandler implements CommandHandler {
     switch (action) {
       case "search": {
         const query = extract_memory_search_query(normalized, command);
-        if (!query) { await ctx.send_reply(format_usage(mention)); return true; }
+        if (!query) { await ctx.send_reply(`${mention}${format_subcommand_usage("memory", "search")}`); return true; }
         const rows = await memory.search(query, { limit: 10 });
         await ctx.send_reply(
           rows.length <= 0

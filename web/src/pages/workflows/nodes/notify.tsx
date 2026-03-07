@@ -35,8 +35,8 @@ function NotifyEditPanel({ node, update, t, options }: EditPanelProps) {
         <label className="label">{t("workflows.notify_parse_mode")}</label>
         <select className="input input--sm" value={String(node.parse_mode || "")} onChange={(e) => update({ parse_mode: e.target.value || undefined })}>
           <option value="">{t("workflows.notify_parse_auto")}</option>
-          <option value="markdown">Markdown</option>
-          <option value="html">HTML</option>
+          <option value="markdown">{t("workflows.opt_markdown")}</option>
+          <option value="html">{t("workflows.opt_html")}</option>
         </select>
       </div>
     </>
@@ -48,16 +48,16 @@ export const notify_descriptor: FrontendNodeDescriptor = {
   icon: "📢",
   color: "#4caf50",
   shape: "rect",
-  toolbar_label: "+ Notify",
+  toolbar_label: "node.notify.label",
   category: "integration",
   output_schema: [
-    { name: "ok",         type: "boolean", description: "Send success" },
-    { name: "message_id", type: "string",  description: "Sent message ID" },
+    { name: "ok",         type: "boolean", description: "node.notify.output.ok" },
+    { name: "message_id", type: "string",  description: "node.notify.output.message_id" },
   ],
   input_schema: [
-    { name: "content", type: "string", description: "Message content (override)" },
-    { name: "channel", type: "string", description: "Target channel (override)" },
-    { name: "chat_id", type: "string", description: "Target chat ID (override)" },
+    { name: "content", type: "string", description: "node.notify.input.content" },
+    { name: "channel", type: "string", description: "node.notify.input.channel" },
+    { name: "chat_id", type: "string", description: "node.notify.input.chat_id" },
   ],
   create_default: () => ({ content: "", target: "origin" }),
   EditPanel: NotifyEditPanel,

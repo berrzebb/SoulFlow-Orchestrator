@@ -4,6 +4,7 @@ export type {
   AgentLoopRunResult,
   AgentLoopTurnContext,
   AgentToolCallHandler,
+  CompactionFlushConfig,
   LoopTimestampProvider,
   TaskLoopRunOptions,
   TaskLoopRunResult,

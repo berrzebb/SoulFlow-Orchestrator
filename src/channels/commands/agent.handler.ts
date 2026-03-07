@@ -1,4 +1,5 @@
 import { slash_name_in } from "../slash-command.js";
+import { format_subcommand_guide, format_subcommand_usage } from "./registry.js";
 import { format_mention, type CommandContext, type CommandHandler } from "./types.js";
 
 const ALIASES = ["agent", "agents", "에이전트", "서브에이전트"] as const;
@@ -64,7 +65,10 @@ export class AgentHandler implements CommandHandler {
       return true;
     }
 
-    // 기본: 전체 목록
+    if (!action) {
+      const guide = format_subcommand_guide("agent");
+      if (guide) { await ctx.send_reply(`${mention}${guide}`); return true; }
+    }
     await ctx.send_reply(`${mention}${this.format_list()}`);
     return true;
   }
@@ -92,7 +96,7 @@ export class AgentHandler implements CommandHandler {
   }
 
   private format_status(id: string): string {
-    if (!id) return "사용법: /agent status <id>";
+    if (!id) return format_subcommand_usage("agent", "status");
     const a = this.access.get(id);
     if (!a) return `서브에이전트를 찾을 수 없습니다: ${id}`;
     const result_preview = a.last_result ? a.last_result.slice(0, 200) : "";
@@ -113,7 +117,7 @@ export class AgentHandler implements CommandHandler {
   }
 
   private do_send(id: string, text: string): string {
-    if (!id) return "사용법: /agent send <id> <text>";
+    if (!id) return format_subcommand_usage("agent", "send");
     if (!text.trim()) return "전송할 텍스트를 입력하세요.";
     const ok = this.access.send_input(id, text);
     return ok
@@ -122,7 +126,7 @@ export class AgentHandler implements CommandHandler {
   }
 
   private do_cancel(id: string): string {
-    if (!id) return "사용법: /agent cancel <id|all>";
+    if (!id) return format_subcommand_usage("agent", "cancel");
 
     if (id === "all" || id === "전체") {
       const running = this.access.list_running();

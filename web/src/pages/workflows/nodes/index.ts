@@ -55,6 +55,39 @@ import { network_descriptor } from "./network";
 import { web_form_descriptor } from "./web-form";
 import { system_info_descriptor } from "./system-info";
 import { package_manager_descriptor } from "./package-manager";
+import { data_format_descriptor } from "./data-format";
+import { encoding_descriptor } from "./encoding";
+import { regex_descriptor } from "./regex";
+import { diff_descriptor } from "./diff";
+import { screenshot_descriptor } from "./screenshot";
+import { database_descriptor } from "./database";
+import { template_engine_descriptor } from "./template-engine";
+import { validator_descriptor } from "./validator";
+import { queue_descriptor } from "./queue";
+import { ttl_cache_descriptor } from "./ttl-cache";
+import { image_descriptor } from "./image";
+import { stats_descriptor } from "./stats";
+import { text_descriptor } from "./text";
+import { compress_descriptor } from "./compress";
+import { math_descriptor } from "./math";
+import { table_descriptor } from "./table";
+import { eval_descriptor } from "./eval";
+import { date_calc_descriptor } from "./date-calc";
+import { format_descriptor } from "./format";
+import { set_ops_descriptor } from "./set-ops";
+import { lookup_descriptor } from "./lookup";
+import { markdown_descriptor } from "./markdown";
+import { media_descriptor } from "./media";
+import { end_descriptor } from "./end";
+import { hash_descriptor } from "./hash";
+import { crypto_descriptor } from "./crypto";
+import { jwt_descriptor } from "./jwt";
+import { graphql_descriptor } from "./graphql";
+import { email_descriptor } from "./email";
+import { diagram_descriptor } from "./diagram";
+import { memory_rw_descriptor } from "./memory-rw";
+import { secret_read_descriptor } from "./secret-read";
+import { kanban_trigger_descriptor } from "./kanban-trigger";
 
 const ALL_DESCRIPTORS = [
   http_descriptor,
@@ -111,6 +144,39 @@ const ALL_DESCRIPTORS = [
   web_form_descriptor,
   system_info_descriptor,
   package_manager_descriptor,
+  data_format_descriptor,
+  encoding_descriptor,
+  regex_descriptor,
+  diff_descriptor,
+  screenshot_descriptor,
+  database_descriptor,
+  template_engine_descriptor,
+  validator_descriptor,
+  queue_descriptor,
+  ttl_cache_descriptor,
+  image_descriptor,
+  stats_descriptor,
+  text_descriptor,
+  compress_descriptor,
+  math_descriptor,
+  table_descriptor,
+  eval_descriptor,
+  date_calc_descriptor,
+  format_descriptor,
+  set_ops_descriptor,
+  lookup_descriptor,
+  markdown_descriptor,
+  media_descriptor,
+  end_descriptor,
+  hash_descriptor,
+  crypto_descriptor,
+  jwt_descriptor,
+  graphql_descriptor,
+  email_descriptor,
+  diagram_descriptor,
+  memory_rw_descriptor,
+  secret_read_descriptor,
+  kanban_trigger_descriptor,
 ];
 
 let registered = false;

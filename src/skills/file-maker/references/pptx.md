@@ -2,9 +2,9 @@
 
 `scripts/pptx_builder.py`로 JSON 데이터 + 빌트인 테마로 슬라이드를 생성한다.
 
-```powershell
-$R = if (Get-Command podman -EA 0) { "podman" } else { "docker" }
-& $R run --rm -v "${PWD}:/workspace:rw" -w /workspace python:3.12-slim sh -lc "
+```bash
+R=$(command -v podman >/dev/null 2>&1 && echo podman || echo docker)
+$R run --rm -v "$PWD:/workspace:rw" -w /workspace python:3.12-slim sh -lc "
   pip install -q python-pptx &&
   python scripts/pptx_builder.py --slides slides.json --template business --output output.pptx
 "
@@ -50,6 +50,6 @@ $R = if (Get-Command podman -EA 0) { "podman" } else { "docker" }
 }
 ```
 
-```powershell
+```bash
 python scripts/pptx_builder.py --slides slides.json --template minimal --custom-theme theme.json --output output.pptx
 ```

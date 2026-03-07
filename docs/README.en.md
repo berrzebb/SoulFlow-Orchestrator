@@ -65,7 +65,7 @@ flowchart TD
 
     subgraph Skills["Role Skills (8)"]
         direction TB
-        BT[butler]
+        BT[concierge]
         PM[pm · pl]
         IMPL[implementer · reviewer]
         DBG[debugger · validator]
@@ -102,7 +102,7 @@ An **orchestration runtime** that receives messages from chat channels and dispa
 | **Channel Manager** | Slack · Telegram · Discord I/O | Streaming · grouping · typing updates |
 | **Orchestrator** | Inbound → agent execution | Agent Loop · Task Loop · Phase Loop triple mode |
 | **Agent Backends** | Claude/Codex × CLI/SDK execution | CircuitBreaker · HealthScorer · auto-fallback |
-| **Role Skills** | 8-role hierarchical delegation | butler → pm/pl → implementer/reviewer/validator/debugger |
+| **Role Skills** | 8-role hierarchical delegation | concierge → pm/pl → implementer/reviewer/validator/debugger |
 | **Security Vault** | AES-256-GCM secret management | Auto inbound sealing · decrypt only in tool path |
 | **OAuth Integration** | External service authentication | GitHub · Google · Custom OAuth 2.0 |
 | **Workflow Engine** | Phase Loop · DAG execution | 120-node graph editor · 6 categories · HITL interaction nodes |
@@ -128,7 +128,7 @@ An **orchestration runtime** that receives messages from chat channels and dispa
 
 | Role | Specialization | Delegation |
 |------|---------------|------------|
-| `butler` | Request routing · role dispatch | → pm/pl/generalist |
+| `concierge` | Request routing · role dispatch | → pm/pl/generalist |
 | `pm` | Requirements analysis · task decomposition | → implementer |
 | `pl` | Tech lead · architecture design | → implementer/reviewer |
 | `implementer` | Implementation · code writing | — |
@@ -192,7 +192,7 @@ No need to create a `.env` file manually — the Wizard handles all configuratio
 | Page | Path | Function |
 |------|------|----------|
 | Overview | `/` | Runtime status summary, system metrics, SSE live feed |
-| Workspace | `/workspace` | Memory · sessions · skills · cron · tools · agents · templates · OAuth (8 tabs) |
+| Workspace | `/workspace` | Memory · sessions · skills · cron · tools · agents · templates · OAuth · models · references (10 tabs) |
 | Chat | `/chat` | Web-based agent conversation (markdown rendering + code highlighting) |
 | Channels | `/channels` | Channel connection status · global settings |
 | Providers | `/providers` | Agent provider CRUD · Circuit Breaker state |
@@ -216,11 +216,11 @@ Agent tools use `oauth:{instance_id}` reference for automatic token injection wi
 
 ## Usage Examples
 
-**Simple task** (butler → automatic role dispatch):
+**Simple task** (concierge → automatic role dispatch):
 
 ```
 User: Find the bug in this code
-→ butler → debugger activates → root cause analysis → response
+→ concierge → debugger activates → root cause analysis → response
 ```
 
 **Multi-agent Phase Loop** (parallel specialists + critic quality gate):
@@ -319,6 +319,9 @@ User: Call the API using MY_API_KEY
 | `/verify` | Output verification |
 | `/guard on\|off` | Toggle confirmation gate for risky operations |
 | `/doctor` | Runtime self-diagnosis (service health check) |
+| `/workflow list\|create\|cancel <id>` | Phase Loop workflow management |
+| `/model list\|set <name>` | Orchestrator LLM model switch |
+| `/mcp list\|reconnect <name>` | MCP server status/reconnect |
 
 ## Directory Structure
 
@@ -346,13 +349,16 @@ next/
     oauth/          ← OAuth 2.0 integration (flow-service, integration-store)
     i18n/           ← Shared i18n protocol + JSON locales (en, ko)
     orchestration/  ← Gateway · Classifier · Prompts · ToolCallHandler · NodeSelector · ToolIndex · ConfirmationGuard
-    services/       ← Domain services (embed, vector-store, query-db, webhook-store, create-task, kanban-store)
+    runtime/        ← Instance lock · ServiceManager · service types
+    services/       ← Domain services (embed, vector-store, query-db, webhook-store, kanban-store, model-catalog, reference-store)
     security/       ← Secret Vault (AES-256-GCM)
     session/        ← Session store
     skills/
       _shared/      ← Shared protocols
       roles/        ← 8 role skills
-  scripts/          ← oauth-relay.mjs (OAuth TCP relay)
+  scripts/
+    scaffold/       ← Code generators (tool, node, handler, route, page)
+    i18n-sync.ts    ← i18n key synchronization (--check / --fix)
   workspace/
     templates/      ← System prompt templates
     skills/         ← User-defined skills

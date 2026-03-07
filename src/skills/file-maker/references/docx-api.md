@@ -3,9 +3,9 @@
 docx_builder.py로 커버되지 않는 세밀한 스타일 제어가 필요할 때 사용한다.
 (ex: 헤더/푸터 커스텀, 스타일 상속 수정, 기존 파일 편집)
 
-```powershell
-$R = if (Get-Command podman -EA 0) { "podman" } else { "docker" }
-& $R run --rm -v "${PWD}:/workspace:rw" -w /workspace python:3.12-slim sh -lc "
+```bash
+R=$(command -v podman >/dev/null 2>&1 && echo podman || echo docker)
+$R run --rm -v "$PWD:/workspace:rw" -w /workspace python:3.12-slim sh -lc "
   pip install -q python-docx && python script.py
 "
 ```

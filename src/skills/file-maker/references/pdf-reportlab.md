@@ -3,9 +3,9 @@
 좌표 기반의 정밀한 레이아웃, 차트 내장, 동적 콘텐츠 생성에 적합.
 weasyprint(HTML→PDF)보다 복잡하지만 표현 범위가 넓다.
 
-```powershell
-$R = if (Get-Command podman -EA 0) { "podman" } else { "docker" }
-& $R run --rm -v "${PWD}:/workspace:rw" -w /workspace python:3.12-slim sh -lc "
+```bash
+R=$(command -v podman >/dev/null 2>&1 && echo podman || echo docker)
+$R run --rm -v "$PWD:/workspace:rw" -w /workspace python:3.12-slim sh -lc "
   pip install -q reportlab && python script.py
 "
 ```
@@ -79,8 +79,8 @@ styles["Normal"].fontName = "NanumGothic"
 
 > 컨테이너에 한글 폰트가 없으면 `apt-get install -y fonts-nanum` 으로 설치.
 
-```powershell
-& $R run --rm -v "${PWD}:/workspace:rw" -w /workspace python:3.12-slim sh -lc "
+```bash
+$R run --rm -v "$PWD:/workspace:rw" -w /workspace python:3.12-slim sh -lc "
   apt-get update -qq && apt-get install -y -q fonts-nanum &&
   pip install -q reportlab &&
   python script.py

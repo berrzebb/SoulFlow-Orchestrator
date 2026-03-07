@@ -15,7 +15,8 @@ function validate_url(url: string): string | null {
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
       return `invalid_protocol:${parsed.protocol}`;
     }
-    const host = parsed.hostname.toLowerCase();
+    // Node.js URL.hostname은 IPv6를 브래킷 포함으로 반환 (예: [::1])
+    const host = parsed.hostname.replace(/^\[|\]$/g, "").toLowerCase();
     if (
       host === "localhost" ||
       host === "0.0.0.0" ||

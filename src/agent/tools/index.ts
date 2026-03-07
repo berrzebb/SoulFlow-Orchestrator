@@ -27,6 +27,7 @@ import { HttpRequestTool } from "./http-request.js";
 import { OAuthFetchTool } from "./oauth-fetch.js";
 import { TaskQueryTool, type TaskQueryCallback } from "./task-query.js";
 import { WorkflowTool } from "./workflow.js";
+import { KanbanTool } from "./kanban.js";
 import type { AppendWorkflowEventInput, AppendWorkflowEventResult } from "../../events/types.js";
 import type { RuntimeExecutionPolicy } from "../../providers/types.js";
 import type { PreToolHook, PostToolHook } from "./types.js";
@@ -34,7 +35,6 @@ import { build_approval_notifier } from "./approval-notifier.js";
 import { GitTool } from "./git.js";
 import { ArchiveTool } from "./archive.js";
 import { ProcessManagerTool } from "./process-manager.js";
-import { ClipboardTool } from "./clipboard.js";
 import { NotificationTool } from "./notification.js";
 import { DockerTool } from "./docker.js";
 import { WebTableTool } from "./web-table.js";
@@ -44,6 +44,126 @@ import { SystemInfoTool } from "./system-info.js";
 import { PackageManagerTool as PkgManagerTool } from "./package-manager.js";
 import { WebAuthTool } from "./web-auth.js";
 import { CronShellTool } from "./cron-shell.js";
+import { DataFormatTool } from "./data-format.js";
+import { EncodingTool } from "./encoding.js";
+import { RegexTool } from "./regex.js";
+import { DiffTool } from "./diff.js";
+import { ScreenshotTool } from "./screenshot.js";
+import { DatabaseTool } from "./database.js";
+import { TemplateTool } from "./template-engine.js";
+import { ValidatorTool } from "./validator.js";
+import { QueueTool } from "./queue.js";
+import { CacheTool } from "./ttl-cache.js";
+import { ImageTool } from "./image.js";
+import { StatsTool } from "./stats.js";
+import { TextTool } from "./text.js";
+import { CompressTool } from "./compress.js";
+import { MathTool } from "./math.js";
+import { TableTool } from "./table.js";
+import { EvalTool } from "./eval.js";
+import { FormatTool } from "./format.js";
+import { SetTool } from "./set.js";
+import { LookupTool } from "./lookup.js";
+import { MarkdownTool } from "./markdown.js";
+import { EmbeddingTool } from "./embedding.js";
+import { VectorStoreTool } from "./vector-store.js";
+import { HashTool } from "./hash.js";
+import { CryptoTool } from "./crypto.js";
+import { FilterTool } from "./filter.js";
+import { TransformTool } from "./transform.js";
+import { JwtTool } from "./jwt.js";
+import { GraphqlTool } from "./graphql.js";
+import { EmailTool } from "./email.js";
+import { WebhookTool } from "./webhook.js";
+import { TextSplitterTool } from "./text-splitter.js";
+import { RetrieverTool } from "./retriever.js";
+import { AggregateTool } from "./aggregate.js";
+import { AssertTool } from "./assert.js";
+import { MediaTool } from "./media.js";
+import { CsvTool } from "./csv.js";
+import { WebSocketTool } from "./websocket.js";
+import { PdfTool } from "./pdf.js";
+import { RateLimitTool } from "./rate-limit.js";
+import { XmlTool } from "./xml.js";
+import { YamlTool } from "./yaml.js";
+import { FtpTool } from "./ftp.js";
+import { DnsTool } from "./dns.js";
+import { SemverTool } from "./semver.js";
+import { UuidTool } from "./uuid.js";
+import { SshTool } from "./ssh.js";
+import { S3Tool } from "./s3.js";
+import { EnvTool } from "./env.js";
+import { HtmlTool } from "./html.js";
+import { JsonPatchTool } from "./json-patch.js";
+import { TomlTool } from "./toml.js";
+import { JsonlTool } from "./jsonl.js";
+import { RandomTool } from "./random.js";
+import { ColorTool } from "./color.js";
+import { QrTool } from "./qr.js";
+import { GeoTool } from "./geo.js";
+import { MqttTool } from "./mqtt.js";
+import { RedisTool } from "./redis.js";
+import { HttpMockTool } from "./http-mock.js";
+import { UrlTool } from "./url.js";
+import { IpTool } from "./ip.js";
+import { SqlBuilderTool } from "./sql-builder.js";
+import { LogParserTool } from "./log-parser.js";
+import { IniTool } from "./ini.js";
+import { RssTool } from "./rss.js";
+import { DotenvTool } from "./dotenv.js";
+import { IcalTool } from "./ical.js";
+import { BaseConvertTool } from "./base-convert.js";
+import { SlugTool } from "./slug.js";
+import { DurationTool } from "./duration.js";
+import { LdapTool } from "./ldap.js";
+import { SyslogTool } from "./syslog.js";
+import { PrometheusTool } from "./prometheus.js";
+import { JsonSchemaTool } from "./json-schema.js";
+import { OpenApiTool } from "./openapi.js";
+import { MimeTool } from "./mime.js";
+import { UserAgentTool } from "./user-agent.js";
+import { BarcodeTool } from "./barcode.js";
+import { VcardTool } from "./vcard.js";
+import { SitemapTool } from "./sitemap.js";
+import { RobotsTxtTool } from "./robots-txt.js";
+import { PhoneTool } from "./phone.js";
+import { EmailValidateTool } from "./email-validate.js";
+import { CountryTool } from "./country.js";
+import { UnitConvertTool } from "./unit-convert.js";
+import { HealthcheckTool } from "./healthcheck.js";
+import { WhoisTool } from "./whois.js";
+import { AsciiArtTool } from "./ascii-art.js";
+import { CookieTool } from "./cookie.js";
+import { CorsTool } from "./cors.js";
+import { CspTool } from "./csp.js";
+import { PasswordTool } from "./password.js";
+import { ChangelogTool } from "./changelog.js";
+import { LicenseTool } from "./license.js";
+import { GlobMatchTool } from "./glob-match.js";
+import { DependencyTool } from "./dependency.js";
+import { MatrixTool } from "./matrix.js";
+import { TimeseriesTool } from "./timeseries.js";
+import { CurrencyTool } from "./currency.js";
+import { TimezoneTool } from "./timezone.js";
+import { MsgpackTool } from "./msgpack.js";
+import { StateMachineTool } from "./state-machine.js";
+import { ProtobufTool } from "./protobuf.js";
+import { CodeDiagramTool } from "./code-diagram.js";
+import { GraphTool } from "./graph.js";
+import { TreeTool } from "./tree.js";
+import { BloomFilterTool } from "./bloom-filter.js";
+import { TokenizerTool } from "./tokenizer.js";
+import { SentimentTool } from "./sentiment.js";
+import { SimilarityTool } from "./similarity.js";
+import { CircuitBreakerTool } from "./circuit-breaker.js";
+import { MetricTool } from "./metric.js";
+import { FeatureFlagTool } from "./feature-flag.js";
+import { DataMaskTool } from "./data-mask.js";
+import { ChecksumTool } from "./checksum.js";
+import { HttpHeaderTool } from "./http-header.js";
+import { PaginationTool } from "./pagination.js";
+import { CrontabTool } from "./crontab.js";
+import { SvgTool } from "./svg.js";
 
 const DANGEROUS_COMMANDS = ["rm -rf", "drop table", "format c:", "mkfs", "dd if="];
 
@@ -122,6 +242,7 @@ export {
   OAuthFetchTool,
   TaskQueryTool,
   WorkflowTool,
+  KanbanTool,
   DynamicToolRuntimeLoader,
   ToolRuntimeReloader,
   ToolInstallerService,
@@ -132,7 +253,6 @@ export {
   GitTool,
   ArchiveTool,
   ProcessManagerTool,
-  ClipboardTool,
   NotificationTool,
   DockerTool,
   WebTableTool,
@@ -142,6 +262,116 @@ export {
   PkgManagerTool,
   WebAuthTool,
   CronShellTool,
+  DataFormatTool,
+  EncodingTool,
+  RegexTool,
+  DiffTool,
+  ScreenshotTool,
+  DatabaseTool,
+  TemplateTool,
+  ValidatorTool,
+  QueueTool,
+  CacheTool,
+  ImageTool,
+  StatsTool,
+  TextTool,
+  CompressTool,
+  MathTool,
+  TableTool,
+  EvalTool,
+  FormatTool,
+  SetTool,
+  LookupTool,
+  MarkdownTool,
+  TextSplitterTool,
+  RetrieverTool,
+  AggregateTool,
+  AssertTool,
+  MediaTool,
+  CsvTool,
+  WebSocketTool,
+  PdfTool,
+  RateLimitTool,
+  XmlTool,
+  YamlTool,
+  FtpTool,
+  DnsTool,
+  SemverTool,
+  UuidTool,
+  SshTool,
+  S3Tool,
+  EnvTool,
+  HtmlTool,
+  JsonPatchTool,
+  TomlTool,
+  JsonlTool,
+  RandomTool,
+  ColorTool,
+  QrTool,
+  GeoTool,
+  MqttTool,
+  RedisTool,
+  HttpMockTool,
+  UrlTool,
+  IpTool,
+  SqlBuilderTool,
+  LogParserTool,
+  IniTool,
+  RssTool,
+  DotenvTool,
+  IcalTool,
+  BaseConvertTool,
+  SlugTool,
+  DurationTool,
+  LdapTool,
+  SyslogTool,
+  PrometheusTool,
+  JsonSchemaTool,
+  OpenApiTool,
+  MimeTool,
+  UserAgentTool,
+  BarcodeTool,
+  VcardTool,
+  SitemapTool,
+  RobotsTxtTool,
+  PhoneTool,
+  EmailValidateTool,
+  CountryTool,
+  UnitConvertTool,
+  HealthcheckTool,
+  WhoisTool,
+  AsciiArtTool,
+  CookieTool,
+  CorsTool,
+  CspTool,
+  PasswordTool,
+  ChangelogTool,
+  LicenseTool,
+  GlobMatchTool,
+  DependencyTool,
+  MatrixTool,
+  TimeseriesTool,
+  CurrencyTool,
+  TimezoneTool,
+  MsgpackTool,
+  StateMachineTool,
+  ProtobufTool,
+  CodeDiagramTool,
+  GraphTool,
+  TreeTool,
+  BloomFilterTool,
+  TokenizerTool,
+  SentimentTool,
+  SimilarityTool,
+  CircuitBreakerTool,
+  MetricTool,
+  FeatureFlagTool,
+  DataMaskTool,
+  ChecksumTool,
+  HttpHeaderTool,
+  PaginationTool,
+  CrontabTool,
+  SvgTool,
 };
 export { Tool } from "./base.js";
 export type {
@@ -225,7 +455,6 @@ export function create_default_tool_registry(args?: ToolRegistryFactoryOptions):
   registry.register(new GitTool({ workspace }));
   registry.register(new ArchiveTool({ workspace }));
   registry.register(new ProcessManagerTool({ workspace }));
-  registry.register(new ClipboardTool());
   registry.register(new NotificationTool());
   registry.register(new DockerTool({ workspace }));
   registry.register(new WebTableTool());
@@ -235,6 +464,126 @@ export function create_default_tool_registry(args?: ToolRegistryFactoryOptions):
   registry.register(new PkgManagerTool({ workspace }));
   registry.register(new WebAuthTool());
   registry.register(new CronShellTool({ workspace }));
+  registry.register(new DataFormatTool());
+  registry.register(new EncodingTool());
+  registry.register(new RegexTool());
+  registry.register(new DiffTool());
+  registry.register(new ScreenshotTool({ workspace }));
+  registry.register(new DatabaseTool({ workspace }));
+  registry.register(new TemplateTool());
+  registry.register(new ValidatorTool());
+  registry.register(new QueueTool());
+  registry.register(new CacheTool());
+  registry.register(new ImageTool({ workspace }));
+  registry.register(new StatsTool());
+  registry.register(new TextTool());
+  registry.register(new CompressTool());
+  registry.register(new MathTool());
+  registry.register(new TableTool());
+  registry.register(new EvalTool());
+  registry.register(new FormatTool());
+  registry.register(new SetTool());
+  registry.register(new LookupTool());
+  registry.register(new MarkdownTool());
+  registry.register(new WebhookTool());
+  registry.register(new EmailTool());
+  registry.register(new GraphqlTool());
+  registry.register(new JwtTool());
+  registry.register(new TransformTool());
+  registry.register(new FilterTool());
+  registry.register(new CryptoTool());
+  registry.register(new HashTool());
+  registry.register(new VectorStoreTool());
+  registry.register(new EmbeddingTool());
+  registry.register(new TextSplitterTool());
+  registry.register(new RetrieverTool());
+  registry.register(new AggregateTool());
+  registry.register(new AssertTool());
+  registry.register(new MediaTool({ workspace }));
+  registry.register(new CsvTool());
+  registry.register(new WebSocketTool());
+  registry.register(new PdfTool({ workspace }));
+  registry.register(new RateLimitTool());
+  registry.register(new XmlTool());
+  registry.register(new YamlTool());
+  registry.register(new FtpTool());
+  registry.register(new DnsTool());
+  registry.register(new SemverTool());
+  registry.register(new UuidTool());
+  registry.register(new SshTool());
+  registry.register(new S3Tool());
+  registry.register(new EnvTool());
+  registry.register(new HtmlTool());
+  registry.register(new JsonPatchTool());
+  registry.register(new TomlTool());
+  registry.register(new JsonlTool());
+  registry.register(new RandomTool());
+  registry.register(new ColorTool());
+  registry.register(new QrTool());
+  registry.register(new GeoTool());
+  registry.register(new MqttTool());
+  registry.register(new RedisTool());
+  registry.register(new HttpMockTool());
+  registry.register(new UrlTool());
+  registry.register(new IpTool());
+  registry.register(new SqlBuilderTool());
+  registry.register(new LogParserTool());
+  registry.register(new IniTool());
+  registry.register(new RssTool());
+  registry.register(new DotenvTool());
+  registry.register(new IcalTool());
+  registry.register(new BaseConvertTool());
+  registry.register(new SlugTool());
+  registry.register(new DurationTool());
+  registry.register(new LdapTool());
+  registry.register(new SyslogTool());
+  registry.register(new PrometheusTool());
+  registry.register(new JsonSchemaTool());
+  registry.register(new OpenApiTool());
+  registry.register(new MimeTool());
+  registry.register(new UserAgentTool());
+  registry.register(new BarcodeTool());
+  registry.register(new VcardTool());
+  registry.register(new SitemapTool());
+  registry.register(new RobotsTxtTool());
+  registry.register(new PhoneTool());
+  registry.register(new EmailValidateTool());
+  registry.register(new CountryTool());
+  registry.register(new UnitConvertTool());
+  registry.register(new HealthcheckTool());
+  registry.register(new WhoisTool());
+  registry.register(new AsciiArtTool());
+  registry.register(new CookieTool());
+  registry.register(new CorsTool());
+  registry.register(new CspTool());
+  registry.register(new PasswordTool());
+  registry.register(new ChangelogTool());
+  registry.register(new LicenseTool());
+  registry.register(new GlobMatchTool());
+  registry.register(new DependencyTool());
+  registry.register(new MatrixTool());
+  registry.register(new TimeseriesTool());
+  registry.register(new CurrencyTool());
+  registry.register(new TimezoneTool());
+  registry.register(new MsgpackTool());
+  registry.register(new StateMachineTool());
+  registry.register(new ProtobufTool());
+  registry.register(new CodeDiagramTool());
+  registry.register(new GraphTool());
+  registry.register(new TreeTool());
+  registry.register(new BloomFilterTool());
+  registry.register(new TokenizerTool());
+  registry.register(new SentimentTool());
+  registry.register(new SimilarityTool());
+  registry.register(new CircuitBreakerTool());
+  registry.register(new MetricTool());
+  registry.register(new FeatureFlagTool());
+  registry.register(new DataMaskTool());
+  registry.register(new ChecksumTool());
+  registry.register(new HttpHeaderTool());
+  registry.register(new PaginationTool());
+  registry.register(new CrontabTool());
+  registry.register(new SvgTool());
 
   if (args?.task_query_callback) {
     registry.register(new TaskQueryTool(args.task_query_callback));

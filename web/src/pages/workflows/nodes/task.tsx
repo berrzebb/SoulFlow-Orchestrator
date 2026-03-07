@@ -10,24 +10,24 @@ function TaskEditPanel({ node, update, t, options }: EditPanelProps) {
     setMemoryRaw(val);
     if (!val.trim()) { setMemoryErr(""); update({ initial_memory: undefined }); return; }
     try { update({ initial_memory: JSON.parse(val) }); setMemoryErr(""); }
-    catch { setMemoryErr("Invalid JSON"); }
+    catch { setMemoryErr(t("workflows.invalid_json")); }
   };
   return (
     <>
       <div className="builder-row">
-        <label className="label">{t("workflows.task_title") || "Task Title"}</label>
+        <label className="label">{t("workflows.task_title")}</label>
         <input className="input input--sm" value={String(node.task_title || "")} onChange={(e) => update({ task_title: e.target.value })} placeholder="Process user request" />
       </div>
       <div className="builder-row">
-        <label className="label">{t("workflows.task_objective") || "Objective"}</label>
+        <label className="label">{t("workflows.task_objective")}</label>
         <textarea className="input code-textarea" rows={3} value={String(node.objective || "")} onChange={(e) => update({ objective: e.target.value })} spellCheck={false} placeholder="{{memory.user_request}}" />
       </div>
       <div className="builder-row-pair">
         <div className="builder-row">
-          <label className="label">{t("workflows.task_channel") || "Channel"}</label>
+          <label className="label">{t("workflows.task_channel")}</label>
           {channels.length > 0 ? (
             <select className="input input--sm" value={String(node.channel || "")} onChange={(e) => update({ channel: e.target.value })}>
-              <option value="">{t("common.select") || "— Select —"}</option>
+              <option value="">{t("common.select")}</option>
               {channels.map((c) => <option key={c.channel_id} value={c.provider}>{c.label || c.provider}</option>)}
             </select>
           ) : (
@@ -35,12 +35,12 @@ function TaskEditPanel({ node, update, t, options }: EditPanelProps) {
           )}
         </div>
         <div className="builder-row">
-          <label className="label">{t("workflows.max_turns") || "Max Turns"}</label>
+          <label className="label">{t("workflows.max_turns")}</label>
           <input className="input input--sm" type="number" min={1} max={200} value={String(node.max_turns ?? 20)} onChange={(e) => update({ max_turns: Number(e.target.value) || 20 })} />
         </div>
       </div>
       <div className="builder-row">
-        <label className="label">{t("workflows.task_memory") || "Initial Memory"}</label>
+        <label className="label">{t("workflows.task_memory")}</label>
         <textarea
           className={`input code-textarea${memoryErr ? " input--err" : ""}`}
           rows={2}
@@ -60,18 +60,18 @@ export const task_descriptor: FrontendNodeDescriptor = {
   icon: "☑",
   color: "#4caf50",
   shape: "rect",
-  toolbar_label: "+ Task",
+  toolbar_label: "node.task.label",
   category: "advanced",
   output_schema: [
-    { name: "task_id",     type: "string", description: "Created task ID" },
-    { name: "status",      type: "string", description: "Task completion status" },
-    { name: "result",      type: "object", description: "Task memory at completion" },
-    { name: "exit_reason", type: "string", description: "Exit reason" },
+    { name: "task_id",     type: "string", description: "node.task.output.task_id" },
+    { name: "status",      type: "string", description: "node.task.output.status" },
+    { name: "result",      type: "object", description: "node.task.output.result" },
+    { name: "exit_reason", type: "string", description: "node.task.output.exit_reason" },
   ],
   input_schema: [
-    { name: "task_title", type: "string", description: "Task title" },
-    { name: "objective",  type: "string", description: "Task objective" },
-    { name: "channel",    type: "string", description: "Execution channel" },
+    { name: "task_title", type: "string", description: "node.task.input.task_title" },
+    { name: "objective",  type: "string", description: "node.task.input.objective" },
+    { name: "channel",    type: "string", description: "node.task.input.channel" },
   ],
   create_default: () => ({ task_title: "", objective: "", max_turns: 20 }),
   EditPanel: TaskEditPanel,

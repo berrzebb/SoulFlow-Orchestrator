@@ -46,39 +46,13 @@ describe("StatsHandler", () => {
     expect(handler.can_handle(ctx_cd)).toBe(true);
   });
 
-  it("/stats — 세션 통계 개요", async () => {
+  it("/stats (인자 없음) → 세부 기능 가이드 표시", async () => {
     const handler = new StatsHandler(make_access());
     const ctx = make_ctx();
     await handler.handle(ctx);
 
-    expect(ctx.replies[0]).toContain("세션 통계");
-    expect(ctx.replies[0]).toContain("CD 점수: 35");
-    expect(ctx.replies[0]).toContain("주의");
-    expect(ctx.replies[0]).toContain("clarify(+10): 1회");
-    expect(ctx.replies[0]).toContain("correct(+25): 1회");
-    expect(ctx.replies[0]).toContain("활성 태스크: 2개");
-    expect(ctx.replies[0]).toContain("활성 루프: 1개");
-  });
-
-  it("/stats — CD 점수 0 이면 건강 표시", async () => {
-    const handler = new StatsHandler(make_access({
-      get_cd_score: vi.fn().mockReturnValue({ total: 0, events: [] }),
-    }));
-    const ctx = make_ctx();
-    await handler.handle(ctx);
-
-    expect(ctx.replies[0]).toContain("CD 점수: 0");
-    expect(ctx.replies[0]).toContain("건강");
-  });
-
-  it("/stats — CD 점수 55 이면 경고 표시", async () => {
-    const handler = new StatsHandler(make_access({
-      get_cd_score: vi.fn().mockReturnValue({ total: 55, events: [] }),
-    }));
-    const ctx = make_ctx();
-    await handler.handle(ctx);
-
-    expect(ctx.replies[0]).toContain("경고");
+    expect(ctx.replies[0]).toContain("/stats cd");
+    expect(ctx.replies[0]).toContain("/stats reset");
   });
 
   it("/stats cd — CD 이벤트 상세 목록", async () => {

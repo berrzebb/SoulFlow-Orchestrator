@@ -12,7 +12,7 @@ register_all_frontend_nodes();
 
 export interface OutputField {
   name: string;
-  type: "string" | "number" | "boolean" | "object" | "array" | "unknown";
+  type: "string" | "number" | "boolean" | "object" | "array" | "unknown" | "any";
   description?: string;
 }
 
@@ -46,11 +46,50 @@ export const CHANNEL_INPUT: OutputField[] = [
   { name: "files",   type: "array",  description: "Files to deliver" },
 ];
 
+export const END_INPUT: OutputField[] = [
+  { name: "result", type: "any", description: "Final result to output" },
+];
+
+/** 출력 대상별 필요 파라미터 스키마. */
+export const END_TARGET_PARAMS: Record<string, OutputField[]> = {
+  channel: [
+    { name: "channel.message", type: "string", description: "node.end.param.channel.message" },
+    { name: "channel.channel_type", type: "string", description: "node.end.param.channel.channel_type" },
+    { name: "channel.chat_id", type: "string", description: "node.end.param.channel.chat_id" },
+  ],
+  media: [
+    { name: "media.data", type: "any", description: "node.end.param.media.data" },
+    { name: "media.mime_type", type: "string", description: "node.end.param.media.mime_type" },
+    { name: "media.filename", type: "string", description: "node.end.param.media.filename" },
+  ],
+  webhook: [
+    { name: "webhook.url", type: "string", description: "node.end.param.webhook.url" },
+    { name: "webhook.method", type: "string", description: "node.end.param.webhook.method" },
+    { name: "webhook.body", type: "object", description: "node.end.param.webhook.body" },
+  ],
+  http: [
+    { name: "http.status", type: "number", description: "node.end.param.http.status" },
+    { name: "http.body", type: "any", description: "node.end.param.http.body" },
+    { name: "http.headers", type: "object", description: "node.end.param.http.headers" },
+  ],
+};
+
+/** 선택된 출력 대상에 따른 End 노드 동적 input 필드 계산. */
+export function get_end_input_fields(output_targets: string[]): OutputField[] {
+  const fields: OutputField[] = [...END_INPUT];
+  for (const target of output_targets) {
+    const params = END_TARGET_PARAMS[target];
+    if (params) fields.push(...params);
+  }
+  return fields;
+}
+
 /** non-orche 노드의 출력 스키마 fallback. */
 const EXTRA_OUTPUT: Record<string, OutputField[]> = {
   phase: PHASE_OUTPUT,
   trigger: TRIGGER_OUTPUT,
   channel: CHANNEL_OUTPUT,
+  end: [],
 };
 
 /** non-orche 노드의 입력 스키마 fallback. */
@@ -58,19 +97,9 @@ const EXTRA_INPUT: Record<string, OutputField[]> = {
   phase: PHASE_INPUT,
   trigger: [],
   channel: CHANNEL_INPUT,
+  end: END_INPUT,
 };
 
-
-// ── Field Type Colors ───────────────────────────────
-
-export const FIELD_TYPE_COLORS: Record<string, string> = {
-  string:  "#3498db",
-  number:  "#2ecc71",
-  boolean: "#f39c12",
-  object:  "#9b59b6",
-  array:   "#e67e22",
-  unknown: "#95a5a6",
-};
 
 // ── Public API ──────────────────────────────────────
 

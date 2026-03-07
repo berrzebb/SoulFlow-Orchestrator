@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect } from "react";
 import { api } from "../api/client";
 import { Badge } from "../components/badge";
 import { Modal } from "../components/modal";
@@ -83,15 +83,15 @@ export default function ChatPage() {
   // mirrorKey 변경 시 라이브 메시지 초기화
   useEffect(() => { setMirrorLiveMessages([]); }, [mirrorKey]);
 
-  const select_mirror = useCallback((key: string) => {
+  const select_mirror = (key: string) => {
     setMirrorKey(key);
     setActiveId(null);
-  }, []);
+  };
 
-  const select_session = useCallback((id: string | null) => {
+  const select_session = (id: string | null) => {
     setActiveId(id);
     setMirrorKey(null);
-  }, []);
+  };
 
   const { pending: pending_approvals, resolve: resolve_approval } = useApprovals({
     related_query_keys: activeId ? [["chat-session", activeId]] : [],
@@ -101,7 +101,7 @@ export default function ChatPage() {
     if (messagesRef.current) {
       messagesRef.current.scrollTop = messagesRef.current.scrollHeight;
     }
-  }, [activeSession?.messages?.length, web_stream?.content]);
+  }, [activeSession?.messages?.length, mirrorLiveMessages.length, !!web_stream?.content]);
 
   const create_session = async () => {
     if (creating) return;
@@ -248,7 +248,7 @@ export default function ChatPage() {
             onClick={() => setDeleteConfirmId(activeId)}
             aria-label={t("chat.delete_session")}
           >
-            ✕
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="2" y1="2" x2="10" y2="10" /><line x1="10" y1="2" x2="2" y2="10" /></svg>
           </button>
         )}
         {is_mirror && <Badge status={t("chat.mirror_badge")} variant="info" />}

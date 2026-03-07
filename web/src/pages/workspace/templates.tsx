@@ -28,7 +28,7 @@ export function TemplatesTab() {
       .catch(() => { if (!cancelled) { setContent(""); toast(t("templates.load_failed"), "err"); } })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [selected]);
+  }, [selected, toast, t]);
 
   const save = async () => {
     if (!selected) return;

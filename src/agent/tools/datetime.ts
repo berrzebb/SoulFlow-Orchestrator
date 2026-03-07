@@ -1,43 +1,55 @@
+/** DateTime 도구 — 현재 시간 조회, 포맷 변환, 타임존 변환, 영업일 계산, 기간 계산, 날짜 가감. */
+
 import { Tool } from "./base.js";
 import type { JsonSchema } from "./types.js";
 
-/** 에이전트가 현재 시간 조회 및 날짜 연산을 수행할 수 있는 도구. */
 export class DateTimeTool extends Tool {
   readonly name = "datetime";
   readonly category = "memory" as const;
-  readonly description = "날짜/시간: 현재 시간 조회, 포맷 변환, 차이 계산, 상대 시간 연산. action=now|format|diff|add";
+  readonly description =
+    "Date/time operations: current time, add/subtract durations, diff, timezone conversion, business days, format, parse, day info, date range.";
   readonly parameters: JsonSchema = {
     type: "object",
-    required: ["action"],
     properties: {
-      action: { type: "string", enum: ["now", "format", "diff", "add"], description: "수행할 작업 (add: iso 기준으로 offset만큼 가감)" },
-      tz: { type: "string", description: "타임존 ID (예: Asia/Seoul, UTC, America/New_York). 기본: UTC" },
-      iso: { type: "string", description: "format/diff/add에서 입력 날짜 (ISO 8601). add에서 생략 시 현재 시간" },
-      other_iso: { type: "string", description: "diff에서 비교할 날짜 (ISO 8601)" },
-      offset: { type: "string", description: "add에서 사용. 예: '3d' (3일 후), '-2h' (2시간 전), '30m', '1w', '-1M' (1개월 전). 단위: s/m/h/d/w/M/y" },
+      action: {
+        type: "string",
+        enum: ["now", "add", "diff", "timezone", "business_days", "format", "parse", "day_info", "range"],
+        description: "Date operation",
+      },
+      date: { type: "string", description: "Input date string (ISO 8601 or common formats)" },
+      date2: { type: "string", description: "Second date (for diff/business_days)" },
+      amount: { type: "number", description: "Amount to add (can be negative)" },
+      unit: { type: "string", enum: ["ms", "s", "min", "h", "d", "week", "month", "year"], description: "Time unit" },
+      from_tz: { type: "string", description: "Source timezone (IANA, e.g. Asia/Seoul)" },
+      to_tz: { type: "string", description: "Target timezone (IANA, e.g. America/New_York)" },
+      format: { type: "string", description: "Output format pattern (e.g. YYYY-MM-DD)" },
+      start_date: { type: "string", description: "Range start" },
+      end_date: { type: "string", description: "Range end" },
+      step_days: { type: "integer", description: "Range step in days (default: 1)" },
     },
+    required: ["action"],
     additionalProperties: false,
   };
 
   protected async run(params: Record<string, unknown>): Promise<string> {
-    const action = String(params.action || "now").trim();
-    const tz = String(params.tz || "UTC").trim();
-
-    if (action === "now") {
-      const now = new Date();
-      try {
-        const localized = now.toLocaleString("sv-SE", { timeZone: tz, hour12: false });
-        return JSON.stringify({ iso: now.toISOString(), localized, tz, unix_ms: now.getTime() });
-      } catch {
-        return `Error: invalid timezone "${tz}"`;
-      }
+    const action = String(params.action || "now");
+    switch (action) {
+      case "now": return this.now(String(params.format || ""), String(params.from_tz || ""));
+      case "add": return this.add(String(params.date || ""), Number(params.amount ?? 0), String(params.unit || "d"));
+      case "diff": return this.diff(String(params.date || ""), String(params.date2 || ""));
+      case "timezone": return this.timezone(String(params.date || ""), String(params.from_tz || "UTC"), String(params.to_tz || "UTC"));
+      case "business_days": return this.business_days(String(params.date || ""), String(params.date2 || ""));
+      case "format": return this.format_date(String(params.date || ""), String(params.format || "YYYY-MM-DD"));
+      case "parse": return this.parse_date(String(params.date || ""));
+      case "day_info": return this.day_info(String(params.date || ""));
+      case "range": return this.date_range(String(params.start_date || params.date || ""), String(params.end_date || params.date2 || ""), Number(params.step_days || 1));
+      default: return `Error: unsupported action "${action}"`;
     }
+  }
 
-    if (action === "format") {
-      const iso = String(params.iso || "").trim();
-      if (!iso) return "Error: iso is required for format action";
-      const d = new Date(iso);
-      if (isNaN(d.getTime())) return `Error: invalid date "${iso}"`;
+  private now(fmt: string, tz: string): string {
+    const d = new Date();
+    if (tz) {
       try {
         const localized = d.toLocaleString("sv-SE", { timeZone: tz, hour12: false });
         return JSON.stringify({ iso: d.toISOString(), localized, tz, unix_ms: d.getTime() });
@@ -45,57 +57,147 @@ export class DateTimeTool extends Tool {
         return `Error: invalid timezone "${tz}"`;
       }
     }
+    return fmt ? this.apply_format(d, fmt) : d.toISOString();
+  }
 
-    if (action === "diff") {
-      const iso = String(params.iso || "").trim();
-      const other_iso = String(params.other_iso || "").trim();
-      if (!iso || !other_iso) return "Error: iso and other_iso are both required for diff action";
-      const a = new Date(iso);
-      const b = new Date(other_iso);
-      if (isNaN(a.getTime())) return `Error: invalid date "${iso}"`;
-      if (isNaN(b.getTime())) return `Error: invalid date "${other_iso}"`;
-      const diff_ms = b.getTime() - a.getTime();
-      const abs_ms = Math.abs(diff_ms);
+  private add(date: string, amount: number, unit: string): string {
+    const d = this.safe_parse(date);
+    if (!d) return "Error: invalid date";
+    const ms_map: Record<string, number> = { ms: 1, s: 1000, min: 60_000, h: 3_600_000, d: 86_400_000, week: 604_800_000 };
+    if (unit === "month") {
+      d.setMonth(d.getMonth() + amount);
+    } else if (unit === "year") {
+      d.setFullYear(d.getFullYear() + amount);
+    } else {
+      const multiplier = ms_map[unit] ?? 86_400_000;
+      d.setTime(d.getTime() + amount * multiplier);
+    }
+    return d.toISOString();
+  }
+
+  private diff(a: string, b: string): string {
+    const da = this.safe_parse(a), db = this.safe_parse(b);
+    if (!da || !db) return "Error: invalid date(s)";
+    const ms = db.getTime() - da.getTime();
+    const abs = Math.abs(ms);
+    return JSON.stringify({
+      ms,
+      seconds: Math.round(ms / 1000),
+      minutes: Math.round(ms / 60_000),
+      hours: Math.round(ms / 3_600_000),
+      days: Math.round(ms / 86_400_000),
+      human: `${Math.floor(abs / 86_400_000)}d ${Math.floor((abs % 86_400_000) / 3_600_000)}h ${Math.floor((abs % 3_600_000) / 60_000)}m`,
+    });
+  }
+
+  private timezone(date: string, from_tz: string, to_tz: string): string {
+    const d = this.safe_parse(date);
+    if (!d) return "Error: invalid date";
+    try {
+      const from_str = d.toLocaleString("en-US", { timeZone: from_tz });
+      const to_str = d.toLocaleString("en-US", { timeZone: to_tz });
+      const to_iso = new Date(d.toLocaleString("en-US", { timeZone: to_tz }));
       return JSON.stringify({
-        diff_ms,
-        seconds: Math.round(abs_ms / 1_000),
-        minutes: Math.round(abs_ms / 60_000),
-        hours: Math.round(abs_ms / 3_600_000),
-        days: Math.round(abs_ms / 86_400_000),
-        direction: diff_ms >= 0 ? "b_after_a" : "b_before_a",
-      });
+        from: { timezone: from_tz, local: from_str },
+        to: { timezone: to_tz, local: to_str, iso: to_iso.toISOString() },
+      }, null, 2);
+    } catch {
+      return "Error: invalid timezone";
     }
+  }
 
-    if (action === "add") {
-      const offset_str = String(params.offset || "").trim();
-      if (!offset_str) return "Error: offset is required for add action (e.g. '3d', '-2h', '30m')";
-      const match = offset_str.match(/^(-?\d+)\s*([smhdwMy])$/);
-      if (!match) return `Error: invalid offset "${offset_str}". Use format: <number><unit> (s/m/h/d/w/M/y)`;
-      const amount = Number(match[1]);
-      const unit = match[2];
-      const base_iso = String(params.iso || "").trim();
-      const base = base_iso ? new Date(base_iso) : new Date();
-      if (isNaN(base.getTime())) return `Error: invalid date "${base_iso}"`;
-
-      const result = new Date(base.getTime());
-      switch (unit) {
-        case "s": result.setTime(result.getTime() + amount * 1_000); break;
-        case "m": result.setTime(result.getTime() + amount * 60_000); break;
-        case "h": result.setTime(result.getTime() + amount * 3_600_000); break;
-        case "d": result.setDate(result.getDate() + amount); break;
-        case "w": result.setDate(result.getDate() + amount * 7); break;
-        case "M": result.setMonth(result.getMonth() + amount); break;
-        case "y": result.setFullYear(result.getFullYear() + amount); break;
-      }
-
-      try {
-        const localized = result.toLocaleString("sv-SE", { timeZone: tz, hour12: false });
-        return JSON.stringify({ iso: result.toISOString(), localized, tz, unix_ms: result.getTime(), offset: offset_str, base: base.toISOString() });
-      } catch {
-        return `Error: invalid timezone "${tz}"`;
-      }
+  private business_days(a: string, b: string): string {
+    const da = this.safe_parse(a), db = this.safe_parse(b);
+    if (!da || !db) return "Error: invalid date(s)";
+    let count = 0;
+    const start = new Date(Math.min(da.getTime(), db.getTime()));
+    const end = new Date(Math.max(da.getTime(), db.getTime()));
+    const cursor = new Date(start);
+    while (cursor <= end) {
+      const dow = cursor.getDay();
+      if (dow !== 0 && dow !== 6) count++;
+      cursor.setDate(cursor.getDate() + 1);
     }
+    return JSON.stringify({ business_days: count, calendar_days: Math.round((end.getTime() - start.getTime()) / 86_400_000) + 1 });
+  }
 
-    return `Error: unsupported action "${action}"`;
+  private format_date(date: string, fmt: string): string {
+    const d = this.safe_parse(date);
+    if (!d) return "Error: invalid date";
+    return this.apply_format(d, fmt);
+  }
+
+  private parse_date(date: string): string {
+    const d = this.safe_parse(date);
+    if (!d) return "Error: invalid date";
+    return JSON.stringify({
+      iso: d.toISOString(),
+      unix_ms: d.getTime(),
+      unix_s: Math.floor(d.getTime() / 1000),
+      year: d.getUTCFullYear(),
+      month: d.getUTCMonth() + 1,
+      day: d.getUTCDate(),
+      hour: d.getUTCHours(),
+      minute: d.getUTCMinutes(),
+      second: d.getUTCSeconds(),
+    });
+  }
+
+  private day_info(date: string): string {
+    const d = this.safe_parse(date);
+    if (!d) return "Error: invalid date";
+    const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    const start_of_year = new Date(d.getUTCFullYear(), 0, 1);
+    const day_of_year = Math.ceil((d.getTime() - start_of_year.getTime()) / 86_400_000) + 1;
+    const week_number = Math.ceil(day_of_year / 7);
+    return JSON.stringify({
+      day_of_week: days[d.getUTCDay()],
+      day_of_week_num: d.getUTCDay(),
+      day_of_year,
+      week_number,
+      is_weekend: d.getUTCDay() === 0 || d.getUTCDay() === 6,
+      is_leap_year: this.is_leap(d.getUTCFullYear()),
+      days_in_month: new Date(d.getUTCFullYear(), d.getUTCMonth() + 1, 0).getDate(),
+      quarter: Math.ceil((d.getUTCMonth() + 1) / 3),
+    });
+  }
+
+  private date_range(start: string, end: string, step: number): string {
+    const ds = this.safe_parse(start), de = this.safe_parse(end);
+    if (!ds || !de) return "Error: invalid date(s)";
+    if (step < 1) return "Error: step must be >= 1";
+    const dates: string[] = [];
+    const cursor = new Date(ds);
+    const limit = 1000;
+    while (cursor <= de && dates.length < limit) {
+      dates.push(cursor.toISOString().slice(0, 10));
+      cursor.setDate(cursor.getDate() + step);
+    }
+    return JSON.stringify(dates);
+  }
+
+  private safe_parse(s: string): Date | null {
+    if (!s.trim()) return null;
+    const ts = Number(s);
+    if (!isNaN(ts) && s.length >= 10) {
+      return new Date(ts);
+    }
+    const d = new Date(s);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  private apply_format(d: Date, fmt: string): string {
+    const pad = (n: number, len = 2) => String(n).padStart(len, "0");
+    return fmt
+      .replace("YYYY", String(d.getUTCFullYear()))
+      .replace("MM", pad(d.getUTCMonth() + 1))
+      .replace("DD", pad(d.getUTCDate()))
+      .replace("HH", pad(d.getUTCHours()))
+      .replace("mm", pad(d.getUTCMinutes()))
+      .replace("ss", pad(d.getUTCSeconds()));
+  }
+
+  private is_leap(y: number): boolean {
+    return (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
   }
 }

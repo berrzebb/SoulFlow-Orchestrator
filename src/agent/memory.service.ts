@@ -1,5 +1,7 @@
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
+import Database from "better-sqlite3";
+import * as sqliteVec from "sqlite-vec";
 import { with_sqlite } from "../utils/sqlite-helper.js";
 import type {
   ConsolidationMessage,
@@ -15,6 +17,8 @@ import { redact_sensitive_text } from "../security/sensitive.js";
 import { sanitize_untrusted_text } from "../security/content-sanitizer.js";
 import { get_shared_secret_vault } from "../security/secret-vault-factory.js";
 import { parse_tool_calls_from_text } from "./tool-call-parser.js";
+import { chunk_markdown } from "./memory-chunker.js";
+import { rrf_merge, apply_temporal_decay, mmr_rerank } from "./memory-scoring.js";
 
 const SAVE_MEMORY_TOOL = [
   {
@@ -40,11 +44,19 @@ type MemoryDocRow = {
   content: string;
 };
 
+/** 임베딩 함수 시그니처. 없으면 벡터 검색 비활성. */
+export type EmbedFn = (texts: string[], opts: { model?: string; dimensions?: number }) => Promise<{ embeddings: number[][] }>;
+
+const VEC_DIMENSIONS = 256;
+/** 임베딩 입력 최대 문자 수 (초과 시 truncate). */
+const MAX_EMBED_CHARS = 2000;
+
 export class MemoryStore implements MemoryStoreLike {
   private readonly root: string;
   private readonly memory_dir: string;
   private readonly sqlite_path: string;
   private readonly initialized: Promise<void>;
+  private embed_fn: EmbedFn | null = null;
 
   constructor(workspace_root = process.cwd()) {
     this.root = workspace_root;
@@ -52,6 +64,9 @@ export class MemoryStore implements MemoryStoreLike {
     this.sqlite_path = join(this.memory_dir, "memory.db");
     this.initialized = this.ensure_initialized();
   }
+
+  /** 임베딩 서비스를 late-inject. 설정 후 벡터 시맨틱 검색 활성화. */
+  set_embed(fn: EmbedFn): void { this.embed_fn = fn; }
 
   private async ensure_initialized(): Promise<void> {
     await mkdir(this.memory_dir, { recursive: true });
@@ -91,6 +106,53 @@ export class MemoryStore implements MemoryStoreLike {
           VALUES (new.rowid, new.content, new.kind, new.day, new.path);
         END;
       `);
+
+      // 벡터 검색용 hash 컬럼 (content 변경 감지)
+      try {
+        db.exec(`ALTER TABLE memory_documents ADD COLUMN content_hash TEXT NOT NULL DEFAULT ''`);
+      } catch { /* 이미 존재 */ }
+
+      // 청크 기반 검색 인덱스 (memsearch 방식)
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS memory_chunks (
+          chunk_id     TEXT PRIMARY KEY,
+          doc_key      TEXT NOT NULL,
+          kind         TEXT NOT NULL,
+          day          TEXT NOT NULL DEFAULT '',
+          heading      TEXT NOT NULL DEFAULT '',
+          start_line   INTEGER NOT NULL DEFAULT 0,
+          end_line     INTEGER NOT NULL DEFAULT 0,
+          content      TEXT NOT NULL,
+          content_hash TEXT NOT NULL,
+          created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_chunks_doc ON memory_chunks(doc_key);
+        CREATE VIRTUAL TABLE IF NOT EXISTS memory_chunks_fts USING fts5(
+          content,
+          content='memory_chunks',
+          content_rowid='rowid',
+          tokenize='unicode61 remove_diacritics 2'
+        );
+        CREATE TRIGGER IF NOT EXISTS memory_chunks_ai AFTER INSERT ON memory_chunks BEGIN
+          INSERT INTO memory_chunks_fts(rowid, content)
+          VALUES (new.rowid, new.content);
+        END;
+        CREATE TRIGGER IF NOT EXISTS memory_chunks_ad AFTER DELETE ON memory_chunks BEGIN
+          INSERT INTO memory_chunks_fts(memory_chunks_fts, rowid, content)
+          VALUES ('delete', old.rowid, old.content);
+        END;
+      `);
+
+      sqliteVec.load(db);
+      db.exec(`
+        CREATE VIRTUAL TABLE IF NOT EXISTS memory_vec
+        USING vec0(embedding float[${VEC_DIMENSIONS}])
+      `);
+      db.exec(`
+        CREATE VIRTUAL TABLE IF NOT EXISTS memory_chunks_vec
+        USING vec0(embedding float[${VEC_DIMENSIONS}])
+      `);
+
       return true;
     });
     this.ensure_longterm_document();
@@ -129,6 +191,7 @@ export class MemoryStore implements MemoryStoreLike {
   }
 
   private sqlite_upsert_document(kind: "longterm" | "daily", day: string, path: string, content: string): void {
+    const doc_key = kind === "longterm" ? this.longterm_doc_key() : this.daily_doc_key(day);
     with_sqlite(this.sqlite_path,(db) => {
       db.prepare(`
         INSERT INTO memory_documents (doc_key, kind, day, path, content, updated_at)
@@ -139,20 +202,15 @@ export class MemoryStore implements MemoryStoreLike {
           path = excluded.path,
           content = excluded.content,
           updated_at = excluded.updated_at
-      `).run(
-        kind === "longterm" ? this.longterm_doc_key() : this.daily_doc_key(day),
-        kind,
-        day,
-        path,
-        String(content || ""),
-        now_iso(),
-      );
+      `).run(doc_key, kind, day, path, String(content || ""), now_iso());
       return true;
     });
+    this.rechunk_document(doc_key, kind, day, String(content || ""));
   }
 
   /** SQL-level atomic append — TOCTOU 방지. */
   private sqlite_append_document(kind: "longterm" | "daily", day: string, path: string, content: string): void {
+    const doc_key = kind === "longterm" ? this.longterm_doc_key() : this.daily_doc_key(day);
     with_sqlite(this.sqlite_path,(db) => {
       db.prepare(`
         INSERT INTO memory_documents (doc_key, kind, day, path, content, updated_at)
@@ -160,14 +218,47 @@ export class MemoryStore implements MemoryStoreLike {
         ON CONFLICT(doc_key) DO UPDATE SET
           content = memory_documents.content || excluded.content,
           updated_at = excluded.updated_at
-      `).run(
-        kind === "longterm" ? this.longterm_doc_key() : this.daily_doc_key(day),
-        kind,
-        day,
-        path,
-        String(content || ""),
-        now_iso(),
-      );
+      `).run(doc_key, kind, day, path, String(content || ""), now_iso());
+      return true;
+    });
+    // append 후 전체 문서를 다시 읽어 re-chunk
+    const full = this.sqlite_read_document(kind, day);
+    if (full?.content) this.rechunk_document(doc_key, kind, day, full.content);
+  }
+
+  /** 문서의 청크 인덱스를 갱신. 변경된 청크만 upsert, 삭제된 청크 제거. */
+  private rechunk_document(doc_key: string, kind: string, day: string, content: string): void {
+    const new_chunks = chunk_markdown(content, doc_key);
+    const new_ids = new Set(new_chunks.map(c => c.chunk_id));
+
+    with_sqlite(this.sqlite_path, (db) => {
+      // 기존 청크 중 새 목록에 없는 것 삭제
+      const existing = db.prepare(
+        "SELECT chunk_id, content_hash FROM memory_chunks WHERE doc_key = ?",
+      ).all(doc_key) as { chunk_id: string; content_hash: string }[];
+
+      const existing_map = new Map(existing.map(r => [r.chunk_id, r.content_hash]));
+      const to_delete = existing.filter(r => !new_ids.has(r.chunk_id)).map(r => r.chunk_id);
+
+      if (to_delete.length > 0) {
+        const del_chunk = db.prepare("DELETE FROM memory_chunks WHERE chunk_id = ?");
+        for (const id of to_delete) del_chunk.run(id);
+      }
+
+      // 새 청크 중 변경된 것만 upsert
+      const upsert = db.prepare(`
+        INSERT INTO memory_chunks (chunk_id, doc_key, kind, day, heading, start_line, end_line, content, content_hash)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(chunk_id) DO UPDATE SET
+          content = excluded.content,
+          content_hash = excluded.content_hash
+      `);
+
+      for (const c of new_chunks) {
+        if (existing_map.get(c.chunk_id) === c.content_hash) continue; // 불변
+        upsert.run(c.chunk_id, doc_key, kind, day, c.heading, c.start_line, c.end_line, c.content, c.content_hash);
+      }
+
       return true;
     });
   }
@@ -289,55 +380,186 @@ export class MemoryStore implements MemoryStoreLike {
     args?: { kind?: "all" | MemoryKind; day?: string; limit?: number; case_sensitive?: boolean },
   ): Promise<Array<{ file: string; line: number; text: string }>> {
     await this.initialized;
-    const limit = Math.max(1, Number(args?.limit || 80));
-    const case_sensitive = !!args?.case_sensitive;
+    const limit = Math.max(1, Number(args?.limit || 20));
     const raw_query = String(query || "").trim();
     if (!raw_query) return [];
-    const fts_query = this.build_fts_query(raw_query);
-    if (!fts_query) return [];
 
     const kind = args?.kind || "all";
     const day = String(args?.day || "").trim();
-    const where: string[] = ["memory_documents_fts MATCH ?"];
-    const bind: Array<string | number> = [fts_query];
-    if (kind === "longterm") {
-      where.push("d.kind = ?");
-      bind.push("longterm");
-    } else if (kind === "daily") {
-      where.push("d.kind = ?");
-      bind.push("daily");
-      if (is_day_key(day)) {
-        where.push("d.day = ?");
-        bind.push(day);
-      }
-    } else if (is_day_key(day)) {
-      where.push("d.day = ?");
-      bind.push(day);
-    }
-    bind.push(Math.max(limit * 6, 24));
+    const candidate_k = Math.max(limit * 3, 30);
 
-    const docs = with_sqlite(this.sqlite_path,(db) => db.prepare(`
-      SELECT d.path AS path, d.content AS content
-      FROM memory_documents_fts f
-      JOIN memory_documents d ON d.rowid = f.rowid
-      WHERE ${where.join(" AND ")}
-      ORDER BY bm25(memory_documents_fts), d.updated_at DESC
-      LIMIT ?
-    `).all(...bind) as MemoryDocRow[]) || [];
+    // 1) FTS5 청크 검색 (BM25 랭킹)
+    const fts_ranked = this.search_chunks_fts(raw_query, kind, day, candidate_k);
 
-    const needle = case_sensitive ? raw_query : raw_query.toLowerCase();
+    // 2) 벡터 청크 검색 (KNN)
+    const vec_ranked = await this.search_chunks_vec(raw_query, kind, day, candidate_k);
+
+    // 3) RRF 스코어 융합
+    let scored = rrf_merge(fts_ranked, vec_ranked);
+
+    // 4) 시간 감쇠 (longterm은 면제)
+    const chunk_age_cache = new Map<string, number | null>();
+    const age_fn = (chunk_id: string): number | null => {
+      if (chunk_age_cache.has(chunk_id)) return chunk_age_cache.get(chunk_id)!;
+      const meta = this.get_chunk_meta(chunk_id);
+      const age = meta ? chunk_age_days(meta.kind, meta.day) : null;
+      chunk_age_cache.set(chunk_id, age);
+      return age;
+    };
+    scored = apply_temporal_decay(scored, age_fn);
+
+    // 5) MMR 다양성 리랭킹
+    const chunk_content_cache = new Map<string, string>();
+    const content_fn = (chunk_id: string): string => {
+      if (chunk_content_cache.has(chunk_id)) return chunk_content_cache.get(chunk_id)!;
+      const c = this.get_chunk_content(chunk_id);
+      chunk_content_cache.set(chunk_id, c);
+      return c;
+    };
+    scored = mmr_rerank(scored, content_fn, limit);
+
+    // 6) 결과 포맷 (기존 인터페이스 호환)
     const out: Array<{ file: string; line: number; text: string }> = [];
-    for (const doc of docs) {
-      const lines = String(doc.content || "").split(/\r?\n/);
-      for (let i = 0; i < lines.length; i += 1) {
-        const text = String(lines[i] || "");
-        const hay = case_sensitive ? text : text.toLowerCase();
-        if (!hay.includes(needle)) continue;
-        out.push({ file: String(doc.path || ""), line: i + 1, text });
-        if (out.length >= limit) return out;
-      }
+    for (const { chunk_id } of scored) {
+      const meta = this.get_chunk_meta(chunk_id);
+      if (!meta) continue;
+      const heading_prefix = meta.heading ? `[${meta.heading}] ` : "";
+      const lines = meta.content.split(/\r?\n/).filter(Boolean);
+      const preview = lines.slice(0, 3).join(" | ");
+      out.push({
+        file: meta.doc_key.replace(":", "/"),
+        line: meta.start_line,
+        text: `${heading_prefix}${preview}`,
+      });
+      if (out.length >= limit) break;
     }
     return out;
+  }
+
+  /** FTS5로 청크 검색, chunk_id 순위 리스트 반환. */
+  private search_chunks_fts(query: string, kind: string, day: string, top_k: number): string[] {
+    const fts_query = this.build_fts_query(query);
+    if (!fts_query) return [];
+
+    const where: string[] = ["memory_chunks_fts MATCH ?"];
+    const bind: Array<string | number> = [fts_query];
+    if (kind === "longterm") { where.push("c.kind = ?"); bind.push("longterm"); }
+    else if (kind === "daily") {
+      where.push("c.kind = ?"); bind.push("daily");
+      if (is_day_key(day)) { where.push("c.day = ?"); bind.push(day); }
+    } else if (is_day_key(day)) { where.push("c.day = ?"); bind.push(day); }
+    bind.push(top_k);
+
+    return with_sqlite(this.sqlite_path, (db) => {
+      const rows = db.prepare(`
+        SELECT c.chunk_id
+        FROM memory_chunks_fts f
+        JOIN memory_chunks c ON c.rowid = f.rowid
+        WHERE ${where.join(" AND ")}
+        ORDER BY bm25(memory_chunks_fts)
+        LIMIT ?
+      `).all(...bind) as { chunk_id: string }[];
+      return rows.map(r => r.chunk_id);
+    }) || [];
+  }
+
+  /** 벡터 KNN으로 청크 검색, chunk_id 순위 리스트 반환. */
+  private async search_chunks_vec(query: string, kind: string, day: string, top_k: number): Promise<string[]> {
+    if (!this.embed_fn) return [];
+
+    try {
+      await this.ensure_chunk_embeddings_fresh();
+
+      const { embeddings } = await this.embed_fn([query.slice(0, MAX_EMBED_CHARS)], { dimensions: VEC_DIMENSIONS });
+      if (!embeddings?.[0]?.length) return [];
+      const query_vec = normalize_vec(embeddings[0]);
+
+      let db: Database.Database | null = null;
+      try {
+        db = new Database(this.sqlite_path, { readonly: true });
+        sqliteVec.load(db);
+
+        const rows = db.prepare(`
+          SELECT v.rowid, v.distance
+          FROM memory_chunks_vec v
+          WHERE v.embedding MATCH ? AND k = ?
+          ORDER BY v.distance
+        `).all(query_vec, top_k) as { rowid: number; distance: number }[];
+
+        if (!rows.length) return [];
+
+        // rowid → chunk_id 매핑
+        const rowids = rows.map(r => r.rowid);
+        const placeholders = rowids.map(() => "?").join(",");
+
+        // kind/day 필터 적용
+        let filter = "";
+        const bind_extra: string[] = [];
+        if (kind === "longterm") { filter = "AND c.kind = ?"; bind_extra.push("longterm"); }
+        else if (kind === "daily") {
+          filter = "AND c.kind = ?"; bind_extra.push("daily");
+          if (is_day_key(day)) { filter += " AND c.day = ?"; bind_extra.push(day); }
+        } else if (is_day_key(day)) { filter = "AND c.day = ?"; bind_extra.push(day); }
+
+        const chunk_rows = db.prepare(
+          `SELECT chunk_id FROM memory_chunks c WHERE c.rowid IN (${placeholders}) ${filter}`,
+        ).all(...rowids, ...bind_extra) as { chunk_id: string }[];
+
+        return chunk_rows.map(r => r.chunk_id);
+      } finally {
+        try { db?.close(); } catch { /* no-op */ }
+      }
+    } catch {
+      return [];
+    }
+  }
+
+  /** 임베딩이 없는 청크를 배치 임베딩. */
+  private async ensure_chunk_embeddings_fresh(): Promise<void> {
+    if (!this.embed_fn) return;
+
+    const stale = with_sqlite(this.sqlite_path, (db) => db.prepare(`
+      SELECT c.rowid, c.chunk_id, c.content, c.content_hash
+      FROM memory_chunks c
+      WHERE c.content != ''
+        AND NOT EXISTS (SELECT 1 FROM memory_chunks_vec v WHERE v.rowid = c.rowid)
+    `).all() as Array<{ rowid: number; chunk_id: string; content: string; content_hash: string }>) || [];
+
+    if (stale.length === 0) return;
+
+    const texts = stale.map(r => r.content.slice(0, MAX_EMBED_CHARS));
+    const { embeddings } = await this.embed_fn(texts, { dimensions: VEC_DIMENSIONS });
+    if (!embeddings || embeddings.length !== stale.length) return;
+
+    let db: Database.Database | null = null;
+    try {
+      db = new Database(this.sqlite_path);
+      db.pragma("journal_mode=WAL");
+      sqliteVec.load(db);
+
+      const ins_vec = db.prepare("INSERT OR REPLACE INTO memory_chunks_vec (rowid, embedding) VALUES (?, ?)");
+      const tx = db.transaction(() => {
+        for (let i = 0; i < stale.length; i++) {
+          ins_vec.run(BigInt(stale[i].rowid), normalize_vec(embeddings[i]));
+        }
+      });
+      tx();
+    } finally {
+      try { db?.close(); } catch { /* no-op */ }
+    }
+  }
+
+  private get_chunk_meta(chunk_id: string): { doc_key: string; kind: string; day: string; heading: string; start_line: number; content: string } | null {
+    return with_sqlite(this.sqlite_path, (db) => db.prepare(
+      "SELECT doc_key, kind, day, heading, start_line, content FROM memory_chunks WHERE chunk_id = ?",
+    ).get(chunk_id) as { doc_key: string; kind: string; day: string; heading: string; start_line: number; content: string } | undefined) || null;
+  }
+
+  private get_chunk_content(chunk_id: string): string {
+    return with_sqlite(this.sqlite_path, (db) => {
+      const row = db.prepare("SELECT content FROM memory_chunks WHERE chunk_id = ?").get(chunk_id) as { content: string } | undefined;
+      return row?.content || "";
+    }) || "";
   }
 
   async consolidate(options?: MemoryConsolidateOptions): Promise<MemoryConsolidateResult> {
@@ -501,4 +723,32 @@ export class MemoryStore implements MemoryStoreLike {
     session.last_consolidated = archive_all ? 0 : Math.max(0, session.messages.length - keep_count);
     return true;
   }
+}
+
+/** L2 단위 벡터로 정규화. */
+function normalize_vec(v: number[]): Float32Array {
+  let norm = 0;
+  for (let i = 0; i < v.length; i++) norm += v[i] * v[i];
+  norm = Math.sqrt(norm);
+  const out = new Float32Array(v.length);
+  if (norm > 0) for (let i = 0; i < v.length; i++) out[i] = v[i] / norm;
+  return out;
+}
+
+/** 청크의 나이(일)를 계산. longterm → null (evergreen, 감쇠 면제). */
+function chunk_age_days(kind: string, day: string): number | null {
+  if (kind !== "daily" || !is_day_key(day)) return null;
+  const d = new Date(`${day}T00:00:00Z`);
+  if (!Number.isFinite(d.getTime())) return null;
+  return Math.max(0, Math.floor((Date.now() - d.getTime()) / (1000 * 60 * 60 * 24)));
+}
+
+/** 간단한 content hash (FNV-1a 32bit). crypto 의존 없이 빠른 변경 감지. */
+function simple_hash(text: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0).toString(16).padStart(8, "0");
 }

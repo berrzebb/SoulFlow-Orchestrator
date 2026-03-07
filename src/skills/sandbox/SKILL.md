@@ -48,10 +48,10 @@ metadata:
 
 ## 핵심 패턴
 
-```powershell
-$R = if (Get-Command podman -EA 0) { "podman" } else { "docker" }
-$N = "sbx-$([guid]::NewGuid().ToString('N').Substring(0,8))"
-& $R run --rm --name $N -v "${PWD}:/workspace:rw" -w /workspace <image> <command>
+```bash
+R=$(command -v podman >/dev/null 2>&1 && echo podman || echo docker)
+N="sbx-$(head -c4 /dev/urandom | xxd -p)"
+$R run --rm --name "$N" -v "$PWD:/workspace:rw" -w /workspace <image> <command>
 ```
 
 ## Guardrails
@@ -59,5 +59,5 @@ $N = "sbx-$([guid]::NewGuid().ToString('N').Substring(0,8))"
 - 항상 `--rm` — 컨테이너 자동 제거.
 - pip/apt 등 모든 패키지 설치는 컨테이너 안에서만.
 - 출력 파일은 `/workspace` 볼륨에 저장 (호스트 `PWD`와 공유됨).
-- 인터럽트 시 강제 정리: `& $R rm -f $N`
+- 인터럽트 시 강제 정리: `$R rm -f "$N"`
 - 호스트에 직접 `python`, `pip`, `psql`, `mysql` 실행 금지.

@@ -1,12 +1,13 @@
 /**
- * Output Sanitizer — 프로바이더 출력에서 노이즈, 프로토콜 누출, 페르소나 노출을 제거하는 순수 함수 모듈.
+ * Output Sanitizer — 프로바이더 출력에서 노이즈, 프로토콜 누출, 페르소나 노출을 제거.
  *
- * 핵심 추상화: `LineMatcher` — 정규식 리스트 기반 라인 필터링의 공통 구조.
- * is_provider_noise_line, is_persona_leak_line, is_sensitive_command_line, is_tool_protocol_leak_line
- * 4개 함수가 모두 동일한 "정규식 리스트 → 하나라도 매칭 → true" 패턴이므로 추상화.
+ * 핵심 원칙: 코드블록(``` ... ```) 내부는 필터링하지 않는다.
+ * 라인 필터는 prose 영역에만 적용되고, 코드블록은 통과시킨다.
  */
 
 import { escape_regexp, normalize_text } from "../utils/common.js";
+
+// ── Line Matchers ──
 
 type LineMatcher = (line: string) => boolean;
 
@@ -20,11 +21,9 @@ function create_line_matcher(patterns: RegExp[]): LineMatcher {
 
 const TOOL_PROTOCOL_LEAK_PATTERNS: RegExp[] = [
   /^tool_calls:\s*\[\d+\s*items?\]/i,
-  /"tool_calls"\s*:/i,
-  /"tool_call_id"\s*:/i,
-  /"id"\s*:\s*"call_[^"]+"/i,
-  /^\{"id":"call_[^"]+"/i,
-  /^\{"tool_calls":\[/i,
+  /^\s*\{?\s*"tool_calls"\s*:\s*\[/i,
+  /^\s*\{?\s*"tool_call_id"\s*:/i,
+  /^\s*"id"\s*:\s*"call_[A-Za-z0-9_]+"\s*[,}]/i,
 ];
 
 const PROVIDER_NOISE_PATTERNS: RegExp[] = [
@@ -32,7 +31,7 @@ const PROVIDER_NOISE_PATTERNS: RegExp[] = [
   /^orchestrator\s*(?:direct|route|routing|dispatch|classification)/i,
   /^(?:execution\s*mode|mode|route|routing)\s*[:=]\s*(?:once|task|agent)\b/i,
   /^(?:분류|라우팅|모드)\s*[:=]\s*(?:once|task|agent)\b/i,
-  /^[[\]{}(),;:]+$/,
+  /^[[\]{}(),;:]{3,}$/,
   /^OpenAI Codex v/i,
   /^WARNING: proceeding, even though we could not update PATH:/i,
   /^(?:workdir|model|provider|approval|sandbox|session id|mcp startup):\s*/i,
@@ -47,10 +46,8 @@ const PROVIDER_NOISE_PATTERNS: RegExp[] = [
   /^for more information, try ['"]--help['"]\.?$/i,
   /^usage:\s+codex\b/i,
   /^-{3,}$/,
-  /^user$/i,
   // 내부 URI / 메모리 메타데이터 누출 방지
-  /\bsqlite:\/\/\S+/i,
-  /^\[sqlite:\/\//i,
+  /^\[?sqlite:\/\/(?:workspace|runtime|data)\//i,
   /^\[(?:daily|longterm|archive)\//i,
   // 내부 컨텍스트 마커 누출 방지
   /^\[(?:CURRENT_REQUEST|REFERENCE_RECENT_CONTEXT|ATTACHED_FILES)\]/i,
@@ -72,16 +69,10 @@ const SENSITIVE_COMMAND_PATTERNS: RegExp[] = [
   /^Do you want to proceed\?/i,
   /^(?:yes|no),?\s*allow\b/i,
   /^PS [A-Za-z]:\\.*>/,
-  /^[A-Za-z]:\\.*>/,
-  /^(?:\$|#|PS>)\s+/,
+  /^[A-Za-z]:\\.*>(?:\s|$)/,
+  /^(?:\$|#|PS>)\s+(?:cd|ls|rm|mkdir|chmod|git|npm|cargo)\b/,
   /^\$env:[A-Za-z_][A-Za-z0-9_]*\s*=/,
   /^(?:export|set)\s+[A-Za-z_][A-Za-z0-9_]*=/,
-  /^(?:bash|sh|zsh|powershell|pwsh|cmd(?:\.exe)?)\b/i,
-  /^(?:cd|ls|dir|cat|grep|awk|sed|find|rg|npm|node|python|pip|cargo|git|dotnet|msbuild|chmod|chown|cp|mv|rm|mkdir|touch|echo)\b/i,
-  /^\s*dotnet\s+build\b/i,
-  /^\s*npm\s+run\s+\S+/i,
-  /^\s*cargo\s+(build|test|check|run)\b/i,
-  /^```(?:bash|sh|zsh|powershell|pwsh|cmd|shell|ps1|bat)?$/i,
 ];
 
 export const is_tool_protocol_leak_line = create_line_matcher(TOOL_PROTOCOL_LEAK_PATTERNS);
@@ -94,25 +85,63 @@ export function is_provider_noise_line(line: string): boolean {
   return is_tool_protocol_leak_line(l) || PROVIDER_NOISE_PATTERNS.some((p) => p.test(l));
 }
 
-/** 스트리밍 전용: 프로바이더 노이즈 판별 (빈 줄은 paragraph break이므로 보존). */
 export function is_stream_noise_line(line: string): boolean {
   const l = String(line || "").trim();
   if (!l) return false;
   return is_provider_noise_line(l);
 }
 
+// ── Code-block-aware line filtering ──
+
+const CODE_FENCE_RE = /^(`{3,}|~{3,})/;
+
+type LineFilter = (line: string) => boolean;
+
+/** 코드블록 내부를 건너뛰며 prose 영역에만 reject 필터를 적용. */
+function filter_lines(text: string, reject: LineFilter[]): string {
+  const lines = text.split("\n");
+  const result: string[] = [];
+  let fence: string | null = null; // 현재 열린 코드블록의 펜스 문자열
+
+  for (const raw of lines) {
+    const trimmed = raw.trimEnd();
+    const fence_match = trimmed.match(CODE_FENCE_RE);
+
+    if (fence) {
+      // 코드블록 내부 — 닫는 펜스인지 확인
+      if (fence_match && trimmed.startsWith(fence) && trimmed.slice(fence.length).trim() === "") {
+        fence = null;
+      }
+      result.push(trimmed);
+      continue;
+    }
+
+    // 여는 펜스 감지
+    if (fence_match) {
+      fence = fence_match[1]!;
+      result.push(trimmed);
+      continue;
+    }
+
+    // prose 영역 — reject 필터 적용
+    if (!reject.some((fn) => fn(trimmed))) {
+      result.push(trimmed);
+    }
+  }
+
+  return result.join("\n");
+}
+
+// ── Block-level strippers ──
+
 const ORCH_TOOL_BLOCK_RE = /<?<ORCH_TOOL_CALLS>?>[^<]{0,50000}<?<(?:\/ORCH_TOOL_CALLS|ORCH_TOOL_CALLS_END)>?>(?:\n?)/gi;
 const PERSONA_BLOCK_RE = /```[^`]{0,10000}(?:AGENTS\.md|SOUL\.md|HEART\.md|TOOLS\.md|USER\.md)[^`]{0,10000}```/gi;
 const CODEX_BLOCK_RE = /```[^`]{0,10000}\bYou are Codex\b[^`]{0,10000}```/gi;
-const SHELL_BLOCK_RE = /```(?:bash|sh|zsh|powershell|pwsh|cmd|shell|ps1|bat)[^`]{0,50000}```/gi;
 
 export function strip_tool_protocol_leaks(raw: string): string {
   if (!raw) return "";
-  return raw
-    .replace(ORCH_TOOL_BLOCK_RE, "")
-    .split("\n")
-    .filter((l) => !is_tool_protocol_leak_line(l.trimEnd()))
-    .join("\n");
+  const after_blocks = raw.replace(ORCH_TOOL_BLOCK_RE, "");
+  return filter_lines(after_blocks, [is_tool_protocol_leak_line]);
 }
 
 export function strip_persona_leak_blocks(raw: string): string {
@@ -120,10 +149,7 @@ export function strip_persona_leak_blocks(raw: string): string {
   return raw.replace(PERSONA_BLOCK_RE, "").replace(CODEX_BLOCK_RE, "").trim();
 }
 
-export function strip_sensitive_command_blocks(raw: string): string {
-  if (!raw) return "";
-  return strip_persona_leak_blocks(raw.replace(SHELL_BLOCK_RE, "")).trim();
-}
+// ── Inline cleaners ──
 
 const ANSI_RE = /\x1B\[[0-9;]*[A-Za-z]/g;
 const SECRET_REF_RE = /\{\{\s*secret:[^}]+\}\}/gi;
@@ -139,23 +165,39 @@ export function strip_secret_reference_tokens(raw: string): string {
     .replace(CIPHERTEXT_RE, "[REDACTED:CIPHERTEXT]");
 }
 
-type LineFilter = (line: string) => boolean;
+/** 위험 HTML 태그만 제거. 안전한 포맷팅 태그는 마크다운 등가물로 변환. 코드블록 내부는 건드리지 않음. */
+function strip_dangerous_html(input: string): string {
+  const out = String(input || "");
+  if (!/<[a-z/][a-z0-9]*[\s>/]/i.test(out)) return out;
 
-function filter_lines(text: string, reject: LineFilter[]): string {
-  return text
-    .split("\n")
-    .map((l) => l.trimEnd())
-    .filter((l) => !reject.some((fn) => fn(l)))
-    .join("\n");
+  // 코드블록을 플레이스홀더로 대체 → HTML 변환 → 복원
+  const blocks: string[] = [];
+  const placeholder = (i: number) => `\x00CB${i}\x00`;
+  const preserved = out.replace(/(`{3,}|~{3,})[^\n]*\n[\s\S]*?\1/g, (match) => {
+    blocks.push(match);
+    return placeholder(blocks.length - 1);
+  });
+
+  const cleaned = preserved
+    .replace(/<(?:script|style|iframe|object|embed)[^>]*>[\s\S]*?<\/(?:script|style|iframe|object|embed)>/gi, "")
+    .replace(/<(?:script|style|iframe|object|embed|img)[^>]*\/?>/gi, "")
+    .replace(/<code>([^<]*)<\/code>/gi, "`$1`")
+    .replace(/<(?:b|strong)>([^<]*)<\/(?:b|strong)>/gi, "**$1**")
+    .replace(/<(?:i|em)>([^<]*)<\/(?:i|em)>/gi, "*$1*")
+    .replace(/<a\s+href="([^"]*)"[^>]*>([^<]*)<\/a>/gi, "[$2]($1)")
+    .replace(/<br\s*\/?>/gi, "\n");
+
+  // 플레이스홀더를 원본 코드블록으로 복원
+  return cleaned.replace(/\x00CB(\d+)\x00/g, (_, i) => blocks[Number(i)] ?? "");
 }
 
-/** 최종 응답용: 민감 명령 필터 제외 (에이전트의 자연어 응답을 보존). */
+// ── Public sanitize functions ──
+
 const FINAL_OUTPUT_LINE_FILTERS: LineFilter[] = [
   is_provider_noise_line,
   is_persona_leak_line,
 ];
 
-/** 스트리밍용: 민감 명령 + 빈 줄까지 적극 필터링. */
 const STREAM_LINE_FILTERS: LineFilter[] = [
   is_stream_noise_line,
   is_persona_leak_line,
@@ -165,32 +207,16 @@ const STREAM_LINE_FILTERS: LineFilter[] = [
 export function sanitize_provider_output(raw: string): string {
   const text = strip_secret_reference_tokens(strip_ansi(String(raw || "")).replace(/\r/g, ""));
   if (!text) return "";
-  // 블록 정규식을 라인 필터보다 먼저 실행 (구분자가 라인 단위 제거되면 블록 매칭 불가)
   const blocks_stripped = strip_tool_protocol_leaks(text);
   const filtered = filter_lines(blocks_stripped, FINAL_OUTPUT_LINE_FILTERS);
-  return strip_inline_html(strip_persona_leak_blocks(filtered)).trim();
-}
-
-/** LLM이 생성한 인라인 HTML 태그를 텍스트 등가물로 변환. 잔여 태그는 catch-all로 제거. */
-function strip_inline_html(input: string): string {
-  const out = String(input || "");
-  if (!/<[a-z/][a-z0-9]*[\s>/]/i.test(out)) return out;
-  return out
-    .replace(/<(?:script|style|iframe|object|embed)[^>]*>[\s\S]*?<\/(?:script|style|iframe|object|embed)>/gi, "")
-    .replace(/<(?:script|style|iframe|object|embed|img)[^>]*\/?>/gi, "")
-    .replace(/<code>([^<]*)<\/code>/gi, "`$1`")
-    .replace(/<(?:b|strong)>([^<]*)<\/(?:b|strong)>/gi, "$1")
-    .replace(/<(?:i|em)>([^<]*)<\/(?:i|em)>/gi, "$1")
-    .replace(/<a\s+href="[^"]*"[^>]*>([^<]*)<\/a>/gi, "$1")
-    .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<\/?[a-z][a-z0-9]*(?:\s[^>]*)?\/?>/gi, "");
+  return strip_dangerous_html(strip_persona_leak_blocks(filtered)).trim();
 }
 
 const ORCH_FINAL_RE = /<<ORCH_FINAL(?:_END)?>>/g;
 const STREAM_ENV_RE = /^\s*(?:\$\s*env:|export\s+[A-Za-z_]|set\s+[A-Za-z_])/i;
 
 export function sanitize_stream_chunk(raw: string): string {
-  const clean = strip_inline_html(strip_secret_reference_tokens(strip_ansi(String(raw || ""))))
+  const clean = strip_dangerous_html(strip_secret_reference_tokens(strip_ansi(String(raw || ""))))
     .replace(/\r/g, "")
     .replace(ORCH_FINAL_RE, "");
   if (!clean) return "";
@@ -198,9 +224,10 @@ export function sanitize_stream_chunk(raw: string): string {
     .split("\n")
     .filter((l) => !STREAM_ENV_RE.test(l))
     .join("\n");
-  // 연속 빈 줄을 최대 1개로 축소 (paragraph break 보존, 과도한 공백 제거)
   return strip_tool_protocol_leaks(filtered).replace(/\n{3,}/g, "\n\n");
 }
+
+// ── Agent reply normalization ──
 
 const RE_LEADING_MENTIONS = /^(\s*@[A-Za-z0-9._-]+\s*)+/;
 

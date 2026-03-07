@@ -26,7 +26,7 @@ workspace/skills/
 
 | Type | Location | Characteristics |
 |------|----------|-----------------|
-| **builtin** | Source code | Role skills (butler · pm · pl · implementer · etc.) — read-only |
+| **builtin** | Source code | Role skills (concierge · pm · pl · implementer · etc.) — read-only |
 | **workspace** | `workspace/skills/` | User-defined skills — add/edit/delete from the dashboard |
 
 All skills in `workspace/skills/` are custom skills managed directly by the user.

@@ -1,32 +1,11 @@
 /** Web Form 도구 — agentBrowser로 웹 폼 자동 작성/제출. */
 
 import { Tool } from "./base.js";
-import { error_message } from "../../utils/common.js";
 import type { JsonSchema, ToolExecutionContext } from "./types.js";
-import { execFile, spawnSync } from "node:child_process";
-import { promisify } from "node:util";
+import { run_agent_browser } from "./agent-browser-client.js";
 
-const exec_file_async = promisify(execFile);
-
-function detect_ab(): string | null {
-  const bin = process.platform === "win32" ? "agent-browser.cmd" : "agent-browser";
-  const r = spawnSync(process.platform === "win32" ? "where" : "which", [bin], { stdio: "ignore", windowsHide: true, shell: false });
-  return r.status === 0 ? bin : null;
-}
-
-async function run_ab(args: string[], signal?: AbortSignal, timeout_ms = 30_000): Promise<{ ok: boolean; stdout: string; stderr: string }> {
-  const bin = detect_ab();
-  if (!bin) return { ok: false, stdout: "", stderr: "agent_browser_not_installed" };
-  try {
-    const cmd = process.platform === "win32" ? "cmd.exe" : bin;
-    const cmd_args = process.platform === "win32"
-      ? ["/d", "/s", "/c", [bin, ...args.map((a) => `"${a}"`)].join(" ")]
-      : args;
-    const r = await exec_file_async(cmd, cmd_args, { timeout: timeout_ms, maxBuffer: 1024 * 1024 * 8, signal, windowsHide: true });
-    return { ok: true, stdout: String(r.stdout || ""), stderr: String(r.stderr || "") };
-  } catch (err) {
-    return { ok: false, stdout: "", stderr: error_message(err) };
-  }
+async function run_ab(args: string[], signal?: AbortSignal, timeout_ms = 30_000) {
+  return run_agent_browser(args, { signal, timeout_ms });
 }
 
 export class WebFormTool extends Tool {

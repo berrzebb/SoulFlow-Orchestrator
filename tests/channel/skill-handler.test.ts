@@ -49,14 +49,14 @@ describe("SkillHandler", () => {
     expect(handler.can_handle(ctx)).toBe(false);
   });
 
-  it("/skill — 기본 요약 목록 표시", async () => {
+  it("/skill (인자 없음) → 세부 기능 가이드 표시", async () => {
     const handler = new SkillHandler(make_access());
     const ctx = make_ctx();
     await handler.handle(ctx);
 
-    expect(ctx.replies[0]).toContain("스킬 2개");
-    expect(ctx.replies[0]).toContain("memory");
-    expect(ctx.replies[0]).toContain("weather");
+    expect(ctx.replies[0]).toContain("/skill list");
+    expect(ctx.replies[0]).toContain("/skill info");
+    expect(ctx.replies[0]).toContain("/skill roles");
   });
 
   it("/skill list — 상세 목록 표시 (source 포함)", async () => {
@@ -90,7 +90,7 @@ describe("SkillHandler", () => {
     const ctx = make_ctx(["info"]);
     await handler.handle(ctx);
 
-    expect(ctx.replies[0]).toContain("사용법");
+    expect(ctx.replies[0]).toContain("/skill info");
   });
 
   it("/skill roles — 역할 스킬 목록", async () => {
@@ -130,7 +130,7 @@ describe("SkillHandler", () => {
     const handler = new SkillHandler(make_access({
       list_skills: vi.fn().mockReturnValue([]),
     }));
-    const ctx = make_ctx();
+    const ctx = make_ctx(["list"]);
     await handler.handle(ctx);
 
     expect(ctx.replies[0]).toContain("등록된 스킬이 없습니다");
