@@ -17,27 +17,20 @@ import {
   normalize_agent_reply,
   extract_provider_error,
 } from "../channels/output-sanitizer.js";
-import { seal_inbound_sensitive_text } from "../security/inbound-seal.js";
-import { redact_sensitive_text } from "../security/sensitive.js";
-import { is_local_reference } from "../utils/local-ref.js";
-import { resolve_executor_provider, type ExecutorProvider, type ProviderCapabilities } from "../providers/executor.js";
-import { select_tools_for_request, rebuild_tool_index } from "./tool-selector.js";
+import type { ExecutorProvider, ProviderCapabilities } from "../providers/executor.js";
 import type { AgentBackendRegistry } from "../agent/agent-registry.js";
 import type { AgentRunResult } from "../agent/agent.types.js";
-import type { ToolSchema } from "../agent/tools/types.js";
 import type { CDObserver } from "../agent/cd-scoring.js";
 import type { ProcessTrackerLike } from "./process-tracker.js";
 import type { WorkflowEventService, AppendWorkflowEventInput } from "../events/index.js";
-import { now_ms, error_message } from "../utils/common.js";
 // ── 추출 모듈 ──
 import {
   build_once_overlay, build_agent_overlay, build_bootstrap_overlay,
   format_secret_notice, GUARD_SUMMARY_PROMPT,
 } from "./prompts.js";
-import { ConfirmationGuard, format_guard_prompt } from "./confirmation-guard.js";
+import { ConfirmationGuard } from "./confirmation-guard.js";
 import { FINISH_REASON_WARNINGS } from "../agent/finish-reason-warnings.js";
-import { detect_escalation, is_once_escalation, is_agent_escalation } from "./classifier.js";
-import { resolve_gateway } from "./gateway.js";
+import { detect_escalation } from "./classifier.js";
 import {
   type ToolCallHandlerDeps,
 } from "./tool-call-handler.js";
@@ -53,22 +46,18 @@ import { run_agent_loop as _run_agent_loop } from "./execution/run-agent-loop.js
 import { run_task_loop as _run_task_loop } from "./execution/run-task-loop.js";
 import { continue_task_loop as _continue_task_loop, type ContinueTaskDeps } from "./execution/continue-task-loop.js";
 import { run_phase_loop as _run_phase_loop, type PhaseWorkflowDeps } from "./execution/phase-workflow.js";
-
-/** run_once / run_agent_loop / run_task_loop 공통 인수. */
-type RunExecutionArgs = {
-  req: OrchestrationRequest;
-  executor: ExecutorProvider;
-  task_with_media: string;
-  context_block: string;
-  skill_names: string[];
-  system_base: string;
-  runtime_policy: RuntimeExecutionPolicy;
-  tool_definitions: Array<Record<string, unknown>>;
-  tool_ctx: ToolExecutionContext;
-  skill_provider_prefs?: string[];
-  /** execute()에서 한 번 계산된 scope ID. run_task_loop에서 재사용. */
-  request_scope: string;
-};
+// ── Request Preflight ──
+import {
+  run_request_preflight,
+  collect_skill_provider_prefs,
+  type RequestPreflightDeps,
+  type RequestPreflightResult,
+} from "./request-preflight.js";
+// ── Execute Dispatcher ──
+import {
+  execute_dispatch,
+  type ExecuteDispatcherDeps,
+} from "./execution/execute-dispatcher.js";
 
 type OrchestratorConfig = {
   executor_provider: ExecutorProvider;
@@ -302,7 +291,7 @@ export class OrchestrationService {
       policy_resolver: this.policy_resolver,
       caps: () => this._caps(),
       build_system_prompt: (names, prov, chat, cats, alias) => this._build_system_prompt(names, prov, chat, cats, alias),
-      collect_skill_provider_preferences: (names) => this._collect_skill_provider_preferences(names),
+      collect_skill_provider_preferences: (names) => collect_skill_provider_prefs(this.runtime, names),
     };
   }
 
@@ -332,217 +321,58 @@ export class OrchestrationService {
     };
   }
 
-  async execute(req: OrchestrationRequest): Promise<OrchestrationResult> {
-    const task = await this.seal_text(req.provider, req.message.chat_id, String(req.message.content || "").trim());
-    const media = await this.seal_list(req.provider, req.message.chat_id, req.media_inputs);
-    const task_with_media = compose_task_with_media(task, media);
-
-    // HITL: TaskResumeService가 이미 resume_task()를 호출하여 running 상태로 전환 → 기존 task loop 이어서 실행
-    if (req.resumed_task_id) {
-      const resumed = await this.runtime.get_task(req.resumed_task_id);
-      if (resumed && resumed.status === "running") {
-        return this.continue_task_loop(req, resumed, task_with_media, media);
-      }
-    }
-
-    const always_skills = this.runtime.get_always_skills();
-    const skill_names = this.resolve_context_skills(task_with_media, always_skills);
-
-    const secret_guard = await this.inspect_secrets([task_with_media, ...media]);
-    if (!secret_guard.ok) {
-      return { reply: format_secret_notice(secret_guard), mode: "once", tool_calls_count: 0, streamed: false };
-    }
-
-    const runtime_policy = this.policy_resolver.resolve(task_with_media, media);
-    const all_tool_definitions = this.runtime.get_tool_definitions();
-    const request_scope = inbound_scope_id(req.message);
-    const request_task_id = `adhoc:${req.provider}:${req.message.chat_id}:${req.alias}:${request_scope}`.toLowerCase();
-    const run_id = req.run_id || `orch-${now_ms()}`;
-
-    // 워크플로우 이벤트: 요청 수신 기록
-    const evt_base: Pick<AppendWorkflowEventInput, "run_id" | "task_id" | "agent_id" | "provider" | "channel" | "chat_id" | "source"> = {
-      run_id,
-      task_id: request_task_id,
-      agent_id: req.alias,
-      provider: req.provider,
-      channel: req.provider,
-      chat_id: req.message.chat_id,
-      source: "inbound",
+  /** request preflight 처리용 의존성 조립. */
+  private _preflight_deps(): RequestPreflightDeps {
+    return {
+      vault: this.vault,
+      runtime: this.runtime,
+      policy_resolver: this.policy_resolver,
+      workspace: this.deps.workspace,
+      tool_index: this.tool_index,
     };
-    this.log_event({ ...evt_base, phase: "assign", summary: `channel request: ${req.alias}`, detail: task_with_media.slice(0, 500) });
-
-    const history_lines = req.session_history.slice(-8).map((r) => `[${r.role}] ${r.content}`);
-    const context_block = build_context_message(task_with_media, history_lines);
-    const tool_ctx = build_tool_context(req, request_task_id);
-
-    const skill_tool_names = this.collect_skill_tool_names(skill_names);
-    const active_tasks_in_chat = this.runtime.list_active_tasks().filter(
-      (t) => String(t.memory?.chat_id || "") === String(req.message.chat_id),
-    );
-    const category_map: Record<string, string> = {};
-    for (const tool of this.runtime.get_tool_executors()) {
-      category_map[tool.name] = tool.category;
-    }
-    const tool_categories = [...new Set(Object.values(category_map))];
-    const tool_index_db = this.deps.workspace
-      ? join(this.deps.workspace, "runtime", "tools", "tool-index.db")
-      : undefined;
-    rebuild_tool_index(all_tool_definitions as ToolSchema[], category_map, tool_index_db, this.tool_index);
-    const skill_provider_prefs = this._collect_skill_provider_preferences(skill_names);
-
-    // Gateway: 분류 + 라우팅 결정
-    const decision = await resolve_gateway(
-      task_with_media,
-      {
-        active_tasks: active_tasks_in_chat,
-        recent_history: req.session_history.slice(-6),
-        available_tool_categories: tool_categories,
-        available_skills: skill_names.map(name => {
-          const meta = this.runtime.get_context_builder().skills_loader.get_skill_metadata(name);
-          return meta
-            ? { name, summary: meta.summary, triggers: meta.triggers }
-            : { name, summary: "", triggers: [] };
-        }),
-      },
-      active_tasks_in_chat,
-      {
-        providers: this.providers,
-        provider_caps: this._caps(),
-        executor_preference: this.config.executor_provider,
-        session_lookup: (task_id: string) => this.runtime.find_session_by_task(task_id),
-        logger: this.logger,
-      },
-    );
-
-    if (decision.action === "identity") {
-      const identity_reply = this._build_identity_reply();
-      this.log_event({ ...evt_base, phase: "done", summary: "identity shortcircuit", payload: { mode: "identity" } });
-      return { reply: identity_reply, mode: "once", tool_calls_count: 0, streamed: false };
-    }
-
-    if (decision.action === "builtin") {
-      this.log_event({ ...evt_base, phase: "done", summary: `builtin: ${decision.command}`, payload: { mode: "builtin", command: decision.command } });
-      return { reply: null, mode: "once", tool_calls_count: 0, streamed: false, builtin_command: decision.command, builtin_args: decision.args };
-    }
-
-    if (decision.action === "inquiry") {
-      this.log_event({ ...evt_base, phase: "done", summary: "inquiry shortcircuit", payload: { mode: "inquiry", active_count: active_tasks_in_chat.length } });
-      return { reply: decision.summary, mode: "once", tool_calls_count: 0, streamed: false };
-    }
-
-    const { mode, executor } = decision;
-
-    // 결과에 done/blocked 이벤트를 기록하는 헬퍼
-    const finalize = (result: OrchestrationResult): OrchestrationResult => {
-      const phase = result.error ? "blocked" : "done";
-      this.log_event({
-        ...evt_base,
-        phase,
-        summary: result.error ? `failed: ${result.error.slice(0, 120)}` : `completed: ${result.mode}`,
-        payload: { mode: result.mode, tool_calls_count: result.tool_calls_count, ...(result.usage ?? {}), ...(result.error ? { error: result.error } : {}) },
-        detail: result.error || (result.reply ?? "").slice(0, 500) || null,
-      });
-      if (req.run_id) {
-        this.process_tracker?.set_tool_count(req.run_id, result.tool_calls_count);
-        this.process_tracker?.end(req.run_id, result.error ? "failed" : "completed", result.error || undefined);
-      }
-      return result;
-    };
-
-    // phase → Phase Loop Runner에 위임 (도구 선택 전에 분기)
-    if (mode === "phase") {
-      this.log_event({ ...evt_base, phase: "progress", summary: "executing: phase", payload: { mode, executor } });
-      const workflow_hint = decision.workflow_id;
-      const node_cats = decision.node_categories;
-      return finalize(await this.run_phase_loop(req, task_with_media, workflow_hint, node_cats));
-    }
-
-    const classifier_cats = decision.action === "execute" ? decision.tool_categories : undefined;
-    const { tools: tool_definitions, categories } = await select_tools_for_request(all_tool_definitions, task_with_media, mode, skill_tool_names, classifier_cats, category_map, classifier_cats, this.tool_index);
-    const system_base = await this._build_system_prompt(skill_names, req.provider, req.message.chat_id, new Set(categories), req.alias);
-    this.logger.info("dispatch", { mode, executor, skills: skill_names, tool_count: tool_definitions.length });
-
-    // ── Confirmation Guard: 중요 작업 실행 전 사용자 확인 ──
-    if (this.guard?.needs_confirmation(mode, categories, req.provider, req.message.chat_id)) {
-      const summary = await this._generate_guard_summary(task_with_media);
-      this.guard.store(req.provider, req.message.chat_id, task_with_media, summary, mode, categories);
-      this.logger.info("guard_confirmation_pending", { mode, categories, provider: req.provider, chat_id: req.message.chat_id });
-      return { reply: format_guard_prompt(summary, mode, categories), mode: "once", tool_calls_count: 0, streamed: false };
-    }
-
-    if (req.run_id) {
-      this.process_tracker?.set_mode(req.run_id, mode);
-      this.process_tracker?.set_executor(req.run_id, executor);
-    }
-    this.log_event({ ...evt_base, phase: "progress", summary: `executing: ${mode}`, payload: { mode, executor } });
-
-    // once → executor 1회 호출. 에스컬레이션 시 executor 루프로 전환.
-    try {
-      let escalation_error: string | undefined;
-      if (mode === "once") {
-        const once_result = await this.run_once({
-          req, executor, task_with_media, context_block, skill_names, system_base,
-          runtime_policy, tool_definitions, tool_ctx, skill_provider_prefs, request_scope,
-        });
-        if (!is_once_escalation(once_result.error)) {
-          return finalize(once_result);
-        }
-        escalation_error = once_result.error ?? undefined;
-      }
-
-      // agent/task 또는 once 에스컬레이션 → executor 루프
-      const loop_mode: "task" | "agent" = mode === "task"
-        ? "task"
-        : (escalation_error === "once_requires_task_loop" ? "task" : "agent");
-
-      if (req.run_id && loop_mode !== mode) this.process_tracker?.set_mode(req.run_id, loop_mode);
-
-      const run_loop = async (executor: ExecutorProvider): Promise<OrchestrationResult> => {
-        const loop_args = {
-          req, executor, task_with_media, media, context_block,
-          skill_names, system_base, runtime_policy, tool_definitions, tool_ctx, skill_provider_prefs, request_scope,
-        };
-        return loop_mode === "task"
-          ? this.run_task_loop(loop_args)
-          : this.run_agent_loop({ ...loop_args, history_lines });
-      };
-
-      const first = await run_loop(executor);
-
-      // agent → task 에스컬레이션: agent 루프가 approval 필요 상황을 감지한 경우
-      if (loop_mode === "agent" && is_agent_escalation(first.error)) {
-        this.logger.info("agent_escalation_to_task", { error: first.error, run_id: req.run_id });
-        if (req.run_id) this.process_tracker?.set_mode(req.run_id, "task");
-        const task_args = {
-          req, executor, task_with_media, media, context_block,
-          skill_names, system_base, runtime_policy, tool_definitions, tool_ctx, skill_provider_prefs, request_scope,
-        };
-        const escalated = await this.run_task_loop(task_args);
-        return finalize(escalated);
-      }
-
-      if (first.reply || first.suppress_reply) return finalize(first);
-
-      if (executor === "claude_code") {
-        const fallback = resolve_executor_provider("chatgpt", this._caps());
-        if (fallback !== executor) {
-          this.logger.warn("executor failed, trying fallback", { executor, fallback, error: first.error });
-          const second = await run_loop(fallback);
-          if (second.reply || second.suppress_reply) return finalize(second);
-          return finalize({ ...second, error: second.error || first.error });
-        }
-      }
-      return finalize(first);
-    } catch (e) {
-      const msg = error_message(e);
-      this.logger.error("execute unhandled", { error: msg });
-      return finalize(error_result(mode, new StreamBuffer(), msg));
-    }
   }
 
-  /** executor에게 1회 질의. 오케스트레이터 LLM은 분류만 수행하고 실제 응답은 executor가 생성. */
-  private async run_once(args: RunExecutionArgs): Promise<OrchestrationResult> {
-    return _run_once(this._runner_deps(), args);
+  /** execute dispatcher 처리용 의존성 조립. */
+  private _dispatch_deps(): ExecuteDispatcherDeps {
+    return {
+      providers: this.providers,
+      runtime: this.runtime,
+      logger: this.logger,
+      config: {
+        executor_provider: this.config.executor_provider,
+        provider_caps: this.config.provider_caps,
+      },
+      process_tracker: this.process_tracker,
+      guard: this.guard,
+      tool_index: this.tool_index,
+      log_event: (e) => this.log_event(e),
+      build_identity_reply: () => this._build_identity_reply(),
+      build_system_prompt: (names, prov, chat, cats, alias) => this._build_system_prompt(names, prov, chat, cats, alias),
+      generate_guard_summary: (text) => this._generate_guard_summary(text),
+      run_once: (args) => _run_once(this._runner_deps(), args),
+      run_agent_loop: (args) => _run_agent_loop(this._runner_deps(), args),
+      run_task_loop: (args) => _run_task_loop(this._runner_deps(), args),
+      run_phase_loop: (req, task, hint, cats) => _run_phase_loop(this._phase_deps(), req, task, hint, cats),
+      caps: () => this._caps(),
+    };
+  }
+
+  async execute(req: OrchestrationRequest): Promise<OrchestrationResult> {
+    // Phase 4.4: Request Preflight — seal, skill 검색, secret 검증, context 조립을 한 경로로 수렴
+    const preflight = await run_request_preflight(this._preflight_deps(), req);
+
+    // resumed_task 조기 반환 (semantic 보존)
+    if (preflight.kind === "resume") {
+      return this.continue_task_loop(req, preflight.resumed_task, preflight.task_with_media, preflight.media);
+    }
+
+    // secret 검증 실패 → 조기 차단
+    if (!preflight.secret_guard.ok) {
+      return { reply: format_secret_notice(preflight.secret_guard), mode: "once", tool_calls_count: 0, streamed: false };
+    }
+
+    // Phase 4.5: Execute Dispatcher — gateway 라우팅 → short-circuit → mode 분기 → finalize
+    return execute_dispatch(this._dispatch_deps(), req, preflight);
   }
 
   /** 컨텍스트 압축 전 메모리 자동 저장 설정 생성. 200K 컨텍스트 기준. */
@@ -555,14 +385,6 @@ export class OrchestrationService {
         try { await mem.append_daily(`[auto-flush] Session nearing compaction — durable memories preserved.\n`); } catch { /* best-effort */ }
       },
     };
-  }
-
-  private async run_agent_loop(args: RunExecutionArgs & { media: string[]; history_lines: string[] }): Promise<OrchestrationResult> {
-    return _run_agent_loop(this._runner_deps(), args);
-  }
-
-  private async run_task_loop(args: RunExecutionArgs & { media: string[] }): Promise<OrchestrationResult> {
-    return _run_task_loop(this._runner_deps(), args);
   }
 
   private _get_renderer(): PersonaMessageRendererLike {
@@ -647,20 +469,6 @@ export class OrchestrationService {
     return reply_result(mode, stream, final_reply, result.tool_calls_count, result.parsed_output, usage);
   }
 
-  /** 활성 스킬들의 preferred_providers를 수집 (중복 제거, 순서 유지). */
-  private _collect_skill_provider_preferences(skill_names: string[]): string[] {
-    const prefs: string[] = [];
-    const seen = new Set<string>();
-    for (const name of skill_names) {
-      const meta = this.runtime.get_context_builder().skills_loader.get_skill_metadata(name);
-      if (!meta?.preferred_providers?.length) continue;
-      for (const p of meta.preferred_providers) {
-        if (!seen.has(p)) { seen.add(p); prefs.push(p); }
-      }
-    }
-    return prefs;
-  }
-
   /** 시스템 프롬프트를 빌드. alias에 대응하는 role skill이 있으면 role persona를 적용하고, 없으면 concierge 힌트를 사용. */
   private async _build_system_prompt(skill_names: string[], provider: string, chat_id: string, tool_categories?: ReadonlySet<string>, alias?: string): Promise<string> {
     const context_builder = this.runtime.get_context_builder();
@@ -685,60 +493,6 @@ export class OrchestrationService {
     return `${system}${active_role_hint}`;
   }
 
-  private async seal_text(provider: ChannelProvider, chat_id: string, raw: string): Promise<string> {
-    if (!raw.trim()) return "";
-    try {
-      const sealed = await seal_inbound_sensitive_text(raw, { provider, chat_id, vault: this.vault });
-      return sealed.text;
-    } catch {
-      return redact_sensitive_text(raw).text;
-    }
-  }
-
-  private async seal_list(provider: ChannelProvider, chat_id: string, values: string[]): Promise<string[]> {
-    const tasks = values
-      .map((v) => String(v || "").trim())
-      .filter(Boolean)
-      .map(async (raw) => {
-        if (is_local_reference(raw)) return raw;
-        const sealed = await this.seal_text(provider, chat_id, raw);
-        return sealed.trim() || null;
-      });
-    return (await Promise.all(tasks)).filter((v): v is string => v !== null);
-  }
-
-  private async inspect_secrets(inputs: string[]): Promise<{ ok: boolean; missing_keys: string[]; invalid_ciphertexts: string[] }> {
-    const filtered = inputs.filter((t) => t.trim());
-    const reports = await Promise.all(filtered.map((text) => this.vault.inspect_secret_references(text)));
-    const missing = new Set<string>();
-    const invalid = new Set<string>();
-    for (const report of reports) {
-      for (const k of report.missing_keys || []) { const n = String(k).trim(); if (n) missing.add(n); }
-      for (const t of report.invalid_ciphertexts || []) { const v = String(t).trim(); if (v) invalid.add(v); }
-    }
-    return { ok: missing.size === 0 && invalid.size === 0, missing_keys: [...missing], invalid_ciphertexts: [...invalid] };
-  }
-
-  /** 추천 스킬들의 메타데이터에서 요구 도구 이름을 수집. */
-  private collect_skill_tool_names(skill_names: string[]): string[] {
-    const out = new Set<string>();
-    for (const name of skill_names) {
-      const meta = this.runtime.get_skill_metadata(name);
-      if (meta) for (const t of meta.tools) out.add(t);
-    }
-    return [...out];
-  }
-
-
-  private resolve_context_skills(task: string, base: string[]): string[] {
-    const out = new Set<string>(base.filter(Boolean));
-    for (const s of this.runtime.recommend_skills(task, 8)) {
-      const name = String(s || "").trim();
-      if (name) out.add(name);
-    }
-    return [...out];
-  }
-
   /** 재개된 Task loop를 이어서 실행. */
   private async continue_task_loop(
     req: OrchestrationRequest,
@@ -748,23 +502,6 @@ export class OrchestrationService {
   ): Promise<OrchestrationResult> {
     return _continue_task_loop(this._continue_deps(), req, task, task_with_media, media);
   }
-
-  /** phase 모드: Phase Loop Runner에 위임. */
-  /** Phase 워크플로우 실행: 템플릿 또는 동적 생성 워크플로우를 실행하고 결과 반환. */
-  private async run_phase_loop(req: OrchestrationRequest, task_with_media: string, workflow_hint?: string, node_categories?: string[]): Promise<OrchestrationResult> {
-    return _run_phase_loop(this._phase_deps(), req, task_with_media, workflow_hint, node_categories);
-  }
-}
-
-function build_tool_context(req: OrchestrationRequest, task_id: string): ToolExecutionContext {
-  return {
-    task_id,
-    signal: req.signal,
-    channel: req.provider,
-    chat_id: req.message.chat_id,
-    sender_id: req.message.sender_id,
-    reply_to: resolve_reply_to(req.provider, req.message) || undefined,
-  };
 }
 
 function error_result(mode: ExecutionMode, stream: StreamBuffer | null, error: string, tool_calls_count = 0): OrchestrationResult {
@@ -869,24 +606,6 @@ function _extract_usage(raw: Record<string, unknown> | undefined): import("./typ
   };
 }
 
-function compose_task_with_media(task: string, media: string[]): string {
-  if (!media.length) return task;
-  const lines = media.map((m, i) => `${i + 1}. ${m}`);
-  return [
-    task || "첨부 파일을 분석하세요.",
-    "", "[ATTACHED_FILES]", ...lines, "",
-    "요구사항:", "- 첨부 파일을 우선 분석하고 핵심 결과를 요약할 것", "- 표/코드/로그가 포함되면 핵심만 구조화해 보고할 것",
-  ].join("\n");
-}
-
-function build_context_message(task_with_media: string, history_lines: string[]): string {
-  return [
-    `[CURRENT_REQUEST]\n${task_with_media}`,
-    history_lines.length > 0 ? ["[REFERENCE_RECENT_CONTEXT]", ...history_lines].join("\n") : "",
-    "중요: 실행 대상은 CURRENT_REQUEST 하나입니다. REFERENCE 문맥은 참고용이며 재실행 지시가 아닙니다.",
-  ].filter(Boolean).join("\n\n");
-}
-
 export function resolve_reply_to(provider: ChannelProvider, message: InboundMessage): string {
   const meta = (message.metadata || {}) as Record<string, unknown>;
   if (provider === "slack") {
@@ -896,16 +615,4 @@ export function resolve_reply_to(provider: ChannelProvider, message: InboundMess
   }
   if (provider === "telegram") return "";
   return String(meta.message_id || message.id || "").trim();
-}
-
-const RE_SCOPE_INVALID = /[^a-zA-Z0-9._-]+/g;
-const RE_MULTI_DASH = /-+/g;
-
-function inbound_scope_id(message: InboundMessage): string {
-  const meta = (message.metadata || {}) as Record<string, unknown>;
-  const raw = String(meta.message_id || message.id || "").trim();
-  if (!raw) return `msg-${now_ms()}`;
-  RE_SCOPE_INVALID.lastIndex = 0;
-  RE_MULTI_DASH.lastIndex = 0;
-  return raw.replace(RE_SCOPE_INVALID, "-").replace(RE_MULTI_DASH, "-").slice(0, 96) || `msg-${now_ms()}`;
 }
