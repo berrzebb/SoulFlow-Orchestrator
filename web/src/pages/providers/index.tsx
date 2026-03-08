@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import { Modal } from "../../components/modal";
 import { ResourceCard } from "../../components/resource-card";
 import { useToast } from "../../components/toast";
+import { useResourceCRUD } from "../../hooks/use-resource-crud";
 import { useT } from "../../i18n";
 import { time_ago } from "../../utils/format";
 import { PROVIDER_TYPE_LABELS as TYPE_LABELS } from "../../utils/constants";
@@ -15,51 +15,35 @@ import { ConnectionModal } from "./connection-modal";
 type Tab = "providers" | "chat" | "embedding";
 
 export default function ProvidersPage() {
-  const qc = useQueryClient();
   const { toast } = useToast();
   const t = useT();
   const [tab, setTab] = useState<Tab>("providers");
   const [modal, setModal] = useState<ModalMode | null>(null);
   const [connModal, setConnModal] = useState<ConnectionModalMode | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<ProviderInstance | null>(null);
-  const [deleteConnTarget, setDeleteConnTarget] = useState<ProviderConnection | null>(null);
 
-  const { data: connections = [], isLoading: connLoading } = useQuery<ProviderConnection[]>({
-    queryKey: ["agent-connections"],
-    queryFn: () => api.get("/api/agents/connections"),
-    refetchInterval: 15_000,
-    staleTime: 10_000,
-  });
+  const { items: connections, isLoading: connLoading, deleteTarget: deleteConnTarget, setDeleteTarget: setDeleteConnTarget, remove: removeConn, queryClient: qc } =
+    useResourceCRUD<ProviderConnection>({
+      queryKey: ["agent-connections"],
+      queryFn: () => api.get("/api/agents/connections"),
+      deleteEndpoint: (id) => `/api/agents/connections/${encodeURIComponent(id)}`,
+      onDeleteSuccess: () => { toast(t("connections.removed"), "ok"); void qc.invalidateQueries({ queryKey: ["agent-providers"] }); },
+      onDeleteError: (err) => toast(t("providers.remove_failed", { error: err.message }), "err"),
+      refetchInterval: 15_000,
+      staleTime: 10_000,
+    });
 
-  const { data: instances, isLoading } = useQuery<ProviderInstance[]>({
+  const { items: instances, isLoading, deleteTarget, setDeleteTarget, remove, queryClient } = useResourceCRUD<ProviderInstance>({
     queryKey: ["agent-providers"],
     queryFn: () => api.get("/api/agents/providers"),
+    deleteEndpoint: (id) => `/api/agents/providers/${encodeURIComponent(id)}`,
+    onDeleteSuccess: () => { toast(t("providers.removed"), "ok"); void queryClient.invalidateQueries({ queryKey: ["agent-connections"] }); },
+    onDeleteError: (err) => toast(t("providers.remove_failed", { error: err.message }), "err"),
     refetchInterval: 10_000,
     staleTime: 5_000,
   });
 
   const chatProviders = instances?.filter((i) => (i.model_purpose || "chat") === "chat") ?? [];
   const embedProviders = instances?.filter((i) => i.model_purpose === "embedding") ?? [];
-
-  const removeConn = useMutation({
-    mutationFn: (id: string) => api.del(`/api/agents/connections/${encodeURIComponent(id)}`),
-    onSuccess: () => {
-      toast(t("connections.removed"), "ok");
-      void qc.invalidateQueries({ queryKey: ["agent-connections"] });
-      void qc.invalidateQueries({ queryKey: ["agent-providers"] });
-    },
-    onError: (err) => toast(t("providers.remove_failed", { error: err.message }), "err"),
-  });
-
-  const remove = useMutation({
-    mutationFn: (id: string) => api.del(`/api/agents/providers/${encodeURIComponent(id)}`),
-    onSuccess: () => {
-      toast(t("providers.removed"), "ok");
-      void qc.invalidateQueries({ queryKey: ["agent-providers"] });
-      void qc.invalidateQueries({ queryKey: ["agent-connections"] });
-    },
-    onError: (err) => toast(t("providers.remove_failed", { error: err.message }), "err"),
-  });
 
   const openAddModal = () => {
     const purpose = tab === "embedding" ? "embedding" : "chat";
