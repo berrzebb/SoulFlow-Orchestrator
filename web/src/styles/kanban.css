@@ -788,6 +788,30 @@
 
 /* ─── Empty / Loading ─── */
 
+.kanban-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-3);
+  padding: var(--sp-8);
+  color: var(--muted);
+  flex: 1;
+}
+
+.kanban-loading .spinner {
+  width: 32px;
+  height: 32px;
+  border: 2px solid var(--surface-subtle);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 .kanban-empty {
   display: flex;
   flex-direction: column;

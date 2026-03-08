@@ -123,7 +123,7 @@ export default function KanbanPage() {
     refetchInterval: 30_000,
   });
 
-  const { data: boardDetail } = useQuery<Board>({
+  const { data: boardDetail, isPending: boardLoading } = useQuery<Board>({
     queryKey: ["kanban-board", board_id],
     queryFn: () => api.get(`/api/kanban/boards/${encodeURIComponent(board_id)}`),
     enabled: !!board_id,
@@ -293,15 +293,24 @@ export default function KanbanPage() {
 
       {/* Body */}
       <div className="kanban-body">
-        {view === "board"
-          ? <BoardView columns={columns} cards={filtered_cards} selectedCard={selectedCard} onSelect={setSelectedCard} onAddCard={add_card} onMoveCard={move_card} />
-          : <ListView cards={filtered_cards} columns={columns} selectedCard={selectedCard} onSelect={setSelectedCard} />
-        }
+        {boardLoading && board_id ? (
+          <div className="kanban-loading">
+            <div className="spinner" aria-label={t("kanban.loading")}></div>
+            <p>{t("kanban.loading")}</p>
+          </div>
+        ) : (
+          <>
+            {view === "board"
+              ? <BoardView columns={columns} cards={filtered_cards} selectedCard={selectedCard} onSelect={setSelectedCard} onAddCard={add_card} onMoveCard={move_card} />
+              : <ListView cards={filtered_cards} columns={columns} selectedCard={selectedCard} onSelect={setSelectedCard} />
+            }
 
-        {selectedCard && (
-          <CardDetailPanel card_id={selectedCard} board_id={board_id} columns={columns}
-            onClose={() => setSelectedCard(null)} onUpdate={update_card} onMove={move_card} onDelete={delete_card}
-            onSelectCard={setSelectedCard} />
+            {selectedCard && (
+              <CardDetailPanel card_id={selectedCard} board_id={board_id} columns={columns}
+                onClose={() => setSelectedCard(null)} onUpdate={update_card} onMove={move_card} onDelete={delete_card}
+                onSelectCard={setSelectedCard} />
+            )}
+          </>
         )}
       </div>
     </div>
