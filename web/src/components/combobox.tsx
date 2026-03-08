@@ -94,10 +94,10 @@ export function Combobox({ options, value, onChange, placeholder, loading, loadi
         >&times;</button>
       )}
       {open && (
-        <ul ref={listRef} className="combobox__list" role="listbox">
+        <ul ref={listRef} className="combobox__list" role="listbox" aria-live="polite" aria-label={`검색 결과 ${filtered.length}개`}>
           {loading && <li className="combobox__item combobox__item--hint">{loadingText || "Loading..."}</li>}
           {!loading && filtered.length === 0 && (
-            <li className="combobox__item combobox__item--hint">
+            <li className="combobox__item combobox__item--hint" role="status">
               {query ? "No matches" : "No options"}
             </li>
           )}
