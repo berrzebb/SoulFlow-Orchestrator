@@ -201,7 +201,7 @@ export class DocumentTool extends Tool {
 
     try {
       const lines = content.split("\n");
-      let data: string[][] = [];
+      const data: string[][] = [];
 
       // 마크다운 테이블 감지
       if (lines.length > 0 && lines[0].includes("|")) {

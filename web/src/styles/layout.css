@@ -4419,6 +4419,24 @@ g:hover > .graph-add-handle circle {
   padding: 0;
 }
 
+/* Provider/Model Selector Bar */
+.provider-model-bar {
+  display: flex;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border-bottom: 1px solid var(--line);
+  background: var(--bg);
+}
+.provider-model-bar__provider-select,
+.provider-model-bar__model-select {
+  flex: 0 1 200px;
+  font-size: var(--fs-sm);
+}
+.provider-model-bar__model-select {
+  flex: 1 1 auto;
+  min-width: 200px;
+}
+
 /* Message media */
 .chat-media { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin-top: var(--sp-2); }
 .chat-media__img {

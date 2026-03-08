@@ -1,0 +1,1238 @@
+
+[1m[46m RUN [49m[22m [36mv4.0.18 [39m[90mD:/claude-tools/.claude/mcp-servers/slack/next[39m
+      [2mCoverage enabled with [22m[33mv8[39m
+
+[90mstdout[2m | tests/agent/oauth-fetch-integration.test.ts[2m > [22m[2mOAuthIntegrationStore 통합 (실제 SQLite + SecretVault)[2m > [22m[2mupsert → get → list CRUD
+[22m[39m{"ts":"2026-03-08T08:29:24.859Z","level":"info","name":"secret-vault","msg":"master key generated"}
+
+[90mstdout[2m | tests/services/kanban-rule-executor.test.ts[2m > [22m[2mkanban rule executor[2m > [22m[2mcard_moved trigger로 move_card action이 실행된다
+[22m[39m{"ts":"2026-03-08T08:29:24.889Z","level":"info","name":"kanban-rule-executor","msg":"rule_action_executed","rule_id":"fc0ffc17-e78c-40ea-85d3-b64302eaac4d","action":"comment","card_id":"TB-1"}
+
+[90mstdout[2m | tests/security/secret-vault-factory.test.ts[2m > [22m[2msecret vault keyring migration[2m > [22m[2mstores master key in keyring.db, not secrets.db
+[22m[39m{"ts":"2026-03-08T08:29:24.897Z","level":"info","name":"secret-vault","msg":"master key generated"}
+
+[90mstdout[2m | tests/security/secret-vault-factory.test.ts[2m > [22m[2msecret vault keyring migration[2m > [22m[2mstores master key in keyring.db, not secrets.db
+[22m[39m{"ts":"2026-03-08T08:29:24.928Z","level":"info","name":"test_key","msg":"secret_put","ok":true}
+
+[90mstdout[2m | tests/agent/oauth-fetch-integration.test.ts[2m > [22m[2mOAuthIntegrationStore 통합 (실제 SQLite + SecretVault)[2m > [22m[2m비활성 연동 upsert 후 enabled=false 확인
+[22m[39m{"ts":"2026-03-08T08:29:24.977Z","level":"info","name":"secret-vault","msg":"master key generated"}
+
+[90mstdout[2m | tests/security/secret-vault-factory.test.ts[2m > [22m[2msecret vault keyring migration[2m > [22m[2mencrypts and decrypts after keyring separation
+[22m[39m{"ts":"2026-03-08T08:29:24.992Z","level":"info","name":"secret-vault","msg":"master key generated"}
+
+[90mstdout[2m | tests/security/secret-vault-factory.test.ts[2m > [22m[2msecret vault keyring migration[2m > [22m[2mencrypts and decrypts after keyring separation
+[22m[39m{"ts":"2026-03-08T08:29:25.030Z","level":"info","name":"my_api_key","msg":"secret_put","ok":true}
+
+[90mstdout[2m | tests/security/secret-vault-factory.test.ts[2m > [22m[2msecret vault keyring migration[2m > [22m[2mencrypts and decrypts after keyring separation
+[22m[39m{"ts":"2026-03-08T08:29:25.067Z","level":"info","name":"my_api_key","msg":"secret_reveal","found":true}
+
+[90mstdout[2m | tests/agent/oauth-fetch-integration.test.ts[2m > [22m[2mOAuthIntegrationStore 통합 (실제 SQLite + SecretVault)[2m > [22m[2m프로세스 재시작 후 연동 정보 복원
+[22m[39m{"ts":"2026-03-08T08:29:25.095Z","level":"info","name":"secret-vault","msg":"master key generated"}
+
+[90mstdout[2m | tests/security/secret-vault-factory.test.ts[2m > [22m[2msecret vault mask cache[2m > [22m[2mmask_known_secrets masks stored secret values
+[22m[39m{"ts":"2026-03-08T08:29:25.133Z","level":"info","name":"secret-vault","msg":"master key generated"}
+
+[90mstdout[2m | tests/security/secret-vault-factory.test.ts[2m > [22m[2msecret vault mask cache[2m > [22m[2mmask_known_secrets masks stored secret values
+[22m[39m{"ts":"2026-03-08T08:29:25.169Z","level":"info","name":"token","msg":"secret_put","ok":true}
+
+ [32m✓[39m tests/provider/circuit-breaker.test.ts [2m([22m[2m13 tests[22m[2m)[22m[33m 621[2mms[22m[39m
+ [32m✓[39m tests/agent/pty/lane-queue.test.ts [2m([22m[2m11 tests[22m[2m)[22m[33m 673[2mms[22m[39m
+     [33m[2m✓[22m[39m wait_for_followup — 타임아웃 시 null 반환 [33m 431[2mms[22m[39m
+[90mstdout[2m | tests/agent/oauth-fetch-integration.test.ts[2m > [22m[2mOAuthIntegrationStore 통합 (실제 SQLite + SecretVault)[2m > [22m[2m토큰 저장 → 조회 → SecretVault 연동
+[22m[39m{"ts":"2026-03-08T08:29:25.268Z","level":"info","name":"secret-vault","msg":"master key generated"}
+
+[90mstdout[2m | tests/security/secret-vault-factory.test.ts[2m > [22m[2msecret vault mask cache[2m > [22m[2minvalidates cache on put_secret
+[22m[39m{"ts":"2026-03-08T08:29:25.278Z","level":"info","name":"secret-vault","msg":"master key generated"}
+
+ [32m✓[39m tests/agent/pty/local-pty.test.ts [2m([22m[2m7 tests[22m[2m)[22m[33m 708[2mms[22m[39m
+[90mstdout[2m | tests/security/secret-vault-factory.test.ts[2m > [22m[2msecret vault mask cache[2m > [22m[2minvalidates cache on put_secret
+[22m[39m{"ts":"2026-03-08T08:29:25.314Z","level":"info","name":"key_a","msg":"secret_put","ok":true}
+
+[90mstdout[2m | tests/agent/oauth-fetch-integration.test.ts[2m > [22m[2mOAuthIntegrationStore 통합 (실제 SQLite + SecretVault)[2m > [22m[2m토큰 저장 → 조회 → SecretVault 연동
+[22m[39m{"ts":"2026-03-08T08:29:25.346Z","level":"info","name":"oauth.github.access_token","msg":"secret_put","ok":true}
+
+[90mstdout[2m | tests/services/kanban-rule-executor.test.ts[2m > [22m[2mkanban rule executor[2m > [22m[2mrun_workflow bridge가 주입되면 run_workflow action이 실행된다
+[22m[39m{"ts":"2026-03-08T08:29:25.357Z","level":"info","name":"kanban-rule-executor","msg":"rule_action_executed","rule_id":"1a57cbd5-0f23-434e-86d4-cafc7a300bc5","action":"run_workflow","card_id":"BB-1","ok":true,"workflow_id":"wf-test-123"}
+
+[90mstdout[2m | tests/agent/oauth-fetch-integration.test.ts[2m > [22m[2mOAuthIntegrationStore 통합 (실제 SQLite + SecretVault)[2m > [22m[2m토큰 저장 → 조회 → SecretVault 연동
+[22m[39m{"ts":"2026-03-08T08:29:25.387Z","level":"info","name":"oauth.github.refresh_token","msg":"secret_put","ok":true}
+
+[90mstdout[2m | tests/security/secret-vault-factory.test.ts[2m > [22m[2msecret vault mask cache[2m > [22m[2minvalidates cache on put_secret
+[22m[39m{"ts":"2026-03-08T08:29:25.395Z","level":"info","name":"key_b","msg":"secret_put","ok":true}
+
+[90mstdout[2m | tests/agent/oauth-fetch-integration.test.ts[2m > [22m[2mOAuthIntegrationStore 통합 (실제 SQLite + SecretVault)[2m > [22m[2m토큰 저장 → 조회 → SecretVault 연동
+[22m[39m{"ts":"2026-03-08T08:29:25.431Z","level":"info","name":"oauth.github.access_token","msg":"secret_reveal","found":true}
+
+[90mstdout[2m | tests/agent/oauth-fetch-integration.test.ts[2m > [22m[2mOAuthIntegrationStore 통합 (실제 SQLite + SecretVault)[2m > [22m[2m토큰 저장 → 조회 → SecretVault 연동
+[22m[39m{"ts":"2026-03-08T08:29:25.469Z","level":"info","name":"oauth.github.refresh_token","msg":"secret_reveal","found":true}
+
+[90mstdout[2m | tests/security/secret-vault-factory.test.ts[2m > [22m[2msecret vault mask cache[2m > [22m[2minvalidates cache on remove_secret
+[22m[39m{"ts":"2026-03-08T08:29:25.517Z","level":"info","name":"secret-vault","msg":"master key generated"}
+
+[90mstdout[2m | tests/security/secret-vault-factory.test.ts[2m > [22m[2msecret vault mask cache[2m > [22m[2minvalidates cache on remove_secret
+[22m[39m{"ts":"2026-03-08T08:29:25.556Z","level":"info","name":"key_x","msg":"secret_put","ok":true}
+
+[90mstdout[2m | tests/agent/oauth-fetch-integration.test.ts[2m > [22m[2mOAuthIntegrationStore 통합 (실제 SQLite + SecretVault)[2m > [22m[2m토큰 재시작 후 복원
+[22m[39m{"ts":"2026-03-08T08:29:25.551Z","level":"info","name":"secret-vault","msg":"master key generated"}
+
+ [32m✓[39m tests/ops/promise-tool.test.ts [2m([22m[2m10 tests[22m[2m)[22m[33m 679[2mms[22m[39m
+[90mstdout[2m | tests/security/secret-vault-factory.test.ts[2m > [22m[2msecret vault mask cache[2m > [22m[2minvalidates cache on remove_secret
+[22m[39m{"ts":"2026-03-08T08:29:25.621Z","level":"info","name":"key_x","msg":"secret_remove","removed":true}
+
+[90mstdout[2m | tests/services/kanban-rule-executor.test.ts[2m > [22m[2mkanban rule executor[2m > [22m[2mcreate_task bridge가 주입되면 create_task action이 실행된다
+[22m[39m{"ts":"2026-03-08T08:29:25.626Z","level":"info","name":"kanban-rule-executor","msg":"rule_action_executed","rule_id":"d1938629-9d1a-40b9-a540-6a10a3581a8e","action":"create_task","card_id":"TB-1","ok":true,"task_id":"task-abc"}
+
+[90mstdout[2m | tests/agent/oauth-fetch-integration.test.ts[2m > [22m[2mOAuthIntegrationStore 통합 (실제 SQLite + SecretVault)[2m > [22m[2m토큰 재시작 후 복원
+[22m[39m{"ts":"2026-03-08T08:29:25.630Z","level":"info","name":"oauth.github.access_token","msg":"secret_put","ok":true}
+
+ [32m✓[39m tests/security/secret-vault-factory.test.ts [2m([22m[2m8 tests[22m[2m)[22m[33m 828[2mms[22m[39m
+ [32m✓[39m tests/orchestration/tool-index.test.ts [2m([22m[2m29 tests[22m[2m)[22m[33m 914[2mms[22m[39m
+ [32m✓[39m tests/agent/nodes/if.test.ts [2m([22m[2m51 tests[22m[2m)[22m[33m 1067[2mms[22m[39m
+       [33m[2m✓[22m[39m should handle infinite loop timeout [33m 1009[2mms[22m[39m
+[90mstdout[2m | tests/agent/oauth-fetch-integration.test.ts[2m > [22m[2mOAuthIntegrationStore 통합 (실제 SQLite + SecretVault)[2m > [22m[2m토큰 재시작 후 복원
+[22m[39m{"ts":"2026-03-08T08:29:25.703Z","level":"info","name":"oauth.github.access_token","msg":"secret_reveal","found":true}
+
+[90mstdout[2m | tests/services/kanban-rule-executor.test.ts[2m > [22m[2mkanban rule executor[2m > [22m[2mbridge 없이 run_workflow action은 스킵된다
+[22m[39m{"ts":"2026-03-08T08:29:25.773Z","level":"warn","name":"kanban-rule-executor","msg":"rule_action_skip","rule_id":"488beb77-e2a9-4dab-9222-2d95f60dde96","reason":"run_workflow bridge unavailable"}
+
+[90mstdout[2m | tests/agent/oauth-fetch-integration.test.ts[2m > [22m[2mOAuthIntegrationStore 통합 (실제 SQLite + SecretVault)[2m > [22m[2mremove → 연동 삭제 확인
+[22m[39m{"ts":"2026-03-08T08:29:25.770Z","level":"info","name":"secret-vault","msg":"master key generated"}
+
+ [32m✓[39m tests/agent/nodes/switch.test.ts [2m([22m[2m26 tests[22m[2m)[22m[33m 1048[2mms[22m[39m
+       [33m[2m✓[22m[39m should throw on timeout [33m 1019[2mms[22m[39m
+ [32m✓[39m tests/services/kanban-store.test.ts [2m([22m[2m23 tests[22m[2m)[22m[33m 1065[2mms[22m[39m
+ [32m✓[39m tests/agent/nodes/retry.test.ts [2m([22m[2m34 tests[22m[2m)[22m[33m 1103[2mms[22m[39m
+       [33m[2m✓[22m[39m should retry on failure until max_attempts [33m 301[2mms[22m[39m
+       [33m[2m✓[22m[39m should track retry progression in events [33m 321[2mms[22m[39m
+[90mstdout[2m | tests/agent/oauth-fetch-integration.test.ts[2m > [22m[2mOAuthIntegrationStore 통합 (실제 SQLite + SecretVault)[2m > [22m[2m존재하지 않는 instance_id get은 null
+[22m[39m{"ts":"2026-03-08T08:29:25.896Z","level":"info","name":"secret-vault","msg":"master key generated"}
+
+[90mstdout[2m | tests/agent/oauth-fetch-integration.test.ts[2m > [22m[2mOAuthIntegrationStore 통합 (실제 SQLite + SecretVault)[2m > [22m[2mupdate_settings로 부분 업데이트
+[22m[39m{"ts":"2026-03-08T08:29:26.021Z","level":"info","name":"secret-vault","msg":"master key generated"}
+
+ [32m✓[39m tests/services/kanban-rule-executor.test.ts [2m([22m[2m6 tests[22m[2m)[22m[33m 1378[2mms[22m[39m
+[90mstdout[2m | tests/agent/oauth-fetch.test.ts[2m > [22m[2mOAuthFetchTool[2m > [22m[2mget_token: 유효한 access_token을 반환한다
+[22m[39m{"ts":"2026-03-08T08:29:26.212Z","level":"info","name":"oauth-fetch","msg":"get_token","service_id":"github"}
+
+[90mstdout[2m | tests/agent/oauth-fetch-integration.test.ts[2m > [22m[2mOAuthIntegrationStore 통합 (실제 SQLite + SecretVault)[2m > [22m[2m커스텀 프리셋 저장 → 복원
+[22m[39m{"ts":"2026-03-08T08:29:26.213Z","level":"info","name":"secret-vault","msg":"master key generated"}
+
+[90mstdout[2m | tests/agent/oauth-fetch-integration.test.ts[2m > [22m[2mOAuthIntegrationStore 통합 (실제 SQLite + SecretVault)[2m > [22m[2mclient credentials SecretVault 연동
+[22m[39m{"ts":"2026-03-08T08:29:26.375Z","level":"info","name":"secret-vault","msg":"master key generated"}
+
+[90mstdout[2m | tests/agent/oauth-fetch-integration.test.ts[2m > [22m[2mOAuthIntegrationStore 통합 (실제 SQLite + SecretVault)[2m > [22m[2mclient credentials SecretVault 연동
+[22m[39m{"ts":"2026-03-08T08:29:26.459Z","level":"info","name":"oauth.oauth-client.client_id","msg":"secret_put","ok":true}
+
+[90mstdout[2m | tests/agent/oauth-fetch-integration.test.ts[2m > [22m[2mOAuthIntegrationStore 통합 (실제 SQLite + SecretVault)[2m > [22m[2mclient credentials SecretVault 연동
+[22m[39m{"ts":"2026-03-08T08:29:26.507Z","level":"info","name":"oauth.oauth-client.client_secret","msg":"secret_put","ok":true}
+
+[90mstdout[2m | tests/agent/oauth-fetch-integration.test.ts[2m > [22m[2mOAuthIntegrationStore 통합 (실제 SQLite + SecretVault)[2m > [22m[2mclient credentials SecretVault 연동
+[22m[39m{"ts":"2026-03-08T08:29:26.540Z","level":"info","name":"oauth.oauth-client.client_id","msg":"secret_reveal","found":true}
+
+[90mstdout[2m | tests/agent/oauth-fetch.test.ts[2m > [22m[2mOAuthFetchTool[2m > [22m[2mfetch: action 미지정 시 fetch로 동작한다
+[22m[39m{"ts":"2026-03-08T08:29:26.551Z","level":"warn","name":"oauth-fetch","msg":"oauth_fetch_retry","service_id":"github","method":"GET","host":"api.github.com","reason":"401_refresh"}
+
+[90mstdout[2m | tests/agent/oauth-fetch-integration.test.ts[2m > [22m[2mOAuthIntegrationStore 통합 (실제 SQLite + SecretVault)[2m > [22m[2mclient credentials SecretVault 연동
+[22m[39m{"ts":"2026-03-08T08:29:26.574Z","level":"info","name":"oauth.oauth-client.client_secret","msg":"secret_reveal","found":true}
+
+ [32m✓[39m tests/agent/pty/docker-pty.test.ts [2m([22m[2m9 tests[22m[2m)[22m[33m 509[2mms[22m[39m
+[90mstdout[2m | tests/agent/oauth-fetch-integration.test.ts[2m > [22m[2mOAuthIntegrationStore 통합 (실제 SQLite + SecretVault)[2m > [22m[2mremove_tokens로 토큰 + 만료일 삭제
+[22m[39m{"ts":"2026-03-08T08:29:26.661Z","level":"info","name":"secret-vault","msg":"master key generated"}
+
+ [32m✓[39m tests/agent/phase-workflow-store-integration.test.ts [2m([22m[2m10 tests[22m[2m)[22m[33m 802[2mms[22m[39m
+ [32m✓[39m tests/agent/memory-store-daily-layout.test.ts [2m([22m[2m4 tests[22m[2m)[22m[33m 719[2mms[22m[39m
+[90mstdout[2m | tests/agent/oauth-fetch-integration.test.ts[2m > [22m[2mOAuthIntegrationStore 통합 (실제 SQLite + SecretVault)[2m > [22m[2mremove_tokens로 토큰 + 만료일 삭제
+[22m[39m{"ts":"2026-03-08T08:29:26.731Z","level":"info","name":"oauth.cleanup.access_token","msg":"secret_put","ok":true}
+
+ [32m✓[39m tests/orchestration/main-alias-persona.test.ts [2m([22m[2m9 tests[22m[2m)[22m[33m 1821[2mms[22m[39m
+[90mstdout[2m | tests/agent/oauth-fetch-integration.test.ts[2m > [22m[2mOAuthIntegrationStore 통합 (실제 SQLite + SecretVault)[2m > [22m[2mremove_tokens로 토큰 + 만료일 삭제
+[22m[39m{"ts":"2026-03-08T08:29:26.764Z","level":"info","name":"oauth.cleanup.access_token","msg":"secret_remove","removed":true}
+
+[90mstdout[2m | tests/agent/oauth-fetch.test.ts[2m > [22m[2mOAuthFetchTool[2m > [22m[2mfetch: action 미지정 시 fetch로 동작한다
+[22m[39m{"ts":"2026-03-08T08:29:26.766Z","level":"info","name":"oauth-fetch","msg":"oauth_fetch","service_id":"github","method":"GET","host":"api.github.com","status":401}
+
+ [32m✓[39m tests/channel/command-registry.test.ts [2m([22m[2m18 tests[22m[2m)[22m[33m 518[2mms[22m[39m
+     [33m[2m✓[22m[39m slack and discord channels have no-op sync_commands [33m 430[2mms[22m[39m
+[90mstdout[2m | tests/agent/oauth-fetch-integration.test.ts[2m > [22m[2mOAuthIntegrationStore 통합 (실제 SQLite + SecretVault)[2m > [22m[2mremove_tokens로 토큰 + 만료일 삭제
+[22m[39m{"ts":"2026-03-08T08:29:26.782Z","level":"info","name":"oauth.cleanup.refresh_token","msg":"secret_remove","removed":false}
+
+ [32m✓[39m tests/agent/oauth-fetch.test.ts [2m([22m[2m13 tests[22m[2m)[22m[33m 563[2mms[22m[39m
+     [33m[2m✓[22m[39m fetch: action 미지정 시 fetch로 동작한다 [33m 554[2mms[22m[39m
+[90mstdout[2m | tests/agent/oauth-fetch-integration.test.ts[2m > [22m[2mOAuthIntegrationStore 통합 (실제 SQLite + SecretVault)[2m > [22m[2mremove_tokens로 토큰 + 만료일 삭제
+[22m[39m{"ts":"2026-03-08T08:29:26.798Z","level":"info","name":"oauth.cleanup.client_id","msg":"secret_remove","removed":false}
+
+ [32m✓[39m tests/agent/task-resume-integration.test.ts [2m([22m[2m9 tests[22m[2m)[22m[33m 878[2mms[22m[39m
+[90mstdout[2m | tests/agent/oauth-fetch-integration.test.ts[2m > [22m[2mOAuthIntegrationStore 통합 (실제 SQLite + SecretVault)[2m > [22m[2mremove_tokens로 토큰 + 만료일 삭제
+[22m[39m{"ts":"2026-03-08T08:29:26.817Z","level":"info","name":"oauth.cleanup.client_secret","msg":"secret_remove","removed":false}
+
+[90mstdout[2m | tests/agent/oauth-fetch-integration.test.ts[2m > [22m[2mOAuthIntegrationStore 통합 (실제 SQLite + SecretVault)[2m > [22m[2mremove_tokens로 토큰 + 만료일 삭제
+[22m[39m{"ts":"2026-03-08T08:29:26.849Z","level":"info","name":"oauth.cleanup.access_token","msg":"secret_reveal","found":false}
+
+ [32m✓[39m tests/agent/oauth-fetch-integration.test.ts [2m([22m[2m11 tests[22m[2m)[22m[33m 2081[2mms[22m[39m
+ [32m✓[39m tests/channel/dispatch-retry-integration.test.ts [2m([22m[2m8 tests[22m[2m)[22m[33m 533[2mms[22m[39m
+ [32m✓[39m tests/agent/kanban-e2e.test.ts [2m([22m[2m19 tests[22m[2m)[22m[33m 525[2mms[22m[39m
+[90mstdout[2m | tests/channel/instance-store.test.ts[2m > [22m[2mChannelInstanceStore[2m > [22m[2m토큰 생명주기: set → has → get → remove → null
+[22m[39m{"ts":"2026-03-08T08:29:27.012Z","level":"info","name":"secret-vault","msg":"master key generated"}
+
+[90mstdout[2m | tests/channel/instance-store.test.ts[2m > [22m[2mChannelInstanceStore[2m > [22m[2m토큰 생명주기: set → has → get → remove → null
+[22m[39m{"ts":"2026-03-08T08:29:27.098Z","level":"info","name":"channel.slack.bottoken","msg":"secret_put","ok":true}
+
+[90mstdout[2m | tests/channel/instance-store.test.ts[2m > [22m[2mChannelInstanceStore[2m > [22m[2m토큰 생명주기: set → has → get → remove → null
+[22m[39m{"ts":"2026-03-08T08:29:27.149Z","level":"info","name":"channel.slack.bottoken","msg":"secret_reveal","found":true}
+
+[90mstdout[2m | tests/channel/instance-store.test.ts[2m > [22m[2mChannelInstanceStore[2m > [22m[2m토큰 생명주기: set → has → get → remove → null
+[22m[39m{"ts":"2026-03-08T08:29:27.169Z","level":"info","name":"channel.slack.bottoken","msg":"secret_remove","removed":true}
+
+[90mstdout[2m | tests/channel/instance-store.test.ts[2m > [22m[2mChannelInstanceStore[2m > [22m[2m토큰 생명주기: set → has → get → remove → null
+[22m[39m{"ts":"2026-03-08T08:29:27.185Z","level":"info","name":"channel.slack.bottoken","msg":"secret_reveal","found":false}
+
+ [32m✓[39m tests/channel/instance-store.test.ts [2m([22m[2m4 tests[22m[2m)[22m[33m 435[2mms[22m[39m
+[90mstdout[2m | tests/agent/provider-store.test.ts[2m > [22m[2mAgentProviderStore[2m > [22m[2m토큰 생명주기: set → has → get → remove → null
+[22m[39m{"ts":"2026-03-08T08:29:27.403Z","level":"info","name":"secret-vault","msg":"master key generated"}
+
+[90mstdout[2m | tests/security/secret-vault-sqlite.test.ts[2m > [22m[2msecret vault sqlite[2m > [22m[2mpersists secrets in sqlite store and resolves values
+[22m[39m{"ts":"2026-03-08T08:29:27.413Z","level":"info","name":"secret-vault","msg":"master key generated"}
+
+[90mstdout[2m | tests/security/secret-vault-sqlite.test.ts[2m > [22m[2msecret vault sqlite[2m > [22m[2mpersists secrets in sqlite store and resolves values
+[22m[39m{"ts":"2026-03-08T08:29:27.441Z","level":"info","name":"api_key","msg":"secret_put","ok":true}
+
+[90mstdout[2m | tests/agent/provider-store.test.ts[2m > [22m[2mAgentProviderStore[2m > [22m[2m토큰 생명주기: set → has → get → remove → null
+[22m[39m{"ts":"2026-03-08T08:29:27.447Z","level":"info","name":"agent.openrouter.apikey","msg":"secret_put","ok":true}
+
+[90mstdout[2m | tests/agent/provider-store.test.ts[2m > [22m[2mAgentProviderStore[2m > [22m[2m토큰 생명주기: set → has → get → remove → null
+[22m[39m{"ts":"2026-03-08T08:29:27.493Z","level":"info","name":"agent.openrouter.apikey","msg":"secret_reveal","found":true}
+
+[90mstdout[2m | tests/security/secret-vault-sqlite.test.ts[2m > [22m[2msecret vault sqlite[2m > [22m[2mpersists secrets in sqlite store and resolves values
+[22m[39m{"ts":"2026-03-08T08:29:27.501Z","level":"info","name":"api_key","msg":"secret_reveal","found":true}
+
+[90mstdout[2m | tests/agent/provider-store.test.ts[2m > [22m[2mAgentProviderStore[2m > [22m[2m토큰 생명주기: set → has → get → remove → null
+[22m[39m{"ts":"2026-03-08T08:29:27.513Z","level":"info","name":"agent.openrouter.apikey","msg":"secret_remove","removed":true}
+
+ [32m✓[39m tests/provider/rate-limiter.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 268[2mms[22m[39m
+[90mstdout[2m | tests/agent/provider-store.test.ts[2m > [22m[2mAgentProviderStore[2m > [22m[2m토큰 생명주기: set → has → get → remove → null
+[22m[39m{"ts":"2026-03-08T08:29:27.529Z","level":"info","name":"agent.openrouter.apikey","msg":"secret_reveal","found":false}
+
+ [32m✓[39m tests/security/secret-vault-sqlite.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 188[2mms[22m[39m
+ [32m✓[39m tests/agent/provider-store.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 281[2mms[22m[39m
+ [32m✓[39m tests/agent/nodes/assert.test.ts [2m([22m[2m41 tests[22m[2m)[22m[33m 1095[2mms[22m[39m
+       [33m[2m✓[22m[39m should handle infinite loops with timeout [33m 1005[2mms[22m[39m
+ [32m✓[39m tests/session/session-recorder-integration.test.ts [2m([22m[2m16 tests[22m[2m)[22m[33m 3105[2mms[22m[39m
+     [33m[2m✓[22m[39m get_history가 max_messages로 최근 N개만 반환 [33m 339[2mms[22m[39m
+     [33m[2m✓[22m[39m 100개 메시지 기록 후 재시작해도 전부 복원 [33m 1331[2mms[22m[39m
+ [32m✓[39m tests/agent/nodes/filter.test.ts [2m([22m[2m36 tests[22m[2m)[22m[33m 1176[2mms[22m[39m
+       [33m[2m✓[22m[39m should handle timeout in condition [33m 1016[2mms[22m[39m
+ [32m✓[39m tests/agent/context-memory-injection.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 192[2mms[22m[39m
+ [32m✓[39m tests/agent/nodes/code.test.ts [2m([22m[2m51 tests[22m[2m)[22m[32m 182[2mms[22m[39m
+ [32m✓[39m tests/agent/memory-consolidation.test.ts [2m([22m[2m19 tests[22m[2m)[22m[33m 2943[2mms[22m[39m
+(node:167760) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+ [32m✓[39m tests/agent/workspace-propagation.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 47[2mms[22m[39m
+ [32m✓[39m tests/agent/role-skill-loading.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 99[2mms[22m[39m
+ [32m✓[39m tests/agent/pty/semaphore.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 113[2mms[22m[39m
+ [32m✓[39m tests/agent/dynamic-tools-sqlite.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 138[2mms[22m[39m
+ [32m✓[39m tests/agent/nodes/file.test.ts [2m([22m[2m36 tests[22m[2m)[22m[32m 150[2mms[22m[39m
+ [32m✓[39m tests/agent/document-tool.test.ts [2m([22m[2m28 tests[22m[2m)[22m[32m 247[2mms[22m[39m
+ [32m✓[39m tests/ops/workflow-events-sqlite-detail.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 94[2mms[22m[39m
+ [32m✓[39m tests/config/config-defaults.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 115[2mms[22m[39m
+ [32m✓[39m tests/agent/skills-always.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 104[2mms[22m[39m
+ [32m✓[39m tests/agent/nodes/transform.test.ts [2m([22m[2m38 tests[22m[2m)[22m[33m 2399[2mms[22m[39m
+       [33m[2m✓[22m[39m should timeout on infinite loop [33m 1517[2mms[22m[39m
+       [33m[2m✓[22m[39m should handle very large arrays [33m 784[2mms[22m[39m
+ [32m✓[39m tests/agent/task-progress.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 78[2mms[22m[39m
+ [32m✓[39m tests/agent/crontab-tool.test.ts [2m([22m[2m19 tests[22m[2m)[22m[32m 63[2mms[22m[39m
+ [32m✓[39m tests/agent/node-handlers.test.ts [2m([22m[2m37 tests[22m[2m)[22m[32m 61[2mms[22m[39m
+ [32m✓[39m tests/ops/runtime-admin-mcp-store.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 44[2mms[22m[39m
+(node:132656) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:93464) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:238348) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:79460) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:224528) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:208012) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:183940) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:151760) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:6484) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+ [32m✓[39m tests/channel/dispatch-retry.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 61[2mms[22m[39m
+ [32m✓[39m tests/agent/nodes/wait.test.ts [2m([22m[2m20 tests[22m[2m)[22m[33m 5924[2mms[22m[39m
+       [33m[2m✓[22m[39m should use default delay when undefined [33m 5006[2mms[22m[39m
+       [33m[2m✓[22m[39m should support retry with wait [33m 617[2mms[22m[39m
+ [32m✓[39m tests/channel/channels-dlq-store.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 64[2mms[22m[39m
+(node:107556) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+ [32m✓[39m tests/agent/workflow-spotify-e2e.test.ts [2m([22m[2m15 tests[22m[2m)[22m[32m 154[2mms[22m[39m
+ [32m✓[39m tests/agent/workspace-handler-integration.test.ts [2m([22m[2m9 tests[22m[2m)[22m[33m 4215[2mms[22m[39m
+     [33m[2m✓[22m[39m working_dir 미지정 시 ctx.workspace가 cwd [33m 805[2mms[22m[39m
+     [33m[2m✓[22m[39m git status가 ctx.workspace 디렉터리에서 실행됨 [33m 497[2mms[22m[39m
+     [33m[2m✓[22m[39m list 명령이 ctx.workspace에서 실행됨 [33m 2672[2mms[22m[39m
+ [32m✓[39m tests/agent/exec-tool-guard.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 36[2mms[22m[39m
+ [32m✓[39m tests/agent/nodes/batch.test.ts [2m([22m[2m30 tests[22m[2m)[22m[32m 44[2mms[22m[39m
+ [32m✓[39m tests/channels/media-collector-datauri.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 39[2mms[22m[39m
+ [32m✓[39m tests/dashboard/static-server.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 40[2mms[22m[39m
+ [32m✓[39m tests/agent/backend-switching.test.ts [2m([22m[2m11 tests[22m[2m | [22m[33m1 skipped[39m[2m)[22m[32m 50[2mms[22m[39m
+ [32m✓[39m tests/agent/pty/container-pool.test.ts [2m([22m[2m8 tests[22m[2m)[22m[33m 815[2mms[22m[39m
+ [32m✓[39m tests/agent/pty/bridge-mcp-server.test.ts [2m([22m[2m5 tests[22m[2m)[22m[33m 721[2mms[22m[39m
+ [32m✓[39m tests/orchestration/execution/phase-workflow.test.ts [2m([22m[2m21 tests[22m[2m)[22m[32m 30[2mms[22m[39m
+ [32m✓[39m tests/agent/datetime-tool.test.ts [2m([22m[2m35 tests[22m[2m)[22m[32m 44[2mms[22m[39m
+(node:246408) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+ [32m✓[39m tests/agent/node-handlers-extended.test.ts [2m([22m[2m60 tests[22m[2m)[22m[32m 29[2mms[22m[39m
+(node:222260) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:238524) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+ [32m✓[39m tests/orchestration/persona-spawn-injection.test.ts [2m([22m[2m8 tests[22m[2m)[22m[33m 1708[2mms[22m[39m
+(node:19804) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+ [32m✓[39m tests/orchestration/tool-call-handler.test.ts [2m([22m[2m24 tests[22m[2m)[22m[32m 19[2mms[22m[39m
+ [32m✓[39m tests/agent/pty/secret-reader.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 23[2mms[22m[39m
+ [32m✓[39m tests/bus/bounded-queue.test.ts [2m([22m[2m17 tests[22m[2m)[22m[32m 29[2mms[22m[39m
+ [32m✓[39m tests/agent/workflow-tool.test.ts [2m([22m[2m20 tests[22m[2m)[22m[32m 17[2mms[22m[39m
+(node:9532) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+ [32m✓[39m tests/agent/nodes/promise.test.ts [2m([22m[2m37 tests[22m[2m)[22m[32m 19[2mms[22m[39m
+ [32m✓[39m tests/orchestration/approval-hitl.test.ts [2m([22m[2m16 tests[22m[2m)[22m[32m 218[2mms[22m[39m
+ [32m✓[39m tests/ops/runtime-instance-lock.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 109[2mms[22m[39m
+ [32m✓[39m tests/cron/cron-service-and-routing.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 284[2mms[22m[39m
+(node:170496) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+ [32m✓[39m tests/agent/pty/inter-agent.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 209[2mms[22m[39m
+ [32m✓[39m tests/dashboard/media-store.test.ts [2m([22m[2m14 tests[22m[2m)[22m[32m 23[2mms[22m[39m
+ [32m✓[39m tests/agent/approval-bridge.test.ts [2m([22m[2m18 tests[22m[2m)[22m[32m 21[2mms[22m[39m
+ [32m✓[39m tests/channel/channel-manager-message-capabilities.test.ts [2m([22m[2m17 tests[22m[2m)[22m[33m 309[2mms[22m[39m
+ [32m✓[39m tests/channel/rendering.test.ts [2m([22m[2m34 tests[22m[2m)[22m[32m 57[2mms[22m[39m
+ [32m✓[39m tests/agent/circuit-breaker-tool.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 26[2mms[22m[39m
+ [32m✓[39m tests/channel/streaming-integration.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 126[2mms[22m[39m
+(node:216764) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+ [32m✓[39m tests/agent/nodes/docker.test.ts [2m([22m[2m47 tests[22m[2m)[22m[32m 16[2mms[22m[39m
+ [32m✓[39m tests/orchestration/hitl-compound.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 152[2mms[22m[39m
+ [32m✓[39m tests/channel/output-sanitizer.test.ts [2m([22m[2m56 tests[22m[2m)[22m[32m 22[2mms[22m[39m
+ [32m✓[39m tests/agent/pty/cli-adapter.test.ts [2m([22m[2m77 tests[22m[2m)[22m[32m 24[2mms[22m[39m
+ [32m✓[39m tests/agent/nodes/task.test.ts [2m([22m[2m42 tests[22m[2m)[22m[32m 16[2mms[22m[39m
+(node:181708) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+ [32m✓[39m tests/agent/semver-tool.test.ts [2m([22m[2m25 tests[22m[2m)[22m[32m 17[2mms[22m[39m
+ [32m✓[39m tests/orchestration/execution/run-agent-loop.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 20[2mms[22m[39m
+ [32m✓[39m tests/agent/pty/agent-bus.test.ts [2m([22m[2m7 tests[22m[2m)[22m[33m 3209[2mms[22m[39m
+     [33m[2m✓[22m[39m send_and_wait으로 mock agent에게 메시지를 보내고 응답을 받는다 [33m 447[2mms[22m[39m
+     [33m[2m✓[22m[39m 출력 이벤트를 스트리밍으로 수신한다 [33m 410[2mms[22m[39m
+     [33m[2m✓[22m[39m 여러 세션을 독립적으로 관리한다 [33m 439[2mms[22m[39m
+     [33m[2m✓[22m[39m 같은 세션에 연속 메시지를 보낼 수 있다 [33m 429[2mms[22m[39m
+     [33m[2m✓[22m[39m remove_session으로 세션을 정리한다 [33m 1037[2mms[22m[39m
+     [33m[2m✓[22m[39m 에러 응답을 올바르게 전달한다 [33m 445[2mms[22m[39m
+ [32m✓[39m tests/agent/nodes/text.test.ts [2m([22m[2m40 tests[22m[2m)[22m[32m 25[2mms[22m[39m
+(node:150752) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+ [32m✓[39m tests/channel/task-resume.test.ts [2m([22m[2m12 tests[22m[2m)[22m[32m 14[2mms[22m[39m
+ [32m✓[39m tests/session/session-store-stress.test.ts [2m([22m[2m16 tests[22m[2m)[22m[33m 9574[2mms[22m[39m
+     [33m[2m✓[22m[39m 같은 세션에 50개 메시지를 동시 append해도 손실 없음 [33m 668[2mms[22m[39m
+     [33m[2m✓[22m[39m append된 메시지의 idx가 연속적이고 유일함 [33m 341[2mms[22m[39m
+     [33m[2m✓[22m[39m 서로 다른 세션에 동시 쓰기 시 격리 보장 [33m 1362[2mms[22m[39m
+     [33m[2m✓[22m[39m 100개 세션에 동시 쓰기 후 모든 데이터 정합성 확인 [33m 6079[2mms[22m[39m
+(node:226700) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+ [32m✓[39m tests/agent/nodes/regex.test.ts [2m([22m[2m41 tests[22m[2m)[22m[33m 7637[2mms[22m[39m
+       [33m[2m✓[22m[39m should handle regex timeout gracefully [33m 7623[2mms[22m[39m
+ [32m✓[39m tests/agent/nodes/db.test.ts [2m([22m[2m35 tests[22m[2m)[22m[32m 15[2mms[22m[39m
+(node:199100) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+ [32m✓[39m tests/channel/task-handler.test.ts [2m([22m[2m19 tests[22m[2m)[22m[32m 17[2mms[22m[39m
+ [32m✓[39m tests/agent/nodes/llm.test.ts [2m([22m[2m48 tests[22m[2m)[22m[32m 17[2mms[22m[39m
+ [32m✓[39m tests/ops/bus-inbound-consumer.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 113[2mms[22m[39m
+ [32m✓[39m tests/agent/nodes/cache.test.ts [2m([22m[2m36 tests[22m[2m)[22m[32m 21[2mms[22m[39m
+ [32m✓[39m tests/agent/nodes/decision.test.ts [2m([22m[2m27 tests[22m[2m)[22m[32m 17[2mms[22m[39m
+(node:262252) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+ [32m✓[39m tests/channel/guard-handler.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 16[2mms[22m[39m
+ [32m✓[39m tests/agent/nodes/approval.test.ts [2m([22m[2m30 tests[22m[2m)[22m[32m 16[2mms[22m[39m
+ [32m✓[39m tests/orchestration/orchestrator-direct-commands.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 111[2mms[22m[39m
+ [32m✓[39m tests/agent/nodes/webhook.test.ts [2m([22m[2m39 tests[22m[2m)[22m[32m 15[2mms[22m[39m
+ [32m✓[39m tests/security/secret-slash-aliases.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 54[2mms[22m[39m
+ [32m✓[39m tests/channel/approval-service.test.ts [2m([22m[2m13 tests[22m[2m)[22m[32m 13[2mms[22m[39m
+(node:253072) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+ [32m✓[39m tests/orchestration/workflow-loader.test.ts [2m([22m[2m30 tests[22m[2m)[22m[32m 15[2mms[22m[39m
+ [32m✓[39m tests/channel/agent-handler.test.ts [2m([22m[2m12 tests[22m[2m)[22m[32m 12[2mms[22m[39m
+ [32m✓[39m tests/security/content-sanitizer.test.ts [2m([22m[2m34 tests[22m[2m)[22m[32m 10[2mms[22m[39m
+ [32m✓[39m tests/orchestration/execute-dispatcher.test.ts [2m([22m[2m20 tests[22m[2m)[22m[32m 19[2mms[22m[39m
+ [32m✓[39m tests/agent/nodes/oauth.test.ts [2m([22m[2m27 tests[22m[2m)[22m[32m 16[2mms[22m[39m
+ [32m✓[39m tests/channel/channel-manager-agent-runtime-interface.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 49[2mms[22m[39m
+(node:97620) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+ [32m✓[39m tests/dashboard/ops-factory.test.ts [2m([22m[2m28 tests[22m[2m)[22m[32m 88[2mms[22m[39m
+ [32m✓[39m tests/agent/special-node-runner.test.ts [2m([22m[2m18 tests[22m[2m)[22m[32m 13[2mms[22m[39m
+ [32m✓[39m tests/channel/skill-handler.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 12[2mms[22m[39m
+(node:297444) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+ [32m✓[39m tests/dashboard/sse-manager.test.ts [2m([22m[2m18 tests[22m[2m)[22m[32m 13[2mms[22m[39m
+(node:119156) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+ [32m✓[39m tests/orchestration/orchestrator-execution-routing.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 58[2mms[22m[39m
+ [32m✓[39m tests/orchestration/process-tracker.test.ts [2m([22m[2m25 tests[22m[2m)[22m[32m 14[2mms[22m[39m
+ [32m✓[39m tests/agent/uuid-tool.test.ts [2m([22m[2m15 tests[22m[2m)[22m[32m 18[2mms[22m[39m
+ [32m✓[39m tests/agent/nodes/loop.test.ts [2m([22m[2m35 tests[22m[2m)[22m[32m 15[2mms[22m[39m
+ [32m✓[39m tests/agent/nodes/error-handler.test.ts [2m([22m[2m34 tests[22m[2m)[22m[32m 18[2mms[22m[39m
+ [32m✓[39m tests/orchestration/classifier.test.ts [2m([22m[2m34 tests[22m[2m)[22m[32m 13[2mms[22m[39m
+ [32m✓[39m tests/agent/tool-call-guard.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 12[2mms[22m[39m
+ [32m✓[39m tests/security/inbound-seal.test.ts [2m([22m[2m18 tests[22m[2m)[22m[32m 11[2mms[22m[39m
+HELLO_PTY_E2E [32m✓[39m tests/agent/cron-tool.test.ts [2m([22m[2m22 tests[22m[2m)[22m[32m 12[2mms[22m[39m
+[90mstdout[2m | tests/agent/pty/e2e-real-cli.test.ts[2m > [22m[2mPTY E2E: 실제 claude CLI[2m > [22m[2m실제 CLI를 PTY로 스폰하고 NDJSON 응답을 수신한다
+[22m[39m
+=== AgentRunResult ===
+finish_reason: stop
+content: HELLO_PTY_E2E
+usage: {"prompt_tokens":2,"completion_tokens":12}
+session: 69012164-229e-4a22-8
+tool_calls: [33m0[39m
+events: init, content_delta, complete
+
+ [32m✓[39m tests/orchestration/execution/continue-task-loop.test.ts [2m([22m[2m12 tests[22m[2m)[22m[32m 17[2mms[22m[39m
+ [32m✓[39m tests/agent/codex-jsonrpc.test.ts [2m([22m[2m12 tests[22m[2m)[22m[32m 10[2mms[22m[39m
+ [32m✓[39m tests/agent/nodes/archive.test.ts [2m([22m[2m24 tests[22m[2m)[22m[32m 10[2mms[22m[39m
+(node:215812) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+ [32m✓[39m tests/channel/stats-handler.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 12[2mms[22m[39m
+ [32m✓[39m tests/orchestration/execution/run-once.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 13[2mms[22m[39m
+ [32m✓[39m tests/orchestration/execution/run-task-loop.test.ts [2m([22m[2m16 tests[22m[2m)[22m[32m 18[2mms[22m[39m
+ [32m✓[39m tests/agent/nodes/encoding.test.ts [2m([22m[2m45 tests[22m[2m)[22m[32m 16[2mms[22m[39m
+ [32m✓[39m tests/agent/approval-parser.test.ts [2m([22m[2m77 tests[22m[2m)[22m[32m 14[2mms[22m[39m
+ [32m✓[39m tests/channel/persona-message-renderer.test.ts [2m([22m[2m55 tests[22m[2m)[22m[32m 11[2mms[22m[39m
+ [32m✓[39m tests/channel/session-recorder.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 12[2mms[22m[39m
+ [32m✓[39m tests/channel/doctor-handler.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 14[2mms[22m[39m
+ [32m✓[39m tests/agent/kanban-tool.test.ts [2m([22m[2m22 tests[22m[2m)[22m[32m 14[2mms[22m[39m
+ [32m✓[39m tests/orchestration/agent-hooks-stream.test.ts [2m([22m[2m20 tests[22m[2m)[22m[32m 15[2mms[22m[39m
+ [32m✓[39m tests/agent/feature-flag-tool.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+ [32m✓[39m tests/orchestration/hitl-pending-store.test.ts [2m([22m[2m13 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32m✓[39m tests/orchestration/execution/helpers.test.ts [2m([22m[2m25 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32m✓[39m tests/dashboard/state-builder.test.ts [2m([22m[2m18 tests[22m[2m)[22m[32m 12[2mms[22m[39m
+ [32m✓[39m tests/provider/types-pure.test.ts [2m([22m[2m21 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+ [32m✓[39m tests/orchestration/confirmation-guard.test.ts [2m([22m[2m18 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+ [32m✓[39m tests/agent/mcp-tool-adapter.test.ts [2m([22m[2m15 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32m✓[39m tests/orchestration/node-selector.test.ts [2m([22m[2m12 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+ [32m✓[39m tests/agent/nodes/aggregate.test.ts [2m([22m[2m34 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+ [32m✓[39m tests/provider/cli-protocol.test.ts [2m([22m[2m31 tests[22m[2m)[22m[32m 11[2mms[22m[39m
+ [32m✓[39m tests/agent/nodes/set.test.ts [2m([22m[2m34 tests[22m[2m)[22m[32m 10[2mms[22m[39m
+ [32m✓[39m tests/ops/status-handler.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+ [32m✓[39m tests/agent/workflow-e2e.test.ts [2m([22m[2m25 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32m✓[39m tests/agent/nodes/process.test.ts [2m([22m[2m34 tests[22m[2m)[22m[32m 10[2mms[22m[39m
+ [32m✓[39m tests/agent/nodes/gate.test.ts [2m([22m[2m30 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32m✓[39m tests/agent/yaml-tool.test.ts [2m([22m[2m18 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32m✓[39m tests/channel/command-intent.test.ts [2m([22m[2m34 tests[22m[2m)[22m[32m 10[2mms[22m[39m
+ [32m✓[39m tests/agent/nodes/template.test.ts [2m([22m[2m38 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+ [32m✓[39m tests/agent/pty/docker-ops.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+ [32m✓[39m tests/agent/tool-selector.test.ts [2m([22m[2m16 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+ [32m✓[39m tests/agent/tool-loop-helpers.test.ts [2m([22m[2m20 tests[22m[2m)[22m[32m 11[2mms[22m[39m
+ [32m✓[39m tests/agent/pty/auth-profile-tracker.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32m✓[39m tests/utils/common.test.ts [2m([22m[2m36 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32m✓[39m tests/agent/nodes/memory-rw.test.ts [2m([22m[2m30 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+ [32m✓[39m tests/agent/nodes/http.test.ts [2m([22m[2m51 tests[22m[2m)[22m[33m 10105[2mms[22m[39m
+       [33m[2m✓[22m[39m should make GET request and return response [33m 1128[2mms[22m[39m
+       [33m[2m✓[22m[39m should handle POST request with JSON body [33m 563[2mms[22m[39m
+       [33m[2m✓[22m[39m should resolve template in body [33m 518[2mms[22m[39m
+       [33m[2m✓[22m[39m should allow https protocol [33m 412[2mms[22m[39m
+       [33m[2m✓[22m[39m should allow public IP addresses [33m 488[2mms[22m[39m
+       [33m[2m✓[22m[39m should enforce maximum timeout of 30 seconds [33m 1187[2mms[22m[39m
+       [33m[2m✓[22m[39m should return status code [33m 786[2mms[22m[39m
+       [33m[2m✓[22m[39m should truncate responses exceeding 50,000 characters [33m 1154[2mms[22m[39m
+       [33m[2m✓[22m[39m should support PUT method [33m 482[2mms[22m[39m
+ [32m✓[39m tests/agent/node-presets.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+ [32m✓[39m tests/agent/approval-notifier.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32m✓[39m tests/agent/policy-tool.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+ [32m✓[39m tests/utils/local-ref.test.ts [2m([22m[2m19 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m tests/agent/assert-tool.test.ts [2m([22m[2m27 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+ [32m✓[39m tests/agent/metric-tool.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+ [32m✓[39m tests/agent/vcard-tool.test.ts [2m([22m[2m15 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+ [32m✓[39m tests/provider/health-scorer.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 14[2mms[22m[39m
+ [32m✓[39m tests/agent/xml-tool.test.ts [2m([22m[2m13 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+ [32m✓[39m tests/orchestration/classifier-golden.test.ts [2m([22m[2m35 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m tests/agent/svg-tool.test.ts [2m([22m[2m12 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m tests/agent/nodes/split.test.ts [2m([22m[2m38 tests[22m[2m)[22m[32m 11[2mms[22m[39m
+ [32m✓[39m tests/orchestration/gateway.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+ [32m✓[39m tests/cron/cron-runtime-handler.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32m✓[39m tests/agent/aggregate-tool.test.ts [2m([22m[2m20 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+ [32m✓[39m tests/orchestration/request-preflight.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32m✓[39m tests/security/sensitive.test.ts [2m([22m[2m29 tests[22m[2m)[22m[32m 11[2mms[22m[39m
+ [32m✓[39m tests/agent/agent-event-types.test.ts [2m([22m[2m21 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32m✓[39m tests/agent/sandbox-policy-mapping.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m tests/channel/stream-buffer.test.ts [2m([22m[2m25 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32m✓[39m tests/agent/similarity-tool.test.ts [2m([22m[2m22 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+ [32m✓[39m tests/agent/nodes/merge.test.ts [2m([22m[2m28 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+(node:95500) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+ [32m✓[39m tests/dashboard/create-command-router.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 17[2mms[22m[39m
+ [32m✓[39m tests/agent/tree-tool.test.ts [2m([22m[2m14 tests[22m[2m)[22m[32m 10[2mms[22m[39m
+ [32m✓[39m tests/agent/send-file-tool.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 11[2mms[22m[39m
+ [32m✓[39m tests/agent/memory-chunker.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+ [32m✓[39m tests/provider/cli-permission.test.ts [2m([22m[2m30 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32m✓[39m tests/agent/memory-scoring.test.ts [2m([22m[2m13 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+ [32m✓[39m tests/agent/failover-handler.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 13[2mms[22m[39m
+ [32m✓[39m tests/agent/checksum-tool.test.ts [2m([22m[2m12 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+(node:300512) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+ [32m✓[39m tests/agent/field-mappings-resume.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+ [32m✓[39m tests/orchestration/tool-selector.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+ [32m✓[39m tests/orchestration/prompts-format.test.ts [2m([22m[2m37 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+ [32m✓[39m tests/agent/nodes/media.test.ts [2m([22m[2m30 tests[22m[2m)[22m[32m 12[2mms[22m[39m
+ [32m✓[39m tests/ops/feedback-analyzer.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+ [32m✓[39m tests/agent/tokenizer-tool.test.ts [2m([22m[2m12 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32m✓[39m tests/channel/streaming-pipeline.test.ts [2m([22m[2m18 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+ [32m✓[39m tests/agent/data-mask-tool.test.ts [2m([22m[2m12 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+ [32m✓[39m tests/orchestration/execution-mode-parser.test.ts [2m([22m[2m20 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+ [32m✓[39m tests/agent/csv-tool.test.ts [2m([22m[2m16 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32m✓[39m tests/agent/bloom-filter-tool.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m tests/channel/channel-command-intent.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m tests/agent/convert.test.ts [2m([22m[2m24 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32m✓[39m tests/agent/retriever-tool.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m tests/provider/cli-provider-tool-call-parser.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m tests/agent/spawn-task-query-tool.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m tests/channel/tone-override-lifetime.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 15[2mms[22m[39m
+ [32m✓[39m tests/channel/slash-command.test.ts [2m([22m[2m22 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+ [32m✓[39m tests/agent/aggregate-node.test.ts [2m([22m[2m13 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m tests/agent/http-utils.test.ts [2m([22m[2m28 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+ [32m✓[39m tests/agent/rate-limit-tool.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m tests/agent/cd-scoring.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m tests/channel/verify-handler.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m tests/agent/worktree.test.ts [2m([22m[2m7 tests[22m[2m)[22m[33m 14136[2mms[22m[39m
+     [33m[2m✓[22m[39m create_worktree: git worktree와 브랜치를 생성한다 [33m 1237[2mms[22m[39m
+     [33m[2m✓[22m[39m create_worktree: git 저장소가 아니면 null을 반환한다 [33m 794[2mms[22m[39m
+     [33m[2m✓[22m[39m create_isolated_directory: 전용 디렉토리를 생성한다 [33m 767[2mms[22m[39m
+     [33m[2m✓[22m[39m merge_worktrees: 충돌 없는 변경사항을 자동 병합한다 [33m 3398[2mms[22m[39m
+     [33m[2m✓[22m[39m merge_worktrees: 같은 파일을 수정하면 충돌을 감지한다 [33m 4434[2mms[22m[39m
+     [33m[2m✓[22m[39m merge_worktrees: 변경사항 없는 worktree는 merged=true, files_changed=0 [33m 1886[2mms[22m[39m
+     [33m[2m✓[22m[39m cleanup_worktrees: worktree와 브랜치를 정리한다 [33m 1618[2mms[22m[39m
+ [32m✓[39m tests/agent/text-splitter-tool.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m tests/agent/pagination-tool.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m tests/agent/sentiment-tool.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m tests/channel/outbound-dedupe.test.ts [2m([22m[2m13 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+ [32m✓[39m tests/orchestration/prompt-version.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m tests/agent/orche-node-executor.test.ts [2m([22m[2m20 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32m✓[39m tests/agent/nodes/escalation.test.ts [2m([22m[2m28 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+ [32m✓[39m tests/agent/tool-chain.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 10[2mms[22m[39m
+ [32m✓[39m tests/agent/webhook-node.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m tests/channel/command-router.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+ [32m✓[39m tests/orchestration/tool-description-filter.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m tests/agent/context-budget.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m tests/agent/tool-registry-filtered.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m tests/provider/executor-provider.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m tests/agent/http-header-tool.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m tests/agent/nodes/ai-agent.test.ts [2m([22m[2m18 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+ [32m✓[39m tests/provider/executor.test.ts [2m([22m[2m14 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m tests/agent/graph-tool.test.ts [2m([22m[2m15 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+(node:241812) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+ [32m✓[39m tests/agent/pty/ndjson-parser.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m tests/security/local-ref-safety.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m tests/agent/agent-loop-implicit-tool-calls.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m tests/agent/pty/comm-permission.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m tests/agent/tool-call-parser.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+ [32m✓[39m tests/agent/nodes/form.test.ts [2m([22m[2m21 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+ [32m✓[39m tests/i18n/protocol.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m tests/agent/loop-resume.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m tests/agent/pty/context-window-guard.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m tests/orchestration/session-state.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m tests/agent/heartbeat-pure.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m tests/agent/agent-loop-tool-guard.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m tests/agent/pty/tool-bridge-server.test.ts [2m([22m[2m12 tests[22m[2m)[22m[32m 16[2mms[22m[39m
+ [32m✓[39m tests/channel/runtime-policy.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+(node:111892) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:129196) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:116148) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:265532) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+ [32m✓[39m tests/agent/subagent-cascade-cancel.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m tests/orchestration/service-runner-delegation.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+ [32m✓[39m tests/orchestration/execution-runners.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 3[2mms[22m[39m
+ [32m✓[39m tests/orchestration/phase-workflow.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 2[2mms[22m[39m
+[90mstdout[2m | tests/agent/pty/e2e-persona-roleplay.test.ts[2m > [22m[2mPersona E2E: Claude 페르소나 부여[2m > [22m[2m해적 페르소나를 부여하면 해적 말투로 응답한다
+[22m[39m
+=== Pirate Persona ===
+content: 
+
+Arr, 안녕하시오 선원! 나는 **캡틴 블랙비어드**요, 코드의 바다를 누비는 해적 선장이라오! 🏴‍☠️
+
+이 보물섬(SoulFlow Orchestrator)의 코드를 읽고, 고치고, 짓는 일이라면 뭐든 맡기시게, matey. Ye가 원하는 항해를 시작하자꾸나!
+
+(node:112828) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:206404) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+ [2m[90m↓[39m[22m tests/agent/pty/e2e-3agent-discussion.test.ts [2m([22m[2m3 tests[22m[2m | [22m[33m3 skipped[39m[2m)[22m
+ [2m[90m↓[39m[22m tests/agent/pty/e2e-cross-cli.test.ts [2m([22m[2m6 tests[22m[2m | [22m[33m6 skipped[39m[2m)[22m
+ [32m✓[39m tests/channel/channel-pipeline-integration.test.ts [2m([22m[2m180 tests[22m[2m)[22m[33m 10815[2mms[22m[39m
+     [33m[2m✓[22m[39m 스트리밍 중 생성된 파일이 최종 응답에 첨부된다 [33m 2624[2mms[22m[39m
+     [33m[2m✓[22m[39m 스트리밍 도중 에러 발생 시 에러 응답이 나간다 (스트림 메시지는 남아있음) [33m 1313[2mms[22m[39m
+     [33m[2m✓[22m[39m task 모드에서 스트리밍 진행 상황이 중간에 전달된다 [33m 3941[2mms[22m[39m
+[90mstdout[2m | tests/agent/pty/e2e-real-cli.test.ts[2m > [22m[2mPTY E2E: 실제 claude CLI[2m > [22m[2msystem_prompt가 실제 CLI에 전달된다
+[22m[39m
+=== System Prompt Test ===
+content: PHOENIX_AGENT입니다.
+
+ [32m✓[39m tests/agent/pty/container-cli-agent.test.ts [2m([22m[2m12 tests[22m[2m)[22m[33m 12111[2mms[22m[39m
+     [33m[2m✓[22m[39m mock agent를 스폰하고 NDJSON으로 통신한다 [33m 445[2mms[22m[39m
+     [33m[2m✓[22m[39m system_prompt + task를 결합하여 전달한다 [33m 394[2mms[22m[39m
+     [33m[2m✓[22m[39m AgentEvent 스트림을 올바르게 발행한다 [33m 440[2mms[22m[39m
+     [33m[2m✓[22m[39m on_stream 훅이 assistant_chunk에서 호출된다 [33m 420[2mms[22m[39m
+     [33m[2m✓[22m[39m 에러 응답을 AgentRunResult로 변환한다 [33m 505[2mms[22m[39m
+     [33m[2m✓[22m[39m send_input으로 followup 메시지를 주입한다 [33m 594[2mms[22m[39m
+     [33m[2m✓[22m[39m resume_session의 session_id를 세션 키로 사용한다 [33m 412[2mms[22m[39m
+     [33m[2m✓[22m[39m wait_for_input_ms 설정 시 complete 후 followup을 대기한다 [33m 2474[2mms[22m[39m
+     [33m[2m✓[22m[39m wait_for_input_ms 타임아웃 시 정상 종료한다 [33m 1006[2mms[22m[39m
+     [33m[2m✓[22m[39m abort_signal로 실행을 중단할 수 있다 [33m 5418[2mms[22m[39m
+ [32m✓[39m tests/channel/channel-manager-concurrency.test.ts [2m([22m[2m8 tests[22m[2m)[22m[33m 14144[2mms[22m[39m
+     [33m[2m✓[22m[39m 같은 chat_id 메시지는 직렬 처리된다 [33m 2048[2mms[22m[39m
+     [33m[2m✓[22m[39m 다른 chat_id 메시지는 병렬 처리된다 [33m 2017[2mms[22m[39m
+     [33m[2m✓[22m[39m 같은 chat_id 메시지가 FIFO 순서로 처리된다 [33m 2007[2mms[22m[39m
+     [33m[2m✓[22m[39m 혼합 시나리오: 같은 chat는 직렬, 다른 chat는 병렬 [33m 2011[2mms[22m[39m
+     [33m[2m✓[22m[39m poll_loop에서 mark_seen된 메시지는 recovery에서 중복 발행되지 않는다 [33m 2052[2mms[22m[39m
+     [33m[2m✓[22m[39m health_check에 inbound_lanes 카운트가 포함된다 [33m 2002[2mms[22m[39m
+     [33m[2m✓[22m[39m HITL send_input이 있으면 lane 직렬화를 우회한다 [33m 2003[2mms[22m[39m
+[90mstdout[2m | tests/agent/pty/e2e-real-cli.test.ts[2m > [22m[2mPTY E2E: 실제 claude CLI[2m > [22m[2msend_input으로 followup 대화를 주고받는다
+[22m[39m
+=== Followup Test (turn 1) ===
+content: 
+
+OK. 이미 메모리에 기억할 숫자 42가 저장되어 있습니다.
+
+ [32m✓[39m tests/agent/pty/e2e-real-cli.test.ts [2m([22m[2m3 tests[22m[2m)[22m[33m 15310[2mms[22m[39m
+     [33m[2m✓[22m[39m 실제 CLI를 PTY로 스폰하고 NDJSON 응답을 수신한다 [33m 4573[2mms[22m[39m
+     [33m[2m✓[22m[39m system_prompt가 실제 CLI에 전달된다 [33m 6268[2mms[22m[39m
+     [33m[2m✓[22m[39m send_input으로 followup 대화를 주고받는다 [33m 4468[2mms[22m[39m
+[90mstdout[2m | tests/agent/pty/e2e-persona-roleplay.test.ts[2m > [22m[2mPersona E2E: Claude 페르소나 부여[2m > [22m[2m과학자 페르소나를 부여하면 과학 용어를 사용한다
+[22m[39m
+=== Scientist Persona ===
+content: 태양광이 대기에 진입하면, 질소(N₂)와 산소(O₂) 분자가 짧은 파장(~450nm, 청색)의 광자를 긴 파장(~700nm, 적색)보다 약 16배 강하게 산란시키는데, 이것이 레일리 산란(Rayleigh scattering)으로 산란 강도가 파장의 4제곱에 반비례(∝ 1/λ⁴)하기 때문입니다. 결과적으로 모든 방향에서 우리 눈에 도달하는 산란광은 청색 파장이 지배적이므로, 하늘 전체가 푸르게 관측되는 것입니다.
+
+ [32m✓[39m tests/agent/pty/e2e-persona-roleplay.test.ts [2m([22m[2m5 tests[22m[2m | [22m[33m3 skipped[39m[2m)[22m[33m 18965[2mms[22m[39m
+     [33m[2m✓[22m[39m 해적 페르소나를 부여하면 해적 말투로 응답한다 [33m 9343[2mms[22m[39m
+     [33m[2m✓[22m[39m 과학자 페르소나를 부여하면 과학 용어를 사용한다 [33m 9621[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m252 passed[39m[22m[2m | [22m[33m2 skipped[39m[90m (254)[39m
+[2m      Tests [22m [1m[32m4462 passed[39m[22m[2m | [22m[33m13 skipped[39m[90m (4475)[39m
+[2m   Start at [22m 17:29:23
+[2m   Duration [22m 28.46s[2m (transform 32.02s, setup 0ms, import 199.51s, tests 166.28s, environment 33ms)[22m
+
+[34m % [39m[2mCoverage report from [22m[33mv8[39m
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   38.28 |    29.34 |   42.14 |   40.66 |                   
+ src               |   12.74 |     12.5 |   22.72 |   13.82 |                   
+  ...-templates.ts |     100 |      100 |     100 |     100 |                   
+  contracts.ts     |       0 |        0 |       0 |       0 |                   
+  logger.ts        |      48 |    33.33 |   45.45 |   54.54 | ...33-37,46,50,61 
+  main.ts          |       0 |        0 |       0 |       0 | 61-258            
+  ...llm-health.ts |       0 |        0 |       0 |       0 | 10-40             
+ src/agent         |   50.78 |     41.6 |   49.07 |   53.67 |                   
+  ...t-registry.ts |   55.81 |    43.54 |      50 |   60.83 | ...18,337-358,369 
+  ...sion-store.ts |       0 |        0 |       0 |       0 | 7-93              
+  cd-scoring.ts    |   96.87 |    96.55 |     100 |   96.87 | 80                
+  ...th.service.ts |       0 |        0 |       0 |       0 | 29-315            
+  ...ext-budget.ts |     100 |      100 |     100 |     100 |                   
+  ...xt.service.ts |   61.82 |    61.11 |      75 |   64.93 | ...57-267,329-366 
+  context.ts       |       0 |        0 |       0 |       0 |                   
+  ...n-warnings.ts |     100 |      100 |     100 |     100 |                   
+  index.ts         |       0 |        0 |       0 |       0 | 25-163            
+  ...or.service.ts |       0 |        0 |       0 |       0 | 9-65              
+  loop.service.ts  |   67.74 |    60.63 |   66.66 |   69.68 | ...31-438,447-448 
+  loop.ts          |       0 |        0 |       0 |       0 |                   
+  ...ry-chunker.ts |   97.01 |    82.75 |     100 |     100 | 28,102,118-131    
+  ...on.service.ts |   68.35 |    62.74 |   78.57 |   72.05 | ...44-145,150-161 
+  ...ry-scoring.ts |     100 |     92.3 |     100 |     100 | 81,118            
+  ...ry.service.ts |   50.28 |     39.4 |   73.84 |   57.34 | ...43-735,741-753 
+  memory.ts        |       0 |        0 |       0 |       0 |                   
+  ...escriptors.ts |       0 |        0 |       0 |       0 |                   
+  node-presets.ts  |     100 |      100 |     100 |     100 |                   
+  node-registry.ts |   83.33 |       50 |     100 |   83.33 | 99                
+  ...e-executor.ts |   96.15 |    94.28 |     100 |     100 | 133-144           
+  ...oop-runner.ts |   20.66 |    18.52 |    19.4 |   22.38 | ...1197,1219-1223 
+  ...flow-store.ts |   87.93 |    54.54 |     100 |   88.67 | 66,71-76,88       
+  ...pt-version.ts |     100 |      100 |     100 |     100 |                   
+  ...er-factory.ts |   13.69 |        0 |    6.66 |   15.62 | ...03-207,215-220 
+  ...ider-store.ts |    29.6 |    14.42 |   36.95 |   32.43 | ...11-238,265-391 
+  ...me.service.ts |       0 |        0 |       0 |       0 | 28-202            
+  ...ls.service.ts |   67.56 |    46.53 |   76.92 |   73.35 | ...95,431,531-538 
+  skills.ts        |       0 |        0 |       0 |       0 |                   
+  subagents.ts     |   45.28 |    41.12 |   35.48 |      50 | ...90,824,898-975 
+  task-store.ts    |   80.76 |     47.5 |   76.47 |   86.36 | 90,146-157        
+  ...call-guard.ts |    91.3 |    73.68 |     100 |    91.3 | 39-40             
+  ...all-parser.ts |   84.96 |     74.1 |     100 |    91.2 | ...14,152,175-176 
+  tools.ts         |       0 |        0 |       0 |       0 |                   
+  worktree.ts      |      84 |    68.75 |   88.88 |   87.87 | 59-67,155,176     
+ ...agent/backends |   15.56 |    11.16 |   24.44 |   15.91 |                   
+  ...-sdk.agent.ts |    4.85 |     0.82 |    9.52 |    5.41 | 77,84-701         
+  ...rver.agent.ts |    3.71 |        1 |    6.89 |    3.96 | 70-714            
+  codex-jsonrpc.ts |   56.25 |    59.52 |    37.5 |   57.89 | ...16-117,151-152 
+  convert.ts       |     100 |      100 |     100 |     100 |                   
+  index.ts         |       0 |        0 |       0 |       0 |                   
+  ...ible.agent.ts |       0 |        0 |       0 |       0 | 30-211            
+  ...ool-bridge.ts |       0 |        0 |       0 |       0 | 23-106            
+  ...op-helpers.ts |     100 |    95.23 |     100 |     100 | 34-36             
+ src/agent/nodes   |   43.55 |    34.49 |   37.75 |   43.38 |                   
+  aggregate.ts     |   97.72 |    89.18 |     100 |     100 | 23,25,36,75       
+  ai-agent.ts      |    47.5 |    46.34 |      75 |   45.45 | 55-99             
+  analyzer.ts      |    2.94 |        0 |       0 |    3.44 | 25-105            
+  approval.ts      |     100 |       80 |     100 |     100 | 42,53,59-60,73    
+  archive.ts       |   95.12 |    85.71 |     100 |   94.44 | 70,78             
+  assert.ts        |     100 |     87.5 |     100 |     100 | 60-61,65          
+  barcode.ts       |    5.26 |        0 |       0 |    5.55 | 21-51             
+  batch.ts         |   98.24 |    82.85 |     100 |     100 | 34-45,96,114      
+  cache.ts         |     100 |     90.9 |     100 |     100 | 47,61             
+  changelog.ts     |    6.66 |        0 |       0 |    7.14 | 20-44             
+  ...it-breaker.ts |    6.25 |        0 |       0 |    6.66 | 21-47             
+  code-diagram.ts  |    5.55 |        0 |       0 |    6.25 | 22-53             
+  code.ts          |     100 |       95 |     100 |     100 | 115               
+  compress.ts      |    5.55 |        0 |       0 |    6.25 | 22-50             
+  ...ode-runner.ts |     2.5 |        0 |       0 |    2.77 | 24-202            
+  cookie.ts        |    6.66 |        0 |       0 |    7.14 | 20-44             
+  crypto.ts        |    8.33 |        0 |       0 |    8.33 | 23-44             
+  csv.ts           |    6.25 |        0 |       0 |    6.66 | 22-47             
+  data-format.ts   |       5 |        0 |       0 |    5.55 | 24-57             
+  data-mask.ts     |    6.25 |        0 |       0 |    6.66 | 22-47             
+  database.ts      |   52.38 |    44.44 |   33.33 |   61.11 | 23,45-54          
+  date-calc.ts     |    8.33 |        0 |       0 |    8.33 | 22-49             
+  db.ts            |     100 |      100 |     100 |     100 |                   
+  decision.ts      |   97.22 |    79.24 |     100 |   96.87 | 79                
+  diagram.ts       |    8.33 |        0 |       0 |    8.33 | 23-44             
+  diff.ts          |    5.26 |        0 |       0 |    5.88 | 23-52             
+  docker.ts        |     100 |    96.49 |     100 |     100 | 31,36             
+  document-docx.ts |    5.55 |        0 |       0 |    6.25 | 23-49             
+  document-pdf.ts  |    5.55 |        0 |       0 |    6.25 | 23-49             
+  document-pptx.ts |    5.55 |        0 |       0 |    6.25 | 23-49             
+  document-xlsx.ts |    5.55 |        0 |       0 |    6.25 | 23-49             
+  duration.ts      |    6.25 |        0 |       0 |    6.66 | 21-46             
+  email.ts         |    5.55 |        0 |       0 |    6.25 | 23-54             
+  embedding.ts     |    2.43 |        0 |       0 |    2.77 | 26-82             
+  encoding.ts      |   96.77 |    94.59 |     100 |   96.29 | 61                
+  error-handler.ts |     100 |    95.45 |     100 |     100 | 31                
+  escalation.ts    |    27.9 |    17.14 |      60 |   26.31 | 41-64,89-112      
+  eval.ts          |    6.66 |        0 |       0 |    7.14 | 22-44             
+  file.ts          |     100 |    92.59 |     100 |     100 | 58-62             
+  filter.ts        |     100 |      100 |     100 |     100 |                   
+  form.ts          |   57.69 |     42.3 |      75 |   52.17 | 39-57             
+  format.ts        |    6.66 |        0 |       0 |    7.14 | 22-49             
+  ftp.ts           |    6.25 |        0 |       0 |    6.66 | 21-48             
+  gate.ts          |     100 |    83.33 |     100 |     100 | 29,55-56          
+  git.ts           |   57.69 |       60 |      50 |   63.63 | 24,45-53,61-62    
+  graph.ts         |    5.88 |        0 |       0 |    6.66 | 22-47             
+  graphql.ts       |    5.55 |        0 |       0 |    6.25 | 23-51             
+  hash.ts          |    8.33 |        0 |       0 |    8.33 | 23-47             
+  healthcheck.ts   |    5.55 |        0 |       0 |    6.25 | 21-50             
+  hitl.ts          |      44 |    27.27 |      50 |   39.13 | 24,37-56          
+  html.ts          |    6.25 |        0 |       0 |    6.66 | 21-45             
+  http.ts          |   96.15 |    86.84 |   83.33 |   97.91 | 56                
+  if.ts            |     100 |      100 |     100 |     100 |                   
+  image.ts         |    6.66 |        0 |       0 |    7.14 | 22-51             
+  index.ts         |     100 |      100 |     100 |     100 |                   
+  json-schema.ts   |    6.25 |        0 |       0 |    6.66 | 21-47             
+  jwt.ts           |    7.69 |        0 |       0 |    7.69 | 23-48             
+  ...an-trigger.ts |    3.44 |        0 |       0 |    3.84 | 22-71             
+  ldap.ts          |    6.25 |        0 |       0 |    6.66 | 21-50             
+  llm.ts           |     100 |     87.5 |     100 |     100 | 56-57             
+  log-parser.ts    |    6.25 |        0 |       0 |    6.66 | 21-48             
+  lookup.ts        |    6.66 |        0 |       0 |    7.14 | 22-46             
+  loop.ts          |     100 |    82.14 |     100 |     100 | 35-36,86,89       
+  markdown.ts      |    8.33 |        0 |       0 |    8.33 | 22-48             
+  math.ts          |    5.88 |        0 |       0 |    6.66 | 22-49             
+  matrix.ts        |    5.88 |        0 |       0 |    6.25 | 20-48             
+  media.ts         |   95.31 |    82.75 |     100 |   96.36 | 41,145            
+  memory-rw.ts     |     100 |    91.66 |     100 |     100 | 27-28             
+  merge.ts         |     100 |    85.71 |     100 |     100 | 42-43             
+  mqtt.ts          |    5.55 |        0 |       0 |    6.25 | 22-52             
+  network.ts       |    3.22 |        0 |       0 |     3.7 | 24-67             
+  notify.ts        |   11.11 |        0 |      25 |   11.76 | 22,29-48          
+  oauth.ts         |     100 |    95.45 |     100 |     100 | 29                
+  openapi.ts       |    6.25 |        0 |       0 |    6.66 | 21-47             
+  ...ge-manager.ts |    1.92 |        0 |       0 |    2.04 | 24-95             
+  password.ts      |    6.66 |        0 |       0 |    7.14 | 20-44             
+  pdf.ts           |    6.25 |        0 |       0 |    6.66 | 22-47             
+  phone.ts         |    6.25 |        0 |       0 |    6.66 | 21-47             
+  process.ts       |     100 |    82.69 |     100 |     100 | ...52-56,61-63,73 
+  promise.ts       |     100 |    92.45 |     100 |     100 | 37,52,58,66       
+  qr.ts            |    6.25 |        0 |       0 |    6.66 | 21-46             
+  queue.ts         |    12.5 |        0 |       0 |   13.33 | 25-52             
+  rate-limit.ts    |    6.25 |        0 |       0 |    6.66 | 21-46             
+  redis.ts         |    6.25 |        0 |       0 |    6.66 | 22-51             
+  regex.ts         |   96.07 |    86.66 |     100 |     100 | 27,30,53,66-72    
+  retriever.ts     |    2.98 |        0 |       0 |    3.38 | 27-127            
+  retry.ts         |   94.91 |       75 |     100 |      96 | 124,126           
+  rss.ts           |    6.25 |        0 |       0 |    6.66 | 21-48             
+  s3.ts            |    6.25 |        0 |       0 |    6.66 | 22-51             
+  screenshot.ts    |    4.54 |        0 |       0 |    5.26 | 22-58             
+  secret-read.ts   |    6.66 |        0 |       0 |    7.14 | 21-42             
+  send-file.ts     |    9.52 |        0 |      25 |      10 | 23,30-52          
+  set-ops.ts       |    5.88 |        0 |       0 |    6.66 | 22-46             
+  set.ts           |     100 |      100 |     100 |     100 |                   
+  shell.ts         |      50 |    42.85 |   33.33 |   59.09 | 30,55-74          
+  similarity.ts    |    5.55 |        0 |       0 |    6.25 | 22-48             
+  spawn-agent.ts   |    3.22 |        0 |       0 |    3.57 | 24-99             
+  split.ts         |     100 |      100 |     100 |     100 |                   
+  sql-builder.ts   |    6.25 |        0 |       0 |    6.66 | 21-50             
+  ssh.ts           |    5.55 |        0 |       0 |    6.25 | 22-50             
+  state-machine.ts |    5.88 |        0 |       0 |    6.66 | 20-46             
+  stats.ts         |    5.88 |        0 |       0 |    6.66 | 22-49             
+  sub-workflow.ts  |     3.7 |        0 |       0 |       4 | 21-86             
+  switch.ts        |     100 |      100 |     100 |     100 |                   
+  system-info.ts   |    9.09 |        0 |       0 |      10 | 30-62             
+  table.ts         |    6.66 |        0 |       0 |    7.14 | 22-54             
+  task.ts          |     100 |      100 |     100 |     100 |                   
+  ...ate-engine.ts |    6.66 |        0 |       0 |    7.14 | 22-41             
+  template.ts      |     100 |      100 |     100 |     100 |                   
+  text-splitter.ts |    2.22 |        0 |       0 |    2.56 | 10-36,53-81       
+  text.ts          |   93.33 |      100 |     100 |   92.85 | 39                
+  tokenizer.ts     |    6.66 |        0 |       0 |    7.14 | 20-44             
+  tool-invoke.ts   |   24.13 |       25 |      25 |      25 | 25,44-78          
+  transform.ts     |     100 |      100 |     100 |     100 |                   
+  ttl-cache.ts     |   11.76 |        0 |       0 |    12.5 | 25-51             
+  validator.ts     |    5.55 |        0 |       0 |    6.25 | 23-50             
+  vector-store.ts  |    2.12 |        0 |       0 |    2.32 | 26-99             
+  wait.ts          |     100 |       90 |     100 |     100 | 37                
+  web-form.ts      |    3.22 |        0 |       0 |       4 | 23-64             
+  web-scrape.ts    |       5 |        0 |       0 |    5.55 | 27-90             
+  web-search.ts    |    2.94 |        0 |       0 |    3.22 | 23-77             
+  web-table.ts     |    2.08 |        0 |       0 |    2.38 | 23-90             
+  webhook.ts       |     100 |      100 |     100 |     100 |                   
+  websocket.ts     |    6.25 |        0 |       0 |    6.66 | 21-47             
+  xml.ts           |    6.25 |        0 |       0 |    6.66 | 21-45             
+  yaml.ts          |    6.25 |        0 |       0 |    6.66 | 21-47             
+ src/agent/pty     |   80.69 |    67.99 |   85.22 |   83.29 |                   
+  agent-bus.ts     |   97.36 |     90.9 |     100 |     100 | 87-94             
+  ...le-tracker.ts |     100 |      100 |     100 |     100 |                   
+  cli-adapter.ts   |      88 |    71.03 |   94.44 |   90.95 | ...19-323,428,443 
+  ...permission.ts |     100 |      100 |     100 |     100 |                   
+  ...-cli-agent.ts |   52.71 |    46.93 |   64.28 |   57.86 | ...14,340-365,400 
+  ...ainer-pool.ts |   60.52 |    39.28 |   73.33 |   63.76 | ...52-163,176-182 
+  ...ndow-guard.ts |     100 |      100 |     100 |     100 |                   
+  docker-ops.ts    |   92.77 |    72.85 |     100 |   95.31 | 84,90,109         
+  docker-pty.ts    |   72.36 |    34.61 |   73.68 |   78.46 | ...57,180-182,196 
+  index.ts         |       0 |        0 |       0 |       0 |                   
+  lane-queue.ts    |   91.78 |     93.1 |   94.73 |   90.32 | 137-144           
+  local-pty.ts     |   87.23 |    68.18 |   81.25 |   97.22 | 29                
+  ndjson-parser.ts |   92.59 |       80 |     100 |     100 | 36-49             
+  pty-transport.ts |   82.35 |       70 |   72.22 |   83.63 | 61,98-100,131-135 
+  secret-reader.ts |     100 |      100 |     100 |     100 |                   
+  semaphore.ts     |     100 |      100 |     100 |     100 |                   
+  ...dge-config.ts |   41.66 |       50 |       0 |   41.66 | 31-53             
+  ...dge-server.ts |    94.2 |       80 |      90 |   93.54 | 76-77,111,127     
+ src/agent/tools   |   30.61 |    20.73 |   31.58 |   33.31 |                   
+  ...ser-client.ts |       2 |        0 |       0 |    2.38 | 12-101            
+  aggregate.ts     |      98 |    86.36 |     100 |     100 | 24-26,41,48,60,81 
+  ...l-notifier.ts |     100 |       80 |     100 |     100 | 30-60,101         
+  ...val-parser.ts |   96.29 |    91.66 |     100 |   95.65 | 63                
+  archive.ts       |   17.94 |        0 |      25 |      20 | 34-78             
+  ascii-art.ts     |    6.09 |        0 |       0 |    7.93 | 51-138            
+  ask-user.ts      |   20.58 |     2.77 |      20 |   24.13 | 54-101            
+  assert.ts        |   94.87 |    81.94 |     100 |   98.48 | 108               
+  barcode.ts       |    3.22 |        0 |       0 |    3.92 | 24-204            
+  base-convert.ts  |       6 |        0 |       0 |    7.14 | 28-140            
+  base.ts          |   34.86 |    22.55 |   31.25 |    38.2 | ...34-135,142-182 
+  bloom-filter.ts  |   94.73 |     65.9 |     100 |   96.77 | 92,122            
+  chain.ts         |   63.52 |    54.54 |   76.92 |   63.15 | 80,98,114,150-194 
+  changelog.ts     |    6.06 |        0 |       0 |    7.22 | 43-159            
+  checksum.ts      |   94.52 |       85 |     100 |   96.42 | 73,110            
+  ...it-breaker.ts |   83.58 |    75.92 |   66.66 |   89.83 | ...02,119,126-127 
+  code-diagram.ts  |    2.29 |        0 |       0 |    2.59 | 74-934            
+  color.ts         |    3.53 |        0 |       0 |    4.81 | 25-144            
+  compress.ts      |    12.5 |        0 |       0 |   13.55 | 36-120            
+  cookie.ts        |    3.77 |        0 |       0 |    5.06 | 39-160            
+  cors.ts          |    3.96 |        0 |       0 |    5.79 | 30-130            
+  country.ts       |   16.66 |        0 |       0 |   20.83 | 72-104            
+  cron-shell.ts    |   13.15 |        0 |   16.66 |   16.66 | 52-128            
+  cron.ts          |   91.46 |     86.9 |     100 |     100 | ...25,131-132,138 
+  crontab.ts       |   86.71 |    70.17 |   93.33 |   92.85 | ...67-170,174-175 
+  crypto.ts        |    7.57 |        0 |       0 |     9.8 | 29-95             
+  csp.ts           |    6.09 |        0 |       0 |    7.35 | 33-120            
+  csv.ts           |   97.89 |    82.35 |     100 |     100 | 25,36-43,49,68-99 
+  currency.ts      |   10.34 |        0 |       0 |   13.04 | 81-143            
+  data-format.ts   |    1.33 |        0 |       0 |     1.6 | 35-414            
+  data-mask.ts     |     100 |    81.08 |     100 |     100 | 38-39,47-65,93    
+  database.ts      |   30.35 |    12.19 |   33.33 |   32.65 | 51-52,56-105      
+  datetime.ts      |   93.26 |    74.52 |     100 |   98.87 | 183               
+  decision-tool.ts |       0 |      100 |       0 |       0 | 6-16              
+  dependency.ts    |    3.96 |        0 |       0 |    5.71 | 23-127            
+  diagram.ts       |    7.01 |        0 |       0 |    8.33 | 7-29,51-94        
+  diff.ts          |    2.46 |        0 |       0 |    3.35 | 33-242            
+  dns.ts           |   15.62 |        0 |       0 |   17.24 | 24-67             
+  docker.ts        |   21.05 |        0 |   33.33 |   22.85 | 46-87             
+  document.ts      |   96.71 |    91.39 |     100 |   96.37 | ...82,225,242,316 
+  dotenv.ts        |    6.34 |        0 |       0 |    7.54 | 24-99             
+  duration.ts      |    3.63 |        0 |       0 |    4.81 | 25-167            
+  dynamic.ts       |   24.32 |     6.25 |      20 |      30 | 20-30,56-80       
+  ...l-validate.ts |    8.33 |        0 |       0 |   11.32 | 34-108            
+  email.ts         |    4.95 |        0 |       0 |    7.93 | 33-128            
+  embedding.ts     |    7.46 |        0 |       0 |     9.8 | 29-107            
+  encoding.ts      |      10 |        0 |       0 |   11.76 | 33-80             
+  env.ts           |    9.75 |        0 |       0 |    12.5 | 25-72             
+  eval.ts          |   15.15 |        0 |       0 |   18.51 | 25-58             
+  feature-flag.ts  |   77.92 |    66.66 |     100 |   88.33 | 102-107,135       
+  file-request.ts  |      25 |     3.84 |      25 |      30 | 38-76             
+  filesystem.ts    |   21.02 |     3.35 |    23.8 |   23.87 | ...03-246,277-342 
+  filter.ts        |    6.89 |        0 |       0 |    8.88 | 24-79             
+  format.ts        |    3.17 |        0 |       0 |       4 | 34-185            
+  ftp.ts           |    6.09 |        0 |       0 |    6.57 | 28-130            
+  geo.ts           |    6.38 |        0 |       0 |    7.69 | 31-142            
+  git.ts           |   20.58 |        0 |      25 |   21.87 | 38-78             
+  glob-match.ts    |    3.77 |        0 |       0 |     5.4 | 24-129            
+  graph.ts         |   98.96 |       80 |     100 |   99.27 | 186               
+  graphql.ts       |   14.63 |        0 |       0 |      20 | 27-75             
+  hash.ts          |   17.24 |        0 |       0 |   19.23 | 29-59             
+  healthcheck.ts   |    8.06 |        0 |       0 |    9.25 | 27-106            
+  html.ts          |    7.84 |        0 |       0 |    8.16 | 23-107            
+  http-header.ts   |   95.45 |       80 |     100 |   98.61 | 124               
+  http-mock.ts     |      10 |        0 |       0 |   10.52 | 34-114            
+  http-request.ts  |   16.66 |        0 |       0 |   17.85 | 7-17,64-79        
+  http-utils.ts    |   97.56 |    90.32 |   85.71 |     100 | 62-70             
+  ical.ts          |    5.47 |        0 |       0 |    6.89 | 27-137            
+  image.ts         |   13.72 |        0 |      10 |   14.58 | 38-108            
+  index.ts         |   83.09 |    33.87 |      25 |   84.68 | ...10,613,624-629 
+  ini.ts           |    5.06 |        0 |       0 |    5.47 | 25-141            
+  installer.ts     |    87.5 |       80 |   85.71 |     100 | 58                
+  ip.ts            |     4.3 |        0 |       0 |    5.06 | 25-148            
+  json-patch.ts    |     2.7 |        0 |       0 |     3.7 | 25-192            
+  json-schema.ts   |     2.2 |        0 |       0 |    3.07 | 24-218            
+  jsonl.ts         |    5.79 |        0 |       0 |    7.14 | 26-107            
+  jwt.ts           |    8.57 |        0 |       0 |      10 | 10-11,32-111      
+  kanban.ts        |   51.91 |    45.05 |   54.34 |   59.76 | ...54-477,498-531 
+  ldap.ts          |    5.61 |        0 |       0 |    6.84 | 31-160            
+  license.ts       |    8.21 |        0 |       0 |   11.76 | 144-207           
+  log-parser.ts    |    9.63 |        0 |       0 |   13.11 | 31-110            
+  lookup.ts        |   24.24 |        0 |       0 |   27.58 | 67-96             
+  markdown.ts      |     4.7 |        0 |       0 |    5.33 | 33-168            
+  math.ts          |    5.61 |        0 |       0 |    7.14 | 45-155            
+  matrix.ts        |    2.32 |        0 |       0 |     3.7 | 26-174            
+  mcp-store.ts     |      90 |       60 |     100 |   94.82 | 64,98-99          
+  media-utils.ts   |       0 |        0 |       0 |       0 | 8-29              
+  media.ts         |   13.33 |        0 |   16.66 |   16.66 | 18-33,60-108      
+  memory-format.ts |   71.42 |       50 |     100 |     100 | 7-10              
+  memory-tool.ts   |   40.81 |    23.07 |   66.66 |   45.23 | 34-39,43-44,61-81 
+  message.ts       |   17.85 |     4.47 |   14.28 |      20 | 60-163            
+  metric.ts        |      96 |    88.88 |   89.47 |   97.95 | 62,150            
+  mime.ts          |   21.73 |     4.44 |       0 |    23.8 | 52-106            
+  mqtt.ts          |    5.31 |        0 |       0 |    6.02 | 31-136            
+  msgpack.ts       |    2.27 |        0 |       0 |     3.2 | 22-184            
+  network.ts       |   18.91 |        0 |      20 |   21.87 | 37-96             
+  notification.ts  |   24.13 |     9.09 |      50 |      25 | 34-72             
+  oauth-fetch.ts   |    89.7 |    76.08 |     100 |    88.7 | ...20,125-126,156 
+  openapi.ts       |    3.57 |        0 |       0 |     4.3 | 24-165            
+  ...ge-manager.ts |    12.5 |        0 |      25 |   13.72 | 41-109            
+  pagination.ts    |   98.18 |     58.2 |     100 |   98.03 | 109               
+  password.ts      |    3.57 |        0 |       0 |    4.87 | 30-134            
+  pdf.ts           |    8.97 |        0 |      10 |   10.29 | 32-149            
+  phone.ts         |    8.62 |        0 |       0 |    9.43 | 37-111            
+  policy-tool.ts   |     100 |    93.33 |     100 |     100 | 66,90             
+  ...ss-manager.ts |      20 |        0 |   16.66 |   22.58 | 34-93             
+  prometheus.ts    |    5.81 |        0 |       0 |    7.46 | 31-131            
+  promise-tool.ts  |     100 |      100 |     100 |     100 |                   
+  protobuf.ts      |    2.31 |        0 |       0 |    2.77 | 26-235            
+  qr.ts            |     3.3 |        0 |       0 |    4.44 | 23-153            
+  queue.ts         |   13.33 |        0 |       0 |   16.32 | 34-103            
+  random.ts        |    6.55 |        0 |       0 |    7.84 | 28-105            
+  rate-limit.ts    |   89.74 |    70.37 |    90.9 |   95.58 | 45,53-54          
+  redis.ts         |     4.5 |        0 |       0 |    6.02 | 33-143            
+  regex.ts         |      12 |        0 |       0 |   13.63 | 33-101            
+  registry.ts      |   57.06 |    48.35 |   76.47 |   55.19 | ...88-289,322-372 
+  retriever.ts     |   85.71 |    63.15 |     100 |   88.37 | 35,43,47-49       
+  robots-txt.ts    |    4.49 |        0 |       0 |    5.71 | 32-122            
+  rss.ts           |    6.84 |        0 |       0 |    8.19 | 30-138            
+  runtime-admin.ts |   34.52 |    28.31 |   26.08 |   38.75 | ...35-248,264-267 
+  ...ime-loader.ts |   28.57 |    46.15 |      50 |   26.08 | 30-58             
+  s3.ts            |    6.75 |        0 |       0 |    7.14 | 34-146            
+  screenshot.ts    |   16.66 |        0 |   16.66 |      20 | 10,41-87          
+  secret-tool.ts   |       0 |        0 |       0 |       0 | 7-71              
+  self-test.ts     |       0 |        0 |       0 |       0 | 12-29             
+  semver.ts        |   85.58 |    73.33 |     100 |   91.86 | ...48-149,151,154 
+  send-file.ts     |     100 |      100 |     100 |     100 |                   
+  sentiment.ts     |   96.92 |    70.83 |     100 |     100 | ...15,121-141,148 
+  set.ts           |    6.49 |        0 |       0 |    8.92 | 25-109            
+  shell-runtime.ts |   44.44 |    23.07 |   57.14 |      48 | ...,64-89,103-122 
+  shell.ts         |   47.57 |       39 |      75 |   52.94 | ...30-140,152-194 
+  similarity.ts    |   96.95 |     81.7 |     100 |   99.12 | 107               
+  sitemap.ts       |    6.55 |        0 |       0 |    8.16 | 27-111            
+  slug.ts          |    11.9 |        0 |       0 |   13.88 | 37-91             
+  spawn.ts         |     100 |    96.42 |     100 |     100 | 48                
+  sql-builder.ts   |    3.33 |        0 |       0 |    4.81 | 31-146            
+  ssh.ts           |   10.86 |        0 |       0 |   12.82 | 29-77             
+  state-machine.ts |     3.3 |        0 |       0 |    4.49 | 27-166            
+  stats.ts         |     4.8 |        0 |       0 |    6.25 | 28-162            
+  store.ts         |   86.53 |    55.73 |    92.3 |   95.55 | 31,72             
+  svg.ts           |    82.1 |    75.23 |   83.33 |   83.33 | 93-95,123,148-158 
+  syslog.ts        |   11.11 |        0 |       0 |    13.2 | 36-115            
+  system-info.ts   |      20 |        0 |      25 |   27.27 | 32-58             
+  table.ts         |    3.73 |        0 |       0 |    4.85 | 35-190            
+  task-query.ts    |     100 |      100 |     100 |     100 |                   
+  ...ate-engine.ts |    7.14 |        0 |       0 |    8.45 | 26-138            
+  text-splitter.ts |   93.61 |    82.14 |     100 |   93.47 | 37-38,77          
+  text.ts          |   86.45 |    74.62 |   86.66 |   90.78 | 60-62,97-99,108   
+  timeseries.ts    |    4.65 |        0 |       0 |    7.01 | 26-104            
+  timezone.ts      |      10 |        0 |       0 |    11.9 | 70-132            
+  tokenizer.ts     |   96.38 |       88 |     100 |   98.41 | 100               
+  toml.ts          |     3.1 |        0 |       0 |    3.66 | 23-192            
+  transform.ts     |    3.36 |        0 |       0 |    4.76 | 27-148            
+  tree.ts          |    94.3 |    82.22 |     100 |   97.82 | 106,126           
+  ttl-cache.ts     |   14.28 |        0 |       0 |   17.54 | 34-122            
+  unit-convert.ts  |   18.75 |        0 |       0 |   22.22 | 59-128            
+  url.ts           |    4.87 |        0 |       0 |    5.63 | 26-140            
+  user-agent.ts    |    6.66 |        0 |       0 |    8.77 | 36-127            
+  uuid.ts          |   94.91 |    83.33 |     100 |   96.36 | 93-94             
+  validator.ts     |    6.81 |        0 |       0 |    9.57 | 37-177            
+  vcard.ts         |   87.34 |     82.6 |     100 |   92.85 | 111-114           
+  vector-store.ts  |    7.14 |        0 |       0 |      10 | 36-148            
+  web-auth.ts      |   13.88 |        0 |       0 |   16.66 | 8,34-68           
+  web-form.ts      |    10.2 |        0 |       0 |   11.62 | 8,30-80           
+  web-table.ts     |   16.12 |        0 |       0 |   18.51 | 9,30-79           
+  web.ts           |   11.16 |        0 |    9.09 |   13.17 | ...25-638,668-729 
+  webhook.ts       |   12.98 |        0 |       0 |   15.15 | 42-135            
+  websocket.ts     |    8.88 |        0 |       0 |    9.87 | 32-154            
+  whois.ts         |      10 |        0 |       0 |      12 | 33-110            
+  ...ow-catalog.ts |     100 |      100 |     100 |     100 |                   
+  workflow.ts      |   76.52 |    77.22 |      80 |   80.61 | ...11,121,210-244 
+  xml.ts           |    82.3 |    69.62 |   76.47 |    87.5 | ...65,170,177,193 
+  yaml.ts          |   78.08 |     81.2 |   94.44 |   85.33 | ...17,235-236,251 
+ src/bootstrap     |       0 |        0 |       0 |       0 |                   
+  agent-core.ts    |       0 |        0 |       0 |       0 | 73-190            
+  ...nel-wiring.ts |       0 |        0 |       0 |       0 | 78-137            
+  channels.ts      |       0 |        0 |       0 |       0 | 66-144            
+  config.ts        |       0 |      100 |       0 |       0 | 17-26             
+  dashboard.ts     |       0 |        0 |       0 |       0 | 90-158            
+  lifecycle.ts     |       0 |        0 |       0 |       0 | 7-41              
+  orchestration.ts |       0 |        0 |       0 |       0 | 82-277            
+  providers.ts     |       0 |        0 |       0 |       0 | 40-150            
+  runtime-data.ts  |       0 |        0 |       0 |       0 | 44-95             
+  runtime-paths.ts |       0 |        0 |       0 |       0 | 7-28              
+  ...me-support.ts |       0 |        0 |       0 |       0 | 52-104            
+  runtime-tools.ts |       0 |        0 |       0 |       0 | 40-109            
+  services.ts      |       0 |        0 |       0 |       0 | 40-177            
+  trigger-sync.ts  |       0 |        0 |       0 |       0 | 31-72             
+  workflow-ops.ts  |       0 |        0 |       0 |       0 | 64-133            
+ src/bus           |   34.75 |     28.8 |   33.33 |   36.78 |                   
+  factory.ts       |       0 |        0 |       0 |       0 | 5-47              
+  index.ts         |       0 |        0 |       0 |       0 |                   
+  redis-bus.ts     |       0 |        0 |       0 |       0 | 16-373            
+  service.ts       |   86.17 |       80 |      84 |    93.2 | ...35,150-156,185 
+ src/channels      |   54.68 |    44.64 |   53.15 |    57.5 |                   
+  ...controller.ts |   76.92 |    33.33 |   66.66 |   79.16 | 29,49,65-66,73    
+  ...al.service.ts |   83.19 |    69.85 |   80.95 |    91.2 | ...05,226,233-235 
+  base.ts          |      10 |        6 |   18.75 |   11.11 | 30-192            
+  ...el-factory.ts |   29.41 |        0 |   14.28 |   31.25 | ...40,49-50,59-60 
+  ...and-intent.ts |   88.23 |    81.81 |     100 |   98.13 | 107-108           
+  ...and-router.ts |    9.45 |     8.33 |    8.92 |   10.34 | 75-94,101-159     
+  ...rd.channel.ts |    4.67 |     4.38 |       5 |    5.74 | 15-42,71-212      
+  ...ch.service.ts |   55.17 |    45.87 |   69.56 |   57.81 | ...15-230,251,279 
+  dlq-store.ts     |   89.47 |    63.33 |   92.85 |   96.96 | 142               
+  index.ts         |       0 |        0 |       0 |       0 | 30-151            
+  ...ance-store.ts |    90.9 |     62.5 |    90.9 |   92.68 | 95-97             
+  manager.ts       |   56.99 |    49.44 |    50.5 |   60.98 | ...1187,1200-1205 
+  ...-collector.ts |    42.7 |    28.85 |      50 |   48.34 | ...53-254,262-269 
+  ...-extractor.ts |   81.08 |    67.64 |   83.33 |   95.83 | 37                
+  ...und-dedupe.ts |     100 |    88.57 |     100 |     100 | 14,34,44          
+  ...-sanitizer.ts |   97.63 |     92.4 |     100 |     100 | ...94,252,291-310 
+  ...e-renderer.ts |   66.25 |    70.16 |   58.33 |   65.03 | ...45,351,371-411 
+  rate-limiter.ts  |     100 |      100 |     100 |     100 |                   
+  rendering.ts     |   81.15 |    61.86 |   83.72 |   85.18 | ...09-313,319-325 
+  ...ime-policy.ts |     100 |      100 |     100 |     100 |                   
+  ...n-recorder.ts |   87.83 |    83.01 |     100 |   90.16 | ...40-142,148,166 
+  slack.channel.ts |    4.49 |     2.59 |    4.34 |    5.16 | 16-61,89-325      
+  slash-command.ts |      94 |    84.21 |     100 |     100 | 19-24,32,49-58    
+  stream-buffer.ts |   96.66 |    96.96 |   88.88 |   97.82 | 51                
+  ...me.service.ts |   79.36 |     74.6 |      75 |   81.48 | 85-90,139,147-152 
+  ...am.channel.ts |    7.48 |     4.95 |   14.28 |    8.01 | ...48-400,423-469 
+ ...nnels/commands |   61.54 |    46.71 |   75.53 |   65.85 |                   
+  agent.handler.ts |   84.28 |    64.28 |      90 |   89.83 | 64-65,120-123     
+  cron.handler.ts  |   46.82 |    33.63 |   76.47 |   55.31 | ...42-344,376-401 
+  ...on.handler.ts |   87.09 |    63.63 |     100 |   85.71 | 56-57,63-64       
+  ...or.handler.ts |   66.66 |    74.07 |      70 |   68.42 | 43-59             
+  guard.handler.ts |     100 |    76.92 |     100 |     100 | 16,39-41          
+  help.handler.ts  |     100 |      100 |     100 |     100 |                   
+  index.ts         |       0 |        0 |       0 |       0 |                   
+  mcp.handler.ts   |    12.5 |     3.84 |      40 |   13.79 | 29-60             
+  ...ry.handler.ts |   77.35 |    54.76 |     100 |   83.33 | 45-46,52-53,72-79 
+  model.handler.ts |    3.33 |        0 |       0 |    3.57 | 14-53             
+  ...se.handler.ts |       8 |     5.12 |   33.33 |     9.3 | 42-114            
+  registry.ts      |     100 |       95 |     100 |     100 | 189               
+  ...ad.handler.ts |   87.87 |       75 |     100 |   87.09 | 47-48,55-56       
+  ...er.handler.ts |      96 |    78.94 |     100 |      96 | 118-119           
+  router.ts        |   68.75 |    56.25 |   71.42 |   76.31 | 10,23-25,48-55    
+  ...et.handler.ts |   83.96 |     72.5 |   95.83 |    91.5 | ...21-122,179-180 
+  skill.handler.ts |   89.83 |    68.91 |     100 |   95.91 | 70-71             
+  stats.handler.ts |   57.77 |       50 |   55.55 |   54.76 | 53-89             
+  ...us.handler.ts |     100 |    79.16 |     100 |     100 | 24,51-65          
+  stop.handler.ts  |     100 |       75 |     100 |     100 | 15                
+  task.handler.ts  |   72.34 |    57.93 |      80 |   74.21 | ...84-191,215-245 
+  tone.handler.ts  |    8.16 |        0 |       0 |    9.75 | 25-84             
+  ...fy.handler.ts |     100 |    83.33 |     100 |     100 | 18,30             
+  ...ow.handler.ts |    3.17 |        0 |       0 |    3.77 | 38-125            
+ src/config        |    49.1 |    25.71 |   41.93 |      50 |                   
+  config-meta.ts   |   41.66 |        0 |      50 |   36.36 | 173-179,189       
+  config-store.ts  |   25.39 |     4.34 |   33.33 |   26.31 | 59-63,78-191      
+  index.ts         |       0 |        0 |       0 |       0 |                   
+  schema.ts        |   91.89 |       80 |     100 |   91.66 | 316-318           
+ src/cron          |   35.75 |     26.8 |   40.21 |   39.74 |                   
+  contracts.ts     |       0 |        0 |       0 |       0 |                   
+  index.ts         |       0 |        0 |       0 |       0 |                   
+  ...me-handler.ts |   70.52 |     58.1 |      75 |   73.62 | ...32-233,269-276 
+  service.ts       |   38.78 |     26.2 |    49.2 |   42.28 | ...04,736,755-826 
+  ...igger-sync.ts |       0 |        0 |       0 |       0 | 18-261            
+ src/dashboard     |   31.81 |    27.58 |   21.42 |   32.77 |                   
+  broadcaster.ts   |       0 |      100 |       0 |       0 | 30-60             
+  media-store.ts   |   97.43 |    92.85 |   85.71 |     100 | 53                
+  ops-factory.ts   |       0 |        0 |       0 |       0 |                   
+  route-context.ts |     100 |      100 |     100 |     100 |                   
+  service.ts       |       0 |        0 |       0 |       0 | 56-711            
+  sse-manager.ts   |    70.9 |     42.3 |   71.42 |      80 | 59-65,74-80       
+  state-builder.ts |   85.45 |       80 |   38.46 |   91.66 | 88,116-118        
+  static-server.ts |   96.42 |      100 |     100 |      96 | 22                
+  ...em-metrics.ts |       0 |        0 |       0 |       0 | 20-140            
+ src/dashboard/ops |   12.26 |     5.82 |   20.12 |   12.74 |                   
+  ...t-provider.ts |       0 |        0 |       0 |       0 | 22-227            
+  bootstrap.ts     |       0 |        0 |       0 |       0 | 21-61             
+  channel.ts       |    0.92 |        0 |       0 |    1.06 | 11-184            
+  cli-auth.ts      |       0 |        0 |       0 |       0 | 9-28              
+  config.ts        |   54.16 |    57.14 |   66.66 |    61.9 | 17-27             
+  index.ts         |       0 |        0 |       0 |       0 |                   
+  memory.ts        |     100 |      100 |     100 |     100 |                   
+  model.ts         |       0 |      100 |       0 |       0 | 7-14              
+  oauth.ts         |       0 |        0 |       0 |       0 | 15-107            
+  shared.ts        |   26.31 |    23.07 |      60 |   31.25 | 11-15,44-50       
+  skill.ts         |   39.28 |       25 |   66.66 |   42.55 | 40,46-49,53-81    
+  template.ts      |    86.2 |       80 |     100 |     100 | 15,34-37          
+  tool.ts          |     100 |      100 |     100 |     100 |                   
+  workflow.ts      |    0.38 |        0 |       0 |    0.45 | 154-610           
+  workspace.ts     |      95 |      100 |     100 |   92.85 | 21                
+ ...shboard/routes |       0 |        0 |       0 |       0 |                   
+  ...t-provider.ts |       0 |        0 |       0 |       0 | 4-187             
+  agent.ts         |       0 |        0 |       0 |       0 | 4-47              
+  approval.ts      |       0 |        0 |       0 |       0 | 5-50              
+  bootstrap.ts     |       0 |        0 |       0 |       0 | 4-22              
+  channel.ts       |       0 |        0 |       0 |       0 | 4-86              
+  chat.ts          |       0 |        0 |       0 |       0 | 6-168             
+  cli-auth.ts      |       0 |        0 |       0 |       0 | 6-52              
+  config.ts        |       0 |        0 |       0 |       0 | 5-102             
+  cron.ts          |       0 |        0 |       0 |       0 | 4-74              
+  health.ts        |       0 |        0 |       0 |       0 | 4-74              
+  kanban.ts        |       0 |        0 |       0 |       0 | 8-545             
+  loop.ts          |       0 |        0 |       0 |       0 | 4-24              
+  memory.ts        |       0 |        0 |       0 |       0 | 4-53              
+  models.ts        |       0 |        0 |       0 |       0 | 7-95              
+  oauth.ts         |       0 |        0 |       0 |       0 | 4-171             
+  process.ts       |       0 |        0 |       0 |       0 | 4-33              
+  promise.ts       |       0 |        0 |       0 |       0 | 4-39              
+  references.ts    |       0 |        0 |       0 |       0 | 9-73              
+  secret.ts        |       0 |        0 |       0 |       0 | 4-40              
+  session.ts       |       0 |        0 |       0 |       0 | 4-54              
+  skill.ts         |       0 |        0 |       0 |       0 | 4-65              
+  state.ts         |       0 |        0 |       0 |       0 | 4-19              
+  task.ts          |       0 |        0 |       0 |       0 | 4-55              
+  template.ts      |       0 |        0 |       0 |       0 | 4-37              
+  workflows.ts     |       0 |        0 |       0 |       0 | 6-193             
+  workspace.ts     |       0 |        0 |       0 |       0 | 4-26              
+ src/decision      |   58.55 |    47.72 |   70.68 |   62.96 |                   
+  index.ts         |       0 |        0 |       0 |       0 |                   
+  ...se.service.ts |   84.61 |      100 |      75 |   81.81 | 43-47             
+  service.ts       |      41 |    41.81 |   55.17 |   44.82 | ...45,176,184-216 
+  store.ts         |   88.57 |    72.22 |   90.47 |   93.54 | 175-180,240       
+ src/events        |   53.38 |    34.54 |      75 |   55.55 |                   
+  index.ts         |       0 |        0 |       0 |       0 |                   
+  service.ts       |   53.38 |    34.54 |      75 |   55.55 | ...87-394,399-403 
+ src/heartbeat     |    11.9 |    14.54 |    7.69 |   11.26 |                   
+  index.ts         |       0 |        0 |       0 |       0 |                   
+  service.ts       |    11.9 |    14.54 |    7.69 |   11.26 | 32-152            
+ src/i18n          |   93.54 |    93.33 |    87.5 |   93.33 |                   
+  index.ts         |      90 |    83.33 |      80 |   89.47 | 23,36             
+  protocol.ts      |     100 |      100 |     100 |     100 |                   
+ src/mcp           |   20.93 |    32.25 |    30.3 |   20.35 |                   
+  ...nt-manager.ts |       0 |        0 |       0 |       0 | 18-237            
+  index.ts         |       0 |        0 |       0 |       0 |                   
+  tool-adapter.ts  |   96.42 |    83.33 |     100 |   95.83 | 42                
+ src/oauth         |   28.95 |    23.25 |   52.63 |   29.55 |                   
+  flow-service.ts  |       0 |        0 |       0 |       0 | 12-301            
+  index.ts         |       0 |        0 |       0 |       0 |                   
+  ...tion-store.ts |      84 |    68.18 |   83.33 |   84.28 | ...53-259,314-318 
+  presets.ts       |      20 |        0 |       0 |      20 | 26-41             
+ ...auth/providers |       0 |      100 |     100 |       0 |                   
+  github.ts        |       0 |      100 |     100 |       0 | 3                 
+  google.ts        |       0 |      100 |     100 |       0 | 3                 
+  spotify.ts       |       0 |      100 |     100 |       0 | 3                 
+ src/ops           |       0 |        0 |       0 |       0 |                   
+  index.ts         |       0 |        0 |       0 |       0 |                   
+  service.ts       |       0 |        0 |       0 |       0 | 7-149             
+ src/orchestration |   71.59 |    59.64 |   60.86 |   73.74 |                   
+  ...ks-builder.ts |   79.33 |    58.43 |   66.66 |   81.48 | ...99-213,223-237 
+  classifier.ts    |   98.78 |    95.29 |     100 |     100 | 55-56,101,126     
+  ...tion-guard.ts |   96.72 |    91.17 |     100 |     100 | 31,114-117        
+  ...k-analyzer.ts |   93.24 |    81.57 |    92.3 |     100 | ...21-123,141,149 
+  gateway.ts       |     100 |     90.9 |     100 |     100 | 62-63             
+  ...ding-store.ts |     100 |      100 |     100 |     100 |                   
+  node-selector.ts |     100 |      100 |     100 |     100 |                   
+  ...ss-tracker.ts |     100 |       80 |     100 |     100 | ...46-159,178,185 
+  prompts.ts       |   92.68 |    80.88 |   93.33 |   94.52 | 77,387-389,395    
+  ...-preflight.ts |   70.27 |    34.66 |      70 |   78.72 | ...53-254,259-260 
+  service.ts       |    5.35 |     5.88 |    1.66 |     4.6 | ...31,577-600,616 
+  ...ll-handler.ts |   98.07 |    86.11 |     100 |     100 | 37-39,47,75,122   
+  ...ion-filter.ts |     100 |    93.75 |     100 |     100 | 61                
+  tool-index.ts    |   76.02 |    76.25 |   72.72 |    80.6 | ...86-413,489-498 
+  tool-selector.ts |   69.23 |    55.88 |   77.77 |   70.27 | 103,125-147       
+  ...low-loader.ts |   47.61 |    55.86 |   58.62 |   48.59 | ...42,234,275-276 
+ ...tion/execution |   72.05 |    56.43 |   60.65 |   72.42 |                   
+  ...-task-loop.ts |   50.64 |    37.87 |   33.33 |   52.05 | 66-144,190-191    
+  ...dispatcher.ts |      96 |    78.26 |      80 |   95.77 | 79,204-207        
+  helpers.ts       |   94.33 |    74.39 |     100 |   97.72 | 82                
+  index.ts         |       0 |        0 |       0 |       0 |                   
+  ...e-workflow.ts |   72.93 |    51.42 |      50 |   73.17 | ...86,307,312-318 
+  ...agent-loop.ts |   79.48 |    58.82 |   33.33 |   84.37 | 56-57,94-99       
+  run-once.ts      |   66.66 |    44.11 |     100 |   65.85 | 34-62,92-107      
+  run-task-loop.ts |   53.16 |    44.73 |   28.57 |   52.05 | 93-181            
+  runner-deps.ts   |       0 |        0 |       0 |       0 |                   
+ src/providers     |    24.2 |    21.61 |   26.34 |   24.97 |                   
+  base.ts          |       0 |        0 |       0 |       0 | 15-57             
+  ...it-breaker.ts |     100 |      100 |     100 |     100 |                   
+  ...mcp-loader.ts |       0 |        0 |       0 |       0 | 22-300            
+  ...permission.ts |   23.88 |    26.81 |   34.61 |   26.57 | 92-295            
+  cli-protocol.ts  |   70.85 |    60.16 |      95 |   78.06 | ...19-320,328-334 
+  cli.provider.ts  |       0 |        0 |       0 |       0 | 36-380            
+  executor.ts      |   94.73 |    94.44 |     100 |     100 | 25,27             
+  health-scorer.ts |    90.9 |     67.5 |     100 |   95.65 | 62-63             
+  index.ts         |       0 |        0 |       0 |       0 |                   
+  ...r.provider.ts |    6.25 |        0 |       0 |    7.14 | 19-77             
+  ...ce.adapter.ts |       0 |      100 |       0 |       0 | 6-20              
+  ...m.provider.ts |    6.66 |        0 |       0 |    7.14 | 19-78             
+  ...lm.runtime.ts |    0.77 |        0 |       0 |    0.88 | 63-549            
+  service.ts       |    2.02 |        0 |       0 |    2.43 | 16,35-375         
+ src/runtime       |   51.61 |    52.45 |   43.75 |   58.02 |                   
+  instance-lock.ts |   77.41 |     65.3 |   63.63 |   90.38 | 29,65,95-96,136   
+  ...ce-manager.ts |       0 |        0 |       0 |       0 | 10-65             
+ src/security      |   74.27 |    52.97 |   83.95 |   79.41 |                   
+  ...-sanitizer.ts |     100 |      100 |     100 |     100 |                   
+  inbound-seal.ts  |   89.65 |    61.61 |   94.44 |   93.13 | 89,222-226,232    
+  ...lt-factory.ts |   92.85 |     87.5 |     100 |     100 | 9                 
+  secret-vault.ts  |   63.21 |    39.37 |   74.46 |   69.88 | ...09-410,422-485 
+  sensitive.ts     |   85.71 |    69.56 |     100 |   87.93 | ...32-133,165-166 
+ src/services      |   33.17 |    30.65 |   37.76 |    34.7 |                   
+  ...sk.service.ts |       0 |        0 |       0 |       0 | 6-47              
+  embed.service.ts |       0 |        0 |       0 |       0 | 5-89              
+  ...on-runtime.ts |       0 |      100 |       0 |       0 | 8-63              
+  ...e-executor.ts |   60.19 |    48.86 |   76.92 |   64.36 | ...37,157,175-183 
+  kanban-store.ts  |   72.99 |    59.09 |   67.56 |   77.04 | ...1175,1200-1268 
+  ...er-watcher.ts |       0 |        0 |       0 |       0 | 6-131             
+  model-catalog.ts |    8.05 |     6.25 |   11.11 |   10.08 | ...57-179,216-338 
+  ...db.service.ts |       0 |        0 |       0 |       0 | 8-59              
+  ...ence-store.ts |       0 |        0 |       0 |       0 | 16-457            
+  ...re.service.ts |       0 |        0 |       0 |       0 | 9-219             
+  ...re.service.ts |       0 |        0 |       0 |       0 | 5-67              
+ src/session       |   72.09 |       50 |      84 |   74.78 |                   
+  index.ts         |       0 |        0 |       0 |       0 |                   
+  service.ts       |   72.09 |       50 |      84 |   74.78 | ...35-338,355-356 
+ src/utils         |   92.42 |    92.37 |   91.66 |   92.92 |                   
+  common.ts        |   92.45 |      100 |   88.88 |      90 | 32-36             
+  local-ref.ts     |      95 |     87.5 |     100 |   97.72 | 27                
+  sqlite-helper.ts |   84.21 |       75 |     100 |   86.66 | 27,43             
+-------------------|---------|----------|---------|---------|-------------------
