@@ -1869,6 +1869,7 @@
   "workflows.delete_template": "Delete",
   "workflows.depends_on": "depends_on",
   "workflows.description": "Multi-agent phase-based workflows",
+  "workflows.diff_context_lines_hint": "Context lines around changes (0-20)",
   "workflows.docker_operation": "Docker operation",
   "workflows.duplicate": "Duplicate",
   "workflows.edit": "Edit",

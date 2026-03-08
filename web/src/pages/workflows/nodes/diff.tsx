@@ -14,6 +14,7 @@ function DiffEditPanel({ node, update, t }: EditPanelProps) {
         <div className="builder-row">
           <label className="label">{t("workflows.field_context_lines")}</label>
           <input className="input input--sm" type="number" min={0} max={20} value={String(node.context_lines ?? 3)} onChange={(e) => update({ context_lines: Number(e.target.value) || 3 })} />
+          <span className="builder-hint">{t("workflows.diff_context_lines_hint")}</span>
         </div>
       </div>
       {(op === "compare" || op === "stats") && (
