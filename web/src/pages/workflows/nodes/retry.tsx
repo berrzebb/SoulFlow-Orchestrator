@@ -12,6 +12,7 @@ function RetryEditPanel({ node, update, t }: EditPanelProps) {
         <div className="builder-row">
           <label className="label">{t("workflows.retry_max_attempts")}</label>
           <input className="input input--sm" type="number" min={1} max={10} value={String(node.max_attempts ?? 3)} onChange={(e) => update({ max_attempts: Number(e.target.value) })} />
+          <span className="builder-hint">{t("workflows.retry_max_attempts_hint")}</span>
         </div>
         <div className="builder-row">
           <label className="label">{t("workflows.retry_backoff")}</label>
@@ -26,12 +27,12 @@ function RetryEditPanel({ node, update, t }: EditPanelProps) {
         <div className="builder-row">
           <label className="label">{t("workflows.retry_initial_delay")}</label>
           <input className="input input--sm" type="number" min={100} value={String(node.initial_delay_ms ?? 1000)} onChange={(e) => update({ initial_delay_ms: Number(e.target.value) })} />
-          <span className="builder-hint">ms</span>
+          <span className="builder-hint">{t("workflows.retry_initial_delay_hint")}</span>
         </div>
         <div className="builder-row">
           <label className="label">{t("workflows.retry_max_delay")}</label>
           <input className="input input--sm" type="number" min={1000} value={String(node.max_delay_ms ?? 30000)} onChange={(e) => update({ max_delay_ms: Number(e.target.value) })} />
-          <span className="builder-hint">ms</span>
+          <span className="builder-hint">{t("workflows.retry_max_delay_hint")}</span>
         </div>
       </div>
     </>

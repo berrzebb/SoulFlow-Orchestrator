@@ -59,6 +59,7 @@ function AiAgentEditPanel({ node, update, t, options }: EditPanelProps) {
         <div className="builder-row">
           <label className="label">{t("workflows.max_turns")}</label>
           <input className="input input--sm" type="number" min={1} max={100} value={String(node.max_turns ?? 10)} onChange={(e) => update({ max_turns: Number(e.target.value) || 10 })} />
+          <span className="builder-hint">{t("workflows.max_turns_hint")}</span>
         </div>
         <div className="builder-row">
           <label className="label">

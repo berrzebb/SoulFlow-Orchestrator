@@ -17,6 +17,7 @@ function BatchEditPanel({ node, update, t }: EditPanelProps) {
         <div className="builder-row">
           <label className="label">{t("workflows.batch_concurrency")}</label>
           <input className="input input--sm" type="number" min={1} max={50} value={String(node.concurrency ?? 5)} onChange={(e) => update({ concurrency: Number(e.target.value) })} />
+          <span className="builder-hint">{t("workflows.batch_concurrency_hint")}</span>
         </div>
         <div className="builder-row">
           <label className="label">{t("workflows.batch_on_error")}</label>

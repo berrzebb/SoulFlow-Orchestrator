@@ -16,6 +16,7 @@ function LoopEditPanel({ node, update, t }: EditPanelProps) {
       <div className="builder-row">
         <label className="label">{t("workflows.loop_max")}</label>
         <input className="input input--sm" type="number" min={1} max={10000} value={String(node.max_iterations ?? 100)} onChange={(e) => update({ max_iterations: Number(e.target.value) || 100 })} />
+        <span className="builder-hint">{t("workflows.loop_max_hint")}</span>
       </div>
     </>
   );
