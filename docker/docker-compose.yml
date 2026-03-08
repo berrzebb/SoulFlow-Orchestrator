@@ -36,9 +36,6 @@ services:
       - ${HOST_WORKSPACE}/.agents/.claude:/root/.claude
       - ${HOST_WORKSPACE}/.agents/.codex:/root/.codex
       - ${HOST_WORKSPACE}/.agents/.gemini:/root/.gemini
-    depends_on:
-      redis:
-        condition: service_healthy
     deploy:
       resources:
         limits:

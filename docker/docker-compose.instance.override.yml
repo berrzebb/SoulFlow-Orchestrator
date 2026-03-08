@@ -4,13 +4,6 @@ services:
     profiles: ["disabled"]
   redis:
     profiles: ["disabled"]
-  orchestrator:
-    depends_on: {}
-    environment:
-      NODE_ENV: ${NODE_ENV:-production}
-      WORKSPACE: /data
-      REDIS_URL: redis://redis:6379
-      DEBUG: ${DEBUG:-false}
 
 networks:
   default:
