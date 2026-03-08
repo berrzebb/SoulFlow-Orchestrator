@@ -176,7 +176,13 @@ function Start-Environment {
     $env:WEB_PORT = if ($WebPort) { $WebPort } else { @{ dev="4200"; test="4201"; staging="4202"; prod="4200" }[$ProfileName] }
     $env:REDIS_PORT = if ($RedisPort) { $RedisPort } else { @{ dev="6379"; test="6380"; staging="6381"; prod="6379" }[$ProfileName] }
 
-    docker compose -f docker/docker-compose.yml -p $projectName up -d
+    $composeArgs = "docker compose -f docker/docker-compose.yml"
+    if ($ProfileName -eq "dev") {
+      $composeArgs += " -f docker/docker-compose.dev.override.yml"
+    }
+    $composeArgs += " -p $projectName up -d"
+
+    Invoke-Expression $composeArgs
 
     Write-Host ""
     Write-Host "✅ $ProfileName 환경이 시작되었습니다!" -ForegroundColor Green
