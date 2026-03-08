@@ -142,7 +142,9 @@ export const handle_workflow: RouteHandler = async (ctx) => {
     const body = await read_body(req);
     if (!body?.instruction || typeof body.instruction !== "string") { json(res, 400, { error: "instruction_required" }); return true; }
     if (!body.workflow || typeof body.workflow !== "object") { json(res, 400, { error: "workflow_required" }); return true; }
-    const result = await ops.suggest(body.instruction, body.workflow as Record<string, unknown>, {
+    const result = await ops.suggest(body.instruction, {
+      name: typeof body.name === "string" ? body.name : undefined,
+      workflow: body.workflow ? body.workflow as Record<string, unknown> : undefined,
       provider_id: typeof body.provider_instance_id === "string" ? body.provider_instance_id : undefined,
       model: typeof body.model === "string" ? body.model : undefined,
       save: body.save === true,
@@ -156,7 +158,9 @@ export const handle_workflow: RouteHandler = async (ctx) => {
     if (!ops.suggest) { json(res, 501, { error: "not_implemented" }); return true; }
     const body = await read_body(req);
     if (!body?.instruction || typeof body.instruction !== "string") { json(res, 400, { error: "instruction_required" }); return true; }
-    if (!body.workflow || typeof body.workflow !== "object") { json(res, 400, { error: "workflow_required" }); return true; }
+    const has_name = typeof body.name === "string" && body.name.trim();
+    const has_workflow = body.workflow && typeof body.workflow === "object";
+    if (!has_name && !has_workflow) { json(res, 400, { error: "name_or_workflow_required" }); return true; }
 
     set_no_cache(res);
     res.writeHead(200, {
@@ -169,7 +173,9 @@ export const handle_workflow: RouteHandler = async (ctx) => {
     };
 
     try {
-      const result = await ops.suggest(body.instruction, body.workflow as Record<string, unknown>, {
+      const result = await ops.suggest(body.instruction, {
+        name: has_name ? String(body.name) : undefined,
+        workflow: has_workflow ? body.workflow as Record<string, unknown> : undefined,
         provider_id: typeof body.provider_instance_id === "string" ? body.provider_instance_id : undefined,
         model: typeof body.model === "string" ? body.model : undefined,
         save: body.save === true,

@@ -721,7 +721,7 @@ export default function WorkflowBuilderPage() {
           {/* 메인 그래프 영역 */}
           <div className="graph-layout__main">
             {/* 프롬프트 바: 상단에 위치 (모바일/데스크탑 모두 접근 가능) */}
-            <WorkflowPromptBar workflow={workflow} onApply={setWorkflow} />
+            <WorkflowPromptBar name={templateName || undefined} workflow={workflow} onApply={setWorkflow} />
             {/* 보조 노드 추가 toolbar */}
             <div className="ws-toolbar" style={{ position: "relative" }}>
               <button

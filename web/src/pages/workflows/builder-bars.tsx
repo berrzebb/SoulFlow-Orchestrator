@@ -48,7 +48,8 @@ function apply_patch(wf: WorkflowDef, path: string, section: Record<string, unkn
 // ── WorkflowPromptBar ─────────────────────────────────────────
 
 /** 자연어 워크플로우 편집 입력바 — SSE 스트리밍으로 섹션 패치 실시간 반영. */
-export function WorkflowPromptBar({ workflow, onApply }: {
+export function WorkflowPromptBar({ name, workflow, onApply }: {
+  name?: string;
   workflow: WorkflowDef;
   onApply: (updated: WorkflowDef) => void;
 }) {
@@ -69,7 +70,10 @@ export function WorkflowPromptBar({ workflow, onApply }: {
 
     void (async () => {
       try {
-        const body: Record<string, unknown> = { instruction: text, workflow: wf };
+        // name이 있으면 파일 저장소에서 로드 (전체 JSON 전송 불필요)
+        const body: Record<string, unknown> = name
+          ? { instruction: text, name }
+          : { instruction: text, workflow: wf };
         if (selectedProvider) body.provider_instance_id = selectedProvider;
         if (selectedModel) body.model = selectedModel;
 

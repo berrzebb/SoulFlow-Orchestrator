@@ -556,11 +556,22 @@ export function create_workflow_ops(deps: {
       return { ok: false, error: "unknown_node_type" };
     },
 
-    async suggest(instruction, workflow, options) {
+    async suggest(instruction, options) {
       if (!deps.providers) return { ok: false, error: "providers_not_configured" };
       try {
+        // name이 있으면 파일 저장소에서 로드, 없으면 직접 전달된 workflow 사용
+        let source: Record<string, unknown>;
+        if (options?.name && workspace) {
+          const tpl = load_workflow_template(workspace, options.name);
+          if (!tpl) return { ok: false, error: `template_not_found: ${options.name}` };
+          source = tpl as unknown as Record<string, unknown>;
+        } else if (options?.workflow) {
+          source = options.workflow;
+        } else {
+          return { ok: false, error: "name_or_workflow_required" };
+        }
         /** 수정 중인 워크플로우 사본. update_section이 in-place로 패치. */
-        const wf = JSON.parse(JSON.stringify(workflow)) as Record<string, unknown>;
+        const wf = JSON.parse(JSON.stringify(source)) as Record<string, unknown>;
 
         // ── Section type → array 매핑 ──────────────────────────────────
         const SECTION_MAP: Record<string, { arr: string; key: string }> = {
