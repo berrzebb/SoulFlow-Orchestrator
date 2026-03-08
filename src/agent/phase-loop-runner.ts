@@ -616,7 +616,7 @@ async function run_phase_agents(
       });
       agent_state.subagent_id = subagent_id;
 
-      const result = await subagents.wait_for_completion(subagent_id, 5 * 60_000);
+      const result = await subagents.wait_for_completion(subagent_id, agent_wait_timeout_ms(agent_def.max_turns));
 
       if (result?.status === "completed") {
         agent_state.status = "completed";
@@ -848,7 +848,7 @@ async function run_looping_phase(
     });
     agent_state.subagent_id = subagent_id;
 
-    const result = await deps.subagents.wait_for_completion(subagent_id, 5 * 60_000);
+    const result = await deps.subagents.wait_for_completion(subagent_id, agent_wait_timeout_ms(agent_def.max_turns));
     const content = result?.content || "";
     const msg: PhaseMessage = { role: "assistant", content, at: now_iso() };
     agent_state.messages.push(msg);
@@ -938,6 +938,12 @@ function reset_phase_state(phase_state: PhaseState): void {
 }
 
 /** 에이전트 도구와 Phase 도구를 합산 (중복 제거). */
+/** 에이전트 최대 턴 수와 턴당 실행 시간을 기반으로 wait_for_completion 타임아웃 산출. */
+function agent_wait_timeout_ms(max_turns: number | undefined): number {
+  const effective = max_turns === 0 ? 20 : (max_turns || 10);
+  return Math.min(effective * 600_000, 3_600_000); // 턴당 10분, 최대 1시간
+}
+
 function merge_tools(agent_tools?: string[], phase_tools?: string[]): string[] | undefined {
   if (!agent_tools?.length && !phase_tools?.length) return undefined;
   return [...new Set([...(agent_tools || []), ...(phase_tools || [])])];
