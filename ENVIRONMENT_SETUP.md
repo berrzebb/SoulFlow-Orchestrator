@@ -2,6 +2,26 @@
 
 실 사용자를 위한 **3가지 환경** (개발/테스트/프로덕션)을 간편하게 관리하는 스크립트입니다.
 
+## 📋 스크립트 선택 가이드
+
+**어떤 스크립트를 사용할까요?**
+
+| 상황 | 추천 | 명령어 |
+|------|------|--------|
+| **Linux/macOS 빠른 실행** | Makefile | `make dev` |
+| **Linux/macOS 상세 메뉴** | setup-env.sh | `bash setup-env.sh` |
+| **Windows (Cmd) 빠른 실행** | run.cmd | `run.cmd dev` |
+| **Windows (PowerShell) 빠른 실행** | run.ps1 | `.\run.ps1 dev` |
+| **Windows (PowerShell) 상세 메뉴** | setup-env.ps1 | `.\setup-env.ps1` |
+| **모든 플랫폼 npm** | npm | `npm run env:dev` |
+
+**권장:**
+- **처음 사용할 때**: `make dev` (Linux/macOS) 또는 `run.cmd dev` (Windows)
+- **상세한 옵션이 필요할 때**: 대화형 메뉴 (`bash setup-env.sh` 또는 `.\setup-env.ps1`)
+- **CI/CD 파이프라인**: npm 스크립트
+
+---
+
 ## 📋 지원하는 환경
 
 | 환경 | 포트 | Redis | 용도 | 볼륨 |
@@ -13,35 +33,84 @@
 
 ---
 
-## 🎯 빠른 시작
+## 🎯 빠른 시작 (권장)
 
-### Linux / macOS
+### Linux / macOS - Makefile 사용 (가장 간단)
 
 ```bash
-# 대화형 메뉴 실행
-bash setup-env.sh
+# 개발 환경 시작
+make dev
 
-# 또는 직접 명령어 사용
-npm run env:dev      # 개발 환경 시작
-npm run env:test     # 테스트 환경 시작
-npm run env:staging  # 스테이징 환경 시작
-npm run env:prod     # 프로덕션 환경 시작
+# 또는 다른 환경
+make test
+make staging
+make prod
+
+# 상태 확인
+make status
+
+# 중지
+make down
 ```
 
-### Windows PowerShell
+### Windows - 배치 스크립트 사용
 
+#### Cmd (명령 프롬프트)
+```cmd
+# 개발 환경 시작
+run.cmd dev
+
+# 또는 다른 환경
+run.cmd test
+run.cmd staging
+run.cmd prod
+
+# 상태 확인
+run.cmd status
+
+# 중지
+run.cmd down
+```
+
+#### PowerShell
 ```powershell
-# 실행 권한 허용 (처음 한 번만)
+# 실행 권한 허용 (처음 한 vez만)
 Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 
-# 대화형 메뉴 실행
-.\setup-env.ps1
+# 개발 환경 시작
+.\run.ps1 dev
 
-# 또는 npm 스크립트 사용
+# 또는 다른 환경
+.\run.ps1 test
+.\run.ps1 staging
+.\run.ps1 prod
+
+# 상태 확인
+.\run.ps1 status
+
+# 중지
+.\run.ps1 down
+```
+
+### npm 스크립트 사용 (모든 플랫폼)
+
+```bash
 npm run env:dev
 npm run env:test
 npm run env:staging
 npm run env:prod
+npm run env:down
+npm run env:status
+```
+
+### 대화형 메뉴 (모든 플랫폼)
+
+```bash
+# Linux/macOS
+bash setup-env.sh
+
+# Windows PowerShell
+.\setup-env.ps1
 ```
 
 ---
