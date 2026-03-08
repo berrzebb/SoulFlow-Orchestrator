@@ -92,6 +92,6 @@ describe("circuit_breaker_handler", () => {
     const node = createMockNode({ action: "get_state", name: "" });
     const ctx = createMockContext();
     const result = await circuit_breaker_handler.execute(node, ctx);
-    expect(result.output.state).toBe("unknown");
+    expect(result.output.state).toBe("not_found");
   });
 });
