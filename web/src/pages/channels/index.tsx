@@ -1,51 +1,45 @@
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import { Modal } from "../../components/modal";
 import { ResourceCard } from "../../components/resource-card";
 import { ToggleSwitch } from "../../components/toggle-switch";
 import { useToast } from "../../components/toast";
 import { useT } from "../../i18n";
+import { useResourceCRUD } from "../../hooks/use-resource-crud";
 import { time_ago } from "../../utils/format";
 import type { ChannelInstance, ModalMode } from "./types";
 import { InstanceModal } from "./instance-modal";
 import { GlobalSettingsSection } from "./global-settings";
 
 export default function ChannelsPage() {
-  const qc = useQueryClient();
   const { toast } = useToast();
   const t = useT();
   const [modal, setModal] = useState<ModalMode | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<ChannelInstance | null>(null);
 
-  const { data: instances, isLoading } = useQuery<ChannelInstance[]>({
+  const { items: instances, isLoading, deleteTarget, setDeleteTarget, remove, queryClient } = useResourceCRUD<ChannelInstance>({
     queryKey: ["channel-instances"],
     queryFn: () => api.get("/api/channels/instances"),
+    deleteEndpoint: (id) => `/api/channels/instances/${encodeURIComponent(id)}`,
+    onDeleteSuccess: () => toast(t("channels.removed"), "ok"),
+    onDeleteError: (err) => toast(t("channels.remove_failed", { error: err.message }), "err"),
     refetchInterval: 10_000,
     staleTime: 5_000,
-  });
-
-  const remove = useMutation({
-    mutationFn: (id: string) => api.del(`/api/channels/instances/${encodeURIComponent(id)}`),
-    onSuccess: () => { toast(t("channels.removed"), "ok"); void qc.invalidateQueries({ queryKey: ["channel-instances"] }); },
-    onError: (err) => toast(t("channels.remove_failed", { error: err.message }), "err"),
   });
 
   const toggle_enabled = useMutation({
     mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) =>
       api.put(`/api/channels/instances/${encodeURIComponent(id)}`, { enabled }),
     onMutate: ({ id, enabled }) => {
-      // 이전 데이터를 롤백용으로 저장
-      const prev = qc.getQueryData<ChannelInstance[]>(["channel-instances"]);
-      // UI 즉시 업데이트
+      const prev = queryClient.getQueryData<ChannelInstance[]>(["channel-instances"]);
       if (prev) {
-        qc.setQueryData(["channel-instances"], prev.map((inst) => inst.instance_id === id ? { ...inst, enabled } : inst));
+        queryClient.setQueryData(["channel-instances"], prev.map((inst) => inst.instance_id === id ? { ...inst, enabled } : inst));
       }
       return prev;
     },
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ["channel-instances"] }),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["channel-instances"] }),
     onError: (err, _, prev) => {
-      if (prev) qc.setQueryData(["channel-instances"], prev);
+      if (prev) queryClient.setQueryData(["channel-instances"], prev);
       toast(t("channels.save_failed", { error: err.message }), "err");
     },
   });
@@ -122,7 +116,7 @@ export default function ChannelsPage() {
           onClose={() => setModal(null)}
           onSaved={() => {
             setModal(null);
-            void qc.invalidateQueries({ queryKey: ["channel-instances"] });
+            void queryClient.invalidateQueries({ queryKey: ["channel-instances"] });
           }}
         />
       )}
