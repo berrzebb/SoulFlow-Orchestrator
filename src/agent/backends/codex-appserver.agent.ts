@@ -174,7 +174,7 @@ export class CodexAppServerAgent implements AgentBackend {
       command,
       args: ["app-server", "--listen", "stdio://"],
       cwd: this.config.cwd,
-      request_timeout_ms: this.config.request_timeout_ms || 120_000,
+      request_timeout_ms: this.config.request_timeout_ms || 300_000,
     });
 
     let stderr_buf = "";
@@ -256,7 +256,7 @@ export class CodexAppServerAgent implements AgentBackend {
     }
 
     return new Promise((resolve, reject) => {
-      const timeout_ms = this.config.request_timeout_ms || 120_000;
+      const timeout_ms = this.config.request_timeout_ms || 300_000;
       const timeout = setTimeout(() => {
         cleanup();
         const phase = turn_id ? "turn_execution" : "turn_start";
