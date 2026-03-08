@@ -5,7 +5,7 @@ function DocumentConvertEditPanel({ node, update, t }: EditPanelProps) {
     <>
       <div className="builder-row">
         <label className="label">{t("node.document_convert.input.input")}</label>
-        <input className="input input--sm" value={String(node.input || "")} onChange={(e) => update({ input: e.target.value })} />
+        <input autoFocus className="input input--sm" value={String(node.input || "")} onChange={(e) => update({ input: e.target.value })} />
       </div>
       <div className="builder-row">
         <label className="label">{t("node.document_convert.input.to")}</label>

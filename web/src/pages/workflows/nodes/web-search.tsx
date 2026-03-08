@@ -5,7 +5,7 @@ function WebSearchEditPanel({ node, update, t }: EditPanelProps) {
     <>
       <div className="builder-row">
         <label className="label">{t("workflows.search_query")}</label>
-        <input className="input" value={String(node.query || "")} onChange={(e) => update({ query: e.target.value })} placeholder="{{memory.keyword}} site:example.com" />
+        <input autoFocus className="input" value={String(node.query || "")} onChange={(e) => update({ query: e.target.value })} placeholder="{{memory.keyword}} site:example.com" />
       </div>
       <div className="builder-row">
         <label className="label">{t("workflows.max_results")}</label>

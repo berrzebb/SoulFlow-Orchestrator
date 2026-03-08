@@ -6,7 +6,7 @@ function StatsEditPanel({ node, update, t }: EditPanelProps) {
     <>
       <div className="builder-row">
         <label className="label">{t("workflows.operation")}</label>
-        <select className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
+        <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
           {["summary", "percentile", "histogram", "correlation", "normalize", "outliers"].map((o) => <option key={o} value={o}>{o}</option>)}
         </select>
       </div>

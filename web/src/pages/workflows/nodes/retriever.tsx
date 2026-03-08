@@ -7,7 +7,7 @@ function RetrieverEditPanel({ node, update, t }: EditPanelProps) {
       <div className="builder-row-pair">
         <div className="builder-row">
           <label className="label">{t("workflows.retriever_source")}</label>
-          <select className="input input--sm" value={source} onChange={(e) => update({ source: e.target.value })}>
+          <select autoFocus className="input input--sm" value={source} onChange={(e) => update({ source: e.target.value })}>
             <option value="http">{t("workflows.opt_http_api")}</option>
             <option value="file">{t("workflows.opt_file")}</option>
             <option value="memory">{t("workflows.opt_memory")}</option>

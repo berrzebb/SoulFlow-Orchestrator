@@ -5,7 +5,7 @@ function DocumentDocxEditPanel({ node, update, t }: EditPanelProps) {
     <>
       <div className="builder-row">
         <label className="label">{t("node.document_docx.input.content")}</label>
-        <input className="input input--sm" value={String(node.content || "")} onChange={(e) => update({ content: e.target.value })} />
+        <input autoFocus className="input input--sm" value={String(node.content || "")} onChange={(e) => update({ content: e.target.value })} />
       </div>
       <div className="builder-row">
         <label className="label">{t("node.document_docx.input.input_format")}</label>
