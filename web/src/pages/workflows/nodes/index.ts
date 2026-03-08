@@ -78,7 +78,6 @@ import { set_ops_descriptor } from "./set-ops";
 import { lookup_descriptor } from "./lookup";
 import { markdown_descriptor } from "./markdown";
 import { media_descriptor } from "./media";
-import { end_descriptor } from "./end";
 import { hash_descriptor } from "./hash";
 import { crypto_descriptor } from "./crypto";
 import { jwt_descriptor } from "./jwt";
@@ -205,7 +204,6 @@ const ALL_DESCRIPTORS = [
   lookup_descriptor,
   markdown_descriptor,
   media_descriptor,
-  end_descriptor,
   hash_descriptor,
   crypto_descriptor,
   jwt_descriptor,
