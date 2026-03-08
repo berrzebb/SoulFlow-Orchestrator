@@ -136,13 +136,9 @@ export function OAuthModal({ mode, presets, onClose, onSaved }: {
             <input className="form-input" value={clientId} onChange={(e) => setClientId(e.target.value)} placeholder={t("oauth.client_id_placeholder")} required aria-required="true" autoComplete="off" />
           </FormGroup>
           {!is_basic_auth && (
-            <div className="form-group">
-              <label className="form-label">
-                {t("oauth.client_secret")}
-                <span className="form-label__optional"> ({t("common.optional")})</span>
-              </label>
+            <FormGroup label={t("oauth.client_secret")} optional>
               <input className="form-input" type="password" value={clientSecret} onChange={(e) => setClientSecret(e.target.value)} placeholder={t("oauth.client_secret_placeholder")} autoComplete="off" />
-            </div>
+            </FormGroup>
           )}
           {is_basic_auth && <p className="form-hint">{t("oauth.client_secret_hint")}</p>}
         </>

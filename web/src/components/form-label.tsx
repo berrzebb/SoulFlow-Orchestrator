@@ -7,9 +7,10 @@ import type { ReactNode } from "react";
  * <FormLabel label="Email" htmlFor="email-input" required />
  * <input id="email-input" type="email" />
  */
-export function FormLabel({ label, required, htmlFor, children }: {
+export function FormLabel({ label, required, optional, htmlFor, children }: {
   label: string;
   required?: boolean;
+  optional?: boolean;
   htmlFor?: string;
   children?: ReactNode;
 }) {
@@ -17,6 +18,7 @@ export function FormLabel({ label, required, htmlFor, children }: {
     <label className="form-label" htmlFor={htmlFor}>
       {label}
       {required && <span aria-label="required" className="form-required">*</span>}
+      {optional && <span className="form-label__optional"> (optional)</span>}
       {children}
     </label>
   );
