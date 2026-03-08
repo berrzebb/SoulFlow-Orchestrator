@@ -389,6 +389,7 @@
   "common.all": "All",
   "common.back": "Back",
   "common.cancel": "Cancel",
+  "common.cannot_edit_after_creation": "Cannot edit after creation",
   "common.close": "Close",
   "common.close_modal": "Close modal",
   "common.collapse": "Collapse",

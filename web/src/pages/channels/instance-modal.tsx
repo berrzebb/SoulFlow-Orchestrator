@@ -94,7 +94,7 @@ export function InstanceModal({ mode, onClose, onSaved }: InstanceModalProps) {
       <div className="form-group">
         <label className="form-label">{t("channels.provider")}</label>
         {isEdit ? (
-          <input className="form-input" value={provider} disabled />
+          <input className="form-input" value={provider} disabled title={t("common.cannot_edit_after_creation")} />
         ) : (
           <select className="form-input" value={provider} onChange={(e) => setProvider(e.target.value)}>
             {PROVIDER_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
@@ -109,6 +109,7 @@ export function InstanceModal({ mode, onClose, onSaved }: InstanceModalProps) {
           value={auto_id ? provider : instanceId}
           onChange={(e) => setInstanceId(e.target.value)}
           disabled={isEdit}
+          title={isEdit ? t("common.cannot_edit_after_creation") : undefined}
           placeholder={provider}
           required
           aria-required="true"

@@ -84,7 +84,7 @@ export function ConnectionModal({ mode, onClose, onSaved }: ConnectionModalProps
       <div className="form-group">
         <label className="form-label">{t("providers.provider_type")}</label>
         {isEdit ? (
-          <input className="form-input" value={TYPE_LABELS[providerType] || providerType} disabled />
+          <input className="form-input" value={TYPE_LABELS[providerType] || providerType} disabled title={t("common.cannot_edit_after_creation")} />
         ) : (
           <select className="form-input" value={providerType} onChange={(e) => setProviderType(e.target.value)}>
             {typeOptions.map((tp) => <option key={tp} value={tp}>{TYPE_LABELS[tp] || tp}</option>)}
@@ -99,6 +99,7 @@ export function ConnectionModal({ mode, onClose, onSaved }: ConnectionModalProps
           value={connectionId || (isEdit ? initial!.connection_id : "")}
           onChange={(e) => setConnectionId(e.target.value)}
           disabled={isEdit}
+          title={isEdit ? t("common.cannot_edit_after_creation") : undefined}
           placeholder={providerType}
         />
         {!isEdit && <span className="form-hint">{t("connections.connection_id_hint")}</span>}
