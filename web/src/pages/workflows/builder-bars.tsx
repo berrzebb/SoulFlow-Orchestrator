@@ -45,6 +45,7 @@ export function WorkflowPromptBar({ workflow, onApply }: {
     <div className={`workflow-prompt-bar${loading ? " workflow-prompt-bar--loading" : ""}`}>
       {loading && <div className="workflow-prompt-bar__shimmer" />}
       <input
+        autoFocus
         className="workflow-prompt-bar__input"
         placeholder={t("workflows.prompt_placeholder")}
         aria-label={t("workflows.prompt_placeholder")}
