@@ -6,7 +6,7 @@ function SpawnAgentEditPanel({ node, update, t, options }: EditPanelProps) {
     <>
       <div className="builder-row">
         <label className="label">{t("workflows.spawn_task")}</label>
-        <textarea className="input code-textarea" rows={3} value={String(node.task || "")} onChange={(e) => update({ task: e.target.value })} spellCheck={false} placeholder="Analyze the data and generate a report..." />
+        <textarea autoFocus className="input code-textarea" rows={3} value={String(node.task || "")} onChange={(e) => update({ task: e.target.value })} spellCheck={false} placeholder="Analyze the data and generate a report..." />
       </div>
       <div className="builder-row-pair">
         <div className="builder-row">

@@ -5,7 +5,7 @@ function TemplateEngineEditPanel({ node, update, t }: EditPanelProps) {
     <>
       <div className="builder-row">
         <label className="label">{t("workflows.template")}</label>
-        <textarea className="input code-textarea" rows={6} value={String(node.template || "")} onChange={(e) => update({ template: e.target.value })} placeholder="Hello {{name}}! {{#if premium}}Premium user{{/if}}" />
+        <textarea autoFocus className="input code-textarea" rows={6} value={String(node.template || "")} onChange={(e) => update({ template: e.target.value })} placeholder="Hello {{name}}! {{#if premium}}Premium user{{/if}}" />
       </div>
       <div className="builder-row">
         <label className="label">{t("workflows.input_data")} (JSON)</label>

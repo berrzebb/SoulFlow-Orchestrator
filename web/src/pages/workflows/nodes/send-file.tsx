@@ -7,7 +7,7 @@ function SendFileEditPanel({ node, update, t, options }: EditPanelProps) {
     <>
       <div className="builder-row">
         <label className="label">{t("workflows.send_file_path")}</label>
-        <input className="input input--sm" value={String(node.file_path || "")} onChange={(e) => update({ file_path: e.target.value })} placeholder="output/report.pdf" />
+        <input autoFocus className="input input--sm" value={String(node.file_path || "")} onChange={(e) => update({ file_path: e.target.value })} placeholder="output/report.pdf" />
       </div>
       <div className="builder-row">
         <label className="label">{t("workflows.send_file_caption")}</label>

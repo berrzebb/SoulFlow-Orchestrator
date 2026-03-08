@@ -30,7 +30,7 @@ function OauthEditPanel({ node, update, t, options }: EditPanelProps) {
       {/* Service 선택 */}
       <div className="builder-row">
         <label className="label">{t("workflows.oauth_service")}</label>
-        <select className="input input--sm" value={is_custom ? CUSTOM_SENTINEL : current} onChange={(e) => handleServiceChange(e.target.value)}>
+        <select autoFocus className="input input--sm" value={is_custom ? CUSTOM_SENTINEL : current} onChange={(e) => handleServiceChange(e.target.value)}>
           <option value="">{t("common.select")}</option>
           {integrations.map((i) => (
             <option key={i.instance_id} value={i.instance_id}>

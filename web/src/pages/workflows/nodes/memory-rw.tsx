@@ -5,7 +5,7 @@ function MemoryRwEditPanel({ node, update, t }: EditPanelProps) {
     <>
       <div className="builder-row">
         <label className="label">{t("node.memory_rw.input.action")}</label>
-        <input className="input input--sm" value={String(node.action || "")} onChange={(e) => update({ action: e.target.value })} />
+        <input autoFocus className="input input--sm" value={String(node.action || "")} onChange={(e) => update({ action: e.target.value })} />
       </div>
       <div className="builder-row">
         <label className="label">{t("node.memory_rw.input.key")}</label>

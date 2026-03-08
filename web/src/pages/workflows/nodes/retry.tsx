@@ -5,7 +5,7 @@ function RetryEditPanel({ node, update, t }: EditPanelProps) {
     <>
       <div className="builder-row">
         <label className="label">{t("workflows.retry_target")}</label>
-        <input className="input input--sm" value={String(node.target_node || "")} onChange={(e) => update({ target_node: e.target.value })} placeholder="node_id" />
+        <input autoFocus className="input input--sm" value={String(node.target_node || "")} onChange={(e) => update({ target_node: e.target.value })} placeholder="node_id" />
         <span className="builder-hint">{t("workflows.retry_target_hint")}</span>
       </div>
       <div className="builder-row-pair">

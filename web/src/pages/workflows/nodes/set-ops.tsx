@@ -6,7 +6,7 @@ function SetOpsEditPanel({ node, update, t }: EditPanelProps) {
     <>
       <div className="builder-row">
         <label className="label">{t("workflows.operation")}</label>
-        <select className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
+        <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
           {["union", "intersection", "difference", "symmetric_difference", "is_subset", "is_superset", "equals", "power_set", "cartesian_product"].map((o) => <option key={o} value={o}>{o}</option>)}
         </select>
       </div>

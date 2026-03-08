@@ -6,7 +6,7 @@ function ErrorHandlerEditPanel({ node, update, t }: EditPanelProps) {
     <>
       <div className="builder-row">
         <label className="label">{t("workflows.error_try_nodes")}</label>
-        <input className="input input--sm" value={String(node.try_nodes || "")} onChange={(e) => update({ try_nodes: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) })} placeholder="node_1, node_2" />
+        <input autoFocus className="input input--sm" value={String(node.try_nodes || "")} onChange={(e) => update({ try_nodes: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) })} placeholder="node_1, node_2" />
         <span className="builder-hint">{t("workflows.error_try_nodes_hint")}</span>
       </div>
       <div className="builder-row">

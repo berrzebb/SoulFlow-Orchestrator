@@ -5,7 +5,7 @@ function SecretReadEditPanel({ node, update, t }: EditPanelProps) {
     <>
       <div className="builder-row">
         <label className="label">{t("node.secret_read.input.key")}</label>
-        <input className="input input--sm" value={String(node.key || "")} onChange={(e) => update({ key: e.target.value })} />
+        <input autoFocus className="input input--sm" value={String(node.key || "")} onChange={(e) => update({ key: e.target.value })} />
       </div>
       <div className="builder-row">
         <label className="label">{t("node.secret_read.input.namespace")}</label>
