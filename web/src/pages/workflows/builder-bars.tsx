@@ -75,8 +75,9 @@ export function WorkflowPromptBar({ name, workflow, onApply }: {
     void (async () => {
       try {
         const body: Record<string, unknown> = { instruction: text };
+        // 항상 현재 in-memory 워크플로우를 전달 (name만 보내면 파일 재로드로 이전 변경사항 소실)
+        if (wf) body.workflow = wf;
         if (name) body.name = name;
-        else if (wf) body.workflow = wf;
         if (selectedProvider) body.provider_instance_id = selectedProvider;
         if (selectedModel) body.model = selectedModel;
 

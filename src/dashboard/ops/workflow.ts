@@ -600,14 +600,15 @@ export function create_workflow_ops(deps: {
       if (!suggest_provider_id) return { ok: false, error: "no_suitable_provider_for_suggest" };
 
       try {
-        // name → 파일 저장소 로드, workflow → 직접 사용, 둘 다 없으면 빈 워크플로우(신규 생성)
+        // workflow 우선: 항상 현재 in-memory 상태를 사용.
+        // name은 workflow가 없을 때만 파일 로드용으로 사용.
         let source: Record<string, unknown>;
-        if (options?.name && workspace) {
+        if (options?.workflow) {
+          source = options.workflow;
+        } else if (options?.name && workspace) {
           const tpl = load_workflow_template(workspace, options.name);
           if (!tpl) return { ok: false, error: `template_not_found: ${options.name}` };
           source = tpl as unknown as Record<string, unknown>;
-        } else if (options?.workflow) {
-          source = options.workflow;
         } else {
           source = { title: "", objective: "", phases: [] };
         }
@@ -962,7 +963,9 @@ export function create_workflow_ops(deps: {
           if (is_done) break;
         }
 
-        if (options?.save && workspace) {
+        // name이 있으면 항상 저장 (다음 요청에서 최신 상태 로드 보장)
+        const should_save = (options?.save || !!options?.name) && workspace;
+        if (should_save) {
           const title = typeof wf.title === "string" && wf.title.trim() ? wf.title.trim() : "untitled";
           const slug = save_workflow_template(workspace, title, wf as unknown as WorkflowDefinition);
           return { ok: true, workflow: wf, name: slug };
