@@ -43,7 +43,8 @@ for %%a in (%*) do (
     if "!arg!"=="--instance" set "PREV_KEY=instance"
     if "!arg:~0,7!"=="--name=" set "INSTANCE=!arg:~7!"
     if "!arg!"=="--name" set "PREV_KEY=instance"
-    if "!arg!"=="--watch" set "WATCH=1"
+    if "!arg:~0,8!"=="--watch=" set "WATCH=!arg:~8!"
+    if "!arg!"=="--watch" set "WATCH=all"
   )
 )
 
@@ -125,10 +126,14 @@ if not "%INSTANCE%"=="" (
   set "PROJECT_NAME=soulflow-%COMMAND%-!INSTANCE!"
 )
 
+REM watch 모드 결정 (dev 프로필은 기본 all)
+set "EFFECTIVE_WATCH=%WATCH%"
+if /i "%COMMAND%"=="dev" if "%WATCH%"=="" set "EFFECTIVE_WATCH=all"
+
 REM compose 실행
 set "COMPOSE_CMD=docker compose -f docker/docker-compose.yml"
-if /i "%COMMAND%"=="dev" set "COMPOSE_CMD=!COMPOSE_CMD! -f docker/docker-compose.dev.override.yml"
-if not "%COMMAND%"=="dev" if "%WATCH%"=="1" set "COMPOSE_CMD=!COMPOSE_CMD! -f docker/docker-compose.dev.override.yml"
+if "!EFFECTIVE_WATCH!"=="all" set "COMPOSE_CMD=!COMPOSE_CMD! -f docker/docker-compose.dev.override.yml"
+if "!EFFECTIVE_WATCH!"=="web" set "COMPOSE_CMD=!COMPOSE_CMD! -f docker/docker-compose.web-watch.override.yml"
 if not "%INSTANCE%"=="" (
   set "BASE_PROFILE=%COMMAND%"
   set "COMPOSE_CMD=!COMPOSE_CMD! -f docker/docker-compose.instance.override.yml"
@@ -242,7 +247,8 @@ echo %YELLOW%옵션:%NC%
 echo   --workspace=PATH   - 워크스페이스 경로 (필수)
 echo   --instance=NAME    - 인스턴스 이름
 echo   --web-port=PORT    - 웹 포트
-echo   --watch            - 소스 마운트 + 핫 리로드 (tsx watch)
+echo   --watch            - 전체 소스 마운트 + 핫 리로드 (tsx watch)
+echo   --watch=web        - 웹 소스만 마운트 + 핫 리로드
 echo.
 goto end
 

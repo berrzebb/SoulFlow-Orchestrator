@@ -16,7 +16,7 @@ $ErrorActionPreference = "Continue"
 $Workspace = $null
 $WebPort = $null
 $Instance = $null
-$Watch = $false
+$Watch = $null
 
 for ($i = 0; $i -lt $Arguments.Count; $i++) {
   $arg = $Arguments[$i]
@@ -38,8 +38,10 @@ for ($i = 0; $i -lt $Arguments.Count; $i++) {
     $i++; $WebPort = $Arguments[$i]
   } elseif ($arg -match "^--(instance|name)$" -and $i + 1 -lt $Arguments.Count) {
     $i++; $Instance = $Arguments[$i]
+  } elseif ($arg -match "^--watch=(.+)$") {
+    $Watch = $matches[1]
   } elseif ($arg -eq "--watch") {
-    $Watch = $true
+    $Watch = "all"
   }
 }
 
@@ -86,7 +88,8 @@ function Show-Help {
   Write-Host "  --workspace=PATH   - 워크스페이스 경로 (필수)"
   Write-Host "  --instance=NAME    - 인스턴스 이름 (다중 인스턴스 스케일링)"
   Write-Host "  --web-port=PORT    - 웹 포트 (기본값: 환경별 다름)"
-  Write-Host "  --watch            - 소스 마운트 + 핫 리로드 (tsx watch)"
+  Write-Host "  --watch            - 전체 소스 마운트 + 핫 리로드 (tsx watch)"
+  Write-Host "  --watch=web        - 웹 소스만 마운트 + 핫 리로드"
   Write-Host ""
   Write-Host "예시:" -ForegroundColor Yellow
   Write-Host "  .\run.ps1 dev --workspace=D:\soulflow"
@@ -119,7 +122,7 @@ function Start-Environment {
   Write-Host "   워크스페이스: $Workspace"
   Write-Host "   프로젝트: $projectName"
   if ($Instance) { Write-Host "   인스턴스: $Instance" }
-  if ($Watch) { Write-Host "   watch: 활성화" -ForegroundColor Cyan }
+  if ($Watch) { Write-Host "   watch: $Watch" -ForegroundColor Cyan }
   Write-Host ""
 
   # .agents 디렉토리 사전 생성 (볼륨 마운트 요구사항)
@@ -151,8 +154,11 @@ function Start-Environment {
 
   # compose 실행
   $composeArgs = @("-f", "docker/docker-compose.yml")
-  if ($ProfileName -eq "dev" -or $Watch) {
+  $effectiveWatch = if ($ProfileName -eq "dev" -and -not $Watch) { "all" } else { $Watch }
+  if ($effectiveWatch -eq "all") {
     $composeArgs += @("-f", "docker/docker-compose.dev.override.yml")
+  } elseif ($effectiveWatch -eq "web") {
+    $composeArgs += @("-f", "docker/docker-compose.web-watch.override.yml")
   }
   if ($Instance) {
     $env:BASE_PROFILE = $ProfileName

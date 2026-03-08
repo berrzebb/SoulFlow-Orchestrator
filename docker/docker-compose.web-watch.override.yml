@@ -1,0 +1,5 @@
+services:
+  orchestrator:
+    volumes:
+      - ../web/src:/app/web/src
+    command: npm run dev

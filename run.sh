@@ -36,7 +36,8 @@ while [ $# -gt 0 ]; do
     --web-port | --webport) shift; WEB_PORT="$1" ;;
     --instance=* | --name=*) INSTANCE="${1#*=}" ;;
     --instance | --name) shift; INSTANCE="$1" ;;
-    --watch) WATCH=true ;;
+    --watch=*) WATCH="${1#*=}" ;;
+    --watch) WATCH=all ;;
   esac
   shift
 done
@@ -83,7 +84,8 @@ show_help() {
   echo "  --workspace=PATH   - 워크스페이스 경로 (필수)"
   echo "  --instance=NAME    - 인스턴스 이름 (다중 인스턴스 스케일링)"
   echo "  --web-port=PORT    - 웹 포트 (기본값: 환경별 다름)"
-  echo "  --watch            - 소스 마운트 + 핫 리로드 (tsx watch)"
+  echo "  --watch            - 전체 소스 마운트 + 핫 리로드 (tsx watch)"
+  echo "  --watch=web        - 웹 소스만 마운트 + 핫 리로드"
   echo ""
   echo -e "${YELLOW}예시:${NC}"
   echo "  ./run.sh dev --workspace=/home/user/soulflow"
@@ -111,7 +113,7 @@ run_env() {
   echo "   워크스페이스: $WORKSPACE"
   echo "   프로젝트: $project_name"
   [ -n "$INSTANCE" ] && echo "   인스턴스: $INSTANCE"
-  [ -n "$WATCH" ] && echo "   watch: 활성화"
+  [ -n "$WATCH" ] && echo "   watch: $WATCH"
 
   # .agents 디렉토리 사전 생성 (볼륨 마운트 요구사항)
   for agent in .claude .codex .gemini; do
@@ -138,8 +140,12 @@ run_env() {
 
   # compose 실행
   local compose_args=("-f" "docker/docker-compose.yml")
-  if [ "$profile" = "dev" ] || [ -n "$WATCH" ]; then
+  local effective_watch="$WATCH"
+  [ "$profile" = "dev" ] && [ -z "$effective_watch" ] && effective_watch="all"
+  if [ "$effective_watch" = "all" ]; then
     compose_args+=("-f" "docker/docker-compose.dev.override.yml")
+  elif [ "$effective_watch" = "web" ]; then
+    compose_args+=("-f" "docker/docker-compose.web-watch.override.yml")
   fi
   if [ -n "$INSTANCE" ]; then
     export BASE_PROFILE="$profile"
