@@ -16,6 +16,8 @@ export interface ChatMessage {
   content: string;
   at: string;
   media?: ChatMediaItem[];
+  model?: string;
+  provider_instance_id?: string;
 }
 
 export interface ChatSession {

@@ -3,6 +3,7 @@ import { useState, useRef, useEffect } from "react";
 import { api } from "../api/client";
 import { Badge } from "../components/badge";
 import { Modal } from "../components/modal";
+import { ProviderModelBar } from "../components/provider-model-bar";
 import { useToast } from "../components/toast";
 import { useApprovals } from "../hooks/use-approvals";
 import { useDashboardStore } from "../store";
@@ -28,6 +29,8 @@ export default function ChatPage() {
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [pending_media, setPendingMedia] = useState<ChatMediaItem[]>([]);
+  const [selectedProvider, setSelectedProvider] = useState("");
+  const [selectedModel, setSelectedModel] = useState("");
   const messagesRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const web_stream = useDashboardStore((s) => s.web_stream);
@@ -155,6 +158,8 @@ export default function ChatPage() {
     try {
       const body: Record<string, unknown> = { content: input.trim() };
       if (pending_media.length > 0) body.media = pending_media;
+      if (selectedProvider) body.provider_instance_id = selectedProvider;
+      if (selectedModel) body.model = selectedModel;
       await api.post(`/api/chat/sessions/${encodeURIComponent(activeId!)}/messages`, body);
       setInput("");
       setPendingMedia([]);
@@ -266,6 +271,14 @@ export default function ChatPage() {
         </div>
       ) : (
         <>
+          {!is_mirror && (
+            <ProviderModelBar
+              selectedProvider={selectedProvider}
+              selectedModel={selectedModel}
+              onProviderChange={setSelectedProvider}
+              onModelChange={setSelectedModel}
+            />
+          )}
           {is_mirror && <div className="chat-mirror-hint">{t("chat.mirror_relay_hint")}</div>}
           <MessageList
             ref={messagesRef}

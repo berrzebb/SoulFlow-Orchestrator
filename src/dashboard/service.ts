@@ -376,7 +376,7 @@ export const MAX_MESSAGES_PER_SESSION = 500;
 export type RecentMessage = { direction: "inbound" | "outbound"; sender_id: string; content: string; chat_id: string; at: string };
 
 export type ChatMediaItem = { type: string; url: string; mime?: string; name?: string };
-export type ChatSessionMessage = { direction: "user" | "assistant"; content: string; at: string; media?: ChatMediaItem[] };
+export type ChatSessionMessage = { direction: "user" | "assistant"; content: string; at: string; media?: ChatMediaItem[]; model?: string; provider_instance_id?: string };
 
 export type ChatSession = {
   id: string;

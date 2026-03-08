@@ -66,8 +66,16 @@ export async function handle_chat(ctx: RouteContext): Promise<boolean> {
       .map((m) => ({ type: String(m.type || "file"), url: String(m.url || ""), mime: m.mime ? String(m.mime) : undefined, name: m.name ? String(m.name) : undefined }))
       .filter((m) => m.url);
     if (!text && media.length === 0) { json(res, 400, { error: "content_or_media_required" }); return true; }
+
+    // 선택적: 모델 및 프로바이더 인스턴스 ID
+    const model = typeof body?.model === "string" ? body.model.trim() || undefined : undefined;
+    const provider_instance_id = typeof body?.provider_instance_id === "string"
+      ? body.provider_instance_id.trim() || undefined : undefined;
+
     const user_msg: ChatSessionMessage = { direction: "user", content: text, at: now_iso() };
     if (media.length > 0) user_msg.media = media;
+    if (model) user_msg.model = model;
+    if (provider_instance_id) user_msg.provider_instance_id = provider_instance_id;
     session.messages.push(user_msg);
     if (session.messages.length > MAX_MESSAGES_PER_SESSION) {
       session.messages.splice(0, session.messages.length - MAX_MESSAGES_PER_SESSION);
