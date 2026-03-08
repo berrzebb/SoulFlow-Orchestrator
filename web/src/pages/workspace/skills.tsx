@@ -412,7 +412,7 @@ export function SkillsTab() {
         <div className="ws-import-form">
           <label className="ws-import-label">
             <span className="ws-import-hint">{t("skills.import_name")}</span>
-            <input className="form-input" value={importName} onChange={(e) => setImportName(e.target.value)} placeholder={t("skills.import_name_hint")} />
+            <input autoFocus className="form-input" value={importName} onChange={(e) => setImportName(e.target.value)} placeholder={t("skills.import_name_hint")} />
           </label>
           <label className="ws-import-label">
             <span className="ws-import-hint">{t("skills.import_file")}</span>

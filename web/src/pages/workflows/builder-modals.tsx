@@ -75,7 +75,7 @@ export function PhaseEditModal({ workflow, phaseId, onChange, onPhaseIdChange, o
         <div className="modal__body">
           <div className="builder-row">
             <label className="label">{t("workflows.phase_id")}</label>
-            <input className="input input--sm" value={phase.phase_id} onChange={(e) => updatePhase({ phase_id: e.target.value })} />
+            <input autoFocus className="input input--sm" value={phase.phase_id} onChange={(e) => updatePhase({ phase_id: e.target.value })} />
           </div>
           <div className="builder-row">
             <label className="label">{t("workflows.phase_title")}</label>
@@ -157,11 +157,11 @@ export function CronEditModal({ trigger, onChange, onRemove, onClose }: {
         <div className="modal__body">
           <div className="builder-row">
             <label className="label">{t("workflows.cron_schedule")}</label>
-            <input className="input input--sm" value={schedule} onChange={(e) => setSchedule(e.target.value)} placeholder="0 9 * * *" />
+            <input autoFocus className="input input--sm" value={schedule} onChange={(e) => setSchedule(e.target.value)} placeholder="0 9 * * *" onKeyDown={(e) => { if (e.key === "Enter") handleSave(); }} />
           </div>
           <div className="builder-row">
             <label className="label">{t("workflows.timezone")}</label>
-            <input className="input input--sm" value={timezone} onChange={(e) => setTimezone(e.target.value)} placeholder="Asia/Seoul" />
+            <input className="input input--sm" value={timezone} onChange={(e) => setTimezone(e.target.value)} placeholder="Asia/Seoul" onKeyDown={(e) => { if (e.key === "Enter") handleSave(); }} />
           </div>
         </div>
         <div className="modal__footer">
@@ -231,27 +231,27 @@ export function TriggerNodeEditModal({ node, onChange, onRemove, onClose }: {
           {triggerType === "cron" && (<>
             <div className="builder-row">
               <label className="label">{t("workflows.cron_schedule")}</label>
-              <input className="input input--sm" value={schedule} onChange={(e) => setSchedule(e.target.value)} placeholder="0 9 * * *" />
+              <input autoFocus className="input input--sm" value={schedule} onChange={(e) => setSchedule(e.target.value)} placeholder="0 9 * * *" onKeyDown={(e) => { if (e.key === "Enter") handleSave(); }} />
             </div>
             <div className="builder-row">
               <label className="label">{t("workflows.timezone")}</label>
-              <input className="input input--sm" value={timezone} onChange={(e) => setTimezone(e.target.value)} placeholder="Asia/Seoul" />
+              <input className="input input--sm" value={timezone} onChange={(e) => setTimezone(e.target.value)} placeholder="Asia/Seoul" onKeyDown={(e) => { if (e.key === "Enter") handleSave(); }} />
             </div>
           </>)}
           {triggerType === "webhook" && (
             <div className="builder-row">
               <label className="label">{t("workflows.webhook_path")}</label>
-              <input className="input input--sm" value={webhookPath} onChange={(e) => setWebhookPath(e.target.value)} placeholder="/hooks/my-workflow" />
+              <input autoFocus className="input input--sm" value={webhookPath} onChange={(e) => setWebhookPath(e.target.value)} placeholder="/hooks/my-workflow" onKeyDown={(e) => { if (e.key === "Enter") handleSave(); }} />
             </div>
           )}
           {triggerType === "channel_message" && (<>
             <div className="builder-row">
               <label className="label">{t("workflows.channel_type")}</label>
-              <input className="input input--sm" value={channelType} onChange={(e) => setChannelType(e.target.value)} placeholder="slack" />
+              <input autoFocus className="input input--sm" value={channelType} onChange={(e) => setChannelType(e.target.value)} placeholder="slack" onKeyDown={(e) => { if (e.key === "Enter") handleSave(); }} />
             </div>
             <div className="builder-row">
               <label className="label">{t("workflows.channel_chat_id")}</label>
-              <input className="input input--sm" value={chatId} onChange={(e) => setChatId(e.target.value)} placeholder="C01234567" />
+              <input className="input input--sm" value={chatId} onChange={(e) => setChatId(e.target.value)} placeholder="C01234567" onKeyDown={(e) => { if (e.key === "Enter") handleSave(); }} />
             </div>
           </>)}
         </div>
@@ -313,7 +313,7 @@ export function ChannelEditModal({ channel, onChange, onRemove, onClose, channel
         <div className="modal__body">
           <div className="builder-row">
             <label className="label">{t("workflows.node_channel")}</label>
-            <select className="input input--sm" value={selectedId} onChange={(e) => handleSelect(e.target.value)}>
+            <select autoFocus className="input input--sm" value={selectedId} onChange={(e) => handleSelect(e.target.value)}>
               <option value="">{t("workflows.select_default")}</option>
               {channels.map((ch) => (
                 <option key={ch.instance_id} value={ch.instance_id}>
@@ -324,7 +324,7 @@ export function ChannelEditModal({ channel, onChange, onRemove, onClose, channel
           </div>
           <div className="builder-row">
             <label className="label">{t("workflows.chat_id")}</label>
-            <input className="input input--sm" value={chatId} onChange={(e) => setChatId(e.target.value)} placeholder="C1234567" />
+            <input className="input input--sm" value={chatId} onChange={(e) => setChatId(e.target.value)} placeholder="C1234567" onKeyDown={(e) => { if (e.key === "Enter") handleSave(); }} />
           </div>
         </div>
         <div className="modal__footer">
@@ -401,7 +401,7 @@ export function OrcheNodeEditModal({ workflow, nodeId, onChange, onClose, onNode
         <div className="modal__body">
           <div className="builder-row">
             <label className="label">{t("workflows.node_id_label")}</label>
-            <input className="input input--sm" value={node.node_id} onChange={(e) => update({ node_id: e.target.value })} />
+            <input autoFocus className="input input--sm" value={node.node_id} onChange={(e) => update({ node_id: e.target.value })} />
           </div>
           <div className="builder-row">
             <label className="label">{t("workflows.phase_title")}</label>
@@ -563,7 +563,7 @@ export function AgentEditModal({ workflow, subNodeId, onChange, onClose, onSubNo
           <div className="builder-row-pair">
             <div className="builder-row">
               <label className="label">{t("workflows.agent_id")}</label>
-              <input className="input input--sm" value={agent.agent_id} onChange={(e) => updateAgent({ agent_id: e.target.value })} />
+              <input autoFocus className="input input--sm" value={agent.agent_id} onChange={(e) => updateAgent({ agent_id: e.target.value })} />
             </div>
             <div className="builder-row">
               <label className="label">{t("workflows.agent_label")}</label>

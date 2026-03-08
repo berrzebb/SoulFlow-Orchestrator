@@ -146,6 +146,7 @@ export function ToolsTab() {
       <div className="section-header">
         <h2>{t("tools.title", { count: data.names.length })}</h2>
         <input
+          autoFocus
           className="input input--sm tool-search"
           type="search"
           value={search}

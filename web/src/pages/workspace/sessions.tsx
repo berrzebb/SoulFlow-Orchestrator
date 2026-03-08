@@ -66,6 +66,7 @@ export function SessionsTab() {
         <div className="ws-col">
           <div className="ws-search-bar">
             <input
+              autoFocus
               className="input input--sm ws-search-bar__input"
               type="search"
               value={search}

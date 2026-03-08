@@ -25,13 +25,14 @@ export function SendAgentModal({ agentId, onClose, onSend }: Props) {
       onClose={() => { onClose(); setText(""); }}
       onConfirm={submit}
       confirmLabel={t("common.send")}
+      submitDisabled={!text.trim()}
     >
       <input
         autoFocus
         className="form-input"
         value={text}
         onChange={(e) => setText(e.target.value)}
-        onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) submit(); }}
+        onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing && text.trim()) submit(); }}
         placeholder={t("agents.message_placeholder")}
       />
     </Modal>

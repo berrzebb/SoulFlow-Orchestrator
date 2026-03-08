@@ -205,11 +205,13 @@ export function ModelsTab() {
           className="pull-form"
         >
           <input
+            autoFocus
             className="input flex-fill"
             placeholder={t("models.pull_placeholder")}
             value={pullName}
             onChange={(e) => setPullName(e.target.value)}
             disabled={pulling}
+            onKeyDown={(e) => { if (e.key === "Enter" && pullName.trim() && !pulling) startPull(pullName.trim()); }}
           />
           <button className="btn btn--primary" type="submit" disabled={pulling || !pullName.trim()}>
             {pulling ? t("models.pulling") : t("models.pull")}
