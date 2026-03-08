@@ -257,4 +257,115 @@ describe("KanbanStore", () => {
       expect(participants).toContain("commenter");
     });
   });
+
+  /* ─── Cycle Time ─── */
+
+  describe("get_card_time_tracking (L1158-1195)", () => {
+    it("이동 없음 → 초기 컬럼 시간만 반환 (L1175)", async () => {
+      const board = await store.create_board({ name: "CT Board", scope_type: "channel", scope_id: "ct-ch" });
+      const card = await store.create_card({ board_id: board.board_id, title: "No Move Card", created_by: "test" });
+      const result = await store.get_card_time_tracking(card.card_id);
+      expect(result).not.toBeNull();
+      expect(result!.column_times.length).toBe(1);
+      expect(result!.column_times[0].column_id).toBe(card.column_id);
+      expect(typeof result!.total_hours).toBe("number");
+    });
+
+    it("카드 이동 후 → 다중 컬럼 시간 반환 (L1177-1190)", async () => {
+      const board = await store.create_board({ name: "CT Move Board", scope_type: "channel", scope_id: "ct-mv-ch" });
+      const card = await store.create_card({ board_id: board.board_id, title: "Move Card", created_by: "test" });
+      await store.move_card(card.card_id, "in_progress");
+      const result = await store.get_card_time_tracking(card.card_id);
+      expect(result!.column_times.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it("존재하지 않는 카드 → null", async () => {
+      const result = await store.get_card_time_tracking("nonexistent-card");
+      expect(result).toBeNull();
+    });
+  });
+
+  /* ─── Search ─── */
+
+  describe("search_cards (L1199-1238)", () => {
+    it("빈 쿼리 → 빈 배열", async () => {
+      const results = await (store as any).search_cards("");
+      expect(results).toEqual([]);
+    });
+
+    it("제목으로 카드 검색", async () => {
+      const board = await store.create_board({ name: "Search Board", scope_type: "channel", scope_id: "srch-ch" });
+      await store.create_card({ board_id: board.board_id, title: "My Unique Searchable Card Title", created_by: "test" });
+      const results = await store.search_cards("Unique Searchable", { board_id: board.board_id });
+      expect(results.length).toBeGreaterThanOrEqual(1);
+      expect(results[0].title).toContain("Unique Searchable");
+    });
+
+    it("board_id 필터 적용", async () => {
+      const b1 = await store.create_board({ name: "SB1", scope_type: "channel", scope_id: "sb1" });
+      const b2 = await store.create_board({ name: "SB2", scope_type: "channel", scope_id: "sb2" });
+      await store.create_card({ board_id: b1.board_id, title: "Alpha Filter Test Card", created_by: "test" });
+      await store.create_card({ board_id: b2.board_id, title: "Alpha Filter Test Card", created_by: "test" });
+      const results = await store.search_cards("Alpha Filter Test", { board_id: b1.board_id });
+      expect(results.every((r: any) => r.board_id === b1.board_id)).toBe(true);
+    });
+
+    it("limit 적용", async () => {
+      const board = await store.create_board({ name: "Limit Board", scope_type: "channel", scope_id: "lim-ch" });
+      for (let i = 0; i < 5; i++) {
+        await store.create_card({ board_id: board.board_id, title: `Limit Test Card ${i}`, created_by: "test" });
+      }
+      const results = await store.search_cards("Limit Test Card", { board_id: board.board_id, limit: 2 });
+      expect(results.length).toBeLessThanOrEqual(2);
+    });
+  });
+
+  /* ─── Filters ─── */
+
+  describe("save_filter / list_filters / delete_filter (L1240-1268)", () => {
+    it("필터 저장 → list_filters에서 조회", async () => {
+      const board = await store.create_board({ name: "Filter Board", scope_type: "channel", scope_id: "flt-ch" });
+      const filter = await store.save_filter({
+        board_id: board.board_id,
+        name: "High Priority",
+        criteria: { priority: "high" },
+        created_by: "user:test",
+      });
+      expect(filter.filter_id).toBeTruthy();
+      expect(filter.name).toBe("High Priority");
+
+      const list = await store.list_filters(board.board_id);
+      expect(list.some((f) => f.filter_id === filter.filter_id)).toBe(true);
+    });
+
+    it("필터 삭제 → delete_filter", async () => {
+      const board = await store.create_board({ name: "Del Filter Board", scope_type: "channel", scope_id: "dflt-ch" });
+      const filter = await store.save_filter({
+        board_id: board.board_id,
+        name: "Temp Filter",
+        criteria: {},
+      });
+      const ok = await store.delete_filter(filter.filter_id);
+      expect(ok).toBe(true);
+
+      const list = await store.list_filters(board.board_id);
+      expect(list.some((f) => f.filter_id === filter.filter_id)).toBe(false);
+    });
+
+    it("없는 필터 삭제 → false", async () => {
+      const ok = await store.delete_filter("nonexistent-filter-id");
+      expect(ok).toBe(false);
+    });
+
+    it("board_id별 필터 목록 분리", async () => {
+      const b1 = await store.create_board({ name: "FB1", scope_type: "channel", scope_id: "fb1" });
+      const b2 = await store.create_board({ name: "FB2", scope_type: "channel", scope_id: "fb2" });
+      await store.save_filter({ board_id: b1.board_id, name: "F1", criteria: {} });
+      await store.save_filter({ board_id: b2.board_id, name: "F2", criteria: {} });
+      const list1 = await store.list_filters(b1.board_id);
+      const list2 = await store.list_filters(b2.board_id);
+      expect(list1.every((f) => f.board_id === b1.board_id)).toBe(true);
+      expect(list2.every((f) => f.board_id === b2.board_id)).toBe(true);
+    });
+  });
 });

@@ -231,4 +231,99 @@ describe("run_once — executor에게 1회 질의", () => {
       expect(buildOverlaySpy).toHaveBeenCalledWith("once");
     });
   });
+
+  describe("native_tool_loop 백엔드 경로 (L34-62)", () => {
+    function make_native_deps(backendCaps = { thinking: false }): RunnerDeps {
+      const deps = createMockRunnerDeps() as RunnerDeps;
+      (deps as any).config = { agent_loop_max_turns: 10 };
+      (deps as any).hooks_for = vi.fn(() => ({}));
+      return deps;
+    }
+
+    it("native_tool_loop 백엔드 성공 → convert_agent_result 호출", async () => {
+      const deps = make_native_deps();
+      const mockBackend = {
+        id: "native-backend",
+        native_tool_loop: true,
+        capabilities: { thinking: false },
+      };
+      deps.agent_backends = {
+        resolve_for_mode: vi.fn(() => mockBackend),
+        resolve_backend: vi.fn(),
+        run: vi.fn(async () => ({ content: "native reply", tool_calls_count: 2 })),
+      } as any;
+      (deps.convert_agent_result as any).mockReturnValue({
+        reply: "native reply", mode: "once", tool_calls_count: 2, streamed: false,
+      });
+
+      const result = await run_once(deps, mockArgs);
+
+      expect((deps.agent_backends as any).run).toHaveBeenCalledOnce();
+      expect(deps.convert_agent_result).toHaveBeenCalled();
+      expect(result.mode).toBe("once");
+    });
+
+    it("native_tool_loop 백엔드 오류 → error_result 반환", async () => {
+      const deps = make_native_deps();
+      const mockBackend = {
+        id: "native-backend",
+        native_tool_loop: true,
+        capabilities: { thinking: false },
+      };
+      deps.agent_backends = {
+        resolve_for_mode: vi.fn(() => mockBackend),
+        resolve_backend: vi.fn(),
+        run: vi.fn().mockRejectedValue(new Error("native backend failed")),
+      } as any;
+
+      const result = await run_once(deps, mockArgs);
+
+      expect(result.error).toContain("native backend failed");
+      expect(result.mode).toBe("once");
+    });
+
+    it("native_tool_loop=false인 backend → headless 폴백", async () => {
+      const deps = make_native_deps();
+      deps.agent_backends = {
+        resolve_for_mode: vi.fn(() => ({ id: "non-native", native_tool_loop: false })),
+        resolve_backend: vi.fn(),
+        run: vi.fn(),
+      } as any;
+      (deps.providers.run_headless as any).mockResolvedValue({
+        content: "headless response",
+        has_tool_calls: false,
+      });
+
+      const result = await run_once(deps, mockArgs);
+
+      expect((deps.agent_backends as any).run).not.toHaveBeenCalled();
+      expect(result.reply).toBeDefined();
+    });
+
+    it("thinking 기능 backend → enable_thinking 옵션 전달", async () => {
+      const deps = make_native_deps({ thinking: true });
+      let capturedOpts: any;
+      const mockBackend = {
+        id: "thinking-backend",
+        native_tool_loop: true,
+        capabilities: { thinking: true },
+      };
+      deps.agent_backends = {
+        resolve_for_mode: vi.fn(() => mockBackend),
+        resolve_backend: vi.fn(),
+        run: vi.fn(async (_id: string, opts: any) => {
+          capturedOpts = opts;
+          return { content: "thinking result", tool_calls_count: 0 };
+        }),
+      } as any;
+      (deps.convert_agent_result as any).mockReturnValue({
+        reply: "ok", mode: "once", tool_calls_count: 0, streamed: false,
+      });
+
+      await run_once(deps, mockArgs);
+
+      expect(capturedOpts?.enable_thinking).toBe(true);
+      expect(capturedOpts?.max_thinking_tokens).toBe(10000);
+    });
+  });
 });

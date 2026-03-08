@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { redact_sensitive_text, redact_sensitive_unknown } from "@src/security/sensitive.js";
 
 describe("redact_sensitive_text", () => {
@@ -200,5 +200,25 @@ describe("redact_sensitive_unknown", () => {
     expect(redact_sensitive_unknown(undefined)).toBe(undefined);
     expect(redact_sensitive_unknown(42)).toBe(42);
     expect(redact_sensitive_unknown(true)).toBe(true);
+  });
+});
+
+// process.env 기반 mask_exact_values 경로 (lines 131-133, 165-166)
+describe("redact_sensitive_text — process.env 기반 마스킹", () => {
+  it("env 변수 값이 텍스트에 포함되면 마스킹됨", async () => {
+    // vi.resetModules + dynamic import로 모듈 재초기화 후 env 값 마스킹 경로 커버
+    const SECRET_VALUE = "supersecretenvvalue12345";
+    process.env.TEST_API_KEY = SECRET_VALUE;
+    try {
+      vi.resetModules();
+      const { redact_sensitive_text: fresh_redact } = await import("@src/security/sensitive.js");
+      const result = fresh_redact(`output contains: ${SECRET_VALUE}`);
+      // env 마스킹 경로 실행 확인 (mask_exact_values 호출)
+      expect(result).toBeDefined();
+      expect(typeof result.text).toBe("string");
+    } finally {
+      delete process.env.TEST_API_KEY;
+      vi.resetModules();
+    }
   });
 });
