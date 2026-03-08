@@ -4,6 +4,7 @@ import { api } from "../../api/client";
 import { Badge } from "../../components/badge";
 import { EmptyState } from "../../components/empty-state";
 import { SearchInput } from "../../components/search-input";
+import { ChipBar } from "../../components/chip-bar";
 import { useT } from "../../i18n";
 import { time_ago } from "../../utils/format";
 import { SplitPane } from "./split-pane";
@@ -77,25 +78,14 @@ export function SessionsTab() {
               className="ws-search-bar__input"
             />
           </div>
-          <div className="ws-chip-bar">
-            <button
-              type="button"
-              className={`filter-chip${!provider_filter ? " filter-chip--active" : ""}`}
-              onClick={() => { setProviderFilter(""); setSelected(null); }}
-            >
-              {t("workspace.sessions.all_channels")}
-            </button>
-            {providers.map((p) => (
-              <button
-                key={p}
-                type="button"
-                className={`filter-chip${provider_filter === p ? " filter-chip--active" : ""}`}
-                onClick={() => { setProviderFilter(p); setSelected(null); }}
-              >
-                {p}
-              </button>
-            ))}
-          </div>
+          <ChipBar
+            options={[
+              { value: "", label: t("workspace.sessions.all_channels") },
+              ...providers.map((p) => ({ value: p, label: p })),
+            ]}
+            value={provider_filter}
+            onChange={(v) => { setProviderFilter(v); setSelected(null); }}
+          />
           <div className="ws-scroll">
             {filtered_sessions.length === 0 ? (
               <EmptyState

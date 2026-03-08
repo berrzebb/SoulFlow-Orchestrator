@@ -7,6 +7,8 @@ import { I18nProvider } from "./i18n";
 import { router } from "./router";
 import "./styles/global.css";
 import "./styles/layout.css";
+import "./styles/workflow.css";
+import "./styles/chat.css";
 
 const queryClient = new QueryClient({
   defaultOptions: {

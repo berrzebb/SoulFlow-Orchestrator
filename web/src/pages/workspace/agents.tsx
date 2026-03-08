@@ -11,6 +11,7 @@ import { classify_agent } from "../../utils/classify";
 import { fmt_time, time_ago } from "../../utils/format";
 import { useT } from "../../i18n";
 import { DataTable } from "../../components/data-table";
+import { ChipBar } from "../../components/chip-bar";
 import { useAsyncAction } from "../../hooks/use-async-action";
 
 interface Agent {
@@ -297,13 +298,14 @@ export function AgentsTab() {
               <div className="mt-2">
                 <div className="filter-bar">
                   <input type="search" className="filter-input" value={completedSearch} onChange={(e) => setCompletedSearch(e.target.value)} placeholder={t("agents.filter_placeholder")} />
-                  <div className="ws-chip-bar">
-                    {(["all", ...completed_statuses] as string[]).map((s) => (
-                      <button key={s} className={`btn btn--xs ${completedStatusFilter === s ? "filter-btn--active" : "filter-btn"}`} onClick={() => setCompletedStatusFilter(s)}>
-                        {s === "all" ? t("agents.filter_all") : s}
-                      </button>
-                    ))}
-                  </div>
+                  <ChipBar
+                    options={[
+                      { value: "all", label: t("agents.filter_all") },
+                      ...completed_statuses.map((s) => ({ value: s, label: s })),
+                    ]}
+                    value={completedStatusFilter}
+                    onChange={setCompletedStatusFilter}
+                  />
                   {(completedSearch || completedStatusFilter !== "all") && (
                     <span className="text-xs text-muted">{filtered.length} / {completed_tasks.length}</span>
                   )}

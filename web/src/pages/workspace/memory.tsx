@@ -11,6 +11,7 @@ import { useT } from "../../i18n";
 import { time_ago } from "../../utils/format";
 import { SplitPane } from "./split-pane";
 import { DataTable } from "../../components/data-table";
+import { useAsyncAction } from "../../hooks/use-async-action";
 
 interface DailyListResponse { days: string[] }
 interface MemoryContentResponse { content: string }
@@ -26,6 +27,7 @@ export function MemoryTab() {
   const t = useT();
   const qc = useQueryClient();
   const { toast } = useToast();
+  const run_action = useAsyncAction();
   const [view, setView] = useState<MemoryView>("longterm");
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState("");
@@ -81,25 +83,23 @@ export function MemoryTab() {
 
   const reset_form = () => { setNewKey(""); setNewValue(""); setNewPriority(0); };
 
-  const add_promise = async () => {
-    if (!newKey.trim() || !newValue.trim()) return;
-    try {
-      await api.post("/api/promises", { key: newKey.trim(), value: newValue.trim(), priority: newPriority });
-      reset_form();
-      setShowAddPromise(false);
-      toast(t("promises.added"), "ok");
-      void qc.invalidateQueries({ queryKey: ["state"] });
-    } catch { toast(t("promises.add_failed"), "err"); }
+  const add_promise = () => {
+    if (!newKey.trim() || !newValue.trim()) return Promise.resolve();
+    return run_action(
+      () => api.post("/api/promises", { key: newKey.trim(), value: newValue.trim(), priority: newPriority })
+        .then(() => { reset_form(); setShowAddPromise(false); void qc.invalidateQueries({ queryKey: ["state"] }); }),
+      t("promises.added"),
+      t("promises.add_failed"),
+    );
   };
 
-  const delete_promise = async (id: string) => {
-    try {
-      await api.del(`/api/promises/${encodeURIComponent(id)}`);
-      setDeleteTarget(null);
-      toast(t("promises.deleted"), "ok");
-      void qc.invalidateQueries({ queryKey: ["state"] });
-    } catch { toast(t("promises.delete_failed"), "err"); }
-  };
+  const delete_promise = (id: string) =>
+    run_action(
+      () => api.del(`/api/promises/${encodeURIComponent(id)}`)
+        .then(() => { setDeleteTarget(null); void qc.invalidateQueries({ queryKey: ["state"] }); }),
+      t("promises.deleted"),
+      t("promises.delete_failed"),
+    );
 
   const section_label = (label: string) => (
     <div className="ws-group-label ws-group-label--section">

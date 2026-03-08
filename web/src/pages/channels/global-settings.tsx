@@ -1,14 +1,14 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import { ToggleSwitch } from "../../components/toggle-switch";
-import { useToast } from "../../components/toast";
 import { useT } from "../../i18n";
+import { useAsyncAction } from "../../hooks/use-async-action";
 import type { ConfigField, ConfigResponse } from "./types";
 
 export function GlobalSettingsSection() {
   const t = useT();
   const qc = useQueryClient();
-  const { toast } = useToast();
+  const run_action = useAsyncAction();
 
   const { data } = useQuery<ConfigResponse>({
     queryKey: ["config"],
@@ -26,12 +26,12 @@ export function GlobalSettingsSection() {
     return false;
   };
 
-  const toggle = async (path: string, current: boolean) => {
-    try {
-      await api.put("/api/config/values", { path, value: !current });
-      void qc.invalidateQueries({ queryKey: ["config"] });
-    } catch { toast(t("channels.toggle_failed"), "err"); }
-  };
+  const toggle = (path: string, current: boolean) =>
+    run_action(
+      () => api.put("/api/config/values", { path, value: !current }).then(() => { void qc.invalidateQueries({ queryKey: ["config"] }); }),
+      undefined,
+      t("channels.toggle_failed"),
+    );
 
   const streaming = get_value("channel.streaming.enabled");
   const auto_reply = get_value("channel.autoReply");

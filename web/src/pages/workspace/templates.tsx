@@ -5,6 +5,7 @@ import { Badge } from "../../components/badge";
 import { EmptyState } from "../../components/empty-state";
 import { useToast } from "../../components/toast";
 import { useT } from "../../i18n";
+import { useAsyncAction } from "../../hooks/use-async-action";
 import { SplitPane } from "./split-pane";
 import { WsListItem, WsDetailHeader, WsSkeletonCol } from "./ws-shared";
 
@@ -14,6 +15,7 @@ export function TemplatesTab() {
   const t = useT();
   const qc = useQueryClient();
   const { toast } = useToast();
+  const run_action = useAsyncAction();
   const { data: templates = [] } = useQuery<TemplateEntry[]>({ queryKey: ["templates"], queryFn: () => api.get("/api/templates"), staleTime: 30_000 });
 
   const [selected, setSelected] = useState<string | null>(null);
@@ -32,16 +34,13 @@ export function TemplatesTab() {
     return () => { cancelled = true; };
   }, [selected, toast, t]);
 
-  const save = async () => {
-    if (!selected) return;
-    try {
-      await api.put(`/api/templates/${encodeURIComponent(selected!)}`, { content });
-      toast(t("templates.saved_fmt", { name: selected }), "ok");
-      setDirty(false);
-      void qc.invalidateQueries({ queryKey: ["templates"] });
-    } catch {
-      toast(t("templates.save_failed"), "err");
-    }
+  const save = () => {
+    if (!selected) return Promise.resolve();
+    return run_action(
+      () => api.put(`/api/templates/${encodeURIComponent(selected!)}`, { content }).then(() => { setDirty(false); void qc.invalidateQueries({ queryKey: ["templates"] }); }),
+      t("templates.saved_fmt", { name: selected }),
+      t("templates.save_failed"),
+    );
   };
 
   return (
