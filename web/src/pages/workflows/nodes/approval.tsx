@@ -40,6 +40,7 @@ function ApprovalEditPanel({ node, update, t, options }: EditPanelProps) {
         <div className="builder-row">
           <label className="label">{t("workflows.hitl_timeout")}</label>
           <input className="input input--sm" type="number" min={0} value={String(node.timeout_ms ?? 600000)} onChange={(e) => update({ timeout_ms: Number(e.target.value) })} />
+          <span className="builder-hint">{t("workflows.hitl_timeout_hint")}</span>
         </div>
       </div>
       <div className="builder-row">

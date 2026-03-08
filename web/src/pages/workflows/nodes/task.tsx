@@ -37,6 +37,7 @@ function TaskEditPanel({ node, update, t, options }: EditPanelProps) {
         <div className="builder-row">
           <label className="label">{t("workflows.max_turns")}</label>
           <input className="input input--sm" type="number" min={1} max={200} value={String(node.max_turns ?? 20)} onChange={(e) => update({ max_turns: Number(e.target.value) || 20 })} />
+          <span className="builder-hint">{t("workflows.task_max_turns_hint")}</span>
         </div>
       </div>
       <div className="builder-row">

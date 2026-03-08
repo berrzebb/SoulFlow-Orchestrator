@@ -40,6 +40,7 @@ function CompressEditPanel({ node, update, t }: EditPanelProps) {
       <div className="builder-row">
         <label className="label">{t("workflows.field_level")}</label>
         <input className="input input--sm" type="number" min={1} max={11} value={String(node.level ?? 6)} onChange={(e) => update({ level: Number(e.target.value) })} />
+        <span className="builder-hint">{t("workflows.compress_level_hint")}</span>
       </div>
     </>
   );
