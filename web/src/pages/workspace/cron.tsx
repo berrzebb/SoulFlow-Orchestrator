@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import { Badge } from "../../components/badge";
@@ -10,6 +9,7 @@ import { useT } from "../../i18n";
 import { fmt_time, fmt_schedule, time_ago } from "../../utils/format";
 import { DataTable } from "../../components/data-table";
 import { useAsyncAction } from "../../hooks/use-async-action";
+import { useDeleteConfirmation } from "../../hooks/use-delete-confirmation";
 
 interface CronStatus { paused: boolean; next_wake_at_ms: number }
 interface CronJob {
@@ -26,36 +26,34 @@ export function CronTab() {
   const { data: status } = useQuery<CronStatus>({ queryKey: ["cron-status"], queryFn: () => api.get("/api/cron/status"), refetchInterval: 15_000, staleTime: 5_000 });
   const { data: jobs = [] } = useQuery<CronJob[]>({ queryKey: ["cron-jobs"], queryFn: () => api.get("/api/cron/jobs?include_disabled=1"), refetchInterval: 15_000, staleTime: 5_000 });
 
-  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
-
   const refresh = () => {
     void qc.invalidateQueries({ queryKey: ["cron-status"] });
     void qc.invalidateQueries({ queryKey: ["cron-jobs"] });
   };
 
+  const { deleteTarget, setDeleteTarget, confirmDelete, modalOpen, closeModal } =
+    useDeleteConfirmation<{ id: string; name: string }>({
+      getEndpoint: (target) => `/api/cron/jobs/${encodeURIComponent(target.id)}`,
+      onDeleted: refresh,
+      okMsg: t("cron.job_removed"),
+      errMsg: t("cron.remove_failed"),
+    });
+
   const toggle = (id: string, enabled: boolean) =>
     run_action(() => api.put(`/api/cron/jobs/${encodeURIComponent(id)}`, { enabled }).then(refresh), undefined, t("cron.toggle_failed"));
   const run = (id: string) =>
     run_action(() => api.post(`/api/cron/jobs/${encodeURIComponent(id)}/runs`, { force: true }).then(refresh), t("cron.job_triggered"), t("cron.run_failed"));
-  const confirm_remove = () => {
-    if (!deleteTarget) return Promise.resolve();
-    return run_action(
-      () => api.del(`/api/cron/jobs/${encodeURIComponent(deleteTarget.id)}`).then(() => { setDeleteTarget(null); refresh(); }),
-      t("cron.job_removed"),
-      t("cron.remove_failed"),
-    );
-  };
   const pause = () => run_action(() => api.put("/api/cron/status", { paused: true }).then(refresh), t("cron.paused"), t("cron.pause_failed"));
   const resume = () => run_action(() => api.put("/api/cron/status", { paused: false }).then(refresh), t("cron.resumed"), t("cron.resume_failed"));
 
   return (
     <>
       <DeleteConfirmModal
-        open={!!deleteTarget}
+        open={modalOpen}
         title={t("cron.remove_title")}
         message={t("cron.remove_confirm", { name: deleteTarget?.name ?? "" })}
-        onClose={() => setDeleteTarget(null)}
-        onConfirm={() => void confirm_remove()}
+        onClose={closeModal}
+        onConfirm={confirmDelete}
         confirmLabel={t("common.remove")}
       />
 

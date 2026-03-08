@@ -1,4 +1,5 @@
 import { useState, useRef } from "react";
+import { useTableFilter } from "../../hooks/use-table-filter";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import { Badge } from "../../components/badge";
@@ -32,7 +33,6 @@ export function SessionsTab() {
   const t = useT();
   const [selected, setSelected] = useState<string | null>(null);
   const [provider_filter, setProviderFilter] = useState<string>("");
-  const [search, setSearch] = useState("");
 
   const { data: sessions = [] } = useQuery<SessionEntry[]>({
     queryKey: ["ws-sessions", provider_filter],
@@ -55,10 +55,8 @@ export function SessionsTab() {
   }
   const providers = providersRef.current;
 
-  const filtered_sessions = sessions.filter((s) => {
-    if (!search) return true;
-    const q = search.toLowerCase();
-    return s.chat_id.toLowerCase().includes(q) || s.alias.toLowerCase().includes(q) || s.provider.toLowerCase().includes(q);
+  const { filtered: filtered_sessions, search, setSearch } = useTableFilter(sessions, {
+    searchFields: ["chat_id", "alias", "provider"],
   });
 
   const selected_session = sessions.find((s) => s.key === selected);

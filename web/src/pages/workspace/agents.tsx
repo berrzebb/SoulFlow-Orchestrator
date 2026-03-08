@@ -12,7 +12,9 @@ import { fmt_time, time_ago } from "../../utils/format";
 import { useT } from "../../i18n";
 import { DataTable } from "../../components/data-table";
 import { ChipBar } from "../../components/chip-bar";
+import { Collapsible } from "../../components/collapsible";
 import { useAsyncAction } from "../../hooks/use-async-action";
+import { useTableFilter } from "../../hooks/use-table-filter";
 
 interface Agent {
   id: string; label: string; role: string; model: string; status: string;
@@ -85,8 +87,6 @@ export function AgentsTab() {
   const [cancelConfirm, setCancelConfirm] = useState<{ kind: string; id: string; label: string } | null>(null);
   const [showCompleted, setShowCompleted] = useState(false);
   const [showRecentProcesses, setShowRecentProcesses] = useState(false);
-  const [completedSearch, setCompletedSearch] = useState("");
-  const [completedStatusFilter, setCompletedStatusFilter] = useState("all");
 
   const refresh = () => {
     void qc.invalidateQueries({ queryKey: ["agents"] });
@@ -97,6 +97,11 @@ export function AgentsTab() {
 
   const active_tasks = task_loops.filter((tl) => ACTIVE_STATUSES.has(tl.status));
   const completed_tasks = task_loops.filter((tl) => !ACTIVE_STATUSES.has(tl.status));
+
+  const { filtered: filtered_completed, search: completedSearch, setSearch: setCompletedSearch,
+    statusFilter: completedStatusFilter, setStatusFilter: setCompletedStatusFilter,
+    statusOptions: completed_statuses, isFiltered: completedIsFiltered } =
+    useTableFilter(completed_tasks, { searchFields: ["title", "taskId"], statusField: "status" });
 
   const active_processes = processes_data?.active ?? [];
   const recent_processes = processes_data?.recent ?? [];
@@ -186,32 +191,32 @@ export function AgentsTab() {
       )}
 
       {recent_processes.length > 0 && (
-        <div className="mt-2">
-          <button className="btn btn--sm toggle-btn" aria-expanded={showRecentProcesses} onClick={() => setShowRecentProcesses((v) => !v)}>
-            {showRecentProcesses ? t("agents.hide_recent") : t("agents.show_recent", { count: recent_processes.length })}
-          </button>
-          {showRecentProcesses && (
-            <DataTable small className="mt-2">
-                <thead>
-                  <tr><th>Run ID</th><th>{t("agents.mode")}</th><th>{t("agents.provider")}</th><th>{t("agents.executor")}</th><th>{t("agents.tools")}</th><th>{t("common.status")}</th><th>{t("agents.started")}</th><th>{t("agents.ended")}</th></tr>
-                </thead>
-                <tbody>
-                  {recent_processes.map((p) => (
-                    <tr key={p.run_id}>
-                      <td className="text-xs text-muted">{p.run_id}</td>
-                      <td><span className={`mode-badge mode-badge--${p.mode}`}>{p.mode}</span></td>
-                      <td>{p.provider} / {p.alias}</td>
-                      <td>{p.executor_provider || "-"}</td>
-                      <td>{p.tool_calls_count}</td>
-                      <td>{STATUS_ICON[p.status] || ""} <Badge status={p.status} />{p.error && <span className="text-xs text-err ml-1">⚠ {p.error}</span>}</td>
-                      <td>{fmt_time(p.started_at)}</td>
-                      <td>{p.ended_at ? fmt_time(p.ended_at) : "-"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </DataTable>
-          )}
-        </div>
+        <Collapsible
+          className="mt-2"
+          open={showRecentProcesses}
+          onToggle={setShowRecentProcesses}
+          label={showRecentProcesses ? t("agents.hide_recent") : t("agents.show_recent", { count: recent_processes.length })}
+        >
+          <DataTable small>
+            <thead>
+              <tr><th>Run ID</th><th>{t("agents.mode")}</th><th>{t("agents.provider")}</th><th>{t("agents.executor")}</th><th>{t("agents.tools")}</th><th>{t("common.status")}</th><th>{t("agents.started")}</th><th>{t("agents.ended")}</th></tr>
+            </thead>
+            <tbody>
+              {recent_processes.map((p) => (
+                <tr key={p.run_id}>
+                  <td className="text-xs text-muted">{p.run_id}</td>
+                  <td><span className={`mode-badge mode-badge--${p.mode}`}>{p.mode}</span></td>
+                  <td>{p.provider} / {p.alias}</td>
+                  <td>{p.executor_provider || "-"}</td>
+                  <td>{p.tool_calls_count}</td>
+                  <td>{STATUS_ICON[p.status] || ""} <Badge status={p.status} />{p.error && <span className="text-xs text-err ml-1">⚠ {p.error}</span>}</td>
+                  <td>{fmt_time(p.started_at)}</td>
+                  <td>{p.ended_at ? fmt_time(p.ended_at) : "-"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </DataTable>
+        </Collapsible>
       )}
 
       {/* Agent Loop */}
@@ -280,60 +285,47 @@ export function AgentsTab() {
 
       {/* 완료 목록 */}
       {completed_tasks.length > 0 && (
-        <div className="mt-3">
-          <button className="btn btn--sm toggle-btn" aria-expanded={showCompleted} onClick={() => setShowCompleted((v) => !v)}>
-            {showCompleted ? t("agents.hide_completed") : t("agents.show_completed", { count: completed_tasks.length })}
-          </button>
-          {showCompleted && (() => {
-            const completed_statuses = [...new Set(completed_tasks.map((ct) => ct.status))];
-            const filtered = completed_tasks.filter((task) => {
-              if (completedStatusFilter !== "all" && task.status !== completedStatusFilter) return false;
-              if (completedSearch) {
-                const q = completedSearch.toLowerCase();
-                return (task.title || "").toLowerCase().includes(q) || task.taskId.toLowerCase().includes(q);
-              }
-              return true;
-            });
-            return (
-              <div className="mt-2">
-                <div className="filter-bar">
-                  <input type="search" className="filter-input" value={completedSearch} onChange={(e) => setCompletedSearch(e.target.value)} placeholder={t("agents.filter_placeholder")} />
-                  <ChipBar
-                    options={[
-                      { value: "all", label: t("agents.filter_all") },
-                      ...completed_statuses.map((s) => ({ value: s, label: s })),
-                    ]}
-                    value={completedStatusFilter}
-                    onChange={setCompletedStatusFilter}
-                  />
-                  {(completedSearch || completedStatusFilter !== "all") && (
-                    <span className="text-xs text-muted">{filtered.length} / {completed_tasks.length}</span>
-                  )}
-                </div>
-                {filtered.length === 0 ? (
-                  <EmptyState type="no-results" title={t("agents.filter_no_match")} icon="🔍" />
-                ) : (
-                  <DataTable small>
-                      <thead>
-                        <tr><th>{t("decisions.task")}</th><th>{t("common.status")}</th><th>{t("agents.turn")}</th><th>{t("agents.exit_reason")}</th><th>{t("agents.updated")}</th></tr>
-                      </thead>
-                      <tbody>
-                        {filtered.map((task) => (
-                          <tr key={task.taskId}>
-                            <td>{STATUS_ICON[task.status] || "❓"} {task.title || task.taskId}<br /><span className="text-xs text-muted">{task.taskId.slice(0, 16)}</span></td>
-                            <td><Badge status={task.status} /></td>
-                            <td>{task.currentTurn}/{task.maxTurns}</td>
-                            <td>{task.exitReason || "-"}</td>
-                            <td className="text-sm text-muted" title={task.updatedAt || ""}>{task.updatedAt ? time_ago(task.updatedAt) : "-"}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </DataTable>
-                )}
-              </div>
-            );
-          })()}
-        </div>
+        <Collapsible
+          className="mt-3"
+          open={showCompleted}
+          onToggle={setShowCompleted}
+          label={showCompleted ? t("agents.hide_completed") : t("agents.show_completed", { count: completed_tasks.length })}
+        >
+          <div className="filter-bar">
+            <input type="search" className="filter-input" value={completedSearch} onChange={(e) => setCompletedSearch(e.target.value)} placeholder={t("agents.filter_placeholder")} />
+            <ChipBar
+              options={[
+                { value: "all", label: t("agents.filter_all") },
+                ...completed_statuses.map((s) => ({ value: s, label: s })),
+              ]}
+              value={completedStatusFilter}
+              onChange={setCompletedStatusFilter}
+            />
+            {completedIsFiltered && (
+              <span className="text-xs text-muted">{filtered_completed.length} / {completed_tasks.length}</span>
+            )}
+          </div>
+          {filtered_completed.length === 0 ? (
+            <EmptyState type="no-results" title={t("agents.filter_no_match")} icon="🔍" />
+          ) : (
+            <DataTable small>
+              <thead>
+                <tr><th>{t("decisions.task")}</th><th>{t("common.status")}</th><th>{t("agents.turn")}</th><th>{t("agents.exit_reason")}</th><th>{t("agents.updated")}</th></tr>
+              </thead>
+              <tbody>
+                {filtered_completed.map((task) => (
+                  <tr key={task.taskId}>
+                    <td>{STATUS_ICON[task.status] || "❓"} {task.title || task.taskId}<br /><span className="text-xs text-muted">{task.taskId.slice(0, 16)}</span></td>
+                    <td><Badge status={task.status} /></td>
+                    <td>{task.currentTurn}/{task.maxTurns}</td>
+                    <td>{task.exitReason || "-"}</td>
+                    <td className="text-sm text-muted" title={task.updatedAt || ""}>{task.updatedAt ? time_ago(task.updatedAt) : "-"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </DataTable>
+          )}
+        </Collapsible>
       )}
 
       {/* 서브에이전트 */}

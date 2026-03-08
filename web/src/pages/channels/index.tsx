@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { useMutation } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import { EmptyState } from "../../components/empty-state";
 import { DeleteConfirmModal } from "../../components/modal";
@@ -10,6 +9,7 @@ import { ToggleSwitch } from "../../components/toggle-switch";
 import { useToast } from "../../components/toast";
 import { useT } from "../../i18n";
 import { useResourceCRUD } from "../../hooks/use-resource-crud";
+import { useToggleMutation } from "../../hooks/use-toggle-mutation";
 import { time_ago } from "../../utils/format";
 import type { ChannelInstance, ModalMode } from "./types";
 import { InstanceModal } from "./instance-modal";
@@ -30,21 +30,12 @@ export default function ChannelsPage() {
     staleTime: 5_000,
   });
 
-  const toggle_enabled = useMutation({
-    mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) =>
-      api.put(`/api/channels/instances/${encodeURIComponent(id)}`, { enabled }),
-    onMutate: ({ id, enabled }) => {
-      const prev = queryClient.getQueryData<ChannelInstance[]>(["channel-instances"]);
-      if (prev) {
-        queryClient.setQueryData(["channel-instances"], prev.map((inst) => inst.instance_id === id ? { ...inst, enabled } : inst));
-      }
-      return prev;
-    },
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["channel-instances"] }),
-    onError: (err, _, prev) => {
-      if (prev) queryClient.setQueryData(["channel-instances"], prev);
-      toast(t("channels.save_failed", { error: err.message }), "err");
-    },
+  const toggle_enabled = useToggleMutation<ChannelInstance>({
+    queryKey: ["channel-instances"],
+    getEndpoint: (id) => `/api/channels/instances/${encodeURIComponent(id)}`,
+    idField: "instance_id",
+    toggleField: "enabled",
+    getErrMsg: (err) => t("channels.save_failed", { error: err.message }),
   });
 
   return (
@@ -86,7 +77,7 @@ export default function ChannelsPage() {
               <div className="stat-card__header">
                 <ToggleSwitch
                   checked={inst.enabled}
-                  onChange={(enabled) => toggle_enabled.mutate({ id: inst.instance_id, enabled })}
+                  onChange={(value) => toggle_enabled.mutate({ id: inst.instance_id, value })}
                   aria-label={t("common.enabled")}
                 />
               </div>
