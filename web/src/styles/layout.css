@@ -2593,6 +2593,16 @@ a:focus-visible > .stat-card {
 .yaml-error { color: var(--err); font-size: var(--fs-xs); margin-top: var(--sp-1); }
 
 .builder-row { display: flex; flex-direction: column; gap: 4px; flex: 1; }
+.builder-row--conditional {
+  border-left: 3px solid var(--accent);
+  padding-left: var(--sp-2);
+  background: color-mix(in srgb, var(--accent) 3%, transparent);
+  animation: builder-row-slideIn 0.2s ease-out;
+}
+@keyframes builder-row-slideIn {
+  from { opacity: 0; transform: translateX(-8px); }
+  to { opacity: 1; transform: translateX(0); }
+}
 .builder-row-pair { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-3); }
 .builder-row-triple { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: var(--sp-3); }
 

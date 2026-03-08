@@ -198,9 +198,10 @@ textarea.input {
 }
 .label__optional {
   color: var(--muted);
-  font-size: 0.85em;
-  font-weight: 400;
-  margin-left: 4px;
+  font-size: 0.9em;
+  font-weight: 500;
+  margin-left: 6px;
+  letter-spacing: 0.02em;
 }
 
 /* skeleton, empty-state → layout.css로 통합 */

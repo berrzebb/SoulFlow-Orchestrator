@@ -23,13 +23,13 @@ function ArchiveEditPanel({ node, update, t }: EditPanelProps) {
         <input className="input" value={String(node.archive_path || "")} onChange={(e) => update({ archive_path: e.target.value })} placeholder="backup.tar.gz" />
       </div>
       {node.operation === "create" && (
-        <div className="builder-row">
+        <div className="builder-row builder-row--conditional">
           <label className="label">{t("workflows.archive_files")}</label>
           <input className="input" value={String(node.files || "")} onChange={(e) => update({ files: e.target.value })} placeholder="src/ docs/ README.md" />
         </div>
       )}
       {node.operation === "extract" && (
-        <div className="builder-row">
+        <div className="builder-row builder-row--conditional">
           <label className="label">{t("workflows.output_dir")}</label>
           <input className="input" value={String(node.output_dir || ".")} onChange={(e) => update({ output_dir: e.target.value })} />
         </div>

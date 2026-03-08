@@ -49,7 +49,7 @@ function FormEditPanel({ node, update, t, options }: EditPanelProps) {
         </select>
       </div>
       {target === "specified" && (
-        <div className="builder-row-pair">
+        <div className="builder-row-pair builder-row--conditional">
           <div className="builder-row">
             <label className="label">{t("workflows.hitl_channel")}</label>
             <select className="input input--sm" value={String(node.channel || "")} onChange={(e) => update({ channel: e.target.value })}>
