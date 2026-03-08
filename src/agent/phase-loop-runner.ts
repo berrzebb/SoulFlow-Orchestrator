@@ -609,7 +609,15 @@ async function run_phase_agents(
 
   const promises = phase_def.agents.map(async (agent_def, idx) => {
     const agent_state = phase_state.agents[idx];
+
+    // resume 시 이미 완료된 에이전트는 재실행하지 않고 저장된 결과를 그대로 사용.
+    // running 상태인 에이전트는 서버 크래시 등으로 중단된 것이므로 재실행.
+    if (agent_state.status === "completed") {
+      return agent_state;
+    }
+
     agent_state.status = "running";
+    agent_state.subagent_id = undefined; // 이전 세션의 dead subagent_id 초기화
     state.updated_at = now_iso();
     emit(on_event, { type: "agent_started", workflow_id: state.workflow_id, phase_id: phase_def.phase_id, agent_id: agent_def.agent_id });
     options.on_agent_update?.(phase_def.phase_id, agent_def.agent_id, agent_state);

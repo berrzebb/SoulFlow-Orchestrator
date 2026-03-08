@@ -184,6 +184,11 @@ export async function createRuntime(): Promise<RuntimeApp> {
 
   await run_trigger_sync(trigger_sync_args);
 
+  // 서버 재시작 후 고아 상태(running)인 워크플로우 자동 재개
+  workflow_ops_result.resume_orphaned().catch((err) => {
+    logger.error(`orphan_workflow_resume_failed: ${error_message(err)}`);
+  });
+
   const { session_prune_timer } = run_post_boot({
     instance_store, primary_provider,
     agent_session_store, agent_backends, cli_auth,

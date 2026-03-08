@@ -155,7 +155,7 @@ export function create_workflow_ops(deps: {
   renderer?: import("../../channels/persona-message-renderer.js").PersonaMessageRendererLike | null;
   /** 템플릿 저장/삭제 후 트리거 재동기화 콜백. */
   on_template_changed?: () => Promise<void>;
-}): DashboardWorkflowOps & { hitl_bridge: import("../../channels/manager.js").WorkflowHitlBridge } {
+}): DashboardWorkflowOps & { hitl_bridge: import("../../channels/manager.js").WorkflowHitlBridge; resume_orphaned: () => Promise<void> } {
   const { store, subagents, workspace, logger, skills_loader, on_workflow_event, bus, cron } = deps;
   let suggest_node_catalog_cache: string | null = null;
 
@@ -507,6 +507,45 @@ export function create_workflow_ops(deps: {
       });
 
       return { ok: true };
+    },
+
+    /** 서버 재시작 시 고아 상태(running)인 워크플로우를 자동으로 재개. */
+    async resume_orphaned() {
+      const all = await store.list();
+      const orphans = all.filter((s) => s.status === "running" && s.definition);
+      if (!orphans.length) return;
+      logger.info("resume_orphaned_workflows", { count: orphans.length });
+
+      for (const state of orphans) {
+        const { workflow_id, channel, chat_id } = state;
+        logger.info("resuming_orphaned_workflow", { workflow_id, title: state.title });
+        void run_phase_loop({
+          workflow_id, title: state.title, objective: state.objective,
+          channel, chat_id,
+          phases: state.definition!.phases || [],
+          nodes: state.definition!.nodes,
+          field_mappings: state.definition!.field_mappings,
+          ask_user: build_ask_user(workflow_id, channel, chat_id),
+          send_message: build_send_message(workflow_id, channel, chat_id),
+          ask_channel: build_ask_channel(workflow_id, channel, chat_id),
+          invoke_tool: deps.invoke_tool,
+          workspace,
+          initial_memory: state.memory,
+          resume_state: state,
+        }, {
+          subagents, store, logger,
+          load_template: (name) => load_workflow_template(workspace, name),
+          providers: deps.providers, decision_service: deps.decision_service,
+          promise_service: deps.promise_service, embed: deps.embed,
+          vector_store: deps.vector_store, oauth_fetch: deps.oauth_fetch,
+          get_webhook_data: deps.get_webhook_data, wait_kanban_event: deps.wait_kanban_event,
+          create_task: deps.create_task, query_db: deps.query_db,
+          on_kanban_trigger_waiting: deps.on_kanban_trigger_waiting,
+          kanban_store: deps.kanban_store, on_event: on_workflow_event,
+        }).catch((err) => {
+          logger.error("workflow_orphan_resume_error", { workflow_id, error: String(err) });
+        });
+      }
     },
 
     async run_single_node(node_raw, input_memory) {
