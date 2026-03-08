@@ -286,7 +286,10 @@ export default function WorkflowBuilderPage() {
         navigate(`/workflows/edit/${encodeURIComponent(result.name)}`, { replace: true });
       }
     },
-    onError: () => toast(t("workflows.save_failed"), "err"),
+    onError: (err: any) => {
+      const msg = err?.response?.data?.error?.message || t("workflows.save_failed");
+      toast(msg, "err");
+    },
   });
 
   const handleSave = () => {
@@ -302,7 +305,10 @@ export default function WorkflowBuilderPage() {
     onSuccess: (data) => {
       if (data.ok && data.workflow_id) navigate(`/workflows/${data.workflow_id}`);
     },
-    onError: () => toast(t("workflows.run_failed"), "err"),
+    onError: (err: any) => {
+      const msg = err?.response?.data?.error?.message || t("workflows.run_failed");
+      toast(msg, "err");
+    },
   });
 
   const handleRun = () => {
@@ -327,9 +333,10 @@ export default function WorkflowBuilderPage() {
       setInspectorNodeId(id);
       toast(mode === "test" ? t("workflows.test_node_done") : t("workflows.run_node_done"), "ok");
     } catch (e) {
-      setNodeRunResult({ id, mode, error: String(e), loading: false });
+      const errorMsg = (e as any)?.response?.data?.error?.message || (e as any)?.message || String(e);
+      setNodeRunResult({ id, mode, error: errorMsg, loading: false });
       setInspectorNodeId(id);
-      toast(t("workflows.node_run_error"), "err");
+      toast(errorMsg || t("workflows.node_run_error"), "err");
     }
   };
 
