@@ -6,8 +6,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import type { NodeOptions } from "./node-registry";
-import { BuilderField, BuilderRowPair } from "./builder-field";
-import { useProviderModels } from "./use-provider-models";
+import { BuilderField, BackendModelPicker, BuilderRowPair } from "./builder-field";
 import { END_TARGET_PARAMS } from "./output-schema";
 import type { PhaseDef, AgentDef, CriticDef, ToolNodeDef, SkillNodeDef, WorkflowDef, RolePreset } from "./workflow-types";
 import type { TFunction } from "../../../../src/i18n/protocol";
@@ -187,8 +186,6 @@ export function AgentSummaryCard({ agent, index, phase, workflow, onChange, onNo
 }) {
   const [expanded, setExpanded] = useState(false);
   const pi = workflow.phases.findIndex((p) => p.phase_id === phase.phase_id);
-  const { models: providerModels, loading: modelsLoading } = useProviderModels(agent.backend, options);
-
   const { data: roles } = useQuery<RolePreset[]>({
     queryKey: ["workflow-roles"],
     queryFn: () => api.get("/api/workflow/roles"),
@@ -273,34 +270,15 @@ export function AgentSummaryCard({ agent, index, phase, workflow, onChange, onNo
               {t("workflows.role_auto_prompt")}
             </div>
           )}
-          <BuilderRowPair>
-            <BuilderField label={t("workflows.backend")}>
-              <select className="input input--sm" value={agent.backend}
-                onChange={(e) => updateAgent({ backend: e.target.value })}>
-                <option value="">-</option>
-                {(options?.backends || []).map((b) => (
-                  <option key={b.value} value={b.value}>
-                    {b.available === false ? "\u26AA " : "\uD83D\uDFE2 "}{b.label}{b.provider_type ? ` (${b.provider_type})` : ""}
-                  </option>
-                ))}
-              </select>
-            </BuilderField>
-            <BuilderField label={t("workflows.model")}>
-              {modelsLoading ? (
-                <input className="input input--sm" disabled placeholder="loading..." />
-              ) : providerModels.length > 0 ? (
-                <select className="input input--sm" value={agent.model || ""}
-                  onChange={(e) => updateAgent({ model: e.target.value || undefined })}>
-                  <option value="">auto</option>
-                  {providerModels.filter((m) => m.purpose !== "embedding").map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-                </select>
-              ) : (
-                <input className="input input--sm" value={agent.model || ""}
-                  onChange={(e) => updateAgent({ model: e.target.value || undefined })}
-                  placeholder="auto" />
-              )}
-            </BuilderField>
-          </BuilderRowPair>
+          <BackendModelPicker
+            backend={agent.backend}
+            onBackendChange={(v) => updateAgent({ backend: v })}
+            model={agent.model}
+            onModelChange={(v) => updateAgent({ model: v })}
+            options={options}
+            backendLabel={t("workflows.backend")}
+            modelLabel={t("workflows.model")}
+          />
           <BuilderField label={t("workflows.max_turns")}>
             <input className="input input--sm" type="number" min={0}
               value={agent.max_turns ?? 3}
@@ -339,8 +317,6 @@ export function CriticSummaryCard({ critic, phase, workflow, onChange, t, option
 }) {
   const [expanded, setExpanded] = useState(false);
   const pi = workflow.phases.findIndex((p) => p.phase_id === phase.phase_id);
-  const { models: criticModels, loading: criticModelsLoading } = useProviderModels(critic.backend, options);
-
   const updateCritic = (patch: Partial<CriticDef>) => {
     const phases = [...workflow.phases];
     phases[pi] = { ...phase, critic: { ...critic, ...patch } };
@@ -357,34 +333,15 @@ export function CriticSummaryCard({ critic, phase, workflow, onChange, t, option
       </div>
       {expanded && (
         <div className="inspector-card__body">
-          <BuilderRowPair>
-            <BuilderField label={t("workflows.backend")}>
-              <select className="input input--sm" value={critic.backend}
-                onChange={(e) => updateCritic({ backend: e.target.value })}>
-                <option value="">-</option>
-                {(options?.backends || []).map((b) => (
-                  <option key={b.value} value={b.value}>
-                    {b.available === false ? "\u26AA " : "\uD83D\uDFE2 "}{b.label}{b.provider_type ? ` (${b.provider_type})` : ""}
-                  </option>
-                ))}
-              </select>
-            </BuilderField>
-            <BuilderField label={t("workflows.model")}>
-              {criticModelsLoading ? (
-                <input className="input input--sm" disabled placeholder="loading..." />
-              ) : criticModels.length > 0 ? (
-                <select className="input input--sm" value={critic.model || ""}
-                  onChange={(e) => updateCritic({ model: e.target.value || undefined })}>
-                  <option value="">auto</option>
-                  {criticModels.filter((m) => m.purpose !== "embedding").map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-                </select>
-              ) : (
-                <input className="input input--sm" value={critic.model || ""}
-                  onChange={(e) => updateCritic({ model: e.target.value || undefined })}
-                  placeholder="auto" />
-              )}
-            </BuilderField>
-          </BuilderRowPair>
+          <BackendModelPicker
+            backend={critic.backend}
+            onBackendChange={(v) => updateCritic({ backend: v })}
+            model={critic.model}
+            onModelChange={(v) => updateCritic({ model: v })}
+            options={options}
+            backendLabel={t("workflows.backend")}
+            modelLabel={t("workflows.model")}
+          />
           <BuilderRowPair>
             <BuilderField label={t("workflows.gate_label")}>
               <select className="input input--sm" value={critic.gate ? "true" : "false"}
