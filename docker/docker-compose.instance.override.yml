@@ -1,0 +1,18 @@
+# 멀티 인스턴스 오버라이드: redis/docker-proxy 비활성화, 기존 네트워크 참여
+services:
+  docker-proxy:
+    profiles: ["disabled"]
+  redis:
+    profiles: ["disabled"]
+  orchestrator:
+    depends_on: {}
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      WORKSPACE: /data
+      REDIS_URL: redis://redis:6379
+      DEBUG: ${DEBUG:-false}
+
+networks:
+  default:
+    external: true
+    name: soulflow-${BASE_PROFILE}-network

@@ -115,12 +115,15 @@ if not exist "%WORKSPACE%\.agents\.claude" mkdir "%WORKSPACE%\.agents\.claude"
 if not exist "%WORKSPACE%\.agents\.codex" mkdir "%WORKSPACE%\.agents\.codex"
 if not exist "%WORKSPACE%\.agents\.gemini" mkdir "%WORKSPACE%\.agents\.gemini"
 
-REM compose 실행
-if /i "%COMMAND%"=="dev" (
-  docker compose -f docker/docker-compose.yml -f docker/docker-compose.dev.override.yml -p !PROJECT_NAME! up -d
-) else (
-  docker compose -f docker/docker-compose.yml -p !PROJECT_NAME! up -d
+REM compose 실행 — instance 모드 시 기존 네트워크 참여
+set "COMPOSE_CMD=docker compose -f docker/docker-compose.yml"
+if /i "%COMMAND%"=="dev" set "COMPOSE_CMD=!COMPOSE_CMD! -f docker/docker-compose.dev.override.yml"
+if not "%INSTANCE%"=="" (
+  set "BASE_PROFILE=%COMMAND%"
+  set "COMPOSE_CMD=!COMPOSE_CMD! -f docker/docker-compose.instance.override.yml"
 )
+set "COMPOSE_CMD=!COMPOSE_CMD! -p !PROJECT_NAME! up -d"
+!COMPOSE_CMD!
 
 if !errorlevel! equ 0 (
   echo.

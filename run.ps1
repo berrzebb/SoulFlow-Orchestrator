@@ -140,6 +140,10 @@ function Start-Environment {
   if ($ProfileName -eq "dev") {
     $composeArgs += @("-f", "docker/docker-compose.dev.override.yml")
   }
+  if ($Instance) {
+    $env:BASE_PROFILE = $ProfileName
+    $composeArgs += @("-f", "docker/docker-compose.instance.override.yml")
+  }
   $composeArgs += @("-p", $projectName, "up", "-d")
 
   docker compose @composeArgs

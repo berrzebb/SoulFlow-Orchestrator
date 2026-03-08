@@ -130,6 +130,10 @@ run_env() {
   if [ "$profile" = "dev" ]; then
     compose_args+=("-f" "docker/docker-compose.dev.override.yml")
   fi
+  if [ -n "$INSTANCE" ]; then
+    export BASE_PROFILE="$profile"
+    compose_args+=("-f" "docker/docker-compose.instance.override.yml")
+  fi
   compose_args+=("-p" "$project_name" "up" "-d")
 
   docker compose "${compose_args[@]}"
