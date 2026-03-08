@@ -6,7 +6,7 @@ function VectorStoreEditPanel({ node, update, t }: EditPanelProps) {
     <>
       <div className="builder-row-pair">
         <div className="builder-row">
-          <label className="label">{t("workflows.vs_operation")}</label>
+          <label className="label">{t("workflows.vs_operation")}<span className="label__required">*</span></label>
           <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
             <option value="query">{t("workflows.opt_query")}</option>
             <option value="upsert">{t("workflows.opt_upsert")}</option>

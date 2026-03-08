@@ -5,7 +5,7 @@ function CacheEditPanel({ node, update, t }: EditPanelProps) {
   return (
     <>
       <div className="builder-row">
-        <label className="label">{t("workflows.cache_operation")}</label>
+        <label className="label">{t("workflows.cache_operation")}<span className="label__required">*</span></label>
         <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
           <option value="get_or_set">{t("workflows.cache_op_get_or_set")}</option>
           <option value="invalidate">{t("workflows.cache_op_invalidate")}</option>

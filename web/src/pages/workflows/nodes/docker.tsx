@@ -6,7 +6,7 @@ function DockerEditPanel({ node, update, t }: EditPanelProps) {
     <>
       <div className="builder-row-pair">
         <div className="builder-row">
-          <label className="label">{t("workflows.docker_operation")}</label>
+          <label className="label">{t("workflows.docker_operation")}<span className="label__required">*</span></label>
           <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
             {["ps", "run", "stop", "rm", "logs", "exec", "images", "inspect"].map((o) => <option key={o} value={o}>{o}</option>)}
           </select>

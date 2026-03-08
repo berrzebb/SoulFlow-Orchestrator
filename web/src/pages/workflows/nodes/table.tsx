@@ -5,7 +5,7 @@ function TableEditPanel({ node, update, t }: EditPanelProps) {
   return (
     <>
       <div className="builder-row">
-        <label className="label">{t("workflows.operation")}</label>
+        <label className="label">{t("workflows.operation")}<span className="label__required">*</span></label>
         <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
           {["sort", "filter", "group_by", "join", "pivot", "aggregate", "distinct", "slice", "pluck", "count_by"].map((o) => <option key={o} value={o}>{o}</option>)}
         </select>

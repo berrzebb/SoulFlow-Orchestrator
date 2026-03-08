@@ -17,7 +17,7 @@ function AggregateEditPanel({ node, update, t }: EditPanelProps) {
   return (
     <>
       <div className="builder-row">
-        <label className="label">{t("workflows.aggregate_operation")}</label>
+        <label className="label">{t("workflows.aggregate_operation")}<span className="label__required">*</span></label>
         <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
           {OPERATIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
