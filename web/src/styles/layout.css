@@ -5557,6 +5557,27 @@ g:hover > .graph-add-handle circle {
   font-style: italic;
 }
 
+/* Chat 로딩 상태 */
+.chat-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-3);
+  padding: var(--sp-8);
+  color: var(--muted);
+  flex: 1;
+}
+
+.chat-loading .spinner {
+  width: 32px;
+  height: 32px;
+  border: 2px solid var(--surface-subtle);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
 /* 모바일 미디어 쿼리 */
 @media (max-width: 640px) {
   .node-palette {

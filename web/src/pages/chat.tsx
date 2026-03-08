@@ -43,7 +43,7 @@ export default function ChatPage() {
     staleTime: 5_000,
   });
 
-  const { data: activeSession } = useQuery<ChatSession>({
+  const { data: activeSession, isPending: activeSessionLoading } = useQuery<ChatSession>({
     queryKey: ["chat-session", activeId],
     queryFn: () => api.get<ChatSession>(`/api/chat/sessions/${encodeURIComponent(activeId!)}`),
     enabled: !!activeId && !is_mirror,
@@ -60,7 +60,7 @@ export default function ChatPage() {
     staleTime: 10_000,
   });
 
-  const { data: mirrorSession } = useQuery<MirrorSession>({
+  const { data: mirrorSession, isPending: mirrorSessionLoading } = useQuery<MirrorSession>({
     queryKey: ["mirror-session", mirrorKey],
     queryFn: () => api.get<MirrorSession>(`/api/chat/mirror/${encodeURIComponent(mirrorKey!)}`),
     enabled: is_mirror,
@@ -259,6 +259,11 @@ export default function ChatPage() {
 
       {!has_active ? (
         <EmptyState onNewSession={create_session} />
+      ) : (activeSessionLoading || mirrorSessionLoading) ? (
+        <div className="chat-loading">
+          <div className="spinner" aria-label={t("chat.loading")}></div>
+          <p>{t("chat.loading")}</p>
+        </div>
       ) : (
         <>
           {is_mirror && <div className="chat-mirror-hint">{t("chat.mirror_relay_hint")}</div>}

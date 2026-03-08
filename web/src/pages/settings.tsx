@@ -46,9 +46,9 @@ export default function SettingsPage() {
 
   if (isLoading || !data) return (
     <div className="page">
-      <div className="skeleton skeleton--row" />
-      <div className="skeleton skeleton--row" />
-      <div className="skeleton skeleton--row" />
+      {Array.from({ length: 6 }).map((_, i) => (
+        <div key={i} className="skeleton skeleton--row" style={{ marginBottom: "12px" }} />
+      ))}
     </div>
   );
 
