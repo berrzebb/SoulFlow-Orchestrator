@@ -7,6 +7,7 @@ import { AgentLoopStore } from "./loop.js";
 import { SubagentRegistry } from "./subagents.js";
 import { TaskStore } from "./task-store.js";
 import { join } from "node:path";
+import { SkillIndex } from "../orchestration/skill-index.js";
 import {
   ToolRuntimeReloader,
   ToolSelfTestService,
@@ -147,11 +148,38 @@ export class AgentDomain implements ServiceLike {
 
   private get skills() { return this.context.skills_loader; }
 
+  /** 스킬 목록이 변경될 때마다 인덱스 재구축. */
+  private _skill_index: SkillIndex | null = null;
+
+  private _get_skill_index(): SkillIndex {
+    if (!this._skill_index) {
+      this._skill_index = new SkillIndex();
+    }
+    if (!this._skill_index.is_built) {
+      const all = [...this.skills["merged"].values()];
+      this._skill_index.build(all);
+    }
+    return this._skill_index;
+  }
+
+  /** SkillIndex 재구축 트리거 (스킬 설치/삭제 후 호출). */
+  invalidate_skill_index(): void {
+    this._skill_index?.close();
+    this._skill_index = null;
+  }
+
   list_always_skills(): string[] {
     return this.skills.get_always_skills();
   }
 
   recommend_skills(task: string, limit = 6): string[] {
+    try {
+      const index = this._get_skill_index();
+      const results = index.select(task, {}, limit);
+      if (results.length > 0) return results;
+    } catch {
+      // FTS5 미지원 환경 등 fallback
+    }
     return this.skills.suggest_skills_for_text(task, limit);
   }
 

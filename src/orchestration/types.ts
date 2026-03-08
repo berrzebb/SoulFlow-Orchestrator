@@ -67,4 +67,6 @@ export type OrchestrationResult = {
   /** 분류기가 builtin 커맨드로 라우팅한 경우. ChannelManager가 CommandRouter에 위임. */
   builtin_command?: string;
   builtin_args?: string;
+  /** SkillIndex가 매칭한 스킬 이름 목록 (SessionMessage.tools_used와 별개). */
+  matched_skills?: string[];
 };

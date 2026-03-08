@@ -26,5 +26,15 @@ export type SkillMetadata = {
   preferred_providers: string[];
   /** 필요한 OAuth 연동 서비스 ID 목록 (e.g., ["github", "google"]). */
   oauth: string[];
+  /** 의도 분류 레이블 (e.g., ["generate_document"]). SkillIndex 4차원 매칭용. */
+  intents: string[];
+  /** 파일 확장자 패턴 (e.g., ["*.pdf", "*.pptx"]). */
+  file_patterns: string[];
+  /** 코드 키워드/라이브러리 (e.g., ["python", "pandas"]). */
+  code_patterns: string[];
+  /** 완료 체크 질문 목록 — CompletionChecker가 수집. */
+  checks: string[];
+  /** 프로젝트 문서 프로토콜 활성화 여부. */
+  project_docs: boolean;
 };
 

@@ -171,6 +171,11 @@ export class SkillsLoader {
       const preferred_providers = this.parse_meta_string_list(meta.preferred_providers);
       const oauth = this.parse_meta_string_list(meta.oauth);
       if (oauth.length > 0 && !tools.includes("oauth_fetch")) tools.push("oauth_fetch");
+      const intents = this.parse_meta_string_list(meta.intents);
+      const file_patterns = this.parse_meta_string_list(meta.file_patterns ?? meta.file_pattern);
+      const code_patterns = this.parse_meta_string_list(meta.code_patterns ?? meta.code_pattern);
+      const checks = this.parse_meta_string_list(meta.checks ?? meta.check);
+      const project_docs = Boolean(meta.project_docs === true || String(meta.project_docs || "").toLowerCase() === "true");
 
       const skillMeta: SkillMetadata = {
         name,
@@ -191,6 +196,11 @@ export class SkillsLoader {
         shared_protocols,
         preferred_providers,
         oauth,
+        intents,
+        file_patterns,
+        code_patterns,
+        checks,
+        project_docs,
       };
       target.set(name, skillMeta);
       this.raw_by_name.set(name, raw);
@@ -232,6 +242,11 @@ export class SkillsLoader {
       const preferred_providers = this.parse_meta_string_list(meta.preferred_providers);
       const oauth = this.parse_meta_string_list(meta.oauth);
       if (oauth.length > 0 && !tools.includes("oauth_fetch")) tools.push("oauth_fetch");
+      const intents = this.parse_meta_string_list(meta.intents);
+      const file_patterns = this.parse_meta_string_list(meta.file_patterns ?? meta.file_pattern);
+      const code_patterns = this.parse_meta_string_list(meta.code_patterns ?? meta.code_pattern);
+      const checks = this.parse_meta_string_list(meta.checks ?? meta.check);
+      const project_docs = Boolean(meta.project_docs === true || String(meta.project_docs || "").toLowerCase() === "true");
 
       target.set(name, {
         name,
@@ -252,6 +267,11 @@ export class SkillsLoader {
         shared_protocols,
         preferred_providers,
         oauth,
+        intents,
+        file_patterns,
+        code_patterns,
+        checks,
+        project_docs,
       });
       this.raw_by_name.set(name, raw);
     }
