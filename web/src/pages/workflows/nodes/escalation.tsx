@@ -1,49 +1,44 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
+import { BuilderField } from "../builder-field";
 
 function EscalationEditPanel({ node, update, t, options }: EditPanelProps) {
   const channels = options?.channels || [];
   return (
     <>
-      <div className="builder-row">
-        <label className="label">{t("workflows.escalation_condition")}</label>
+      <BuilderField label={t("workflows.escalation_condition")}>
         <select autoFocus className="input input--sm" value={String(node.condition || "always")} onChange={(e) => update({ condition: e.target.value })}>
           <option value="always">{t("workflows.escalation_condition_always")}</option>
           <option value="on_timeout">{t("workflows.escalation_condition_timeout")}</option>
           <option value="on_rejection">{t("workflows.escalation_condition_rejection")}</option>
           <option value="custom">{t("workflows.escalation_condition_custom")}</option>
         </select>
-      </div>
+      </BuilderField>
       {String(node.condition) === "custom" && (
-        <div className="builder-row">
-          <label className="label">{t("workflows.escalation_expression")}</label>
+        <BuilderField label={t("workflows.escalation_expression")}>
           <input className="input input--sm" value={String(node.custom_expression || "")} onChange={(e) => update({ custom_expression: e.target.value })} placeholder="memory.status === 'failed'" />
-        </div>
+        </BuilderField>
       )}
-      <div className="builder-row">
-        <label className="label">{t("workflows.escalation_message")}</label>
+      <BuilderField label={t("workflows.escalation_message")}>
         <textarea className="input" rows={3} value={String(node.message || "")} onChange={(e) => update({ message: e.target.value })} placeholder={t("workflows.escalation_message_hint")} />
-      </div>
-      <div className="builder-row">
-        <label className="label">{t("workflows.escalation_priority")}</label>
+      </BuilderField>
+      <BuilderField label={t("workflows.escalation_priority")}>
         <select className="input input--sm" value={String(node.priority || "high")} onChange={(e) => update({ priority: e.target.value })}>
           <option value="critical">{t("workflows.opt_critical")}</option>
           <option value="high">{t("workflows.opt_high")}</option>
           <option value="medium">{t("workflows.opt_medium")}</option>
           <option value="low">{t("workflows.opt_low")}</option>
         </select>
-      </div>
+      </BuilderField>
       <div className="builder-row-pair">
-        <div className="builder-row">
-          <label className="label">{t("workflows.escalation_target_channel")}</label>
+        <BuilderField label={t("workflows.escalation_target_channel")}>
           <select className="input input--sm" value={String(node.target_channel || "")} onChange={(e) => update({ target_channel: e.target.value })}>
             <option value="">{t("common.select")}</option>
             {channels.map((c) => <option key={c.channel_id} value={c.provider}>{c.label} ({c.provider})</option>)}
           </select>
-        </div>
-        <div className="builder-row">
-          <label className="label">{t("workflows.escalation_target_chat_id")}</label>
+        </BuilderField>
+        <BuilderField label={t("workflows.escalation_target_chat_id")}>
           <input className="input input--sm" value={String(node.target_chat_id || "")} onChange={(e) => update({ target_chat_id: e.target.value })} />
-        </div>
+        </BuilderField>
       </div>
     </>
   );

@@ -1,20 +1,18 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
+import { BuilderField } from "../builder-field";
 
 function MemoryRwEditPanel({ node, update, t }: EditPanelProps) {
   return (
     <>
-      <div className="builder-row">
-        <label className="label">{t("node.memory_rw.input.action")}</label>
+      <BuilderField label={t("node.memory_rw.input.action")}>
         <input autoFocus className="input input--sm" value={String(node.action || "")} onChange={(e) => update({ action: e.target.value })} />
-      </div>
-      <div className="builder-row">
-        <label className="label">{t("node.memory_rw.input.key")}</label>
+      </BuilderField>
+      <BuilderField label={t("node.memory_rw.input.key")}>
         <input className="input input--sm" value={String(node.key || "")} onChange={(e) => update({ key: e.target.value })} />
-      </div>
-      <div className="builder-row">
-        <label className="label">{t("node.memory_rw.input.value")}</label>
+      </BuilderField>
+      <BuilderField label={t("node.memory_rw.input.value")}>
         <input className="input input--sm" value={String(node.value || "")} onChange={(e) => update({ value: e.target.value })} />
-      </div>
+      </BuilderField>
     </>
   );
 }

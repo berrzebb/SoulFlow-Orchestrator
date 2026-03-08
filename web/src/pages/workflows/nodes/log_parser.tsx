@@ -1,13 +1,11 @@
+import { BuilderField } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
 function LogParserEditPanel({ node, update, t }: EditPanelProps) {
   return (
-    <>
-      <div className="builder-row">
-        <label className="label">{t("node.log_parser.description")}</label>
-        <p className="builder-hint">{t("node.log_parser.hint")}</p>
-      </div>
-    </>
+    <BuilderField label={t("node.log_parser.description")} hint={t("node.log_parser.hint")}>
+      {null}
+    </BuilderField>
   );
 }
 

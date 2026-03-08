@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { BuilderField } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
 function SetEditPanel({ node, update, t }: EditPanelProps) {
@@ -13,8 +14,7 @@ function SetEditPanel({ node, update, t }: EditPanelProps) {
   };
 
   return (
-    <div className="builder-row">
-      <label className="label">{t("workflows.set_assignments")}</label>
+    <BuilderField label={t("workflows.set_assignments")} hint={t("workflows.set_hint")} error={err}>
       <textarea
         autoFocus
         className={`input code-textarea${err ? " input--err" : ""}`}
@@ -24,9 +24,7 @@ function SetEditPanel({ node, update, t }: EditPanelProps) {
         spellCheck={false}
         placeholder='[{"key": "result", "value": "{{memory.http-1.body}}"}]'
       />
-      {err && <span className="field-error">{err}</span>}
-      <span className="builder-hint">{t("workflows.set_hint")}</span>
-    </div>
+    </BuilderField>
   );
 }
 

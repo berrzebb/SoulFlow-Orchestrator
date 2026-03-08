@@ -1,26 +1,23 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
+import { BuilderField } from "../builder-field";
 
 function TextSplitterEditPanel({ node, update, t }: EditPanelProps) {
   return (
     <>
-      <div className="builder-row">
-        <label className="label">{t("workflows.splitter_input")}</label>
+      <BuilderField label={t("workflows.splitter_input")}>
         <input autoFocus className="input input--sm" value={String(node.input_field || "")} onChange={(e) => update({ input_field: e.target.value })} placeholder="memory.document_text" />
-      </div>
+      </BuilderField>
       <div className="builder-row-pair">
-        <div className="builder-row">
-          <label className="label">{t("workflows.splitter_chunk_size")}</label>
+        <BuilderField label={t("workflows.splitter_chunk_size")}>
           <input className="input input--sm" type="number" min={50} value={String(node.chunk_size ?? 1000)} onChange={(e) => update({ chunk_size: Number(e.target.value) || 1000 })} />
-        </div>
-        <div className="builder-row">
-          <label className="label">{t("workflows.splitter_overlap")}</label>
+        </BuilderField>
+        <BuilderField label={t("workflows.splitter_overlap")}>
           <input className="input input--sm" type="number" min={0} value={String(node.chunk_overlap ?? 200)} onChange={(e) => update({ chunk_overlap: Number(e.target.value) || 0 })} />
-        </div>
+        </BuilderField>
       </div>
-      <div className="builder-row">
-        <label className="label">{t("workflows.splitter_separator")}</label>
+      <BuilderField label={t("workflows.splitter_separator")}>
         <input className="input input--sm" value={String(node.separator ?? "\\n\\n")} onChange={(e) => update({ separator: e.target.value.replace(/\\n/g, "\n") })} placeholder="\n\n" />
-      </div>
+      </BuilderField>
     </>
   );
 }

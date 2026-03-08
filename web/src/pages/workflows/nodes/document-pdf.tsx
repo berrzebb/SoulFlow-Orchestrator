@@ -1,20 +1,18 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
+import { BuilderField } from "../builder-field";
 
 function DocumentPdfEditPanel({ node, update, t }: EditPanelProps) {
   return (
     <>
-      <div className="builder-row">
-        <label className="label">{t("node.document_pdf.input.content")}</label>
+      <BuilderField label={t("node.document_pdf.input.content")}>
         <input autoFocus className="input input--sm" value={String(node.content || "")} onChange={(e) => update({ content: e.target.value })} />
-      </div>
-      <div className="builder-row">
-        <label className="label">{t("node.document_pdf.input.input_format")}</label>
+      </BuilderField>
+      <BuilderField label={t("node.document_pdf.input.input_format")}>
         <input className="input input--sm" value={String(node.input_format || "")} onChange={(e) => update({ input_format: e.target.value })} />
-      </div>
-      <div className="builder-row">
-        <label className="label">{t("node.document_pdf.input.output")}</label>
+      </BuilderField>
+      <BuilderField label={t("node.document_pdf.input.output")}>
         <input className="input input--sm" value={String(node.output || "")} onChange={(e) => update({ output: e.target.value })} />
-      </div>
+      </BuilderField>
     </>
   );
 }

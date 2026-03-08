@@ -1,70 +1,58 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
+import { BuilderField } from "../builder-field";
 
 function VectorStoreEditPanel({ node, update, t }: EditPanelProps) {
   const op = String(node.operation || "query");
   return (
     <>
       <div className="builder-row-pair">
-        <div className="builder-row">
-          <label className="label">{t("workflows.vs_operation")}<span className="label__required">*</span></label>
+        <BuilderField label={t("workflows.vs_operation")} required>
           <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
             <option value="query">{t("workflows.opt_query")}</option>
             <option value="upsert">{t("workflows.opt_upsert")}</option>
             <option value="delete">{t("workflows.opt_delete")}</option>
           </select>
-        </div>
-        <div className="builder-row">
-          <label className="label">{t("workflows.vs_store")}</label>
+        </BuilderField>
+        <BuilderField label={t("workflows.vs_store")}>
           <input className="input input--sm" value={String(node.store_id || "")} onChange={(e) => update({ store_id: e.target.value })} placeholder="default" />
-        </div>
+        </BuilderField>
       </div>
-      <div className="builder-row">
-        <label className="label">{t("workflows.vs_collection")}</label>
+      <BuilderField label={t("workflows.vs_collection")}>
         <input className="input input--sm" value={String(node.collection || "")} onChange={(e) => update({ collection: e.target.value })} placeholder="default" />
-      </div>
+      </BuilderField>
       {op === "query" && (
         <>
           <div className="builder-row-pair">
-            <div className="builder-row">
-              <label className="label">{t("workflows.vs_query_field")}</label>
+            <BuilderField label={t("workflows.vs_query_field")}>
               <input className="input input--sm" value={String(node.query_vector_field || "")} onChange={(e) => update({ query_vector_field: e.target.value })} placeholder="memory.query_embedding" />
-            </div>
-            <div className="builder-row">
-              <label className="label">{t("workflows.vs_top_k")}</label>
+            </BuilderField>
+            <BuilderField label={t("workflows.vs_top_k")} hint={t("workflows.vs_top_k_hint")}>
               <input className="input input--sm" type="number" min={1} max={100} value={String(node.top_k ?? 5)} onChange={(e) => update({ top_k: Number(e.target.value) || 5 })} />
-              <span className="builder-hint">{t("workflows.vs_top_k_hint")}</span>
-            </div>
+            </BuilderField>
           </div>
-          <div className="builder-row">
-            <label className="label">{t("workflows.vs_min_score")}</label>
+          <BuilderField label={t("workflows.vs_min_score")} hint={t("workflows.vs_min_score_hint")}>
             <input className="input input--sm" type="number" step="0.05" min={0} max={1} value={String(node.min_score ?? 0)} onChange={(e) => update({ min_score: Number(e.target.value) || 0 })} />
-            <span className="builder-hint">{t("workflows.vs_min_score_hint")}</span>
-          </div>
+          </BuilderField>
         </>
       )}
       {op === "upsert" && (
         <div className="builder-row-pair">
-          <div className="builder-row">
-            <label className="label">{t("workflows.vs_vectors")}</label>
+          <BuilderField label={t("workflows.vs_vectors")}>
             <input className="input input--sm" value={String(node.vectors_field || "")} onChange={(e) => update({ vectors_field: e.target.value })} placeholder="memory.embeddings" />
-          </div>
-          <div className="builder-row">
-            <label className="label">{t("workflows.vs_docs")}</label>
+          </BuilderField>
+          <BuilderField label={t("workflows.vs_docs")}>
             <input className="input input--sm" value={String(node.documents_field || "")} onChange={(e) => update({ documents_field: e.target.value })} placeholder="memory.chunks" />
-          </div>
+          </BuilderField>
         </div>
       )}
       {op === "delete" && (
-        <div className="builder-row">
-          <label className="label">{t("workflows.vs_ids")}</label>
+        <BuilderField label={t("workflows.vs_ids")}>
           <input className="input input--sm" value={String(node.ids_field || "")} onChange={(e) => update({ ids_field: e.target.value })} placeholder="memory.delete_ids" />
-        </div>
+        </BuilderField>
       )}
-      <div className="builder-row">
-        <label className="label">{t("workflows.vs_filter")}</label>
+      <BuilderField label={t("workflows.vs_filter")} hint={t("workflows.vs_filter_hint")}>
         <input className="input input--sm" value={String(node.filter || "")} onChange={(e) => update({ filter: e.target.value || undefined })} placeholder='{"category": "docs"}' />
-        <span className="builder-hint">{t("workflows.vs_filter_hint")}</span>
-      </div>
+      </BuilderField>
     </>
   );
 }

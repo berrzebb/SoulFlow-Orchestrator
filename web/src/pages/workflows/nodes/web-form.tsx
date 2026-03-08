@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
+import { BuilderField } from "../builder-field";
 
 function WebFormEditPanel({ node, update, t }: EditPanelProps) {
   const [fieldsRaw, setFieldsRaw] = useState(node.fields ? JSON.stringify(node.fields, null, 2) : "{}");
@@ -14,12 +15,10 @@ function WebFormEditPanel({ node, update, t }: EditPanelProps) {
 
   return (
     <>
-      <div className="builder-row">
-        <label className="label">{t("workflows.scrape_url")}</label>
+      <BuilderField label={t("workflows.scrape_url")}>
         <input autoFocus className="input" value={String(node.url || "")} onChange={(e) => update({ url: e.target.value })} placeholder="https://example.com/form" />
-      </div>
-      <div className="builder-row">
-        <label className="label">{t("workflows.form_fields")}</label>
+      </BuilderField>
+      <BuilderField label={t("workflows.form_fields")} error={fieldsErr}>
         <textarea
           className={`input code-textarea${fieldsErr ? " input--err" : ""}`}
           rows={4}
@@ -27,17 +26,14 @@ function WebFormEditPanel({ node, update, t }: EditPanelProps) {
           onChange={(e) => handleFields(e.target.value)}
           placeholder='{"#email": "test@test.com", "#password": "***"}'
         />
-        {fieldsErr && <span className="field-error">{fieldsErr}</span>}
-      </div>
+      </BuilderField>
       <div className="builder-row-pair">
-        <div className="builder-row">
-          <label className="label">{t("workflows.submit_selector")}</label>
+        <BuilderField label={t("workflows.submit_selector")}>
           <input className="input input--sm" value={String(node.submit_selector || "")} onChange={(e) => update({ submit_selector: e.target.value })} placeholder='button[type="submit"]' />
-        </div>
-        <div className="builder-row">
-          <label className="label">{t("workflows.wait_after_ms")}</label>
+        </BuilderField>
+        <BuilderField label={t("workflows.wait_after_ms")}>
           <input className="input input--sm" type="number" min={0} max={30000} step={500} value={String(node.wait_after_ms ?? 2000)} onChange={(e) => update({ wait_after_ms: Number(e.target.value) || 2000 })} />
-        </div>
+        </BuilderField>
       </div>
     </>
   );

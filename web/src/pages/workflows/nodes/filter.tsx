@@ -1,17 +1,15 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
+import { BuilderField } from "../builder-field";
 
 function FilterEditPanel({ node, update, t }: EditPanelProps) {
   return (
     <>
-      <div className="builder-row">
-        <label className="label">{t("workflows.filter_array")}</label>
+      <BuilderField label={t("workflows.filter_array")}>
         <input autoFocus className="input input--sm" value={String(node.array_field || "")} onChange={(e) => update({ array_field: e.target.value })} placeholder="body.users" />
-      </div>
-      <div className="builder-row">
-        <label className="label">{t("workflows.filter_condition")}</label>
+      </BuilderField>
+      <BuilderField label={t("workflows.filter_condition")} hint={t("workflows.filter_hint")}>
         <textarea className="input code-textarea" rows={3} value={String(node.condition || "")} onChange={(e) => update({ condition: e.target.value })} spellCheck={false} placeholder="item.active === true" />
-        <span className="builder-hint">{t("workflows.filter_hint")}</span>
-      </div>
+      </BuilderField>
     </>
   );
 }

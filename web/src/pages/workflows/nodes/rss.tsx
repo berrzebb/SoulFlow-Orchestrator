@@ -1,13 +1,11 @@
+import { BuilderField } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
 function RssEditPanel({ node, update, t }: EditPanelProps) {
   return (
-    <>
-      <div className="builder-row">
-        <label className="label">{t("node.rss.description")}</label>
-        <p className="builder-hint">{t("node.rss.hint")}</p>
-      </div>
-    </>
+    <BuilderField label={t("node.rss.description")} hint={t("node.rss.hint")}>
+      {null}
+    </BuilderField>
   );
 }
 

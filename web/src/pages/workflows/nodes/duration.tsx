@@ -1,13 +1,11 @@
+import { BuilderField } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
 function DurationEditPanel({ node, update, t }: EditPanelProps) {
   return (
-    <>
-      <div className="builder-row">
-        <label className="label">{t("node.duration.description")}</label>
-        <p className="builder-hint">{t("node.duration.hint")}</p>
-      </div>
-    </>
+    <BuilderField label={t("node.duration.description")} hint={t("node.duration.hint")}>
+      {null}
+    </BuilderField>
   );
 }
 

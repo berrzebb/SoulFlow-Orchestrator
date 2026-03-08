@@ -1,20 +1,18 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
+import { BuilderField } from "../builder-field";
 
 function DocumentXlsxEditPanel({ node, update, t }: EditPanelProps) {
   return (
     <>
-      <div className="builder-row">
-        <label className="label">{t("node.document_xlsx.input.content")}</label>
+      <BuilderField label={t("node.document_xlsx.input.content")}>
         <input autoFocus className="input input--sm" value={String(node.content || "")} onChange={(e) => update({ content: e.target.value })} />
-      </div>
-      <div className="builder-row">
-        <label className="label">{t("node.document_xlsx.input.output")}</label>
+      </BuilderField>
+      <BuilderField label={t("node.document_xlsx.input.output")}>
         <input className="input input--sm" value={String(node.output || "")} onChange={(e) => update({ output: e.target.value })} />
-      </div>
-      <div className="builder-row">
-        <label className="label">{t("node.document_xlsx.input.delimiter")}</label>
+      </BuilderField>
+      <BuilderField label={t("node.document_xlsx.input.delimiter")}>
         <input className="input input--sm" value={String(node.delimiter || "")} onChange={(e) => update({ delimiter: e.target.value })} />
-      </div>
+      </BuilderField>
     </>
   );
 }

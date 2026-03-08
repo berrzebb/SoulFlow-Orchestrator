@@ -1,20 +1,18 @@
+import { BuilderField } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
 function JwtEditPanel({ node, update, t }: EditPanelProps) {
   return (
     <>
-      <div className="builder-row">
-        <label className="label">{t("node.jwt.input.action")}</label>
+      <BuilderField label={t("node.jwt.input.action")}>
         <input autoFocus className="input input--sm" value={String(node.action || "")} onChange={(e) => update({ action: e.target.value })} />
-      </div>
-      <div className="builder-row">
-        <label className="label">{t("node.jwt.input.token")}</label>
+      </BuilderField>
+      <BuilderField label={t("node.jwt.input.token")}>
         <input className="input input--sm" value={String(node.token || "")} onChange={(e) => update({ token: e.target.value })} />
-      </div>
-      <div className="builder-row">
-        <label className="label">{t("node.jwt.input.secret")}</label>
+      </BuilderField>
+      <BuilderField label={t("node.jwt.input.secret")}>
         <input className="input input--sm" value={String(node.secret || "")} onChange={(e) => update({ secret: e.target.value })} />
-      </div>
+      </BuilderField>
     </>
   );
 }

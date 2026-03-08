@@ -1,48 +1,43 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
+import { BuilderField } from "../builder-field";
 
 function QueueEditPanel({ node, update, t }: EditPanelProps) {
   const op = String(node.operation || "enqueue");
   return (
     <>
       <div className="builder-row-pair">
-        <div className="builder-row">
-          <label className="label">{t("workflows.operation")}<span className="label__required">*</span></label>
+        <BuilderField label={t("workflows.operation")} required>
           <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
             {["enqueue", "dequeue", "peek", "size", "drain", "list", "clear", "delete"].map((o) => <option key={o} value={o}>{o}</option>)}
           </select>
-        </div>
-        <div className="builder-row">
-          <label className="label">{t("workflows.field_queue")}</label>
+        </BuilderField>
+        <BuilderField label={t("workflows.field_queue")}>
           <input className="input input--sm" value={String(node.queue || "default")} onChange={(e) => update({ queue: e.target.value })} />
-        </div>
+        </BuilderField>
       </div>
       {op === "enqueue" && (
         <>
-          <div className="builder-row">
-            <label className="label">{t("workflows.field_value")}</label>
+          <BuilderField label={t("workflows.field_value")}>
             <textarea className="input code-textarea" rows={2} value={String(node.value || "")} onChange={(e) => update({ value: e.target.value })} />
-          </div>
+          </BuilderField>
           <div className="builder-row-pair">
-            <div className="builder-row">
-              <label className="label">{t("workflows.field_mode")}</label>
+            <BuilderField label={t("workflows.field_mode")}>
               <select className="input input--sm" value={String(node.mode || "fifo")} onChange={(e) => update({ mode: e.target.value })}>
                 {["fifo", "lifo", "priority"].map((m) => <option key={m} value={m}>{m}</option>)}
               </select>
-            </div>
+            </BuilderField>
             {String(node.mode) === "priority" && (
-              <div className="builder-row">
-                <label className="label">{t("workflows.field_priority")}</label>
+              <BuilderField label={t("workflows.field_priority")}>
                 <input className="input input--sm" type="number" min={0} max={100} value={String(node.priority ?? 50)} onChange={(e) => update({ priority: Number(e.target.value) })} />
-              </div>
+              </BuilderField>
             )}
           </div>
         </>
       )}
       {op === "drain" && (
-        <div className="builder-row">
-          <label className="label">{t("workflows.field_count")}</label>
+        <BuilderField label={t("workflows.field_count")}>
           <input className="input input--sm" type="number" min={1} max={1000} value={String(node.count ?? 10)} onChange={(e) => update({ count: Number(e.target.value) })} />
-        </div>
+        </BuilderField>
       )}
     </>
   );

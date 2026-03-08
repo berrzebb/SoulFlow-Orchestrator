@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
+import { BuilderField } from "../builder-field";
 
 function TaskEditPanel({ node, update, t, options }: EditPanelProps) {
   const channels = options?.channels || [];
@@ -14,17 +15,14 @@ function TaskEditPanel({ node, update, t, options }: EditPanelProps) {
   };
   return (
     <>
-      <div className="builder-row">
-        <label className="label">{t("workflows.task_title")}<span className="label__required">*</span></label>
+      <BuilderField label={t("workflows.task_title")} required>
         <input autoFocus required className="input input--sm" value={String(node.task_title || "")} onChange={(e) => update({ task_title: e.target.value })} placeholder="Process user request" aria-required="true" />
-      </div>
-      <div className="builder-row">
-        <label className="label">{t("workflows.task_objective")}<span className="label__required">*</span></label>
+      </BuilderField>
+      <BuilderField label={t("workflows.task_objective")} required>
         <textarea required className="input code-textarea" rows={3} value={String(node.objective || "")} onChange={(e) => update({ objective: e.target.value })} spellCheck={false} placeholder="{{memory.user_request}}" aria-required="true" />
-      </div>
+      </BuilderField>
       <div className="builder-row-pair">
-        <div className="builder-row">
-          <label className="label">{t("workflows.task_channel")}</label>
+        <BuilderField label={t("workflows.task_channel")}>
           {channels.length > 0 ? (
             <select className="input input--sm" value={String(node.channel || "")} onChange={(e) => update({ channel: e.target.value })}>
               <option value="">{t("common.select")}</option>
@@ -33,15 +31,12 @@ function TaskEditPanel({ node, update, t, options }: EditPanelProps) {
           ) : (
             <input className="input input--sm" value={String(node.channel || "")} onChange={(e) => update({ channel: e.target.value })} placeholder="slack" />
           )}
-        </div>
-        <div className="builder-row">
-          <label className="label">{t("workflows.max_turns")}<span className="label__required">*</span></label>
+        </BuilderField>
+        <BuilderField label={t("workflows.max_turns")} required hint={t("workflows.task_max_turns_hint")}>
           <input required className="input input--sm" type="number" min={1} max={200} value={String(node.max_turns ?? 20)} onChange={(e) => update({ max_turns: Number(e.target.value) || 20 })} aria-required="true" />
-          <span className="builder-hint">{t("workflows.task_max_turns_hint")}</span>
-        </div>
+        </BuilderField>
       </div>
-      <div className="builder-row">
-        <label className="label">{t("workflows.task_memory")}</label>
+      <BuilderField label={t("workflows.task_memory")} error={memoryErr}>
         <textarea
           className={`input code-textarea${memoryErr ? " input--err" : ""}`}
           rows={2}
@@ -50,8 +45,7 @@ function TaskEditPanel({ node, update, t, options }: EditPanelProps) {
           spellCheck={false}
           placeholder='{"context": "{{memory.prev.result}}"}'
         />
-        {memoryErr && <span className="field-error">{memoryErr}</span>}
-      </div>
+      </BuilderField>
     </>
   );
 }

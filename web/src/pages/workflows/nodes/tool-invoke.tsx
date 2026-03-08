@@ -1,4 +1,5 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
+import { BuilderField } from "../builder-field";
 
 function ToolInvokeEditPanel({ node, update, t, options }: EditPanelProps) {
   const available = options?.available_tools || [];
@@ -11,30 +12,25 @@ function ToolInvokeEditPanel({ node, update, t, options }: EditPanelProps) {
 
   return (
     <>
-      <div className="builder-row">
-        <label className="label">{t("workflows.tool_invoke_id")}<span className="label__required">*</span></label>
+      <BuilderField label={t("workflows.tool_invoke_id")} required hint={t("workflows.tool_invoke_id_hint")}>
         <select autoFocus required className="input input--sm" value={toolId} onChange={(e) => update({ tool_id: e.target.value })} aria-required="true">
           <option value="">{t("common.select")}</option>
           {available.map((id) => <option key={id} value={id}>{id}</option>)}
         </select>
-        <span className="builder-hint">{t("workflows.tool_invoke_id_hint")}</span>
-      </div>
+      </BuilderField>
       {selectedDef && (
         <div className="builder-row">
           <span className="muted">{String(selectedDef.description || "")}</span>
         </div>
       )}
-      <div className="builder-row">
-        <label className="label">{t("workflows.tool_invoke_params")}</label>
+      <BuilderField label={t("workflows.tool_invoke_params")} hint={t("workflows.tool_invoke_params_hint")}>
         <textarea className="input" rows={5} value={paramsJson} onChange={(e) => {
           try { update({ params: JSON.parse(e.target.value) }); } catch { /* invalid json */ }
         }} placeholder='{ "key": "{{memory.value}}" }' />
-        <span className="builder-hint">{t("workflows.tool_invoke_params_hint")}</span>
-      </div>
-      <div className="builder-row">
-        <label className="label">{t("workflows.hitl_timeout")}<span className="label__required">*</span></label>
+      </BuilderField>
+      <BuilderField label={t("workflows.hitl_timeout")} required>
         <input required className="input input--sm" type="number" min={0} value={String(node.timeout_ms ?? 30000)} onChange={(e) => update({ timeout_ms: Number(e.target.value) })} aria-required="true" />
-      </div>
+      </BuilderField>
     </>
   );
 }

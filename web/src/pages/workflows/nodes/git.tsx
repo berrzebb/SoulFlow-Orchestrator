@@ -1,24 +1,22 @@
+import { BuilderField } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
 function GitEditPanel({ node, update, t }: EditPanelProps) {
   return (
     <>
       <div className="builder-row-pair">
-        <div className="builder-row">
-          <label className="label">{t("workflows.git_operation")}<span className="label__required">*</span></label>
+        <BuilderField label={t("workflows.git_operation")} required>
           <select autoFocus className="input input--sm" value={String(node.operation || "status")} onChange={(e) => update({ operation: e.target.value })}>
             {["status", "diff", "log", "commit", "push", "pull", "branch", "checkout", "stash", "tag"].map((o) => <option key={o} value={o}>{o}</option>)}
           </select>
-        </div>
-        <div className="builder-row">
-          <label className="label">{t("workflows.git_args")}</label>
+        </BuilderField>
+        <BuilderField label={t("workflows.git_args")}>
           <input className="input input--sm" value={String(node.args || "")} onChange={(e) => update({ args: e.target.value })} placeholder="--oneline -5" />
-        </div>
+        </BuilderField>
       </div>
-      <div className="builder-row">
-        <label className="label">{t("workflows.working_dir")}</label>
+      <BuilderField label={t("workflows.working_dir")}>
         <input className="input input--sm" value={String(node.working_dir || "")} onChange={(e) => update({ working_dir: e.target.value })} placeholder="(workspace default)" />
-      </div>
+      </BuilderField>
     </>
   );
 }

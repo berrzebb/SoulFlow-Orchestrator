@@ -1,13 +1,11 @@
+import { BuilderField } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
 function MqttEditPanel({ node, update, t }: EditPanelProps) {
   return (
-    <>
-      <div className="builder-row">
-        <label className="label">{t("node.mqtt.description")}</label>
-        <p className="builder-hint">{t("node.mqtt.hint")}</p>
-      </div>
-    </>
+    <BuilderField label={t("node.mqtt.description")} hint={t("node.mqtt.hint")}>
+      {null}
+    </BuilderField>
   );
 }
 

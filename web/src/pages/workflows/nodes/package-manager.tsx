@@ -1,33 +1,30 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
+import { BuilderField } from "../builder-field";
 
 function PkgManagerEditPanel({ node, update, t }: EditPanelProps) {
   const op = String(node.operation || "list");
   return (
     <>
       <div className="builder-row-pair">
-        <div className="builder-row">
-          <label className="label">{t("workflows.pkg_manager")}</label>
+        <BuilderField label={t("workflows.pkg_manager")}>
           <select autoFocus className="input input--sm" value={String(node.manager || "npm")} onChange={(e) => update({ manager: e.target.value })}>
             {["npm", "pip", "cargo"].map((m) => <option key={m} value={m}>{m}</option>)}
           </select>
-        </div>
-        <div className="builder-row">
-          <label className="label">{t("workflows.pkg_operation")}</label>
+        </BuilderField>
+        <BuilderField label={t("workflows.pkg_operation")}>
           <select className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
             {["list", "install", "uninstall", "audit", "outdated", "info"].map((o) => <option key={o} value={o}>{o}</option>)}
           </select>
-        </div>
+        </BuilderField>
       </div>
       {["install", "uninstall", "info"].includes(op) && (
-        <div className="builder-row">
-          <label className="label">{t("workflows.package_name")}</label>
+        <BuilderField label={t("workflows.package_name")}>
           <input className="input" value={String(node.package_name || "")} onChange={(e) => update({ package_name: e.target.value })} placeholder="lodash" />
-        </div>
+        </BuilderField>
       )}
-      <div className="builder-row">
-        <label className="label">{t("workflows.extra_args")}</label>
+      <BuilderField label={t("workflows.extra_args")}>
         <input className="input input--sm" value={String(node.flags || "")} onChange={(e) => update({ flags: e.target.value })} placeholder="--save-dev" />
-      </div>
+      </BuilderField>
     </>
   );
 }

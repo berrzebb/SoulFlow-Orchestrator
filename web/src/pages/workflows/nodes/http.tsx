@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
+import { BuilderField } from "../builder-field";
 
 function HttpEditPanel({ node, update, t }: EditPanelProps) {
   const [headersRaw, setHeadersRaw] = useState(node.headers ? JSON.stringify(node.headers, null, 2) : "");
@@ -15,19 +16,16 @@ function HttpEditPanel({ node, update, t }: EditPanelProps) {
   return (
     <>
       <div className="builder-row-pair">
-        <div className="builder-row">
-          <label className="label">{t("workflows.http_method")}<span className="label__required">*</span></label>
+        <BuilderField label={t("workflows.http_method")} required>
           <select autoFocus className="input input--sm" required value={String(node.method || "GET")} onChange={(e) => update({ method: e.target.value })} aria-required="true">
             {["GET", "POST", "PUT", "PATCH", "DELETE"].map((m) => <option key={m} value={m}>{m}</option>)}
           </select>
-        </div>
-        <div className="builder-row">
-          <label className="label">{t("workflows.http_url")}<span className="label__required">*</span></label>
+        </BuilderField>
+        <BuilderField label={t("workflows.http_url")} required>
           <input className="input input--sm" required value={String(node.url || "")} onChange={(e) => update({ url: e.target.value })} placeholder="https://api.example.com/data" aria-required="true" />
-        </div>
+        </BuilderField>
       </div>
-      <div className="builder-row">
-        <label className="label">{t("workflows.http_headers")}</label>
+      <BuilderField label={t("workflows.http_headers")} error={headersErr}>
         <textarea
           className={`input input--sm code-textarea${headersErr ? " input--err" : ""}`}
           rows={2}
@@ -35,17 +33,13 @@ function HttpEditPanel({ node, update, t }: EditPanelProps) {
           onChange={(e) => handleHeaders(e.target.value)}
           placeholder='{"Authorization": "Bearer {{memory.token}}"}'
         />
-        {headersErr && <span className="field-error">{headersErr}</span>}
-      </div>
-      <div className="builder-row">
-        <label className="label">{t("workflows.http_body")}</label>
+      </BuilderField>
+      <BuilderField label={t("workflows.http_body")}>
         <textarea className="input" rows={3} value={typeof node.body === "string" ? node.body : JSON.stringify(node.body || "", null, 2)} onChange={(e) => update({ body: e.target.value })} />
-      </div>
-      <div className="builder-row">
-        <label className="label">{t("workflows.timeout_ms")}<span className="label__required">*</span></label>
+      </BuilderField>
+      <BuilderField label={t("workflows.timeout_ms")} required hint={t("workflows.timeout_ms_hint")}>
         <input className="input input--sm" required type="number" min={100} max={30000} step={1000} value={String(node.timeout_ms ?? 10000)} onChange={(e) => update({ timeout_ms: Number(e.target.value) || 10000 })} aria-required="true" />
-        <span className="builder-hint">{t("workflows.timeout_ms_hint")}</span>
-      </div>
+      </BuilderField>
     </>
   );
 }

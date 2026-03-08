@@ -6,6 +6,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import type { NodeOptions } from "./node-registry";
+import { BuilderField } from "./builder-field";
 import { useProviderModels } from "./use-provider-models";
 import { END_TARGET_PARAMS } from "./output-schema";
 import type { PhaseDef, AgentDef, CriticDef, ToolNodeDef, SkillNodeDef, WorkflowDef, RolePreset } from "./workflow-types";
@@ -81,29 +82,25 @@ export function PhaseParamsPanel({ phase, workflow, onChange, onPhaseIdChange, t
   return (
     <>
       <div className="builder-row-pair">
-        <div className="builder-row">
-          <label className="label">{t("workflows.phase_id")}</label>
+        <BuilderField label={t("workflows.phase_id")}>
           <input autoFocus className="input input--sm" value={phase.phase_id}
             onChange={(e) => updatePhase({ phase_id: e.target.value })} />
-        </div>
-        <div className="builder-row">
-          <label className="label">{t("workflows.phase_title")}</label>
+        </BuilderField>
+        <BuilderField label={t("workflows.phase_title")}>
           <input className="input input--sm" value={phase.title}
             onChange={(e) => updatePhase({ title: e.target.value })} />
-        </div>
+        </BuilderField>
       </div>
 
-      <div className="builder-row">
-        <label className="label">{t("workflows.phase_description")}</label>
+      <BuilderField label={t("workflows.phase_description")}>
         <textarea className="input input--sm" rows={2}
           value={phase.description || ""}
           onChange={(e) => updatePhase({ description: e.target.value })}
           placeholder={t("workflows.phase_description_placeholder")}
         />
-      </div>
+      </BuilderField>
 
-      <div className="builder-row">
-        <label className="label">{t("workflows.phase_mode")}</label>
+      <BuilderField label={t("workflows.phase_mode")}>
         <select className="input input--sm"
           value={phase.mode || "parallel"}
           onChange={(e) => updatePhase({ mode: e.target.value as PhaseDef["mode"] })}
@@ -112,19 +109,17 @@ export function PhaseParamsPanel({ phase, workflow, onChange, onPhaseIdChange, t
           <option value="interactive">{t("workflows.mode_interactive")}</option>
           <option value="sequential_loop">{t("workflows.mode_sequential_loop")}</option>
         </select>
-      </div>
+      </BuilderField>
 
       {(phase.mode === "interactive" || phase.mode === "sequential_loop") && (
-        <div className="builder-row">
-          <label className="label">{t("workflows.max_loop_iterations")}</label>
+        <BuilderField label={t("workflows.max_loop_iterations")}>
           <input className="input input--sm" type="number" min={1}
             value={phase.max_loop_iterations ?? (phase.mode === "interactive" ? 20 : 50)}
             onChange={(e) => updatePhase({ max_loop_iterations: Number(e.target.value) || undefined })} />
-        </div>
+        </BuilderField>
       )}
 
-      <div className="builder-row">
-        <label className="label">{t("workflows.context_template")}</label>
+      <BuilderField label={t("workflows.context_template")} hint={t("workflows.context_template_hint")}>
         <textarea className="input input--sm inspector-droppable" rows={2}
           value={phase.context_template || ""}
           onChange={(e) => updatePhase({ context_template: e.target.value })}
@@ -133,8 +128,7 @@ export function PhaseParamsPanel({ phase, workflow, onChange, onPhaseIdChange, t
           placeholder="{{prev_phase.result}}"
           data-droppable="true"
         />
-        <span className="builder-hint">{t("workflows.context_template_hint")}</span>
-      </div>
+      </BuilderField>
 
       <div className="inspector-section">
         <div className="inspector-section__header">
@@ -251,32 +245,28 @@ export function AgentSummaryCard({ agent, index, phase, workflow, onChange, onNo
       {expanded && (
         <div className="inspector-card__body">
           <div className="builder-row-pair">
-            <div className="builder-row">
-              <label className="label">{t("workflows.agent_id")}</label>
+            <BuilderField label={t("workflows.agent_id")}>
               <input className="input input--sm" value={agent.agent_id}
                 onChange={(e) => updateAgent({ agent_id: e.target.value })} />
-            </div>
-            <div className="builder-row">
-              <label className="label">{t("workflows.agent_label")}</label>
+            </BuilderField>
+            <BuilderField label={t("workflows.agent_label")}>
               <input className="input input--sm" value={agent.label}
                 onChange={(e) => updateAgent({ label: e.target.value })} />
-            </div>
+            </BuilderField>
           </div>
-          <div className="builder-row">
-            <label className="label">{t("workflows.select_role")}</label>
+          <BuilderField label={t("workflows.select_role")}>
             <select className="input input--sm"
               value={isPresetRole ? agent.role : ""}
               onChange={(e) => { if (e.target.value) applyRole(e.target.value); }}>
               <option value="">{t("workflows.custom_role")}</option>
               {roles?.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
             </select>
-          </div>
+          </BuilderField>
           {!isPresetRole && (
-            <div className="builder-row">
-              <label className="label">{t("workflows.agent_role")}</label>
+            <BuilderField label={t("workflows.agent_role")}>
               <input className="input input--sm" value={agent.role}
                 onChange={(e) => updateAgent({ role: e.target.value })} />
-            </div>
+            </BuilderField>
           )}
           {isPresetRole && (
             <div className="builder-meta-hint--mb">
@@ -284,8 +274,7 @@ export function AgentSummaryCard({ agent, index, phase, workflow, onChange, onNo
             </div>
           )}
           <div className="builder-row-pair">
-            <div className="builder-row">
-              <label className="label">{t("workflows.backend")}</label>
+            <BuilderField label={t("workflows.backend")}>
               <select className="input input--sm" value={agent.backend}
                 onChange={(e) => updateAgent({ backend: e.target.value })}>
                 <option value="">-</option>
@@ -295,9 +284,8 @@ export function AgentSummaryCard({ agent, index, phase, workflow, onChange, onNo
                   </option>
                 ))}
               </select>
-            </div>
-            <div className="builder-row">
-              <label className="label">{t("workflows.model")}</label>
+            </BuilderField>
+            <BuilderField label={t("workflows.model")}>
               {modelsLoading ? (
                 <input className="input input--sm" disabled placeholder="loading..." />
               ) : providerModels.length > 0 ? (
@@ -311,16 +299,14 @@ export function AgentSummaryCard({ agent, index, phase, workflow, onChange, onNo
                   onChange={(e) => updateAgent({ model: e.target.value || undefined })}
                   placeholder="auto" />
               )}
-            </div>
+            </BuilderField>
           </div>
-          <div className="builder-row">
-            <label className="label">{t("workflows.max_turns")}</label>
+          <BuilderField label={t("workflows.max_turns")}>
             <input className="input input--sm" type="number" min={0}
               value={agent.max_turns ?? 3}
               onChange={(e) => updateAgent({ max_turns: Number(e.target.value) })} />
-          </div>
-          <div className="builder-row">
-            <label className="label">{t("workflows.system_prompt")}</label>
+          </BuilderField>
+          <BuilderField label={t("workflows.system_prompt")}>
             <textarea className="input input--sm inspector-droppable" rows={4}
               value={agent.system_prompt}
               onChange={(e) => updateAgent({ system_prompt: e.target.value })}
@@ -328,7 +314,7 @@ export function AgentSummaryCard({ agent, index, phase, workflow, onChange, onNo
               onDragOver={handleDragOver}
               data-droppable="true"
             />
-          </div>
+          </BuilderField>
           <div className="inspector-card__actions">
             <button className="btn btn--xs btn--danger" onClick={removeAgent}
               disabled={phase.agents.length <= 1}>
@@ -372,8 +358,7 @@ export function CriticSummaryCard({ critic, phase, workflow, onChange, t, option
       {expanded && (
         <div className="inspector-card__body">
           <div className="builder-row-pair">
-            <div className="builder-row">
-              <label className="label">{t("workflows.backend")}</label>
+            <BuilderField label={t("workflows.backend")}>
               <select className="input input--sm" value={critic.backend}
                 onChange={(e) => updateCritic({ backend: e.target.value })}>
                 <option value="">-</option>
@@ -383,9 +368,8 @@ export function CriticSummaryCard({ critic, phase, workflow, onChange, t, option
                   </option>
                 ))}
               </select>
-            </div>
-            <div className="builder-row">
-              <label className="label">{t("workflows.model")}</label>
+            </BuilderField>
+            <BuilderField label={t("workflows.model")}>
               {criticModelsLoading ? (
                 <input className="input input--sm" disabled placeholder="loading..." />
               ) : criticModels.length > 0 ? (
@@ -399,19 +383,17 @@ export function CriticSummaryCard({ critic, phase, workflow, onChange, t, option
                   onChange={(e) => updateCritic({ model: e.target.value || undefined })}
                   placeholder="auto" />
               )}
-            </div>
+            </BuilderField>
           </div>
           <div className="builder-row-pair">
-            <div className="builder-row">
-              <label className="label">{t("workflows.gate_label")}</label>
+            <BuilderField label={t("workflows.gate_label")}>
               <select className="input input--sm" value={critic.gate ? "true" : "false"}
                 onChange={(e) => updateCritic({ gate: e.target.value === "true" })}>
                 <option value="true">{t("workflows.gate_yes")}</option>
                 <option value="false">{t("workflows.gate_no")}</option>
               </select>
-            </div>
-            <div className="builder-row">
-              <label className="label">{t("workflows.on_rejection")}</label>
+            </BuilderField>
+            <BuilderField label={t("workflows.on_rejection")}>
               <select className="input input--sm" value={critic.on_rejection || ""}
                 onChange={(e) => updateCritic({ on_rejection: e.target.value || undefined })}>
                 <option value="">-</option>
@@ -419,10 +401,9 @@ export function CriticSummaryCard({ critic, phase, workflow, onChange, t, option
                 <option value="retry_targeted">retry_targeted</option>
                 <option value="escalate">escalate</option>
               </select>
-            </div>
+            </BuilderField>
           </div>
-          <div className="builder-row">
-            <label className="label">{t("workflows.system_prompt")}</label>
+          <BuilderField label={t("workflows.system_prompt")}>
             <textarea className="input input--sm inspector-droppable" rows={4}
               value={critic.system_prompt}
               onChange={(e) => updateCritic({ system_prompt: e.target.value })}
@@ -430,7 +411,7 @@ export function CriticSummaryCard({ critic, phase, workflow, onChange, t, option
               onDragOver={handleDragOver}
               data-droppable="true"
             />
-          </div>
+          </BuilderField>
         </div>
       )}
     </div>
@@ -568,8 +549,7 @@ function ToolParamsPanel({ node, index, workflow, onChange, t, options }: {
       </div>
       {expanded && (
         <div className="inspector-card__body">
-          <div className="builder-row">
-            <label className="label">{t("workflows.tool_id")}</label>
+          <BuilderField label={t("workflows.tool_id")}>
             {availableTools.length > 0 ? (
               <select className="input input--sm" value={node.tool_id} onChange={(e) => update({ tool_id: e.target.value })}>
                 <option value="">—</option>
@@ -579,14 +559,12 @@ function ToolParamsPanel({ node, index, workflow, onChange, t, options }: {
               <input className="input input--sm" value={node.tool_id}
                 onChange={(e) => update({ tool_id: e.target.value })} placeholder="tool_name" />
             )}
-          </div>
-          <div className="builder-row">
-            <label className="label">{t("workflows.description")}</label>
+          </BuilderField>
+          <BuilderField label={t("workflows.description")}>
             <input className="input input--sm" value={node.description}
               onChange={(e) => update({ description: e.target.value })} />
-          </div>
-          <div className="builder-row">
-            <label className="label">{t("workflows.attach_to_phases")}</label>
+          </BuilderField>
+          <BuilderField label={t("workflows.attach_to_phases")}>
             <div className="inspector-tag-list">
               {phaseOptions.map((p) => {
                 const attached = (node.attach_to || []).includes(p.id);
@@ -605,10 +583,9 @@ function ToolParamsPanel({ node, index, workflow, onChange, t, options }: {
                 );
               })}
             </div>
-          </div>
+          </BuilderField>
           {Object.keys(paramSchema).length > 0 && (
-            <div className="builder-row">
-              <label className="label">{t("workflows.tool_params")}</label>
+            <BuilderField label={t("workflows.tool_params")}>
               <div className="builder-param-list">
                 {Object.entries(paramSchema).map(([key, schema]) => (
                   <div key={key} className="builder-param-row">
@@ -633,7 +610,7 @@ function ToolParamsPanel({ node, index, workflow, onChange, t, options }: {
                   </div>
                 ))}
               </div>
-            </div>
+            </BuilderField>
           )}
           <div className="inspector-card__actions">
             <button className="btn btn--xs btn--danger" onClick={remove}>
@@ -682,8 +659,7 @@ function SkillParamsPanel({ node, index, workflow, onChange, t, options }: {
       </div>
       {expanded && (
         <div className="inspector-card__body">
-          <div className="builder-row">
-            <label className="label">{t("workflows.skill_name")}</label>
+          <BuilderField label={t("workflows.skill_name")}>
             {availableSkills.length > 0 ? (
               <select className="input input--sm" value={node.skill_name} onChange={(e) => update({ skill_name: e.target.value })}>
                 <option value="">—</option>
@@ -693,14 +669,12 @@ function SkillParamsPanel({ node, index, workflow, onChange, t, options }: {
               <input className="input input--sm" value={node.skill_name}
                 onChange={(e) => update({ skill_name: e.target.value })} placeholder="skill_name" />
             )}
-          </div>
-          <div className="builder-row">
-            <label className="label">{t("workflows.description")}</label>
+          </BuilderField>
+          <BuilderField label={t("workflows.description")}>
             <input className="input input--sm" value={node.description}
               onChange={(e) => update({ description: e.target.value })} />
-          </div>
-          <div className="builder-row">
-            <label className="label">{t("workflows.attach_to_phases")}</label>
+          </BuilderField>
+          <BuilderField label={t("workflows.attach_to_phases")}>
             <div className="inspector-tag-list">
               {phaseOptions.map((p) => {
                 const attached = (node.attach_to || []).includes(p.id);
@@ -719,7 +693,7 @@ function SkillParamsPanel({ node, index, workflow, onChange, t, options }: {
                 );
               })}
             </div>
-          </div>
+          </BuilderField>
           <div className="inspector-card__actions">
             <button className="btn btn--xs btn--danger" onClick={remove}>
               {t("workflows.delete")}
@@ -748,8 +722,7 @@ export function EndTargetParamsPanel({ target, node, onUpdate, t }: {
       {params.map((param) => {
         const fieldKey = param.name.split(".")[1]!;
         return (
-          <div className="builder-row" key={param.name}>
-            <label className="label">{t(param.description || fieldKey) || fieldKey}</label>
+          <BuilderField key={param.name} label={t(param.description || fieldKey) || fieldKey}>
             <input
               className="input input--sm inspector-droppable"
               value={String(node[fieldKey] ?? "")}
@@ -757,7 +730,7 @@ export function EndTargetParamsPanel({ target, node, onUpdate, t }: {
               placeholder={`{{prev.result}} or value`}
               data-droppable="true"
             />
-          </div>
+          </BuilderField>
         );
       })}
     </div>

@@ -1,4 +1,5 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
+import { BuilderField } from "../builder-field";
 
 const KANBAN_ACTIONS = ["created", "moved", "updated", "archived", "commented", "assigned", "priority_changed", "labels_changed", "due_date_set"];
 
@@ -11,12 +12,10 @@ function KanbanTriggerEditPanel({ node, update, t }: EditPanelProps) {
 
   return (
     <>
-      <div className="builder-row">
-        <label className="label">{t("workflows.kanban_trigger_board_id")}</label>
+      <BuilderField label={t("workflows.kanban_trigger_board_id")}>
         <input autoFocus className="input input--sm" value={String(node.kanban_board_id || "")} onChange={(e) => update({ kanban_board_id: e.target.value })} placeholder="board_id or scope:workflow:name" />
-      </div>
-      <div className="builder-row">
-        <label className="label">{t("workflows.kanban_trigger_actions")}</label>
+      </BuilderField>
+      <BuilderField label={t("workflows.kanban_trigger_actions")}>
         <div style={{ display: "flex", flexWrap: "wrap", gap: "4px" }}>
           {KANBAN_ACTIONS.map((action) => (
             <button key={action} type="button" className={`badge ${actions.includes(action) ? "badge--active" : ""}`} onClick={() => toggle_action(action)} style={{ cursor: "pointer", padding: "2px 8px", borderRadius: "4px", border: "1px solid var(--border)", background: actions.includes(action) ? "var(--accent)" : "transparent", color: actions.includes(action) ? "#fff" : "var(--text-secondary)", fontSize: "12px" }}>
@@ -24,12 +23,10 @@ function KanbanTriggerEditPanel({ node, update, t }: EditPanelProps) {
             </button>
           ))}
         </div>
-      </div>
-      <div className="builder-row">
-        <label className="label">{t("workflows.kanban_trigger_column_id")}</label>
+      </BuilderField>
+      <BuilderField label={t("workflows.kanban_trigger_column_id")} hint={t("workflows.kanban_trigger_column_hint")}>
         <input className="input input--sm" value={String(node.kanban_column_id || "")} onChange={(e) => update({ kanban_column_id: e.target.value })} placeholder="todo, in_progress, done ..." />
-        <small className="hint">{t("workflows.kanban_trigger_column_hint")}</small>
-      </div>
+      </BuilderField>
     </>
   );
 }

@@ -1,22 +1,22 @@
+import { BuilderField } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
 function MergeEditPanel({ node, update, t }: EditPanelProps) {
   return (
-    <div className="builder-row">
-      <label className="label">{t("workflows.merge_mode")}</label>
+    <BuilderField
+      label={t("workflows.merge_mode")}
+      hint={String(node.merge_mode || "wait_all") === "collect"
+        ? (t("workflows.merge_collect_hint"))
+        : String(node.merge_mode || "wait_all") === "first_completed"
+          ? (t("workflows.merge_first_hint"))
+          : (t("workflows.merge_wait_all_hint"))}
+    >
       <select autoFocus className="input input--sm" value={String(node.merge_mode || "wait_all")} onChange={(e) => update({ merge_mode: e.target.value })}>
         <option value="wait_all">wait_all</option>
         <option value="first_completed">first_completed</option>
         <option value="collect">collect</option>
       </select>
-      <span className="builder-hint">
-        {String(node.merge_mode || "wait_all") === "collect"
-          ? (t("workflows.merge_collect_hint"))
-          : String(node.merge_mode || "wait_all") === "first_completed"
-            ? (t("workflows.merge_first_hint"))
-            : (t("workflows.merge_wait_all_hint"))}
-      </span>
-    </div>
+    </BuilderField>
   );
 }
 

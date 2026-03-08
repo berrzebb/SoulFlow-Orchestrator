@@ -1,15 +1,14 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
+import { BuilderField } from "../builder-field";
 
 function EmbeddingEditPanel({ node, update, t, options }: EditPanelProps) {
   const models = options?.models || [];
   return (
     <>
-      <div className="builder-row">
-        <label className="label">{t("workflows.embed_input")}</label>
+      <BuilderField label={t("workflows.embed_input")}>
         <input autoFocus className="input input--sm" value={String(node.input_field || "")} onChange={(e) => update({ input_field: e.target.value })} placeholder="memory.document_text" />
-      </div>
-      <div className="builder-row">
-        <label className="label">{t("workflows.embed_model")}</label>
+      </BuilderField>
+      <BuilderField label={t("workflows.embed_model")}>
         {models.length > 0 ? (
           <select className="input input--sm" value={String(node.model || "")} onChange={(e) => update({ model: e.target.value })}>
             <option value="">{t("common.select")}</option>
@@ -18,18 +17,14 @@ function EmbeddingEditPanel({ node, update, t, options }: EditPanelProps) {
         ) : (
           <input className="input input--sm" value={String(node.model || "")} onChange={(e) => update({ model: e.target.value })} placeholder="text-embedding-3-small" />
         )}
-      </div>
+      </BuilderField>
       <div className="builder-row-pair">
-        <div className="builder-row">
-          <label className="label">{t("workflows.embed_batch")}</label>
+        <BuilderField label={t("workflows.embed_batch")} hint={t("workflows.embed_batch_hint")}>
           <input className="input input--sm" type="number" min={1} max={2048} value={String(node.batch_size ?? 32)} onChange={(e) => update({ batch_size: Number(e.target.value) || 32 })} />
-          <span className="builder-hint">{t("workflows.embed_batch_hint")}</span>
-        </div>
-        <div className="builder-row">
-          <label className="label">{t("workflows.embed_dims")}</label>
+        </BuilderField>
+        <BuilderField label={t("workflows.embed_dims")} hint={t("workflows.embed_dims_hint")}>
           <input className="input input--sm" type="number" min={1} value={String(node.dimensions ?? "")} onChange={(e) => update({ dimensions: e.target.value ? Number(e.target.value) : undefined })} placeholder="auto" />
-          <span className="builder-hint">{t("workflows.embed_dims_hint")}</span>
-        </div>
+        </BuilderField>
       </div>
     </>
   );

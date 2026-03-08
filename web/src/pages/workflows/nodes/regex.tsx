@@ -1,34 +1,30 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
+import { BuilderField } from "../builder-field";
 
 function RegexEditPanel({ node, update, t }: EditPanelProps) {
   const op = String(node.operation || "match");
   return (
     <>
       <div className="builder-row-pair">
-        <div className="builder-row">
-          <label className="label">{t("workflows.operation")}<span className="label__required">*</span></label>
+        <BuilderField label={t("workflows.operation")} required>
           <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
             {["match", "match_all", "replace", "extract", "split", "test"].map((o) => <option key={o} value={o}>{o}</option>)}
           </select>
-        </div>
-        <div className="builder-row">
-          <label className="label">{t("workflows.field_flags")}</label>
+        </BuilderField>
+        <BuilderField label={t("workflows.field_flags")}>
           <input className="input input--sm" value={String(node.flags || "g")} onChange={(e) => update({ flags: e.target.value })} placeholder="g" />
-        </div>
+        </BuilderField>
       </div>
-      <div className="builder-row">
-        <label className="label">{t("workflows.field_pattern")}</label>
+      <BuilderField label={t("workflows.field_pattern")}>
         <input className="input" value={String(node.pattern || "")} onChange={(e) => update({ pattern: e.target.value })} placeholder="(\w+)@(\w+)" />
-      </div>
-      <div className="builder-row">
-        <label className="label">{t("workflows.input_data")}</label>
+      </BuilderField>
+      <BuilderField label={t("workflows.input_data")}>
         <textarea className="input code-textarea" rows={3} value={String(node.input || "")} onChange={(e) => update({ input: e.target.value })} placeholder="user@example.com" />
-      </div>
+      </BuilderField>
       {op === "replace" && (
-        <div className="builder-row">
-          <label className="label">{t("workflows.replacement")}</label>
+        <BuilderField label={t("workflows.replacement")}>
           <input className="input" value={String(node.replacement || "")} onChange={(e) => update({ replacement: e.target.value })} placeholder="$1 at $2" />
-        </div>
+        </BuilderField>
       )}
     </>
   );

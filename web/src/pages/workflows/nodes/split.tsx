@@ -1,16 +1,15 @@
+import { BuilderField } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
 function SplitEditPanel({ node, update, t }: EditPanelProps) {
   return (
     <>
-      <div className="builder-row">
-        <label className="label">{t("workflows.split_array_field")}</label>
+      <BuilderField label={t("workflows.split_array_field")}>
         <input autoFocus className="input input--sm" value={String(node.array_field || "")} onChange={(e) => update({ array_field: e.target.value })} placeholder="body.users" />
-      </div>
-      <div className="builder-row">
-        <label className="label">{t("workflows.split_batch_size")}</label>
+      </BuilderField>
+      <BuilderField label={t("workflows.split_batch_size")}>
         <input className="input input--sm" type="number" min={1} value={String(node.batch_size ?? 1)} onChange={(e) => update({ batch_size: Number(e.target.value) || 1 })} />
-      </div>
+      </BuilderField>
     </>
   );
 }

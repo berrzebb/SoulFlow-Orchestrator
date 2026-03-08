@@ -1,55 +1,48 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
+import { BuilderField } from "../builder-field";
 
 function MarkdownEditPanel({ node, update, t }: EditPanelProps) {
   const op = String(node.operation || "table");
   return (
     <>
-      <div className="builder-row">
-        <label className="label">{t("workflows.operation")}</label>
+      <BuilderField label={t("workflows.operation")}>
         <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
           {["table", "list", "checklist", "toc", "html_to_md", "badge", "link", "image", "code_block", "details", "task_list"].map((o) => <option key={o} value={o}>{o}</option>)}
         </select>
-      </div>
+      </BuilderField>
       {["table", "list", "checklist", "task_list"].includes(op) && (
-        <div className="builder-row">
-          <label className="label">{t("workflows.input_data")}</label>
+        <BuilderField label={t("workflows.input_data")}>
           <textarea className="input code-textarea" rows={3} value={String(node.data || "")} onChange={(e) => update({ data: e.target.value })} placeholder={op === "table" ? '[{"name":"a","value":1}]' : '["item1","item2"]'} />
-        </div>
+        </BuilderField>
       )}
       {op === "table" && (
-        <div className="builder-row">
-          <label className="label">{t("workflows.field_columns")}</label>
+        <BuilderField label={t("workflows.field_columns")}>
           <input className="input" value={String(node.columns || "")} onChange={(e) => update({ columns: e.target.value })} placeholder="name, value (auto-detect if empty)" />
-        </div>
+        </BuilderField>
       )}
       {["toc", "html_to_md", "details"].includes(op) && (
-        <div className="builder-row">
-          <label className="label">{t("workflows.field_text")}</label>
+        <BuilderField label={t("workflows.field_text")}>
           <textarea className="input code-textarea" rows={4} value={String(node.text || "")} onChange={(e) => update({ text: e.target.value })} />
-        </div>
+        </BuilderField>
       )}
       {op === "code_block" && (
         <>
-          <div className="builder-row">
-            <label className="label">{t("workflows.field_language")}</label>
+          <BuilderField label={t("workflows.field_language")}>
             <input className="input input--sm" value={String(node.language || "")} onChange={(e) => update({ language: e.target.value })} placeholder="javascript" />
-          </div>
-          <div className="builder-row">
-            <label className="label">{t("workflows.field_code")}</label>
+          </BuilderField>
+          <BuilderField label={t("workflows.field_code")}>
             <textarea className="input code-textarea" rows={4} value={String(node.code || "")} onChange={(e) => update({ code: e.target.value })} />
-          </div>
+          </BuilderField>
         </>
       )}
       {["link", "badge", "image"].includes(op) && (
         <div className="builder-row-pair">
-          <div className="builder-row">
-            <label className="label">{op === "image" ? "Alt" : "Label"}</label>
+          <BuilderField label={op === "image" ? "Alt" : "Label"}>
             <input className="input input--sm" value={String(node.label || node.alt || "")} onChange={(e) => update(op === "image" ? { alt: e.target.value } : { label: e.target.value })} />
-          </div>
-          <div className="builder-row">
-            <label className="label">{t("workflows.field_url")}</label>
+          </BuilderField>
+          <BuilderField label={t("workflows.field_url")}>
             <input className="input input--sm" value={String(node.url || "")} onChange={(e) => update({ url: e.target.value })} />
-          </div>
+          </BuilderField>
         </div>
       )}
       {op === "list" && (

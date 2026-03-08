@@ -1,34 +1,29 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
+import { BuilderField } from "../builder-field";
 
 function NetworkEditPanel({ node, update, t }: EditPanelProps) {
   const op = String(node.operation || "ping");
   return (
     <>
-      <div className="builder-row">
-        <label className="label">{t("workflows.network_operation")}</label>
+      <BuilderField label={t("workflows.network_operation")}>
         <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
           {["ping", "dns", "port_check", "http_head", "netstat"].map((o) => <option key={o} value={o}>{o}</option>)}
         </select>
-      </div>
+      </BuilderField>
       {op !== "netstat" && (
-        <div className="builder-row">
-          <label className="label">{t("workflows.host")}</label>
+        <BuilderField label={t("workflows.host")}>
           <input className="input" value={String(node.host || "")} onChange={(e) => update({ host: e.target.value })} placeholder="example.com" />
-        </div>
+        </BuilderField>
       )}
       {op === "port_check" && (
-        <div className="builder-row">
-          <label className="label">{t("workflows.port")}</label>
+        <BuilderField label={t("workflows.port")} hint={t("workflows.network_port_hint")}>
           <input className="input input--sm" type="number" min={1} max={65535} value={String(node.port ?? "")} onChange={(e) => update({ port: Number(e.target.value) || 0 })} />
-          <span className="builder-hint">{t("workflows.network_port_hint")}</span>
-        </div>
+        </BuilderField>
       )}
       {op === "ping" && (
-        <div className="builder-row">
-          <label className="label">{t("workflows.field_count")}</label>
+        <BuilderField label={t("workflows.field_count")} hint={t("workflows.network_ping_count_hint")}>
           <input className="input input--sm" type="number" min={1} max={10} value={String(node.count ?? 3)} onChange={(e) => update({ count: Number(e.target.value) || 3 })} />
-          <span className="builder-hint">{t("workflows.network_ping_count_hint")}</span>
-        </div>
+        </BuilderField>
       )}
     </>
   );

@@ -1,34 +1,30 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
+import { BuilderField } from "../builder-field";
 
 function WaitEditPanel({ node, update, t }: EditPanelProps) {
   return (
     <>
-      <div className="builder-row">
-        <label className="label">{t("workflows.wait_type")}</label>
+      <BuilderField label={t("workflows.wait_type")}>
         <select autoFocus className="input input--sm" value={String(node.wait_type || "timer")} onChange={(e) => update({ wait_type: e.target.value })}>
           <option value="timer">{t("workflows.opt_timer")}</option>
           <option value="webhook">{t("workflows.opt_webhook")}</option>
           <option value="approval">{t("workflows.opt_approval")}</option>
         </select>
-      </div>
+      </BuilderField>
       {String(node.wait_type || "timer") === "timer" && (
-        <div className="builder-row">
-          <label className="label">{t("workflows.wait_delay")}</label>
+        <BuilderField label={t("workflows.wait_delay")} hint={t("workflows.wait_delay_hint")}>
           <input className="input input--sm" type="number" min={0} value={String(node.delay_ms ?? 5000)} onChange={(e) => update({ delay_ms: Number(e.target.value) })} />
-          <span className="builder-hint">{t("workflows.wait_delay_hint")}</span>
-        </div>
+        </BuilderField>
       )}
       {String(node.wait_type) === "webhook" && (
-        <div className="builder-row">
-          <label className="label">{t("workflows.wait_webhook")}</label>
+        <BuilderField label={t("workflows.wait_webhook")}>
           <input className="input input--sm" value={String(node.webhook_path || "")} onChange={(e) => update({ webhook_path: e.target.value })} placeholder="/hooks/my-webhook" />
-        </div>
+        </BuilderField>
       )}
       {String(node.wait_type) === "approval" && (
-        <div className="builder-row">
-          <label className="label">{t("workflows.wait_approval")}</label>
+        <BuilderField label={t("workflows.wait_approval")}>
           <textarea className="input" rows={2} value={String(node.approval_message || "")} onChange={(e) => update({ approval_message: e.target.value })} placeholder="Please approve this step" />
-        </div>
+        </BuilderField>
       )}
     </>
   );

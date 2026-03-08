@@ -1,13 +1,11 @@
+import { BuilderField } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
 function SshEditPanel({ node, update, t }: EditPanelProps) {
   return (
-    <>
-      <div className="builder-row">
-        <label className="label">{t("node.ssh.description")}</label>
-        <p className="builder-hint">{t("node.ssh.hint")}</p>
-      </div>
-    </>
+    <BuilderField label={t("node.ssh.description")} hint={t("node.ssh.hint")}>
+      {null}
+    </BuilderField>
   );
 }
 

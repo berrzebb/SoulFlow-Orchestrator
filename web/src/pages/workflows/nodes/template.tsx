@@ -1,17 +1,15 @@
+import { BuilderField } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
 function TemplateEditPanel({ node, update, t }: EditPanelProps) {
   return (
     <>
-      <div className="builder-row">
-        <label className="label">{t("workflows.template_body")}</label>
+      <BuilderField label={t("workflows.template_body")} hint={t("workflows.template_hint")}>
         <textarea autoFocus className="input code-textarea" rows={6} value={String(node.template || "")} onChange={(e) => update({ template: e.target.value })} spellCheck={false} placeholder="Hello {{input.name}}, your order #{{input.order_id}} is ready." aria-label={t("workflows.template_body")} />
-        <span className="builder-hint">{t("workflows.template_hint")}</span>
-      </div>
-      <div className="builder-row">
-        <label className="label">{t("workflows.field_output_field")}</label>
+      </BuilderField>
+      <BuilderField label={t("workflows.field_output_field")}>
         <input className="input input--sm" value={String(node.output_field || "text")} onChange={(e) => update({ output_field: e.target.value })} placeholder="text" aria-label={t("workflows.field_output_field")} />
-      </div>
+      </BuilderField>
     </>
   );
 }

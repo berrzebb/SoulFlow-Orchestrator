@@ -1,54 +1,48 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
+import { BuilderField } from "../builder-field";
 
 function DataFormatEditPanel({ node, update, t }: EditPanelProps) {
   const op = String(node.operation || "convert");
   return (
     <>
       <div className="builder-row-pair">
-        <div className="builder-row">
-          <label className="label">{t("workflows.operation")}<span className="label__required">*</span></label>
+        <BuilderField label={t("workflows.operation")} required>
           <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
             {["convert", "query", "validate", "pretty", "flatten", "unflatten", "merge", "pick", "omit"].map((o) => <option key={o} value={o}>{o}</option>)}
           </select>
-        </div>
+        </BuilderField>
         {op === "convert" && (
-          <div className="builder-row">
-            <label className="label">{t("workflows.from_format")}</label>
+          <BuilderField label={t("workflows.from_format")}>
             <select className="input input--sm" value={String(node.from || "json")} onChange={(e) => update({ from: e.target.value })}>
               {["json", "csv", "yaml", "toml"].map((f) => <option key={f} value={f}>{f.toUpperCase()}</option>)}
             </select>
-          </div>
+          </BuilderField>
         )}
       </div>
       {op === "convert" && (
-        <div className="builder-row">
-          <label className="label">{t("workflows.to_format")}</label>
+        <BuilderField label={t("workflows.to_format")}>
           <select className="input input--sm" value={String(node.to || "csv")} onChange={(e) => update({ to: e.target.value })}>
             {["json", "csv", "yaml", "toml"].map((f) => <option key={f} value={f}>{f.toUpperCase()}</option>)}
           </select>
-        </div>
+        </BuilderField>
       )}
-      <div className="builder-row">
-        <label className="label">{t("workflows.input_data")}</label>
+      <BuilderField label={t("workflows.input_data")}>
         <textarea className="input code-textarea" rows={5} value={String(node.input || "")} onChange={(e) => update({ input: e.target.value })} placeholder='{"key": "value"}' />
-      </div>
+      </BuilderField>
       {op === "query" && (
-        <div className="builder-row">
-          <label className="label">{t("workflows.field_json_path")}</label>
+        <BuilderField label={t("workflows.field_json_path")}>
           <input className="input input--sm" value={String(node.path || "")} onChange={(e) => update({ path: e.target.value })} placeholder="$.users[0].name" />
-        </div>
+        </BuilderField>
       )}
       {(op === "pick" || op === "omit") && (
-        <div className="builder-row">
-          <label className="label">{t("workflows.keys")}</label>
+        <BuilderField label={t("workflows.keys")}>
           <input className="input input--sm" value={String(node.keys || "")} onChange={(e) => update({ keys: e.target.value })} placeholder="name, email, age" />
-        </div>
+        </BuilderField>
       )}
       {op === "merge" && (
-        <div className="builder-row">
-          <label className="label">{t("workflows.input_data")} 2</label>
+        <BuilderField label={`${t("workflows.input_data")} 2`}>
           <textarea className="input code-textarea" rows={3} value={String(node.input2 || "")} onChange={(e) => update({ input2: e.target.value })} placeholder='{"extra": true}' />
-        </div>
+        </BuilderField>
       )}
     </>
   );

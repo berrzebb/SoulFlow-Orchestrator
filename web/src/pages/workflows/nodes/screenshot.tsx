@@ -1,31 +1,27 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
+import { BuilderField } from "../builder-field";
 
 function ScreenshotEditPanel({ node, update, t }: EditPanelProps) {
   return (
     <>
-      <div className="builder-row">
-        <label className="label">{t("workflows.scrape_url")}</label>
+      <BuilderField label={t("workflows.scrape_url")}>
         <input autoFocus className="input" value={String(node.url || "")} onChange={(e) => update({ url: e.target.value })} placeholder="https://example.com" />
-      </div>
+      </BuilderField>
       <div className="builder-row-pair">
-        <div className="builder-row">
-          <label className="label">{t("workflows.field_width")}</label>
+        <BuilderField label={t("workflows.field_width")}>
           <input className="input input--sm" type="number" min={320} max={3840} value={String(node.width ?? 1280)} onChange={(e) => update({ width: Number(e.target.value) || 1280 })} />
-        </div>
-        <div className="builder-row">
-          <label className="label">{t("workflows.field_height")}</label>
+        </BuilderField>
+        <BuilderField label={t("workflows.field_height")}>
           <input className="input input--sm" type="number" min={240} max={2160} value={String(node.height ?? 720)} onChange={(e) => update({ height: Number(e.target.value) || 720 })} />
-        </div>
+        </BuilderField>
       </div>
       <div className="builder-row-pair">
-        <div className="builder-row">
-          <label className="label">{t("workflows.selector")}</label>
+        <BuilderField label={t("workflows.selector")}>
           <input className="input input--sm" value={String(node.selector || "")} onChange={(e) => update({ selector: e.target.value })} placeholder="#main-content" />
-        </div>
-        <div className="builder-row">
-          <label className="label">{t("workflows.field_delay_ms")}</label>
+        </BuilderField>
+        <BuilderField label={t("workflows.field_delay_ms")}>
           <input className="input input--sm" type="number" min={0} max={10000} step={500} value={String(node.delay_ms ?? 1000)} onChange={(e) => update({ delay_ms: Number(e.target.value) || 1000 })} />
-        </div>
+        </BuilderField>
       </div>
       <div className="builder-row">
         <label className="label">

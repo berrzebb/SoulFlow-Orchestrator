@@ -1,13 +1,11 @@
+import { BuilderField } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
 function PasswordEditPanel({ node, update, t }: EditPanelProps) {
   return (
-    <>
-      <div className="builder-row">
-        <label className="label">{t("node.password.description")}</label>
-        <p className="builder-hint">{t("node.password.hint")}</p>
-      </div>
-    </>
+    <BuilderField label={t("node.password.description")} hint={t("node.password.hint")}>
+      {null}
+    </BuilderField>
   );
 }
 

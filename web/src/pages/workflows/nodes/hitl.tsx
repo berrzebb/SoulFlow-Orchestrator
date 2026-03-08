@@ -1,45 +1,39 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
+import { BuilderField } from "../builder-field";
 
 function HitlEditPanel({ node, update, t, options }: EditPanelProps) {
   const target = String(node.target || "origin");
   const channels = options?.channels || [];
   return (
     <>
-      <div className="builder-row">
-        <label className="label">{t("workflows.hitl_prompt")}</label>
+      <BuilderField label={t("workflows.hitl_prompt")}>
         <textarea autoFocus className="input" rows={3} value={String(node.prompt || "")} onChange={(e) => update({ prompt: e.target.value })} placeholder={t("workflows.hitl_prompt_hint")} />
-      </div>
-      <div className="builder-row">
-        <label className="label">{t("workflows.hitl_target")}</label>
+      </BuilderField>
+      <BuilderField label={t("workflows.hitl_target")}>
         <select className="input input--sm" value={target} onChange={(e) => update({ target: e.target.value })}>
           <option value="origin">{t("workflows.hitl_target_origin")}</option>
           <option value="specified">{t("workflows.hitl_target_specified")}</option>
         </select>
-      </div>
+      </BuilderField>
       {target === "specified" && (
         <div className="builder-row-pair">
-          <div className="builder-row">
-            <label className="label">{t("workflows.hitl_channel")}</label>
+          <BuilderField label={t("workflows.hitl_channel")}>
             <select className="input input--sm" value={String(node.channel || "")} onChange={(e) => update({ channel: e.target.value })}>
               <option value="">{t("common.select")}</option>
               {channels.map((c) => <option key={c.channel_id} value={c.provider}>{c.label} ({c.provider})</option>)}
             </select>
-          </div>
-          <div className="builder-row">
-            <label className="label">{t("workflows.hitl_chat_id")}</label>
+          </BuilderField>
+          <BuilderField label={t("workflows.hitl_chat_id")}>
             <input className="input input--sm" value={String(node.chat_id || "")} onChange={(e) => update({ chat_id: e.target.value })} />
-          </div>
+          </BuilderField>
         </div>
       )}
-      <div className="builder-row">
-        <label className="label">{t("workflows.hitl_timeout")}</label>
+      <BuilderField label={t("workflows.hitl_timeout")} hint={t("workflows.hitl_timeout_hint")}>
         <input className="input input--sm" type="number" min={0} value={String(node.timeout_ms ?? 300000)} onChange={(e) => update({ timeout_ms: Number(e.target.value) })} />
-        <span className="builder-hint">{t("workflows.hitl_timeout_hint")}</span>
-      </div>
-      <div className="builder-row">
-        <label className="label">{t("workflows.hitl_fallback")}</label>
+      </BuilderField>
+      <BuilderField label={t("workflows.hitl_fallback")}>
         <input className="input input--sm" value={String(node.fallback_value || "")} onChange={(e) => update({ fallback_value: e.target.value || undefined })} placeholder={t("workflows.hitl_fallback_hint")} />
-      </div>
+      </BuilderField>
     </>
   );
 }

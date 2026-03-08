@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { BuilderField } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
 function SubWorkflowEditPanel({ node, update, t, options }: EditPanelProps) {
@@ -14,8 +15,7 @@ function SubWorkflowEditPanel({ node, update, t, options }: EditPanelProps) {
   };
   return (
     <>
-      <div className="builder-row">
-        <label className="label">{t("workflows.sub_workflow_name")}</label>
+      <BuilderField label={t("workflows.sub_workflow_name")}>
         {templates.length > 0 ? (
           <select autoFocus className="input input--sm" value={String(node.workflow_name || "")} onChange={(e) => update({ workflow_name: e.target.value })}>
             <option value="">{t("common.select")}</option>
@@ -24,9 +24,8 @@ function SubWorkflowEditPanel({ node, update, t, options }: EditPanelProps) {
         ) : (
           <input autoFocus className="input input--sm" value={String(node.workflow_name || "")} onChange={(e) => update({ workflow_name: e.target.value })} placeholder="my-sub-workflow" />
         )}
-      </div>
-      <div className="builder-row">
-        <label className="label">{t("workflows.sub_input_mapping")}</label>
+      </BuilderField>
+      <BuilderField label={t("workflows.sub_input_mapping")} error={mappingErr}>
         <textarea
           className={`input code-textarea${mappingErr ? " input--err" : ""}`}
           rows={3}
@@ -35,8 +34,7 @@ function SubWorkflowEditPanel({ node, update, t, options }: EditPanelProps) {
           spellCheck={false}
           placeholder='{"prompt": "{{memory.prev.result}}"}'
         />
-        {mappingErr && <span className="field-error">{mappingErr}</span>}
-      </div>
+      </BuilderField>
     </>
   );
 }

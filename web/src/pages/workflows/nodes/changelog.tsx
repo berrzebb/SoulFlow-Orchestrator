@@ -1,13 +1,11 @@
+import { BuilderField } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
 function ChangelogEditPanel({ node, update, t }: EditPanelProps) {
   return (
-    <>
-      <div className="builder-row">
-        <label className="label">{t("node.changelog.description")}</label>
-        <p className="builder-hint">{t("node.changelog.hint")}</p>
-      </div>
-    </>
+    <BuilderField label={t("node.changelog.description")} hint={t("node.changelog.hint")}>
+      {null}
+    </BuilderField>
   );
 }
 

@@ -1,22 +1,19 @@
+import { BuilderField } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
 function IfEditPanel({ node, update, t }: EditPanelProps) {
   return (
     <>
-      <div className="builder-row">
-        <label className="label">{t("workflows.if_condition")}</label>
+      <BuilderField label={t("workflows.if_condition")} hint={t("workflows.condition_hint")}>
         <input autoFocus className="input input--sm" value={String(node.condition || "")} onChange={(e) => update({ condition: e.target.value })} placeholder="memory.prev.status === 200" />
-        <span className="builder-hint">{t("workflows.condition_hint")}</span>
-      </div>
+      </BuilderField>
       <div className="builder-row-pair">
-        <div className="builder-row">
-          <label className="label">{t("workflows.if_true_branch")}</label>
+        <BuilderField label={t("workflows.if_true_branch")}>
           <input className="input input--sm" value={(((node.outputs as Record<string, unknown>)?.true_branch as string[]) || []).join(", ")} onChange={(e) => update({ outputs: { ...((node.outputs as Record<string, unknown>) || {}), true_branch: e.target.value.split(",").map((s: string) => s.trim()).filter(Boolean) } })} placeholder="next-node" />
-        </div>
-        <div className="builder-row">
-          <label className="label">{t("workflows.if_false_branch")}</label>
+        </BuilderField>
+        <BuilderField label={t("workflows.if_false_branch")}>
           <input className="input input--sm" value={(((node.outputs as Record<string, unknown>)?.false_branch as string[]) || []).join(", ")} onChange={(e) => update({ outputs: { ...((node.outputs as Record<string, unknown>) || {}), false_branch: e.target.value.split(",").map((s: string) => s.trim()).filter(Boolean) } })} placeholder="fallback-node" />
-        </div>
+        </BuilderField>
       </div>
     </>
   );

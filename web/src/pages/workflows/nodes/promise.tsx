@@ -1,70 +1,62 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
+import { BuilderField } from "../builder-field";
 
 function PromiseEditPanel({ node, update, t }: EditPanelProps) {
   const op = String(node.operation || "append");
   return (
     <>
       <div className="builder-row-pair">
-        <div className="builder-row">
-          <label className="label">{t("workflows.promise_op")}</label>
+        <BuilderField label={t("workflows.promise_op")}>
           <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
             <option value="append">{t("workflows.opt_append")}</option>
             <option value="list">{t("workflows.opt_list")}</option>
             <option value="get_effective">{t("workflows.opt_get_effective")}</option>
             <option value="archive">{t("workflows.opt_archive")}</option>
           </select>
-        </div>
-        <div className="builder-row">
-          <label className="label">{t("workflows.promise_scope")}</label>
+        </BuilderField>
+        <BuilderField label={t("workflows.promise_scope")}>
           <select className="input input--sm" value={String(node.scope || "global")} onChange={(e) => update({ scope: e.target.value })}>
             <option value="global">{t("workflows.opt_global")}</option>
             <option value="team">{t("workflows.opt_team")}</option>
             <option value="agent">{t("workflows.opt_agent")}</option>
           </select>
-        </div>
+        </BuilderField>
       </div>
       {op === "append" && (
         <>
-          <div className="builder-row">
-            <label className="label">{t("workflows.promise_key")}</label>
+          <BuilderField label={t("workflows.promise_key")}>
             <input className="input input--sm" value={String(node.key || "")} onChange={(e) => update({ key: e.target.value })} placeholder="never_delete_without_backup" />
-          </div>
-          <div className="builder-row">
-            <label className="label">{t("workflows.promise_value")}</label>
+          </BuilderField>
+          <BuilderField label={t("workflows.promise_value")}>
             <textarea className="input" rows={2} value={String(node.value || "")} onChange={(e) => update({ value: e.target.value })} placeholder="I will always create a backup before deleting data" />
-          </div>
-          <div className="builder-row">
-            <label className="label">{t("workflows.promise_rationale")}</label>
+          </BuilderField>
+          <BuilderField label={t("workflows.promise_rationale")}>
             <input className="input input--sm" value={String(node.rationale || "")} onChange={(e) => update({ rationale: e.target.value || undefined })} placeholder="Why this promise is important" />
-          </div>
+          </BuilderField>
           <div className="builder-row-pair">
-            <div className="builder-row">
-              <label className="label">{t("workflows.decision_priority")}</label>
+            <BuilderField label={t("workflows.decision_priority")}>
               <select className="input input--sm" value={String(node.priority ?? 1)} onChange={(e) => update({ priority: Number(e.target.value) })}>
                 <option value="0">{t("workflows.opt_p0")}</option>
                 <option value="1">{t("workflows.opt_p1")}</option>
                 <option value="2">{t("workflows.opt_p2")}</option>
                 <option value="3">{t("workflows.opt_p3")}</option>
               </select>
-            </div>
-            <div className="builder-row">
-              <label className="label">{t("workflows.decision_tags")}</label>
+            </BuilderField>
+            <BuilderField label={t("workflows.decision_tags")}>
               <input className="input input--sm" value={Array.isArray(node.tags) ? (node.tags as string[]).join(", ") : ""} onChange={(e) => update({ tags: e.target.value.split(",").map((s: string) => s.trim()).filter(Boolean) })} placeholder="safety, data" />
-            </div>
+            </BuilderField>
           </div>
         </>
       )}
       {(op === "list" || op === "get_effective") && (
-        <div className="builder-row">
-          <label className="label">{t("workflows.promise_scope_id")}</label>
+        <BuilderField label={t("workflows.promise_scope_id")}>
           <input className="input input--sm" value={String(node.scope_id || "")} onChange={(e) => update({ scope_id: e.target.value || undefined })} placeholder="team-123" />
-        </div>
+        </BuilderField>
       )}
       {op === "archive" && (
-        <div className="builder-row">
-          <label className="label">{t("workflows.promise_target")}</label>
+        <BuilderField label={t("workflows.promise_target")}>
           <input className="input input--sm" value={String(node.target_id || "")} onChange={(e) => update({ target_id: e.target.value })} placeholder="promise-id-456" />
-        </div>
+        </BuilderField>
       )}
     </>
   );

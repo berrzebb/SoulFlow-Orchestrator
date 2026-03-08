@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 import { useProviderModels } from "../use-provider-models";
+import { BuilderField } from "../builder-field";
 
 function LlmEditPanel({ node, update, t, options }: EditPanelProps) {
   const { models, loading: modelsLoading } = useProviderModels(node.backend as string | undefined, options);
@@ -18,8 +19,7 @@ function LlmEditPanel({ node, update, t, options }: EditPanelProps) {
   return (
     <>
       <div className="builder-row-pair">
-        <div className="builder-row">
-          <label className="label">{t("workflows.llm_backend")}<span className="label__required">*</span></label>
+        <BuilderField label={t("workflows.llm_backend")} required>
           <select autoFocus className="input input--sm" required value={String(node.backend || "")} onChange={(e) => update({ backend: e.target.value })} aria-required="true">
             <option value="">-</option>
             {(options?.backends || []).map((b) => (
@@ -28,9 +28,8 @@ function LlmEditPanel({ node, update, t, options }: EditPanelProps) {
               </option>
             ))}
           </select>
-        </div>
-        <div className="builder-row">
-          <label className="label">{t("workflows.llm_model")}<span className="label__required">*</span></label>
+        </BuilderField>
+        <BuilderField label={t("workflows.llm_model")} required>
           {modelsLoading ? (
             <input className="input input--sm" disabled aria-busy="true" placeholder="loading..." />
           ) : models.length > 0 ? (
@@ -41,16 +40,14 @@ function LlmEditPanel({ node, update, t, options }: EditPanelProps) {
           ) : (
             <input className="input input--sm" value={String(node.model || "")} onChange={(e) => update({ model: e.target.value })} placeholder="auto" />
           )}
-        </div>
+        </BuilderField>
       </div>
-      <div className="builder-row">
-        <label className="label">{t("workflows.llm_prompt")}<span className="label__required">*</span></label>
+      <BuilderField label={t("workflows.llm_prompt")} required>
         <textarea className="input code-textarea" required rows={4} value={String(node.prompt_template || "")} onChange={(e) => update({ prompt_template: e.target.value })} spellCheck={false} placeholder="{{prompt}}" aria-required="true" />
-      </div>
-      <div className="builder-row">
-        <label className="label">{t("workflows.llm_system")}<span className="label__optional">(optional)</span></label>
+      </BuilderField>
+      <BuilderField label={t("workflows.llm_system")} optional>
         <textarea className="input" rows={3} value={String(node.system_prompt || "")} onChange={(e) => update({ system_prompt: e.target.value })} placeholder={t("common.optional")} />
-      </div>
+      </BuilderField>
       <div className="builder-row-pair">
         <div className="builder-row">
           <label className="label">
@@ -62,13 +59,11 @@ function LlmEditPanel({ node, update, t, options }: EditPanelProps) {
           <input className="input input--sm" type="range" min={0} max={2} step={0.1} value={String(temp ?? 0.7)} onChange={(e) => update({ temperature: Number(e.target.value) })} />
           <span className="builder-hint">{temp ?? 0.7}</span>
         </div>
-        <div className="builder-row">
-          <label className="label">{t("providers.max_tokens")}</label>
+        <BuilderField label={t("providers.max_tokens")}>
           <input className="input input--sm" type="number" min={1} value={String(node.max_tokens ?? "")} onChange={(e) => update({ max_tokens: e.target.value ? Number(e.target.value) : undefined })} />
-        </div>
+        </BuilderField>
       </div>
-      <div className="builder-row">
-        <label className="label">{t("workflows.llm_schema")}</label>
+      <BuilderField label={t("workflows.llm_schema")} error={schemaErr}>
         <textarea
           className={`input code-textarea${schemaErr ? " input--err" : ""}`}
           rows={3}
@@ -77,8 +72,7 @@ function LlmEditPanel({ node, update, t, options }: EditPanelProps) {
           spellCheck={false}
           placeholder='{"type": "object", "properties": {...}}'
         />
-        {schemaErr && <span className="field-error">{schemaErr}</span>}
-      </div>
+      </BuilderField>
     </>
   );
 }

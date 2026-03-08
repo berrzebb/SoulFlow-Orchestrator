@@ -1,3 +1,4 @@
+import { BuilderField } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
 function EncodingEditPanel({ node, update, t }: EditPanelProps) {
@@ -5,34 +6,30 @@ function EncodingEditPanel({ node, update, t }: EditPanelProps) {
   return (
     <>
       <div className="builder-row-pair">
-        <div className="builder-row">
-          <label className="label">{t("workflows.operation")}<span className="label__required">*</span></label>
+        <BuilderField label={t("workflows.operation")} required>
           <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
             {["encode", "decode", "hash", "uuid"].map((o) => <option key={o} value={o}>{o}</option>)}
           </select>
-        </div>
+        </BuilderField>
         {op !== "uuid" && (
-          <div className="builder-row">
-            <label className="label">{t("workflows.format")}</label>
+          <BuilderField label={t("workflows.format")}>
             <select className="input input--sm" value={String(node.format || "base64")} onChange={(e) => update({ format: e.target.value })}>
               {op === "hash"
                 ? ["sha256", "sha512", "md5"].map((f) => <option key={f} value={f}>{f}</option>)
                 : ["base64", "hex", "url"].map((f) => <option key={f} value={f}>{f}</option>)}
             </select>
-          </div>
+          </BuilderField>
         )}
       </div>
       {op !== "uuid" && (
-        <div className="builder-row">
-          <label className="label">{t("workflows.input_data")}</label>
+        <BuilderField label={t("workflows.input_data")}>
           <textarea className="input code-textarea" rows={3} value={String(node.input || "")} onChange={(e) => update({ input: e.target.value })} placeholder="Hello World" />
-        </div>
+        </BuilderField>
       )}
       {op === "uuid" && (
-        <div className="builder-row">
-          <label className="label">{t("workflows.field_count")}</label>
+        <BuilderField label={t("workflows.field_count")}>
           <input className="input input--sm" type="number" min={1} max={100} value={String(node.count ?? 1)} onChange={(e) => update({ count: Number(e.target.value) || 1 })} />
-        </div>
+        </BuilderField>
       )}
     </>
   );

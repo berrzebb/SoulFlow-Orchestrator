@@ -1,18 +1,17 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
+import { BuilderField } from "../builder-field";
 
 function LookupEditPanel({ node, update, t }: EditPanelProps) {
   return (
     <>
-      <div className="builder-row">
-        <label className="label">{t("workflows.field_table")}</label>
+      <BuilderField label={t("workflows.field_table")}>
         <select autoFocus className="input input--sm" value={String(node.table || "http_status")} onChange={(e) => update({ table: e.target.value })}>
           {["http_status", "mime_type", "country", "currency_symbol"].map((v) => <option key={v} value={v}>{v}</option>)}
         </select>
-      </div>
-      <div className="builder-row">
-        <label className="label">{t("workflows.field_key")}</label>
+      </BuilderField>
+      <BuilderField label={t("workflows.field_key")}>
         <input className="input" value={String(node.key || "")} onChange={(e) => update({ key: e.target.value })} placeholder="404" />
-      </div>
+      </BuilderField>
       <div className="builder-row-pair">
         <div className="builder-row">
           <label className="label" style={{ display: "flex", alignItems: "center", gap: "6px" }}>

@@ -1,27 +1,23 @@
+import { BuilderField } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
 function CacheEditPanel({ node, update, t }: EditPanelProps) {
   const op = String(node.operation || "get_or_set");
   return (
     <>
-      <div className="builder-row">
-        <label className="label">{t("workflows.cache_operation")}<span className="label__required">*</span></label>
+      <BuilderField label={t("workflows.cache_operation")} required>
         <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
           <option value="get_or_set">{t("workflows.cache_op_get_or_set")}</option>
           <option value="invalidate">{t("workflows.cache_op_invalidate")}</option>
         </select>
-      </div>
-      <div className="builder-row">
-        <label className="label">{t("workflows.cache_key")}</label>
+      </BuilderField>
+      <BuilderField label={t("workflows.cache_key")} hint={t("workflows.cache_key_hint")}>
         <input className="input input--sm" value={String(node.cache_key || "")} onChange={(e) => update({ cache_key: e.target.value })} placeholder="llm_{{memory.prompt_hash}}" />
-        <span className="builder-hint">{t("workflows.cache_key_hint")}</span>
-      </div>
+      </BuilderField>
       {op === "get_or_set" && (
-        <div className="builder-row">
-          <label className="label">{t("workflows.cache_ttl")}</label>
+        <BuilderField label={t("workflows.cache_ttl")} hint={t("workflows.cache_ttl_hint")}>
           <input className="input input--sm" type="number" min={0} value={String(node.ttl_ms ?? 300000)} onChange={(e) => update({ ttl_ms: Number(e.target.value) })} />
-          <span className="builder-hint">{t("workflows.cache_ttl_hint")}</span>
-        </div>
+        </BuilderField>
       )}
     </>
   );

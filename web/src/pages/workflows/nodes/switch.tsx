@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { BuilderField } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
 function SwitchEditPanel({ node, update, t }: EditPanelProps) {
@@ -14,13 +15,10 @@ function SwitchEditPanel({ node, update, t }: EditPanelProps) {
 
   return (
     <>
-      <div className="builder-row">
-        <label className="label">{t("workflows.switch_expression")}</label>
+      <BuilderField label={t("workflows.switch_expression")} hint={t("workflows.expression_hint")}>
         <input autoFocus className="input input--sm" value={String(node.expression || "")} onChange={(e) => update({ expression: e.target.value })} placeholder="memory.status" />
-        <span className="builder-hint">{t("workflows.expression_hint")}</span>
-      </div>
-      <div className="builder-row">
-        <label className="label">{t("workflows.switch_cases")}</label>
+      </BuilderField>
+      <BuilderField label={t("workflows.switch_cases")} error={casesErr}>
         <textarea
           className={`input code-textarea${casesErr ? " input--err" : ""}`}
           rows={4}
@@ -29,12 +27,10 @@ function SwitchEditPanel({ node, update, t }: EditPanelProps) {
           spellCheck={false}
           placeholder='[{"value": "success", "targets": ["next-1"]}]'
         />
-        {casesErr && <span className="field-error">{casesErr}</span>}
-      </div>
-      <div className="builder-row">
-        <label className="label">{t("workflows.switch_default")}</label>
+      </BuilderField>
+      <BuilderField label={t("workflows.switch_default")}>
         <input className="input input--sm" value={((node.default_targets as string[]) || []).join(", ")} onChange={(e) => update({ default_targets: e.target.value.split(",").map((s: string) => s.trim()).filter(Boolean) })} placeholder="fallback-node" />
-      </div>
+      </BuilderField>
     </>
   );
 }

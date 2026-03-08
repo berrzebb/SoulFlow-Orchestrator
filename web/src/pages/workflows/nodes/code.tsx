@@ -1,4 +1,5 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
+import { BuilderField } from "../builder-field";
 
 const LANGUAGES = [
   { value: "javascript", label: "JavaScript (VM)" },
@@ -20,27 +21,23 @@ function CodeEditPanel({ node, update, t }: EditPanelProps) {
 
   return (
     <>
-      <div className="builder-row">
-        <label className="label">{t("workflows.code_language")}<span className="label__required">*</span></label>
+      <BuilderField label={t("workflows.code_language")} required>
         <select autoFocus className="input input--sm" required value={lang} onChange={(e) => update({ language: e.target.value })} aria-required="true">
           {LANGUAGES.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}
         </select>
-      </div>
+      </BuilderField>
       <div className="builder-row">
         <label className="label">{t("workflows.field_code")}<span className="label__required">*</span> <span className="builder-hint--inline">({lang})</span></label>
         <textarea className="input code-textarea code-textarea--tall" required rows={14} value={String(node.code || "")} onChange={(e) => update({ code: e.target.value })} spellCheck={false} aria-required="true" />
       </div>
-      <div className="builder-row">
-        <label className="label">{t("workflows.timeout_ms")}<span className="label__required">*</span></label>
+      <BuilderField label={t("workflows.timeout_ms")} required hint={t("workflows.timeout_ms_hint")}>
         <input className="input input--sm" required type="number" min={100} max={120000} step={1000} value={String(node.timeout_ms ?? 10000)} onChange={(e) => update({ timeout_ms: Number(e.target.value) || 10000 })} aria-required="true" />
-        <span className="builder-hint">{t("workflows.timeout_ms_hint")}</span>
-      </div>
+      </BuilderField>
       {is_container && (
         <>
-          <div className="builder-row">
-            <label className="label">{t("workflows.container_image_override")}</label>
+          <BuilderField label={t("workflows.container_image_override")}>
             <input className="input input--sm" placeholder="e.g. python:3.11-slim" value={String(node.container_image || "")} onChange={(e) => update({ container_image: e.target.value || undefined })} />
-          </div>
+          </BuilderField>
           <div className="builder-row builder-checkbox-row">
             <label className="builder-checkbox-label">
               <input type="checkbox" checked={!!node.network_access} onChange={(e) => update({ network_access: e.target.checked })} />

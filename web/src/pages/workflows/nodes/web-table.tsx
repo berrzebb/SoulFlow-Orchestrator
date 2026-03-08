@@ -1,21 +1,19 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
+import { BuilderField } from "../builder-field";
 
 function WebTableEditPanel({ node, update, t }: EditPanelProps) {
   return (
     <>
-      <div className="builder-row">
-        <label className="label">{t("workflows.scrape_url")}</label>
+      <BuilderField label={t("workflows.scrape_url")}>
         <input autoFocus className="input" value={String(node.url || "")} onChange={(e) => update({ url: e.target.value })} placeholder="https://example.com/data" />
-      </div>
+      </BuilderField>
       <div className="builder-row-pair">
-        <div className="builder-row">
-          <label className="label">{t("workflows.selector")}</label>
+        <BuilderField label={t("workflows.selector")}>
           <input className="input input--sm" value={String(node.selector || "table")} onChange={(e) => update({ selector: e.target.value })} />
-        </div>
-        <div className="builder-row">
-          <label className="label">{t("workflows.max_results")}</label>
+        </BuilderField>
+        <BuilderField label={t("workflows.max_results")}>
           <input className="input input--sm" type="number" min={1} max={1000} value={String(node.max_rows ?? 100)} onChange={(e) => update({ max_rows: Number(e.target.value) || 100 })} />
-        </div>
+        </BuilderField>
       </div>
     </>
   );

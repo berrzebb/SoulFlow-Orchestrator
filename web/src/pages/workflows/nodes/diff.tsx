@@ -1,3 +1,4 @@
+import { BuilderField } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
 function DiffEditPanel({ node, update, t }: EditPanelProps) {
@@ -5,35 +6,29 @@ function DiffEditPanel({ node, update, t }: EditPanelProps) {
   return (
     <>
       <div className="builder-row-pair">
-        <div className="builder-row">
-          <label className="label">{t("workflows.operation")}</label>
+        <BuilderField label={t("workflows.operation")}>
           <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
             {["compare", "patch", "stats"].map((o) => <option key={o} value={o}>{o}</option>)}
           </select>
-        </div>
-        <div className="builder-row">
-          <label className="label">{t("workflows.field_context_lines")}</label>
+        </BuilderField>
+        <BuilderField label={t("workflows.field_context_lines")} hint={t("workflows.diff_context_lines_hint")}>
           <input className="input input--sm" type="number" min={0} max={20} value={String(node.context_lines ?? 3)} onChange={(e) => update({ context_lines: Number(e.target.value) || 3 })} />
-          <span className="builder-hint">{t("workflows.diff_context_lines_hint")}</span>
-        </div>
+        </BuilderField>
       </div>
       {(op === "compare" || op === "stats") && (
         <>
-          <div className="builder-row">
-            <label className="label">{t("workflows.field_old_text")}</label>
+          <BuilderField label={t("workflows.field_old_text")}>
             <textarea className="input code-textarea" rows={4} value={String(node.old_text || "")} onChange={(e) => update({ old_text: e.target.value })} placeholder="Original text or @file:path" />
-          </div>
-          <div className="builder-row">
-            <label className="label">{t("workflows.field_new_text")}</label>
+          </BuilderField>
+          <BuilderField label={t("workflows.field_new_text")}>
             <textarea className="input code-textarea" rows={4} value={String(node.new_text || "")} onChange={(e) => update({ new_text: e.target.value })} placeholder="Modified text or @file:path" />
-          </div>
+          </BuilderField>
         </>
       )}
       {op === "patch" && (
-        <div className="builder-row">
-          <label className="label">{t("workflows.field_diff_text")}</label>
+        <BuilderField label={t("workflows.field_diff_text")}>
           <textarea className="input code-textarea" rows={6} value={String(node.diff_text || "")} onChange={(e) => update({ diff_text: e.target.value })} placeholder="Unified diff..." />
-        </div>
+        </BuilderField>
       )}
     </>
   );

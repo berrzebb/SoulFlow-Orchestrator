@@ -1,13 +1,11 @@
+import { BuilderField } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
 function MatrixEditPanel({ node, update, t }: EditPanelProps) {
   return (
-    <>
-      <div className="builder-row">
-        <label className="label">{t("node.matrix.description")}</label>
-        <p className="builder-hint">{t("node.matrix.hint")}</p>
-      </div>
-    </>
+    <BuilderField label={t("node.matrix.description")} hint={t("node.matrix.hint")}>
+      {null}
+    </BuilderField>
   );
 }
 

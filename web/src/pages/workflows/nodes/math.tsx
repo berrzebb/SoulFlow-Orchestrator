@@ -1,77 +1,67 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
+import { BuilderField } from "../builder-field";
 
 function MathEditPanel({ node, update, t }: EditPanelProps) {
   const op = String(node.operation || "eval");
   return (
     <>
-      <div className="builder-row">
-        <label className="label">{t("workflows.operation")}</label>
+      <BuilderField label={t("workflows.operation")}>
         <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
           {["eval", "convert", "compound_interest", "loan_payment", "roi", "percentage", "round", "gcd", "lcm", "factorial", "fibonacci"].map((o) => <option key={o} value={o}>{o}</option>)}
         </select>
-      </div>
+      </BuilderField>
       {op === "eval" && (
-        <div className="builder-row">
-          <label className="label">{t("workflows.field_expression")}</label>
+        <BuilderField label={t("workflows.field_expression")}>
           <input className="input" value={String(node.expression || "")} onChange={(e) => update({ expression: e.target.value })} placeholder="Math.sqrt(144) + 2 * 3" />
-        </div>
+        </BuilderField>
       )}
       {op === "convert" && (
         <div className="builder-row-pair">
-          <div className="builder-row">
-            <label className="label">{t("workflows.field_value")}</label>
+          <BuilderField label={t("workflows.field_value")}>
             <input className="input input--sm" type="number" value={String(node.value ?? 0)} onChange={(e) => update({ value: Number(e.target.value) })} />
-          </div>
-          <div className="builder-row">
-            <label className="label">{t("workflows.field_from_to")}</label>
+          </BuilderField>
+          <BuilderField label={t("workflows.field_from_to")}>
             <div style={{ display: "flex", gap: "4px" }}>
               <input className="input input--sm" value={String(node.from || "")} onChange={(e) => update({ from: e.target.value })} placeholder="km" style={{ flex: 1 }} />
               <input className="input input--sm" value={String(node.to || "")} onChange={(e) => update({ to: e.target.value })} placeholder="mi" style={{ flex: 1 }} />
             </div>
-          </div>
+          </BuilderField>
         </div>
       )}
       {["compound_interest", "loan_payment"].includes(op) && (
         <>
           <div className="builder-row-pair">
-            <div className="builder-row">
-              <label className="label">{t("workflows.field_principal")}</label>
+            <BuilderField label={t("workflows.field_principal")}>
               <input className="input input--sm" type="number" value={String(node.principal ?? 0)} onChange={(e) => update({ principal: Number(e.target.value) })} />
-            </div>
-            <div className="builder-row">
-              <label className="label">{t("workflows.field_rate")}</label>
+            </BuilderField>
+            <BuilderField label={t("workflows.field_rate")}>
               <input className="input input--sm" type="number" step="0.01" value={String(node.rate ?? 0)} onChange={(e) => update({ rate: Number(e.target.value) })} />
-            </div>
+            </BuilderField>
           </div>
-          <div className="builder-row">
-            <label className="label">{t("workflows.field_periods")}</label>
+          <BuilderField label={t("workflows.field_periods")}>
             <input className="input input--sm" type="number" value={String(node.periods ?? 0)} onChange={(e) => update({ periods: Number(e.target.value) })} />
-          </div>
+          </BuilderField>
         </>
       )}
       {["round", "percentage"].includes(op) && (
-        <div className="builder-row">
-          <label className="label">{t("workflows.field_value")}</label>
+        <BuilderField label={t("workflows.field_value")}>
           <input className="input input--sm" type="number" value={String(node.value ?? 0)} onChange={(e) => update({ value: Number(e.target.value) })} />
-        </div>
+        </BuilderField>
       )}
       {["gcd", "lcm"].includes(op) && (
         <div className="builder-row-pair">
-          <div className="builder-row">
-            <label className="label">A</label>
+          <BuilderField label="A">
             <input className="input input--sm" type="number" value={String(node.a ?? 0)} onChange={(e) => update({ a: Number(e.target.value) })} />
-          </div>
-          <div className="builder-row">
-            <label className="label">B</label>
+          </BuilderField>
+          <BuilderField label="B">
             <input className="input input--sm" type="number" value={String(node.b ?? 0)} onChange={(e) => update({ b: Number(e.target.value) })} />
-          </div>
+          </BuilderField>
         </div>
       )}
       {["factorial", "fibonacci"].includes(op) && (
-        <div className="builder-row">
-          <label className="label">N</label>
+        <BuilderField label="N">
           <input className="input input--sm" type="number" min={0} value={String(node.n ?? 0)} onChange={(e) => update({ n: Number(e.target.value) })} />
-        </div>
+        </BuilderField>
       )}
     </>
   );

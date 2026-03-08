@@ -1,47 +1,40 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
+import { BuilderField } from "../builder-field";
 
 function ApprovalEditPanel({ node, update, t, options }: EditPanelProps) {
   const target = String(node.target || "origin");
   const channels = options?.channels || [];
   return (
     <>
-      <div className="builder-row">
-        <label className="label">{t("workflows.approval_message")}<span className="label__required">*</span></label>
+      <BuilderField label={t("workflows.approval_message")} required>
         <textarea autoFocus required className="input" rows={3} value={String(node.message || "")} onChange={(e) => update({ message: e.target.value })} placeholder={t("workflows.approval_message_hint")} aria-required="true" />
-      </div>
-      <div className="builder-row">
-        <label className="label">{t("workflows.approval_target")}<span className="label__required">*</span></label>
+      </BuilderField>
+      <BuilderField label={t("workflows.approval_target")} required>
         <select required className="input input--sm" value={target} onChange={(e) => update({ target: e.target.value })} aria-required="true">
           <option value="origin">{t("workflows.hitl_target_origin")}</option>
           <option value="specified">{t("workflows.hitl_target_specified")}</option>
         </select>
-      </div>
+      </BuilderField>
       {target === "specified" && (
         <div className="builder-row-pair builder-row--conditional">
-          <div className="builder-row">
-            <label className="label">{t("workflows.hitl_channel")}</label>
+          <BuilderField label={t("workflows.hitl_channel")}>
             <select className="input input--sm" value={String(node.channel || "")} onChange={(e) => update({ channel: e.target.value })}>
               <option value="">{t("common.select")}</option>
               {channels.map((c) => <option key={c.channel_id} value={c.provider}>{c.label} ({c.provider})</option>)}
             </select>
-          </div>
-          <div className="builder-row">
-            <label className="label">{t("workflows.hitl_chat_id")}</label>
+          </BuilderField>
+          <BuilderField label={t("workflows.hitl_chat_id")}>
             <input className="input input--sm" value={String(node.chat_id || "")} onChange={(e) => update({ chat_id: e.target.value })} />
-          </div>
+          </BuilderField>
         </div>
       )}
       <div className="builder-row-pair">
-        <div className="builder-row">
-          <label className="label">{t("workflows.approval_quorum")}<span className="label__required">*</span></label>
+        <BuilderField label={t("workflows.approval_quorum")} required hint={`${t("workflows.approval_quorum_hint")} (최소: 1)`}>
           <input required className="input input--sm" type="number" min={1} value={String(node.quorum ?? 1)} onChange={(e) => update({ quorum: Number(e.target.value) })} placeholder="1" aria-required="true" />
-          <span className="builder-hint">{t("workflows.approval_quorum_hint")} (최소: 1)</span>
-        </div>
-        <div className="builder-row">
-          <label className="label">{t("workflows.hitl_timeout")}<span className="label__required">*</span></label>
+        </BuilderField>
+        <BuilderField label={t("workflows.hitl_timeout")} required hint={`${t("workflows.hitl_timeout_hint")} (밀리초, 최소: 0)`}>
           <input required className="input input--sm" type="number" min={0} value={String(node.timeout_ms ?? 600000)} onChange={(e) => update({ timeout_ms: Number(e.target.value) })} placeholder="600000" aria-required="true" />
-          <span className="builder-hint">{t("workflows.hitl_timeout_hint")} (밀리초, 최소: 0)</span>
-        </div>
+        </BuilderField>
       </div>
       <div className="builder-row">
         <label className="label-inline">

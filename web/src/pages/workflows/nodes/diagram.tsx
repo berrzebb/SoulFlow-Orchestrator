@@ -1,16 +1,15 @@
+import { BuilderField } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
 function DiagramEditPanel({ node, update, t }: EditPanelProps) {
   return (
     <>
-      <div className="builder-row">
-        <label className="label">{t("node.diagram.input.source")}</label>
+      <BuilderField label={t("node.diagram.input.source")}>
         <input autoFocus className="input input--sm" value={String(node.source || "")} onChange={(e) => update({ source: e.target.value })} />
-      </div>
-      <div className="builder-row">
-        <label className="label">{t("node.diagram.input.type")}</label>
+      </BuilderField>
+      <BuilderField label={t("node.diagram.input.type")}>
         <input className="input input--sm" value={String(node.type || "")} onChange={(e) => update({ type: e.target.value })} />
-      </div>
+      </BuilderField>
     </>
   );
 }

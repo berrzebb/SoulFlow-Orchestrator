@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
+import { BuilderField } from "../builder-field";
 
 function DbEditPanel({ node, update, t }: EditPanelProps) {
   const [paramsRaw, setParamsRaw] = useState(node.params ? JSON.stringify(node.params, null, 2) : "");
@@ -15,27 +16,22 @@ function DbEditPanel({ node, update, t }: EditPanelProps) {
   return (
     <>
       <div className="builder-row-pair">
-        <div className="builder-row">
-          <label className="label">{t("workflows.db_operation")}<span className="label__required">*</span></label>
+        <BuilderField label={t("workflows.db_operation")} required>
           <select autoFocus className="input input--sm" value={String(node.operation || "query")} onChange={(e) => update({ operation: e.target.value })}>
             <option value="query">{t("workflows.opt_query")}</option>
             <option value="insert">{t("workflows.opt_insert")}</option>
             <option value="update">{t("workflows.opt_update")}</option>
             <option value="delete">{t("workflows.opt_delete")}</option>
           </select>
-        </div>
-        <div className="builder-row">
-          <label className="label">{t("workflows.db_datasource")}</label>
+        </BuilderField>
+        <BuilderField label={t("workflows.db_datasource")}>
           <input className="input input--sm" value={String(node.datasource || "")} onChange={(e) => update({ datasource: e.target.value })} placeholder="main-db" />
-        </div>
+        </BuilderField>
       </div>
-      <div className="builder-row">
-        <label className="label">{t("workflows.db_query")}</label>
+      <BuilderField label={t("workflows.db_query")} hint={t("workflows.db_query_hint")}>
         <textarea className="input code-textarea" rows={4} value={String(node.query || "")} onChange={(e) => update({ query: e.target.value })} spellCheck={false} placeholder="SELECT * FROM users WHERE id = {{memory.user_id}}" />
-        <span className="builder-hint">{t("workflows.db_query_hint")}</span>
-      </div>
-      <div className="builder-row">
-        <label className="label">{t("workflows.db_params")}</label>
+      </BuilderField>
+      <BuilderField label={t("workflows.db_params")} error={paramsErr}>
         <textarea
           className={`input code-textarea${paramsErr ? " input--err" : ""}`}
           rows={2}
@@ -44,8 +40,7 @@ function DbEditPanel({ node, update, t }: EditPanelProps) {
           spellCheck={false}
           placeholder='{"user_id": 42}'
         />
-        {paramsErr && <span className="field-error">{paramsErr}</span>}
-      </div>
+      </BuilderField>
     </>
   );
 }

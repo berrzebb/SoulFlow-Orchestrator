@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
+import { BuilderField } from "../builder-field";
 
 interface FormFieldDef {
   name: string;
@@ -33,40 +34,34 @@ function FormEditPanel({ node, update, t, options }: EditPanelProps) {
 
   return (
     <>
-      <div className="builder-row">
-        <label className="label">{t("workflows.form_title")}</label>
+      <BuilderField label={t("workflows.form_title")}>
         <input autoFocus className="input input--sm" value={String(node.title || "")} onChange={(e) => update({ title: e.target.value })} placeholder={t("workflows.form_title_hint")} />
-      </div>
-      <div className="builder-row">
-        <label className="label">{t("workflows.form_description")}</label>
+      </BuilderField>
+      <BuilderField label={t("workflows.form_description")}>
         <textarea className="input" rows={2} value={String(node.description || "")} onChange={(e) => update({ description: e.target.value })} />
-      </div>
-      <div className="builder-row">
-        <label className="label">{t("workflows.form_target")}</label>
+      </BuilderField>
+      <BuilderField label={t("workflows.form_target")}>
         <select className="input input--sm" value={target} onChange={(e) => update({ target: e.target.value })}>
           <option value="origin">{t("workflows.hitl_target_origin")}</option>
           <option value="specified">{t("workflows.hitl_target_specified")}</option>
         </select>
-      </div>
+      </BuilderField>
       {target === "specified" && (
         <div className="builder-row-pair builder-row--conditional">
-          <div className="builder-row">
-            <label className="label">{t("workflows.hitl_channel")}</label>
+          <BuilderField label={t("workflows.hitl_channel")}>
             <select className="input input--sm" value={String(node.channel || "")} onChange={(e) => update({ channel: e.target.value })}>
               <option value="">{t("common.select")}</option>
               {channels.map((c) => <option key={c.channel_id} value={c.provider}>{c.label} ({c.provider})</option>)}
             </select>
-          </div>
-          <div className="builder-row">
-            <label className="label">{t("workflows.hitl_chat_id")}</label>
+          </BuilderField>
+          <BuilderField label={t("workflows.hitl_chat_id")}>
             <input className="input input--sm" value={String(node.chat_id || "")} onChange={(e) => update({ chat_id: e.target.value })} />
-          </div>
+          </BuilderField>
         </div>
       )}
-      <div className="builder-row">
-        <label className="label">{t("workflows.hitl_timeout")}</label>
+      <BuilderField label={t("workflows.hitl_timeout")}>
         <input className="input input--sm" type="number" min={0} value={String(node.timeout_ms ?? 600000)} onChange={(e) => update({ timeout_ms: Number(e.target.value) })} />
-      </div>
+      </BuilderField>
 
       {/* Fields */}
       <div className="builder-row">
@@ -85,18 +80,15 @@ function FormEditPanel({ node, update, t, options }: EditPanelProps) {
           {expanded === i && (
             <>
               <div className="builder-row-pair">
-                <div className="builder-row">
-                  <label className="label">{t("workflows.form_field_name")}</label>
+                <BuilderField label={t("workflows.form_field_name")}>
                   <input className="input input--sm" value={f.name} onChange={(e) => updateField(i, { name: e.target.value })} placeholder="field_name" />
-                </div>
-                <div className="builder-row">
-                  <label className="label">{t("workflows.form_field_label")}</label>
+                </BuilderField>
+                <BuilderField label={t("workflows.form_field_label")}>
                   <input className="input input--sm" value={f.label} onChange={(e) => updateField(i, { label: e.target.value })} placeholder={t("workflows.field_label")} />
-                </div>
+                </BuilderField>
               </div>
               <div className="builder-row-pair">
-                <div className="builder-row">
-                  <label className="label">{t("workflows.form_field_type")}</label>
+                <BuilderField label={t("workflows.form_field_type")}>
                   <select className="input input--sm" value={f.type} onChange={(e) => updateField(i, { type: e.target.value as FormFieldDef["type"] })}>
                     <option value="text">{t("workflows.opt_text")}</option>
                     <option value="number">{t("workflows.opt_number")}</option>
@@ -104,7 +96,7 @@ function FormEditPanel({ node, update, t, options }: EditPanelProps) {
                     <option value="select">{t("workflows.opt_select")}</option>
                     <option value="boolean">{t("workflows.opt_boolean")}</option>
                   </select>
-                </div>
+                </BuilderField>
                 <div className="builder-row">
                   <label className="label-inline">
                     <input type="checkbox" checked={!!f.required} onChange={(e) => updateField(i, { required: e.target.checked })} />
@@ -113,15 +105,13 @@ function FormEditPanel({ node, update, t, options }: EditPanelProps) {
                 </div>
               </div>
               {f.type === "select" && (
-                <div className="builder-row">
-                  <label className="label">{t("workflows.form_field_options")}</label>
+                <BuilderField label={t("workflows.form_field_options")}>
                   <input className="input input--sm" value={(f.options || []).join(", ")} onChange={(e) => updateField(i, { options: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) })} placeholder="option1, option2, option3" />
-                </div>
+                </BuilderField>
               )}
-              <div className="builder-row">
-                <label className="label">{t("workflows.form_field_default")}</label>
+              <BuilderField label={t("workflows.form_field_default")}>
                 <input className="input input--sm" value={f.default_value || ""} onChange={(e) => updateField(i, { default_value: e.target.value || undefined })} />
-              </div>
+              </BuilderField>
             </>
           )}
         </div>

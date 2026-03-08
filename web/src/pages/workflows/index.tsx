@@ -5,7 +5,9 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { api } from "../../api/client";
 import { Badge } from "../../components/badge";
-import { Modal, useModalEffects } from "../../components/modal";
+import { EmptyState } from "../../components/empty-state";
+import { DeleteConfirmModal, useModalEffects } from "../../components/modal";
+import { SkeletonGrid } from "../../components/skeleton-grid";
 import { useToast } from "../../components/toast";
 import { useT } from "../../i18n";
 import { time_ago } from "../../utils/format";
@@ -234,29 +236,16 @@ export default function WorkflowsPage() {
       {tab === "templates" && (
         <>
           {tplLoading ? (
-            <div className="stat-grid stat-grid--wide">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <div key={i} className="skeleton skeleton-card" style={{ height: 140 }} />
-              ))}
-            </div>
+            <SkeletonGrid count={4} cardStyle={{ height: 140 }} />
           ) : !templates?.length ? (
-            <div className="empty-state">
-              <div className="empty-state__icon" aria-hidden="true">
-                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="8.5" y="14" width="7" height="7" rx="1.5" />
-                  <path d="M6.5 10v2.5a1.5 1.5 0 001.5 1.5h0M17.5 10v2.5a1.5 1.5 0 01-1.5 1.5h0" />
-                </svg>
-              </div>
-              <p className="empty-state__text">{t("workflows.no_templates")}</p>
-              <div className="empty-state__actions">
-                <button className="btn btn--sm btn--accent" onClick={() => navigate("/workflows/new")}>
-                  + {t("workflows.new_workflow")}
-                </button>
-                <button className="btn btn--sm" onClick={() => setShowImport(true)}>
-                  {t("workflows.import")}
-                </button>
-              </div>
-            </div>
+            <EmptyState title={t("workflows.no_templates")} actions={<>
+              <button className="btn btn--sm btn--accent" onClick={() => navigate("/workflows/new")}>
+                + {t("workflows.new_workflow")}
+              </button>
+              <button className="btn btn--sm" onClick={() => setShowImport(true)}>
+                {t("workflows.import")}
+              </button>
+            </>} />
           ) : (
             <>
               <div className="stat-grid stat-grid--wide" ref={templateListRef}>
@@ -323,50 +312,34 @@ export default function WorkflowsPage() {
             }}
           />
 
-          <Modal
+          <DeleteConfirmModal
             open={!!deleteTarget}
             title={t("workflows.delete_template")}
+            message={t("workflows.confirm_delete")}
             onClose={() => setDeleteTarget(null)}
             onConfirm={() => deleteTarget && deleteMut.mutate(deleteTarget)}
             confirmLabel={t("workflows.delete_template")}
-            danger
-          >
-            <p>{t("workflows.confirm_delete")}</p>
-          </Modal>
+          />
         </>
       )}
 
       {/* Cancel Workflow Confirm */}
-      <Modal
+      <DeleteConfirmModal
         open={!!cancelTarget}
         title={t("workflows.cancel_confirm_title")}
+        message={t("workflows.cancel_confirm_desc")}
         onClose={() => setCancelTarget(null)}
         onConfirm={() => cancelTarget && cancelMut.mutate(cancelTarget)}
         confirmLabel={t("workflows.cancel")}
-        danger
-      >
-        <p className="text-sm">{t("workflows.cancel_confirm_desc")}</p>
-      </Modal>
+      />
 
       {/* Running 탭 */}
       {tab === "running" && (
         <>
           {wfLoading ? (
-            <div className="stat-grid stat-grid--wide">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <div key={i} className="skeleton skeleton-card" style={{ height: 180 }} />
-              ))}
-            </div>
+            <SkeletonGrid count={4} cardStyle={{ height: 180 }} />
           ) : !sortedWorkflows.length ? (
-            <div className="empty-state">
-              <div className="empty-state__icon" aria-hidden="true">
-                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 3" />
-                </svg>
-              </div>
-              <p className="empty-state__text">{t("workflows.empty")}</p>
-              <p className="empty-state__hint">{t("workflows.empty_hint")}</p>
-            </div>
+            <EmptyState title={t("workflows.empty")} description={t("workflows.empty_hint")} />
           ) : (
             <div className="stat-grid stat-grid--wide">
               {sortedWorkflows.map((wf) => {

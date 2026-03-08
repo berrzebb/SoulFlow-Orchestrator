@@ -1,26 +1,23 @@
+import { BuilderField } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
 function ErrorHandlerEditPanel({ node, update, t }: EditPanelProps) {
   const on_error = String(node.on_error || "continue");
   return (
     <>
-      <div className="builder-row">
-        <label className="label">{t("workflows.error_try_nodes")}</label>
+      <BuilderField label={t("workflows.error_try_nodes")} hint={t("workflows.error_try_nodes_hint")}>
         <input autoFocus className="input input--sm" value={String(node.try_nodes || "")} onChange={(e) => update({ try_nodes: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) })} placeholder="node_1, node_2" />
-        <span className="builder-hint">{t("workflows.error_try_nodes_hint")}</span>
-      </div>
-      <div className="builder-row">
-        <label className="label">{t("workflows.error_on_error")}</label>
+      </BuilderField>
+      <BuilderField label={t("workflows.error_on_error")}>
         <select className="input input--sm" value={on_error} onChange={(e) => update({ on_error: e.target.value })}>
           <option value="continue">{t("workflows.error_continue")}</option>
           <option value="fallback">{t("workflows.error_fallback")}</option>
         </select>
-      </div>
+      </BuilderField>
       {on_error === "fallback" && (
-        <div className="builder-row">
-          <label className="label">{t("workflows.error_fallback_nodes")}</label>
+        <BuilderField label={t("workflows.error_fallback_nodes")}>
           <input className="input input--sm" value={String(node.fallback_nodes || "")} onChange={(e) => update({ fallback_nodes: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) })} placeholder="fallback_node_1" />
-        </div>
+        </BuilderField>
       )}
     </>
   );

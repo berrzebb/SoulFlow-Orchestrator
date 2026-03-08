@@ -1,36 +1,32 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
+import { BuilderField } from "../builder-field";
 
 function StatsEditPanel({ node, update, t }: EditPanelProps) {
   const op = String(node.operation || "summary");
   return (
     <>
-      <div className="builder-row">
-        <label className="label">{t("workflows.operation")}<span className="label__required">*</span></label>
+      <BuilderField label={t("workflows.operation")} required>
         <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
           {["summary", "percentile", "histogram", "correlation", "normalize", "outliers"].map((o) => <option key={o} value={o}>{o}</option>)}
         </select>
-      </div>
-      <div className="builder-row">
-        <label className="label">{t("workflows.input_data")}</label>
+      </BuilderField>
+      <BuilderField label={t("workflows.input_data")}>
         <textarea className="input code-textarea" rows={3} value={String(node.data || "")} onChange={(e) => update({ data: e.target.value })} placeholder="[1, 2, 3, 4, 5] or 1,2,3,4,5" />
-      </div>
+      </BuilderField>
       {op === "correlation" && (
-        <div className="builder-row">
-          <label className="label">{t("workflows.field_data_2")}</label>
+        <BuilderField label={t("workflows.field_data_2")}>
           <textarea className="input code-textarea" rows={2} value={String(node.data2 || "")} onChange={(e) => update({ data2: e.target.value })} placeholder="[10, 20, 30, 40, 50]" />
-        </div>
+        </BuilderField>
       )}
       {op === "percentile" && (
-        <div className="builder-row">
-          <label className="label">{t("workflows.field_percentile")}</label>
+        <BuilderField label={t("workflows.field_percentile")}>
           <input className="input input--sm" type="number" min={0} max={100} value={String(node.percentile ?? 50)} onChange={(e) => update({ percentile: Number(e.target.value) })} />
-        </div>
+        </BuilderField>
       )}
       {op === "histogram" && (
-        <div className="builder-row">
-          <label className="label">{t("workflows.field_bins")}</label>
+        <BuilderField label={t("workflows.field_bins")}>
           <input className="input input--sm" type="number" min={2} max={100} value={String(node.bins ?? 10)} onChange={(e) => update({ bins: Number(e.target.value) })} />
-        </div>
+        </BuilderField>
       )}
     </>
   );

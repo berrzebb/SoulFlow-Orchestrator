@@ -1,20 +1,18 @@
+import { BuilderField } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
 function GraphqlEditPanel({ node, update, t }: EditPanelProps) {
   return (
     <>
-      <div className="builder-row">
-        <label className="label">{t("node.graphql.input.url")}</label>
+      <BuilderField label={t("node.graphql.input.url")}>
         <input autoFocus className="input input--sm" value={String(node.url || "")} onChange={(e) => update({ url: e.target.value })} />
-      </div>
-      <div className="builder-row">
-        <label className="label">{t("node.graphql.input.query")}</label>
+      </BuilderField>
+      <BuilderField label={t("node.graphql.input.query")}>
         <input className="input input--sm" value={String(node.query || "")} onChange={(e) => update({ query: e.target.value })} />
-      </div>
-      <div className="builder-row">
-        <label className="label">{t("node.graphql.input.variables")}</label>
+      </BuilderField>
+      <BuilderField label={t("node.graphql.input.variables")}>
         <input className="input input--sm" value={String(node.variables || "")} onChange={(e) => update({ variables: e.target.value })} />
-      </div>
+      </BuilderField>
     </>
   );
 }

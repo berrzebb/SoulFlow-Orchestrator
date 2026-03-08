@@ -1,3 +1,4 @@
+import { BuilderField } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
 const OPERATIONS = [
@@ -16,21 +17,18 @@ function AggregateEditPanel({ node, update, t }: EditPanelProps) {
   const op = String(node.operation || "collect");
   return (
     <>
-      <div className="builder-row">
-        <label className="label">{t("workflows.aggregate_operation")}<span className="label__required">*</span></label>
+      <BuilderField label={t("workflows.aggregate_operation")} required>
         <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
           {OPERATIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
-      </div>
-      <div className="builder-row">
-        <label className="label">{t("workflows.aggregate_array_field")}</label>
+      </BuilderField>
+      <BuilderField label={t("workflows.aggregate_array_field")}>
         <input className="input input--sm" value={String(node.array_field || "")} onChange={(e) => update({ array_field: e.target.value })} placeholder="body.items" />
-      </div>
+      </BuilderField>
       {op === "join" && (
-        <div className="builder-row">
-          <label className="label">{t("workflows.aggregate_separator")}</label>
+        <BuilderField label={t("workflows.aggregate_separator")}>
           <input className="input input--sm" value={String(node.separator ?? "\\n")} onChange={(e) => update({ separator: e.target.value })} placeholder="\n" />
-        </div>
+        </BuilderField>
       )}
     </>
   );

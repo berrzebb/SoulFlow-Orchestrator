@@ -1,24 +1,22 @@
+import { BuilderField } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
 function SetOpsEditPanel({ node, update, t }: EditPanelProps) {
   const op = String(node.operation || "union");
   return (
     <>
-      <div className="builder-row">
-        <label className="label">{t("workflows.operation")}<span className="label__required">*</span></label>
+      <BuilderField label={t("workflows.operation")} required>
         <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
           {["union", "intersection", "difference", "symmetric_difference", "is_subset", "is_superset", "equals", "power_set", "cartesian_product"].map((o) => <option key={o} value={o}>{o}</option>)}
         </select>
-      </div>
-      <div className="builder-row">
-        <label className="label">{t("workflows.field_set_a")}</label>
+      </BuilderField>
+      <BuilderField label={t("workflows.field_set_a")}>
         <textarea className="input code-textarea" rows={2} value={String(node.a || "")} onChange={(e) => update({ a: e.target.value })} placeholder='[1, 2, 3]' />
-      </div>
+      </BuilderField>
       {op !== "power_set" && (
-        <div className="builder-row">
-          <label className="label">{t("workflows.field_set_b")}</label>
+        <BuilderField label={t("workflows.field_set_b")}>
           <textarea className="input code-textarea" rows={2} value={String(node.b || "")} onChange={(e) => update({ b: e.target.value })} placeholder='[2, 3, 4]' />
-        </div>
+        </BuilderField>
       )}
     </>
   );

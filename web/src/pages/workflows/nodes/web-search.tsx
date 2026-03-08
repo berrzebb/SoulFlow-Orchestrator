@@ -1,16 +1,15 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
+import { BuilderField } from "../builder-field";
 
 function WebSearchEditPanel({ node, update, t }: EditPanelProps) {
   return (
     <>
-      <div className="builder-row">
-        <label className="label">{t("workflows.search_query")}</label>
+      <BuilderField label={t("workflows.search_query")}>
         <input autoFocus className="input" value={String(node.query || "")} onChange={(e) => update({ query: e.target.value })} placeholder="{{memory.keyword}} site:example.com" />
-      </div>
-      <div className="builder-row">
-        <label className="label">{t("workflows.max_results")}</label>
+      </BuilderField>
+      <BuilderField label={t("workflows.max_results")}>
         <input className="input input--sm" type="number" min={1} max={20} value={String(node.max_results ?? 5)} onChange={(e) => update({ max_results: Number(e.target.value) || 5 })} />
-      </div>
+      </BuilderField>
     </>
   );
 }

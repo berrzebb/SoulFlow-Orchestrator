@@ -1,13 +1,11 @@
+import { BuilderField } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
 function YamlEditPanel({ node, update, t }: EditPanelProps) {
   return (
-    <>
-      <div className="builder-row">
-        <label className="label">{t("node.yaml.description")}</label>
-        <p className="builder-hint">{t("node.yaml.hint")}</p>
-      </div>
-    </>
+    <BuilderField label={t("node.yaml.description")} hint={t("node.yaml.hint")}>
+      {null}
+    </BuilderField>
   );
 }
 

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
+import { BuilderField } from "../builder-field";
 
 const CUSTOM_SENTINEL = "__custom__";
 
@@ -27,9 +28,7 @@ function OauthEditPanel({ node, update, t, options }: EditPanelProps) {
 
   return (
     <>
-      {/* Service 선택 */}
-      <div className="builder-row">
-        <label className="label">{t("workflows.oauth_service")}</label>
+      <BuilderField label={t("workflows.oauth_service")}>
         <select autoFocus className="input input--sm" value={is_custom ? CUSTOM_SENTINEL : current} onChange={(e) => handleServiceChange(e.target.value)}>
           <option value="">{t("common.select")}</option>
           {integrations.map((i) => (
@@ -39,53 +38,43 @@ function OauthEditPanel({ node, update, t, options }: EditPanelProps) {
           ))}
           <option value={CUSTOM_SENTINEL}>{t("workflows.oauth_custom")}</option>
         </select>
-      </div>
+      </BuilderField>
 
-      {/* Custom OAuth 설정 필드 */}
       {is_custom && (
         <>
           <div className="builder-row-pair">
-            <div className="builder-row">
-              <label className="label">{t("workflows.oauth_auth_url")}</label>
+            <BuilderField label={t("workflows.oauth_auth_url")}>
               <input className="input input--sm" value={String(node.auth_url || "")} onChange={(e) => update({ auth_url: e.target.value })} placeholder="https://example.com/oauth/authorize" />
-            </div>
-            <div className="builder-row">
-              <label className="label">{t("workflows.oauth_token_url")}</label>
+            </BuilderField>
+            <BuilderField label={t("workflows.oauth_token_url")}>
               <input className="input input--sm" value={String(node.token_url || "")} onChange={(e) => update({ token_url: e.target.value })} placeholder="https://example.com/oauth/token" />
-            </div>
+            </BuilderField>
           </div>
           <div className="builder-row-pair">
-            <div className="builder-row">
-              <label className="label">{t("workflows.oauth_client_id")}</label>
+            <BuilderField label={t("workflows.oauth_client_id")}>
               <input className="input input--sm" value={String(node.client_id || "")} onChange={(e) => update({ client_id: e.target.value })} placeholder="client_id" />
-            </div>
-            <div className="builder-row">
-              <label className="label">{t("workflows.oauth_client_secret")}</label>
+            </BuilderField>
+            <BuilderField label={t("workflows.oauth_client_secret")}>
               <input className="input input--sm" type="password" value={String(node.client_secret || "")} onChange={(e) => update({ client_secret: e.target.value })} placeholder="••••••••" />
-            </div>
+            </BuilderField>
           </div>
-          <div className="builder-row">
-            <label className="label">{t("workflows.oauth_scopes")}</label>
+          <BuilderField label={t("workflows.oauth_scopes")}>
             <input className="input input--sm" value={String(node.scopes || "")} onChange={(e) => update({ scopes: e.target.value })} placeholder="read write (space-separated)" />
-          </div>
+          </BuilderField>
         </>
       )}
 
-      {/* HTTP 설정 */}
       <div className="builder-row-pair">
-        <div className="builder-row">
-          <label className="label">{t("workflows.http_method")}</label>
+        <BuilderField label={t("workflows.http_method")}>
           <select className="input input--sm" value={String(node.method || "GET")} onChange={(e) => update({ method: e.target.value })}>
             {["GET", "POST", "PUT", "PATCH", "DELETE"].map((m) => <option key={m} value={m}>{m}</option>)}
           </select>
-        </div>
-        <div className="builder-row">
-          <label className="label">{t("workflows.http_url")}</label>
+        </BuilderField>
+        <BuilderField label={t("workflows.http_url")}>
           <input className="input input--sm" value={String(node.url || "")} onChange={(e) => update({ url: e.target.value })} placeholder="https://api.github.com/user" />
-        </div>
+        </BuilderField>
       </div>
-      <div className="builder-row">
-        <label className="label">{t("workflows.http_headers")}</label>
+      <BuilderField label={t("workflows.http_headers")} error={headersErr}>
         <textarea
           className={`input input--sm code-textarea${headersErr ? " input--err" : ""}`}
           rows={2}
@@ -93,12 +82,10 @@ function OauthEditPanel({ node, update, t, options }: EditPanelProps) {
           onChange={(e) => handleHeaders(e.target.value)}
           placeholder='{"Accept": "application/json"}'
         />
-        {headersErr && <span className="field-error">{headersErr}</span>}
-      </div>
-      <div className="builder-row">
-        <label className="label">{t("workflows.http_body")}</label>
+      </BuilderField>
+      <BuilderField label={t("workflows.http_body")}>
         <textarea className="input" rows={3} value={typeof node.body === "string" ? node.body : JSON.stringify(node.body || "", null, 2)} onChange={(e) => update({ body: e.target.value })} />
-      </div>
+      </BuilderField>
     </>
   );
 }

@@ -1,37 +1,33 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
+import { BuilderField } from "../builder-field";
 
 function DockerEditPanel({ node, update, t }: EditPanelProps) {
   const op = String(node.operation || "ps");
   return (
     <>
       <div className="builder-row-pair">
-        <div className="builder-row">
-          <label className="label">{t("workflows.docker_operation")}<span className="label__required">*</span></label>
+        <BuilderField label={t("workflows.docker_operation")} required>
           <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
             {["ps", "run", "stop", "rm", "logs", "exec", "images", "inspect"].map((o) => <option key={o} value={o}>{o}</option>)}
           </select>
-        </div>
-        <div className="builder-row">
-          <label className="label">{t("workflows.container")}</label>
+        </BuilderField>
+        <BuilderField label={t("workflows.container")}>
           <input className="input input--sm" value={String(node.container || "")} onChange={(e) => update({ container: e.target.value })} placeholder="container-name" />
-        </div>
+        </BuilderField>
       </div>
       {op === "run" && (
-        <div className="builder-row">
-          <label className="label">{t("workflows.image")}</label>
+        <BuilderField label={t("workflows.image")}>
           <input className="input" value={String(node.image || "")} onChange={(e) => update({ image: e.target.value })} placeholder="node:22-slim" />
-        </div>
+        </BuilderField>
       )}
       {(op === "run" || op === "exec") && (
-        <div className="builder-row">
-          <label className="label">{t("workflows.shell_command")}</label>
+        <BuilderField label={t("workflows.shell_command")}>
           <input className="input" value={String(node.command || "")} onChange={(e) => update({ command: e.target.value })} placeholder="sh -c 'echo hello'" />
-        </div>
+        </BuilderField>
       )}
-      <div className="builder-row">
-        <label className="label">{t("workflows.extra_args")}</label>
+      <BuilderField label={t("workflows.extra_args")}>
         <input className="input input--sm" value={String(node.args || "")} onChange={(e) => update({ args: e.target.value })} placeholder="--rm -e FOO=bar" />
-      </div>
+      </BuilderField>
     </>
   );
 }

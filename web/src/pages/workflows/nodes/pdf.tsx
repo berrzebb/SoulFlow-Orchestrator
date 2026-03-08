@@ -1,13 +1,11 @@
+import { BuilderField } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
 function PdfEditPanel({ node, update, t }: EditPanelProps) {
   return (
-    <>
-      <div className="builder-row">
-        <label className="label">{t("node.pdf.description")}</label>
-        <p className="builder-hint">{t("node.pdf.hint")}</p>
-      </div>
-    </>
+    <BuilderField label={t("node.pdf.description")} hint={t("node.pdf.hint")}>
+      {null}
+    </BuilderField>
   );
 }
 

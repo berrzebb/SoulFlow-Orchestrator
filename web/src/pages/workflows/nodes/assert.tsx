@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
+import { BuilderField } from "../builder-field";
 
 interface AssertionDef {
   condition: string;
@@ -26,17 +27,15 @@ function AssertEditPanel({ node, update, t }: EditPanelProps) {
 
   return (
     <>
-      <div className="builder-row">
-        <label className="label">{t("workflows.assert_on_fail")}</label>
+      <BuilderField label={t("workflows.assert_on_fail")}>
         <select autoFocus className="input input--sm" value={String(node.on_fail || "halt")} onChange={(e) => update({ on_fail: e.target.value })}>
           <option value="halt">{t("workflows.assert_on_fail_halt")}</option>
           <option value="continue">{t("workflows.assert_on_fail_continue")}</option>
         </select>
-      </div>
-      <div className="builder-row">
-        <label className="label">{t("workflows.assert_error_message")}</label>
+      </BuilderField>
+      <BuilderField label={t("workflows.assert_error_message")}>
         <input className="input input--sm" value={String(node.error_message || "")} onChange={(e) => update({ error_message: e.target.value })} placeholder={t("workflows.assert_error_message_hint")} />
-      </div>
+      </BuilderField>
 
       <div className="builder-row">
         <label className="label">{t("workflows.assert_list")}</label>
@@ -50,14 +49,12 @@ function AssertEditPanel({ node, update, t }: EditPanelProps) {
           </div>
           {expanded === i && (
             <>
-              <div className="builder-row">
-                <label className="label">{t("workflows.assert_condition")}</label>
+              <BuilderField label={t("workflows.assert_condition")}>
                 <input className="input input--sm" value={a.condition} onChange={(e) => updateAssertion(i, { condition: e.target.value })} placeholder="memory.count > 0" />
-              </div>
-              <div className="builder-row">
-                <label className="label">{t("workflows.assert_message")}</label>
+              </BuilderField>
+              <BuilderField label={t("workflows.assert_message")}>
                 <input className="input input--sm" value={a.message} onChange={(e) => updateAssertion(i, { message: e.target.value })} placeholder="Count must be positive" />
-              </div>
+              </BuilderField>
             </>
           )}
         </div>

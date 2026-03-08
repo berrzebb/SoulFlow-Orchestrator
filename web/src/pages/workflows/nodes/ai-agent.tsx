@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 import { useProviderModels } from "../use-provider-models";
+import { BuilderField } from "../builder-field";
 
 function AiAgentEditPanel({ node, update, t, options }: EditPanelProps) {
   const { models, loading: modelsLoading } = useProviderModels(node.backend as string | undefined, options);
@@ -17,8 +18,7 @@ function AiAgentEditPanel({ node, update, t, options }: EditPanelProps) {
   return (
     <>
       <div className="builder-row-pair">
-        <div className="builder-row">
-          <label className="label">{t("workflows.llm_backend")}</label>
+        <BuilderField label={t("workflows.llm_backend")}>
           <select autoFocus className="input input--sm" value={String(node.backend || "")} onChange={(e) => update({ backend: e.target.value })}>
             <option value="">-</option>
             {(options?.backends || []).map((b) => (
@@ -27,9 +27,8 @@ function AiAgentEditPanel({ node, update, t, options }: EditPanelProps) {
               </option>
             ))}
           </select>
-        </div>
-        <div className="builder-row">
-          <label className="label">{t("workflows.llm_model")}</label>
+        </BuilderField>
+        <BuilderField label={t("workflows.llm_model")}>
           {modelsLoading ? (
             <input className="input input--sm" disabled placeholder="loading..." />
           ) : models.length > 0 ? (
@@ -40,27 +39,21 @@ function AiAgentEditPanel({ node, update, t, options }: EditPanelProps) {
           ) : (
             <input className="input input--sm" value={String(node.model || "")} onChange={(e) => update({ model: e.target.value })} placeholder="auto" />
           )}
-        </div>
+        </BuilderField>
       </div>
-      <div className="builder-row">
-        <label className="label">{t("workflows.ai_agent_system")}</label>
+      <BuilderField label={t("workflows.ai_agent_system")}>
         <textarea className="input code-textarea" rows={3} value={String(node.system_prompt || "")} onChange={(e) => update({ system_prompt: e.target.value })} spellCheck={false} placeholder="You are a helpful assistant that can use tools to accomplish tasks." />
-      </div>
-      <div className="builder-row">
-        <label className="label">{t("workflows.ai_agent_user")}</label>
+      </BuilderField>
+      <BuilderField label={t("workflows.ai_agent_user")}>
         <textarea className="input code-textarea" rows={3} value={String(node.user_prompt || "")} onChange={(e) => update({ user_prompt: e.target.value })} spellCheck={false} placeholder="{{memory.user_input}}" />
-      </div>
-      <div className="builder-row">
-        <label className="label">{t("workflows.ai_agent_tools")}</label>
+      </BuilderField>
+      <BuilderField label={t("workflows.ai_agent_tools")} hint={t("workflows.tool_nodes_hint")}>
         <input className="input input--sm" value={Array.isArray(node.tool_nodes) ? (node.tool_nodes as string[]).join(", ") : ""} onChange={(e) => update({ tool_nodes: e.target.value.split(",").map((s: string) => s.trim()).filter(Boolean) })} placeholder="http-1, code-1, db-1" />
-        <span className="builder-hint">{t("workflows.tool_nodes_hint")}</span>
-      </div>
+      </BuilderField>
       <div className="builder-row-pair">
-        <div className="builder-row">
-          <label className="label">{t("workflows.max_turns")}</label>
+        <BuilderField label={t("workflows.max_turns")} hint={t("workflows.max_turns_hint")}>
           <input className="input input--sm" type="number" min={1} max={100} value={String(node.max_turns ?? 10)} onChange={(e) => update({ max_turns: Number(e.target.value) || 10 })} />
-          <span className="builder-hint">{t("workflows.max_turns_hint")}</span>
-        </div>
+        </BuilderField>
         <div className="builder-row">
           <label className="label">
             {t("workflows.llm_temperature")}
@@ -72,8 +65,7 @@ function AiAgentEditPanel({ node, update, t, options }: EditPanelProps) {
           <span className="builder-hint">{temp ?? 0.7}</span>
         </div>
       </div>
-      <div className="builder-row">
-        <label className="label">{t("workflows.llm_schema")}</label>
+      <BuilderField label={t("workflows.llm_schema")} error={schemaErr}>
         <textarea
           className={`input code-textarea${schemaErr ? " input--err" : ""}`}
           rows={3}
@@ -82,8 +74,7 @@ function AiAgentEditPanel({ node, update, t, options }: EditPanelProps) {
           spellCheck={false}
           placeholder='{"type": "object", "properties": {...}}'
         />
-        {schemaErr && <span className="field-error">{schemaErr}</span>}
-      </div>
+      </BuilderField>
     </>
   );
 }

@@ -1,26 +1,22 @@
+import { BuilderField } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
 function GateEditPanel({ node, update, t }: EditPanelProps) {
   const sources = Array.isArray(node.depends_on) ? (node.depends_on as string[]) : [];
   return (
     <>
-      <div className="builder-row">
-        <label className="label">{t("workflows.gate_quorum")}</label>
+      <BuilderField label={t("workflows.gate_quorum")} hint={`${t("workflows.gate_quorum_hint")}${sources.length ? ` (${sources.length} sources)` : ""}`}>
         <input autoFocus className="input input--sm" type="number" min={1} value={String(node.quorum ?? 1)} onChange={(e) => update({ quorum: Number(e.target.value) })} aria-label={t("workflows.gate_quorum")} />
-        <span className="builder-hint">{t("workflows.gate_quorum_hint")}{sources.length ? ` (${sources.length} sources)` : ""}</span>
-      </div>
-      <div className="builder-row">
-        <label className="label">{t("workflows.gate_on_timeout")}</label>
+      </BuilderField>
+      <BuilderField label={t("workflows.gate_on_timeout")}>
         <select className="input input--sm" value={String(node.on_timeout || "proceed")} onChange={(e) => update({ on_timeout: e.target.value })} aria-label={t("workflows.gate_on_timeout")}>
           <option value="proceed">{t("workflows.gate_on_timeout_proceed")}</option>
           <option value="fail">{t("workflows.gate_on_timeout_fail")}</option>
         </select>
-      </div>
-      <div className="builder-row">
-        <label className="label">{t("workflows.hitl_timeout")}</label>
+      </BuilderField>
+      <BuilderField label={t("workflows.hitl_timeout")} hint={t("workflows.hitl_timeout_hint")}>
         <input className="input input--sm" type="number" min={0} value={String(node.timeout_ms ?? 300000)} onChange={(e) => update({ timeout_ms: Number(e.target.value) })} aria-label={t("workflows.hitl_timeout")} />
-        <span className="builder-hint">{t("workflows.hitl_timeout_hint")}</span>
-      </div>
+      </BuilderField>
     </>
   );
 }

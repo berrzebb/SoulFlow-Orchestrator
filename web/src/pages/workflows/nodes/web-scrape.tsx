@@ -1,22 +1,19 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
+import { BuilderField } from "../builder-field";
 
 function WebScrapeEditPanel({ node, update, t }: EditPanelProps) {
   return (
     <>
-      <div className="builder-row">
-        <label className="label">{t("workflows.scrape_url")}</label>
+      <BuilderField label={t("workflows.scrape_url")}>
         <input autoFocus className="input" value={String(node.url || "")} onChange={(e) => update({ url: e.target.value })} placeholder="https://example.com/page" />
-      </div>
+      </BuilderField>
       <div className="builder-row-pair">
-        <div className="builder-row">
-          <label className="label">{t("workflows.selector")}</label>
+        <BuilderField label={t("workflows.selector")}>
           <input className="input input--sm" value={String(node.selector || "")} onChange={(e) => update({ selector: e.target.value })} placeholder="article, .content" />
-        </div>
-        <div className="builder-row">
-          <label className="label">{t("workflows.max_chars")}</label>
+        </BuilderField>
+        <BuilderField label={t("workflows.max_chars")} hint={t("workflows.max_chars_hint")}>
           <input className="input input--sm" type="number" min={1000} max={100000} step={1000} value={String(node.max_chars ?? 50000)} onChange={(e) => update({ max_chars: Number(e.target.value) || 50000 })} />
-          <span className="builder-hint">{t("workflows.max_chars_hint")}</span>
-        </div>
+        </BuilderField>
       </div>
     </>
   );

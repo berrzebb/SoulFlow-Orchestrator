@@ -1,20 +1,18 @@
+import { BuilderField } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
 function HashEditPanel({ node, update, t }: EditPanelProps) {
   return (
     <>
-      <div className="builder-row">
-        <label className="label">{t("node.hash.input.action")}</label>
+      <BuilderField label={t("node.hash.input.action")}>
         <input autoFocus className="input input--sm" value={String(node.action || "")} onChange={(e) => update({ action: e.target.value })} />
-      </div>
-      <div className="builder-row">
-        <label className="label">{t("node.hash.input.input")}</label>
+      </BuilderField>
+      <BuilderField label={t("node.hash.input.input")}>
         <input className="input input--sm" value={String(node.input || "")} onChange={(e) => update({ input: e.target.value })} />
-      </div>
-      <div className="builder-row">
-        <label className="label">{t("node.hash.input.algorithm")}</label>
+      </BuilderField>
+      <BuilderField label={t("node.hash.input.algorithm")}>
         <input className="input input--sm" value={String(node.algorithm || "")} onChange={(e) => update({ algorithm: e.target.value })} />
-      </div>
+      </BuilderField>
     </>
   );
 }

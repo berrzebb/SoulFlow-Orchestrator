@@ -1,13 +1,11 @@
+import { BuilderField } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
 function SqlBuilderEditPanel({ node, update, t }: EditPanelProps) {
   return (
-    <>
-      <div className="builder-row">
-        <label className="label">{t("node.sql_builder.description")}</label>
-        <p className="builder-hint">{t("node.sql_builder.hint")}</p>
-      </div>
-    </>
+    <BuilderField label={t("node.sql_builder.description")} hint={t("node.sql_builder.hint")}>
+      {null}
+    </BuilderField>
   );
 }
 

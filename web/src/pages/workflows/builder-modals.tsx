@@ -6,7 +6,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import { useModalEffects, useConfirm } from "../../components/modal";
-import { FormLabel } from "../../components/form-label";
+import { BuilderField } from "./builder-field";
 import { useT } from "../../i18n";
 import { get_frontend_node } from "./node-registry";
 import type { WorkflowDef, PhaseDef, AgentDef, CriticDef, OrcheNodeDef, TriggerNodeDef, RolePreset } from "./workflow-types";
@@ -74,16 +74,13 @@ export function PhaseEditModal({ workflow, phaseId, onChange, onPhaseIdChange, o
           <button className="modal__close" onClick={onClose} aria-label={t("workflows.close")}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
         </div>
         <div className="modal__body">
-          <div className="builder-row">
-            <label className="label">{t("workflows.phase_id")}</label>
+          <BuilderField label={t("workflows.phase_id")}>
             <input autoFocus className="input input--sm" value={phase.phase_id} onChange={(e) => updatePhase({ phase_id: e.target.value })} />
-          </div>
-          <div className="builder-row">
-            <label className="label">{t("workflows.phase_title")}</label>
+          </BuilderField>
+          <BuilderField label={t("workflows.phase_title")}>
             <input className="input input--sm" value={phase.title} onChange={(e) => updatePhase({ title: e.target.value })} />
-          </div>
-          <div className="builder-row">
-            <label className="label">{t("workflows.phase_mode")}</label>
+          </BuilderField>
+          <BuilderField label={t("workflows.phase_mode")}>
             <select
               className="input input--sm"
               value={phase.mode || "parallel"}
@@ -93,10 +90,9 @@ export function PhaseEditModal({ workflow, phaseId, onChange, onPhaseIdChange, o
               <option value="interactive">{t("workflows.mode_interactive")}</option>
               <option value="sequential_loop">{t("workflows.mode_sequential_loop")}</option>
             </select>
-          </div>
+          </BuilderField>
           {(phase.mode === "interactive" || phase.mode === "sequential_loop") && (
-            <div className="builder-row">
-              <label className="label">{t("workflows.max_loop_iterations")}</label>
+            <BuilderField label={t("workflows.max_loop_iterations")} hint={t("workflows.loop_iterations_hint")}>
               <input
                 className="input input--sm"
                 type="number"
@@ -105,8 +101,7 @@ export function PhaseEditModal({ workflow, phaseId, onChange, onPhaseIdChange, o
                 value={phase.max_loop_iterations ?? (phase.mode === "interactive" ? 20 : 50)}
                 onChange={(e) => updatePhase({ max_loop_iterations: Number(e.target.value) || undefined })}
               />
-              <span className="builder-hint">{t("workflows.loop_iterations_hint")}</span>
-            </div>
+            </BuilderField>
           )}
           <div className="builder-meta-hint">
             {t("workflows.agents_count", { n: String(phase.agents.length) })}
@@ -158,14 +153,12 @@ export function CronEditModal({ trigger, onChange, onRemove, onClose }: {
           <button className="modal__close" onClick={onClose} aria-label={t("workflows.close")}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
         </div>
         <div className="modal__body">
-          <div className="builder-row">
-            <label className="label">{t("workflows.cron_schedule")}</label>
+          <BuilderField label={t("workflows.cron_schedule")}>
             <input autoFocus className="input input--sm" value={schedule} onChange={(e) => setSchedule(e.target.value)} placeholder="0 9 * * *" onKeyDown={(e) => { if (e.key === "Enter") handleSave(); }} />
-          </div>
-          <div className="builder-row">
-            <label className="label">{t("workflows.timezone")}</label>
+          </BuilderField>
+          <BuilderField label={t("workflows.timezone")}>
             <input className="input input--sm" value={timezone} onChange={(e) => setTimezone(e.target.value)} placeholder="Asia/Seoul" onKeyDown={(e) => { if (e.key === "Enter") handleSave(); }} />
-          </div>
+          </BuilderField>
         </div>
         <div className="modal__footer">
           <button className="btn btn--sm btn--danger" onClick={() => confirm(t("workflows.remove_confirm"), () => { onRemove(); onClose(); })}>
@@ -230,55 +223,45 @@ export function TriggerNodeEditModal({ node, onChange, onRemove, onClose }: {
           <button className="modal__close" onClick={onClose} aria-label={t("workflows.close")}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
         </div>
         <div className="modal__body">
-          <div className="builder-row">
-            <label className="label">{t("workflows.trigger_type")}</label>
+          <BuilderField label={t("workflows.trigger_type")}>
             <div className="builder-btn-row">
               {TRIGGER_TYPES.map((tt) => (
                 <button key={tt} className={`btn btn--sm${triggerType === tt ? " btn--accent" : ""}`}
                   onClick={() => setTriggerType(tt)}>{t(TRIGGER_LABEL_KEYS[tt])}</button>
               ))}
             </div>
-          </div>
+          </BuilderField>
           {triggerType === "cron" && (<>
-            <div className="builder-row">
-              <label className="label">{t("workflows.cron_schedule")}</label>
+            <BuilderField label={t("workflows.cron_schedule")}>
               <input autoFocus className="input input--sm" value={schedule} onChange={(e) => setSchedule(e.target.value)} placeholder="0 9 * * *" onKeyDown={(e) => { if (e.key === "Enter") handleSave(); }} />
-            </div>
-            <div className="builder-row">
-              <label className="label">{t("workflows.timezone")}</label>
+            </BuilderField>
+            <BuilderField label={t("workflows.timezone")}>
               <input className="input input--sm" value={timezone} onChange={(e) => setTimezone(e.target.value)} placeholder="Asia/Seoul" onKeyDown={(e) => { if (e.key === "Enter") handleSave(); }} />
-            </div>
+            </BuilderField>
           </>)}
           {triggerType === "webhook" && (
-            <div className="builder-row">
-              <label className="label">{t("workflows.webhook_path")}</label>
+            <BuilderField label={t("workflows.webhook_path")}>
               <input autoFocus className="input input--sm" value={webhookPath} onChange={(e) => setWebhookPath(e.target.value)} placeholder="/hooks/my-workflow" onKeyDown={(e) => { if (e.key === "Enter") handleSave(); }} />
-            </div>
+            </BuilderField>
           )}
           {triggerType === "channel_message" && (<>
-            <div className="builder-row">
-              <label className="label">{t("workflows.channel_type")}</label>
+            <BuilderField label={t("workflows.channel_type")}>
               <input autoFocus className="input input--sm" value={channelType} onChange={(e) => setChannelType(e.target.value)} placeholder="slack" onKeyDown={(e) => { if (e.key === "Enter") handleSave(); }} />
-            </div>
-            <div className="builder-row">
-              <label className="label">{t("workflows.channel_chat_id")}</label>
+            </BuilderField>
+            <BuilderField label={t("workflows.channel_chat_id")}>
               <input className="input input--sm" value={chatId} onChange={(e) => setChatId(e.target.value)} placeholder="C01234567" onKeyDown={(e) => { if (e.key === "Enter") handleSave(); }} />
-            </div>
+            </BuilderField>
           </>)}
           {triggerType === "kanban" && (<>
-            <div className="builder-row">
-              <FormLabel label={t("workflows.kanban_trigger_board_id")} htmlFor="kanban-board-id-input" required />
-              <input autoFocus id="kanban-board-id-input" className="input input--sm" required value={boardId} onChange={(e) => setBoardId(e.target.value)} placeholder="board-id" onKeyDown={(e) => { if (e.key === "Enter") handleSave(); }} />
-            </div>
-            <div className="builder-row">
-              <label className="label">{t("workflows.kanban_trigger_actions")}</label>
+            <BuilderField label={t("workflows.kanban_trigger_board_id")} required>
+              <input autoFocus className="input input--sm" required value={boardId} onChange={(e) => setBoardId(e.target.value)} placeholder="board-id" onKeyDown={(e) => { if (e.key === "Enter") handleSave(); }} />
+            </BuilderField>
+            <BuilderField label={t("workflows.kanban_trigger_actions")} hint={t("workflows.kanban_trigger_column_hint")}>
               <input className="input input--sm" value={actions} onChange={(e) => setActions(e.target.value)} placeholder="created,moved" onKeyDown={(e) => { if (e.key === "Enter") handleSave(); }} />
-              <span className="builder-hint">{t("workflows.kanban_trigger_column_hint")}</span>
-            </div>
-            <div className="builder-row">
-              <label className="label">{t("workflows.kanban_trigger_column_id")}</label>
+            </BuilderField>
+            <BuilderField label={t("workflows.kanban_trigger_column_id")}>
               <input className="input input--sm" value={columnId} onChange={(e) => setColumnId(e.target.value)} placeholder="todo, in_progress, done" onKeyDown={(e) => { if (e.key === "Enter") handleSave(); }} />
-            </div>
+            </BuilderField>
           </>)}
         </div>
         <div className="modal__footer">
@@ -337,8 +320,7 @@ export function ChannelEditModal({ channel, onChange, onRemove, onClose, channel
           <button className="modal__close" onClick={onClose} aria-label={t("workflows.close")}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
         </div>
         <div className="modal__body">
-          <div className="builder-row">
-            <label className="label">{t("workflows.node_channel")}</label>
+          <BuilderField label={t("workflows.node_channel")}>
             <select autoFocus className="input input--sm" value={selectedId} onChange={(e) => handleSelect(e.target.value)}>
               <option value="">{t("workflows.select_default")}</option>
               {channels.map((ch) => (
@@ -347,11 +329,10 @@ export function ChannelEditModal({ channel, onChange, onRemove, onClose, channel
                 </option>
               ))}
             </select>
-          </div>
-          <div className="builder-row">
-            <label className="label">{t("workflows.chat_id")}</label>
+          </BuilderField>
+          <BuilderField label={t("workflows.chat_id")}>
             <input className="input input--sm" value={chatId} onChange={(e) => setChatId(e.target.value)} placeholder="C1234567" onKeyDown={(e) => { if (e.key === "Enter") handleSave(); }} />
-          </div>
+          </BuilderField>
         </div>
         <div className="modal__footer">
           <button className="btn btn--sm btn--danger" onClick={() => confirm(t("workflows.remove_confirm"), () => { onRemove(); onClose(); })}>
@@ -425,23 +406,20 @@ export function OrcheNodeEditModal({ workflow, nodeId, onChange, onClose, onNode
           <button className="modal__close" onClick={onClose} aria-label={t("workflows.close")}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
         </div>
         <div className="modal__body">
-          <div className="builder-row">
-            <label className="label">{t("workflows.node_id_label")}</label>
+          <BuilderField label={t("workflows.node_id_label")}>
             <input autoFocus className="input input--sm" value={node.node_id} onChange={(e) => update({ node_id: e.target.value })} />
-          </div>
-          <div className="builder-row">
-            <label className="label">{t("workflows.phase_title")}</label>
+          </BuilderField>
+          <BuilderField label={t("workflows.phase_title")}>
             <input className="input input--sm" value={node.title} onChange={(e) => update({ title: e.target.value })} />
-          </div>
-          <div className="builder-row">
-            <label className="label">{t("workflows.depends_on")}</label>
+          </BuilderField>
+          <BuilderField label={t("workflows.depends_on")}>
             <input
               className="input input--sm"
               value={(node.depends_on || []).join(", ")}
               onChange={(e) => update({ depends_on: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) })}
               placeholder="node-1, phase-1"
             />
-          </div>
+          </BuilderField>
 
           {/* 노드 타입별 편집 패널 — registry에서 조회 */}
           {(() => {
@@ -507,37 +485,32 @@ export function AgentEditModal({ workflow, subNodeId, onChange, onClose, onSubNo
           </div>
           <div className="modal__body">
             <div className="builder-row-pair">
-              <div className="builder-row">
-                <label className="label">{t("workflows.backend")}</label>
+              <BuilderField label={t("workflows.backend")}>
                 <select className="input input--sm" value={critic.backend} onChange={(e) => updateCritic({ backend: e.target.value })}>
                   {(backends || []).map((b) => <option key={b.value} value={b.value}>{b.label}</option>)}
                 </select>
-              </div>
-              <div className="builder-row">
-                <label className="label">{t("workflows.model")}</label>
+              </BuilderField>
+              <BuilderField label={t("workflows.model")}>
                 <input className="input input--sm" value={critic.model || ""} placeholder="auto" onChange={(e) => updateCritic({ model: e.target.value || undefined })} />
-              </div>
+              </BuilderField>
             </div>
             <div className="builder-row-pair">
-              <div className="builder-row">
-                <label className="label">{t("workflows.gate_label")}</label>
+              <BuilderField label={t("workflows.gate_label")}>
                 <select className="input input--sm" value={critic.gate ? "true" : "false"} onChange={(e) => updateCritic({ gate: e.target.value === "true" })}>
                   <option value="true">{t("workflows.gate_yes")}</option>
                   <option value="false">{t("workflows.gate_no")}</option>
                 </select>
-              </div>
-              <div className="builder-row">
-                <label className="label">{t("workflows.on_rejection")}</label>
+              </BuilderField>
+              <BuilderField label={t("workflows.on_rejection")}>
                 <select className="input input--sm" value={critic.on_rejection || ""} onChange={(e) => updateCritic({ on_rejection: e.target.value || undefined })}>
                   <option value="">-</option>
                   {REJECTION_POLICIES.map((p) => <option key={p} value={p}>{p}</option>)}
                 </select>
-              </div>
+              </BuilderField>
             </div>
-            <div className="builder-row">
-              <label className="label">{t("workflows.system_prompt")}</label>
+            <BuilderField label={t("workflows.system_prompt")}>
               <textarea className="input input--sm" rows={4} value={critic.system_prompt} onChange={(e) => updateCritic({ system_prompt: e.target.value })} />
-            </div>
+            </BuilderField>
           </div>
           <div className="modal__footer">
             <button className="btn btn--sm" onClick={onClose}>{t("workflows.close")}</button>
@@ -587,18 +560,15 @@ export function AgentEditModal({ workflow, subNodeId, onChange, onClose, onSubNo
         </div>
         <div className="modal__body">
           <div className="builder-row-pair">
-            <div className="builder-row">
-              <label className="label">{t("workflows.agent_id")}</label>
+            <BuilderField label={t("workflows.agent_id")}>
               <input autoFocus className="input input--sm" value={agent.agent_id} onChange={(e) => updateAgent({ agent_id: e.target.value })} />
-            </div>
-            <div className="builder-row">
-              <label className="label">{t("workflows.agent_label")}</label>
+            </BuilderField>
+            <BuilderField label={t("workflows.agent_label")}>
               <input className="input input--sm" value={agent.label} onChange={(e) => updateAgent({ label: e.target.value })} />
-            </div>
+            </BuilderField>
           </div>
           {/* Role 태그 칩 선택 */}
-          <div className="builder-row">
-            <label className="label">{t("workflows.agent_role")}</label>
+          <BuilderField label={t("workflows.agent_role")}>
             <div className="role-chips">
               {roles?.map((r) => (
                 <button
@@ -624,20 +594,17 @@ export function AgentEditModal({ workflow, subNodeId, onChange, onClose, onSubNo
                 {t("workflows.role_auto_prompt")}
               </div>
             )}
-          </div>
+          </BuilderField>
           <div className="builder-row-triple">
-            <div className="builder-row">
-              <label className="label">{t("workflows.backend")}</label>
+            <BuilderField label={t("workflows.backend")}>
               <select className="input input--sm" value={agent.backend} onChange={(e) => updateAgent({ backend: e.target.value })}>
                 {(backends || []).map((b) => <option key={b.value} value={b.value}>{b.label}</option>)}
               </select>
-            </div>
-            <div className="builder-row">
-              <label className="label">{t("workflows.model")}</label>
+            </BuilderField>
+            <BuilderField label={t("workflows.model")}>
               <input className="input input--sm" value={agent.model || ""} placeholder="auto" onChange={(e) => updateAgent({ model: e.target.value || undefined })} />
-            </div>
-            <div className="builder-row">
-              <label className="label">{t("workflows.max_turns")}</label>
+            </BuilderField>
+            <BuilderField label={t("workflows.max_turns")} hint={t("workflows.max_turns_hint")}>
               <div className="builder-inline-row">
                 <input
                   className="input input--sm flex-1"
@@ -656,16 +623,14 @@ export function AgentEditModal({ workflow, subNodeId, onChange, onClose, onSubNo
                   {t("workflows.unlimited")}
                 </label>
               </div>
-              <span className="builder-hint">{t("workflows.max_turns_hint")}</span>
-            </div>
+            </BuilderField>
           </div>
-          <div className="builder-row">
-            <label className="label">{t("workflows.system_prompt")}</label>
+          <BuilderField label={t("workflows.system_prompt")}>
             <div className="builder-accent-hint--mb">
               {t(`workflows.prompt_hint_${phase.mode || "parallel"}`)}
             </div>
             <textarea className="input input--sm" rows={5} value={agent.system_prompt} onChange={(e) => updateAgent({ system_prompt: e.target.value })} />
-          </div>
+          </BuilderField>
         </div>
         <div className="modal__footer">
           <button className="btn btn--sm" onClick={onClose}>{t("workflows.close")}</button>

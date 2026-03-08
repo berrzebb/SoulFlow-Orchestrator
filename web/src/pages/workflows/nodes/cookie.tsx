@@ -1,13 +1,11 @@
+import { BuilderField } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
 function CookieEditPanel({ node, update, t }: EditPanelProps) {
   return (
-    <>
-      <div className="builder-row">
-        <label className="label">{t("node.cookie.description")}</label>
-        <p className="builder-hint">{t("node.cookie.hint")}</p>
-      </div>
-    </>
+    <BuilderField label={t("node.cookie.description")} hint={t("node.cookie.hint")}>
+      {null}
+    </BuilderField>
   );
 }
 

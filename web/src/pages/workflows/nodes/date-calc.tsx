@@ -1,58 +1,51 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
+import { BuilderField } from "../builder-field";
 
 function DateCalcEditPanel({ node, update, t }: EditPanelProps) {
   const op = String(node.operation || "now");
   return (
     <>
-      <div className="builder-row">
-        <label className="label">{t("workflows.operation")}<span className="label__required">*</span></label>
+      <BuilderField label={t("workflows.operation")} required>
         <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
           {["now", "add", "diff", "timezone", "business_days", "format", "parse", "day_info", "range"].map((o) => <option key={o} value={o}>{o}</option>)}
         </select>
-      </div>
+      </BuilderField>
       {op !== "now" && (
-        <div className="builder-row">
-          <label className="label">{t("workflows.field_date")}</label>
+        <BuilderField label={t("workflows.field_date")}>
           <input className="input" value={String(node.date || "")} onChange={(e) => update({ date: e.target.value })} placeholder="2025-01-01T00:00:00Z" />
-        </div>
+        </BuilderField>
       )}
       {["diff", "business_days", "range"].includes(op) && (
-        <div className="builder-row">
-          <label className="label">{t("workflows.field_date_2")}</label>
+        <BuilderField label={t("workflows.field_date_2")}>
           <input className="input" value={String(node.date2 || "")} onChange={(e) => update({ date2: e.target.value })} placeholder="2025-12-31" />
-        </div>
+        </BuilderField>
       )}
       {op === "add" && (
         <div className="builder-row-pair">
-          <div className="builder-row">
-            <label className="label">{t("workflows.field_amount")}</label>
+          <BuilderField label={t("workflows.field_amount")}>
             <input className="input input--sm" type="number" value={String(node.amount ?? 0)} onChange={(e) => update({ amount: Number(e.target.value) })} />
-          </div>
-          <div className="builder-row">
-            <label className="label">{t("workflows.field_unit")}</label>
+          </BuilderField>
+          <BuilderField label={t("workflows.field_unit")}>
             <select className="input input--sm" value={String(node.unit || "d")} onChange={(e) => update({ unit: e.target.value })}>
               {["ms", "s", "min", "h", "d", "week", "month", "year"].map((u) => <option key={u} value={u}>{u}</option>)}
             </select>
-          </div>
+          </BuilderField>
         </div>
       )}
       {op === "timezone" && (
         <div className="builder-row-pair">
-          <div className="builder-row">
-            <label className="label">{t("workflows.field_from_tz")}</label>
+          <BuilderField label={t("workflows.field_from_tz")}>
             <input className="input input--sm" value={String(node.from_tz || "UTC")} onChange={(e) => update({ from_tz: e.target.value })} />
-          </div>
-          <div className="builder-row">
-            <label className="label">{t("workflows.field_to_tz")}</label>
+          </BuilderField>
+          <BuilderField label={t("workflows.field_to_tz")}>
             <input className="input input--sm" value={String(node.to_tz || "UTC")} onChange={(e) => update({ to_tz: e.target.value })} />
-          </div>
+          </BuilderField>
         </div>
       )}
       {["format", "now"].includes(op) && (
-        <div className="builder-row">
-          <label className="label">{t("workflows.field_format")}</label>
+        <BuilderField label={t("workflows.field_format")}>
           <input className="input" value={String(node.format || "")} onChange={(e) => update({ format: e.target.value })} placeholder="YYYY-MM-DD HH:mm:ss" />
-        </div>
+        </BuilderField>
       )}
     </>
   );

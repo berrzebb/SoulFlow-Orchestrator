@@ -1,50 +1,44 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
+import { BuilderField } from "../builder-field";
 
 function ImageEditPanel({ node, update, t }: EditPanelProps) {
   const op = String(node.operation || "info");
   return (
     <>
       <div className="builder-row-pair">
-        <div className="builder-row">
-          <label className="label">{t("workflows.operation")}<span className="label__required">*</span></label>
+        <BuilderField label={t("workflows.operation")} required>
           <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
             {["resize", "crop", "rotate", "convert", "info", "thumbnail"].map((o) => <option key={o} value={o}>{o}</option>)}
           </select>
-        </div>
+        </BuilderField>
         {op === "convert" && (
-          <div className="builder-row">
-            <label className="label">{t("workflows.format")}</label>
+          <BuilderField label={t("workflows.format")}>
             <select className="input input--sm" value={String(node.format || "png")} onChange={(e) => update({ format: e.target.value })}>
               {["png", "jpeg", "webp", "gif", "bmp", "tiff"].map((f) => <option key={f} value={f}>{f}</option>)}
             </select>
-          </div>
+          </BuilderField>
         )}
       </div>
-      <div className="builder-row">
-        <label className="label">{t("workflows.field_input_path")}</label>
+      <BuilderField label={t("workflows.field_input_path")}>
         <input className="input" value={String(node.input_path || "")} onChange={(e) => update({ input_path: e.target.value })} placeholder="/path/to/image.png" />
-      </div>
-      <div className="builder-row">
-        <label className="label">{t("workflows.field_output_path")}</label>
+      </BuilderField>
+      <BuilderField label={t("workflows.field_output_path")}>
         <input className="input" value={String(node.output_path || "")} onChange={(e) => update({ output_path: e.target.value })} placeholder="(auto)" />
-      </div>
+      </BuilderField>
       {["resize", "crop", "thumbnail"].includes(op) && (
         <div className="builder-row-pair">
-          <div className="builder-row">
-            <label className="label">{t("workflows.field_width")}</label>
+          <BuilderField label={t("workflows.field_width")}>
             <input className="input input--sm" type="number" min={1} max={10000} value={String(node.width ?? 800)} onChange={(e) => update({ width: Number(e.target.value) })} />
-          </div>
-          <div className="builder-row">
-            <label className="label">{t("workflows.field_height")}</label>
+          </BuilderField>
+          <BuilderField label={t("workflows.field_height")}>
             <input className="input input--sm" type="number" min={1} max={10000} value={String(node.height ?? 600)} onChange={(e) => update({ height: Number(e.target.value) })} />
-          </div>
+          </BuilderField>
         </div>
       )}
       {op === "rotate" && (
-        <div className="builder-row">
-          <label className="label">{t("workflows.field_angle")}</label>
+        <BuilderField label={t("workflows.field_angle")}>
           <input className="input input--sm" type="number" value={String(node.angle ?? 90)} onChange={(e) => update({ angle: Number(e.target.value) })} />
-        </div>
+        </BuilderField>
       )}
     </>
   );

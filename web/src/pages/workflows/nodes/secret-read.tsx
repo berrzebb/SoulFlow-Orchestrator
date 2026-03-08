@@ -1,16 +1,15 @@
+import { BuilderField } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
 function SecretReadEditPanel({ node, update, t }: EditPanelProps) {
   return (
     <>
-      <div className="builder-row">
-        <label className="label">{t("node.secret_read.input.key")}</label>
+      <BuilderField label={t("node.secret_read.input.key")}>
         <input autoFocus className="input input--sm" value={String(node.key || "")} onChange={(e) => update({ key: e.target.value })} />
-      </div>
-      <div className="builder-row">
-        <label className="label">{t("node.secret_read.input.namespace")}</label>
+      </BuilderField>
+      <BuilderField label={t("node.secret_read.input.namespace")}>
         <input className="input input--sm" value={String(node.namespace || "")} onChange={(e) => update({ namespace: e.target.value })} />
-      </div>
+      </BuilderField>
     </>
   );
 }

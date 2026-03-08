@@ -1,38 +1,34 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
+import { BuilderField } from "../builder-field";
 
 function ValidatorEditPanel({ node, update, t }: EditPanelProps) {
   const op = String(node.operation || "format");
   return (
     <>
-      <div className="builder-row">
-        <label className="label">{t("workflows.operation")}<span className="label__required">*</span></label>
+      <BuilderField label={t("workflows.operation")} required>
         <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
           {["schema", "format", "rules"].map((o) => <option key={o} value={o}>{o}</option>)}
         </select>
-      </div>
-      <div className="builder-row">
-        <label className="label">{t("workflows.input_data")}</label>
+      </BuilderField>
+      <BuilderField label={t("workflows.input_data")}>
         <textarea className="input code-textarea" rows={3} value={String(node.input || "")} onChange={(e) => update({ input: e.target.value })} placeholder='{"email": "test@test.com"}' />
-      </div>
+      </BuilderField>
       {op === "format" && (
-        <div className="builder-row">
-          <label className="label">{t("workflows.format")}</label>
+        <BuilderField label={t("workflows.format")}>
           <select className="input input--sm" value={String(node.format || "json")} onChange={(e) => update({ format: e.target.value })}>
             {["email", "url", "ip", "date", "uuid", "json", "number"].map((f) => <option key={f} value={f}>{f}</option>)}
           </select>
-        </div>
+        </BuilderField>
       )}
       {op === "schema" && (
-        <div className="builder-row">
-          <label className="label">{t("workflows.field_json_schema")}</label>
+        <BuilderField label={t("workflows.field_json_schema")}>
           <textarea className="input code-textarea" rows={4} value={String(node.schema || "{}")} onChange={(e) => update({ schema: e.target.value })} placeholder='{"type":"object","required":["name"],"properties":{"name":{"type":"string"}}}' />
-        </div>
+        </BuilderField>
       )}
       {op === "rules" && (
-        <div className="builder-row">
-          <label className="label">{t("workflows.field_rules")}</label>
+        <BuilderField label={t("workflows.field_rules")}>
           <textarea className="input code-textarea" rows={4} value={String(node.rules || "[]")} onChange={(e) => update({ rules: e.target.value })} placeholder='[{"field":"age","type":"number","min":0,"max":150}]' />
-        </div>
+        </BuilderField>
       )}
     </>
   );

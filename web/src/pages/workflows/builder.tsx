@@ -333,11 +333,14 @@ export default function WorkflowBuilderPage() {
   const [runInputPrompt, setRunInputPrompt] = useState<{ id: string; node: Record<string, unknown> } | null>(null);
 
   /** 노드 실행 API 호출. */
-  const executeNode = async (id: string, mode: "run" | "test", node: Record<string, unknown>, input_memory: Record<string, unknown>) => {
+  const executeNode = async (id: string, mode: "run" | "test", node: Record<string, unknown>, input_memory: Record<string, unknown>, provider_instance_id?: string, model?: string) => {
     setNodeRunResult({ id, mode, loading: true });
     try {
       const endpoint = mode === "test" ? "/api/workflow/node/tests" : "/api/workflow/node/runs";
-      const result = await api.post<Record<string, unknown>>(endpoint, { node, input_memory });
+      const body: Record<string, unknown> = { node, input_memory };
+      if (provider_instance_id) body.provider_instance_id = provider_instance_id;
+      if (model) body.model = model;
+      const result = await api.post<Record<string, unknown>>(endpoint, body);
       setNodeRunResult({ id, mode, result, loading: false });
       setInspectorNodeId(id);
       toast(mode === "test" ? t("workflows.test_node_done") : t("workflows.run_node_done"), "ok");
@@ -760,10 +763,10 @@ export default function WorkflowBuilderPage() {
             {runInputPrompt && (
               <NodeRunInputBar
                 nodeId={runInputPrompt.id}
-                onSubmit={(objective) => {
+                onSubmit={(objective, provider_instance_id, model) => {
                   const { id, node } = runInputPrompt;
                   setRunInputPrompt(null);
-                  void executeNode(id, "run", node, { objective });
+                  void executeNode(id, "run", node, { objective }, provider_instance_id, model);
                 }}
                 onCancel={() => setRunInputPrompt(null)}
               />

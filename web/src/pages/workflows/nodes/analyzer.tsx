@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 import { useProviderModels } from "../use-provider-models";
+import { BuilderField } from "../builder-field";
 
 function AnalyzerEditPanel({ node, update, t, options }: EditPanelProps) {
   const { models, loading: modelsLoading } = useProviderModels(node.backend as string | undefined, options);
@@ -18,8 +19,7 @@ function AnalyzerEditPanel({ node, update, t, options }: EditPanelProps) {
   return (
     <>
       <div className="builder-row-pair">
-        <div className="builder-row">
-          <label className="label">{t("workflows.llm_backend")}<span className="label__required">*</span></label>
+        <BuilderField label={t("workflows.llm_backend")} required>
           <select autoFocus className="input input--sm" required value={String(node.backend || "")} onChange={(e) => update({ backend: e.target.value })} aria-required="true">
             <option value="">-</option>
             {(options?.backends || []).map((b) => (
@@ -28,9 +28,8 @@ function AnalyzerEditPanel({ node, update, t, options }: EditPanelProps) {
               </option>
             ))}
           </select>
-        </div>
-        <div className="builder-row">
-          <label className="label">{t("workflows.llm_model")}<span className="label__required">*</span></label>
+        </BuilderField>
+        <BuilderField label={t("workflows.llm_model")} required>
           {modelsLoading ? (
             <input className="input input--sm" disabled aria-busy="true" placeholder="loading..." />
           ) : models.length > 0 ? (
@@ -41,22 +40,18 @@ function AnalyzerEditPanel({ node, update, t, options }: EditPanelProps) {
           ) : (
             <input className="input input--sm" value={String(node.model || "")} onChange={(e) => update({ model: e.target.value })} placeholder="auto" />
           )}
-        </div>
+        </BuilderField>
       </div>
-      <div className="builder-row">
-        <label className="label">{t("workflows.analyzer_input")}<span className="label__required">*</span></label>
+      <BuilderField label={t("workflows.analyzer_input")} required>
         <input className="input input--sm" required value={String(node.input_field || "")} onChange={(e) => update({ input_field: e.target.value })} placeholder="memory.resume_text" aria-required="true" />
-      </div>
-      <div className="builder-row">
-        <label className="label">{t("workflows.analyzer_prompt")}<span className="label__required">*</span></label>
+      </BuilderField>
+      <BuilderField label={t("workflows.analyzer_prompt")} required>
         <textarea className="input code-textarea" required rows={4} value={String(node.prompt_template || "")} onChange={(e) => update({ prompt_template: e.target.value })} spellCheck={false} placeholder="Analyze the following resume and extract key skills, experience level, and fit score..." aria-required="true" />
-      </div>
-      <div className="builder-row">
-        <label className="label">{t("workflows.analyzer_categories")}<span className="label__optional">(optional)</span></label>
+      </BuilderField>
+      <BuilderField label={t("workflows.analyzer_categories")} optional>
         <input className="input input--sm" value={Array.isArray(node.categories) ? (node.categories as string[]).join(", ") : ""} onChange={(e) => update({ categories: e.target.value.split(",").map((s: string) => s.trim()).filter(Boolean) })} placeholder="qualified, unqualified, maybe" />
-      </div>
-      <div className="builder-row">
-        <label className="label">{t("workflows.llm_schema")}</label>
+      </BuilderField>
+      <BuilderField label={t("workflows.llm_schema")} error={schemaErr}>
         <textarea
           className={`input code-textarea${schemaErr ? " input--err" : ""}`}
           rows={3}
@@ -65,8 +60,7 @@ function AnalyzerEditPanel({ node, update, t, options }: EditPanelProps) {
           spellCheck={false}
           placeholder='{"type": "object", "properties": {"score": {"type": "number"}, "category": {"type": "string"}}}'
         />
-        {schemaErr && <span className="field-error">{schemaErr}</span>}
-      </div>
+      </BuilderField>
       <div className="builder-row">
         <label className="label">
           {t("workflows.llm_temperature")}

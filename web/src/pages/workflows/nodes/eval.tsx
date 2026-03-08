@@ -1,16 +1,15 @@
+import { BuilderField } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
 function EvalEditPanel({ node, update, t }: EditPanelProps) {
   return (
     <>
-      <div className="builder-row">
-        <label className="label">{t("workflows.field_code")}</label>
+      <BuilderField label={t("workflows.field_code")}>
         <textarea autoFocus className="input code-textarea" rows={5} value={String(node.code || "")} onChange={(e) => update({ code: e.target.value })} placeholder="return x + y;" />
-      </div>
-      <div className="builder-row">
-        <label className="label">{t("workflows.field_context_json")}</label>
+      </BuilderField>
+      <BuilderField label={t("workflows.field_context_json")}>
         <textarea className="input code-textarea" rows={2} value={String(node.context || "")} onChange={(e) => update({ context: e.target.value })} placeholder='{"x": 1, "y": 2}' />
-      </div>
+      </BuilderField>
     </>
   );
 }

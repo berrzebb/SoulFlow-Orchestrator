@@ -1,40 +1,36 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
+import { BuilderField } from "../builder-field";
 
 function ProcessEditPanel({ node, update, t }: EditPanelProps) {
   const op = String(node.operation || "list");
   return (
     <>
-      <div className="builder-row">
-        <label className="label">{t("workflows.process_operation")}</label>
+      <BuilderField label={t("workflows.process_operation")}>
         <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
           {["list", "start", "stop", "info"].map((o) => <option key={o} value={o}>{o}</option>)}
         </select>
-      </div>
+      </BuilderField>
       {op === "list" && (
-        <div className="builder-row">
-          <label className="label">{t("workflows.process_filter")}</label>
+        <BuilderField label={t("workflows.process_filter")}>
           <input className="input input--sm" value={String(node.filter || "")} onChange={(e) => update({ filter: e.target.value })} placeholder="node" />
-        </div>
+        </BuilderField>
       )}
       {op === "start" && (
-        <div className="builder-row">
-          <label className="label">{t("workflows.shell_command")}</label>
+        <BuilderField label={t("workflows.shell_command")}>
           <input className="input" value={String(node.command || "")} onChange={(e) => update({ command: e.target.value })} placeholder="npm run start" />
-        </div>
+        </BuilderField>
       )}
       {(op === "stop" || op === "info") && (
         <div className="builder-row-pair">
-          <div className="builder-row">
-            <label className="label">{t("workflows.field_pid")}</label>
+          <BuilderField label={t("workflows.field_pid")}>
             <input className="input input--sm" type="number" min={1} value={String(node.pid ?? "")} onChange={(e) => update({ pid: Number(e.target.value) || 0 })} />
-          </div>
+          </BuilderField>
           {op === "stop" && (
-            <div className="builder-row">
-              <label className="label">{t("workflows.signal")}</label>
+            <BuilderField label={t("workflows.signal")}>
               <select className="input input--sm" value={String(node.signal || "SIGTERM")} onChange={(e) => update({ signal: e.target.value })}>
                 {["SIGTERM", "SIGKILL", "SIGINT", "SIGHUP"].map((s) => <option key={s} value={s}>{s}</option>)}
               </select>
-            </div>
+            </BuilderField>
           )}
         </div>
       )}

@@ -1,39 +1,34 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
+import { BuilderField } from "../builder-field";
 
 function DatabaseEditPanel({ node, update, t }: EditPanelProps) {
   const op = String(node.operation || "query");
   return (
     <>
       <div className="builder-row-pair">
-        <div className="builder-row">
-          <label className="label">{t("workflows.operation")}<span className="label__required">*</span></label>
+        <BuilderField label={t("workflows.operation")} required>
           <select autoFocus className="input input--sm" required value={op} onChange={(e) => update({ operation: e.target.value })} aria-label={t("workflows.operation")} aria-required="true">
             {["query", "tables", "schema", "explain"].map((o) => <option key={o} value={o}>{o}</option>)}
           </select>
-        </div>
-        <div className="builder-row">
-          <label className="label">{t("workflows.field_datasource")}<span className="label__required">*</span></label>
+        </BuilderField>
+        <BuilderField label={t("workflows.field_datasource")} required>
           <input className="input input--sm" required value={String(node.datasource || "")} onChange={(e) => update({ datasource: e.target.value })} placeholder="my_database" aria-label={t("workflows.field_datasource")} aria-required="true" />
-        </div>
+        </BuilderField>
       </div>
       {(op === "query" || op === "explain") && (
-        <div className="builder-row builder-row--conditional">
-          <label className="label">{t("workflows.field_sql")}<span className="label__required">*</span></label>
+        <BuilderField label={t("workflows.field_sql")} required>
           <textarea className="input code-textarea" required rows={4} value={String(node.sql || "")} onChange={(e) => update({ sql: e.target.value })} placeholder="SELECT * FROM users LIMIT 10" aria-label={t("workflows.field_sql")} aria-required="true" />
-        </div>
+        </BuilderField>
       )}
       {op === "schema" && (
-        <div className="builder-row builder-row--conditional">
-          <label className="label">{t("workflows.field_table")}</label>
+        <BuilderField label={t("workflows.field_table")}>
           <input className="input input--sm" value={String(node.table || "")} onChange={(e) => update({ table: e.target.value })} placeholder="users" aria-label={t("workflows.field_table")} />
-        </div>
+        </BuilderField>
       )}
       {op === "query" && (
-        <div className="builder-row builder-row--conditional">
-          <label className="label">{t("workflows.max_results")}</label>
+        <BuilderField label={t("workflows.max_results")} hint={t("workflows.max_results_hint", { min: "1", max: "1000" })}>
           <input className="input input--sm" type="number" min={1} max={1000} value={String(node.max_rows ?? 100)} onChange={(e) => update({ max_rows: Number(e.target.value) || 100 })} placeholder="100" aria-label={t("workflows.max_results")} />
-          <span className="builder-hint">{t("workflows.max_results_hint", { min: "1", max: "1000" })}</span>
-        </div>
+        </BuilderField>
       )}
     </>
   );
