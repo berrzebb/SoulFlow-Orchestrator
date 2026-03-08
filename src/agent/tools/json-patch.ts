@@ -94,20 +94,37 @@ export class JsonPatchTool extends Tool {
         case "remove": {
           const resolved = this.resolve_pointer(result, op.path);
           if (!resolved || resolved.parent === null) return { error: `op ${i}: path not found: ${op.path}` };
-          if (Array.isArray(resolved.parent)) resolved.parent.splice(Number(resolved.key), 1);
-          else delete (resolved.parent as Record<string, unknown>)[resolved.key];
+          if (Array.isArray(resolved.parent)) {
+            const idx = Number(resolved.key);
+            if (idx >= resolved.parent.length) return { error: `op ${i}: path not found: ${op.path}` };
+            resolved.parent.splice(idx, 1);
+          } else {
+            if (!(resolved.key in (resolved.parent as Record<string, unknown>))) return { error: `op ${i}: path not found: ${op.path}` };
+            delete (resolved.parent as Record<string, unknown>)[resolved.key];
+          }
           break;
         }
         case "replace": {
           const resolved = this.resolve_pointer(result, op.path);
           if (!resolved || resolved.parent === null) return { error: `op ${i}: path not found: ${op.path}` };
-          if (Array.isArray(resolved.parent)) resolved.parent[Number(resolved.key)] = op.value;
-          else (resolved.parent as Record<string, unknown>)[resolved.key] = op.value;
+          if (Array.isArray(resolved.parent)) {
+            const idx = Number(resolved.key);
+            if (idx >= resolved.parent.length) return { error: `op ${i}: path not found: ${op.path}` };
+            resolved.parent[idx] = op.value;
+          } else {
+            if (!(resolved.key in (resolved.parent as Record<string, unknown>))) return { error: `op ${i}: path not found: ${op.path}` };
+            (resolved.parent as Record<string, unknown>)[resolved.key] = op.value;
+          }
           break;
         }
         case "test": {
           const resolved = this.resolve_pointer(result, op.path);
           if (!resolved) return { error: `op ${i}: path not found: ${op.path}` };
+          const key_exists = resolved.parent === null || (
+            resolved.parent !== null && typeof resolved.parent === "object" &&
+            resolved.key in (resolved.parent as Record<string, unknown>)
+          );
+          if (!key_exists) return { error: `op ${i}: path not found: ${op.path}` };
           if (JSON.stringify(resolved.value) !== JSON.stringify(op.value)) {
             return { error: `op ${i}: test failed at ${op.path}` };
           }
@@ -117,6 +134,7 @@ export class JsonPatchTool extends Tool {
           if (!op.from) return { error: `op ${i}: move requires from` };
           const from_resolved = this.resolve_pointer(result, op.from);
           if (!from_resolved || from_resolved.parent === null) return { error: `op ${i}: from path not found` };
+          if (!(from_resolved.key in (from_resolved.parent as Record<string, unknown>))) return { error: `op ${i}: from path not found` };
           const val = JSON.parse(JSON.stringify(from_resolved.value));
           if (Array.isArray(from_resolved.parent)) from_resolved.parent.splice(Number(from_resolved.key), 1);
           else delete (from_resolved.parent as Record<string, unknown>)[from_resolved.key];
@@ -127,6 +145,7 @@ export class JsonPatchTool extends Tool {
           if (!op.from) return { error: `op ${i}: copy requires from` };
           const from_resolved = this.resolve_pointer(result, op.from);
           if (!from_resolved) return { error: `op ${i}: from path not found` };
+          if (from_resolved.parent !== null && !(from_resolved.key in (from_resolved.parent as Record<string, unknown>))) return { error: `op ${i}: from path not found` };
           result = this.set_value(result, op.path, JSON.parse(JSON.stringify(from_resolved.value)));
           break;
         }
