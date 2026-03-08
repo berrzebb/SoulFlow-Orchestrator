@@ -125,7 +125,8 @@ export async function execute_dispatch(
       const skill_metas = skill_names
         .map((n) => skills_loader?.get_skill_metadata(n))
         .filter((m): m is NonNullable<typeof m> => m !== null && m !== undefined);
-      const check = generate_completion_checks(result.tools_used ?? [], skill_metas, result.tool_calls_count);
+      const has_role = skill_metas.some((m) => m.type === "role" && m.shared_protocols.includes("phase-gates"));
+      const check = generate_completion_checks(result.tools_used ?? [], skill_metas, result.tool_calls_count, has_role);
       if (check.has_checks) {
         const follow_up = format_follow_up(check.questions);
         result.reply = `${result.reply}\n\n${follow_up}`;

@@ -36,13 +36,14 @@ export interface CompletionCheckResult {
 /**
  * 체크 질문 생성.
  * - 매칭된 스킬의 `checks[]` 수집 (스킬 체크 우선)
- * - 도구 사용 패턴 기반 동적 체크 추가
+ * - 역할 스킬이 활성화된 경우에만 도구 사용 패턴 기반 동적 체크 추가
  * - 중복 제거 + 최대 5개
  */
 export function generate_completion_checks(
   tools_used: string[],
   matched_skills: SkillMetadata[],
   tool_calls_count: number,
+  has_role: boolean = false,
 ): CompletionCheckResult {
   const questions: string[] = [];
 
@@ -57,8 +58,8 @@ export function generate_completion_checks(
     if (questions.length >= 5) break;
   }
 
-  // B. 동적 체크 (도구 사용 패턴)
-  if (questions.length < 5) {
+  // B. 동적 체크 (도구 사용 패턴) — 역할 스킬 활성화 시에만 적용
+  if (has_role && questions.length < 5) {
     const used_set = new Set(tools_used.map((t) => t.toLowerCase()));
     for (const rule of DYNAMIC_RULES) {
       if (rule.tools.some((t) => used_set.has(t))) {
@@ -70,8 +71,8 @@ export function generate_completion_checks(
     }
   }
 
-  // 대량 도구 사용 시 전체 검토 체크
-  if (questions.length < 5 && tool_calls_count > 10) {
+  // 대량 도구 사용 시 전체 검토 체크 — 역할 스킬 활성화 시에만 적용
+  if (has_role && questions.length < 5 && tool_calls_count > 10) {
     if (!questions.includes(HEAVY_TASK_QUESTION)) {
       questions.push(HEAVY_TASK_QUESTION);
     }
