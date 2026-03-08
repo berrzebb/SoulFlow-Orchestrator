@@ -529,7 +529,7 @@ export function create_workflow_ops(deps: {
       return { ok: false, error: "unknown_node_type" };
     },
 
-    async suggest(instruction, workflow) {
+    async suggest(instruction, workflow, options) {
       if (!deps.providers) return { ok: false, error: "providers_not_configured" };
       try {
         if (!suggest_node_catalog_cache) suggest_node_catalog_cache = build_node_catalog();
@@ -571,7 +571,16 @@ export function create_workflow_ops(deps: {
           "## Instruction",
           instruction,
         ].join("\n");
-        const res = await deps.providers.run_headless_prompt({ prompt, system, max_tokens: 8192, temperature: 0.2 });
+        const messages: import("../../providers/types.js").ChatMessage[] = [];
+        if (system?.trim()) messages.push({ role: "system", content: system });
+        messages.push({ role: "user", content: prompt });
+        const res = await deps.providers.run_orchestrator({
+          messages,
+          provider_id: options?.provider_id as import("../../providers/types.js").ProviderId | undefined,
+          model: options?.model,
+          max_tokens: 8192,
+          temperature: 0.2,
+        });
         const raw = String(res.content || "").trim();
         let parsed: Record<string, unknown> | null = null;
         try { parsed = JSON.parse(raw); } catch {

@@ -32,6 +32,14 @@ const ChannelDedupeSchema = z.object({
   maxSize: z.number().min(500),
 });
 
+const ChannelGroupingSchema = z.object({
+  enabled: z.boolean(),
+  /** 같은 chat_id로 오는 메시지를 묶을 시간 창 (ms). */
+  windowMs: z.number().min(100).max(10_000),
+  /** 한 그룹에 합칠 수 있는 최대 메시지 수. 초과 시 즉시 플러시. */
+  maxMessages: z.number().min(2).max(20),
+});
+
 const ChannelSchema = z.object({
   debug: z.boolean(),
   autoReply: z.boolean(),
@@ -50,6 +58,7 @@ const ChannelSchema = z.object({
   streaming: ChannelStreamingSchema,
   dispatch: ChannelDispatchSchema,
   outboundDedupe: ChannelDedupeSchema,
+  grouping: ChannelGroupingSchema,
 });
 
 const OrchestratorLlmSchema = z.object({
@@ -218,6 +227,11 @@ export function get_config_defaults(): AppConfig {
       outboundDedupe: {
         ttlMs: 25_000,
         maxSize: 20_000,
+      },
+      grouping: {
+        enabled: false,
+        windowMs: 800,
+        maxMessages: 5,
       },
     },
     orchestration: {

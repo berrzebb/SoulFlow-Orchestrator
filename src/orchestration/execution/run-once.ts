@@ -67,6 +67,7 @@ export async function run_once(deps: RunnerDeps, args: RunExecutionArgs): Promis
   try {
     const response = await deps.providers.run_headless({
       provider_id: args.executor,
+      model: args.preferred_model,
       messages,
       tools: args.tool_definitions,
       max_tokens: 1600,
@@ -93,6 +94,7 @@ export async function run_once(deps: RunnerDeps, args: RunExecutionArgs): Promis
 
       const followup = await deps.providers.run_headless({
         provider_id: args.executor,
+        model: args.preferred_model,
         messages: [
           ...messages,
           { role: "assistant", content: `[TOOL_RESULTS]\n${tool_output}` },

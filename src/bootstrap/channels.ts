@@ -87,6 +87,7 @@ export async function create_channel_bundle(deps: ChannelBundleDeps): Promise<Ch
     registry: channels,
     retry_config: app_config.channel.dispatch,
     dedupe_config: app_config.channel.outboundDedupe,
+    grouping_config: app_config.channel.grouping,
     dlq_store,
     dedupe_policy: new DefaultOutboundDedupePolicy(),
     logger: logger.child("dispatch"),

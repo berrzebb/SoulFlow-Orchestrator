@@ -600,11 +600,17 @@ export class ChannelManager implements ServiceLike {
 
       const is_status_mode = this.config.streaming.enabled && this.config.streaming.mode === "status";
 
+      const msg_meta = (message.metadata || {}) as Record<string, unknown>;
+      const preferred_provider_id = typeof msg_meta.preferred_provider_id === "string" ? msg_meta.preferred_provider_id : undefined;
+      const preferred_model = typeof msg_meta.preferred_model === "string" ? msg_meta.preferred_model : undefined;
+
       const result = await this.orchestration.execute({
         message, alias, provider, media_inputs,
         session_history: history,
         resumed_task_id,
         run_id,
+        preferred_provider_id,
+        preferred_model,
         on_stream: is_status_mode
           ? (chunk) => {
               stream_state.accumulated += chunk;

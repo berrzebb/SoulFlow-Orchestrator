@@ -100,7 +100,9 @@ export async function execute_dispatch(
     return { reply: decision.summary, mode: "once", tool_calls_count: 0, streamed: false };
   }
 
-  const { mode, executor } = decision;
+  const { mode } = decision;
+  // 사용자 지정 프로바이더가 있으면 gateway 선택을 오버라이드
+  const executor = (req.preferred_provider_id as import("../../providers/executor.js").ExecutorProvider | undefined) ?? decision.executor;
 
   // finalize: done/blocked 이벤트 기록 + process tracker 종료
   const finalize = (result: OrchestrationResult): OrchestrationResult => {
@@ -155,6 +157,7 @@ export async function execute_dispatch(
       const once_result = await deps.run_once({
         req, executor, task_with_media, context_block, skill_names, system_base,
         runtime_policy, tool_definitions, tool_ctx, skill_provider_prefs, request_scope,
+        preferred_model: req.preferred_model,
       });
       if (!is_once_escalation(once_result.error)) {
         return finalize(once_result);
@@ -173,6 +176,7 @@ export async function execute_dispatch(
       const loop_args = {
         req, executor, task_with_media, media, context_block,
         skill_names, system_base, runtime_policy, tool_definitions, tool_ctx, skill_provider_prefs, request_scope,
+        preferred_model: req.preferred_model,
       };
       return loop_mode === "task"
         ? deps.run_task_loop(loop_args)

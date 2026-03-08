@@ -141,7 +141,10 @@ export const handle_workflow: RouteHandler = async (ctx) => {
     const body = await read_body(req);
     if (!body?.instruction || typeof body.instruction !== "string") { json(res, 400, { error: "instruction_required" }); return true; }
     if (!body.workflow || typeof body.workflow !== "object") { json(res, 400, { error: "workflow_required" }); return true; }
-    const result = await ops.suggest(body.instruction, body.workflow as Record<string, unknown>);
+    const result = await ops.suggest(body.instruction, body.workflow as Record<string, unknown>, {
+      provider_id: typeof body.provider_instance_id === "string" ? body.provider_instance_id : undefined,
+      model: typeof body.model === "string" ? body.model : undefined,
+    });
     json(res, result.ok ? 200 : 400, result);
     return true;
   }

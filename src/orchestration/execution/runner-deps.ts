@@ -32,6 +32,8 @@ export type RunExecutionArgs = {
   skill_provider_prefs?: string[];
   /** execute()에서 한 번 계산된 scope ID. run_task_loop에서 재사용. */
   request_scope: string;
+  /** 사용자 지정 모델 ID. 미설정 시 프로바이더 기본값 사용. */
+  preferred_model?: string;
 };
 
 export type StreamingConfig = {

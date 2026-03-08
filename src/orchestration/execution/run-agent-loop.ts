@@ -85,7 +85,7 @@ export async function run_agent_loop(
     channel: args.req.provider,
     chat_id: args.req.message.chat_id,
     max_turns: deps.config.agent_loop_max_turns,
-    model: undefined,
+    model: args.preferred_model,
     max_tokens: 1800,
     temperature: 0.3,
     abort_signal: args.req.signal,

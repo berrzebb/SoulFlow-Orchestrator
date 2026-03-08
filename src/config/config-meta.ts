@@ -34,6 +34,7 @@ export type ConfigSection =
   | "channel.streaming"
   | "channel.dispatch"
   | "channel.dedupe"
+  | "channel.grouping"
   | "orchestration"
   | "dashboard"
   | "cli"
@@ -49,6 +50,7 @@ export const SECTION_LABELS: Record<ConfigSection, string> = {
   "channel.streaming": "Streaming",
   "channel.dispatch": "Dispatch & Retry",
   "channel.dedupe": "Outbound Dedupe",
+  "channel.grouping": "Message Grouping",
   orchestration: "Orchestration",
   dashboard: "Dashboard",
   cli: "CLI Providers",
@@ -63,6 +65,7 @@ export const SECTION_ORDER: ConfigSection[] = [
   "general",
   "channel",
   "channel.streaming",
+  "channel.grouping",
   "channel.dispatch",
   "channel.dedupe",
   "orchestration",
@@ -112,6 +115,11 @@ export const CONFIG_FIELDS: ConfigFieldMeta[] = [
   { path: "channel.dispatch.retryJitterMs", label: "Retry Jitter (ms)", section: "channel.dispatch", type: "number", env_key: "CHANNEL_DISPATCH_RETRY_JITTER_MS", default_value: 250, sensitive: false, restart_required: false, description: "Random jitter added to retry delays to avoid thundering herd" },
   { path: "channel.dispatch.dlqEnabled", label: "DLQ Enabled", section: "channel.dispatch", type: "boolean", env_key: "CHANNEL_DISPATCH_DLQ_ENABLED", default_value: true, sensitive: false, restart_required: false, description: "Save permanently failed messages to Dead Letter Queue" },
   { path: "channel.dispatch.dlqPath", label: "DLQ Path", section: "channel.dispatch", type: "string", env_key: "CHANNEL_DISPATCH_DLQ_PATH", default_value: "", sensitive: false, restart_required: true, description: "SQLite file path for DLQ storage" },
+
+  // ── Grouping ──
+  { path: "channel.grouping.enabled", label: "Enabled", section: "channel.grouping", type: "boolean", env_key: "CHANNEL_GROUPING_ENABLED", default_value: false, sensitive: false, restart_required: false, description: "Combine multiple rapid responses into a single message to reduce spam" },
+  { path: "channel.grouping.windowMs", label: "Window (ms)", section: "channel.grouping", type: "number", env_key: "CHANNEL_GROUPING_WINDOW_MS", default_value: 800, sensitive: false, restart_required: false, description: "Time window to collect messages before grouping and sending" },
+  { path: "channel.grouping.maxMessages", label: "Max Messages", section: "channel.grouping", type: "number", env_key: "CHANNEL_GROUPING_MAX_MESSAGES", default_value: 5, sensitive: false, restart_required: false, description: "Maximum messages to group; flush immediately when reached" },
 
   // ── Dedupe ──
   { path: "channel.outboundDedupe.ttlMs", label: "TTL (ms)", section: "channel.dedupe", type: "number", env_key: "CHANNEL_OUTBOUND_DEDUPE_TTL_MS", default_value: 25_000, sensitive: false, restart_required: false, description: "Window for detecting duplicate outbound messages" },

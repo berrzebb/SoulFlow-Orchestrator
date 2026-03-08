@@ -319,7 +319,7 @@ export interface DashboardWorkflowOps {
   /** 단일 노드 테스트 (Dry-run). */
   test_single_node?(node: Record<string, unknown>, input_memory: Record<string, unknown>): { ok: boolean; preview?: unknown; warnings?: string[] };
   /** 자연어 instruction으로 워크플로우 수정 제안. */
-  suggest?(instruction: string, workflow: Record<string, unknown>): Promise<{ ok: boolean; workflow?: Record<string, unknown>; error?: string }>;
+  suggest?(instruction: string, workflow: Record<string, unknown>, options?: { provider_id?: string; model?: string }): Promise<{ ok: boolean; workflow?: Record<string, unknown>; error?: string }>;
 }
 
 export interface DashboardCliAuthOps {

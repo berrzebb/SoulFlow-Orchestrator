@@ -35,6 +35,10 @@ export type OrchestrationRequest = {
   max_turns?: number;
   /** Task 초기 메모리 (create_task에서 전달). */
   initial_memory?: Record<string, unknown>;
+  /** 사용자 지정 프로바이더 ID (웹 채팅에서 전달). 미설정 시 자동 선택. */
+  preferred_provider_id?: string;
+  /** 사용자 지정 모델 ID (웹 채팅에서 전달). */
+  preferred_model?: string;
 };
 
 /** 결과에 포함되는 토큰/비용 요약. */

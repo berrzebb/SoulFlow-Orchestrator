@@ -89,6 +89,10 @@ export async function handle_chat(ctx: RouteContext): Promise<boolean> {
       content: text,
       at: now_iso(),
       media: media.length > 0 ? media.map((m) => ({ type: m.type as import("../../bus/types.js").MediaItemType, url: m.url, mime: m.mime, name: m.name })) : undefined,
+      metadata: {
+        ...(provider_instance_id ? { preferred_provider_id: provider_instance_id } : {}),
+        ...(model ? { preferred_model: model } : {}),
+      },
     });
     json(res, 200, { ok: true, message_count: session.messages.length });
     return true;

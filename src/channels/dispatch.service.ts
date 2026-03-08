@@ -6,6 +6,7 @@ import { resolve_provider, type ChannelProvider, type ChannelRegistryLike } from
 import type { DispatchDlqStoreLike } from "./dlq-store.js";
 import type { OutboundDedupePolicy } from "./outbound-dedupe.js";
 import { TokenBucketRateLimiter, type RateLimiterOptions } from "./rate-limiter.js";
+import { OutboundGroupingBuffer, type GroupingConfig } from "./outbound-grouping.js";
 import { prune_ttl_map, sleep, error_message, now_iso} from "../utils/common.js";
 
 type RecentRecord = { at_ms: number; message_id: string };
@@ -18,6 +19,7 @@ export type DispatchServiceDeps = {
   registry: ChannelRegistryLike;
   retry_config: RetryConfig;
   dedupe_config: DedupeConfig;
+  grouping_config: GroupingConfig;
   dlq_store: DispatchDlqStoreLike | null;
   dedupe_policy: OutboundDedupePolicy;
   logger: Logger;
@@ -42,6 +44,7 @@ export class DispatchService implements ServiceLike {
   private readonly dedupe_policy: OutboundDedupePolicy;
   private readonly logger: Logger;
   private readonly rate_limiter: TokenBucketRateLimiter;
+  private readonly grouping: OutboundGroupingBuffer;
   private readonly on_direct_send: ((message: OutboundMessage) => void) | null;
   private readonly recent = new Map<string, RecentRecord>();
   private readonly pending_retries = new Set<ReturnType<typeof setTimeout>>();
@@ -58,6 +61,9 @@ export class DispatchService implements ServiceLike {
     this.logger = deps.logger;
     this.rate_limiter = new TokenBucketRateLimiter(deps.rate_limiter);
     this.on_direct_send = deps.on_direct_send || null;
+    this.grouping = new OutboundGroupingBuffer(deps.grouping_config, (msgs) => {
+      for (const msg of msgs) this.do_send_with_retry(msg);
+    });
   }
 
   async start(): Promise<void> {
@@ -68,6 +74,7 @@ export class DispatchService implements ServiceLike {
 
   async stop(): Promise<void> {
     this.running = false;
+    this.grouping.flush_all();
     for (const timer of this.pending_retries) clearTimeout(timer);
     this.pending_retries.clear();
     await this.loop_task;
@@ -82,11 +89,23 @@ export class DispatchService implements ServiceLike {
   }
 
   async send(provider: ChannelProvider, message: OutboundMessage): Promise<{ ok: boolean; message_id?: string; error?: string }> {
-    const result = await this.send_with_retry(provider, message, true);
-    if (result.ok && this.on_direct_send) {
+    // 그룹핑 활성화 시 버퍼에 넣고 낙관적 ok 반환 (실제 전송은 비동기 플러시)
+    this.grouping.push(provider, message);
+    if (this.on_direct_send) {
       try { this.on_direct_send(message); } catch { /* 옵저버 실패가 전달을 차단하면 안 됨 */ }
     }
-    return result;
+    return { ok: true };
+  }
+
+  /** 그룹핑 버퍼 플러시 콜백에서 호출: 병합된 메시지를 실제로 전송. */
+  private do_send_with_retry(message: OutboundMessage): void {
+    const provider = resolve_provider(message);
+    if (!provider || provider === "web") return;
+    this.send_with_retry(provider, message, true).then((result) => {
+      if (!result.ok) {
+        this.logger.debug("grouped send failed", { provider, error: result.error });
+      }
+    });
   }
 
   private async consume_loop(): Promise<void> {
