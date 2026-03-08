@@ -60,6 +60,7 @@ export default function SecretsPage() {
         <h2>{t("secrets.title", { count: names.length })}</h2>
         <div className="section-header__actions">
           <input
+            autoFocus
             className="input input--sm section-header__search"
             type="search"
             value={search}
