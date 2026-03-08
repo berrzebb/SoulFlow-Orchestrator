@@ -61,11 +61,17 @@ export function messages_to_prompt(messages: ChatMessage[], tools?: Record<strin
           const fn = tc.function as Record<string, unknown> | undefined;
           const name = String(fn?.name ?? tc.name ?? "");
           const args = fn?.arguments ?? tc.arguments ?? {};
-          return `called: ${name}(${typeof args === "string" ? args : JSON.stringify(args)})`;
+          const id = String(tc.id ?? "");
+          // id 포함 → [TOOL id=call_1] 결과와 매핑 가능
+          return `called[${id}]: ${name}(${typeof args === "string" ? args : JSON.stringify(args)})`;
         }).join(", ");
         content = content ? `${content} [${calls}]` : `[${calls}]`;
       }
-      return `[${role}] ${content}`;
+      // tool 응답에도 call_id 표시 → 어느 호출의 결과인지 LLM이 추적 가능
+      const call_id = String((m as Record<string, unknown>).tool_call_id ?? "");
+      return call_id
+        ? `[${role} id=${call_id}] ${content}`
+        : `[${role}] ${content}`;
     })
     .join("\n\n");
   const has_tools = Array.isArray(tools) && tools.length > 0;
