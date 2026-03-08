@@ -5,6 +5,7 @@ import { Badge } from "../components/badge";
 import { DeleteConfirmModal } from "../components/modal";
 import { ChatPromptBar } from "../components/chat-prompt-bar";
 import { useToast } from "../components/toast";
+import { useAsyncState } from "../hooks/use-async-state";
 import { useApprovals } from "../hooks/use-approvals";
 import { useDashboardStore } from "../store";
 import { useT } from "../i18n";
@@ -26,9 +27,9 @@ export default function ChatPage() {
   const [sending, setSending] = useState(false);
   /** 전송 후 어시스턴트가 응답 시작할 때까지의 대기 상태 */
   const [waiting_response, setWaitingResponse] = useState(false);
-  const [deleting, setDeleting] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
-  const [creating, setCreating] = useState(false);
+  const { pending: creating, run: run_create } = useAsyncState();
+  const { pending: deleting, run: run_delete } = useAsyncState();
   const [pending_media, setPendingMedia] = useState<ChatMediaItem[]>([]);
   const [selectedProvider, setSelectedProvider] = useState("");
   const [selectedModel, setSelectedModel] = useState("");
@@ -59,14 +60,14 @@ export default function ChatPage() {
   // ── 외부 채널 세션 목록 (모든 채널) ──
   const { data: mirror_sessions = [] } = useQuery<MirrorSessionEntry[]>({
     queryKey: ["mirror-sessions"],
-    queryFn: () => api.get("/api/sessions"),
+    queryFn: () => api.get("/api/chat/mirror"),
     refetchInterval: 30_000,
     staleTime: 10_000,
   });
 
   const { data: mirrorSession, isLoading: mirrorSessionLoading } = useQuery<MirrorSession>({
     queryKey: ["mirror-session", mirrorKey],
-    queryFn: () => api.get<MirrorSession>(`/api/sessions/${encodeURIComponent(mirrorKey!)}`),
+    queryFn: () => api.get<MirrorSession>(`/api/chat/mirror/${encodeURIComponent(mirrorKey!)}`),
     enabled: is_mirror,
     refetchInterval: 15_000,
     staleTime: 5_000,
@@ -107,35 +108,17 @@ export default function ChatPage() {
     }
   }, [activeSession?.messages?.length, mirrorLiveMessages.length, !!web_stream?.content]);
 
-  const create_session = async () => {
-    if (creating) return;
-    setCreating(true);
-    try {
-      const res = await api.post<{ id: string }>("/api/chat/sessions");
-      setActiveId(res.id);
-      toast(t("chat.session_created"), "ok");
-      void qc.invalidateQueries({ queryKey: ["chat-sessions"] });
-    } catch {
-      toast(t("chat.create_failed"), "err");
-    } finally {
-      setCreating(false);
-    }
-  };
+  const create_session = () => run_create(async () => {
+    const res = await api.post<{ id: string }>("/api/chat/sessions");
+    setActiveId(res.id);
+    void qc.invalidateQueries({ queryKey: ["chat-sessions"] });
+  }, t("chat.session_created"), t("chat.create_failed"));
 
-  const delete_session = async (id: string) => {
-    if (deleting) return;
-    setDeleting(true);
-    try {
-      await api.del(`/api/chat/sessions/${encodeURIComponent(id)}`);
-      if (activeId === id) setActiveId(null);
-      toast(t("chat.session_deleted"), "ok");
-      void qc.invalidateQueries({ queryKey: ["chat-sessions"] });
-    } catch {
-      toast(t("chat.delete_failed"), "err");
-    } finally {
-      setDeleting(false);
-    }
-  };
+  const delete_session = (id: string) => run_delete(async () => {
+    await api.del(`/api/chat/sessions/${encodeURIComponent(id)}`);
+    if (activeId === id) setActiveId(null);
+    void qc.invalidateQueries({ queryKey: ["chat-sessions"] });
+  }, t("chat.session_deleted"), t("chat.delete_failed"));
 
   const handle_file = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;

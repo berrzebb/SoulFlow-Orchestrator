@@ -34,7 +34,7 @@ interface ConfigResponse {
   sections: SectionInfo[];
 }
 
-const CHANNEL_SECTIONS = new Set(["slack", "discord", "telegram", "channel", "channel.streaming", "channel.dispatch", "channel.dedupe"]);
+const CHANNEL_SECTIONS = new Set(["slack", "discord", "telegram", "channel", "channel.streaming", "channel.grouping", "channel.dispatch", "channel.dedupe"]);
 
 export default function SettingsPage() {
   const { data, isLoading } = useQuery<ConfigResponse>({

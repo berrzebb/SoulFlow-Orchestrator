@@ -2,9 +2,9 @@ import { useState } from "react";
 import { FormModal } from "../../components/modal";
 import { FormGroup } from "../../components/form-group";
 import { ToggleSwitch } from "../../components/toggle-switch";
-import { useToast } from "../../components/toast";
 import { useT } from "../../i18n";
 import { api } from "../../api/client";
+import { useAsyncState } from "../../hooks/use-async-state";
 import { PROVIDER_OPTIONS } from "./types";
 import type { ModalMode } from "./types";
 
@@ -28,8 +28,7 @@ export function InstanceModal({ mode, onClose, onSaved }: InstanceModalProps) {
     String(initial?.settings?.default_channel || initial?.settings?.default_chat_id || ""),
   );
   const [apiBase, setApiBase] = useState(String(initial?.settings?.api_base || ""));
-  const [saving, setSaving] = useState(false);
-  const { toast } = useToast();
+  const { pending: saving, run } = useAsyncState();
 
   const auto_id = !isEdit && !instanceId;
 
@@ -56,10 +55,9 @@ export function InstanceModal({ mode, onClose, onSaved }: InstanceModalProps) {
     return s;
   }
 
-  async function handleSubmit(e: React.FormEvent) {
+  function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setSaving(true);
-    try {
+    void run(async () => {
       const id = isEdit ? initial!.instance_id : (instanceId || provider);
       if (isEdit) {
         await api.put(`/api/channels/instances/${encodeURIComponent(id)}`, {
@@ -72,13 +70,9 @@ export function InstanceModal({ mode, onClose, onSaved }: InstanceModalProps) {
           ...(token ? { token } : {}),
         });
       }
-      toast(isEdit ? t("channels.updated") : t("channels.added"), "ok");
       onSaved();
-    } catch (err) {
-      toast(t("channels.save_failed", { error: err instanceof Error ? err.message : String(err) }), "err");
-    } finally {
-      setSaving(false);
-    }
+    }, isEdit ? t("channels.updated") : t("channels.added"),
+      (e) => t("channels.save_failed", { error: e instanceof Error ? e.message : String(e) }));
   }
 
   return (

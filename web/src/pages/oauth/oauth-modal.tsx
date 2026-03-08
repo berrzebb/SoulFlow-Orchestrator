@@ -2,8 +2,8 @@ import { useState } from "react";
 import { api } from "../../api/client";
 import { FormModal } from "../../components/modal";
 import { FormGroup } from "../../components/form-group";
-import { useToast } from "../../components/toast";
 import { useT } from "../../i18n";
+import { useAsyncState } from "../../hooks/use-async-state";
 import type { OAuthPreset, ModalMode } from "./types";
 import { parse_csv } from "./types";
 
@@ -25,8 +25,7 @@ export function OAuthModal({ mode, presets, onClose, onSaved }: {
   const [authUrl, setAuthUrl] = useState("");
   const [tokenUrl, setTokenUrl] = useState("");
   const [scopeText, setScopeText] = useState((initial?.scopes ?? []).join(", "));
-  const [saving, setSaving] = useState(false);
-  const { toast } = useToast();
+  const { pending: saving, run } = useAsyncState();
 
   const active_preset = presets.find((p) => p.service_type === serviceType);
   const available_scopes = active_preset?.scopes_available ?? [];
@@ -54,17 +53,15 @@ export function OAuthModal({ mode, presets, onClose, onSaved }: {
     setScopeText(next.join(", "));
   };
 
-  async function handleSubmit(e: React.FormEvent) {
+  function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setSaving(true);
-    try {
+    void run(async () => {
       if (isEdit) {
         await api.put(`/api/oauth/integrations/${encodeURIComponent(initial!.instance_id)}`, {
           label: label || initial!.instance_id,
           enabled,
           scopes: parse_csv(scopeText),
         });
-        toast(t("oauth.updated"), "ok");
       } else {
         const body: Record<string, unknown> = {
           service_type: serviceType,
@@ -78,22 +75,12 @@ export function OAuthModal({ mode, presets, onClose, onSaved }: {
           body.token_url = tokenUrl;
         }
         await api.post("/api/oauth/integrations", body);
-        toast(t("oauth.added"), "ok");
-      }
-      // 폼 초기화 (신규 추가 후 모달이 닫히면 다음 오픈 시 깨끗한 폼 준비)
-      if (!isEdit) {
-        setLabel("");
-        setClientId("");
-        setClientSecret("");
-        setAuthUrl("");
-        setTokenUrl("");
+        // 폼 초기화 (신규 추가 후 모달이 닫히면 다음 오픈 시 깨끗한 폼 준비)
+        setLabel(""); setClientId(""); setClientSecret(""); setAuthUrl(""); setTokenUrl("");
       }
       onSaved();
-    } catch (err) {
-      toast(t("oauth.save_failed", { error: err instanceof Error ? err.message : String(err) }), "err");
-    } finally {
-      setSaving(false);
-    }
+    }, isEdit ? t("oauth.updated") : t("oauth.added"),
+      (e) => t("oauth.save_failed", { error: e instanceof Error ? e.message : String(e) }));
   }
 
   return (

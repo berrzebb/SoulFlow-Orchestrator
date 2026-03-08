@@ -2,8 +2,8 @@ import { useState } from "react";
 import { api } from "../../api/client";
 import { FormModal } from "../../components/modal";
 import { FormGroup } from "../../components/form-group";
-import { useToast } from "../../components/toast";
 import { useT } from "../../i18n";
+import { useAsyncState } from "../../hooks/use-async-state";
 import type { OAuthPreset } from "./types";
 import { parse_csv } from "./types";
 
@@ -14,7 +14,7 @@ export function PresetModal({ initial, onClose, onSaved }: {
 }) {
   const isEdit = initial !== null;
   const t = useT();
-  const { toast } = useToast();
+  const { pending: saving, run } = useAsyncState();
 
   const [serviceType, setServiceType] = useState(initial?.service_type ?? "");
   const [label, setLabel] = useState(initial?.label ?? "");
@@ -26,8 +26,6 @@ export function PresetModal({ initial, onClose, onSaved }: {
   const [scopesAvailable, setScopesAvailable] = useState((initial?.scopes_available ?? []).join(", "));
   const [defaultScopes, setDefaultScopes] = useState((initial?.default_scopes ?? []).join(", "));
   const [supportsRefresh, setSupportsRefresh] = useState(initial?.supports_refresh ?? true);
-  const [saving, setSaving] = useState(false);
-
   const hasChanges = (): boolean => {
     if (!isEdit) return true;
     if (authUrl !== (initial?.auth_url ?? "")) return true;
@@ -41,10 +39,9 @@ export function PresetModal({ initial, onClose, onSaved }: {
     return false;
   };
 
-  async function handleSubmit(e: React.FormEvent) {
+  function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setSaving(true);
-    try {
+    void run(async () => {
       if (isEdit) {
         await api.put(`/api/oauth/presets/${encodeURIComponent(initial.service_type)}`, {
           auth_url: authUrl.trim(),
@@ -56,7 +53,6 @@ export function PresetModal({ initial, onClose, onSaved }: {
           default_scopes: parse_csv(defaultScopes),
           supports_refresh: supportsRefresh,
         });
-        toast(t("oauth.preset_updated"), "ok");
       } else {
         await api.post("/api/oauth/presets", {
           service_type: serviceType.trim(),
@@ -70,14 +66,10 @@ export function PresetModal({ initial, onClose, onSaved }: {
           default_scopes: parse_csv(defaultScopes),
           supports_refresh: supportsRefresh,
         });
-        toast(t("oauth.preset_added"), "ok");
       }
       onSaved();
-    } catch (err) {
-      toast(t("oauth.preset_save_failed", { error: err instanceof Error ? err.message : String(err) }), "err");
-    } finally {
-      setSaving(false);
-    }
+    }, isEdit ? t("oauth.preset_updated") : t("oauth.preset_added"),
+      (e) => t("oauth.preset_save_failed", { error: e instanceof Error ? e.message : String(e) }));
   }
 
   return (

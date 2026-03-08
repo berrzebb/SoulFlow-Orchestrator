@@ -6,6 +6,8 @@ import { EmptyState } from "../../components/empty-state";
 import { Modal } from "../../components/modal";
 import { useToast } from "../../components/toast";
 import { useT } from "../../i18n";
+import { useAsyncAction } from "../../hooks/use-async-action";
+import { useAsyncState } from "../../hooks/use-async-state";
 import { SplitPane } from "./split-pane";
 import { WsListItem } from "./ws-shared";
 
@@ -157,16 +159,16 @@ function ToolPicker({ content, onChange, all_tools, native_tools, oauth_services
 export function SkillsTab() {
   const t = useT();
   const qc = useQueryClient();
-  const { toast } = useToast();
+  const run_action = useAsyncAction();
+  const { pending: importing, run: run_import } = useAsyncState();
+  const { pending: saving, run: run_save } = useAsyncState();
   const fileRef = useRef<HTMLInputElement>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [activeFile, setActiveFile] = useState("SKILL.md");
   const [showImport, setShowImport] = useState(false);
   const [importName, setImportName] = useState("");
   const [zipFile, setZipFile] = useState<File | null>(null);
-  const [importing, setImporting] = useState(false);
   const [editContent, setEditContent] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
   const [metaExpanded, setMetaExpanded] = useState(false);
 
   const { data: skills = [] } = useQuery<SkillInfo[]>({
@@ -196,11 +198,10 @@ export function SkillsTab() {
     enabled: !!selected,
   });
 
-  const refresh = async () => {
+  const refresh = () => run_action(async () => {
     await api.post("/api/skills/refresh");
-    toast(t("skills.refreshed"), "ok");
     void qc.invalidateQueries({ queryKey: ["ws-skills"] });
-  };
+  }, t("skills.refreshed"));
 
   const handle_import_file = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -209,24 +210,18 @@ export function SkillsTab() {
     if (!importName) setImportName(file.name.replace(/\.zip$/i, ""));
   };
 
-  const confirm_import = async () => {
+  const confirm_import = () => {
     if (!importName.trim() || !zipFile) return;
-    setImporting(true);
-    try {
+    void run_import(async () => {
       const buf = await zipFile.arrayBuffer();
       const zip_b64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
       await api.post("/api/skills", { name: importName.trim(), zip_b64 });
-      toast(t("skills.imported", { name: importName.trim() }), "ok");
       void qc.invalidateQueries({ queryKey: ["ws-skills"] });
       setShowImport(false);
       setImportName("");
       setZipFile(null);
       if (fileRef.current) fileRef.current.value = "";
-    } catch {
-      toast(t("common.unknown_error"), "err");
-    } finally {
-      setImporting(false);
-    }
+    }, t("skills.imported", { name: importName.trim() }), t("common.unknown_error"));
   };
 
   const is_editable = detail?.metadata
@@ -258,19 +253,13 @@ export function SkillsTab() {
     setMetaExpanded(false);
   };
 
-  const save = async () => {
+  const save = () => {
     if (!selected || editContent === null) return;
-    setSaving(true);
-    try {
-      await api.put(`/api/skills/${encodeURIComponent(selected!)}/files`, { file: activeFile, content: editContent });
-      toast(t("skills.saved"), "ok");
+    void run_save(async () => {
+      await api.put(`/api/skills/${encodeURIComponent(selected)}/files`, { file: activeFile, content: editContent });
       setEditContent(null);
       void qc.invalidateQueries({ queryKey: ["ws-skill-detail", selected] });
-    } catch {
-      toast(t("skills.save_failed"), "err");
-    } finally {
-      setSaving(false);
-    }
+    }, t("skills.saved"), t("skills.save_failed"));
   };
 
   const roles = skills.filter((s) => s.type === "role");

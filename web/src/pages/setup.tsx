@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import { useToast } from "../components/toast";
 import { useT } from "../i18n";
+import { useAsyncState } from "../hooks/use-async-state";
 import { PROVIDER_TYPE_LABELS as TYPE_LABELS } from "../utils/constants";
 
 type ProviderEntry = {
@@ -25,7 +26,7 @@ export default function SetupPage() {
   const [orchestrator, setOrchestrator] = useState("");
   const [alias, setAlias] = useState("assistant");
   const [personaName, setPersonaName] = useState("");
-  const [submitting, setSubmitting] = useState(false);
+  const { pending: submitting, run: run_finish } = useAsyncState();
 
   useEffect(() => {
     void api.get<string[]>("/api/agents/providers/types").then(setProviderTypes).catch(() => toast(t("setup.load_failed"), "err"));
@@ -48,32 +49,25 @@ export default function SetupPage() {
     });
   };
 
-  const finish = async () => {
-    setSubmitting(true);
-    try {
-      const payload = {
-        providers: selected.map(([type, entry], idx) => ({
-          instance_id: type,
-          provider_type: type,
-          label: TYPE_LABELS[type] || type,
-          enabled: true,
-          priority: (idx + 1) * 10,
-          token: entry.token || undefined,
-        })),
-        executor,
-        orchestrator,
-        alias,
-        persona_name: personaName || undefined,
-      };
-      await api.post("/api/bootstrap", payload);
-      setStep(3);
-      setTimeout(() => navigate("/"), 1500);
-    } catch (err) {
-      toast(t("setup.error", { error: err instanceof Error ? err.message : String(err) }), "err");
-    } finally {
-      setSubmitting(false);
-    }
-  };
+  const finish = () => run_finish(async () => {
+    const payload = {
+      providers: selected.map(([type, entry], idx) => ({
+        instance_id: type,
+        provider_type: type,
+        label: TYPE_LABELS[type] || type,
+        enabled: true,
+        priority: (idx + 1) * 10,
+        token: entry.token || undefined,
+      })),
+      executor,
+      orchestrator,
+      alias,
+      persona_name: personaName || undefined,
+    };
+    await api.post("/api/bootstrap", payload);
+    setStep(3);
+    setTimeout(() => navigate("/"), 1500);
+  }, undefined, (e) => t("setup.error", { error: e instanceof Error ? e.message : String(e) }));
 
   return (
     <div className="page setup">

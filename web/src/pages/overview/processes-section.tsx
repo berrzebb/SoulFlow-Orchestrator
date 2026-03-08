@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Badge } from "../../components/badge";
+import { Collapsible } from "../../components/collapsible";
 import { EmptyState } from "../../components/empty-state";
 import { DeleteConfirmModal } from "../../components/modal";
 import { SectionHeader } from "../../components/section-header";
@@ -62,30 +63,27 @@ export function ProcessesSection({ active, recent, onCancelled }: ProcessesSecti
       )}
 
       {recent.length > 0 && (
-        <div className="mt-2">
-          <button
-            className="toggle-btn text-muted"
-            aria-expanded={showRecent}
-            onClick={() => setShowRecent((v) => !v)}
-          >
-            {showRecent ? "▾" : "▸"} {t("overview.recent_processes")} ({recent.length})
-          </button>
-          {showRecent && (
-            <div className="grid-stack mt-2">
-              {recent.slice(0, 8).map((p) => (
-                <div key={p.run_id} className="process-row process-row--recent">
-                  <Badge status={p.status} />
-                  <ModeBadge mode={p.mode} />
-                  <span className="truncate flex-fill">{p.alias}</span>
-                  {p.executor_provider && <span className="text-muted">{p.executor_provider}</span>}
-                  <span className="text-muted ml-auto">{t("overview.tool_prefix")}{p.tool_calls_count}</span>
-                  {p.ended_at && <span className="text-xs text-muted" title={p.ended_at}>{time_ago(p.ended_at)}</span>}
-                  {p.error && <span className="text-err text-xs truncate proc-error" title={p.error}>⚠ {p.error}</span>}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+        <Collapsible
+          className="mt-2"
+          buttonClassName="toggle-btn text-muted"
+          open={showRecent}
+          onToggle={setShowRecent}
+          label={`${t("overview.recent_processes")} (${recent.length})`}
+        >
+          <div className="grid-stack">
+            {recent.slice(0, 8).map((p) => (
+              <div key={p.run_id} className="process-row process-row--recent">
+                <Badge status={p.status} />
+                <ModeBadge mode={p.mode} />
+                <span className="truncate flex-fill">{p.alias}</span>
+                {p.executor_provider && <span className="text-muted">{p.executor_provider}</span>}
+                <span className="text-muted ml-auto">{t("overview.tool_prefix")}{p.tool_calls_count}</span>
+                {p.ended_at && <span className="text-xs text-muted" title={p.ended_at}>{time_ago(p.ended_at)}</span>}
+                {p.error && <span className="text-err text-xs truncate proc-error" title={p.error}>⚠ {p.error}</span>}
+              </div>
+            ))}
+          </div>
+        </Collapsible>
       )}
 
       <DeleteConfirmModal

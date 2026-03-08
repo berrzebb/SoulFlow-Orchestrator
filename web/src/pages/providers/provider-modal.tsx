@@ -5,8 +5,8 @@ import { FormModal } from "../../components/modal";
 import { FormGroup } from "../../components/form-group";
 import { Combobox, type ComboboxOption } from "../../components/combobox";
 import { ToggleSwitch } from "../../components/toggle-switch";
-import { useToast } from "../../components/toast";
 import { useT } from "../../i18n";
+import { useAsyncState } from "../../hooks/use-async-state";
 import { PROVIDER_TYPE_LABELS as TYPE_LABELS } from "../../utils/constants";
 import { MODE_OPTIONS, PURPOSE_OPTIONS, TYPES_WITH_SETTINGS, TYPES_WITH_MODELS } from "./types";
 import type { ModalMode, ModelInfo, ProviderConnection, CliAuthStatus } from "./types";
@@ -56,8 +56,7 @@ export function ProviderModal({ mode, connections, onClose, onSaved }: ProviderM
   const [selectedModes, setSelectedModes] = useState<Set<string>>(
     new Set(initial?.supported_modes ?? ["once", "agent", "task"]),
   );
-  const [saving, setSaving] = useState(false);
-  const { toast } = useToast();
+  const { pending: saving, run } = useAsyncState();
 
   const resolvedType = effectiveProviderType || providerType;
 
@@ -142,10 +141,9 @@ export function ProviderModal({ mode, connections, onClose, onSaved }: ProviderM
     return out;
   }
 
-  async function handleSubmit(e: React.FormEvent) {
+  function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setSaving(true);
-    try {
+    void run(async () => {
       const id = isEdit ? initial!.instance_id : (instanceId || resolvedType);
       const body = {
         provider_type: resolvedType,
@@ -163,13 +161,9 @@ export function ProviderModal({ mode, connections, onClose, onSaved }: ProviderM
       } else {
         await api.post("/api/agents/providers", { instance_id: id, ...body });
       }
-      toast(isEdit ? t("providers.updated") : t("providers.added"), "ok");
       onSaved();
-    } catch (err) {
-      toast(t("providers.save_failed", { error: err instanceof Error ? err.message : String(err) }), "err");
-    } finally {
-      setSaving(false);
-    }
+    }, isEdit ? t("providers.updated") : t("providers.added"),
+      (e) => t("providers.save_failed", { error: e instanceof Error ? e.message : String(e) }));
   }
 
   // 등록된 프로바이더만 표시: connection에 존재하거나 CLI 인증된 타입

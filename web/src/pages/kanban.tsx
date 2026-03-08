@@ -507,7 +507,7 @@ function CardDetailPanel({ card_id, board_id, columns, onClose, onUpdate, onMove
   onSelectCard: (id: string) => void;
 }) {
   const t = useT();
-  const { toast } = useToast();
+  const run_action = useAsyncAction();
   const [commentText, setCommentText] = useState("");
   const [confirmDeleteCard, setConfirmDeleteCard] = useState(false);
 
@@ -545,13 +545,14 @@ function CardDetailPanel({ card_id, board_id, columns, onClose, onUpdate, onMove
 
   const qc = useQueryClient();
 
-  const add_comment = async () => {
+  const add_comment = () => {
     if (!commentText.trim()) return;
-    try {
-      await api.post(`/api/kanban/cards/${encodeURIComponent(card_id)}/comments`, { text: commentText.trim() });
-      setCommentText("");
-      void qc.invalidateQueries({ queryKey: ["kanban-comments", card_id] });
-    } catch { toast(t("kanban.comment_failed"), "err"); }
+    void run_action(
+      () => api.post(`/api/kanban/cards/${encodeURIComponent(card_id)}/comments`, { text: commentText.trim() })
+        .then(() => { setCommentText(""); void qc.invalidateQueries({ queryKey: ["kanban-comments", card_id] }); }),
+      undefined,
+      t("kanban.comment_failed"),
+    );
   };
 
   if (!card) return <div className="kanban-detail"><div className="kanban-detail__loading">{t("kanban.loading")}</div></div>;
@@ -749,7 +750,7 @@ const ACTION_TYPE_OPTIONS = ["move_card", "assign", "add_label", "comment", "run
 
 function RulesPanel({ board_id, onClose }: { board_id: string; onClose: () => void }) {
   const t = useT();
-  const { toast } = useToast();
+  const run_action = useAsyncAction();
   const qc = useQueryClient();
   const [showCreate, setShowCreate] = useState(false);
 
@@ -759,20 +760,19 @@ function RulesPanel({ board_id, onClose }: { board_id: string; onClose: () => vo
     enabled: !!board_id,
   });
 
-  const toggle_rule = async (rule: Rule) => {
-    try {
-      await api.put(`/api/kanban/rules/${encodeURIComponent(rule.rule_id)}`, { enabled: !rule.enabled });
-      void qc.invalidateQueries({ queryKey: ["kanban-rules", board_id] });
-    } catch { toast(t("kanban.update_failed"), "err"); }
-  };
+  const toggle_rule = (rule: Rule) => void run_action(
+    () => api.put(`/api/kanban/rules/${encodeURIComponent(rule.rule_id)}`, { enabled: !rule.enabled })
+      .then(() => { void qc.invalidateQueries({ queryKey: ["kanban-rules", board_id] }); }),
+    undefined,
+    t("kanban.update_failed"),
+  );
 
-  const delete_rule = async (rule_id: string) => {
-    try {
-      await api.del(`/api/kanban/rules/${encodeURIComponent(rule_id)}`);
-      void qc.invalidateQueries({ queryKey: ["kanban-rules", board_id] });
-      toast(t("kanban.rule_deleted"), "ok");
-    } catch { toast(t("kanban.delete_failed"), "err"); }
-  };
+  const delete_rule = (rule_id: string) => void run_action(
+    () => api.del(`/api/kanban/rules/${encodeURIComponent(rule_id)}`)
+      .then(() => { void qc.invalidateQueries({ queryKey: ["kanban-rules", board_id] }); }),
+    t("kanban.rule_deleted"),
+    t("kanban.delete_failed"),
+  );
 
   return (
     <div className="kanban-rules">
@@ -813,22 +813,24 @@ function RulesPanel({ board_id, onClose }: { board_id: string; onClose: () => vo
 function CreateRuleForm({ board_id, onClose, onCreated }: { board_id: string; onClose: () => void; onCreated: () => void }) {
   const t = useT();
   const { toast } = useToast();
+  const run_action = useAsyncAction();
   const [trigger, setTrigger] = useState<string>("card_moved");
   const [actionType, setActionType] = useState<string>("move_card");
   const [conditionStr, setConditionStr] = useState("{}");
   const [paramsStr, setParamsStr] = useState("{}");
 
-  const handle_submit = async (e: React.FormEvent) => {
+  const handle_submit = (e: React.FormEvent) => {
     e.preventDefault();
     let condition: Record<string, unknown>;
     let action_params: Record<string, unknown>;
     try { condition = JSON.parse(conditionStr); } catch { toast(t("kanban.invalid_json"), "err"); return; }
     try { action_params = JSON.parse(paramsStr); } catch { toast(t("kanban.invalid_json"), "err"); return; }
-    try {
-      await api.post(`/api/kanban/boards/${encodeURIComponent(board_id)}/rules`, { trigger, action_type: actionType, condition, action_params });
-      toast(t("kanban.rule_created"), "ok");
-      onCreated();
-    } catch { toast(t("kanban.create_failed"), "err"); }
+    void run_action(
+      () => api.post(`/api/kanban/boards/${encodeURIComponent(board_id)}/rules`, { trigger, action_type: actionType, condition, action_params })
+        .then(() => onCreated()),
+      t("kanban.rule_created"),
+      t("kanban.create_failed"),
+    );
   };
 
   return (

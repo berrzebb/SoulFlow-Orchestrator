@@ -4,8 +4,8 @@ import { api } from "../../api/client";
 import { FormModal } from "../../components/modal";
 import { FormGroup } from "../../components/form-group";
 import { ToggleSwitch } from "../../components/toggle-switch";
-import { useToast } from "../../components/toast";
 import { useT } from "../../i18n";
+import { useAsyncState } from "../../hooks/use-async-state";
 import { PROVIDER_TYPE_LABELS as TYPE_LABELS } from "../../utils/constants";
 import type { ConnectionModalMode } from "./types";
 
@@ -31,8 +31,7 @@ export function ConnectionModal({ mode, onClose, onSaved }: ConnectionModalProps
   const [enabled, setEnabled] = useState(initial?.enabled ?? true);
   const [apiBase, setApiBase] = useState(initial?.api_base || "");
   const [token, setToken] = useState("");
-  const [saving, setSaving] = useState(false);
-  const { toast } = useToast();
+  const { pending: saving, run } = useAsyncState();
 
   const typeOptions = types.length > 0 ? types : Object.keys(TYPE_LABELS);
   const showApiBase = providerType === "openai_compatible" || providerType === "openrouter";
@@ -46,10 +45,9 @@ export function ConnectionModal({ mode, onClose, onSaved }: ConnectionModalProps
     return false;
   };
 
-  async function handleSubmit(e: React.FormEvent) {
+  function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setSaving(true);
-    try {
+    void run(async () => {
       const id = isEdit ? initial!.connection_id : (connectionId || providerType);
       const body = {
         provider_type: providerType,
@@ -63,13 +61,9 @@ export function ConnectionModal({ mode, onClose, onSaved }: ConnectionModalProps
       } else {
         await api.post("/api/agents/connections", { connection_id: id, ...body });
       }
-      toast(isEdit ? t("connections.updated") : t("connections.added"), "ok");
       onSaved();
-    } catch (err) {
-      toast(t("providers.save_failed", { error: err instanceof Error ? err.message : String(err) }), "err");
-    } finally {
-      setSaving(false);
-    }
+    }, isEdit ? t("connections.updated") : t("connections.added"),
+      (e) => t("providers.save_failed", { error: e instanceof Error ? e.message : String(e) }));
   }
 
   return (

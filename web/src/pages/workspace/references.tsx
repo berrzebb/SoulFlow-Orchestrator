@@ -8,6 +8,7 @@ import { FormGroup } from "../../components/form-group";
 import { WsSkeletonCol } from "./ws-shared";
 import { SearchInput } from "../../components/search-input";
 import { useToast } from "../../components/toast";
+import { useAsyncState } from "../../hooks/use-async-state";
 import { useT } from "../../i18n";
 import { time_ago } from "../../utils/format";
 import { DataTable } from "../../components/data-table";
@@ -49,7 +50,7 @@ export function ReferencesTab() {
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<RefSearchResult[] | null>(null);
-  const [searching, setSearching] = useState(false);
+  const { pending: searching, run: run_search } = useAsyncState();
   const [selectedDoc, setSelectedDoc] = useState<string | null>(null);
 
   const { data, isLoading } = useQuery<{ documents: RefDocument[]; stats: RefStats }>({
@@ -93,17 +94,12 @@ export function ReferencesTab() {
     onError: () => toast(t("references.delete_failed"), "err"),
   });
 
-  const do_search = async () => {
+  const do_search = () => {
     if (!searchQuery.trim()) return;
-    setSearching(true);
-    try {
+    void run_search(async () => {
       const res = await api.post("/api/references/search", { query: searchQuery, limit: 8 }) as { results: RefSearchResult[] };
       setSearchResults(res.results);
-    } catch {
-      toast(t("references.search_failed"), "err");
-    } finally {
-      setSearching(false);
-    }
+    }, undefined, t("references.search_failed"));
   };
 
   const handle_file_select = async (e: React.ChangeEvent<HTMLInputElement>) => {
