@@ -7,6 +7,7 @@ import { useToast } from "../../components/toast";
 import { useT } from "../../i18n";
 import { time_ago } from "../../utils/format";
 import { WsSkeletonCol } from "./ws-shared";
+import { DataTable } from "../../components/data-table";
 
 interface PullProgress {
   status: string;
@@ -243,8 +244,7 @@ export function ModelsTab() {
         {!models?.length ? (
           <EmptyState icon="🧠" title={t("models.empty")} />
         ) : (
-          <div className="table-scroll">
-          <table className="data-table">
+          <DataTable>
             <thead>
               <tr>
                 <th>{t("common.name")}</th>
@@ -296,8 +296,7 @@ export function ModelsTab() {
                 </tr>
               ))}
             </tbody>
-          </table>
-          </div>
+          </DataTable>
         )}
       </section>
 
@@ -305,8 +304,7 @@ export function ModelsTab() {
       {active && active.length > 0 && (
         <section>
           <h3>{t("models.active")}</h3>
-          <div className="table-scroll">
-          <table className="data-table">
+          <DataTable>
             <thead>
               <tr>
                 <th>{t("common.name")}</th>
@@ -325,8 +323,7 @@ export function ModelsTab() {
                 </tr>
               ))}
             </tbody>
-          </table>
-          </div>
+          </DataTable>
         </section>
       )}
     </div>

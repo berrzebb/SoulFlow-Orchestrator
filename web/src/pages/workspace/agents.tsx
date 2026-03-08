@@ -7,10 +7,11 @@ import { Modal, DeleteConfirmModal } from "../../components/modal";
 import { FormGroup } from "../../components/form-group";
 import { SectionHeader } from "../../components/section-header";
 import { SendAgentModal } from "../../components/send-agent-modal";
-import { useToast } from "../../components/toast";
 import { classify_agent } from "../../utils/classify";
 import { fmt_time, time_ago } from "../../utils/format";
 import { useT } from "../../i18n";
+import { DataTable } from "../../components/data-table";
+import { useAsyncAction } from "../../hooks/use-async-action";
 
 interface Agent {
   id: string; label: string; role: string; model: string; status: string;
@@ -68,7 +69,7 @@ function ChannelRef({ channelId, messageId }: { channelId: string; messageId?: s
 export function AgentsTab() {
   const t = useT();
   const qc = useQueryClient();
-  const { toast } = useToast();
+  const run_action = useAsyncAction();
 
   const { data: agents = [] } = useQuery<Agent[]>({ queryKey: ["agents"], queryFn: () => api.get("/api/agents"), refetchInterval: 15_000, staleTime: 5_000 });
   const { data: agent_loops = [] } = useQuery<AgentLoop[]>({ queryKey: ["loops"], queryFn: () => api.get("/api/loops"), refetchInterval: 15_000, staleTime: 5_000 });
@@ -99,34 +100,27 @@ export function AgentsTab() {
   const active_processes = processes_data?.active ?? [];
   const recent_processes = processes_data?.recent ?? [];
 
-  const safe_action = async (fn: () => Promise<void>, ok_msg: string, after?: () => void) => {
-    try {
-      await fn();
-      toast(ok_msg, "ok");
-      after?.();
-      refresh();
-    } catch (err) {
-      toast(err instanceof Error ? err.message : String(err), "err");
-    }
-  };
-
-  const handle_send = (agentId: string, text: string) => void safe_action(() => api.post(`/api/agents/${encodeURIComponent(agentId)}/input`, { text }), t("agents.message_sent"), () => setSendTarget(null));
+  const handle_send = (agentId: string, text: string) =>
+    void run_action(
+      () => api.post(`/api/agents/${encodeURIComponent(agentId)}/input`, { text }).then(() => { setSendTarget(null); refresh(); }),
+      t("agents.message_sent"),
+    );
 
   const confirm_cancel = () => {
     if (!cancelConfirm) return;
     const { kind, id } = cancelConfirm;
     setCancelConfirm(null);
-    if (kind === "agent") void safe_action(() => api.del(`/api/agents/${encodeURIComponent(id)}`), t("agents.cancelled"));
-    else if (kind === "loop") void safe_action(() => api.del(`/api/loops/${encodeURIComponent(id)}`), t("agents.loop_stopped"));
-    else if (kind === "task") void safe_action(() => api.del(`/api/tasks/${encodeURIComponent(id)}`), t("agents.task_cancelled"));
-    else if (kind === "process") void safe_action(() => api.del(`/api/processes/${encodeURIComponent(id)}`), t("agents.process_cancelled"));
+    const after = () => refresh();
+    if (kind === "agent") void run_action(() => api.del(`/api/agents/${encodeURIComponent(id)}`).then(after), t("agents.cancelled"));
+    else if (kind === "loop") void run_action(() => api.del(`/api/loops/${encodeURIComponent(id)}`).then(after), t("agents.loop_stopped"));
+    else if (kind === "task") void run_action(() => api.del(`/api/tasks/${encodeURIComponent(id)}`).then(after), t("agents.task_cancelled"));
+    else if (kind === "process") void run_action(() => api.del(`/api/processes/${encodeURIComponent(id)}`).then(after), t("agents.process_cancelled"));
   };
   const confirm_resume = () => {
     if (!resumeTarget) return;
-    void safe_action(
-      () => api.put(`/api/tasks/${encodeURIComponent(resumeTarget)}`, { text: resumeText || undefined }),
+    void run_action(
+      () => api.put(`/api/tasks/${encodeURIComponent(resumeTarget)}`, { text: resumeText || undefined }).then(() => { setResumeTarget(null); setResumeText(""); refresh(); }),
       t("agents.task_resumed"),
-      () => { setResumeTarget(null); setResumeText(""); },
     );
   };
 
@@ -161,8 +155,7 @@ export function AgentsTab() {
       {!active_processes.length ? (
         <EmptyState type="empty" title={t("agents.no_processes")} icon="⚡" />
       ) : (
-        <div className="table-scroll">
-          <table className="data-table">
+        <DataTable>
             <thead>
               <tr>
                 <th>Run ID</th><th>{t("agents.mode")}</th><th>{t("agents.provider")}</th>
@@ -188,8 +181,7 @@ export function AgentsTab() {
                 </tr>
               ))}
             </tbody>
-          </table>
-        </div>
+          </DataTable>
       )}
 
       {recent_processes.length > 0 && (
@@ -198,8 +190,7 @@ export function AgentsTab() {
             {showRecentProcesses ? t("agents.hide_recent") : t("agents.show_recent", { count: recent_processes.length })}
           </button>
           {showRecentProcesses && (
-            <div className="table-scroll mt-2">
-              <table className="data-table data-table--xs">
+            <DataTable small className="mt-2">
                 <thead>
                   <tr><th>Run ID</th><th>{t("agents.mode")}</th><th>{t("agents.provider")}</th><th>{t("agents.executor")}</th><th>{t("agents.tools")}</th><th>{t("common.status")}</th><th>{t("agents.started")}</th><th>{t("agents.ended")}</th></tr>
                 </thead>
@@ -217,8 +208,7 @@ export function AgentsTab() {
                     </tr>
                   ))}
                 </tbody>
-              </table>
-            </div>
+              </DataTable>
           )}
         </div>
       )}
@@ -231,8 +221,7 @@ export function AgentsTab() {
       {!agent_loops.length ? (
         <EmptyState type="empty" title={t("agents.no_agent_loops")} icon="🔄" />
       ) : (
-        <div className="table-scroll">
-          <table className="data-table">
+        <DataTable>
             <thead>
               <tr><th>{t("agents.id")}</th><th>{t("agents.objective")}</th><th>{t("agents.turn")}</th><th>{t("agents.channel")}</th><th>{t("common.status")}</th><th>{t("common.actions")}</th></tr>
             </thead>
@@ -248,8 +237,7 @@ export function AgentsTab() {
                 </tr>
               ))}
             </tbody>
-          </table>
-        </div>
+          </DataTable>
       )}
 
       {/* Task Loop */}
@@ -260,8 +248,7 @@ export function AgentsTab() {
       {!active_tasks.length ? (
         <EmptyState type="empty" title={t("agents.no_task_loops")} icon="⚙️" />
       ) : (
-        <div className="table-scroll">
-          <table className="data-table">
+        <DataTable>
             <thead>
               <tr><th>{t("decisions.task")}</th><th>{t("agents.objective")}</th><th>{t("agents.turn")}</th><th>{t("agents.channel")}</th><th>{t("common.status")}</th><th>{t("common.actions")}</th></tr>
             </thead>
@@ -287,8 +274,7 @@ export function AgentsTab() {
                 </tr>
               ))}
             </tbody>
-          </table>
-        </div>
+          </DataTable>
       )}
 
       {/* 완료 목록 */}
@@ -325,8 +311,7 @@ export function AgentsTab() {
                 {filtered.length === 0 ? (
                   <EmptyState type="no-results" title={t("agents.filter_no_match")} icon="🔍" />
                 ) : (
-                  <div className="table-scroll">
-                    <table className="data-table data-table--xs">
+                  <DataTable small>
                       <thead>
                         <tr><th>{t("decisions.task")}</th><th>{t("common.status")}</th><th>{t("agents.turn")}</th><th>{t("agents.exit_reason")}</th><th>{t("agents.updated")}</th></tr>
                       </thead>
@@ -341,8 +326,7 @@ export function AgentsTab() {
                           </tr>
                         ))}
                       </tbody>
-                    </table>
-                  </div>
+                    </DataTable>
                 )}
               </div>
             );

@@ -8,11 +8,14 @@ import { useState } from "react";
 import { useT } from "../i18n";
 import { Modal, DeleteConfirmModal } from "../components/modal";
 import { FormGroup } from "../components/form-group";
+import { DataTable } from "../components/data-table";
+import { useAsyncAction } from "../hooks/use-async-action";
 
 export default function SecretsPage() {
   const t = useT();
   const qc = useQueryClient();
   const { toast } = useToast();
+  const run_action = useAsyncAction();
   const { data } = useQuery<{ names: string[] }>({ queryKey: ["secrets"], queryFn: () => api.get("/api/secrets"), refetchInterval: 30_000, staleTime: 10_000 });
   const names = data?.names ?? [];
 
@@ -32,30 +35,22 @@ export default function SecretsPage() {
 
   const refresh = () => void qc.invalidateQueries({ queryKey: ["secrets"] });
 
-  const add = async () => {
-    if (!newName.trim()) return;
-    try {
-      await api.post("/api/secrets", { name: newName, value: newValue });
-      toast(t("secrets.saved"), "ok");
-      setAdding(false);
-      setNewName("");
-      setNewValue("");
-      refresh();
-    } catch {
-      toast(t("secrets.save_failed"), "err");
-    }
+  const add = () => {
+    if (!newName.trim()) return Promise.resolve();
+    return run_action(
+      () => api.post("/api/secrets", { name: newName, value: newValue }).then(() => { setAdding(false); setNewName(""); setNewValue(""); refresh(); }),
+      t("secrets.saved"),
+      t("secrets.save_failed"),
+    );
   };
 
-  const confirm_remove = async () => {
-    if (!deleteTarget) return;
-    try {
-      await api.del(`/api/secrets/${encodeURIComponent(deleteTarget)}`);
-      toast(t("secrets.removed"), "ok");
-      setDeleteTarget(null);
-      refresh();
-    } catch {
-      toast(t("secrets.remove_failed"), "err");
-    }
+  const confirm_remove = () => {
+    if (!deleteTarget) return Promise.resolve();
+    return run_action(
+      () => api.del(`/api/secrets/${encodeURIComponent(deleteTarget)}`).then(() => { setDeleteTarget(null); refresh(); }),
+      t("secrets.removed"),
+      t("secrets.remove_failed"),
+    );
   };
 
   return (
@@ -82,8 +77,7 @@ export default function SecretsPage() {
         <EmptyState type="no-results" title={t("secrets.no_match")} />
       ) : (
         <>
-          <div className="table-scroll secret-table-view">
-            <table className="data-table">
+          <DataTable className="secret-table-view">
               <thead><tr><th>{t("common.name")}</th><th>{t("secrets.usage")}</th><th>{t("common.actions")}</th></tr></thead>
               <tbody>
                 {filtered.map((name) => (
@@ -102,8 +96,7 @@ export default function SecretsPage() {
                   </tr>
                 ))}
               </tbody>
-            </table>
-          </div>
+            </DataTable>
           <div className="secret-card-list">
             {filtered.map((name) => (
               <div key={name} className="secret-card">

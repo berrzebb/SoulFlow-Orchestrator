@@ -10,6 +10,7 @@ import { useToast } from "../../components/toast";
 import { useT } from "../../i18n";
 import { time_ago } from "../../utils/format";
 import { SplitPane } from "./split-pane";
+import { DataTable } from "../../components/data-table";
 
 interface DailyListResponse { days: string[] }
 interface MemoryContentResponse { content: string }
@@ -122,8 +123,7 @@ export function MemoryTab() {
             {!decisions.length ? (
               <EmptyState icon="📋" title={t("decisions.no_decisions")} />
             ) : (
-              <div className="table-scroll">
-              <table className="data-table">
+              <DataTable>
                 <thead><tr><th>{t("decisions.priority")}</th><th>{t("decisions.key")}</th><th>{t("decisions.value")}</th></tr></thead>
                 <tbody>
                   {decisions.map((d) => {
@@ -139,8 +139,7 @@ export function MemoryTab() {
                     );
                   })}
                 </tbody>
-              </table>
-              </div>
+              </DataTable>
             )}
           </div>
         </div>
@@ -157,8 +156,7 @@ export function MemoryTab() {
             {!promises.length ? (
               <EmptyState icon="🤝" title={t("promises.no_promises")} />
             ) : (
-              <div className="table-scroll">
-              <table className="data-table">
+              <DataTable>
                 <thead><tr><th>{t("decisions.priority")}</th><th>{t("decisions.key")}</th><th>{t("decisions.value")}</th><th className="th--actions"></th></tr></thead>
                 <tbody>
                   {promises.map((p) => (
@@ -170,8 +168,7 @@ export function MemoryTab() {
                     </tr>
                   ))}
                 </tbody>
-              </table>
-              </div>
+              </DataTable>
             )}
           </div>
         </div>
@@ -186,8 +183,7 @@ export function MemoryTab() {
             {!events.length ? (
               <EmptyState icon="📊" title={t("decisions.no_events")} />
             ) : (
-              <div className="table-scroll">
-              <table className="data-table">
+              <DataTable>
                 <thead><tr><th>{t("decisions.phase")}</th><th>{t("decisions.task")}</th><th>{t("decisions.agent")}</th><th>{t("decisions.summary")}</th><th>{t("decisions.time")}</th></tr></thead>
                 <tbody>
                   {events.map((e) => (
@@ -200,8 +196,7 @@ export function MemoryTab() {
                     </tr>
                   ))}
                 </tbody>
-              </table>
-              </div>
+              </DataTable>
             )}
           </div>
         </div>

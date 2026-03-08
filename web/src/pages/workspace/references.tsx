@@ -10,6 +10,7 @@ import { SearchInput } from "../../components/search-input";
 import { useToast } from "../../components/toast";
 import { useT } from "../../i18n";
 import { time_ago } from "../../utils/format";
+import { DataTable } from "../../components/data-table";
 
 interface RefDocument {
   path: string;
@@ -186,8 +187,7 @@ export function ReferencesTab() {
       ) : !docs.length ? (
         <EmptyState title={t("references.no_documents")} description={t("references.no_documents_hint")} />
       ) : (
-        <div className="table-scroll">
-          <table className="data-table">
+        <DataTable>
             <thead>
               <tr>
                 <th>{t("references.filename")}</th>
@@ -227,8 +227,7 @@ export function ReferencesTab() {
                 );
               })}
             </tbody>
-          </table>
-        </div>
+          </DataTable>
       )}
 
       {/* Upload modal */}
