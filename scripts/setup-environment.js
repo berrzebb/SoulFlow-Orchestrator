@@ -75,6 +75,11 @@ function generateDockerCompose(profile, config, skipRedis = false) {
       - ../web/src:/app/web/src  # 웹 개발 모드`
     : '';
 
+  // CLI 에이전트 인증 정보 마운트 (workspace/.agents -> /root/.{claude,codex,gemini})
+  const agentVolumes = `      - ${config.hostWorkspace}/.agents/.claude:/root/.claude
+      - ${config.hostWorkspace}/.agents/.codex:/root/.codex
+      - ${config.hostWorkspace}/.agents/.gemini:/root/.gemini`;
+
   // 환경별 커맨드
   const devCommand = profile === 'dev' ? '    command: npm run dev' : '';
 
@@ -158,6 +163,7 @@ services:
     volumes:
       - ${config.hostWorkspace}:/data
 ${devVolumes}
+${agentVolumes}
 ${dependsOnRedis}
 ${devCommand}
     deploy:
@@ -250,6 +256,13 @@ function main() {
   mkdirSync(dirname(composeFile), { recursive: true });
   writeFileSync(composeFile, composeContent);
   console.log(`✅ ${config.composeFile} 생성됨`);
+
+  // 워크스페이스의 agents 디렉토리 미리 생성 (docker volume mount 사전 요구)
+  const agentsDir = resolve(config.hostWorkspace, '.agents');
+  mkdirSync(agentsDir, { recursive: true });
+  mkdirSync(resolve(agentsDir, '.claude'), { recursive: true });
+  mkdirSync(resolve(agentsDir, '.codex'), { recursive: true });
+  mkdirSync(resolve(agentsDir, '.gemini'), { recursive: true });
 
   console.log(`\n📋 ${config.name} 환경 설정:`);
   console.log(`   프로젝트: ${config.projectName}`);
