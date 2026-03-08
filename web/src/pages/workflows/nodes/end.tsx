@@ -53,15 +53,21 @@ function EndEditPanel({ node, update, t }: EditPanelProps) {
             <label className="label">{targetInfo?.icon} {t(`node.end.target.${target}`)}</label>
             {params.map((param) => {
               const fieldKey = param.name.split(".")[1]!;
+              const isRequired = ["message", "url", "status", "data"].includes(fieldKey);
               return (
                 <div className="builder-row" key={param.name} style={{ marginTop: 4 }}>
-                  <label className="label" style={{ fontSize: "var(--fs-xs)", textTransform: "none" }}>{t(param.description || fieldKey)}</label>
+                  <label className="label" style={{ fontSize: "var(--fs-xs)", textTransform: "none" }}>
+                    {t(param.description || fieldKey)}
+                    {isRequired && <span className="label__required">*</span>}
+                  </label>
                   <input
                     className="input input--sm inspector-droppable"
+                    required={isRequired}
                     value={String(targetConfig[fieldKey] ?? "")}
                     onChange={(e) => updateConfig(target, fieldKey, e.target.value)}
                     placeholder={`{{prev.result}} or value`}
                     data-droppable="true"
+                    aria-required={isRequired}
                   />
                 </div>
               );
