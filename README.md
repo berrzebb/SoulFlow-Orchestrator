@@ -149,42 +149,87 @@ flowchart TD
 
 ## 빠른 시작
 
+**⚡ [QUICKSTART.md](QUICKSTART.md)를 읽고 3줄의 명령어로 시작하세요!**
+
+### 1️⃣ 초기 설정 (처음 한 번만)
+
+```bash
+# 1. 프로젝트 디렉터리로 이동
+cd next
+
+# 2. npm 패키지 설치
+npm install
+
+# 3. Docker 요구사항 확인
+docker --version    # Docker 24+ 필요
+```
+
+### 2️⃣ 환경 시작 (선택)
+
+**Linux/macOS:**
+```bash
+make dev           # 📍 권장 - 가장 간단함
+```
+
+**Windows (Cmd):**
+```cmd
+run.cmd dev        # 📍 권장 - 가장 간단함
+```
+
+**Windows (PowerShell):**
+```powershell
+.\run.ps1 dev      # 📍 권장 - 가장 간단함
+```
+
+**또는 npm으로 (모든 플랫폼):**
+```bash
+npm run env:dev
+```
+
+**완료!** 브라우저에서 **http://localhost:4200** 을 열어보세요 🎉
+
+### 환경 선택
+
+```bash
+# 개발 (자동 리로드)
+make dev
+
+# 테스트 (격리된 환경)
+make test
+
+# 스테이징 (프로덕션 설정)
+make staging
+
+# 프로덕션
+make prod
+```
+
+### 상태 확인 및 관리
+
+```bash
+make status    # 환경 상태 확인
+make logs      # 로그 보기
+make down      # 중지
+make clean     # 완전 정리
+```
+
 ### 요구사항
 
-- **Node.js** 20+
+- **Node.js** 22+
+- **Docker Desktop** (또는 Podman 5.7+)
+- **Make** (Linux/macOS) 또는 **Cmd/PowerShell** (Windows)
 - 최소 1개 채널 Bot Token (Slack · Telegram · Discord)
 - (선택) `@anthropic-ai/claude-code` SDK — `claude_sdk` 백엔드 사용 시
-- (선택) Podman/Docker + Ollama — `orchestrator_llm` 분류기 사용 시
-
-### 설치 및 실행
-
-```bash
-cd next
-npm install
-npm run dev      # 개발 모드 (핫리로드)
-```
-
-프로덕션:
-```bash
-npm run build
-cd workspace && node ../dist/main.js
-```
-
-### Docker
-
-```bash
-# 프로덕션 (orchestrator + ollama)
-docker compose up -d
-
-# 개발 (라이브 리로드)
-docker compose -f docker-compose.dev.yml up
-```
-
-`full` 이미지에 Claude Code, Codex, Gemini CLI가 사전 설치되어 있습니다.
+- (선택) Ollama — `orchestrator_llm` 분류기 사용 시
 
 ### Setup Wizard
 
 첫 실행 시 프로바이더가 설정되지 않으면 대시보드가 자동으로 Setup Wizard(`/setup`)로 이동합니다.
+
+### 상세 가이드
+
+- **[QUICKSTART.md](QUICKSTART.md)** - 최소 3줄로 시작하기
+- **[ENVIRONMENT_SETUP.md](ENVIRONMENT_SETUP.md)** - 상세한 환경 설정 및 관리
 
 ```
 http://127.0.0.1:4200
