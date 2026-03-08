@@ -129,4 +129,77 @@ describe("create_agent_provider", () => {
     const result = create_agent_provider(config, null, make_deps());
     expect(result).not.toBeNull();
   });
+
+  it("claude_cli 팩토리 → ContainerCliAgent 생성 (is_available 반환 타입 boolean)", () => {
+    const config = make_config("claude_cli", { cwd: "/tmp" });
+    const result = create_agent_provider(config, null, make_deps());
+    expect(result).not.toBeNull();
+    expect(typeof result!.is_available()).toBe("boolean");
+  });
+
+  it("codex_cli 팩토리 → ContainerCliAgent 생성", () => {
+    const config = make_config("codex_cli", { cwd: "/tmp" });
+    const result = create_agent_provider(config, null, make_deps());
+    expect(result).not.toBeNull();
+  });
+
+  it("gemini_cli 팩토리 → ContainerCliAgent 생성", () => {
+    const config = make_config("gemini_cli", {});
+    const result = create_agent_provider(config, null, make_deps());
+    expect(result).not.toBeNull();
+  });
+
+  it("container_cli: cli_type=codex → CodexCliAdapter 사용", () => {
+    const config = make_config("container_cli", { cli_type: "codex" });
+    const result = create_agent_provider(config, null, make_deps());
+    expect(result).not.toBeNull();
+  });
+
+  it("container_cli: cli_type=gemini → GeminiCliAdapter 사용", () => {
+    const config = make_config("container_cli", { cli_type: "gemini" });
+    const result = create_agent_provider(config, null, make_deps());
+    expect(result).not.toBeNull();
+  });
+
+  it("container_cli: cli_type 없음 → ClaudeCliAdapter(기본)", () => {
+    const config = make_config("container_cli", {});
+    const result = create_agent_provider(config, null, make_deps());
+    expect(result).not.toBeNull();
+  });
+
+  it("claude_cli: execution_mode=docker → DockerPtyFactory 사용", () => {
+    const config = make_config("claude_cli", { execution_mode: "docker", image: "my-image:latest" });
+    const result = create_agent_provider(config, null, make_deps());
+    expect(result).not.toBeNull();
+  });
+
+  it("claude_cli: env 설정 → 환경변수 포함", () => {
+    const config = make_config("claude_cli", { env: { MY_KEY: "my_value" } });
+    const result = create_agent_provider(config, null, make_deps());
+    expect(result).not.toBeNull();
+  });
+
+  it("claude_cli: env 비객체 → 무시하고 생성", () => {
+    const config = make_config("claude_cli", { env: "not-an-object" });
+    const result = create_agent_provider(config, null, make_deps());
+    expect(result).not.toBeNull();
+  });
+
+  it("claude_cli: secret_mappings 배열 → resolve_secrets 호출", () => {
+    const config = make_config("claude_cli", { secret_mappings: [] });
+    const result = create_agent_provider(config, null, make_deps());
+    expect(result).not.toBeNull();
+  });
+
+  it("claude_cli: auth_profiles 배열 → profile_key_map 구성", () => {
+    const config = make_config("claude_cli", {
+      auth_profiles: [
+        { env: { PROFILE_KEY: "val1" } },
+        { env: { PROFILE_KEY: "val2" } },
+      ],
+      auth_profile_count: 2,
+    });
+    const result = create_agent_provider(config, null, make_deps());
+    expect(result).not.toBeNull();
+  });
 });
