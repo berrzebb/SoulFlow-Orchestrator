@@ -135,7 +135,7 @@ export default function WorkflowDetailPage() {
   // 프론트엔드 폴백 자동승인: 서버 설정이 있어도 대시보드에서도 즉시 처리
   const auto_approved_ids = useRef(new Set<string>());
   const resolve_ref = useRef(resolve_approval);
-  resolve_ref.current = resolve_approval;
+  useEffect(() => { resolve_ref.current = resolve_approval; }, [resolve_approval]);
 
   useEffect(() => {
     if (!wf?.auto_approve) return;

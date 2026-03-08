@@ -280,6 +280,12 @@ export default function KanbanPage() {
           </div>
           <SearchInput value={search} onChange={setSearch} placeholder={t("kanban.search")} onClear={() => setSearch("")} className="kanban-search" />
           {board_id && <button className={`btn btn--sm ${showRules ? "btn--accent" : ""}`} onClick={() => setShowRules(!showRules)}>{t("kanban.rules")}</button>}
+          {boardDetail && (
+            <button className="btn btn--sm btn--danger" title={t("kanban.delete_board")} aria-label={t("kanban.delete_board")}
+              onClick={() => setDeleteBoardTarget(boardDetail)}>
+              🗑
+            </button>
+          )}
           <button className="btn btn--accent btn--sm" onClick={() => setShowCreateBoard(true)}>+ {t("kanban.new_board")}</button>
         </div>
       </div>
