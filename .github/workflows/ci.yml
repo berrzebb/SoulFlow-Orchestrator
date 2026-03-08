@@ -81,14 +81,19 @@ jobs:
 
       - name: Generate badge JSONs
         run: |
-          # Coverage badge
-          PCT=$(node -e "console.log(require('./.artifact/coverage/coverage-summary.json').total.lines.pct)")
-          if (( $(echo "$PCT >= 80" | bc -l) )); then COLOR="brightgreen"
-          elif (( $(echo "$PCT >= 60" | bc -l) )); then COLOR="green"
-          elif (( $(echo "$PCT >= 40" | bc -l) )); then COLOR="yellow"
-          else COLOR="red"; fi
           mkdir -p .badges
-          echo "{\"schemaVersion\":1,\"label\":\"coverage\",\"message\":\"${PCT}%\",\"color\":\"${COLOR}\"}" > .badges/coverage.json
+
+          # Coverage badge
+          if [ -f .artifact/coverage/coverage-summary.json ]; then
+            PCT=$(node -e "console.log(require('./.artifact/coverage/coverage-summary.json').total.lines.pct)")
+            if (( $(echo "$PCT >= 80" | bc -l) )); then COLOR="brightgreen"
+            elif (( $(echo "$PCT >= 60" | bc -l) )); then COLOR="green"
+            elif (( $(echo "$PCT >= 40" | bc -l) )); then COLOR="yellow"
+            else COLOR="red"; fi
+            echo "{\"schemaVersion\":1,\"label\":\"coverage\",\"message\":\"${PCT}%\",\"color\":\"${COLOR}\"}" > .badges/coverage.json
+          else
+            echo "{\"schemaVersion\":1,\"label\":\"coverage\",\"message\":\"N/A\",\"color\":\"lightgrey\"}" > .badges/coverage.json
+          fi
 
           # Lines of code badge (src only, exclude generated/locales)
           LOC=$(find src -name '*.ts' -not -path '*/locales/*' -not -name '*.d.ts' | xargs wc -l | tail -1 | awk '{print $1}')
