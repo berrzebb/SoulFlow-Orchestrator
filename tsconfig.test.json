@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "noEmit": true,
+    "paths": {
+      "@src/*": ["./src/*"],
+      "@helpers/*": ["./tests/helpers/*"]
+    }
+  },
+  "include": ["src/**/*", "tests/**/*"]
+}
