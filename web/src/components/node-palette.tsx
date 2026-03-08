@@ -120,7 +120,6 @@ export function NodePalette({ tools, skills, onSelectTool, onSelectSkill, onClos
   const flat_items = filtered.filter((it) => !collapsed.has(it.group));
 
   useEffect(() => { inputRef.current?.focus(); }, []);
-  useEffect(() => { setCursor(-1); }, [query]);
 
   const select = (item: PaletteItem) => {
     if (item.kind === "tool") onSelectTool(item.id, item.description);
@@ -175,7 +174,7 @@ export function NodePalette({ tools, skills, onSelectTool, onSelectSkill, onClos
             ref={inputRef}
             className="input input--sm"
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => { setQuery(e.target.value); setCursor(-1); }}
             onKeyDown={handle_key}
             placeholder={t("palette.search_placeholder")}
           />

@@ -410,11 +410,18 @@ function TemplateDetailPanel({ template, onClose, onRun, onEdit, onDelete, runni
   running: boolean;
 }) {
   const t = useT();
+  const [currentSlug, setCurrentSlug] = useState(template.slug);
   const [title, setTitle] = useState(template.title);
   const [objective, setObjective] = useState(template.objective);
   const [hasChanges, setHasChanges] = useState(false);
 
-  useEffect(() => { setTitle(template.title); setObjective(template.objective); setHasChanges(false); }, [template.slug]);
+  // template.slug 변경 시 로컬 편집 상태 리셋 — 렌더 중 setState (cascading 렌더 방지에 React가 최적화)
+  if (currentSlug !== template.slug) {
+    setCurrentSlug(template.slug);
+    setTitle(template.title);
+    setObjective(template.objective);
+    setHasChanges(false);
+  }
 
   const handleChangeTitle = (e: React.ChangeEvent<HTMLInputElement>) => {
     setTitle(e.target.value);

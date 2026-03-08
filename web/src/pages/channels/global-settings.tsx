@@ -80,7 +80,7 @@ export function GlobalSettingsSection() {
           {s.desc && <div className="settings-row__desc">{s.desc}</div>}
         </div>
         {s.type === "boolean" ? (
-          <ToggleSwitch checked={Boolean(current)} onChange={() => void save(s.key, !Boolean(current))} aria-label={s.label} />
+          <ToggleSwitch checked={Boolean(current)} onChange={() => void save(s.key, !current)} aria-label={s.label} />
         ) : is_editing ? (
           <div className="cfg-edit-row">
             {s.type === "select" ? (

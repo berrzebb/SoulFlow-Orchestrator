@@ -31,7 +31,6 @@ export function Combobox({ options, value, onChange, placeholder, loading, loadi
     return options.filter((o) => o.label.toLowerCase().includes(q) || o.value.toLowerCase().includes(q));
   }, [options, query]);
 
-  useEffect(() => { setFocusIdx(-1); }, [filtered]);
 
   useEffect(() => {
     if (!open) return;
@@ -76,8 +75,8 @@ export function Combobox({ options, value, onChange, placeholder, loading, loadi
         className="form-input combobox__input"
         value={open ? query : (selected?.label || value)}
         placeholder={placeholder}
-        onChange={(e) => { setQuery(e.target.value); if (!open) setOpen(true); }}
-        onFocus={() => { setOpen(true); setQuery(""); }}
+        onChange={(e) => { setQuery(e.target.value); setFocusIdx(-1); if (!open) setOpen(true); }}
+        onFocus={() => { setOpen(true); setQuery(""); setFocusIdx(-1); }}
         onKeyDown={handleKey}
         autoComplete="off"
         role="combobox"

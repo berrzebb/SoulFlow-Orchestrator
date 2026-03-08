@@ -373,15 +373,15 @@ function InteractivePhaseBody({ phase, workflowId, maxIterations }: {
   const [input, setInput] = useState("");
   const endRef = useRef<HTMLDivElement>(null);
   const agent = phase.agents[0];
-  if (!agent) return null;
 
-  const msgKey = ["workflow-messages", workflowId, phase.phase_id, agent.agent_id];
+  const msgKey = ["workflow-messages", workflowId, phase.phase_id, agent?.agent_id ?? ""];
 
   const { data: messages } = useQuery<PhaseMessage[]>({
     queryKey: msgKey,
     queryFn: () => api.get(
-      `/api/workflow/runs/${workflowId}/messages?phase_id=${phase.phase_id}&agent_id=${agent.agent_id}`,
+      `/api/workflow/runs/${workflowId}/messages?phase_id=${phase.phase_id}&agent_id=${agent!.agent_id}`,
     ),
+    enabled: !!agent,
     refetchInterval: 10_000, staleTime: 3_000,
   });
 
@@ -393,7 +393,7 @@ function InteractivePhaseBody({ phase, workflowId, maxIterations }: {
     mutationFn: (content: string) =>
       api.post(`/api/workflow/runs/${workflowId}/messages`, {
         phase_id: phase.phase_id,
-        agent_id: agent.agent_id,
+        agent_id: agent!.agent_id,
         content,
       }),
     onSuccess: () => {
@@ -402,6 +402,8 @@ function InteractivePhaseBody({ phase, workflowId, maxIterations }: {
     },
     onError: () => toast(t("workflows.send_failed"), "err"),
   });
+
+  if (!agent) return null;
 
   const iteration = phase.loop_iteration || 0;
 

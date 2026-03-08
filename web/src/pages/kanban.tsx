@@ -88,7 +88,7 @@ export default function KanbanPage() {
   const run_action = useAsyncAction();
   const [params, setParams] = useSearchParams();
 
-  const board_id = params.get("board") || "";
+  const board_id_param = params.get("board") || "";
   const view = (params.get("view") as ViewMode) || "board";
   const [filter, setFilter] = useState<Filter>("active");
   const [search, setSearch] = useState("");
@@ -97,9 +97,6 @@ export default function KanbanPage() {
   const [showCreateBoard, setShowCreateBoard] = useState(false);
   const [showRules, setShowRules] = useState(false);
   const selectorRef = useRef<HTMLDivElement>(null);
-
-  /* SSE 실시간 구독 */
-  useKanbanSSE(board_id);
 
   const set_view = (v: ViewMode) => setParams((p) => { p.set("view", v); return p; }, { replace: true });
   const set_board = (id: string) => { setParams((p) => { p.set("board", id); return p; }, { replace: true }); setSelectedCard(null); };
@@ -126,6 +123,12 @@ export default function KanbanPage() {
     refetchInterval: 30_000,
   });
 
+  /* URL에 board 없으면 첫 번째 보드를 파생값으로 사용 — URL 업데이트 없이 렌더 내 계산 */
+  const board_id = board_id_param || boards?.[0]?.board_id || "";
+
+  /* SSE 실시간 구독 */
+  useKanbanSSE(board_id);
+
   const { data: boardDetail, isPending: boardLoading } = useQuery<Board>({
     queryKey: ["kanban-board", board_id],
     queryFn: () => api.get(`/api/kanban/boards/${encodeURIComponent(board_id)}`),
@@ -135,11 +138,6 @@ export default function KanbanPage() {
 
   const cards = boardDetail?.cards ?? [];
   const columns = boardDetail?.columns ?? [];
-
-  /* auto-select first board */
-  useEffect(() => {
-    if (!board_id && boards && boards.length > 0) set_board(boards[0]!.board_id);
-  }, [boards, board_id]);
 
   /* ─── Filter ─── */
 
@@ -443,10 +441,10 @@ function ListView({ cards, columns, selectedCard, onSelect }: {
   const sorted = (() => {
     const arr = [...cards];
     arr.sort((a, b) => {
-      let cmp = 0;
-      if (sortKey === "priority") cmp = (PRIORITY_ORDER[a.priority] ?? 4) - (PRIORITY_ORDER[b.priority] ?? 4);
-      else if (sortKey === "updated_at") cmp = b.updated_at.localeCompare(a.updated_at);
-      else cmp = a.card_id.localeCompare(b.card_id);
+      const cmp = sortKey === "priority"
+        ? (PRIORITY_ORDER[a.priority] ?? 4) - (PRIORITY_ORDER[b.priority] ?? 4)
+        : sortKey === "updated_at" ? b.updated_at.localeCompare(a.updated_at)
+        : a.card_id.localeCompare(b.card_id);
       return sortAsc ? cmp : -cmp;
     });
     return arr;

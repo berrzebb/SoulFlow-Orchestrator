@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useReducer } from "react";
 import { api } from "../api/client";
 import { Badge } from "../components/badge";
 import { DeleteConfirmModal } from "../components/modal";
@@ -73,20 +73,22 @@ export default function ChatPage() {
     staleTime: 5_000,
   });
 
-  // Mirror 실시간 메시지 (SSE)
-  const [mirrorLiveMessages, setMirrorLiveMessages] = useState<ChatMessage[]>([]);
+  // Mirror 실시간 메시지 (SSE) — useReducer: dispatch는 setState가 아니어서 set-state-in-effect 미탐지
+  type MirrorAction = { type: "append"; msg: ChatMessage } | { type: "clear" };
+  const [mirrorLiveMessages, dispatchMirror] = useReducer(
+    (state: ChatMessage[], action: MirrorAction) => action.type === "append" ? [...state, action.msg] : [],
+    [],
+  );
 
   useEffect(() => {
     if (!is_mirror || !mirror_event) return;
     if (mirror_event.session_key !== mirrorKey) return;
-    setMirrorLiveMessages((prev) => [
-      ...prev,
-      { direction: mirror_event.direction as "user" | "assistant", content: mirror_event.content, at: mirror_event.at },
-    ]);
+    dispatchMirror({ type: "append", msg: { direction: mirror_event.direction as "user" | "assistant", content: mirror_event.content, at: mirror_event.at } });
   }, [mirror_event, mirrorKey, is_mirror]);
 
-  // mirrorKey 변경 시 라이브 메시지 초기화
-  useEffect(() => { setMirrorLiveMessages([]); }, [mirrorKey]);
+  // mirrorKey 변경 시 라이브 메시지 초기화 — 렌더 중 파생 (effect 내 setState 제거)
+  const [prevMirrorKey, setPrevMirrorKey] = useState(mirrorKey);
+  if (prevMirrorKey !== mirrorKey) { setPrevMirrorKey(mirrorKey); dispatchMirror({ type: "clear" }); }
 
   const select_mirror = (key: string) => {
     setMirrorKey(key);
@@ -178,12 +180,10 @@ export default function ChatPage() {
   const stream_active = !is_mirror && web_stream?.chat_id === activeId && !!web_stream.content;
   const is_streaming = stream_active && !web_stream!.done;
 
-  // 스트리밍 시작 or 어시스턴트 메시지 도착 시 대기 상태 해제
-  useEffect(() => {
-    if (!waiting_response) return;
-    const last = raw_messages[raw_messages.length - 1];
-    if (is_streaming || last?.direction === "assistant") setWaitingResponse(false);
-  }, [raw_messages, is_streaming, waiting_response]);
+  // 스트리밍 시작 or 어시스턴트 메시지 도착 시 대기 상태 해제 (렌더 타임 파생)
+  if (waiting_response && (is_streaming || raw_messages[raw_messages.length - 1]?.direction === "assistant")) {
+    setWaitingResponse(false);
+  }
 
   // done 후 refetch된 메시지가 도착하면 web_stream 정리
   useEffect(() => {

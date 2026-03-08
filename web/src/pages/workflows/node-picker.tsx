@@ -63,13 +63,16 @@ export function NodePicker({ open, onClose, onSelect, t }: NodePickerProps) {
   const searchRef = useRef<HTMLInputElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
 
+  const [wasOpen, setWasOpen] = useState(false);
+  // open 전환 시 렌더 중 state 리셋 — effect 내 동기 setState 대신 렌더 시 파생
+  if (open && !wasOpen) { setWasOpen(true); setQuery(""); setFocusIdx(-1); setCollapsedCats(new Set()); }
+  if (!open && wasOpen) { setWasOpen(false); }
+
+  // focus는 DOM 조작이므로 effect에서만 가능
   useEffect(() => {
-    if (open) {
-      setQuery("");
-      setFocusIdx(-1);
-      setCollapsedCats(new Set());
-      setTimeout(() => searchRef.current?.focus(), 50);
-    }
+    if (!open) return;
+    const timer = setTimeout(() => searchRef.current?.focus(), 50);
+    return () => clearTimeout(timer);
   }, [open]);
 
   useEffect(() => {

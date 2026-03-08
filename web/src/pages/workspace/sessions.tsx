@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useMemo } from "react";
 import { useTableFilter } from "../../hooks/use-table-filter";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../api/client";
@@ -48,12 +48,11 @@ export function SessionsTab() {
     staleTime: 5_000,
   });
 
-  // 필터 없는 세션 데이터에서 프로바이더 목록 캐시 (별도 API 호출 제거)
-  const providersRef = useRef<string[]>([]);
-  if (!provider_filter && sessions.length > 0) {
-    providersRef.current = Array.from(new Set(sessions.map((s) => s.provider))).sort();
-  }
-  const providers = providersRef.current;
+  // 필터 없는 세션 데이터에서 프로바이더 목록 파생 (별도 API 호출 제거)
+  const providers = useMemo(
+    () => Array.from(new Set(sessions.map((s) => s.provider))).sort(),
+    [sessions],
+  );
 
   const { filtered: filtered_sessions, search, setSearch } = useTableFilter(sessions, {
     searchFields: ["chat_id", "alias", "provider"],

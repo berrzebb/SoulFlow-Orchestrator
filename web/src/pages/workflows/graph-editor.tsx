@@ -85,9 +85,7 @@ export function GraphEditor({
     mouse: { x: number; y: number };
   } | null>(null);
   const handleDragRef = useRef(handleDrag);
-  handleDragRef.current = handleDrag;
-  /** 드롭으로 생성된 노드의 위치 보정 예약. */
-  const pendingDropRef = useRef<{ node_id: string; pos: { x: number; y: number } } | null>(null);
+  useEffect(() => { handleDragRef.current = handleDrag; }, [handleDrag]);
 
   // 다중 선택 (marquee + 모바일 롱프레스)
   const [multiSelected, setMultiSelected] = useState<Set<string>>(new Set());
@@ -128,19 +126,6 @@ export function GraphEditor({
     ...compute_edges(workflow.phases),
     ...compute_aux_edges(workflow),
   ];
-
-  // 드롭으로 생성된 노드의 위치를 드롭 좌표로 보정
-  if (pendingDropRef.current) {
-    const { node_id, pos: dropPos } = pendingDropRef.current;
-    const layoutPos = positions.get(node_id);
-    if (layoutPos) {
-      const dx = dropPos.x - layoutPos.x + (nodeOffsets[node_id]?.dx || 0);
-      const dy = dropPos.y - layoutPos.y + (nodeOffsets[node_id]?.dy || 0);
-      pendingDropRef.current = null;
-      // 다음 틱에서 offset 적용 (현재 렌더 중 setState 방지)
-      queueMicrotask(() => setNodeOffsets((prev) => ({ ...prev, [node_id]: { dx, dy } })));
-    }
-  }
 
   /** SVG 엘리먼트 실제 크기 추적 (viewBox를 콘텐츠가 아닌 뷰포트 기준으로). */
   const [svgSize, setSvgSize] = useState({ w: 800, h: 600 });
@@ -194,7 +179,6 @@ export function GraphEditor({
     return { x: svgPt.x, y: svgPt.y };
   };
   const svgPointRef = useRef(svgPoint);
-  svgPointRef.current = svgPoint;
 
   /** 노드 드래그 시작. */
   const handleNodeDragStart = (phase_id: string, e: React.MouseEvent) => {
@@ -235,17 +219,14 @@ export function GraphEditor({
     const fy = pos.height / 2;
     setDrag({ from_id: nodeId, from_port: portName, mouse: { x: pos.x + pos.width, y: pos.y + fy } });
   };
-  portDragStartRef.current = handlePortDragStart;
-
   /** 휠 이벤트 — Ctrl/Meta+Wheel: 줌, 일반 Wheel: 팬 (트랙패드 친화). */
-  const wheelHandler = useRef<(e: WheelEvent) => void>(undefined);
-  wheelHandler.current = (e: WheelEvent) => {
+  const handleWheel = (e: WheelEvent) => {
     e.preventDefault();
     e.stopPropagation();
 
     if (e.ctrlKey || e.metaKey) {
       // Ctrl+Wheel 또는 트랙패드 핀치 → 줌 (피벗 기반)
-      const pivot = svgPoint(e.clientX, e.clientY);
+      const pivot = svgPointRef.current(e.clientX, e.clientY);
       setZoom((prev) => {
         const factor = e.deltaY < 0 ? ZOOM_FACTOR : 1 / ZOOM_FACTOR;
         const next = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, prev * factor));
@@ -269,6 +250,7 @@ export function GraphEditor({
       }));
     }
   };
+  const wheelHandler = useRef<(e: WheelEvent) => void>(handleWheel);
   /** ref 래핑 — 터치 핸들러에서 stale closure 방지. */
   const mouseUpRef = useRef<() => void>(undefined);
 
@@ -583,7 +565,13 @@ export function GraphEditor({
     }
     setDrag(null);
   };
-  mouseUpRef.current = handleMouseUp;
+  // 렌더마다 최신 함수로 refs 갱신 — 이벤트 핸들러의 stale closure 방지
+  useEffect(() => {
+    svgPointRef.current = svgPoint;
+    portDragStartRef.current = handlePortDragStart;
+    wheelHandler.current = handleWheel;
+    mouseUpRef.current = handleMouseUp;
+  });
 
   const addPhase = () => {
     const idx = workflow.phases.length;
@@ -677,9 +665,16 @@ export function GraphEditor({
       });
     }
 
-    // 드롭 위치에 노드 배치 예약
+    // 드롭 위치에 노드 배치: 레이아웃 자동 위치와 드롭 좌표 차이를 오프셋으로 적용
     if (pickerDropPos) {
-      pendingDropRef.current = { node_id, pos: pickerDropPos };
+      const newAutoPositions = compute_positions(updatedPhases);
+      const newAuxData = compute_aux_positions({ ...workflow, phases: updatedPhases, orche_nodes: updatedOrche }, newAutoPositions);
+      const layoutPos = newAutoPositions.get(node_id) ?? newAuxData.positions.get(node_id);
+      if (layoutPos) {
+        const dx = pickerDropPos.x - layoutPos.x;
+        const dy = pickerDropPos.y - layoutPos.y;
+        setNodeOffsets((prev) => ({ ...prev, [node_id]: { dx, dy } }));
+      }
     }
 
     onChange({ ...workflow, phases: updatedPhases, orche_nodes: updatedOrche });

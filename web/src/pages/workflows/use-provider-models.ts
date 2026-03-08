@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import type { NodeOptions, ProviderModelInfo } from "./node-registry";
 
 /**
@@ -9,32 +9,25 @@ export function useProviderModels(
   backend: string | undefined,
   options?: NodeOptions,
 ): { models: ProviderModelInfo[]; loading: boolean } {
-  const [models, setModels] = useState<ProviderModelInfo[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [asyncModels, setAsyncModels] = useState<ProviderModelInfo[]>([]);
+  // fetchedBackend 추적으로 loading을 렌더 중 파생 — effect 내 동기 setState 제거
+  const [fetchedBackend, setFetchedBackend] = useState<string | undefined>(undefined);
+
+  const fallback = useMemo(
+    () => (options?.models || []).map((m) => ({ id: m.name, name: m.name, provider: "default", purpose: "chat" as const })),
+    [options?.models],
+  );
 
   useEffect(() => {
-    if (!backend || !options?.fetch_provider_models) {
-      // backend 미지정 시 fallback (Ollama 등 기본 모델 목록)
-      const fallback = (options?.models || []).map((m) => ({
-        id: m.name,
-        name: m.name,
-        provider: "default",
-        purpose: "chat" as const,
-      }));
-      setModels(fallback);
-      return;
-    }
-
+    if (!backend || !options?.fetch_provider_models) return;
     let cancelled = false;
-    setLoading(true);
     options.fetch_provider_models(backend).then((result) => {
-      if (!cancelled) {
-        setModels(result);
-        setLoading(false);
-      }
+      if (!cancelled) { setAsyncModels(result); setFetchedBackend(backend); }
     });
     return () => { cancelled = true; };
-  }, [backend, options?.fetch_provider_models, options?.models]);
+  }, [backend, options?.fetch_provider_models]);
 
+  const models = backend ? asyncModels : fallback;
+  const loading = !!backend && !!options?.fetch_provider_models && fetchedBackend !== backend;
   return { models, loading };
 }

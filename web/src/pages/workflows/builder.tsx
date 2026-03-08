@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import yaml from "js-yaml";
@@ -24,6 +24,8 @@ type ChannelInstanceInfo = { instance_id: string; provider: string; label: strin
 type ProviderInfo = { instance_id: string; label: string; enabled: boolean; available: boolean; provider_type?: string };
 /** /api/agents/providers/:id/models 응답 항목. */
 type ProviderModelInfo = { id: string; name: string; provider: string; purpose: "chat" | "embedding" | "both" };
+/** 프로바이더 모델 캐시 — 컴포넌트 외부에서 단일 인스턴스로 유지 (useRef 불필요). */
+const _providerModelsCache = new Map<string, { data: ProviderModelInfo[]; ts: number }>();
 
 function empty_agent(index: number, defaultBackend = ""): AgentDef {
   return { agent_id: `agent-${index + 1}`, role: "", label: "", backend: defaultBackend, system_prompt: "", max_turns: 3 };
@@ -51,7 +53,7 @@ export default function WorkflowBuilderPage() {
   // Undo/Redo 히스토리
   const historyRef = useRef<{ past: string[]; future: string[] }>({ past: [], future: [] });
   const MAX_HISTORY = 50;
-  const setWorkflow = (next: WorkflowDef) => {
+  const setWorkflow = useCallback((next: WorkflowDef) => {
     setWorkflowRaw((prev) => {
       const h = historyRef.current;
       h.past.push(JSON.stringify(prev));
@@ -59,8 +61,8 @@ export default function WorkflowBuilderPage() {
       h.future = [];
       return next;
     });
-  };
-  const undo = () => {
+  }, []);
+  const undo = useCallback(() => {
     const h = historyRef.current;
     if (!h.past.length) return;
     setWorkflowRaw((prev) => {
@@ -68,8 +70,8 @@ export default function WorkflowBuilderPage() {
       const restored = JSON.parse(h.past.pop()!) as WorkflowDef;
       return restored;
     });
-  };
-  const redo = () => {
+  }, []);
+  const redo = useCallback(() => {
     const h = historyRef.current;
     if (!h.future.length) return;
     setWorkflowRaw((prev) => {
@@ -77,7 +79,7 @@ export default function WorkflowBuilderPage() {
       const restored = JSON.parse(h.future.pop()!) as WorkflowDef;
       return restored;
     });
-  };
+  }, []);
   const [yamlText, setYamlText] = useState("");
   const [yamlError, setYamlError] = useState("");
   const [templateName, setTemplateName] = useState(name || "");
@@ -143,17 +145,16 @@ export default function WorkflowBuilderPage() {
     staleTime: 60_000,
   });
 
-  /** 프로바이더 instance_id로 해당 프로바이더의 모델 목록을 조회. */
-  const providerModelsCache = useRef(new Map<string, { data: ProviderModelInfo[]; ts: number }>());
-  const fetchProviderModels = useRef(async (instance_id: string): Promise<ProviderModelInfo[]> => {
-    const cached = providerModelsCache.current.get(instance_id);
+  /** 프로바이더 instance_id로 해당 프로바이더의 모델 목록을 조회 — 모듈 캐시 사용. */
+  const fetchProviderModels = useCallback(async (instance_id: string): Promise<ProviderModelInfo[]> => {
+    const cached = _providerModelsCache.get(instance_id);
     if (cached && Date.now() - cached.ts < 60_000) return cached.data;
     try {
       const models = await api.get<ProviderModelInfo[]>(`/api/agents/providers/${encodeURIComponent(instance_id)}/models`);
-      providerModelsCache.current.set(instance_id, { data: models, ts: Date.now() });
+      _providerModelsCache.set(instance_id, { data: models, ts: Date.now() });
       return models;
     } catch { return []; }
-  }).current;
+  }, []);
   const { data: oauthData } = useQuery<{ instance_id: string; label: string; service_type: string; enabled: boolean }[]>({
     queryKey: ["oauth-integrations"],
     queryFn: () => api.get("/api/oauth/integrations"),
@@ -200,44 +201,34 @@ export default function WorkflowBuilderPage() {
     setWorkflowRaw(existing);
     historyRef.current = { past: [], future: [] };
     setTemplateName(name || existing.title);
-    try { setYamlText(yaml.dump(existing, { lineWidth: -1, noRefs: true })); } catch { /* ignore */ }
+    setYamlSideDirty(false);
   }, [existing, name]);
 
-  // 새 워크플로우에서 백엔드 미지정 에이전트에 기본 백엔드 적용
-  const defaultBackendApplied = useRef(false);
-  useEffect(() => {
-    if (!isNew || defaultBackendApplied.current) return;
+  // 새 워크플로우에서 백엔드 미지정 에이전트에 기본 백엔드 적용 (렌더 타임)
+  const [defaultBackendApplied, setDefaultBackendApplied] = useState(false);
+  if (!defaultBackendApplied && isNew) {
     const defaultBackend = nodeOptions.backends[0]?.value;
-    if (!defaultBackend) return;
-    const needsPatch = workflow.phases.some((p) => p.agents.some((a) => !a.backend));
-    if (!needsPatch) return;
-    defaultBackendApplied.current = true;
-    setWorkflowRaw((prev) => ({
-      ...prev,
-      phases: prev.phases.map((p) => ({
-        ...p,
-        agents: p.agents.map((a) => a.backend ? a : { ...a, backend: defaultBackend }),
-      })),
-    }));
-  }, [isNew, nodeOptions.backends, workflow.phases]);
-
-  // YAML 패널이 열려있고 사용자가 수정 중이 아니면 graph 변경을 자동 반영
-  useEffect(() => {
-    if (yamlSideOpen && !yamlSideDirty) {
-      try { setYamlText(yaml.dump(workflow, { lineWidth: -1, noRefs: true })); setYamlError(""); } catch { /* ignore */ }
+    if (defaultBackend && workflow.phases.some((p) => p.agents.some((a) => !a.backend))) {
+      setDefaultBackendApplied(true);
+      setWorkflowRaw((prev) => ({
+        ...prev,
+        phases: prev.phases.map((p) => ({
+          ...p,
+          agents: p.agents.map((a) => a.backend ? a : { ...a, backend: defaultBackend }),
+        })),
+      }));
     }
-  }, [yamlSideOpen, yamlSideDirty, workflow]);
+  }
 
-  // YAML ↔ 폼 동기화
-  const sync_yaml_from_form = () => {
-    try {
-      setYamlText(yaml.dump(workflow, { lineWidth: -1, noRefs: true }));
-      setYamlError("");
-    } catch { /* ignore */ }
-  };
+  // workflow → YAML 문자열 (메모화). yamlSideDirty=false이면 이 값을 에디터에 직접 표시
+  const yamlFromWorkflow = useMemo(() => {
+    try { return yaml.dump(workflow, { lineWidth: -1, noRefs: true }); } catch { return ""; }
+  }, [workflow]);
+  // 사용자가 편집 중이 아닐 때는 workflow 변경을 에디터에 실시간 반영
+  const effectiveYamlText = yamlSideOpen && !yamlSideDirty ? yamlFromWorkflow : yamlText;
 
   const yamlTextRef = useRef(yamlText);
-  yamlTextRef.current = yamlText;
+  useEffect(() => { yamlTextRef.current = yamlText; }, [yamlText]);
 
   const sync_form_from_yaml = () => {
     try {
@@ -293,8 +284,9 @@ export default function WorkflowBuilderPage() {
         navigate(`/workflows/edit/${encodeURIComponent(result.name)}`, { replace: true });
       }
     },
-    onError: (err: any) => {
-      const msg = err?.response?.data?.error?.message || t("workflows.save_failed");
+    onError: (err: unknown) => {
+      const api_err = err as { response?: { data?: { error?: { message?: string } } }; message?: string };
+      const msg = api_err?.response?.data?.error?.message || t("workflows.save_failed");
       toast(msg, "err");
       setSaveStatusPulse("error");
       setTimeout(() => setSaveStatusPulse(null), 3000);
@@ -314,8 +306,9 @@ export default function WorkflowBuilderPage() {
     onSuccess: (data) => {
       if (data.ok && data.workflow_id) navigate(`/workflows/${data.workflow_id}`);
     },
-    onError: (err: any) => {
-      const msg = err?.response?.data?.error?.message || t("workflows.run_failed");
+    onError: (err: unknown) => {
+      const api_err = err as { response?: { data?: { error?: { message?: string } } } };
+      const msg = api_err?.response?.data?.error?.message || t("workflows.run_failed");
       toast(msg, "err");
     },
   });
@@ -345,7 +338,8 @@ export default function WorkflowBuilderPage() {
       setInspectorNodeId(id);
       toast(mode === "test" ? t("workflows.test_node_done") : t("workflows.run_node_done"), "ok");
     } catch (e) {
-      const errorMsg = (e as any)?.response?.data?.error?.message || (e as any)?.message || String(e);
+      const api_err = e as { response?: { data?: { error?: { message?: string } } }; message?: string };
+      const errorMsg = api_err?.response?.data?.error?.message || api_err?.message || String(e);
       setNodeRunResult({ id, mode, error: errorMsg, loading: false });
       setInspectorNodeId(id);
       toast(errorMsg || t("workflows.node_run_error"), "err");
@@ -616,7 +610,7 @@ export default function WorkflowBuilderPage() {
         <div className="builder-header__right">
           <button
             className={`btn btn--sm btn--ghost${yamlSideOpen ? " btn--ghost--active" : ""}`}
-            onClick={() => { if (!yamlSideOpen) { sync_yaml_from_form(); setYamlSideDirty(false); } setYamlSideOpen(!yamlSideOpen); }}
+            onClick={() => { if (!yamlSideOpen) setYamlSideDirty(false); setYamlSideOpen(!yamlSideOpen); }}
             aria-expanded={yamlSideOpen}
             title={t("workflows.toggle_yaml")}
           >
@@ -672,7 +666,7 @@ export default function WorkflowBuilderPage() {
               </button>
             </div>
             <YamlEditor
-              value={yamlText}
+              value={effectiveYamlText}
               onChange={(v) => {
                 setYamlText(v);
                 setYamlSideDirty(true);
@@ -733,7 +727,7 @@ export default function WorkflowBuilderPage() {
               >
                 <span>⚡ + Tool / Skill</span>
               </button>
-              {paletteOpen && paletteBtnRef.current && (
+              {paletteOpen && (
                 <NodePalette
                   tools={toolsData || { names: [], definitions: [], mcp_servers: [] }}
                   skills={skillsData || []}
