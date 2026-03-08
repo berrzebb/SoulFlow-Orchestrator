@@ -3,6 +3,22 @@ setlocal enabledelayedexpansion
 
 REM SoulFlow Orchestrator 환경 관리 스크립트 (Windows)
 REM 사용법: run.cmd dev|test|staging|prod|down|status|logs|help
+REM 워크스페이스: run.cmd dev WORKSPACE=D:\my\workspace
+
+setlocal enabledelayedexpansion
+
+REM 환경변수 설정 (WORKSPACE=xxx 형태로 전달받음)
+if not "!WORKSPACE!"=="" (
+  set "WORKSPACE=!WORKSPACE!"
+) else (
+  REM .env 파일에서 WORKSPACE 읽기
+  for /f "tokens=2 delims==" %%A in ('findstr /R "^WORKSPACE=" .env 2^>nul') do (
+    set "WORKSPACE=%%A"
+  )
+)
+
+REM 기본값
+if "!WORKSPACE!"=="" set "WORKSPACE=/data"
 
 cls
 

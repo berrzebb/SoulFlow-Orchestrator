@@ -6,6 +6,10 @@ GREEN := \033[0;32m
 YELLOW := \033[1;33m
 NC := \033[0m # No Color
 
+# 워크스페이스 설정
+WORKSPACE ?= $(shell grep '^WORKSPACE=' .env 2>/dev/null | cut -d'=' -f2)
+WORKSPACE ?= /data
+
 help:
 	@echo "$(BLUE)════════════════════════════════════════$(NC)"
 	@echo "$(BLUE)  SoulFlow Orchestrator 환경 관리$(NC)"
@@ -16,6 +20,10 @@ help:
 	@echo "  make test      - 테스트 환경 시작 (포트 4201)"
 	@echo "  make staging   - 스테이징 환경 시작 (포트 4202)"
 	@echo "  make prod      - 프로덕션 환경 시작 (포트 4200)"
+	@echo ""
+	@echo "$(YELLOW)워크스페이스 옵션:$(NC)"
+	@echo "  make dev WORKSPACE=/custom/path     - 커스텀 워크스페이스로 시작"
+	@echo "  make dev WORKSPACE=./local-workspace"
 	@echo ""
 	@echo "$(YELLOW)관리:$(NC)"
 	@echo "  make down      - 모든 환경 중지 및 정리"
@@ -29,39 +37,49 @@ help:
 	@echo "  make lint      - 코드 린트 검사"
 	@echo "  make quality   - 전체 품질 검사 (build+lint+test)"
 	@echo ""
+	@echo "$(BLUE)현재 워크스페이스: $(WORKSPACE)$(NC)"
+	@echo ""
 
 # ─ 환경 시작 ─
 dev:
 	@echo "$(YELLOW)🚀 개발 환경 시작 중...$(NC)"
-	@node setup-environment.js dev
+	@echo "   워크스페이스: $(WORKSPACE)"
+	@WORKSPACE=$(WORKSPACE) node setup-environment.js dev
 	@docker compose -f docker-compose.dev.yml up -d
 	@echo "$(GREEN)✅ 개발 환경이 시작되었습니다!$(NC)"
 	@echo "   웹: http://localhost:4200"
 	@echo "   Redis: redis://localhost:6379"
+	@echo "   워크스페이스: $(WORKSPACE)"
 
 test:
 	@echo "$(YELLOW)🧪 테스트 환경 시작 중...$(NC)"
-	@node setup-environment.js test
+	@echo "   워크스페이스: $(WORKSPACE)"
+	@WORKSPACE=$(WORKSPACE) node setup-environment.js test
 	@docker compose -f docker-compose.test.yml up -d
 	@echo "$(GREEN)✅ 테스트 환경이 시작되었습니다!$(NC)"
 	@echo "   웹: http://localhost:4201"
 	@echo "   Redis: redis://localhost:6380"
+	@echo "   워크스페이스: $(WORKSPACE)"
 
 staging:
 	@echo "$(YELLOW)📦 스테이징 환경 시작 중...$(NC)"
-	@node setup-environment.js staging
+	@echo "   워크스페이스: $(WORKSPACE)"
+	@WORKSPACE=$(WORKSPACE) node setup-environment.js staging
 	@docker compose -f docker-compose.staging.yml up -d
 	@echo "$(GREEN)✅ 스테이징 환경이 시작되었습니다!$(NC)"
 	@echo "   웹: http://localhost:4202"
 	@echo "   Redis: redis://localhost:6381"
+	@echo "   워크스페이스: $(WORKSPACE)"
 
 prod:
 	@echo "$(YELLOW)🏢 프로덕션 환경 시작 중...$(NC)"
-	@node setup-environment.js prod
+	@echo "   워크스페이스: $(WORKSPACE)"
+	@WORKSPACE=$(WORKSPACE) node setup-environment.js prod
 	@docker compose -f docker-compose.yml up -d
 	@echo "$(GREEN)✅ 프로덕션 환경이 시작되었습니다!$(NC)"
 	@echo "   웹: http://localhost:4200"
 	@echo "   Redis: redis://localhost:6379"
+	@echo "   워크스페이스: $(WORKSPACE)"
 
 # ─ 관리 ─
 down:

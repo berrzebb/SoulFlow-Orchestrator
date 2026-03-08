@@ -51,27 +51,26 @@ cd soulflow-orchestrator
 cd /path/to/soulflow-orchestrator
 ```
 
-### 2️⃣ 의존성 설치
+### 2️⃣ 환경 설정 (선택사항)
 
 ```bash
-# npm 패키지 설치 (처음 한 번만)
-npm install
+# .env 파일 생성 (기본값 사용 가능)
+cp .env.example .env
 
-# 웹 프론트엔드 의존성 (선택사항)
-cd web && npm install && cd ..
+# 필요시 워크스페이스 경로 변경
+# vi .env  또는  code .env
 ```
 
-### 3️⃣ Docker 이미지 빌드 (첫 실행 시만)
+**이제 준비 완료!** npm 설치나 빌드는 **자동으로 컨테이너에서 실행됩니다** 👇
 
-```bash
-# 자동으로 첫 실행 시 빌드됩니다.
-# 또는 수동으로:
-make dev          # 개발 환경 빌드
-make test         # 테스트 환경 빌드
-make prod         # 프로덕션 환경 빌드
-```
+---
 
-**이제 준비 완료!** 환경을 시작하세요 👇
+## 📌 중요: 사용자 격리
+
+- **npm install**: 자동으로 컨테이너에서 실행 ✅
+- **node_modules**: 컨테이너 내부에만 생성 ✅
+- **워크스페이스**: 각 사용자별로 격리됨 ✅
+- **수동 작업 불필요**: make dev 하나만 실행하면 됨 ✅
 
 ---
 
