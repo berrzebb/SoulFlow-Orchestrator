@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import { Badge } from "../../components/badge";
+import { EmptyState } from "../../components/empty-state";
 import { Modal } from "../../components/modal";
 import { SendAgentModal } from "../../components/send-agent-modal";
 import { useToast } from "../../components/toast";
@@ -152,7 +153,7 @@ export function AgentsTab() {
       </div>
 
       {!active_processes.length ? (
-        <div className="empty-state"><div className="empty-state__icon">⚡</div><div className="empty-state__text">{t("agents.no_processes")}</div></div>
+        <EmptyState type="empty" title={t("agents.no_processes")} icon="⚡" />
       ) : (
         <div className="table-scroll">
           <table className="data-table">
@@ -224,7 +225,7 @@ export function AgentsTab() {
         </h2>
       </div>
       {!agent_loops.length ? (
-        <div className="empty-state"><div className="empty-state__icon">🔄</div><div className="empty-state__text">{t("agents.no_agent_loops")}</div></div>
+        <EmptyState type="empty" title={t("agents.no_agent_loops")} icon="🔄" />
       ) : (
         <div className="table-scroll">
           <table className="data-table">
@@ -255,7 +256,7 @@ export function AgentsTab() {
         </h2>
       </div>
       {!active_tasks.length ? (
-        <div className="empty-state"><div className="empty-state__icon">⚙️</div><div className="empty-state__text">{t("agents.no_task_loops")}</div></div>
+        <EmptyState type="empty" title={t("agents.no_task_loops")} icon="⚙️" />
       ) : (
         <div className="table-scroll">
           <table className="data-table">
@@ -320,7 +321,7 @@ export function AgentsTab() {
                   )}
                 </div>
                 {filtered.length === 0 ? (
-                  <div className="empty-state"><div className="empty-state__icon">🔍</div><div className="empty-state__text">{t("agents.filter_no_match")}</div></div>
+                  <EmptyState type="no-results" title={t("agents.filter_no_match")} icon="🔍" />
                 ) : (
                   <div className="table-scroll">
                     <table className="data-table data-table--xs">
