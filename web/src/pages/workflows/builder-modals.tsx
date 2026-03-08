@@ -100,9 +100,11 @@ export function PhaseEditModal({ workflow, phaseId, onChange, onPhaseIdChange, o
                 className="input input--sm"
                 type="number"
                 min={1}
+                placeholder={phase.mode === "interactive" ? "20" : "50"}
                 value={phase.max_loop_iterations ?? (phase.mode === "interactive" ? 20 : 50)}
                 onChange={(e) => updatePhase({ max_loop_iterations: Number(e.target.value) || undefined })}
               />
+              <span className="builder-hint">{t("workflows.loop_iterations_hint")}</span>
             </div>
           )}
           <div className="builder-meta-hint">
@@ -630,6 +632,7 @@ export function AgentEditModal({ workflow, subNodeId, onChange, onClose, onSubNo
                   {t("workflows.unlimited")}
                 </label>
               </div>
+              <span className="builder-hint">{t("workflows.max_turns_hint")}</span>
             </div>
           </div>
           <div className="builder-row">
