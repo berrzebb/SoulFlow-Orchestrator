@@ -69,6 +69,11 @@ function make_deps(overrides?: any) {
       ttlMs: 5000,
       maxSize: 100,
     },
+    grouping_config: {
+      enabled: false,
+      windowMs: 0,
+      maxMessages: 0,
+    },
     ...overrides,
   };
 }
@@ -81,6 +86,7 @@ describe("DispatchService", () => {
       registry: deps.registry as any,
       retry_config: deps.retry_config,
       dedupe_config: deps.dedupe_config,
+      grouping_config: deps.grouping_config,
       dlq_store: deps.dlq_store as any,
       dedupe_policy: deps.dedupe_policy as any,
       logger: deps.logger as any,
@@ -105,13 +111,15 @@ describe("DispatchService", () => {
       registry: deps.registry as any,
       retry_config: deps.retry_config,
       dedupe_config: deps.dedupe_config,
+      grouping_config: deps.grouping_config,
       dlq_store: deps.dlq_store as any,
       dedupe_policy: deps.dedupe_policy as any,
       logger: deps.logger as any,
     });
 
-    const result = await service.send("slack", make_message());
-    expect(result.ok).toBe(true);
+    await service.send("slack", make_message());
+    // send()는 낙관적 ok 반환 — 실제 전송은 비동기, retry 지연 대기
+    await new Promise((r) => setTimeout(r, 100));
     expect(deps.registry.send).toHaveBeenCalledTimes(3);
   });
 
@@ -127,15 +135,16 @@ describe("DispatchService", () => {
       registry: deps.registry as any,
       retry_config: deps.retry_config,
       dedupe_config: deps.dedupe_config,
+      grouping_config: deps.grouping_config,
       dlq_store: deps.dlq_store as any,
       dedupe_policy: deps.dedupe_policy as any,
       logger: deps.logger as any,
     });
 
-    const result = await service.send("slack", make_message());
-    expect(result.ok).toBe(false);
-    expect(result.error).toContain("invalid_auth");
-    // Should not retry: only 1 call
+    await service.send("slack", make_message());
+    // send()는 낙관적 ok — 실제 전송은 비동기
+    await new Promise((r) => setTimeout(r, 20));
+    // non-retryable: registry.send 1회만 호출
     expect(deps.registry.send).toHaveBeenCalledTimes(1);
   });
 
@@ -151,14 +160,14 @@ describe("DispatchService", () => {
       registry: deps.registry as any,
       retry_config: deps.retry_config,
       dedupe_config: deps.dedupe_config,
+      grouping_config: deps.grouping_config,
       dlq_store: deps.dlq_store as any,
       dedupe_policy: deps.dedupe_policy as any,
       logger: deps.logger as any,
     });
 
-    const result = await service.send("slack", make_message());
-    expect(result.ok).toBe(false);
-    expect(result.error).toContain("channel_not_found");
+    await service.send("slack", make_message());
+    await new Promise((r) => setTimeout(r, 20));
     expect(deps.registry.send).toHaveBeenCalledTimes(1);
   });
 
@@ -169,6 +178,7 @@ describe("DispatchService", () => {
       registry: deps.registry as any,
       retry_config: deps.retry_config,
       dedupe_config: deps.dedupe_config,
+      grouping_config: deps.grouping_config,
       dlq_store: deps.dlq_store as any,
       dedupe_policy: deps.dedupe_policy as any,
       logger: deps.logger as any,
@@ -191,6 +201,7 @@ describe("DispatchService", () => {
       registry: deps.registry as any,
       retry_config: deps.retry_config,
       dedupe_config: deps.dedupe_config,
+      grouping_config: deps.grouping_config,
       dlq_store: deps.dlq_store as any,
       dedupe_policy: deps.dedupe_policy as any,
       logger: deps.logger as any,
@@ -214,6 +225,7 @@ describe("DispatchService", () => {
       registry: deps.registry as any,
       retry_config: deps.retry_config,
       dedupe_config: deps.dedupe_config,
+      grouping_config: deps.grouping_config,
       dlq_store: deps.dlq_store as any,
       dedupe_policy: deps.dedupe_policy as any,
       logger: deps.logger as any,
@@ -237,6 +249,7 @@ describe("DispatchService", () => {
       registry: deps.registry as any,
       retry_config: { ...deps.retry_config, retryBaseMs: 5, retryJitterMs: 0 },
       dedupe_config: deps.dedupe_config,
+      grouping_config: deps.grouping_config,
       dlq_store: deps.dlq_store as any,
       dedupe_policy: deps.dedupe_policy as any,
       logger: deps.logger as any,
@@ -245,12 +258,10 @@ describe("DispatchService", () => {
     // schedule_retry가 this.running을 확인하므로 서비스 먼저 시작
     await service.start();
 
-    const result = await service.send("slack", make_message());
-    expect(result.ok).toBe(false);
-    expect(result.error).toContain("dispatch_requeued");
-
-    // 타이머 대기 후 bus.publish_outbound 호출됨 (clone_outbound + schedule_retry)
-    await new Promise((r) => setTimeout(r, 30));
+    // send()는 낙관적 ok — schedule_retry는 비동기로 발생
+    await service.send("slack", make_message());
+    // inline retry 지연(5ms × 2) + schedule_retry 타이머(5ms) 대기
+    await new Promise((r) => setTimeout(r, 100));
     expect(deps.bus.publish_outbound).toHaveBeenCalled();
 
     await service.stop();
@@ -266,12 +277,15 @@ describe("DispatchService", () => {
       registry: deps.registry as any,
       retry_config: { ...deps.retry_config, inlineRetries: 0, retryMax: 0 },
       dedupe_config: deps.dedupe_config,
+      grouping_config: deps.grouping_config,
       dlq_store: deps.dlq_store as any,
       dedupe_policy: deps.dedupe_policy as any,
       logger: deps.logger as any,
     });
 
     await service.send("slack", make_message());
+    // 비동기 전송 완료 대기
+    await new Promise((r) => setTimeout(r, 50));
     expect(deps.logger.error).toHaveBeenCalledWith("dlq_append_failed", expect.any(Object));
   });
 });
@@ -431,6 +445,7 @@ describe("DispatchService — consume_loop_basic (기본 버스 경로)", () => 
       registry: deps.registry as any,
       retry_config: deps.retry_config,
       dedupe_config: deps.dedupe_config,
+      grouping_config: deps.grouping_config,
       dlq_store: deps.dlq_store as any,
       dedupe_policy: deps.dedupe_policy as any,
       logger: deps.logger as any,
@@ -456,6 +471,7 @@ describe("DispatchService — consume_loop_basic (기본 버스 경로)", () => 
       registry: deps.registry as any,
       retry_config: deps.retry_config,
       dedupe_config: deps.dedupe_config,
+      grouping_config: deps.grouping_config,
       dlq_store: deps.dlq_store as any,
       dedupe_policy: deps.dedupe_policy as any,
       logger: deps.logger as any,

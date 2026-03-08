@@ -6,7 +6,7 @@ import { createRequire } from "node:module";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import * as fontkitModule from "@pdf-lib/fontkit";
 import { Document, Packer, Paragraph, HeadingLevel, AlignmentType } from "docx";
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 import { Tool } from "./base.js";
 import type { JsonSchema } from "./types.js";
 
@@ -225,17 +225,17 @@ export class DocumentTool extends Tool {
         return "Error: no data to create spreadsheet";
       }
 
-      const ws = XLSX.utils.aoa_to_sheet(data);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Sheet1");
+      const wb = new ExcelJS.Workbook();
+      const ws = wb.addWorksheet("Sheet1");
+      ws.addRows(data);
 
-      const buffer = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
       await mkdir(resolve(this.workspace), { recursive: true });
-      await writeFile(abs, buffer);
+      const buffer = await wb.xlsx.writeBuffer();
+      await writeFile(abs, Buffer.from(buffer));
 
       return JSON.stringify({
         output,
-        size_bytes: (buffer as Buffer).length,
+        size_bytes: buffer.byteLength,
         success: true,
       });
     } catch (err) {

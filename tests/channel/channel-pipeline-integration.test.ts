@@ -1880,13 +1880,15 @@ describe("E2E: 채널별 마크업 규칙 위반 검출", () => {
  * ═══════════════════════════════════════════════════════ */
 
 describe("E2E: 중복 메시지 방지", () => {
-  it("같은 message_id로 두 번 처리하면 ingress dedupe로 1회만 응답한다", async () => {
+  it("handle_inbound_message 직접 호출은 poll-loop dedupe를 우회하므로 두 번 모두 처리된다", async () => {
+    // poll loop가 mark_seen 후 publish_inbound → is_duplicate 체크를 handle_inbound_message에서
+    // 제거함 (dd7e1e3). dedupe는 poll loop 내부에서만 동작하므로 직접 호출 시 중복 처리됨.
     const h = await create_harness({ command_handlers: [new HelpHandler()] });
     try {
       const msg = inbound("/help", { id: "dup-1", metadata: { message_id: "dup-1" } });
       await h.manager.handle_inbound_message(msg);
       await h.manager.handle_inbound_message(msg);
-      expect(h.registry.sent.length).toBe(1);
+      expect(h.registry.sent.length).toBe(2);
     } finally { await h.cleanup(); }
   });
 

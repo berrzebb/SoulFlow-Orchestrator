@@ -173,6 +173,7 @@ describe("DispatchService → DLQ 연동", () => {
         dlqPath: join(dir, "dlq.db"),
       },
       dedupe_config: { ttlMs: 5000, maxSize: 100 },
+      grouping_config: { enabled: false, windowMs: 0, maxMessages: 0 },
       dlq_store,
       dedupe_policy: {
         key: (_provider: string, msg: OutboundMessage) => `${msg.chat_id}:${msg.id}`,
@@ -181,8 +182,9 @@ describe("DispatchService → DLQ 연동", () => {
     });
 
     const msg = make_outbound("dlq-target");
-    const result = await service.send("slack", msg);
-    expect(result.ok).toBe(false);
+    await service.send("slack", msg);
+    // send()는 낙관적 반환 — 비동기 전송 및 DLQ 기록 완료 대기
+    await new Promise((r) => setTimeout(r, 100));
 
     const items = await dlq_store.list(100);
     expect(items.length).toBeGreaterThanOrEqual(1);
@@ -213,6 +215,7 @@ describe("DispatchService → DLQ 연동", () => {
         dlqPath: join(dir, "dlq.db"),
       },
       dedupe_config: { ttlMs: 5000, maxSize: 100 },
+      grouping_config: { enabled: false, windowMs: 0, maxMessages: 0 },
       dlq_store,
       dedupe_policy: {
         key: (_provider: string, msg: OutboundMessage) => `${msg.chat_id}:${msg.content}`,
@@ -221,11 +224,11 @@ describe("DispatchService → DLQ 연동", () => {
     });
 
     const msg = make_outbound("dedupe-test");
-    const r1 = await service.send("slack", msg);
-    const r2 = await service.send("slack", msg);
+    await service.send("slack", msg);
+    // 첫 전송 비동기 완료(dedupe 캐시 기록) 대기 후 두 번째 send
+    await new Promise((r) => setTimeout(r, 50));
+    await service.send("slack", msg);
 
-    expect(r1.ok).toBe(true);
-    expect(r2.ok).toBe(true);
     expect(registry.send).toHaveBeenCalledTimes(1);
   });
 });

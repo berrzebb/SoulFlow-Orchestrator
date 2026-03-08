@@ -39,16 +39,19 @@
     "adm-zip": "^0.5.16",
     "better-sqlite3": "^12.6.2",
     "docx": "^9.6.0",
+    "exceljs": "^4.4.0",
     "ioredis": "^5.10.0",
     "js-yaml": "^4.1.1",
     "markdown-to-markdown-sanitizer": "^1.1.3",
     "pdf-lib": "^1.17.1",
     "pptxgenjs": "^4.0.1",
     "sqlite-vec": "^0.1.7-alpha.2",
-    "xlsx": "^0.18.5",
     "zod": "^4.3.6"
   },
   "optionalDependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.63"
+    "@anthropic-ai/claude-agent-sdk": "^0.2.71"
+  },
+  "overrides": {
+    "express-rate-limit": "^8.3.0"
   }
 }
