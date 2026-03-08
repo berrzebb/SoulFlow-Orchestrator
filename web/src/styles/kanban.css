@@ -932,8 +932,10 @@
   }
 
   .kanban-card {
-    cursor: default;
+    cursor: pointer;
     -webkit-user-drag: none;
+    touch-action: manipulation;
+    user-select: none;
   }
 
   .kanban-detail {
