@@ -83,9 +83,14 @@ export class ReadFileTool extends Tool {
     const resolved = resolve_path_with_approval(original_path, params, this.workspace, this.allowed_dir);
     if (!resolved.path) return resolved.error || "Error: invalid_path";
     const file_path = resolved.path;
-    const file_stat = await stat(file_path);
-    if (!file_stat.isFile()) return `Error: Not a file: ${file_path}`;
-    return readFile(file_path, "utf-8");
+    try {
+      const file_stat = await stat(file_path);
+      if (!file_stat.isFile()) return `Error: Not a file: ${file_path}`;
+      return readFile(file_path, "utf-8");
+    } catch (err) {
+      const e = err as NodeJS.ErrnoException;
+      return `Error: ${e.code === "ENOENT" ? `file not found: ${file_path}` : e.message}`;
+    }
   }
 }
 
@@ -204,7 +209,8 @@ export class ListDirTool extends Tool {
     const resolved = resolve_path_with_approval(original_path, params, this.workspace, this.allowed_dir);
     if (!resolved.path) return resolved.error || "Error: invalid_path";
     const dir_path = resolved.path;
-    const dir_stat = await stat(dir_path);
+    let dir_stat: Awaited<ReturnType<typeof stat>>;
+    try { dir_stat = await stat(dir_path); } catch { return `Error: not found: ${dir_path}`; }
     if (!dir_stat.isDirectory()) return `Error: Not a directory: ${dir_path}`;
     const limit = Math.max(1, Math.min(2000, Number(params.limit || 200)));
     const recursive = Boolean(params.recursive);
@@ -278,7 +284,8 @@ export class SearchFilesTool extends Tool {
     const resolved = resolve_path_with_approval(original_path, params, this.workspace, this.allowed_dir);
     if (!resolved.path) return resolved.error || "Error: invalid_path";
     const dir_path = resolved.path;
-    const dir_stat = await stat(dir_path);
+    let dir_stat: Awaited<ReturnType<typeof stat>>;
+    try { dir_stat = await stat(dir_path); } catch { return `Error: not found: ${dir_path}`; }
     if (!dir_stat.isDirectory()) return `Error: Not a directory: ${dir_path}`;
 
     const pattern = String(params.pattern || "").trim();
