@@ -169,6 +169,105 @@ describe("SseManager", () => {
     });
   });
 
+  describe("broadcast_progress_event", () => {
+    it("progress 이벤트를 전송한다", () => {
+      const res = make_mock_response();
+      sse.add_client(res as any);
+      res.write.mockClear();
+      const event = { run_id: "r1", task_id: "t1", type: "output", content: "result" } as any;
+      sse.broadcast_progress_event(event);
+      const payload = res.write.mock.calls[0][0] as string;
+      expect(payload).toContain("event: progress");
+      expect(payload).toContain('"run_id":"r1"');
+    });
+
+    it("클라이언트 없으면 브로드캐스트 안 함 (에러 없음)", () => {
+      expect(() => sse.broadcast_progress_event({ run_id: "r1" } as any)).not.toThrow();
+    });
+  });
+
+  describe("broadcast_task_event", () => {
+    it("task 이벤트를 전송한다", () => {
+      const res = make_mock_response();
+      sse.add_client(res as any);
+      res.write.mockClear();
+      const task = {
+        taskId: "task-1",
+        title: "Test Task",
+        status: "running",
+        exitReason: undefined,
+        currentStep: "assign",
+        currentTurn: 1,
+        maxTurns: 10,
+        channel: "slack",
+        chatId: "chat-1",
+        objective: "do something",
+      } as any;
+      sse.broadcast_task_event("status_change", task);
+      const payload = res.write.mock.calls[0][0] as string;
+      expect(payload).toContain("event: task");
+      expect(payload).toContain('"taskId":"task-1"');
+      expect(payload).toContain('"status":"running"');
+    });
+
+    it("클라이언트 없으면 브로드캐스트 안 함 (에러 없음)", () => {
+      expect(() => sse.broadcast_task_event("status_change", { taskId: "t1" } as any)).not.toThrow();
+    });
+  });
+
+  describe("broadcast_mirror_message", () => {
+    it("mirror_message 이벤트를 전송한다", () => {
+      const res = make_mock_response();
+      sse.add_client(res as any);
+      res.write.mockClear();
+      const event = { session_key: "sk-1", direction: "inbound", sender_id: "user1", content: "hello", at: "2025-01-01" };
+      sse.broadcast_mirror_message(event);
+      const payload = res.write.mock.calls[0][0] as string;
+      expect(payload).toContain("event: mirror_message");
+      expect(payload).toContain('"session_key":"sk-1"');
+    });
+
+    it("클라이언트 없으면 브로드캐스트 안 함 (에러 없음)", () => {
+      expect(() => sse.broadcast_mirror_message({ session_key: "s1", direction: "out", sender_id: "a", content: "b", at: "c" })).not.toThrow();
+    });
+  });
+
+  describe("broadcast_workflow_event", () => {
+    it("workflow 이벤트를 전송한다", () => {
+      const res = make_mock_response();
+      sse.add_client(res as any);
+      res.write.mockClear();
+      const event = { type: "phase_start", phase_id: "p1", workflow_id: "wf-1" } as any;
+      sse.broadcast_workflow_event(event);
+      const payload = res.write.mock.calls[0][0] as string;
+      expect(payload).toContain("event: workflow");
+      expect(payload).toContain('"workflow_id":"wf-1"');
+    });
+
+    it("클라이언트 없으면 브로드캐스트 안 함 (에러 없음)", () => {
+      expect(() => sse.broadcast_workflow_event({ type: "phase_start" } as any)).not.toThrow();
+    });
+  });
+
+  describe("클라이언트 없을 때 early return", () => {
+    it("broadcast_process_event: 클라이언트 없으면 no-op", () => {
+      expect(sse.client_count).toBe(0);
+      expect(() => sse.broadcast_process_event("start", { run_id: "r1", alias: "a", mode: "once", status: "running" } as any)).not.toThrow();
+    });
+
+    it("broadcast_cron_event: 클라이언트 없으면 no-op", () => {
+      expect(() => sse.broadcast_cron_event("fired")).not.toThrow();
+    });
+
+    it("broadcast_agent_event: 클라이언트 없으면 no-op", () => {
+      expect(() => sse.broadcast_agent_event({ type: "tool_use", source: { backend: "b", task_id: "t" }, at: "t" } as any)).not.toThrow();
+    });
+
+    it("broadcast_web_stream: 클라이언트 없으면 no-op", () => {
+      expect(() => sse.broadcast_web_stream("chat1", "chunk", false)).not.toThrow();
+    });
+  });
+
   describe("SSE format", () => {
     it("event:와 data: 필드가 올바른 SSE 형식이다", () => {
       const res = make_mock_response();
