@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
 import { Badge } from "../components/badge";
+import { SearchInput } from "../components/search-input";
 import { ToggleSwitch } from "../components/toggle-switch";
 import { useToast } from "../components/toast";
 import { useT } from "../i18n";
@@ -66,13 +67,13 @@ export default function SettingsPage() {
     <div className="page">
       <div className="section-header">
         <h2>{t("settings.title")}</h2>
-        <input
-          autoFocus
-          className="input input--sm section-header__search"
-          type="search"
+        <SearchInput
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={setSearch}
           placeholder={t("settings.search")}
+          onClear={() => setSearch("")}
+          autoFocus
+          className="section-header__search"
         />
       </div>
       <p className="text-xs text-muted mb-3">
@@ -535,12 +536,12 @@ function ModelPicker({
       {instanceId && loading && <div className="text-xs text-muted">{t("common.loading")}</div>}
       {instanceId && !loading && models.length > 0 && (
         <>
-          <input
-            className="instance-picker__model-search"
-            type="search"
+          <SearchInput
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={setSearch}
             placeholder={t("settings.model_search")}
+            onClear={() => setSearch("")}
+            className="instance-picker__model-search"
           />
           <div className="instance-picker__model-list">
             <button

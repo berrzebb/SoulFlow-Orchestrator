@@ -4,6 +4,7 @@ import { useSearchParams } from "react-router-dom";
 import { api } from "../api/client";
 import { create_sse } from "../api/sse";
 import { useToast } from "../components/toast";
+import { SearchInput } from "../components/search-input";
 import { Modal, FormModal } from "../components/modal";
 import { useT } from "../i18n";
 import { time_ago } from "../utils/format";
@@ -274,7 +275,7 @@ export default function KanbanPage() {
               </button>
             ))}
           </div>
-          <input className="kanban-search" placeholder={t("kanban.search")} value={search} onChange={e => setSearch(e.target.value)} aria-label={t("kanban.search")} />
+          <SearchInput value={search} onChange={setSearch} placeholder={t("kanban.search")} onClear={() => setSearch("")} className="kanban-search" />
           {board_id && <button className={`btn btn--sm ${showRules ? "btn--accent" : ""}`} onClick={() => setShowRules(!showRules)}>{t("kanban.rules")}</button>}
           <button className="btn btn--accent btn--sm" onClick={() => setShowCreateBoard(true)}>+ {t("kanban.new_board")}</button>
         </div>
