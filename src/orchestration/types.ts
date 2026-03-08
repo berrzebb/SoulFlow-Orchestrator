@@ -69,4 +69,6 @@ export type OrchestrationResult = {
   builtin_args?: string;
   /** SkillIndex가 매칭한 스킬 이름 목록 (SessionMessage.tools_used와 별개). */
   matched_skills?: string[];
+  /** 이번 실행에서 사용된 도구 이름 목록. SessionMessage.tools_used에 저장. */
+  tools_used?: string[];
 };

@@ -30,6 +30,20 @@ metadata:
     - temp-db
     - database
     - 샌드박스
+  intents:
+    - execute_code
+    - analyze_data
+    - query_database
+  code_patterns:
+    - python
+    - pandas
+    - numpy
+    - sqlite
+    - sql
+  checks:
+    - 실행 결과에 에러나 예외가 없었나요?
+    - 출력 데이터가 기대한 형식과 일치하나요?
+    - 컨테이너가 정상적으로 종료되었나요?
 ---
 
 # Sandbox

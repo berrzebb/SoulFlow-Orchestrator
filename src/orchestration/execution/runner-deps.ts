@@ -64,8 +64,8 @@ export type RunnerDeps = {
 
   /** 모드에 맞는 시스템 프롬프트 overlay. */
   build_overlay: (mode: "once" | "agent") => string;
-  /** 공통 AgentHooks 생성. */
-  hooks_for: (stream: StreamBuffer, args: { req: OrchestrationRequest; runtime_policy: RuntimeExecutionPolicy }, backend_id: string, task_id?: string) => import("../../agent/agent.types.js").AgentHooks;
+  /** 공통 AgentHooks 생성. tools_accumulator에 실행된 도구명이 누적됨. */
+  hooks_for: (stream: StreamBuffer, args: { req: OrchestrationRequest; runtime_policy: RuntimeExecutionPolicy }, backend_id: string, task_id?: string, tools_accumulator?: string[]) => import("../../agent/agent.types.js").AgentHooks;
   /** 워크플로우 이벤트 기록. */
   log_event: (input: AppendWorkflowEventInput) => void;
   /** AgentRunResult → OrchestrationResult 변환. */

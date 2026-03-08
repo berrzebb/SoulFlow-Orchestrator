@@ -32,13 +32,15 @@ type AgentHooksOptions = {
   on_progress?: OrchestrationRequest["on_progress"];
   run_id?: string;
   on_agent_event?: OrchestrationRequest["on_agent_event"];
+  /** 실행 중 사용된 도구 이름을 누적할 외부 배열. hook이 push하면 호출자가 읽음. */
+  tools_accumulator?: string[];
 };
 
 export function build_agent_hooks(
   deps: AgentHooksBuilderDeps,
   opts: AgentHooksOptions,
 ): { hooks: AgentHooks; cd: CDObserver } {
-  const { buffer, on_stream, runtime_policy, channel_context, on_tool_block, backend_id, on_progress, run_id, on_agent_event } = opts;
+  const { buffer, on_stream, runtime_policy, channel_context, on_tool_block, backend_id, on_progress, run_id, on_agent_event, tools_accumulator } = opts;
   const cd = create_cd_observer();
   const hooks: AgentHooks = {};
   let progress_step = 0;
@@ -65,6 +67,9 @@ export function build_agent_hooks(
       deps.logger.info("cd_event", { indicator: cd_event.indicator, points: cd_event.points, total: cd.get_score().total });
     }
 
+    if (event.type === "tool_use" && event.tool_name) {
+      tools_accumulator?.push(event.tool_name);
+    }
     if (on_tool_block && event.type === "tool_use") {
       on_tool_block(`${event.tool_name || "tool"}`);
       return;
@@ -220,6 +225,8 @@ export function build_agent_hooks(
   }
 
   hooks.post_tool_use = (tool_name, params, result, _context, is_error) => {
+    // on_event보다 나중에 호출되지만, headless 백엔드는 on_event가 없어 여기서도 push
+    tools_accumulator?.push(tool_name);
     deps.session_cd.observe({
       type: "tool_result",
       source: { backend: backend_id || "claude_sdk" },

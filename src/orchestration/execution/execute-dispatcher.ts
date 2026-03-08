@@ -21,6 +21,7 @@ import { error_message } from "../../utils/common.js";
 import { select_tools_for_request } from "../tool-selector.js";
 import { is_once_escalation, is_agent_escalation } from "../classifier.js";
 import { error_result } from "./helpers.js";
+import { generate_completion_checks, format_follow_up } from "../completion-checker.js";
 
 export type ExecuteDispatcherDeps = {
   providers: ProviderRegistry;
@@ -104,7 +105,7 @@ export async function execute_dispatch(
   // 사용자 지정 프로바이더가 있으면 gateway 선택을 오버라이드
   const executor = (req.preferred_provider_id as import("../../providers/executor.js").ExecutorProvider | undefined) ?? decision.executor;
 
-  // finalize: done/blocked 이벤트 기록 + process tracker 종료
+  // finalize: done/blocked 이벤트 기록 + process tracker 종료 + completion check 추가
   const finalize = (result: OrchestrationResult): OrchestrationResult => {
     const phase = result.error ? "blocked" : "done";
     deps.log_event({
@@ -117,6 +118,19 @@ export async function execute_dispatch(
     if (req.run_id) {
       deps.process_tracker?.set_tool_count(req.run_id, result.tool_calls_count);
       deps.process_tracker?.end(req.run_id, result.error ? "failed" : "completed", result.error || undefined);
+    }
+    // CompletionChecker: 성공 응답에만 체크리스트 추가 (오류/억제 제외)
+    if (result.reply && !result.error && !result.suppress_reply && result.tool_calls_count > 0) {
+      const skills_loader = deps.runtime.get_context_builder()?.skills_loader;
+      const skill_metas = skill_names
+        .map((n) => skills_loader?.get_skill_metadata(n))
+        .filter((m): m is NonNullable<typeof m> => m != null);
+      const check = generate_completion_checks(result.tools_used ?? [], skill_metas, result.tool_calls_count);
+      if (check.has_checks) {
+        const follow_up = format_follow_up(check.questions);
+        result.reply = `${result.reply}\n\n${follow_up}`;
+        result.matched_skills = skill_names;
+      }
     }
     return result;
   };

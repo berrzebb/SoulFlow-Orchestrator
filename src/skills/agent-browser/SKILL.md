@@ -25,6 +25,11 @@ metadata:
   aliases:
     - 검색
     - 웹검색
+  intents:
+    - search_web
+  checks:
+    - 검색 결과의 출처가 신뢰할 수 있나요?
+    - 최신 정보가 맞게 반영되었나요?
 ---
 
 # agent-browser

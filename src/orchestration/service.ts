@@ -212,12 +212,13 @@ export class OrchestrationService {
   }
 
   /** 공통 AgentHooks 구성. args.req + stream + backend_id 조합. */
-  private _hooks_for(stream: StreamBuffer, args: { req: OrchestrationRequest; runtime_policy: RuntimeExecutionPolicy }, backend_id: string, task_id?: string) {
+  private _hooks_for(stream: StreamBuffer, args: { req: OrchestrationRequest; runtime_policy: RuntimeExecutionPolicy }, backend_id: string, task_id?: string, tools_accumulator?: string[]) {
     return build_agent_hooks(this.hooks_deps, {
       buffer: stream, on_stream: args.req.on_stream, runtime_policy: args.runtime_policy,
       channel_context: { channel: args.req.provider, chat_id: String(args.req.message.chat_id || ""), task_id },
       on_tool_block: args.req.on_tool_block, backend_id, on_progress: args.req.on_progress,
       run_id: args.req.run_id, on_agent_event: args.req.on_agent_event,
+      tools_accumulator,
     }).hooks;
   }
 
@@ -275,7 +276,7 @@ export class OrchestrationService {
       session_cd: this.session_cd,
       workspace: this.deps.workspace,
       build_overlay: (mode: "once" | "agent") => this._build_overlay(mode),
-      hooks_for: (stream: StreamBuffer, args: { req: OrchestrationRequest; runtime_policy: RuntimeExecutionPolicy }, backend_id: string, task_id?: string) => this._hooks_for(stream, args, backend_id, task_id),
+      hooks_for: (stream: StreamBuffer, args: { req: OrchestrationRequest; runtime_policy: RuntimeExecutionPolicy }, backend_id: string, task_id?: string, tools_accumulator?: string[]) => this._hooks_for(stream, args, backend_id, task_id, tools_accumulator),
       log_event: (input: AppendWorkflowEventInput) => this.log_event(input),
       convert_agent_result: (result: AgentRunResult, mode: ExecutionMode, stream: StreamBuffer, req: OrchestrationRequest) => this._convert_agent_result(result, mode, stream, req),
       build_persona_followup: (heart: string) => this.build_persona_followup(heart),

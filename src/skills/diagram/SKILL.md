@@ -15,6 +15,14 @@ metadata:
     - chart
   aliases:
     - 차트
+  intents:
+    - generate_document
+  file_patterns:
+    - "*.svg"
+    - "*.mmd"
+  checks:
+    - 다이어그램이 요청한 구조를 정확히 표현하나요?
+    - 노드 연결과 방향이 올바른가요?
 ---
 
 # Diagram

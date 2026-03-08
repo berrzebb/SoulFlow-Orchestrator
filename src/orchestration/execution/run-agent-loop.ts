@@ -28,6 +28,7 @@ export async function run_agent_loop(
   emit_execution_info(stream, args.req.on_stream, "agent", args.executor, deps.logger);
 
   // native backend 우선: 스마트 라우팅 → 레거시 폴백
+  const tools_used: string[] = [];
   if (deps.agent_backends) {
     const backend = deps.agent_backends.resolve_for_mode("agent", args.skill_provider_prefs)
       ?? deps.agent_backends.resolve_backend(args.executor);
@@ -47,14 +48,16 @@ export async function run_agent_loop(
           max_turns: deps.config.agent_loop_max_turns,
           effort: "high",
           ...(caps.thinking ? { enable_thinking: true, max_thinking_tokens: 16000 } : {}),
-          hooks: deps.hooks_for(stream, args, backend.id, args.tool_ctx.task_id),
+          hooks: deps.hooks_for(stream, args, backend.id, args.tool_ctx.task_id, tools_used),
           abort_signal: args.req.signal,
           cwd: deps.workspace,
           mcp_server_configs: deps.get_mcp_configs?.() ?? undefined,
           tool_context: args.tool_ctx,
         });
         flush_remaining(stream, args.req.on_stream);
-        return deps.convert_agent_result(result, "agent", stream, args.req);
+        const orch = deps.convert_agent_result(result, "agent", stream, args.req);
+        orch.tools_used = [...new Set(tools_used)];
+        return orch;
       } catch (e) {
         const msg = error_message(e);
         deps.logger.warn("native_tool_loop run_agent_loop error, falling back to legacy", { error: msg });
@@ -96,7 +99,10 @@ export async function run_agent_loop(
     },
     on_tool_calls: create_tool_call_handler(deps.tool_deps, args.tool_ctx, state, {
       buffer: stream, on_stream: args.req.on_stream, on_tool_block: args.req.on_tool_block,
-      on_tool_event: (e) => deps.session_cd.observe(e),
+      on_tool_event: (e) => {
+        deps.session_cd.observe(e);
+        if (e.type === "tool_use" && e.tool_name) tools_used.push(e.tool_name);
+      },
       log_ctx: args.req.run_id ? { run_id: args.req.run_id, agent_id: String(args.executor), provider: args.req.provider, chat_id: args.req.message.chat_id } : undefined,
     }),
     compaction_flush: deps.build_compaction_flush(),
@@ -119,5 +125,7 @@ export async function run_agent_loop(
   const reply = normalize_agent_reply(content, args.req.alias, args.req.message.sender_id);
   if (!reply) return error_result("agent", stream, "empty_provider_response", state.tool_count);
   const final_reply = state.tool_count === 0 ? append_no_tool_notice(reply) : reply;
-  return reply_result("agent", stream, final_reply, state.tool_count);
+  const legacy_result = reply_result("agent", stream, final_reply, state.tool_count);
+  legacy_result.tools_used = [...new Set(tools_used)];
+  return legacy_result;
 }

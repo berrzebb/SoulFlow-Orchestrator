@@ -23,6 +23,18 @@ metadata:
   aliases:
     - 문서생성
     - 파일생성
+  intents:
+    - generate_document
+  file_patterns:
+    - "*.pdf"
+    - "*.docx"
+    - "*.pptx"
+    - "*.xlsx"
+    - "*.zip"
+  checks:
+    - 생성된 파일이 workspace에 존재하나요?
+    - 파일 내용이 요청과 일치하나요?
+    - 한글 폰트 깨짐 없이 정상적으로 표시되나요?
 ---
 
 # file-maker

@@ -10,6 +10,13 @@ metadata:
     - bash
     - shell
     - 쉘
+  intents:
+    - execute_code
+    - read_file
+    - write_file
+  checks:
+    - 실행 결과에 에러가 없었나요?
+    - 파일 변경사항이 의도와 일치하나요?
 ---
 
 # just-bash

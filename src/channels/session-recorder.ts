@@ -65,7 +65,7 @@ export class SessionRecorder {
 
   async record_assistant(
     provider: ChannelProvider, message: InboundMessage, alias: string, content: string,
-    metadata?: { stream_full_content?: string; parsed_output?: unknown; tool_calls_count?: number; run_id?: string; usage?: Record<string, unknown> },
+    metadata?: { stream_full_content?: string; parsed_output?: unknown; tool_calls_count?: number; run_id?: string; usage?: Record<string, unknown>; tools_used?: string[] },
   ): Promise<void> {
     if (!this.sessions) return;
     try {
@@ -84,6 +84,7 @@ export class SessionRecorder {
         ...(metadata?.tool_calls_count ? { tool_calls_count: metadata.tool_calls_count } : {}),
         ...(metadata?.run_id ? { run_id: metadata.run_id } : {}),
         ...(metadata?.usage ? { usage: metadata.usage } : {}),
+        ...(metadata?.tools_used?.length ? { tools_used: metadata.tools_used } : {}),
       };
       await this.sessions.append_message(key, msg);
       this.emit_mirror(key, "assistant", alias, safe, ts);

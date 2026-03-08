@@ -706,6 +706,7 @@ export class ChannelManager implements ServiceLike {
       tool_calls_count: result.tool_calls_count,
       run_id: result.run_id,
       usage: result.usage as Record<string, unknown> | undefined,
+      tools_used: result.tools_used,
     };
 
     const build_meta = (): Record<string, unknown> => {

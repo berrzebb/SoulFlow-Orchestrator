@@ -31,6 +31,7 @@ export async function try_native_task_execute(
   _objective: string,
   seed_prompt: string,
   resume_session?: AgentSession,
+  tools_accumulator?: string[],
 ): Promise<AgentRunResult | null> {
   if (!deps.agent_backends) return null;
   const backend = deps.agent_backends.resolve_for_mode("task", args.skill_provider_prefs)
@@ -52,7 +53,7 @@ export async function try_native_task_execute(
       max_turns: deps.config.agent_loop_max_turns,
       effort: "high",
       ...(caps.thinking ? { enable_thinking: true, max_thinking_tokens: 16000 } : {}),
-      hooks: deps.hooks_for(stream, args, backend.id, task_tool_ctx.task_id),
+      hooks: deps.hooks_for(stream, args, backend.id, task_tool_ctx.task_id, tools_accumulator),
       abort_signal: args.req.signal,
       cwd: deps.workspace,
       mcp_server_configs: deps.get_mcp_configs?.() ?? undefined,
@@ -86,6 +87,7 @@ export async function run_task_loop(
   });
   const FILE_WAIT_MARKER = "__file_request_waiting__";
   let total_tool_count = 0;
+  const tools_used: string[] = [];
 
   const nodes: TaskNode[] = [
     {
@@ -104,7 +106,7 @@ export async function run_task_loop(
         const seed_prompt = String(memory.seed_prompt || args.context_block);
 
         // native backend 우선: 전체 tool loop를 백엔드에 위임
-        const native_result = await try_native_task_execute(deps, args, stream, task_tool_ctx, task_id, objective, seed_prompt);
+        const native_result = await try_native_task_execute(deps, args, stream, task_tool_ctx, task_id, objective, seed_prompt, undefined, tools_used);
         if (native_result) {
           flush_remaining(stream, args.req.on_stream);
           const final = sanitize_provider_output(String(native_result.content || "")).trim();
@@ -151,7 +153,10 @@ export async function run_task_loop(
           check_should_continue: async () => false,
           on_tool_calls: create_tool_call_handler(deps.tool_deps, task_tool_ctx, state, {
             buffer: stream, on_stream: args.req.on_stream, on_tool_block: args.req.on_tool_block,
-            on_tool_event: (e) => deps.session_cd.observe(e),
+            on_tool_event: (e) => {
+              deps.session_cd.observe(e);
+              if (e.type === "tool_use" && e.tool_name) tools_used.push(e.tool_name);
+            },
             log_ctx: args.req.run_id ? { run_id: args.req.run_id, agent_id: String(args.executor), provider: args.req.provider, chat_id: args.req.message.chat_id } : undefined,
           }),
           compaction_flush: deps.build_compaction_flush(),
@@ -230,5 +235,7 @@ export async function run_task_loop(
   const err = extract_provider_error(output);
   if (err) return error_result("task", stream, err, total_tool_count);
 
-  return reply_result("task", stream, normalize_agent_reply(output, args.req.alias, args.req.message.sender_id), total_tool_count);
+  const task_result = reply_result("task", stream, normalize_agent_reply(output, args.req.alias, args.req.message.sender_id), total_tool_count);
+  task_result.tools_used = [...new Set(tools_used)];
+  return task_result;
 }

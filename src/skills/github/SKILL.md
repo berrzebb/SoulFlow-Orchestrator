@@ -18,6 +18,16 @@ metadata:
     - 커밋
   aliases:
     - gh
+  intents:
+    - version_control
+  code_patterns:
+    - git
+    - github
+    - gh
+  checks:
+    - PR/이슈가 의도한 내용으로 생성되었나요?
+    - CI 체크 결과가 통과했나요?
+    - 브랜치/커밋 타겟이 올바른가요?
 ---
 
 # GitHub Skill

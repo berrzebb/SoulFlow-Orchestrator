@@ -48,7 +48,7 @@ export function generate_completion_checks(
 
   // A. 스킬 정의 체크 (frontmatter checks[])
   for (const skill of matched_skills) {
-    for (const check of skill.checks) {
+    for (const check of (skill.checks ?? [])) {
       if (check.trim() && !questions.includes(check)) {
         questions.push(check);
         if (questions.length >= 5) break;
