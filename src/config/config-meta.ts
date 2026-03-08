@@ -35,6 +35,7 @@ export type ConfigSection =
   | "channel.dispatch"
   | "channel.dedupe"
   | "channel.grouping"
+  | "memory.consolidation"
   | "orchestration"
   | "dashboard"
   | "cli"
@@ -51,6 +52,7 @@ export const SECTION_LABELS: Record<ConfigSection, string> = {
   "channel.dispatch": "Dispatch & Retry",
   "channel.dedupe": "Outbound Dedupe",
   "channel.grouping": "Message Grouping",
+  "memory.consolidation": "Memory & Consolidation",
   orchestration: "Orchestration",
   dashboard: "Dashboard",
   cli: "CLI Providers",
@@ -68,6 +70,7 @@ export const SECTION_ORDER: ConfigSection[] = [
   "channel.grouping",
   "channel.dispatch",
   "channel.dedupe",
+  "memory.consolidation",
   "orchestration",
   "dashboard",
   "cli",
@@ -124,6 +127,16 @@ export const CONFIG_FIELDS: ConfigFieldMeta[] = [
   // ── Dedupe ──
   { path: "channel.outboundDedupe.ttlMs", label: "TTL (ms)", section: "channel.dedupe", type: "number", env_key: "CHANNEL_OUTBOUND_DEDUPE_TTL_MS", default_value: 25_000, sensitive: false, restart_required: false, description: "Window for detecting duplicate outbound messages" },
   { path: "channel.outboundDedupe.maxSize", label: "Max Size", section: "channel.dedupe", type: "number", env_key: "CHANNEL_OUTBOUND_DEDUPE_MAX_SIZE", default_value: 20_000, sensitive: false, restart_required: false, description: "Maximum fingerprints stored in dedupe cache" },
+
+  // ── Memory & Consolidation ──
+  { path: "memory.consolidation.enabled", label: "Consolidation Enabled", section: "memory.consolidation", type: "boolean", env_key: "", default_value: false, sensitive: false, restart_required: false, description: "Automatically compress conversation history into long-term memory" },
+  { path: "memory.consolidation.trigger", label: "Trigger Mode", section: "memory.consolidation", type: "select", env_key: "", default_value: "idle", sensitive: false, restart_required: false, options: ["idle", "cron"], description: "idle: run after session goes quiet; cron: run on fixed schedule" },
+  { path: "memory.consolidation.idleAfterMs", label: "Idle After (ms)", section: "memory.consolidation", type: "number", env_key: "", default_value: 1_800_000, sensitive: false, restart_required: false, description: "Wait time after last activity before triggering idle consolidation" },
+  { path: "memory.consolidation.intervalMs", label: "Interval (ms)", section: "memory.consolidation", type: "number", env_key: "", default_value: 86_400_000, sensitive: false, restart_required: false, description: "How often to run consolidation in cron mode (default: 24h)" },
+  { path: "memory.consolidation.windowDays", label: "Window Days", section: "memory.consolidation", type: "number", env_key: "", default_value: 7, sensitive: false, restart_required: false, description: "Number of recent daily memory days included in each consolidation run" },
+  { path: "memory.consolidation.archiveUsed", label: "Archive After Consolidation", section: "memory.consolidation", type: "boolean", env_key: "", default_value: false, sensitive: false, restart_required: false, description: "Delete daily memory entries after they have been consolidated" },
+  { path: "memory.dailyInjectionDays", label: "Daily Injection Days", section: "memory.consolidation", type: "number", env_key: "", default_value: 1, sensitive: false, restart_required: false, description: "Number of recent daily memory days to inject into the system prompt (0 = disabled)" },
+  { path: "memory.dailyInjectionMaxChars", label: "Daily Injection Max Chars", section: "memory.consolidation", type: "number", env_key: "", default_value: 4_000, sensitive: false, restart_required: false, description: "Character limit for daily memory injected into system prompt" },
 
   // ── Orchestration ──
   { path: "orchestration.maxToolResultChars", label: "Max Tool Result Chars", section: "orchestration", type: "number", env_key: "ORCHESTRATION_MAX_TOOL_RESULT_CHARS", default_value: 500, sensitive: false, restart_required: false, description: "Truncate tool outputs beyond this length before sending to LLM" },

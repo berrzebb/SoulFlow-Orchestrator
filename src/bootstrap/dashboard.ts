@@ -11,6 +11,7 @@ import type { MessageBusRuntime } from "../bus/types.js";
 import type { ChannelManager } from "../channels/manager.js";
 import type { ChannelInstanceStore, ChannelRegistryLike } from "../channels/index.js";
 import type { SqliteDispatchDlqStore } from "../channels/index.js";
+import type { DispatchService } from "../channels/dispatch.service.js";
 import type { CliAuthService } from "../agent/cli-auth.service.js";
 import type { DecisionService } from "../decision/index.js";
 import type { WorkflowEventService } from "../events/index.js";
@@ -63,6 +64,7 @@ export interface DashboardBundleDeps {
   cron: CronService;
   sessions: SessionStoreLike;
   dlq_store: InstanceType<typeof SqliteDispatchDlqStore> | null;
+  dispatch: DispatchService;
   oauth_store: OAuthIntegrationStore;
   oauth_flow: OAuthFlowService;
   kanban_store: KanbanStore;
@@ -84,7 +86,7 @@ export function create_dashboard_bundle(deps: DashboardBundleDeps): DashboardBun
     bus, broadcaster, channel_manager, channels, instance_store,
     cli_auth, decisions, events, heartbeat, mcp, ops,
     orchestrator_llm_runtime, orchestration, process_tracker, cron,
-    sessions, dlq_store, oauth_store, oauth_flow,
+    sessions, dlq_store, dispatch, oauth_store, oauth_flow,
     kanban_store, kanban_automation, reference_store, webhook_store,
     workflow_ops_result,
   } = deps;
@@ -122,6 +124,7 @@ export function create_dashboard_bundle(deps: DashboardBundleDeps): DashboardBun
       reset_cd_score: () => orchestration.reset_cd_score(),
     },
     dlq: dlq_store,
+    dispatch,
     secrets: providers.get_secret_vault(),
     config_ops: create_config_ops({ app_config, config_store }),
     skill_ops: create_skill_ops({ skills_loader: agent.context.skills_loader, workspace }),

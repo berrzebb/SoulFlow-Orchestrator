@@ -15,6 +15,7 @@ import type { ProcessTrackerLike } from "../orchestration/process-tracker.js";
 import type { TaskState } from "../contracts.js";
 import type { CronScheduler } from "../cron/index.js";
 import type { DispatchDlqStoreLike } from "../channels/dlq-store.js";
+import type { DispatchServiceLike } from "../channels/dispatch.service.js";
 import type { SecretVaultLike } from "../security/secret-vault.js";
 import type { SessionStoreLike } from "../session/index.js";
 import { now_iso, error_message } from "../utils/common.js";
@@ -347,6 +348,7 @@ export type DashboardOptions = {
   task_ops?: DashboardTaskOps | null;
   stats_ops?: DashboardStatsOps | null;
   dlq?: DispatchDlqStoreLike | null;
+  dispatch?: DispatchServiceLike | null;
   secrets?: SecretVaultLike | null;
   config_ops?: DashboardConfigOps | null;
   skill_ops?: DashboardSkillOps | null;
