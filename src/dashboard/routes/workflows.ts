@@ -160,7 +160,6 @@ export const handle_workflow: RouteHandler = async (ctx) => {
     if (!body?.instruction || typeof body.instruction !== "string") { json(res, 400, { error: "instruction_required" }); return true; }
     const has_name = typeof body.name === "string" && body.name.trim();
     const has_workflow = body.workflow && typeof body.workflow === "object";
-    if (!has_name && !has_workflow) { json(res, 400, { error: "name_or_workflow_required" }); return true; }
 
     set_no_cache(res);
     res.writeHead(200, {

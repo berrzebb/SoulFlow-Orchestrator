@@ -47,10 +47,14 @@ function apply_patch(wf: WorkflowDef, path: string, section: Record<string, unkn
 
 // ── WorkflowPromptBar ─────────────────────────────────────────
 
-/** 자연어 워크플로우 편집 입력바 — SSE 스트리밍으로 섹션 패치 실시간 반영. */
+/** 자연어 워크플로우 편집 입력바 — SSE 스트리밍으로 섹션 패치 실시간 반영.
+ * - name: 기존 템플릿 슬러그 (파일 저장소에서 로드)
+ * - workflow: 미저장 상태 직접 전달
+ * - 둘 다 없으면 신규 생성 모드 (instruction만 전송)
+ */
 export function WorkflowPromptBar({ name, workflow, onApply }: {
   name?: string;
-  workflow: WorkflowDef;
+  workflow?: WorkflowDef;
   onApply: (updated: WorkflowDef) => void;
 }) {
   const t = useT();
@@ -65,15 +69,14 @@ export function WorkflowPromptBar({ name, workflow, onApply }: {
     if (!text || loading) return;
 
     // 현재 워크플로우 스냅샷 (스트리밍 중 점진적 패치 대상)
-    const wf: WorkflowDef = JSON.parse(JSON.stringify(workflow)) as WorkflowDef;
+    const wf = workflow ? JSON.parse(JSON.stringify(workflow)) as WorkflowDef : null;
     setLoading(true);
 
     void (async () => {
       try {
-        // name이 있으면 파일 저장소에서 로드 (전체 JSON 전송 불필요)
-        const body: Record<string, unknown> = name
-          ? { instruction: text, name }
-          : { instruction: text, workflow: wf };
+        const body: Record<string, unknown> = { instruction: text };
+        if (name) body.name = name;
+        else if (wf) body.workflow = wf;
         if (selectedProvider) body.provider_instance_id = selectedProvider;
         if (selectedModel) body.model = selectedModel;
 
@@ -105,8 +108,10 @@ export function WorkflowPromptBar({ name, workflow, onApply }: {
             try {
               const data = JSON.parse(raw) as Record<string, unknown>;
               if (event === "patch") {
-                apply_patch(wf, data.path as string, data.section as Record<string, unknown>);
-                onApply({ ...wf, phases: [...(wf.phases ?? [])] as PhaseDef[] });
+                if (wf) {
+                  apply_patch(wf, data.path as string, data.section as Record<string, unknown>);
+                  onApply({ ...wf, phases: [...(wf.phases ?? [])] as PhaseDef[] });
+                }
               } else if (event === "done") {
                 if (data.workflow) onApply(data.workflow as WorkflowDef);
                 setValue("");

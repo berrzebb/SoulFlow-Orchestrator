@@ -559,7 +559,7 @@ export function create_workflow_ops(deps: {
     async suggest(instruction, options) {
       if (!deps.providers) return { ok: false, error: "providers_not_configured" };
       try {
-        // name이 있으면 파일 저장소에서 로드, 없으면 직접 전달된 workflow 사용
+        // name → 파일 저장소 로드, workflow → 직접 사용, 둘 다 없으면 빈 워크플로우(신규 생성)
         let source: Record<string, unknown>;
         if (options?.name && workspace) {
           const tpl = load_workflow_template(workspace, options.name);
@@ -568,7 +568,7 @@ export function create_workflow_ops(deps: {
         } else if (options?.workflow) {
           source = options.workflow;
         } else {
-          return { ok: false, error: "name_or_workflow_required" };
+          source = { title: "", objective: "", phases: [] };
         }
         /** 수정 중인 워크플로우 사본. update_section이 in-place로 패치. */
         const wf = JSON.parse(JSON.stringify(source)) as Record<string, unknown>;
