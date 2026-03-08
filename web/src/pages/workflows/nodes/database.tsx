@@ -6,20 +6,20 @@ function DatabaseEditPanel({ node, update, t }: EditPanelProps) {
     <>
       <div className="builder-row-pair">
         <div className="builder-row">
-          <label className="label">{t("workflows.operation")}</label>
-          <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })} aria-label={t("workflows.operation")}>
+          <label className="label">{t("workflows.operation")}<span className="label__required">*</span></label>
+          <select autoFocus className="input input--sm" required value={op} onChange={(e) => update({ operation: e.target.value })} aria-label={t("workflows.operation")} aria-required="true">
             {["query", "tables", "schema", "explain"].map((o) => <option key={o} value={o}>{o}</option>)}
           </select>
         </div>
         <div className="builder-row">
-          <label className="label">{t("workflows.field_datasource")}</label>
-          <input className="input input--sm" value={String(node.datasource || "")} onChange={(e) => update({ datasource: e.target.value })} placeholder="my_database" aria-label={t("workflows.field_datasource")} />
+          <label className="label">{t("workflows.field_datasource")}<span className="label__required">*</span></label>
+          <input className="input input--sm" required value={String(node.datasource || "")} onChange={(e) => update({ datasource: e.target.value })} placeholder="my_database" aria-label={t("workflows.field_datasource")} aria-required="true" />
         </div>
       </div>
       {(op === "query" || op === "explain") && (
         <div className="builder-row">
-          <label className="label">{t("workflows.field_sql")}</label>
-          <textarea className="input code-textarea" rows={4} value={String(node.sql || "")} onChange={(e) => update({ sql: e.target.value })} placeholder="SELECT * FROM users LIMIT 10" aria-label={t("workflows.field_sql")} />
+          <label className="label">{t("workflows.field_sql")}<span className="label__required">*</span></label>
+          <textarea className="input code-textarea" required rows={4} value={String(node.sql || "")} onChange={(e) => update({ sql: e.target.value })} placeholder="SELECT * FROM users LIMIT 10" aria-label={t("workflows.field_sql")} aria-required="true" />
         </div>
       )}
       {op === "schema" && (

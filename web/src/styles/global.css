@@ -117,8 +117,15 @@ textarea.input {
 .input:focus:not(:focus-visible) { outline: none; }
 .input::placeholder { color: var(--muted); opacity: 0.6; }
 .input:disabled {
-  opacity: 0.5;
+  opacity: 0.6;
+  background-color: var(--surface-subtle);
+  border-color: var(--line);
+  color: var(--muted);
   cursor: not-allowed;
+}
+.input:disabled::placeholder {
+  opacity: 1;
+  color: var(--muted);
 }
 select.input {
   appearance: none;
@@ -135,6 +142,42 @@ textarea.input {
   padding: 5px 8px;
   font-size: var(--fs-xs);
 }
+.input--err {
+  border-color: var(--err);
+  background-color: color-mix(in srgb, var(--err) 5%, transparent);
+}
+.input--err:focus-visible {
+  border-color: var(--err);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--err) 20%, transparent);
+}
+.field-error {
+  display: block;
+  font-size: var(--fs-xs);
+  color: var(--err);
+  margin-top: 4px;
+  font-weight: 500;
+}
+.input--loading {
+  position: relative;
+  color: var(--muted);
+  border-color: var(--accent);
+  background-color: color-mix(in srgb, var(--accent) 3%, transparent);
+  cursor: default;
+}
+.input__spinner {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin-right: 6px;
+  border: 2px solid var(--accent);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spinner 0.6s linear infinite;
+  vertical-align: middle;
+}
+@keyframes spinner {
+  to { transform: rotate(360deg); }
+}
 
 /* ===== Label 공통 ===== */
 .label {
@@ -143,6 +186,17 @@ textarea.input {
   font-weight: 600;
   color: var(--muted);
   margin-bottom: 4px;
+}
+.label__required {
+  color: var(--err);
+  font-weight: 700;
+  margin-left: 2px;
+}
+.label__optional {
+  color: var(--muted);
+  font-size: 0.85em;
+  font-weight: 400;
+  margin-left: 4px;
 }
 
 /* skeleton, empty-state → layout.css로 통합 */

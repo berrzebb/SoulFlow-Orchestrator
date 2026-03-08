@@ -21,18 +21,18 @@ function CodeEditPanel({ node, update, t }: EditPanelProps) {
   return (
     <>
       <div className="builder-row">
-        <label className="label">{t("workflows.code_language")}</label>
-        <select autoFocus className="input input--sm" value={lang} onChange={(e) => update({ language: e.target.value })}>
+        <label className="label">{t("workflows.code_language")}<span className="label__required">*</span></label>
+        <select autoFocus className="input input--sm" required value={lang} onChange={(e) => update({ language: e.target.value })} aria-required="true">>
           {LANGUAGES.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}
         </select>
       </div>
       <div className="builder-row">
-        <label className="label">{t("workflows.field_code")} <span className="builder-hint--inline">({lang})</span></label>
-        <textarea className="input code-textarea code-textarea--tall" rows={14} value={String(node.code || "")} onChange={(e) => update({ code: e.target.value })} spellCheck={false} />
+        <label className="label">{t("workflows.field_code")}<span className="label__required">*</span> <span className="builder-hint--inline">({lang})</span></label>
+        <textarea className="input code-textarea code-textarea--tall" required rows={14} value={String(node.code || "")} onChange={(e) => update({ code: e.target.value })} spellCheck={false} aria-required="true" />
       </div>
       <div className="builder-row">
-        <label className="label">{t("workflows.timeout_ms")}</label>
-        <input className="input input--sm" type="number" min={100} max={120000} step={1000} value={String(node.timeout_ms ?? 10000)} onChange={(e) => update({ timeout_ms: Number(e.target.value) || 10000 })} />
+        <label className="label">{t("workflows.timeout_ms")}<span className="label__required">*</span></label>
+        <input className="input input--sm" required type="number" min={100} max={120000} step={1000} value={String(node.timeout_ms ?? 10000)} onChange={(e) => update({ timeout_ms: Number(e.target.value) || 10000 })} aria-required="true" />
         <span className="builder-hint">{t("workflows.timeout_ms_hint")}</span>
       </div>
       {is_container && (

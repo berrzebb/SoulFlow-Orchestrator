@@ -19,8 +19,8 @@ function LlmEditPanel({ node, update, t, options }: EditPanelProps) {
     <>
       <div className="builder-row-pair">
         <div className="builder-row">
-          <label className="label">{t("workflows.llm_backend")}</label>
-          <select autoFocus className="input input--sm" value={String(node.backend || "")} onChange={(e) => update({ backend: e.target.value })}>
+          <label className="label">{t("workflows.llm_backend")}<span className="label__required">*</span></label>
+          <select autoFocus className="input input--sm" required value={String(node.backend || "")} onChange={(e) => update({ backend: e.target.value })} aria-required="true">
             <option value="">-</option>
             {(options?.backends || []).map((b) => (
               <option key={b.value} value={b.value}>
@@ -30,9 +30,9 @@ function LlmEditPanel({ node, update, t, options }: EditPanelProps) {
           </select>
         </div>
         <div className="builder-row">
-          <label className="label">{t("workflows.llm_model")}</label>
+          <label className="label">{t("workflows.llm_model")}<span className="label__required">*</span></label>
           {modelsLoading ? (
-            <input className="input input--sm" disabled placeholder="loading..." />
+            <input className="input input--sm" disabled aria-busy="true" placeholder="loading..." />
           ) : models.length > 0 ? (
             <select className="input input--sm" value={String(node.model || "")} onChange={(e) => update({ model: e.target.value })}>
               <option value="">auto</option>
@@ -44,11 +44,11 @@ function LlmEditPanel({ node, update, t, options }: EditPanelProps) {
         </div>
       </div>
       <div className="builder-row">
-        <label className="label">{t("workflows.llm_prompt")}</label>
-        <textarea className="input code-textarea" rows={4} value={String(node.prompt_template || "")} onChange={(e) => update({ prompt_template: e.target.value })} spellCheck={false} placeholder="{{prompt}}" />
+        <label className="label">{t("workflows.llm_prompt")}<span className="label__required">*</span></label>
+        <textarea className="input code-textarea" required rows={4} value={String(node.prompt_template || "")} onChange={(e) => update({ prompt_template: e.target.value })} spellCheck={false} placeholder="{{prompt}}" aria-required="true" />
       </div>
       <div className="builder-row">
-        <label className="label">{t("workflows.llm_system")}</label>
+        <label className="label">{t("workflows.llm_system")}<span className="label__optional">(optional)</span></label>
         <textarea className="input" rows={3} value={String(node.system_prompt || "")} onChange={(e) => update({ system_prompt: e.target.value })} placeholder={t("common.optional")} />
       </div>
       <div className="builder-row-pair">

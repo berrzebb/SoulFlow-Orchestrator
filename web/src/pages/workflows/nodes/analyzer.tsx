@@ -19,8 +19,8 @@ function AnalyzerEditPanel({ node, update, t, options }: EditPanelProps) {
     <>
       <div className="builder-row-pair">
         <div className="builder-row">
-          <label className="label">{t("workflows.llm_backend")}</label>
-          <select autoFocus className="input input--sm" value={String(node.backend || "")} onChange={(e) => update({ backend: e.target.value })}>
+          <label className="label">{t("workflows.llm_backend")}<span className="label__required">*</span></label>
+          <select autoFocus className="input input--sm" required value={String(node.backend || "")} onChange={(e) => update({ backend: e.target.value })} aria-required="true">
             <option value="">-</option>
             {(options?.backends || []).map((b) => (
               <option key={b.value} value={b.value}>
@@ -30,9 +30,9 @@ function AnalyzerEditPanel({ node, update, t, options }: EditPanelProps) {
           </select>
         </div>
         <div className="builder-row">
-          <label className="label">{t("workflows.llm_model")}</label>
+          <label className="label">{t("workflows.llm_model")}<span className="label__required">*</span></label>
           {modelsLoading ? (
-            <input className="input input--sm" disabled placeholder="loading..." />
+            <input className="input input--sm" disabled aria-busy="true" placeholder="loading..." />
           ) : models.length > 0 ? (
             <select className="input input--sm" value={String(node.model || "")} onChange={(e) => update({ model: e.target.value })}>
               <option value="">auto</option>
@@ -44,15 +44,15 @@ function AnalyzerEditPanel({ node, update, t, options }: EditPanelProps) {
         </div>
       </div>
       <div className="builder-row">
-        <label className="label">{t("workflows.analyzer_input")}</label>
-        <input className="input input--sm" value={String(node.input_field || "")} onChange={(e) => update({ input_field: e.target.value })} placeholder="memory.resume_text" />
+        <label className="label">{t("workflows.analyzer_input")}<span className="label__required">*</span></label>
+        <input className="input input--sm" required value={String(node.input_field || "")} onChange={(e) => update({ input_field: e.target.value })} placeholder="memory.resume_text" aria-required="true" />
       </div>
       <div className="builder-row">
-        <label className="label">{t("workflows.analyzer_prompt")}</label>
-        <textarea className="input code-textarea" rows={4} value={String(node.prompt_template || "")} onChange={(e) => update({ prompt_template: e.target.value })} spellCheck={false} placeholder="Analyze the following resume and extract key skills, experience level, and fit score..." />
+        <label className="label">{t("workflows.analyzer_prompt")}<span className="label__required">*</span></label>
+        <textarea className="input code-textarea" required rows={4} value={String(node.prompt_template || "")} onChange={(e) => update({ prompt_template: e.target.value })} spellCheck={false} placeholder="Analyze the following resume and extract key skills, experience level, and fit score..." aria-required="true" />
       </div>
       <div className="builder-row">
-        <label className="label">{t("workflows.analyzer_categories")}</label>
+        <label className="label">{t("workflows.analyzer_categories")}<span className="label__optional">(optional)</span></label>
         <input className="input input--sm" value={Array.isArray(node.categories) ? (node.categories as string[]).join(", ") : ""} onChange={(e) => update({ categories: e.target.value.split(",").map((s: string) => s.trim()).filter(Boolean) })} placeholder="qualified, unqualified, maybe" />
       </div>
       <div className="builder-row">

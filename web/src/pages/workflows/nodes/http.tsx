@@ -16,14 +16,14 @@ function HttpEditPanel({ node, update, t }: EditPanelProps) {
     <>
       <div className="builder-row-pair">
         <div className="builder-row">
-          <label className="label">{t("workflows.http_method")}</label>
-          <select autoFocus className="input input--sm" value={String(node.method || "GET")} onChange={(e) => update({ method: e.target.value })}>
+          <label className="label">{t("workflows.http_method")}<span className="label__required">*</span></label>
+          <select autoFocus className="input input--sm" required value={String(node.method || "GET")} onChange={(e) => update({ method: e.target.value })} aria-required="true">
             {["GET", "POST", "PUT", "PATCH", "DELETE"].map((m) => <option key={m} value={m}>{m}</option>)}
           </select>
         </div>
         <div className="builder-row">
-          <label className="label">{t("workflows.http_url")}</label>
-          <input className="input input--sm" value={String(node.url || "")} onChange={(e) => update({ url: e.target.value })} placeholder="https://api.example.com/data" />
+          <label className="label">{t("workflows.http_url")}<span className="label__required">*</span></label>
+          <input className="input input--sm" required value={String(node.url || "")} onChange={(e) => update({ url: e.target.value })} placeholder="https://api.example.com/data" aria-required="true" />
         </div>
       </div>
       <div className="builder-row">
@@ -42,8 +42,8 @@ function HttpEditPanel({ node, update, t }: EditPanelProps) {
         <textarea className="input" rows={3} value={typeof node.body === "string" ? node.body : JSON.stringify(node.body || "", null, 2)} onChange={(e) => update({ body: e.target.value })} />
       </div>
       <div className="builder-row">
-        <label className="label">{t("workflows.timeout_ms")}</label>
-        <input className="input input--sm" type="number" min={100} max={30000} step={1000} value={String(node.timeout_ms ?? 10000)} onChange={(e) => update({ timeout_ms: Number(e.target.value) || 10000 })} />
+        <label className="label">{t("workflows.timeout_ms")}<span className="label__required">*</span></label>
+        <input className="input input--sm" required type="number" min={100} max={30000} step={1000} value={String(node.timeout_ms ?? 10000)} onChange={(e) => update({ timeout_ms: Number(e.target.value) || 10000 })} aria-required="true" />
         <span className="builder-hint">{t("workflows.timeout_ms_hint")}</span>
       </div>
     </>
