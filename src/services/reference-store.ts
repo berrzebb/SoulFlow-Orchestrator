@@ -344,11 +344,18 @@ export class ReferenceStore implements ReferenceStoreLike {
       buf.push(lines[i]);
       // 청크 크기 초과 시 분할
       if (buf.join("\n").length > CHUNK_SIZE) {
+        const prev_start = start;
         flush();
-        // 오버랩
+        // overlap이 전체 버퍼와 동일하면 start가 진행되지 않아 중복 chunk_id 발생 → 초기화
         const overlap_lines = buf.slice(-3);
-        buf = [...overlap_lines];
-        start = i - overlap_lines.length + 2;
+        const next_start = i - overlap_lines.length + 2;
+        if (next_start > prev_start) {
+          buf = [...overlap_lines];
+          start = next_start;
+        } else {
+          buf = [];
+          start = i + 2;
+        }
       }
     }
     flush();
@@ -375,9 +382,16 @@ export class ReferenceStore implements ReferenceStoreLike {
             end_line: i + 1,
           });
         }
+        // overlap이 전체 버퍼와 동일하면 start가 진행되지 않아 중복 chunk_id 발생 → 초기화
         const overlap = buf.slice(-3);
-        buf = [...overlap];
-        start = i - overlap.length + 2;
+        const next_start = i - overlap.length + 2;
+        if (next_start > start) {
+          buf = [...overlap];
+          start = next_start;
+        } else {
+          buf = [];
+          start = i + 2;
+        }
       }
     }
     // 남은 버퍼

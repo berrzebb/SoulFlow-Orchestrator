@@ -547,6 +547,36 @@ describe("run_task_loop — task 모드 실행", () => {
       // legacy path 실행됨 (agent_backends=null → try_native_task_execute → null)
       expect(result.mode).toBe("task");
     });
+
+    it("legacy headless — run_agent_loop → approval_required → waiting_approval", async () => {
+      const deps = createMockRunnerDeps() as RunnerDeps;
+      deps.agent_backends = undefined;
+      (deps.runtime.run_agent_loop as any) = vi.fn().mockResolvedValue({ final_content: "approval_required" });
+      (deps.runtime.run_task_loop as any).mockImplementation(async ({ nodes, task_id, objective, initial_memory }: any) => {
+        const memory = { ...initial_memory };
+        const plan = await nodes[0].run({ task_state: { taskId: task_id, objective, status: "running", memory, currentTurn: 0, maxTurns: 20 }, memory });
+        const exec = await nodes[1].run({ task_state: { taskId: task_id, objective, status: "running", memory: plan.memory_patch, currentTurn: 1, maxTurns: 20 }, memory: plan.memory_patch });
+        return { state: { status: exec.status ?? "waiting_approval", exitReason: exec.exit_reason, memory: exec.memory_patch, currentTurn: 2 } };
+      });
+
+      const result = await run_task_loop(deps, mockArgs);
+      expect(result.suppress_reply).toBe(true);
+    });
+
+    it("legacy headless — run_agent_loop → __request_user_choice__ → waiting_user_input", async () => {
+      const deps = createMockRunnerDeps() as RunnerDeps;
+      deps.agent_backends = undefined;
+      (deps.runtime.run_agent_loop as any) = vi.fn().mockResolvedValue({ final_content: "__request_user_choice__" });
+      (deps.runtime.run_task_loop as any).mockImplementation(async ({ nodes, task_id, objective, initial_memory }: any) => {
+        const memory = { ...initial_memory };
+        const plan = await nodes[0].run({ task_state: { taskId: task_id, objective, status: "running", memory, currentTurn: 0, maxTurns: 20 }, memory });
+        const exec = await nodes[1].run({ task_state: { taskId: task_id, objective, status: "running", memory: plan.memory_patch, currentTurn: 1, maxTurns: 20 }, memory: plan.memory_patch });
+        return { state: { status: exec.status ?? "waiting_user_input", exitReason: exec.exit_reason, memory: exec.memory_patch, currentTurn: 2 } };
+      });
+
+      const result = await run_task_loop(deps, mockArgs);
+      expect(result.suppress_reply).toBe(true);
+    });
   });
 
   describe("이벤트 로깅", () => {

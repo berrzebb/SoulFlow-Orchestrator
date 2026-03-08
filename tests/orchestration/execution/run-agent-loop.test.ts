@@ -313,4 +313,39 @@ describe("run_agent_loop — executor 루프 실행", () => {
       expect(result.tool_calls_count).toBe(0);
     });
   });
+
+  describe("check_should_continue 콜백", () => {
+    it("최대 턴 도달 → false 반환", async () => {
+      const deps = createMockRunnerDeps() as RunnerDeps;
+      let captured_check: ((ctx: any) => Promise<any>) | undefined;
+
+      (deps.runtime.run_agent_loop as any).mockImplementation(async (opts: any) => {
+        captured_check = opts.check_should_continue;
+        return { final_content: "result" };
+      });
+
+      await run_agent_loop(deps, mockArgs);
+
+      // 최대 턴(10) 도달 시 false
+      const result = await captured_check!({ state: { currentTurn: 10 } });
+      expect(result).toBe(false);
+    });
+
+    it("최대 턴 미달 → AGENT_TOOL_NUDGE 반환", async () => {
+      const deps = createMockRunnerDeps() as RunnerDeps;
+      let captured_check: ((ctx: any) => Promise<any>) | undefined;
+
+      (deps.runtime.run_agent_loop as any).mockImplementation(async (opts: any) => {
+        captured_check = opts.check_should_continue;
+        return { final_content: "result" };
+      });
+
+      await run_agent_loop(deps, mockArgs);
+
+      const result = await captured_check!({ state: { currentTurn: 3 } });
+      // AGENT_TOOL_NUDGE는 문자열이거나 truthy 값
+      expect(result).toBeTruthy();
+      expect(typeof result).toBe("string");
+    });
+  });
 });
