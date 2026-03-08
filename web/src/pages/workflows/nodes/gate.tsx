@@ -6,7 +6,7 @@ function GateEditPanel({ node, update, t }: EditPanelProps) {
     <>
       <div className="builder-row">
         <label className="label">{t("workflows.gate_quorum")}</label>
-        <input className="input input--sm" type="number" min={1} value={String(node.quorum ?? 1)} onChange={(e) => update({ quorum: Number(e.target.value) })} />
+        <input autoFocus className="input input--sm" type="number" min={1} value={String(node.quorum ?? 1)} onChange={(e) => update({ quorum: Number(e.target.value) })} />
         <span className="builder-hint">{t("workflows.gate_quorum_hint")}{sources.length ? ` (${sources.length} sources)` : ""}</span>
       </div>
       <div className="builder-row">

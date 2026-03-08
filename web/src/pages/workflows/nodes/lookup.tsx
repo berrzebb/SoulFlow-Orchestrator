@@ -5,7 +5,7 @@ function LookupEditPanel({ node, update, t }: EditPanelProps) {
     <>
       <div className="builder-row">
         <label className="label">{t("workflows.field_table")}</label>
-        <select className="input input--sm" value={String(node.table || "http_status")} onChange={(e) => update({ table: e.target.value })}>
+        <select autoFocus className="input input--sm" value={String(node.table || "http_status")} onChange={(e) => update({ table: e.target.value })}>
           {["http_status", "mime_type", "country", "currency_symbol"].map((v) => <option key={v} value={v}>{v}</option>)}
         </select>
       </div>

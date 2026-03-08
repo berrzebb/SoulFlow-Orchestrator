@@ -5,7 +5,7 @@ function EvalEditPanel({ node, update, t }: EditPanelProps) {
     <>
       <div className="builder-row">
         <label className="label">{t("workflows.field_code")}</label>
-        <textarea className="input code-textarea" rows={5} value={String(node.code || "")} onChange={(e) => update({ code: e.target.value })} placeholder="return x + y;" />
+        <textarea autoFocus className="input code-textarea" rows={5} value={String(node.code || "")} onChange={(e) => update({ code: e.target.value })} placeholder="return x + y;" />
       </div>
       <div className="builder-row">
         <label className="label">{t("workflows.field_context_json")}</label>

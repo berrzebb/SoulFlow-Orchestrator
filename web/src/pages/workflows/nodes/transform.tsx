@@ -5,7 +5,7 @@ function TransformEditPanel({ node, update, t }: EditPanelProps) {
     <>
       <div className="builder-row">
         <label className="label">{t("workflows.transform_array")}</label>
-        <input className="input input--sm" value={String(node.array_field || "")} onChange={(e) => update({ array_field: e.target.value })} placeholder="body.rows" />
+        <input autoFocus className="input input--sm" value={String(node.array_field || "")} onChange={(e) => update({ array_field: e.target.value })} placeholder="body.rows" />
       </div>
       <div className="builder-row">
         <label className="label">{t("workflows.transform_expression")}</label>

@@ -8,7 +8,7 @@ function CompressEditPanel({ node, update, t }: EditPanelProps) {
       <div className="builder-row-pair">
         <div className="builder-row">
           <label className="label">{t("workflows.operation")}</label>
-          <select className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
+          <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
             {["compress", "decompress", "compress_string", "decompress_string"].map((o) => <option key={o} value={o}>{o}</option>)}
           </select>
         </div>
