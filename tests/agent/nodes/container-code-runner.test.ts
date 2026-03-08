@@ -129,13 +129,8 @@ describe("get_engine", () => {
 
 describe("run_code_in_container — 에러 경로", () => {
   it("미지원 언어 → unsupported 에러", async () => {
-    // engine은 이미 cached → spawnSync는 호출되지 않을 수 있음
-    // engine이 null이면 'no container engine' 에러가 먼저 발생
-    // 그래서 engine이 있어야 언어 에러로 도달함
-    // 여기서는 engine이 있을 경우에만 유의미 → 조건부 검증
     const engine = get_engine();
     if (!engine) {
-      // engine 없음 → no container engine 에러 먼저
       await expect(run_code_in_container({ language: "php" as CodeLanguage, code: "", timeout_ms: 1000 }))
         .rejects.toThrow("no container engine");
     } else {
@@ -145,16 +140,109 @@ describe("run_code_in_container — 에러 경로", () => {
   });
 
   it("engine 없음(spawnSync mock=실패) → no container engine 에러", async () => {
-    // 주의: cached_engine이 이미 설정된 경우 spawnSync mock이 영향 없음
-    // 이 케이스는 cached_engine === null일 때만 유효하므로 조건부 검증
     mock_spawn_sync.mockReturnValue({ status: 1 });
     const engine = get_engine();
     if (engine === null) {
       await expect(run_code_in_container({ language: "python" as CodeLanguage, code: "print(1)", timeout_ms: 1000 }))
         .rejects.toThrow("no container engine");
     } else {
-      // engine이 이미 cached → 테스트 스킵 (캐싱 특성상)
       expect(engine).not.toBeNull();
     }
+  });
+});
+
+// ══════════════════════════════════════════
+// run_code_in_container — oneshot 경로 (engine 있을 때만)
+// ══════════════════════════════════════════
+
+describe("run_code_in_container — oneshot 성공", () => {
+  it("python oneshot → exec_file 호출 + stdout 반환", async () => {
+    const engine = get_engine();
+    if (!engine) {
+      // engine 없으면 스킵
+      return;
+    }
+    // promisify(execFile) 콜백 스타일: (cmd, args, opts, cb) → cb(null, stdout, stderr)
+    mock_exec_file.mockImplementation((_cmd: string, _args: string[], _opts: unknown, cb: (err: null, out: {stdout: string; stderr: string}) => void) => {
+      cb(null, { stdout: "hello from python", stderr: "" } as any);
+    });
+    const r = await run_code_in_container({ language: "python" as CodeLanguage, code: "print('hello')", timeout_ms: 5000 });
+    expect(r.stdout).toBe("hello from python");
+    expect(r.exit_code).toBe(0);
+  });
+
+  it("oneshot: exec 실패 → exit_code != 0", async () => {
+    const engine = get_engine();
+    if (!engine) return;
+    mock_exec_file.mockImplementation((_cmd: string, _args: string[], _opts: unknown, cb: Function) => {
+      const err = Object.assign(new Error("exit code 1"), { stdout: "", stderr: "syntax error", status: 1 });
+      cb(err);
+    });
+    const r = await run_code_in_container({ language: "python" as CodeLanguage, code: "invalid", timeout_ms: 5000 });
+    expect(r.exit_code).not.toBe(0);
+    expect(r.stderr).toContain("syntax error");
+  });
+
+  it("oneshot: timeout → exit_code 124", async () => {
+    const engine = get_engine();
+    if (!engine) return;
+    mock_exec_file.mockImplementation((_cmd: string, _args: string[], _opts: unknown, cb: Function) => {
+      const err = Object.assign(new Error("timeout"), { killed: true, stdout: "", stderr: "" });
+      cb(err);
+    });
+    const r = await run_code_in_container({ language: "python" as CodeLanguage, code: "while True: pass", timeout_ms: 100 });
+    expect(r.exit_code).toBe(124);
+  });
+
+  it("oneshot: network_access=true → --network=none 없음", async () => {
+    const engine = get_engine();
+    if (!engine) return;
+    mock_exec_file.mockImplementation((_cmd: string, args: string[], _opts: unknown, cb: Function) => {
+      // --network=none가 없어야 함
+      cb(null, { stdout: "ok", stderr: "" } as any);
+    });
+    const r = await run_code_in_container({
+      language: "python" as CodeLanguage,
+      code: "print('ok')",
+      timeout_ms: 5000,
+      network_access: true,
+    });
+    expect(r.stdout).toBe("ok");
+  });
+
+  it("oneshot: workspace 있음 → -v /workspace:ro 포함", async () => {
+    const engine = get_engine();
+    if (!engine) return;
+    let captured_args: string[] = [];
+    mock_exec_file.mockImplementation((_cmd: string, args: string[], _opts: unknown, cb: Function) => {
+      captured_args = args;
+      cb(null, { stdout: "ok", stderr: "" } as any);
+    });
+    await run_code_in_container({
+      language: "python" as CodeLanguage,
+      code: "print('ok')",
+      timeout_ms: 5000,
+      workspace: "/my/workspace",
+    });
+    expect(captured_args.some((a: string) => a.includes("/workspace"))).toBe(true);
+  });
+
+  it("oneshot: env 있음 → -e KEY=VAL 포함", async () => {
+    const engine = get_engine();
+    if (!engine) return;
+    let captured_args: string[] = [];
+    mock_exec_file.mockImplementation((_cmd: string, args: string[], _opts: unknown, cb: Function) => {
+      captured_args = args;
+      cb(null, { stdout: "ok", stderr: "" } as any);
+    });
+    await run_code_in_container({
+      language: "python" as CodeLanguage,
+      code: "print(os.environ['MY_VAR'])",
+      timeout_ms: 5000,
+      env: { MY_VAR: "hello" },
+    });
+    const env_idx = captured_args.indexOf("-e");
+    expect(env_idx).toBeGreaterThan(-1);
+    expect(captured_args[env_idx + 1]).toContain("MY_VAR");
   });
 });
