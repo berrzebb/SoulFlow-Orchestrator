@@ -512,7 +512,12 @@ export function create_workflow_ops(deps: {
     /** 서버 재시작 시 고아 상태(running)인 워크플로우를 자동으로 재개. */
     async resume_orphaned() {
       const all = await store.list();
-      const orphans = all.filter((s) => s.status === "running" && s.definition);
+      const orphans = all.filter((s) =>
+        s.definition && (
+          s.status === "running" ||
+          (s.status === "waiting_user_input" && s.auto_resume)
+        ),
+      );
       if (!orphans.length) return;
       logger.info("resume_orphaned_workflows", { count: orphans.length });
 
