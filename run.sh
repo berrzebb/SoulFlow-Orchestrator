@@ -73,7 +73,7 @@ show_help() {
   echo "  build     - 이미지 빌드"
   echo "  down      - 모든 환경 중지"
   echo "  status    - 환경 상태 확인"
-  echo "  logs      - 로그 확인"
+  echo "  logs [env]  - 로그 확인 (env 생략 시 전체)"
   echo ""
   echo -e "${YELLOW}에이전트 로그인 (워크스페이스별 저장):${NC}"
   echo "  login claude   - Claude 에이전트 로그인"
@@ -228,8 +228,17 @@ case "$COMMAND" in
     docker compose ps 2>/dev/null || echo "실행 중인 환경 없음"
     ;;
   logs)
-    echo -e "\n${BLUE}로그 확인 중... (Ctrl+C로 종료)${NC}"
-    docker compose logs -f
+    # 첫 번째 비-옵션 인자를 프로필로 사용 (e.g. ./run.sh logs prod --instance=worker1)
+    PROFILE_ARG=$(echo "$@" | tr ' ' '\n' | grep -v '^--' | head -1)
+    if [ -n "$PROFILE_ARG" ]; then
+      PROJECT="soulflow-$PROFILE_ARG"
+      [ -n "$INSTANCE" ] && PROJECT="$PROJECT-$INSTANCE"
+      echo -e "\n${BLUE}로그 확인 중: $PROJECT (Ctrl+C로 종료)${NC}\n"
+      docker compose -f docker/docker-compose.yml -p "$PROJECT" logs -f
+    else
+      echo -e "\n${BLUE}로그 확인 중... (Ctrl+C로 종료)${NC}\n"
+      docker compose logs -f
+    fi
     ;;
   login)
     AGENT=${2:-}

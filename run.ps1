@@ -77,7 +77,7 @@ function Show-Help {
   Write-Host "  build     - 이미지 빌드"
   Write-Host "  down      - 모든 환경 중지"
   Write-Host "  status    - 환경 상태 확인"
-  Write-Host "  logs      - 로그 확인"
+  Write-Host "  logs [env]  - 로그 확인 (env 생략 시 전체)"
   Write-Host ""
   Write-Host "에이전트 로그인 (워크스페이스별 저장):" -ForegroundColor Yellow
   Write-Host "  login claude   - Claude 에이전트 로그인"
@@ -218,10 +218,27 @@ function Show-Status {
 }
 
 function Show-Logs {
+  param([string]$ProfileName)
+
+  $projectName = if ($ProfileName) {
+    $n = "soulflow-$ProfileName"
+    if ($Instance) { $n += "-$Instance" }
+    $n
+  } else { $null }
+
   Write-Host ""
-  Write-Host "로그 확인 중... (Ctrl+C로 종료)" -ForegroundColor Blue
+  if ($projectName) {
+    Write-Host "로그 확인 중: $projectName (Ctrl+C로 종료)" -ForegroundColor Blue
+  } else {
+    Write-Host "로그 확인 중... (Ctrl+C로 종료)" -ForegroundColor Blue
+  }
   Write-Host ""
-  docker compose logs -f
+
+  if ($projectName) {
+    docker compose -f docker/docker-compose.yml -p $projectName logs -f
+  } else {
+    docker compose logs -f
+  }
 }
 
 function Start-AgentLogin {
@@ -285,7 +302,10 @@ switch ($Command.ToLower()) {
   }
   "down"    { Stop-AllEnvironments }
   "status"  { Show-Status }
-  "logs"    { Show-Logs }
+  "logs" {
+    $ProfileArg = $Arguments | Where-Object { $_ -notmatch "^--" } | Select-Object -First 1
+    Show-Logs $ProfileArg
+  }
   "login" {
     $Agent = $Arguments | Where-Object { $_ -notmatch "^--" } | Select-Object -First 1
     if ([string]::IsNullOrWhiteSpace($Agent)) {

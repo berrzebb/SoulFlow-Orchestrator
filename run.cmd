@@ -201,10 +201,21 @@ docker compose ps
 goto end
 
 :logs
-echo.
-echo %BLUE%로그 확인 중... (Ctrl+C로 종료)%NC%
-echo.
-docker compose logs -f
+REM 두 번째 인자를 프로필로 사용 (e.g. run.cmd logs prod --instance=worker1)
+set "LOG_PROFILE=%2"
+if not "!LOG_PROFILE!"=="" (
+  set "LOG_PROJECT=soulflow-!LOG_PROFILE!"
+  if not "!INSTANCE!"=="" set "LOG_PROJECT=!LOG_PROJECT!-!INSTANCE!"
+  echo.
+  echo %BLUE%로그 확인 중: !LOG_PROJECT! ^(Ctrl+C로 종료^)%NC%
+  echo.
+  docker compose -f docker/docker-compose.yml -p !LOG_PROJECT! logs -f
+) else (
+  echo.
+  echo %BLUE%로그 확인 중... (Ctrl+C로 종료)%NC%
+  echo.
+  docker compose logs -f
+)
 goto end
 
 :login
@@ -253,7 +264,7 @@ echo %YELLOW%관리:%NC%
 echo   build     - 이미지 빌드
 echo   down      - 모든 환경 중지
 echo   status    - 환경 상태 확인
-echo   logs      - 로그 확인
+echo   logs [env]  - 로그 확인 (env 생략 시 전체)
 echo.
 echo %YELLOW%에이전트 로그인:%NC%
 echo   login claude   - Claude 에이전트 로그인
