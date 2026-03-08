@@ -4,6 +4,7 @@
 
 import { useState } from "react";
 import { api } from "../../api/client";
+import { InputBar } from "../../components/input-bar";
 import { useToast } from "../../components/toast";
 import { useT } from "../../i18n";
 import type { WorkflowDef } from "./workflow-types";
@@ -43,25 +44,20 @@ export function WorkflowPromptBar({ workflow, onApply }: {
 
   return (
     <div className={`workflow-prompt-bar${loading ? " workflow-prompt-bar--loading" : ""}`}>
-      {loading && <div className="workflow-prompt-bar__shimmer" />}
-      <input
-        autoFocus
-        className="workflow-prompt-bar__input"
-        placeholder={t("workflows.prompt_placeholder")}
-        aria-label={t("workflows.prompt_placeholder")}
+      <InputBar
         value={value}
-        onChange={(e) => setValue(e.target.value)}
-        onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(); } }}
+        onChange={setValue}
+        placeholder={t("workflows.prompt_placeholder")}
+        ariaLabel={t("workflows.prompt_placeholder")}
+        onSubmit={send}
+        submitLabel={loading ? "…" : "↑"}
+        submitDisabled={!value.trim()}
         disabled={loading}
+        loading={loading}
+        showShimmer={loading}
+        autoFocus
+        className="workflow-prompt-bar__input-bar"
       />
-      <button
-        className="workflow-prompt-bar__send"
-        onClick={() => void send()}
-        disabled={!value.trim() || loading}
-        aria-label={t("workflows.prompt_send")}
-      >
-        {loading ? <span className="workflow-prompt-bar__spinner" /> : <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>}
-      </button>
     </div>
   );
 }
@@ -77,18 +73,16 @@ export function NodeRunInputBar({ nodeId, onSubmit, onCancel }: {
   return (
     <div className="node-run-input-bar">
       <strong className="builder-run-label">{t("workflows.run_prefix", { id: nodeId })}</strong>
-      <input
-        className="input input--sm flex-1"
-        placeholder={t("workflows.run_objective_placeholder")}
+      <InputBar
         value={value}
-        onChange={(e) => setValue(e.target.value)}
-        onKeyDown={(e) => { if (e.key === "Enter" && value.trim()) onSubmit(value.trim()); }}
+        onChange={setValue}
+        placeholder={t("workflows.run_objective_placeholder")}
+        onSubmit={() => { if (value.trim()) onSubmit(value.trim()); }}
+        submitLabel={t("workflows.run_execute")}
+        submitDisabled={!value.trim()}
+        onCancel={onCancel}
         autoFocus
       />
-      <button className="btn btn--sm btn--primary" onClick={() => { if (value.trim()) onSubmit(value.trim()); }} disabled={!value.trim()}>
-        {t("workflows.run_execute")}
-      </button>
-      <button className="btn btn--sm" onClick={onCancel}>{t("workflows.cancel")}</button>
     </div>
   );
 }
