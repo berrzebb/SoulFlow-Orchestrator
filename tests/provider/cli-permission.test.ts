@@ -156,3 +156,135 @@ describe("is_gemini_command", () => {
     expect(is_gemini_command("claude")).toBe(false);
   });
 });
+
+import {
+  with_claude_permission_overrides,
+  with_gemini_permission_overrides,
+  with_codex_permission_overrides,
+} from "@src/providers/cli-permission.js";
+import { sandbox_from_preset } from "@src/providers/types.js";
+
+describe("with_claude_permission_overrides", () => {
+  it("claude 커맨드 → --permission-mode 추가", () => {
+    const sandbox = sandbox_from_preset("full-auto");
+    const result = with_claude_permission_overrides("claude", [], { sandbox });
+    expect(result).toContain("--permission-mode");
+    expect(result).toContain("dontAsk");
+  });
+
+  it("read-only → default 모드", () => {
+    const sandbox = sandbox_from_preset("strict");
+    const result = with_claude_permission_overrides("claude", [], { sandbox });
+    expect(result).toContain("default");
+  });
+
+  it("workspace-write → acceptEdits 모드", () => {
+    const sandbox = sandbox_from_preset("workspace-write");
+    const result = with_claude_permission_overrides("claude", [], { sandbox });
+    expect(result).toContain("acceptEdits");
+  });
+
+  it("plan_only=true → plan 모드", () => {
+    const sandbox = { ...sandbox_from_preset("full-auto"), plan_only: true };
+    const result = with_claude_permission_overrides("claude", [], { sandbox });
+    expect(result).toContain("plan");
+  });
+
+  it("이미 --permission-mode 있음 → 중복 추가 안 함", () => {
+    const sandbox = sandbox_from_preset("full-auto");
+    const args = ["--permission-mode", "acceptEdits"];
+    const result = with_claude_permission_overrides("claude", args, { sandbox });
+    expect(result.filter((v) => v === "--permission-mode")).toHaveLength(1);
+  });
+
+  it("claude 커맨드 아님 → args 그대로 반환", () => {
+    const sandbox = sandbox_from_preset("full-auto");
+    const args = ["--verbose"];
+    const result = with_claude_permission_overrides("node", args, { sandbox });
+    expect(result).toEqual(args);
+  });
+
+  it("첫 번째 인자로 claude → 적용됨", () => {
+    const sandbox = sandbox_from_preset("full-auto");
+    const result = with_claude_permission_overrides("npx", ["claude", "--verbose"], { sandbox });
+    expect(result).toContain("--permission-mode");
+  });
+});
+
+describe("with_gemini_permission_overrides", () => {
+  it("gemini 커맨드 → --approval-mode 추가", () => {
+    const sandbox = sandbox_from_preset("full-auto");
+    const result = with_gemini_permission_overrides("gemini", [], { sandbox });
+    expect(result).toContain("--approval-mode");
+    expect(result).toContain("yolo");
+  });
+
+  it("read-only → approval-mode=default + --sandbox 추가", () => {
+    const sandbox = sandbox_from_preset("strict");
+    const result = with_gemini_permission_overrides("gemini", [], { sandbox });
+    expect(result).toContain("default");
+    expect(result).toContain("--sandbox");
+  });
+
+  it("workspace-write → auto_edit", () => {
+    const sandbox = sandbox_from_preset("workspace-write");
+    const result = with_gemini_permission_overrides("gemini", [], { sandbox });
+    expect(result).toContain("auto_edit");
+  });
+
+  it("plan_only → approval-mode=default", () => {
+    const sandbox = { ...sandbox_from_preset("full-auto"), plan_only: true };
+    const result = with_gemini_permission_overrides("gemini", [], { sandbox });
+    expect(result).toContain("default");
+  });
+
+  it("gemini 커맨드 아님 → args 그대로 반환", () => {
+    const sandbox = sandbox_from_preset("full-auto");
+    const result = with_gemini_permission_overrides("node", ["--verbose"], { sandbox });
+    expect(result).toEqual(["--verbose"]);
+  });
+
+  it("이미 --approval-mode 있음 → 중복 추가 안 함", () => {
+    const sandbox = sandbox_from_preset("full-auto");
+    const args = ["--approval-mode", "auto_edit"];
+    const result = with_gemini_permission_overrides("gemini", args, { sandbox });
+    expect(result.filter((v) => v === "--approval-mode")).toHaveLength(1);
+  });
+});
+
+describe("with_codex_permission_overrides", () => {
+  const WS = "/tmp/test-workspace";
+
+  it("codex 아닌 커맨드 → args 그대로 반환", () => {
+    const result = with_codex_permission_overrides("node", ["--verbose"]);
+    expect(result).toEqual(["--verbose"]);
+  });
+
+  it("full-access → bypass sandbox 플래그 추가", () => {
+    const sandbox = sandbox_from_preset("full-auto");
+    const result = with_codex_permission_overrides("codex", [], { sandbox }, { workspace_dir: WS });
+    expect(result).toContain("--dangerously-bypass-approvals-and-sandbox");
+  });
+
+  it("이미 bypass 플래그 있음 → 그대로 반환", () => {
+    const result = with_codex_permission_overrides(
+      "codex",
+      ["--dangerously-bypass-approvals-and-sandbox"],
+      undefined,
+      { workspace_dir: WS },
+    );
+    expect(result.filter((v) => v === "--dangerously-bypass-approvals-and-sandbox")).toHaveLength(1);
+  });
+
+  it("workspace_dir 없음 → 에러 throw", () => {
+    const sandbox = sandbox_from_preset("workspace-write");
+    expect(() => with_codex_permission_overrides("codex", [], { sandbox }, {})).toThrow("workspace_dir");
+  });
+
+  it("workspace-write → --sandbox workspace-write 추가", () => {
+    const sandbox = sandbox_from_preset("workspace-write");
+    const result = with_codex_permission_overrides("codex", [], { sandbox }, { workspace_dir: WS });
+    expect(result).toContain("--sandbox");
+    expect(result).toContain("workspace-write");
+  });
+});
