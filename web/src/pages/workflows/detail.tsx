@@ -738,6 +738,19 @@ function AgentChatPanel({ workflow_id, phase_id, agent_id, label, model, status,
           />
         ))}
 
+        {status === "running" && (
+          <div className="chat-msg chat-msg--assistant">
+            <div className="chat-msg__avatar">🤖</div>
+            <div className="chat-msg__body">
+              <div className="chat-msg__content chat-typing">
+                <span className="chat-typing__dot" />
+                <span className="chat-typing__dot" />
+                <span className="chat-typing__dot" />
+              </div>
+            </div>
+          </div>
+        )}
+
         <div ref={endRef} />
       </div>
 

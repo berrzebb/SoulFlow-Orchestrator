@@ -64,11 +64,18 @@
   gap: var(--sp-3);
 }
 
+/* Message enter animation */
+@keyframes chat-msg-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
 /* Message bubble */
 .chat-msg {
   display: flex;
   gap: var(--sp-2);
   max-width: 100%;
+  animation: chat-msg-in 0.22s ease-out both;
 }
 .chat-msg--user { flex-direction: row-reverse; }
 .chat-msg--user.chat-msg--left { flex-direction: row; }
@@ -114,6 +121,11 @@
   border: 1px solid var(--line);
   border-top-left-radius: var(--radius-sm);
   white-space: normal;
+}
+/* 스트리밍 중 어시스턴트 버블 — border 하이라이트 */
+.chat-msg--assistant .chat-msg__content:has(.chat-cursor) {
+  border-color: color-mix(in srgb, var(--accent) 50%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 8%, transparent);
 }
 
 /* ?? Typing indicator (thinking dots) ?? */
