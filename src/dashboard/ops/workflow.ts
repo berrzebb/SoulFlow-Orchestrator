@@ -945,8 +945,11 @@ export function create_workflow_ops(deps: {
             } else if (tc.name === "read_section") {
               result = read_section(String(tc.arguments.path ?? ""));
             } else if (tc.name === "update_section") {
-              result = update_section(String(tc.arguments.path ?? ""), String(tc.arguments.yaml_content ?? ""));
-              logger?.debug?.("[suggest] update_section", { path: tc.arguments.path, result, content_preview: String(tc.arguments.yaml_content ?? "").slice(0, 80) });
+              // yaml_content가 이미 파싱된 객체일 수 있음 → String() 하면 "[object Object]"
+              const yaml_arg = tc.arguments.yaml_content;
+              const yaml_str = typeof yaml_arg === "string" ? yaml_arg : JSON.stringify(yaml_arg ?? "");
+              result = update_section(String(tc.arguments.path ?? ""), yaml_str);
+              logger?.debug?.("[suggest] update_section", { path: tc.arguments.path, result, content_preview: yaml_str.slice(0, 80) });
             } else if (tc.name === "search_tool") {
               result = await search_tool(String(tc.arguments.query ?? ""));
             } else if (tc.name === "search_skill") {
