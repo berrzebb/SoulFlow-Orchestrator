@@ -7,8 +7,8 @@ describe("image_handler", () => {
   const createMockNode = (overrides?: Partial<ImageNodeDefinition>): OrcheNodeDefinition => ({
     node_id: "test-node",
     node_type: "image",
-    action: "resize",
-    input: "/tmp/image.jpg",
+    operation: "resize",
+    input_path: "/tmp/image.jpg",
     width: 100,
     height: 100,
     ...overrides,
@@ -26,7 +26,7 @@ describe("image_handler", () => {
 
   it("metadata: output_schema should have result and success", () => {
     expect(image_handler.output_schema).toEqual([
-      { name: "result", type: "string", description: "Image operation result" },
+      { name: "result", type: "string", description: "Operation result" },
       { name: "success", type: "boolean", description: "Whether operation succeeded" },
     ]);
   });
@@ -34,11 +34,11 @@ describe("image_handler", () => {
   it("create_default: should return default config", () => {
     const defaults = image_handler.create_default?.();
     expect(defaults).toBeDefined();
-    expect(defaults).toHaveProperty("action");
+    expect(defaults).toHaveProperty("operation");
   });
 
-  it("execute: should handle resize action", async () => {
-    const node = createMockNode({ action: "resize" });
+  it("execute: should handle resize operation", async () => {
+    const node = createMockNode({ operation: "resize" });
     const ctx = createMockContext();
     const result = await image_handler.execute(node, ctx);
     expect(result.output).toBeDefined();
