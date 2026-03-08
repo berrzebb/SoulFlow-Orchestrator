@@ -1022,10 +1022,7 @@ export function create_workflow_ops(deps: {
     async update_settings(workflow_id, settings) {
       const state = await store.get(workflow_id);
       if (!state) return { ok: false, error: "workflow_not_found" };
-      const updated = { ...state };
-      if (typeof settings.auto_approve === "boolean") updated.auto_approve = settings.auto_approve;
-      if (typeof settings.auto_resume === "boolean") updated.auto_resume = settings.auto_resume;
-      await store.upsert(updated);
+      await store.patch_settings(workflow_id, settings);
       return { ok: true };
     },
   };

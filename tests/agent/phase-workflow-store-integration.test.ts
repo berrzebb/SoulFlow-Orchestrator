@@ -161,6 +161,41 @@ describe("PhaseWorkflowStore 통합 (실제 SQLite)", () => {
     expect(removed).toBe(false);
   });
 
+  it("patch_settings: upsert 후 런너가 stale state로 덮어써도 설정 보존", async () => {
+    const { store } = await make_store();
+    const state = make_state();
+
+    await store.upsert(state);
+    await store.patch_settings(state.workflow_id, { auto_approve: true, auto_resume: true });
+
+    // 런너가 auto_approve 없는 stale state로 upsert
+    await store.upsert({ ...state, status: "running" as const });
+
+    const got = await store.get(state.workflow_id);
+    expect(got!.auto_approve).toBe(true);
+    expect(got!.auto_resume).toBe(true);
+  });
+
+  it("patch_settings: auto_approve=false로 끈 뒤 런너 upsert 이후에도 유지", async () => {
+    const { store } = await make_store();
+    const state = make_state();
+
+    await store.upsert(state);
+    await store.patch_settings(state.workflow_id, { auto_approve: true });
+    await store.patch_settings(state.workflow_id, { auto_approve: false });
+
+    // 런너가 auto_approve 없는 state로 upsert
+    await store.upsert({ ...state });
+
+    const got = await store.get(state.workflow_id);
+    expect(got!.auto_approve).toBe(false);
+  });
+
+  it("patch_settings: 존재하지 않는 workflow_id는 no-op (예외 없음)", async () => {
+    const { store } = await make_store();
+    await expect(store.patch_settings("nonexistent", { auto_approve: true })).resolves.toBeUndefined();
+  });
+
   it("다른 phase/agent의 메시지는 격리", async () => {
     const { store } = await make_store();
     const state = make_state();

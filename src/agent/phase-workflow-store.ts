@@ -8,6 +8,8 @@ import type { PhaseLoopState, PhaseMessage } from "./phase-loop.types.js";
 
 export interface PhaseWorkflowStoreLike {
   upsert(state: PhaseLoopState): Promise<void>;
+  /** 런타임과 무관하게 설정 필드(auto_approve, auto_resume)만 원자적으로 수정. */
+  patch_settings(workflow_id: string, settings: { auto_approve?: boolean; auto_resume?: boolean }): Promise<void>;
   get(workflow_id: string): Promise<PhaseLoopState | null>;
   list(): Promise<PhaseLoopState[]>;
   remove(workflow_id: string): Promise<boolean>;
@@ -92,6 +94,18 @@ export class PhaseWorkflowStore implements PhaseWorkflowStoreLike {
   async upsert(state: PhaseLoopState): Promise<void> {
     await this.initialized;
     with_sqlite(this.sqlite_path, (db) => {
+      // 런타임 상태 저장 시 기존 DB의 설정 필드(auto_approve, auto_resume)를 항상 보존.
+      // 설정 변경은 patch_settings()로만 가능하며, upsert는 런타임 상태만 책임진다.
+      const existing = db.prepare("SELECT payload_json FROM phase_workflows WHERE workflow_id = ? LIMIT 1")
+        .get(state.workflow_id) as { payload_json: string } | undefined;
+      let save_state = state;
+      if (existing) {
+        try {
+          const prev = JSON.parse(String(existing.payload_json)) as Partial<PhaseLoopState>;
+          save_state = { ...state, auto_approve: prev.auto_approve, auto_resume: prev.auto_resume };
+        } catch { /* 기존 레코드 파싱 실패 시 state 그대로 저장 */ }
+      }
+
       db.prepare(`
         INSERT INTO phase_workflows (workflow_id, status, channel, chat_id, updated_at, payload_json)
         VALUES (?, ?, ?, ?, ?, ?)
@@ -102,13 +116,31 @@ export class PhaseWorkflowStore implements PhaseWorkflowStoreLike {
           updated_at = excluded.updated_at,
           payload_json = excluded.payload_json
       `).run(
-        state.workflow_id,
-        state.status,
-        state.channel || "",
-        state.chat_id || "",
+        save_state.workflow_id,
+        save_state.status,
+        save_state.channel || "",
+        save_state.chat_id || "",
         now_iso(),
-        JSON.stringify(state),
+        JSON.stringify(save_state),
       );
+      return true;
+    });
+  }
+
+  async patch_settings(workflow_id: string, settings: { auto_approve?: boolean; auto_resume?: boolean }): Promise<void> {
+    await this.initialized;
+    with_sqlite(this.sqlite_path, (db) => {
+      const row = db.prepare("SELECT payload_json FROM phase_workflows WHERE workflow_id = ? LIMIT 1")
+        .get(workflow_id) as { payload_json: string } | undefined;
+      if (!row) return true;
+      try {
+        const prev = JSON.parse(String(row.payload_json)) as PhaseLoopState;
+        const updated: PhaseLoopState = { ...prev };
+        if (typeof settings.auto_approve === "boolean") updated.auto_approve = settings.auto_approve;
+        if (typeof settings.auto_resume === "boolean") updated.auto_resume = settings.auto_resume;
+        db.prepare("UPDATE phase_workflows SET payload_json = ?, updated_at = ? WHERE workflow_id = ?")
+          .run(JSON.stringify(updated), now_iso(), workflow_id);
+      } catch { /* 파싱 실패 시 무시 */ }
       return true;
     });
   }
