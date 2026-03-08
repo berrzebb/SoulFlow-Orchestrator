@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 import { useT } from "../../i18n";
+import { useProviderModels } from "./use-provider-models";
+import type { NodeOptions } from "./node-registry";
 
 /** 워크플로우 빌더 폼 필드 — label + input + hint/error 표준화. */
 export function BuilderField({ label, required, optional, hint, error, children }: {
@@ -30,6 +32,48 @@ export function BuilderRowPair({ children, className }: {
   className?: string;
 }) {
   return <div className={`builder-row-pair${className ? ` ${className}` : ""}`}>{children}</div>;
+}
+
+/** LLM backend + model 선택기 — useProviderModels 훅 내장, 로딩/fallback 처리 포함. */
+export function BackendModelPicker({ backend, onBackendChange, model, onModelChange, options, required, autoFocus, backendLabel, modelLabel }: {
+  backend: string;
+  onBackendChange: (v: string) => void;
+  model: string | undefined;
+  onModelChange: (v: string | undefined) => void;
+  options?: NodeOptions;
+  required?: boolean;
+  autoFocus?: boolean;
+  backendLabel: string;
+  modelLabel: string;
+}) {
+  const { models, loading } = useProviderModels(backend, options);
+  return (
+    <BuilderRowPair>
+      <BuilderField label={backendLabel} required={required}>
+        <select autoFocus={autoFocus} className="input input--sm" required={required} value={backend}
+          onChange={(e) => onBackendChange(e.target.value)} aria-required={required || undefined}>
+          <option value="">-</option>
+          {(options?.backends || []).map((b) => (
+            <option key={b.value} value={b.value}>
+              {b.available === false ? "\u26AA " : "\uD83D\uDFE2 "}{b.label}{b.provider_type ? ` (${b.provider_type})` : ""}
+            </option>
+          ))}
+        </select>
+      </BuilderField>
+      <BuilderField label={modelLabel} required={required}>
+        {loading ? (
+          <input className="input input--sm" disabled aria-busy="true" placeholder="loading..." />
+        ) : models.length > 0 ? (
+          <select className="input input--sm" value={model || ""} onChange={(e) => onModelChange(e.target.value || undefined)}>
+            <option value="">auto</option>
+            {models.filter((m) => m.purpose !== "embedding").map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+          </select>
+        ) : (
+          <input className="input input--sm" value={model || ""} onChange={(e) => onModelChange(e.target.value || undefined)} placeholder="auto" />
+        )}
+      </BuilderField>
+    </BuilderRowPair>
+  );
 }
 
 /** LLM temperature 슬라이더 — label 내부 상태 표시(precise/balanced/creative) 포함. */

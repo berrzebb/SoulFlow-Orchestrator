@@ -358,3 +358,152 @@ describe("Escalation Node Handler", () => {
     });
   });
 });
+
+// ── runner_execute + evaluate_condition 테스트 ────────────────────────────
+
+function make_runner(memory: Record<string, unknown> = {}, send_message?: (r: any) => Promise<void>) {
+  return {
+    state: { memory },
+    logger: { warn: vi.fn(), info: vi.fn(), debug: vi.fn(), error: vi.fn(), child: vi.fn() },
+    options: { send_message },
+  } as any;
+}
+
+describe("escalation_handler.runner_execute", () => {
+  it("always 조건 + send_message 있음 → escalated=true, send_message 호출", async () => {
+    const node = createMockEscalationNode({ condition: "always", message: "Alert!", target_channel: "slack", target_chat_id: "C001" });
+    const send_message = vi.fn().mockResolvedValue(undefined);
+    const runner = make_runner({}, send_message);
+    const ctx = createMockContext();
+
+    const result = await escalation_handler.runner_execute!(node, ctx, runner);
+
+    expect(result.output.escalated).toBe(true);
+    expect(result.output.escalated_to).toMatchObject({ channel: "slack", chat_id: "C001" });
+    expect(send_message).toHaveBeenCalledOnce();
+    const req = send_message.mock.calls[0][0];
+    expect(req.content).toContain("[ESCALATION:high]");
+    expect(req.content).toContain("Alert!");
+  });
+
+  it("always 조건 + send_message 없음 → escalated=false, reason=no_send_callback", async () => {
+    const node = createMockEscalationNode({ condition: "always" });
+    const runner = make_runner({}, undefined);
+    const ctx = createMockContext();
+
+    const result = await escalation_handler.runner_execute!(node, ctx, runner);
+
+    expect(result.output.escalated).toBe(false);
+    expect(result.output.reason).toBe("no_send_callback");
+    expect(runner.logger.warn).toHaveBeenCalledWith("escalation_no_send_message", expect.any(Object));
+  });
+
+  it("on_timeout 조건 → 의존 노드에 timed_out=true 있으면 에스컬레이션", async () => {
+    const node = createMockEscalationNode({ condition: "on_timeout", depends_on: ["node-a"] });
+    const memory = { "node-a": { timed_out: true } };
+    const send_message = vi.fn().mockResolvedValue(undefined);
+    const runner = make_runner(memory, send_message);
+
+    const result = await escalation_handler.runner_execute!(node, createMockContext(), runner);
+    expect(result.output.escalated).toBe(true);
+  });
+
+  it("on_timeout 조건 → timed_out 없으면 에스컬레이션 안 함", async () => {
+    const node = createMockEscalationNode({ condition: "on_timeout", depends_on: ["node-a"] });
+    const memory = { "node-a": { timed_out: false } };
+    const send_message = vi.fn().mockResolvedValue(undefined);
+    const runner = make_runner(memory, send_message);
+
+    const result = await escalation_handler.runner_execute!(node, createMockContext(), runner);
+    expect(result.output.escalated).toBe(false);
+    expect(result.output.reason).toBe("condition_not_met");
+  });
+
+  it("on_rejection 조건 → 의존 노드에 approved=false 있으면 에스컬레이션", async () => {
+    const node = createMockEscalationNode({ condition: "on_rejection", depends_on: ["approval-1"] });
+    const memory = { "approval-1": { approved: false } };
+    const send_message = vi.fn().mockResolvedValue(undefined);
+    const runner = make_runner(memory, send_message);
+
+    const result = await escalation_handler.runner_execute!(node, createMockContext(), runner);
+    expect(result.output.escalated).toBe(true);
+  });
+
+  it("on_rejection 조건 → approved=true이면 에스컬레이션 안 함", async () => {
+    const node = createMockEscalationNode({ condition: "on_rejection", depends_on: ["approval-1"] });
+    const memory = { "approval-1": { approved: true } };
+    const send_message = vi.fn().mockResolvedValue(undefined);
+    const runner = make_runner(memory, send_message);
+
+    const result = await escalation_handler.runner_execute!(node, createMockContext(), runner);
+    expect(result.output.escalated).toBe(false);
+  });
+
+  it("custom 조건 → 표현식이 truthy이면 에스컬레이션", async () => {
+    const node = createMockEscalationNode({
+      condition: "custom",
+      custom_expression: "memory.error_count > 3",
+    });
+    const memory = { error_count: 5 };
+    const send_message = vi.fn().mockResolvedValue(undefined);
+    const runner = make_runner(memory, send_message);
+
+    const result = await escalation_handler.runner_execute!(node, createMockContext(), runner);
+    expect(result.output.escalated).toBe(true);
+  });
+
+  it("custom 조건 → 표현식이 falsy이면 에스컬레이션 안 함", async () => {
+    const node = createMockEscalationNode({
+      condition: "custom",
+      custom_expression: "memory.error_count > 10",
+    });
+    const memory = { error_count: 2 };
+    const runner = make_runner(memory);
+
+    const result = await escalation_handler.runner_execute!(node, createMockContext(), runner);
+    expect(result.output.escalated).toBe(false);
+  });
+
+  it("custom 조건 → 표현식 에러 시 false 반환", async () => {
+    const node = createMockEscalationNode({
+      condition: "custom",
+      custom_expression: "this_will_throw.undefined.access",
+    });
+    const runner = make_runner({});
+
+    const result = await escalation_handler.runner_execute!(node, createMockContext(), runner);
+    expect(result.output.escalated).toBe(false);
+  });
+
+  it("custom_expression 없음 → false (에스컬레이션 안 함)", async () => {
+    const node = createMockEscalationNode({ condition: "custom" }) as any;
+    delete node.custom_expression;
+    const runner = make_runner({});
+
+    const result = await escalation_handler.runner_execute!(node, createMockContext(), runner);
+    expect(result.output.escalated).toBe(false);
+  });
+
+  it("unknown 조건 → false (에스컬레이션 안 함)", async () => {
+    const node = createMockEscalationNode({ condition: "unknown_condition" as any });
+    const runner = make_runner({});
+
+    const result = await escalation_handler.runner_execute!(node, createMockContext(), runner);
+    expect(result.output.escalated).toBe(false);
+  });
+
+  it("메시지 템플릿 보간 적용됨", async () => {
+    const node = createMockEscalationNode({
+      condition: "always",
+      message: "User {{memory.user}} reported error",
+    });
+    const memory = { user: "alice" };
+    const send_message = vi.fn().mockResolvedValue(undefined);
+    const runner = make_runner(memory, send_message);
+
+    await escalation_handler.runner_execute!(node, createMockContext(), runner);
+
+    const req = send_message.mock.calls[0][0];
+    expect(req.content).toContain("alice");
+  });
+});
