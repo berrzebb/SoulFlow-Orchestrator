@@ -235,8 +235,9 @@ export default function WorkflowsPage() {
         <>
           {tplLoading ? (
             <div className="stat-grid stat-grid--wide">
-              <div className="skeleton skeleton-card" style={{ height: 140 }} />
-              <div className="skeleton skeleton-card" style={{ height: 140 }} />
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="skeleton skeleton-card" style={{ height: 140 }} />
+              ))}
             </div>
           ) : !templates?.length ? (
             <div className="empty-state">
@@ -352,8 +353,9 @@ export default function WorkflowsPage() {
         <>
           {wfLoading ? (
             <div className="stat-grid stat-grid--wide">
-              <div className="skeleton skeleton-card" style={{ height: 180 }} />
-              <div className="skeleton skeleton-card" style={{ height: 180 }} />
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="skeleton skeleton-card" style={{ height: 180 }} />
+              ))}
             </div>
           ) : !sortedWorkflows.length ? (
             <div className="empty-state">

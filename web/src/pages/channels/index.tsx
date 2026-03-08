@@ -61,8 +61,9 @@ export default function ChannelsPage() {
 
       {isLoading ? (
         <div className="stat-grid stat-grid--wide mt-3">
-          <div className="skeleton skeleton-card" />
-          <div className="skeleton skeleton-card" />
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="skeleton skeleton-card" />
+          ))}
         </div>
       ) : !instances?.length ? (
         <div className="empty-state">
