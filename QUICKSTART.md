@@ -1,6 +1,26 @@
 # 🚀 SoulFlow Orchestrator - 빠른 시작
 
-> **⚡ 최고의 방법: 이 3줄만 실행하세요!**
+> **⚡ 정말 간단합니다: 이 명령어 하나만 실행하세요!**
+> ```bash
+> make dev                    # Linux/macOS
+> run.cmd dev                 # Windows Cmd
+> .\run.ps1 dev               # Windows PowerShell
+> ```
+>
+> **나머지는 모두 자동입니다** ✨
+
+---
+
+## ⚡ 5초 시작 가이드
+
+```bash
+git clone ...
+cd soulflow-orchestrator
+make dev              # 또는 run.cmd dev (Windows)
+# → http://localhost:4200 열기
+```
+
+**끝입니다!** npm install, 빌드, 서버 실행 모두 자동 🚀
 
 ---
 
