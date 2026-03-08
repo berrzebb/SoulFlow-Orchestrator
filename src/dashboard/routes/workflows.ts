@@ -54,6 +54,20 @@ export const handle_workflow: RouteHandler = async (ctx) => {
     return true;
   }
 
+  // PATCH /api/workflow/runs/:id/settings — auto_approve, auto_resume 설정
+  const settings_match = path.match(/^\/api\/workflow\/runs\/([^/]+)\/settings$/);
+  if (settings_match && method === "PATCH") {
+    if (!ops.update_settings) { json(res, 501, { error: "not_supported" }); return true; }
+    const body = await read_body(req);
+    if (!body) { json(res, 400, { error: "invalid_body" }); return true; }
+    const result = await ops.update_settings(settings_match[1], {
+      auto_approve: typeof body.auto_approve === "boolean" ? body.auto_approve : undefined,
+      auto_resume: typeof body.auto_resume === "boolean" ? body.auto_resume : undefined,
+    });
+    json(res, result.ok ? 200 : 400, result);
+    return true;
+  }
+
   // GET /api/workflow/runs/:id/messages?phase_id=&agent_id=
   const msg_match = path.match(/^\/api\/workflow\/runs\/([^/]+)\/messages$/);
   if (msg_match && method === "GET") {

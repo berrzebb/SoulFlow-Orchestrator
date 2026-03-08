@@ -89,6 +89,10 @@ export interface PhaseLoopState {
   updated_at: string;
   /** 워크플로우 정의 원본 (YAML 또는 dashboard 생성). 재실행/UI 표시용. */
   definition?: WorkflowDefinition;
+  /** Approval 노드 + ask_channel 대기를 자동으로 승인. */
+  auto_approve?: boolean;
+  /** HITL/ask_user 대기를 빈 응답으로 자동 재개. */
+  auto_resume?: boolean;
 }
 
 // ── Definition (워크플로우 템플릿) ───────────────────

@@ -315,6 +315,8 @@ export interface DashboardWorkflowOps {
   list_roles(): Array<{ id: string; name: string; description: string; soul: string | null; heart: string | null; tools: string[] }>;
   /** 중단된 워크플로우를 영속 상태에서 재개. */
   resume(workflow_id: string): Promise<{ ok: boolean; error?: string }>;
+  /** 워크플로우 자동화 설정 변경 (auto_approve, auto_resume). */
+  update_settings(workflow_id: string, settings: { auto_approve?: boolean; auto_resume?: boolean }): Promise<{ ok: boolean; error?: string }>;
   /** 단일 노드 실행 (Run 모드). */
   run_single_node?(node: Record<string, unknown>, input_memory: Record<string, unknown>): Promise<{ ok: boolean; output?: unknown; duration_ms?: number; error?: string }>;
   /** 단일 노드 테스트 (Dry-run). */

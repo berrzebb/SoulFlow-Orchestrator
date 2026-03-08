@@ -10,6 +10,29 @@ import { useApprovals } from "../../hooks/use-approvals";
 import { useT } from "../../i18n";
 import { time_ago } from "../../utils/format";
 
+/** 자동 승인 토글 버튼 — 활성 시 pending approvals를 즉시 자동 resolve. */
+function AutoApproveToggle({ enabled, onToggle, pending_count }: {
+  enabled: boolean;
+  onToggle: () => void;
+  pending_count: number;
+}) {
+  const t = useT();
+  return (
+    <button
+      className={`btn btn--sm${enabled ? " btn--ok" : " btn--ghost"}`}
+      onClick={onToggle}
+      title={t("workflows.auto_approve_hint") || "Pending approvals will be automatically approved"}
+    >
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+        {enabled && <polyline points="9 12 11 14 15 10"/>}
+      </svg>
+      {enabled ? (t("workflows.auto_approve_on") || "자동 승인 ON") : (t("workflows.auto_approve_off") || "자동 승인")}
+      {pending_count > 0 && <Badge status={String(pending_count)} variant="warn" />}
+    </button>
+  );
+}
+
 interface PhaseMessage {
   role: "user" | "assistant" | "system";
   content: string;
@@ -65,6 +88,8 @@ interface PhaseLoopState {
   created_at: string;
   updated_at: string;
   definition?: { phases: PhaseDefinitionBrief[] };
+  auto_approve?: boolean;
+  auto_resume?: boolean;
 }
 
 const STATUS_VARIANT: Record<string, "ok" | "warn" | "err" | "off"> = {
@@ -82,6 +107,8 @@ export default function WorkflowDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const t = useT();
+  const qc = useQueryClient();
+  const { toast } = useToast();
   const [chatTarget, setChatTarget] = useState<{
     phase_id: string; agent_id: string; label: string; model?: string; status?: string; phase_title?: string;
   } | null>(null);
@@ -93,6 +120,32 @@ export default function WorkflowDetailPage() {
     refetchInterval: 10_000, staleTime: 3_000,
     enabled: !!id,
   });
+
+  const settings_mut = useMutation({
+    mutationFn: (settings: { auto_approve?: boolean; auto_resume?: boolean }) =>
+      api.patch(`/api/workflow/runs/${id}/settings`, settings),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["workflow", id] }),
+    onError: () => toast(t("workflows.settings_failed") || "설정 변경 실패", "err"),
+  });
+
+  const { pending: pending_approvals, resolve: resolve_approval } = useApprovals({
+    related_query_keys: [["workflow", id]],
+  });
+
+  // 프론트엔드 폴백 자동승인: 서버 설정이 있어도 대시보드에서도 즉시 처리
+  const auto_approved_ids = useRef(new Set<string>());
+  const resolve_ref = useRef(resolve_approval);
+  resolve_ref.current = resolve_approval;
+
+  useEffect(() => {
+    if (!wf?.auto_approve) return;
+    for (const ap of pending_approvals) {
+      if (!auto_approved_ids.current.has(ap.request_id)) {
+        auto_approved_ids.current.add(ap.request_id);
+        void resolve_ref.current(ap.request_id, "approve");
+      }
+    }
+  }, [wf?.auto_approve, pending_approvals]);
 
   if (isLoading || !wf) {
     return (
@@ -145,9 +198,26 @@ export default function WorkflowDetailPage() {
                   {time_ago(wf.updated_at)}
                 </span>
               </div>
-              {(wf.status === "failed" || wf.status === "waiting_user_input") && (
-                <ResumeButton workflowId={wf.workflow_id} />
-              )}
+              <div className="wf-detail__hero-actions">
+                <AutoApproveToggle
+                  enabled={!!wf.auto_approve}
+                  onToggle={() => settings_mut.mutate({ auto_approve: !wf.auto_approve })}
+                  pending_count={pending_approvals.length}
+                />
+                <button
+                  className={`btn btn--sm${wf.auto_resume ? " btn--ok" : " btn--ghost"}`}
+                  onClick={() => settings_mut.mutate({ auto_resume: !wf.auto_resume })}
+                  title={t("workflows.auto_resume_hint") || "HITL 대기를 자동으로 재개합니다"}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polygon points="5 3 19 12 5 21 5 3"/>
+                  </svg>
+                  {wf.auto_resume ? (t("workflows.auto_resume_on") || "자동 재개 ON") : (t("workflows.auto_resume_off") || "자동 재개")}
+                </button>
+                {(wf.status === "failed" || wf.status === "waiting_user_input") && (
+                  <ResumeButton workflowId={wf.workflow_id} />
+                )}
+              </div>
             </div>
           </div>
 

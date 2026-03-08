@@ -178,7 +178,14 @@ export function create_workflow_ops(deps: {
   const pending_responses = deps.hitl_pending_store;
 
   function build_ask_user(workflow_id: string, target_channel: string, target_chat_id: string) {
-    return (question: string): Promise<string> => {
+    return async (question: string): Promise<string> => {
+      // auto_resume 설정 시 즉시 빈 응답으로 재개
+      const current = await store.get(workflow_id);
+      if (current?.auto_resume) {
+        logger.info("workflow_auto_resume", { workflow_id });
+        return "";
+      }
+
       on_workflow_event?.({ type: "user_input_requested", workflow_id, phase_id: "", question });
 
       if (bus && target_channel !== "dashboard" && target_channel !== "web") {
@@ -225,9 +232,22 @@ export function create_workflow_ops(deps: {
   }
 
   function build_ask_channel(workflow_id: string, origin_channel: string, origin_chat_id: string) {
-    return (req: ChannelSendRequest, timeout_ms: number): Promise<ChannelResponse> => {
+    return async (req: ChannelSendRequest, timeout_ms: number): Promise<ChannelResponse> => {
       const channel = req.target === "origin" ? origin_channel : (req.channel || origin_channel);
       const chat_id = req.target === "origin" ? origin_chat_id : (req.chat_id || origin_chat_id);
+
+      // auto_approve 설정 시 approval 요청을 즉시 승인
+      if (req.structured?.type === "approval") {
+        const current = await store.get(workflow_id);
+        if (current?.auto_approve) {
+          logger.info("workflow_auto_approve", { workflow_id });
+          return {
+            response: "approve", approved: true,
+            responded_by: { channel: "system", chat_id: "auto-approve" },
+            responded_at: new Date().toISOString(), timed_out: false,
+          };
+        }
+      }
 
       if (bus && channel !== "dashboard" && channel !== "web") {
         bus.publish_outbound({
@@ -997,6 +1017,16 @@ export function create_workflow_ops(deps: {
         `\n## Objective\n(will be provided at runtime)`,
       ].join("\n");
       return { ok: true, preview: { prompt: prompt_preview, backend: agent_def.backend, model: agent_def.model }, warnings: [] };
+    },
+
+    async update_settings(workflow_id, settings) {
+      const state = await store.get(workflow_id);
+      if (!state) return { ok: false, error: "workflow_not_found" };
+      const updated = { ...state };
+      if (typeof settings.auto_approve === "boolean") updated.auto_approve = settings.auto_approve;
+      if (typeof settings.auto_resume === "boolean") updated.auto_resume = settings.auto_resume;
+      await store.upsert(updated);
+      return { ok: true };
     },
   };
 }
