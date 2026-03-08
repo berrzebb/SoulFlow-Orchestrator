@@ -16,7 +16,7 @@ function SwitchEditPanel({ node, update, t }: EditPanelProps) {
     <>
       <div className="builder-row">
         <label className="label">{t("workflows.switch_expression")}</label>
-        <input className="input input--sm" value={String(node.expression || "")} onChange={(e) => update({ expression: e.target.value })} placeholder="memory.status" />
+        <input autoFocus className="input input--sm" value={String(node.expression || "")} onChange={(e) => update({ expression: e.target.value })} placeholder="memory.status" />
         <span className="builder-hint">{t("workflows.expression_hint")}</span>
       </div>
       <div className="builder-row">

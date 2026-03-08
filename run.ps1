@@ -9,6 +9,8 @@ param(
 
 $ErrorActionPreference = "Continue"
 $Workspace = $env:WORKSPACE -or "/data"
+$WebPort = $env:WEB_PORT
+$RedisPort = $env:REDIS_PORT
 
 function Write-Title {
   param([string]$Title)
@@ -35,6 +37,8 @@ function Show-Help {
   Write-Host ""
   Write-Host "옵션:" -ForegroundColor Yellow
   Write-Host "  `$env:WORKSPACE='D:\path' .\run.ps1 dev - 커스텀 워크스페이스"
+  Write-Host "  `$env:WEB_PORT=8080 .\run.ps1 dev         - 웹 포트"
+  Write-Host "  `$env:REDIS_PORT=6380 .\run.ps1 dev       - Redis 포트"
   Write-Host ""
 }
 
@@ -53,6 +57,9 @@ function Start-Environment {
 
   try {
     $env:WORKSPACE = $Workspace
+    if ($WebPort) { $env:WEB_PORT = $WebPort }
+    if ($RedisPort) { $env:REDIS_PORT = $RedisPort }
+
     & node setup-environment.js $Profile
     $composeFile = "docker-compose.$Profile.yml"
     docker compose -f $composeFile up -d

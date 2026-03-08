@@ -11,8 +11,10 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
-# 워크스페이스 설정
+# 환경변수 설정
 WORKSPACE=${WORKSPACE:-/data}
+WEB_PORT=${WEB_PORT:-}
+REDIS_PORT=${REDIS_PORT:-}
 
 show_help() {
   echo ""
@@ -32,9 +34,14 @@ show_help() {
   echo "  ./run.sh down      - 모든 환경 중지"
   echo ""
   echo -e "${YELLOW}옵션:${NC}"
-  echo "  WORKSPACE=/path ./run.sh dev  - 커스텀 워크스페이스"
+  echo "  WORKSPACE=/path ./run.sh dev            - 커스텀 워크스페이스"
+  echo "  WEB_PORT=8080 ./run.sh dev              - 웹 포트"
+  echo "  REDIS_PORT=6380 ./run.sh dev            - Redis 포트"
   echo ""
-  echo -e "${BLUE}현재 워크스페이스: ${WORKSPACE}${NC}"
+  echo -e "${BLUE}현재 설정:${NC}"
+  echo "  워크스페이스: ${WORKSPACE}"
+  if [ -n "$WEB_PORT" ]; then echo "  웹 포트: ${WEB_PORT}"; fi
+  if [ -n "$REDIS_PORT" ]; then echo "  Redis 포트: ${REDIS_PORT}"; fi
   echo ""
 }
 
@@ -43,7 +50,11 @@ run_env() {
   echo -e "\n${YELLOW}🚀 $profile 환경 시작 중...${NC}"
   echo "   워크스페이스: $WORKSPACE"
 
-  WORKSPACE="$WORKSPACE" node setup-environment.js "$profile"
+  export WORKSPACE="$WORKSPACE"
+  [ -n "$WEB_PORT" ] && export WEB_PORT="$WEB_PORT"
+  [ -n "$REDIS_PORT" ] && export REDIS_PORT="$REDIS_PORT"
+
+  node setup-environment.js "$profile"
   docker compose -f "docker-compose.${profile}.yml" up -d
 
   echo -e "\n${GREEN}✅ $profile 환경이 시작되었습니다!${NC}"

@@ -5,7 +5,7 @@ function LoopEditPanel({ node, update, t }: EditPanelProps) {
     <>
       <div className="builder-row">
         <label className="label">{t("workflows.loop_array")}</label>
-        <input className="input input--sm" value={String(node.array_field || "")} onChange={(e) => update({ array_field: e.target.value })} placeholder="items" />
+        <input autoFocus className="input input--sm" value={String(node.array_field || "")} onChange={(e) => update({ array_field: e.target.value })} placeholder="items" />
         <span className="builder-hint">{t("workflows.loop_array_hint")}</span>
       </div>
       <div className="builder-row">

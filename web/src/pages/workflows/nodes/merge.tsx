@@ -4,7 +4,7 @@ function MergeEditPanel({ node, update, t }: EditPanelProps) {
   return (
     <div className="builder-row">
       <label className="label">{t("workflows.merge_mode")}</label>
-      <select className="input input--sm" value={String(node.merge_mode || "wait_all")} onChange={(e) => update({ merge_mode: e.target.value })}>
+      <select autoFocus className="input input--sm" value={String(node.merge_mode || "wait_all")} onChange={(e) => update({ merge_mode: e.target.value })}>
         <option value="wait_all">wait_all</option>
         <option value="first_completed">first_completed</option>
         <option value="collect">collect</option>

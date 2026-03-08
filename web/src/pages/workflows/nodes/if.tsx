@@ -5,7 +5,7 @@ function IfEditPanel({ node, update, t }: EditPanelProps) {
     <>
       <div className="builder-row">
         <label className="label">{t("workflows.if_condition")}</label>
-        <input className="input input--sm" value={String(node.condition || "")} onChange={(e) => update({ condition: e.target.value })} placeholder="memory.prev.status === 200" />
+        <input autoFocus className="input input--sm" value={String(node.condition || "")} onChange={(e) => update({ condition: e.target.value })} placeholder="memory.prev.status === 200" />
         <span className="builder-hint">{t("workflows.condition_hint")}</span>
       </div>
       <div className="builder-row-pair">

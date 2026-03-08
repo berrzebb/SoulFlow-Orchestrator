@@ -4,6 +4,7 @@ setlocal enabledelayedexpansion
 REM SoulFlow Orchestrator 환경 관리 스크립트 (Windows)
 REM 사용법: run.cmd dev|test|staging|prod|down|status|logs|help
 REM 워크스페이스: run.cmd dev WORKSPACE=D:\my\workspace
+REM 포트: run.cmd dev WEB_PORT=8080 REDIS_PORT=6380
 
 setlocal enabledelayedexpansion
 
@@ -59,6 +60,11 @@ echo %YELLOW%관리:%RESET%
 echo   run.cmd down      - 모든 환경 중지
 echo   run.cmd status    - 환경 상태 확인
 echo   run.cmd logs      - 로그 확인
+echo.
+echo %YELLOW%옵션:%RESET%
+echo   run.cmd dev WORKSPACE=D:\path - 커스텀 워크스페이스
+echo   run.cmd dev WEB_PORT=8080     - 웹 포트
+echo   run.cmd dev REDIS_PORT=6380   - Redis 포트
 echo.
 goto end
 

@@ -9,18 +9,35 @@
 | staging | 4202 | 배포 전 점검 |
 | prod | 4200 | 실제 운영 |
 
-## 특정 폴더에서 실행하기
-
-특정 폴더를 사용하여 실행하려면:
+## 커스텀 설정으로 실행하기
 
 **Linux/macOS:**
 ```bash
-WORKSPACE=/경로/입력 ./run.sh dev
+# 워크스페이스
+WORKSPACE=/custom/path ./run.sh dev
+
+# 웹 포트
+WEB_PORT=8080 ./run.sh dev
+
+# Redis 포트
+REDIS_PORT=6380 ./run.sh dev
+
+# 모두 지정
+WORKSPACE=/custom/path WEB_PORT=8080 REDIS_PORT=6380 ./run.sh dev
 ```
 
-**Windows:**
+**Windows (Cmd):**
 ```cmd
-run.cmd dev WORKSPACE=D:\경로\입력
+run.cmd dev WORKSPACE=D:\custom\path
+run.cmd dev WEB_PORT=8080
+run.cmd dev REDIS_PORT=6380
+```
+
+**Windows (PowerShell):**
+```powershell
+$env:WORKSPACE='D:\custom\path' .\run.ps1 dev
+$env:WEB_PORT=8080 .\run.ps1 dev
+$env:REDIS_PORT=6380 .\run.ps1 dev
 ```
 
 ## 환경 중지하기

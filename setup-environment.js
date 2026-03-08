@@ -172,15 +172,23 @@ function main() {
     process.exit(1);
   }
 
-  // WORKSPACE 환경변수 또는 기본값 사용
+  // 환경변수 또는 기본값 사용
   const envWorkspace = process.env.WORKSPACE;
+  const envWebPort = process.env.WEB_PORT;
+  const envRedisPort = process.env.REDIS_PORT;
 
   const config = { ...ENV_PROFILES[profile] };
 
-  // 환경변수로 WORKSPACE가 지정되면 사용 (격리 목적)
+  // 환경변수로 설정이 지정되면 사용
   if (envWorkspace) {
     config.workspace = envWorkspace;
     config.projectName = `${config.projectName}-${process.env.USER || 'user'}`;
+  }
+  if (envWebPort) {
+    config.webPort = parseInt(envWebPort, 10);
+  }
+  if (envRedisPort) {
+    config.redisPort = parseInt(envRedisPort, 10);
   }
 
   console.log(`\n🔧 ${config.name} 환경 설정 생성 중...\n`);
