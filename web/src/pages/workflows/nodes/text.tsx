@@ -6,7 +6,7 @@ function TextEditPanel({ node, update, t }: EditPanelProps) {
     <>
       <div className="builder-row">
         <label className="label">{t("workflows.operation")}</label>
-        <select className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
+        <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
           {["upper", "lower", "title", "camel", "snake", "kebab", "slugify", "truncate", "pad", "count", "dedup", "similarity", "reverse", "join", "wrap", "trim_lines"].map((o) => <option key={o} value={o}>{o}</option>)}
         </select>
       </div>
