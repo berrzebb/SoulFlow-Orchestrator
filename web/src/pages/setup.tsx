@@ -106,6 +106,7 @@ export default function SetupPage() {
                   {checked && needs_token && (
                     <div className="mt-2">
                       <input
+                        autoFocus
                         type="password"
                         placeholder={t("setup.api_key")}
                         value={entry?.token || ""}
@@ -174,6 +175,7 @@ export default function SetupPage() {
             <label>
               <div className="form-label">{t("setup.persona_name")}</div>
               <input
+                autoFocus
                 type="text"
                 value={personaName}
                 onChange={(e) => setPersonaName(e.target.value)}
@@ -188,6 +190,7 @@ export default function SetupPage() {
                 type="text"
                 value={alias}
                 onChange={(e) => setAlias(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter" && alias.trim()) void finish(); }}
                 className="form-input"
               />
             </label>
