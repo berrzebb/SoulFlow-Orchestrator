@@ -34,13 +34,13 @@ function ApprovalEditPanel({ node, update, t, options }: EditPanelProps) {
       <div className="builder-row-pair">
         <div className="builder-row">
           <label className="label">{t("workflows.approval_quorum")}<span className="label__required">*</span></label>
-          <input required className="input input--sm" type="number" min={1} value={String(node.quorum ?? 1)} onChange={(e) => update({ quorum: Number(e.target.value) })} aria-required="true" />
-          <span className="builder-hint">{t("workflows.approval_quorum_hint")}</span>
+          <input required className="input input--sm" type="number" min={1} value={String(node.quorum ?? 1)} onChange={(e) => update({ quorum: Number(e.target.value) })} placeholder="1" aria-required="true" />
+          <span className="builder-hint">{t("workflows.approval_quorum_hint")} (최소: 1)</span>
         </div>
         <div className="builder-row">
           <label className="label">{t("workflows.hitl_timeout")}<span className="label__required">*</span></label>
-          <input required className="input input--sm" type="number" min={0} value={String(node.timeout_ms ?? 600000)} onChange={(e) => update({ timeout_ms: Number(e.target.value) })} aria-required="true" />
-          <span className="builder-hint">{t("workflows.hitl_timeout_hint")}</span>
+          <input required className="input input--sm" type="number" min={0} value={String(node.timeout_ms ?? 600000)} onChange={(e) => update({ timeout_ms: Number(e.target.value) })} placeholder="600000" aria-required="true" />
+          <span className="builder-hint">{t("workflows.hitl_timeout_hint")} (밀리초, 최소: 0)</span>
         </div>
       </div>
       <div className="builder-row">
