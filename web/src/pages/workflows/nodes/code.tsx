@@ -22,7 +22,7 @@ function CodeEditPanel({ node, update, t }: EditPanelProps) {
     <>
       <div className="builder-row">
         <label className="label">{t("workflows.code_language")}</label>
-        <select className="input input--sm" value={lang} onChange={(e) => update({ language: e.target.value })}>
+        <select autoFocus className="input input--sm" value={lang} onChange={(e) => update({ language: e.target.value })}>
           {LANGUAGES.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}
         </select>
       </div>

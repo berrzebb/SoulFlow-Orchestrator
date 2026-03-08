@@ -83,7 +83,7 @@ export function PhaseParamsPanel({ phase, workflow, onChange, onPhaseIdChange, t
       <div className="builder-row-pair">
         <div className="builder-row">
           <label className="label">{t("workflows.phase_id")}</label>
-          <input className="input input--sm" value={phase.phase_id}
+          <input autoFocus className="input input--sm" value={phase.phase_id}
             onChange={(e) => updatePhase({ phase_id: e.target.value })} />
         </div>
         <div className="builder-row">

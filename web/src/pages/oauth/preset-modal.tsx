@@ -91,7 +91,7 @@ export function PresetModal({ initial, onClose, onSaved }: {
     >
       <div className="form-group">
         <label className="form-label">{t("oauth.service_type")}</label>
-        <input className="form-input" value={serviceType} onChange={(e) => !isEdit && setServiceType(e.target.value)} placeholder="e.g. notion, dropbox" disabled={isEdit} required={!isEdit} />
+        <input autoFocus={!isEdit} className="form-input" value={serviceType} onChange={(e) => !isEdit && setServiceType(e.target.value)} placeholder="e.g. notion, dropbox" disabled={isEdit} required={!isEdit} />
       </div>
       <div className="form-group">
         <label className="form-label">{t("oauth.label")}</label>
@@ -99,7 +99,7 @@ export function PresetModal({ initial, onClose, onSaved }: {
       </div>
       <div className="form-group">
         <label className="form-label">{t("oauth.auth_url")}</label>
-        <input className="form-input" value={authUrl} onChange={(e) => setAuthUrl(e.target.value)} placeholder="https://..." required />
+        <input autoFocus={isEdit} className="form-input" value={authUrl} onChange={(e) => setAuthUrl(e.target.value)} placeholder="https://..." required />
       </div>
       <div className="form-group">
         <label className="form-label">{t("oauth.token_url")}</label>

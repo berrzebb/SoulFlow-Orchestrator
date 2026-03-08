@@ -19,7 +19,7 @@ function AiAgentEditPanel({ node, update, t, options }: EditPanelProps) {
       <div className="builder-row-pair">
         <div className="builder-row">
           <label className="label">{t("workflows.llm_backend")}</label>
-          <select className="input input--sm" value={String(node.backend || "")} onChange={(e) => update({ backend: e.target.value })}>
+          <select autoFocus className="input input--sm" value={String(node.backend || "")} onChange={(e) => update({ backend: e.target.value })}>
             <option value="">-</option>
             {(options?.backends || []).map((b) => (
               <option key={b.value} value={b.value}>
