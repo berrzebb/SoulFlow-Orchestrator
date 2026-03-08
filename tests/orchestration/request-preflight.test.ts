@@ -11,6 +11,7 @@ import type { SecretVaultService } from "@src/security/secret-vault.js";
 import type { AgentRuntimeLike } from "@src/agent/runtime.types.js";
 import type { RuntimePolicyResolver } from "@src/channels/runtime-policy.js";
 import type { OrchestrationRequest } from "@src/orchestration/types.js";
+import type { TaskState } from "@src/contracts.js";
 
 /* ── Mock Implementations ── */
 
@@ -159,6 +160,281 @@ describe("Phase 4.4: Request Preflight 분리", () => {
       const prefs = collect_skill_provider_prefs(mockRtWithDups as any, ["skill1"]);
       expect(prefs.indexOf("prov1")).toEqual(0); // 첫 번째 위치
       expect(prefs.filter((p) => p === "prov1").length).toEqual(1); // 중복 제거됨
+    });
+
+    it("스킬 메타 없으면 빈 배열 반환", () => {
+      const rt = {
+        ...mockRuntime,
+        get_context_builder: () => ({
+          ...mockRuntime.get_context_builder?.(),
+          skills_loader: { get_skill_metadata: () => null, get_role_skill: () => null },
+        }),
+      };
+      const prefs = collect_skill_provider_prefs(rt as any, ["nonexistent"]);
+      expect(prefs).toEqual([]);
+    });
+
+    it("preferred_providers 없는 스킬은 스킵", () => {
+      const rt = {
+        ...mockRuntime,
+        get_context_builder: () => ({
+          ...mockRuntime.get_context_builder?.(),
+          skills_loader: {
+            get_skill_metadata: () => ({ name: "test", summary: "", tools: [], preferred_providers: [] }),
+            get_role_skill: () => null,
+          },
+        }),
+      };
+      const prefs = collect_skill_provider_prefs(rt as any, ["skill1"]);
+      expect(prefs).toEqual([]);
+    });
+  });
+
+  describe("run_request_preflight — 추가 경로 커버", () => {
+    it("resumed_task_id가 있고 상태 running이면 kind='resume' 반환", async () => {
+      const running_task: TaskState = {
+        task_id: "task-123",
+        status: "running",
+        memory: { chat_id: "chat1" },
+      } as unknown as TaskState;
+
+      const resumable_runtime: Partial<AgentRuntimeLike> = {
+        ...mockRuntime,
+        get_task: async (id: string) => id === "task-123" ? running_task : null,
+      };
+
+      const deps: RequestPreflightDeps = {
+        ...mockDeps,
+        runtime: resumable_runtime as AgentRuntimeLike,
+      };
+
+      const req: OrchestrationRequest = {
+        ...mockRequest,
+        resumed_task_id: "task-123",
+      };
+
+      const result = await run_request_preflight(deps, req);
+      expect(result.kind).toBe("resume");
+      if (result.kind === "resume") {
+        expect(result.resumed_task).toBe(running_task);
+      }
+    });
+
+    it("resumed_task_id 있지만 상태 done이면 정상 실행 (kind='ready')", async () => {
+      const done_task: TaskState = {
+        task_id: "task-done",
+        status: "done",
+        memory: {},
+      } as unknown as TaskState;
+
+      const runtime: Partial<AgentRuntimeLike> = {
+        ...mockRuntime,
+        get_task: async () => done_task,
+      };
+
+      const deps: RequestPreflightDeps = { ...mockDeps, runtime: runtime as AgentRuntimeLike };
+      const req: OrchestrationRequest = { ...mockRequest, resumed_task_id: "task-done" };
+
+      const result = await run_request_preflight(deps, req);
+      expect(result.kind).toBe("ready");
+    });
+
+    it("메시지 내용 없으면 task_with_media가 빈 문자열", async () => {
+      const req: OrchestrationRequest = {
+        ...mockRequest,
+        message: { ...mockRequest.message, content: "" },
+      };
+      const result = await run_request_preflight(mockDeps, req) as any;
+      expect(result.kind).toBe("ready");
+      expect(result.task_with_media).toBe("");
+    });
+
+    it("media_inputs 있으면 task_with_media에 ATTACHED_FILES 포함", async () => {
+      const req: OrchestrationRequest = {
+        ...mockRequest,
+        media_inputs: ["report.pdf", "data.csv"],
+      };
+      const result = await run_request_preflight(mockDeps, req) as any;
+      expect(result.task_with_media).toContain("ATTACHED_FILES");
+      expect(result.media.length).toBe(2);
+    });
+
+    it("session_history 8개 초과 시 마지막 8개만 사용", async () => {
+      const history = Array.from({ length: 12 }, (_, i) => ({
+        role: "user" as const,
+        content: `msg-${i}`,
+      }));
+      const req: OrchestrationRequest = { ...mockRequest, session_history: history };
+      const result = await run_request_preflight(mockDeps, req) as any;
+      expect(result.history_lines.length).toBe(8);
+      expect(result.history_lines[0]).toContain("msg-4"); // 0-indexed: 12-8=4
+    });
+
+    it("slack provider + thread_id 있으면 reply_to = thread_id", async () => {
+      const req: OrchestrationRequest = {
+        ...mockRequest,
+        provider: "slack",
+        message: {
+          ...mockRequest.message,
+          provider: "slack",
+          thread_id: "thread-xyz",
+          metadata: {},
+        },
+      };
+      const result = await run_request_preflight(mockDeps, req) as any;
+      expect(result.tool_ctx.reply_to).toBe("thread-xyz");
+    });
+
+    it("slack provider + thread_id 없으면 reply_to = message_id", async () => {
+      const req: OrchestrationRequest = {
+        ...mockRequest,
+        provider: "slack",
+        message: {
+          ...mockRequest.message,
+          provider: "slack",
+          thread_id: undefined,
+          metadata: { message_id: "slack-msg-999" },
+        },
+      };
+      const result = await run_request_preflight(mockDeps, req) as any;
+      expect(result.tool_ctx.reply_to).toBe("slack-msg-999");
+    });
+
+    it("telegram provider이면 reply_to 빈 문자열", async () => {
+      const req: OrchestrationRequest = {
+        ...mockRequest,
+        provider: "telegram",
+        message: {
+          ...mockRequest.message,
+          provider: "telegram",
+          metadata: { message_id: "tg-123" },
+        },
+      };
+      const result = await run_request_preflight(mockDeps, req) as any;
+      expect(result.tool_ctx.reply_to).toBeUndefined(); // "" → undefined in build_tool_context
+    });
+
+    it("message_id 없으면 request_scope가 msg-로 시작", async () => {
+      const req: OrchestrationRequest = {
+        ...mockRequest,
+        message: {
+          ...mockRequest.message,
+          id: "",
+          metadata: {},
+        },
+      };
+      const result = await run_request_preflight(mockDeps, req) as any;
+      expect(result.request_scope).toMatch(/^msg-/);
+    });
+
+    it("secret_guard: missing_keys가 있으면 ok=false", async () => {
+      const vault_with_missing: Partial<SecretVaultService> = {
+        ...new MockSecretVault(),
+        inspect_secret_references: async () => ({
+          missing_keys: ["API_KEY"],
+          invalid_ciphertexts: [],
+        }),
+      };
+      const deps: RequestPreflightDeps = {
+        ...mockDeps,
+        vault: vault_with_missing as SecretVaultService,
+      };
+      const result = await run_request_preflight(deps, mockRequest) as any;
+      expect(result.secret_guard.ok).toBe(false);
+      expect(result.secret_guard.missing_keys).toContain("API_KEY");
+    });
+
+    it("secret_guard: invalid_ciphertexts 있으면 ok=false", async () => {
+      const vault_with_invalid: Partial<SecretVaultService> = {
+        ...new MockSecretVault(),
+        inspect_secret_references: async () => ({
+          missing_keys: [],
+          invalid_ciphertexts: ["bad-cipher"],
+        }),
+      };
+      const deps: RequestPreflightDeps = {
+        ...mockDeps,
+        vault: vault_with_invalid as SecretVaultService,
+      };
+      const result = await run_request_preflight(deps, mockRequest) as any;
+      expect(result.secret_guard.ok).toBe(false);
+      expect(result.secret_guard.invalid_ciphertexts).toContain("bad-cipher");
+    });
+
+    it("recommend_skills 결과가 skill_names에 포함됨", async () => {
+      const runtime: Partial<AgentRuntimeLike> = {
+        ...mockRuntime,
+        recommend_skills: () => ["recommended-skill"],
+      };
+      const deps: RequestPreflightDeps = { ...mockDeps, runtime: runtime as AgentRuntimeLike };
+      const result = await run_request_preflight(deps, mockRequest) as any;
+      expect(result.skill_names).toContain("recommended-skill");
+    });
+
+    it("tool_executors에서 category_map 구성", async () => {
+      const runtime: Partial<AgentRuntimeLike> = {
+        ...mockRuntime,
+        get_tool_executors: () => [
+          { name: "search", category: "productivity", execute: async () => "" } as any,
+          { name: "code", category: "dev", execute: async () => "" } as any,
+        ],
+      };
+      const deps: RequestPreflightDeps = { ...mockDeps, runtime: runtime as AgentRuntimeLike };
+      const result = await run_request_preflight(deps, mockRequest) as any;
+      expect(result.category_map["search"]).toBe("productivity");
+      expect(result.tool_categories).toContain("productivity");
+      expect(result.tool_categories).toContain("dev");
+    });
+
+    it("active_tasks_in_chat: chat_id 일치하는 태스크만 포함", async () => {
+      const runtime: Partial<AgentRuntimeLike> = {
+        ...mockRuntime,
+        list_active_tasks: () => [
+          { task_id: "t1", status: "running", memory: { chat_id: "chat1" } } as any,
+          { task_id: "t2", status: "running", memory: { chat_id: "other-chat" } } as any,
+        ],
+      };
+      const deps: RequestPreflightDeps = { ...mockDeps, runtime: runtime as AgentRuntimeLike };
+      const result = await run_request_preflight(deps, mockRequest) as any;
+      expect(result.active_tasks_in_chat.length).toBe(1);
+      expect(result.active_tasks_in_chat[0].task_id).toBe("t1");
+    });
+
+    it("collect_skill_tool_names: 스킬 메타의 tools를 수집", async () => {
+      const runtime: Partial<AgentRuntimeLike> = {
+        ...mockRuntime,
+        get_always_skills: () => ["my-skill"],
+        get_skill_metadata: () => ({
+          name: "my-skill",
+          summary: "",
+          tools: ["tool-a", "tool-b"],
+          preferred_providers: [],
+        }),
+      };
+      const deps: RequestPreflightDeps = { ...mockDeps, runtime: runtime as AgentRuntimeLike };
+      const result = await run_request_preflight(deps, mockRequest) as any;
+      expect(result.skill_tool_names).toContain("tool-a");
+      expect(result.skill_tool_names).toContain("tool-b");
+    });
+
+    it("workspace 없으면 tool_index_db 없이도 rebuild_tool_index 호출", async () => {
+      const deps: RequestPreflightDeps = { ...mockDeps, workspace: undefined };
+      const result = await run_request_preflight(deps, mockRequest);
+      expect(result.kind).toBe("ready");
+    });
+
+    it("context_block에 CURRENT_REQUEST 포함", async () => {
+      const result = await run_request_preflight(mockDeps, mockRequest) as any;
+      expect(result.context_block).toContain("CURRENT_REQUEST");
+    });
+
+    it("session_history 있으면 context_block에 REFERENCE_RECENT_CONTEXT 포함", async () => {
+      const req: OrchestrationRequest = {
+        ...mockRequest,
+        session_history: [{ role: "user", content: "previous question" }],
+      };
+      const result = await run_request_preflight(mockDeps, req) as any;
+      expect(result.context_block).toContain("REFERENCE_RECENT_CONTEXT");
     });
   });
 });

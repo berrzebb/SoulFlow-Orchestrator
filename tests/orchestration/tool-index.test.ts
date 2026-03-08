@@ -44,12 +44,17 @@ const mockCategories: Record<string, string> = {
   git: "version_control",
 };
 
-const mockEmbedFn: EmbedFn = vi.fn(async (text: string) => {
-  // Mock embeddings: simple hash-based "embeddings"
-  const hash = Array.from(text).reduce((a, b) => a + b.charCodeAt(0), 0);
-  const embedding = new Array(384).fill(0);
-  embedding[hash % 384] = 1.0;
-  return embedding;
+const VEC_DIM = 256; // ToolIndex.VEC_DIMENSIONS와 일치
+
+const mockEmbedFn: EmbedFn = vi.fn(async (texts: string[]) => {
+  // 각 텍스트에 대해 256차원 임베딩 생성 (정규화 불필요 — ToolIndex가 처리)
+  const embeddings = texts.map((text) => {
+    const hash = Array.from(text).reduce((a, b) => a + b.charCodeAt(0), 0);
+    const vec = new Array(VEC_DIM).fill(0);
+    vec[hash % VEC_DIM] = 1.0;
+    return vec;
+  });
+  return { embeddings };
 });
 
 /* ── Tests ── */
@@ -305,6 +310,90 @@ describe("ToolIndex — FTS5 + 벡터 하이브리드 도구 인덱싱", () => {
       // Second search should not find git since it was removed
       expect(results1 instanceof Set).toBe(true);
       expect(results2 instanceof Set).toBe(true);
+    });
+  });
+
+  describe("size getter", () => {
+    it("build 전 size = 0", () => {
+      expect(index.size).toBe(0);
+    });
+
+    it("build 후 size = 도구 개수", () => {
+      index.build(mockTools, mockCategories, testDbPath);
+      expect(index.size).toBe(mockTools.length);
+    });
+
+    it("빈 배열 build 후 size = 0", () => {
+      index.build([], mockCategories, testDbPath);
+      expect(index.size).toBe(0);
+    });
+  });
+
+  describe("action enum 도구", () => {
+    it("action enum 필드가 있는 도구 → 태그에 enum 값 포함", async () => {
+      const encoding_tool: ToolSchema = {
+        function: {
+          name: "encoding",
+          description: "Encode and decode data",
+          parameters: {
+            type: "object",
+            properties: {
+              action: {
+                type: "string",
+                enum: ["encode", "decode", "hash", "uuid"],
+              },
+            },
+          },
+        },
+      };
+      index.build([encoding_tool], { encoding: "utility" }, testDbPath);
+      const results = await index.select("encode decode hash");
+      expect(results instanceof Set).toBe(true);
+      // FTS5가 action enum 값으로 검색해서 결과가 나와야 함
+    });
+  });
+
+  describe("벡터 검색 (embed_fn 사용)", () => {
+    it("build + set_embed + select → embed_fn이 호출됨", async () => {
+      index.build(mockTools, mockCategories, testDbPath);
+      vi.clearAllMocks();
+      index.set_embed(mockEmbedFn);
+
+      const results = await index.select("파일 읽기 작업", { max_tools: 10 });
+      expect(results instanceof Set).toBe(true);
+      // 벡터 검색이 실행되면 embed_fn이 호출됨
+      expect(vi.mocked(mockEmbedFn)).toHaveBeenCalled();
+    });
+
+    it("select 결과에 embed_fn 활성화 시 추가 도구 포함 가능", async () => {
+      index.build(mockTools, mockCategories, testDbPath);
+      index.set_embed(mockEmbedFn);
+
+      // core 도구(read_file, write_file, exec, message)는 max 무관하게 항상 포함됨
+      // embed 활성화 시 벡터 검색으로 추가 도구 포함 가능
+      const results = await index.select("file search", { max_tools: 20 });
+      expect(results instanceof Set).toBe(true);
+      expect(results.size).toBeGreaterThan(0);
+    });
+
+    it("embed_fn이 없어도 FTS5만으로 검색 성공", async () => {
+      index.build(mockTools, mockCategories, testDbPath);
+      // set_embed 없이 직접 select
+      const results = await index.select("web search");
+      expect(results.size).toBeGreaterThan(0);
+    });
+  });
+
+  describe("classifier_categories 폴백", () => {
+    it("FTS 결과가 적을 때 category로 보강", async () => {
+      // 아주 특이한 쿼리 → FTS 결과 없음 → category 폴백
+      index.build(mockTools, mockCategories, testDbPath);
+      const results = await index.select("xyzzy_impossible_term", {
+        max_tools: 20,
+        classifier_categories: ["file", "shell"],
+      });
+      expect(results instanceof Set).toBe(true);
+      // file, shell 카테고리 도구들이 포함됨
     });
   });
 

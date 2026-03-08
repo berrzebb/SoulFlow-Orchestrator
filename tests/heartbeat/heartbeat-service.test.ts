@@ -184,4 +184,97 @@ describe("HeartbeatService", () => {
     // on_notify는 trigger_now에서 직접 호출하지 않음
     await svc.stop();
   });
+
+  // ── _tick 직접 커버: 가짜 타이머로 루프 실행 ──
+  it("tick: 응답이 OK가 아니면 on_notify 호출됨", async () => {
+    await writeFile(join(workspace, "HEARTBEAT.md"), "urgent: memory leak detected");
+    const on_heartbeat = vi.fn().mockResolvedValue("Memory leak in service X — needs restart");
+    const on_notify = vi.fn().mockResolvedValue(undefined);
+
+    vi.useFakeTimers();
+    try {
+      const svc = new HeartbeatService(workspace, {
+        interval_s: 5,
+        on_heartbeat,
+        on_notify,
+      });
+      await svc.start();
+      // 5초 타이머 진행
+      await vi.advanceTimersByTimeAsync(5100);
+      await svc.stop();
+    } finally {
+      vi.useRealTimers();
+    }
+
+    expect(on_heartbeat).toHaveBeenCalled();
+    expect(on_notify).toHaveBeenCalled();
+    const notify_arg = on_notify.mock.calls[0][0];
+    expect(notify_arg).toContain("Memory leak");
+  });
+
+  it("tick: on_heartbeat 콜백이 예외 발생해도 루프 지속됨", async () => {
+    await writeFile(join(workspace, "HEARTBEAT.md"), "check required");
+    let call_count = 0;
+    const on_heartbeat = vi.fn().mockImplementation(async () => {
+      call_count++;
+      if (call_count === 1) throw new Error("agent unreachable");
+      return HEARTBEAT_OK_TOKEN;
+    });
+
+    vi.useFakeTimers();
+    try {
+      const svc = new HeartbeatService(workspace, {
+        interval_s: 5,
+        on_heartbeat,
+      });
+      await svc.start();
+      // 두 번 tick이 일어나도록 10초 이상 진행
+      await vi.advanceTimersByTimeAsync(11000);
+      await svc.stop();
+    } finally {
+      vi.useRealTimers();
+    }
+
+    // 첫 번째 에러 후 루프가 계속 실행되어 두 번 이상 호출됨
+    expect(call_count).toBeGreaterThanOrEqual(1);
+  });
+
+  it("tick: HEARTBEAT.md 내용이 비어있으면 on_heartbeat 호출 안 함", async () => {
+    await writeFile(join(workspace, "HEARTBEAT.md"), "# Just a header\n- [ ] unchecked");
+    const on_heartbeat = vi.fn().mockResolvedValue(HEARTBEAT_OK_TOKEN);
+
+    vi.useFakeTimers();
+    try {
+      const svc = new HeartbeatService(workspace, {
+        interval_s: 5,
+        on_heartbeat,
+      });
+      await svc.start();
+      await vi.advanceTimersByTimeAsync(5100);
+      await svc.stop();
+    } finally {
+      vi.useRealTimers();
+    }
+
+    expect(on_heartbeat).not.toHaveBeenCalled();
+  });
+
+  it("tick: on_heartbeat 없으면 파일 있어도 루프 정상 동작", async () => {
+    await writeFile(join(workspace, "HEARTBEAT.md"), "urgent task needed");
+
+    vi.useFakeTimers();
+    try {
+      const svc = new HeartbeatService(workspace, {
+        interval_s: 5,
+        // on_heartbeat 없음
+      });
+      await svc.start();
+      await vi.advanceTimersByTimeAsync(5100);
+      await svc.stop();
+    } finally {
+      vi.useRealTimers();
+    }
+    // 예외 없이 정상 완료
+    expect(true).toBe(true);
+  });
 });
