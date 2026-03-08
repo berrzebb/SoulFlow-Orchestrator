@@ -1085,7 +1085,8 @@ a:focus-visible > .stat-card {
   flex-shrink: 0;
 }
 .workflow-prompt-bar__send:disabled {
-  opacity: 0.4;
+  opacity: 0.65;
+  color: var(--muted);
   cursor: not-allowed;
 }
 /* Loading state */
@@ -1953,7 +1954,7 @@ a:focus-visible > .stat-card {
   transition: opacity 0.15s;
   flex-shrink: 0;
 }
-.wf-hero__run-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.wf-hero__run-btn:disabled { opacity: 0.65; color: var(--muted); cursor: not-allowed; }
 .wf-hero__run-btn:hover:not(:disabled) { opacity: 0.85; }
 .wf-hero__actions {
   display: flex;
@@ -4368,7 +4369,7 @@ g:hover > .graph-add-handle circle {
 .chat-input-bar__btn:hover { background: var(--hover); color: var(--text); }
 .chat-input-bar__btn--send { background: var(--accent); color: #fff; }
 .chat-input-bar__btn--send:hover { opacity: 0.85; }
-.chat-input-bar__btn:disabled { opacity: 0.55; color: var(--muted); cursor: not-allowed; }
+.chat-input-bar__btn:disabled { opacity: 0.65; color: var(--muted); cursor: not-allowed; }
 .chat-input-bar__hint { text-align: right; padding: 2px 8px 0; }
 
 /* Media preview (above input bar) */
