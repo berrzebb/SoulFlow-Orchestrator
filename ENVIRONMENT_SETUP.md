@@ -50,3 +50,12 @@ run.cmd down
 ## 웹 브라우저에서 접속
 
 `http://localhost:4200` (또는 사용 중인 포트)
+
+## Docker Compose 파일
+
+설정 파일은 자동으로 `docker/` 디렉토리에 생성됩니다:
+
+- `docker/docker-compose.dev.yml` — 개발 환경
+- `docker/docker-compose.test.yml` — 테스트 환경
+- `docker/docker-compose.staging.yml` — 스테이징 환경
+- `docker/docker-compose.prod.yml` — 프로덕션 환경

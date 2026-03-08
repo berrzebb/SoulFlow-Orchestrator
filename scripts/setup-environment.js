@@ -6,9 +6,20 @@
  * 프로필: dev, test, staging (기본값: dev)
  */
 
-import { readFileSync, writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { resolve, dirname } from 'node:path';
 import { execSync } from 'node:child_process';
+
+function isRedisContainerRunning() {
+  try {
+    // Docker/Podman에서 redis 컨테이너 확인
+    const cmd = 'docker ps --filter "ancestor=redis:*" --quiet 2>/dev/null || podman ps --filter "ancestor=redis:*" --quiet';
+    const output = execSync(cmd, { encoding: 'utf8', stdio: 'pipe' });
+    return output.trim().length > 0; // 컨테이너가 실행 중이면 true
+  } catch (e) {
+    return false; // 컨테이너가 없으면 false
+  }
+}
 
 const ENV_PROFILES = {
   dev: {
@@ -19,7 +30,7 @@ const ENV_PROFILES = {
     workspace: '/data/workspace-dev',
     nodeEnv: 'development',
     debug: 'true',
-    composeFile: 'docker-compose.dev.yml',
+    composeFile: 'docker/docker-compose.dev.yml',
     buildTarget: 'dev',
   },
   test: {
@@ -30,7 +41,7 @@ const ENV_PROFILES = {
     workspace: '/data/workspace-test',
     nodeEnv: 'test',
     debug: 'true',
-    composeFile: 'docker-compose.test.yml',
+    composeFile: 'docker/docker-compose.test.yml',
     buildTarget: 'production',
   },
   staging: {
@@ -41,7 +52,7 @@ const ENV_PROFILES = {
     workspace: '/data/workspace-staging',
     nodeEnv: 'production',
     debug: 'false',
-    composeFile: 'docker-compose.staging.yml',
+    composeFile: 'docker/docker-compose.staging.yml',
     buildTarget: 'production',
   },
   prod: {
@@ -52,61 +63,31 @@ const ENV_PROFILES = {
     workspace: '/data',
     nodeEnv: 'production',
     debug: 'false',
-    composeFile: 'docker-compose.yml',
+    composeFile: 'docker/docker-compose.prod.yml',
     buildTarget: 'full',
   },
 };
 
-function generateDockerCompose(profile, config) {
-  return `version: "3.9"
+function generateDockerCompose(profile, config, skipRedis = false) {
+  // 환경별 볼륨 설정 (src, web은 프로젝트 루트 상대경로)
+  const devVolumes = profile === 'dev'
+    ? `      - ../src:/app/src  # 개발 모드 소스 마운트
+      - ../web/src:/app/web/src  # 웹 개발 모드`
+    : '';
 
-services:
-  docker-proxy:
-    image: tecnativa/docker-socket-proxy
-    restart: unless-stopped
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-    environment:
-      CONTAINERS: 1
-      IMAGES: 0
-      NETWORKS: 0
-      VOLUMES: 0
-      POST: 1
-    deploy:
-      resources:
-        limits:
-          memory: 128M
-          cpus: "0.5"
+  // 환경별 커맨드
+  const devCommand = profile === 'dev' ? '    command: npm run dev' : '';
 
-  orchestrator:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: ${config.buildTarget}
-    container_name: ${config.projectName}-orchestrator
-    restart: unless-stopped
-    ports:
-      - "${config.webPort}:4200"
-    environment:
-      NODE_ENV: ${config.nodeEnv}
-      WORKSPACE: ${config.workspace}
-      REDIS_URL: redis://redis:6379
-      DEBUG: ${config.debug}
-    volumes:
-      - ${config.projectName}-workspace:/data
-      ${profile === 'dev' ? '- ./src:/app/src  # 개발 모드 소스 마운트' : ''}
-      ${profile === 'dev' ? '- ./web/src:/app/web/src  # 웹 개발 모드' : ''}
-    depends_on:
+  // 환경별 리소스 제한
+  const memory = profile === 'prod' ? '2G' : '1G';
+  const cpus = profile === 'prod' ? '4' : '2';
+
+  // Redis 서비스 조건부 포함
+  const dependsOnRedis = skipRedis ? '' : `    depends_on:
       redis:
-        condition: service_healthy
-    ${profile === 'dev' ? 'command: npm run dev' : ''}
-    deploy:
-      resources:
-        limits:
-          memory: ${profile === 'prod' ? '2G' : '1G'}
-          cpus: ${profile === 'prod' ? '"4"' : '"2"'}
+        condition: service_healthy`;
 
-  redis:
+  const redisService = skipRedis ? '' : `  redis:
     image: redis:7-alpine
     container_name: ${config.projectName}-redis
     restart: unless-stopped
@@ -130,11 +111,61 @@ services:
           memory: 384M
           cpus: "0.5"
 
+`;
+
+  const redisVolumes = skipRedis ? '' : `  ${config.projectName}-redis-data:
+    driver: local
+`;
+
+  return `version: "3.9"
+
+services:
+  docker-proxy:
+    image: tecnativa/docker-socket-proxy
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      CONTAINERS: 1
+      IMAGES: 0
+      NETWORKS: 0
+      VOLUMES: 0
+      POST: 1
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: "0.5"
+
+  orchestrator:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      target: ${config.buildTarget}
+    image: soulflow-orchestrator
+    container_name: ${config.projectName}-orchestrator
+    restart: unless-stopped
+    ports:
+      - "${config.webPort}:4200"
+    environment:
+      NODE_ENV: ${config.nodeEnv}
+      WORKSPACE: ${config.workspace}
+      REDIS_URL: redis://redis:6379
+      DEBUG: ${config.debug}
+    volumes:
+      - \${WORKSPACE}:/data
+${devVolumes}
+${dependsOnRedis}
+${devCommand}
+    deploy:
+      resources:
+        limits:
+          memory: ${memory}
+          cpus: "${cpus}"
+
+${redisService}
 volumes:
-  ${config.projectName}-workspace:
-    driver: local
-  ${config.projectName}-redis-data:
-    driver: local
+${redisVolumes}
 
 networks:
   default:
@@ -172,17 +203,20 @@ function main() {
     process.exit(1);
   }
 
-  // 환경변수 또는 기본값 사용
+  const config = { ...ENV_PROFILES[profile] };
+
+  // 환경변수로 설정이 지정되면 사용 (파라미터 우선)
   const envWorkspace = process.env.WORKSPACE;
   const envWebPort = process.env.WEB_PORT;
   const envRedisPort = process.env.REDIS_PORT;
+  const envInstance = process.env.INSTANCE;
 
-  const config = { ...ENV_PROFILES[profile] };
-
-  // 환경변수로 설정이 지정되면 사용
   if (envWorkspace) {
     config.workspace = envWorkspace;
     config.projectName = `${config.projectName}-${process.env.USER || 'user'}`;
+  }
+  if (envInstance) {
+    config.projectName = `${config.projectName}-${envInstance}`;
   }
   if (envWebPort) {
     config.webPort = parseInt(envWebPort, 10);
@@ -193,17 +227,21 @@ function main() {
 
   console.log(`\n🔧 ${config.name} 환경 설정 생성 중...\n`);
 
+  // Redis 컨테이너 실행 여부 확인
+  const skipRedis = process.env.SKIP_REDIS === 'true' || isRedisContainerRunning();
+  if (skipRedis && process.env.SKIP_REDIS !== 'true') {
+    console.log(`⚠️  Redis 컨테이너가 이미 실행 중입니다.`);
+    console.log(`   기존 Redis 인스턴스에 연결합니다.\n`);
+  } else if (process.env.SKIP_REDIS === 'true') {
+    console.log(`⚠️  SKIP_REDIS=true로 설정되어 Redis 서비스를 생략합니다.\n`);
+  }
+
   // docker-compose 파일 생성
-  const composeContent = generateDockerCompose(profile, config);
+  const composeContent = generateDockerCompose(profile, config, skipRedis);
   const composeFile = resolve(config.composeFile);
+  mkdirSync(dirname(composeFile), { recursive: true });
   writeFileSync(composeFile, composeContent);
   console.log(`✅ ${config.composeFile} 생성됨`);
-
-  // .env 파일 생성
-  const envContent = generateEnvFile(profile, config);
-  const envFile = resolve(`.env.${profile}`);
-  writeFileSync(envFile, envContent);
-  console.log(`✅ .env.${profile} 생성됨`);
 
   console.log(`\n📋 ${config.name} 환경 설정:`);
   console.log(`   프로젝트: ${config.projectName}`);
@@ -212,10 +250,13 @@ function main() {
   console.log(`   워크스페이스: ${config.workspace}`);
   console.log(`   Node 환경: ${config.nodeEnv}`);
 
-  console.log(`\n🚀 시작하려면:\n`);
-  console.log(`   docker compose -f ${config.composeFile} up -d\n`);
-  console.log(`또는 다음 명령어를 사용하세요:\n`);
-  console.log(`   npm run env:${profile}\n`);
+  // 스크립트에서 읽을 수 있는 형식으로 프로젝트명 출력
+  console.log(`\n[PROJECT_NAME:${config.projectName}]`);
+
+  console.log(`\n📌 환경변수 설정 (필요시):`);
+  console.log(`   export WORKSPACE="${config.workspace}"`);
+  console.log(`   export NODE_ENV="${config.nodeEnv}"`);
+  console.log(`   export DEBUG="${config.debug}"\n`);
 }
 
 main();

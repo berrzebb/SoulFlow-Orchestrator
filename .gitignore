@@ -20,7 +20,11 @@ coverage/
 **/.env
 **/.env.local
 **/.env.*.local
+.env.*
 **/!.env.example
+
+# Generated Docker Compose files (created by setup-environment.js)
+docker/docker-compose.*.yml
 
 # Runtime/generated state (루트 레벨만 — src/ 하위 제외)
 /runtime/
