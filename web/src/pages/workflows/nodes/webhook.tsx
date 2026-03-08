@@ -6,18 +6,18 @@ function WebhookEditPanel({ node, update, t }: EditPanelProps) {
     <>
       <div className="builder-row">
         <label className="label">{t("workflows.webhook_node_path")}</label>
-        <input autoFocus className="input input--sm" value={String(node.path || "")} onChange={(e) => update({ path: e.target.value })} placeholder="/hooks/my-webhook" />
+        <input autoFocus className="input input--sm" value={String(node.path || "")} onChange={(e) => update({ path: e.target.value })} placeholder="/hooks/my-webhook" aria-label={t("workflows.webhook_node_path")} />
       </div>
       <div className="builder-row-pair">
         <div className="builder-row">
           <label className="label">{t("workflows.webhook_node_method")}</label>
-          <select className="input input--sm" value={String(node.http_method || "POST")} onChange={(e) => update({ http_method: e.target.value })}>
+          <select className="input input--sm" value={String(node.http_method || "POST")} onChange={(e) => update({ http_method: e.target.value })} aria-label={t("workflows.webhook_node_method")}>
             {["GET", "POST", "PUT", "DELETE"].map((m) => <option key={m} value={m}>{m}</option>)}
           </select>
         </div>
         <div className="builder-row">
           <label className="label">{t("workflows.webhook_response_mode")}</label>
-          <select className="input input--sm" value={response_mode} onChange={(e) => update({ response_mode: e.target.value })}>
+          <select className="input input--sm" value={response_mode} onChange={(e) => update({ response_mode: e.target.value })} aria-label={t("workflows.webhook_response_mode")}>
             <option value="immediate">{t("workflows.webhook_response_immediate")}</option>
             <option value="wait">{t("workflows.webhook_response_wait")}</option>
           </select>
@@ -27,11 +27,12 @@ function WebhookEditPanel({ node, update, t }: EditPanelProps) {
         <div className="builder-row-pair">
           <div className="builder-row">
             <label className="label">{t("workflows.webhook_response_status")}</label>
-            <input className="input input--sm" type="number" value={String(node.response_status ?? 200)} onChange={(e) => update({ response_status: Number(e.target.value) })} />
+            <input className="input input--sm" type="number" value={String(node.response_status ?? 200)} onChange={(e) => update({ response_status: Number(e.target.value) })} placeholder="200" aria-label={t("workflows.webhook_response_status")} />
+            <span className="builder-hint">{t("workflows.webhook_status_hint")}</span>
           </div>
           <div className="builder-row">
             <label className="label">{t("workflows.webhook_response_body")}</label>
-            <input className="input input--sm" value={String(node.response_body || "")} onChange={(e) => update({ response_body: e.target.value })} placeholder='{"ok": true}' />
+            <input className="input input--sm" value={String(node.response_body || "")} onChange={(e) => update({ response_body: e.target.value })} placeholder='{"ok": true}' aria-label={t("workflows.webhook_response_body")} />
           </div>
         </div>
       )}

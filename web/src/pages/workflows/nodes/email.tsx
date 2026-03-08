@@ -5,19 +5,19 @@ function EmailEditPanel({ node, update, t }: EditPanelProps) {
     <>
       <div className="builder-row">
         <label className="label">{t("node.email.input.action")}</label>
-        <input autoFocus className="input input--sm" value={String(node.action || "")} onChange={(e) => update({ action: e.target.value })} />
+        <input autoFocus className="input input--sm" value={String(node.action || "")} onChange={(e) => update({ action: e.target.value })} placeholder="send, draft" aria-label={t("node.email.input.action")} />
       </div>
       <div className="builder-row">
         <label className="label">{t("node.email.input.to")}</label>
-        <input className="input input--sm" value={String(node.to || "")} onChange={(e) => update({ to: e.target.value })} />
+        <input className="input input--sm" value={String(node.to || "")} onChange={(e) => update({ to: e.target.value })} placeholder="user@example.com" aria-label={t("node.email.input.to")} />
       </div>
       <div className="builder-row">
         <label className="label">{t("node.email.input.subject")}</label>
-        <input className="input input--sm" value={String(node.subject || "")} onChange={(e) => update({ subject: e.target.value })} />
+        <input className="input input--sm" value={String(node.subject || "")} onChange={(e) => update({ subject: e.target.value })} placeholder="Email subject {{memory.var}}" aria-label={t("node.email.input.subject")} />
       </div>
       <div className="builder-row">
         <label className="label">{t("node.email.input.body")}</label>
-        <input className="input input--sm" value={String(node.body || "")} onChange={(e) => update({ body: e.target.value })} />
+        <input className="input input--sm" value={String(node.body || "")} onChange={(e) => update({ body: e.target.value })} placeholder="Email body with {{memory.var}} templates" aria-label={t("node.email.input.body")} />
       </div>
     </>
   );

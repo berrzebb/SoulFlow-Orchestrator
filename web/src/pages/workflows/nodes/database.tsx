@@ -7,31 +7,32 @@ function DatabaseEditPanel({ node, update, t }: EditPanelProps) {
       <div className="builder-row-pair">
         <div className="builder-row">
           <label className="label">{t("workflows.operation")}</label>
-          <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
+          <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })} aria-label={t("workflows.operation")}>
             {["query", "tables", "schema", "explain"].map((o) => <option key={o} value={o}>{o}</option>)}
           </select>
         </div>
         <div className="builder-row">
           <label className="label">{t("workflows.field_datasource")}</label>
-          <input className="input input--sm" value={String(node.datasource || "")} onChange={(e) => update({ datasource: e.target.value })} placeholder="my_database" />
+          <input className="input input--sm" value={String(node.datasource || "")} onChange={(e) => update({ datasource: e.target.value })} placeholder="my_database" aria-label={t("workflows.field_datasource")} />
         </div>
       </div>
       {(op === "query" || op === "explain") && (
         <div className="builder-row">
           <label className="label">{t("workflows.field_sql")}</label>
-          <textarea className="input code-textarea" rows={4} value={String(node.sql || "")} onChange={(e) => update({ sql: e.target.value })} placeholder="SELECT * FROM users LIMIT 10" />
+          <textarea className="input code-textarea" rows={4} value={String(node.sql || "")} onChange={(e) => update({ sql: e.target.value })} placeholder="SELECT * FROM users LIMIT 10" aria-label={t("workflows.field_sql")} />
         </div>
       )}
       {op === "schema" && (
         <div className="builder-row">
           <label className="label">{t("workflows.field_table")}</label>
-          <input className="input input--sm" value={String(node.table || "")} onChange={(e) => update({ table: e.target.value })} placeholder="users" />
+          <input className="input input--sm" value={String(node.table || "")} onChange={(e) => update({ table: e.target.value })} placeholder="users" aria-label={t("workflows.field_table")} />
         </div>
       )}
       {op === "query" && (
         <div className="builder-row">
           <label className="label">{t("workflows.max_results")}</label>
-          <input className="input input--sm" type="number" min={1} max={1000} value={String(node.max_rows ?? 100)} onChange={(e) => update({ max_rows: Number(e.target.value) || 100 })} />
+          <input className="input input--sm" type="number" min={1} max={1000} value={String(node.max_rows ?? 100)} onChange={(e) => update({ max_rows: Number(e.target.value) || 100 })} placeholder="100" aria-label={t("workflows.max_results")} />
+          <span className="builder-hint">{t("workflows.max_results_hint", { min: "1", max: "1000" })}</span>
         </div>
       )}
     </>
