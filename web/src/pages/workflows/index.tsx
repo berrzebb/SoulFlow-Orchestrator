@@ -72,6 +72,7 @@ export default function WorkflowsPage() {
   const { toast } = useToast();
   const t = useT();
   const navigate = useNavigate();
+  const templateListRef = useRef<HTMLDivElement>(null);
 
   const [tab, setTab] = useState<"templates" | "running">("templates");
   const [selectedTpl, setSelectedTpl] = useState<string | null>(null);
@@ -112,6 +113,11 @@ export default function WorkflowsPage() {
       toast(t("workflows.template_deleted"), "ok");
       void qc.invalidateQueries({ queryKey: ["workflow-templates"] });
       setDeleteTarget(null);
+      // 삭제 후 리스트의 첫 번째 항목으로 포커스 이동 (접근성)
+      setTimeout(() => {
+        const firstTemplate = templateListRef.current?.querySelector('[role="button"]');
+        (firstTemplate as HTMLElement)?.focus();
+      }, 0);
     },
   });
 
@@ -251,7 +257,7 @@ export default function WorkflowsPage() {
             </div>
           ) : (
             <>
-              <div className="stat-grid stat-grid--wide">
+              <div className="stat-grid stat-grid--wide" ref={templateListRef}>
                 {templates.map((tpl) => {
                   const agent_count = tpl.phases.reduce((n, p) => n + p.agents.length, 0);
                   const selected = selectedTpl === tpl.slug;
@@ -430,8 +436,26 @@ function TemplateDetailPanel({ template, onClose, onRun, onEdit, onDelete, runni
   const t = useT();
   const [title, setTitle] = useState(template.title);
   const [objective, setObjective] = useState(template.objective);
+  const [hasChanges, setHasChanges] = useState(false);
 
-  useEffect(() => { setTitle(template.title); setObjective(template.objective); }, [template.slug]);
+  useEffect(() => { setTitle(template.title); setObjective(template.objective); setHasChanges(false); }, [template.slug]);
+
+  const handleChangeTitle = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setTitle(e.target.value);
+    setHasChanges(e.target.value !== template.title || objective !== template.objective);
+  };
+
+  const handleChangeObjective = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setObjective(e.target.value);
+    setHasChanges(title !== template.title || e.target.value !== template.objective);
+  };
+
+  const handleClose = () => {
+    if (hasChanges && !window.confirm(t("workflows.unsaved_changes_confirm") || "변경사항이 저장되지 않습니다. 계속하시겠습니까?")) {
+      return;
+    }
+    onClose();
+  };
 
   const handleRun = (e: React.FormEvent) => {
     e.preventDefault();
@@ -445,7 +469,7 @@ function TemplateDetailPanel({ template, onClose, onRun, onEdit, onDelete, runni
     <div className="tpl-detail">
       <div className="tpl-detail__header">
         <h3 className="mt-0 mb-0">{template.title}</h3>
-        <button className="btn btn--xs btn--ghost tpl-detail__close" onClick={onClose} aria-label="close">
+        <button className="btn btn--xs btn--ghost tpl-detail__close" onClick={handleClose} aria-label="close">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
       </div>
@@ -491,7 +515,7 @@ function TemplateDetailPanel({ template, onClose, onRun, onEdit, onDelete, runni
       <form className="tpl-detail__form" onSubmit={handleRun}>
         <div className="tpl-detail__form-row">
           <label className="label">{t("workflows.title_label")}</label>
-          <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} />
+          <input className="input" value={title} onChange={handleChangeTitle} />
         </div>
         <div className="tpl-detail__form-row">
           <label className="label">{t("workflows.objective_label")}</label>
@@ -499,7 +523,7 @@ function TemplateDetailPanel({ template, onClose, onRun, onEdit, onDelete, runni
             className="input"
             rows={2}
             value={objective}
-            onChange={(e) => setObjective(e.target.value)}
+            onChange={handleChangeObjective}
             placeholder={t("workflows.objective_placeholder")}
           />
         </div>

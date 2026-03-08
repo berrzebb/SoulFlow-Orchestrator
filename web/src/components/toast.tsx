@@ -32,7 +32,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
   const toast = (message: string, variant: ToastVariant = "info") => {
     const id = ++next_id.current;
-    const duration = variant === "err" ? 5000 : 3000;
+    // 스크린 리더가 읽을 시간 확보: 에러 8초, 일반 5초
+    const duration = variant === "err" ? 8000 : 5000;
     setToasts((prev) => [...prev, { id, message, variant }]);
     const t1 = setTimeout(() => setToasts((prev) => prev.map((t) => t.id === id ? { ...t, exiting: true } : t)), duration - 300);
     const t2 = setTimeout(() => { setToasts((prev) => prev.filter((t) => t.id !== id)); timers.current.delete(id); }, duration);
@@ -44,9 +45,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <Ctx.Provider value={{ toast }}>
       {children}
-      <div className="toast-container" aria-live="polite" role="status">
+      <div className="toast-container" aria-live="polite" aria-atomic="true" role="status">
         {toasts.map((t) => (
-          <div key={t.id} className={`toast toast--${t.variant}${t.exiting ? " toast--exit" : ""}`}>
+          <div key={t.id} className={`toast toast--${t.variant}${t.exiting ? " toast--exit" : ""}`} role="alert">
             <span className="toast__msg">{t.message}</span>
             <button className="toast__close" onClick={() => dismiss(t.id)} aria-label={close_label}>✕</button>
           </div>

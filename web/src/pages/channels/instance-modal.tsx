@@ -33,6 +33,17 @@ export function InstanceModal({ mode, onClose, onSaved }: InstanceModalProps) {
 
   const auto_id = !isEdit && !instanceId;
 
+  // 변경사항 감지: 현재 값이 초기값과 다른지 확인
+  const hasChanges = (): boolean => {
+    if (!isEdit) return true; // 신규 추가는 항상 변경사항으로 간주
+    if (label !== (initial?.label || "")) return true;
+    if (enabled !== (initial?.enabled ?? true)) return true;
+    if (token !== "") return true; // 토큰 필드 수정 감지
+    if (defaultTarget !== String(initial?.settings?.default_channel || initial?.settings?.default_chat_id || "")) return true;
+    if (apiBase !== String(initial?.settings?.api_base || "")) return true;
+    return false;
+  };
+
   function build_settings(): Record<string, unknown> {
     const s: Record<string, unknown> = {};
     if (provider === "telegram") {
@@ -78,6 +89,7 @@ export function InstanceModal({ mode, onClose, onSaved }: InstanceModalProps) {
       onSubmit={handleSubmit}
       submitLabel={isEdit ? t("common.save") : t("common.add")}
       saving={saving}
+      submitDisabled={!hasChanges()}
     >
       <div className="form-group">
         <label className="form-label">{t("channels.provider")}</label>

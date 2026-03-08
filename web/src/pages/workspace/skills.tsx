@@ -244,6 +244,12 @@ export function SkillsTab() {
   };
 
   const handle_select = (name: string) => {
+    // 이미 선택된 item 다시 클릭 → 선택 해제 (토글)
+    if (selected === name) {
+      setSelected(null);
+      setEditContent(null);
+      return;
+    }
     setSelected(name);
     setActiveFile("SKILL.md");
     setEditContent(null);
@@ -276,7 +282,10 @@ export function SkillsTab() {
           <div className="ws-col">
             <div className="ws-toolbar">
               {selected && (
-                <button className="btn btn--xs" onClick={() => { setSelected(null); setEditContent(null); }}>{t("common.back")}</button>
+                <button className="btn btn--sm" onClick={() => { setSelected(null); setEditContent(null); }} aria-label={t("common.back")}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+                  {t("common.back")}
+                </button>
               )}
               <button className="btn btn--xs" onClick={() => setShowImport(true)}>{t("skills.import")}</button>
               <button className="btn btn--xs" onClick={() => void refresh()}>{t("common.refresh")}</button>

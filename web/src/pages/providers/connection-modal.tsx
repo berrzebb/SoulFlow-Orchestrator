@@ -36,6 +36,15 @@ export function ConnectionModal({ mode, onClose, onSaved }: ConnectionModalProps
   const typeOptions = types.length > 0 ? types : Object.keys(TYPE_LABELS);
   const showApiBase = providerType === "openai_compatible" || providerType === "openrouter";
 
+  const hasChanges = (): boolean => {
+    if (!isEdit) return true;
+    if (label !== (initial?.label || "")) return true;
+    if (enabled !== (initial?.enabled ?? true)) return true;
+    if (apiBase !== (initial?.api_base || "")) return true;
+    if (token !== "") return true;
+    return false;
+  };
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
@@ -70,6 +79,7 @@ export function ConnectionModal({ mode, onClose, onSaved }: ConnectionModalProps
       onSubmit={handleSubmit}
       submitLabel={isEdit ? t("common.save") : t("common.add")}
       saving={saving}
+      submitDisabled={!hasChanges()}
     >
       <div className="form-group">
         <label className="form-label">{t("providers.provider_type")}</label>

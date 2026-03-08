@@ -32,8 +32,20 @@ export default function ChannelsPage() {
   const toggle_enabled = useMutation({
     mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) =>
       api.put(`/api/channels/instances/${encodeURIComponent(id)}`, { enabled }),
+    onMutate: ({ id, enabled }) => {
+      // 이전 데이터를 롤백용으로 저장
+      const prev = qc.getQueryData<ChannelInstance[]>(["channel-instances"]);
+      // UI 즉시 업데이트
+      if (prev) {
+        qc.setQueryData(["channel-instances"], prev.map((inst) => inst.instance_id === id ? { ...inst, enabled } : inst));
+      }
+      return prev;
+    },
     onSuccess: () => void qc.invalidateQueries({ queryKey: ["channel-instances"] }),
-    onError: (err) => toast(t("channels.save_failed", { error: err.message }), "err"),
+    onError: (err, _, prev) => {
+      if (prev) qc.setQueryData(["channel-instances"], prev);
+      toast(t("channels.save_failed", { error: err.message }), "err");
+    },
   });
 
   return (

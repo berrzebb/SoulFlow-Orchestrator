@@ -27,6 +27,19 @@ export function PresetModal({ initial, onClose, onSaved }: {
   const [supportsRefresh, setSupportsRefresh] = useState(initial?.supports_refresh ?? true);
   const [saving, setSaving] = useState(false);
 
+  const hasChanges = (): boolean => {
+    if (!isEdit) return true;
+    if (authUrl !== (initial?.auth_url ?? "")) return true;
+    if (tokenUrl !== (initial?.token_url ?? "")) return true;
+    if (tokenAuthMethod !== (initial?.token_auth_method ?? "body")) return true;
+    if (scopeSeparator !== (initial?.scope_separator ?? " ")) return true;
+    if (testUrl !== (initial?.test_url ?? "")) return true;
+    if (scopesAvailable !== (initial?.scopes_available ?? []).join(", ")) return true;
+    if (defaultScopes !== (initial?.default_scopes ?? []).join(", ")) return true;
+    if (supportsRefresh !== (initial?.supports_refresh ?? true)) return true;
+    return false;
+  };
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
@@ -74,6 +87,7 @@ export function PresetModal({ initial, onClose, onSaved }: {
       onSubmit={handleSubmit}
       submitLabel={isEdit ? t("common.save") : t("common.add")}
       saving={saving}
+      submitDisabled={!hasChanges()}
     >
       <div className="form-group">
         <label className="form-label">{t("oauth.service_type")}</label>

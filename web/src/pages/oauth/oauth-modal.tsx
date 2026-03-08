@@ -80,6 +80,14 @@ export function OAuthModal({ mode, presets, onClose, onSaved }: {
         await api.post("/api/oauth/integrations", body);
         toast(t("oauth.added"), "ok");
       }
+      // 폼 초기화 (신규 추가 후 모달이 닫히면 다음 오픈 시 깨끗한 폼 준비)
+      if (!isEdit) {
+        setLabel("");
+        setClientId("");
+        setClientSecret("");
+        setAuthUrl("");
+        setTokenUrl("");
+      }
       onSaved();
     } catch (err) {
       toast(t("oauth.save_failed", { error: err instanceof Error ? err.message : String(err) }), "err");

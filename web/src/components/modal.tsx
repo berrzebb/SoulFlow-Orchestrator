@@ -1,10 +1,13 @@
 import { useState, useEffect, useRef, type ReactNode } from "react";
 import { useT } from "../i18n";
 
-/** body 스크롤 락 + Esc 키 바인딩 */
+/** body 스크롤 락 + Esc 키 바인딩 + 포커스 복구 */
 export function useModalEffects(open: boolean, onClose: () => void) {
+  const prevFocusRef = useRef<HTMLElement | null>(null);
   useEffect(() => {
     if (!open) return;
+    // 이전 포커스 저장
+    prevFocusRef.current = document.activeElement as HTMLElement;
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const handle = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
@@ -12,6 +15,8 @@ export function useModalEffects(open: boolean, onClose: () => void) {
     return () => {
       document.body.style.overflow = prev;
       document.removeEventListener("keydown", handle);
+      // 모달 종료 시 이전 포커스 복구
+      prevFocusRef.current?.focus();
     };
   }, [open, onClose]);
 }
@@ -30,7 +35,18 @@ export function Modal({ open, title, children, onClose, onConfirm, confirmLabel,
   const t = useT();
   const modalRef = useRef<HTMLDivElement>(null);
   useModalEffects(open, onClose);
-  useEffect(() => { if (open) modalRef.current?.focus(); }, [open]);
+  useEffect(() => {
+    if (!open) return;
+    // 첫 입력 가능한 요소로 포커스 이동
+    const focusableElements = modalRef.current?.querySelectorAll(
+      'input:not([disabled]), button:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    );
+    if (focusableElements?.length) {
+      (focusableElements[0] as HTMLElement).focus();
+    } else {
+      modalRef.current?.focus();
+    }
+  }, [open]);
   if (!open) return null;
   return (
     <div className="modal-overlay" onClick={danger ? undefined : onClose}>
@@ -84,27 +100,39 @@ interface FormModalProps {
   onSubmit: (e: React.FormEvent) => void;
   submitLabel?: string;
   saving?: boolean;
+  submitDisabled?: boolean; // 변경사항 없음 등 추가 비활성화 조건
   wide?: boolean;
 }
 
-export function FormModal({ open, title, children, onClose, onSubmit, submitLabel, saving, wide }: FormModalProps) {
+export function FormModal({ open, title, children, onClose, onSubmit, submitLabel, saving, submitDisabled, wide }: FormModalProps) {
   const t = useT();
   const modalRef = useRef<HTMLDivElement>(null);
   useModalEffects(open, onClose);
-  useEffect(() => { if (open) modalRef.current?.focus(); }, [open]);
+  useEffect(() => {
+    if (!open) return;
+    // 첫 입력 가능한 요소로 포커스 이동
+    const focusableElements = modalRef.current?.querySelectorAll(
+      'input:not([disabled]), button:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    );
+    if (focusableElements?.length) {
+      (focusableElements[0] as HTMLElement).focus();
+    } else {
+      modalRef.current?.focus();
+    }
+  }, [open]);
   if (!open) return null;
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <div className="modal-overlay" onClick={saving ? undefined : onClose}>
       <div className={`modal${wide ? " modal--wide" : ""}`} ref={modalRef} tabIndex={-1} onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label={title}>
         <div className="modal__header">
           <h3 className="modal__title">{title}</h3>
-          <button className="modal__close" onClick={onClose} aria-label={t("common.close_modal")}>✕</button>
+          <button className="modal__close" onClick={saving ? undefined : onClose} disabled={saving} aria-label={t("common.close_modal")}>✕</button>
         </div>
         <form onSubmit={onSubmit}>
           <div className="modal__body modal__form-body">{children}</div>
           <div className="modal__footer">
-            <button type="button" className="btn btn--sm" onClick={onClose}>{t("common.cancel")}</button>
-            <button type="submit" className="btn btn--sm btn--accent" disabled={saving}>
+            <button type="button" className="btn btn--sm" onClick={onClose} disabled={saving}>{t("common.cancel")}</button>
+            <button type="submit" className="btn btn--sm btn--accent" disabled={saving || submitDisabled}>
               {saving ? t("common.saving") : submitLabel || t("common.save")}
             </button>
           </div>

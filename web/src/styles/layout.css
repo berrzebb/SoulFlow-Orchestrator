@@ -1537,6 +1537,13 @@ a:focus-visible > .stat-card {
 }
 .form-input:focus:not(:focus-visible) { outline: none; }
 .form-input::placeholder { color: var(--off); }
+.form-input--error {
+  border-color: var(--err);
+}
+.form-input--error:focus-visible {
+  border-color: var(--err);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--err) 20%, transparent);
+}
 .form-hint {
   display: block;
   font-size: var(--fs-xs);
@@ -4650,9 +4657,9 @@ g:hover > .graph-add-handle circle {
 @media (max-width: 768px) {
   .chat-page { height: calc(100dvh - 100px - 52px); }
   .chat-input-bar { bottom: var(--sp-2); padding: 0 var(--sp-2); }
-  .chat-input-bar__pill { border-radius: var(--radius-lg); }
+  .chat-input-bar__pill { border-radius: var(--radius-lg); padding: var(--sp-2) var(--sp-2); }
   .chat-input-bar__hint { display: none; }
-  .chat-input-bar__btn { width: 40px; height: 40px; }
+  .chat-input-bar__btn { width: 44px; height: 44px; padding: var(--sp-2); }
   .chat-messages { padding: var(--sp-2) var(--sp-2) 100px; }
   .chat-msg__time { opacity: 1; }
   .chat-msg__avatar { width: 28px; height: 28px; font-size: 10px; }
@@ -5300,7 +5307,46 @@ g:hover > .graph-add-handle circle {
 
   /* 모든 버튼 44px 터치 타겟 */
   .btn--xs, .btn--sm { min-height: 44px; }
+  .btn--icon { width: 44px; height: 44px; }
 
   /* ws-toolbar: 래핑 */
   .ws-toolbar { flex-wrap: wrap; }
+}
+
+/* ===== Filter Status (필터 결과 공지) ===== */
+.filter-status {
+  font-size: var(--fs-xs);
+  color: var(--muted);
+  margin-bottom: var(--sp-2);
+}
+
+/* ===== Aria Description (키보드 도움말) ===== */
+.aria-description-wrapper {
+  position: relative;
+  display: inline-block;
+}
+
+.aria-description {
+  display: none;
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-bottom: 8px;
+  padding: 6px 10px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-xs);
+  color: var(--text);
+  white-space: nowrap;
+  z-index: 1000;
+  pointer-events: none;
+  box-shadow: var(--shadow-sm);
+}
+
+/* 포커스 또는 호버 시 표시 */
+.aria-description-wrapper:hover .aria-description,
+.aria-description-wrapper:focus-within .aria-description {
+  display: block;
 }

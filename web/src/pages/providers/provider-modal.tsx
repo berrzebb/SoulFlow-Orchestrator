@@ -110,6 +110,24 @@ export function ProviderModal({ mode, connections, onClose, onSaved }: ProviderM
     setSelectedModes(next);
   };
 
+  const hasChanges = (): boolean => {
+    if (!isEdit) return true;
+    if (label !== (initial?.label || "")) return true;
+    if (enabled !== (initial?.enabled ?? true)) return true;
+    if (priority !== (initial?.priority ?? 10)) return true;
+    if (modelPurpose !== (initial?.model_purpose || "chat")) return true;
+    if (token !== "") return true;
+    const initialModes = new Set(initial?.supported_modes ?? ["once", "agent", "task"]);
+    if (selectedModes.size !== initialModes.size || ![...selectedModes].every((m) => initialModes.has(m))) return true;
+    if (model !== (initial?.settings?.model || "")) return true;
+    if (maxTokens !== String(initial?.settings?.max_tokens || "")) return true;
+    if (temperature !== String(initial?.settings?.temperature || "")) return true;
+    if (apiBase !== String(initial?.settings?.api_base || "")) return true;
+    if (siteUrl !== String(initial?.settings?.site_url || "")) return true;
+    if (appName !== String(initial?.settings?.app_name || "")) return true;
+    return false;
+  };
+
   function build_settings(): Record<string, unknown> {
     const out: Record<string, unknown> = {};
     if (resolvedType === "openai_compatible" && apiBase && !connectionId) out.api_base = apiBase;
@@ -178,6 +196,7 @@ export function ProviderModal({ mode, connections, onClose, onSaved }: ProviderM
       onSubmit={handleSubmit}
       submitLabel={isEdit ? t("common.save") : t("common.add")}
       saving={saving}
+      submitDisabled={!hasChanges()}
     >
       {/* Connection 선택 (선택사항) */}
       {connections.length > 0 && (
