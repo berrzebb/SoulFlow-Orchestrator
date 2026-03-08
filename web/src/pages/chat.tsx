@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState, useRef, useEffect, useReducer } from "react";
+import { useState, useRef, useEffect, useReducer, useMemo } from "react";
 import { api } from "../api/client";
 import { Badge } from "../components/badge";
 import { DeleteConfirmModal } from "../components/modal";
@@ -104,11 +104,12 @@ export default function ChatPage() {
     related_query_keys: activeId ? [["chat-session", activeId]] : [],
   });
 
+  const has_stream_content = !!web_stream?.content;
   useEffect(() => {
     if (messagesRef.current) {
       messagesRef.current.scrollTop = messagesRef.current.scrollHeight;
     }
-  }, [activeSession?.messages?.length, mirrorLiveMessages.length, !!web_stream?.content]);
+  }, [activeSession?.messages?.length, mirrorLiveMessages.length, has_stream_content]);
 
   const create_session = () => run_create(async () => {
     const res = await api.post<{ id: string }>("/api/chat/sessions");
@@ -174,9 +175,12 @@ export default function ChatPage() {
     }
   };
 
-  const raw_messages = is_mirror
-    ? [...(mirrorSession?.messages ?? []), ...mirrorLiveMessages]
-    : activeSession?.messages ?? [];
+  const raw_messages = useMemo(
+    () => is_mirror
+      ? [...(mirrorSession?.messages ?? []), ...mirrorLiveMessages]
+      : activeSession?.messages ?? [],
+    [is_mirror, mirrorSession?.messages, mirrorLiveMessages, activeSession?.messages],
+  );
   const stream_active = !is_mirror && web_stream?.chat_id === activeId && !!web_stream.content;
   const is_streaming = stream_active && !web_stream!.done;
 

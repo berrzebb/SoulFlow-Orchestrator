@@ -565,6 +565,7 @@ export function GraphEditor({
     }
     setDrag(null);
   };
+  const keyHandlerRef = useRef<((e: KeyboardEvent) => void) | null>(null);
   // 렌더마다 최신 함수로 refs 갱신 — 이벤트 핸들러의 stale closure 방지
   useEffect(() => {
     svgPointRef.current = svgPoint;
@@ -816,6 +817,28 @@ export function GraphEditor({
     onSelectPhase(null);
   };
 
+  // 키보드 핸들러 ref 갱신 — 선언 완료 후 위치에서 최신 클로저 유지
+  useEffect(() => {
+    keyHandlerRef.current = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "f") {
+        e.preventDefault();
+        setSearchOpen(true);
+        setTimeout(() => searchRef.current?.focus(), 50);
+        return;
+      }
+      if (e.key === "Escape" && searchOpen) { setSearchOpen(false); setSearchQuery(""); return; }
+      const tag = (e.target as HTMLElement).tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      if (e.key === "Escape") { onSelectPhase(null); return; }
+      if (e.key === "=" || e.key === "+") { zoomIn(); return; }
+      if (e.key === "-") { zoomOut(); return; }
+      if (e.key === "0") { zoomReset(); return; }
+      if ((e.key === "Delete" || e.key === "Backspace") && selectedPhaseId) {
+        confirmAction(t("workflows.remove_confirm"), () => deleteNode(selectedPhaseId));
+      }
+    };
+  });
+
   /** 컨텍스트 메뉴: 노드 삭제. */
   const ctxDelete = () => {
     if (!ctxMenu) return;
@@ -893,37 +916,12 @@ export function GraphEditor({
     onSelectPhase(nodeId);
   };
 
-  /** 키보드 단축키. */
+  /** 키보드 단축키 — stable listener가 ref를 통해 최신 핸들러 호출. */
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      // Ctrl+F: 노드 검색 (입력 필드 내에서도 작동)
-      if ((e.ctrlKey || e.metaKey) && e.key === "f") {
-        e.preventDefault();
-        setSearchOpen(true);
-        setTimeout(() => searchRef.current?.focus(), 50);
-        return;
-      }
-      // Escape: 검색 닫기 우선
-      if (e.key === "Escape" && searchOpen) {
-        setSearchOpen(false);
-        setSearchQuery("");
-        return;
-      }
-      // 입력 필드 내에서는 무시
-      const tag = (e.target as HTMLElement).tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
-      if (e.key === "Escape") { onSelectPhase(null); return; }
-      if (e.key === "=" || e.key === "+") { zoomIn(); return; }
-      if (e.key === "-") { zoomOut(); return; }
-      if (e.key === "0") { zoomReset(); return; }
-      if ((e.key === "Delete" || e.key === "Backspace") && selectedPhaseId) {
-        confirmAction(t("workflows.remove_confirm"), () => deleteNode(selectedPhaseId));
-        return;
-      }
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [selectedPhaseId, workflow, onChange, onSelectPhase, searchOpen]);
+    const listener = (e: KeyboardEvent) => keyHandlerRef.current?.(e);
+    window.addEventListener("keydown", listener);
+    return () => window.removeEventListener("keydown", listener);
+  }, []);
 
   return (
     <div className="graph-editor">
