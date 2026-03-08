@@ -558,6 +558,47 @@ export function create_workflow_ops(deps: {
 
     async suggest(instruction, options) {
       if (!deps.providers) return { ok: false, error: "providers_not_configured" };
+
+      // provider_id가 "auto"이거나 미지정 시 tool-loop 지원 프로바이더 자동 선택.
+      // orchestrator_llm(Ollama 등)은 multi-turn tool-call 루프를 신뢰할 수 없으므로 제외.
+      // 자동 선택 시: 사용자가 Providers 페이지에서 설정한 priority 순서를 따름.
+      const PROVIDER_TYPE_TO_ID: Record<string, import("../../providers/types.js").ProviderId> = {
+        claude_cli: "claude_code", claude_sdk: "claude_code",
+        codex_cli: "chatgpt", codex_appserver: "chatgpt",
+        gemini_cli: "gemini",
+        openrouter: "openrouter",
+      };
+      const VALID_PROVIDER_IDS = new Set<string>(["chatgpt", "claude_code", "openrouter", "orchestrator_llm", "gemini"]);
+      const requested = options?.provider_id;
+      const summaries = deps.get_provider_summaries?.() ?? [];
+      let suggest_provider_id: import("../../providers/types.js").ProviderId | undefined;
+
+      if (!requested || requested === "auto") {
+        // 설정된 프로바이더 순서(priority ASC) → ProviderId 매핑 → orchestrator_llm 제외
+        const configured_order = summaries
+          .map((p) => PROVIDER_TYPE_TO_ID[p.provider_type])
+          .filter((id): id is import("../../providers/types.js").ProviderId => !!id);
+        const seen = new Set<string>();
+        const deduped = configured_order.filter((id) => {
+          if (seen.has(id)) return false;
+          seen.add(id);
+          return deps.providers!.list_providers().includes(id);
+        });
+        const fallback: import("../../providers/types.js").ProviderId[] = ["claude_code", "chatgpt", "gemini", "openrouter"];
+        suggest_provider_id = deduped[0] ?? fallback.find((id) => deps.providers!.list_providers().includes(id));
+      } else if (VALID_PROVIDER_IDS.has(requested)) {
+        // 이미 유효한 ProviderId
+        suggest_provider_id = requested as import("../../providers/types.js").ProviderId;
+      } else {
+        // instance_id (프론트엔드 프로바이더 선택기) → provider_type → ProviderId 변환
+        const summary = summaries.find((p) => p.backend === requested);
+        const mapped = summary ? PROVIDER_TYPE_TO_ID[summary.provider_type] : undefined;
+        const fallback: import("../../providers/types.js").ProviderId[] = ["claude_code", "chatgpt", "gemini", "openrouter"];
+        suggest_provider_id = mapped ?? fallback.find((id) => deps.providers!.list_providers().includes(id));
+      }
+
+      if (!suggest_provider_id) return { ok: false, error: "no_suitable_provider_for_suggest" };
+
       try {
         // name → 파일 저장소 로드, workflow → 직접 사용, 둘 다 없으면 빈 워크플로우(신규 생성)
         let source: Record<string, unknown>;
@@ -798,12 +839,17 @@ export function create_workflow_ops(deps: {
 
         logger?.debug?.("[suggest] loop start", { instruction: instruction.slice(0, 80), source: options?.name ?? "inline" });
 
+        let last_tool_sig = "";
+        let repeat_count = 0;
+        let use_single_shot_fallback = false;
+
         for (let turn = 0; turn < MAX_TURNS; turn++) {
           if (loop_abort.aborted) break;
+          if (use_single_shot_fallback) break;
           const res = await deps.providers.run_orchestrator({
             messages,
             tools: SUGGEST_TOOLS,
-            provider_id: options?.provider_id as import("../../providers/types.js").ProviderId | undefined,
+            provider_id: suggest_provider_id,
             model: options?.model,
             max_tokens: 4096,
             temperature: 0.2,
@@ -819,6 +865,19 @@ export function create_workflow_ops(deps: {
             content_preview: String(res.content ?? "").slice(0, 120),
           });
 
+          // 루프 감지: 같은 툴 시그니처가 연속 반복 → single-shot 폴백으로 전환
+          const tool_sig = res.tool_calls.map(tc => tc.name).join(",");
+          if (tool_sig && tool_sig === last_tool_sig) {
+            repeat_count++;
+          } else {
+            repeat_count = 0;
+            last_tool_sig = tool_sig;
+          }
+          if (repeat_count >= 2) {
+            logger?.debug?.("[suggest] loop detected, switching to single-shot fallback", { tool_sig, repeat_count });
+            use_single_shot_fallback = true;
+          }
+
           messages.push({
             role: "assistant",
             content: res.content,
@@ -830,11 +889,10 @@ export function create_workflow_ops(deps: {
               : undefined,
           });
 
-          if (res.tool_calls.length === 0) {
-            // tool loop를 지원하지 않는 프로바이더(CLI, 일부 Ollama)는 텍스트로 응답.
-            // single-shot JSON 폴백: 간결한 시스템 프롬프트로 완전한 수정 JSON 요청.
-            if (turn === 0) {
-              logger?.debug?.("[suggest] fallback: no tool_calls on turn 0, trying single-shot JSON");
+          if (res.tool_calls.length === 0 || use_single_shot_fallback) {
+            // tool loop를 지원하지 않는 프로바이더이거나 루프 감지 시 single-shot JSON 폴백.
+            if (turn === 0 || use_single_shot_fallback) {
+              logger?.debug?.("[suggest] fallback: single-shot JSON", { reason: use_single_shot_fallback ? "loop_detected" : "no_tool_calls", turn });
               const fallback_system = [
                 "You are a workflow JSON editor.",
                 "Modify the workflow JSON according to the instruction and return the COMPLETE modified workflow.",
@@ -854,7 +912,7 @@ export function create_workflow_ops(deps: {
                     ].join("\n\n"),
                   },
                 ],
-                provider_id: options?.provider_id as import("../../providers/types.js").ProviderId | undefined,
+                provider_id: suggest_provider_id,
                 model: options?.model,
                 max_tokens: 8192,
                 temperature: 0.1,

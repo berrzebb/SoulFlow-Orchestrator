@@ -4,7 +4,7 @@
  */
 import { describe, it, expect } from "vitest";
 import { run_shell_command } from "@src/agent/tools/shell-runtime.js";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -52,16 +52,17 @@ describe("run_shell_command — 기본 실행", () => {
     ).rejects.toThrow();
   });
 
-  it("cwd 옵션 적용 → pwd 출력에 cwd 포함", async () => {
-    const { stdout } = await run_shell_command("pwd", {
+  it("cwd 옵션 적용 → 해당 디렉토리에서 실행됨", async () => {
+    // just-bash는 --root <cwd>로 실행 시 내부 CWD가 /로 변경됨
+    // → ls 결과에 고유 마커 파일이 보이면 cwd가 올바르게 적용된 것
+    const marker = `cwd-marker-${Date.now()}`;
+    writeFileSync(join(cwd, marker), "");
+    const { stdout } = await run_shell_command("ls", {
       cwd,
       timeout_ms: 10_000,
       max_buffer_bytes: 1024 * 1024,
     });
-    // 경로 구분자 정규화 (Windows/Linux 호환)
-    expect(stdout.toLowerCase().replace(/\\/g, "/")).toContain(
-      cwd.toLowerCase().replace(/\\/g, "/").split("/").pop()!
-    );
+    expect(stdout).toContain(marker);
   });
 
   it("exit code 0 → 정상 반환", async () => {
