@@ -19,8 +19,13 @@ type CronTarget = { provider: MessageProvider; chat_id: string };
 
 const CRON_BLOCKED_TOOL_NAMES = new Set(["spawn", "cron"]);
 
+/** 턴당 최대 허용 시간 (ms). 기본값 600s. */
+const DEFAULT_PER_TURN_TIMEOUT_MS = 600_000;
+
 export type CronConfig = {
   agent_loop_max_turns: number;
+  /** 턴당 최대 실행 시간 (ms). 총 잡 타임아웃은 max_turns × per_turn 으로 산출. */
+  per_turn_timeout_ms?: number;
   default_alias: string;
   executor_provider: string;
   provider_caps: ProviderCapabilities;
@@ -192,8 +197,10 @@ export function create_cron_job_handler(deps: CronRuntimeHandlerDeps): CronOnJob
         },
       };
 
+      const per_turn_ms = deps.config.per_turn_timeout_ms ?? DEFAULT_PER_TURN_TIMEOUT_MS;
+      const job_timeout_ms = deps.config.agent_loop_max_turns * per_turn_ms;
       const cron_abort = new AbortController();
-      const cron_timeout = setTimeout(() => cron_abort.abort(), 1_800_000);
+      const cron_timeout = setTimeout(() => cron_abort.abort(), job_timeout_ms);
 
       // 인바운드 텍스트 sealing: 크론 메시지도 민감 정보 보호 적용
       const raw_task = String(job.payload.message || job.name || "scheduled task");

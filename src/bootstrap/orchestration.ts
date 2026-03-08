@@ -237,6 +237,7 @@ export async function create_orchestration_bundle(deps: OrchestrationBundleDeps)
   const cron = new CronService(join(data_dir, "cron"), create_cron_job_handler({
     config: {
       agent_loop_max_turns: app_config.agentLoopMaxTurns,
+      per_turn_timeout_ms: 600_000,
       default_alias: app_config.channel.defaultAlias,
       executor_provider: resolve_instance_to_type(app_config.orchestration.executorProvider) || app_config.orchestration.executorProvider,
       provider_caps,
