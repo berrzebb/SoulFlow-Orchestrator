@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import { Modal } from "../../components/modal";
 import { ResourceCard } from "../../components/resource-card";
@@ -7,45 +7,37 @@ import { Badge } from "../../components/badge";
 import { FormModal } from "../../components/modal";
 import { useToast } from "../../components/toast";
 import { useT } from "../../i18n";
+import { useResourceCRUD } from "../../hooks/use-resource-crud";
 import { time_ago } from "../../utils/format";
 import type { OAuthIntegration, OAuthPreset, ModalMode } from "./types";
 import { OAuthModal } from "./oauth-modal";
 import { PresetModal } from "./preset-modal";
 
 export default function OAuthPage() {
-  const qc = useQueryClient();
   const { toast } = useToast();
   const t = useT();
   const [modal, setModal] = useState<ModalMode | null>(null);
   const [presetModal, setPresetModal] = useState<OAuthPreset | null | "add">(null);
-  const [deleteTarget, setDeleteTarget] = useState<OAuthIntegration | null>(null);
-  const [deletePresetTarget, setDeletePresetTarget] = useState<OAuthPreset | null>(null);
   const [connectShowSecret, setConnectShowSecret] = useState<string | null>(null);
   const [connectSecret, setConnectSecret] = useState("");
 
-  const { data: integrations, isLoading } = useQuery<OAuthIntegration[]>({
+  const { items: integrations, isLoading, deleteTarget, setDeleteTarget, remove, queryClient: qc } = useResourceCRUD<OAuthIntegration>({
     queryKey: ["oauth-integrations"],
     queryFn: () => api.get("/api/oauth/integrations"),
+    deleteEndpoint: (id) => `/api/oauth/integrations/${encodeURIComponent(id)}`,
+    onDeleteSuccess: () => toast(t("oauth.removed"), "ok"),
+    onDeleteError: (err) => toast(t("oauth.remove_failed", { error: err.message }), "err"),
     refetchInterval: 30_000,
     staleTime: 10_000,
   });
 
-  const { data: presets = [] } = useQuery<OAuthPreset[]>({
+  const { items: presets = [], deleteTarget: deletePresetTarget, setDeleteTarget: setDeletePresetTarget, remove: removePreset } = useResourceCRUD<OAuthPreset>({
     queryKey: ["oauth-presets"],
     queryFn: () => api.get("/api/oauth/presets"),
+    deleteEndpoint: (type) => `/api/oauth/presets/${encodeURIComponent(type)}`,
+    onDeleteSuccess: () => toast(t("oauth.preset_removed"), "ok"),
+    onDeleteError: (err) => toast(t("oauth.preset_remove_failed", { error: err.message }), "err"),
     staleTime: 60_000,
-  });
-
-  const remove = useMutation({
-    mutationFn: (id: string) => api.del(`/api/oauth/integrations/${encodeURIComponent(id)}`),
-    onSuccess: () => { toast(t("oauth.removed"), "ok"); void qc.invalidateQueries({ queryKey: ["oauth-integrations"] }); },
-    onError: (err) => toast(t("oauth.remove_failed", { error: err.message }), "err"),
-  });
-
-  const removePreset = useMutation({
-    mutationFn: (type: string) => api.del(`/api/oauth/presets/${encodeURIComponent(type)}`),
-    onSuccess: () => { toast(t("oauth.preset_removed"), "ok"); void qc.invalidateQueries({ queryKey: ["oauth-presets"] }); },
-    onError: (err) => toast(t("oauth.preset_remove_failed", { error: err.message }), "err"),
   });
 
   // OAuth connect/refresh logic
@@ -306,7 +298,7 @@ export default function OAuthPage() {
         title={t("oauth.preset_remove_title")}
         onClose={() => setDeletePresetTarget(null)}
         onConfirm={() => {
-          if (deletePresetTarget) removePreset.mutate(deletePresetTarget.service_type);
+          if (deletePresetTarget) removePreset.mutate((deletePresetTarget as OAuthPreset).service_type);
           setDeletePresetTarget(null);
         }}
         confirmLabel={t("common.remove")}
