@@ -83,9 +83,7 @@ function Show-Help {
 
 function Start-Environment {
   param(
-    [string]$ProfileName,
-    [string]$Port,
-    [string]$RedisPort
+    [string]$ProfileName
   )
 
   Clear-Host
@@ -96,24 +94,94 @@ function Start-Environment {
   Write-Host ""
 
   try {
-    $env:WORKSPACE = $Workspace
-    if ($WebPort) { $env:WEB_PORT = $WebPort }
-    if ($RedisPort) { $env:REDIS_PORT = $RedisPort }
-    if ($Instance) { $env:INSTANCE = $Instance }
+    # 환경별 preset 정의
+    $preset = @{
+      "dev" = @{
+        BUILD_TARGET = "dev"
+        NODE_ENV = "development"
+        DEBUG = "true"
+        MEMORY = "1G"
+        CPUS = "2"
+        DEV_VOLUMES = "`n      - ../src:/app/src`n      - ../web/src:/app/web/src"
+        DEV_COMMAND = "command: npm run dev"
+        REDIS_SERVICE = "redis`n        condition: service_healthy"
+        REDIS_NAME = "redis"
+        REDIS_CONDITION = ""
+      }
+      "test" = @{
+        BUILD_TARGET = "production"
+        NODE_ENV = "test"
+        DEBUG = "true"
+        MEMORY = "1G"
+        CPUS = "2"
+        DEV_VOLUMES = "`n      - ../src:/app/src`n      - ../web/src:/app/web/src"
+        DEV_COMMAND = ""
+        REDIS_SERVICE = "redis`n        condition: service_healthy"
+        REDIS_NAME = "redis"
+        REDIS_CONDITION = ""
+      }
+      "staging" = @{
+        BUILD_TARGET = "production"
+        NODE_ENV = "production"
+        DEBUG = "false"
+        MEMORY = "1G"
+        CPUS = "2"
+        DEV_VOLUMES = ""
+        DEV_COMMAND = ""
+        REDIS_SERVICE = "redis`n        condition: service_healthy"
+        REDIS_NAME = "redis"
+        REDIS_CONDITION = ""
+      }
+      "prod" = @{
+        BUILD_TARGET = "full"
+        NODE_ENV = "production"
+        DEBUG = "false"
+        MEMORY = "2G"
+        CPUS = "4"
+        DEV_VOLUMES = ""
+        DEV_COMMAND = ""
+        REDIS_SERVICE = "redis`n        condition: service_healthy"
+        REDIS_NAME = "redis"
+        REDIS_CONDITION = ""
+      }
+    }
 
-    # Buildkit 비활성화 (Podman 권한 문제 우회)
+    $p = $preset[$ProfileName]
+    if (-not $p) {
+      Write-Host "❌ 알 수 없는 프로필: $ProfileName" -ForegroundColor Red
+      return
+    }
+
+    # 프로젝트명 생성 (기본값은 preset 기반)
+    $baseName = @{ dev="soulflow-dev"; test="soulflow-test"; staging="soulflow-staging"; prod="soulflow-orchestrator" }[$ProfileName]
+    $projectName = $baseName
+    if ($Workspace -and $Workspace -ne "/data") { $projectName += "-user" }
+    if ($Instance) { $projectName += "-$Instance" }
+
+    # 환경변수 설정
     $env:DOCKER_BUILDKIT = 0
+    $env:BUILD_TARGET = $p.BUILD_TARGET
+    $env:NODE_ENV = $p.NODE_ENV
+    $env:DEBUG = $p.DEBUG
+    $env:MEMORY = $p.MEMORY
+    $env:CPUS = $p.CPUS
+    $env:DEV_VOLUMES = $p.DEV_VOLUMES
+    $env:DEV_COMMAND = $p.DEV_COMMAND
+    $env:REDIS_SERVICE = $p.REDIS_SERVICE
+    $env:REDIS_NAME = $p.REDIS_NAME
+    $env:REDIS_CONDITION = $p.REDIS_CONDITION
+    $env:WORKSPACE = "/data"
+    $env:HOST_WORKSPACE = $Workspace
+    $env:PROJECT_NAME = $projectName
+    $env:WEB_PORT = if ($WebPort) { $WebPort } else { @{ dev="4200"; test="4201"; staging="4202"; prod="4200" }[$ProfileName] }
+    $env:REDIS_PORT = if ($RedisPort) { $RedisPort } else { @{ dev="6379"; test="6380"; staging="6381"; prod="6379" }[$ProfileName] }
 
-    $output = & node scripts/setup-environment.js $ProfileName 2>&1
-    # [PROJECT_NAME:...] 패턴에서 프로젝트명 추출
-    $projectName = ($output | Select-String '\[PROJECT_NAME:([^\]]+)\]').Matches.Groups[1].Value
-    if (-not $projectName) { $projectName = "soulflow-$ProfileName" }
-
-    $composeFile = "docker/docker-compose.$ProfileName.yml"
-    docker compose -f $composeFile -p $projectName up -d
+    docker compose -f docker/docker-compose.yml -p $projectName up -d
 
     Write-Host ""
     Write-Host "✅ $ProfileName 환경이 시작되었습니다!" -ForegroundColor Green
+    Write-Host "   프로젝트: $projectName" -ForegroundColor Green
+    Write-Host "   포트: $($env:WEB_PORT)/4200" -ForegroundColor Green
     Write-Host ""
   }
   catch {

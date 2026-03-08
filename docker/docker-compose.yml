@@ -1,0 +1,81 @@
+version: "3.9"
+
+services:
+  docker-proxy:
+    image: tecnativa/docker-socket-proxy
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      CONTAINERS: 1
+      IMAGES: 0
+      NETWORKS: 0
+      VOLUMES: 0
+      POST: 1
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: "0.5"
+
+  orchestrator:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      target: ${BUILD_TARGET:-full}
+    image: soulflow-orchestrator
+    container_name: ${PROJECT_NAME:-soulflow-orchestrator}-orchestrator
+    restart: unless-stopped
+    ports:
+      - "${WEB_PORT:-4200}:4200"
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      WORKSPACE: ${WORKSPACE:-/data}
+      REDIS_URL: redis://${REDIS_HOST:-redis}:6379
+      DEBUG: ${DEBUG:-false}
+    volumes:
+      - ${HOST_WORKSPACE}:/data
+      - ${HOST_WORKSPACE}/.agents/.claude:/root/.claude
+      - ${HOST_WORKSPACE}/.agents/.codex:/root/.codex
+      - ${HOST_WORKSPACE}/.agents/.gemini:/root/.gemini
+      ${DEV_VOLUMES:-}
+    depends_on:
+      ${REDIS_SERVICE:-}
+    ${DEV_COMMAND:-}
+    deploy:
+      resources:
+        limits:
+          memory: ${MEMORY:-1G}
+          cpus: "${CPUS:-2}"
+
+  ${REDIS_NAME:-redis}:
+    image: redis:7-alpine
+    ${REDIS_CONDITION:-}
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - ${PROJECT_NAME:-soulflow-orchestrator}-redis-data:/data
+    command: >
+      redis-server
+      --appendonly yes
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+          cpus: "0.5"
+
+volumes:
+  ${PROJECT_NAME:-soulflow-orchestrator}-redis-data:
+    driver: local
+
+networks:
+  default:
+    name: ${PROJECT_NAME:-soulflow-orchestrator}-network
