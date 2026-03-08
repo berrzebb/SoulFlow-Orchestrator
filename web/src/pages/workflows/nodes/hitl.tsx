@@ -7,7 +7,7 @@ function HitlEditPanel({ node, update, t, options }: EditPanelProps) {
     <>
       <div className="builder-row">
         <label className="label">{t("workflows.hitl_prompt")}</label>
-        <textarea className="input" rows={3} value={String(node.prompt || "")} onChange={(e) => update({ prompt: e.target.value })} placeholder={t("workflows.hitl_prompt_hint")} />
+        <textarea autoFocus className="input" rows={3} value={String(node.prompt || "")} onChange={(e) => update({ prompt: e.target.value })} placeholder={t("workflows.hitl_prompt_hint")} />
       </div>
       <div className="builder-row">
         <label className="label">{t("workflows.hitl_target")}</label>

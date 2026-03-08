@@ -16,7 +16,7 @@ function TaskEditPanel({ node, update, t, options }: EditPanelProps) {
     <>
       <div className="builder-row">
         <label className="label">{t("workflows.task_title")}</label>
-        <input className="input input--sm" value={String(node.task_title || "")} onChange={(e) => update({ task_title: e.target.value })} placeholder="Process user request" />
+        <input autoFocus className="input input--sm" value={String(node.task_title || "")} onChange={(e) => update({ task_title: e.target.value })} placeholder="Process user request" />
       </div>
       <div className="builder-row">
         <label className="label">{t("workflows.task_objective")}</label>
