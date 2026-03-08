@@ -80,6 +80,10 @@ const EmbeddingSchema = z.object({
   instanceId: z.string().default(""),
   /** 임베딩 모델 오버라이드. 빈 문자열이면 인스턴스 기본 모델 사용. */
   model: z.string().default(""),
+  /** 이미지(멀티모달) 임베딩 프로바이더 인스턴스 ID. 빈 문자열이면 이미지 임베딩 비활성화. */
+  imageInstanceId: z.string().default(""),
+  /** 이미지 임베딩 모델 오버라이드. 빈 문자열이면 인스턴스 기본 모델 사용. */
+  imageModel: z.string().default(""),
 });
 
 const OrchestrationSchema = z.object({

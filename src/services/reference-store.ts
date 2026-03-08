@@ -13,6 +13,7 @@ import { join, extname } from "node:path";
 import Database from "better-sqlite3";
 import * as sqliteVec from "sqlite-vec";
 import type { EmbedFn } from "../agent/memory.service.js";
+import type { ImageEmbedFn } from "./embed.service.js";
 import { extract_doc_text, BINARY_DOC_EXTENSIONS } from "../utils/doc-extractor.js";
 
 const VEC_DIMENSIONS = 256;
@@ -23,8 +24,10 @@ const MAX_SEARCH_RESULTS = 8;
 
 /** 텍스트 파일 확장자. */
 const TEXT_EXTENSIONS = new Set([".md", ".txt", ".json", ".yaml", ".yml", ".csv", ".xml", ".html", ".log", ".ts", ".js", ".py", ".sh", ".sql", ".toml", ".ini", ".cfg", ".env.example"]);
-/** 전체 지원 확장자 (텍스트 + 바이너리 문서). */
-const SUPPORTED_EXTENSIONS = new Set([...TEXT_EXTENSIONS, ...BINARY_DOC_EXTENSIONS]);
+/** 이미지 파일 확장자 (멀티모달 임베딩 모델 필요). */
+export const SUPPORTED_IMAGE_EXTENSIONS = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp"]);
+/** 전체 지원 확장자 (텍스트 + 바이너리 문서 + 이미지). */
+const SUPPORTED_EXTENSIONS = new Set([...TEXT_EXTENSIONS, ...BINARY_DOC_EXTENSIONS, ...SUPPORTED_IMAGE_EXTENSIONS]);
 
 export interface ReferenceChunk {
   chunk_id: string;
@@ -57,7 +60,14 @@ const INIT_SQL = `
     content_hash TEXT NOT NULL,
     chunk_count  INTEGER NOT NULL DEFAULT 0,
     file_size    INTEGER NOT NULL DEFAULT 0,
-    updated_at   TEXT NOT NULL
+    updated_at   TEXT NOT NULL,
+    media_type   TEXT NOT NULL DEFAULT 'text'
+  );
+  CREATE TABLE IF NOT EXISTS ref_media (
+    chunk_id   TEXT PRIMARY KEY REFERENCES ref_chunks(chunk_id) ON DELETE CASCADE,
+    file_path  TEXT NOT NULL,
+    media_type TEXT NOT NULL,
+    alt_text   TEXT
   );
   CREATE TABLE IF NOT EXISTS ref_chunks (
     chunk_id    TEXT PRIMARY KEY,
@@ -85,6 +95,7 @@ export class ReferenceStore implements ReferenceStoreLike {
   private readonly db_path: string;
   private readonly refs_dir: string;
   private embed_fn: EmbedFn | null = null;
+  private image_embed_fn: ImageEmbedFn | null = null;
   private last_sync = 0;
   private initialized = false;
 
@@ -96,6 +107,9 @@ export class ReferenceStore implements ReferenceStoreLike {
   }
 
   set_embed(fn: EmbedFn): void { this.embed_fn = fn; }
+
+  /** 이미지 파일 임베딩용 멀티모달 함수 주입. 미설정 시 이미지는 FTS 없이 경로만 저장. */
+  set_image_embed(fn: ImageEmbedFn): void { this.image_embed_fn = fn; }
 
   private ensure_init(): void {
     if (this.initialized) return;
@@ -146,49 +160,75 @@ export class ReferenceStore implements ReferenceStoreLike {
 
       // 추가/변경된 파일 처리
       const to_embed: { chunk_id: string; text: string }[] = [];
+      const to_image_embed: { chunk_id: string; data_url: string }[] = [];
+
+      const ins_chunk = db.prepare("INSERT INTO ref_chunks (chunk_id, doc_path, heading, content, start_line, end_line) VALUES (?, ?, ?, ?, ?, ?)");
+      const ins_fts_content = db.prepare("INSERT INTO ref_chunk_docs (chunk_id, content) VALUES (?, ?)");
+      const ins_fts = db.prepare("INSERT INTO ref_chunks_fts (rowid, chunk_id, content) VALUES (?, ?, ?)");
+      const ins_media = db.prepare("INSERT INTO ref_media (chunk_id, file_path, media_type, alt_text) VALUES (?, ?, ?, ?)");
 
       for (const file of fs_files) {
         const ext = extname(file.abs_path).toLowerCase();
         const is_binary = BINARY_DOC_EXTENSIONS.has(ext);
+        const is_image = SUPPORTED_IMAGE_EXTENSIONS.has(ext);
 
-        // 해시: 바이너리는 raw buffer, 텍스트는 utf-8 문자열 기반
         const raw_buf = await readFile(file.abs_path);
         const hash = sha256_short(raw_buf.toString("binary"));
 
-        if (db_map.get(file.rel_path) === hash) continue; // 변경 없음
+        if (db_map.get(file.rel_path) === hash) continue;
 
         const is_new = !db_map.has(file.rel_path);
-        if (!is_new) this.remove_document(db, file.rel_path); // 기존 제거 후 재삽입
+        if (!is_new) this.remove_document(db, file.rel_path);
 
-        // 텍스트 추출 (바이너리는 doc-extractor, 텍스트는 직접 디코딩)
-        const text_content = is_binary
-          ? await extract_doc_text(raw_buf, ext)
-          : raw_buf.toString("utf-8");
-
-        const chunks = this.chunk_text(text_content, file.rel_path);
         const file_size = statSync(file.abs_path).size;
         const ts = new Date().toISOString();
 
-        db.prepare("INSERT OR REPLACE INTO ref_documents (path, content_hash, chunk_count, file_size, updated_at) VALUES (?, ?, ?, ?, ?)").run(file.rel_path, hash, chunks.length, file_size, ts);
+        if (is_image) {
+          // 이미지: 단일 청크 (FTS 없음, 경로 + alt_text만 저장)
+          const mime = ext === ".jpg" || ext === ".jpeg" ? "image/jpeg"
+            : ext === ".png" ? "image/png"
+            : ext === ".gif" ? "image/gif"
+            : ext === ".webp" ? "image/webp" : "image/jpeg";
+          const chunk_id = sha256_short(`${file.rel_path}:image`);
+          const display = `[이미지: ${file.rel_path}]`;
 
-        const ins_chunk = db.prepare("INSERT INTO ref_chunks (chunk_id, doc_path, heading, content, start_line, end_line) VALUES (?, ?, ?, ?, ?, ?)");
-        const ins_fts_content = db.prepare("INSERT INTO ref_chunk_docs (chunk_id, content) VALUES (?, ?)");
-        const ins_fts = db.prepare("INSERT INTO ref_chunks_fts (rowid, chunk_id, content) VALUES (?, ?, ?)");
+          db.prepare("INSERT OR REPLACE INTO ref_documents (path, content_hash, chunk_count, file_size, updated_at, media_type) VALUES (?, ?, ?, ?, ?, ?)").run(file.rel_path, hash, 1, file_size, ts, "image");
+          ins_chunk.run(chunk_id, file.rel_path, "", display, 0, 0);
+          ins_media.run(chunk_id, file.rel_path, "image", null);
 
-        for (const chunk of chunks) {
-          ins_chunk.run(chunk.chunk_id, file.rel_path, chunk.heading, chunk.content, chunk.start_line, chunk.end_line);
-          const info = ins_fts_content.run(chunk.chunk_id, chunk.content);
-          ins_fts.run(info.lastInsertRowid, chunk.chunk_id, chunk.content);
-          to_embed.push({ chunk_id: chunk.chunk_id, text: `[${file.rel_path}] ${chunk.heading}\n${chunk.content}`.slice(0, MAX_EMBED_CHARS) });
+          if (this.image_embed_fn) {
+            const data_url = `data:${mime};base64,${raw_buf.toString("base64")}`;
+            to_image_embed.push({ chunk_id, data_url });
+          }
+        } else {
+          // 텍스트/바이너리 문서
+          const text_content = is_binary
+            ? await extract_doc_text(raw_buf, ext)
+            : raw_buf.toString("utf-8");
+
+          const chunks = this.chunk_text(text_content, file.rel_path);
+
+          db.prepare("INSERT OR REPLACE INTO ref_documents (path, content_hash, chunk_count, file_size, updated_at, media_type) VALUES (?, ?, ?, ?, ?, ?)").run(file.rel_path, hash, chunks.length, file_size, ts, "text");
+
+          for (const chunk of chunks) {
+            ins_chunk.run(chunk.chunk_id, file.rel_path, chunk.heading, chunk.content, chunk.start_line, chunk.end_line);
+            const info = ins_fts_content.run(chunk.chunk_id, chunk.content);
+            ins_fts.run(info.lastInsertRowid, chunk.chunk_id, chunk.content);
+            to_embed.push({ chunk_id: chunk.chunk_id, text: `[${file.rel_path}] ${chunk.heading}\n${chunk.content}`.slice(0, MAX_EMBED_CHARS) });
+          }
         }
 
         if (is_new) added++;
         else updated++;
       }
 
-      // 벡터 임베딩 (배치)
+      // 텍스트 벡터 임베딩
       if (this.embed_fn && to_embed.length > 0) {
         await this.embed_chunks(db, to_embed);
+      }
+      // 이미지 벡터 임베딩
+      if (this.image_embed_fn && to_image_embed.length > 0) {
+        await this.embed_image_chunks(db, to_image_embed);
       }
     } finally {
       db.close();
@@ -265,6 +305,32 @@ export class ReferenceStore implements ReferenceStoreLike {
             }
           }
         } catch { /* 벡터 검색 실패 시 FTS 결과만 사용 */ }
+      }
+
+      // 이미지 KNN 검색 (멀티모달 embed가 있을 때만)
+      if (this.image_embed_fn) {
+        try {
+          const { embeddings } = await this.image_embed_fn([query.slice(0, MAX_EMBED_CHARS)], { dimensions: VEC_DIMENSIONS });
+          if (embeddings.length > 0) {
+            const qvec = normalize_vec(embeddings[0]!);
+            const qbuf = new Float32Array(qvec);
+            const img_rows = db.prepare(`
+              SELECT v.rowid, v.distance
+              FROM ref_image_chunks_vec v
+              WHERE v.embedding MATCH ? AND k = ?
+              ORDER BY v.distance
+            `).all(qbuf, limit) as { rowid: number; distance: number }[];
+
+            for (const vr of img_rows) {
+              const chunk = db.prepare(
+                "SELECT chunk_id, doc_path, heading, content FROM ref_chunks WHERE rowid = ?",
+              ).get(vr.rowid) as ReferenceChunk | undefined;
+              if (chunk && !results.has(chunk.chunk_id)) {
+                results.set(chunk.chunk_id, { ...chunk, score: 1 / (1 + vr.distance) });
+              }
+            }
+          }
+        } catch { /* 이미지 검색 실패 시 무시 */ }
       }
     } finally {
       db.close();
@@ -434,6 +500,45 @@ export class ReferenceStore implements ReferenceStoreLike {
     }
     db.prepare("DELETE FROM ref_chunks WHERE doc_path = ?").run(path);
     db.prepare("DELETE FROM ref_documents WHERE path = ?").run(path);
+  }
+
+  /**
+   * 이미지 청크 벡터 임베딩. ref_chunk_docs rowid 없이 ref_media rowid 기준으로 저장.
+   * 이미지는 FTS에 없으므로 ref_chunks_vec에 직접 rowid 지정 불가 → image_vec 별도 테이블 사용.
+   */
+  private async embed_image_chunks(db: Database.Database, items: { chunk_id: string; data_url: string }[]): Promise<void> {
+    if (!this.image_embed_fn || items.length === 0) return;
+    const BATCH_SIZE = 16; // 이미지는 페이로드가 크므로 배치 작게
+
+    // 이미지용 vec0 테이블이 없으면 생성
+    try {
+      db.exec(`CREATE VIRTUAL TABLE IF NOT EXISTS ref_image_chunks_vec USING vec0(embedding float[${VEC_DIMENSIONS}])`);
+    } catch { /* 이미 있으면 무시 */ }
+
+    const ins_img_vec = db.prepare("INSERT INTO ref_image_chunks_vec (rowid, embedding) VALUES (?, ?)");
+    const del_img_vec = db.prepare("DELETE FROM ref_image_chunks_vec WHERE rowid = ?");
+    // ref_chunks rowid를 image_vec rowid로 사용
+    const get_rowid = db.prepare("SELECT rowid FROM ref_chunks WHERE chunk_id = ?");
+
+    for (let i = 0; i < items.length; i += BATCH_SIZE) {
+      const batch = items.slice(i, i + BATCH_SIZE);
+      try {
+        const { embeddings } = await this.image_embed_fn(
+          batch.map((b) => ({ image_data_url: b.data_url })),
+          { dimensions: VEC_DIMENSIONS },
+        );
+        const tx = db.transaction(() => {
+          for (let j = 0; j < batch.length; j++) {
+            const row = get_rowid.get(batch[j]!.chunk_id) as { rowid: number } | undefined;
+            if (!row) continue;
+            const vec = normalize_vec(embeddings[j]!);
+            try { del_img_vec.run(row.rowid); } catch { /* 없을 수 있음 */ }
+            ins_img_vec.run(row.rowid, new Float32Array(vec));
+          }
+        });
+        tx();
+      } catch { /* 이미지 임베딩 실패 시 경로만 저장된 상태 유지 */ }
+    }
   }
 
   private async embed_chunks(db: Database.Database, items: { chunk_id: string; text: string }[]): Promise<void> {

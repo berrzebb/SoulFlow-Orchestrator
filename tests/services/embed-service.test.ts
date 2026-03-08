@@ -3,7 +3,12 @@
  * 실제 API 호출 없이 fetch mock 사용.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { create_embed_service, create_embed_service_from_provider } from "@src/services/embed.service.js";
+import {
+  create_embed_service,
+  create_embed_service_from_provider,
+  create_multimodal_embed_service,
+  create_multimodal_embed_service_from_provider,
+} from "@src/services/embed.service.js";
 
 function make_mock_response(embeddings: number[][], total_tokens = 10) {
   return {
@@ -202,5 +207,98 @@ describe("create_embed_service_from_provider", () => {
     const call = vi.mocked(fetch).mock.calls[0];
     const body = JSON.parse(String(call[1]?.body));
     expect(body.model).toBe("custom-embed-model");
+  });
+});
+
+describe("create_multimodal_embed_service", () => {
+  it("텍스트 입력 → {text: ...} 포맷으로 전송", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(make_mock_response([[0.1, 0.2]]) as unknown as Response);
+
+    const embed = create_multimodal_embed_service({ get_api_key: async () => "key" });
+    const result = await embed(["hello"], {});
+
+    expect(result.embeddings).toHaveLength(1);
+    const call = vi.mocked(fetch).mock.calls[0];
+    const body = JSON.parse(String(call[1]?.body));
+    expect(body.input[0]).toEqual({ text: "hello" });
+  });
+
+  it("이미지 입력 → {image: data_url} 포맷으로 전송", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(make_mock_response([[0.3, 0.4]]) as unknown as Response);
+
+    const embed = create_multimodal_embed_service({ get_api_key: async () => "key" });
+    const data_url = "data:image/png;base64,abc123";
+    await embed([{ image_data_url: data_url }], {});
+
+    const call = vi.mocked(fetch).mock.calls[0];
+    const body = JSON.parse(String(call[1]?.body));
+    expect(body.input[0]).toEqual({ image: data_url });
+  });
+
+  it("텍스트 + 이미지 혼합 입력", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(make_mock_response([[1], [2]]) as unknown as Response);
+
+    const embed = create_multimodal_embed_service({ get_api_key: async () => "key" });
+    await embed(["text", { image_data_url: "data:image/png;base64,x" }], {});
+
+    const call = vi.mocked(fetch).mock.calls[0];
+    const body = JSON.parse(String(call[1]?.body));
+    expect(body.input[0]).toEqual({ text: "text" });
+    expect(body.input[1]).toEqual({ image: "data:image/png;base64,x" });
+  });
+
+  it("기본 모델 jina-ai/jina-clip-v2 사용", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(make_mock_response([[1]]) as unknown as Response);
+
+    const embed = create_multimodal_embed_service({ get_api_key: async () => "key" });
+    await embed(["test"], {});
+
+    const call = vi.mocked(fetch).mock.calls[0];
+    const body = JSON.parse(String(call[1]?.body));
+    expect(body.model).toBe("jina-ai/jina-clip-v2");
+  });
+
+  it("API 키 없을 때 에러 던짐", async () => {
+    const embed = create_multimodal_embed_service({ get_api_key: async () => null });
+    await expect(embed(["test"], {})).rejects.toThrow("image embedding API key not configured");
+  });
+
+  it("skip_auth=true → API 키 없어도 요청", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(make_mock_response([[0.1]]) as unknown as Response);
+
+    const embed = create_multimodal_embed_service({ get_api_key: async () => null, skip_auth: true });
+    const result = await embed(["test"], {});
+    expect(result.embeddings).toHaveLength(1);
+  });
+
+  it("API 오류 응답 → 에러 던짐", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(make_error_response(403, "Forbidden") as unknown as Response);
+
+    const embed = create_multimodal_embed_service({ get_api_key: async () => "key" });
+    await expect(embed(["test"], {})).rejects.toThrow("Multimodal embedding API error (403)");
+  });
+});
+
+describe("create_multimodal_embed_service_from_provider", () => {
+  it("ollama → skip_auth=true", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(make_mock_response([[0.5]]) as unknown as Response);
+
+    const embed = create_multimodal_embed_service_from_provider({
+      provider_type: "ollama",
+      get_api_key: async () => null,
+      api_base: "http://ollama:11434/v1",
+    });
+
+    const result = await embed(["test"], {});
+    expect(result.embeddings).toHaveLength(1);
+  });
+
+  it("openai → API 키 필수", async () => {
+    const embed = create_multimodal_embed_service_from_provider({
+      provider_type: "openai",
+      get_api_key: async () => null,
+    });
+
+    await expect(embed(["test"], {})).rejects.toThrow("image embedding API key not configured");
   });
 });

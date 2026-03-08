@@ -179,6 +179,8 @@ export const CONFIG_FIELDS: ConfigFieldMeta[] = [
   // ── Embedding ──
   { path: "embedding.instanceId", label: "Embed Provider Instance", section: "embedding", type: "string", env_key: "EMBED_INSTANCE_ID", default_value: "", sensitive: false, restart_required: true, description: "Provider instance for embeddings (registered in Providers page with purpose=embedding). Empty = auto-select first available" },
   { path: "embedding.model", label: "Embed Model", section: "embedding", type: "string", env_key: "", default_value: "", sensitive: false, restart_required: true, description: "Model override for embeddings. Empty = use instance default model" },
+  { path: "embedding.imageInstanceId", label: "Image Embed Provider Instance", section: "embedding", type: "string", env_key: "IMAGE_EMBED_INSTANCE_ID", default_value: "", sensitive: false, restart_required: true, description: "Provider instance for multimodal (image+text) embeddings, e.g. jina-clip-v2. Empty = image indexing disabled" },
+  { path: "embedding.imageModel", label: "Image Embed Model", section: "embedding", type: "string", env_key: "", default_value: "", sensitive: false, restart_required: true, description: "Model override for multimodal embeddings. Empty = use instance default model" },
 
   // ── Logging ──
   { path: "logging.level", label: "Log Level", section: "logging", type: "select", env_key: "", default_value: "info", sensitive: false, restart_required: true, options: ["debug", "info", "warn", "error"], description: "Minimum log level for console output" },

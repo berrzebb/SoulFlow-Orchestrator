@@ -29,6 +29,7 @@ import type { WorkflowEventService } from "../events/index.js";
 import type { OAuthIntegrationStore } from "../oauth/integration-store.js";
 import type { OAuthFlowService } from "../oauth/flow-service.js";
 import { create_logger } from "../logger.js";
+import type { ImageEmbedFn } from "../services/embed.service.js";
 
 export type EmbedServiceFn = (
   texts: string[],
@@ -47,6 +48,7 @@ export interface AgentCoreDeps {
   agent_backend_registry: AgentBackendRegistry;
   provider_caps: ProviderCapabilities;
   embed_service: EmbedServiceFn | undefined;
+  image_embed_service: ImageEmbedFn | undefined;
   oauth_store: OAuthIntegrationStore;
   oauth_flow: OAuthFlowService;
   broadcaster: MutableBroadcaster;
@@ -84,7 +86,7 @@ export async function create_agent_core(deps: AgentCoreDeps): Promise<AgentCoreR
   const {
     workspace, data_dir, sessions_dir, app_root, app_config,
     providers, bus, events, agent_backend_registry, provider_caps,
-    embed_service, oauth_store, broadcaster, logger,
+    embed_service, image_embed_service, oauth_store, broadcaster, logger,
   } = deps;
 
   const tone_pref_store = new TonePreferenceStore(join(workspace, "runtime", "tone-preferences.json"));
@@ -170,6 +172,7 @@ export async function create_agent_core(deps: AgentCoreDeps): Promise<AgentCoreR
 
   const reference_store = new ReferenceStore(workspace);
   if (embed_service) reference_store.set_embed(embed_service);
+  if (image_embed_service) reference_store.set_image_embed(image_embed_service);
   agent.context.set_reference_store(reference_store);
 
   // 스킬 레퍼런스 RAG: src/skills, workspace/skills 하위 references/*.md 인덱싱

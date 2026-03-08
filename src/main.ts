@@ -71,7 +71,7 @@ export async function createRuntime(): Promise<RuntimeApp> {
   const {
     data_dir, sessions_dir, bus, decisions, events,
     provider_store, oauth_store, oauth_flow,
-    embed_service, vector_store_service, webhook_store, query_db_service,
+    embed_service, image_embed_service, vector_store_service, webhook_store, query_db_service,
   } = await create_runtime_data({ workspace, app_config, shared_vault, logger });
 
   const {
@@ -91,7 +91,7 @@ export async function createRuntime(): Promise<RuntimeApp> {
   } = await create_agent_core({
     workspace, data_dir, sessions_dir, app_root, app_config,
     providers, bus, events, agent_backend_registry, provider_caps,
-    embed_service, oauth_store, oauth_flow, broadcaster, logger,
+    embed_service, image_embed_service, oauth_store, oauth_flow, broadcaster, logger,
   });
 
   const {

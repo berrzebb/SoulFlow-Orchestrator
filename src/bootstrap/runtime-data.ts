@@ -13,7 +13,8 @@ import { WorkflowEventService } from "../events/index.js";
 import { AgentProviderStore } from "../agent/provider-store.js";
 import { OAuthIntegrationStore } from "../oauth/integration-store.js";
 import { OAuthFlowService } from "../oauth/flow-service.js";
-import { create_embed_service_from_provider } from "../services/embed.service.js";
+import { create_embed_service_from_provider, create_multimodal_embed_service_from_provider } from "../services/embed.service.js";
+import type { ImageEmbedFn } from "../services/embed.service.js";
 import { create_vector_store_service } from "../services/vector-store.service.js";
 import { WebhookStore } from "../services/webhook-store.service.js";
 import { create_query_db_service } from "../services/query-db.service.js";
@@ -35,6 +36,7 @@ export interface RuntimeDataResult {
   oauth_store: OAuthIntegrationStore;
   oauth_flow: OAuthFlowService;
   embed_service: EmbedServiceFn | undefined;
+  image_embed_service: ImageEmbedFn | undefined;
   vector_store_service: ReturnType<typeof create_vector_store_service> | undefined;
   webhook_store: WebhookStore;
   query_db_service: ReturnType<typeof create_query_db_service> | undefined;
@@ -88,6 +90,18 @@ export async function create_runtime_data(deps: RuntimeDataDeps): Promise<Runtim
     })
     : undefined;
 
+  // 이미지(멀티모달) embed 서비스: imageInstanceId로 지정된 프로바이더 사용
+  const image_instance_id = app_config.embedding.imageInstanceId || undefined;
+  const image_provider = image_instance_id ? provider_store.get(image_instance_id) : null;
+  const image_embed_service: ImageEmbedFn | undefined = image_provider
+    ? create_multimodal_embed_service_from_provider({
+      provider_type: image_provider.provider_type,
+      model: app_config.embedding.imageModel || (typeof image_provider.settings.model === "string" ? image_provider.settings.model : undefined),
+      api_base: provider_store.resolve_api_base(image_instance_id!),
+      get_api_key: () => provider_store.resolve_token(image_instance_id!),
+    })
+    : undefined;
+
   const vector_store_service = create_vector_store_service(data_dir);
   const webhook_store = new WebhookStore();
   const query_db_service = create_query_db_service(data_dir);
@@ -95,6 +109,6 @@ export async function create_runtime_data(deps: RuntimeDataDeps): Promise<Runtim
   return {
     data_dir, sessions_dir, bus, decisions, events,
     provider_store, oauth_store, oauth_flow,
-    embed_service, vector_store_service, webhook_store, query_db_service,
+    embed_service, image_embed_service, vector_store_service, webhook_store, query_db_service,
   };
 }
