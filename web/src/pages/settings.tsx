@@ -67,6 +67,7 @@ export default function SettingsPage() {
       <div className="section-header">
         <h2>{t("settings.title")}</h2>
         <input
+          autoFocus
           className="input input--sm section-header__search"
           type="search"
           value={search}
