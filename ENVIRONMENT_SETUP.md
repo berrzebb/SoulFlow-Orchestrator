@@ -13,12 +13,10 @@
 | **Windows (Cmd) 빠른 실행** | run.cmd | `run.cmd dev` |
 | **Windows (PowerShell) 빠른 실행** | run.ps1 | `.\run.ps1 dev` |
 | **Windows (PowerShell) 상세 메뉴** | setup-env.ps1 | `.\setup-env.ps1` |
-| **모든 플랫폼 npm** | npm | `npm run env:dev` |
 
 **권장:**
 - **처음 사용할 때**: `make dev` (Linux/macOS) 또는 `run.cmd dev` (Windows)
 - **상세한 옵션이 필요할 때**: 대화형 메뉴 (`bash setup-env.sh` 또는 `.\setup-env.ps1`)
-- **CI/CD 파이프라인**: npm 스크립트
 
 ---
 
@@ -92,18 +90,7 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 .\run.ps1 down
 ```
 
-### npm 스크립트 사용 (모든 플랫폼)
-
-```bash
-npm run env:dev
-npm run env:test
-npm run env:staging
-npm run env:prod
-npm run env:down
-npm run env:status
-```
-
-### 대화형 메뉴 (모든 플랫폼)
+### 대화형 메뉴
 
 ```bash
 # Linux/macOS
@@ -363,21 +350,6 @@ sudo chown -R 1000:1000 /var/lib/docker/volumes/soulflow-dev-workspace/_data
 
 ---
 
-## 📝 npm 스크립트 요약
-
-```bash
-npm run env:setup      # 대화형 설정 (프로필 선택)
-npm run env:dev        # 개발 환경 시작
-npm run env:test       # 테스트 환경 시작
-npm run env:staging    # 스테이징 환경 시작
-npm run env:prod       # 프로덕션 환경 시작
-npm run env:down       # 모든 환경 중지
-npm run env:status     # 환경 상태 확인
-npm run env:logs       # 로그 보기
-```
-
----
-
 ## 🔐 보안 고려사항
 
 - **프로덕션 환경**: 외부에서는 방화벽으로 접근 제한
@@ -392,13 +364,13 @@ npm run env:logs       # 로그 보기
 ### 동시에 여러 환경 실행
 
 ```bash
-# 개발 + 테스트 동시 실행
-npm run env:dev &
-npm run env:test &
+# 터미널 1
+make dev
 
-# 또는 각각 다른 터미널에서
-# 터미널 1: npm run env:dev
-# 터미널 2: npm run env:test
+# 터미널 2
+make test
+
+# 또는 run.cmd / run.ps1 사용
 ```
 
 ### 환경 간 데이터 마이그레이션

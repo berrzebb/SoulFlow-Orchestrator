@@ -181,11 +181,6 @@ run.cmd dev        # 📍 권장 - 가장 간단함
 .\run.ps1 dev      # 📍 권장 - 가장 간단함
 ```
 
-**또는 npm으로 (모든 플랫폼):**
-```bash
-npm run env:dev
-```
-
 **완료!** 브라우저에서 **http://localhost:4200** 을 열어보세요 🎉
 
 ### 환경 선택
