@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 import { useProviderModels } from "../use-provider-models";
-import { BuilderField } from "../builder-field";
+import { BuilderField, BuilderRowPair, TemperatureField } from "../builder-field";
 
 function AiAgentEditPanel({ node, update, t, options }: EditPanelProps) {
   const { models, loading: modelsLoading } = useProviderModels(node.backend as string | undefined, options);
@@ -17,7 +17,7 @@ function AiAgentEditPanel({ node, update, t, options }: EditPanelProps) {
   };
   return (
     <>
-      <div className="builder-row-pair">
+      <BuilderRowPair>
         <BuilderField label={t("workflows.llm_backend")}>
           <select autoFocus className="input input--sm" value={String(node.backend || "")} onChange={(e) => update({ backend: e.target.value })}>
             <option value="">-</option>
@@ -40,7 +40,7 @@ function AiAgentEditPanel({ node, update, t, options }: EditPanelProps) {
             <input className="input input--sm" value={String(node.model || "")} onChange={(e) => update({ model: e.target.value })} placeholder="auto" />
           )}
         </BuilderField>
-      </div>
+      </BuilderRowPair>
       <BuilderField label={t("workflows.ai_agent_system")}>
         <textarea className="input code-textarea" rows={3} value={String(node.system_prompt || "")} onChange={(e) => update({ system_prompt: e.target.value })} spellCheck={false} placeholder="You are a helpful assistant that can use tools to accomplish tasks." />
       </BuilderField>
@@ -50,21 +50,12 @@ function AiAgentEditPanel({ node, update, t, options }: EditPanelProps) {
       <BuilderField label={t("workflows.ai_agent_tools")} hint={t("workflows.tool_nodes_hint")}>
         <input className="input input--sm" value={Array.isArray(node.tool_nodes) ? (node.tool_nodes as string[]).join(", ") : ""} onChange={(e) => update({ tool_nodes: e.target.value.split(",").map((s: string) => s.trim()).filter(Boolean) })} placeholder="http-1, code-1, db-1" />
       </BuilderField>
-      <div className="builder-row-pair">
+      <BuilderRowPair>
         <BuilderField label={t("workflows.max_turns")} hint={t("workflows.max_turns_hint")}>
           <input className="input input--sm" type="number" min={1} max={100} value={String(node.max_turns ?? 10)} onChange={(e) => update({ max_turns: Number(e.target.value) || 10 })} />
         </BuilderField>
-        <div className="builder-row">
-          <label className="label">
-            {t("workflows.llm_temperature")}
-            <span className="builder-hint--inline">
-              {temp == null ? "" : ` (${temp <= 0.3 ? t("workflows.temp_precise") : temp <= 0.7 ? t("workflows.temp_balanced") : t("workflows.temp_creative")})`}
-            </span>
-          </label>
-          <input className="input input--sm" type="range" min={0} max={2} step={0.1} value={String(temp ?? 0.7)} onChange={(e) => update({ temperature: Number(e.target.value) })} />
-          <span className="builder-hint">{temp ?? 0.7}</span>
-        </div>
-      </div>
+        <TemperatureField value={temp} onChange={(v) => update({ temperature: v })} />
+      </BuilderRowPair>
       <BuilderField label={t("workflows.llm_schema")} error={schemaErr}>
         <textarea
           className={`input code-textarea${schemaErr ? " input--err" : ""}`}

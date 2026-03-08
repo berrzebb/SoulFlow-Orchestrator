@@ -1,11 +1,11 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
-import { BuilderField } from "../builder-field";
+import { BuilderField, BuilderRowPair } from "../builder-field";
 
 function DockerEditPanel({ node, update, t }: EditPanelProps) {
   const op = String(node.operation || "ps");
   return (
     <>
-      <div className="builder-row-pair">
+      <BuilderRowPair>
         <BuilderField label={t("workflows.docker_operation")} required>
           <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
             {["ps", "run", "stop", "rm", "logs", "exec", "images", "inspect"].map((o) => <option key={o} value={o}>{o}</option>)}
@@ -14,7 +14,7 @@ function DockerEditPanel({ node, update, t }: EditPanelProps) {
         <BuilderField label={t("workflows.container")}>
           <input className="input input--sm" value={String(node.container || "")} onChange={(e) => update({ container: e.target.value })} placeholder="container-name" />
         </BuilderField>
-      </div>
+      </BuilderRowPair>
       {op === "run" && (
         <BuilderField label={t("workflows.image")}>
           <input className="input" value={String(node.image || "")} onChange={(e) => update({ image: e.target.value })} placeholder="node:22-slim" />

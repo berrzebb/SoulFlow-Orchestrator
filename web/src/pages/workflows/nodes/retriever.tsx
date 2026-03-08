@@ -1,11 +1,11 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
-import { BuilderField } from "../builder-field";
+import { BuilderField, BuilderRowPair } from "../builder-field";
 
 function RetrieverEditPanel({ node, update, t }: EditPanelProps) {
   const source = String(node.source || "http");
   return (
     <>
-      <div className="builder-row-pair">
+      <BuilderRowPair>
         <BuilderField label={t("workflows.retriever_source")}>
           <select autoFocus className="input input--sm" value={source} onChange={(e) => update({ source: e.target.value })}>
             <option value="http">{t("workflows.opt_http_api")}</option>
@@ -16,13 +16,13 @@ function RetrieverEditPanel({ node, update, t }: EditPanelProps) {
         <BuilderField label={t("workflows.retriever_top_k")} hint={t("workflows.retriever_top_k_hint")}>
           <input className="input input--sm" type="number" min={1} max={100} value={String(node.top_k ?? 5)} onChange={(e) => update({ top_k: Number(e.target.value) || 5 })} />
         </BuilderField>
-      </div>
+      </BuilderRowPair>
       <BuilderField label={t("workflows.retriever_query")}>
         <input className="input input--sm" value={String(node.query || "")} onChange={(e) => update({ query: e.target.value })} placeholder="{{memory.user_question}}" />
       </BuilderField>
       {source === "http" && (
         <>
-          <div className="builder-row-pair">
+          <BuilderRowPair>
             <BuilderField label={t("workflows.http_method")}>
               <select className="input input--sm" value={String(node.method || "GET")} onChange={(e) => update({ method: e.target.value })}>
                 <option value="GET">GET</option>
@@ -32,7 +32,7 @@ function RetrieverEditPanel({ node, update, t }: EditPanelProps) {
             <BuilderField label={t("workflows.http_url")}>
               <input className="input input--sm" value={String(node.url || "")} onChange={(e) => update({ url: e.target.value })} placeholder="https://api.example.com/search" />
             </BuilderField>
-          </div>
+          </BuilderRowPair>
         </>
       )}
       {source === "file" && (

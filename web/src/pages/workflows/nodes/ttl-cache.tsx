@@ -1,11 +1,11 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
-import { BuilderField } from "../builder-field";
+import { BuilderField, BuilderRowPair } from "../builder-field";
 
 function TtlCacheEditPanel({ node, update, t }: EditPanelProps) {
   const op = String(node.operation || "get");
   return (
     <>
-      <div className="builder-row-pair">
+      <BuilderRowPair>
         <BuilderField label={t("workflows.operation")}>
           <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
             {["set", "get", "invalidate", "has", "keys", "stats", "clear"].map((o) => <option key={o} value={o}>{o}</option>)}
@@ -16,7 +16,7 @@ function TtlCacheEditPanel({ node, update, t }: EditPanelProps) {
             <input className="input input--sm" value={String(node.key || "")} onChange={(e) => update({ key: e.target.value })} placeholder="cache-key" />
           </BuilderField>
         )}
-      </div>
+      </BuilderRowPair>
       {op === "set" && (
         <>
           <BuilderField label={t("workflows.field_value")}>

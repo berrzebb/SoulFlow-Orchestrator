@@ -1,4 +1,4 @@
-import { BuilderField } from "../builder-field";
+import { BuilderField, BuilderRowPair } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
 function IfEditPanel({ node, update, t }: EditPanelProps) {
@@ -7,14 +7,14 @@ function IfEditPanel({ node, update, t }: EditPanelProps) {
       <BuilderField label={t("workflows.if_condition")} hint={t("workflows.condition_hint")}>
         <input autoFocus className="input input--sm" value={String(node.condition || "")} onChange={(e) => update({ condition: e.target.value })} placeholder="memory.prev.status === 200" />
       </BuilderField>
-      <div className="builder-row-pair">
+      <BuilderRowPair>
         <BuilderField label={t("workflows.if_true_branch")}>
           <input className="input input--sm" value={(((node.outputs as Record<string, unknown>)?.true_branch as string[]) || []).join(", ")} onChange={(e) => update({ outputs: { ...((node.outputs as Record<string, unknown>) || {}), true_branch: e.target.value.split(",").map((s: string) => s.trim()).filter(Boolean) } })} placeholder="next-node" />
         </BuilderField>
         <BuilderField label={t("workflows.if_false_branch")}>
           <input className="input input--sm" value={(((node.outputs as Record<string, unknown>)?.false_branch as string[]) || []).join(", ")} onChange={(e) => update({ outputs: { ...((node.outputs as Record<string, unknown>) || {}), false_branch: e.target.value.split(",").map((s: string) => s.trim()).filter(Boolean) } })} placeholder="fallback-node" />
         </BuilderField>
-      </div>
+      </BuilderRowPair>
     </>
   );
 }

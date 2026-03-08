@@ -1,11 +1,11 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
-import { BuilderField } from "../builder-field";
+import { BuilderField, BuilderRowPair } from "../builder-field";
 
 function DataFormatEditPanel({ node, update, t }: EditPanelProps) {
   const op = String(node.operation || "convert");
   return (
     <>
-      <div className="builder-row-pair">
+      <BuilderRowPair>
         <BuilderField label={t("workflows.operation")} required>
           <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
             {["convert", "query", "validate", "pretty", "flatten", "unflatten", "merge", "pick", "omit"].map((o) => <option key={o} value={o}>{o}</option>)}
@@ -18,7 +18,7 @@ function DataFormatEditPanel({ node, update, t }: EditPanelProps) {
             </select>
           </BuilderField>
         )}
-      </div>
+      </BuilderRowPair>
       {op === "convert" && (
         <BuilderField label={t("workflows.to_format")}>
           <select className="input input--sm" value={String(node.to || "csv")} onChange={(e) => update({ to: e.target.value })}>

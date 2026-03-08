@@ -1,5 +1,5 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
-import { BuilderField } from "../builder-field";
+import { BuilderField, BuilderRowPair } from "../builder-field";
 
 function EmbeddingEditPanel({ node, update, t, options }: EditPanelProps) {
   const models = options?.models || [];
@@ -18,14 +18,14 @@ function EmbeddingEditPanel({ node, update, t, options }: EditPanelProps) {
           <input className="input input--sm" value={String(node.model || "")} onChange={(e) => update({ model: e.target.value })} placeholder="text-embedding-3-small" />
         )}
       </BuilderField>
-      <div className="builder-row-pair">
+      <BuilderRowPair>
         <BuilderField label={t("workflows.embed_batch")} hint={t("workflows.embed_batch_hint")}>
           <input className="input input--sm" type="number" min={1} max={2048} value={String(node.batch_size ?? 32)} onChange={(e) => update({ batch_size: Number(e.target.value) || 32 })} />
         </BuilderField>
         <BuilderField label={t("workflows.embed_dims")} hint={t("workflows.embed_dims_hint")}>
           <input className="input input--sm" type="number" min={1} value={String(node.dimensions ?? "")} onChange={(e) => update({ dimensions: e.target.value ? Number(e.target.value) : undefined })} placeholder="auto" />
         </BuilderField>
-      </div>
+      </BuilderRowPair>
     </>
   );
 }

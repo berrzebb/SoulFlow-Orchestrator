@@ -1,11 +1,11 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
-import { BuilderField } from "../builder-field";
+import { BuilderField, BuilderRowPair } from "../builder-field";
 
 function RegexEditPanel({ node, update, t }: EditPanelProps) {
   const op = String(node.operation || "match");
   return (
     <>
-      <div className="builder-row-pair">
+      <BuilderRowPair>
         <BuilderField label={t("workflows.operation")} required>
           <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
             {["match", "match_all", "replace", "extract", "split", "test"].map((o) => <option key={o} value={o}>{o}</option>)}
@@ -14,7 +14,7 @@ function RegexEditPanel({ node, update, t }: EditPanelProps) {
         <BuilderField label={t("workflows.field_flags")}>
           <input className="input input--sm" value={String(node.flags || "g")} onChange={(e) => update({ flags: e.target.value })} placeholder="g" />
         </BuilderField>
-      </div>
+      </BuilderRowPair>
       <BuilderField label={t("workflows.field_pattern")}>
         <input className="input" value={String(node.pattern || "")} onChange={(e) => update({ pattern: e.target.value })} placeholder="(\w+)@(\w+)" />
       </BuilderField>

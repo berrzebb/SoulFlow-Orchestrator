@@ -1,10 +1,10 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
-import { BuilderField } from "../builder-field";
+import { BuilderField, BuilderRowPair } from "../builder-field";
 
 function ArchiveEditPanel({ node, update, t }: EditPanelProps) {
   return (
     <>
-      <div className="builder-row-pair">
+      <BuilderRowPair>
         <BuilderField label={t("workflows.archive_operation")} required>
           <select autoFocus className="input input--sm" value={String(node.operation || "list")} onChange={(e) => update({ operation: e.target.value })}>
             {["create", "extract", "list"].map((o) => <option key={o} value={o}>{o}</option>)}
@@ -16,7 +16,7 @@ function ArchiveEditPanel({ node, update, t }: EditPanelProps) {
             <option value="zip">zip</option>
           </select>
         </BuilderField>
-      </div>
+      </BuilderRowPair>
       <BuilderField label={t("workflows.archive_path")}>
         <input className="input" value={String(node.archive_path || "")} onChange={(e) => update({ archive_path: e.target.value })} placeholder="backup.tar.gz" />
       </BuilderField>

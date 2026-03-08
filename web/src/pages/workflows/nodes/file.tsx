@@ -1,10 +1,10 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
-import { BuilderField } from "../builder-field";
+import { BuilderField, BuilderRowPair } from "../builder-field";
 
 function FileEditPanel({ node, update, t }: EditPanelProps) {
   return (
     <>
-      <div className="builder-row-pair">
+      <BuilderRowPair>
         <BuilderField label={t("workflows.file_operation")} required>
           <select autoFocus className="input input--sm" value={String(node.operation || "read")} onChange={(e) => update({ operation: e.target.value })}>
             <option value="read">{t("workflows.opt_read")}</option>
@@ -15,7 +15,7 @@ function FileEditPanel({ node, update, t }: EditPanelProps) {
         <BuilderField label={t("workflows.file_path")}>
           <input className="input input--sm" value={String(node.file_path || "")} onChange={(e) => update({ file_path: e.target.value })} placeholder="data/input.csv" />
         </BuilderField>
-      </div>
+      </BuilderRowPair>
       {String(node.operation) === "write" && (
         <BuilderField label={t("workflows.file_content")}>
           <textarea className="input code-textarea" rows={4} value={String(node.content || "")} onChange={(e) => update({ content: e.target.value })} spellCheck={false} placeholder="{{memory.report}}" />

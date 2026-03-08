@@ -1,5 +1,5 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
-import { BuilderField } from "../builder-field";
+import { BuilderField, BuilderRowPair } from "../builder-field";
 
 function TableEditPanel({ node, update, t }: EditPanelProps) {
   const op = String(node.operation || "sort");
@@ -36,7 +36,7 @@ function TableEditPanel({ node, update, t }: EditPanelProps) {
           <BuilderField label={t("workflows.field_data_2")}>
             <textarea className="input code-textarea" rows={2} value={String(node.data2 || "")} onChange={(e) => update({ data2: e.target.value })} />
           </BuilderField>
-          <div className="builder-row-pair">
+          <BuilderRowPair>
             <BuilderField label={t("workflows.field_join_field")}>
               <input className="input input--sm" value={String(node.join_field || "id")} onChange={(e) => update({ join_field: e.target.value })} />
             </BuilderField>
@@ -45,7 +45,7 @@ function TableEditPanel({ node, update, t }: EditPanelProps) {
                 {["inner", "left", "right", "full"].map((t) => <option key={t} value={t}>{t}</option>)}
               </select>
             </BuilderField>
-          </div>
+          </BuilderRowPair>
         </>
       )}
       {["pivot", "aggregate"].includes(op) && (

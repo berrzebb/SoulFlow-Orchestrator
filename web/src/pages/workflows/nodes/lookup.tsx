@@ -1,5 +1,5 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
-import { BuilderField } from "../builder-field";
+import { BuilderField, BuilderRowPair } from "../builder-field";
 
 function LookupEditPanel({ node, update, t }: EditPanelProps) {
   return (
@@ -12,7 +12,7 @@ function LookupEditPanel({ node, update, t }: EditPanelProps) {
       <BuilderField label={t("workflows.field_key")}>
         <input className="input" value={String(node.key || "")} onChange={(e) => update({ key: e.target.value })} placeholder="404" />
       </BuilderField>
-      <div className="builder-row-pair">
+      <BuilderRowPair>
         <div className="builder-row">
           <label className="label" style={{ display: "flex", alignItems: "center", gap: "6px" }}>
             <input type="checkbox" checked={Boolean(node.reverse)} onChange={(e) => update({ reverse: e.target.checked })} />
@@ -25,7 +25,7 @@ function LookupEditPanel({ node, update, t }: EditPanelProps) {
             List All
           </label>
         </div>
-      </div>
+      </BuilderRowPair>
     </>
   );
 }

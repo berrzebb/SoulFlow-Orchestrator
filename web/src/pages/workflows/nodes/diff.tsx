@@ -1,11 +1,11 @@
-import { BuilderField } from "../builder-field";
+import { BuilderField, BuilderRowPair } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
 function DiffEditPanel({ node, update, t }: EditPanelProps) {
   const op = String(node.operation || "compare");
   return (
     <>
-      <div className="builder-row-pair">
+      <BuilderRowPair>
         <BuilderField label={t("workflows.operation")}>
           <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
             {["compare", "patch", "stats"].map((o) => <option key={o} value={o}>{o}</option>)}
@@ -14,7 +14,7 @@ function DiffEditPanel({ node, update, t }: EditPanelProps) {
         <BuilderField label={t("workflows.field_context_lines")} hint={t("workflows.diff_context_lines_hint")}>
           <input className="input input--sm" type="number" min={0} max={20} value={String(node.context_lines ?? 3)} onChange={(e) => update({ context_lines: Number(e.target.value) || 3 })} />
         </BuilderField>
-      </div>
+      </BuilderRowPair>
       {(op === "compare" || op === "stats") && (
         <>
           <BuilderField label={t("workflows.field_old_text")}>

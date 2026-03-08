@@ -1,5 +1,5 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
-import { BuilderField } from "../builder-field";
+import { BuilderField, BuilderRowPair } from "../builder-field";
 
 function EscalationEditPanel({ node, update, t, options }: EditPanelProps) {
   const channels = options?.channels || [];
@@ -29,7 +29,7 @@ function EscalationEditPanel({ node, update, t, options }: EditPanelProps) {
           <option value="low">{t("workflows.opt_low")}</option>
         </select>
       </BuilderField>
-      <div className="builder-row-pair">
+      <BuilderRowPair>
         <BuilderField label={t("workflows.escalation_target_channel")}>
           <select className="input input--sm" value={String(node.target_channel || "")} onChange={(e) => update({ target_channel: e.target.value })}>
             <option value="">{t("common.select")}</option>
@@ -39,7 +39,7 @@ function EscalationEditPanel({ node, update, t, options }: EditPanelProps) {
         <BuilderField label={t("workflows.escalation_target_chat_id")}>
           <input className="input input--sm" value={String(node.target_chat_id || "")} onChange={(e) => update({ target_chat_id: e.target.value })} />
         </BuilderField>
-      </div>
+      </BuilderRowPair>
     </>
   );
 }

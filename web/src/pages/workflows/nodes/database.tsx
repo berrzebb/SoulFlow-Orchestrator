@@ -1,11 +1,11 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
-import { BuilderField } from "../builder-field";
+import { BuilderField, BuilderRowPair } from "../builder-field";
 
 function DatabaseEditPanel({ node, update, t }: EditPanelProps) {
   const op = String(node.operation || "query");
   return (
     <>
-      <div className="builder-row-pair">
+      <BuilderRowPair>
         <BuilderField label={t("workflows.operation")} required>
           <select autoFocus className="input input--sm" required value={op} onChange={(e) => update({ operation: e.target.value })} aria-label={t("workflows.operation")} aria-required="true">
             {["query", "tables", "schema", "explain"].map((o) => <option key={o} value={o}>{o}</option>)}
@@ -14,7 +14,7 @@ function DatabaseEditPanel({ node, update, t }: EditPanelProps) {
         <BuilderField label={t("workflows.field_datasource")} required>
           <input className="input input--sm" required value={String(node.datasource || "")} onChange={(e) => update({ datasource: e.target.value })} placeholder="my_database" aria-label={t("workflows.field_datasource")} aria-required="true" />
         </BuilderField>
-      </div>
+      </BuilderRowPair>
       {(op === "query" || op === "explain") && (
         <BuilderField label={t("workflows.field_sql")} required>
           <textarea className="input code-textarea" required rows={4} value={String(node.sql || "")} onChange={(e) => update({ sql: e.target.value })} placeholder="SELECT * FROM users LIMIT 10" aria-label={t("workflows.field_sql")} aria-required="true" />

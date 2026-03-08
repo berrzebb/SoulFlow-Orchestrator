@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
-import { BuilderField } from "../builder-field";
+import { BuilderField, BuilderRowPair } from "../builder-field";
 
 function TaskEditPanel({ node, update, t, options }: EditPanelProps) {
   const channels = options?.channels || [];
@@ -21,7 +21,7 @@ function TaskEditPanel({ node, update, t, options }: EditPanelProps) {
       <BuilderField label={t("workflows.task_objective")} required>
         <textarea required className="input code-textarea" rows={3} value={String(node.objective || "")} onChange={(e) => update({ objective: e.target.value })} spellCheck={false} placeholder="{{memory.user_request}}" aria-required="true" />
       </BuilderField>
-      <div className="builder-row-pair">
+      <BuilderRowPair>
         <BuilderField label={t("workflows.task_channel")}>
           {channels.length > 0 ? (
             <select className="input input--sm" value={String(node.channel || "")} onChange={(e) => update({ channel: e.target.value })}>
@@ -35,7 +35,7 @@ function TaskEditPanel({ node, update, t, options }: EditPanelProps) {
         <BuilderField label={t("workflows.max_turns")} required hint={t("workflows.task_max_turns_hint")}>
           <input required className="input input--sm" type="number" min={1} max={200} value={String(node.max_turns ?? 20)} onChange={(e) => update({ max_turns: Number(e.target.value) || 20 })} aria-required="true" />
         </BuilderField>
-      </div>
+      </BuilderRowPair>
       <BuilderField label={t("workflows.task_memory")} error={memoryErr}>
         <textarea
           className={`input code-textarea${memoryErr ? " input--err" : ""}`}

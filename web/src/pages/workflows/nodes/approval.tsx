@@ -1,5 +1,5 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
-import { BuilderField } from "../builder-field";
+import { BuilderField, BuilderRowPair } from "../builder-field";
 
 function ApprovalEditPanel({ node, update, t, options }: EditPanelProps) {
   const target = String(node.target || "origin");
@@ -16,7 +16,7 @@ function ApprovalEditPanel({ node, update, t, options }: EditPanelProps) {
         </select>
       </BuilderField>
       {target === "specified" && (
-        <div className="builder-row-pair builder-row--conditional">
+        <BuilderRowPair className="builder-row--conditional">
           <BuilderField label={t("workflows.hitl_channel")}>
             <select className="input input--sm" value={String(node.channel || "")} onChange={(e) => update({ channel: e.target.value })}>
               <option value="">{t("common.select")}</option>
@@ -26,16 +26,16 @@ function ApprovalEditPanel({ node, update, t, options }: EditPanelProps) {
           <BuilderField label={t("workflows.hitl_chat_id")}>
             <input className="input input--sm" value={String(node.chat_id || "")} onChange={(e) => update({ chat_id: e.target.value })} />
           </BuilderField>
-        </div>
+        </BuilderRowPair>
       )}
-      <div className="builder-row-pair">
+      <BuilderRowPair>
         <BuilderField label={t("workflows.approval_quorum")} required hint={`${t("workflows.approval_quorum_hint")} (최소: 1)`}>
           <input required className="input input--sm" type="number" min={1} value={String(node.quorum ?? 1)} onChange={(e) => update({ quorum: Number(e.target.value) })} placeholder="1" aria-required="true" />
         </BuilderField>
         <BuilderField label={t("workflows.hitl_timeout")} required hint={`${t("workflows.hitl_timeout_hint")} (밀리초, 최소: 0)`}>
           <input required className="input input--sm" type="number" min={0} value={String(node.timeout_ms ?? 600000)} onChange={(e) => update({ timeout_ms: Number(e.target.value) })} placeholder="600000" aria-required="true" />
         </BuilderField>
-      </div>
+      </BuilderRowPair>
       <div className="builder-row">
         <label className="label-inline">
           <input type="checkbox" checked={!!node.require_comment} onChange={(e) => update({ require_comment: e.target.checked })} />

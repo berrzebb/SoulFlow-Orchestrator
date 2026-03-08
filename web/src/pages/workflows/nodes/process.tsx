@@ -1,5 +1,5 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
-import { BuilderField } from "../builder-field";
+import { BuilderField, BuilderRowPair } from "../builder-field";
 
 function ProcessEditPanel({ node, update, t }: EditPanelProps) {
   const op = String(node.operation || "list");
@@ -21,7 +21,7 @@ function ProcessEditPanel({ node, update, t }: EditPanelProps) {
         </BuilderField>
       )}
       {(op === "stop" || op === "info") && (
-        <div className="builder-row-pair">
+        <BuilderRowPair>
           <BuilderField label={t("workflows.field_pid")}>
             <input className="input input--sm" type="number" min={1} value={String(node.pid ?? "")} onChange={(e) => update({ pid: Number(e.target.value) || 0 })} />
           </BuilderField>
@@ -32,7 +32,7 @@ function ProcessEditPanel({ node, update, t }: EditPanelProps) {
               </select>
             </BuilderField>
           )}
-        </div>
+        </BuilderRowPair>
       )}
     </>
   );

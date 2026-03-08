@@ -1,5 +1,5 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
-import { BuilderField } from "../builder-field";
+import { BuilderField, BuilderRowPair } from "../builder-field";
 
 function FormatEditPanel({ node, update, t }: EditPanelProps) {
   const op = String(node.operation || "number");
@@ -14,7 +14,7 @@ function FormatEditPanel({ node, update, t }: EditPanelProps) {
         <input className="input" value={String(node.value || "")} onChange={(e) => update({ value: e.target.value })} placeholder={op === "bytes" ? "1073741824" : "12345.67"} />
       </BuilderField>
       {["number", "currency", "percent"].includes(op) && (
-        <div className="builder-row-pair">
+        <BuilderRowPair>
           <BuilderField label={t("workflows.field_locale")}>
             <input className="input input--sm" value={String(node.locale || "en-US")} onChange={(e) => update({ locale: e.target.value })} />
           </BuilderField>
@@ -23,7 +23,7 @@ function FormatEditPanel({ node, update, t }: EditPanelProps) {
               <input className="input input--sm" value={String(node.currency || "USD")} onChange={(e) => update({ currency: e.target.value })} placeholder="USD" />
             </BuilderField>
           )}
-        </div>
+        </BuilderRowPair>
       )}
       {op === "mask" && (
         <BuilderField label={t("workflows.field_mask_type")}>

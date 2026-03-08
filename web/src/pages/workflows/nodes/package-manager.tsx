@@ -1,11 +1,11 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
-import { BuilderField } from "../builder-field";
+import { BuilderField, BuilderRowPair } from "../builder-field";
 
 function PkgManagerEditPanel({ node, update, t }: EditPanelProps) {
   const op = String(node.operation || "list");
   return (
     <>
-      <div className="builder-row-pair">
+      <BuilderRowPair>
         <BuilderField label={t("workflows.pkg_manager")}>
           <select autoFocus className="input input--sm" value={String(node.manager || "npm")} onChange={(e) => update({ manager: e.target.value })}>
             {["npm", "pip", "cargo"].map((m) => <option key={m} value={m}>{m}</option>)}
@@ -16,7 +16,7 @@ function PkgManagerEditPanel({ node, update, t }: EditPanelProps) {
             {["list", "install", "uninstall", "audit", "outdated", "info"].map((o) => <option key={o} value={o}>{o}</option>)}
           </select>
         </BuilderField>
-      </div>
+      </BuilderRowPair>
       {["install", "uninstall", "info"].includes(op) && (
         <BuilderField label={t("workflows.package_name")}>
           <input className="input" value={String(node.package_name || "")} onChange={(e) => update({ package_name: e.target.value })} placeholder="lodash" />

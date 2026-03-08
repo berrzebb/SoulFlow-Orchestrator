@@ -1,12 +1,12 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
-import { BuilderField } from "../builder-field";
+import { BuilderField, BuilderRowPair } from "../builder-field";
 
 function CompressEditPanel({ node, update, t }: EditPanelProps) {
   const op = String(node.operation || "compress");
   const is_file = op === "compress" || op === "decompress";
   return (
     <>
-      <div className="builder-row-pair">
+      <BuilderRowPair>
         <BuilderField label={t("workflows.operation")} required>
           <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
             {["compress", "decompress", "compress_string", "decompress_string"].map((o) => <option key={o} value={o}>{o}</option>)}
@@ -17,7 +17,7 @@ function CompressEditPanel({ node, update, t }: EditPanelProps) {
             {["gzip", "brotli"].map((a) => <option key={a} value={a}>{a}</option>)}
           </select>
         </BuilderField>
-      </div>
+      </BuilderRowPair>
       {is_file && (
         <>
           <BuilderField label={t("workflows.field_input_path")}>

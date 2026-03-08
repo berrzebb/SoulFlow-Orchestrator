@@ -1,5 +1,5 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
-import { BuilderField } from "../builder-field";
+import { BuilderField, BuilderRowPair } from "../builder-field";
 
 function SpawnAgentEditPanel({ node, update, t, options }: EditPanelProps) {
   const models = options?.models || [];
@@ -8,7 +8,7 @@ function SpawnAgentEditPanel({ node, update, t, options }: EditPanelProps) {
       <BuilderField label={t("workflows.spawn_task")}>
         <textarea autoFocus className="input code-textarea" rows={3} value={String(node.task || "")} onChange={(e) => update({ task: e.target.value })} spellCheck={false} placeholder="Analyze the data and generate a report..." />
       </BuilderField>
-      <div className="builder-row-pair">
+      <BuilderRowPair>
         <BuilderField label={t("workflows.spawn_role")}>
           <input className="input input--sm" value={String(node.role || "")} onChange={(e) => update({ role: e.target.value })} placeholder="assistant" />
         </BuilderField>
@@ -22,8 +22,8 @@ function SpawnAgentEditPanel({ node, update, t, options }: EditPanelProps) {
             <input className="input input--sm" value={String(node.model || "")} onChange={(e) => update({ model: e.target.value })} placeholder="auto" />
           )}
         </BuilderField>
-      </div>
-      <div className="builder-row-pair">
+      </BuilderRowPair>
+      <BuilderRowPair>
         <BuilderField label={t("workflows.spawn_await")}>
           <select className="input input--sm" value={String(node.await_completion ?? true)} onChange={(e) => update({ await_completion: e.target.value === "true" })}>
             <option value="true">{t("workflows.opt_yes")}</option>
@@ -33,15 +33,15 @@ function SpawnAgentEditPanel({ node, update, t, options }: EditPanelProps) {
         <BuilderField label={t("workflows.spawn_max_iter")} hint={t("workflows.spawn_max_iter_hint")}>
           <input className="input input--sm" type="number" min={1} max={100} value={String(node.max_iterations ?? 10)} onChange={(e) => update({ max_iterations: Number(e.target.value) || 10 })} />
         </BuilderField>
-      </div>
-      <div className="builder-row-pair">
+      </BuilderRowPair>
+      <BuilderRowPair>
         <BuilderField label={t("workflows.spawn_origin_channel")}>
           <input className="input input--sm" value={String(node.origin_channel || "")} onChange={(e) => update({ origin_channel: e.target.value || undefined })} placeholder="{{memory.origin.channel}}" />
         </BuilderField>
         <BuilderField label={t("workflows.spawn_origin_chat")}>
           <input className="input input--sm" value={String(node.origin_chat_id || "")} onChange={(e) => update({ origin_chat_id: e.target.value || undefined })} placeholder="{{memory.origin.chat_id}}" />
         </BuilderField>
-      </div>
+      </BuilderRowPair>
     </>
   );
 }

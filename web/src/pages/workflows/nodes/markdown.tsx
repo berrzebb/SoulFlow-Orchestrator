@@ -1,5 +1,5 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
-import { BuilderField } from "../builder-field";
+import { BuilderField, BuilderRowPair } from "../builder-field";
 
 function MarkdownEditPanel({ node, update, t }: EditPanelProps) {
   const op = String(node.operation || "table");
@@ -36,14 +36,14 @@ function MarkdownEditPanel({ node, update, t }: EditPanelProps) {
         </>
       )}
       {["link", "badge", "image"].includes(op) && (
-        <div className="builder-row-pair">
+        <BuilderRowPair>
           <BuilderField label={op === "image" ? "Alt" : "Label"}>
             <input className="input input--sm" value={String(node.label || node.alt || "")} onChange={(e) => update(op === "image" ? { alt: e.target.value } : { label: e.target.value })} />
           </BuilderField>
           <BuilderField label={t("workflows.field_url")}>
             <input className="input input--sm" value={String(node.url || "")} onChange={(e) => update({ url: e.target.value })} />
           </BuilderField>
-        </div>
+        </BuilderRowPair>
       )}
       {op === "list" && (
         <div className="builder-row">

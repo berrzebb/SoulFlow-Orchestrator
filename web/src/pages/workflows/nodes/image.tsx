@@ -1,11 +1,11 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
-import { BuilderField } from "../builder-field";
+import { BuilderField, BuilderRowPair } from "../builder-field";
 
 function ImageEditPanel({ node, update, t }: EditPanelProps) {
   const op = String(node.operation || "info");
   return (
     <>
-      <div className="builder-row-pair">
+      <BuilderRowPair>
         <BuilderField label={t("workflows.operation")} required>
           <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
             {["resize", "crop", "rotate", "convert", "info", "thumbnail"].map((o) => <option key={o} value={o}>{o}</option>)}
@@ -18,7 +18,7 @@ function ImageEditPanel({ node, update, t }: EditPanelProps) {
             </select>
           </BuilderField>
         )}
-      </div>
+      </BuilderRowPair>
       <BuilderField label={t("workflows.field_input_path")}>
         <input className="input" value={String(node.input_path || "")} onChange={(e) => update({ input_path: e.target.value })} placeholder="/path/to/image.png" />
       </BuilderField>
@@ -26,14 +26,14 @@ function ImageEditPanel({ node, update, t }: EditPanelProps) {
         <input className="input" value={String(node.output_path || "")} onChange={(e) => update({ output_path: e.target.value })} placeholder="(auto)" />
       </BuilderField>
       {["resize", "crop", "thumbnail"].includes(op) && (
-        <div className="builder-row-pair">
+        <BuilderRowPair>
           <BuilderField label={t("workflows.field_width")}>
             <input className="input input--sm" type="number" min={1} max={10000} value={String(node.width ?? 800)} onChange={(e) => update({ width: Number(e.target.value) })} />
           </BuilderField>
           <BuilderField label={t("workflows.field_height")}>
             <input className="input input--sm" type="number" min={1} max={10000} value={String(node.height ?? 600)} onChange={(e) => update({ height: Number(e.target.value) })} />
           </BuilderField>
-        </div>
+        </BuilderRowPair>
       )}
       {op === "rotate" && (
         <BuilderField label={t("workflows.field_angle")}>

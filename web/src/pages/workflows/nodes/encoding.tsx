@@ -1,11 +1,11 @@
-import { BuilderField } from "../builder-field";
+import { BuilderField, BuilderRowPair } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
 function EncodingEditPanel({ node, update, t }: EditPanelProps) {
   const op = String(node.operation || "encode");
   return (
     <>
-      <div className="builder-row-pair">
+      <BuilderRowPair>
         <BuilderField label={t("workflows.operation")} required>
           <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
             {["encode", "decode", "hash", "uuid"].map((o) => <option key={o} value={o}>{o}</option>)}
@@ -20,7 +20,7 @@ function EncodingEditPanel({ node, update, t }: EditPanelProps) {
             </select>
           </BuilderField>
         )}
-      </div>
+      </BuilderRowPair>
       {op !== "uuid" && (
         <BuilderField label={t("workflows.input_data")}>
           <textarea className="input code-textarea" rows={3} value={String(node.input || "")} onChange={(e) => update({ input: e.target.value })} placeholder="Hello World" />

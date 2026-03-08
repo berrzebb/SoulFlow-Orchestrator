@@ -1,11 +1,11 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
-import { BuilderField } from "../builder-field";
+import { BuilderField, BuilderRowPair } from "../builder-field";
 
 function QueueEditPanel({ node, update, t }: EditPanelProps) {
   const op = String(node.operation || "enqueue");
   return (
     <>
-      <div className="builder-row-pair">
+      <BuilderRowPair>
         <BuilderField label={t("workflows.operation")} required>
           <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
             {["enqueue", "dequeue", "peek", "size", "drain", "list", "clear", "delete"].map((o) => <option key={o} value={o}>{o}</option>)}
@@ -14,13 +14,13 @@ function QueueEditPanel({ node, update, t }: EditPanelProps) {
         <BuilderField label={t("workflows.field_queue")}>
           <input className="input input--sm" value={String(node.queue || "default")} onChange={(e) => update({ queue: e.target.value })} />
         </BuilderField>
-      </div>
+      </BuilderRowPair>
       {op === "enqueue" && (
         <>
           <BuilderField label={t("workflows.field_value")}>
             <textarea className="input code-textarea" rows={2} value={String(node.value || "")} onChange={(e) => update({ value: e.target.value })} />
           </BuilderField>
-          <div className="builder-row-pair">
+          <BuilderRowPair>
             <BuilderField label={t("workflows.field_mode")}>
               <select className="input input--sm" value={String(node.mode || "fifo")} onChange={(e) => update({ mode: e.target.value })}>
                 {["fifo", "lifo", "priority"].map((m) => <option key={m} value={m}>{m}</option>)}
@@ -31,7 +31,7 @@ function QueueEditPanel({ node, update, t }: EditPanelProps) {
                 <input className="input input--sm" type="number" min={0} max={100} value={String(node.priority ?? 50)} onChange={(e) => update({ priority: Number(e.target.value) })} />
               </BuilderField>
             )}
-          </div>
+          </BuilderRowPair>
         </>
       )}
       {op === "drain" && (

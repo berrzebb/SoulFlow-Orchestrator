@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
-import { BuilderField } from "../builder-field";
+import { BuilderField, BuilderRowPair } from "../builder-field";
 
 function DbEditPanel({ node, update, t }: EditPanelProps) {
   const [paramsRaw, setParamsRaw] = useState(node.params ? JSON.stringify(node.params, null, 2) : "");
@@ -15,7 +15,7 @@ function DbEditPanel({ node, update, t }: EditPanelProps) {
 
   return (
     <>
-      <div className="builder-row-pair">
+      <BuilderRowPair>
         <BuilderField label={t("workflows.db_operation")} required>
           <select autoFocus className="input input--sm" value={String(node.operation || "query")} onChange={(e) => update({ operation: e.target.value })}>
             <option value="query">{t("workflows.opt_query")}</option>
@@ -27,7 +27,7 @@ function DbEditPanel({ node, update, t }: EditPanelProps) {
         <BuilderField label={t("workflows.db_datasource")}>
           <input className="input input--sm" value={String(node.datasource || "")} onChange={(e) => update({ datasource: e.target.value })} placeholder="main-db" />
         </BuilderField>
-      </div>
+      </BuilderRowPair>
       <BuilderField label={t("workflows.db_query")} hint={t("workflows.db_query_hint")}>
         <textarea className="input code-textarea" rows={4} value={String(node.query || "")} onChange={(e) => update({ query: e.target.value })} spellCheck={false} placeholder="SELECT * FROM users WHERE id = {{memory.user_id}}" />
       </BuilderField>

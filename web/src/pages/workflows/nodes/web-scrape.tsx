@@ -1,5 +1,5 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
-import { BuilderField } from "../builder-field";
+import { BuilderField, BuilderRowPair } from "../builder-field";
 
 function WebScrapeEditPanel({ node, update, t }: EditPanelProps) {
   return (
@@ -7,14 +7,14 @@ function WebScrapeEditPanel({ node, update, t }: EditPanelProps) {
       <BuilderField label={t("workflows.scrape_url")}>
         <input autoFocus className="input" value={String(node.url || "")} onChange={(e) => update({ url: e.target.value })} placeholder="https://example.com/page" />
       </BuilderField>
-      <div className="builder-row-pair">
+      <BuilderRowPair>
         <BuilderField label={t("workflows.selector")}>
           <input className="input input--sm" value={String(node.selector || "")} onChange={(e) => update({ selector: e.target.value })} placeholder="article, .content" />
         </BuilderField>
         <BuilderField label={t("workflows.max_chars")} hint={t("workflows.max_chars_hint")}>
           <input className="input input--sm" type="number" min={1000} max={100000} step={1000} value={String(node.max_chars ?? 50000)} onChange={(e) => update({ max_chars: Number(e.target.value) || 50000 })} />
         </BuilderField>
-      </div>
+      </BuilderRowPair>
     </>
   );
 }

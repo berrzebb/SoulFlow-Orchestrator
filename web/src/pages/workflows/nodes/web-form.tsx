@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
-import { BuilderField } from "../builder-field";
+import { BuilderField, BuilderRowPair } from "../builder-field";
 
 function WebFormEditPanel({ node, update, t }: EditPanelProps) {
   const [fieldsRaw, setFieldsRaw] = useState(node.fields ? JSON.stringify(node.fields, null, 2) : "{}");
@@ -27,14 +27,14 @@ function WebFormEditPanel({ node, update, t }: EditPanelProps) {
           placeholder='{"#email": "test@test.com", "#password": "***"}'
         />
       </BuilderField>
-      <div className="builder-row-pair">
+      <BuilderRowPair>
         <BuilderField label={t("workflows.submit_selector")}>
           <input className="input input--sm" value={String(node.submit_selector || "")} onChange={(e) => update({ submit_selector: e.target.value })} placeholder='button[type="submit"]' />
         </BuilderField>
         <BuilderField label={t("workflows.wait_after_ms")}>
           <input className="input input--sm" type="number" min={0} max={30000} step={500} value={String(node.wait_after_ms ?? 2000)} onChange={(e) => update({ wait_after_ms: Number(e.target.value) || 2000 })} />
         </BuilderField>
-      </div>
+      </BuilderRowPair>
     </>
   );
 }

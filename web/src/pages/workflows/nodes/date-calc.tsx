@@ -1,5 +1,5 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
-import { BuilderField } from "../builder-field";
+import { BuilderField, BuilderRowPair } from "../builder-field";
 
 function DateCalcEditPanel({ node, update, t }: EditPanelProps) {
   const op = String(node.operation || "now");
@@ -21,7 +21,7 @@ function DateCalcEditPanel({ node, update, t }: EditPanelProps) {
         </BuilderField>
       )}
       {op === "add" && (
-        <div className="builder-row-pair">
+        <BuilderRowPair>
           <BuilderField label={t("workflows.field_amount")}>
             <input className="input input--sm" type="number" value={String(node.amount ?? 0)} onChange={(e) => update({ amount: Number(e.target.value) })} />
           </BuilderField>
@@ -30,17 +30,17 @@ function DateCalcEditPanel({ node, update, t }: EditPanelProps) {
               {["ms", "s", "min", "h", "d", "week", "month", "year"].map((u) => <option key={u} value={u}>{u}</option>)}
             </select>
           </BuilderField>
-        </div>
+        </BuilderRowPair>
       )}
       {op === "timezone" && (
-        <div className="builder-row-pair">
+        <BuilderRowPair>
           <BuilderField label={t("workflows.field_from_tz")}>
             <input className="input input--sm" value={String(node.from_tz || "UTC")} onChange={(e) => update({ from_tz: e.target.value })} />
           </BuilderField>
           <BuilderField label={t("workflows.field_to_tz")}>
             <input className="input input--sm" value={String(node.to_tz || "UTC")} onChange={(e) => update({ to_tz: e.target.value })} />
           </BuilderField>
-        </div>
+        </BuilderRowPair>
       )}
       {["format", "now"].includes(op) && (
         <BuilderField label={t("workflows.field_format")}>

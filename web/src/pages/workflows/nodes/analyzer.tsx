@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 import { useProviderModels } from "../use-provider-models";
-import { BuilderField } from "../builder-field";
+import { BuilderField, BuilderRowPair, TemperatureField } from "../builder-field";
 
 function AnalyzerEditPanel({ node, update, t, options }: EditPanelProps) {
   const { models, loading: modelsLoading } = useProviderModels(node.backend as string | undefined, options);
@@ -18,7 +18,7 @@ function AnalyzerEditPanel({ node, update, t, options }: EditPanelProps) {
 
   return (
     <>
-      <div className="builder-row-pair">
+      <BuilderRowPair>
         <BuilderField label={t("workflows.llm_backend")} required>
           <select autoFocus className="input input--sm" required value={String(node.backend || "")} onChange={(e) => update({ backend: e.target.value })} aria-required="true">
             <option value="">-</option>
@@ -41,7 +41,7 @@ function AnalyzerEditPanel({ node, update, t, options }: EditPanelProps) {
             <input className="input input--sm" value={String(node.model || "")} onChange={(e) => update({ model: e.target.value })} placeholder="auto" />
           )}
         </BuilderField>
-      </div>
+      </BuilderRowPair>
       <BuilderField label={t("workflows.analyzer_input")} required>
         <input className="input input--sm" required value={String(node.input_field || "")} onChange={(e) => update({ input_field: e.target.value })} placeholder="memory.resume_text" aria-required="true" />
       </BuilderField>
@@ -61,16 +61,7 @@ function AnalyzerEditPanel({ node, update, t, options }: EditPanelProps) {
           placeholder='{"type": "object", "properties": {"score": {"type": "number"}, "category": {"type": "string"}}}'
         />
       </BuilderField>
-      <div className="builder-row">
-        <label className="label">
-          {t("workflows.llm_temperature")}
-          <span className="builder-hint--inline">
-            {temp == null ? "" : ` (${temp <= 0.3 ? t("workflows.temp_precise") : temp <= 0.7 ? t("workflows.temp_balanced") : t("workflows.temp_creative")})`}
-          </span>
-        </label>
-        <input className="input input--sm" type="range" min={0} max={2} step={0.1} value={String(temp ?? 0.7)} onChange={(e) => update({ temperature: Number(e.target.value) })} />
-        <span className="builder-hint">{temp ?? 0.7}</span>
-      </div>
+      <TemperatureField value={temp} onChange={(v) => update({ temperature: v })} />
     </>
   );
 }

@@ -1,11 +1,11 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
-import { BuilderField } from "../builder-field";
+import { BuilderField, BuilderRowPair } from "../builder-field";
 
 function PromiseEditPanel({ node, update, t }: EditPanelProps) {
   const op = String(node.operation || "append");
   return (
     <>
-      <div className="builder-row-pair">
+      <BuilderRowPair>
         <BuilderField label={t("workflows.promise_op")}>
           <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
             <option value="append">{t("workflows.opt_append")}</option>
@@ -21,7 +21,7 @@ function PromiseEditPanel({ node, update, t }: EditPanelProps) {
             <option value="agent">{t("workflows.opt_agent")}</option>
           </select>
         </BuilderField>
-      </div>
+      </BuilderRowPair>
       {op === "append" && (
         <>
           <BuilderField label={t("workflows.promise_key")}>
@@ -33,7 +33,7 @@ function PromiseEditPanel({ node, update, t }: EditPanelProps) {
           <BuilderField label={t("workflows.promise_rationale")}>
             <input className="input input--sm" value={String(node.rationale || "")} onChange={(e) => update({ rationale: e.target.value || undefined })} placeholder="Why this promise is important" />
           </BuilderField>
-          <div className="builder-row-pair">
+          <BuilderRowPair>
             <BuilderField label={t("workflows.decision_priority")}>
               <select className="input input--sm" value={String(node.priority ?? 1)} onChange={(e) => update({ priority: Number(e.target.value) })}>
                 <option value="0">{t("workflows.opt_p0")}</option>
@@ -45,7 +45,7 @@ function PromiseEditPanel({ node, update, t }: EditPanelProps) {
             <BuilderField label={t("workflows.decision_tags")}>
               <input className="input input--sm" value={Array.isArray(node.tags) ? (node.tags as string[]).join(", ") : ""} onChange={(e) => update({ tags: e.target.value.split(",").map((s: string) => s.trim()).filter(Boolean) })} placeholder="safety, data" />
             </BuilderField>
-          </div>
+          </BuilderRowPair>
         </>
       )}
       {(op === "list" || op === "get_effective") && (

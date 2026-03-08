@@ -1,5 +1,5 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
-import { BuilderField } from "../builder-field";
+import { BuilderField, BuilderRowPair } from "../builder-field";
 
 function RetryEditPanel({ node, update, t }: EditPanelProps) {
   return (
@@ -7,7 +7,7 @@ function RetryEditPanel({ node, update, t }: EditPanelProps) {
       <BuilderField label={t("workflows.retry_target")} hint={t("workflows.retry_target_hint")}>
         <input autoFocus className="input input--sm" value={String(node.target_node || "")} onChange={(e) => update({ target_node: e.target.value })} placeholder="node_id" aria-label={t("workflows.retry_target")} />
       </BuilderField>
-      <div className="builder-row-pair">
+      <BuilderRowPair>
         <BuilderField label={t("workflows.retry_max_attempts")} hint={t("workflows.retry_max_attempts_hint")}>
           <input className="input input--sm" type="number" min={1} max={10} value={String(node.max_attempts ?? 3)} onChange={(e) => update({ max_attempts: Number(e.target.value) })} aria-label={t("workflows.retry_max_attempts")} />
         </BuilderField>
@@ -18,15 +18,15 @@ function RetryEditPanel({ node, update, t }: EditPanelProps) {
             <option value="fixed">{t("workflows.opt_fixed")}</option>
           </select>
         </BuilderField>
-      </div>
-      <div className="builder-row-pair">
+      </BuilderRowPair>
+      <BuilderRowPair>
         <BuilderField label={t("workflows.retry_initial_delay")} hint={t("workflows.retry_initial_delay_hint")}>
           <input className="input input--sm" type="number" min={100} value={String(node.initial_delay_ms ?? 1000)} onChange={(e) => update({ initial_delay_ms: Number(e.target.value) })} aria-label={t("workflows.retry_initial_delay")} />
         </BuilderField>
         <BuilderField label={t("workflows.retry_max_delay")} hint={t("workflows.retry_max_delay_hint")}>
           <input className="input input--sm" type="number" min={1000} value={String(node.max_delay_ms ?? 30000)} onChange={(e) => update({ max_delay_ms: Number(e.target.value) })} aria-label={t("workflows.retry_max_delay")} />
         </BuilderField>
-      </div>
+      </BuilderRowPair>
     </>
   );
 }

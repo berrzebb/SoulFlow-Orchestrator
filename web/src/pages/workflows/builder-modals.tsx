@@ -6,7 +6,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import { useModalEffects, useConfirm } from "../../components/modal";
-import { BuilderField } from "./builder-field";
+import { BuilderField, BuilderRowPair } from "./builder-field";
 import { useT } from "../../i18n";
 import { get_frontend_node } from "./node-registry";
 import type { WorkflowDef, PhaseDef, AgentDef, CriticDef, OrcheNodeDef, TriggerNodeDef, RolePreset } from "./workflow-types";
@@ -484,7 +484,7 @@ export function AgentEditModal({ workflow, subNodeId, onChange, onClose, onSubNo
             <button className="modal__close" onClick={onClose} aria-label={t("workflows.close")}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
           </div>
           <div className="modal__body">
-            <div className="builder-row-pair">
+            <BuilderRowPair>
               <BuilderField label={t("workflows.backend")}>
                 <select className="input input--sm" value={critic.backend} onChange={(e) => updateCritic({ backend: e.target.value })}>
                   {(backends || []).map((b) => <option key={b.value} value={b.value}>{b.label}</option>)}
@@ -493,8 +493,8 @@ export function AgentEditModal({ workflow, subNodeId, onChange, onClose, onSubNo
               <BuilderField label={t("workflows.model")}>
                 <input className="input input--sm" value={critic.model || ""} placeholder="auto" onChange={(e) => updateCritic({ model: e.target.value || undefined })} />
               </BuilderField>
-            </div>
-            <div className="builder-row-pair">
+            </BuilderRowPair>
+            <BuilderRowPair>
               <BuilderField label={t("workflows.gate_label")}>
                 <select className="input input--sm" value={critic.gate ? "true" : "false"} onChange={(e) => updateCritic({ gate: e.target.value === "true" })}>
                   <option value="true">{t("workflows.gate_yes")}</option>
@@ -507,7 +507,7 @@ export function AgentEditModal({ workflow, subNodeId, onChange, onClose, onSubNo
                   {REJECTION_POLICIES.map((p) => <option key={p} value={p}>{p}</option>)}
                 </select>
               </BuilderField>
-            </div>
+            </BuilderRowPair>
             <BuilderField label={t("workflows.system_prompt")}>
               <textarea className="input input--sm" rows={4} value={critic.system_prompt} onChange={(e) => updateCritic({ system_prompt: e.target.value })} />
             </BuilderField>
@@ -559,14 +559,14 @@ export function AgentEditModal({ workflow, subNodeId, onChange, onClose, onSubNo
           <button className="modal__close" onClick={onClose} aria-label={t("workflows.close")}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
         </div>
         <div className="modal__body">
-          <div className="builder-row-pair">
+          <BuilderRowPair>
             <BuilderField label={t("workflows.agent_id")}>
               <input autoFocus className="input input--sm" value={agent.agent_id} onChange={(e) => updateAgent({ agent_id: e.target.value })} />
             </BuilderField>
             <BuilderField label={t("workflows.agent_label")}>
               <input className="input input--sm" value={agent.label} onChange={(e) => updateAgent({ label: e.target.value })} />
             </BuilderField>
-          </div>
+          </BuilderRowPair>
           {/* Role 태그 칩 선택 */}
           <BuilderField label={t("workflows.agent_role")}>
             <div className="role-chips">

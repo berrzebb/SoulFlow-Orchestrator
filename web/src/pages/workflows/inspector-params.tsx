@@ -6,7 +6,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import type { NodeOptions } from "./node-registry";
-import { BuilderField } from "./builder-field";
+import { BuilderField, BuilderRowPair } from "./builder-field";
 import { useProviderModels } from "./use-provider-models";
 import { END_TARGET_PARAMS } from "./output-schema";
 import type { PhaseDef, AgentDef, CriticDef, ToolNodeDef, SkillNodeDef, WorkflowDef, RolePreset } from "./workflow-types";
@@ -81,7 +81,7 @@ export function PhaseParamsPanel({ phase, workflow, onChange, onPhaseIdChange, t
 
   return (
     <>
-      <div className="builder-row-pair">
+      <BuilderRowPair>
         <BuilderField label={t("workflows.phase_id")}>
           <input autoFocus className="input input--sm" value={phase.phase_id}
             onChange={(e) => updatePhase({ phase_id: e.target.value })} />
@@ -90,7 +90,7 @@ export function PhaseParamsPanel({ phase, workflow, onChange, onPhaseIdChange, t
           <input className="input input--sm" value={phase.title}
             onChange={(e) => updatePhase({ title: e.target.value })} />
         </BuilderField>
-      </div>
+      </BuilderRowPair>
 
       <BuilderField label={t("workflows.phase_description")}>
         <textarea className="input input--sm" rows={2}
@@ -244,7 +244,7 @@ export function AgentSummaryCard({ agent, index, phase, workflow, onChange, onNo
       </div>
       {expanded && (
         <div className="inspector-card__body">
-          <div className="builder-row-pair">
+          <BuilderRowPair>
             <BuilderField label={t("workflows.agent_id")}>
               <input className="input input--sm" value={agent.agent_id}
                 onChange={(e) => updateAgent({ agent_id: e.target.value })} />
@@ -253,7 +253,7 @@ export function AgentSummaryCard({ agent, index, phase, workflow, onChange, onNo
               <input className="input input--sm" value={agent.label}
                 onChange={(e) => updateAgent({ label: e.target.value })} />
             </BuilderField>
-          </div>
+          </BuilderRowPair>
           <BuilderField label={t("workflows.select_role")}>
             <select className="input input--sm"
               value={isPresetRole ? agent.role : ""}
@@ -273,7 +273,7 @@ export function AgentSummaryCard({ agent, index, phase, workflow, onChange, onNo
               {t("workflows.role_auto_prompt")}
             </div>
           )}
-          <div className="builder-row-pair">
+          <BuilderRowPair>
             <BuilderField label={t("workflows.backend")}>
               <select className="input input--sm" value={agent.backend}
                 onChange={(e) => updateAgent({ backend: e.target.value })}>
@@ -300,7 +300,7 @@ export function AgentSummaryCard({ agent, index, phase, workflow, onChange, onNo
                   placeholder="auto" />
               )}
             </BuilderField>
-          </div>
+          </BuilderRowPair>
           <BuilderField label={t("workflows.max_turns")}>
             <input className="input input--sm" type="number" min={0}
               value={agent.max_turns ?? 3}
@@ -357,7 +357,7 @@ export function CriticSummaryCard({ critic, phase, workflow, onChange, t, option
       </div>
       {expanded && (
         <div className="inspector-card__body">
-          <div className="builder-row-pair">
+          <BuilderRowPair>
             <BuilderField label={t("workflows.backend")}>
               <select className="input input--sm" value={critic.backend}
                 onChange={(e) => updateCritic({ backend: e.target.value })}>
@@ -384,8 +384,8 @@ export function CriticSummaryCard({ critic, phase, workflow, onChange, t, option
                   placeholder="auto" />
               )}
             </BuilderField>
-          </div>
-          <div className="builder-row-pair">
+          </BuilderRowPair>
+          <BuilderRowPair>
             <BuilderField label={t("workflows.gate_label")}>
               <select className="input input--sm" value={critic.gate ? "true" : "false"}
                 onChange={(e) => updateCritic({ gate: e.target.value === "true" })}>
@@ -402,7 +402,7 @@ export function CriticSummaryCard({ critic, phase, workflow, onChange, t, option
                 <option value="escalate">escalate</option>
               </select>
             </BuilderField>
-          </div>
+          </BuilderRowPair>
           <BuilderField label={t("workflows.system_prompt")}>
             <textarea className="input input--sm inspector-droppable" rows={4}
               value={critic.system_prompt}

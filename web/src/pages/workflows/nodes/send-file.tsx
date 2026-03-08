@@ -1,5 +1,5 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
-import { BuilderField } from "../builder-field";
+import { BuilderField, BuilderRowPair } from "../builder-field";
 
 function SendFileEditPanel({ node, update, t, options }: EditPanelProps) {
   const target = String(node.target || "origin");
@@ -19,7 +19,7 @@ function SendFileEditPanel({ node, update, t, options }: EditPanelProps) {
         </select>
       </BuilderField>
       {target === "specified" && (
-        <div className="builder-row-pair">
+        <BuilderRowPair>
           <BuilderField label={t("workflows.notify_channel")}>
             <select className="input input--sm" value={String(node.channel || "")} onChange={(e) => update({ channel: e.target.value })}>
               <option value="">{t("common.select")}</option>
@@ -29,7 +29,7 @@ function SendFileEditPanel({ node, update, t, options }: EditPanelProps) {
           <BuilderField label={t("workflows.notify_chat_id")}>
             <input className="input input--sm" value={String(node.chat_id || "")} onChange={(e) => update({ chat_id: e.target.value })} />
           </BuilderField>
-        </div>
+        </BuilderRowPair>
       )}
     </>
   );

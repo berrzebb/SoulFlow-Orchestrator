@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
-import { BuilderField } from "../builder-field";
+import { BuilderField, BuilderRowPair } from "../builder-field";
 
 function HttpEditPanel({ node, update, t }: EditPanelProps) {
   const [headersRaw, setHeadersRaw] = useState(node.headers ? JSON.stringify(node.headers, null, 2) : "");
@@ -15,7 +15,7 @@ function HttpEditPanel({ node, update, t }: EditPanelProps) {
 
   return (
     <>
-      <div className="builder-row-pair">
+      <BuilderRowPair>
         <BuilderField label={t("workflows.http_method")} required>
           <select autoFocus className="input input--sm" required value={String(node.method || "GET")} onChange={(e) => update({ method: e.target.value })} aria-required="true">
             {["GET", "POST", "PUT", "PATCH", "DELETE"].map((m) => <option key={m} value={m}>{m}</option>)}
@@ -24,7 +24,7 @@ function HttpEditPanel({ node, update, t }: EditPanelProps) {
         <BuilderField label={t("workflows.http_url")} required>
           <input className="input input--sm" required value={String(node.url || "")} onChange={(e) => update({ url: e.target.value })} placeholder="https://api.example.com/data" aria-required="true" />
         </BuilderField>
-      </div>
+      </BuilderRowPair>
       <BuilderField label={t("workflows.http_headers")} error={headersErr}>
         <textarea
           className={`input input--sm code-textarea${headersErr ? " input--err" : ""}`}

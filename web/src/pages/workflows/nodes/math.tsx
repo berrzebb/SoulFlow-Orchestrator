@@ -1,5 +1,5 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
-import { BuilderField } from "../builder-field";
+import { BuilderField, BuilderRowPair } from "../builder-field";
 
 function MathEditPanel({ node, update, t }: EditPanelProps) {
   const op = String(node.operation || "eval");
@@ -16,7 +16,7 @@ function MathEditPanel({ node, update, t }: EditPanelProps) {
         </BuilderField>
       )}
       {op === "convert" && (
-        <div className="builder-row-pair">
+        <BuilderRowPair>
           <BuilderField label={t("workflows.field_value")}>
             <input className="input input--sm" type="number" value={String(node.value ?? 0)} onChange={(e) => update({ value: Number(e.target.value) })} />
           </BuilderField>
@@ -26,18 +26,18 @@ function MathEditPanel({ node, update, t }: EditPanelProps) {
               <input className="input input--sm" value={String(node.to || "")} onChange={(e) => update({ to: e.target.value })} placeholder="mi" style={{ flex: 1 }} />
             </div>
           </BuilderField>
-        </div>
+        </BuilderRowPair>
       )}
       {["compound_interest", "loan_payment"].includes(op) && (
         <>
-          <div className="builder-row-pair">
+          <BuilderRowPair>
             <BuilderField label={t("workflows.field_principal")}>
               <input className="input input--sm" type="number" value={String(node.principal ?? 0)} onChange={(e) => update({ principal: Number(e.target.value) })} />
             </BuilderField>
             <BuilderField label={t("workflows.field_rate")}>
               <input className="input input--sm" type="number" step="0.01" value={String(node.rate ?? 0)} onChange={(e) => update({ rate: Number(e.target.value) })} />
             </BuilderField>
-          </div>
+          </BuilderRowPair>
           <BuilderField label={t("workflows.field_periods")}>
             <input className="input input--sm" type="number" value={String(node.periods ?? 0)} onChange={(e) => update({ periods: Number(e.target.value) })} />
           </BuilderField>
@@ -49,14 +49,14 @@ function MathEditPanel({ node, update, t }: EditPanelProps) {
         </BuilderField>
       )}
       {["gcd", "lcm"].includes(op) && (
-        <div className="builder-row-pair">
+        <BuilderRowPair>
           <BuilderField label="A">
             <input className="input input--sm" type="number" value={String(node.a ?? 0)} onChange={(e) => update({ a: Number(e.target.value) })} />
           </BuilderField>
           <BuilderField label="B">
             <input className="input input--sm" type="number" value={String(node.b ?? 0)} onChange={(e) => update({ b: Number(e.target.value) })} />
           </BuilderField>
-        </div>
+        </BuilderRowPair>
       )}
       {["factorial", "fibonacci"].includes(op) && (
         <BuilderField label="N">

@@ -1,5 +1,5 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
-import { BuilderField } from "../builder-field";
+import { BuilderField, BuilderRowPair } from "../builder-field";
 
 function BatchEditPanel({ node, update, t }: EditPanelProps) {
   return (
@@ -10,7 +10,7 @@ function BatchEditPanel({ node, update, t }: EditPanelProps) {
       <BuilderField label={t("workflows.batch_body_node")} hint={t("workflows.batch_body_node_hint")}>
         <input className="input input--sm" value={String(node.body_node || "")} onChange={(e) => update({ body_node: e.target.value })} placeholder="process_item" aria-label={t("workflows.batch_body_node")} />
       </BuilderField>
-      <div className="builder-row-pair">
+      <BuilderRowPair>
         <BuilderField label={t("workflows.batch_concurrency")} hint={t("workflows.batch_concurrency_hint")}>
           <input className="input input--sm" type="number" min={1} max={50} value={String(node.concurrency ?? 5)} onChange={(e) => update({ concurrency: Number(e.target.value) })} aria-label={t("workflows.batch_concurrency")} />
         </BuilderField>
@@ -20,7 +20,7 @@ function BatchEditPanel({ node, update, t }: EditPanelProps) {
             <option value="halt">{t("workflows.batch_on_error_halt")}</option>
           </select>
         </BuilderField>
-      </div>
+      </BuilderRowPair>
     </>
   );
 }

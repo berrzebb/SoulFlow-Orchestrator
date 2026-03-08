@@ -1,5 +1,5 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
-import { BuilderField } from "../builder-field";
+import { BuilderField, BuilderRowPair } from "../builder-field";
 
 function WebhookEditPanel({ node, update, t }: EditPanelProps) {
   const response_mode = String(node.response_mode || "immediate");
@@ -8,7 +8,7 @@ function WebhookEditPanel({ node, update, t }: EditPanelProps) {
       <BuilderField label={t("workflows.webhook_node_path")}>
         <input autoFocus className="input input--sm" value={String(node.path || "")} onChange={(e) => update({ path: e.target.value })} placeholder="/hooks/my-webhook" aria-label={t("workflows.webhook_node_path")} />
       </BuilderField>
-      <div className="builder-row-pair">
+      <BuilderRowPair>
         <BuilderField label={t("workflows.webhook_node_method")}>
           <select className="input input--sm" value={String(node.http_method || "POST")} onChange={(e) => update({ http_method: e.target.value })} aria-label={t("workflows.webhook_node_method")}>
             {["GET", "POST", "PUT", "DELETE"].map((m) => <option key={m} value={m}>{m}</option>)}
@@ -20,16 +20,16 @@ function WebhookEditPanel({ node, update, t }: EditPanelProps) {
             <option value="wait">{t("workflows.webhook_response_wait")}</option>
           </select>
         </BuilderField>
-      </div>
+      </BuilderRowPair>
       {response_mode === "wait" && (
-        <div className="builder-row-pair">
+        <BuilderRowPair>
           <BuilderField label={t("workflows.webhook_response_status")} hint={t("workflows.webhook_status_hint")}>
             <input className="input input--sm" type="number" value={String(node.response_status ?? 200)} onChange={(e) => update({ response_status: Number(e.target.value) })} placeholder="200" aria-label={t("workflows.webhook_response_status")} />
           </BuilderField>
           <BuilderField label={t("workflows.webhook_response_body")}>
             <input className="input input--sm" value={String(node.response_body || "")} onChange={(e) => update({ response_body: e.target.value })} placeholder='{"ok": true}' aria-label={t("workflows.webhook_response_body")} />
           </BuilderField>
-        </div>
+        </BuilderRowPair>
       )}
     </>
   );
