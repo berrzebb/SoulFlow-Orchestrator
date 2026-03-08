@@ -20,10 +20,10 @@ REDIS_PORT=
 INSTANCE=
 
 shift || true
-for arg in "$@"; do
-  case $arg in
+while [ $# -gt 0 ]; do
+  case $1 in
     --workspace=*)
-      VAL="${arg#*=}"
+      VAL="${1#*=}"
       if [[ "$VAL" =~ ^= ]]; then
         echo -e "${RED}파라미터 오류: --workspace==... (= 기호가 두 개)${NC}"
         echo -e "${YELLOW}올바른 형식: --workspace=/path (= 한 개)${NC}"
@@ -31,16 +31,15 @@ for arg in "$@"; do
       fi
       WORKSPACE="$VAL"
       ;;
-    --web-port=* | --webport=*)
-      WEB_PORT="${arg#*=}"
-      ;;
-    --redis-port=* | --redisport=*)
-      REDIS_PORT="${arg#*=}"
-      ;;
-    --instance=* | --name=*)
-      INSTANCE="${arg#*=}"
-      ;;
+    --workspace) shift; WORKSPACE="$1" ;;
+    --web-port=* | --webport=*) WEB_PORT="${1#*=}" ;;
+    --web-port | --webport) shift; WEB_PORT="$1" ;;
+    --redis-port=* | --redisport=*) REDIS_PORT="${1#*=}" ;;
+    --redis-port | --redisport) shift; REDIS_PORT="$1" ;;
+    --instance=* | --name=*) INSTANCE="${1#*=}" ;;
+    --instance | --name) shift; INSTANCE="$1" ;;
   esac
+  shift
 done
 
 # 환경별 프리셋

@@ -24,15 +24,30 @@ set "INSTANCE="
 set "COMMAND=%~1"
 if "%COMMAND%"=="" set "COMMAND=help"
 
+REM 파라미터 파싱 (=구분, 공백구분 모두 지원)
+set "PREV_KEY="
 for %%a in (%*) do (
   set "arg=%%a"
-  if "!arg:~0,12!"=="--workspace=" set "WORKSPACE=!arg:~12!"
-  if "!arg:~0,11!"=="--web-port=" set "WEB_PORT=!arg:~11!"
-  if "!arg:~0,10!"=="--webport=" set "WEB_PORT=!arg:~10!"
-  if "!arg:~0,13!"=="--redis-port=" set "REDIS_PORT=!arg:~13!"
-  if "!arg:~0,12!"=="--redisport=" set "REDIS_PORT=!arg:~12!"
-  if "!arg:~0,11!"=="--instance=" set "INSTANCE=!arg:~11!"
-  if "!arg:~0,7!"=="--name=" set "INSTANCE=!arg:~7!"
+  if defined PREV_KEY (
+    if "!PREV_KEY!"=="workspace" set "WORKSPACE=!arg!"
+    if "!PREV_KEY!"=="web-port" set "WEB_PORT=!arg!"
+    if "!PREV_KEY!"=="redis-port" set "REDIS_PORT=!arg!"
+    if "!PREV_KEY!"=="instance" set "INSTANCE=!arg!"
+    set "PREV_KEY="
+  ) else (
+    if "!arg:~0,12!"=="--workspace=" set "WORKSPACE=!arg:~12!"
+    if "!arg!"=="--workspace" set "PREV_KEY=workspace"
+    if "!arg:~0,11!"=="--web-port=" set "WEB_PORT=!arg:~11!"
+    if "!arg!"=="--web-port" set "PREV_KEY=web-port"
+    if "!arg:~0,10!"=="--webport=" set "WEB_PORT=!arg:~10!"
+    if "!arg:~0,13!"=="--redis-port=" set "REDIS_PORT=!arg:~13!"
+    if "!arg!"=="--redis-port" set "PREV_KEY=redis-port"
+    if "!arg:~0,12!"=="--redisport=" set "REDIS_PORT=!arg:~12!"
+    if "!arg:~0,11!"=="--instance=" set "INSTANCE=!arg:~11!"
+    if "!arg!"=="--instance" set "PREV_KEY=instance"
+    if "!arg:~0,7!"=="--name=" set "INSTANCE=!arg:~7!"
+    if "!arg!"=="--name" set "PREV_KEY=instance"
+  )
 )
 
 if /i "%COMMAND%"=="help" goto help

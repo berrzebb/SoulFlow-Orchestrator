@@ -18,7 +18,8 @@ $WebPort = $null
 $RedisPort = $null
 $Instance = $null
 
-foreach ($arg in $Arguments) {
+for ($i = 0; $i -lt $Arguments.Count; $i++) {
+  $arg = $Arguments[$i]
   if ($arg -match "^--workspace=(.+)$") {
     $val = $matches[1]
     if ($val -match "^=") {
@@ -33,6 +34,14 @@ foreach ($arg in $Arguments) {
     $RedisPort = $matches[2]
   } elseif ($arg -match "^--(instance|name)=(.+)$") {
     $Instance = $matches[2]
+  } elseif ($arg -match "^--(workspace)$" -and $i + 1 -lt $Arguments.Count) {
+    $i++; $Workspace = $Arguments[$i]
+  } elseif ($arg -match "^--(web-port|webport)$" -and $i + 1 -lt $Arguments.Count) {
+    $i++; $WebPort = $Arguments[$i]
+  } elseif ($arg -match "^--(redis-port|redisport)$" -and $i + 1 -lt $Arguments.Count) {
+    $i++; $RedisPort = $Arguments[$i]
+  } elseif ($arg -match "^--(instance|name)$" -and $i + 1 -lt $Arguments.Count) {
+    $i++; $Instance = $Arguments[$i]
   }
 }
 
