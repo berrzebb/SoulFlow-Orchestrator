@@ -19,6 +19,7 @@ REM 파라미터 파싱
 set "WORKSPACE="
 set "WEB_PORT="
 set "INSTANCE="
+set "WATCH="
 
 set "COMMAND=%~1"
 if "%COMMAND%"=="" set "COMMAND=help"
@@ -42,6 +43,7 @@ for %%a in (%*) do (
     if "!arg!"=="--instance" set "PREV_KEY=instance"
     if "!arg:~0,7!"=="--name=" set "INSTANCE=!arg:~7!"
     if "!arg!"=="--name" set "PREV_KEY=instance"
+    if "!arg!"=="--watch" set "WATCH=1"
   )
 )
 
@@ -126,6 +128,7 @@ if not "%INSTANCE%"=="" (
 REM compose 실행
 set "COMPOSE_CMD=docker compose -f docker/docker-compose.yml"
 if /i "%COMMAND%"=="dev" set "COMPOSE_CMD=!COMPOSE_CMD! -f docker/docker-compose.dev.override.yml"
+if not "%COMMAND%"=="dev" if "%WATCH%"=="1" set "COMPOSE_CMD=!COMPOSE_CMD! -f docker/docker-compose.dev.override.yml"
 if not "%INSTANCE%"=="" (
   set "BASE_PROFILE=%COMMAND%"
   set "COMPOSE_CMD=!COMPOSE_CMD! -f docker/docker-compose.instance.override.yml"
@@ -239,6 +242,7 @@ echo %YELLOW%옵션:%NC%
 echo   --workspace=PATH   - 워크스페이스 경로 (필수)
 echo   --instance=NAME    - 인스턴스 이름
 echo   --web-port=PORT    - 웹 포트
+echo   --watch            - 소스 마운트 + 핫 리로드 (tsx watch)
 echo.
 goto end
 
