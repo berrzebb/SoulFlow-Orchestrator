@@ -47,6 +47,7 @@ export function ReferencesTab() {
   const [showUpload, setShowUpload] = useState(false);
   const [uploadName, setUploadName] = useState("");
   const [uploadContent, setUploadContent] = useState("");
+  const [uploadBase64, setUploadBase64] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<RefSearchResult[] | null>(null);
@@ -73,12 +74,13 @@ export function ReferencesTab() {
   });
 
   const upload = useMutation({
-    mutationFn: (body: { filename: string; content: string }) => api.post("/api/references/upload", body),
+    mutationFn: (body: { filename: string; content?: string; base64?: string }) => api.post("/api/references/upload", body),
     onSuccess: () => {
       toast(t("references.uploaded"), "ok");
       setShowUpload(false);
       setUploadName("");
       setUploadContent("");
+      setUploadBase64(null);
       void qc.invalidateQueries({ queryKey: ["references"] });
     },
     onError: () => toast(t("references.upload_failed"), "err"),
@@ -102,12 +104,23 @@ export function ReferencesTab() {
     }, undefined, t("references.search_failed"));
   };
 
+  const BINARY_EXTS = new Set(["pdf", "docx", "pptx", "hwpx"]);
+
   const handle_file_select = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const text = await file.text();
+    const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
     setUploadName(file.name);
-    setUploadContent(text);
+    if (BINARY_EXTS.has(ext)) {
+      const buf = await file.arrayBuffer();
+      const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
+      setUploadBase64(b64);
+      setUploadContent(`[바이너리 파일: ${file.name}, ${(file.size / 1024).toFixed(1)} KB]`);
+    } else {
+      const text = await file.text();
+      setUploadContent(text);
+      setUploadBase64(null);
+    }
   };
 
   return (
@@ -231,16 +244,20 @@ export function ReferencesTab() {
         open={showUpload}
         title={t("references.upload_title")}
         onClose={() => { setShowUpload(false); setUploadName(""); setUploadContent(""); }}
-        onConfirm={() => { if (uploadName && uploadContent) upload.mutate({ filename: uploadName, content: uploadContent }); }}
+        onConfirm={() => {
+          if (!uploadName) return;
+          if (uploadBase64) upload.mutate({ filename: uploadName, base64: uploadBase64 });
+          else if (uploadContent) upload.mutate({ filename: uploadName, content: uploadContent });
+        }}
         confirmLabel={t("references.upload")}
-        submitDisabled={!uploadName || !uploadContent}
+        submitDisabled={!uploadName || (!uploadContent && !uploadBase64)}
       >
         <div className="modal__form-body">
           <FormGroup label={t("references.select_file")}>
             <input
               type="file"
               className="form-input"
-              accept=".md,.txt,.json,.yaml,.yml,.csv,.xml,.html,.log,.ts,.js,.py,.sh,.sql,.toml,.ini,.cfg"
+              accept=".md,.txt,.json,.yaml,.yml,.csv,.xml,.html,.log,.ts,.js,.py,.sh,.sql,.toml,.ini,.cfg,.pdf,.docx,.pptx,.hwpx"
               onChange={(e) => void handle_file_select(e)}
             />
           </FormGroup>
@@ -284,11 +301,15 @@ export function ReferencesTab() {
 
 function ext_icon(ext: string): string {
   switch (ext) {
-    case "md": return "\u{1F4DD}";
-    case "json": case "yaml": case "yml": case "toml": return "\u{2699}";
-    case "ts": case "js": case "py": case "sh": case "sql": return "\u{1F4BB}";
-    case "csv": return "\u{1F4CA}";
-    case "html": case "xml": return "\u{1F310}";
-    default: return "\u{1F4C4}";
+    case "md": return "📝";
+    case "pdf": return "📄";
+    case "docx": return "📃";
+    case "pptx": return "📊";
+    case "hwpx": return "🇰🇷";
+    case "json": case "yaml": case "yml": case "toml": return "⚙️";
+    case "ts": case "js": case "py": case "sh": case "sql": return "💻";
+    case "csv": return "📈";
+    case "html": case "xml": return "🌐";
+    default: return "📄";
   }
 }

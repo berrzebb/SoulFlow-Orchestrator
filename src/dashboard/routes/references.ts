@@ -39,18 +39,25 @@ export async function handle_references(ctx: RouteContext): Promise<boolean> {
     return true;
   }
 
-  // POST /api/references/upload — 파일 업로드 (multipart 대신 JSON base64)
+  // POST /api/references/upload — 파일 업로드 (JSON: { filename, content } 또는 { filename, base64 })
   if (path === "/api/references/upload" && req.method === "POST") {
     const body = await read_body(req);
     const filename = String(body?.filename || "").replace(/[/\\:*?"<>|]/g, "_");
-    const content = String(body?.content || "");
-    if (!filename || !content) { json(res, 400, { error: "filename and content required" }); return true; }
+    if (!filename) { json(res, 400, { error: "filename required" }); return true; }
 
     const refs_dir = join(options.workspace || "workspace", "references");
     await mkdir(refs_dir, { recursive: true });
-    await writeFile(join(refs_dir, filename), content, "utf-8");
 
-    // 즉시 sync
+    if (body?.base64) {
+      // 바이너리 파일 (PDF/DOCX/PPTX/HWPX): base64 디코딩 후 원본 바이너리로 저장
+      const buf = Buffer.from(String(body.base64), "base64");
+      await writeFile(join(refs_dir, filename), buf);
+    } else {
+      const content = String(body?.content || "");
+      if (!content) { json(res, 400, { error: "content or base64 required" }); return true; }
+      await writeFile(join(refs_dir, filename), content, "utf-8");
+    }
+
     const result = await store.sync();
     json(res, 200, { ok: true, filename, sync: result });
     return true;

@@ -47,6 +47,7 @@ export class ContextBuilder {
   private readonly workspace: string;
   private _oauth_summary_provider: OAuthSummaryProvider | null = null;
   private _reference_store: ReferenceStoreLike | null = null;
+  private _skill_ref_store: ReferenceStoreLike | null = null;
   private _daily_injection_days = 1;
   private _daily_injection_max_chars = 4_000;
 
@@ -60,6 +61,10 @@ export class ContextBuilder {
 
   set_reference_store(store: ReferenceStoreLike): void {
     this._reference_store = store;
+  }
+
+  set_skill_ref_store(store: ReferenceStoreLike): void {
+    this._skill_ref_store = store;
   }
 
   /** SOUL.md에서 페르소나 이름을 추출. 미설정 시 "assistant". */
@@ -209,6 +214,11 @@ export class ContextBuilder {
     if (ref_context) {
       messages.push({ role: "system", content: ref_context });
     }
+    // 스킬 레퍼런스 컨텍스트 주입 (활성 스킬의 references/ 청크 검색)
+    const skill_ref_context = await this._build_skill_reference_context(current_message, skill_names || []);
+    if (skill_ref_context) {
+      messages.push({ role: "system", content: skill_ref_context });
+    }
 
     const user_content = this._build_user_content(current_message, media || []);
     messages.push({
@@ -263,6 +273,22 @@ export class ContextBuilder {
         `### ${r.doc_path}${r.heading ? ` — ${r.heading}` : ""}\n${r.content}`,
       );
       return `# Reference Documents\nsource: workspace/references/\nRelevance-ranked excerpts from project reference documents.\n\n${sections.join("\n\n---\n\n")}`;
+    } catch {
+      return "";
+    }
+  }
+
+  private async _build_skill_reference_context(user_message: string, skill_names: string[]): Promise<string> {
+    if (!this._skill_ref_store) return "";
+    try {
+      await this._skill_ref_store.sync();
+      const filter = skill_names.length > 0 ? skill_names.join("|") : undefined;
+      const results = await this._skill_ref_store.search(user_message, { limit: 4, doc_filter: filter });
+      if (results.length === 0) return "";
+      const sections = results.map((r) =>
+        `### ${r.doc_path}${r.heading ? ` — ${r.heading}` : ""}\n${r.content}`,
+      );
+      return `# Skill Reference Docs\nsource: skills/references/\nRelevance-ranked excerpts from skill reference files.\n\n${sections.join("\n\n---\n\n")}`;
     } catch {
       return "";
     }

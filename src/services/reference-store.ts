@@ -7,11 +7,13 @@
  */
 
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { join, extname } from "node:path";
 import Database from "better-sqlite3";
 import * as sqliteVec from "sqlite-vec";
 import type { EmbedFn } from "../agent/memory.service.js";
+import { extract_doc_text, BINARY_DOC_EXTENSIONS } from "../utils/doc-extractor.js";
 
 const VEC_DIMENSIONS = 256;
 const MAX_EMBED_CHARS = 1500;
@@ -19,8 +21,10 @@ const CHUNK_SIZE = 1200;
 const SYNC_DEBOUNCE_MS = 60_000;
 const MAX_SEARCH_RESULTS = 8;
 
-/** 지원 확장자. */
-const SUPPORTED_EXTENSIONS = new Set([".md", ".txt", ".json", ".yaml", ".yml", ".csv", ".xml", ".html", ".log", ".ts", ".js", ".py", ".sh", ".sql", ".toml", ".ini", ".cfg", ".env.example"]);
+/** 텍스트 파일 확장자. */
+const TEXT_EXTENSIONS = new Set([".md", ".txt", ".json", ".yaml", ".yml", ".csv", ".xml", ".html", ".log", ".ts", ".js", ".py", ".sh", ".sql", ".toml", ".ini", ".cfg", ".env.example"]);
+/** 전체 지원 확장자 (텍스트 + 바이너리 문서). */
+const SUPPORTED_EXTENSIONS = new Set([...TEXT_EXTENSIONS, ...BINARY_DOC_EXTENSIONS]);
 
 export interface ReferenceChunk {
   chunk_id: string;
@@ -144,15 +148,24 @@ export class ReferenceStore implements ReferenceStoreLike {
       const to_embed: { chunk_id: string; text: string }[] = [];
 
       for (const file of fs_files) {
-        const content = readFileSync(file.abs_path, "utf-8");
-        const hash = sha256_short(content);
+        const ext = extname(file.abs_path).toLowerCase();
+        const is_binary = BINARY_DOC_EXTENSIONS.has(ext);
+
+        // 해시: 바이너리는 raw buffer, 텍스트는 utf-8 문자열 기반
+        const raw_buf = await readFile(file.abs_path);
+        const hash = sha256_short(raw_buf.toString("binary"));
 
         if (db_map.get(file.rel_path) === hash) continue; // 변경 없음
 
         const is_new = !db_map.has(file.rel_path);
         if (!is_new) this.remove_document(db, file.rel_path); // 기존 제거 후 재삽입
 
-        const chunks = this.chunk_text(content, file.rel_path);
+        // 텍스트 추출 (바이너리는 doc-extractor, 텍스트는 직접 디코딩)
+        const text_content = is_binary
+          ? await extract_doc_text(raw_buf, ext)
+          : raw_buf.toString("utf-8");
+
+        const chunks = this.chunk_text(text_content, file.rel_path);
         const file_size = statSync(file.abs_path).size;
         const ts = new Date().toISOString();
 

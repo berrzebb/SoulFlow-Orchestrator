@@ -16,6 +16,7 @@ import { KanbanAutomationRuntime } from "../services/kanban-automation-runtime.j
 import { PhaseWorkflowStore } from "../agent/phase-workflow-store.js";
 import { ToolIndex } from "../orchestration/tool-index.js";
 import { ReferenceStore } from "../services/reference-store.js";
+import { SkillRefStore } from "../services/skill-ref-store.js";
 import { SessionStore } from "../session/index.js";
 import { MemoryConsolidationService } from "../agent/memory-consolidation.service.js";
 import { PersonaMessageRenderer, TonePreferenceStore } from "../channels/persona-message-renderer.js";
@@ -64,6 +65,7 @@ export interface AgentCoreResult {
   kanban_automation: KanbanAutomationRuntime;
   tool_index: ToolIndex;
   reference_store: ReferenceStore;
+  skill_ref_store: SkillRefStore;
   sessions: SessionStore;
   memory_consolidation: MemoryConsolidationService;
 }
@@ -170,6 +172,14 @@ export async function create_agent_core(deps: AgentCoreDeps): Promise<AgentCoreR
   if (embed_service) reference_store.set_embed(embed_service);
   agent.context.set_reference_store(reference_store);
 
+  // 스킬 레퍼런스 RAG: src/skills, workspace/skills 하위 references/*.md 인덱싱
+  const skill_ref_store = new SkillRefStore(
+    [join(app_root, "src", "skills"), join(workspace, "skills")],
+    join(workspace, "runtime", "references"),
+  );
+  if (embed_service) skill_ref_store.set_embed(embed_service);
+  agent.context.set_skill_ref_store(skill_ref_store);
+
   const sessions = new SessionStore(workspace, sessions_dir);
 
   events.bind_task_store(agent.task_store);
@@ -191,6 +201,6 @@ export async function create_agent_core(deps: AgentCoreDeps): Promise<AgentCoreR
     agent, agent_runtime, agent_inspector,
     persona_renderer, tone_pref_store,
     phase_workflow_store, kanban_store, kanban_tool, kanban_automation,
-    tool_index, reference_store, sessions, memory_consolidation,
+    tool_index, reference_store, skill_ref_store, sessions, memory_consolidation,
   };
 }
