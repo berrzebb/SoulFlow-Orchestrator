@@ -232,6 +232,142 @@ describe("DocumentTool", () => {
     });
   });
 
+  describe("create_xlsx", () => {
+    it("creates XLSX from CSV content", async () => {
+      const tool = new DocumentTool({ workspace: tmpdir });
+      const result = await tool.execute({
+        action: "create_xlsx",
+        content: "Name,Age\nAlice,30\nBob,25",
+        output: "data.xlsx",
+      });
+
+      const parsed = JSON.parse(result);
+      expect(parsed.success).toBe(true);
+      expect(parsed.output).toBe("data.xlsx");
+      expect(parsed.size_bytes).toBeGreaterThan(0);
+      expect(existsSync(resolve(tmpdir, "data.xlsx"))).toBe(true);
+    });
+
+    it("creates XLSX from markdown table", async () => {
+      const tool = new DocumentTool({ workspace: tmpdir });
+      const result = await tool.execute({
+        action: "create_xlsx",
+        content: "| Name | Age |\n|------|-----|\n| Alice | 30 |",
+        output: "table.xlsx",
+      });
+
+      const parsed = JSON.parse(result);
+      expect(parsed.success).toBe(true);
+      expect(existsSync(resolve(tmpdir, "table.xlsx"))).toBe(true);
+    });
+
+    it("requires content parameter", async () => {
+      const tool = new DocumentTool({ workspace: tmpdir });
+      const result = await tool.execute({
+        action: "create_xlsx",
+        output: "test.xlsx",
+      });
+
+      expect(result).toContain("Error: content is required");
+    });
+
+    it("requires output parameter", async () => {
+      const tool = new DocumentTool({ workspace: tmpdir });
+      const result = await tool.execute({
+        action: "create_xlsx",
+        content: "Name,Age\nAlice,30",
+      });
+
+      expect(result).toContain("Error: output filename is required");
+    });
+
+    it("blocks path traversal attacks", async () => {
+      const tool = new DocumentTool({ workspace: tmpdir });
+      const result = await tool.execute({
+        action: "create_xlsx",
+        content: "Name,Age\nAlice,30",
+        output: "../../../../etc/passwd.xlsx",
+      });
+
+      expect(result).toContain("Error: path traversal blocked");
+    });
+  });
+
+  describe("create_pptx", () => {
+    it("creates PPTX from markdown", async () => {
+      const tool = new DocumentTool({ workspace: tmpdir });
+      const result = await tool.execute({
+        action: "create_pptx",
+        content: "# First Slide\nContent here",
+        output: "presentation.pptx",
+      });
+
+      const parsed = JSON.parse(result);
+      expect(parsed.success).toBe(true);
+      expect(parsed.output).toBe("presentation.pptx");
+      expect(parsed.size_bytes).toBeGreaterThan(0);
+      expect(existsSync(resolve(tmpdir, "presentation.pptx"))).toBe(true);
+    });
+
+    it("creates PPTX with multiple slides", async () => {
+      const tool = new DocumentTool({ workspace: tmpdir });
+      const result = await tool.execute({
+        action: "create_pptx",
+        content: "# Slide 1\nContent 1\n---\n# Slide 2\nContent 2",
+        output: "multi.pptx",
+      });
+
+      const parsed = JSON.parse(result);
+      expect(parsed.success).toBe(true);
+      expect(existsSync(resolve(tmpdir, "multi.pptx"))).toBe(true);
+    });
+
+    it("creates PPTX with custom slide format", async () => {
+      const tool = new DocumentTool({ workspace: tmpdir });
+      const result = await tool.execute({
+        action: "create_pptx",
+        content: "# Title\nContent",
+        output: "custom.pptx",
+        slide_format: "4:3",
+      });
+
+      const parsed = JSON.parse(result);
+      expect(parsed.success).toBe(true);
+      expect(existsSync(resolve(tmpdir, "custom.pptx"))).toBe(true);
+    });
+
+    it("requires content parameter", async () => {
+      const tool = new DocumentTool({ workspace: tmpdir });
+      const result = await tool.execute({
+        action: "create_pptx",
+        output: "test.pptx",
+      });
+
+      expect(result).toContain("Error: content is required");
+    });
+
+    it("requires output parameter", async () => {
+      const tool = new DocumentTool({ workspace: tmpdir });
+      const result = await tool.execute({
+        action: "create_pptx",
+        content: "# Title",
+      });
+
+      expect(result).toContain("Error: output filename is required");
+    });
+
+    it("blocks path traversal attacks", async () => {
+      const tool = new DocumentTool({ workspace: tmpdir });
+      const result = await tool.execute({
+        action: "create_pptx",
+        content: "# Title",
+        output: "../../sensitive/pres.pptx",
+      });
+
+      expect(result).toContain("Error: path traversal blocked");
+    });
+  });
+
   describe("error handling", () => {
     it("returns error for unknown action", async () => {
       const tool = new DocumentTool({ workspace: tmpdir });

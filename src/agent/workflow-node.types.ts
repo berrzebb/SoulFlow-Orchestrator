@@ -1613,6 +1613,40 @@ export interface CircuitBreakerNodeDefinition extends NodeBase {
   half_open_max?: number;
 }
 
+export interface DocumentPdfNodeDefinition extends NodeBase {
+  node_type: "document_pdf";
+  content?: string;
+  input_format?: string;
+  output?: string;
+}
+
+export interface DocumentDocxNodeDefinition extends NodeBase {
+  node_type: "document_docx";
+  content?: string;
+  input_format?: string;
+  output?: string;
+}
+
+export interface DocumentXlsxNodeDefinition extends NodeBase {
+  node_type: "document_xlsx";
+  content?: string;
+  output?: string;
+  delimiter?: string;
+}
+
+export interface DocumentPptxNodeDefinition extends NodeBase {
+  node_type: "document_pptx";
+  content?: string;
+  output?: string;
+  slide_format?: string;
+}
+
+export interface DocumentConvertNodeDefinition extends NodeBase {
+  node_type: "document_convert";
+  input?: string;
+  to?: string;
+}
+
 // ── Union Types ─────────────────────────────────────
 
 export type OrcheNodeType = "http" | "code" | "if" | "merge" | "set" | "split"
@@ -1639,6 +1673,11 @@ export type OrcheNodeType = "http" | "code" | "if" | "merge" | "set" | "split"
   | "cookie" | "password" | "changelog" | "matrix" | "state_machine"
   | "code_diagram"
   | "graph" | "tokenizer" | "similarity" | "data_mask" | "circuit_breaker"
+  | "document_pdf"
+  | "document_docx"
+  | "document_xlsx"
+  | "document_pptx"
+  | "document_convert"
   | "end";
 
 export type OrcheNodeDefinition =
@@ -1761,6 +1800,11 @@ export type OrcheNodeDefinition =
   | SimilarityNodeDefinition
   | DataMaskNodeDefinition
   | CircuitBreakerNodeDefinition
+  | DocumentPdfNodeDefinition
+  | DocumentDocxNodeDefinition
+  | DocumentXlsxNodeDefinition
+  | DocumentPptxNodeDefinition
+  | DocumentConvertNodeDefinition
   | EndNodeDefinition;
 
 export type WorkflowNodeDefinition = PhaseNodeDefinition | OrcheNodeDefinition | TriggerNodeDefinition;

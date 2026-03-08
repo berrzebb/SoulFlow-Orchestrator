@@ -88,6 +88,11 @@ import { diagram_descriptor } from "./diagram";
 import { memory_rw_descriptor } from "./memory-rw";
 import { secret_read_descriptor } from "./secret-read";
 import { kanban_trigger_descriptor } from "./kanban-trigger";
+import { document_pdf_descriptor } from "./document-pdf";
+import { document_docx_descriptor } from "./document-docx";
+import { document_xlsx_descriptor } from "./document-xlsx";
+import { document_pptx_descriptor } from "./document-pptx";
+import { document_convert_descriptor } from "./document-convert";
 
 const ALL_DESCRIPTORS = [
   http_descriptor,
@@ -177,6 +182,11 @@ const ALL_DESCRIPTORS = [
   memory_rw_descriptor,
   secret_read_descriptor,
   kanban_trigger_descriptor,
+  document_pdf_descriptor,
+  document_docx_descriptor,
+  document_xlsx_descriptor,
+  document_pptx_descriptor,
+  document_convert_descriptor,
 ];
 
 let registered = false;
