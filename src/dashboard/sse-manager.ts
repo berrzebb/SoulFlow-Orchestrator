@@ -70,6 +70,12 @@ export class SseManager implements SseBroadcasterLike {
     this._broadcast(`event: web_stream\ndata: ${JSON.stringify({ chat_id, content, done })}\n\n`);
   }
 
+  /** 어시스턴트 메시지가 세션에 저장된 직후 발송. */
+  broadcast_web_message(chat_id: string): void {
+    if (this.clients.size === 0) return;
+    this._broadcast(`event: web_message\ndata: ${JSON.stringify({ chat_id })}\n\n`);
+  }
+
   broadcast_mirror_message(event: { session_key: string; direction: string; sender_id: string; content: string; at: string }): void {
     if (this.clients.size === 0) return;
     this._broadcast(`event: mirror_message\ndata: ${JSON.stringify(event)}\n\n`);

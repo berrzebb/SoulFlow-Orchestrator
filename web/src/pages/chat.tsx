@@ -54,7 +54,7 @@ export default function ChatPage() {
     queryKey: ["chat-session", activeId],
     queryFn: () => api.get<ChatSession>(`/api/chat/sessions/${encodeURIComponent(activeId!)}`),
     enabled: !!activeId && !is_mirror,
-    refetchInterval: 15_000,
+    // web_message SSE 이벤트로 실시간 refetch — 폴링 불필요
     staleTime: 5_000,
     refetchOnWindowFocus: false,
   });

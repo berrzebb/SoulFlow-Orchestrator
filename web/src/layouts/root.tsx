@@ -55,10 +55,14 @@ export function RootLayout() {
         if (d.done) {
           const prev = useDashboardStore.getState().web_stream;
           if (prev) set_web_stream({ ...prev, done: true });
-          void qc.invalidateQueries({ queryKey: ["chat-session"] });
+          // web_message 이벤트가 메시지 저장 후 정확한 시점에 invalidate하므로 여기선 생략
           return;
         }
         if (d.chat_id) set_web_stream({ chat_id: d.chat_id, content: d.content ?? "" });
+      },
+      web_message: (data: unknown) => {
+        const d = data as { chat_id?: string };
+        if (d.chat_id) void qc.invalidateQueries({ queryKey: ["chat-session", d.chat_id] });
       },
       mirror_message: (data: unknown) => {
         const d = data as { session_key?: string; direction?: string; sender_id?: string; content?: string; at?: string };

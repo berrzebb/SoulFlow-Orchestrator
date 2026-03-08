@@ -155,6 +155,8 @@ export function create_dashboard_bundle(deps: DashboardBundleDeps): DashboardBun
     if (dir === "outbound" && msg.provider === "web" && msg.chat_id) {
       const media = msg.media?.map((m) => ({ type: m.type as string, url: m.url, mime: m.mime, name: m.name }));
       dash.capture_web_outbound(msg.chat_id, msg.content, media);
+      // 메시지 저장 후 SSE 발송 → 폴링 없이 프론트엔드 즉시 refetch
+      broadcaster.broadcast_web_message(msg.chat_id);
     }
   });
 

@@ -21,6 +21,8 @@ export interface SseBroadcasterLike {
   broadcast_progress_event(event: ProgressEvent): void;
   broadcast_task_event(type: "status_change", task: TaskState): void;
   broadcast_web_stream(chat_id: string, content: string, done: boolean): void;
+  /** 어시스턴트 메시지가 세션에 저장된 직후 발송 — 프론트엔드가 폴링 없이 즉시 refetch. */
+  broadcast_web_message(chat_id: string): void;
   broadcast_mirror_message(event: MirrorMessageEvent): void;
   broadcast_workflow_event(event: PhaseLoopEvent): void;
   broadcast_agent_event(event: AgentEvent): void;
@@ -34,6 +36,7 @@ export const NULL_BROADCASTER: SseBroadcasterLike = {
   broadcast_progress_event() {},
   broadcast_task_event() {},
   broadcast_web_stream() {},
+  broadcast_web_message() {},
   broadcast_mirror_message() {},
   broadcast_workflow_event() {},
   broadcast_agent_event() {},
@@ -55,6 +58,7 @@ export class MutableBroadcaster implements SseBroadcasterLike {
   broadcast_progress_event(...args: Parameters<SseBroadcasterLike["broadcast_progress_event"]>): void { this.target.broadcast_progress_event(...args); }
   broadcast_task_event(...args: Parameters<SseBroadcasterLike["broadcast_task_event"]>): void { this.target.broadcast_task_event(...args); }
   broadcast_web_stream(...args: Parameters<SseBroadcasterLike["broadcast_web_stream"]>): void { this.target.broadcast_web_stream(...args); }
+  broadcast_web_message(...args: Parameters<SseBroadcasterLike["broadcast_web_message"]>): void { this.target.broadcast_web_message(...args); }
   broadcast_mirror_message(...args: Parameters<SseBroadcasterLike["broadcast_mirror_message"]>): void { this.target.broadcast_mirror_message(...args); }
   broadcast_workflow_event(...args: Parameters<SseBroadcasterLike["broadcast_workflow_event"]>): void { this.target.broadcast_workflow_event(...args); }
   broadcast_agent_event(...args: Parameters<SseBroadcasterLike["broadcast_agent_event"]>): void { this.target.broadcast_agent_event(...args); }
