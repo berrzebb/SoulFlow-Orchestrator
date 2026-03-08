@@ -5,87 +5,186 @@
 | Item | Condition |
 |------|-----------|
 | Docker or Podman | Container runtime (recommended) |
-| Channel Bot Token | At least one of Slack · Telegram · Discord |
 | AI Provider API Key | Claude, OpenAI, OpenRouter, etc. |
+| (Optional) Channel Bot Token | Slack · Telegram · Discord — Web chat available without any token |
 | (Optional) GPU | For local Ollama orchestrator LLM classifier |
 
-## Docker (Recommended)
+---
 
-The recommended way to run SoulFlow is via Docker Compose. The `full` image includes Claude Code, Codex CLI, and Gemini CLI pre-installed.
+## Quick Start (5 minutes)
 
-### Production
-
-```bash
-docker compose up -d
-```
-
-This starts 2 services by default:
-- **orchestrator** — SoulFlow runtime + dashboard (port 4200)
-- **docker-proxy** — Secure Docker socket proxy for container agent isolation
-
-Optional profiles enable additional services:
+### Step 1: Clone the repository
 
 ```bash
-# With GPU-accelerated local LLM classifier
-docker compose --profile gpu up -d
-
-# With Redis message bus (multi-instance deployment)
-docker compose --profile redis up -d
+git clone https://github.com/berrzebb/SoulFlow-Orchestrator.git
+cd SoulFlow-Orchestrator
 ```
 
-### Development (Live Reload)
+### Step 2: Start the environment
+
+SoulFlow provides platform-specific run scripts:
+
+**Linux/macOS:**
+```bash
+chmod +x run.sh
+./run.sh prod --workspace=/path/to/your/workspace
+```
+
+**Windows (PowerShell):**
+```powershell
+.\run.ps1 prod --workspace=D:\your\workspace
+```
+
+**Windows (CMD):**
+```cmd
+run.cmd prod --workspace=D:\your\workspace
+```
+
+> `--workspace` is the path to a **persistent directory** where config files, runtime DBs, and skills are stored.
+> If the path does not exist, it is created automatically.
+
+### Step 3: Complete Setup Wizard in browser
+
+```
+http://localhost:4200
+```
+
+If no provider is configured, the dashboard automatically redirects to the **Setup Wizard** (`/setup`):
+
+1. **AI Provider** — Enter Claude/OpenAI/OpenRouter API key
+2. **Channels** — Enter Slack/Telegram/Discord Bot Token *(optional — Web chat works without any token)*
+3. **Agent Settings** — Select default role and backend
+
+All configuration is handled through the Wizard — no `.env` file needed.
+
+### Step 4: Verify it works
+
+Type the following in any chat channel:
+
+```
+/status   → View tool and skill list
+/doctor   → Run self-diagnosis
+```
+
+---
+
+## run.sh / run.ps1 / run.cmd Reference
+
+### Commands
+
+| Command | Description |
+|---------|-------------|
+| `dev` | Development environment (source mount + hot reload, port 4200) |
+| `test` | Test environment (port 4201) |
+| `staging` | Staging environment (port 4202) |
+| `prod` | Production environment (`full` image, port 4200) |
+| `build` | Build Docker image only |
+| `down` | Stop all environments |
+| `status` | Check running environment status |
+| `logs [env]` | Stream logs (`logs prod`) |
+| `login <agent>` | Agent CLI login (`login claude`) |
+
+### Options
+
+| Option | Description |
+|--------|-------------|
+| `--workspace=PATH` | Workspace path **(required)** |
+| `--web-port=PORT` | Override dashboard port |
+| `--instance=NAME` | Instance name (multi-instance scaling) |
+| `--watch` | Full source mount + hot reload (tsx watch) |
+| `--watch=web` | Web source only + Vite --watch |
+
+### Environment Presets
+
+| Environment | Image | NODE_ENV | Memory | CPU |
+|-------------|-------|----------|--------|-----|
+| `dev` | dev | development | 1G | 2 |
+| `test` | production | test | 1G | 2 |
+| `staging` | production | production | 1G | 2 |
+| `prod` | full (with CLI agents) | production | 2G | 4 |
+
+### Agent Login
+
+CLI agents (Claude Code, Codex, Gemini) use workspace-specific credentials.
+Run once during initial setup — credentials are persisted to `{workspace}/.agents/`.
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+# Linux/macOS
+./run.sh login claude --workspace=/path/to/workspace
+./run.sh login codex  --workspace=/path/to/workspace
+./run.sh login gemini --workspace=/path/to/workspace
+
+# Windows
+.\run.ps1 login claude --workspace=D:\workspace
 ```
 
-Source files are mounted via volume — code changes are reflected automatically.
+### Multi-Instance Scaling
+
+Multiple instances can run simultaneously against the same workspace.
+When `--instance` is specified, shared infrastructure (Redis, docker-proxy) is started first automatically.
+
+```bash
+./run.sh prod --workspace=/path/to/workspace --instance=worker1 --web-port=4200
+./run.sh prod --workspace=/path/to/workspace --instance=worker2 --web-port=4201
+```
+
+---
+
+## Docker Compose Direct Usage (Advanced)
+
+To use `docker compose` directly without the run scripts:
+
+```bash
+# Basic run
+HOST_WORKSPACE=/path/to/workspace docker compose -f docker/docker-compose.yml up -d
+
+# GPU profile (Ollama LLM classifier)
+docker compose -f docker/docker-compose.yml --profile gpu up -d
+
+# Redis message bus (multi-instance)
+docker compose -f docker/docker-compose.yml --profile redis up -d
+```
 
 ### Environment Variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `DASHBOARD_PORT` | `4200` | Dashboard port mapping |
-| `WORKSPACE_PATH` | `./workspace2` | Host path for persistent workspace data |
-| `BUS_BACKEND` | `memory` | Message bus backend (`memory` or `redis`) |
-| `BUS_REDIS_URL` | `redis://redis:6379` | Redis connection URL (when `BUS_BACKEND=redis`) |
+| `HOST_WORKSPACE` | — | Workspace host path **(required)** |
+| `WEB_PORT` | `4200` | Dashboard port |
+| `BUILD_TARGET` | `production` | Dockerfile build stage |
+| `NODE_ENV` | `production` | Node.js environment |
+| `BUS_BACKEND` | `memory` | Message bus (`memory` or `redis`) |
+| `BUS_REDIS_URL` | `redis://redis:6379` | Redis connection URL |
 
 ### Container Architecture
 
 ```
-docker-compose.yml
-  ├─ docker-proxy     ← Secure Docker socket proxy (POST-only, containers-only)
-  ├─ ollama           ← Orchestrator LLM [profile: gpu] (GPU passthrough, 6GB memory limit)
-  ├─ redis            ← Redis message bus [profile: redis] (256MB, AOF persistence)
-  └─ orchestrator     ← SoulFlow runtime (full image with CLI agents)
-       ├─ /data       ← Workspace volume (config, runtime DBs, skills)
-       ├─ cli-auth-*  ← CLI OAuth token persistence (Claude, Codex, Gemini)
-       └─ port 4200   ← Dashboard + API
+docker/docker-compose.yml
+  ├─ docker-proxy     ← Secure Docker socket proxy (POST-only)
+  ├─ ollama           ← Orchestrator LLM [profile: gpu]
+  ├─ redis            ← Message bus [profile: redis] (256MB, AOF)
+  └─ orchestrator     ← SoulFlow runtime
+       ├─ /data       ← Workspace volume (config, DBs, skills)
+       ├─ /agents     ← CLI agent auth tokens (Claude, Codex, Gemini)
+       └─ :4200       ← Dashboard + API
 ```
 
 ### Dockerfile Stages
 
 | Stage | Purpose |
 |-------|---------|
-| `deps` | Install Node.js dependencies + native builds (better-sqlite3) |
-| `build` | Compile TypeScript + Vite frontend build |
+| `deps` | Node.js dependencies + native builds (better-sqlite3) |
+| `build` | TypeScript compile + Vite frontend build |
 | `production` | Minimal runtime image (node:22-slim + python3 + tini) |
-| `full` | Production + Claude Code, Codex CLI, Gemini CLI pre-installed |
-| `dev` | Development image with devDependencies + watch mode |
+| `full` | Production + Claude Code, Codex CLI, Gemini CLI |
+| `dev` | devDependencies included + watch mode |
 
 ---
 
-## Local (Not Recommended)
+## Local Run (Not Recommended)
 
-> Local installation is not recommended. Container deployment provides CLI agent isolation, consistent environments, and simpler setup. Use local only for development or when containers are unavailable.
-
-### Requirements
-
-| Item | Version |
-|------|---------|
-| Node.js | 20 or above |
-
-### Install & Run
+> Container deployment provides CLI agent isolation, consistent environments, and simpler setup.
+> Use local only when containers are unavailable.
 
 ```bash
 cd next
@@ -94,33 +193,12 @@ npm install
 # Development (hot reload)
 npm run dev
 
-# Production
+# Production build
 npm run build
-cd workspace && node ../dist/main.js
+node dist/main.js
 ```
 
 ---
-
-## Initial Setup via Setup Wizard
-
-On first launch, if no provider is configured, the dashboard automatically redirects to the **Setup Wizard** (`/setup`).
-
-```
-http://127.0.0.1:4200
-```
-
-The wizard guides you through:
-1. **AI Provider** — Enter Claude/Codex API key
-2. **Channels** — Enter Slack/Telegram/Discord Bot Token
-3. **Agent Settings** — Select default role and backend
-
-All configuration is handled through the Wizard — no `.env` file needed.
-
-## Verify It Works
-
-1. **Open dashboard** — `http://127.0.0.1:4200`
-2. **Test in channel** — type `/status` in chat
-3. **Self-diagnosis** — type `/doctor` and review any issues
 
 ## Channel Bot Setup
 
@@ -145,16 +223,19 @@ All configuration is handled through the Wizard — no `.env` file needed.
 3. Invite bot via OAuth2 URL (permissions: `Send Messages`, `Read Message History`)
 4. Enter token in the dashboard **Setup Wizard** or **Channels** page
 
+---
+
 ## Troubleshooting
 
 | Symptom | Check |
 |---------|-------|
+| `--workspace parameter is required` | Add `--workspace=PATH` to run script |
 | `another instance is active` | Stop other process using the same token |
 | No response | Verify token/chat ID, run `/doctor` |
-| Dashboard unreachable | Check `DASHBOARD_PORT`, or stop the conflicting process |
+| Dashboard unreachable | Check `--web-port` or stop conflicting process |
 | SDK backend fails | Check log for `backend_fallback` (auto-fallback to CLI) |
-| Container won't start | Verify Docker/Podman daemon is running, check `docker compose logs` |
-| Ollama not responding | Check GPU availability, run `docker compose logs ollama` |
+| Container won't start | Verify Docker/Podman daemon is running, check `run.sh logs` |
+| Agent login fails | Re-run `./run.sh login claude --workspace=...` |
 
 ## Next Steps
 

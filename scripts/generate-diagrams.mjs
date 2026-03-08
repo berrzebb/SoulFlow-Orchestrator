@@ -22,18 +22,18 @@ const diagrams = [
   {
     name: "service-architecture",
     code: `flowchart TD
-  subgraph Runtime["RuntimeApp"]
+  subgraph Runtime["RuntimeApp (bootstrap/ 15모듈)"]
     SM["ServiceManager"]
 
     subgraph Core["Core Services"]
-      AD["AgentDomain<br/>tools · skills · memory · tasks"]
-      CM["ChannelManager<br/>polling · routing · streaming"]
-      DS["DispatchService<br/>retry · DLQ · dedup · rate-limit"]
-      OS["OrchestrationService<br/>once · agent · task · phase modes"]
+      AD["AgentDomain\nToolIndex · SkillIndex · memory · tasks"]
+      CM["ChannelManager\npolling · routing · streaming · LaneQueue"]
+      DS["DispatchService\nretry · DLQ · dedup · rate-limit"]
+      OS["OrchestrationService\nonce · agent · task · phase"]
     end
 
-    subgraph Backends["Agent Backends"]
-      ABR["AgentBackendRegistry<br/>circuit breaker · fallback"]
+    subgraph Backends["Agent Backends (CircuitBreaker)"]
+      ABR["AgentBackendRegistry\ncircuit breaker · HealthScorer · fallback"]
       SDK_C["claude_sdk"]
       CLI_C["claude_cli"]
       SDK_X["codex_appserver"]
@@ -46,102 +46,100 @@ const diagrams = [
     subgraph Infra["Infrastructure"]
       CS["CronService"]
       HS["HeartbeatService"]
-      OPS["OpsRuntimeService"]
-      DB["DashboardService<br/>API · SSE · inline assets"]
+      OPS["OpsRuntimeService\n(ops/ 13모듈)"]
+      DB["DashboardService\nAPI · SSE · Web 채팅 · i18n"]
       MCP["McpClientManager"]
     end
 
-    BUS(["MessageBus<br/>inbound ↔ outbound"])
+    BUS(["MessageBus\ninbound ↔ outbound ↔ progress"])
   end
 
-  subgraph Channels["Channel Adapters"]
-    SL["Slack<br/>@slack/web-api"]
+  subgraph Channels["Channel Adapters (선택)"]
+    SL["Slack"]
     TG["Telegram"]
     DC["Discord"]
   end
 
-  subgraph Providers["API Providers"]
-    OR["OpenRouter"]
-    OLLM["Orchestrator LLM<br/>Ollama runtime"]
+  subgraph Providers["LLM Providers"]
+    OR["OrchestratorLLM\nOllama / OpenRouter"]
   end
 
   SM --> Core & Infra
   ABR --> SDK_C & CLI_C & SDK_X & CLI_X & CLI_G & OAI & CTR
 
   SL & TG & DC <-->|read/send| CM
+  DB <-->|SSE 채팅| CM
   CM -->|publish_inbound| BUS
   BUS -->|consume_inbound| CM
   CM -->|execute| OS
   OS -->|run| ABR
-  OS -->|classify| OLLM
-  OS -->|chat| OR
+  OS -->|classify| OR
   OS -->|tool calls| AD
   CM -->|send reply| DS
-  DS -->|deliver| SL & TG & DC
-  BUS -->|consume_outbound| DS`,
+  DS -->|deliver| SL & TG & DC`,
   },
   {
     name: "inbound-pipeline",
     code: `flowchart LR
-  CH["Channel<br/>read()"]
-  DD{"Dedup<br/>seen?"}
-  PUB["Bus<br/>publish_inbound"]
-  CON["Bus<br/>consume_inbound"]
-  CMD{"CommandRouter<br/>16 slash commands"}
-  APR["ApprovalService<br/>pending check"]
-  SEAL["Sensitive Seal<br/>inbound-seal.ts"]
-  MEDIA["MediaCollector<br/>file download"]
-  ORCH["OrchestrationService"]
-  BACK["AgentBackend<br/>cli / sdk"]
-  TOOL["Tool Execution<br/>+ secret resolve"]
-  REC["SessionRecorder<br/>history save"]
+  CH["채널 read()"]
+  DD{"중복 체크\nDedup"}
+  BUS["MessageBus\npublish_inbound"]
+  CMD{"CommandRouter\n슬래시 커맨드\n+ 퍼지 매칭"}
+  GUARD["ConfirmationGuard\n위험 작업 확인"]
+  APR["ApprovalService\n승인 대기 확인"]
+  SEAL["Sensitive Seal\nAES-256-GCM"]
+  MEDIA["MediaCollector\n파일 다운로드"]
+  ORCH["OrchestrationService\nonce · agent · task · phase"]
+  BACK["AgentBackend\ncli / sdk"]
+  TOOL["도구 실행\n+ 시크릿 복호화"]
+  REC["SessionRecorder\n히스토리 저장"]
   DISP["DispatchService"]
-  OUT["Channel<br/>send()"]
+  OUT["채널 send()"]
 
   CH --> DD
-  DD -->|new| PUB --> CON
-  DD -->|dup| X["skip"]
-  CON --> CMD
-  CMD -->|slash cmd| DISP
-  CMD -->|message| APR
-  APR -->|approval text| DISP
-  APR -->|normal| SEAL --> MEDIA --> ORCH
-  ORCH -->|once/agent/task/phase| BACK
+  DD -->|신규| BUS --> CMD
+  DD -->|중복| X["skip"]
+  CMD -->|슬래시 커맨드| DISP
+  CMD -->|메시지| GUARD
+  GUARD -->|위험 작업| APR
+  GUARD -->|일반| SEAL
+  APR -->|승인 완료| SEAL
+  APR -->|승인 대기| DISP
+  SEAL --> MEDIA --> ORCH
+  ORCH --> BACK
   BACK -->|tool_calls| TOOL
   TOOL -->|result| BACK
-  BACK -->|final| REC --> DISP --> OUT
+  BACK --> REC --> DISP --> OUT
 
   style X fill:#444,stroke:#666`,
   },
   {
     name: "provider-resilience",
     code: `flowchart TD
-  REQ["Orchestration<br/>execute request"]
-  REG["AgentBackendRegistry<br/>resolve backend"]
-  CB{"CircuitBreaker<br/>can_acquire?"}
-  HS["HealthScorer<br/>score / rank"]
+  REQ["Orchestration\nexecute request"]
+  REG["AgentBackendRegistry\nresolve backend"]
+  HS["HealthScorer\nscore / rank"]
+  CB{"CircuitBreaker\ncan_acquire?"}
   EXEC["Backend.run()"]
-  OK["record_success<br/>half_open→closed"]
-  FAIL["record_failure<br/>threshold→open"]
-  FB["Fallback Backend<br/>same family"]
+  OK["record_success\nhalf_open→closed"]
+  FAIL["record_failure\nthreshold→open"]
+  FB["Fallback Backend\nsame family"]
   RES["AgentRunResult"]
 
-  REQ --> REG
-  REG --> HS
+  REQ --> REG --> HS
   HS -->|"best score"| CB
   CB -->|"closed / half_open"| EXEC
   CB -->|"open"| FB
   EXEC -->|success| OK --> RES
-  EXEC -->|failure| FAIL
-  FAIL --> FB
+  EXEC -->|failure| FAIL --> FB
   FB -->|"has next"| HS
   FB -->|"exhausted"| ERR["Error Response"]
 
   subgraph States["Circuit States"]
     direction LR
-    CL["closed<br/>모든 요청 허용"]
-    OP["open<br/>요청 차단"]
-    HO["half_open<br/>제한적 허용"]
+    CL["closed\n모든 요청 허용"]
+    OP["open\n요청 차단"]
+    HO["half_open\n제한적 허용"]
     CL -->|"N회 실패"| OP
     OP -->|"timeout 경과"| HO
     HO -->|"성공"| CL
@@ -164,10 +162,10 @@ const diagrams = [
   REQ["Inbound Message"]
 
   subgraph Classify["Classification"]
-    CLS{"Complexity Scorer"}
+    CLS{"Complexity Scorer\n(CD Scoring)"}
   end
 
-  subgraph Once["once mode"]
+  subgraph Once["once mode\n간단한 단일 응답"]
     O_EXEC["Single LLM call"]
     O_TOOL{"tool_calls?"}
     O_RUN["Tool Execution"]
@@ -175,30 +173,30 @@ const diagrams = [
     O_DONE["Return reply"]
   end
 
-  subgraph Agent["agent mode"]
+  subgraph Agent["agent mode\n복잡한 에이전트 루프"]
     A_BACK["AgentBackend.run()"]
     A_NAT{"native_tool_loop?"}
-    A_SDK["SDK internal loop"]
-    A_CLI["CLI single turn"]
+    A_SDK["SDK internal loop\n(claude_sdk / codex_appserver)"]
+    A_CLI["CLI single turn\n(claude_cli / codex_cli / gemini_cli)"]
     A_TRUN["Tool Execution"]
     A_ITER{"max_turns?"}
     A_DONE["Return result"]
   end
 
-  subgraph Task["task mode"]
+  subgraph Task["task mode\n다단계 노드 실행"]
     T_PLAN["Build plan nodes"]
-    T_NODE["Execute node"]
+    T_NODE["Execute node\n(DAG 124종)"]
     T_GATE{"Phase Gate"}
     T_NEXT["Next node"]
     T_DONE["Task complete"]
   end
 
-  subgraph Phase["phase mode"]
-    PH_WF["Load workflow<br/>YAML / dynamic"]
+  subgraph Phase["phase mode\n병렬 에이전트 + Critic"]
+    PH_WF["Load workflow\nYAML / dynamic"]
     PH_SPAWN["Spawn parallel agents"]
-    PH_AGENT1["Agent 1"]
-    PH_AGENT2["Agent 2"]
-    PH_AGENT3["Agent N"]
+    PH_AGENT1["Agent 1\n독립 세션"]
+    PH_AGENT2["Agent 2\n독립 세션"]
+    PH_AGENT3["Agent N\n독립 세션"]
     PH_WAIT["Await all agents"]
     PH_CRITIC{"Critic review"}
     PH_NEXT["Next phase"]
@@ -243,49 +241,40 @@ const diagrams = [
     name: "sensitive-seal-flow",
     code: `flowchart LR
   IN["Inbound Message"]
-  DETECT["Detect Sensitive Patterns"]
-  SEAL["Seal AES-256-GCM"]
-  REF["Replace with secret ref"]
-  STORE["SecretVault store"]
-  AGENT["Agent receives sealed prompt"]
-  TOOL["Tool requests secret"]
-  DECRYPT["Vault decrypt JIT"]
-  EXEC["Execute with plaintext"]
-  RESP["Response redact"]
+  DETECT["Sensitive Pattern 감지\n(API 키 · 토큰 · 비밀번호)"]
+  SEAL["Seal AES-256-GCM\nSecretVault 저장"]
+  REF["secret ref 토큰으로 교체\ninbound.provider.cHash.type.vHash"]
+  AGENT["에이전트 수신\n(sealed prompt)"]
+  TOOL["도구가 secret ref 요청"]
+  DECRYPT["Vault JIT 복호화\n(도구 경로에서만)"]
+  EXEC["평문으로 실행"]
+  RESP["응답 redact\n(secret ref 재주입)"]
   OUT["Outbound Message"]
 
   IN --> DETECT
-  DETECT -->|found| SEAL --> REF --> STORE
-  DETECT -->|clean| AGENT
-  STORE --> AGENT
-  AGENT --> TOOL --> DECRYPT --> EXEC
-  EXEC --> RESP --> OUT
-
-  subgraph KeyFormat["Key Format"]
-    direction LR
-    K["inbound.provider.cHash.type.vHash"]
-  end
+  DETECT -->|민감 패턴 발견| SEAL --> REF --> AGENT
+  DETECT -->|클린| AGENT
+  AGENT --> TOOL --> DECRYPT --> EXEC --> RESP --> OUT
 
   style SEAL fill:#6a2d2d,stroke:#bf5a5a
-  style DECRYPT fill:#2d6a2d,stroke:#5abf5a
-  style STORE fill:#2d4a6a,stroke:#5a8abf`,
+  style DECRYPT fill:#2d6a2d,stroke:#5abf5a`,
   },
   {
     name: "role-delegation",
     code: `flowchart TD
-  USER["User Message"]
-  BTL["🏠 butler<br/>사용자 대면 · 비개발 처리"]
-  PM["📋 pm<br/>요구사항 분석 · 스펙 작성"]
-  PL["🔧 pl<br/>실행 조율 · Phase Gate"]
-  IMPL["⚡ implementer<br/>코드 구현 · 셀프 검증"]
-  REV["🔍 reviewer<br/>품질 · 보안 · 성능"]
-  VAL["✅ validator<br/>빌드 · 테스트 · lint"]
-  DBG["🐛 debugger<br/>RCA · 수정 제안"]
-  GEN["🔄 generalist<br/>범용 단일 작업"]
+  USER["사용자 메시지"]
+  CON["🏠 concierge\n사용자 대면 · 일상 처리 · 위임 조율"]
+  PM["📋 pm\n요구사항 분석 · 스펙 작성 · Kanban board"]
+  PL["🔧 pl\n실행 조율 · Phase Gate · Kanban cards"]
+  IMPL["⚡ implementer\n코드 구현 · 셀프 검증 · PR 작성"]
+  REV["🔍 reviewer\n품질 · 보안 · 성능 · 코드 리뷰"]
+  VAL["✅ validator\n빌드 · 테스트 · lint · 자동수정"]
+  DBG["🐛 debugger\nRCA · 재현 · 수정 제안"]
+  GEN["🔄 generalist\n범용 단일 작업"]
 
-  USER --> BTL
-  BTL -->|"기획 필요"| PM
-  BTL -->|"즉시 실행"| PL
+  USER --> CON
+  CON -->|"기획 필요"| PM
+  CON -->|"즉시 실행"| PL
   PM -->|"스펙 전달"| PL
   PL -->|"구현"| IMPL
   PL -->|"리뷰"| REV
@@ -296,7 +285,7 @@ const diagrams = [
   REV -->|"결과"| PL
   VAL -->|"결과"| PL
 
-  style BTL fill:#2d4a6a,stroke:#5a8abf
+  style CON fill:#2d4a6a,stroke:#5a8abf
   style PM fill:#4a2d6a,stroke:#8a5abf
   style PL fill:#2d6a4a,stroke:#5abf8a
   style IMPL fill:#6a5a2d,stroke:#bf9a5a
@@ -308,37 +297,36 @@ const diagrams = [
   {
     name: "container-architecture",
     code: `flowchart TD
-  subgraph Orchestrator["Orchestrator"]
-    GW["Gateway<br/>lightweight classifier"]
-    AB["AgentBus<br/>inter-agent comm · permission matrix"]
-    CP["ContainerPool<br/>lifecycle management"]
+  subgraph Orchestrator["Orchestrator (container_cli 백엔드)"]
+    CP["ContainerPool\nlifecycle: spawn · kill · reconcile"]
+    AB["AgentBus\nask_agent · permission matrix · max_depth=3"]
+    PTY["PtyTransport\nNDJSON wire protocol"]
   end
 
-  subgraph Containers["Docker / Podman"]
-    C1["🏠 butler container"]
-    C2["⚡ implementer container"]
-    C3["🔍 reviewer container"]
+  subgraph Containers["Docker / Podman 컨테이너"]
+    C1["🏠 concierge 컨테이너"]
+    C2["⚡ implementer 컨테이너"]
+    C3["🔍 reviewer 컨테이너"]
   end
 
-  subgraph Security["Container Security"]
+  subgraph Security["컨테이너 보안"]
     direction LR
     S1["--cap-drop ALL"]
-    S2["--read-only"]
+    S2["--read-only rootfs"]
     S3["--network none"]
-    S4["--user 1000:1000"]
-    S5["--pids-limit 100"]
+    S4["--pids-limit 100"]
+    S5["resource limits"]
   end
 
   subgraph Protocol["NDJSON Wire Protocol"]
     direction LR
-    TX["orchestrator → container<br/>prompt · tool_result · abort"]
-    RX["container → orchestrator<br/>text · tool_call · complete · error"]
+    TX["orchestrator → container\nprompt · tool_result · abort"]
+    RX["container → orchestrator\ntext · tool_call · complete · error"]
   end
 
-  GW -->|"classify route"| CP
-  CP -->|"spawn / kill / reconcile"| Containers
+  CP -->|"spawn / kill"| Containers
   AB <-->|"ask_agent"| C1 & C2 & C3
-  C1 & C2 & C3 <-->|"NDJSON via Pty"| CP
+  C1 & C2 & C3 <-->|"stdin/stdout NDJSON"| PTY
 
   style Orchestrator fill:#1a2a3a,stroke:#3a5a7a
   style Containers fill:#2d4a2d,stroke:#4a8a4a
@@ -348,48 +336,47 @@ const diagrams = [
   {
     name: "phase-loop-lifecycle",
     code: `flowchart TD
-  START["Workflow Start"]
-  LOAD["Load Definition<br/>YAML template / dynamic generation"]
+  START["Workflow 시작"]
+  LOAD["Definition 로드\nYAML 템플릿 / 자연어 → 동적 생성"]
 
-  subgraph PhaseN["Phase Execution"]
-    CTX["Build phase context<br/>inject prev phase results"]
-    SPAWN["Spawn parallel agents"]
+  subgraph PhaseN["Phase 실행 (반복)"]
+    CTX["Phase 컨텍스트 구성\n이전 phase 결과 inject"]
+    SPAWN["병렬 에이전트 스폰"]
 
-    subgraph Agents["Parallel Agents"]
+    subgraph Agents["병렬 에이전트 (독립 세션)"]
       direction LR
-      AG1["Agent 1<br/>independent session"]
-      AG2["Agent 2<br/>independent session"]
-      AG3["Agent N<br/>independent session"]
+      AG1["Agent 1"]
+      AG2["Agent 2"]
+      AG3["Agent N"]
     end
 
-    ASK["ask_agent<br/>inter-agent communication<br/>max_depth=3"]
-    WAIT["Await all agents"]
-    POLICY{"Failure Policy"}
+    WAIT["모든 에이전트 대기"]
+    POLICY{"실패 정책"}
   end
 
-  subgraph Review["Critic Review"]
-    CR_EXEC["Critic evaluates<br/>all agent results"]
-    CR_GATE{"Gate Decision"}
-    CR_RETRY["Retry<br/>inject feedback"]
-    CR_ESC["Escalate<br/>user decision"]
+  subgraph Review["Critic 리뷰"]
+    CR_EXEC["Critic이 모든 결과 평가"]
+    CR_GATE{"Gate 결정"}
+    CR_RETRY["재시도\n피드백 inject"]
+    CR_ESC["사용자 에스컬레이션\nASK_USER"]
   end
 
-  DONE["Workflow Complete<br/>synthesized result"]
+  DONE["Workflow 완료\n결과 합성"]
 
   START --> LOAD --> CTX
   CTX --> SPAWN --> Agents
-  AG1 & AG2 & AG3 <-.->|"ask_agent"| ASK
+  AG1 & AG2 & AG3 <-.->|"ask_agent\nmax_depth=3"| SPAWN
   AG1 & AG2 & AG3 --> WAIT
   WAIT --> POLICY
   POLICY -->|"best_effort"| Review
-  POLICY -->|"fail_fast · any fail"| CR_ESC
-  POLICY -->|"quorum · enough"| Review
+  POLICY -->|"fail_fast"| CR_ESC
+  POLICY -->|"quorum"| Review
 
   CR_EXEC --> CR_GATE
   CR_GATE -->|"approve"| CTX
-  CR_GATE -->|"reject · retry_targeted"| CR_RETRY --> SPAWN
+  CR_GATE -->|"reject · retry"| CR_RETRY --> SPAWN
   CR_GATE -->|"reject · escalate"| CR_ESC
-  CR_GATE -->|"final phase approved"| DONE
+  CR_GATE -->|"최종 phase 승인"| DONE
 
   style PhaseN fill:#3a1a3a,stroke:#7a3a7a
   style Review fill:#1a3a2a,stroke:#3a7a5a
@@ -398,24 +385,24 @@ const diagrams = [
   {
     name: "lane-queue",
     code: `flowchart LR
-  MSG["New message<br/>arrives during execution"]
+  MSG["실행 중 새 메시지 도착"]
 
-  subgraph Modes["Lane Queue Modes"]
+  subgraph Modes["LaneQueue 모드"]
     direction TB
-    STEER["🔴 steer<br/>Immediately inject<br/>into running agent"]
-    FOLLOW["🟡 followup<br/>Queue for next turn<br/>after completion"]
-    COLLECT["🟢 collect<br/>Batch multiple messages<br/>deliver together"]
+    STEER["🔴 steer\n실행 중 에이전트에\n즉시 inject (방향 전환)"]
+    FOLLOW["🟡 followup\n완료 후 다음 턴에\n큐에서 처리"]
+    COLLECT["🟢 collect\n여러 메시지 배치 수집\n한 번에 전달"]
   end
 
-  RUNNING["Running Agent"]
-  QUEUE["Message Queue"]
-  NEXT["Next Turn"]
+  RUNNING["실행 중 에이전트"]
+  QUEUE["메시지 큐"]
+  NEXT["다음 턴"]
 
   MSG --> Modes
-  STEER -->|"urgent directive"| RUNNING
+  STEER -->|"긴급 지시"| RUNNING
   FOLLOW -->|"enqueue"| QUEUE
   COLLECT -->|"accumulate"| QUEUE
-  QUEUE -->|"agent completes"| NEXT --> RUNNING
+  QUEUE -->|"에이전트 완료 시"| NEXT --> RUNNING
 
   style STEER fill:#6a2d2d,stroke:#bf5a5a
   style FOLLOW fill:#6a5a2d,stroke:#bf9a5a
@@ -424,35 +411,35 @@ const diagrams = [
   {
     name: "error-recovery",
     code: `flowchart TD
-  ERR["Error Detected"]
+  ERR["에러 감지"]
 
-  ERR --> CLS{"Error Classifier"}
+  ERR --> CLS{"에러 분류"}
 
-  CLS -->|"context_overflow"| CTX["3-Stage Recovery"]
-  CLS -->|"auth_error"| AUTH["Auth Recovery"]
-  CLS -->|"rate_limit"| RATE["Rate Limit Recovery"]
-  CLS -->|"crash"| CRASH["Crash Recovery"]
+  CLS -->|"context_overflow"| CTX["3단계 복구"]
+  CLS -->|"auth_error"| AUTH["인증 복구"]
+  CLS -->|"rate_limit"| RATE["Rate Limit 복구"]
+  CLS -->|"crash"| CRASH["Crash 복구"]
 
   subgraph CTXFlow["Context Overflow"]
-    CTX --> CTX1["1. Compaction<br/>summarize history"]
-    CTX1 -->|"still over"| CTX2["2. Tool result truncation"]
-    CTX2 -->|"still over"| CTX3["3. Give up<br/>return partial"]
+    CTX --> CTX1["1. Compaction\n히스토리 요약"]
+    CTX1 -->|"여전히 초과"| CTX2["2. Tool result 截断"]
+    CTX2 -->|"여전히 초과"| CTX3["3. 포기\n부분 결과 반환"]
   end
 
   subgraph AuthFlow["Auth Error"]
-    AUTH --> AUTH1["Rotate auth profile"]
-    AUTH1 -->|"profiles exhausted"| AUTH2["Model failover"]
-    AUTH2 -->|"all exhausted"| AUTH3["FailoverError"]
+    AUTH --> AUTH1["auth profile 순환"]
+    AUTH1 -->|"모두 소진"| AUTH2["모델 failover"]
+    AUTH2 -->|"모두 소진"| AUTH3["FailoverError 반환"]
   end
 
   subgraph RateFlow["Rate Limit"]
     RATE --> RATE1["Exponential backoff"]
-    RATE1 -->|"max retries"| RATE2["Fallback backend"]
+    RATE1 -->|"max retries 초과"| RATE2["Fallback backend 전환"]
   end
 
-  subgraph CrashFlow["Crash"]
-    CRASH --> CRASH1["Recreate container"]
-    CRASH1 --> CRASH2["Restore context"]
+  subgraph CrashFlow["Crash (container_cli)"]
+    CRASH --> CRASH1["컨테이너 재생성"]
+    CRASH1 --> CRASH2["컨텍스트 복원"]
   end
 
   style CTXFlow fill:#3a2a1a,stroke:#7a5a3a

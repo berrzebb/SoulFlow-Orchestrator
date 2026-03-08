@@ -14,7 +14,7 @@
 
 Slack · Telegram · Discord 메시지를 **헤드리스 에이전트**로 처리하는 비동기 오케스트레이션 런타임.
 
-8개 에이전트 백엔드(Claude/Codex/Gemini × CLI/SDK + OpenAI 호환 + OpenRouter + 컨테이너), 8개 역할 기반 스킬 시스템, CircuitBreaker 기반 프로바이더 복원력, AES-256-GCM 보안 Vault, OAuth 2.0 연동, 120종 노드 워크플로우 그래프 에디터, 에이전트 기반 WorkflowTool CRUD, React + Vite 웹 대시보드(i18n, 마크다운 렌더링)를 내장한 올인원 솔루션입니다.
+8개 에이전트 백엔드(Claude/Codex/Gemini × CLI/SDK + OpenAI 호환 + OpenRouter + 컨테이너), 8개 역할 기반 스킬 시스템, CircuitBreaker 기반 프로바이더 복원력, AES-256-GCM 보안 Vault, OAuth 2.0 연동, 124종 노드 워크플로우 그래프 에디터, 에이전트 기반 WorkflowTool CRUD, React + Vite 웹 대시보드(i18n, 마크다운 렌더링)를 내장한 올인원 솔루션입니다.
 
 ## 목차
 
@@ -102,7 +102,63 @@ flowchart TD
     DASH -.-> Pipeline
 ```
 
-상세 다이어그램: [서비스 아키텍처](diagrams/service-architecture.svg) · [인바운드 파이프라인](diagrams/inbound-pipeline.svg) · [오케스트레이터 흐름](diagrams/orchestrator-flow.svg) · [프로바이더 복원력](diagrams/provider-resilience.svg) · [역할 위임](diagrams/role-delegation.svg) · [컨테이너 아키텍처](diagrams/container-architecture.svg) · [Phase Loop 생명주기](diagrams/phase-loop-lifecycle.svg) · [Lane Queue](diagrams/lane-queue.svg) · [에러 복구](diagrams/error-recovery.svg)
+**인바운드 파이프라인**
+
+```mermaid
+flowchart LR
+  CH["채널 read()"]
+  DD{"중복 체크"}
+  CMD{"CommandRouter\n슬래시 커맨드 + 퍼지 매칭"}
+  GUARD["ConfirmationGuard"]
+  APR["ApprovalService"]
+  SEAL["Sensitive Seal\nAES-256-GCM"]
+  MEDIA["MediaCollector"]
+  ORCH["OrchestrationService\nonce · agent · task · phase"]
+  BACK["AgentBackend"]
+  TOOL["도구 실행 + 시크릿 복호화"]
+  REC["SessionRecorder"]
+  DISP["DispatchService"]
+  OUT["채널 send()"]
+
+  CH --> DD
+  DD -->|신규| CMD
+  DD -->|중복| X(skip)
+  CMD -->|슬래시 커맨드| DISP
+  CMD -->|메시지| GUARD
+  GUARD -->|위험 작업| APR
+  GUARD -->|일반| SEAL
+  APR -->|승인 완료| SEAL
+  SEAL --> MEDIA --> ORCH
+  ORCH --> BACK
+  BACK -->|tool_calls| TOOL
+  TOOL -->|result| BACK
+  BACK --> REC --> DISP --> OUT
+```
+
+**역할 위임 계층**
+
+```mermaid
+flowchart TD
+  USER["사용자 메시지"]
+  CON["🏠 concierge\n사용자 대면 · 일상 처리 · 위임 조율"]
+  PM["📋 pm\n요구사항 분석 · 스펙 작성"]
+  PL["🔧 pl\n실행 조율 · Phase Gate"]
+  IMPL["⚡ implementer\n코드 구현 · 셀프 검증"]
+  REV["🔍 reviewer\n품질 · 보안 · 성능"]
+  VAL["✅ validator\n빌드 · 테스트 · lint"]
+  DBG["🐛 debugger\nRCA · 수정 제안"]
+  GEN["🔄 generalist\n범용 단일 작업"]
+
+  USER --> CON
+  CON -->|기획 필요| PM -->|스펙 전달| PL
+  CON -->|즉시 실행| PL
+  PL -->|구현| IMPL
+  PL -->|리뷰| REV
+  PL -->|검증| VAL
+  PL -->|디버깅| DBG
+  PL -->|잡무| GEN
+  IMPL & REV & VAL -->|결과| PL
+```
 
 ## 이게 뭔가요?
 
@@ -116,7 +172,7 @@ flowchart TD
 | **역할 스킬** | 8개 역할 계층적 분담 | concierge → pm/pl → implementer/reviewer/validator/debugger |
 | **보안 Vault** | AES-256-GCM 민감정보 관리 | 인바운드 자동 sealing · 도구 경로 복호화만 허용 |
 | **OAuth 연동** | 외부 서비스 인증 | GitHub · Google · Custom OAuth 2.0 |
-| **워크플로우 엔진** | Phase Loop · DAG 실행 | 120종 노드 그래프 에디터 · 6개 카테고리 · HITL 인터랙션 노드 |
+| **워크플로우 엔진** | Phase Loop · DAG 실행 | 124종 노드 그래프 에디터 · 6개 카테고리 · HITL 인터랙션 노드 |
 | **메시지 버스** | 내부 이벤트 라우팅 | 인메모리 (기본) · Redis Streams (다중 인스턴스) |
 | **도메인 서비스** | 임베딩 · 벡터 스토어 · 웹훅 · 칸반 | sqlite-vec KNN · 하이브리드 검색 · 칸반 자동화 규칙 |
 | **대시보드** | 웹 기반 실시간 모니터링 | SSE 피드 · 에이전트/태스크/결정/프로바이더 관리 |
@@ -125,75 +181,58 @@ flowchart TD
 
 ### 에이전트 백엔드
 
-| 백엔드 | 방식 | 특징 | 자동 fallback |
-|--------|------|------|--------------|
-| `claude_sdk` | 네이티브 SDK | tool loop 내장 · 스트리밍 | → `claude_cli` |
-| `claude_cli` | Headless CLI 래퍼 | 안정성 · 범용 | — |
-| `codex_appserver` | 네이티브 AppServer | 병렬 실행 · tool loop 내장 | → `codex_cli` |
-| `codex_cli` | Headless CLI 래퍼 | 샌드박스 모드 지원 | — |
-| `gemini_cli` | Headless CLI 래퍼 | Gemini CLI 연동 | — |
-| `openai_compatible` | OpenAI 호환 API | vLLM · Ollama · LM Studio · Together AI · Gemini 등 로컬/원격 모델 | — |
-| `openrouter` | OpenRouter API | 멀티 모델 라우팅 · 100+ 모델 접근 | — |
-| `container_cli` | 컨테이너 CLI 래퍼 | Podman/Docker 샌드박스 실행 | — |
+`claude_sdk` · `claude_cli` · `codex_appserver` · `codex_cli` · `gemini_cli` · `openai_compatible` · `openrouter` · `container_cli` — CircuitBreaker · 자동 fallback.
 
-### 역할 스킬
+→ [에이전트 백엔드 선택 가이드](ko/core-concepts/agents.md)
 
-| 역할 | 전문 분야 | 위임 방향 |
-|------|----------|----------|
-| `concierge` | 요청 수신 · 역할 라우팅 | → pm/pl/generalist |
-| `pm` | 요구사항 분석 · 태스크 분해 | → implementer |
-| `pl` | 기술 리드 · 아키텍처 설계 | → implementer/reviewer |
-| `implementer` | 실제 구현 · 코드 작성 | — |
-| `reviewer` | 코드 리뷰 · 품질 검증 | — |
-| `debugger` | 버그 진단 · 근본 원인 분석 | — |
-| `validator` | 출력 검증 · 회귀 테스트 | — |
-| `generalist` | 범용 처리 | — |
+### 역할 스킬 & 팀 구성
+
+8개 역할이 계층적으로 협업합니다. `concierge`가 사용자를 직접 대면하고, 개발 작업은 `pm`/`pl`을 통해 전문 역할에 위임합니다.
+
+```
+concierge (사용자 대면)
+  ├── pm (기획) → pl (실행 조율)
+  └── pl (즉시 실행)
+        ├── implementer · reviewer · validator · debugger
+        └── generalist
+```
+
+| 팀 프리셋 | 구성 | 용도 |
+|----------|------|------|
+| **풀 팀** | PM → PL → Implementer → Reviewer → Validator | 복잡한 개발 작업 |
+| **라이트** | PM → Implementer → Validator | 소규모·명확한 작업 |
+| **기획팀** | PM | 계획 수립 · 문서화 |
+| **품질관리팀** | Reviewer + Implementer | 코드 리뷰 · 구조 개선 |
+| **테스트팀** | Validator | 빌드 · 테스트 · lint |
+
+### 도구 & 스킬 동적 선택
+
+158개 도구 전체 전송 시 ~25,000 토큰 소비. **ToolIndex FTS5**가 한/영 키워드 확장 + BM25 랭킹으로 요청별 최적 도구 20~35개를 자동 선택합니다. (Core 13개 항상 포함)
 
 ## 빠른 시작
 
 ### 요구사항
 
-- **Docker** 또는 **Podman** (권장)
-- 최소 1개 채널 Bot Token (Slack · Telegram · Discord)
+- **Docker** 또는 **Podman**
 - AI 프로바이더 API 키 (Claude, OpenAI, OpenRouter 등)
-- (선택) GPU — 로컬 Ollama 오케스트레이터 LLM 분류기 사용 시
+- (선택) 채널 Bot Token (Slack · Telegram · Discord) — 없으면 Web 채널로 바로 사용
 
-### Docker (권장)
-
-```bash
-# 프로덕션 (orchestrator + ollama + docker-proxy)
-docker compose up -d
-
-# 개발 (라이브 리로드)
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up
-```
-
-`full` 이미지에 Claude Code, Codex CLI, Gemini CLI가 사전 설치되어 있습니다.
-
-### 로컬 (비권장)
+### 시작
 
 ```bash
-cd next
-npm install
-npm run dev      # 개발 모드 (핫리로드)
+git clone https://github.com/berrzebb/SoulFlow-Orchestrator.git
+cd SoulFlow-Orchestrator
+
+# Linux/macOS
+./run.sh prod --workspace=/path/to/workspace
+
+# Windows
+.\run.ps1 prod --workspace=D:\workspace
 ```
 
-> 컨테이너 배포가 CLI 에이전트 격리와 일관된 환경을 제공하므로 권장됩니다. 자세한 내용은 [설치 가이드](ko/getting-started/installation.md)를 참조하세요.
+브라우저에서 `http://localhost:4200` 열고 **Setup Wizard**를 완료하면 끝입니다.
 
-### Setup Wizard
-
-첫 실행 시 프로바이더가 설정되지 않으면 대시보드가 자동으로 Setup Wizard(`/setup`)로 이동합니다.
-
-```
-http://127.0.0.1:4200
-```
-
-Wizard에서 다음을 순서대로 설정합니다:
-1. **AI 프로바이더** — Claude/Codex API 키 입력
-2. **채널** — Slack/Telegram/Discord Bot Token 입력
-3. **에이전트 설정** — 기본 역할 및 백엔드 선택
-
-`.env` 파일을 직접 작성할 필요 없이, Wizard에서 모든 설정을 완료할 수 있습니다.
+> 상세: [설치 가이드](ko/getting-started/installation.md) — 개발/스테이징/다중 인스턴스, 에이전트 로그인, Docker Compose 직접 사용
 
 ---
 
@@ -347,14 +386,16 @@ next/
   src/
     agent/
       backends/     ← SDK/CLI/OpenAI 백엔드 어댑터 (8개 백엔드)
-      nodes/        ← 120종 워크플로우 노드 핸들러 (OCP 플러그인 아키텍처)
+      nodes/        ← 124종 워크플로우 노드 핸들러 (OCP 플러그인 아키텍처)
       pty/          ← PTY 기반 CLI 통합 (ContainerPool, AgentBus, MCP 브릿지, NDJSON 와이어)
       tools/        ← 에이전트 도구 구현 (oauth_fetch, workflow, ask-user, approval-notifier 포함)
     bus/            ← MessageBus (인메모리 기본 · Redis Streams 선택)
     channels/       ← 채널 매니저 · 커맨드 · 디스패치 · 승인 · 페르소나 톤 렌더링
     config/         ← Zod 기반 설정 스키마 + config-meta
     cron/           ← 크론 스케줄러 (SQLite)
+    bootstrap/      ← 15개 부트스트랩 모듈 (main.ts 분해: agent-core, channels, config, dashboard 등)
     dashboard/
+      ops/          ← 13개 대시보드 ops 모듈 (ops-factory.ts 분해)
       routes/       ← 26개 라우트 핸들러 (state, config, chat, cron, workflows, kanban 등)
       service.ts    ← HTTP 서버 + 라우트 등록
     decision/       ← 결정사항 서비스

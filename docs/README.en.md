@@ -12,7 +12,7 @@
 
 An asynchronous orchestration runtime that processes Slack · Telegram · Discord messages through **headless agents**.
 
-The batteries-included solution featuring 8 agent backends (Claude/Codex/Gemini × CLI/SDK + OpenAI-compatible + OpenRouter + container), an 8-role skill system, CircuitBreaker-based provider resilience, AES-256-GCM security vault, OAuth 2.0 integrations, a 120-node workflow graph editor, WorkflowTool for agent-driven CRUD, and a React + Vite web dashboard with i18n and markdown rendering.
+The batteries-included solution featuring 8 agent backends (Claude/Codex/Gemini × CLI/SDK + OpenAI-compatible + OpenRouter + container), an 8-role skill system, CircuitBreaker-based provider resilience, AES-256-GCM security vault, OAuth 2.0 integrations, a 124-node workflow graph editor, WorkflowTool for agent-driven CRUD, and a React + Vite web dashboard with i18n and markdown rendering.
 
 ## Table of Contents
 
@@ -100,7 +100,63 @@ flowchart TD
     DASH -.-> Pipeline
 ```
 
-Detailed diagrams: [Service Architecture](diagrams/service-architecture.svg) · [Inbound Pipeline](diagrams/inbound-pipeline.svg) · [Orchestrator Flow](diagrams/orchestrator-flow.svg) · [Provider Resilience](diagrams/provider-resilience.svg) · [Role Delegation](diagrams/role-delegation.svg) · [Container Architecture](diagrams/container-architecture.svg) · [Phase Loop Lifecycle](diagrams/phase-loop-lifecycle.svg) · [Lane Queue](diagrams/lane-queue.svg) · [Error Recovery](diagrams/error-recovery.svg)
+**Inbound Pipeline**
+
+```mermaid
+flowchart LR
+  CH["Channel read()"]
+  DD{"Dedup"}
+  CMD{"CommandRouter\nslash commands + fuzzy match"}
+  GUARD["ConfirmationGuard"]
+  APR["ApprovalService"]
+  SEAL["Sensitive Seal\nAES-256-GCM"]
+  MEDIA["MediaCollector"]
+  ORCH["OrchestrationService\nonce · agent · task · phase"]
+  BACK["AgentBackend"]
+  TOOL["Tool Execution + secret decrypt"]
+  REC["SessionRecorder"]
+  DISP["DispatchService"]
+  OUT["Channel send()"]
+
+  CH --> DD
+  DD -->|new| CMD
+  DD -->|dup| X(skip)
+  CMD -->|slash command| DISP
+  CMD -->|message| GUARD
+  GUARD -->|dangerous op| APR
+  GUARD -->|normal| SEAL
+  APR -->|approved| SEAL
+  SEAL --> MEDIA --> ORCH
+  ORCH --> BACK
+  BACK -->|tool_calls| TOOL
+  TOOL -->|result| BACK
+  BACK --> REC --> DISP --> OUT
+```
+
+**Role Delegation Hierarchy**
+
+```mermaid
+flowchart TD
+  USER["User Message"]
+  CON["🏠 concierge\nUser-facing · daily tasks · delegation"]
+  PM["📋 pm\nRequirements · spec writing"]
+  PL["🔧 pl\nExecution · Phase Gate"]
+  IMPL["⚡ implementer\nCode implementation · self-verify"]
+  REV["🔍 reviewer\nQuality · security · perf"]
+  VAL["✅ validator\nBuild · test · lint"]
+  DBG["🐛 debugger\nRCA · fix suggestions"]
+  GEN["🔄 generalist\nGeneral single tasks"]
+
+  USER --> CON
+  CON -->|needs planning| PM -->|spec| PL
+  CON -->|direct execution| PL
+  PL -->|implement| IMPL
+  PL -->|review| REV
+  PL -->|validate| VAL
+  PL -->|debug| DBG
+  PL -->|misc| GEN
+  IMPL & REV & VAL -->|results| PL
+```
 
 ## What Is This?
 
@@ -114,7 +170,7 @@ An **orchestration runtime** that receives messages from chat channels and dispa
 | **Role Skills** | 8-role hierarchical delegation | concierge → pm/pl → implementer/reviewer/validator/debugger |
 | **Security Vault** | AES-256-GCM secret management | Auto inbound sealing · decrypt only in tool path |
 | **OAuth Integration** | External service authentication | GitHub · Google · Custom OAuth 2.0 |
-| **Workflow Engine** | Phase Loop · DAG execution | 120-node graph editor · 6 categories · HITL interaction nodes |
+| **Workflow Engine** | Phase Loop · DAG execution | 124-node graph editor · 6 categories · HITL interaction nodes |
 | **Message Bus** | Internal event routing | In-memory (default) · Redis Streams (multi-instance) |
 | **Domain Services** | Embedding · vector store · webhook · kanban | sqlite-vec KNN · hybrid search · kanban automation rules |
 | **Dashboard** | Web-based real-time monitoring | SSE feed · agent/task/decision/provider management |
@@ -123,75 +179,58 @@ An **orchestration runtime** that receives messages from chat channels and dispa
 
 ### Agent Backends
 
-| Backend | Mode | Features | Auto Fallback |
-|---------|------|----------|---------------|
-| `claude_sdk` | Native SDK | Built-in tool loop · streaming | → `claude_cli` |
-| `claude_cli` | Headless CLI wrapper | Stability · general purpose | — |
-| `codex_appserver` | Native AppServer | Parallel execution · built-in tool loop | → `codex_cli` |
-| `codex_cli` | Headless CLI wrapper | Sandbox mode support | — |
-| `gemini_cli` | Headless CLI wrapper | Gemini CLI integration | — |
-| `openai_compatible` | OpenAI-compatible API | vLLM · Ollama · LM Studio · Together AI · Gemini and other local/remote models | — |
-| `openrouter` | OpenRouter API | Multi-model routing · 100+ model access | — |
-| `container_cli` | Container CLI wrapper | Podman/Docker sandboxed execution | — |
+`claude_sdk` · `claude_cli` · `codex_appserver` · `codex_cli` · `gemini_cli` · `openai_compatible` · `openrouter` · `container_cli` — CircuitBreaker · auto-fallback.
 
-### Role Skills
+→ [Choosing an Agent Backend](en/core-concepts/agents.md)
 
-| Role | Specialization | Delegation |
-|------|---------------|------------|
-| `concierge` | Request routing · role dispatch | → pm/pl/generalist |
-| `pm` | Requirements analysis · task decomposition | → implementer |
-| `pl` | Tech lead · architecture design | → implementer/reviewer |
-| `implementer` | Implementation · code writing | — |
-| `reviewer` | Code review · quality verification | — |
-| `debugger` | Bug diagnosis · root cause analysis | — |
-| `validator` | Output verification · regression tests | — |
-| `generalist` | General purpose | — |
+### Role Skills & Team Composition
+
+8 roles collaborate in a delegation hierarchy. `concierge` faces the user and delegates dev tasks to `pm`/`pl`.
+
+```
+concierge (user-facing)
+  ├── pm (planning) → pl (execution)
+  └── pl (direct)
+        ├── implementer · reviewer · validator · debugger
+        └── generalist
+```
+
+| Team Preset | Composition | Use Case |
+|-------------|-------------|----------|
+| **Full Team** | PM → PL → Implementer → Reviewer → Validator | Complex dev tasks |
+| **Light** | PM → Implementer → Validator | Small, clear tasks |
+| **Planning** | PM | Spec writing · documentation |
+| **QA Team** | Reviewer + Implementer | Code review · refactoring |
+| **Test Team** | Validator | Build · test · lint |
+
+### Tool & Skill Dynamic Selection
+
+Sending all 158 tools on every request costs ~25,000 tokens. **ToolIndex FTS5** selects the optimal 20–35 tools per request using keyword expansion + BM25 ranking. (13 core tools always included)
 
 ## Quick Start
 
 ### Prerequisites
 
-- **Docker** or **Podman** (recommended)
-- At least 1 channel Bot Token (Slack · Telegram · Discord)
+- **Docker** or **Podman**
 - AI Provider API Key (Claude, OpenAI, OpenRouter, etc.)
-- (Optional) GPU — for local Ollama orchestrator LLM classifier
+- (Optional) Channel Bot Token (Slack · Telegram · Discord) — Web chat works without any token
 
-### Docker (Recommended)
-
-```bash
-# Production (orchestrator + ollama + docker-proxy)
-docker compose up -d
-
-# Development (live reload)
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up
-```
-
-The `full` image includes Claude Code, Codex CLI, and Gemini CLI pre-installed.
-
-### Local (Not Recommended)
+### Start
 
 ```bash
-cd next
-npm install
-npm run dev      # Development mode (hot reload)
+git clone https://github.com/berrzebb/SoulFlow-Orchestrator.git
+cd SoulFlow-Orchestrator
+
+# Linux/macOS
+./run.sh prod --workspace=/path/to/workspace
+
+# Windows
+.\run.ps1 prod --workspace=D:\workspace
 ```
 
-> Container deployment is recommended for CLI agent isolation and consistent environments. See [Installation Guide](en/getting-started/installation.md) for details.
+Open `http://localhost:4200` in your browser and complete the **Setup Wizard**.
 
-### Setup Wizard
-
-On first launch, if no provider is configured, the dashboard automatically redirects to the Setup Wizard (`/setup`).
-
-```
-http://127.0.0.1:4200
-```
-
-The wizard guides you through:
-1. **AI Provider** — Enter Claude/Codex API key
-2. **Channels** — Enter Slack/Telegram/Discord Bot Token
-3. **Agent Settings** — Select default role and backend
-
-No need to create a `.env` file manually — the Wizard handles all configuration.
+> Details: [Installation Guide](en/getting-started/installation.md) — dev/staging/multi-instance, agent login, Docker Compose direct usage
 
 ---
 
@@ -345,14 +384,16 @@ next/
   src/
     agent/
       backends/     ← SDK/CLI/OpenAI backend adapters (8 backends)
-      nodes/        ← 120 workflow node handlers (OCP plugin architecture)
+      nodes/        ← 124 workflow node handlers (OCP plugin architecture)
       pty/          ← PTY-based CLI integration (ContainerPool, AgentBus, MCP bridge, NDJSON wire)
       tools/        ← Agent tool implementations (incl. oauth_fetch, workflow, ask-user, approval-notifier)
     bus/            ← MessageBus (in-memory default · Redis Streams optional)
     channels/       ← Channel manager · commands · dispatch · approval · persona tone rendering
     config/         ← Zod-based config schema + config-meta
     cron/           ← Cron scheduler (SQLite)
+    bootstrap/      ← 15 bootstrap modules (main.ts decomposed: agent-core, channels, config, dashboard, etc.)
     dashboard/
+      ops/          ← 13 dashboard ops modules (ops-factory.ts decomposed)
       routes/       ← 26 route handlers (state, config, chat, cron, workflows, kanban, etc.)
       service.ts    ← HTTP server + route registration
     decision/       ← Decision service
