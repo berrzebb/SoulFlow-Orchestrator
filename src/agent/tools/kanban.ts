@@ -179,6 +179,15 @@ export class KanbanTool extends Tool {
     const board_id = str(p.board_id);
     const title = str(p.title);
     if (!board_id || !title) return "Error: board_id and title are required";
+
+    // 동일 보드에 같은 제목 카드가 이미 있으면 기존 카드 반환 (goto 재실행 시 중복 방지)
+    const parent_id = str(p.parent_id) || undefined;
+    const existing_cards = await this.store.list_cards(board_id, undefined, 500);
+    const existing = existing_cards.find((c) => c.title === title);
+    if (existing) {
+      return `${existing.card_id} already exists: "${existing.title}" in ${existing.column_id}`;
+    }
+
     const card = await this.store.create_card({
       board_id,
       title,
@@ -188,12 +197,12 @@ export class KanbanTool extends Tool {
       labels: p.labels as string[] | undefined,
       assignee: str(p.assignee) || undefined,
       created_by: agent_id,
-      parent_id: str(p.parent_id) || undefined,
+      parent_id,
       due_date: str(p.due_date) || undefined,
       task_id: str(p.task_id) || undefined,
       metadata: p.metadata as Record<string, unknown> | undefined,
     });
-    const parent_note = str(p.parent_id) ? ` (child of ${str(p.parent_id)})` : "";
+    const parent_note = parent_id ? ` (child of ${parent_id})` : "";
     return `${card.card_id} created${parent_note}: "${card.title}" in ${card.column_id}`;
   }
 
