@@ -2,6 +2,7 @@ import { useState, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import { Badge } from "../../components/badge";
+import { SearchInput } from "../../components/search-input";
 import { useT } from "../../i18n";
 import { time_ago } from "../../utils/format";
 import { SplitPane } from "./split-pane";
@@ -65,13 +66,13 @@ export function SessionsTab() {
       left={
         <div className="ws-col">
           <div className="ws-search-bar">
-            <input
-              autoFocus
-              className="input input--sm ws-search-bar__input"
-              type="search"
+            <SearchInput
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={setSearch}
               placeholder={t("workspace.sessions.search")}
+              onClear={() => setSearch("")}
+              autoFocus
+              className="ws-search-bar__input"
             />
           </div>
           <div className="ws-chip-bar">

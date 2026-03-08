@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import { Badge } from "../../components/badge";
 import { Modal } from "../../components/modal";
+import { SearchInput } from "../../components/search-input";
 import { useToast } from "../../components/toast";
 import { useT } from "../../i18n";
 import { time_ago } from "../../utils/format";
@@ -138,13 +139,12 @@ export function ReferencesTab() {
 
       {/* Search bar */}
       <div className="ws-references__search">
-        <input
-          autoFocus
-          className="form-input form-input--sm"
-          placeholder={t("references.search")}
+        <SearchInput
           value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter") void do_search(); }}
+          onChange={setSearchQuery}
+          placeholder={t("references.search")}
+          onClear={() => setSearchQuery("")}
+          autoFocus
         />
         <button className="btn btn--xs" onClick={() => void do_search()} disabled={searching || !searchQuery.trim()}>
           {searching ? t("common.searching") : t("common.search")}

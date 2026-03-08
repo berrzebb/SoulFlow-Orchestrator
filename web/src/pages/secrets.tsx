@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
 import { useToast } from "../components/toast";
+import { SearchInput } from "../components/search-input";
 import { useState } from "react";
 import { useT } from "../i18n";
 import { Modal } from "../components/modal";
@@ -59,13 +60,13 @@ export default function SecretsPage() {
       <div className="section-header">
         <h2>{t("secrets.title", { count: names.length })}</h2>
         <div className="section-header__actions">
-          <input
-            autoFocus
-            className="input input--sm section-header__search"
-            type="search"
+          <SearchInput
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={setSearch}
             placeholder={t("secrets.search")}
+            onClear={() => setSearch("")}
+            autoFocus
+            className="section-header__search"
           />
           <button className="btn btn--sm btn--ok" onClick={() => setAdding(true)}>{t("secrets.add")}</button>
         </div>
