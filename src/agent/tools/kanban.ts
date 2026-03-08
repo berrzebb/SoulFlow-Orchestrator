@@ -151,6 +151,14 @@ export class KanbanTool extends Tool {
     const scope_type = str(p.scope_type) as ScopeType;
     const scope_id = str(p.scope_id);
     if (!scope_type || !scope_id) return "Error: scope_type and scope_id are required";
+
+    // 동일 scope에 보드가 이미 있으면 기존 보드 반환 (goto 재실행 시 중복 방지)
+    const existing = await this.store.list_boards(scope_type, scope_id);
+    if (existing.length > 0) {
+      const b = existing[0]!;
+      return JSON.stringify({ ok: true, board_id: b.board_id, prefix: b.prefix, columns: b.columns.map(c => c.id), already_exists: true });
+    }
+
     const columns = p.columns as Array<{ id: string; name: string; color: string }> | undefined;
     const board = await this.store.create_board({ name, scope_type, scope_id, columns });
     return JSON.stringify({ ok: true, board_id: board.board_id, prefix: board.prefix, columns: board.columns.map(c => c.id) });
