@@ -117,6 +117,9 @@ function generateDockerCompose(profile, config, skipRedis = false) {
     driver: local
 `;
 
+  const volumesSection = redisVolumes ? `volumes:
+${redisVolumes}` : '';
+
   return `version: "3.9"
 
 services:
@@ -164,9 +167,7 @@ ${devCommand}
           cpus: "${cpus}"
 
 ${redisService}
-volumes:
-${redisVolumes}
-
+${volumesSection}
 networks:
   default:
     name: ${config.projectName}-network
