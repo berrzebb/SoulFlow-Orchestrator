@@ -32,11 +32,13 @@ function VectorStoreEditPanel({ node, update, t }: EditPanelProps) {
             <div className="builder-row">
               <label className="label">{t("workflows.vs_top_k")}</label>
               <input className="input input--sm" type="number" min={1} max={100} value={String(node.top_k ?? 5)} onChange={(e) => update({ top_k: Number(e.target.value) || 5 })} />
+              <span className="builder-hint">{t("workflows.vs_top_k_hint")}</span>
             </div>
           </div>
           <div className="builder-row">
             <label className="label">{t("workflows.vs_min_score")}</label>
             <input className="input input--sm" type="number" step="0.05" min={0} max={1} value={String(node.min_score ?? 0)} onChange={(e) => update({ min_score: Number(e.target.value) || 0 })} />
+            <span className="builder-hint">{t("workflows.vs_min_score_hint")}</span>
           </div>
         </>
       )}

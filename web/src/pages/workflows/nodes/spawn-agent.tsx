@@ -36,6 +36,7 @@ function SpawnAgentEditPanel({ node, update, t, options }: EditPanelProps) {
         <div className="builder-row">
           <label className="label">{t("workflows.spawn_max_iter")}</label>
           <input className="input input--sm" type="number" min={1} max={100} value={String(node.max_iterations ?? 10)} onChange={(e) => update({ max_iterations: Number(e.target.value) || 10 })} />
+          <span className="builder-hint">{t("workflows.spawn_max_iter_hint")}</span>
         </div>
       </div>
       <div className="builder-row-pair">

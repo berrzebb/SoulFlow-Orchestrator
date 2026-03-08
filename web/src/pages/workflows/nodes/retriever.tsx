@@ -16,6 +16,7 @@ function RetrieverEditPanel({ node, update, t }: EditPanelProps) {
         <div className="builder-row">
           <label className="label">{t("workflows.retriever_top_k")}</label>
           <input className="input input--sm" type="number" min={1} max={100} value={String(node.top_k ?? 5)} onChange={(e) => update({ top_k: Number(e.target.value) || 5 })} />
+          <span className="builder-hint">{t("workflows.retriever_top_k_hint")}</span>
         </div>
       </div>
       <div className="builder-row">
