@@ -53,15 +53,27 @@ describe("run_shell_command — 기본 실행", () => {
   });
 
   it("cwd 옵션 적용 → 해당 디렉토리에서 실행됨", async () => {
-    // just-bash는 --root <cwd>로 실행 시 내부 CWD가 /로 변경됨
-    // → ls 결과에 고유 마커 파일이 보이면 cwd가 올바르게 적용된 것
+    // just-bash: --root <cwd>로 cwd가 /에 마운트됨 → ls / 결과에 마커 포함
+    // Unix 시스템 셸 폴백: ls 동작
+    // Windows cmd.exe 폴백: ls 없음 → dir /b 사용 (just-bash 환경에서 실패 시 ls 재시도)
     const marker = `cwd-marker-${Date.now()}`;
     writeFileSync(join(cwd, marker), "");
-    const { stdout } = await run_shell_command("ls", {
-      cwd,
-      timeout_ms: 10_000,
-      max_buffer_bytes: 1024 * 1024,
-    });
+    const primary_cmd = process.platform === "win32" ? "dir /b" : "ls";
+    let stdout: string;
+    try {
+      ({ stdout } = await run_shell_command(primary_cmd, {
+        cwd,
+        timeout_ms: 10_000,
+        max_buffer_bytes: 1024 * 1024,
+      }));
+    } catch {
+      // just-bash가 있는 Windows: bash 환경에서 dir /b 실패 → ls 재시도
+      ({ stdout } = await run_shell_command("ls", {
+        cwd,
+        timeout_ms: 10_000,
+        max_buffer_bytes: 1024 * 1024,
+      }));
+    }
     expect(stdout).toContain(marker);
   });
 
