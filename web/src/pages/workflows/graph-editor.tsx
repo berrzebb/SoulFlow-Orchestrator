@@ -6,6 +6,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useT } from "../../i18n";
 import { useConfirm } from "../../components/modal";
+import { SearchInput } from "../../components/search-input";
 import { NodePicker } from "./node-picker";
 import type { NodePreset } from "./node-presets";
 
@@ -1321,13 +1322,13 @@ export function GraphEditor({
       {/* 노드 검색 오버레이 */}
       {searchOpen && (
         <div className="graph-editor__search">
-          <input
+          <SearchInput
             ref={searchRef}
-            type="text"
-            className="graph-editor__search-input"
-            placeholder={t("workflows.search_nodes")}
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={setSearchQuery}
+            placeholder={t("workflows.search_nodes")}
+            onClear={() => { setSearchOpen(false); setSearchQuery(""); }}
+            className="graph-editor__search-input"
             onKeyDown={(e) => {
               if (e.key === "Escape") { setSearchOpen(false); setSearchQuery(""); }
               if (e.key === "Enter" && searchResults.length > 0) {

@@ -5,6 +5,7 @@ import { NODE_CATEGORIES, get_nodes_by_category } from "./node-registry";
 import type { FrontendNodeDescriptor } from "./node-registry";
 import { get_presets_for_type } from "./node-presets";
 import type { NodePreset } from "./node-presets";
+import { SearchInput } from "../../components/search-input";
 
 const SVG16_BASE = { width: 16, height: 16, viewBox: "0 0 24 24", fill: "none", strokeWidth: 2, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
 const SVG12_BASE = { width: 12, height: 12, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
@@ -239,22 +240,16 @@ export function NodePicker({ open, onClose, onSelect, t }: NodePickerProps) {
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
           </button>
         </header>
-        <div className="node-picker__search-wrap">
-          <svg className="node-picker__search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-          <input
-            ref={searchRef}
-            className="node-picker__search"
-            placeholder={t("workflows.node_picker_search")}
-            value={query}
-            onChange={(e) => { setQuery(e.target.value); setFocusIdx(-1); }}
-            onKeyDown={handleKeyNav}
-          />
-          {query && (
-            <button className="node-picker__search-clear" onClick={() => { setQuery(""); searchRef.current?.focus(); }} aria-label={t("workflows.clear")}>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-            </button>
-          )}
-        </div>
+        <SearchInput
+          ref={searchRef}
+          value={query}
+          onChange={(val) => { setQuery(val); setFocusIdx(-1); }}
+          onClear={() => setQuery("")}
+          placeholder={t("workflows.node_picker_search")}
+          onKeyDown={handleKeyNav}
+          className="node-picker__search-wrap"
+          inputClassName="node-picker__search"
+        />
         <div className="node-picker__body" ref={bodyRef}>
           {/* Core (Phase) */}
           {specialCore.length > 0 && (
