@@ -24,6 +24,7 @@ export default defineConfig({
       ],
       reporter: ["text", "html", "json-summary"],
       reportsDirectory: "coverage",
+      reportOnFailure: true,
     },
   },
 });
