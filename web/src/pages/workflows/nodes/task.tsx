@@ -15,12 +15,12 @@ function TaskEditPanel({ node, update, t, options }: EditPanelProps) {
   return (
     <>
       <div className="builder-row">
-        <label className="label">{t("workflows.task_title")}</label>
-        <input autoFocus className="input input--sm" value={String(node.task_title || "")} onChange={(e) => update({ task_title: e.target.value })} placeholder="Process user request" />
+        <label className="label">{t("workflows.task_title")}<span className="label__required">*</span></label>
+        <input autoFocus required className="input input--sm" value={String(node.task_title || "")} onChange={(e) => update({ task_title: e.target.value })} placeholder="Process user request" aria-required="true" />
       </div>
       <div className="builder-row">
-        <label className="label">{t("workflows.task_objective")}</label>
-        <textarea className="input code-textarea" rows={3} value={String(node.objective || "")} onChange={(e) => update({ objective: e.target.value })} spellCheck={false} placeholder="{{memory.user_request}}" />
+        <label className="label">{t("workflows.task_objective")}<span className="label__required">*</span></label>
+        <textarea required className="input code-textarea" rows={3} value={String(node.objective || "")} onChange={(e) => update({ objective: e.target.value })} spellCheck={false} placeholder="{{memory.user_request}}" aria-required="true" />
       </div>
       <div className="builder-row-pair">
         <div className="builder-row">
@@ -35,8 +35,8 @@ function TaskEditPanel({ node, update, t, options }: EditPanelProps) {
           )}
         </div>
         <div className="builder-row">
-          <label className="label">{t("workflows.max_turns")}</label>
-          <input className="input input--sm" type="number" min={1} max={200} value={String(node.max_turns ?? 20)} onChange={(e) => update({ max_turns: Number(e.target.value) || 20 })} />
+          <label className="label">{t("workflows.max_turns")}<span className="label__required">*</span></label>
+          <input required className="input input--sm" type="number" min={1} max={200} value={String(node.max_turns ?? 20)} onChange={(e) => update({ max_turns: Number(e.target.value) || 20 })} aria-required="true" />
           <span className="builder-hint">{t("workflows.task_max_turns_hint")}</span>
         </div>
       </div>

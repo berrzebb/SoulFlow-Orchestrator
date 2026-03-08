@@ -12,8 +12,8 @@ function ToolInvokeEditPanel({ node, update, t, options }: EditPanelProps) {
   return (
     <>
       <div className="builder-row">
-        <label className="label">{t("workflows.tool_invoke_id")}</label>
-        <select autoFocus className="input input--sm" value={toolId} onChange={(e) => update({ tool_id: e.target.value })}>
+        <label className="label">{t("workflows.tool_invoke_id")}<span className="label__required">*</span></label>
+        <select autoFocus required className="input input--sm" value={toolId} onChange={(e) => update({ tool_id: e.target.value })} aria-required="true">
           <option value="">{t("common.select")}</option>
           {available.map((id) => <option key={id} value={id}>{id}</option>)}
         </select>
@@ -32,8 +32,8 @@ function ToolInvokeEditPanel({ node, update, t, options }: EditPanelProps) {
         <span className="builder-hint">{t("workflows.tool_invoke_params_hint")}</span>
       </div>
       <div className="builder-row">
-        <label className="label">{t("workflows.hitl_timeout")}</label>
-        <input className="input input--sm" type="number" min={0} value={String(node.timeout_ms ?? 30000)} onChange={(e) => update({ timeout_ms: Number(e.target.value) })} />
+        <label className="label">{t("workflows.hitl_timeout")}<span className="label__required">*</span></label>
+        <input required className="input input--sm" type="number" min={0} value={String(node.timeout_ms ?? 30000)} onChange={(e) => update({ timeout_ms: Number(e.target.value) })} aria-required="true" />
       </div>
     </>
   );

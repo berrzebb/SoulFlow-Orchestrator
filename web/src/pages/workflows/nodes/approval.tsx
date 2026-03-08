@@ -6,12 +6,12 @@ function ApprovalEditPanel({ node, update, t, options }: EditPanelProps) {
   return (
     <>
       <div className="builder-row">
-        <label className="label">{t("workflows.approval_message")}</label>
-        <textarea autoFocus className="input" rows={3} value={String(node.message || "")} onChange={(e) => update({ message: e.target.value })} placeholder={t("workflows.approval_message_hint")} />
+        <label className="label">{t("workflows.approval_message")}<span className="label__required">*</span></label>
+        <textarea autoFocus required className="input" rows={3} value={String(node.message || "")} onChange={(e) => update({ message: e.target.value })} placeholder={t("workflows.approval_message_hint")} aria-required="true" />
       </div>
       <div className="builder-row">
-        <label className="label">{t("workflows.approval_target")}</label>
-        <select className="input input--sm" value={target} onChange={(e) => update({ target: e.target.value })}>
+        <label className="label">{t("workflows.approval_target")}<span className="label__required">*</span></label>
+        <select required className="input input--sm" value={target} onChange={(e) => update({ target: e.target.value })} aria-required="true">
           <option value="origin">{t("workflows.hitl_target_origin")}</option>
           <option value="specified">{t("workflows.hitl_target_specified")}</option>
         </select>
@@ -33,13 +33,13 @@ function ApprovalEditPanel({ node, update, t, options }: EditPanelProps) {
       )}
       <div className="builder-row-pair">
         <div className="builder-row">
-          <label className="label">{t("workflows.approval_quorum")}</label>
-          <input className="input input--sm" type="number" min={1} value={String(node.quorum ?? 1)} onChange={(e) => update({ quorum: Number(e.target.value) })} />
+          <label className="label">{t("workflows.approval_quorum")}<span className="label__required">*</span></label>
+          <input required className="input input--sm" type="number" min={1} value={String(node.quorum ?? 1)} onChange={(e) => update({ quorum: Number(e.target.value) })} aria-required="true" />
           <span className="builder-hint">{t("workflows.approval_quorum_hint")}</span>
         </div>
         <div className="builder-row">
-          <label className="label">{t("workflows.hitl_timeout")}</label>
-          <input className="input input--sm" type="number" min={0} value={String(node.timeout_ms ?? 600000)} onChange={(e) => update({ timeout_ms: Number(e.target.value) })} />
+          <label className="label">{t("workflows.hitl_timeout")}<span className="label__required">*</span></label>
+          <input required className="input input--sm" type="number" min={0} value={String(node.timeout_ms ?? 600000)} onChange={(e) => update({ timeout_ms: Number(e.target.value) })} aria-required="true" />
           <span className="builder-hint">{t("workflows.hitl_timeout_hint")}</span>
         </div>
       </div>
