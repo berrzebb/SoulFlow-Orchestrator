@@ -130,7 +130,7 @@ if not "%INSTANCE%"=="" (
   set "BASE_PROFILE=%COMMAND%"
   set "COMPOSE_CMD=!COMPOSE_CMD! -f docker/docker-compose.instance.override.yml"
 )
-set "COMPOSE_CMD=!COMPOSE_CMD! -p !PROJECT_NAME! up -d"
+set "COMPOSE_CMD=!COMPOSE_CMD! -p !PROJECT_NAME! up -d --build"
 !COMPOSE_CMD!
 
 if !errorlevel! equ 0 (

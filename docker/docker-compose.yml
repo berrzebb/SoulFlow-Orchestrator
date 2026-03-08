@@ -22,7 +22,7 @@ services:
       dockerfile: docker/Dockerfile
       target: ${BUILD_TARGET:-full}
     image: soulflow-orchestrator
-    container_name: ${PROJECT_NAME}-orchestrator
+    container_name: ${PROJECT_NAME:-soulflow}-orchestrator
     restart: unless-stopped
     ports:
       - "${WEB_PORT:-4200}:4200"
@@ -32,10 +32,10 @@ services:
       REDIS_URL: redis://redis:6379
       DEBUG: ${DEBUG:-false}
     volumes:
-      - ${HOST_WORKSPACE}:/data
-      - ${HOST_WORKSPACE}/.agents/.claude:/root/.claude
-      - ${HOST_WORKSPACE}/.agents/.codex:/root/.codex
-      - ${HOST_WORKSPACE}/.agents/.gemini:/root/.gemini
+      - ${HOST_WORKSPACE:-.}:/data
+      - ${HOST_WORKSPACE:-.}/.agents/.claude:/root/.claude
+      - ${HOST_WORKSPACE:-.}/.agents/.codex:/root/.codex
+      - ${HOST_WORKSPACE:-.}/.agents/.gemini:/root/.gemini
     deploy:
       resources:
         limits:
@@ -69,4 +69,4 @@ volumes:
 
 networks:
   default:
-    name: ${PROJECT_NAME}-network
+    name: ${PROJECT_NAME:-soulflow}-network

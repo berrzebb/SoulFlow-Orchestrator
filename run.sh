@@ -141,7 +141,7 @@ run_env() {
     export BASE_PROFILE="$profile"
     compose_args+=("-f" "docker/docker-compose.instance.override.yml")
   fi
-  compose_args+=("-p" "$project_name" "up" "-d")
+  compose_args+=("-p" "$project_name" "up" "-d" "--build")
 
   docker compose "${compose_args[@]}"
 

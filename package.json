@@ -14,7 +14,7 @@
     "dev": "tsx watch --clear-screen=false src/main.ts",
     "dev:once": "tsx src/main.ts",
     "health:llm": "tsx src/orchestrator-llm-health.ts",
-    "docker:build": "docker compose -f docker/docker-compose.yml build",
+    "docker:build": "node -e \"process.env.DOCKER_BUILDKIT='0';require('child_process').execSync('docker compose -f docker/docker-compose.yml build',{stdio:'inherit'})\"",
     "docker:down": "docker compose -f docker/docker-compose.yml down -v"
   },
   "devDependencies": {

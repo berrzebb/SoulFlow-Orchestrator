@@ -29,6 +29,9 @@ tests/
 **/*.spec.ts
 vitest.config.*
 
+# Coverage
+coverage/
+
 # Temporary
 *.tsbuildinfo
 *.log
