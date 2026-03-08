@@ -1,17 +1,9 @@
-import { useState } from "react";
 import { BuilderField } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
+import { useJsonField } from "../use-json-field";
 
 function SetEditPanel({ node, update, t }: EditPanelProps) {
-  const [raw, setRaw] = useState(JSON.stringify(node.assignments || [], null, 2));
-  const [err, setErr] = useState("");
-
-  const handleChange = (val: string) => {
-    setRaw(val);
-    if (!val.trim()) { setErr(""); update({ assignments: [] }); return; }
-    try { update({ assignments: JSON.parse(val) }); setErr(""); }
-    catch { setErr(t("workflows.invalid_json")); }
-  };
+  const { raw, err, onChange: handleChange } = useJsonField(node.assignments || [], (v) => update({ assignments: (v as unknown[]) ?? [] }), []);
 
   return (
     <BuilderField label={t("workflows.set_assignments")} hint={t("workflows.set_hint")} error={err}>
