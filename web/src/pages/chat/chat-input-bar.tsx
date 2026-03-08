@@ -51,6 +51,7 @@ export function ChatInputBar(props: ChatInputBarProps) {
         )}
         <textarea
           ref={textarea_ref}
+          autoFocus
           className="chat-input-bar__textarea"
           value={props.input}
           onChange={(e) => props.setInput(e.target.value)}

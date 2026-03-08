@@ -814,7 +814,7 @@ function CreateRuleForm({ board_id, onClose, onCreated }: { board_id: string; on
   return (
     <form className="kanban-rules__form" onSubmit={handle_submit}>
       <label className="form-label">{t("kanban.trigger")}</label>
-      <select className="form-input" value={trigger} onChange={e => setTrigger(e.target.value)}>
+      <select autoFocus className="form-input" value={trigger} onChange={e => setTrigger(e.target.value)}>
         {TRIGGER_OPTIONS.map(tr => <option key={tr} value={tr}>{tr}</option>)}
       </select>
 
