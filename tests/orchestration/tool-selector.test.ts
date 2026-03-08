@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { select_tools_for_request, TOOL_CATEGORIES } from "@src/orchestration/tool-selector.js";
 
 /** 도구 정의 헬퍼. */
@@ -93,5 +93,65 @@ describe("select_tools_for_request (category fallback)", () => {
     expect(names).toContain("read_file");
     // messaging always included
     expect(names).toContain("message");
+  });
+});
+
+describe("select_tools_for_request — keyword index 경로", () => {
+  // KEYWORD_SELECTION_THRESHOLD = 30 이상의 tool_index.size와 all_tools.length 필요
+
+  function make_large_tools(count: number) {
+    return Array.from({ length: count }, (_, i) => tool_def(`tool_${i}`));
+  }
+
+  it("tool_index.size >= 30 + all_tools >= 30 → 키워드 인덱스 선택 경로", async () => {
+    const selected_names = new Set(["tool_0", "tool_1", "web_search"]);
+
+    const mock_index = {
+      size: 35, // >= 30
+      select: vi.fn(async () => selected_names),
+    } as any;
+
+    const large_tools = [
+      ...make_large_tools(30),
+      tool_def("web_search"),
+    ];
+
+    const result = await select_tools_for_request(
+      large_tools,
+      "search for something",
+      "once",
+      [],
+      undefined,
+      undefined,
+      undefined,
+      mock_index,
+    );
+
+    expect(mock_index.select).toHaveBeenCalledOnce();
+    // 선택된 도구만 반환
+    const names = result.tools.map((t) => (t.function as any).name);
+    expect(names).toContain("web_search");
+    expect(result.keyword_matched).toBeGreaterThan(0);
+  });
+
+  it("tool_index.size < 30 → category fallback (keyword path 미사용)", async () => {
+    const mock_index = {
+      size: 5, // < 30
+      select: vi.fn(async () => new Set(["tool_0"])),
+    } as any;
+
+    const result = await select_tools_for_request(
+      SAMPLE_TOOLS, // 19개 < 30
+      "search",
+      "once",
+      [],
+      undefined,
+      undefined,
+      undefined,
+      mock_index,
+    );
+
+    expect(mock_index.select).not.toHaveBeenCalled();
+    expect(result.keyword_matched).toBeUndefined();
   });
 });

@@ -148,6 +148,50 @@ describe("seal_inbound_sensitive_text", () => {
     });
   });
 
+  describe("단일 따옴표 래핑 값", () => {
+    it("api_key='single_quoted' → 단일 따옴표 처리", async () => {
+      const result = await seal_inbound_sensitive_text(
+        "api_key='my_single_quoted_secret_here'",
+        BASE_ARGS,
+      );
+      expect(result.hits.length).toBeGreaterThan(0);
+      expect(result.text).not.toContain("my_single_quoted_secret_here");
+    });
+  });
+
+  describe("ACCOUNT_LINE_RE (키워드 + 공백 + 숫자)", () => {
+    it("bank 공백 구분 계좌번호 시크릿 처리", async () => {
+      // ACCOUNT_ASSIGNMENT_RE은 bank_account(언더스코어)만 대응,
+      // ACCOUNT_LINE_RE는 bank(공백 구분)도 대응
+      const result = await seal_inbound_sensitive_text(
+        "bank 12345678901",
+        BASE_ARGS,
+      );
+      expect(result.hits.length).toBeGreaterThan(0);
+      expect(result.hits.some((h) => h.kind === "account")).toBe(true);
+    });
+
+    it("iban 공백 구분 계좌번호 시크릿 처리", async () => {
+      const result = await seal_inbound_sensitive_text(
+        "iban 1234567890123456",
+        BASE_ARGS,
+      );
+      expect(result.hits.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe("카드번호 순수 번호 패턴 (CARD_NUMBER_RE)", () => {
+    it("키워드 없이 Luhn-valid 카드번호만 → CARD_NUMBER_RE 경로", async () => {
+      // CARD_ASSIGNMENT_RE는 card= 키워드 필요; 여기서는 순수 숫자만
+      const result = await seal_inbound_sensitive_text(
+        "결제 정보: 4111111111111111 로 처리됩니다",
+        BASE_ARGS,
+      );
+      expect(result.hits.length).toBeGreaterThan(0);
+      expect(result.hits.some((h) => h.kind === "card")).toBe(true);
+    });
+  });
+
   describe("엣지 케이스", () => {
     it("빈 입력 → 빈 결과", async () => {
       const result = await seal_inbound_sensitive_text("", BASE_ARGS);
