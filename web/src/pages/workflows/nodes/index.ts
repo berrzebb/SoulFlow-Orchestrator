@@ -92,7 +92,6 @@ import { document_pdf_descriptor } from "./document-pdf";
 import { document_docx_descriptor } from "./document-docx";
 import { document_xlsx_descriptor } from "./document-xlsx";
 import { document_pptx_descriptor } from "./document-pptx";
-import { document_convert_descriptor } from "./document-convert";
 import { barcode_descriptor } from "./barcode";
 import { changelog_descriptor } from "./changelog";
 import { circuit_breaker_descriptor } from "./circuit-breaker";
@@ -220,7 +219,6 @@ const ALL_DESCRIPTORS = [
   document_docx_descriptor,
   document_xlsx_descriptor,
   document_pptx_descriptor,
-  document_convert_descriptor,
   barcode_descriptor,
   changelog_descriptor,
   circuit_breaker_descriptor,
