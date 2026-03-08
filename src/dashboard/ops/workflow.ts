@@ -796,6 +796,8 @@ export function create_workflow_ops(deps: {
         if (system.trim()) messages.push({ role: "system", content: system });
         messages.push({ role: "user", content: `## Instruction\n${instruction}` });
 
+        logger?.debug?.("[suggest] loop start", { instruction: instruction.slice(0, 80), source: options?.name ?? "inline" });
+
         for (let turn = 0; turn < MAX_TURNS; turn++) {
           if (loop_abort.aborted) break;
           const res = await deps.providers.run_orchestrator({
@@ -806,6 +808,15 @@ export function create_workflow_ops(deps: {
             max_tokens: 4096,
             temperature: 0.2,
             abort_signal: loop_abort,
+          });
+
+          logger?.debug?.("[suggest] turn response", {
+            turn,
+            tool_calls: res.tool_calls.length,
+            tool_names: res.tool_calls.map(tc => tc.name),
+            finish_reason: res.finish_reason,
+            content_len: String(res.content ?? "").length,
+            content_preview: String(res.content ?? "").slice(0, 120),
           });
 
           messages.push({
@@ -823,6 +834,7 @@ export function create_workflow_ops(deps: {
             // tool loop를 지원하지 않는 프로바이더(CLI, 일부 Ollama)는 텍스트로 응답.
             // single-shot JSON 폴백: 간결한 시스템 프롬프트로 완전한 수정 JSON 요청.
             if (turn === 0) {
+              logger?.debug?.("[suggest] fallback: no tool_calls on turn 0, trying single-shot JSON");
               const fallback_system = [
                 "You are a workflow JSON editor.",
                 "Modify the workflow JSON according to the instruction and return the COMPLETE modified workflow.",
@@ -848,7 +860,12 @@ export function create_workflow_ops(deps: {
                 temperature: 0.1,
                 abort_signal: loop_abort,
               });
+              logger?.debug?.("[suggest] fallback response", {
+                content_len: String(fallback_res.content ?? "").length,
+                content_preview: String(fallback_res.content ?? "").slice(0, 200),
+              });
               const patched = extract_json_from_response(String(fallback_res.content || ""));
+              logger?.debug?.("[suggest] fallback json parse", { success: !!patched });
               if (patched) {
                 Object.assign(wf, patched);
                 options?.on_patch?.("metadata", { title: wf.title, objective: wf.objective, variables: wf.variables });
@@ -869,6 +886,7 @@ export function create_workflow_ops(deps: {
               result = read_section(String(tc.arguments.path ?? ""));
             } else if (tc.name === "update_section") {
               result = update_section(String(tc.arguments.path ?? ""), String(tc.arguments.yaml_content ?? ""));
+              logger?.debug?.("[suggest] update_section", { path: tc.arguments.path, result, content_preview: String(tc.arguments.yaml_content ?? "").slice(0, 80) });
             } else if (tc.name === "search_tool") {
               result = await search_tool(String(tc.arguments.query ?? ""));
             } else if (tc.name === "search_skill") {
