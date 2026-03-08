@@ -2,10 +2,12 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import { Modal } from "../../components/modal";
+import { ResourceCard } from "../../components/resource-card";
+import { ToggleSwitch } from "../../components/toggle-switch";
 import { useToast } from "../../components/toast";
 import { useT } from "../../i18n";
+import { time_ago } from "../../utils/format";
 import type { ChannelInstance, ModalMode } from "./types";
-import { InstanceCard } from "./instance-card";
 import { InstanceModal } from "./instance-modal";
 import { GlobalSettingsSection } from "./global-settings";
 
@@ -74,13 +76,42 @@ export default function ChannelsPage() {
       ) : (
         <div className="stat-grid stat-grid--wide fade-in mt-3">
           {instances.map((inst) => (
-            <InstanceCard
+            <ResourceCard
               key={inst.instance_id}
-              instance={inst}
+              resourceId={inst.instance_id}
+              title={inst.label || inst.instance_id}
+              subtitle={inst.instance_id}
+              statusVariant={inst.running ? "ok" : "off"}
+              statusLabel={inst.enabled ? t("channels.running") : t("common.disabled")}
+              badges={[
+                { label: inst.provider.toUpperCase(), variant: "info" },
+                ...(inst.running ? [] : [{ label: t("common.disconnected"), variant: "err" }] as const),
+              ]}
+              testUrl={`/api/channels/instances/${encodeURIComponent(inst.instance_id)}/test`}
+              onTestSuccess={() => `${inst.label}: ${t("channels.connected")}`}
+              onTestFail={(err) => `${inst.label}: ${err}`}
               onEdit={() => setModal({ kind: "edit", instance: inst })}
               onRemove={() => setDeleteTarget(inst)}
-              onToggle={(enabled) => toggle_enabled.mutate({ id: inst.instance_id, enabled })}
-            />
+            >
+              <div className="stat-card__header">
+                <ToggleSwitch
+                  checked={inst.enabled}
+                  onChange={(enabled) => toggle_enabled.mutate({ id: inst.instance_id, enabled })}
+                  aria-label={t("common.enabled")}
+                />
+              </div>
+              {inst.default_target && (
+                <div className="stat-card__extra">
+                  <span className="text-xs text-muted">{inst.default_target}</span>
+                </div>
+              )}
+              {inst.last_error && (
+                <div className="text-xs text-err mt-1">{inst.last_error}</div>
+              )}
+              {inst.updated_at && (
+                <div className="text-xs text-muted">{time_ago(inst.updated_at)}</div>
+              )}
+            </ResourceCard>
           ))}
         </div>
       )}

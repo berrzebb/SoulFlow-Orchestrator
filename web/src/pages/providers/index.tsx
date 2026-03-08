@@ -2,11 +2,12 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import { Modal } from "../../components/modal";
+import { ResourceCard } from "../../components/resource-card";
 import { useToast } from "../../components/toast";
 import { useT } from "../../i18n";
+import { time_ago } from "../../utils/format";
+import { PROVIDER_TYPE_LABELS as TYPE_LABELS } from "../../utils/constants";
 import type { ProviderInstance, ProviderConnection, ModalMode, ConnectionModalMode } from "./types";
-import { ProviderCard } from "./provider-card";
-import { ConnectionCard } from "./connection-card";
 import { CliAuthSection } from "./cli-auth-section";
 import { ProviderModal } from "./provider-modal";
 import { ConnectionModal } from "./connection-modal";
@@ -107,12 +108,41 @@ export default function ProvidersPage() {
           ) : (
             <div className="stat-grid stat-grid--wide">
               {connections.map((conn) => (
-                <ConnectionCard
+                <ResourceCard
                   key={conn.connection_id}
-                  connection={conn}
+                  resourceId={conn.connection_id}
+                  title={conn.label || conn.connection_id}
+                  subtitle={conn.connection_id}
+                  statusVariant={conn.enabled && conn.token_configured ? "ok" : conn.enabled ? "warn" : "off"}
+                  statusLabel={conn.enabled ? t("providers.on") : t("providers.off")}
+                  badges={[
+                    { label: TYPE_LABELS[conn.provider_type] || conn.provider_type, variant: "info" },
+                  ]}
+                  testUrl={`/api/agents/connections/${encodeURIComponent(conn.connection_id)}/test`}
+                  onTestSuccess={() => `${conn.label}: ${t("providers.available")}`}
+                  onTestFail={(err) => `${conn.label}: ${err}`}
                   onEdit={() => setConnModal({ kind: "edit", connection: conn })}
                   onRemove={() => setDeleteConnTarget(conn)}
-                />
+                >
+                  <div className="stat-card__extra">
+                    {conn.api_base && (
+                      <>
+                        <span className="text-accent">{conn.api_base}</span>
+                        {" · "}
+                      </>
+                    )}
+                    {conn.token_configured ? (
+                      <span className="text-ok">{t("providers.token_configured")}</span>
+                    ) : (
+                      <span className="text-err">{t("providers.no_token")}</span>
+                    )}
+                    {" · "}
+                    <span className="text-muted">{t("connections.preset_count", { count: String(conn.preset_count) })}</span>
+                  </div>
+                  {conn.updated_at && (
+                    <div className="text-xs text-muted">{time_ago(conn.updated_at)}</div>
+                  )}
+                </ResourceCard>
               ))}
             </div>
           )}
@@ -145,12 +175,48 @@ export default function ProvidersPage() {
           ) : (
             <div className="stat-grid stat-grid--wide">
               {chatProviders.map((inst) => (
-                <ProviderCard
+                <ResourceCard
                   key={inst.instance_id}
-                  instance={inst}
+                  resourceId={inst.instance_id}
+                  title={inst.label || inst.instance_id}
+                  subtitle={inst.instance_id}
+                  statusVariant={inst.available ? "ok" : inst.enabled ? "warn" : "off"}
+                  statusLabel={inst.enabled ? t("providers.on") : t("common.disabled")}
+                  badges={[
+                    { label: TYPE_LABELS[inst.provider_type] || inst.provider_type, variant: "info" },
+                    { label: inst.model_purpose || "chat", variant: "info" },
+                    ...(inst.available ? [] : [{ label: t("common.unavailable"), variant: "err" }] as const),
+                  ]}
+                  testUrl={`/api/agents/providers/${encodeURIComponent(inst.instance_id)}/test`}
+                  onTestSuccess={(d) => `${inst.label}: ${d || t("providers.available")}`}
+                  onTestFail={(err) => `${inst.label}: ${err}`}
                   onEdit={() => setModal({ kind: "edit", instance: inst })}
                   onRemove={() => setDeleteTarget(inst)}
-                />
+                >
+                  <div className="stat-card__extra">
+                    {inst.settings?.model && (
+                      <>
+                        <span className="text-accent">{inst.settings.model}</span>
+                        {" · "}
+                      </>
+                    )}
+                    {inst.token_configured ? (
+                      <span className="text-ok">{t("providers.token_configured")}</span>
+                    ) : (
+                      <span className="text-err">{t("providers.no_token")}</span>
+                    )}
+                    {" · "}
+                    <span className="text-muted">{t("providers.priority")}: {inst.priority}</span>
+                  </div>
+                  {inst.supported_modes?.length > 0 && (
+                    <div className="stat-card__tags">
+                      {inst.supported_modes.map((m) => <span key={m} className="badge badge--info">{m}</span>)}
+                    </div>
+                  )}
+                  {inst.updated_at && (
+                    <div className="text-xs text-muted">{time_ago(inst.updated_at)}</div>
+                  )}
+                </ResourceCard>
               ))}
             </div>
           )}
@@ -180,12 +246,40 @@ export default function ProvidersPage() {
           ) : (
             <div className="stat-grid stat-grid--wide">
               {embedProviders.map((inst) => (
-                <ProviderCard
+                <ResourceCard
                   key={inst.instance_id}
-                  instance={inst}
+                  resourceId={inst.instance_id}
+                  title={inst.label || inst.instance_id}
+                  subtitle={inst.instance_id}
+                  statusVariant={inst.available ? "ok" : inst.enabled ? "warn" : "off"}
+                  statusLabel={inst.enabled ? t("providers.on") : t("common.disabled")}
+                  badges={[
+                    { label: TYPE_LABELS[inst.provider_type] || inst.provider_type, variant: "info" },
+                    { label: "embedding", variant: "warn" },
+                  ]}
+                  testUrl={`/api/agents/providers/${encodeURIComponent(inst.instance_id)}/test`}
+                  onTestSuccess={(d) => `${inst.label}: ${d || t("providers.available")}`}
+                  onTestFail={(err) => `${inst.label}: ${err}`}
                   onEdit={() => setModal({ kind: "edit", instance: inst })}
                   onRemove={() => setDeleteTarget(inst)}
-                />
+                >
+                  <div className="stat-card__extra">
+                    {inst.settings?.model && (
+                      <>
+                        <span className="text-accent">{inst.settings.model}</span>
+                        {" · "}
+                      </>
+                    )}
+                    {inst.token_configured ? (
+                      <span className="text-ok">{t("providers.token_configured")}</span>
+                    ) : (
+                      <span className="text-err">{t("providers.no_token")}</span>
+                    )}
+                  </div>
+                  {inst.updated_at && (
+                    <div className="text-xs text-muted">{time_ago(inst.updated_at)}</div>
+                  )}
+                </ResourceCard>
               ))}
             </div>
           )}
