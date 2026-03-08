@@ -4,13 +4,28 @@
 
 param(
   [Parameter(Position = 0)]
-  [string]$Command = "help"
+  [string]$Command = "help",
+
+  [Parameter(ValueFromRemainingArguments = $true)]
+  [string[]]$Arguments
 )
 
 $ErrorActionPreference = "Continue"
-$Workspace = $env:WORKSPACE -or "/data"
-$WebPort = $env:WEB_PORT
-$RedisPort = $env:REDIS_PORT
+
+# Named 파라미터 파싱
+$Workspace = "/data"
+$WebPort = $null
+$RedisPort = $null
+
+foreach ($arg in $Arguments) {
+  if ($arg -match "^--workspace=(.+)$") {
+    $Workspace = $matches[1]
+  } elseif ($arg -match "^--web-port=(.+)$") {
+    $WebPort = $matches[1]
+  } elseif ($arg -match "^--redis-port=(.+)$") {
+    $RedisPort = $matches[1]
+  }
+}
 
 function Write-Title {
   param([string]$Title)
@@ -24,21 +39,24 @@ function Show-Help {
   Write-Host ""
   Write-Title "SoulFlow Orchestrator 환경 관리"
   Write-Host ""
-  Write-Host "환경 시작:" -ForegroundColor Yellow
-  Write-Host "  .\run.ps1 dev       - 개발 환경 시작"
-  Write-Host "  .\run.ps1 test      - 테스트 환경 시작"
-  Write-Host "  .\run.ps1 staging   - 스테이징 환경 시작"
-  Write-Host "  .\run.ps1 prod      - 프로덕션 환경 시작"
+  Write-Host "사용법:" -ForegroundColor Yellow
+  Write-Host "  .\run.ps1 dev [--workspace=PATH] [--web-port=PORT] [--redis-port=PORT]"
+  Write-Host ""
+  Write-Host "환경:" -ForegroundColor Yellow
+  Write-Host "  dev       - 개발 환경"
+  Write-Host "  test      - 테스트 환경"
+  Write-Host "  staging   - 스테이징 환경"
+  Write-Host "  prod      - 프로덕션 환경"
   Write-Host ""
   Write-Host "관리:" -ForegroundColor Yellow
-  Write-Host "  .\run.ps1 down      - 모든 환경 중지"
-  Write-Host "  .\run.ps1 status    - 환경 상태 확인"
-  Write-Host "  .\run.ps1 logs      - 로그 확인"
+  Write-Host "  down      - 모든 환경 중지"
+  Write-Host "  status    - 환경 상태 확인"
+  Write-Host "  logs      - 로그 확인"
   Write-Host ""
-  Write-Host "옵션:" -ForegroundColor Yellow
-  Write-Host "  `$env:WORKSPACE='D:\path' .\run.ps1 dev - 커스텀 워크스페이스"
-  Write-Host "  `$env:WEB_PORT=8080 .\run.ps1 dev         - 웹 포트"
-  Write-Host "  `$env:REDIS_PORT=6380 .\run.ps1 dev       - Redis 포트"
+  Write-Host "예시:" -ForegroundColor Yellow
+  Write-Host "  .\run.ps1 dev"
+  Write-Host "  .\run.ps1 dev --workspace=D:\path"
+  Write-Host "  .\run.ps1 dev --workspace=D:\path --web-port=8080 --redis-port=6380"
   Write-Host ""
 }
 

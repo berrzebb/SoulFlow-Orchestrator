@@ -5,7 +5,7 @@ function BatchEditPanel({ node, update, t }: EditPanelProps) {
     <>
       <div className="builder-row">
         <label className="label">{t("workflows.batch_array_field")}</label>
-        <input className="input input--sm" value={String(node.array_field || "")} onChange={(e) => update({ array_field: e.target.value })} placeholder="memory.items" />
+        <input autoFocus className="input input--sm" value={String(node.array_field || "")} onChange={(e) => update({ array_field: e.target.value })} placeholder="memory.items" />
         <span className="builder-hint">{t("workflows.batch_array_field_hint")}</span>
       </div>
       <div className="builder-row">

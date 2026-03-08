@@ -6,7 +6,7 @@ function ArchiveEditPanel({ node, update, t }: EditPanelProps) {
       <div className="builder-row-pair">
         <div className="builder-row">
           <label className="label">{t("workflows.archive_operation")}</label>
-          <select className="input input--sm" value={String(node.operation || "list")} onChange={(e) => update({ operation: e.target.value })}>
+          <select autoFocus className="input input--sm" value={String(node.operation || "list")} onChange={(e) => update({ operation: e.target.value })}>
             {["create", "extract", "list"].map((o) => <option key={o} value={o}>{o}</option>)}
           </select>
         </div>

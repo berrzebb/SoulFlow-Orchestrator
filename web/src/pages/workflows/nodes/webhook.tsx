@@ -6,7 +6,7 @@ function WebhookEditPanel({ node, update, t }: EditPanelProps) {
     <>
       <div className="builder-row">
         <label className="label">{t("workflows.webhook_node_path")}</label>
-        <input className="input input--sm" value={String(node.path || "")} onChange={(e) => update({ path: e.target.value })} placeholder="/hooks/my-webhook" />
+        <input autoFocus className="input input--sm" value={String(node.path || "")} onChange={(e) => update({ path: e.target.value })} placeholder="/hooks/my-webhook" />
       </div>
       <div className="builder-row-pair">
         <div className="builder-row">

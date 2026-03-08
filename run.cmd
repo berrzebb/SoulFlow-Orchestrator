@@ -2,24 +2,29 @@
 setlocal enabledelayedexpansion
 
 REM SoulFlow Orchestrator 환경 관리 스크립트 (Windows)
-REM 사용법: run.cmd dev|test|staging|prod|down|status|logs|help
-REM 워크스페이스: run.cmd dev WORKSPACE=D:\my\workspace
-REM 포트: run.cmd dev WEB_PORT=8080 REDIS_PORT=6380
+REM 사용법: run.cmd dev [workspace] [web_port] [redis_port]
 
 setlocal enabledelayedexpansion
 
-REM 환경변수 설정 (WORKSPACE=xxx 형태로 전달받음)
-if not "!WORKSPACE!"=="" (
-  set "WORKSPACE=!WORKSPACE!"
-) else (
-  REM .env 파일에서 WORKSPACE 읽기
-  for /f "tokens=2 delims==" %%A in ('findstr /R "^WORKSPACE=" .env 2^>nul') do (
-    set "WORKSPACE=%%A"
+REM 파라미터 파싱 (named parameters 지원)
+set "WORKSPACE=/data"
+set "WEB_PORT="
+set "REDIS_PORT="
+
+REM 모든 인자를 파싱
+setlocal enabledelayedexpansion
+for /l %%i in (2, 1, 9) do (
+  set "arg=!%%i!"
+  if not "!arg!"=="" (
+    if "!arg:~0,12!"=="--workspace=" (
+      set "WORKSPACE=!arg:~12!"
+    ) else if "!arg:~0,11!"=="--web-port=" (
+      set "WEB_PORT=!arg:~11!"
+    ) else if "!arg:~0,13!"=="--redis-port=" (
+      set "REDIS_PORT=!arg:~13!"
+    )
   )
 )
-
-REM 기본값
-if "!WORKSPACE!"=="" set "WORKSPACE=/data"
 
 cls
 
@@ -50,21 +55,24 @@ echo %BLUE%═══════════════════════
 echo %BLUE%   SoulFlow Orchestrator 환경 관리%RESET%
 echo %BLUE%════════════════════════════════════════%RESET%
 echo.
-echo %YELLOW%환경 시작:%RESET%
-echo   run.cmd dev       - 개발 환경 시작
-echo   run.cmd test      - 테스트 환경 시작
-echo   run.cmd staging   - 스테이징 환경 시작
-echo   run.cmd prod      - 프로덕션 환경 시작
+echo %YELLOW%사용법:%RESET%
+echo   run.cmd dev [--workspace=PATH] [--web-port=PORT] [--redis-port=PORT]
+echo.
+echo %YELLOW%환경:%RESET%
+echo   dev       - 개발 환경
+echo   test      - 테스트 환경
+echo   staging   - 스테이징 환경
+echo   prod      - 프로덕션 환경
 echo.
 echo %YELLOW%관리:%RESET%
-echo   run.cmd down      - 모든 환경 중지
-echo   run.cmd status    - 환경 상태 확인
-echo   run.cmd logs      - 로그 확인
+echo   down      - 모든 환경 중지
+echo   status    - 환경 상태 확인
+echo   logs      - 로그 확인
 echo.
-echo %YELLOW%옵션:%RESET%
-echo   run.cmd dev WORKSPACE=D:\path - 커스텀 워크스페이스
-echo   run.cmd dev WEB_PORT=8080     - 웹 포트
-echo   run.cmd dev REDIS_PORT=6380   - Redis 포트
+echo %YELLOW%예시:%RESET%
+echo   run.cmd dev
+echo   run.cmd dev --workspace=D:\path
+echo   run.cmd dev --workspace=D:\path --web-port=8080 --redis-port=6380
 echo.
 goto end
 
@@ -73,14 +81,15 @@ cls
 echo.
 echo %YELLOW%🚀 개발 환경 시작 중...%RESET%
 echo.
+set "WORKSPACE=!WORKSPACE!"
+if not "!WEB_PORT!"=="" set "WEB_PORT=!WEB_PORT!"
+if not "!REDIS_PORT!"=="" set "REDIS_PORT=!REDIS_PORT!"
 node setup-environment.js dev
 if !errorlevel! neq 0 goto error
 docker compose -f docker-compose.dev.yml up -d
 if !errorlevel! neq 0 goto error
 echo.
 echo %GREEN%✅ 개발 환경이 시작되었습니다!%RESET%
-echo    웹: http://localhost:4200
-echo    Redis: redis://localhost:6379
 echo.
 goto end
 
@@ -95,8 +104,6 @@ docker compose -f docker-compose.test.yml up -d
 if !errorlevel! neq 0 goto error
 echo.
 echo %GREEN%✅ 테스트 환경이 시작되었습니다!%RESET%
-echo    웹: http://localhost:4201
-echo    Redis: redis://localhost:6380
 echo.
 goto end
 
@@ -111,8 +118,6 @@ docker compose -f docker-compose.staging.yml up -d
 if !errorlevel! neq 0 goto error
 echo.
 echo %GREEN%✅ 스테이징 환경이 시작되었습니다!%RESET%
-echo    웹: http://localhost:4202
-echo    Redis: redis://localhost:6381
 echo.
 goto end
 
@@ -127,8 +132,6 @@ docker compose -f docker-compose.yml up -d
 if !errorlevel! neq 0 goto error
 echo.
 echo %GREEN%✅ 프로덕션 환경이 시작되었습니다!%RESET%
-echo    웹: http://localhost:4200
-echo    Redis: redis://localhost:6379
 echo.
 goto end
 

@@ -5,7 +5,7 @@ function WaitEditPanel({ node, update, t }: EditPanelProps) {
     <>
       <div className="builder-row">
         <label className="label">{t("workflows.wait_type")}</label>
-        <select className="input input--sm" value={String(node.wait_type || "timer")} onChange={(e) => update({ wait_type: e.target.value })}>
+        <select autoFocus className="input input--sm" value={String(node.wait_type || "timer")} onChange={(e) => update({ wait_type: e.target.value })}>
           <option value="timer">{t("workflows.opt_timer")}</option>
           <option value="webhook">{t("workflows.opt_webhook")}</option>
           <option value="approval">{t("workflows.opt_approval")}</option>

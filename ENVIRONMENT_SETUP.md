@@ -13,31 +13,26 @@
 
 **Linux/macOS:**
 ```bash
-# 워크스페이스
-WORKSPACE=/custom/path ./run.sh dev
-
-# 웹 포트
-WEB_PORT=8080 ./run.sh dev
-
-# Redis 포트
-REDIS_PORT=6380 ./run.sh dev
-
-# 모두 지정
-WORKSPACE=/custom/path WEB_PORT=8080 REDIS_PORT=6380 ./run.sh dev
+./run.sh dev --workspace=/custom/path
+./run.sh dev --web-port=8080
+./run.sh dev --redis-port=6380
+./run.sh dev --workspace=/custom/path --web-port=8080 --redis-port=6380
 ```
 
 **Windows (Cmd):**
 ```cmd
-run.cmd dev WORKSPACE=D:\custom\path
-run.cmd dev WEB_PORT=8080
-run.cmd dev REDIS_PORT=6380
+run.cmd dev --workspace=D:\custom\path
+run.cmd dev --web-port=8080
+run.cmd dev --redis-port=6380
+run.cmd dev --workspace=D:\custom\path --web-port=8080 --redis-port=6380
 ```
 
 **Windows (PowerShell):**
 ```powershell
-$env:WORKSPACE='D:\custom\path' .\run.ps1 dev
-$env:WEB_PORT=8080 .\run.ps1 dev
-$env:REDIS_PORT=6380 .\run.ps1 dev
+.\run.ps1 dev --workspace=D:\custom\path
+.\run.ps1 dev --web-port=8080
+.\run.ps1 dev --redis-port=6380
+.\run.ps1 dev --workspace=D:\custom\path --web-port=8080 --redis-port=6380
 ```
 
 ## 환경 중지하기

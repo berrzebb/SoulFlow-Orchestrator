@@ -7,7 +7,7 @@ function DecisionEditPanel({ node, update, t }: EditPanelProps) {
       <div className="builder-row-pair">
         <div className="builder-row">
           <label className="label">{t("workflows.decision_op")}</label>
-          <select className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
+          <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
             <option value="append">{t("workflows.opt_append")}</option>
             <option value="list">{t("workflows.opt_list")}</option>
             <option value="get_effective">{t("workflows.opt_get_effective")}</option>

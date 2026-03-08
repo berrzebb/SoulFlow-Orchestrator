@@ -28,7 +28,7 @@ function AssertEditPanel({ node, update, t }: EditPanelProps) {
     <>
       <div className="builder-row">
         <label className="label">{t("workflows.assert_on_fail")}</label>
-        <select className="input input--sm" value={String(node.on_fail || "halt")} onChange={(e) => update({ on_fail: e.target.value })}>
+        <select autoFocus className="input input--sm" value={String(node.on_fail || "halt")} onChange={(e) => update({ on_fail: e.target.value })}>
           <option value="halt">{t("workflows.assert_on_fail_halt")}</option>
           <option value="continue">{t("workflows.assert_on_fail_continue")}</option>
         </select>

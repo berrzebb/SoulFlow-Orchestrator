@@ -13,7 +13,7 @@ function ToolInvokeEditPanel({ node, update, t, options }: EditPanelProps) {
     <>
       <div className="builder-row">
         <label className="label">{t("workflows.tool_invoke_id")}</label>
-        <select className="input input--sm" value={toolId} onChange={(e) => update({ tool_id: e.target.value })}>
+        <select autoFocus className="input input--sm" value={toolId} onChange={(e) => update({ tool_id: e.target.value })}>
           <option value="">{t("common.select")}</option>
           {available.map((id) => <option key={id} value={id}>{id}</option>)}
         </select>
