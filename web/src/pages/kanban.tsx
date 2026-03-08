@@ -705,7 +705,7 @@ function CreateBoardModal({ open, onClose, onCreate }: {
 
   return (
     <FormModal open={open} title={t("kanban.new_board")} onClose={() => { onClose(); reset(); }}
-      onSubmit={handle_submit} submitLabel={t("kanban.create_board")}>
+      onSubmit={handle_submit} submitLabel={t("kanban.create_board")} submitDisabled={!name.trim() || !scopeId.trim()}>
       <label className="form-label">{t("kanban.board_name")}</label>
       <input className="form-input" value={name} onChange={e => setName(e.target.value)} autoFocus
         placeholder="e.g. Sprint 1, My Project" />
@@ -717,7 +717,7 @@ function CreateBoardModal({ open, onClose, onCreate }: {
 
       <label className="form-label kanban-form__label--mt">{t("kanban.scope_id")}</label>
       <input className="form-input" value={scopeId} onChange={e => setScopeId(e.target.value)}
-        placeholder="e.g. my-workflow, #general" />
+        placeholder="e.g. my-workflow, #general" onKeyDown={(e) => { if (e.key === "Enter" && name.trim() && scopeId.trim()) handle_submit(e as unknown as React.FormEvent); }} />
     </FormModal>
   );
 }
