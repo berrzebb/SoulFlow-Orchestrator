@@ -1,6 +1,5 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
-import { BuilderField, BuilderRowPair } from "../builder-field";
-import { useJsonField } from "../use-json-field";
+import { BuilderField, BuilderRowPair, JsonField } from "../builder-field";
 
 const CUSTOM_SENTINEL = "__custom__";
 
@@ -8,8 +7,6 @@ function OauthEditPanel({ node, update, t, options }: EditPanelProps) {
   const integrations = options?.oauth_integrations || [];
   const current = String(node.service_id || "");
   const is_custom = current === CUSTOM_SENTINEL || (current !== "" && !integrations.some((i) => i.instance_id === current));
-  const { raw: headersRaw, err: headersErr, onChange: handleHeaders } = useJsonField(node.headers, (v) => update({ headers: v }));
-
   const handleServiceChange = (val: string) => {
     if (val === CUSTOM_SENTINEL) {
       update({ service_id: CUSTOM_SENTINEL, auth_url: "", token_url: "", client_id: "", scopes: "" });
@@ -66,15 +63,7 @@ function OauthEditPanel({ node, update, t, options }: EditPanelProps) {
           <input className="input input--sm" value={String(node.url || "")} onChange={(e) => update({ url: e.target.value })} placeholder="https://api.github.com/user" />
         </BuilderField>
       </BuilderRowPair>
-      <BuilderField label={t("workflows.http_headers")} error={headersErr}>
-        <textarea
-          className={`input input--sm code-textarea${headersErr ? " input--err" : ""}`}
-          rows={2}
-          value={headersRaw}
-          onChange={(e) => handleHeaders(e.target.value)}
-          placeholder='{"Accept": "application/json"}'
-        />
-      </BuilderField>
+      <JsonField label={t("workflows.http_headers")} value={node.headers} onUpdate={(v) => update({ headers: v })} rows={2} small placeholder='{"Accept": "application/json"}' />
       <BuilderField label={t("workflows.http_body")}>
         <textarea className="input" rows={3} value={typeof node.body === "string" ? node.body : JSON.stringify(node.body || "", null, 2)} onChange={(e) => update({ body: e.target.value })} />
       </BuilderField>

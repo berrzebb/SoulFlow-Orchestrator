@@ -1,4 +1,4 @@
-import { useRef, useEffect, forwardRef } from "react";
+import { useRef, useEffect, forwardRef, type KeyboardEvent } from "react";
 
 /**
  * 검색 입력 필드 — 아이콘, 검색어, 클리어 버튼 포함.
@@ -40,6 +40,8 @@ export interface SearchInputProps {
   showIcon?: boolean;
   /** 아이콘 위치 ('left' | 'right') */
   iconPosition?: "left" | "right";
+  /** 키보드 이벤트 핸들러 */
+  onKeyDown?: (e: KeyboardEvent<HTMLInputElement>) => void;
 }
 
 export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(function SearchInput(
@@ -55,6 +57,7 @@ export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(functi
     inputClassName = "",
     showIcon = true,
     iconPosition = "left",
+    onKeyDown,
   },
   ref,
 ) {
@@ -110,6 +113,7 @@ export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(functi
         placeholder={placeholder}
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        onKeyDown={onKeyDown}
         disabled={disabled}
         aria-label={ariaLabel}
       />
