@@ -93,7 +93,7 @@ export interface SkillNodeDef {
   attach_to?: string[];
 }
 
-export type TriggerType = "cron" | "webhook" | "manual" | "channel_message";
+export type TriggerType = "cron" | "webhook" | "manual" | "channel_message" | "kanban";
 
 export interface TriggerNodeDef {
   id: string;
@@ -103,6 +103,9 @@ export interface TriggerNodeDef {
   webhook_path?: string;
   channel_type?: string;
   chat_id?: string;
+  board_id?: string;
+  actions?: string[];
+  column_id?: string;
 }
 
 /** 필드 레벨 데이터 매핑 (소스 노드 필드 → 타겟 노드). */

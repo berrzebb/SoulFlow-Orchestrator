@@ -182,10 +182,10 @@ export function CronEditModal({ trigger, onChange, onRemove, onClose }: {
 
 // ── Trigger Node 편집 모달 ──
 
-type TriggerType = "cron" | "webhook" | "manual" | "channel_message";
-const TRIGGER_TYPES: TriggerType[] = ["cron", "webhook", "manual", "channel_message"];
+type TriggerType = "cron" | "webhook" | "manual" | "channel_message" | "kanban";
+const TRIGGER_TYPES: TriggerType[] = ["cron", "webhook", "manual", "channel_message", "kanban"];
 const TRIGGER_LABEL_KEYS: Record<TriggerType, string> = {
-  cron: "workflows.trigger_cron", webhook: "workflows.trigger_webhook", manual: "workflows.trigger_manual", channel_message: "workflows.trigger_channel",
+  cron: "workflows.trigger_cron", webhook: "workflows.trigger_webhook", manual: "workflows.trigger_manual", channel_message: "workflows.trigger_channel", kanban: "workflows.kanban_trigger",
 };
 
 export function TriggerNodeEditModal({ node, onChange, onRemove, onClose }: {
@@ -203,12 +203,20 @@ export function TriggerNodeEditModal({ node, onChange, onRemove, onClose }: {
   const [webhookPath, setWebhookPath] = useState(node.webhook_path || "");
   const [channelType, setChannelType] = useState(node.channel_type || "slack");
   const [chatId, setChatId] = useState(node.chat_id || "");
+  const [boardId, setBoardId] = useState(node.board_id || "");
+  const [actions, setActions] = useState((node.actions || []).join(","));
+  const [columnId, setColumnId] = useState(node.column_id || "");
 
   const handleSave = () => {
     const updated: TriggerNodeDef = { id: node.id, trigger_type: triggerType };
     if (triggerType === "cron") { updated.schedule = schedule; if (timezone) updated.timezone = timezone; }
     if (triggerType === "webhook") { updated.webhook_path = webhookPath; }
     if (triggerType === "channel_message") { updated.channel_type = channelType; if (chatId) updated.chat_id = chatId; }
+    if (triggerType === "kanban") {
+      updated.board_id = boardId;
+      if (actions) updated.actions = actions.split(",").map(a => a.trim()).filter(a => a);
+      if (columnId) updated.column_id = columnId;
+    }
     onChange(updated);
     onClose();
   };
@@ -254,6 +262,21 @@ export function TriggerNodeEditModal({ node, onChange, onRemove, onClose }: {
             <div className="builder-row">
               <label className="label">{t("workflows.channel_chat_id")}</label>
               <input className="input input--sm" value={chatId} onChange={(e) => setChatId(e.target.value)} placeholder="C01234567" onKeyDown={(e) => { if (e.key === "Enter") handleSave(); }} />
+            </div>
+          </>)}
+          {triggerType === "kanban" && (<>
+            <div className="builder-row">
+              <label className="label">{t("workflows.kanban_trigger_board_id")}<span className="label__required">*</span></label>
+              <input autoFocus className="input input--sm" required value={boardId} onChange={(e) => setBoardId(e.target.value)} placeholder="board-id" onKeyDown={(e) => { if (e.key === "Enter") handleSave(); }} />
+            </div>
+            <div className="builder-row">
+              <label className="label">{t("workflows.kanban_trigger_actions")}</label>
+              <input className="input input--sm" value={actions} onChange={(e) => setActions(e.target.value)} placeholder="created,moved" onKeyDown={(e) => { if (e.key === "Enter") handleSave(); }} />
+              <span className="builder-hint">{t("workflows.kanban_trigger_column_hint")}</span>
+            </div>
+            <div className="builder-row">
+              <label className="label">{t("workflows.kanban_trigger_column_id")}</label>
+              <input className="input input--sm" value={columnId} onChange={(e) => setColumnId(e.target.value)} placeholder="todo, in_progress, done" onKeyDown={(e) => { if (e.key === "Enter") handleSave(); }} />
             </div>
           </>)}
         </div>
