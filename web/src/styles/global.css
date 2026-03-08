@@ -152,7 +152,7 @@ textarea.input {
 }
 .input--err {
   border-color: var(--err);
-  background-color: color-mix(in srgb, var(--err) 5%, transparent);
+  background-color: color-mix(in srgb, var(--err) 10%, transparent);
 }
 .input--err:focus-visible {
   border-color: var(--err);
