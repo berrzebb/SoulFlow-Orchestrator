@@ -1,6 +1,6 @@
-import { useState } from "react";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 import { BuilderField, BuilderRowPair } from "../builder-field";
+import { useJsonField } from "../use-json-field";
 
 const CUSTOM_SENTINEL = "__custom__";
 
@@ -8,15 +8,7 @@ function OauthEditPanel({ node, update, t, options }: EditPanelProps) {
   const integrations = options?.oauth_integrations || [];
   const current = String(node.service_id || "");
   const is_custom = current === CUSTOM_SENTINEL || (current !== "" && !integrations.some((i) => i.instance_id === current));
-  const [headersRaw, setHeadersRaw] = useState(node.headers ? JSON.stringify(node.headers, null, 2) : "");
-  const [headersErr, setHeadersErr] = useState("");
-
-  const handleHeaders = (val: string) => {
-    setHeadersRaw(val);
-    if (!val.trim()) { setHeadersErr(""); update({ headers: undefined }); return; }
-    try { update({ headers: JSON.parse(val) }); setHeadersErr(""); }
-    catch { setHeadersErr(t("workflows.invalid_json")); }
-  };
+  const { raw: headersRaw, err: headersErr, onChange: handleHeaders } = useJsonField(node.headers, (v) => update({ headers: v }));
 
   const handleServiceChange = (val: string) => {
     if (val === CUSTOM_SENTINEL) {

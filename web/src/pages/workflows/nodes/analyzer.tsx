@@ -1,18 +1,10 @@
-import { useState } from "react";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 import { BuilderField, BackendModelPicker, TemperatureField } from "../builder-field";
+import { useJsonField } from "../use-json-field";
 
 function AnalyzerEditPanel({ node, update, t, options }: EditPanelProps) {
-  const [schemaRaw, setSchemaRaw] = useState(node.output_json_schema ? JSON.stringify(node.output_json_schema, null, 2) : "");
-  const [schemaErr, setSchemaErr] = useState("");
+  const { raw: schemaRaw, err: schemaErr, onChange: handleSchema } = useJsonField(node.output_json_schema, (v) => update({ output_json_schema: v }));
   const temp = node.temperature as number | undefined;
-
-  const handleSchema = (val: string) => {
-    setSchemaRaw(val);
-    if (!val.trim()) { setSchemaErr(""); update({ output_json_schema: undefined }); return; }
-    try { update({ output_json_schema: JSON.parse(val) }); setSchemaErr(""); }
-    catch { setSchemaErr(t("workflows.invalid_json")); }
-  };
 
   return (
     <>

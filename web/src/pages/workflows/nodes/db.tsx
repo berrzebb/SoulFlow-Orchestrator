@@ -1,17 +1,9 @@
-import { useState } from "react";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 import { BuilderField, BuilderRowPair } from "../builder-field";
+import { useJsonField } from "../use-json-field";
 
 function DbEditPanel({ node, update, t }: EditPanelProps) {
-  const [paramsRaw, setParamsRaw] = useState(node.params ? JSON.stringify(node.params, null, 2) : "");
-  const [paramsErr, setParamsErr] = useState("");
-
-  const handleParams = (val: string) => {
-    setParamsRaw(val);
-    if (!val.trim()) { setParamsErr(""); update({ params: undefined }); return; }
-    try { update({ params: JSON.parse(val) }); setParamsErr(""); }
-    catch { setParamsErr(t("workflows.invalid_json")); }
-  };
+  const { raw: paramsRaw, err: paramsErr, onChange: handleParams } = useJsonField(node.params, (v) => update({ params: v }));
 
   return (
     <>

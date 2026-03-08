@@ -1,18 +1,10 @@
-import { useState } from "react";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 import { BuilderField, BuilderRowPair } from "../builder-field";
+import { useJsonField } from "../use-json-field";
 
 function TaskEditPanel({ node, update, t, options }: EditPanelProps) {
   const channels = options?.channels || [];
-  const [memoryRaw, setMemoryRaw] = useState(node.initial_memory ? JSON.stringify(node.initial_memory, null, 2) : "");
-  const [memoryErr, setMemoryErr] = useState("");
-
-  const handleMemory = (val: string) => {
-    setMemoryRaw(val);
-    if (!val.trim()) { setMemoryErr(""); update({ initial_memory: undefined }); return; }
-    try { update({ initial_memory: JSON.parse(val) }); setMemoryErr(""); }
-    catch { setMemoryErr(t("workflows.invalid_json")); }
-  };
+  const { raw: memoryRaw, err: memoryErr, onChange: handleMemory } = useJsonField(node.initial_memory, (v) => update({ initial_memory: v }));
   return (
     <>
       <BuilderField label={t("workflows.task_title")} required>

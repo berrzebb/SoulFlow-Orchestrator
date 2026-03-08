@@ -1,17 +1,9 @@
-import { useState } from "react";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 import { BuilderField, BuilderRowPair } from "../builder-field";
+import { useJsonField } from "../use-json-field";
 
 function WebFormEditPanel({ node, update, t }: EditPanelProps) {
-  const [fieldsRaw, setFieldsRaw] = useState(node.fields ? JSON.stringify(node.fields, null, 2) : "{}");
-  const [fieldsErr, setFieldsErr] = useState("");
-
-  const handleFields = (val: string) => {
-    setFieldsRaw(val);
-    if (!val.trim()) { setFieldsErr(""); update({ fields: {} }); return; }
-    try { update({ fields: JSON.parse(val) }); setFieldsErr(""); }
-    catch { setFieldsErr(t("workflows.invalid_json")); }
-  };
+  const { raw: fieldsRaw, err: fieldsErr, onChange: handleFields } = useJsonField(node.fields ?? {}, (v) => update({ fields: v }), {});
 
   return (
     <>

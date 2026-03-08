@@ -1,17 +1,9 @@
-import { useState } from "react";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 import { BuilderField, BuilderRowPair } from "../builder-field";
+import { useJsonField } from "../use-json-field";
 
 function HttpEditPanel({ node, update, t }: EditPanelProps) {
-  const [headersRaw, setHeadersRaw] = useState(node.headers ? JSON.stringify(node.headers, null, 2) : "");
-  const [headersErr, setHeadersErr] = useState("");
-
-  const handleHeaders = (val: string) => {
-    setHeadersRaw(val);
-    if (!val.trim()) { setHeadersErr(""); update({ headers: undefined }); return; }
-    try { update({ headers: JSON.parse(val) }); setHeadersErr(""); }
-    catch { setHeadersErr(t("workflows.invalid_json")); }
-  };
+  const { raw: headersRaw, err: headersErr, onChange: handleHeaders } = useJsonField(node.headers, (v) => update({ headers: v }));
 
   return (
     <>

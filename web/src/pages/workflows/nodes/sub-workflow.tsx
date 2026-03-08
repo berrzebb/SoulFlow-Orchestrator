@@ -1,18 +1,10 @@
-import { useState } from "react";
 import { BuilderField } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
+import { useJsonField } from "../use-json-field";
 
 function SubWorkflowEditPanel({ node, update, t, options }: EditPanelProps) {
   const templates = options?.workflow_templates || [];
-  const [mappingRaw, setMappingRaw] = useState(node.input_mapping ? JSON.stringify(node.input_mapping, null, 2) : "");
-  const [mappingErr, setMappingErr] = useState("");
-
-  const handleMapping = (val: string) => {
-    setMappingRaw(val);
-    if (!val.trim()) { setMappingErr(""); update({ input_mapping: undefined }); return; }
-    try { update({ input_mapping: JSON.parse(val) }); setMappingErr(""); }
-    catch { setMappingErr(t("workflows.invalid_json")); }
-  };
+  const { raw: mappingRaw, err: mappingErr, onChange: handleMapping } = useJsonField(node.input_mapping, (v) => update({ input_mapping: v }));
   return (
     <>
       <BuilderField label={t("workflows.sub_workflow_name")}>

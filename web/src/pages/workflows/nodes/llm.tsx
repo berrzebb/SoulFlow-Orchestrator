@@ -1,47 +1,24 @@
-import { useState } from "react";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
-import { useProviderModels } from "../use-provider-models";
-import { BuilderField, BuilderRowPair, TemperatureField } from "../builder-field";
+import { BuilderField, BackendModelPicker, BuilderRowPair, TemperatureField } from "../builder-field";
+import { useJsonField } from "../use-json-field";
 
 function LlmEditPanel({ node, update, t, options }: EditPanelProps) {
-  const { models, loading: modelsLoading } = useProviderModels(node.backend as string | undefined, options);
-  const [schemaRaw, setSchemaRaw] = useState(node.output_json_schema ? JSON.stringify(node.output_json_schema, null, 2) : "");
-  const [schemaErr, setSchemaErr] = useState("");
+  const { raw: schemaRaw, err: schemaErr, onChange: handleSchema } = useJsonField(node.output_json_schema, (v) => update({ output_json_schema: v }));
   const temp = node.temperature as number | undefined;
-
-  const handleSchema = (val: string) => {
-    setSchemaRaw(val);
-    if (!val.trim()) { setSchemaErr(""); update({ output_json_schema: undefined }); return; }
-    try { update({ output_json_schema: JSON.parse(val) }); setSchemaErr(""); }
-    catch { setSchemaErr(t("workflows.invalid_json")); }
-  };
 
   return (
     <>
-      <BuilderRowPair>
-        <BuilderField label={t("workflows.llm_backend")} required>
-          <select autoFocus className="input input--sm" required value={String(node.backend || "")} onChange={(e) => update({ backend: e.target.value })} aria-required="true">
-            <option value="">-</option>
-            {(options?.backends || []).map((b) => (
-              <option key={b.value} value={b.value}>
-                {b.available === false ? "\u26AA " : "\uD83D\uDFE2 "}{b.label}{b.provider_type ? ` (${b.provider_type})` : ""}
-              </option>
-            ))}
-          </select>
-        </BuilderField>
-        <BuilderField label={t("workflows.llm_model")} required>
-          {modelsLoading ? (
-            <input className="input input--sm" disabled aria-busy="true" placeholder="loading..." />
-          ) : models.length > 0 ? (
-            <select className="input input--sm" value={String(node.model || "")} onChange={(e) => update({ model: e.target.value })}>
-              <option value="">auto</option>
-              {models.filter((m) => m.purpose !== "embedding").map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-            </select>
-          ) : (
-            <input className="input input--sm" value={String(node.model || "")} onChange={(e) => update({ model: e.target.value })} placeholder="auto" />
-          )}
-        </BuilderField>
-      </BuilderRowPair>
+      <BackendModelPicker
+        backend={String(node.backend || "")}
+        onBackendChange={(v) => update({ backend: v })}
+        model={node.model as string | undefined}
+        onModelChange={(v) => update({ model: v })}
+        options={options}
+        required
+        autoFocus
+        backendLabel={t("workflows.llm_backend")}
+        modelLabel={t("workflows.llm_model")}
+      />
       <BuilderField label={t("workflows.llm_prompt")} required>
         <textarea className="input code-textarea" required rows={4} value={String(node.prompt_template || "")} onChange={(e) => update({ prompt_template: e.target.value })} spellCheck={false} placeholder="{{prompt}}" aria-required="true" />
       </BuilderField>

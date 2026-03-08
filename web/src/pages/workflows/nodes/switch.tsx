@@ -1,17 +1,9 @@
-import { useState } from "react";
 import { BuilderField } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
+import { useJsonField } from "../use-json-field";
 
 function SwitchEditPanel({ node, update, t }: EditPanelProps) {
-  const [casesRaw, setCasesRaw] = useState(JSON.stringify(node.cases || [], null, 2));
-  const [casesErr, setCasesErr] = useState("");
-
-  const handleCases = (val: string) => {
-    setCasesRaw(val);
-    if (!val.trim()) { setCasesErr(""); update({ cases: [] }); return; }
-    try { update({ cases: JSON.parse(val) }); setCasesErr(""); }
-    catch { setCasesErr(t("workflows.invalid_json")); }
-  };
+  const { raw: casesRaw, err: casesErr, onChange: handleCases } = useJsonField(node.cases || [], (v) => update({ cases: (v as unknown[]) ?? [] }), []);
 
   return (
     <>
