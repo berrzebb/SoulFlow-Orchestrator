@@ -581,7 +581,7 @@ a:focus-visible > .stat-card {
 .btn--ghost:hover { background: var(--hover); color: var(--text); }
 .btn--ghost--active { background: var(--surface-subtle); color: var(--accent); border-color: color-mix(in srgb, var(--accent) 20%, transparent); }
 .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+.btn:disabled { opacity: 0.65; color: var(--muted); cursor: not-allowed; transform: none; }
 .btn:not(.btn--icon) > svg {
   margin-right: 4px;
   vertical-align: -2px;
@@ -1324,7 +1324,7 @@ a:focus-visible > .stat-card {
   box-shadow: var(--shadow-sm);
 }
 .toggle-switch--on .toggle-switch__thumb { transform: translateX(18px); }
-.toggle-switch:disabled { opacity: 0.5; cursor: default; }
+.toggle-switch:disabled { opacity: 0.65; background-color: var(--surface-subtle); cursor: default; }
 .toggle-switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 /* ===== Cron Controls ===== */
@@ -1380,7 +1380,7 @@ a:focus-visible > .stat-card {
 .modal__close {
   background: none;
   border: none;
-  color: var(--muted);
+  color: var(--text);
   font-size: 18px;
   cursor: pointer;
   padding: var(--sp-2);
@@ -1391,6 +1391,7 @@ a:focus-visible > .stat-card {
   justify-content: center;
   border-radius: var(--radius-sm);
   transition: background 0.15s, color 0.15s;
+  opacity: 0.7;
 }
 .modal__close:hover { background: var(--hover); color: var(--text); }
 .modal__close:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -4358,7 +4359,7 @@ g:hover > .graph-add-handle circle {
 .chat-input-bar__btn:hover { background: var(--hover); color: var(--text); }
 .chat-input-bar__btn--send { background: var(--accent); color: #fff; }
 .chat-input-bar__btn--send:hover { opacity: 0.85; }
-.chat-input-bar__btn:disabled { opacity: 0.3; cursor: not-allowed; }
+.chat-input-bar__btn:disabled { opacity: 0.55; color: var(--muted); cursor: not-allowed; }
 .chat-input-bar__hint { text-align: right; padding: 2px 8px 0; }
 
 /* Media preview (above input bar) */
