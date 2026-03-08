@@ -5,7 +5,7 @@
 import { useState } from "react";
 import { api } from "../../api/client";
 import { ChatPromptBar } from "../../components/chat-prompt-bar";
-import { useToast } from "../../components/toast";
+import { useAsyncState } from "../../hooks/use-async-state";
 import { useT } from "../../i18n";
 import type { WorkflowDef } from "./workflow-types";
 
@@ -15,33 +15,22 @@ export function WorkflowPromptBar({ workflow, onApply }: {
   onApply: (updated: WorkflowDef) => void;
 }) {
   const t = useT();
-  const { toast } = useToast();
+  const { pending: loading, run } = useAsyncState();
   const [value, setValue] = useState("");
-  const [loading, setLoading] = useState(false);
   const [selectedProvider, setSelectedProvider] = useState("");
   const [selectedModel, setSelectedModel] = useState("");
 
-  const send = async () => {
+  const send = () => {
     const text = value.trim();
     if (!text || loading) return;
-    setLoading(true);
-    try {
+    void run(async () => {
       const body: Record<string, unknown> = { instruction: text, workflow };
       if (selectedProvider) body.provider_instance_id = selectedProvider;
       if (selectedModel) body.model = selectedModel;
       const res = await api.post<{ workflow?: WorkflowDef; error?: string }>("/api/workflow/suggest", body);
-      if (res.error) {
-        toast(res.error, "err");
-      } else if (res.workflow) {
-        onApply(res.workflow);
-        setValue("");
-        toast(t("workflows.prompt_applied"), "ok");
-      }
-    } catch {
-      toast(t("workflows.prompt_failed"), "err");
-    } finally {
-      setLoading(false);
-    }
+      if (res.error) throw new Error(res.error);
+      if (res.workflow) { onApply(res.workflow); setValue(""); }
+    }, t("workflows.prompt_applied"), (e) => e instanceof Error ? e.message : t("workflows.prompt_failed"));
   };
 
   return (
