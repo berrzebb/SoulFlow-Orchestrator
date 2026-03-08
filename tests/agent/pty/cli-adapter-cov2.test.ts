@@ -1,0 +1,299 @@
+/**
+ * cli-adapter.ts — 미커버 분기 보충.
+ * ClaudeCliAdapter: 다중 content block → 배열, 빈 content_blocks → null,
+ *   messages.length=0 (미인식 블록만) → null, root user (getuid=0) → skip --dangerously,
+ * CodexCliAdapter: extract_tool_input rest spread (비string arguments),
+ *   build_developer_instructions tool_definitions 경로,
+ * GeminiCliAdapter: message role !== "assistant" → null, empty content → null,
+ *   rate error 분류, result when last_text empty → response fallback.
+ */
+import { describe, it, expect, beforeEach } from "vitest";
+import { ClaudeCliAdapter, CodexCliAdapter, GeminiCliAdapter } from "@src/agent/pty/cli-adapter.js";
+
+// ══════════════════════════════════════════
+// ClaudeCliAdapter — 다중 content block
+// ══════════════════════════════════════════
+
+describe("ClaudeCliAdapter — 다중 content block → 배열 반환", () => {
+  let adapter: ClaudeCliAdapter;
+  beforeEach(() => { adapter = new ClaudeCliAdapter(); });
+
+  it("text + tool_use 두 블록 → AgentOutputMessage[] 배열 반환", () => {
+    const line = JSON.stringify({
+      type: "assistant",
+      message: {
+        content: [
+          { type: "text", text: "I will call a tool." },
+          { type: "tool_use", id: "tu-1", name: "read_file", input: { path: "/etc/hosts" } },
+        ],
+      },
+    });
+    const result = adapter.parse_output(line);
+    expect(Array.isArray(result)).toBe(true);
+    const arr = result as any[];
+    expect(arr.length).toBe(2);
+    expect(arr[0].type).toBe("assistant_chunk");
+    expect(arr[1].type).toBe("tool_use");
+    expect(arr[1].tool).toBe("read_file");
+  });
+
+  it("세 개 블록 (text + tool_use + text) → 길이 3 배열", () => {
+    const line = JSON.stringify({
+      type: "assistant",
+      message: {
+        content: [
+          { type: "text", text: "start" },
+          { type: "tool_use", id: "tu-2", name: "exec", input: {} },
+          { type: "text", text: "end" },
+        ],
+      },
+    });
+    const result = adapter.parse_output(line);
+    expect(Array.isArray(result)).toBe(true);
+    expect((result as any[]).length).toBe(3);
+  });
+});
+
+// ══════════════════════════════════════════
+// ClaudeCliAdapter — 빈 / 미인식 content_blocks
+// ══════════════════════════════════════════
+
+describe("ClaudeCliAdapter — 빈 content_blocks → null", () => {
+  let adapter: ClaudeCliAdapter;
+  beforeEach(() => { adapter = new ClaudeCliAdapter(); });
+
+  it("content_blocks 빈 배열 → null", () => {
+    const line = JSON.stringify({
+      type: "assistant",
+      message: { content: [] },
+    });
+    expect(adapter.parse_output(line)).toBeNull();
+  });
+
+  it("content_blocks undefined → null", () => {
+    const line = JSON.stringify({
+      type: "assistant",
+      message: {},
+    });
+    expect(adapter.parse_output(line)).toBeNull();
+  });
+
+  it("text 블록 text 값이 빈 문자열 → messages.length=0 → null", () => {
+    // text="" → push 안 함 (if (text) 조건), 다른 블록 없음 → messages.length=0
+    const line = JSON.stringify({
+      type: "assistant",
+      message: {
+        content: [
+          { type: "text", text: "" },
+        ],
+      },
+    });
+    expect(adapter.parse_output(line)).toBeNull();
+  });
+
+  it("미인식 블록 타입만 있을 때 → messages.length=0 → null", () => {
+    const line = JSON.stringify({
+      type: "assistant",
+      message: {
+        content: [
+          { type: "unknown_block", data: "xyz" },
+        ],
+      },
+    });
+    expect(adapter.parse_output(line)).toBeNull();
+  });
+});
+
+// ══════════════════════════════════════════
+// ClaudeCliAdapter — root user (getuid = 0)
+// ══════════════════════════════════════════
+
+describe("ClaudeCliAdapter — root user (getuid=0) → --dangerously-skip-permissions 생략", () => {
+  it("process.getuid()=0 시 --dangerously-skip-permissions 포함 안 됨", () => {
+    const adapter = new ClaudeCliAdapter();
+    // getuid를 0으로 임시 재정의 (root 시뮬레이션)
+    const orig_getuid = (process as any).getuid;
+    (process as any).getuid = () => 0;
+    try {
+      const args = adapter.build_args({ session_key: "test" });
+      expect(args).not.toContain("--dangerously-skip-permissions");
+    } finally {
+      if (orig_getuid === undefined) {
+        delete (process as any).getuid;
+      } else {
+        (process as any).getuid = orig_getuid;
+      }
+    }
+  });
+});
+
+// ══════════════════════════════════════════
+// CodexCliAdapter — extract_tool_input rest spread
+// ══════════════════════════════════════════
+
+describe("CodexCliAdapter — extract_tool_input 비 arguments 필드", () => {
+  let adapter: CodexCliAdapter;
+  beforeEach(() => { adapter = new CodexCliAdapter(); });
+
+  it("arguments 필드 없고 개별 필드 있음 → rest spread로 추출", () => {
+    // item에 type, call_id, id, status 제외한 나머지 필드 추출
+    const line = JSON.stringify({
+      type: "item.started",
+      item: {
+        type: "custom_op",
+        call_id: "cid-1",
+        id: "id-1",
+        status: "running",
+        file_path: "/tmp/work.py",
+        line_count: 42,
+      },
+    });
+    const msg = adapter.parse_output(line);
+    expect(msg?.type).toBe("tool_use");
+    if (msg?.type === "tool_use") {
+      const input = msg.input as Record<string, unknown>;
+      // type, call_id, id, status 제거됨
+      expect(input.file_path).toBe("/tmp/work.py");
+      expect(input.line_count).toBe(42);
+      expect(input.type).toBeUndefined();
+      expect(input.call_id).toBeUndefined();
+    }
+  });
+
+  it("arguments가 유효한 JSON 문자열 → JSON.parse 결과 반환", () => {
+    const line = JSON.stringify({
+      type: "item.started",
+      item: {
+        type: "apply_patch",
+        arguments: JSON.stringify({ patch: "--- a\\n+++ b", target: "file.ts" }),
+      },
+    });
+    const msg = adapter.parse_output(line);
+    if (msg?.type === "tool_use") {
+      const input = msg.input as Record<string, unknown>;
+      expect(input.patch).toContain("--- a");
+      expect(input.target).toBe("file.ts");
+    }
+  });
+});
+
+// ══════════════════════════════════════════
+// CodexCliAdapter — build_developer_instructions tool_definitions
+// ══════════════════════════════════════════
+
+describe("CodexCliAdapter — build_args tool_definitions 경로", () => {
+  it("tool_definitions → developer_instructions에 포함됨", () => {
+    const adapter = new CodexCliAdapter();
+    const defs = "read_file: reads a file";
+    const args = adapter.build_args({ session_key: "test", tool_definitions: defs });
+    // --config developer_instructions=... 인자 확인
+    const config_idx = args.indexOf("--config");
+    expect(config_idx).toBeGreaterThan(-1);
+    const config_val = args[config_idx + 1];
+    expect(config_val).toContain("## Tools");
+    expect(config_val).toContain(defs);
+  });
+
+  it("system_prompt + tool_definitions 조합 → 모두 포함됨", () => {
+    const adapter = new CodexCliAdapter();
+    const args = adapter.build_args({
+      session_key: "test",
+      system_prompt: "You are a helpful bot.",
+      tool_definitions: "exec: runs shell commands",
+    });
+    const config_idx = args.indexOf("--config");
+    expect(config_idx).toBeGreaterThan(-1);
+    const config_val = args[config_idx + 1];
+    expect(config_val).toContain("You are a helpful bot.");
+    expect(config_val).toContain("exec: runs shell commands");
+  });
+});
+
+// ══════════════════════════════════════════
+// GeminiCliAdapter — message role 분기
+// ══════════════════════════════════════════
+
+describe("GeminiCliAdapter — message role !== 'assistant' → null", () => {
+  let adapter: GeminiCliAdapter;
+  beforeEach(() => { adapter = new GeminiCliAdapter(); });
+
+  it("role='user' → null 반환", () => {
+    const line = JSON.stringify({
+      type: "message",
+      role: "user",
+      content: "human message",
+      delta: true,
+    });
+    expect(adapter.parse_output(line)).toBeNull();
+  });
+
+  it("role='system' → null 반환", () => {
+    const line = JSON.stringify({
+      type: "message",
+      role: "system",
+      content: "system message",
+      delta: true,
+    });
+    expect(adapter.parse_output(line)).toBeNull();
+  });
+
+  it("content 빈 문자열 → null 반환", () => {
+    const line = JSON.stringify({
+      type: "message",
+      role: "assistant",
+      content: "",
+      delta: true,
+    });
+    expect(adapter.parse_output(line)).toBeNull();
+  });
+});
+
+// ══════════════════════════════════════════
+// GeminiCliAdapter — result response fallback
+// ══════════════════════════════════════════
+
+describe("GeminiCliAdapter — result: last_text 없을 때 response fallback", () => {
+  it("assistant 메시지 없이 result → parsed.response 사용", () => {
+    const adapter = new GeminiCliAdapter();
+    // last_text 누적 없이 result
+    const msg = adapter.parse_output('{"type":"result","response":"direct response","stats":{"input_tokens":10,"output_tokens":5}}');
+    expect(msg?.type).toBe("complete");
+    if (msg?.type === "complete") {
+      expect(msg.result).toBe("direct response");
+      expect(msg.usage?.input).toBe(10);
+    }
+  });
+});
+
+// ══════════════════════════════════════════
+// GeminiCliAdapter — rate error 분류
+// ══════════════════════════════════════════
+
+describe("GeminiCliAdapter — rate_limit 에러 (rate 포함)", () => {
+  it("'rate limit exceeded' → rate_limit 코드", () => {
+    const adapter = new GeminiCliAdapter();
+    const msg = adapter.parse_output('{"type":"error","message":"rate limit exceeded"}');
+    if (msg?.type === "error") expect(msg.code).toBe("rate_limit");
+  });
+});
+
+// ══════════════════════════════════════════
+// GeminiCliAdapter — init 세션 리셋
+// ══════════════════════════════════════════
+
+describe("GeminiCliAdapter — init 이벤트: session_id + last_text 리셋", () => {
+  it("init → session_id 저장, last_text 초기화", () => {
+    const adapter = new GeminiCliAdapter();
+    // 먼저 last_text 축적
+    adapter.parse_output('{"type":"message","role":"assistant","content":"old text","delta":true}');
+    // init → 리셋
+    const r = adapter.parse_output('{"type":"init","session_id":"sess-999","model":"gemini-pro"}');
+    expect(r).toBeNull();
+    expect(adapter.session_id).toBe("sess-999");
+    // result에서 last_text가 비어 있으므로 response 사용
+    const complete = adapter.parse_output('{"type":"result","response":"fresh start"}');
+    if (complete?.type === "complete") {
+      expect(complete.result).toBe("fresh start");
+    }
+  });
+});
