@@ -6,7 +6,7 @@ function EscalationEditPanel({ node, update, t, options }: EditPanelProps) {
     <>
       <div className="builder-row">
         <label className="label">{t("workflows.escalation_condition")}</label>
-        <select className="input input--sm" value={String(node.condition || "always")} onChange={(e) => update({ condition: e.target.value })}>
+        <select autoFocus className="input input--sm" value={String(node.condition || "always")} onChange={(e) => update({ condition: e.target.value })}>
           <option value="always">{t("workflows.escalation_condition_always")}</option>
           <option value="on_timeout">{t("workflows.escalation_condition_timeout")}</option>
           <option value="on_rejection">{t("workflows.escalation_condition_rejection")}</option>

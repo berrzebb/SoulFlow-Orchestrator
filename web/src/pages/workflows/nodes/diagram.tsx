@@ -5,7 +5,7 @@ function DiagramEditPanel({ node, update, t }: EditPanelProps) {
     <>
       <div className="builder-row">
         <label className="label">{t("node.diagram.input.source")}</label>
-        <input className="input input--sm" value={String(node.source || "")} onChange={(e) => update({ source: e.target.value })} />
+        <input autoFocus className="input input--sm" value={String(node.source || "")} onChange={(e) => update({ source: e.target.value })} />
       </div>
       <div className="builder-row">
         <label className="label">{t("node.diagram.input.type")}</label>

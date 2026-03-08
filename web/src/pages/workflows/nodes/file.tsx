@@ -6,7 +6,7 @@ function FileEditPanel({ node, update, t }: EditPanelProps) {
       <div className="builder-row-pair">
         <div className="builder-row">
           <label className="label">{t("workflows.file_operation")}</label>
-          <select className="input input--sm" value={String(node.operation || "read")} onChange={(e) => update({ operation: e.target.value })}>
+          <select autoFocus className="input input--sm" value={String(node.operation || "read")} onChange={(e) => update({ operation: e.target.value })}>
             <option value="read">{t("workflows.opt_read")}</option>
             <option value="write">{t("workflows.opt_write")}</option>
             <option value="extract">{t("workflows.opt_extract")}</option>

@@ -7,7 +7,7 @@ function ApprovalEditPanel({ node, update, t, options }: EditPanelProps) {
     <>
       <div className="builder-row">
         <label className="label">{t("workflows.approval_message")}</label>
-        <textarea className="input" rows={3} value={String(node.message || "")} onChange={(e) => update({ message: e.target.value })} placeholder={t("workflows.approval_message_hint")} />
+        <textarea autoFocus className="input" rows={3} value={String(node.message || "")} onChange={(e) => update({ message: e.target.value })} placeholder={t("workflows.approval_message_hint")} />
       </div>
       <div className="builder-row">
         <label className="label">{t("workflows.approval_target")}</label>

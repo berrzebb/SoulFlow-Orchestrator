@@ -17,12 +17,12 @@ function SubWorkflowEditPanel({ node, update, t, options }: EditPanelProps) {
       <div className="builder-row">
         <label className="label">{t("workflows.sub_workflow_name")}</label>
         {templates.length > 0 ? (
-          <select className="input input--sm" value={String(node.workflow_name || "")} onChange={(e) => update({ workflow_name: e.target.value })}>
+          <select autoFocus className="input input--sm" value={String(node.workflow_name || "")} onChange={(e) => update({ workflow_name: e.target.value })}>
             <option value="">{t("common.select")}</option>
             {templates.map((w) => <option key={w.slug} value={w.slug}>{w.title} ({w.slug})</option>)}
           </select>
         ) : (
-          <input className="input input--sm" value={String(node.workflow_name || "")} onChange={(e) => update({ workflow_name: e.target.value })} placeholder="my-sub-workflow" />
+          <input autoFocus className="input input--sm" value={String(node.workflow_name || "")} onChange={(e) => update({ workflow_name: e.target.value })} placeholder="my-sub-workflow" />
         )}
       </div>
       <div className="builder-row">

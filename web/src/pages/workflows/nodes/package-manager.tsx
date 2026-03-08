@@ -7,7 +7,7 @@ function PkgManagerEditPanel({ node, update, t }: EditPanelProps) {
       <div className="builder-row-pair">
         <div className="builder-row">
           <label className="label">{t("workflows.pkg_manager")}</label>
-          <select className="input input--sm" value={String(node.manager || "npm")} onChange={(e) => update({ manager: e.target.value })}>
+          <select autoFocus className="input input--sm" value={String(node.manager || "npm")} onChange={(e) => update({ manager: e.target.value })}>
             {["npm", "pip", "cargo"].map((m) => <option key={m} value={m}>{m}</option>)}
           </select>
         </div>

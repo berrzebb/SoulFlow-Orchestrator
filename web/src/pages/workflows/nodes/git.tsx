@@ -6,7 +6,7 @@ function GitEditPanel({ node, update, t }: EditPanelProps) {
       <div className="builder-row-pair">
         <div className="builder-row">
           <label className="label">{t("workflows.git_operation")}</label>
-          <select className="input input--sm" value={String(node.operation || "status")} onChange={(e) => update({ operation: e.target.value })}>
+          <select autoFocus className="input input--sm" value={String(node.operation || "status")} onChange={(e) => update({ operation: e.target.value })}>
             {["status", "diff", "log", "commit", "push", "pull", "branch", "checkout", "stash", "tag"].map((o) => <option key={o} value={o}>{o}</option>)}
           </select>
         </div>

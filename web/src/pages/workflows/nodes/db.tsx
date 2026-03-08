@@ -17,7 +17,7 @@ function DbEditPanel({ node, update, t }: EditPanelProps) {
       <div className="builder-row-pair">
         <div className="builder-row">
           <label className="label">{t("workflows.db_operation")}</label>
-          <select className="input input--sm" value={String(node.operation || "query")} onChange={(e) => update({ operation: e.target.value })}>
+          <select autoFocus className="input input--sm" value={String(node.operation || "query")} onChange={(e) => update({ operation: e.target.value })}>
             <option value="query">{t("workflows.opt_query")}</option>
             <option value="insert">{t("workflows.opt_insert")}</option>
             <option value="update">{t("workflows.opt_update")}</option>
