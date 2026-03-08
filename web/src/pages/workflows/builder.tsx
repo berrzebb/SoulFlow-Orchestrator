@@ -6,6 +6,7 @@ import { api } from "../../api/client";
 
 import { useToast } from "../../components/toast";
 import { YamlEditor } from "../../components/yaml-editor";
+import { NodePalette } from "../../components/node-palette";
 import { useT } from "../../i18n";
 import { GraphEditor, type WorkflowDef, type AgentDef, type PhaseDef, type ToolNodeDef, type SkillNodeDef, type OrcheNodeDef, type TriggerNodeDef } from "./graph-editor";
 import { NodeInspector, type UpstreamRef } from "./node-inspector";
@@ -84,6 +85,8 @@ export default function WorkflowBuilderPage() {
   const [editPhaseId, setEditPhaseId] = useState<string | null>(null);
   const [cronModalOpen, setCronModalOpen] = useState(false);
   const [channelModalOpen, setChannelModalOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const paletteBtnRef = useRef<HTMLButtonElement>(null);
   const [yamlSideOpen, setYamlSideOpen] = useState(false);
   const [yamlSideWidth, setYamlSideWidth] = useState<number | null>(null);
   const [yamlSideDirty, setYamlSideDirty] = useState(false);
@@ -356,6 +359,36 @@ export default function WorkflowBuilderPage() {
     }
     // Test 모드 또는 오케 노드 → 즉시 실행
     void executeNode(id, mode, node, {});
+  };
+
+  /** NodePalette에서 도구 선택. */
+  const handleSelectTool = (tool_id: string, description: string) => {
+    const idx = (workflow.tool_nodes?.length || 0) + 1;
+    const newNode: ToolNodeDef = {
+      id: `tool-${idx}`,
+      tool_id,
+      description,
+      attach_to: workflow.phases[0]?.phase_id ? [workflow.phases[0].phase_id] : [],
+    };
+    setWorkflow({ ...workflow, tool_nodes: [...(workflow.tool_nodes || []), newNode] });
+    setPaletteOpen(false);
+    // Select newly added node in inspector
+    setTimeout(() => setInspectorNodeId(`${workflow.phases[0]?.phase_id}__tool_${newNode.id}`), 0);
+  };
+
+  /** NodePalette에서 스킬 선택. */
+  const handleSelectSkill = (skill_name: string, description: string) => {
+    const idx = (workflow.skill_nodes?.length || 0) + 1;
+    const newNode: SkillNodeDef = {
+      id: `skill-${idx}`,
+      skill_name,
+      description,
+      attach_to: workflow.phases[0]?.phase_id ? [workflow.phases[0].phase_id] : [],
+    };
+    setWorkflow({ ...workflow, skill_nodes: [...(workflow.skill_nodes || []), newNode] });
+    setPaletteOpen(false);
+    // Select newly added node in inspector
+    setTimeout(() => setInspectorNodeId(`${workflow.phases[0]?.phase_id}__skill_${newNode.id}`), 0);
   };
 
   /** inspectorNodeId에서 노드 데이터·타입·라벨·update 콜백을 resolve. */
@@ -658,6 +691,27 @@ export default function WorkflowBuilderPage() {
           <div className="graph-layout__main">
             {/* 프롬프트 바: 상단에 위치 (모바일/데스크탑 모두 접근 가능) */}
             <WorkflowPromptBar workflow={workflow} onApply={setWorkflow} />
+            {/* 보조 노드 추가 toolbar */}
+            <div className="ws-toolbar" style={{ position: "relative" }}>
+              <button
+                ref={paletteBtnRef}
+                className="btn btn--xs btn--ghost"
+                onClick={() => setPaletteOpen(true)}
+                aria-label={t("palette.open_tools_skills")}
+                title={t("palette.open_tools_skills")}
+              >
+                <span>⚡ + Tool / Skill</span>
+              </button>
+              {paletteOpen && paletteBtnRef.current && (
+                <NodePalette
+                  tools={toolsData || { names: [], definitions: [], mcp_servers: [] }}
+                  skills={skillsData || []}
+                  onSelectTool={handleSelectTool}
+                  onSelectSkill={handleSelectSkill}
+                  onClose={() => setPaletteOpen(false)}
+                />
+              )}
+            </div>
             {/* 보조 노드 추가는 GraphEditor 내 NodePicker로 통합 */}
             <GraphEditor
               workflow={workflow}

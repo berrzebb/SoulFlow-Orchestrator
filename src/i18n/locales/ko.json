@@ -1245,6 +1245,7 @@
   "overview.workflow_events": "워크플로우 이벤트 ({count})",
   "overview.working_fmt": "{count}개 작업 중",
   "palette.no_results": "검색 결과가 없습니다",
+  "palette.open_tools_skills": "도구 / 스킬 추가",
   "palette.search_placeholder": "도구 또는 스킬 검색...",
   "palette.title": "도구 / 스킬 추가",
   "promises.add": "약속 추가",

@@ -1245,6 +1245,7 @@
   "overview.workflow_events": "Workflow Events ({count})",
   "overview.working_fmt": "{count} working",
   "palette.no_results": "No results found",
+  "palette.open_tools_skills": "Add Tool / Skill",
   "palette.search_placeholder": "Search tools or skills...",
   "palette.title": "Add Tool / Skill",
   "promises.add": "Add Promise",

@@ -5,7 +5,7 @@ import { useT } from "../i18n";
 
 interface McpServer {
   name: string;
-  connected: boolean;
+  connected?: boolean;
   tools: string[];
   error?: string;
 }
