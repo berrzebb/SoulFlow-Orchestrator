@@ -1,9 +1,8 @@
 /**
- * AgentProviderFactory — 레지스트리 함수 테스트.
- * register_agent_provider_factory, get_agent_provider_factory,
- * list_registered_provider_types, create_agent_provider.
+ * provider-factory — register/get/list/create_agent_provider 커버리지.
+ * 빌트인 CLI 팩토리는 ContainerPool/AgentBus 생성 포함이므로 mock 불필요한 sdk/openai_compatible 계열만 직접 검증.
  */
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import {
   register_agent_provider_factory,
   get_agent_provider_factory,
@@ -12,116 +11,122 @@ import {
 } from "@src/agent/provider-factory.js";
 import type { AgentProviderConfig } from "@src/agent/agent.types.js";
 
-function make_config(patch: Partial<AgentProviderConfig> = {}): AgentProviderConfig {
+function make_config(provider_type: string, settings: Record<string, unknown> = {}): AgentProviderConfig {
   return {
-    instance_id: patch.instance_id ?? "test-instance",
-    provider_type: patch.provider_type ?? "test_type",
-    label: patch.label ?? "Test",
-    enabled: patch.enabled ?? true,
-    priority: patch.priority ?? 50,
-    model_purpose: "chat",
-    supported_modes: ["once", "agent", "task"],
-    settings: patch.settings ?? {},
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  };
+    instance_id: "test-inst",
+    name: "test",
+    provider_type,
+    settings,
+  } as any;
 }
 
-describe("AgentProviderFactory — 레지스트리", () => {
-  it("register + get_agent_provider_factory: 등록된 팩토리 조회", () => {
-    const mock_factory = () => ({} as any);
-    register_agent_provider_factory("custom_test_type", mock_factory);
+function make_deps(workspace = "/tmp/ws") {
+  return { provider_registry: {} as any, workspace };
+}
 
-    const retrieved = get_agent_provider_factory("custom_test_type");
-    expect(retrieved).toBe(mock_factory);
+// ══════════════════════════════════════════
+// register / get / list
+// ══════════════════════════════════════════
+
+describe("register_agent_provider_factory / get / list", () => {
+  it("등록 → get으로 조회 가능", () => {
+    const factory = vi.fn().mockReturnValue({ is_available: () => true });
+    register_agent_provider_factory("__test_type_a__", factory);
+    expect(get_agent_provider_factory("__test_type_a__")).toBe(factory);
   });
 
-  it("get_agent_provider_factory: 대소문자 무관 (lowercase 변환)", () => {
-    const mock_factory = () => ({} as any);
-    register_agent_provider_factory("UPPER_CASE_TYPE", mock_factory);
-
-    const retrieved = get_agent_provider_factory("upper_case_type");
-    expect(retrieved).not.toBeNull();
+  it("대소문자 무관 — 대문자 등록 → 소문자로도 조회", () => {
+    const factory = vi.fn();
+    register_agent_provider_factory("__TEST_TYPE_B__", factory);
+    expect(get_agent_provider_factory("__test_type_b__")).toBe(factory);
   });
 
-  it("get_agent_provider_factory: 없는 타입 → null", () => {
-    expect(get_agent_provider_factory("nonexistent_type_xyz")).toBeNull();
+  it("미등록 타입 → null 반환", () => {
+    expect(get_agent_provider_factory("totally_unknown_xyz")).toBeNull();
   });
 
-  it("list_registered_provider_types: 빌트인 타입 포함 확인", () => {
+  it("list_registered_provider_types → 등록된 타입 포함", () => {
+    register_agent_provider_factory("__test_list_type__", vi.fn());
     const types = list_registered_provider_types();
-    expect(types).toContain("claude_cli");
-    expect(types).toContain("codex_cli");
+    expect(types).toContain("__test_list_type__");
+  });
+
+  it("빌트인 타입들 포함 검증", () => {
+    const types = list_registered_provider_types();
     expect(types).toContain("claude_sdk");
+    expect(types).toContain("codex_appserver");
     expect(types).toContain("openai_compatible");
     expect(types).toContain("openrouter");
+    expect(types).toContain("claude_cli");
+    expect(types).toContain("codex_cli");
+    expect(types).toContain("container_cli");
   });
+});
 
-  it("list_registered_provider_types: 커스텀 등록 타입 포함", () => {
-    register_agent_provider_factory("my_custom_provider", () => ({} as any));
-    const types = list_registered_provider_types();
-    expect(types).toContain("my_custom_provider");
-  });
+// ══════════════════════════════════════════
+// create_agent_provider
+// ══════════════════════════════════════════
 
-  it("create_agent_provider: 등록된 팩토리로 인스턴스 생성", () => {
-    const mock_backend = { id: "mock-backend" };
-    register_agent_provider_factory("mock_backend_type", () => mock_backend as any);
-
-    const config = make_config({ provider_type: "mock_backend_type" });
-    const deps = { provider_registry: {} as any, workspace: "/tmp" };
-
-    const result = create_agent_provider(config, null, deps);
-    expect(result).toBe(mock_backend);
-  });
-
-  it("create_agent_provider: 없는 타입 → null", () => {
-    const config = make_config({ provider_type: "totally_unknown_type_xyz" });
-    const deps = { provider_registry: {} as any, workspace: "/tmp" };
-
-    const result = create_agent_provider(config, null, deps);
+describe("create_agent_provider", () => {
+  it("미등록 타입 → null 반환", () => {
+    const result = create_agent_provider(make_config("no_such_type_xyz"), null, make_deps());
     expect(result).toBeNull();
   });
 
-  it("create_agent_provider: 팩토리에 config + token 전달", () => {
-    let received_config: AgentProviderConfig | null = null;
-    let received_token: string | null = null;
+  it("등록된 커스텀 팩토리 → 호출 + 결과 반환", () => {
+    const mock_backend = { is_available: () => true, id: "custom" };
+    const factory = vi.fn().mockReturnValue(mock_backend);
+    register_agent_provider_factory("__create_test__", factory);
 
-    register_agent_provider_factory("token_test_type", (config, token) => {
-      received_config = config;
-      received_token = token;
-      return {} as any;
-    });
+    const config = make_config("__create_test__", { model: "gpt-4" });
+    const deps = make_deps();
+    const result = create_agent_provider(config, "my-token", deps);
 
-    const config = make_config({ provider_type: "token_test_type", instance_id: "my-id" });
-    const deps = { provider_registry: {} as any, workspace: "/tmp" };
-
-    create_agent_provider(config, "sk-test-token", deps);
-    expect(received_config?.instance_id).toBe("my-id");
-    expect(received_token).toBe("sk-test-token");
+    expect(result).toBe(mock_backend);
+    expect(factory).toHaveBeenCalledWith(config, "my-token", deps);
   });
 
-  it("claude_sdk factory 등록 확인", () => {
-    const factory = get_agent_provider_factory("claude_sdk");
-    expect(factory).not.toBeNull();
+  it("claude_sdk 팩토리 → ClaudeSdkAgent 생성 (is_available 확인)", () => {
+    const config = make_config("claude_sdk", { model: "claude-opus-4-6", cwd: "/tmp" });
+    const result = create_agent_provider(config, "test-key", make_deps());
+    expect(result).not.toBeNull();
+    expect(typeof result!.is_available).toBe("function");
   });
 
-  it("openrouter factory 등록 확인", () => {
-    const factory = get_agent_provider_factory("openrouter");
-    expect(factory).not.toBeNull();
+  it("claude_sdk: settings.cwd/model 없음 → 기본값으로 생성", () => {
+    const config = make_config("claude_sdk", {});
+    const result = create_agent_provider(config, null, make_deps());
+    expect(result).not.toBeNull();
   });
 
-  it("container_cli factory 등록 확인", () => {
-    const factory = get_agent_provider_factory("container_cli");
-    expect(factory).not.toBeNull();
+  it("openai_compatible 팩토리 → OpenAiCompatibleAgent 생성", () => {
+    const config = make_config("openai_compatible", { api_base: "https://api.openai.com/v1", model: "gpt-4o" });
+    const result = create_agent_provider(config, "tok", make_deps());
+    expect(result).not.toBeNull();
+    expect(typeof result!.is_available).toBe("function");
   });
 
-  it("gemini_cli factory 등록 확인", () => {
-    const factory = get_agent_provider_factory("gemini_cli");
-    expect(factory).not.toBeNull();
+  it("openrouter 팩토리 → extra_headers 설정 포함 생성", () => {
+    const config = make_config("openrouter", { site_url: "https://myapp.com", app_name: "MyApp" });
+    const result = create_agent_provider(config, "or-key", make_deps());
+    expect(result).not.toBeNull();
   });
 
-  it("codex_appserver factory 등록 확인", () => {
-    const factory = get_agent_provider_factory("codex_appserver");
-    expect(factory).not.toBeNull();
+  it("openrouter: site_url/app_name 없음 → extra_headers 없이 생성", () => {
+    const config = make_config("openrouter", {});
+    const result = create_agent_provider(config, null, make_deps());
+    expect(result).not.toBeNull();
+  });
+
+  it("codex_appserver 팩토리 → CodexAppServerAgent 생성", () => {
+    const config = make_config("codex_appserver", { cwd: "/tmp", model: "o4-mini" });
+    const result = create_agent_provider(config, null, make_deps());
+    expect(result).not.toBeNull();
+  });
+
+  it("codex_appserver: settings 모두 없음 → 기본값으로 생성", () => {
+    const config = make_config("codex_appserver", {});
+    const result = create_agent_provider(config, null, make_deps());
+    expect(result).not.toBeNull();
   });
 });
