@@ -17,7 +17,7 @@ export function useDeleteConfirmation<T>({
   errMsg,
 }: {
   getEndpoint: (target: T) => string;
-  onDeleted?: () => void;
+  onDeleted?: (target: T) => void;
   okMsg?: string;
   errMsg?: string;
 }) {
@@ -26,8 +26,9 @@ export function useDeleteConfirmation<T>({
 
   const confirm = () => {
     if (!deleteTarget) return Promise.resolve();
+    const target = deleteTarget;
     return run_action(
-      () => api.del(getEndpoint(deleteTarget)).then(() => { setDeleteTarget(null); onDeleted?.(); }),
+      () => api.del(getEndpoint(target)).then(() => { setDeleteTarget(null); onDeleted?.(target); }),
       okMsg,
       errMsg,
     );

@@ -8,6 +8,8 @@ import { SearchInput } from "../components/search-input";
 import { DeleteConfirmModal, FormModal } from "../components/modal";
 import { useT } from "../i18n";
 import { time_ago } from "../utils/format";
+import { useAsyncAction } from "../hooks/use-async-action";
+import { useDeleteConfirmation } from "../hooks/use-delete-confirmation";
 import "../styles/kanban.css";
 
 /* ─── 타입 ─── */
@@ -83,7 +85,7 @@ function Participants({ list }: { list?: string[] }) {
 export default function KanbanPage() {
   const t = useT();
   const qc = useQueryClient();
-  const { toast } = useToast();
+  const run_action = useAsyncAction();
   const [params, setParams] = useSearchParams();
 
   const board_id = params.get("board") || "";
@@ -158,60 +160,63 @@ export default function KanbanPage() {
 
   /* ─── Actions ─── */
 
-  const create_board = async (name: string, scope_type: string, scope_id: string) => {
-    try {
-      const board = await api.post<Board>("/api/kanban/boards", { name, scope_type, scope_id });
-      refresh_boards();
-      set_board(board.board_id);
-      setShowCreateBoard(false);
-      toast(t("kanban.board_created"), "ok");
-    } catch { toast(t("kanban.create_failed"), "err"); }
-  };
+  const create_board = (name: string, scope_type: string, scope_id: string) =>
+    run_action(
+      async () => {
+        const board = await api.post<Board>("/api/kanban/boards", { name, scope_type, scope_id });
+        refresh_boards();
+        set_board(board.board_id);
+        setShowCreateBoard(false);
+      },
+      t("kanban.board_created"),
+      t("kanban.create_failed"),
+    );
 
   /* ── delete board with Modal ── */
-  const [deleteBoardTarget, setDeleteBoardTarget] = useState<Board | null>(null);
+  const { deleteTarget: deleteBoardTarget, setDeleteTarget: setDeleteBoardTarget,
+    confirmDelete: confirm_delete_board, modalOpen: deleteBoardModalOpen, closeModal: closeBoardDeleteModal } =
+    useDeleteConfirmation<Board>({
+      getEndpoint: (b) => `/api/kanban/boards/${encodeURIComponent(b.board_id)}`,
+      onDeleted: (b) => {
+        refresh_boards();
+        if (b.board_id === board_id) setParams((p) => { p.delete("board"); return p; }, { replace: true });
+      },
+      okMsg: t("kanban.board_deleted"),
+      errMsg: t("kanban.delete_failed"),
+    });
 
-  const confirm_delete_board = async () => {
-    if (!deleteBoardTarget) return;
-    try {
-      await api.del(`/api/kanban/boards/${encodeURIComponent(deleteBoardTarget.board_id)}`);
-      refresh_boards();
-      if (board_id === deleteBoardTarget.board_id) setParams((p) => { p.delete("board"); return p; }, { replace: true });
-      toast(t("kanban.board_deleted"), "ok");
-    } catch { toast(t("kanban.delete_failed"), "err"); }
-    setDeleteBoardTarget(null);
+  const add_card = (column_id: string, title: string) => {
+    if (!title.trim() || !board_id) return Promise.resolve();
+    return run_action(
+      () => api.post(`/api/kanban/boards/${encodeURIComponent(board_id)}/cards`, { title, column_id }).then(refresh),
+      undefined,
+      t("kanban.create_failed"),
+    );
   };
 
-  const add_card = async (column_id: string, title: string) => {
-    if (!title.trim() || !board_id) return;
-    try {
-      await api.post(`/api/kanban/boards/${encodeURIComponent(board_id)}/cards`, { title, column_id });
-      refresh();
-    } catch { toast(t("kanban.create_failed"), "err"); }
-  };
+  const move_card = (card_id: string, column_id: string) =>
+    run_action(
+      () => api.put(`/api/kanban/cards/${encodeURIComponent(card_id)}`, { column_id }).then(refresh),
+      undefined,
+      t("kanban.move_failed"),
+    );
 
-  const move_card = async (card_id: string, column_id: string) => {
-    try {
-      await api.put(`/api/kanban/cards/${encodeURIComponent(card_id)}`, { column_id });
-      refresh();
-    } catch { toast(t("kanban.move_failed"), "err"); }
-  };
+  const update_card = (card_id: string, data: Record<string, unknown>) =>
+    run_action(
+      () => api.put(`/api/kanban/cards/${encodeURIComponent(card_id)}`, data).then(refresh),
+      undefined,
+      t("kanban.update_failed"),
+    );
 
-  const update_card = async (card_id: string, data: Record<string, unknown>) => {
-    try {
-      await api.put(`/api/kanban/cards/${encodeURIComponent(card_id)}`, data);
-      refresh();
-    } catch { toast(t("kanban.update_failed"), "err"); }
-  };
-
-  const delete_card = async (card_id: string) => {
-    try {
-      await api.del(`/api/kanban/cards/${encodeURIComponent(card_id)}`);
-      if (selectedCard === card_id) setSelectedCard(null);
-      refresh();
-      toast(t("kanban.card_deleted"), "ok");
-    } catch { toast(t("kanban.delete_failed"), "err"); }
-  };
+  const delete_card = (card_id: string) =>
+    run_action(
+      () => api.del(`/api/kanban/cards/${encodeURIComponent(card_id)}`).then(() => {
+        if (selectedCard === card_id) setSelectedCard(null);
+        refresh();
+      }),
+      t("kanban.card_deleted"),
+      t("kanban.delete_failed"),
+    );
 
   /* ─── No board ─── */
 
@@ -284,10 +289,10 @@ export default function KanbanPage() {
 
       {/* Delete board confirmation modal */}
       <DeleteConfirmModal
-        open={!!deleteBoardTarget}
+        open={deleteBoardModalOpen}
         title={t("kanban.delete_board")}
         message={deleteBoardTarget ? t("kanban.confirm_delete_board", { name: deleteBoardTarget.name }) : ""}
-        onClose={() => setDeleteBoardTarget(null)}
+        onClose={closeBoardDeleteModal}
         onConfirm={confirm_delete_board}
         confirmLabel={t("kanban.delete_board")}
       />
