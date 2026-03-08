@@ -815,8 +815,8 @@ export function create_workflow_ops(deps: {
         const system = [
           "You are a workflow editor agent. Modify the workflow using the provided tools.",
           "STRATEGY:",
-          "1. Call get_overview() to see all node/phase IDs.",
-          "2. Call read_section('node:{id}') or 'phase:{id}' for the target section.",
+          "1. The workflow overview is already provided in the user message — do NOT call get_overview() first.",
+          "2. Call read_section('phase:{id}') or 'node:{id}' for sections that need changes.",
           "3. Modify only the necessary fields and call update_section(path, json).",
           "4. Repeat for each section that needs changes.",
           "5. Call done() when finished. Never skip done().",
@@ -835,7 +835,9 @@ export function create_workflow_ops(deps: {
         const loop_abort = AbortSignal.timeout(110_000);
         const messages: import("../../providers/types.js").ChatMessage[] = [];
         if (system.trim()) messages.push({ role: "system", content: system });
-        messages.push({ role: "user", content: `## Instruction\n${instruction}` });
+        // overview를 user 메시지에 미리 포함 → get_overview() 첫 호출 불필요
+        const initial_overview = read_section("overview");
+        messages.push({ role: "user", content: `## Workflow Overview\n${initial_overview}\n\n## Instruction\n${instruction}` });
 
         logger?.debug?.("[suggest] loop start", { instruction: instruction.slice(0, 80), source: options?.name ?? "inline" });
 

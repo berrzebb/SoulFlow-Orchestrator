@@ -165,10 +165,19 @@ export const handle_workflow: RouteHandler = async (ctx) => {
     res.writeHead(200, {
       "Content-Type": "text/event-stream",
       "Connection": "keep-alive",
+      // 역방향 프록시(Nginx 등) 버퍼링 비활성화
+      "X-Accel-Buffering": "no",
+      "Cache-Control": "no-cache, no-transform",
     });
+    // 연결 즉시 헤더 플러시 (일부 프록시가 첫 바이트 전까지 버퍼링)
+    res.write(":\n\n");
 
     const send_event = (event: string, data: unknown) => {
-      if (!res.destroyed) res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+      if (!res.destroyed) {
+        res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+        // Node.js HTTP는 write 후 자동 플러시하지 않을 수 있음
+        (res as unknown as { flush?: () => void }).flush?.();
+      }
     };
 
     try {
