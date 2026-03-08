@@ -159,9 +159,10 @@ export class AgentRuntimeAdapter implements AgentRuntimeLike {
         announce: false,
         provider_id: options.provider_id,
       });
+      const default_timeout = Math.min((options.max_turns ?? 8) * 600_000, 3_600_000);
       const result = await this.domain.subagents.wait_for_completion(
         spawned.subagent_id,
-        options.timeout_ms ?? 120_000,
+        options.timeout_ms ?? default_timeout,
       );
       if (!result) return { ok: false, content: "", error: "spawn_not_found" };
       return {

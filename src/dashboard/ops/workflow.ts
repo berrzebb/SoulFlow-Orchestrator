@@ -508,7 +508,8 @@ export function create_workflow_ops(deps: {
             announce: false,
             skip_controller: true,
           });
-          const result = await subagents.wait_for_completion(subagent_id, 3 * 60_000);
+          const wait_ms = Math.min((agent_def.max_turns || 5) * 600_000, 3_600_000);
+          const result = await subagents.wait_for_completion(subagent_id, wait_ms);
           if (!result) return { ok: false, error: "subagent_not_found", duration_ms: Date.now() - start };
           if (result.status === "failed") return { ok: false, error: result.error || "subagent_failed", duration_ms: Date.now() - start };
           const raw = result.content || "";

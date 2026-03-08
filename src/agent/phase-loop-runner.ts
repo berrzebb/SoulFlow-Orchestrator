@@ -742,7 +742,7 @@ async function run_critic(
       skip_controller: true,
     });
 
-    const result = await subagents.wait_for_completion(subagent_id, 3 * 60_000);
+    const result = await subagents.wait_for_completion(subagent_id, agent_wait_timeout_ms(3));
     const content = result?.content || "";
 
     const parsed = parse_critic_response(content);
