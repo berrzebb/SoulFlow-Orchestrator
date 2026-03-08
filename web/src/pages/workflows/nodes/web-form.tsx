@@ -16,7 +16,7 @@ function WebFormEditPanel({ node, update, t }: EditPanelProps) {
     <>
       <div className="builder-row">
         <label className="label">{t("workflows.scrape_url")}</label>
-        <input className="input" value={String(node.url || "")} onChange={(e) => update({ url: e.target.value })} placeholder="https://example.com/form" />
+        <input autoFocus className="input" value={String(node.url || "")} onChange={(e) => update({ url: e.target.value })} placeholder="https://example.com/form" />
       </div>
       <div className="builder-row">
         <label className="label">{t("workflows.form_fields")}</label>

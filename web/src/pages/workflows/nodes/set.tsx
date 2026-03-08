@@ -16,6 +16,7 @@ function SetEditPanel({ node, update, t }: EditPanelProps) {
     <div className="builder-row">
       <label className="label">{t("workflows.set_assignments")}</label>
       <textarea
+        autoFocus
         className={`input code-textarea${err ? " input--err" : ""}`}
         rows={4}
         value={raw}

@@ -13,7 +13,7 @@ function KanbanTriggerEditPanel({ node, update, t }: EditPanelProps) {
     <>
       <div className="builder-row">
         <label className="label">{t("workflows.kanban_trigger_board_id")}</label>
-        <input className="input input--sm" value={String(node.kanban_board_id || "")} onChange={(e) => update({ kanban_board_id: e.target.value })} placeholder="board_id or scope:workflow:name" />
+        <input autoFocus className="input input--sm" value={String(node.kanban_board_id || "")} onChange={(e) => update({ kanban_board_id: e.target.value })} placeholder="board_id or scope:workflow:name" />
       </div>
       <div className="builder-row">
         <label className="label">{t("workflows.kanban_trigger_actions")}</label>
