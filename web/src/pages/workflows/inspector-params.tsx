@@ -2,7 +2,7 @@
  * Inspector parameter panels — Phase, Agent, Critic, Tool, Skill, EndTarget, SubNode.
  */
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import type { NodeOptions } from "./node-registry";
@@ -172,6 +172,29 @@ export function PhaseParamsPanel({ phase, workflow, onChange, onPhaseIdChange, t
   );
 }
 
+// ── Collapsible Card ──
+
+function CollapsibleCard({ icon, label, meta, defaultExpanded = false, children }: {
+  icon: string;
+  label: string;
+  meta?: string;
+  defaultExpanded?: boolean;
+  children: ReactNode;
+}) {
+  const [expanded, setExpanded] = useState(defaultExpanded);
+  return (
+    <div className="inspector-card">
+      <div className="inspector-card__header" role="button" tabIndex={0} aria-expanded={expanded} onClick={() => setExpanded(!expanded)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setExpanded(!expanded); } }}>
+        <span className="inspector-card__icon">{icon}</span>
+        <span className="inspector-card__label">{label}</span>
+        {meta && <span className="inspector-card__meta">{meta}</span>}
+        <svg className={`inspector-card__toggle${expanded ? "" : " inspector-card__toggle--closed"}`} width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+      </div>
+      {expanded && <div className="inspector-card__body">{children}</div>}
+    </div>
+  );
+}
+
 // ── Agent Summary Card (expandable) ──
 
 export function AgentSummaryCard({ agent, index, phase, workflow, onChange, onNodeIdChange, t, options }: {
@@ -184,7 +207,6 @@ export function AgentSummaryCard({ agent, index, phase, workflow, onChange, onNo
   t: TFunction;
   options?: NodeOptions;
 }) {
-  const [expanded, setExpanded] = useState(false);
   const pi = workflow.phases.findIndex((p) => p.phase_id === phase.phase_id);
   const { data: roles } = useQuery<RolePreset[]>({
     queryKey: ["workflow-roles"],
@@ -232,15 +254,7 @@ export function AgentSummaryCard({ agent, index, phase, workflow, onChange, onNo
   const isPresetRole = roles?.some((r) => r.id === agent.role);
 
   return (
-    <div className="inspector-card">
-      <div className="inspector-card__header" role="button" tabIndex={0} aria-expanded={expanded} onClick={() => setExpanded(!expanded)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setExpanded(!expanded); } }}>
-        <span className="inspector-card__icon">🤖</span>
-        <span className="inspector-card__label">{agent.label || agent.agent_id}</span>
-        <span className="inspector-card__meta">{agent.backend || t("workflows.no_backend")}</span>
-        <svg className={`inspector-card__toggle${expanded ? "" : " inspector-card__toggle--closed"}`} width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-      </div>
-      {expanded && (
-        <div className="inspector-card__body">
+    <CollapsibleCard icon="🤖" label={agent.label || agent.agent_id} meta={agent.backend || t("workflows.no_backend")}>
           <BuilderRowPair>
             <BuilderField label={t("workflows.agent_id")}>
               <input className="input input--sm" value={agent.agent_id}
@@ -299,9 +313,7 @@ export function AgentSummaryCard({ agent, index, phase, workflow, onChange, onNo
               {t("workflows.delete")}
             </button>
           </div>
-        </div>
-      )}
-    </div>
+    </CollapsibleCard>
   );
 }
 
@@ -315,7 +327,6 @@ export function CriticSummaryCard({ critic, phase, workflow, onChange, t, option
   t: TFunction;
   options?: NodeOptions;
 }) {
-  const [expanded, setExpanded] = useState(false);
   const pi = workflow.phases.findIndex((p) => p.phase_id === phase.phase_id);
   const updateCritic = (patch: Partial<CriticDef>) => {
     const phases = [...workflow.phases];
@@ -324,15 +335,7 @@ export function CriticSummaryCard({ critic, phase, workflow, onChange, t, option
   };
 
   return (
-    <div className="inspector-card">
-      <div className="inspector-card__header" role="button" tabIndex={0} aria-expanded={expanded} onClick={() => setExpanded(!expanded)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setExpanded(!expanded); } }}>
-        <span className="inspector-card__icon">⚖</span>
-        <span className="inspector-card__label">{t("workflows.critic")}</span>
-        <span className="inspector-card__meta">gate={critic.gate ? t("workflows.gate_yes") : t("workflows.gate_no")}</span>
-        <svg className={`inspector-card__toggle${expanded ? "" : " inspector-card__toggle--closed"}`} width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-      </div>
-      {expanded && (
-        <div className="inspector-card__body">
+    <CollapsibleCard icon="⚖" label={t("workflows.critic")} meta={`gate=${critic.gate ? t("workflows.gate_yes") : t("workflows.gate_no")}`}>
           <BackendModelPicker
             backend={critic.backend}
             onBackendChange={(v) => updateCritic({ backend: v })}
@@ -369,9 +372,7 @@ export function CriticSummaryCard({ critic, phase, workflow, onChange, t, option
               data-droppable="true"
             />
           </BuilderField>
-        </div>
-      )}
-    </div>
+    </CollapsibleCard>
   );
 }
 
@@ -473,7 +474,6 @@ function ToolParamsPanel({ node, index, workflow, onChange, t, options }: {
   t: TFunction;
   options?: NodeOptions;
 }) {
-  const [expanded, setExpanded] = useState(true);
   const nodes = workflow.tool_nodes || [];
 
   const update = (patch: Partial<ToolNodeDef>) => {
@@ -497,15 +497,7 @@ function ToolParamsPanel({ node, index, workflow, onChange, t, options }: {
   const params = node.params || {};
 
   return (
-    <div className="inspector-card">
-      <div className="inspector-card__header" role="button" tabIndex={0} aria-expanded={expanded} onClick={() => setExpanded(!expanded)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setExpanded(!expanded); } }}>
-        <span className="inspector-card__icon">🔧</span>
-        <span className="inspector-card__label">{node.tool_id || t("workflows.tool_id")}</span>
-        <span className="inspector-card__meta">{node.id}</span>
-        <svg className={`inspector-card__toggle${expanded ? "" : " inspector-card__toggle--closed"}`} width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-      </div>
-      {expanded && (
-        <div className="inspector-card__body">
+    <CollapsibleCard icon="🔧" label={node.tool_id || t("workflows.tool_id")} meta={node.id} defaultExpanded>
           <BuilderField label={t("workflows.tool_id")}>
             {availableTools.length > 0 ? (
               <select className="input input--sm" value={node.tool_id} onChange={(e) => update({ tool_id: e.target.value })}>
@@ -574,9 +566,7 @@ function ToolParamsPanel({ node, index, workflow, onChange, t, options }: {
               {t("workflows.delete")}
             </button>
           </div>
-        </div>
-      )}
-    </div>
+    </CollapsibleCard>
   );
 }
 
@@ -590,7 +580,6 @@ function SkillParamsPanel({ node, index, workflow, onChange, t, options }: {
   t: TFunction;
   options?: NodeOptions;
 }) {
-  const [expanded, setExpanded] = useState(true);
   const nodes = workflow.skill_nodes || [];
 
   const update = (patch: Partial<SkillNodeDef>) => {
@@ -607,15 +596,7 @@ function SkillParamsPanel({ node, index, workflow, onChange, t, options }: {
   const phaseOptions = workflow.phases.map((p) => ({ id: p.phase_id, label: p.title || p.phase_id }));
 
   return (
-    <div className="inspector-card">
-      <div className="inspector-card__header" role="button" tabIndex={0} aria-expanded={expanded} onClick={() => setExpanded(!expanded)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setExpanded(!expanded); } }}>
-        <span className="inspector-card__icon">⚡</span>
-        <span className="inspector-card__label">{node.skill_name || t("workflows.skill_name")}</span>
-        <span className="inspector-card__meta">{node.id}</span>
-        <svg className={`inspector-card__toggle${expanded ? "" : " inspector-card__toggle--closed"}`} width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-      </div>
-      {expanded && (
-        <div className="inspector-card__body">
+    <CollapsibleCard icon="⚡" label={node.skill_name || t("workflows.skill_name")} meta={node.id} defaultExpanded>
           <BuilderField label={t("workflows.skill_name")}>
             {availableSkills.length > 0 ? (
               <select className="input input--sm" value={node.skill_name} onChange={(e) => update({ skill_name: e.target.value })}>
@@ -656,9 +637,7 @@ function SkillParamsPanel({ node, index, workflow, onChange, t, options }: {
               {t("workflows.delete")}
             </button>
           </div>
-        </div>
-      )}
-    </div>
+    </CollapsibleCard>
   );
 }
 
