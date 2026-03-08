@@ -5,6 +5,7 @@ import { with_sqlite } from "../utils/sqlite-helper.js";
 import type { ChannelProvider } from "./types.js";
 
 type DlqRow = {
+  id: number;
   at: string;
   provider: string;
   chat_id: string;
@@ -19,6 +20,8 @@ type DlqRow = {
 };
 
 export type DispatchDlqRecord = {
+  /** SQLite row ID — replay/delete 에 사용. */
+  id?: number;
   at: string;
   provider: ChannelProvider;
   chat_id: string;
@@ -38,6 +41,8 @@ export interface DispatchDlqStoreLike {
   get_path(): string;
   /** TTL 기반 오래된 레코드 삭제. 삭제 건수 반환. */
   prune_older_than(max_age_ms: number): Promise<number>;
+  /** 지정 ID 레코드 삭제. 삭제 건수 반환. */
+  delete_by_ids(ids: number[]): Promise<number>;
 }
 
 export class SqliteDispatchDlqStore implements DispatchDlqStoreLike {
@@ -123,10 +128,21 @@ export class SqliteDispatchDlqStore implements DispatchDlqStoreLike {
     return deleted;
   }
 
+  async delete_by_ids(ids: number[]): Promise<number> {
+    if (ids.length === 0) return 0;
+    await this.initialized;
+    const placeholders = ids.map(() => "?").join(",");
+    const deleted = with_sqlite(this.sqlite_path, (db) => {
+      const result = db.prepare(`DELETE FROM outbound_dlq WHERE id IN (${placeholders})`).run(...ids);
+      return result.changes;
+    }) || 0;
+    return deleted;
+  }
+
   async list(limit = 100): Promise<DispatchDlqRecord[]> {
     await this.initialized;
     const rows = with_sqlite(this.sqlite_path,(db) => db.prepare(`
-      SELECT at, provider, chat_id, message_id, sender_id, reply_to, thread_id, retry_count, error, content, metadata_json
+      SELECT id, at, provider, chat_id, message_id, sender_id, reply_to, thread_id, retry_count, error, content, metadata_json
       FROM outbound_dlq
       ORDER BY id DESC
       LIMIT ?
@@ -142,6 +158,7 @@ export class SqliteDispatchDlqStore implements DispatchDlqStoreLike {
         metadata = {};
       }
       return {
+        id: row.id,
         at: String(row.at || ""),
         provider: String(row.provider || "") as ChannelProvider,
         chat_id: String(row.chat_id || ""),
@@ -157,4 +174,5 @@ export class SqliteDispatchDlqStore implements DispatchDlqStoreLike {
     });
   }
 }
+
 

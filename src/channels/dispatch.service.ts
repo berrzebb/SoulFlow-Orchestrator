@@ -11,6 +11,10 @@ import { prune_ttl_map, sleep, error_message, now_iso} from "../utils/common.js"
 
 type RecentRecord = { at_ms: number; message_id: string };
 
+export interface DispatchServiceLike {
+  send(provider: ChannelProvider, message: OutboundMessage): Promise<{ ok: boolean; message_id?: string; error?: string }>;
+}
+
 type RetryConfig = AppConfig["channel"]["dispatch"];
 type DedupeConfig = AppConfig["channel"]["outboundDedupe"];
 
