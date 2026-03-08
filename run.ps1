@@ -69,6 +69,7 @@ function Show-Help {
   Write-Host "  prod      - 프로덕션 환경"
   Write-Host ""
   Write-Host "관리:" -ForegroundColor Yellow
+  Write-Host "  build     - 이미지 빌드"
   Write-Host "  down      - 모든 환경 중지"
   Write-Host "  status    - 환경 상태 확인"
   Write-Host "  logs      - 로그 확인"
@@ -241,6 +242,20 @@ switch ($Command.ToLower()) {
   "test"    { Start-Environment "test" }
   "staging" { Start-Environment "staging" }
   "prod"    { Start-Environment "prod" }
+  "build" {
+    Write-Host ""
+    Write-Host "🔨 이미지 빌드 중..." -ForegroundColor Yellow
+    $env:DOCKER_BUILDKIT = 0
+    docker compose -f docker/docker-compose.yml build
+    if ($LASTEXITCODE -eq 0) {
+      Write-Host ""
+      Write-Host "✅ 이미지 빌드 완료" -ForegroundColor Green
+    } else {
+      Write-Host ""
+      Write-Host "이미지 빌드 실패" -ForegroundColor Red
+    }
+    Write-Host ""
+  }
   "down"    { Stop-AllEnvironments }
   "status"  { Show-Status }
   "logs"    { Show-Logs }

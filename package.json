@@ -14,17 +14,8 @@
     "dev": "tsx watch --clear-screen=false src/main.ts",
     "dev:once": "tsx src/main.ts",
     "health:llm": "tsx src/orchestrator-llm-health.ts",
-    "container:build": "node scripts/container.js build",
-    "container:up": "node scripts/env.js up",
-    "container:down": "node scripts/env.js down",
-    "container:logs": "node scripts/env.js logs",
-    "container:dev": "node scripts/env.js dev",
-    "container:bash": "node scripts/container.js bash",
-    "container:test": "node scripts/container.js test",
-    "container:test:pty": "node scripts/container.js test:pty",
-    "container:login:claude": "node scripts/login.js claude",
-    "container:login:codex": "node scripts/login.js codex",
-    "container:login:gemini": "node scripts/login.js gemini"
+    "docker:build": "docker compose -f docker/docker-compose.yml build",
+    "docker:down": "docker compose -f docker/docker-compose.yml down -v"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

@@ -50,6 +50,7 @@ if /i "%COMMAND%"=="dev" goto env_start
 if /i "%COMMAND%"=="test" goto env_start
 if /i "%COMMAND%"=="staging" goto env_start
 if /i "%COMMAND%"=="prod" goto env_start
+if /i "%COMMAND%"=="build" goto build
 if /i "%COMMAND%"=="down" goto down
 if /i "%COMMAND%"=="status" goto status
 if /i "%COMMAND%"=="logs" goto logs
@@ -144,6 +145,20 @@ if !errorlevel! equ 0 (
 echo.
 goto end
 
+:build
+echo.
+echo %YELLOW%🔨 이미지 빌드 중...%NC%
+docker compose -f docker/docker-compose.yml build
+if !errorlevel! equ 0 (
+  echo.
+  echo %GREEN%✅ 이미지 빌드 완료%NC%
+) else (
+  echo.
+  echo %RED%이미지 빌드 실패%NC%
+)
+echo.
+goto end
+
 :down
 echo.
 echo %YELLOW%모든 환경 중지 중...%NC%
@@ -210,6 +225,7 @@ echo   staging   - 스테이징 환경
 echo   prod      - 프로덕션 환경
 echo.
 echo %YELLOW%관리:%NC%
+echo   build     - 이미지 빌드
 echo   down      - 모든 환경 중지
 echo   status    - 환경 상태 확인
 echo   logs      - 로그 확인

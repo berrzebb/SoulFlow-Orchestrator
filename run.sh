@@ -67,6 +67,7 @@ show_help() {
   echo "  prod      - 프로덕션 환경"
   echo ""
   echo -e "${YELLOW}관리:${NC}"
+  echo "  build     - 이미지 빌드"
   echo "  down      - 모든 환경 중지"
   echo "  status    - 환경 상태 확인"
   echo "  logs      - 로그 확인"
@@ -188,6 +189,11 @@ agent_login() {
 case "$COMMAND" in
   dev|test|staging|prod)
     run_env "$COMMAND"
+    ;;
+  build)
+    echo -e "\n${YELLOW}🔨 이미지 빌드 중...${NC}"
+    DOCKER_BUILDKIT=0 docker compose -f docker/docker-compose.yml build
+    echo -e "${GREEN}✅ 이미지 빌드 완료${NC}\n"
     ;;
   down)
     echo -e "\n${YELLOW}모든 환경 중지 중...${NC}"
