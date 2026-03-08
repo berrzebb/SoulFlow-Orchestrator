@@ -1,0 +1,30 @@
+import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
+
+function TokenizerEditPanel({ node, update, t }: EditPanelProps) {
+  return (
+    <>
+      <div className="builder-row">
+        <label className="label">{t("node.tokenizer.description")}</label>
+        <p className="builder-hint">{t("node.tokenizer.hint")}</p>
+      </div>
+    </>
+  );
+}
+
+export const tokenizer_descriptor: FrontendNodeDescriptor = {
+  node_type: "tokenizer",
+  icon: "💬",
+  color: "#00695c",
+  shape: "rect",
+  toolbar_label: "node.tokenizer.label",
+  category: "advanced",
+  output_schema: [
+    { name: "result", type: "string", description: "node.tokenizer.output.result" },
+    { name: "success", type: "boolean", description: "node.tokenizer.output.success" },
+  ],
+  input_schema: [
+    { name: "data", type: "string", description: "node.tokenizer.input.data" },
+  ],
+  create_default: () => ({}),
+  EditPanel: TokenizerEditPanel,
+};

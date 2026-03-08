@@ -93,6 +93,40 @@ import { document_docx_descriptor } from "./document-docx";
 import { document_xlsx_descriptor } from "./document-xlsx";
 import { document_pptx_descriptor } from "./document-pptx";
 import { document_convert_descriptor } from "./document-convert";
+import { barcode_descriptor } from "./barcode";
+import { changelog_descriptor } from "./changelog";
+import { circuit_breaker_descriptor } from "./circuit-breaker";
+import { code_diagram_descriptor } from "./code-diagram";
+import { cookie_descriptor } from "./cookie";
+import { csv_descriptor } from "./csv";
+import { data_mask_descriptor } from "./data-mask";
+import { duration_descriptor } from "./duration";
+import { ftp_descriptor } from "./ftp";
+import { graph_descriptor } from "./graph";
+import { healthcheck_descriptor } from "./healthcheck";
+import { html_descriptor } from "./html";
+import { json_schema_descriptor } from "./json-schema";
+import { ldap_descriptor } from "./ldap";
+import { log_parser_descriptor } from "./log-parser";
+import { matrix_descriptor } from "./matrix";
+import { mqtt_descriptor } from "./mqtt";
+import { openapi_descriptor } from "./openapi";
+import { password_descriptor } from "./password";
+import { pdf_descriptor } from "./pdf";
+import { phone_descriptor } from "./phone";
+import { qr_descriptor } from "./qr";
+import { rate_limit_descriptor } from "./rate-limit";
+import { redis_descriptor } from "./redis";
+import { rss_descriptor } from "./rss";
+import { s3_descriptor } from "./s3";
+import { similarity_descriptor } from "./similarity";
+import { sql_builder_descriptor } from "./sql-builder";
+import { ssh_descriptor } from "./ssh";
+import { state_machine_descriptor } from "./state-machine";
+import { tokenizer_descriptor } from "./tokenizer";
+import { websocket_descriptor } from "./websocket";
+import { xml_descriptor } from "./xml";
+import { yaml_descriptor } from "./yaml";
 
 const ALL_DESCRIPTORS = [
   http_descriptor,
@@ -187,6 +221,40 @@ const ALL_DESCRIPTORS = [
   document_xlsx_descriptor,
   document_pptx_descriptor,
   document_convert_descriptor,
+  barcode_descriptor,
+  changelog_descriptor,
+  circuit_breaker_descriptor,
+  code_diagram_descriptor,
+  cookie_descriptor,
+  csv_descriptor,
+  data_mask_descriptor,
+  duration_descriptor,
+  ftp_descriptor,
+  graph_descriptor,
+  healthcheck_descriptor,
+  html_descriptor,
+  json_schema_descriptor,
+  ldap_descriptor,
+  log_parser_descriptor,
+  matrix_descriptor,
+  mqtt_descriptor,
+  openapi_descriptor,
+  password_descriptor,
+  pdf_descriptor,
+  phone_descriptor,
+  qr_descriptor,
+  rate_limit_descriptor,
+  redis_descriptor,
+  rss_descriptor,
+  s3_descriptor,
+  similarity_descriptor,
+  sql_builder_descriptor,
+  ssh_descriptor,
+  state_machine_descriptor,
+  tokenizer_descriptor,
+  websocket_descriptor,
+  xml_descriptor,
+  yaml_descriptor,
 ];
 
 let registered = false;
