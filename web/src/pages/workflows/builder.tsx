@@ -616,7 +616,7 @@ export default function WorkflowBuilderPage() {
             </svg>
             YAML
           </button>
-          <button className="btn btn--sm btn--accent" onClick={handleSave} disabled={saveMut.isPending}>
+          <button className="btn btn--sm btn--accent" onClick={handleSave} disabled={saveMut.isPending} aria-busy={saveMut.isPending}>
             {saveMut.isPending ? (
               <span className="btn__spinner" />
             ) : (
@@ -626,7 +626,7 @@ export default function WorkflowBuilderPage() {
             )}
             {saveMut.isPending ? t("workflows.saving") : t("workflows.save_template")}
           </button>
-          <button className="btn btn--sm btn--ok" onClick={handleRun} disabled={runMut.isPending}>
+          <button className="btn btn--sm btn--ok" onClick={handleRun} disabled={runMut.isPending} aria-busy={runMut.isPending}>
             {runMut.isPending ? (
               <span className="btn__spinner" />
             ) : (
