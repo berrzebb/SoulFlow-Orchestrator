@@ -295,12 +295,13 @@ export function MemoryTab() {
         onClose={() => { setShowAddPromise(false); reset_form(); }}
         onConfirm={() => void add_promise()}
         confirmLabel={t("common.save")}
+        submitDisabled={!newKey.trim() || !newValue.trim()}
       >
         <div className="modal__form-body">
           <label className="form-label">{t("decisions.key")}</label>
-          <input autoFocus className="form-input" value={newKey} onChange={(e) => setNewKey(e.target.value)} placeholder={t("promises.key_placeholder")} />
+          <input autoFocus className="form-input" value={newKey} onChange={(e) => setNewKey(e.target.value)} placeholder={t("promises.key_placeholder")} onKeyDown={(e) => { if (e.key === "Enter" && newKey.trim() && newValue.trim()) void add_promise(); }} />
           <label className="form-label">{t("decisions.value")}</label>
-          <input className="form-input" value={newValue} onChange={(e) => setNewValue(e.target.value)} placeholder={t("promises.value_placeholder")} />
+          <input className="form-input" value={newValue} onChange={(e) => setNewValue(e.target.value)} placeholder={t("promises.value_placeholder")} onKeyDown={(e) => { if (e.key === "Enter" && newKey.trim() && newValue.trim()) void add_promise(); }} />
           <label className="form-label">{t("decisions.priority")}</label>
           <select className="form-input" value={newPriority} onChange={(e) => setNewPriority(Number(e.target.value))}>
             <option value={0}>{t("decisions.p0")}</option>

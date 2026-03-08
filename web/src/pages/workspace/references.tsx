@@ -241,6 +241,7 @@ export function ReferencesTab() {
         onClose={() => { setShowUpload(false); setUploadName(""); setUploadContent(""); }}
         onConfirm={() => { if (uploadName && uploadContent) upload.mutate({ filename: uploadName, content: uploadContent }); }}
         confirmLabel={t("references.upload")}
+        submitDisabled={!uploadName || !uploadContent}
       >
         <div className="modal__form-body">
           <label className="form-label">{t("references.select_file")}</label>
@@ -251,7 +252,14 @@ export function ReferencesTab() {
             onChange={(e) => void handle_file_select(e)}
           />
           <label className="form-label">{t("references.filename")}</label>
-          <input className="form-input" value={uploadName} onChange={(e) => setUploadName(e.target.value)} placeholder="document.md" />
+          <input
+            className="form-input"
+            value={uploadName}
+            onChange={(e) => setUploadName(e.target.value)}
+            placeholder="document.md"
+            autoFocus
+            onKeyDown={(e) => { if (e.key === "Enter" && uploadName && uploadContent) upload.mutate({ filename: uploadName, content: uploadContent }); }}
+          />
           <label className="form-label">{t("references.content_preview")}</label>
           <textarea
             className="form-input ws-references__preview-textarea"
