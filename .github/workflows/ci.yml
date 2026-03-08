@@ -32,6 +32,9 @@ jobs:
 
       - name: Test with coverage
         run: npm run test:coverage 2>&1 | tee test-output.txt
+        env:
+          NODE_OPTIONS: --max-old-space-size=8192
+        timeout-minutes: 60
       - name: Upload coverage artifact
         if: always()
         uses: actions/upload-artifact@v4

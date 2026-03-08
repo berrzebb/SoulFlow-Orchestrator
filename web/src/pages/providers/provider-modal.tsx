@@ -354,11 +354,11 @@ export function ProviderModal({ mode, connections, onClose, onSaved }: ProviderM
         <div className="form-row-2">
           <div className="form-group">
             <label className="form-label">{t("providers.max_tokens")}</label>
-            <input className="form-input" type="number" min={1} value={maxTokens} onChange={(e) => setMaxTokens(e.target.value)} placeholder="—" />
+            <input className="form-input" type="number" min={1} value={maxTokens || ""} onChange={(e) => setMaxTokens(e.target.value === "" ? "" : Number(e.target.value))} placeholder="—" />
           </div>
           <div className="form-group">
             <label className="form-label">{t("providers.temperature")}</label>
-            <input className="form-input" type="number" min={0} max={2} step={0.1} value={temperature} onChange={(e) => setTemperature(e.target.value)} placeholder="—" />
+            <input className="form-input" type="number" min={0} max={2} step={0.1} value={temperature || ""} onChange={(e) => setTemperature(e.target.value === "" ? "" : Number(e.target.value))} placeholder="—" />
           </div>
         </div>
 

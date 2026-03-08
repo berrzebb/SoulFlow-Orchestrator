@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { FormModal } from "../../components/modal";
+import { FormLabel } from "../../components/form-label";
 import { ToggleSwitch } from "../../components/toggle-switch";
 import { useToast } from "../../components/toast";
 import { useT } from "../../i18n";
@@ -90,20 +91,22 @@ export function InstanceModal({ mode, onClose, onSaved }: InstanceModalProps) {
       </div>
 
       <div className="form-group">
-        <label className="form-label">{t("channels.instance_id")}</label>
+        <FormLabel label={t("channels.instance_id")} required />
         <input
           className="form-input"
           value={auto_id ? provider : instanceId}
           onChange={(e) => setInstanceId(e.target.value)}
           disabled={isEdit}
           placeholder={provider}
+          required
+          aria-required="true"
         />
         {!isEdit && <span className="form-hint">{t("channels.instance_id_hint")}</span>}
       </div>
 
       <div className="form-group">
-        <label className="form-label">{t("channels.label")}</label>
-        <input className="form-input" value={label} onChange={(e) => setLabel(e.target.value)} placeholder={t("channels.label_placeholder")} />
+        <FormLabel label={t("channels.label")} required />
+        <input className="form-input" value={label} onChange={(e) => setLabel(e.target.value)} placeholder={t("channels.label_placeholder")} required aria-required="true" />
       </div>
 
       <div className="form-group form-group--row">
@@ -112,7 +115,7 @@ export function InstanceModal({ mode, onClose, onSaved }: InstanceModalProps) {
       </div>
 
       <div className="form-group">
-        <label className="form-label">{t("channels.bot_token")}</label>
+        <FormLabel label={t("channels.bot_token")} required />
         <input
           className="form-input"
           type="password"
@@ -120,6 +123,8 @@ export function InstanceModal({ mode, onClose, onSaved }: InstanceModalProps) {
           onChange={(e) => setToken(e.target.value)}
           placeholder={isEdit ? t("channels.bot_token_placeholder_edit") : t("channels.bot_token_placeholder_new")}
           autoComplete="off"
+          required
+          aria-required="true"
         />
       </div>
 

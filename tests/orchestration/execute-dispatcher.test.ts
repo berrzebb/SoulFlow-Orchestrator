@@ -4,7 +4,7 @@
  *       dispatcher가 진입점 흐름을 타입 안전하게 분리하는지 확인.
  */
 
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
 import type { ExecuteDispatcherDeps } from "@src/orchestration/execution/execute-dispatcher.js";
 import { execute_dispatch } from "@src/orchestration/execution/execute-dispatcher.js";
 import type { ReadyPreflight } from "@src/orchestration/request-preflight.js";
@@ -14,6 +14,8 @@ import type { ProviderRegistry } from "@src/providers/service.js";
 import type { AgentRuntimeLike } from "@src/agent/runtime.types.js";
 import type { Logger } from "@src/logger.js";
 import type { ConfirmationGuard } from "@src/orchestration/confirmation-guard.js";
+import * as gatewayModule from "@src/orchestration/gateway.js";
+import type { GatewayDecision } from "@src/orchestration/gateway.js";
 
 /* ── Mock Implementations ── */
 
@@ -91,6 +93,32 @@ const mockPreflight: ReadyPreflight = {
   skill_provider_prefs: [],
   category_map: {},
   tool_categories: [],
+  active_tasks_in_chat: [
+    {
+      taskId: "task-1",
+      title: "Task 1",
+      objective: "Do something",
+      channel: "slack",
+      chatId: "chat1",
+      status: "in_progress",
+      memory: {},
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      currentTurn: 1,
+    },
+    {
+      taskId: "task-2",
+      title: "Task 2",
+      objective: "Do another thing",
+      channel: "slack",
+      chatId: "chat1",
+      status: "waiting_user_input",
+      memory: {},
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      currentTurn: 2,
+    },
+  ],
 };
 
 const createMockDeps = (): ExecuteDispatcherDeps => ({
@@ -118,7 +146,11 @@ const createMockDeps = (): ExecuteDispatcherDeps => ({
 /* ── Tests ── */
 
 describe("Phase 4.5: Execute Dispatcher 분리", () => {
-  describe("execute_dispatch", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  describe("execute_dispatch — 구조 검증", () => {
     it("gateway를 통해 의존성을 주입받는다", async () => {
       const deps = createMockDeps();
       // gateway mock이 필요하면 여기서 resolve_gateway를 모킹해야 함
@@ -222,6 +254,412 @@ describe("Phase 4.5: Execute Dispatcher 분리", () => {
       expect(logEventSpy).toHaveBeenCalledWith(expect.objectContaining({
         phase: "done",
         summary: expect.stringContaining("completed"),
+      }));
+    });
+  });
+
+  describe("execute_dispatch — 실제 로직 커버리지", () => {
+    let gatewaySpy: any;
+
+    beforeEach(() => {
+      gatewaySpy = vi.spyOn(gatewayModule, "resolve_gateway");
+    });
+
+    it("identity short-circuit: 페르소나 질의 → identity_reply 반환 + done 이벤트", async () => {
+      const deps = createMockDeps();
+      const logEventSpy = vi.fn();
+      deps.log_event = logEventSpy;
+      deps.build_identity_reply = vi.fn(() => "I am Claude");
+
+      gatewaySpy.mockResolvedValue({ action: "identity" } as GatewayDecision);
+
+      const result = await execute_dispatch(deps, mockRequest, mockPreflight);
+
+      expect(result).toEqual({
+        reply: "I am Claude",
+        mode: "once",
+        tool_calls_count: 0,
+        streamed: false,
+      });
+      expect(deps.build_identity_reply).toHaveBeenCalled();
+      expect(logEventSpy).toHaveBeenCalledWith(expect.objectContaining({
+        phase: "done",
+        summary: "identity shortcircuit",
+      }));
+    });
+
+    it("builtin short-circuit: 커맨드 → builtin_command 반환 + done 이벤트", async () => {
+      const deps = createMockDeps();
+      const logEventSpy = vi.fn();
+      deps.log_event = logEventSpy;
+
+      gatewaySpy.mockResolvedValue({
+        action: "builtin",
+        command: "help",
+        args: "--all",
+      } as GatewayDecision);
+
+      const result = await execute_dispatch(deps, mockRequest, mockPreflight);
+
+      expect(result).toEqual({
+        reply: null,
+        mode: "once",
+        tool_calls_count: 0,
+        streamed: false,
+        builtin_command: "help",
+        builtin_args: "--all",
+      });
+      expect(logEventSpy).toHaveBeenCalledWith(expect.objectContaining({
+        phase: "done",
+        summary: "builtin: help",
+      }));
+    });
+
+    it("inquiry short-circuit: 활성 태스크 요약 → summary 반환 + done 이벤트", async () => {
+      const deps = createMockDeps();
+      const logEventSpy = vi.fn();
+      deps.log_event = logEventSpy;
+
+      gatewaySpy.mockResolvedValue({
+        action: "inquiry",
+        summary: "Current tasks: Task-1 (in_progress), Task-2 (pending)",
+      } as GatewayDecision);
+
+      const result = await execute_dispatch(deps, mockRequest, mockPreflight);
+
+      expect(result).toEqual({
+        reply: "Current tasks: Task-1 (in_progress), Task-2 (pending)",
+        mode: "once",
+        tool_calls_count: 0,
+        streamed: false,
+      });
+      expect(logEventSpy).toHaveBeenCalledWith(expect.objectContaining({
+        phase: "done",
+        summary: "inquiry shortcircuit",
+      }));
+    });
+
+    it("phase 모드: run_phase_loop 호출 → finalize로 done 이벤트", async () => {
+      const deps = createMockDeps();
+      const logEventSpy = vi.fn();
+      const runPhaseLoopSpy = vi.fn(async () => ({
+        reply: "workflow completed",
+        mode: "phase" as const,
+        tool_calls_count: 3,
+        streamed: true,
+      }));
+      deps.log_event = logEventSpy;
+      deps.run_phase_loop = runPhaseLoopSpy;
+
+      gatewaySpy.mockResolvedValue({
+        action: "execute",
+        mode: "phase",
+        executor: "claude_code",
+        workflow_id: "wf-123",
+        node_categories: ["category1"],
+      } as GatewayDecision);
+
+      const result = await execute_dispatch(deps, mockRequest, mockPreflight);
+
+      expect(result).toEqual({
+        reply: "workflow completed",
+        mode: "phase",
+        tool_calls_count: 3,
+        streamed: true,
+      });
+      expect(runPhaseLoopSpy).toHaveBeenCalled();
+      expect(logEventSpy).toHaveBeenCalledWith(expect.objectContaining({
+        phase: "done",
+        summary: "completed: phase",
+      }));
+    });
+
+    it("once 모드: run_once 호출 → finalize로 done 이벤트", async () => {
+      const deps = createMockDeps();
+      const logEventSpy = vi.fn();
+      const runOnceSpy = vi.fn(async () => ({
+        reply: "one-off task result",
+        mode: "once" as const,
+        tool_calls_count: 1,
+        streamed: false,
+      }));
+      deps.log_event = logEventSpy;
+      deps.run_once = runOnceSpy;
+
+      gatewaySpy.mockResolvedValue({
+        action: "execute",
+        mode: "once",
+        executor: "chatgpt",
+      } as GatewayDecision);
+
+      const result = await execute_dispatch(deps, mockRequest, mockPreflight);
+
+      expect(result).toEqual({
+        reply: "one-off task result",
+        mode: "once",
+        tool_calls_count: 1,
+        streamed: false,
+      });
+      expect(runOnceSpy).toHaveBeenCalled();
+      expect(logEventSpy).toHaveBeenCalledWith(expect.objectContaining({
+        phase: "done",
+        summary: "completed: once",
+      }));
+    });
+
+    it("task 모드: run_task_loop 호출 → finalize로 done 이벤트", async () => {
+      const deps = createMockDeps();
+      const logEventSpy = vi.fn();
+      const runTaskLoopSpy = vi.fn(async () => ({
+        reply: "task loop result",
+        mode: "task" as const,
+        tool_calls_count: 5,
+        streamed: true,
+      }));
+      deps.log_event = logEventSpy;
+      deps.run_task_loop = runTaskLoopSpy;
+
+      gatewaySpy.mockResolvedValue({
+        action: "execute",
+        mode: "task",
+        executor: "claude_code",
+      } as GatewayDecision);
+
+      const result = await execute_dispatch(deps, mockRequest, mockPreflight);
+
+      expect(result).toEqual({
+        reply: "task loop result",
+        mode: "task",
+        tool_calls_count: 5,
+        streamed: true,
+      });
+      expect(runTaskLoopSpy).toHaveBeenCalled();
+    });
+
+    it("agent 모드: run_agent_loop 호출 → finalize로 done 이벤트", async () => {
+      const deps = createMockDeps();
+      const logEventSpy = vi.fn();
+      const runAgentLoopSpy = vi.fn(async () => ({
+        reply: "agent loop result",
+        mode: "agent" as const,
+        tool_calls_count: 7,
+        streamed: true,
+      }));
+      deps.log_event = logEventSpy;
+      deps.run_agent_loop = runAgentLoopSpy;
+
+      gatewaySpy.mockResolvedValue({
+        action: "execute",
+        mode: "agent",
+        executor: "chatgpt",
+      } as GatewayDecision);
+
+      const result = await execute_dispatch(deps, mockRequest, mockPreflight);
+
+      expect(result).toEqual({
+        reply: "agent loop result",
+        mode: "agent",
+        tool_calls_count: 7,
+        streamed: true,
+      });
+      expect(runAgentLoopSpy).toHaveBeenCalled();
+    });
+
+    it("once → task 에스컬레이션: run_once 실패 → run_task_loop로 전환", async () => {
+      const deps = createMockDeps();
+      const logEventSpy = vi.fn();
+      const runOnceSpy = vi.fn(async () => ({
+        error: "once_requires_task_loop",
+        mode: "once" as const,
+        tool_calls_count: 0,
+        streamed: false,
+      }));
+      const runTaskLoopSpy = vi.fn(async () => ({
+        reply: "task escalation result",
+        mode: "task" as const,
+        tool_calls_count: 3,
+        streamed: true,
+      }));
+      deps.log_event = logEventSpy;
+      deps.run_once = runOnceSpy;
+      deps.run_task_loop = runTaskLoopSpy;
+
+      gatewaySpy.mockResolvedValue({
+        action: "execute",
+        mode: "once",
+        executor: "claude_code",
+      } as GatewayDecision);
+
+      const result = await execute_dispatch(deps, mockRequest, mockPreflight);
+
+      expect(result).toEqual({
+        reply: "task escalation result",
+        mode: "task",
+        tool_calls_count: 3,
+        streamed: true,
+      });
+      expect(runOnceSpy).toHaveBeenCalled();
+      expect(runTaskLoopSpy).toHaveBeenCalled();
+    });
+
+    it("confirmation guard: guard 대기 상태 → guard_prompt 반환 + done 이벤트", async () => {
+      const deps = createMockDeps();
+      const logEventSpy = vi.fn();
+      const guardMock: Partial<ConfirmationGuard> = {
+        needs_confirmation: vi.fn(() => true),
+        store: vi.fn(),
+      };
+      deps.log_event = logEventSpy;
+      deps.guard = guardMock as ConfirmationGuard;
+      deps.generate_guard_summary = vi.fn(async () => "User approval required for sensitive operation");
+
+      gatewaySpy.mockResolvedValue({
+        action: "execute",
+        mode: "once",
+        executor: "chatgpt",
+      } as GatewayDecision);
+
+      const result = await execute_dispatch(deps, mockRequest, mockPreflight);
+
+      expect(result).toEqual({
+        reply: expect.stringContaining("User approval required"),
+        mode: "once",
+        tool_calls_count: 0,
+        streamed: false,
+      });
+      expect(guardMock.needs_confirmation).toHaveBeenCalled();
+      expect(guardMock.store).toHaveBeenCalled();
+    });
+
+    it("error 처리: 예외 발생 → error_result 반환 + blocked 이벤트", async () => {
+      const deps = createMockDeps();
+      const logEventSpy = vi.fn();
+      const runOnceSpy = vi.fn(async () => {
+        throw new Error("Unexpected failure");
+      });
+      deps.log_event = logEventSpy;
+      deps.run_once = runOnceSpy;
+
+      gatewaySpy.mockResolvedValue({
+        action: "execute",
+        mode: "once",
+        executor: "chatgpt",
+      } as GatewayDecision);
+
+      const result = await execute_dispatch(deps, mockRequest, mockPreflight);
+
+      expect(result.error).toBeDefined();
+      expect(result.error).toContain("Unexpected failure");
+      expect(logEventSpy).toHaveBeenCalledWith(expect.objectContaining({
+        phase: "blocked",
+        summary: expect.stringContaining("failed:"),
+      }));
+    });
+
+    it("suppress_reply: runner 성공하지만 suppress_reply 설정 → finalize 반환", async () => {
+      const deps = createMockDeps();
+      const logEventSpy = vi.fn();
+      const runOnceSpy = vi.fn(async () => ({
+        suppress_reply: true,
+        mode: "once" as const,
+        tool_calls_count: 2,
+        streamed: false,
+      }));
+      deps.log_event = logEventSpy;
+      deps.run_once = runOnceSpy;
+
+      gatewaySpy.mockResolvedValue({
+        action: "execute",
+        mode: "once",
+        executor: "chatgpt",
+      } as GatewayDecision);
+
+      const result = await execute_dispatch(deps, mockRequest, mockPreflight);
+
+      expect(result).toEqual({
+        suppress_reply: true,
+        mode: "once",
+        tool_calls_count: 2,
+        streamed: false,
+      });
+      expect(logEventSpy).toHaveBeenCalledWith(expect.objectContaining({
+        phase: "done",
+      }));
+    });
+
+    it("executor fallback: claude_code 실패 → chatgpt 재시도 → 성공", async () => {
+      const deps = createMockDeps();
+      const logEventSpy = vi.fn();
+      let callCount = 0;
+      const runTaskLoopSpy = vi.fn(async () => {
+        callCount++;
+        if (callCount === 1) {
+          // First call with claude_code fails without reply
+          return {
+            error: "claude_code execution failed",
+            mode: "task" as const,
+            tool_calls_count: 0,
+            streamed: false,
+          };
+        }
+        // Second call with fallback (chatgpt) succeeds
+        return {
+          reply: "fallback succeeded",
+          mode: "task" as const,
+          tool_calls_count: 1,
+          streamed: false,
+        };
+      });
+      deps.log_event = logEventSpy;
+      deps.run_task_loop = runTaskLoopSpy;
+
+      gatewaySpy.mockResolvedValue({
+        action: "execute",
+        mode: "task",
+        executor: "claude_code",
+      } as GatewayDecision);
+
+      const result = await execute_dispatch(deps, mockRequest, mockPreflight);
+
+      expect(result.reply).toBe("fallback succeeded");
+      expect(runTaskLoopSpy).toHaveBeenCalledTimes(2);
+      expect(logEventSpy).toHaveBeenCalledWith(expect.objectContaining({
+        phase: "done",
+      }));
+    });
+
+    it("agent → task 에스컬레이션: is_agent_escalation=true → run_task_loop 호출", async () => {
+      const deps = createMockDeps();
+      const logEventSpy = vi.fn();
+      const runAgentLoopSpy = vi.fn(async () => ({
+        error: "agent_requires_task_loop",
+        mode: "agent" as const,
+        tool_calls_count: 3,
+        streamed: true,
+      }));
+      const runTaskLoopSpy = vi.fn(async () => ({
+        reply: "Escalated to task and completed",
+        mode: "task" as const,
+        tool_calls_count: 1,
+        streamed: false,
+      }));
+      deps.log_event = logEventSpy;
+      deps.run_agent_loop = runAgentLoopSpy;
+      deps.run_task_loop = runTaskLoopSpy;
+
+      gatewaySpy.mockResolvedValue({
+        action: "execute",
+        mode: "agent",
+        executor: "chatgpt",
+      } as GatewayDecision);
+
+      const result = await execute_dispatch(deps, mockRequest, mockPreflight);
+
+      expect(result.reply).toBe("Escalated to task and completed");
+      expect(runAgentLoopSpy).toHaveBeenCalled();
+      expect(runTaskLoopSpy).toHaveBeenCalled();
+      expect(logEventSpy).toHaveBeenCalledWith(expect.objectContaining({
+        phase: "done",
       }));
     });
   });

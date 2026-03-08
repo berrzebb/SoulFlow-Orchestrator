@@ -5,7 +5,7 @@
  */
 
 import type { RunExecutionArgs } from "./runner-deps.js";
-import type { OrchestrationRequest, OrchestrationResult, ExecutionMode } from "../types.js";
+import type { OrchestrationRequest, OrchestrationResult } from "../types.js";
 import type { ReadyPreflight } from "../request-preflight.js";
 import type { ProviderRegistry } from "../../providers/service.js";
 import type { ExecutorProvider, ProviderCapabilities } from "../../providers/executor.js";
@@ -19,7 +19,7 @@ import type { AppendWorkflowEventInput } from "../../events/index.js";
 import { resolve_gateway } from "../gateway.js";
 import { error_message } from "../../utils/common.js";
 import { select_tools_for_request } from "../tool-selector.js";
-import { detect_escalation, is_once_escalation, is_agent_escalation } from "../classifier.js";
+import { is_once_escalation, is_agent_escalation } from "../classifier.js";
 import { error_result } from "./helpers.js";
 
 export type ExecuteDispatcherDeps = {
@@ -54,13 +54,8 @@ export async function execute_dispatch(
     task_with_media, media, skill_names, runtime_policy, all_tool_definitions,
     request_scope, evt_base, history_lines,
     context_block, tool_ctx, skill_tool_names, skill_provider_prefs,
-    category_map, tool_categories,
+    category_map, tool_categories, active_tasks_in_chat,
   } = preflight;
-
-  // active_tasks 조회
-  const active_tasks_in_chat = deps.runtime.list_active_tasks().filter(
-    (t) => String(t.memory?.chat_id || "") === String(req.message.chat_id),
-  );
 
   // Gateway: 분류 + 라우팅 결정
   const decision = await resolve_gateway(

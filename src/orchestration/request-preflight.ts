@@ -57,6 +57,7 @@ export type ReadyPreflight = {
   skill_provider_prefs: string[];
   category_map: Record<string, string>;
   tool_categories: string[];
+  active_tasks_in_chat: import("../contracts.js").TaskState[];
 };
 
 export type RequestPreflightResult = ResumedPreflight | ReadyPreflight;
@@ -144,6 +145,7 @@ export async function run_request_preflight(
     skill_provider_prefs,
     category_map,
     tool_categories,
+    active_tasks_in_chat,
   };
 }
 

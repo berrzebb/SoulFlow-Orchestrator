@@ -33,7 +33,7 @@ export function Modal({ open, title, children, onClose, onConfirm, confirmLabel,
   useEffect(() => { if (open) modalRef.current?.focus(); }, [open]);
   if (!open) return null;
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <div className="modal-overlay" onClick={danger ? undefined : onClose}>
       <div className="modal" ref={modalRef} tabIndex={-1} onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label={title}>
         <div className="modal__header">
           <h3 className="modal__title">{title}</h3>

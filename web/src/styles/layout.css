@@ -1036,7 +1036,7 @@ a:focus-visible > .stat-card {
   gap: 8px;
   padding: 10px 16px;
   background: var(--panel-elevated);
-  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
   flex-shrink: 0;
 }
 .workflow-prompt-bar__input {
@@ -1107,6 +1107,22 @@ a:focus-visible > .stat-card {
 }
 @keyframes prompt-spin {
   to { transform: rotate(360deg); }
+}
+
+/* 모바일: 수직 스택 레이아웃 */
+@media (max-width: 480px) {
+  .workflow-prompt-bar {
+    flex-direction: column;
+    padding: 8px 12px;
+    gap: 6px;
+  }
+  .workflow-prompt-bar__input {
+    width: 100%;
+  }
+  .workflow-prompt-bar__send {
+    width: 100%;
+    border-radius: 4px;
+  }
 }
 
 /* ===== Node Run Input Bar ===== */
@@ -1530,6 +1546,11 @@ a:focus-visible > .stat-card {
 .form-label__optional {
   color: var(--muted);
   font-weight: normal;
+}
+.form-required {
+  color: var(--err);
+  font-weight: 700;
+  margin-left: 2px;
 }
 .form-group--row {
   display: flex;

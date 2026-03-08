@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { api } from "../../api/client";
 import { FormModal } from "../../components/modal";
+import { FormLabel } from "../../components/form-label";
 import { useToast } from "../../components/toast";
 import { useT } from "../../i18n";
 import type { OAuthPreset, ModalMode } from "./types";
@@ -110,8 +111,8 @@ export function OAuthModal({ mode, presets, onClose, onSaved }: {
       </div>
 
       <div className="form-group">
-        <label className="form-label">{t("oauth.label")}</label>
-        <input className="form-input" value={label} onChange={(e) => setLabel(e.target.value)} placeholder={serviceType} />
+        <FormLabel label={t("oauth.label")} required />
+        <input className="form-input" value={label} onChange={(e) => setLabel(e.target.value)} placeholder={serviceType} required aria-required="true" />
       </div>
 
       {isEdit && (
@@ -126,8 +127,8 @@ export function OAuthModal({ mode, presets, onClose, onSaved }: {
       {!isEdit && (
         <>
           <div className="form-group">
-            <label className="form-label">{t("oauth.client_id")}</label>
-            <input className="form-input" value={clientId} onChange={(e) => setClientId(e.target.value)} placeholder={t("oauth.client_id_placeholder")} required autoComplete="off" />
+            <FormLabel label={t("oauth.client_id")} required />
+            <input className="form-input" value={clientId} onChange={(e) => setClientId(e.target.value)} placeholder={t("oauth.client_id_placeholder")} required aria-required="true" autoComplete="off" />
           </div>
           {!is_basic_auth && (
             <div className="form-group">
@@ -145,8 +146,8 @@ export function OAuthModal({ mode, presets, onClose, onSaved }: {
       {is_custom && !isEdit && (
         <>
           <div className="form-group">
-            <label className="form-label">{t("oauth.auth_url")}</label>
-            <input className="form-input" value={authUrl} onChange={(e) => setAuthUrl(e.target.value)} placeholder="https://..." required />
+            <FormLabel label={t("oauth.auth_url")} required />
+            <input className="form-input" value={authUrl} onChange={(e) => setAuthUrl(e.target.value)} placeholder="https://..." required aria-required="true" />
             <span className="form-hint">{t("oauth.custom_url_hint")}</span>
           </div>
           <div className="form-group">
