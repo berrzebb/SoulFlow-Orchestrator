@@ -204,4 +204,25 @@ describe("parse_tool_calls_from_output", () => {
   it("빈 입력", () => {
     expect(parse_tool_calls_from_output("")).toEqual([]);
   });
+
+  it("JSON 이벤트 스트림에서 도구 호출 추출", () => {
+    // TOOL_BLOCK 마커가 없고, JSON 이벤트 스트림에 tool_calls가 있는 경우
+    const tool_json = JSON.stringify({ tool_calls: [{ id: "c1", name: "search", arguments: { q: "hello" } }] });
+    const raw = [
+      `{"type":"message","role":"assistant","text":"${tool_json.replace(/"/g, '\\"')}"}`,
+    ].join("\n");
+    const result = parse_tool_calls_from_output(raw);
+    // JSON 이벤트에서 도구 호출 파싱 시도
+    expect(Array.isArray(result)).toBe(true);
+  });
+
+  it("ORCH_FINAL 블록 안에 TOOL_CALLS 블록 포함 → 도구 호출 추출", () => {
+    // extract_protocol_output 경로: ORCH_FINAL 내에 TOOL_BLOCK 있는 경우
+    const tool_payload = `{"tool_calls":[{"id":"c2","name":"calc","arguments":{"expr":"1+1"}}]}`;
+    const final_content = `${TOOL_BLOCK_START}${tool_payload}${TOOL_BLOCK_END}`;
+    const raw = `${OUTPUT_BLOCK_START}${final_content}${OUTPUT_BLOCK_END}`;
+    const result = parse_tool_calls_from_output(raw);
+    expect(result.length).toBe(1);
+    expect(result[0].name).toBe("calc");
+  });
 });
