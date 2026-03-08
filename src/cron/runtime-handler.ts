@@ -193,7 +193,7 @@ export function create_cron_job_handler(deps: CronRuntimeHandlerDeps): CronOnJob
       };
 
       const cron_abort = new AbortController();
-      const cron_timeout = setTimeout(() => cron_abort.abort(), 300_000);
+      const cron_timeout = setTimeout(() => cron_abort.abort(), 1_800_000);
 
       // 인바운드 텍스트 sealing: 크론 메시지도 민감 정보 보호 적용
       const raw_task = String(job.payload.message || job.name || "scheduled task");
@@ -219,9 +219,9 @@ export function create_cron_job_handler(deps: CronRuntimeHandlerDeps): CronOnJob
           tool_executors,
           hooks,
           max_turns: Math.max(1, deps.config.agent_loop_max_turns),
-          max_tokens: 1800,
+          max_tokens: 8192,
           temperature: 0.3,
-          effort: "medium",
+          effort: "high",
           ...(caps?.thinking ? { enable_thinking: true, max_thinking_tokens: 10000 } : {}),
           abort_signal: cron_abort.signal,
           tool_context: { channel: target.provider, chat_id: target.chat_id, sender_id: `cron:${job.id}` },
