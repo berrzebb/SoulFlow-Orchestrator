@@ -1,9 +1,9 @@
 # SoulFlow Orchestrator
 
 [![CI](https://github.com/berrzebb/SoulFlow-Orchestrator/actions/workflows/ci.yml/badge.svg)](https://github.com/berrzebb/SoulFlow-Orchestrator/actions/workflows/ci.yml)
-[![Coverage](https://img.shields.io/endpoint?url=https://berrzebb.github.io/SoulFlow-Orchestrator/badges/coverage.json)](https://github.com/berrzebb/SoulFlow-Orchestrator/actions/workflows/ci.yml)
-[![Tests](https://img.shields.io/endpoint?url=https://berrzebb.github.io/SoulFlow-Orchestrator/badges/tests.json)](https://github.com/berrzebb/SoulFlow-Orchestrator/actions/workflows/ci.yml)
-[![Lines of Code](https://img.shields.io/endpoint?url=https://berrzebb.github.io/SoulFlow-Orchestrator/badges/loc.json)](https://github.com/berrzebb/SoulFlow-Orchestrator)
+[![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/berrzebb/SoulFlow-Orchestrator/gh-pages/badges/coverage.json)](https://github.com/berrzebb/SoulFlow-Orchestrator/actions/workflows/ci.yml)
+[![Tests](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/berrzebb/SoulFlow-Orchestrator/gh-pages/badges/tests.json)](https://github.com/berrzebb/SoulFlow-Orchestrator/actions/workflows/ci.yml)
+[![Lines of Code](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/berrzebb/SoulFlow-Orchestrator/gh-pages/badges/loc.json)](https://github.com/berrzebb/SoulFlow-Orchestrator)
 [![Node](https://img.shields.io/badge/node-%3E%3D22-brightgreen)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/typescript-5.8-blue)](https://www.typescriptlang.org/)
 [![License](https://img.shields.io/github/license/berrzebb/SoulFlow-Orchestrator)](LICENSE)

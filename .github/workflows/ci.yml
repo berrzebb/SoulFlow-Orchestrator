@@ -31,7 +31,9 @@ jobs:
         run: npm run lint
 
       - name: Test with coverage
-        run: npm run test:coverage 2>&1 | tee test-output.txt
+        run: |
+          set -o pipefail
+          npm run test:coverage 2>&1 | tee test-output.txt
         env:
           NODE_OPTIONS: --max-old-space-size=8192
         timeout-minutes: 60
@@ -66,7 +68,7 @@ jobs:
   coverage-badge:
     name: Update Coverage Badge
     needs: test
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: always() && github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -116,3 +118,6 @@ jobs:
           destination_dir: badges
           keep_files: true
           publish_branch: gh-pages
+          user_name: github-actions[bot]
+          user_email: github-actions[bot]@users.noreply.github.com
+
