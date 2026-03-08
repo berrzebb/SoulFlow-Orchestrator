@@ -18,6 +18,7 @@ function SpecialNodeIcon({ id, color }: { id: string; color: string }) {
   if (id === "__trigger_manual__") return <svg {...s} fill={color} stroke="none"><polygon points="5 3 19 12 5 21 5 3"/></svg>;
   if (id === "__trigger_channel__") return <svg {...s}><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>;
   if (id === "__trigger_kanban__") return <svg {...s}><rect x="3" y="3" width="4" height="6" rx="1"/><rect x="9" y="3" width="4" height="8" rx="1"/><rect x="15" y="3" width="4" height="10" rx="1"/></svg>;
+  if (id === "__end__") return <svg {...s}><circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-5" strokeWidth={2.5} fill="none"/></svg>;
   return null;
 }
 
@@ -42,6 +43,7 @@ const SPECIAL_NODES: { id: string; label_key: string; color: string; category: s
   { id: "__trigger_manual__", label_key: "workflows.manual_trigger", color: "#2ecc71", category: "trigger", desc_key: "workflows.manual_trigger_desc" },
   { id: "__trigger_channel__", label_key: "workflows.channel_trigger", color: "#f1c40f", category: "trigger", desc_key: "workflows.channel_trigger_desc" },
   { id: "__trigger_kanban__", label_key: "workflows.kanban_trigger", color: "#9b59b6", category: "trigger", desc_key: "workflows.kanban_trigger_desc" },
+  { id: "__end__", label_key: "workflows.node_end", color: "#e74c3c", category: "core", desc_key: "workflows.node_end_desc" },
 ];
 
 export interface NodePickerProps {

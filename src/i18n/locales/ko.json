@@ -2227,6 +2227,8 @@
   "workflows.phase_mode": "실행 모드",
   "workflows.phase_node": "페이즈",
   "workflows.phase_node_desc": "병렬/대화형 모드의 에이전트 실행 단계",
+  "workflows.node_end": "End",
+  "workflows.node_end_desc": "아웃풋 기반 노드들을 하부에 연결하여 인풋을 배포하는 노드",
   "workflows.phase_not_found": "페이즈를 찾을 수 없음",
   "workflows.phase_progress": "페이즈 {current}/{total}",
   "workflows.phase_title": "Phase 제목",
