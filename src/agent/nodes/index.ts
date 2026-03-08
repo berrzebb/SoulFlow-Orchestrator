@@ -125,7 +125,6 @@ import { document_pdf_handler } from "./document-pdf.js";
 import { document_docx_handler } from "./document-docx.js";
 import { document_xlsx_handler } from "./document-xlsx.js";
 import { document_pptx_handler } from "./document-pptx.js";
-import { document_convert_handler } from "./document-convert.js";
 
 const ALL_HANDLERS = [
   http_handler,
@@ -252,7 +251,6 @@ const ALL_HANDLERS = [
   document_docx_handler,
   document_xlsx_handler,
   document_pptx_handler,
-  document_convert_handler,
 ];
 
 let registered = false;

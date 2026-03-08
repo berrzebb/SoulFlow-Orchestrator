@@ -169,69 +169,6 @@ describe("DocumentTool", () => {
     });
   });
 
-  describe("convert", () => {
-    it("requires input file path", async () => {
-      const tool = new DocumentTool({ workspace: tmpdir });
-      const result = await tool.execute({
-        action: "convert",
-        to: "pdf",
-      });
-
-      expect(result).toContain("Error: input file path is required");
-    });
-
-    it("requires output format", async () => {
-      const tool = new DocumentTool({ workspace: tmpdir });
-      const result = await tool.execute({
-        action: "convert",
-        input: "test.docx",
-      });
-
-      expect(result).toContain("Error: output format is required");
-    });
-
-    it("rejects non-existent input file", async () => {
-      const tool = new DocumentTool({ workspace: tmpdir });
-      const result = await tool.execute({
-        action: "convert",
-        input: "nonexistent.docx",
-        to: "pdf",
-      });
-
-      expect(result).toContain("Error: input file not found");
-    });
-
-    it("blocks path traversal attacks on input", async () => {
-      const tool = new DocumentTool({ workspace: tmpdir });
-      const result = await tool.execute({
-        action: "convert",
-        input: "../../etc/passwd",
-        to: "pdf",
-      });
-
-      expect(result).toContain("Error: path traversal blocked");
-    });
-
-    it("handles LibreOffice not available gracefully", async () => {
-      const { mkdir, writeFile } = await import("node:fs/promises");
-      const tool = new DocumentTool({ workspace: tmpdir });
-
-      // Create a dummy file to convert (will fail because LibreOffice is not available in test env)
-      await mkdir(tmpdir, { recursive: true });
-      const testFile = resolve(tmpdir, "test.txt");
-      await writeFile(testFile, "test content");
-
-      const result = await tool.execute({
-        action: "convert",
-        input: "test.txt",
-        to: "pdf",
-      });
-
-      // Should handle the error gracefully (either success or error message)
-      expect(result).toBeTruthy();
-    });
-  });
-
   describe("create_xlsx", () => {
     it("creates XLSX from CSV content", async () => {
       const tool = new DocumentTool({ workspace: tmpdir });
@@ -396,8 +333,6 @@ describe("DocumentTool", () => {
       expect(params.properties).toHaveProperty("content");
       expect(params.properties).toHaveProperty("input_format");
       expect(params.properties).toHaveProperty("output");
-      expect(params.properties).toHaveProperty("input");
-      expect(params.properties).toHaveProperty("to");
       expect(params.required).toContain("action");
     });
   });

@@ -120,7 +120,7 @@ export function OAuthModal({ mode, presets, onClose, onSaved }: {
 
       <div className="form-group">
         <FormLabel label={t("oauth.label")} required />
-        <input className="form-input" value={label} onChange={(e) => setLabel(e.target.value)} placeholder={serviceType} required aria-required="true" />
+        <input autoFocus className="form-input" value={label} onChange={(e) => setLabel(e.target.value)} placeholder={serviceType} required aria-required="true" />
       </div>
 
       {isEdit && (

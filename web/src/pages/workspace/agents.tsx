@@ -137,7 +137,7 @@ export function AgentsTab() {
 
       <Modal open={!!resumeTarget} title={t("agents.resume_task")} onClose={() => { setResumeTarget(null); setResumeText(""); }} onConfirm={() => void confirm_resume()} confirmLabel={t("agents.resume")}>
         <label className="form-label">{t("agents.user_input")}</label>
-        <textarea className="form-input resize-y" value={resumeText} onChange={(e) => setResumeText(e.target.value)} rows={3} />
+        <textarea autoFocus className="form-input resize-y" value={resumeText} onChange={(e) => setResumeText(e.target.value)} rows={3} />
       </Modal>
 
       {/* 실행 프로세스 */}

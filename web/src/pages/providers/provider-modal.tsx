@@ -249,7 +249,7 @@ export function ProviderModal({ mode, connections, onClose, onSaved }: ProviderM
 
       <div className="form-group">
         <label className="form-label">{t("providers.label")}</label>
-        <input className="form-input" value={label} onChange={(e) => setLabel(e.target.value)} placeholder={t("providers.label_placeholder")} />
+        <input autoFocus className="form-input" value={label} onChange={(e) => setLabel(e.target.value)} placeholder={t("providers.label_placeholder")} />
       </div>
 
       <div className="form-group">

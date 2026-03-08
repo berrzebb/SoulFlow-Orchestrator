@@ -1641,11 +1641,6 @@ export interface DocumentPptxNodeDefinition extends NodeBase {
   slide_format?: string;
 }
 
-export interface DocumentConvertNodeDefinition extends NodeBase {
-  node_type: "document_convert";
-  input?: string;
-  to?: string;
-}
 
 // ── Union Types ─────────────────────────────────────
 
@@ -1677,7 +1672,6 @@ export type OrcheNodeType = "http" | "code" | "if" | "merge" | "set" | "split"
   | "document_docx"
   | "document_xlsx"
   | "document_pptx"
-  | "document_convert"
   | "end";
 
 export type OrcheNodeDefinition =
@@ -1804,7 +1798,6 @@ export type OrcheNodeDefinition =
   | DocumentDocxNodeDefinition
   | DocumentXlsxNodeDefinition
   | DocumentPptxNodeDefinition
-  | DocumentConvertNodeDefinition
   | EndNodeDefinition;
 
 export type WorkflowNodeDefinition = PhaseNodeDefinition | OrcheNodeDefinition | TriggerNodeDefinition;

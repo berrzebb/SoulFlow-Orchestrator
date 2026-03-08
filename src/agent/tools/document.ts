@@ -1,9 +1,7 @@
-/** 문서 생성/변환 도구 — PDF/DOCX 생성 + 다양한 포맷 간 변환 (LibreOffice headless). */
+/** 문서 생성 도구 — PDF/DOCX/XLSX/PPTX 생성 (텍스트/마크다운 입력). */
 
-import { existsSync } from "node:fs";
-import { writeFile, readFile, mkdir, rm } from "node:fs/promises";
-import { resolve, extname, basename } from "node:path";
-import { spawn } from "node:child_process";
+import { writeFile, mkdir } from "node:fs/promises";
+import { resolve } from "node:path";
 import { createRequire } from "node:module";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import * as fontkitModule from "@pdf-lib/fontkit";
@@ -11,7 +9,6 @@ import { Document, Packer, Paragraph, HeadingLevel, AlignmentType } from "docx";
 import * as XLSX from "xlsx";
 import { Tool } from "./base.js";
 import type { JsonSchema } from "./types.js";
-import { short_id } from "../../utils/common.js";
 
 const require = createRequire(import.meta.url);
 const PptxGenJS = require("pptxgenjs");
@@ -19,17 +16,15 @@ const PptxGenJS = require("pptxgenjs");
 export class DocumentTool extends Tool {
   readonly name = "document";
   readonly category = "data" as const;
-  readonly description = "Create PDF/DOCX/XLSX/PPTX documents from text/markdown, or convert between document formats.";
+  readonly description = "Create PDF/DOCX/XLSX/PPTX documents from text/markdown content.";
   readonly policy_flags = { write: true } as const;
   readonly parameters: JsonSchema = {
     type: "object",
     properties: {
-      action: { type: "string", enum: ["create_pdf", "create_docx", "create_xlsx", "create_pptx", "convert"], description: "Document operation" },
-      content: { type: "string", description: "Content to generate (create_*)" },
+      action: { type: "string", enum: ["create_pdf", "create_docx", "create_xlsx", "create_pptx"], description: "Document operation" },
+      content: { type: "string", description: "Content to generate" },
       input_format: { type: "string", enum: ["text", "markdown", "html"], description: "Input format (default: markdown)" },
       output: { type: "string", description: "Output filename (workspace relative)" },
-      input: { type: "string", description: "Input file path (convert)" },
-      to: { type: "string", description: "Output format: pdf, docx, xlsx, pptx, odt, ods, odp, etc." },
       delimiter: { type: "string", description: "CSV delimiter for create_xlsx (default: ',')" },
       slide_format: { type: "string", enum: ["16:9", "4:3"], description: "Slide format for create_pptx (default: '16:9')" },
     },
@@ -56,8 +51,6 @@ export class DocumentTool extends Tool {
         return this.create_xlsx(params);
       case "create_pptx":
         return this.create_pptx(params);
-      case "convert":
-        return this.convert(params);
       default:
         return `Error: unknown action "${action}"`;
     }
@@ -190,111 +183,6 @@ export class DocumentTool extends Tool {
     }
   }
 
-  /** 파일 형식 간 변환 (LibreOffice headless 사용). */
-  private async convert(params: Record<string, unknown>): Promise<string> {
-    const input = String(params.input || "").trim();
-    if (!input) return "Error: input file path is required";
-
-    const to = String(params.to || "").trim().toLowerCase();
-    if (!to) return "Error: output format is required";
-
-    const abs_input = resolve(this.workspace, input);
-    if (!abs_input.startsWith(resolve(this.workspace))) {
-      return "Error: path traversal blocked";
-    }
-
-    if (!existsSync(abs_input)) {
-      return `Error: input file not found: ${input}`;
-    }
-
-    const tmp_dir = resolve(this.workspace, `.tmp-convert-${short_id()}`);
-
-    try {
-      await mkdir(tmp_dir, { recursive: true });
-
-      // LibreOffice headless 변환
-      const result = await this.run_libreoffice_convert(abs_input, to, tmp_dir);
-      if (!result.success) {
-        return `Error: ${result.error}`;
-      }
-
-      // 결과 파일을 workspace에 복사
-      const output_filename = `${basename(input, extname(input))}.${to}`;
-      const abs_output = resolve(this.workspace, output_filename);
-
-      if (existsSync(result.output_path)) {
-        const content = await readFile(result.output_path);
-        await writeFile(abs_output, content);
-      }
-
-      return JSON.stringify({
-        input,
-        output: output_filename,
-        success: true,
-      });
-    } catch (err) {
-      return `Error: ${String(err)}`;
-    } finally {
-      // tmp 정리
-      try {
-        if (existsSync(tmp_dir)) {
-          await rm(tmp_dir, { recursive: true, force: true });
-        }
-      } catch {
-        /* tmp 정리 실패는 무시 */
-      }
-    }
-  }
-
-  /** LibreOffice headless 변환 실행. */
-  private async run_libreoffice_convert(
-    input: string,
-    to: string,
-    outdir: string,
-  ): Promise<{ success: boolean; output_path: string; error?: string }> {
-    return new Promise((resolveFn) => {
-      const proc = spawn("libreoffice", [
-        "--headless",
-        "--convert-to",
-        to,
-        "--outdir",
-        outdir,
-        input,
-      ]);
-
-      let _stdout = "";
-      let _stderr = "";
-
-      proc.stdout?.on("data", (data) => {
-        _stdout += String(data);
-      });
-      proc.stderr?.on("data", (data) => {
-        _stderr += String(data);
-      });
-
-      proc.on("close", (code) => {
-        if (code === 0) {
-          const output_filename = `${basename(input, extname(input))}.${to}`;
-          const output_path = resolve(outdir, output_filename);
-          resolveFn({ success: true, output_path });
-        } else {
-          resolveFn({
-            success: false,
-            output_path: "",
-            error: `LibreOffice convert failed (code ${code}): ${_stderr}`,
-          });
-        }
-      });
-
-      proc.on("error", (err) => {
-        resolveFn({
-          success: false,
-          output_path: "",
-          error: `LibreOffice not available: ${String(err)}`,
-        });
-      });
-    });
-  }
 
   /** 텍스트/마크다운 → XLSX 생성 (xlsx 사용). */
   private async create_xlsx(params: Record<string, unknown>): Promise<string> {
