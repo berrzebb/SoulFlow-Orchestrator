@@ -5,7 +5,7 @@ function ShellEditPanel({ node, update, t }: EditPanelProps) {
     <>
       <div className="builder-row">
         <label className="label">{t("workflows.shell_command")}</label>
-        <textarea className="input code-textarea" rows={3} value={String(node.command || "")} onChange={(e) => update({ command: e.target.value })} placeholder="echo Hello World" />
+        <textarea autoFocus className="input code-textarea" rows={3} value={String(node.command || "")} onChange={(e) => update({ command: e.target.value })} placeholder="echo Hello World" />
       </div>
       <div className="builder-row-pair">
         <div className="builder-row">

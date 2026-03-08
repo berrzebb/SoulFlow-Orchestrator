@@ -17,7 +17,7 @@ function HttpEditPanel({ node, update, t }: EditPanelProps) {
       <div className="builder-row-pair">
         <div className="builder-row">
           <label className="label">{t("workflows.http_method")}</label>
-          <select className="input input--sm" value={String(node.method || "GET")} onChange={(e) => update({ method: e.target.value })}>
+          <select autoFocus className="input input--sm" value={String(node.method || "GET")} onChange={(e) => update({ method: e.target.value })}>
             {["GET", "POST", "PUT", "PATCH", "DELETE"].map((m) => <option key={m} value={m}>{m}</option>)}
           </select>
         </div>

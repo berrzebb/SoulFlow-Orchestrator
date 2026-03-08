@@ -35,7 +35,7 @@ function FormEditPanel({ node, update, t, options }: EditPanelProps) {
     <>
       <div className="builder-row">
         <label className="label">{t("workflows.form_title")}</label>
-        <input className="input input--sm" value={String(node.title || "")} onChange={(e) => update({ title: e.target.value })} placeholder={t("workflows.form_title_hint")} />
+        <input autoFocus className="input input--sm" value={String(node.title || "")} onChange={(e) => update({ title: e.target.value })} placeholder={t("workflows.form_title_hint")} />
       </div>
       <div className="builder-row">
         <label className="label">{t("workflows.form_description")}</label>
