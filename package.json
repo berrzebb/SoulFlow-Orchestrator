@@ -5,8 +5,9 @@
   "type": "module",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test": "vitest run",
-    "test:coverage": "vitest run --coverage",
+    "test": "vitest run --exclude 'tests/e2e/**'",
+    "test:coverage": "vitest run --coverage --exclude 'tests/e2e/**'",
+    "test:e2e": "vitest run tests/e2e/",
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix",
     "typecheck": "tsc --noEmit",

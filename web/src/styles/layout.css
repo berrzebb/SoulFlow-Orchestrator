@@ -1044,13 +1044,21 @@ a:focus-visible > .stat-card {
 
 /* ===== Workflow Prompt Bar (자연어 편집) ===== */
 .workflow-prompt-bar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 16px;
+  position: relative;
+  padding: 0;
   background: var(--panel-elevated);
   border-bottom: 1px solid var(--line);
   flex-shrink: 0;
+  min-height: 68px;
+}
+/* ChatPromptBar를 워크플로우 바에 인라인으로 배치 */
+.workflow-prompt-bar .chat-prompt-bar {
+  position: relative;
+  bottom: unset;
+  left: unset;
+  transform: none;
+  width: 100%;
+  padding: var(--sp-2) var(--sp-3);
 }
 .workflow-prompt-bar__input {
   flex: 1;
@@ -4417,6 +4425,128 @@ g:hover > .graph-add-handle circle {
   align-items: center;
   justify-content: center;
   padding: 0;
+}
+
+/* ─── ChatPromptBar (통합 입력 + 모델 선택 팝업) ─── */
+.chat-prompt-bar {
+  position: absolute;
+  bottom: max(var(--sp-4), env(safe-area-inset-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(700px, calc(100% - var(--sp-8)));
+  padding: 0 var(--sp-4);
+  z-index: 10;
+}
+.chat-prompt-bar__pill {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.chat-prompt-bar__pill:focus-within {
+  border-color: var(--accent);
+  box-shadow: var(--shadow-md), var(--shadow-focus);
+}
+.chat-prompt-bar__textarea {
+  flex: 1;
+  background: transparent;
+  color: var(--text);
+  border: none;
+  outline: none;
+  resize: none;
+  font-size: var(--fs-base);
+  line-height: 1.5;
+  min-height: 24px;
+  max-height: 160px;
+  padding: var(--sp-1) 0;
+}
+.chat-prompt-bar__textarea::placeholder { color: var(--off); }
+.chat-prompt-bar__btn {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--fs-base);
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s;
+}
+.chat-prompt-bar__btn:hover { background: var(--hover); color: var(--text); }
+.chat-prompt-bar__btn--send { background: var(--accent); color: #fff; }
+.chat-prompt-bar__btn--send:hover { opacity: 0.85; }
+.chat-prompt-bar__btn:disabled { opacity: 0.65; color: var(--muted); cursor: not-allowed; }
+.chat-prompt-bar__hint { text-align: right; padding: 2px 8px 0; }
+
+/* 모델 선택 칩 + 팝업 */
+.chat-prompt-bar__model-wrap {
+  position: relative;
+  flex-shrink: 0;
+  align-self: flex-end;
+  margin-bottom: 4px;
+}
+.chat-prompt-bar__model-chip {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 8px;
+  background: var(--hover);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: var(--fs-xs);
+  color: var(--muted);
+  cursor: pointer;
+  white-space: nowrap;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background 0.15s, color 0.15s;
+}
+.chat-prompt-bar__model-chip:hover { background: var(--surface2); color: var(--text); }
+.chat-prompt-bar__model-chip:disabled { opacity: 0.6; cursor: not-allowed; }
+.chat-prompt-bar__model-chip-caret { font-size: 9px; flex-shrink: 0; }
+.chat-prompt-bar__model-popup {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  right: 0;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  padding: var(--sp-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  min-width: 220px;
+  z-index: 100;
+}
+.chat-prompt-bar__model-popup-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.chat-prompt-bar__model-popup-label {
+  font-size: var(--fs-xs);
+  color: var(--muted);
+  font-weight: 500;
+}
+
+/* ChatPromptBar 모바일 */
+@media (max-width: 768px) {
+  .chat-prompt-bar { bottom: var(--sp-2); padding: 0 var(--sp-2); }
+  .chat-prompt-bar__pill { border-radius: var(--radius-lg); padding: var(--sp-2); }
+  .chat-prompt-bar__hint { display: none; }
+  .chat-prompt-bar__btn { width: 44px; height: 44px; padding: var(--sp-2); }
+  .chat-prompt-bar__model-chip { max-width: 100px; }
 }
 
 /* Provider/Model Selector Bar */

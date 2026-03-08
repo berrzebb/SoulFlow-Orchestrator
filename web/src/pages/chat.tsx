@@ -2,19 +2,18 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useRef, useEffect } from "react";
 import { api } from "../api/client";
 import { Badge } from "../components/badge";
-import { Modal } from "../components/modal";
-import { ProviderModelBar } from "../components/provider-model-bar";
+import { DeleteConfirmModal } from "../components/modal";
+import { ChatPromptBar } from "../components/chat-prompt-bar";
 import { useToast } from "../components/toast";
 import { useApprovals } from "../hooks/use-approvals";
 import { useDashboardStore } from "../store";
 import { useT } from "../i18n";
 import { time_ago } from "../utils/format";
 import { MessageList } from "./chat/message-list";
-import { ChatInputBar } from "./chat/chat-input-bar";
 import { EmptyState } from "./chat/empty-state";
 import type { ChatSessionSummary, ChatSession, ChatMessage, ChatMediaItem } from "./chat/types";
 
-type MirrorSessionEntry = { key: string; provider: string; chat_id: string; alias: string; updated_at: string; message_count: number };
+type MirrorSessionEntry = { key: string; provider: string; chat_id: string; alias: string; thread?: string; updated_at: string; message_count: number };
 type MirrorSession = { key: string; provider: string; chat_id: string; alias: string; messages: ChatMessage[] };
 
 export default function ChatPage() {
@@ -46,7 +45,7 @@ export default function ChatPage() {
     staleTime: 5_000,
   });
 
-  const { data: activeSession, isPending: activeSessionLoading } = useQuery<ChatSession>({
+  const { data: activeSession, isLoading: activeSessionLoading } = useQuery<ChatSession>({
     queryKey: ["chat-session", activeId],
     queryFn: () => api.get<ChatSession>(`/api/chat/sessions/${encodeURIComponent(activeId!)}`),
     enabled: !!activeId && !is_mirror,
@@ -55,17 +54,17 @@ export default function ChatPage() {
     refetchOnWindowFocus: false,
   });
 
-  // ── Mirror queries ──
+  // ── 외부 채널 세션 목록 (모든 채널) ──
   const { data: mirror_sessions = [] } = useQuery<MirrorSessionEntry[]>({
     queryKey: ["mirror-sessions"],
-    queryFn: () => api.get("/api/chat/mirror"),
+    queryFn: () => api.get("/api/sessions"),
     refetchInterval: 30_000,
     staleTime: 10_000,
   });
 
-  const { data: mirrorSession, isPending: mirrorSessionLoading } = useQuery<MirrorSession>({
+  const { data: mirrorSession, isLoading: mirrorSessionLoading } = useQuery<MirrorSession>({
     queryKey: ["mirror-session", mirrorKey],
-    queryFn: () => api.get<MirrorSession>(`/api/chat/mirror/${encodeURIComponent(mirrorKey!)}`),
+    queryFn: () => api.get<MirrorSession>(`/api/sessions/${encodeURIComponent(mirrorKey!)}`),
     enabled: is_mirror,
     refetchInterval: 15_000,
     staleTime: 5_000,
@@ -271,14 +270,6 @@ export default function ChatPage() {
         </div>
       ) : (
         <>
-          {!is_mirror && (
-            <ProviderModelBar
-              selectedProvider={selectedProvider}
-              selectedModel={selectedModel}
-              onProviderChange={setSelectedProvider}
-              onModelChange={setSelectedModel}
-            />
-          )}
           {is_mirror && <div className="chat-mirror-hint">{t("chat.mirror_relay_hint")}</div>}
           <MessageList
             ref={messagesRef}
@@ -289,7 +280,7 @@ export default function ChatPage() {
             pending_approvals={is_mirror ? [] : pending_approvals}
             onResolveApproval={(id, text) => void resolve_approval(id, text)}
           />
-          <ChatInputBar
+          <ChatPromptBar
             input={input}
             setInput={setInput}
             sending={sending}
@@ -297,7 +288,11 @@ export default function ChatPage() {
             onSend={() => void (is_mirror ? send_mirror() : send())}
             pending_media={is_mirror ? [] : pending_media}
             onAttach={is_mirror ? undefined : () => fileInputRef.current?.click()}
-            onRemoveMedia={is_mirror ? undefined : (idx) => setPendingMedia((prev) => prev.filter((_, i) => i !== idx))}
+            onRemoveMedia={is_mirror ? undefined : (idx: number) => setPendingMedia((prev) => prev.filter((_, i) => i !== idx))}
+            selectedProvider={is_mirror ? undefined : selectedProvider}
+            selectedModel={is_mirror ? undefined : selectedModel}
+            onProviderChange={is_mirror ? undefined : setSelectedProvider}
+            onModelChange={is_mirror ? undefined : setSelectedModel}
           />
           {!is_mirror && (
             <input
@@ -311,19 +306,14 @@ export default function ChatPage() {
           )}
         </>
       )}
-      <Modal
+      <DeleteConfirmModal
         open={!!deleteConfirmId}
         title={t("chat.delete_session_title")}
+        message={t("chat.delete_session_confirm")}
         onClose={() => setDeleteConfirmId(null)}
-        onConfirm={() => {
-          if (deleteConfirmId) void delete_session(deleteConfirmId);
-          setDeleteConfirmId(null);
-        }}
+        onConfirm={() => { if (deleteConfirmId) void delete_session(deleteConfirmId); setDeleteConfirmId(null); }}
         confirmLabel={t("common.delete")}
-        danger
-      >
-        <p className="text-sm">{t("chat.delete_session_confirm")}</p>
-      </Modal>
+      />
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import { forwardRef } from "react";
+import { EmptyState } from "../../components/empty-state";
 import { useT } from "../../i18n";
 import { ChatMessageBubble } from "./message-bubble";
 import { ApprovalBanner } from "../../components/approval-banner";
@@ -22,7 +23,7 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(function
     <div className="chat-messages" ref={ref}>
       <div className="chat-messages__inner">
         {!props.messages.length && !props.pending_approvals.length && (
-          <div className="empty-state"><div className="empty-state__icon">💬</div><div className="empty-state__text">{t("chat.no_messages")}</div></div>
+          <EmptyState icon="💬" title={t("chat.no_messages")} />
         )}
 
         {props.messages.map((m, i) => (
