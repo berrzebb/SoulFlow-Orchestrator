@@ -379,50 +379,54 @@ GitHub · Google · Custom OAuth 2.0 외부 서비스 연동. 대시보드 Works
 
 ```text
 next/
-  Dockerfile              ← 멀티스테이지 Docker 빌드 (5 스테이지)
-  docker-compose.yml      ← 프로덕션 배포
-  docker-compose.dev.yml  ← 개발용 라이브 리로드
+  run.sh / run.ps1 / run.cmd ← 환경 관리 (dev/test/staging/prod)
+  Dockerfile              ← 멀티스테이지 Docker 빌드
   .devcontainer/          ← VS Code Dev Container 설정
+  docker/                 ← docker-compose 파일 (prod, dev, instance 오버라이드)
   src/
     agent/
-      backends/     ← SDK/CLI/OpenAI 백엔드 어댑터 (8개 백엔드)
+      backends/     ← SDK/AppServer/OpenAI 백엔드 어댑터 (7개)
       nodes/        ← 124종 워크플로우 노드 핸들러 (OCP 플러그인 아키텍처)
-      pty/          ← PTY 기반 CLI 통합 (ContainerPool, AgentBus, MCP 브릿지, NDJSON 와이어)
-      tools/        ← 에이전트 도구 구현 (oauth_fetch, workflow, ask-user, approval-notifier 포함)
-    bus/            ← MessageBus (인메모리 기본 · Redis Streams 선택)
-    channels/       ← 채널 매니저 · 커맨드 · 디스패치 · 승인 · 페르소나 톤 렌더링
-    config/         ← Zod 기반 설정 스키마 + config-meta
+      pty/          ← PTY 기반 CLI 통합 (ContainerPool, AgentBus, NDJSON 와이어)
+      tools/        ← 에이전트 도구 구현 (oauth_fetch, workflow, ask-user 등)
+    bootstrap/      ← 15개 부트스트랩 모듈 (main.ts 분해)
+    bus/            ← MessageBus (인메모리 · Redis Streams)
+    channels/       ← 채널 매니저 · 커맨드 · 디스패치 · 승인 · 페르소나 톤
+    config/         ← Zod 기반 설정 스키마
     cron/           ← 크론 스케줄러 (SQLite)
-    bootstrap/      ← 15개 부트스트랩 모듈 (main.ts 분해: agent-core, channels, config, dashboard 등)
     dashboard/
-      ops/          ← 13개 대시보드 ops 모듈 (ops-factory.ts 분해)
-      routes/       ← 26개 라우트 핸들러 (state, config, chat, cron, workflows, kanban 등)
-      service.ts    ← HTTP 서버 + 라우트 등록
+      ops/          ← 13개 ops 모듈
+      routes/       ← 라우트 핸들러
     decision/       ← 결정사항 서비스
+    events/         ← 워크플로우 이벤트 서비스
+    heartbeat/      ← 하트비트 서비스
+    i18n/           ← 공유 i18n 프로토콜 + JSON 로케일
     mcp/            ← MCP 클라이언트 매니저
     oauth/          ← OAuth 2.0 연동 (flow-service, integration-store)
-    i18n/           ← 공유 i18n 프로토콜 + JSON 로케일 (en, ko)
-    orchestration/  ← Gateway · Classifier · Prompts · ToolCallHandler · NodeSelector · ToolIndex · ConfirmationGuard
-    runtime/        ← 인스턴스 잠금 · ServiceManager · 서비스 타입
-    services/       ← 도메인 서비스 (embed, vector-store, query-db, webhook-store, kanban-store, kanban-rule-executor, model-catalog, reference-store)
+    orchestration/  ← Classifier · ToolIndex · ConfirmationGuard · HitlPendingStore
+    providers/      ← LLM 프로바이더 (Claude, Codex, Gemini, OpenAI-compatible)
+    runtime/        ← 인스턴스 잠금 · ServiceManager
     security/       ← Secret Vault (AES-256-GCM)
+    services/       ← 도메인 서비스 (embed, vector-store, kanban, webhook, model-catalog 등)
     session/        ← 세션 저장소
     skills/
       _shared/      ← 공유 프로토콜
-      roles/        ← 8개 역할 스킬
+      roles/        ← 8개 역할 (concierge, pm, pl, implementer, reviewer, validator, debugger, generalist)
+      diagram / github / sandbox / ...  ← 추가 빌트인 스킬
   scripts/
     scaffold/       ← 코드 생성기 (tool, node, handler, route, page)
+    generate-diagrams.mjs ← SVG 다이어그램 생성
     i18n-sync.ts    ← i18n 키 동기화 (--check / --fix)
-  workspace/
-    templates/      ← 시스템 프롬프트 템플릿
+  <workspace>/      ← --workspace 로 지정 (런타임 데이터)
+    runtime/        ← SQLite DB (sessions, tasks, events, cron, kanban, dlq 등)
     skills/         ← 사용자 정의 스킬
-    runtime/        ← SQLite DB 모음 (sessions, tasks, events, decisions, cron, dlq)
-  web/              ← 대시보드 프론트엔드 (React + Vite + i18n + Zustand)
-    src/pages/workflows/  ← 그래프 에디터, 노드 인스펙터, 노드 피커, 87종 노드 UI 컴포넌트
+    templates/      ← 시스템 프롬프트 템플릿
+  web/              ← 대시보드 프론트엔드 (React + Vite + i18n)
+    src/pages/workflows/  ← 그래프 에디터 · 노드 인스펙터 · 124종 노드 UI
   docs/
-    */guide/        ← 사용자 가이드 (dashboard, oauth, providers, heartbeat, workflows)
-    */design/       ← 아키텍처 설계 문서 (phase-loop, pty-agent-backend, node-registry, workflow-tool 등)
-  diagrams/         ← SVG 아키텍처 다이어그램
+    diagrams/       ← SVG 아키텍처 다이어그램
+    */guide/        ← 사용자 가이드
+    */design/       ← 아키텍처 설계 문서
 ```
 
 ## 트러블슈팅

@@ -377,50 +377,54 @@ User: Call the API using MY_API_KEY
 
 ```text
 next/
-  Dockerfile              ← Multi-stage Docker build (5 stages)
-  docker-compose.yml      ← Production deployment
-  docker-compose.dev.yml  ← Development with live reload
+  run.sh / run.ps1 / run.cmd ← Environment management (dev/test/staging/prod)
+  Dockerfile              ← Multi-stage Docker build
   .devcontainer/          ← VS Code Dev Container setup
+  docker/                 ← docker-compose files (prod, dev, instance overrides)
   src/
     agent/
-      backends/     ← SDK/CLI/OpenAI backend adapters (8 backends)
+      backends/     ← SDK/AppServer/OpenAI backend adapters (7 backends)
       nodes/        ← 124 workflow node handlers (OCP plugin architecture)
-      pty/          ← PTY-based CLI integration (ContainerPool, AgentBus, MCP bridge, NDJSON wire)
-      tools/        ← Agent tool implementations (incl. oauth_fetch, workflow, ask-user, approval-notifier)
-    bus/            ← MessageBus (in-memory default · Redis Streams optional)
-    channels/       ← Channel manager · commands · dispatch · approval · persona tone rendering
-    config/         ← Zod-based config schema + config-meta
+      pty/          ← PTY-based CLI integration (ContainerPool, AgentBus, NDJSON wire)
+      tools/        ← Agent tool implementations (oauth_fetch, workflow, ask-user, etc.)
+    bootstrap/      ← 15 bootstrap modules (decomposed from main.ts)
+    bus/            ← MessageBus (in-memory · Redis Streams)
+    channels/       ← Channel manager · commands · dispatch · approval · persona tone
+    config/         ← Zod-based config schema
     cron/           ← Cron scheduler (SQLite)
-    bootstrap/      ← 15 bootstrap modules (main.ts decomposed: agent-core, channels, config, dashboard, etc.)
     dashboard/
-      ops/          ← 13 dashboard ops modules (ops-factory.ts decomposed)
-      routes/       ← 26 route handlers (state, config, chat, cron, workflows, kanban, etc.)
-      service.ts    ← HTTP server + route registration
+      ops/          ← 13 ops modules
+      routes/       ← Route handlers
     decision/       ← Decision service
+    events/         ← Workflow event service
+    heartbeat/      ← Heartbeat service
+    i18n/           ← Shared i18n protocol + JSON locales
     mcp/            ← MCP client manager
     oauth/          ← OAuth 2.0 integration (flow-service, integration-store)
-    i18n/           ← Shared i18n protocol + JSON locales (en, ko)
-    orchestration/  ← Gateway · Classifier · Prompts · ToolCallHandler · NodeSelector · ToolIndex · ConfirmationGuard
-    runtime/        ← Instance lock · ServiceManager · service types
-    services/       ← Domain services (embed, vector-store, query-db, webhook-store, kanban-store, kanban-rule-executor, model-catalog, reference-store)
+    orchestration/  ← Classifier · ToolIndex · ConfirmationGuard · HitlPendingStore
+    providers/      ← LLM providers (Claude, Codex, Gemini, OpenAI-compatible)
+    runtime/        ← Instance lock · ServiceManager
     security/       ← Secret Vault (AES-256-GCM)
+    services/       ← Domain services (embed, vector-store, kanban, webhook, model-catalog, etc.)
     session/        ← Session store
     skills/
       _shared/      ← Shared protocols
-      roles/        ← 8 role skills
+      roles/        ← 8 roles (concierge, pm, pl, implementer, reviewer, validator, debugger, generalist)
+      diagram / github / sandbox / ...  ← Additional built-in skills
   scripts/
     scaffold/       ← Code generators (tool, node, handler, route, page)
+    generate-diagrams.mjs ← SVG diagram generation
     i18n-sync.ts    ← i18n key synchronization (--check / --fix)
-  workspace/
-    templates/      ← System prompt templates
+  <workspace>/      ← Specified via --workspace (runtime data)
+    runtime/        ← SQLite DBs (sessions, tasks, events, cron, kanban, dlq, etc.)
     skills/         ← User-defined skills
-    runtime/        ← SQLite DBs (sessions, tasks, events, decisions, cron, dlq)
-  web/              ← Dashboard frontend (React + Vite + i18n + Zustand)
-    src/pages/workflows/  ← Graph editor, Node Inspector, Node Picker, 87 node UI components
+    templates/      ← System prompt templates
+  web/              ← Dashboard frontend (React + Vite + i18n)
+    src/pages/workflows/  ← Graph editor · Node Inspector · 124-node UI
   docs/
-    */guide/        ← User guides (dashboard, oauth, providers, heartbeat, workflows)
-    */design/       ← Architecture design documents (phase-loop, pty-agent-backend, node-registry, workflow-tool, etc.)
-  diagrams/         ← SVG architecture diagrams
+    diagrams/       ← SVG architecture diagrams
+    */guide/        ← User guides
+    */design/       ← Architecture design documents
 ```
 
 ## Troubleshooting
