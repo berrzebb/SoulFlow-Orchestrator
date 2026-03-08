@@ -89,6 +89,7 @@ export function TemplatesTab() {
               </div>
             ) : (
               <textarea
+                autoFocus
                 className="ws-editor ws-editor--editing"
                 value={content}
                 onChange={(e) => { setContent(e.target.value); setDirty(true); }}

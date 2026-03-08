@@ -139,6 +139,7 @@ export function ReferencesTab() {
       {/* Search bar */}
       <div className="ws-references__search">
         <input
+          autoFocus
           className="form-input form-input--sm"
           placeholder={t("references.search")}
           value={searchQuery}

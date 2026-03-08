@@ -235,7 +235,7 @@ export function MemoryTab() {
               <div className="skeleton skeleton--text-sm" />
             </div>
           ) : editing ? (
-            <textarea className="ws-editor ws-editor--editing" value={editText} onChange={(e) => setEditText(e.target.value)} />
+            <textarea autoFocus className="ws-editor ws-editor--editing" value={editText} onChange={(e) => setEditText(e.target.value)} />
           ) : (
             <div className="ws-preview">
               <pre>{content_data?.content || <span className="text-muted">-</span>}</pre>
