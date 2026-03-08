@@ -1,6 +1,6 @@
 # SoulFlow Orchestrator 환경 관리 스크립트 (Windows PowerShell)
-# 사용법: .\run.ps1 dev|test|staging|prod|down|status|logs|help
-# 워크스페이스: $env:WORKSPACE="D:\custom\path" .\run.ps1 dev
+# 사용법: .\run.ps1 dev|test|staging|prod|down|status|logs|login|help
+# 예시: .\run.ps1 dev --workspace=D:\soulflow
 
 param(
   [Parameter(Position = 0)]
@@ -13,7 +13,7 @@ param(
 $ErrorActionPreference = "Continue"
 
 # Named 파라미터 파싱
-$Workspace = "/data"
+$Workspace = $null
 $WebPort = $null
 $RedisPort = $null
 $Instance = $null
@@ -22,7 +22,7 @@ foreach ($arg in $Arguments) {
   if ($arg -match "^--workspace=(.+)$") {
     $val = $matches[1]
     if ($val -match "^=") {
-      Write-Host "❌ 파라미터 오류: --workspace==... (= 기호가 두 개)" -ForegroundColor Red
+      Write-Host "파라미터 오류: --workspace==... (= 기호가 두 개)" -ForegroundColor Red
       Write-Host "올바른 형식: --workspace=D:\path (= 한 개)" -ForegroundColor Yellow
       exit 1
     }
@@ -36,6 +36,14 @@ foreach ($arg in $Arguments) {
   }
 }
 
+# 환경별 프리셋 (docker-compose 환경변수만)
+$Presets = @{
+  dev     = @{ BUILD_TARGET="dev";        NODE_ENV="development"; DEBUG="true";  MEMORY="1G"; CPUS="2"; WEB_PORT="4200"; REDIS_PORT="6379" }
+  test    = @{ BUILD_TARGET="production"; NODE_ENV="test";        DEBUG="true";  MEMORY="1G"; CPUS="2"; WEB_PORT="4201"; REDIS_PORT="6380" }
+  staging = @{ BUILD_TARGET="production"; NODE_ENV="production";  DEBUG="false"; MEMORY="1G"; CPUS="2"; WEB_PORT="4202"; REDIS_PORT="6381" }
+  prod    = @{ BUILD_TARGET="full";       NODE_ENV="production";  DEBUG="false"; MEMORY="2G"; CPUS="4"; WEB_PORT="4200"; REDIS_PORT="6379" }
+}
+
 function Write-Title {
   param([string]$Title)
   Write-Host "════════════════════════════════════════" -ForegroundColor Blue
@@ -44,7 +52,6 @@ function Write-Title {
 }
 
 function Show-Help {
-  Clear-Host
   Write-Host ""
   Write-Title "SoulFlow Orchestrator 환경 관리"
   Write-Host ""
@@ -68,143 +75,92 @@ function Show-Help {
   Write-Host "  login gemini   - Gemini 에이전트 로그인"
   Write-Host ""
   Write-Host "옵션 (모든 명령과 함께 사용 가능):" -ForegroundColor Yellow
-  Write-Host "  --workspace=PATH   - 워크스페이스 경로 (로그인 정보 저장 위치)"
+  Write-Host "  --workspace=PATH   - 워크스페이스 경로 (필수)"
   Write-Host "  --instance=NAME    - 인스턴스 이름 (다중 인스턴스 스케일링)"
   Write-Host "  --web-port=PORT    - 웹 포트 (기본값: 환경별 다름)"
   Write-Host "  --redis-port=PORT  - Redis 포트 (기본값: 환경별 다름)"
   Write-Host ""
   Write-Host "예시:" -ForegroundColor Yellow
-  Write-Host "  .\run.ps1 prod --workspace=D:\soulflow"
-  Write-Host "  .\run.ps1 dev --instance=worker1 --web-port=4200"
-  Write-Host "  .\run.ps1 dev --instance=worker2 --web-port=4201"
+  Write-Host "  .\run.ps1 dev --workspace=D:\soulflow"
+  Write-Host "  .\run.ps1 dev --workspace=D:\soulflow --instance=worker1 --web-port=4200"
   Write-Host "  .\run.ps1 login claude --workspace=D:\soulflow"
   Write-Host ""
 }
 
 function Start-Environment {
-  param(
-    [string]$ProfileName
-  )
+  param([string]$ProfileName)
 
-  Clear-Host
+  if (-not $Workspace) {
+    Write-Host "--workspace 파라미터가 필요합니다." -ForegroundColor Red
+    Write-Host "예시: .\run.ps1 $ProfileName --workspace=D:\soulflow" -ForegroundColor Yellow
+    exit 1
+  }
+
+  $p = $Presets[$ProfileName]
+  if (-not $p) {
+    Write-Host "알 수 없는 프로필: $ProfileName" -ForegroundColor Red
+    return
+  }
+
+  # 프로젝트명: soulflow-{profile}[-{instance}]
+  $projectName = "soulflow-$ProfileName"
+  if ($Instance) { $projectName += "-$Instance" }
+
   Write-Host ""
   Write-Host "🚀 $ProfileName 환경 시작 중..." -ForegroundColor Yellow
   Write-Host "   워크스페이스: $Workspace"
+  Write-Host "   프로젝트: $projectName"
   if ($Instance) { Write-Host "   인스턴스: $Instance" }
   Write-Host ""
 
-  try {
-    # 환경별 preset 정의
-    $preset = @{
-      "dev" = @{
-        BUILD_TARGET = "dev"
-        NODE_ENV = "development"
-        DEBUG = "true"
-        MEMORY = "1G"
-        CPUS = "2"
-        DEV_VOLUMES = "`n      - ../src:/app/src`n      - ../web/src:/app/web/src"
-        DEV_COMMAND = "command: npm run dev"
-        REDIS_SERVICE = "redis`n        condition: service_healthy"
-        REDIS_NAME = "redis"
-        REDIS_CONDITION = ""
-      }
-      "test" = @{
-        BUILD_TARGET = "production"
-        NODE_ENV = "test"
-        DEBUG = "true"
-        MEMORY = "1G"
-        CPUS = "2"
-        DEV_VOLUMES = "`n      - ../src:/app/src`n      - ../web/src:/app/web/src"
-        DEV_COMMAND = ""
-        REDIS_SERVICE = "redis`n        condition: service_healthy"
-        REDIS_NAME = "redis"
-        REDIS_CONDITION = ""
-      }
-      "staging" = @{
-        BUILD_TARGET = "production"
-        NODE_ENV = "production"
-        DEBUG = "false"
-        MEMORY = "1G"
-        CPUS = "2"
-        DEV_VOLUMES = ""
-        DEV_COMMAND = ""
-        REDIS_SERVICE = "redis`n        condition: service_healthy"
-        REDIS_NAME = "redis"
-        REDIS_CONDITION = ""
-      }
-      "prod" = @{
-        BUILD_TARGET = "full"
-        NODE_ENV = "production"
-        DEBUG = "false"
-        MEMORY = "2G"
-        CPUS = "4"
-        DEV_VOLUMES = ""
-        DEV_COMMAND = ""
-        REDIS_SERVICE = "redis`n        condition: service_healthy"
-        REDIS_NAME = "redis"
-        REDIS_CONDITION = ""
-      }
+  # .agents 디렉토리 사전 생성 (볼륨 마운트 요구사항)
+  foreach ($agent in @(".claude", ".codex", ".gemini")) {
+    $dir = Join-Path $Workspace ".agents\$agent"
+    if (-not (Test-Path $dir)) {
+      New-Item -ItemType Directory -Path $dir -Force | Out-Null
     }
+  }
 
-    $p = $preset[$ProfileName]
-    if (-not $p) {
-      Write-Host "❌ 알 수 없는 프로필: $ProfileName" -ForegroundColor Red
-      return
-    }
+  # 프리셋 → 환경변수
+  $env:DOCKER_BUILDKIT = 0
+  $env:BUILD_TARGET = $p.BUILD_TARGET
+  $env:NODE_ENV = $p.NODE_ENV
+  $env:DEBUG = $p.DEBUG
+  $env:MEMORY = $p.MEMORY
+  $env:CPUS = $p.CPUS
+  $env:HOST_WORKSPACE = $Workspace
+  $env:PROJECT_NAME = $projectName
+  $env:WEB_PORT = if ($WebPort) { $WebPort } else { $p.WEB_PORT }
+  $env:REDIS_PORT = if ($RedisPort) { $RedisPort } else { $p.REDIS_PORT }
 
-    # 프로젝트명 생성 (기본값은 preset 기반)
-    $baseName = @{ dev="soulflow-dev"; test="soulflow-test"; staging="soulflow-staging"; prod="soulflow-orchestrator" }[$ProfileName]
-    $projectName = $baseName
-    if ($Workspace -and $Workspace -ne "/data") { $projectName += "-user" }
-    if ($Instance) { $projectName += "-$Instance" }
+  # compose 실행
+  $composeArgs = @("-f", "docker/docker-compose.yml")
+  if ($ProfileName -eq "dev") {
+    $composeArgs += @("-f", "docker/docker-compose.dev.override.yml")
+  }
+  $composeArgs += @("-p", $projectName, "up", "-d")
 
-    # 환경변수 설정
-    $env:DOCKER_BUILDKIT = 0
-    $env:BUILD_TARGET = $p.BUILD_TARGET
-    $env:NODE_ENV = $p.NODE_ENV
-    $env:DEBUG = $p.DEBUG
-    $env:MEMORY = $p.MEMORY
-    $env:CPUS = $p.CPUS
-    $env:DEV_VOLUMES = $p.DEV_VOLUMES
-    $env:DEV_COMMAND = $p.DEV_COMMAND
-    $env:REDIS_SERVICE = $p.REDIS_SERVICE
-    $env:REDIS_NAME = $p.REDIS_NAME
-    $env:REDIS_CONDITION = $p.REDIS_CONDITION
-    $env:WORKSPACE = "/data"
-    $env:HOST_WORKSPACE = $Workspace
-    $env:PROJECT_NAME = $projectName
-    $env:WEB_PORT = if ($WebPort) { $WebPort } else { @{ dev="4200"; test="4201"; staging="4202"; prod="4200" }[$ProfileName] }
-    $env:REDIS_PORT = if ($RedisPort) { $RedisPort } else { @{ dev="6379"; test="6380"; staging="6381"; prod="6379" }[$ProfileName] }
+  docker compose @composeArgs
 
-    $composeArgs = "docker compose -f docker/docker-compose.yml"
-    if ($ProfileName -eq "dev") {
-      $composeArgs += " -f docker/docker-compose.dev.override.yml"
-    }
-    $composeArgs += " -p $projectName up -d"
-
-    Invoke-Expression $composeArgs
-
+  if ($LASTEXITCODE -eq 0) {
     Write-Host ""
     Write-Host "✅ $ProfileName 환경이 시작되었습니다!" -ForegroundColor Green
     Write-Host "   프로젝트: $projectName" -ForegroundColor Green
-    Write-Host "   포트: $($env:WEB_PORT)/4200" -ForegroundColor Green
+    Write-Host "   웹 포트: $($env:WEB_PORT)" -ForegroundColor Green
     Write-Host ""
-  }
-  catch {
-    Write-Host "❌ 오류: $_" -ForegroundColor Red
+  } else {
+    Write-Host ""
+    Write-Host "환경 시작 실패" -ForegroundColor Red
+    Write-Host ""
   }
 }
 
 function Stop-AllEnvironments {
-  Clear-Host
   Write-Host ""
-  Write-Host "⛔ 모든 환경 중지 중..." -ForegroundColor Yellow
+  Write-Host "모든 환경 중지 중..." -ForegroundColor Yellow
   Write-Host ""
 
-  docker compose down -v 2>$null
-  @("dev", "test", "staging", "prod") | ForEach-Object {
-    docker compose -f "docker/docker-compose.$_.yml" down -v 2>$null
-  }
+  docker compose -f docker/docker-compose.yml down -v 2>$null
 
   Write-Host ""
   Write-Host "✅ 모든 환경이 중지되었습니다" -ForegroundColor Green
@@ -212,58 +168,52 @@ function Stop-AllEnvironments {
 }
 
 function Show-Status {
-  Clear-Host
   Write-Host ""
-  Write-Host "📊 환경 상태:" -ForegroundColor Blue
+  Write-Host "환경 상태:" -ForegroundColor Blue
   Write-Host ""
   docker compose ps
   Write-Host ""
 }
 
 function Show-Logs {
-  Clear-Host
   Write-Host ""
-  Write-Host "📋 로그 확인 중... (Ctrl+C로 종료)" -ForegroundColor Blue
+  Write-Host "로그 확인 중... (Ctrl+C로 종료)" -ForegroundColor Blue
   Write-Host ""
   docker compose logs -f
 }
 
 function Start-AgentLogin {
-  param([string]$Agent, [string]$WorkspacePath = "/data")
+  param([string]$Agent)
 
-  Clear-Host
-  Write-Host ""
-
-  # 워크스페이스의 agents 디렉토리 생성
-  $AgentsDir = "$WorkspacePath\.agents"
-  if (-not (Test-Path $AgentsDir)) {
-    New-Item -ItemType Directory -Path $AgentsDir -Force | Out-Null
+  if (-not $Workspace) {
+    Write-Host "--workspace 파라미터가 필요합니다." -ForegroundColor Red
+    Write-Host "예시: .\run.ps1 login $Agent --workspace=D:\soulflow" -ForegroundColor Yellow
+    exit 1
   }
+
+  $AgentsDir = Join-Path $Workspace ".agents"
 
   switch ($Agent.ToLower()) {
     "claude" {
       Write-Host "🔑 Claude 에이전트 로그인 중..." -ForegroundColor Yellow
-      Write-Host "   인증 정보 저장: $AgentsDir\.claude" -ForegroundColor Gray
-      $claudeDir = "$AgentsDir\.claude"
-      if (-not (Test-Path $claudeDir)) { New-Item -ItemType Directory -Path $claudeDir -Force | Out-Null }
-      docker run --rm -it -v "$claudeDir`:/root/.claude" soulflow-orchestrator claude login
+      $dir = Join-Path $AgentsDir ".claude"
+      if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+      docker run --rm -it -v "${dir}:/root/.claude" soulflow-orchestrator claude login
     }
     "codex" {
       Write-Host "🔑 Codex 에이전트 로그인 중..." -ForegroundColor Yellow
-      Write-Host "   인증 정보 저장: $AgentsDir\.codex" -ForegroundColor Gray
-      $codexDir = "$AgentsDir\.codex"
-      if (-not (Test-Path $codexDir)) { New-Item -ItemType Directory -Path $codexDir -Force | Out-Null }
-      docker run --rm -it -p 1455:1456 -v "$codexDir`:/root/.codex" -v "$(Get-Location)\scripts\oauth-relay.mjs:/tmp/relay.mjs:ro" soulflow-orchestrator bash -c "node /tmp/relay.mjs 1456 1455 & codex auth login"
+      $dir = Join-Path $AgentsDir ".codex"
+      if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+      docker run --rm -it -p 1455:1456 -v "${dir}:/root/.codex" -v "$(Get-Location)\scripts\oauth-relay.mjs:/tmp/relay.mjs:ro" soulflow-orchestrator bash -c "node /tmp/relay.mjs 1456 1455 & codex auth login"
     }
     "gemini" {
       Write-Host "🔑 Gemini 에이전트 로그인 중..." -ForegroundColor Yellow
-      Write-Host "   인증 정보 저장: $AgentsDir\.gemini" -ForegroundColor Gray
-      $geminiDir = "$AgentsDir\.gemini"
-      if (-not (Test-Path $geminiDir)) { New-Item -ItemType Directory -Path $geminiDir -Force | Out-Null }
-      docker run --rm -it -v "$geminiDir`:/root/.gemini" soulflow-orchestrator gemini auth login
+      $dir = Join-Path $AgentsDir ".gemini"
+      if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+      docker run --rm -it -v "${dir}:/root/.gemini" soulflow-orchestrator gemini auth login
     }
     default {
-      Write-Host "❌ 알 수 없는 에이전트: $Agent" -ForegroundColor Red
+      Write-Host "알 수 없는 에이전트: $Agent" -ForegroundColor Red
       Write-Host "사용법: .\run.ps1 login [claude|codex|gemini]"
     }
   }
@@ -271,26 +221,26 @@ function Start-AgentLogin {
 }
 
 # 메인 실행
-switch -CaseSensitive ($Command.ToLower()) {
-  "help" { Show-Help }
-  "dev" { Start-Environment "dev" }
-  "test" { Start-Environment "test" }
+switch ($Command.ToLower()) {
+  "help"    { Show-Help }
+  "dev"     { Start-Environment "dev" }
+  "test"    { Start-Environment "test" }
   "staging" { Start-Environment "staging" }
-  "prod" { Start-Environment "prod" }
-  "down" { Stop-AllEnvironments }
-  "status" { Show-Status }
-  "logs" { Show-Logs }
+  "prod"    { Start-Environment "prod" }
+  "down"    { Stop-AllEnvironments }
+  "status"  { Show-Status }
+  "logs"    { Show-Logs }
   "login" {
-    $Agent = $Arguments[0]
+    $Agent = $Arguments | Where-Object { $_ -notmatch "^--" } | Select-Object -First 1
     if ([string]::IsNullOrWhiteSpace($Agent)) {
-      Write-Host "❌ 에이전트를 지정하세요" -ForegroundColor Red
+      Write-Host "에이전트를 지정하세요" -ForegroundColor Red
       Write-Host "사용법: .\run.ps1 login [claude|codex|gemini]"
     } else {
-      Start-AgentLogin $Agent $Workspace
+      Start-AgentLogin $Agent
     }
   }
   default {
-    Write-Host "❌ 알 수 없는 명령어: $Command" -ForegroundColor Red
+    Write-Host "알 수 없는 명령어: $Command" -ForegroundColor Red
     Write-Host ""
     Show-Help
   }

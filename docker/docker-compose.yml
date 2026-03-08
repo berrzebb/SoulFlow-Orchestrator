@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   docker-proxy:
     image: tecnativa/docker-socket-proxy
@@ -24,13 +22,13 @@ services:
       dockerfile: docker/Dockerfile
       target: ${BUILD_TARGET:-full}
     image: soulflow-orchestrator
-    container_name: ${PROJECT_NAME:-soulflow-orchestrator}-orchestrator
+    container_name: ${PROJECT_NAME}-orchestrator
     restart: unless-stopped
     ports:
       - "${WEB_PORT:-4200}:4200"
     environment:
       NODE_ENV: ${NODE_ENV:-production}
-      WORKSPACE: ${WORKSPACE:-/data}
+      WORKSPACE: /data
       REDIS_URL: redis://redis:6379
       DEBUG: ${DEBUG:-false}
     volumes:
@@ -53,7 +51,7 @@ services:
     ports:
       - "${REDIS_PORT:-6379}:6379"
     volumes:
-      - ${PROJECT_NAME:-soulflow-orchestrator}-redis-data:/data
+      - redis-data:/data
     command: >
       redis-server
       --appendonly yes
@@ -71,9 +69,9 @@ services:
           cpus: "0.5"
 
 volumes:
-  ${PROJECT_NAME:-soulflow-orchestrator}-redis-data:
+  redis-data:
     driver: local
 
 networks:
   default:
-    name: ${PROJECT_NAME:-soulflow-orchestrator}-network
+    name: ${PROJECT_NAME}-network
