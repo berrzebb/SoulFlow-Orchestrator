@@ -95,7 +95,8 @@ const createMockRunnerDeps = (): Partial<RunnerDeps> => ({
   process_tracker: null,
   get_mcp_configs: vi.fn(() => undefined),
   workspace: "/tmp",
-  convert_agent_result: vi.fn(),
+  convert_agent_result: vi.fn((result, mode, stream) => ({ reply: String(result.content || ""), mode, suppress_reply: false, tool_calls_count: result.tool_calls_count || 0, streamed: false })),
+  hooks_for: vi.fn(() => ({})),
   config: {
     agent_loop_max_turns: 10,
   } as any,
@@ -119,6 +120,48 @@ describe("run_agent_loop — executor 루프 실행", () => {
 
       expect(result.mode).toBe("agent");
       expect(result.reply).toContain("Result from native or legacy path");
+    });
+
+    it("native backend 성공 → convert_agent_result 호출", async () => {
+      const deps = createMockRunnerDeps() as RunnerDeps;
+      deps.agent_backends = {
+        resolve_for_mode: vi.fn(() => ({
+          id: "native-backend",
+          native_tool_loop: true,
+          capabilities: { thinking: false },
+        })),
+        resolve_backend: vi.fn(),
+        run: vi.fn().mockResolvedValue({ content: "native reply", tool_calls_count: 3, finish_reason: "stop" }),
+      } as any;
+      (deps.convert_agent_result as any).mockReturnValue({ reply: "native reply", mode: "agent", suppress_reply: false, tool_calls_count: 3, streamed: false });
+
+      const result = await run_agent_loop(deps, mockArgs);
+
+      expect(deps.convert_agent_result).toHaveBeenCalled();
+      expect(result.reply).toBe("native reply");
+      expect(result.tool_calls_count).toBe(3);
+    });
+
+    it("native backend thinking 활성화 → thinking 파라미터 포함", async () => {
+      const deps = createMockRunnerDeps() as RunnerDeps;
+      const run_spy = vi.fn().mockResolvedValue({ content: "thinking reply", tool_calls_count: 0, finish_reason: "stop" });
+      deps.agent_backends = {
+        resolve_for_mode: vi.fn(() => ({
+          id: "native-thinking",
+          native_tool_loop: true,
+          capabilities: { thinking: true },
+        })),
+        resolve_backend: vi.fn(),
+        run: run_spy,
+      } as any;
+      (deps.convert_agent_result as any).mockReturnValue({ reply: "thinking reply", mode: "agent", suppress_reply: false, tool_calls_count: 0, streamed: false });
+
+      await run_agent_loop(deps, mockArgs);
+
+      expect(run_spy).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({
+        enable_thinking: true,
+        max_thinking_tokens: 16000,
+      }));
     });
 
     it("native backend 실패 시 warn 로그 기록", async () => {

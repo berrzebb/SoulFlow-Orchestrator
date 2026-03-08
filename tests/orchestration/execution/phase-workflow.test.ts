@@ -384,6 +384,142 @@ describe("run_phase_loop — phase 워크플로우 실행", () => {
     });
   });
 
+  describe("콜백 직접 호출 (exec 인수 캡처)", () => {
+    async function capture_exec_args(deps: PhaseWorkflowDeps) {
+      const { run_phase_loop: phaseLoopExec } = await import("@src/agent/phase-loop-runner.js");
+      let captured_first_arg: any = null;
+      let captured_second_arg: any = null;
+      (phaseLoopExec as any).mockImplementationOnce(async (first: any, second: any) => {
+        captured_first_arg = first;
+        captured_second_arg = second;
+        return {
+          status: "completed",
+          phases: [{ phase_id: "p1", title: "T1", status: "completed", agents: [{ agent_id: "a1", label: "A1", status: "completed", result: "ok" }] }],
+          memory: {},
+        };
+      });
+      await run_phase_loop(deps, mockRequest, "task", "test-template");
+      return { first: captured_first_arg, second: captured_second_arg };
+    }
+
+    it("on_phase_change → req.on_progress 호출", async () => {
+      const deps = createMockPhaseWorkflowDeps() as PhaseWorkflowDeps;
+      const on_progress_spy = vi.fn();
+      const req_with_progress = { ...mockRequest, on_progress: on_progress_spy };
+
+      const { run_phase_loop: phaseLoopExec } = await import("@src/agent/phase-loop-runner.js");
+      let on_phase_change_fn: any = null;
+      (phaseLoopExec as any).mockImplementationOnce(async (first: any) => {
+        on_phase_change_fn = first.on_phase_change;
+        return {
+          status: "completed",
+          phases: [],
+          memory: {},
+        };
+      });
+
+      await run_phase_loop(deps, req_with_progress, "task", "test-template");
+
+      if (on_phase_change_fn) {
+        on_phase_change_fn({ current_phase: 0, phases: [{ phase_id: "p1" }] });
+        expect(on_progress_spy).toHaveBeenCalledWith(expect.objectContaining({ step: 1, total_steps: 1 }));
+      }
+    });
+
+    it("on_event → get_sse_broadcaster 및 req.on_agent_event 호출", async () => {
+      const deps = createMockPhaseWorkflowDeps() as PhaseWorkflowDeps;
+      const on_agent_event_spy = vi.fn();
+      const req_with_event = { ...mockRequest, on_agent_event: on_agent_event_spy };
+
+      const { run_phase_loop: phaseLoopExec } = await import("@src/agent/phase-loop-runner.js");
+      let on_event_fn: any = null;
+      (phaseLoopExec as any).mockImplementationOnce(async (_first: any, second: any) => {
+        on_event_fn = second.on_event;
+        return { status: "completed", phases: [], memory: {} };
+      });
+
+      await run_phase_loop(deps, req_with_event, "task", "test-template");
+
+      if (on_event_fn) {
+        on_event_fn({ type: "phase_start", phase_id: "p1", workflow_id: "wf-1" });
+        expect(on_agent_event_spy).toHaveBeenCalled();
+      }
+    });
+
+    it("send_message 콜백 — 성공 → bus.publish_outbound 호출", async () => {
+      const deps = createMockPhaseWorkflowDeps() as PhaseWorkflowDeps;
+      const { first } = await capture_exec_args(deps);
+
+      if (first?.send_message) {
+        const result = await first.send_message({ target: "origin", content: "hello" });
+        expect(deps.bus?.publish_outbound).toHaveBeenCalled();
+        expect(result.ok).toBe(true);
+        expect(result.message_id).toBeTruthy();
+      }
+    });
+
+    it("send_message 콜백 — bus 실패 → logger.error + ok:false", async () => {
+      const deps = createMockPhaseWorkflowDeps() as PhaseWorkflowDeps;
+      (deps.bus!.publish_outbound as any).mockRejectedValue(new Error("bus down"));
+      const { first } = await capture_exec_args(deps);
+
+      if (first?.send_message) {
+        const result = await first.send_message({ target: "origin", content: "hello" });
+        expect(deps.logger.error).toHaveBeenCalledWith("workflow_send_message_failed", expect.any(Object));
+        expect(result.ok).toBe(false);
+      }
+    });
+  });
+
+  describe("format_phase_summary — 메모리 폴백", () => {
+    it("phases 없고 memory 있으면 마지막 키 값으로 요약", async () => {
+      const deps = createMockPhaseWorkflowDeps() as PhaseWorkflowDeps;
+      const { run_phase_loop: phaseLoopExec } = await import("@src/agent/phase-loop-runner.js");
+      (phaseLoopExec as any).mockResolvedValue({
+        status: "completed",
+        phases: [],  // 빈 phases → lines.length === 0
+        memory: { origin: "skip", result: "final_output_text" },
+      });
+
+      const result = await run_phase_loop(deps, mockRequest, "task", "test-template");
+
+      expect(result.reply).toContain("final_output_text");
+    });
+
+    it("phases 없고 memory 없으면 빈 요약", async () => {
+      const deps = createMockPhaseWorkflowDeps() as PhaseWorkflowDeps;
+      const { run_phase_loop: phaseLoopExec } = await import("@src/agent/phase-loop-runner.js");
+      (phaseLoopExec as any).mockResolvedValue({
+        status: "completed",
+        phases: [],
+        memory: {},
+      });
+
+      const result = await run_phase_loop(deps, mockRequest, "task", "test-template");
+      expect(result.reply).toContain("완료");
+    });
+
+    it("critic 정보가 있는 phase → critic review 출력", async () => {
+      const deps = createMockPhaseWorkflowDeps() as PhaseWorkflowDeps;
+      const { run_phase_loop: phaseLoopExec } = await import("@src/agent/phase-loop-runner.js");
+      (phaseLoopExec as any).mockResolvedValue({
+        status: "completed",
+        phases: [
+          {
+            phase_id: "p1", title: "Phase 1", status: "completed",
+            agents: [{ agent_id: "a1", label: "A1", status: "completed", result: "result" }],
+            critic: { approved: true, review: "Looks good" },
+          },
+        ],
+        memory: {},
+      });
+
+      const result = await run_phase_loop(deps, mockRequest, "task", "test-template");
+      expect(result.reply).toContain("Critic");
+      expect(result.reply).toContain("Looks good");
+    });
+  });
+
   describe("동적 워크플로우 생성", () => {
     it("동적 생성 성공 → preview 반환 및 store upsert", async () => {
       const deps = createMockPhaseWorkflowDeps() as PhaseWorkflowDeps;

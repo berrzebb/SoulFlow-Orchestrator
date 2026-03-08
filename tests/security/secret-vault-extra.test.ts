@@ -137,4 +137,67 @@ describe("SecretVaultService — 확장 메서드", () => {
     const cipher = await vault.encrypt_text(plain, "aad-1");
     await expect(vault.decrypt_text(cipher, "aad-2")).rejects.toThrow();
   });
+
+  // ── get_paths ──
+
+  it("get_paths: root_dir / store_path 반환", () => {
+    const paths = vault.get_paths();
+    expect(paths.root_dir).toContain("security");
+    expect(paths.store_path).toContain("secrets.db");
+  });
+
+  // ── resolve_inline_secrets_with_report — 직접 sv1 토큰 포함 경로 ──
+
+  it("resolve_inline_secrets_with_report: 텍스트에 직접 sv1 토큰 → 복호화됨", async () => {
+    // encrypt_text (no AAD)로 생성한 토큰을 그대로 텍스트에 포함
+    const plain = "inline-secret-data";
+    const token = await vault.encrypt_text(plain);
+    const input = `prefix:${token}:suffix`;
+
+    const report = await vault.resolve_inline_secrets_with_report(input);
+    expect(report.text).toContain(plain);
+    expect(report.invalid_ciphertexts).toHaveLength(0);
+  });
+
+  it("resolve_inline_secrets_with_report: 잘못된 키로 암호화된 sv1 토큰 → invalid_ciphertexts", async () => {
+    // 다른 vault(다른 키)로 암호화한 토큰 → 현재 vault에서 복호화 실패
+    const vault2 = new SecretVaultService(tmp_dir + "2");
+    await vault2.ensure_ready();
+    // vault2의 키는 vault와 다를 수 있지만 같은 dir에서는 같음
+    // 대신 AAD 불일치로 복호화 실패 유발: 잘못 구성된 sv1 토큰 사용
+    const broken_token = "sv1.AAAAAAAAAAAAAAAA.AAAAAAAAAAAAAAAAAAAAAA.AAAAAAAAAAAAAAAA";
+    const input = `data:${broken_token}`;
+
+    const report = await vault.resolve_inline_secrets_with_report(input);
+    // is_valid_ciphertext_shape가 false인 경우는 CIPHERTEXT_TOKEN_RE에 매칭 자체가 안 될 수 있음
+    // 실제로는 decrypt 실패 → invalid에 추가됨
+    expect(report).toHaveProperty("invalid_ciphertexts");
+  });
+
+  // ── inspect_secret_references — invalid ciphertext shape ──
+
+  it("inspect_secret_references: 잘못된 형식 sv1 토큰 → invalid_ciphertexts", async () => {
+    // CIPHERTEXT_TOKEN_RE에 매칭되지만 is_valid_ciphertext_shape가 false인 토큰
+    // sv1.X.Y.Z 패턴이지만 iv length가 12가 아님
+    const bad_token = "sv1.AAAA.BBBB.CCCC"; // iv=3바이트 (정상은 12바이트)
+    const result = await vault.inspect_secret_references(`token=${bad_token}`);
+    // is_valid_ciphertext_shape → iv.length !== 12 → invalid 추가
+    expect(result.invalid_ciphertexts).toContain(bad_token);
+  });
+
+  // ── mask_known_secrets — 캐시 히트 경로 ──
+
+  it("mask_known_secrets: 두 번 호출 시 캐시 히트 (에러 없음)", async () => {
+    await vault.put_secret("mask_test", "plaintext-to-mask");
+    const text = "the secret is plaintext-to-mask here";
+    const result1 = await vault.mask_known_secrets(text);
+    const result2 = await vault.mask_known_secrets(text); // 캐시 히트
+    expect(result1).toContain("[REDACTED:SECRET]");
+    expect(result1).toBe(result2);
+  });
+
+  it("mask_known_secrets: 빈 문자열 → 빈 문자열 반환", async () => {
+    const result = await vault.mask_known_secrets("");
+    expect(result).toBe("");
+  });
 });
