@@ -33,7 +33,7 @@ export interface UseResourceCRUDResult<T> {
   // 삭제 모달
   deleteTarget: T | null;
   setDeleteTarget: (target: T | null) => void;
-  remove: UseMutationResult<void, Error, string>;
+  remove: UseMutationResult<unknown, Error, string>;
 
   // 검색/필터
   search: string;
