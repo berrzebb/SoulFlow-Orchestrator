@@ -23,10 +23,12 @@ function EmbeddingEditPanel({ node, update, t, options }: EditPanelProps) {
         <div className="builder-row">
           <label className="label">{t("workflows.embed_batch")}</label>
           <input className="input input--sm" type="number" min={1} max={2048} value={String(node.batch_size ?? 32)} onChange={(e) => update({ batch_size: Number(e.target.value) || 32 })} />
+          <span className="builder-hint">{t("workflows.embed_batch_hint")}</span>
         </div>
         <div className="builder-row">
           <label className="label">{t("workflows.embed_dims")}</label>
           <input className="input input--sm" type="number" min={1} value={String(node.dimensions ?? "")} onChange={(e) => update({ dimensions: e.target.value ? Number(e.target.value) : undefined })} placeholder="auto" />
+          <span className="builder-hint">{t("workflows.embed_dims_hint")}</span>
         </div>
       </div>
     </>

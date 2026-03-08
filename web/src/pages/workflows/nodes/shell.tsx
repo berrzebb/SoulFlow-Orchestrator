@@ -15,6 +15,7 @@ function ShellEditPanel({ node, update, t }: EditPanelProps) {
         <div className="builder-row">
           <label className="label">{t("workflows.timeout_ms")}</label>
           <input className="input input--sm" type="number" min={1000} max={120000} step={1000} value={String(node.timeout_ms ?? 30000)} onChange={(e) => update({ timeout_ms: Number(e.target.value) || 30000 })} />
+          <span className="builder-hint">{t("workflows.timeout_ms_hint")}</span>
         </div>
       </div>
     </>
