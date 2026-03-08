@@ -1,10 +1,13 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
+import { EmptyState } from "../components/empty-state";
 import { useToast } from "../components/toast";
 import { SearchInput } from "../components/search-input";
+import { SectionHeader } from "../components/section-header";
 import { useState } from "react";
 import { useT } from "../i18n";
-import { Modal } from "../components/modal";
+import { Modal, DeleteConfirmModal } from "../components/modal";
+import { FormGroup } from "../components/form-group";
 
 export default function SecretsPage() {
   const t = useT();
@@ -57,8 +60,7 @@ export default function SecretsPage() {
 
   return (
     <div className="page">
-      <div className="section-header">
-        <h2>{t("secrets.title", { count: names.length })}</h2>
+      <SectionHeader title={t("secrets.title", { count: names.length })}>
         <div className="section-header__actions">
           <SearchInput
             value={search}
@@ -70,19 +72,14 @@ export default function SecretsPage() {
           />
           <button className="btn btn--sm btn--ok" onClick={() => setAdding(true)}>{t("secrets.add")}</button>
         </div>
-      </div>
+      </SectionHeader>
 
       {!names.length ? (
-        <div className="empty-state">
-          <div className="empty-state__icon">🔐</div>
-          <div className="empty-state__text">{t("secrets.no_secrets")}</div>
-          <button className="btn btn--sm btn--ok empty-state__action" onClick={() => setAdding(true)}>{t("secrets.add")}</button>
-        </div>
+        <EmptyState icon="🔐" title={t("secrets.no_secrets")}
+          actions={<button className="btn btn--sm btn--ok" onClick={() => setAdding(true)}>{t("secrets.add")}</button>}
+        />
       ) : !filtered.length ? (
-        <div className="empty-state">
-          <div className="empty-state__icon">🔍</div>
-          <div className="empty-state__text">{t("secrets.no_match")}</div>
-        </div>
+        <EmptyState type="no-results" title={t("secrets.no_match")} />
       ) : (
         <>
           <div className="table-scroll secret-table-view">
@@ -123,16 +120,14 @@ export default function SecretsPage() {
         </>
       )}
 
-      <Modal
+      <DeleteConfirmModal
         open={!!deleteTarget}
         title={t("secrets.delete_title")}
+        message={t("secrets.delete_confirm", { name: deleteTarget ?? "" })}
         onClose={() => setDeleteTarget(null)}
         onConfirm={() => void confirm_remove()}
         confirmLabel={t("common.delete")}
-        danger
-      >
-        <p className="text-sm">{t("secrets.delete_confirm", { name: deleteTarget ?? "" })}</p>
-      </Modal>
+      />
 
       <Modal
         open={adding}
@@ -141,8 +136,7 @@ export default function SecretsPage() {
         onConfirm={() => void add()}
         confirmLabel={t("common.save")}
       >
-        <div className="form-group">
-          <label className="form-label">{t("common.name")}</label>
+        <FormGroup label={t("common.name")}>
           <input
             autoFocus
             className="form-input"
@@ -151,9 +145,8 @@ export default function SecretsPage() {
             disabled={newName && names.includes(newName)}
             placeholder={t("secrets.name_placeholder")}
           />
-        </div>
-        <div className="form-group">
-          <label className="form-label">{t("secrets.value")}</label>
+        </FormGroup>
+        <FormGroup label={t("secrets.value")}>
           <input
             className="form-input"
             type="password"
@@ -162,7 +155,7 @@ export default function SecretsPage() {
             onKeyDown={(e) => { if (e.key === "Enter" && newName.trim()) void add(); }}
             placeholder={t("secrets.value_placeholder")}
           />
-        </div>
+        </FormGroup>
       </Modal>
     </div>
   );

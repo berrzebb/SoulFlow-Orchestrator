@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useStatus } from "../../api/hooks";
 import { Badge } from "../../components/badge";
+import { SectionHeader } from "../../components/section-header";
 import { api } from "../../api/client";
 import { classify_agent } from "../../utils/classify";
 import { fmt_time } from "../../utils/format";
@@ -11,6 +12,7 @@ import { MetricBar, StatusDot, fmt_uptime, fmt_kbps } from "./helpers";
 import { ProcessesSection } from "./processes-section";
 import type { DashboardState, SystemMetrics } from "./types";
 import { ACTIVE_TASK_STATUSES, PHASE_VARIANT } from "./types";
+import { SkeletonGrid } from "../../components/skeleton-grid";
 
 export default function OverviewPage() {
   const t = useT();
@@ -24,11 +26,7 @@ export default function OverviewPage() {
   });
 
   if (isLoading || !s) {
-    return (
-      <div className="stat-grid">
-        {[...Array(4)].map((_, i) => <div key={i} className="skeleton skeleton-card" />)}
-      </div>
-    );
+    return <SkeletonGrid count={4} className="stat-grid" />;
   }
 
   const working_agents = s.agents?.filter((a) => classify_agent(a.status) === "working").length ?? 0;
@@ -112,10 +110,9 @@ export default function OverviewPage() {
       {/* 2: LLM Providers + Channels */}
       <div className="panel-grid">
         <section className="panel panel--flush">
-          <div className="section-header">
-            <h2>LLM {t("nav.providers")}</h2>
+          <SectionHeader title={`LLM ${t("nav.providers")}`}>
             <Link to="/providers" className="btn btn--xs">{t("common.view_all")}</Link>
-          </div>
+          </SectionHeader>
           {providers.length === 0 ? (
             <p className="empty text-xs">{t("common.none")}</p>
           ) : (
@@ -137,10 +134,9 @@ export default function OverviewPage() {
         </section>
 
         <section className="panel panel--flush">
-          <div className="section-header">
-            <h2>{t("overview.channels")}</h2>
+          <SectionHeader title={t("overview.channels")}>
             <Link to="/channels" className="btn btn--xs">{t("common.view_all")}</Link>
-          </div>
+          </SectionHeader>
           {enabled_channels.length === 0 ? (
             <p className="empty text-xs">{t("common.none")}</p>
           ) : (
@@ -178,10 +174,9 @@ export default function OverviewPage() {
       <div className="panel-grid panel-grid--wider">
         {s.cron && (enabled_jobs > 0 || running_jobs > 0) && (
           <section className="panel panel--flush">
-            <div className="section-header">
-              <h2>{t("overview.cron")}</h2>
+            <SectionHeader title={t("overview.cron")}>
               <Link to="/workspace" className="btn btn--xs">{t("common.view_all")}</Link>
-            </div>
+            </SectionHeader>
             <div className="grid-stack">
               <div className="kv mt-0 mb-0">
                 <Badge status={s.cron.paused ? t("overview.paused") : t("overview.active")} variant={s.cron.paused ? "warn" : "ok"} />
@@ -234,10 +229,9 @@ export default function OverviewPage() {
 
         {(s.decisions?.length ?? 0) > 0 && (
           <section className="panel panel--flush">
-            <div className="section-header">
-              <h2>{t("overview.decisions", { count: s.decisions?.length ?? 0 })}</h2>
+            <SectionHeader title={t("overview.decisions", { count: s.decisions?.length ?? 0 })}>
               <Link to="/workspace" className="btn btn--xs">{t("common.view_all")}</Link>
-            </div>
+            </SectionHeader>
             <ul className="list list--compact">
               {s.decisions?.slice(0, 6).map((d) => (
                 <li key={d.id}>
@@ -257,12 +251,11 @@ export default function OverviewPage() {
       {metrics && (metrics.cpu_percent !== undefined || metrics.net_rx_kbps !== null) && (
         <div className="panel-grid">
           <section className="panel panel--flush">
-            <div className="section-header">
-              <h2>{t("overview.perf_monitoring")}</h2>
+            <SectionHeader title={t("overview.perf_monitoring")}>
               {metrics.uptime_s > 0 && (
                 <span className="text-xs text-muted">{t("overview.uptime")} {fmt_uptime(metrics.uptime_s)}</span>
               )}
-            </div>
+            </SectionHeader>
             <div className="grid-stack grid-stack--lg">
               <MetricBar
                 label="CPU"

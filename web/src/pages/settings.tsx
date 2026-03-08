@@ -2,7 +2,9 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
 import { Badge } from "../components/badge";
+import { EmptyState } from "../components/empty-state";
 import { SearchInput } from "../components/search-input";
+import { SectionHeader } from "../components/section-header";
 import { ToggleSwitch } from "../components/toggle-switch";
 import { useToast } from "../components/toast";
 import { useT } from "../i18n";
@@ -65,8 +67,7 @@ export default function SettingsPage() {
 
   return (
     <div className="page">
-      <div className="section-header">
-        <h2>{t("settings.title")}</h2>
+      <SectionHeader title={t("settings.title")}>
         <SearchInput
           value={search}
           onChange={setSearch}
@@ -75,7 +76,7 @@ export default function SettingsPage() {
           autoFocus
           className="section-header__search"
         />
-      </div>
+      </SectionHeader>
       <p className="text-xs text-muted mb-3">
         {t("settings.description")}
       </p>
@@ -107,7 +108,7 @@ export default function SettingsPage() {
         <SectionPanel key={s.id} section={s} />
       ))}
       {search && filtered_sections.length === 0 && (
-        <div className="empty-state"><div className="empty-state__icon">🔍</div><div className="empty-state__text">{t("settings.no_match")}</div></div>
+        <EmptyState type="no-results" title={t("settings.no_match")} />
       )}
     </div>
   );

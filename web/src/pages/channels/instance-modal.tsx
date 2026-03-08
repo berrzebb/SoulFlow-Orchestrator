@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { FormModal } from "../../components/modal";
-import { FormLabel } from "../../components/form-label";
+import { FormGroup } from "../../components/form-group";
 import { ToggleSwitch } from "../../components/toggle-switch";
 import { useToast } from "../../components/toast";
 import { useT } from "../../i18n";
@@ -91,8 +91,7 @@ export function InstanceModal({ mode, onClose, onSaved }: InstanceModalProps) {
       saving={saving}
       submitDisabled={!hasChanges()}
     >
-      <div className="form-group">
-        <label className="form-label">{t("channels.provider")}</label>
+      <FormGroup label={t("channels.provider")}>
         {isEdit ? (
           <input className="form-input" value={provider} disabled title={t("common.cannot_edit_after_creation")} />
         ) : (
@@ -100,10 +99,9 @@ export function InstanceModal({ mode, onClose, onSaved }: InstanceModalProps) {
             {PROVIDER_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
         )}
-      </div>
+      </FormGroup>
 
-      <div className="form-group">
-        <FormLabel label={t("channels.instance_id")} required />
+      <FormGroup label={t("channels.instance_id")} required hint={!isEdit ? t("channels.instance_id_hint") : undefined}>
         <input
           className="form-input"
           value={auto_id ? provider : instanceId}
@@ -114,21 +112,17 @@ export function InstanceModal({ mode, onClose, onSaved }: InstanceModalProps) {
           required
           aria-required="true"
         />
-        {!isEdit && <span className="form-hint">{t("channels.instance_id_hint")}</span>}
-      </div>
+      </FormGroup>
 
-      <div className="form-group">
-        <FormLabel label={t("channels.label")} required />
+      <FormGroup label={t("channels.label")} required>
         <input autoFocus className="form-input" value={label} onChange={(e) => setLabel(e.target.value)} placeholder={t("channels.label_placeholder")} required aria-required="true" />
-      </div>
+      </FormGroup>
 
-      <div className="form-group form-group--row">
-        <label className="form-label">{t("common.enabled")}</label>
+      <FormGroup label={t("common.enabled")} className="form-group--row">
         <ToggleSwitch checked={enabled} onChange={setEnabled} aria-label={t("common.enabled")} />
-      </div>
+      </FormGroup>
 
-      <div className="form-group">
-        <FormLabel label={t("channels.bot_token")} required />
+      <FormGroup label={t("channels.bot_token")} required>
         <input
           className="form-input"
           type="password"
@@ -139,30 +133,26 @@ export function InstanceModal({ mode, onClose, onSaved }: InstanceModalProps) {
           required
           aria-required="true"
         />
-      </div>
+      </FormGroup>
 
-      <div className="form-group">
-        <label className="form-label">
-          {provider === "telegram" ? t("channels.default_chat_id") : t("channels.default_target")}
-        </label>
+      <FormGroup label={provider === "telegram" ? t("channels.default_chat_id") : t("channels.default_target")}>
         <input
           className="form-input"
           value={defaultTarget}
           onChange={(e) => setDefaultTarget(e.target.value)}
           placeholder={provider === "telegram" ? "-1001234567890" : "#general"}
         />
-      </div>
+      </FormGroup>
 
       {(provider === "discord" || provider === "telegram") && (
-        <div className="form-group">
-          <label className="form-label">{t("channels.api_base")}</label>
+        <FormGroup label={t("channels.api_base")}>
           <input
             className="form-input"
             value={apiBase}
             onChange={(e) => setApiBase(e.target.value)}
             placeholder={provider === "telegram" ? "https://api.telegram.org" : "https://discord.com/api/v10"}
           />
-        </div>
+        </FormGroup>
       )}
     </FormModal>
   );

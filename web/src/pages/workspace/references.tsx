@@ -2,7 +2,10 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import { Badge } from "../../components/badge";
-import { Modal } from "../../components/modal";
+import { EmptyState } from "../../components/empty-state";
+import { Modal, DeleteConfirmModal } from "../../components/modal";
+import { FormGroup } from "../../components/form-group";
+import { WsSkeletonCol } from "./ws-shared";
 import { SearchInput } from "../../components/search-input";
 import { useToast } from "../../components/toast";
 import { useT } from "../../i18n";
@@ -179,16 +182,9 @@ export function ReferencesTab() {
 
       {/* Document list */}
       {isLoading ? (
-        <div className="ws-skeleton-col">
-          <div className="skeleton skeleton--text" />
-          <div className="skeleton skeleton--text" />
-          <div className="skeleton skeleton--text-sm" />
-        </div>
+        <WsSkeletonCol rows={["text", "text", "text-sm"]} />
       ) : !docs.length ? (
-        <div className="empty-state">
-          <div className="empty-state__text">{t("references.no_documents")}</div>
-          <p className="text-xs text-muted">{t("references.no_documents_hint")}</p>
-        </div>
+        <EmptyState title={t("references.no_documents")} description={t("references.no_documents_hint")} />
       ) : (
         <div className="table-scroll">
           <table className="data-table">
@@ -245,47 +241,48 @@ export function ReferencesTab() {
         submitDisabled={!uploadName || !uploadContent}
       >
         <div className="modal__form-body">
-          <label className="form-label">{t("references.select_file")}</label>
-          <input
-            type="file"
-            className="form-input"
-            accept=".md,.txt,.json,.yaml,.yml,.csv,.xml,.html,.log,.ts,.js,.py,.sh,.sql,.toml,.ini,.cfg"
-            onChange={(e) => void handle_file_select(e)}
-          />
-          <label className="form-label">{t("references.filename")}</label>
-          <input
-            className="form-input"
-            value={uploadName}
-            onChange={(e) => setUploadName(e.target.value)}
-            placeholder="document.md"
-            autoFocus
-            onKeyDown={(e) => { if (e.key === "Enter" && uploadName && uploadContent) upload.mutate({ filename: uploadName, content: uploadContent }); }}
-          />
-          <label className="form-label">{t("references.content_preview")}</label>
-          <textarea
-            className="form-input ws-references__preview-textarea"
-            value={uploadContent.slice(0, 2000)}
-            readOnly
-            rows={6}
-            placeholder={t("references.content_preview_hint")}
-          />
-          {uploadContent.length > 2000 && (
-            <span className="text-xs text-muted">{t("references.content_truncated", { total: uploadContent.length })}</span>
-          )}
+          <FormGroup label={t("references.select_file")}>
+            <input
+              type="file"
+              className="form-input"
+              accept=".md,.txt,.json,.yaml,.yml,.csv,.xml,.html,.log,.ts,.js,.py,.sh,.sql,.toml,.ini,.cfg"
+              onChange={(e) => void handle_file_select(e)}
+            />
+          </FormGroup>
+          <FormGroup label={t("references.filename")}>
+            <input
+              className="form-input"
+              value={uploadName}
+              onChange={(e) => setUploadName(e.target.value)}
+              placeholder="document.md"
+              autoFocus
+              onKeyDown={(e) => { if (e.key === "Enter" && uploadName && uploadContent) upload.mutate({ filename: uploadName, content: uploadContent }); }}
+            />
+          </FormGroup>
+          <FormGroup label={t("references.content_preview")}>
+            <textarea
+              className="form-input ws-references__preview-textarea"
+              value={uploadContent.slice(0, 2000)}
+              readOnly
+              rows={6}
+              placeholder={t("references.content_preview_hint")}
+            />
+            {uploadContent.length > 2000 && (
+              <span className="text-xs text-muted">{t("references.content_truncated", { total: uploadContent.length })}</span>
+            )}
+          </FormGroup>
         </div>
       </Modal>
 
       {/* Delete confirm */}
-      <Modal
+      <DeleteConfirmModal
         open={!!deleteTarget}
         title={t("references.delete_title")}
+        message={t("references.delete_confirm", { name: deleteTarget ?? "" })}
         onClose={() => setDeleteTarget(null)}
         onConfirm={() => deleteTarget && remove.mutate(deleteTarget)}
         confirmLabel={t("common.delete")}
-        danger
-      >
-        <p className="text-sm">{t("references.delete_confirm", { name: deleteTarget ?? "" })}</p>
-      </Modal>
+      />
     </div>
   );
 }

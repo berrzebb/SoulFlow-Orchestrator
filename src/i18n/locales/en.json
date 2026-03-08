@@ -268,6 +268,7 @@
   "chat.mirror_label": "Mirror",
   "chat.mirror_none": "No external sessions",
   "chat.mirror_relay_hint": "Messages are relayed to the external channel",
+  "chat.loading": "Loading...",
   "chat.mirror_select": "Select external session...",
   "chat.model_auto": "Auto (default)",
   "chat.model_loading": "Loading...",

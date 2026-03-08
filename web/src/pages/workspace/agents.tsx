@@ -3,7 +3,9 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import { Badge } from "../../components/badge";
 import { EmptyState } from "../../components/empty-state";
-import { Modal } from "../../components/modal";
+import { Modal, DeleteConfirmModal } from "../../components/modal";
+import { FormGroup } from "../../components/form-group";
+import { SectionHeader } from "../../components/section-header";
 import { SendAgentModal } from "../../components/send-agent-modal";
 import { useToast } from "../../components/toast";
 import { classify_agent } from "../../utils/classify";
@@ -132,25 +134,29 @@ export function AgentsTab() {
     <>
       <SendAgentModal agentId={sendTarget} onClose={() => setSendTarget(null)} onSend={(id, text) => void handle_send(id, text)} />
 
-      <Modal open={!!cancelConfirm} title={t("agents.cancel_confirm_title")} onClose={() => setCancelConfirm(null)} onConfirm={confirm_cancel} confirmLabel={t("common.confirm")} danger>
-        <p className="text-sm">{t("agents.cancel_confirm_desc", { label: cancelConfirm?.label ?? "" })}</p>
-      </Modal>
+      <DeleteConfirmModal
+        open={!!cancelConfirm}
+        title={t("agents.cancel_confirm_title")}
+        message={t("agents.cancel_confirm_desc", { label: cancelConfirm?.label ?? "" })}
+        onClose={() => setCancelConfirm(null)}
+        onConfirm={confirm_cancel}
+        confirmLabel={t("common.confirm")}
+      />
 
       <Modal open={!!resumeTarget} title={t("agents.resume_task")} onClose={() => { setResumeTarget(null); setResumeText(""); }} onConfirm={() => void confirm_resume()} confirmLabel={t("agents.resume")}>
-        <label className="form-label">{t("agents.user_input")}</label>
-        <textarea autoFocus className="form-input resize-y" value={resumeText} onChange={(e) => setResumeText(e.target.value)} rows={3} />
+        <FormGroup label={t("agents.user_input")}>
+          <textarea autoFocus className="form-input resize-y" value={resumeText} onChange={(e) => setResumeText(e.target.value)} rows={3} />
+        </FormGroup>
       </Modal>
 
       {/* 실행 프로세스 */}
-      <div className="section-header">
-        <h2 className="li-flex">
-          <span className="section-header__icon">⚡</span>
-          {t("agents.processes_title")}
-          {active_processes.length > 0 && (
-            <span className="section-header__badge">{t("agents.processes_active", { count: active_processes.length })}</span>
-          )}
-        </h2>
-      </div>
+      <SectionHeader titleClassName="li-flex" title={<>
+        <span className="section-header__icon">⚡</span>
+        {t("agents.processes_title")}
+        {active_processes.length > 0 && (
+          <span className="section-header__badge">{t("agents.processes_active", { count: active_processes.length })}</span>
+        )}
+      </>} />
 
       {!active_processes.length ? (
         <EmptyState type="empty" title={t("agents.no_processes")} icon="⚡" />
@@ -218,12 +224,10 @@ export function AgentsTab() {
       )}
 
       {/* Agent Loop */}
-      <div className="section-header section-header--spaced">
-        <h2 className="li-flex">
-          <span className="section-header__icon">🔄</span>
-          {t("agents.agent_loops", { count: agent_loops.length })}
-        </h2>
-      </div>
+      <SectionHeader className="section-header--spaced" titleClassName="li-flex" title={<>
+        <span className="section-header__icon">🔄</span>
+        {t("agents.agent_loops", { count: agent_loops.length })}
+      </>} />
       {!agent_loops.length ? (
         <EmptyState type="empty" title={t("agents.no_agent_loops")} icon="🔄" />
       ) : (
@@ -249,12 +253,10 @@ export function AgentsTab() {
       )}
 
       {/* Task Loop */}
-      <div className="section-header section-header--spaced">
-        <h2 className="li-flex">
-          <span className="section-header__icon">⚙️</span>
-          {t("agents.task_loops", { count: active_tasks.length })}
-        </h2>
-      </div>
+      <SectionHeader className="section-header--spaced" titleClassName="li-flex" title={<>
+        <span className="section-header__icon">⚙️</span>
+        {t("agents.task_loops", { count: active_tasks.length })}
+      </>} />
       {!active_tasks.length ? (
         <EmptyState type="empty" title={t("agents.no_task_loops")} icon="⚙️" />
       ) : (
@@ -351,12 +353,10 @@ export function AgentsTab() {
       {/* 서브에이전트 */}
       {agents.length > 0 && (
         <>
-          <div className="section-header section-header--spaced">
-            <h2 className="li-flex">
-              <span className="section-header__icon">🤖</span>
-              {t("agents.once_title", { count: agents.length })}
-            </h2>
-          </div>
+          <SectionHeader className="section-header--spaced" titleClassName="li-flex" title={<>
+            <span className="section-header__icon">🤖</span>
+            {t("agents.once_title", { count: agents.length })}
+          </>} />
           <div className="office-grid">
             {agents.map((a) => {
               const cls = classify_agent(a.status);

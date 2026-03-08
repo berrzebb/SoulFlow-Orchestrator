@@ -1,8 +1,11 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import { Badge } from "../../components/badge";
-import { Modal } from "../../components/modal";
+import { EmptyState } from "../../components/empty-state";
+import { Modal, DeleteConfirmModal } from "../../components/modal";
+import { FormGroup } from "../../components/form-group";
+import { WsListItem, WsDetailHeader, WsSkeletonCol } from "./ws-shared";
 import { useToast } from "../../components/toast";
 import { useT } from "../../i18n";
 import { time_ago } from "../../utils/format";
@@ -97,21 +100,17 @@ export function MemoryTab() {
     } catch { toast(t("promises.delete_failed"), "err"); }
   };
 
-  const nav_item = (active: boolean, onClick: () => void, children: React.ReactNode) => (
-    <div role="button" tabIndex={0} onClick={onClick} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); } }} className={`ws-item${active ? " ws-item--active" : ""}`}>{children}</div>
-  );
-
   const section_label = (label: string) => (
     <div className="ws-group-label ws-group-label--section">
       <span className="text-muted">{label}</span>
     </div>
   );
 
-  const right_header = (title: string, action?: React.ReactNode) => (
-    <div className="ws-detail-header">
+  const right_header = (title: string, action?: ReactNode) => (
+    <WsDetailHeader>
       <span className="fw-600 text-sm">{title}</span>
       {action}
-    </div>
+    </WsDetailHeader>
   );
 
   const right_content = () => {
@@ -121,7 +120,7 @@ export function MemoryTab() {
           {right_header(t("workspace.memory.decisions"))}
           <div className="ws-preview">
             {!decisions.length ? (
-              <div className="empty-state"><div className="empty-state__icon">📋</div><div className="empty-state__text">{t("decisions.no_decisions")}</div></div>
+              <EmptyState icon="📋" title={t("decisions.no_decisions")} />
             ) : (
               <div className="table-scroll">
               <table className="data-table">
@@ -156,7 +155,7 @@ export function MemoryTab() {
           )}
           <div className="ws-preview">
             {!promises.length ? (
-              <div className="empty-state"><div className="empty-state__icon">🤝</div><div className="empty-state__text">{t("promises.no_promises")}</div></div>
+              <EmptyState icon="🤝" title={t("promises.no_promises")} />
             ) : (
               <div className="table-scroll">
               <table className="data-table">
@@ -185,7 +184,7 @@ export function MemoryTab() {
           {right_header(t("workspace.memory.events"))}
           <div className="ws-preview">
             {!events.length ? (
-              <div className="empty-state"><div className="empty-state__icon">📊</div><div className="empty-state__text">{t("decisions.no_events")}</div></div>
+              <EmptyState icon="📊" title={t("decisions.no_events")} />
             ) : (
               <div className="table-scroll">
               <table className="data-table">
@@ -229,11 +228,7 @@ export function MemoryTab() {
         )}
         <div className="ws-col flex-fill">
           {content_loading ? (
-            <div className="ws-skeleton-col">
-              <div className="skeleton skeleton--text" />
-              <div className="skeleton skeleton--text" />
-              <div className="skeleton skeleton--text-sm" />
-            </div>
+            <WsSkeletonCol rows={["text", "text", "text-sm"]} />
           ) : editing ? (
             <textarea autoFocus className="ws-editor ws-editor--editing" value={editText} onChange={(e) => setEditText(e.target.value)} />
           ) : (
@@ -252,38 +247,33 @@ export function MemoryTab() {
         left={
           <div className="ws-scroll">
             {/* 메모리 */}
-            {nav_item(view === "longterm", () => { setView("longterm"); setEditing(false); },
+            <WsListItem id="longterm" active={view === "longterm"} onClick={() => { setView("longterm"); setEditing(false); }}>
               <span className="fw-600">{t("workspace.memory.longterm")}</span>
-            )}
+            </WsListItem>
             {section_label(t("workspace.memory.daily"))}
-            {nav_item(typeof view === "object" && (view as { day: string }).day === today, () => { setView({ day: today }); setEditing(false); },
-              <>{today} <Badge status={t("workspace.memory.today")} variant="ok" /></>
-            )}
-            {days.filter((d) => d !== today).map((day) => {
-              const active = typeof view === "object" && (view as { day: string }).day === day;
-              const click = () => { setView({ day }); setEditing(false); };
-              return (
-                <div key={day} role="button" tabIndex={0} onClick={click} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); click(); } }}
-                  className={`ws-item${active ? " ws-item--active" : ""}`}>
-                  {day}
-                </div>
-              );
-            })}
+            <WsListItem id="today" active={typeof view === "object" && (view as { day: string }).day === today} onClick={() => { setView({ day: today }); setEditing(false); }}>
+              {today} <Badge status={t("workspace.memory.today")} variant="ok" />
+            </WsListItem>
+            {days.filter((d) => d !== today).map((day) => (
+              <WsListItem key={day} id={day} active={typeof view === "object" && (view as { day: string }).day === day} onClick={() => { setView({ day }); setEditing(false); }}>
+                {day}
+              </WsListItem>
+            ))}
             {days.length === 0 && (
               <div className="ws-item text-muted">{t("workspace.memory.no_daily")}</div>
             )}
 
             {/* 결정사항 / 약속 / 이벤트 */}
             {section_label(t("workspace.memory.decisions"))}
-            {nav_item(view === "decisions", () => setView("decisions"),
-              <>{t("workspace.memory.decisions")} <span className="text-xs text-muted">({decisions.length})</span></>
-            )}
-            {nav_item(view === "promises", () => setView("promises"),
-              <>{t("workspace.memory.promises")} <span className="text-xs text-muted">({promises.length})</span></>
-            )}
-            {nav_item(view === "events", () => setView("events"),
-              <>{t("workspace.memory.events")} <span className="text-xs text-muted">({events.length})</span></>
-            )}
+            <WsListItem id="decisions" active={view === "decisions"} onClick={() => setView("decisions")}>
+              {t("workspace.memory.decisions")} <span className="text-xs text-muted">({decisions.length})</span>
+            </WsListItem>
+            <WsListItem id="promises" active={view === "promises"} onClick={() => setView("promises")}>
+              {t("workspace.memory.promises")} <span className="text-xs text-muted">({promises.length})</span>
+            </WsListItem>
+            <WsListItem id="events" active={view === "events"} onClick={() => setView("events")}>
+              {t("workspace.memory.events")} <span className="text-xs text-muted">({events.length})</span>
+            </WsListItem>
           </div>
         }
         right={right_content()}
@@ -298,30 +288,31 @@ export function MemoryTab() {
         submitDisabled={!newKey.trim() || !newValue.trim()}
       >
         <div className="modal__form-body">
-          <label className="form-label">{t("decisions.key")}</label>
-          <input autoFocus className="form-input" value={newKey} onChange={(e) => setNewKey(e.target.value)} placeholder={t("promises.key_placeholder")} onKeyDown={(e) => { if (e.key === "Enter" && newKey.trim() && newValue.trim()) void add_promise(); }} />
-          <label className="form-label">{t("decisions.value")}</label>
-          <input className="form-input" value={newValue} onChange={(e) => setNewValue(e.target.value)} placeholder={t("promises.value_placeholder")} onKeyDown={(e) => { if (e.key === "Enter" && newKey.trim() && newValue.trim()) void add_promise(); }} />
-          <label className="form-label">{t("decisions.priority")}</label>
-          <select className="form-input" value={newPriority} onChange={(e) => setNewPriority(Number(e.target.value))}>
-            <option value={0}>{t("decisions.p0")}</option>
-            <option value={1}>{t("decisions.p1")}</option>
-            <option value={2}>{t("decisions.p2")}</option>
-            <option value={3}>{t("decisions.p3")}</option>
-          </select>
+          <FormGroup label={t("decisions.key")}>
+            <input autoFocus className="form-input" value={newKey} onChange={(e) => setNewKey(e.target.value)} placeholder={t("promises.key_placeholder")} onKeyDown={(e) => { if (e.key === "Enter" && newKey.trim() && newValue.trim()) void add_promise(); }} />
+          </FormGroup>
+          <FormGroup label={t("decisions.value")}>
+            <input className="form-input" value={newValue} onChange={(e) => setNewValue(e.target.value)} placeholder={t("promises.value_placeholder")} onKeyDown={(e) => { if (e.key === "Enter" && newKey.trim() && newValue.trim()) void add_promise(); }} />
+          </FormGroup>
+          <FormGroup label={t("decisions.priority")}>
+            <select className="form-input" value={newPriority} onChange={(e) => setNewPriority(Number(e.target.value))}>
+              <option value={0}>{t("decisions.p0")}</option>
+              <option value={1}>{t("decisions.p1")}</option>
+              <option value={2}>{t("decisions.p2")}</option>
+              <option value={3}>{t("decisions.p3")}</option>
+            </select>
+          </FormGroup>
         </div>
       </Modal>
 
-      <Modal
+      <DeleteConfirmModal
         open={!!deleteTarget}
         title={t("promises.confirm_delete")}
+        message={t("promises.delete_warning")}
         onClose={() => setDeleteTarget(null)}
         onConfirm={() => deleteTarget && void delete_promise(deleteTarget)}
         confirmLabel={t("common.delete")}
-        danger
-      >
-        <p className="text-sm">{t("promises.delete_warning")}</p>
-      </Modal>
+      />
     </>
   );
 }

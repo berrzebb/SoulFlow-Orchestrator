@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Badge } from "../../components/badge";
-import { Modal } from "../../components/modal";
+import { EmptyState } from "../../components/empty-state";
+import { DeleteConfirmModal } from "../../components/modal";
+import { SectionHeader } from "../../components/section-header";
 import { useToast } from "../../components/toast";
 import { api } from "../../api/client";
 import { time_ago } from "../../utils/format";
@@ -33,23 +35,15 @@ export function ProcessesSection({ active, recent, onCancelled }: ProcessesSecti
 
   return (
     <section className="panel">
-      <div className="section-header">
-        <h2 className="li-flex">
-          {t("overview.processes")}
-          {active.length > 0 && <Badge status={t("overview.processes_active_fmt", { count: active.length })} variant="warn" />}
-        </h2>
+      <SectionHeader titleClassName="li-flex" title={<>
+        {t("overview.processes")}
+        {active.length > 0 && <Badge status={t("overview.processes_active_fmt", { count: active.length })} variant="warn" />}
+      </>}>
         <Link to="/workspace" className="btn btn--xs">{t("common.view_all")}</Link>
-      </div>
+      </SectionHeader>
 
       {active.length === 0 ? (
-        <div className="empty-state">
-          <div className="empty-state__icon" aria-hidden="true">
-            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-            </svg>
-          </div>
-          <div className="empty-state__text">{t("overview.no_active_processes")}</div>
-        </div>
+        <EmptyState title={t("overview.no_active_processes")} />
       ) : (
         <div className="grid-stack">
           {active.map((p) => (
@@ -94,19 +88,14 @@ export function ProcessesSection({ active, recent, onCancelled }: ProcessesSecti
         </div>
       )}
 
-      <Modal
+      <DeleteConfirmModal
         open={!!cancelConfirmId}
         title={t("overview.cancel_process_title")}
+        message={t("overview.cancel_process_confirm")}
         onClose={() => setCancelConfirmId(null)}
-        onConfirm={() => {
-          if (cancelConfirmId) cancel_process(cancelConfirmId);
-          setCancelConfirmId(null);
-        }}
+        onConfirm={() => { if (cancelConfirmId) cancel_process(cancelConfirmId); setCancelConfirmId(null); }}
         confirmLabel={t("common.cancel")}
-        danger
-      >
-        <p className="text-sm">{t("overview.cancel_process_confirm")}</p>
-      </Modal>
+      />
     </section>
   );
 }

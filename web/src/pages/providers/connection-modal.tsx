@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import { FormModal } from "../../components/modal";
+import { FormGroup } from "../../components/form-group";
 import { ToggleSwitch } from "../../components/toggle-switch";
 import { useToast } from "../../components/toast";
 import { useT } from "../../i18n";
@@ -81,8 +82,7 @@ export function ConnectionModal({ mode, onClose, onSaved }: ConnectionModalProps
       saving={saving}
       submitDisabled={!hasChanges()}
     >
-      <div className="form-group">
-        <label className="form-label">{t("providers.provider_type")}</label>
+      <FormGroup label={t("providers.provider_type")}>
         {isEdit ? (
           <input className="form-input" value={TYPE_LABELS[providerType] || providerType} disabled title={t("common.cannot_edit_after_creation")} />
         ) : (
@@ -90,10 +90,9 @@ export function ConnectionModal({ mode, onClose, onSaved }: ConnectionModalProps
             {typeOptions.map((tp) => <option key={tp} value={tp}>{TYPE_LABELS[tp] || tp}</option>)}
           </select>
         )}
-      </div>
+      </FormGroup>
 
-      <div className="form-group">
-        <label className="form-label">{t("connections.connection_id")}</label>
+      <FormGroup label={t("connections.connection_id")} hint={!isEdit ? t("connections.connection_id_hint") : undefined}>
         <input
           className="form-input"
           value={connectionId || (isEdit ? initial!.connection_id : "")}
@@ -102,29 +101,23 @@ export function ConnectionModal({ mode, onClose, onSaved }: ConnectionModalProps
           title={isEdit ? t("common.cannot_edit_after_creation") : undefined}
           placeholder={providerType}
         />
-        {!isEdit && <span className="form-hint">{t("connections.connection_id_hint")}</span>}
-      </div>
+      </FormGroup>
 
-      <div className="form-group">
-        <label className="form-label">{t("providers.label")}</label>
+      <FormGroup label={t("providers.label")}>
         <input autoFocus className="form-input" value={label} onChange={(e) => setLabel(e.target.value)} placeholder={t("providers.label_placeholder")} />
-      </div>
+      </FormGroup>
 
-      <div className="form-group form-group--row">
-        <label className="form-label">{t("common.enabled")}</label>
+      <FormGroup label={t("common.enabled")} className="form-group--row">
         <ToggleSwitch checked={enabled} onChange={setEnabled} aria-label={t("common.enabled")} />
-      </div>
+      </FormGroup>
 
       {showApiBase && (
-        <div className="form-group">
-          <label className="form-label">{t("providers.api_base")}</label>
+        <FormGroup label={t("providers.api_base")} hint={t("providers.api_base_hint")}>
           <input className="form-input" value={apiBase} onChange={(e) => setApiBase(e.target.value)} placeholder="https://api.openai.com/v1" />
-          <span className="form-hint">{t("providers.api_base_hint")}</span>
-        </div>
+        </FormGroup>
       )}
 
-      <div className="form-group">
-        <label className="form-label">{t("providers.api_token")}</label>
+      <FormGroup label={t("providers.api_token")}>
         <input
           className="form-input"
           type="password"
@@ -133,7 +126,7 @@ export function ConnectionModal({ mode, onClose, onSaved }: ConnectionModalProps
           placeholder={isEdit ? t("providers.token_placeholder_edit") : t("providers.token_placeholder_new")}
           autoComplete="off"
         />
-      </div>
+      </FormGroup>
     </FormModal>
   );
 }

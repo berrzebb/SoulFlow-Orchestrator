@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import { FormModal } from "../../components/modal";
+import { FormGroup } from "../../components/form-group";
 import { Combobox, type ComboboxOption } from "../../components/combobox";
 import { ToggleSwitch } from "../../components/toggle-switch";
 import { useToast } from "../../components/toast";
@@ -200,8 +201,7 @@ export function ProviderModal({ mode, connections, onClose, onSaved }: ProviderM
     >
       {/* Connection 선택 (선택사항) */}
       {connections.length > 0 && (
-        <div className="form-group">
-          <label className="form-label">{t("connections.select")}</label>
+        <FormGroup label={t("connections.select")} hint={t("connections.select_hint")}>
           <select
             className="form-input"
             value={connectionId}
@@ -218,12 +218,10 @@ export function ProviderModal({ mode, connections, onClose, onSaved }: ProviderM
               </option>
             ))}
           </select>
-          <span className="form-hint">{t("connections.select_hint")}</span>
-        </div>
+        </FormGroup>
       )}
 
-      <div className="form-group">
-        <label className="form-label">{t("providers.provider_type")}</label>
+      <FormGroup label={t("providers.provider_type")}>
         {isEdit || connectionId ? (
           <input className="form-input" value={TYPE_LABELS[resolvedType] || resolvedType} disabled />
         ) : typeOptions.length === 0 ? (
@@ -233,10 +231,9 @@ export function ProviderModal({ mode, connections, onClose, onSaved }: ProviderM
             {typeOptions.map((tp) => <option key={tp} value={tp}>{TYPE_LABELS[tp] || tp}</option>)}
           </select>
         )}
-      </div>
+      </FormGroup>
 
-      <div className="form-group">
-        <label className="form-label">{t("providers.instance_id")}</label>
+      <FormGroup label={t("providers.instance_id")} hint={!isEdit ? t("providers.instance_id_hint") : undefined}>
         <input
           className="form-input"
           value={instanceId || (isEdit ? initial!.instance_id : "")}
@@ -244,16 +241,13 @@ export function ProviderModal({ mode, connections, onClose, onSaved }: ProviderM
           disabled={isEdit}
           placeholder={resolvedType}
         />
-        {!isEdit && <span className="form-hint">{t("providers.instance_id_hint")}</span>}
-      </div>
+      </FormGroup>
 
-      <div className="form-group">
-        <label className="form-label">{t("providers.label")}</label>
+      <FormGroup label={t("providers.label")}>
         <input autoFocus className="form-input" value={label} onChange={(e) => setLabel(e.target.value)} placeholder={t("providers.label_placeholder")} />
-      </div>
+      </FormGroup>
 
-      <div className="form-group">
-        <label className="form-label">{t("providers.model_purpose")}</label>
+      <FormGroup label={t("providers.model_purpose")}>
         <div className="checkbox-group">
           {PURPOSE_OPTIONS.map((p) => (
             <label key={p} className={`chip-label${modelPurpose === p ? " chip-label--active" : ""}`}>
@@ -262,15 +256,13 @@ export function ProviderModal({ mode, connections, onClose, onSaved }: ProviderM
             </label>
           ))}
         </div>
-      </div>
+      </FormGroup>
 
-      <div className="form-group form-group--row">
-        <label className="form-label">{t("common.enabled")}</label>
+      <FormGroup label={t("common.enabled")} className="form-group--row">
         <ToggleSwitch checked={enabled} onChange={setEnabled} aria-label={t("common.enabled")} />
-      </div>
+      </FormGroup>
 
-      <div className="form-group">
-        <label className="form-label">{t("providers.priority")}</label>
+      <FormGroup label={t("providers.priority")} hint={t("providers.priority_hint")}>
         <input
           className="form-input"
           type="number"
@@ -279,12 +271,10 @@ export function ProviderModal({ mode, connections, onClose, onSaved }: ProviderM
           value={priority}
           onChange={(e) => setPriority(Number(e.target.value))}
         />
-        <span className="form-hint">{t("providers.priority_hint")}</span>
-      </div>
+      </FormGroup>
 
       {!connectionId && (
-        <div className="form-group">
-          <label className="form-label">{t("providers.api_token")}</label>
+        <FormGroup label={t("providers.api_token")} hint={t("connections.token_from_connection_hint")}>
           <input
             className="form-input"
             type="password"
@@ -293,12 +283,10 @@ export function ProviderModal({ mode, connections, onClose, onSaved }: ProviderM
             placeholder={isEdit ? t("providers.token_placeholder_edit") : t("providers.token_placeholder_new")}
             autoComplete="off"
           />
-          <span className="form-hint">{t("connections.token_from_connection_hint")}</span>
-        </div>
+        </FormGroup>
       )}
 
-      <div className="form-group">
-        <label className="form-label">{t("providers.modes")}</label>
+      <FormGroup label={t("providers.modes")}>
         <div className="checkbox-group">
           {MODE_OPTIONS.map((m) => (
             <label key={m} className="checkbox-label">
@@ -307,22 +295,19 @@ export function ProviderModal({ mode, connections, onClose, onSaved }: ProviderM
             </label>
           ))}
         </div>
-      </div>
+      </FormGroup>
 
       {/* Model — 모든 프로바이더 타입에서 표시 */}
       <fieldset className="form-fieldset">
         <legend className="form-fieldset__legend">{t("providers.model_settings")}</legend>
 
         {showExtendedSettings && resolvedType === "openai_compatible" && !connectionId && (
-          <div className="form-group">
-            <label className="form-label">{t("providers.api_base")}</label>
+          <FormGroup label={t("providers.api_base")} hint={t("providers.api_base_hint")}>
             <input className="form-input" value={apiBase} onChange={(e) => setApiBase(e.target.value)} placeholder="https://api.openai.com/v1" />
-            <span className="form-hint">{t("providers.api_base_hint")}</span>
-          </div>
+          </FormGroup>
         )}
 
-        <div className="form-group">
-          <label className="form-label">{t("providers.model")}</label>
+        <FormGroup label={t("providers.model")}>
           {canFetchModels && modelOptions.length > 0 ? (
             <Combobox
               options={modelOptions}
@@ -339,7 +324,7 @@ export function ProviderModal({ mode, connections, onClose, onSaved }: ProviderM
             <span className="form-hint text-warn">{t("providers.no_models_for_purpose")}</span>
           )}
           <span className="form-hint">{t("providers.model_hint")}</span>
-        </div>
+        </FormGroup>
 
         {model && filteredModels.length > 0 && (() => {
           const selected = filteredModels.find((m) => m.id === model);
@@ -371,28 +356,22 @@ export function ProviderModal({ mode, connections, onClose, onSaved }: ProviderM
         })()}
 
         <div className="form-row-2">
-          <div className="form-group">
-            <label className="form-label">{t("providers.max_tokens")}</label>
+          <FormGroup label={t("providers.max_tokens")}>
             <input className="form-input" type="number" min={1} value={maxTokens || ""} onChange={(e) => setMaxTokens(e.target.value === "" ? "" : Number(e.target.value))} placeholder="—" />
-          </div>
-          <div className="form-group">
-            <label className="form-label">{t("providers.temperature")}</label>
+          </FormGroup>
+          <FormGroup label={t("providers.temperature")}>
             <input className="form-input" type="number" min={0} max={2} step={0.1} value={temperature || ""} onChange={(e) => setTemperature(e.target.value === "" ? "" : Number(e.target.value))} placeholder="—" />
-          </div>
+          </FormGroup>
         </div>
 
         {showExtendedSettings && resolvedType === "openrouter" && (
           <>
-            <div className="form-group">
-              <label className="form-label">{t("providers.site_url")}</label>
+            <FormGroup label={t("providers.site_url")} hint={t("providers.site_url_hint")}>
               <input className="form-input" value={siteUrl} onChange={(e) => setSiteUrl(e.target.value)} placeholder="https://example.com" />
-              <span className="form-hint">{t("providers.site_url_hint")}</span>
-            </div>
-            <div className="form-group">
-              <label className="form-label">{t("providers.app_name")}</label>
+            </FormGroup>
+            <FormGroup label={t("providers.app_name")} hint={t("providers.app_name_hint")}>
               <input className="form-input" value={appName} onChange={(e) => setAppName(e.target.value)} placeholder="My App" />
-              <span className="form-hint">{t("providers.app_name_hint")}</span>
-            </div>
+            </FormGroup>
           </>
         )}
       </fieldset>

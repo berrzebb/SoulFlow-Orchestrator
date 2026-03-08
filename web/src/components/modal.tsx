@@ -96,6 +96,22 @@ export function useConfirm(): {
   return { confirm, dialog };
 }
 
+/** 삭제/취소 확인 전용 모달 — danger 스타일 고정. */
+export function DeleteConfirmModal({ open, title, message, onClose, onConfirm, confirmLabel }: {
+  open: boolean;
+  title: string;
+  message: ReactNode;
+  onClose: () => void;
+  onConfirm: () => void;
+  confirmLabel: string;
+}) {
+  return (
+    <Modal open={open} title={title} danger onClose={onClose} onConfirm={onConfirm} confirmLabel={confirmLabel}>
+      <p className="text-sm">{message}</p>
+    </Modal>
+  );
+}
+
 /** form 전용 모달 — onSubmit 핸들러를 래핑하고 Save/Cancel 푸터 제공 */
 interface FormModalProps {
   open: boolean;

@@ -2,10 +2,12 @@ import { useState, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import { Badge } from "../../components/badge";
+import { EmptyState } from "../../components/empty-state";
 import { SearchInput } from "../../components/search-input";
 import { useT } from "../../i18n";
 import { time_ago } from "../../utils/format";
 import { SplitPane } from "./split-pane";
+import { WsListItem, WsDetailHeader, WsSkeletonCol } from "./ws-shared";
 
 interface SessionEntry {
   key: string;
@@ -96,12 +98,12 @@ export function SessionsTab() {
           </div>
           <div className="ws-scroll">
             {filtered_sessions.length === 0 ? (
-              <div className="empty-state">
-                <div className="empty-state__icon">{search ? "🔍" : "💬"}</div>
-                <div className="empty-state__text">{search ? (t("workspace.sessions.no_match")) : t("workspace.sessions.no_sessions")}</div>
-              </div>
+              <EmptyState
+                icon={search ? "🔍" : "💬"}
+                title={search ? t("workspace.sessions.no_match") : t("workspace.sessions.no_sessions")}
+              />
             ) : filtered_sessions.map((s) => (
-              <div key={s.key} role="button" tabIndex={0} onClick={() => setSelected(s.key)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSelected(s.key); } }} className={`ws-item${selected === s.key ? " ws-item--active" : ""}`}>
+              <WsListItem key={s.key} id={s.key} active={selected === s.key} onClick={() => setSelected(s.key)}>
                 <div className="li-flex mb-0">
                   <Badge status={s.provider} variant="info" />
                   <span className="fw-600 truncate flex-fill">{s.chat_id}</span>
@@ -112,15 +114,14 @@ export function SessionsTab() {
                   {s.thread && s.thread !== "main" && <span className="mr-1">#{s.thread}</span>}
                   <span title={s.updated_at}>{time_ago(s.updated_at)}</span>
                 </div>
-              </div>
+              </WsListItem>
             ))}
           </div>
         </div>
       }
       right={
         <div className="ws-col">
-          <div className="ws-detail-header">
-            <button className="ws-back-btn" onClick={() => setSelected(null)}>{t("common.back")}</button>
+          <WsDetailHeader onBack={() => setSelected(null)}>
             {selected_session ? (
               <>
                 <Badge status={selected_session.provider} variant="info" />
@@ -132,19 +133,12 @@ export function SessionsTab() {
             ) : (
               <span className="fw-600 text-sm">{t("workspace.select_item")}</span>
             )}
-          </div>
+          </WsDetailHeader>
           <div className="ws-preview ws-msg-list">
             {!selected ? (
-              <div className="empty-state">
-                <div className="empty-state__icon">💬</div>
-                <div className="empty-state__text">{t("workspace.select_item")}</div>
-              </div>
+              <EmptyState icon="💬" title={t("workspace.select_item")} />
             ) : !detail ? (
-              <div className="ws-skeleton-col">
-                <div className="skeleton skeleton--row" />
-                <div className="skeleton skeleton--row" />
-                <div className="skeleton skeleton--row" />
-              </div>
+              <WsSkeletonCol rows={["row", "row", "row"]} />
             ) : detail.messages.map((m, i) => (
               <div key={i} className={`ws-msg ws-msg--${m.direction}`}>
                 <div className="ws-msg__header">

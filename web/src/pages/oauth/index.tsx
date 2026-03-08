@@ -1,10 +1,13 @@
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { api } from "../../api/client";
-import { Modal } from "../../components/modal";
+import { EmptyState } from "../../components/empty-state";
+import { FormModal, DeleteConfirmModal } from "../../components/modal";
+import { FormGroup } from "../../components/form-group";
+import { SkeletonGrid } from "../../components/skeleton-grid";
 import { ResourceCard } from "../../components/resource-card";
 import { Badge } from "../../components/badge";
-import { FormModal } from "../../components/modal";
+import { SectionHeader } from "../../components/section-header";
 import { useToast } from "../../components/toast";
 import { useT } from "../../i18n";
 import { useResourceCRUD } from "../../hooks/use-resource-crud";
@@ -81,23 +84,16 @@ export default function OAuthPage() {
 
   return (
     <div className="page">
-      <div className="section-header">
-        <h2>{t("oauth.title")}</h2>
+      <SectionHeader title={t("oauth.title")}>
         <button className="btn btn--sm btn--accent" onClick={() => setModal({ kind: "add" })}>
           {t("oauth.add")}
         </button>
-      </div>
+      </SectionHeader>
 
       {isLoading ? (
-        <div className="stat-grid stat-grid--wide">
-          <div className="skeleton skeleton-card" />
-          <div className="skeleton skeleton-card" />
-        </div>
+        <SkeletonGrid count={2} />
       ) : !integrations?.length ? (
-        <div className="empty-state">
-          <div className="empty-state__icon">🔗</div>
-          <div className="empty-state__text">{t("oauth.no_integrations")}</div>
-        </div>
+        <EmptyState icon="🔗" title={t("oauth.no_integrations")} />
       ) : (
         <div className="stat-grid stat-grid--wide">
           {integrations.map((inst) => {
@@ -185,12 +181,11 @@ export default function OAuthPage() {
         </div>
       )}
 
-      <div className="section-header section-header--spaced">
-        <h2>{t("oauth.presets_title")}</h2>
+      <SectionHeader title={t("oauth.presets_title")} className="section-header--spaced">
         <button className="btn btn--sm btn--accent" onClick={() => setPresetModal("add")}>
           {t("oauth.add_preset")}
         </button>
-      </div>
+      </SectionHeader>
 
       <div className="stat-grid stat-grid--wider">
         {builtin_presets.map((p) => (
@@ -239,10 +234,7 @@ export default function OAuthPage() {
           </ResourceCard>
         ))}
         {custom_presets.length === 0 && builtin_presets.length === presets.filter((p) => p.service_type !== "custom").length && (
-          <div className="empty-state empty-state--span-all">
-            <div className="empty-state__icon">🔧</div>
-            <div className="empty-state__text">{t("oauth.no_custom_presets")}</div>
-          </div>
+          <EmptyState icon="🔧" title={t("oauth.no_custom_presets")} className="empty-state--span-all" />
         )}
       </div>
 
@@ -261,8 +253,7 @@ export default function OAuthPage() {
           submitLabel={t("oauth.connect")}
           saving={connect.isPending}
         >
-          <div className="form-group">
-            <label className="form-label">{t("oauth.client_secret")}</label>
+          <FormGroup label={t("oauth.client_secret")}>
             <input
               className="form-input"
               type="password"
@@ -273,41 +264,27 @@ export default function OAuthPage() {
               autoComplete="off"
               autoFocus
             />
-          </div>
+          </FormGroup>
         </FormModal>
       )}
 
-      <Modal
+      <DeleteConfirmModal
         open={!!deleteTarget}
         title={t("oauth.remove_title")}
+        message={t("oauth.remove_confirm", { label: deleteTarget?.label || deleteTarget?.instance_id || "" })}
         onClose={() => setDeleteTarget(null)}
-        onConfirm={() => {
-          if (deleteTarget) remove.mutate(deleteTarget.instance_id);
-          setDeleteTarget(null);
-        }}
+        onConfirm={() => { if (deleteTarget) remove.mutate(deleteTarget.instance_id); setDeleteTarget(null); }}
         confirmLabel={t("common.remove")}
-        danger
-      >
-        <p className="text-sm">
-          {t("oauth.remove_confirm", { label: deleteTarget?.label || deleteTarget?.instance_id || "" })}
-        </p>
-      </Modal>
+      />
 
-      <Modal
+      <DeleteConfirmModal
         open={!!deletePresetTarget}
         title={t("oauth.preset_remove_title")}
+        message={t("oauth.preset_remove_confirm", { label: deletePresetTarget?.label || "" })}
         onClose={() => setDeletePresetTarget(null)}
-        onConfirm={() => {
-          if (deletePresetTarget) removePreset.mutate((deletePresetTarget as OAuthPreset).service_type);
-          setDeletePresetTarget(null);
-        }}
+        onConfirm={() => { if (deletePresetTarget) removePreset.mutate((deletePresetTarget as OAuthPreset).service_type); setDeletePresetTarget(null); }}
         confirmLabel={t("common.remove")}
-        danger
-      >
-        <p className="text-sm">
-          {t("oauth.preset_remove_confirm", { label: deletePresetTarget?.label || "" })}
-        </p>
-      </Modal>
+      />
 
       {modal && (
         <OAuthModal

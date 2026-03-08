@@ -15,12 +15,14 @@ export function EmptyState({
   description,
   icon,
   actions,
+  className,
 }: {
   type?: EmptyStateType;
   title: string;
   description?: ReactNode;
   icon?: string;
   actions?: ReactNode;
+  className?: string;
 }) {
   const icons: Record<EmptyStateType, string> = {
     empty: "📭",
@@ -33,7 +35,7 @@ export function EmptyState({
   const ariaLabel = type === "loading" ? "로딩 중" : `${type} 상태`;
 
   return (
-    <div className="empty-state" role="status" aria-label={ariaLabel}>
+    <div className={`empty-state${className ? ` ${className}` : ""}`} role="status" aria-label={ariaLabel}>
       <div className="empty-state__icon" aria-hidden="true">
         {defaultIcon}
       </div>

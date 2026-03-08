@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { api } from "../../api/client";
 import { FormModal } from "../../components/modal";
+import { FormGroup } from "../../components/form-group";
 import { useToast } from "../../components/toast";
 import { useT } from "../../i18n";
 import type { OAuthPreset } from "./types";
@@ -89,48 +90,39 @@ export function PresetModal({ initial, onClose, onSaved }: {
       saving={saving}
       submitDisabled={!hasChanges()}
     >
-      <div className="form-group">
-        <label className="form-label">{t("oauth.service_type")}</label>
+      <FormGroup label={t("oauth.service_type")}>
         <input autoFocus={!isEdit} className="form-input" value={serviceType} onChange={(e) => !isEdit && setServiceType(e.target.value)} placeholder="e.g. notion, dropbox" disabled={isEdit} required={!isEdit} />
-      </div>
-      <div className="form-group">
-        <label className="form-label">{t("oauth.label")}</label>
+      </FormGroup>
+      <FormGroup label={t("oauth.label")}>
         <input className="form-input" value={label} onChange={(e) => !isEdit && setLabel(e.target.value)} placeholder="e.g. Notion" disabled={isEdit} required={!isEdit} />
-      </div>
-      <div className="form-group">
-        <label className="form-label">{t("oauth.auth_url")}</label>
+      </FormGroup>
+      <FormGroup label={t("oauth.auth_url")}>
         <input autoFocus={isEdit} className="form-input" value={authUrl} onChange={(e) => setAuthUrl(e.target.value)} placeholder="https://..." required />
-      </div>
-      <div className="form-group">
-        <label className="form-label">{t("oauth.token_url")}</label>
+      </FormGroup>
+      <FormGroup label={t("oauth.token_url")}>
         <input className="form-input" value={tokenUrl} onChange={(e) => setTokenUrl(e.target.value)} placeholder="https://..." required />
-      </div>
-      <div className="form-group">
-        <label className="form-label">{t("oauth.token_auth_method")}</label>
+      </FormGroup>
+      <FormGroup label={t("oauth.token_auth_method")}>
         <select className="form-input" value={tokenAuthMethod} onChange={(e) => setTokenAuthMethod(e.target.value as "body" | "basic")}>
           <option value="body">{t("oauth.token_auth_body")}</option>
           <option value="basic">{t("oauth.token_auth_basic")}</option>
         </select>
-      </div>
-      <div className="form-group">
-        <label className="form-label">{t("oauth.scope_separator")}</label>
+      </FormGroup>
+      <FormGroup label={t("oauth.scope_separator")}>
         <select className="form-input" value={scopeSeparator} onChange={(e) => setScopeSeparator(e.target.value as " " | ",")}>
           <option value=" ">{t("oauth.scope_sep_space")}</option>
           <option value=",">{t("oauth.scope_sep_comma")}</option>
         </select>
-      </div>
-      <div className="form-group">
-        <label className="form-label">{t("oauth.test_url")}</label>
+      </FormGroup>
+      <FormGroup label={t("oauth.test_url")}>
         <input className="form-input" value={testUrl} onChange={(e) => setTestUrl(e.target.value)} placeholder="https://... (optional)" />
-      </div>
-      <div className="form-group">
-        <label className="form-label">{t("oauth.scopes_available")}</label>
+      </FormGroup>
+      <FormGroup label={t("oauth.scopes_available")}>
         <input className="form-input" value={scopesAvailable} onChange={(e) => setScopesAvailable(e.target.value)} placeholder={t("oauth.scopes_hint")} />
-      </div>
-      <div className="form-group">
-        <label className="form-label">{t("oauth.default_scopes")}</label>
+      </FormGroup>
+      <FormGroup label={t("oauth.default_scopes")}>
         <input className="form-input" value={defaultScopes} onChange={(e) => setDefaultScopes(e.target.value)} placeholder={t("oauth.scopes_hint")} />
-      </div>
+      </FormGroup>
       <div className="form-group">
         <label className="form-label">
           <input type="checkbox" checked={supportsRefresh} onChange={(e) => setSupportsRefresh(e.target.checked)} />

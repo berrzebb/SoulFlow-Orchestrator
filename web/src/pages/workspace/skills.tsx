@@ -2,10 +2,12 @@ import { useState, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import { Badge } from "../../components/badge";
+import { EmptyState } from "../../components/empty-state";
 import { Modal } from "../../components/modal";
 import { useToast } from "../../components/toast";
 import { useT } from "../../i18n";
 import { SplitPane } from "./split-pane";
+import { WsListItem } from "./ws-shared";
 
 interface SkillInfo { name: string; summary: string; source: string; type: string; always: string; model: string }
 interface SkillDetail {
@@ -295,10 +297,10 @@ export function SkillsTab() {
                 <>
                   <div className="ws-group-label text-accent">{t("skills.category_roles")}</div>
                   {roles.map((s) => (
-                    <div key={s.name} role="button" tabIndex={0} onClick={() => handle_select(s.name)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handle_select(s.name); } }} className={`ws-item${selected === s.name ? " ws-item--active" : ""}`}>
+                    <WsListItem key={s.name} id={s.name} active={selected === s.name} onClick={() => handle_select(s.name)}>
                       <div className="ws-item__name">{s.name}</div>
                       <div className="ws-item__meta"><Badge status={s.source} variant="info" /></div>
-                    </div>
+                    </WsListItem>
                   ))}
                 </>
               )}
@@ -306,14 +308,14 @@ export function SkillsTab() {
                 <>
                   <div className={`ws-group-label text-ok${roles.length > 0 ? " ws-group-label--bordered" : ""}`}>{t("skills.category_tools")}</div>
                   {tools.map((s) => (
-                    <div key={s.name} role="button" tabIndex={0} onClick={() => handle_select(s.name)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handle_select(s.name); } }} className={`ws-item${selected === s.name ? " ws-item--active ws-item--active-ok" : ""}`}>
+                    <WsListItem key={s.name} id={s.name} active={selected === s.name} onClick={() => handle_select(s.name)} className={selected === s.name ? "ws-item--active-ok" : undefined}>
                       <div className="ws-item__name">{s.name}</div>
                       <div className="ws-item__meta"><Badge status={s.source} variant="info" /></div>
-                    </div>
+                    </WsListItem>
                   ))}
                 </>
               )}
-              {skills.length === 0 && <div className="empty-state"><div className="empty-state__icon">🛠️</div><div className="empty-state__text">No skills</div></div>}
+              {skills.length === 0 && <EmptyState icon="🛠️" title="No skills" />}
             </div>
           </div>
         }
@@ -323,7 +325,7 @@ export function SkillsTab() {
               <div className="ws-detail-header">
                 <span className="fw-600 text-sm">{t("workspace.select_item")}</span>
               </div>
-              <div className="empty-state"><div className="empty-state__icon">🛠️</div><div className="empty-state__text">{t("workspace.select_item")}</div></div>
+              <EmptyState icon="🛠️" title={t("workspace.select_item")} />
             </div>
           ) : (
             <div className="ws-detail-row">
@@ -392,7 +394,7 @@ export function SkillsTab() {
                     {active_content ? (
                       <pre>{active_content}</pre>
                     ) : (
-                      <div className="empty-state"><div className="empty-state__icon">📄</div><div className="empty-state__text">{t("skills.no_content")}</div></div>
+                      <EmptyState icon="📄" title={t("skills.no_content")} />
                     )}
                   </div>
                 )}

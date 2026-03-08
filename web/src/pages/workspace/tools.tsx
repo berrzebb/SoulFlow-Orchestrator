@@ -3,6 +3,8 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import { Badge } from "../../components/badge";
 import { SearchInput } from "../../components/search-input";
+import { SectionHeader } from "../../components/section-header";
+import { WsSkeletonCol } from "./ws-shared";
 import { useT } from "../../i18n";
 
 interface ToolSchema {
@@ -127,12 +129,7 @@ export function ToolsTab() {
   const [search, setSearch] = useState("");
   const { data, isLoading } = useQuery<ToolsResponse>({ queryKey: ["tools"], queryFn: () => api.get("/api/tools"), staleTime: 30_000 });
 
-  if (isLoading || !data) return (
-    <div className="ws-skeleton-col">
-      <div className="skeleton skeleton--card" />
-      <div className="skeleton skeleton--card" />
-    </div>
-  );
+  if (isLoading || !data) return <WsSkeletonCol rows={["card", "card"]} />;
 
   const mcp_tool_names = new Set((data.mcp_servers ?? []).flatMap((s) => s.tools));
   const q = search.toLowerCase();
@@ -144,8 +141,7 @@ export function ToolsTab() {
 
   return (
     <div className="fade-in">
-      <div className="section-header">
-        <h2>{t("tools.title", { count: data.names.length })}</h2>
+      <SectionHeader title={t("tools.title", { count: data.names.length })}>
         <SearchInput
           value={search}
           onChange={setSearch}
@@ -154,7 +150,7 @@ export function ToolsTab() {
           autoFocus
           className="tool-search"
         />
-      </div>
+      </SectionHeader>
       {search && <div className="text-xs text-muted mb-2">{t("tools.search_result", { count: total_shown })}</div>}
 
       {servers.length > 0 && (

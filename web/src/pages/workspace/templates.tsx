@@ -2,9 +2,11 @@ import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import { Badge } from "../../components/badge";
+import { EmptyState } from "../../components/empty-state";
 import { useToast } from "../../components/toast";
 import { useT } from "../../i18n";
 import { SplitPane } from "./split-pane";
+import { WsListItem, WsDetailHeader, WsSkeletonCol } from "./ws-shared";
 
 interface TemplateEntry { name: string; exists: boolean }
 
@@ -48,24 +50,16 @@ export function TemplatesTab() {
       left={
         <div className="ws-scroll">
           {templates.map((tmpl) => (
-            <div
-              key={tmpl.name}
-              role="button"
-              tabIndex={0}
-              onClick={() => setSelected(tmpl.name)}
-              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSelected(tmpl.name); } }}
-              className={`ws-item ws-item--spread${selected === tmpl.name ? " ws-item--active" : ""}`}
-            >
+            <WsListItem key={tmpl.name} id={tmpl.name} active={selected === tmpl.name} onClick={() => setSelected(tmpl.name)} className="ws-item--spread">
               <span>{tmpl.name}.md</span>
               <Badge status={tmpl.exists ? "✓" : "—"} variant={tmpl.exists ? "ok" : "off"} />
-            </div>
+            </WsListItem>
           ))}
         </div>
       }
       right={
         <div className="ws-col">
-          <div className="ws-detail-header">
-            <button className="ws-back-btn" onClick={() => { setSelected(null); setDirty(false); }}>{t("common.back")}</button>
+          <WsDetailHeader onBack={() => { setSelected(null); setDirty(false); }}>
             <span className="fw-600 text-sm">
               {selected ? (
                 <>
@@ -77,16 +71,12 @@ export function TemplatesTab() {
             {selected && (
               <button className="btn btn--sm btn--ok" onClick={() => void save()} disabled={!dirty}>{t("common.save")}</button>
             )}
-          </div>
+          </WsDetailHeader>
           <div className="ws-col flex-fill">
             {!selected ? (
-              <div className="empty-state"><div className="empty-state__icon">📝</div><div className="empty-state__text">{t("templates.select")}</div></div>
+              <EmptyState icon="📝" title={t("templates.select")} />
             ) : loading ? (
-              <div className="ws-skeleton-col">
-                <div className="skeleton skeleton--text" />
-                <div className="skeleton skeleton--text" />
-                <div className="skeleton skeleton--text-sm" />
-              </div>
+              <WsSkeletonCol rows={["text", "text", "text-sm"]} />
             ) : (
               <textarea
                 autoFocus

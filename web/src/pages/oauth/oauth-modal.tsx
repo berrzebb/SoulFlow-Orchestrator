@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { api } from "../../api/client";
 import { FormModal } from "../../components/modal";
-import { FormLabel } from "../../components/form-label";
+import { FormGroup } from "../../components/form-group";
 import { useToast } from "../../components/toast";
 import { useT } from "../../i18n";
 import type { OAuthPreset, ModalMode } from "./types";
@@ -105,8 +105,7 @@ export function OAuthModal({ mode, presets, onClose, onSaved }: {
       submitLabel={isEdit ? t("common.save") : t("common.add")}
       saving={saving}
     >
-      <div className="form-group">
-        <label className="form-label">{t("oauth.service_type")}</label>
+      <FormGroup label={t("oauth.service_type")}>
         {isEdit ? (
           <input className="form-input" value={active_preset?.label || serviceType} disabled />
         ) : (
@@ -116,12 +115,11 @@ export function OAuthModal({ mode, presets, onClose, onSaved }: {
             ))}
           </select>
         )}
-      </div>
+      </FormGroup>
 
-      <div className="form-group">
-        <FormLabel label={t("oauth.label")} required />
+      <FormGroup label={t("oauth.label")} required>
         <input autoFocus className="form-input" value={label} onChange={(e) => setLabel(e.target.value)} placeholder={serviceType} required aria-required="true" />
-      </div>
+      </FormGroup>
 
       {isEdit && (
         <div className="form-group">
@@ -134,10 +132,9 @@ export function OAuthModal({ mode, presets, onClose, onSaved }: {
 
       {!isEdit && (
         <>
-          <div className="form-group">
-            <FormLabel label={t("oauth.client_id")} required />
+          <FormGroup label={t("oauth.client_id")} required>
             <input className="form-input" value={clientId} onChange={(e) => setClientId(e.target.value)} placeholder={t("oauth.client_id_placeholder")} required aria-required="true" autoComplete="off" />
-          </div>
+          </FormGroup>
           {!is_basic_auth && (
             <div className="form-group">
               <label className="form-label">
@@ -153,20 +150,16 @@ export function OAuthModal({ mode, presets, onClose, onSaved }: {
 
       {is_custom && !isEdit && (
         <>
-          <div className="form-group">
-            <FormLabel label={t("oauth.auth_url")} required />
+          <FormGroup label={t("oauth.auth_url")} required hint={t("oauth.custom_url_hint")}>
             <input className="form-input" value={authUrl} onChange={(e) => setAuthUrl(e.target.value)} placeholder="https://..." required aria-required="true" />
-            <span className="form-hint">{t("oauth.custom_url_hint")}</span>
-          </div>
-          <div className="form-group">
-            <label className="form-label">{t("oauth.token_url")}</label>
+          </FormGroup>
+          <FormGroup label={t("oauth.token_url")}>
             <input className="form-input" value={tokenUrl} onChange={(e) => setTokenUrl(e.target.value)} placeholder="https://..." required />
-          </div>
+          </FormGroup>
         </>
       )}
 
-      <div className="form-group">
-        <label className="form-label">{t("oauth.scopes")}</label>
+      <FormGroup label={t("oauth.scopes")}>
         {available_scopes.length > 0 && (
           <div className="checkbox-group mb-2">
             {available_scopes.map((s) => (
@@ -178,7 +171,7 @@ export function OAuthModal({ mode, presets, onClose, onSaved }: {
           </div>
         )}
         <input className="form-input" value={scopeText} onChange={(e) => setScopeText(e.target.value)} placeholder={t("oauth.scopes_hint")} />
-      </div>
+      </FormGroup>
     </FormModal>
   );
 }

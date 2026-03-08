@@ -1,7 +1,10 @@
 import { useState } from "react";
 import { api } from "../../api/client";
-import { Modal } from "../../components/modal";
+import { EmptyState } from "../../components/empty-state";
+import { DeleteConfirmModal } from "../../components/modal";
+import { SkeletonGrid } from "../../components/skeleton-grid";
 import { ResourceCard } from "../../components/resource-card";
+import { SectionHeader } from "../../components/section-header";
 import { useToast } from "../../components/toast";
 import { useResourceCRUD } from "../../hooks/use-resource-crud";
 import { useT } from "../../i18n";
@@ -73,22 +76,17 @@ export default function ProvidersPage() {
       {/* ── Tab: 프로바이더 ── */}
       {tab === "providers" && (
         <div className="fade-in">
-          <div className="section-header">
-            <h2>{t("connections.title")}</h2>
+          <SectionHeader title={t("connections.title")}>
             <button className="btn btn--sm btn--accent" onClick={() => setConnModal({ kind: "add" })}>
               {t("connections.add")}
             </button>
-          </div>
+          </SectionHeader>
           <p className="text-sm text-muted mb-3">{t("connections.description")}</p>
 
           {connLoading ? (
-            <div className="stat-grid stat-grid--wide">
-              <div className="skeleton skeleton-card" />
-            </div>
+            <SkeletonGrid count={1} />
           ) : !connections.length ? (
-            <div className="empty-state empty-state--sm">
-              <div className="empty-state__text">{t("connections.no_connections")}</div>
-            </div>
+            <EmptyState title={t("connections.no_connections")} className="empty-state--sm" />
           ) : (
             <div className="stat-grid stat-grid--wide">
               {connections.map((conn) => (
@@ -138,24 +136,17 @@ export default function ProvidersPage() {
       {/* ── Tab: Chat ── */}
       {tab === "chat" && (
         <div className="fade-in">
-          <div className="section-header">
-            <h2>{t("providers.tab_chat")}</h2>
+          <SectionHeader title={t("providers.tab_chat")}>
             <button className="btn btn--sm btn--accent" onClick={openAddModal}>
               {t("providers.add")}
             </button>
-          </div>
+          </SectionHeader>
           <p className="text-sm text-muted mb-3">{t("providers.chat_description")}</p>
 
           {isLoading ? (
-            <div className="stat-grid stat-grid--wide">
-              <div className="skeleton skeleton-card" />
-              <div className="skeleton skeleton-card" />
-            </div>
+            <SkeletonGrid count={2} />
           ) : !chatProviders.length ? (
-            <div className="empty-state">
-              <div className="empty-state__icon">💬</div>
-              <div className="empty-state__text">{t("providers.no_chat_models")}</div>
-            </div>
+            <EmptyState icon="💬" title={t("providers.no_chat_models")} />
           ) : (
             <div className="stat-grid stat-grid--wide">
               {chatProviders.map((inst) => (
@@ -210,23 +201,17 @@ export default function ProvidersPage() {
       {/* ── Tab: Embedding ── */}
       {tab === "embedding" && (
         <div className="fade-in">
-          <div className="section-header">
-            <h2>{t("providers.tab_embedding")}</h2>
+          <SectionHeader title={t("providers.tab_embedding")}>
             <button className="btn btn--sm btn--accent" onClick={openAddModal}>
               {t("providers.add")}
             </button>
-          </div>
+          </SectionHeader>
           <p className="text-sm text-muted mb-3">{t("providers.embedding_description")}</p>
 
           {isLoading ? (
-            <div className="stat-grid stat-grid--wide">
-              <div className="skeleton skeleton-card" />
-            </div>
+            <SkeletonGrid count={1} />
           ) : !embedProviders.length ? (
-            <div className="empty-state">
-              <div className="empty-state__icon">📐</div>
-              <div className="empty-state__text">{t("providers.no_embed_models")}</div>
-            </div>
+            <EmptyState icon="📐" title={t("providers.no_embed_models")} />
           ) : (
             <div className="stat-grid stat-grid--wide">
               {embedProviders.map((inst) => (
@@ -271,37 +256,23 @@ export default function ProvidersPage() {
       )}
 
       {/* ── Modals ── */}
-      <Modal
+      <DeleteConfirmModal
         open={!!deleteTarget}
         title={t("providers.remove_title")}
+        message={t("providers.remove_confirm", { label: deleteTarget?.label || deleteTarget?.instance_id || "" })}
         onClose={() => setDeleteTarget(null)}
-        onConfirm={() => {
-          if (deleteTarget) remove.mutate(deleteTarget.instance_id);
-          setDeleteTarget(null);
-        }}
+        onConfirm={() => { if (deleteTarget) remove.mutate(deleteTarget.instance_id); setDeleteTarget(null); }}
         confirmLabel={t("common.remove")}
-        danger
-      >
-        <p className="text-sm">
-          {t("providers.remove_confirm", { label: deleteTarget?.label || deleteTarget?.instance_id || "" })}
-        </p>
-      </Modal>
+      />
 
-      <Modal
+      <DeleteConfirmModal
         open={!!deleteConnTarget}
         title={t("connections.remove_title")}
+        message={t("connections.remove_confirm", { label: deleteConnTarget?.label || deleteConnTarget?.connection_id || "" })}
         onClose={() => setDeleteConnTarget(null)}
-        onConfirm={() => {
-          if (deleteConnTarget) removeConn.mutate(deleteConnTarget.connection_id);
-          setDeleteConnTarget(null);
-        }}
+        onConfirm={() => { if (deleteConnTarget) removeConn.mutate(deleteConnTarget.connection_id); setDeleteConnTarget(null); }}
         confirmLabel={t("common.remove")}
-        danger
-      >
-        <p className="text-sm">
-          {t("connections.remove_confirm", { label: deleteConnTarget?.label || deleteConnTarget?.connection_id || "" })}
-        </p>
-      </Modal>
+      />
 
       {modal && (
         <ProviderModal

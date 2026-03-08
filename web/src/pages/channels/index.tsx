@@ -1,8 +1,11 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../api/client";
-import { Modal } from "../../components/modal";
+import { EmptyState } from "../../components/empty-state";
+import { DeleteConfirmModal } from "../../components/modal";
+import { SkeletonGrid } from "../../components/skeleton-grid";
 import { ResourceCard } from "../../components/resource-card";
+import { SectionHeader } from "../../components/section-header";
 import { ToggleSwitch } from "../../components/toggle-switch";
 import { useToast } from "../../components/toast";
 import { useT } from "../../i18n";
@@ -46,27 +49,20 @@ export default function ChannelsPage() {
 
   return (
     <div className="page">
-      <div className="section-header">
-        <h2>{t("channels.title")}</h2>
+      <SectionHeader title={t("channels.title")}>
         <button className="btn btn--sm btn--accent" onClick={() => setModal({ kind: "add" })}>
           {t("channels.add")}
         </button>
-      </div>
+      </SectionHeader>
 
       <GlobalSettingsSection />
 
       {isLoading ? (
-        <div className="stat-grid stat-grid--wide mt-3">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="skeleton skeleton-card" />
-          ))}
-        </div>
+        <SkeletonGrid count={6} className="stat-grid stat-grid--wide mt-3" />
       ) : !instances?.length ? (
-        <div className="empty-state">
-          <div className="empty-state__icon">📡</div>
-          <div className="empty-state__text">{t("channels.no_instances")}</div>
-          <button className="btn btn--sm btn--accent empty-state__action" onClick={() => setModal({ kind: "add" })}>{t("channels.add")}</button>
-        </div>
+        <EmptyState icon="📡" title={t("channels.no_instances")}
+          actions={<button className="btn btn--sm btn--accent" onClick={() => setModal({ kind: "add" })}>{t("channels.add")}</button>}
+        />
       ) : (
         <div className="stat-grid stat-grid--wide fade-in mt-3">
           {instances.map((inst) => (
@@ -121,21 +117,14 @@ export default function ChannelsPage() {
         />
       )}
 
-      <Modal
+      <DeleteConfirmModal
         open={!!deleteTarget}
         title={t("channels.remove_title")}
+        message={t("channels.remove_confirm", { label: deleteTarget?.label || deleteTarget?.instance_id || "" })}
         onClose={() => setDeleteTarget(null)}
-        onConfirm={() => {
-          if (deleteTarget) remove.mutate(deleteTarget.instance_id);
-          setDeleteTarget(null);
-        }}
+        onConfirm={() => { if (deleteTarget) remove.mutate(deleteTarget.instance_id); setDeleteTarget(null); }}
         confirmLabel={t("common.remove")}
-        danger
-      >
-        <p className="text-sm">
-          {t("channels.remove_confirm", { label: deleteTarget?.label || deleteTarget?.instance_id || "" })}
-        </p>
-      </Modal>
+      />
     </div>
   );
 }

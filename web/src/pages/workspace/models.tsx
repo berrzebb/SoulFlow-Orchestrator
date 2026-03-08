@@ -2,9 +2,11 @@ import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import { Badge } from "../../components/badge";
+import { EmptyState } from "../../components/empty-state";
 import { useToast } from "../../components/toast";
 import { useT } from "../../i18n";
 import { time_ago } from "../../utils/format";
+import { WsSkeletonCol } from "./ws-shared";
 
 interface PullProgress {
   status: string;
@@ -149,14 +151,7 @@ export function ModelsTab() {
     onError: () => toast(t("models.switch_failed"), "err"),
   });
 
-  if (runtimeLoading || modelsLoading) return (
-    <div className="ws-skeleton-col">
-      <div className="skeleton skeleton--card" />
-      <div className="skeleton skeleton--row" />
-      <div className="skeleton skeleton--row" />
-      <div className="skeleton skeleton--row" />
-    </div>
-  );
+  if (runtimeLoading || modelsLoading) return <WsSkeletonCol rows={["card", "row", "row", "row"]} />;
 
   const runtimeStatus = runtime?.running ? t("models.running") : runtime?.enabled ? t("models.stopped") : t("models.disabled");
   const runtimeVariant = runtime?.running ? "ok" as const : runtime?.enabled ? "warn" as const : "off" as const;
@@ -246,7 +241,7 @@ export function ModelsTab() {
       <section className="mb-4">
         <h3>{t("models.installed")}</h3>
         {!models?.length ? (
-          <div className="empty-state"><div className="empty-state__icon">🧠</div><div className="empty-state__text">{t("models.empty")}</div></div>
+          <EmptyState icon="🧠" title={t("models.empty")} />
         ) : (
           <div className="table-scroll">
           <table className="data-table">

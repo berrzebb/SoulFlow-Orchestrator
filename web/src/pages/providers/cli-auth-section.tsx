@@ -1,6 +1,8 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import { Badge } from "../../components/badge";
+import { EmptyState } from "../../components/empty-state";
+import { SectionHeader } from "../../components/section-header";
 import { useToast } from "../../components/toast";
 import { useT } from "../../i18n";
 import type { CliAuthStatus, LoginResult } from "./types";
@@ -39,8 +41,7 @@ export function CliAuthSection() {
 
   return (
     <div className="cli-auth-section">
-      <div className="section-header">
-        <h3>{t("cli_auth.title")}</h3>
+      <SectionHeader title={t("cli_auth.title")}>
         <button
           className="btn btn--sm"
           onClick={() => checkAll.mutate()}
@@ -48,10 +49,10 @@ export function CliAuthSection() {
         >
           {checkAll.isPending ? t("common.loading") : t("common.refresh")}
         </button>
-      </div>
+      </SectionHeader>
 
       {!statuses?.length ? (
-        <div className="empty-state"><div className="empty-state__icon">🤖</div><div className="empty-state__text">{t("cli_auth.no_agents")}</div></div>
+        <EmptyState icon="🤖" title={t("cli_auth.no_agents")} />
       ) : (
         <div className="stat-grid stat-grid--wide">
           {statuses.map((s) => (

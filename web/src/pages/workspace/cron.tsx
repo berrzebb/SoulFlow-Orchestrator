@@ -2,7 +2,9 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import { Badge } from "../../components/badge";
-import { Modal } from "../../components/modal";
+import { EmptyState } from "../../components/empty-state";
+import { DeleteConfirmModal } from "../../components/modal";
+import { SectionHeader } from "../../components/section-header";
 import { ToggleSwitch } from "../../components/toggle-switch";
 import { useToast } from "../../components/toast";
 import { useT } from "../../i18n";
@@ -58,19 +60,16 @@ export function CronTab() {
 
   return (
     <>
-      <Modal
+      <DeleteConfirmModal
         open={!!deleteTarget}
         title={t("cron.remove_title")}
+        message={t("cron.remove_confirm", { name: deleteTarget?.name ?? "" })}
         onClose={() => setDeleteTarget(null)}
         onConfirm={() => void confirm_remove()}
         confirmLabel={t("common.remove")}
-        danger
-      >
-        <p className="text-sm">{t("cron.remove_confirm", { name: deleteTarget?.name ?? "" })}</p>
-      </Modal>
+      />
 
-      <div className="section-header">
-        <h2>{t("cron.title", { count: jobs.length })}</h2>
+      <SectionHeader title={t("cron.title", { count: jobs.length })}>
         <div className="cron-controls">
           {status?.paused ? (
             <button className="btn btn--sm btn--ok" onClick={() => void resume()}>{t("cron.resume")}</button>
@@ -78,7 +77,7 @@ export function CronTab() {
             <button className="btn btn--sm btn--warn" onClick={() => void pause()}>{t("cron.pause")}</button>
           )}
         </div>
-      </div>
+      </SectionHeader>
 
       <div className="kv mb-2">
         <div>
@@ -88,10 +87,7 @@ export function CronTab() {
       </div>
 
       {!jobs.length ? (
-        <div className="empty-state">
-          <div className="empty-state__icon">⏰</div>
-          <div className="empty-state__text">{t("cron.no_jobs")}</div>
-        </div>
+        <EmptyState icon="⏰" title={t("cron.no_jobs")} />
       ) : (
         <div className="table-scroll">
           <table className="data-table">

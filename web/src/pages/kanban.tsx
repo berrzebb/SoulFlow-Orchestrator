@@ -5,7 +5,7 @@ import { api } from "../api/client";
 import { create_sse } from "../api/sse";
 import { useToast } from "../components/toast";
 import { SearchInput } from "../components/search-input";
-import { Modal, FormModal } from "../components/modal";
+import { DeleteConfirmModal, FormModal } from "../components/modal";
 import { useT } from "../i18n";
 import { time_ago } from "../utils/format";
 import "../styles/kanban.css";
@@ -283,11 +283,14 @@ export default function KanbanPage() {
       <CreateBoardModal open={showCreateBoard} onClose={() => setShowCreateBoard(false)} onCreate={create_board} />
 
       {/* Delete board confirmation modal */}
-      <Modal open={!!deleteBoardTarget} title={t("kanban.delete_board")} danger
-        onClose={() => setDeleteBoardTarget(null)} onConfirm={confirm_delete_board}
-        confirmLabel={t("kanban.delete_board")}>
-        <p>{deleteBoardTarget ? t("kanban.confirm_delete_board", { name: deleteBoardTarget.name }) : ""}</p>
-      </Modal>
+      <DeleteConfirmModal
+        open={!!deleteBoardTarget}
+        title={t("kanban.delete_board")}
+        message={deleteBoardTarget ? t("kanban.confirm_delete_board", { name: deleteBoardTarget.name }) : ""}
+        onClose={() => setDeleteBoardTarget(null)}
+        onConfirm={confirm_delete_board}
+        confirmLabel={t("kanban.delete_board")}
+      />
 
       {/* Rules panel */}
       {showRules && board_id && <RulesPanel board_id={board_id} onClose={() => setShowRules(false)} />}
@@ -680,12 +683,14 @@ function CardDetailPanel({ card_id, board_id, columns, onClose, onUpdate, onMove
         <button className="kanban-detail__delete" onClick={() => setConfirmDeleteCard(true)}>
           {t("kanban.delete_card")}
         </button>
-        <Modal open={confirmDeleteCard} title={t("kanban.delete_card")} danger
+        <DeleteConfirmModal
+          open={confirmDeleteCard}
+          title={t("kanban.delete_card")}
+          message={t("kanban.confirm_delete_card", { id: card.card_id })}
           onClose={() => setConfirmDeleteCard(false)}
           onConfirm={() => { setConfirmDeleteCard(false); onDelete(card.card_id); }}
-          confirmLabel={t("kanban.delete_card")}>
-          <p>{t("kanban.confirm_delete_card", { id: card.card_id })}</p>
-        </Modal>
+          confirmLabel={t("kanban.delete_card")}
+        />
       </div>
     </div>
   );
