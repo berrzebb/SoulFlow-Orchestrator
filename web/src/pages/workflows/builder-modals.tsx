@@ -6,6 +6,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import { useModalEffects, useConfirm } from "../../components/modal";
+import { FormLabel } from "../../components/form-label";
 import { useT } from "../../i18n";
 import { get_frontend_node } from "./node-registry";
 import type { WorkflowDef, PhaseDef, AgentDef, CriticDef, OrcheNodeDef, TriggerNodeDef, RolePreset } from "./workflow-types";
@@ -266,8 +267,8 @@ export function TriggerNodeEditModal({ node, onChange, onRemove, onClose }: {
           </>)}
           {triggerType === "kanban" && (<>
             <div className="builder-row">
-              <label className="label">{t("workflows.kanban_trigger_board_id")}<span className="label__required">*</span></label>
-              <input autoFocus className="input input--sm" required value={boardId} onChange={(e) => setBoardId(e.target.value)} placeholder="board-id" onKeyDown={(e) => { if (e.key === "Enter") handleSave(); }} />
+              <FormLabel label={t("workflows.kanban_trigger_board_id")} htmlFor="kanban-board-id-input" required />
+              <input autoFocus id="kanban-board-id-input" className="input input--sm" required value={boardId} onChange={(e) => setBoardId(e.target.value)} placeholder="board-id" onKeyDown={(e) => { if (e.key === "Enter") handleSave(); }} />
             </div>
             <div className="builder-row">
               <label className="label">{t("workflows.kanban_trigger_actions")}</label>
