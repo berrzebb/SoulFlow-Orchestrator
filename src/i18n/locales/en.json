@@ -2071,6 +2071,7 @@
   "workflows.manual_trigger": "Manual Trigger",
   "workflows.manual_trigger_desc": "Manually trigger workflow execution",
   "workflows.max_chars": "Max chars",
+  "workflows.max_chars_hint": "Maximum characters to retrieve (1000-100000)",
   "workflows.max_loop_iterations": "Max Iterations",
   "workflows.loop_iterations_hint": "Maximum number of iterations (default: 20-50)",
   "workflows.max_results": "Max results",

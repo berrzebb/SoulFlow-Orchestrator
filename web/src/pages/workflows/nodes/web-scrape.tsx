@@ -15,6 +15,7 @@ function WebScrapeEditPanel({ node, update, t }: EditPanelProps) {
         <div className="builder-row">
           <label className="label">{t("workflows.max_chars")}</label>
           <input className="input input--sm" type="number" min={1000} max={100000} step={1000} value={String(node.max_chars ?? 50000)} onChange={(e) => update({ max_chars: Number(e.target.value) || 50000 })} />
+          <span className="builder-hint">{t("workflows.max_chars_hint")}</span>
         </div>
       </div>
     </>

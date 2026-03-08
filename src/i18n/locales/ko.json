@@ -2071,6 +2071,7 @@
   "workflows.manual_trigger": "수동 트리거",
   "workflows.manual_trigger_desc": "워크플로우 수동 실행",
   "workflows.max_chars": "Max chars",
+  "workflows.max_chars_hint": "검색할 최대 문자 수 (1000-100000)",
   "workflows.max_loop_iterations": "최대 반복",
   "workflows.loop_iterations_hint": "최대 반복 횟수 (기본값: 20~50)",
   "workflows.max_results": "Max results",
