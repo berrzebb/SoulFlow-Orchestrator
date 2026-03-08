@@ -177,7 +177,7 @@ export function ProviderModal({ mode, connections, onClose, onSaved }: ProviderM
     const connTypes = new Set(connections.filter((c) => c.enabled).map((c) => c.provider_type));
     const CLI_TYPE_MAP: Record<string, string> = { claude: "claude_cli", codex: "codex_cli", gemini: "gemini_cli" };
     for (const s of cliStatuses) {
-      if (s.authenticated && CLI_TYPE_MAP[s.cli]) connTypes.add(CLI_TYPE_MAP[s.cli]);
+      if (s.authenticated && CLI_TYPE_MAP[s.cli]) connTypes.add(CLI_TYPE_MAP[s.cli]!);
     }
     // claude_cli가 있으면 claude_sdk도 사용 가능
     if (connTypes.has("claude_cli")) connTypes.add("claude_sdk");
@@ -357,10 +357,10 @@ export function ProviderModal({ mode, connections, onClose, onSaved }: ProviderM
 
         <div className="form-row-2">
           <FormGroup label={t("providers.max_tokens")}>
-            <input className="form-input" type="number" min={1} value={maxTokens || ""} onChange={(e) => setMaxTokens(e.target.value === "" ? "" : Number(e.target.value))} placeholder="—" />
+            <input className="form-input" type="number" min={1} value={maxTokens || ""} onChange={(e) => setMaxTokens(e.target.value)} placeholder="—" />
           </FormGroup>
           <FormGroup label={t("providers.temperature")}>
-            <input className="form-input" type="number" min={0} max={2} step={0.1} value={temperature || ""} onChange={(e) => setTemperature(e.target.value === "" ? "" : Number(e.target.value))} placeholder="—" />
+            <input className="form-input" type="number" min={0} max={2} step={0.1} value={temperature || ""} onChange={(e) => setTemperature(e.target.value)} placeholder="—" />
           </FormGroup>
         </div>
 

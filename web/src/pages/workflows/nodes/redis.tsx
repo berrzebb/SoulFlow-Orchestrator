@@ -1,7 +1,7 @@
 import { BuilderField } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
-function RedisEditPanel({ node, update, t }: EditPanelProps) {
+function RedisEditPanel({ t }: EditPanelProps) {
   return (
     <BuilderField label={t("node.redis.description")} hint={t("node.redis.hint")}>
       {null}

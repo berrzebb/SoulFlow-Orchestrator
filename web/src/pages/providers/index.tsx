@@ -169,9 +169,9 @@ export default function ProvidersPage() {
                   onRemove={() => setDeleteTarget(inst)}
                 >
                   <div className="stat-card__extra">
-                    {inst.settings?.model && (
+                    {!!inst.settings?.model && (
                       <>
-                        <span className="text-accent">{inst.settings.model}</span>
+                        <span className="text-accent">{String(inst.settings.model)}</span>
                         {" · "}
                       </>
                     )}
@@ -233,9 +233,9 @@ export default function ProvidersPage() {
                   onRemove={() => setDeleteTarget(inst)}
                 >
                   <div className="stat-card__extra">
-                    {inst.settings?.model && (
+                    {!!inst.settings?.model && (
                       <>
-                        <span className="text-accent">{inst.settings.model}</span>
+                        <span className="text-accent">{String(inst.settings.model)}</span>
                         {" · "}
                       </>
                     )}

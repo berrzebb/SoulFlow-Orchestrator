@@ -142,7 +142,7 @@ export default function SecretsPage() {
             className="form-input"
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
-            disabled={newName && names.includes(newName)}
+            disabled={!!newName && names.includes(newName)}
             placeholder={t("secrets.name_placeholder")}
           />
         </FormGroup>

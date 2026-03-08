@@ -1,7 +1,7 @@
 import { BuilderField } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
-function LogParserEditPanel({ node, update, t }: EditPanelProps) {
+function LogParserEditPanel({ t }: EditPanelProps) {
   return (
     <BuilderField label={t("node.log_parser.description")} hint={t("node.log_parser.hint")}>
       {null}

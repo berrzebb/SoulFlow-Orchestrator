@@ -1,7 +1,7 @@
 import { BuilderField } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
-function YamlEditPanel({ node, update, t }: EditPanelProps) {
+function YamlEditPanel({ t }: EditPanelProps) {
   return (
     <BuilderField label={t("node.yaml.description")} hint={t("node.yaml.hint")}>
       {null}

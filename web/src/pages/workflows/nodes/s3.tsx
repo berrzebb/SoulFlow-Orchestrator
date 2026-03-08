@@ -1,7 +1,7 @@
 import { BuilderField } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
-function S3EditPanel({ node, update, t }: EditPanelProps) {
+function S3EditPanel({ t }: EditPanelProps) {
   return (
     <BuilderField label={t("node.s3.description")} hint={t("node.s3.hint")}>
       {null}

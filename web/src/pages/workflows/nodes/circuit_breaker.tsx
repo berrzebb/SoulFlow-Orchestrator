@@ -1,7 +1,7 @@
 import { BuilderField } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
-function CircuitBreakerEditPanel({ node, update, t }: EditPanelProps) {
+function CircuitBreakerEditPanel({ t }: EditPanelProps) {
   return (
     <BuilderField label={t("node.circuit_breaker.description")} hint={t("node.circuit_breaker.hint")}>
       {null}

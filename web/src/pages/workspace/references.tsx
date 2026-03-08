@@ -62,7 +62,7 @@ export function ReferencesTab() {
   const stats = data?.stats;
 
   const sync = useMutation({
-    mutationFn: () => api.post("/api/references/sync", {}),
+    mutationFn: () => api.post<{ ok: boolean; added?: number; updated?: number; removed?: number }>("/api/references/sync", {}),
     onSuccess: (result: { ok: boolean; added?: number; updated?: number; removed?: number }) => {
       toast(t("references.sync_result", { added: result.added ?? 0, updated: result.updated ?? 0, removed: result.removed ?? 0 }), "ok");
       void qc.invalidateQueries({ queryKey: ["references"] });

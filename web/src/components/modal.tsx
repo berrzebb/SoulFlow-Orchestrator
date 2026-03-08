@@ -29,9 +29,10 @@ interface Props {
   onConfirm?: () => void;
   confirmLabel?: string;
   danger?: boolean;
+  submitDisabled?: boolean;
 }
 
-export function Modal({ open, title, children, onClose, onConfirm, confirmLabel, danger }: Props) {
+export function Modal({ open, title, children, onClose, onConfirm, confirmLabel, danger, submitDisabled }: Props) {
   const t = useT();
   const modalRef = useRef<HTMLDivElement>(null);
   useModalEffects(open, onClose);
@@ -64,7 +65,7 @@ export function Modal({ open, title, children, onClose, onConfirm, confirmLabel,
         {onConfirm && (
           <div className="modal__footer">
             <button className="btn" onClick={onClose}>{t("common.cancel")}</button>
-            <button className={`btn ${danger ? "btn--danger" : "btn--ok"}`} onClick={onConfirm}>
+            <button className={`btn ${danger ? "btn--danger" : "btn--ok"}`} onClick={onConfirm} disabled={submitDisabled}>
               {confirmLabel || t("common.confirm")}
             </button>
           </div>

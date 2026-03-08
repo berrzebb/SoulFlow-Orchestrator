@@ -1,7 +1,7 @@
 import { BuilderField } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
-function MqttEditPanel({ node, update, t }: EditPanelProps) {
+function MqttEditPanel({ t }: EditPanelProps) {
   return (
     <BuilderField label={t("node.mqtt.description")} hint={t("node.mqtt.hint")}>
       {null}

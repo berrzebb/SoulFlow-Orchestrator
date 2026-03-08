@@ -1,7 +1,7 @@
 import { BuilderField } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
-function XmlEditPanel({ node, update, t }: EditPanelProps) {
+function XmlEditPanel({ t }: EditPanelProps) {
   return (
     <BuilderField label={t("node.xml.description")} hint={t("node.xml.hint")}>
       {null}

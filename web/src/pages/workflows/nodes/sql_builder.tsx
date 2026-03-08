@@ -1,7 +1,7 @@
 import { BuilderField } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
-function SqlBuilderEditPanel({ node, update, t }: EditPanelProps) {
+function SqlBuilderEditPanel({ t }: EditPanelProps) {
   return (
     <BuilderField label={t("node.sql_builder.description")} hint={t("node.sql_builder.hint")}>
       {null}

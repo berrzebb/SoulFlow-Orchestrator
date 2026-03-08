@@ -1,7 +1,7 @@
 import { BuilderField } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
-function DataMaskEditPanel({ node, update, t }: EditPanelProps) {
+function DataMaskEditPanel({ t }: EditPanelProps) {
   return (
     <BuilderField label={t("node.data_mask.description")} hint={t("node.data_mask.hint")}>
       {null}

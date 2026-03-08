@@ -1,7 +1,7 @@
 import { BuilderField } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
-function PhoneEditPanel({ node, update, t }: EditPanelProps) {
+function PhoneEditPanel({ t }: EditPanelProps) {
   return (
     <BuilderField label={t("node.phone.description")} hint={t("node.phone.hint")}>
       {null}

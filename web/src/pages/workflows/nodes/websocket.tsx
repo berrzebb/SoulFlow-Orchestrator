@@ -1,7 +1,7 @@
 import { BuilderField } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
-function WebsocketEditPanel({ node, update, t }: EditPanelProps) {
+function WebsocketEditPanel({ t }: EditPanelProps) {
   return (
     <BuilderField label={t("node.websocket.description")} hint={t("node.websocket.hint")}>
       {null}

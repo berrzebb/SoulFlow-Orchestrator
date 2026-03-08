@@ -1,7 +1,7 @@
 import { BuilderField } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
-function CsvEditPanel({ node, update, t }: EditPanelProps) {
+function CsvEditPanel({ t }: EditPanelProps) {
   return (
     <BuilderField label={t("node.csv.description")} hint={t("node.csv.hint")}>
       {null}

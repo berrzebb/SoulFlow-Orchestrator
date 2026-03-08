@@ -58,7 +58,7 @@ export function Combobox({ options, value, onChange, placeholder, loading, loadi
       setFocusIdx((i) => Math.max(i - 1, 0));
     } else if (e.key === "Enter" && open && focusIdx >= 0) {
       e.preventDefault();
-      pick(filtered[focusIdx].value);
+      pick(filtered[focusIdx]!.value);
     } else if (e.key === "Escape") {
       setOpen(false);
     }

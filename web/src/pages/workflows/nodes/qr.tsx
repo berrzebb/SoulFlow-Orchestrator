@@ -1,7 +1,7 @@
 import { BuilderField } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
-function QrEditPanel({ node, update, t }: EditPanelProps) {
+function QrEditPanel({ t }: EditPanelProps) {
   return (
     <BuilderField label={t("node.qr.description")} hint={t("node.qr.hint")}>
       {null}

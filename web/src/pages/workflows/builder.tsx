@@ -323,7 +323,7 @@ export default function WorkflowBuilderPage() {
   const handleRun = () => {
     runMut.mutate({
       title: workflow.title, objective: workflow.objective, phases: workflow.phases,
-      nodes: workflow.nodes, orche_nodes: workflow.orche_nodes, field_mappings: workflow.field_mappings,
+      orche_nodes: workflow.orche_nodes, field_mappings: workflow.field_mappings,
       tool_nodes: workflow.tool_nodes, skill_nodes: workflow.skill_nodes,
       trigger: workflow.trigger, hitl_channel: workflow.hitl_channel,
     });

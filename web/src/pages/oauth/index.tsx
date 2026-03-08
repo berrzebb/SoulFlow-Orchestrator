@@ -112,7 +112,7 @@ export default function OAuthPage() {
                 statusLabel={statusLabel}
                 badges={[
                   { label: preset?.label || inst.service_type, variant: "info" },
-                  ...(inst.token_configured && inst.expired ? [{ label: t("oauth.expired"), variant: "warn" }] : []),
+                  ...(inst.token_configured && inst.expired ? [{ label: t("oauth.expired"), variant: "warn" as const }] : []),
                 ]}
                 testUrl={inst.token_configured ? `/api/oauth/integrations/${encodeURIComponent(inst.instance_id)}/test` : undefined}
                 onTestSuccess={() => t("oauth.test_passed")}
@@ -193,7 +193,7 @@ export default function OAuthPage() {
             key={p.service_type}
             resourceId={p.service_type}
             title={p.label}
-            statusVariant={p.is_builtin ? "ok" : "info"}
+            statusVariant={p.is_builtin ? "ok" : "off"}
             statusLabel={p.is_builtin ? t("oauth.builtin_badge") : t("oauth.custom_badge")}
             badges={[{ label: p.service_type, variant: "info" }]}
             onEdit={() => setPresetModal(p)}
@@ -217,7 +217,7 @@ export default function OAuthPage() {
             key={p.service_type}
             resourceId={p.service_type}
             title={p.label}
-            statusVariant="info"
+            statusVariant="off"
             statusLabel={t("oauth.custom_badge")}
             badges={[{ label: p.service_type, variant: "info" }]}
             onEdit={() => setPresetModal(p)}

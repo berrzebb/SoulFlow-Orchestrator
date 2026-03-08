@@ -1,7 +1,7 @@
 import { BuilderField } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
-function StateMachineEditPanel({ node, update, t }: EditPanelProps) {
+function StateMachineEditPanel({ t }: EditPanelProps) {
   return (
     <BuilderField label={t("node.state_machine.description")} hint={t("node.state_machine.hint")}>
       {null}

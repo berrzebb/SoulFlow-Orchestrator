@@ -31,6 +31,6 @@ export function lazyRetryNamed<
   K extends keyof M & string,
 >(factory: () => Promise<M>, name: K): React.LazyExoticComponent<M[K]> {
   return lazyRetry(() =>
-    factory().then((m) => ({ default: m[name] })),
+    factory().then((m) => ({ default: m[name] } as unknown as { default: React.ComponentType })),
   ) as React.LazyExoticComponent<M[K]>;
 }

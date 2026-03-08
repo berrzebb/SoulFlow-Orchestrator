@@ -1,7 +1,7 @@
 import { BuilderField } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
-function SshEditPanel({ node, update, t }: EditPanelProps) {
+function SshEditPanel({ t }: EditPanelProps) {
   return (
     <BuilderField label={t("node.ssh.description")} hint={t("node.ssh.hint")}>
       {null}

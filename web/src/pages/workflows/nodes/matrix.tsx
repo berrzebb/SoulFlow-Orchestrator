@@ -1,7 +1,7 @@
 import { BuilderField } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
-function MatrixEditPanel({ node, update, t }: EditPanelProps) {
+function MatrixEditPanel({ t }: EditPanelProps) {
   return (
     <BuilderField label={t("node.matrix.description")} hint={t("node.matrix.hint")}>
       {null}

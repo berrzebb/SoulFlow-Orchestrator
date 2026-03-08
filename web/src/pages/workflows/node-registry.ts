@@ -58,7 +58,7 @@ export interface NodeOptions {
 export interface EditPanelProps {
   node: Record<string, unknown>;
   update: (partial: Record<string, unknown>) => void;
-  t: (key: string) => string;
+  t: (key: string, vars?: Record<string, string | number>) => string;
   /** API에서 가져온 리소스 목록. 노드 편집 시 select/dropdown 제공. */
   options?: NodeOptions;
 }

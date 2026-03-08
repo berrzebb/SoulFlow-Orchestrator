@@ -1,7 +1,7 @@
 import { BuilderField } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
-function GraphEditPanel({ node, update, t }: EditPanelProps) {
+function GraphEditPanel({ t }: EditPanelProps) {
   return (
     <BuilderField label={t("node.graph.description")} hint={t("node.graph.hint")}>
       {null}

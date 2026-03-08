@@ -1,7 +1,7 @@
 import { BuilderField } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
-function HealthcheckEditPanel({ node, update, t }: EditPanelProps) {
+function HealthcheckEditPanel({ t }: EditPanelProps) {
   return (
     <BuilderField label={t("node.healthcheck.description")} hint={t("node.healthcheck.hint")}>
       {null}

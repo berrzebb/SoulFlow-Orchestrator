@@ -1,7 +1,7 @@
 import { BuilderField } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
-function JsonSchemaEditPanel({ node, update, t }: EditPanelProps) {
+function JsonSchemaEditPanel({ t }: EditPanelProps) {
   return (
     <BuilderField label={t("node.json_schema.description")} hint={t("node.json_schema.hint")}>
       {null}

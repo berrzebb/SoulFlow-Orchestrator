@@ -3,6 +3,7 @@ import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import type { Components } from "react-markdown";
+import type { Pluggable } from "unified";
 import "highlight.js/styles/github-dark.min.css";
 
 /** highlight.js가 추가하는 클래스명을 sanitize에서 허용 */
@@ -44,8 +45,8 @@ const COMPONENTS: Components = {
   img: SafeImage as Components["img"],
 };
 
-const REMARK_PLUGINS = [remarkGfm] as const;
-const REHYPE_PLUGINS = [rehypeHighlight, [rehypeSanitize, SANITIZE_SCHEMA]] as const;
+const REMARK_PLUGINS: Pluggable[] = [remarkGfm];
+const REHYPE_PLUGINS: Pluggable[] = [rehypeHighlight, [rehypeSanitize, SANITIZE_SCHEMA]];
 
 export function MarkdownContent({ content }: { content: string }) {
   return (

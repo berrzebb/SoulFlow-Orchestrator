@@ -1,7 +1,7 @@
 import { BuilderField } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
-function TokenizerEditPanel({ node, update, t }: EditPanelProps) {
+function TokenizerEditPanel({ t }: EditPanelProps) {
   return (
     <BuilderField label={t("node.tokenizer.description")} hint={t("node.tokenizer.hint")}>
       {null}

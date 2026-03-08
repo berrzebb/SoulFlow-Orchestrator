@@ -160,7 +160,7 @@ export function NodePalette({ tools, skills, onSelectTool, onSelectSkill, onClos
   // MCP 연결 상태 맵
   const mcp_status = (() => {
     const m = new Map<string, boolean>();
-    for (const srv of tools.mcp_servers) m.set(`MCP: ${srv.name}`, srv.connected);
+    for (const srv of tools.mcp_servers) m.set(`MCP: ${srv.name}`, srv.connected ?? false);
     return m;
   })();
 

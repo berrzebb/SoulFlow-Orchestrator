@@ -91,8 +91,8 @@ export function ResourceCard({
 
   const { testing, testResult, test } = useTestMutation({
     url: testUrl || "",
-    onOk: (r) => onTestSuccess?.(r.detail) || r.detail || t("common.test_passed"),
-    onFail: (r) => onTestFail?.(r.error) || r.error || t("common.test_failed"),
+    onOk: (r) => onTestSuccess?.(r.detail ?? "") ?? (r.detail ?? t("common.test_passed")),
+    onFail: (r) => onTestFail?.(r.error ?? "") ?? (r.error ?? t("common.test_failed")),
     onError: () => t("common.test_failed"),
   });
 

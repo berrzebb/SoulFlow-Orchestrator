@@ -1,7 +1,7 @@
 import { BuilderField } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
-function SimilarityEditPanel({ node, update, t }: EditPanelProps) {
+function SimilarityEditPanel({ t }: EditPanelProps) {
   return (
     <BuilderField label={t("node.similarity.description")} hint={t("node.similarity.hint")}>
       {null}

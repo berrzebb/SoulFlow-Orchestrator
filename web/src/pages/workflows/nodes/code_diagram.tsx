@@ -1,6 +1,6 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
-function CodeDiagramEditPanel({ node, update, t }: EditPanelProps) {
+function CodeDiagramEditPanel({ t }: EditPanelProps) {
   return (
     <>
       <div className="builder-row">

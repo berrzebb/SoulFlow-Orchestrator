@@ -1,7 +1,7 @@
 import { BuilderField } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
-function BarcodeEditPanel({ node, update, t }: EditPanelProps) {
+function BarcodeEditPanel({ t }: EditPanelProps) {
   return (
     <BuilderField label={t("node.barcode.description")} hint={t("node.barcode.hint")}>
       {null}

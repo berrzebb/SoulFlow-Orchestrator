@@ -1,7 +1,7 @@
 import { BuilderField } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
-function OpenapiEditPanel({ node, update, t }: EditPanelProps) {
+function OpenapiEditPanel({ t }: EditPanelProps) {
   return (
     <BuilderField label={t("node.openapi.description")} hint={t("node.openapi.hint")}>
       {null}

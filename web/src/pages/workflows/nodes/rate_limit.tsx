@@ -1,7 +1,7 @@
 import { BuilderField } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
-function RateLimitEditPanel({ node, update, t }: EditPanelProps) {
+function RateLimitEditPanel({ t }: EditPanelProps) {
   return (
     <BuilderField label={t("node.rate_limit.description")} hint={t("node.rate_limit.hint")}>
       {null}

@@ -1,7 +1,7 @@
 import { BuilderField } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
-function FtpEditPanel({ node, update, t }: EditPanelProps) {
+function FtpEditPanel({ t }: EditPanelProps) {
   return (
     <BuilderField label={t("node.ftp.description")} hint={t("node.ftp.hint")}>
       {null}
