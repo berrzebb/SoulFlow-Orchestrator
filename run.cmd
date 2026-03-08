@@ -115,7 +115,14 @@ if not exist "%WORKSPACE%\.agents\.claude" mkdir "%WORKSPACE%\.agents\.claude"
 if not exist "%WORKSPACE%\.agents\.codex" mkdir "%WORKSPACE%\.agents\.codex"
 if not exist "%WORKSPACE%\.agents\.gemini" mkdir "%WORKSPACE%\.agents\.gemini"
 
-REM compose 실행 — instance 모드 시 기존 네트워크 참여
+REM instance 모드: 기본 인프라(redis, docker-proxy) 먼저 보장
+if not "%INSTANCE%"=="" (
+  set "BASE_PROJECT=soulflow-%COMMAND%"
+  set "PROJECT_NAME=!BASE_PROJECT!" && docker compose -f docker/docker-compose.yml -p !BASE_PROJECT! up -d redis docker-proxy 2>nul
+  set "PROJECT_NAME=soulflow-%COMMAND%-!INSTANCE!"
+)
+
+REM compose 실행
 set "COMPOSE_CMD=docker compose -f docker/docker-compose.yml"
 if /i "%COMMAND%"=="dev" set "COMPOSE_CMD=!COMPOSE_CMD! -f docker/docker-compose.dev.override.yml"
 if not "%INSTANCE%"=="" (

@@ -125,6 +125,12 @@ run_env() {
   export WEB_PORT="${WEB_PORT:-$DEFAULT_WEB_PORT}"
 
 
+  # instance 모드: 기본 인프라(redis, docker-proxy)를 먼저 보장
+  if [ -n "$INSTANCE" ]; then
+    local base_project="soulflow-$profile"
+    PROJECT_NAME="$base_project" docker compose -f docker/docker-compose.yml -p "$base_project" up -d redis docker-proxy 2>/dev/null || true
+  fi
+
   # compose 실행
   local compose_args=("-f" "docker/docker-compose.yml")
   if [ "$profile" = "dev" ]; then

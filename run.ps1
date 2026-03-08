@@ -135,6 +135,14 @@ function Start-Environment {
   $env:PROJECT_NAME = $projectName
   $env:WEB_PORT = if ($WebPort) { $WebPort } else { $p.WEB_PORT }
 
+  # instance 모드: 기본 인프라(redis, docker-proxy)를 먼저 보장
+  if ($Instance) {
+    $baseProject = "soulflow-$ProfileName"
+    $env:PROJECT_NAME = $baseProject
+    docker compose -f docker/docker-compose.yml -p $baseProject up -d redis docker-proxy 2>$null
+    $env:PROJECT_NAME = $projectName
+  }
+
   # compose 실행
   $composeArgs = @("-f", "docker/docker-compose.yml")
   if ($ProfileName -eq "dev") {
