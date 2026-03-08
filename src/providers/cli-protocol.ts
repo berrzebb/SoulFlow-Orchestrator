@@ -52,7 +52,19 @@ export function messages_to_prompt(messages: ChatMessage[], tools?: Record<strin
   const base = messages
     .map((m) => {
       const role = String(m.role || "user").toUpperCase();
-      const content = typeof m.content === "string" ? m.content : JSON.stringify(m.content ?? "");
+      let content = typeof m.content === "string" ? m.content : JSON.stringify(m.content ?? "");
+      // assistant가 tool_call을 했을 때 content는 null이지만 tool_calls 정보는 유지해야 함.
+      // 누락 시 다음 turn에서 LLM이 맥락을 잃고 같은 tool을 반복 호출함.
+      if (Array.isArray((m as Record<string, unknown>).tool_calls)) {
+        const tcs = (m as Record<string, unknown>).tool_calls as Array<Record<string, unknown>>;
+        const calls = tcs.map((tc) => {
+          const fn = tc.function as Record<string, unknown> | undefined;
+          const name = String(fn?.name ?? tc.name ?? "");
+          const args = fn?.arguments ?? tc.arguments ?? {};
+          return `called: ${name}(${typeof args === "string" ? args : JSON.stringify(args)})`;
+        }).join(", ");
+        content = content ? `${content} [${calls}]` : `[${calls}]`;
+      }
       return `[${role}] ${content}`;
     })
     .join("\n\n");
