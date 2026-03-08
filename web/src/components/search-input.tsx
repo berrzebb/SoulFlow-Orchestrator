@@ -1,4 +1,4 @@
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, forwardRef } from "react";
 
 /**
  * 검색 입력 필드 — 아이콘, 검색어, 클리어 버튼 포함.
@@ -11,6 +11,11 @@ import { useRef, useEffect } from "react";
  *   onClear={() => setQuery("")}
  *   autoFocus
  * />
+ *
+ * ref 사용:
+ * const inputRef = useRef<HTMLInputElement>(null);
+ * <SearchInput ref={inputRef} ... />
+ * inputRef.current?.focus();
  */
 export interface SearchInputProps {
   /** 검색어 */
@@ -37,26 +42,36 @@ export interface SearchInputProps {
   iconPosition?: "left" | "right";
 }
 
-export function SearchInput({
-  value,
-  onChange,
-  placeholder = "Search...",
-  onClear,
-  disabled = false,
-  autoFocus = false,
-  ariaLabel,
-  className = "",
-  inputClassName = "",
-  showIcon = true,
-  iconPosition = "left",
-}: SearchInputProps) {
-  const inputRef = useRef<HTMLInputElement>(null);
+export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(function SearchInput(
+  {
+    value,
+    onChange,
+    placeholder = "Search...",
+    onClear,
+    disabled = false,
+    autoFocus = false,
+    ariaLabel,
+    className = "",
+    inputClassName = "",
+    showIcon = true,
+    iconPosition = "left",
+  },
+  ref,
+) {
+  const internalRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (autoFocus) {
-      setTimeout(() => inputRef.current?.focus(), 50);
+      setTimeout(() => {
+        if (typeof ref === "function") {
+          ref(internalRef.current);
+        } else if (ref) {
+          ref.current = internalRef.current;
+        }
+        internalRef.current?.focus();
+      }, 50);
     }
-  }, [autoFocus]);
+  }, [autoFocus, ref]);
 
   const handleClear = () => {
     if (onClear) {
@@ -64,7 +79,7 @@ export function SearchInput({
     } else {
       onChange("");
     }
-    inputRef.current?.focus();
+    internalRef.current?.focus();
   };
 
   const icon = (
@@ -89,7 +104,7 @@ export function SearchInput({
     <div className={`search-input${className ? ` ${className}` : ""}`}>
       {showIcon && iconPosition === "left" && icon}
       <input
-        ref={inputRef}
+        ref={internalRef}
         className={`search-input__field${inputClassName ? ` ${inputClassName}` : ""}`}
         type="text"
         placeholder={placeholder}
@@ -112,4 +127,4 @@ export function SearchInput({
       {showIcon && iconPosition === "right" && icon}
     </div>
   );
-}
+});
