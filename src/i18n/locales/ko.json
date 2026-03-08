@@ -2092,6 +2092,8 @@
   "workflows.n_fields": "{{n}}개 필드",
   "workflows.network_access": "네트워크 허용",
   "workflows.network_operation": "Network operation",
+  "workflows.network_port_hint": "대상 포트 번호 (1-65535)",
+  "workflows.network_ping_count_hint": "핑 시도 횟수 (1-10)",
   "workflows.new_template": "새 템플릿",
   "workflows.new_workflow": "새 워크플로우",
   "workflows.no_backend": "백엔드 없음",

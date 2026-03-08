@@ -20,12 +20,14 @@ function NetworkEditPanel({ node, update, t }: EditPanelProps) {
         <div className="builder-row">
           <label className="label">{t("workflows.port")}</label>
           <input className="input input--sm" type="number" min={1} max={65535} value={String(node.port ?? "")} onChange={(e) => update({ port: Number(e.target.value) || 0 })} />
+          <span className="builder-hint">{t("workflows.network_port_hint")}</span>
         </div>
       )}
       {op === "ping" && (
         <div className="builder-row">
           <label className="label">{t("workflows.field_count")}</label>
           <input className="input input--sm" type="number" min={1} max={10} value={String(node.count ?? 3)} onChange={(e) => update({ count: Number(e.target.value) || 3 })} />
+          <span className="builder-hint">{t("workflows.network_ping_count_hint")}</span>
         </div>
       )}
     </>

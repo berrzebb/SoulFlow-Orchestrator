@@ -2092,6 +2092,8 @@
   "workflows.n_fields": "{{n}} fields",
   "workflows.network_access": "Network",
   "workflows.network_operation": "Network operation",
+  "workflows.network_port_hint": "Target port number (1-65535)",
+  "workflows.network_ping_count_hint": "Number of ping attempts (1-10)",
   "workflows.new_template": "New Template",
   "workflows.new_workflow": "New Workflow",
   "workflows.no_backend": "no backend",
