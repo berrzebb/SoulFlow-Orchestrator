@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import { Badge } from "../../components/badge";
+import { SearchInput } from "../../components/search-input";
 import { useT } from "../../i18n";
 
 interface ToolSchema {
@@ -145,13 +146,13 @@ export function ToolsTab() {
     <div className="fade-in">
       <div className="section-header">
         <h2>{t("tools.title", { count: data.names.length })}</h2>
-        <input
-          autoFocus
-          className="input input--sm tool-search"
-          type="search"
+        <SearchInput
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={setSearch}
           placeholder={t("tools.search")}
+          onClear={() => setSearch("")}
+          autoFocus
+          className="tool-search"
         />
       </div>
       {search && <div className="text-xs text-muted mb-2">{t("tools.search_result", { count: total_shown })}</div>}
