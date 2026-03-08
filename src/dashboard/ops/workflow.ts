@@ -33,6 +33,7 @@ WorkflowDefinition {
   tool_nodes?: ToolNodeDefinition[],
   skill_nodes?: SkillNodeDefinition[],
   trigger_nodes?: TriggerNodeRecord[],
+  end_nodes?: EndNodeRecord[],
   hitl_channel?: { channel_type: string, chat_id?: string },
 }
 \`\`\`
@@ -82,12 +83,35 @@ Example: { from_node: "fetch-1", from_field: "body.items[0].id", to_node: "set-2
 \`\`\`
 {
   id: string,
-  trigger_type: "cron" | "webhook" | "manual" | "channel_message",
+  trigger_type: "cron" | "webhook" | "manual" | "channel_message" | "kanban",
   schedule?: string,           // cron expression (for cron)
   timezone?: string,
   webhook_path?: string,       // (for webhook)
   channel_type?: string,       // (for channel_message)
   chat_id?: string,
+  board_id?: string,           // (for kanban)
+  actions?: string[],          // (for kanban) e.g. ["created", "moved"]
+  column_id?: string,          // (for kanban) optional column filter
+}
+\`\`\`
+
+### EndNodeRecord
+\`\`\`
+{
+  node_id: string,
+  depends_on?: string[],       // source node_ids
+  output_targets: string[],    // "channel" | "media" | "webhook" | "http"
+  target_config?: {
+    [target]: {                // target-specific configuration
+      message?: string,        // for channel
+      url?: string,            // for webhook/http
+      status?: number,         // for http
+      data?: any,              // for media
+      mime_type?: string,      // for media
+      headers?: object,        // for webhook/http
+      body?: any,              // for webhook/http/media
+    }
+  }
 }
 \`\`\`
 
