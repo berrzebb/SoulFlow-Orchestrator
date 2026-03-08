@@ -1,9 +1,7 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
-import { BuilderField, BackendModelPicker, BuilderRowPair, TemperatureField } from "../builder-field";
-import { useJsonField } from "../use-json-field";
+import { BuilderField, BackendModelPicker, BuilderRowPair, TemperatureField, JsonField } from "../builder-field";
 
 function LlmEditPanel({ node, update, t, options }: EditPanelProps) {
-  const { raw: schemaRaw, err: schemaErr, onChange: handleSchema } = useJsonField(node.output_json_schema, (v) => update({ output_json_schema: v }));
   const temp = node.temperature as number | undefined;
 
   return (
@@ -31,16 +29,7 @@ function LlmEditPanel({ node, update, t, options }: EditPanelProps) {
           <input className="input input--sm" type="number" min={1} value={String(node.max_tokens ?? "")} onChange={(e) => update({ max_tokens: e.target.value ? Number(e.target.value) : undefined })} />
         </BuilderField>
       </BuilderRowPair>
-      <BuilderField label={t("workflows.llm_schema")} error={schemaErr}>
-        <textarea
-          className={`input code-textarea${schemaErr ? " input--err" : ""}`}
-          rows={3}
-          value={schemaRaw}
-          onChange={(e) => handleSchema(e.target.value)}
-          spellCheck={false}
-          placeholder='{"type": "object", "properties": {...}}'
-        />
-      </BuilderField>
+      <JsonField label={t("workflows.llm_schema")} value={node.output_json_schema} onUpdate={(v) => update({ output_json_schema: v })} rows={3} placeholder='{"type": "object", "properties": {...}}' />
     </>
   );
 }

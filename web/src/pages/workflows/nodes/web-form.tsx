@@ -1,24 +1,13 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
-import { BuilderField, BuilderRowPair } from "../builder-field";
-import { useJsonField } from "../use-json-field";
+import { BuilderField, BuilderRowPair, JsonField } from "../builder-field";
 
 function WebFormEditPanel({ node, update, t }: EditPanelProps) {
-  const { raw: fieldsRaw, err: fieldsErr, onChange: handleFields } = useJsonField(node.fields ?? {}, (v) => update({ fields: v }), {});
-
   return (
     <>
       <BuilderField label={t("workflows.scrape_url")}>
         <input autoFocus className="input" value={String(node.url || "")} onChange={(e) => update({ url: e.target.value })} placeholder="https://example.com/form" />
       </BuilderField>
-      <BuilderField label={t("workflows.form_fields")} error={fieldsErr}>
-        <textarea
-          className={`input code-textarea${fieldsErr ? " input--err" : ""}`}
-          rows={4}
-          value={fieldsRaw}
-          onChange={(e) => handleFields(e.target.value)}
-          placeholder='{"#email": "test@test.com", "#password": "***"}'
-        />
-      </BuilderField>
+      <JsonField label={t("workflows.form_fields")} value={node.fields ?? {}} onUpdate={(v) => update({ fields: v })} rows={4} placeholder='{"#email": "test@test.com", "#password": "***"}' emptyValue={{}} />
       <BuilderRowPair>
         <BuilderField label={t("workflows.submit_selector")}>
           <input className="input input--sm" value={String(node.submit_selector || "")} onChange={(e) => update({ submit_selector: e.target.value })} placeholder='button[type="submit"]' />

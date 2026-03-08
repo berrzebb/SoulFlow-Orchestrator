@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { useT } from "../../i18n";
 import { useProviderModels } from "./use-provider-models";
+import { useJsonField } from "./use-json-field";
 import type { NodeOptions } from "./node-registry";
 
 /** 워크플로우 빌더 폼 필드 — label + input + hint/error 표준화. */
@@ -73,6 +74,34 @@ export function BackendModelPicker({ backend, onBackendChange, model, onModelCha
         )}
       </BuilderField>
     </BuilderRowPair>
+  );
+}
+
+/** JSON textarea — raw text + 파싱 에러 표시 통합. label/rows/placeholder/emptyValue 설정 가능. */
+export function JsonField({ label, value, onUpdate, rows = 3, placeholder, small, hint, autoFocus, emptyValue = undefined }: {
+  label: string;
+  value: unknown;
+  onUpdate: (parsed: unknown) => void;
+  rows?: number;
+  placeholder?: string;
+  small?: boolean;
+  hint?: ReactNode;
+  autoFocus?: boolean;
+  emptyValue?: unknown;
+}) {
+  const { raw, err, onChange } = useJsonField(value, onUpdate, emptyValue);
+  return (
+    <BuilderField label={label} hint={hint} error={err}>
+      <textarea
+        autoFocus={autoFocus}
+        className={`input${small ? " input--sm" : ""} code-textarea${err ? " input--err" : ""}`}
+        rows={rows}
+        value={raw}
+        onChange={(e) => onChange(e.target.value)}
+        spellCheck={false}
+        placeholder={placeholder}
+      />
+    </BuilderField>
   );
 }
 

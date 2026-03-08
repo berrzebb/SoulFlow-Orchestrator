@@ -1,10 +1,8 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
-import { BuilderField, BuilderRowPair } from "../builder-field";
-import { useJsonField } from "../use-json-field";
+import { BuilderField, BuilderRowPair, JsonField } from "../builder-field";
 
 function TaskEditPanel({ node, update, t, options }: EditPanelProps) {
   const channels = options?.channels || [];
-  const { raw: memoryRaw, err: memoryErr, onChange: handleMemory } = useJsonField(node.initial_memory, (v) => update({ initial_memory: v }));
   return (
     <>
       <BuilderField label={t("workflows.task_title")} required>
@@ -28,16 +26,7 @@ function TaskEditPanel({ node, update, t, options }: EditPanelProps) {
           <input required className="input input--sm" type="number" min={1} max={200} value={String(node.max_turns ?? 20)} onChange={(e) => update({ max_turns: Number(e.target.value) || 20 })} aria-required="true" />
         </BuilderField>
       </BuilderRowPair>
-      <BuilderField label={t("workflows.task_memory")} error={memoryErr}>
-        <textarea
-          className={`input code-textarea${memoryErr ? " input--err" : ""}`}
-          rows={2}
-          value={memoryRaw}
-          onChange={(e) => handleMemory(e.target.value)}
-          spellCheck={false}
-          placeholder='{"context": "{{memory.prev.result}}"}'
-        />
-      </BuilderField>
+      <JsonField label={t("workflows.task_memory")} value={node.initial_memory} onUpdate={(v) => update({ initial_memory: v })} rows={2} placeholder='{"context": "{{memory.prev.result}}"}' />
     </>
   );
 }

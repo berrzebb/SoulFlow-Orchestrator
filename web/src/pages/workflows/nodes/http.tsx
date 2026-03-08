@@ -1,10 +1,7 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
-import { BuilderField, BuilderRowPair } from "../builder-field";
-import { useJsonField } from "../use-json-field";
+import { BuilderField, BuilderRowPair, JsonField } from "../builder-field";
 
 function HttpEditPanel({ node, update, t }: EditPanelProps) {
-  const { raw: headersRaw, err: headersErr, onChange: handleHeaders } = useJsonField(node.headers, (v) => update({ headers: v }));
-
   return (
     <>
       <BuilderRowPair>
@@ -17,15 +14,7 @@ function HttpEditPanel({ node, update, t }: EditPanelProps) {
           <input className="input input--sm" required value={String(node.url || "")} onChange={(e) => update({ url: e.target.value })} placeholder="https://api.example.com/data" aria-required="true" />
         </BuilderField>
       </BuilderRowPair>
-      <BuilderField label={t("workflows.http_headers")} error={headersErr}>
-        <textarea
-          className={`input input--sm code-textarea${headersErr ? " input--err" : ""}`}
-          rows={2}
-          value={headersRaw}
-          onChange={(e) => handleHeaders(e.target.value)}
-          placeholder='{"Authorization": "Bearer {{memory.token}}"}'
-        />
-      </BuilderField>
+      <JsonField label={t("workflows.http_headers")} value={node.headers} onUpdate={(v) => update({ headers: v })} rows={2} small placeholder='{"Authorization": "Bearer {{memory.token}}"}'  />
       <BuilderField label={t("workflows.http_body")}>
         <textarea className="input" rows={3} value={typeof node.body === "string" ? node.body : JSON.stringify(node.body || "", null, 2)} onChange={(e) => update({ body: e.target.value })} />
       </BuilderField>

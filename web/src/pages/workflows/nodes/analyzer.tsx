@@ -1,9 +1,7 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
-import { BuilderField, BackendModelPicker, TemperatureField } from "../builder-field";
-import { useJsonField } from "../use-json-field";
+import { BuilderField, BackendModelPicker, TemperatureField, JsonField } from "../builder-field";
 
 function AnalyzerEditPanel({ node, update, t, options }: EditPanelProps) {
-  const { raw: schemaRaw, err: schemaErr, onChange: handleSchema } = useJsonField(node.output_json_schema, (v) => update({ output_json_schema: v }));
   const temp = node.temperature as number | undefined;
 
   return (
@@ -28,16 +26,7 @@ function AnalyzerEditPanel({ node, update, t, options }: EditPanelProps) {
       <BuilderField label={t("workflows.analyzer_categories")} optional>
         <input className="input input--sm" value={Array.isArray(node.categories) ? (node.categories as string[]).join(", ") : ""} onChange={(e) => update({ categories: e.target.value.split(",").map((s: string) => s.trim()).filter(Boolean) })} placeholder="qualified, unqualified, maybe" />
       </BuilderField>
-      <BuilderField label={t("workflows.llm_schema")} error={schemaErr}>
-        <textarea
-          className={`input code-textarea${schemaErr ? " input--err" : ""}`}
-          rows={3}
-          value={schemaRaw}
-          onChange={(e) => handleSchema(e.target.value)}
-          spellCheck={false}
-          placeholder='{"type": "object", "properties": {"score": {"type": "number"}, "category": {"type": "string"}}}'
-        />
-      </BuilderField>
+      <JsonField label={t("workflows.llm_schema")} value={node.output_json_schema} onUpdate={(v) => update({ output_json_schema: v })} rows={3} placeholder='{"type": "object", "properties": {"score": {"type": "number"}, "category": {"type": "string"}}}' />
       <TemperatureField value={temp} onChange={(v) => update({ temperature: v })} />
     </>
   );

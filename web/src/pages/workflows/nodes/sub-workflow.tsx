@@ -1,10 +1,8 @@
-import { BuilderField } from "../builder-field";
+import { BuilderField, JsonField } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
-import { useJsonField } from "../use-json-field";
 
 function SubWorkflowEditPanel({ node, update, t, options }: EditPanelProps) {
   const templates = options?.workflow_templates || [];
-  const { raw: mappingRaw, err: mappingErr, onChange: handleMapping } = useJsonField(node.input_mapping, (v) => update({ input_mapping: v }));
   return (
     <>
       <BuilderField label={t("workflows.sub_workflow_name")}>
@@ -17,16 +15,7 @@ function SubWorkflowEditPanel({ node, update, t, options }: EditPanelProps) {
           <input autoFocus className="input input--sm" value={String(node.workflow_name || "")} onChange={(e) => update({ workflow_name: e.target.value })} placeholder="my-sub-workflow" />
         )}
       </BuilderField>
-      <BuilderField label={t("workflows.sub_input_mapping")} error={mappingErr}>
-        <textarea
-          className={`input code-textarea${mappingErr ? " input--err" : ""}`}
-          rows={3}
-          value={mappingRaw}
-          onChange={(e) => handleMapping(e.target.value)}
-          spellCheck={false}
-          placeholder='{"prompt": "{{memory.prev.result}}"}'
-        />
-      </BuilderField>
+      <JsonField label={t("workflows.sub_input_mapping")} value={node.input_mapping} onUpdate={(v) => update({ input_mapping: v })} rows={3} placeholder='{"prompt": "{{memory.prev.result}}"}' />
     </>
   );
 }

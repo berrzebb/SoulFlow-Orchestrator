@@ -1,10 +1,7 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
-import { BuilderField, BuilderRowPair } from "../builder-field";
-import { useJsonField } from "../use-json-field";
+import { BuilderField, BuilderRowPair, JsonField } from "../builder-field";
 
 function DbEditPanel({ node, update, t }: EditPanelProps) {
-  const { raw: paramsRaw, err: paramsErr, onChange: handleParams } = useJsonField(node.params, (v) => update({ params: v }));
-
   return (
     <>
       <BuilderRowPair>
@@ -23,16 +20,7 @@ function DbEditPanel({ node, update, t }: EditPanelProps) {
       <BuilderField label={t("workflows.db_query")} hint={t("workflows.db_query_hint")}>
         <textarea className="input code-textarea" rows={4} value={String(node.query || "")} onChange={(e) => update({ query: e.target.value })} spellCheck={false} placeholder="SELECT * FROM users WHERE id = {{memory.user_id}}" />
       </BuilderField>
-      <BuilderField label={t("workflows.db_params")} error={paramsErr}>
-        <textarea
-          className={`input code-textarea${paramsErr ? " input--err" : ""}`}
-          rows={2}
-          value={paramsRaw}
-          onChange={(e) => handleParams(e.target.value)}
-          spellCheck={false}
-          placeholder='{"user_id": 42}'
-        />
-      </BuilderField>
+      <JsonField label={t("workflows.db_params")} value={node.params} onUpdate={(v) => update({ params: v })} rows={2} placeholder='{"user_id": 42}' />
     </>
   );
 }
