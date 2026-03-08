@@ -160,10 +160,11 @@ textarea.input {
 }
 .field-error {
   display: block;
-  font-size: var(--fs-xs);
+  font-size: max(13px, var(--fs-xs));
   color: var(--err);
   margin-top: 4px;
   font-weight: 500;
+  line-height: 1.4;
 }
 .input--loading {
   position: relative;
