@@ -147,9 +147,16 @@ export function register_kanban_rule_executor(store: KanbanStoreLike, bridge?: R
     if (!trigger) return;
 
     const rules = await kanban.get_rules_by_trigger(board_id, trigger);
+
+    // label 조건 평가를 위해 카드의 현재 labels를 detail에 병합
+    const needs_label_check = rules.some((r) => r.enabled && r.condition.label);
+    const detail = needs_label_check
+      ? { ...activity.detail, labels: (await kanban.get_card(activity.card_id))?.labels ?? activity.detail.labels }
+      : activity.detail;
+
     for (const rule of rules.filter((r) => r.enabled)) {
       if (!matches_trigger(rule, activity.action)) continue;
-      if (!matches_condition(rule, activity.detail)) continue;
+      if (!matches_condition(rule, detail)) continue;
 
       try {
         await execute_action(kanban, rule, activity.card_id, board_id, bridge);
