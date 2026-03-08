@@ -165,6 +165,7 @@ import { HttpHeaderTool } from "./http-header.js";
 import { PaginationTool } from "./pagination.js";
 import { CrontabTool } from "./crontab.js";
 import { SvgTool } from "./svg.js";
+import { DocumentTool } from "./document.js";
 
 const DANGEROUS_COMMANDS = ["rm -rf", "drop table", "format c:", "mkfs", "dd if="];
 
@@ -373,6 +374,7 @@ export {
   PaginationTool,
   CrontabTool,
   SvgTool,
+  DocumentTool,
 };
 export { Tool } from "./base.js";
 export type {
@@ -586,6 +588,7 @@ export function create_default_tool_registry(args?: ToolRegistryFactoryOptions):
   registry.register(new PaginationTool());
   registry.register(new CrontabTool());
   registry.register(new SvgTool());
+  registry.register(new DocumentTool({ workspace }));
 
   if (args?.task_query_callback) {
     registry.register(new TaskQueryTool(args.task_query_callback));

@@ -27,11 +27,22 @@ RUN cd web && npx vite build
 # ── Stage 3: Production ──────────────────────────────────────────────────────
 FROM node:22-slim AS production
 
-# 런타임: python3 + lxml (HWPX 스킬), tini (PID 1)
+# 런타임: python3 + lxml (HWPX 스킬), LibreOffice (문서 변환), tini (PID 1)
 # 빌드 전용: make, g++ (better-sqlite3 네이티브 컴파일 후 제거)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 python3-lxml tini make g++ \
+    python3 python3-pip python3-venv python3-lxml tini make g++ \
+    libreoffice-headless libreoffice-writer \
+    libreoffice-calc libreoffice-impress \
     && rm -rf /var/lib/apt/lists/*
+
+# Python 가상환경 생성 및 문서 처리 패키지 설치
+RUN python3 -m venv /opt/venv \
+    && /opt/venv/bin/pip install --no-cache-dir \
+        python-docx \
+        pypdf2 \
+        markdown
+
+ENV PATH="/opt/venv/bin:$PATH"
 
 WORKDIR /app
 

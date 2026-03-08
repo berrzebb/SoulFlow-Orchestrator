@@ -1,0 +1,305 @@
+/** 문서 생성/변환 도구 — PDF/DOCX 생성 + 다양한 포맷 간 변환 (LibreOffice headless). */
+
+import { existsSync } from "node:fs";
+import { writeFile, readFile, mkdir, rm } from "node:fs/promises";
+import { resolve, extname, basename } from "node:path";
+import { spawn } from "node:child_process";
+import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import * as fontkitModule from "@pdf-lib/fontkit";
+import { Document, Packer, Paragraph, HeadingLevel, AlignmentType } from "docx";
+import { Tool } from "./base.js";
+import type { JsonSchema } from "./types.js";
+import { short_id } from "../../utils/common.js";
+
+export class DocumentTool extends Tool {
+  readonly name = "document";
+  readonly category = "data" as const;
+  readonly description = "Create PDF/DOCX documents from text/markdown, or convert between document formats.";
+  readonly policy_flags = { write: true } as const;
+  readonly parameters: JsonSchema = {
+    type: "object",
+    properties: {
+      action: { type: "string", enum: ["create_pdf", "create_docx", "convert"], description: "Document operation" },
+      content: { type: "string", description: "Content to generate (create_*)" },
+      input_format: { type: "string", enum: ["text", "markdown", "html"], description: "Input format (default: markdown)" },
+      output: { type: "string", description: "Output filename (workspace relative)" },
+      input: { type: "string", description: "Input file path (convert)" },
+      to: { type: "string", description: "Output format: pdf, docx, xlsx, pptx, odt, ods, odp, etc." },
+    },
+    required: ["action"],
+    additionalProperties: false,
+  };
+
+  private readonly workspace: string;
+
+  constructor(opts: { workspace: string }) {
+    super();
+    this.workspace = opts.workspace;
+  }
+
+  protected async run(params: Record<string, unknown>): Promise<string> {
+    const action = String(params.action || "");
+
+    switch (action) {
+      case "create_pdf":
+        return this.create_pdf(params);
+      case "create_docx":
+        return this.create_docx(params);
+      case "convert":
+        return this.convert(params);
+      default:
+        return `Error: unknown action "${action}"`;
+    }
+  }
+
+  /** 텍스트/마크다운 → PDF 생성 (pdf-lib 사용). */
+  private async create_pdf(params: Record<string, unknown>): Promise<string> {
+    const content = String(params.content || "").trim();
+    if (!content) return "Error: content is required";
+
+    const output = String(params.output || "").trim();
+    if (!output) return "Error: output filename is required";
+
+    const format = String(params.input_format || "markdown").toLowerCase();
+    const abs = resolve(this.workspace, output);
+
+    if (!abs.startsWith(resolve(this.workspace))) {
+      return "Error: path traversal blocked";
+    }
+
+    try {
+      const pdfDoc = await PDFDocument.create();
+      pdfDoc.registerFontkit(fontkitModule.default);
+
+      const fontName = StandardFonts.Helvetica;
+      const font = await pdfDoc.embedFont(fontName);
+      const fontSize = 12;
+      const pageHeight = 792;
+      const pageWidth = 612;
+      const margin = 50;
+      const _maxWidth = pageWidth - 2 * margin;
+      const lineHeight = fontSize * 1.5;
+
+      let page = pdfDoc.addPage([pageWidth, pageHeight]);
+      let currentY = pageHeight - margin;
+
+      // 간단한 마크다운 파싱
+      const lines = format === "markdown"
+        ? this.parse_markdown(content)
+        : content.split("\n");
+
+      for (const line of lines) {
+        const lineObj = this.parse_line(line);
+        const fontSize_adj = lineObj.heading ? 16 + (3 - lineObj.level) * 2 : 12;
+        const _isBold = !!lineObj.heading;
+
+        if (currentY - lineHeight < margin) {
+          page = pdfDoc.addPage([pageWidth, pageHeight]);
+          currentY = pageHeight - margin;
+        }
+
+        page.drawText(lineObj.text, {
+          x: margin,
+          y: currentY,
+          size: fontSize_adj,
+          font,
+          color: rgb(0, 0, 0),
+        });
+
+        currentY -= lineHeight * (fontSize_adj / 12);
+      }
+
+      const pdfBytes = await pdfDoc.save();
+      await mkdir(resolve(this.workspace), { recursive: true });
+      await writeFile(abs, pdfBytes);
+
+      return JSON.stringify({
+        output,
+        size_bytes: pdfBytes.length,
+        success: true,
+      });
+    } catch (err) {
+      return `Error: ${String(err)}`;
+    }
+  }
+
+  /** 텍스트/마크다운 → DOCX 생성 (docx npm 사용). */
+  private async create_docx(params: Record<string, unknown>): Promise<string> {
+    const content = String(params.content || "").trim();
+    if (!content) return "Error: content is required";
+
+    const output = String(params.output || "").trim();
+    if (!output) return "Error: output filename is required";
+
+    const format = String(params.input_format || "markdown").toLowerCase();
+    const abs = resolve(this.workspace, output);
+
+    if (!abs.startsWith(resolve(this.workspace))) {
+      return "Error: path traversal blocked";
+    }
+
+    try {
+      const lines = format === "markdown"
+        ? this.parse_markdown(content)
+        : content.split("\n");
+
+      const sections = lines.map((line) => {
+        const lineObj = this.parse_line(line);
+        if (lineObj.heading) {
+          return new Paragraph({
+            text: lineObj.text,
+            heading: HeadingLevel[`HEADING_${lineObj.level}` as keyof typeof HeadingLevel] || HeadingLevel.HEADING_1,
+          });
+        }
+        return new Paragraph({
+          text: lineObj.text,
+          alignment: AlignmentType.LEFT,
+        });
+      });
+
+      const doc = new Document({
+        sections: [
+          {
+            children: sections,
+          },
+        ],
+      });
+
+      const buffer = await Packer.toBuffer(doc);
+      await mkdir(resolve(this.workspace), { recursive: true });
+      await writeFile(abs, buffer);
+
+      return JSON.stringify({
+        output,
+        size_bytes: buffer.length,
+        success: true,
+      });
+    } catch (err) {
+      return `Error: ${String(err)}`;
+    }
+  }
+
+  /** 파일 형식 간 변환 (LibreOffice headless 사용). */
+  private async convert(params: Record<string, unknown>): Promise<string> {
+    const input = String(params.input || "").trim();
+    if (!input) return "Error: input file path is required";
+
+    const to = String(params.to || "").trim().toLowerCase();
+    if (!to) return "Error: output format is required";
+
+    const abs_input = resolve(this.workspace, input);
+    if (!abs_input.startsWith(resolve(this.workspace))) {
+      return "Error: path traversal blocked";
+    }
+
+    if (!existsSync(abs_input)) {
+      return `Error: input file not found: ${input}`;
+    }
+
+    const tmp_dir = resolve(this.workspace, `.tmp-convert-${short_id()}`);
+
+    try {
+      await mkdir(tmp_dir, { recursive: true });
+
+      // LibreOffice headless 변환
+      const result = await this.run_libreoffice_convert(abs_input, to, tmp_dir);
+      if (!result.success) {
+        return `Error: ${result.error}`;
+      }
+
+      // 결과 파일을 workspace에 복사
+      const output_filename = `${basename(input, extname(input))}.${to}`;
+      const abs_output = resolve(this.workspace, output_filename);
+
+      if (existsSync(result.output_path)) {
+        const content = await readFile(result.output_path);
+        await writeFile(abs_output, content);
+      }
+
+      return JSON.stringify({
+        input,
+        output: output_filename,
+        success: true,
+      });
+    } catch (err) {
+      return `Error: ${String(err)}`;
+    } finally {
+      // tmp 정리
+      try {
+        if (existsSync(tmp_dir)) {
+          await rm(tmp_dir, { recursive: true, force: true });
+        }
+      } catch {
+        /* tmp 정리 실패는 무시 */
+      }
+    }
+  }
+
+  /** LibreOffice headless 변환 실행. */
+  private async run_libreoffice_convert(
+    input: string,
+    to: string,
+    outdir: string,
+  ): Promise<{ success: boolean; output_path: string; error?: string }> {
+    return new Promise((resolveFn) => {
+      const proc = spawn("libreoffice", [
+        "--headless",
+        "--convert-to",
+        to,
+        "--outdir",
+        outdir,
+        input,
+      ]);
+
+      let _stdout = "";
+      let _stderr = "";
+
+      proc.stdout?.on("data", (data) => {
+        _stdout += String(data);
+      });
+      proc.stderr?.on("data", (data) => {
+        _stderr += String(data);
+      });
+
+      proc.on("close", (code) => {
+        if (code === 0) {
+          const output_filename = `${basename(input, extname(input))}.${to}`;
+          const output_path = resolve(outdir, output_filename);
+          resolveFn({ success: true, output_path });
+        } else {
+          resolveFn({
+            success: false,
+            output_path: "",
+            error: `LibreOffice convert failed (code ${code}): ${_stderr}`,
+          });
+        }
+      });
+
+      proc.on("error", (err) => {
+        resolveFn({
+          success: false,
+          output_path: "",
+          error: `LibreOffice not available: ${String(err)}`,
+        });
+      });
+    });
+  }
+
+  /** 간단한 마크다운 파싱 (헤딩 + 텍스트). */
+  private parse_markdown(content: string): string[] {
+    return content.split("\n");
+  }
+
+  /** 한 줄 파싱 (헤딩 레벨 + 텍스트). */
+  private parse_line(line: string): { heading: boolean; level: number; text: string } {
+    const match = line.match(/^(#+)\s+(.*)$/);
+    if (match) {
+      return {
+        heading: true,
+        level: match[1].length,
+        text: match[2],
+      };
+    }
+    return { heading: false, level: 1, text: line };
+  }
+}
