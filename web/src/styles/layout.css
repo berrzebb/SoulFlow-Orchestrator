@@ -4485,6 +4485,18 @@ g:hover > .graph-add-handle circle {
 .chat-prompt-bar__btn--send { background: var(--accent); color: #fff; }
 .chat-prompt-bar__btn--send:hover { opacity: 0.85; }
 .chat-prompt-bar__btn:disabled { opacity: 0.65; color: var(--muted); cursor: not-allowed; }
+.chat-prompt-bar__btn--loading { background: var(--accent); color: #fff; cursor: default; gap: 3px; }
+.chat-prompt-bar__btn--loading:hover { opacity: 1; }
+.chat-send-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #fff;
+  display: inline-block;
+  animation: chat-typing-bounce 1.4s ease-in-out infinite;
+}
+.chat-send-dot:nth-child(2) { animation-delay: 0.2s; }
+.chat-send-dot:nth-child(3) { animation-delay: 0.4s; }
 .chat-prompt-bar__hint { text-align: right; padding: 2px 8px 0; }
 
 /* 모델 선택 칩 + 팝업 */

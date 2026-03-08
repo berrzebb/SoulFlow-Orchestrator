@@ -25,6 +25,8 @@ export interface ChatPromptBarProps {
   input: string;
   setInput: (v: string) => void;
   sending: boolean;
+  /** AI 응답 스트리밍 중 여부 — true이면 전송 버튼이 로딩 상태 유지 */
+  is_streaming?: boolean;
   can_send: boolean;
   onSend: () => void;
   placeholder?: string;
@@ -45,6 +47,7 @@ export interface ChatPromptBarProps {
 
 export function ChatPromptBar(props: ChatPromptBarProps) {
   const t = useT();
+  const is_busy = props.sending || !!props.is_streaming;
   const textarea_ref = useRef<HTMLTextAreaElement>(null);
   const popup_ref = useRef<HTMLDivElement>(null);
 
@@ -102,7 +105,7 @@ export function ChatPromptBar(props: ChatPromptBarProps) {
         if (!cancelled) {
           setModels(data);
           if (data.length > 0 && !data.find((m) => m.id === props.selectedModel)) {
-            props.onModelChange?.(data[0].id);
+            props.onModelChange?.(data[0]!.id);
           }
         }
       })
@@ -135,7 +138,7 @@ export function ChatPromptBar(props: ChatPromptBarProps) {
           <button
             className="chat-prompt-bar__btn"
             onClick={props.onAttach}
-            disabled={props.sending}
+            disabled={is_busy}
             title={t("chat.attach_file")}
             aria-label={t("chat.attach_file")}
           >
@@ -151,7 +154,7 @@ export function ChatPromptBar(props: ChatPromptBarProps) {
           onChange={(e) => props.setInput(e.target.value)}
           onKeyDown={handle_key_down}
           placeholder={props.placeholder ?? t("chat.placeholder")}
-          disabled={props.sending}
+          disabled={is_busy}
           rows={1}
         />
 
@@ -213,12 +216,19 @@ export function ChatPromptBar(props: ChatPromptBarProps) {
         )}
 
         <button
-          className={`chat-prompt-bar__btn${props.can_send ? " chat-prompt-bar__btn--send" : ""}`}
-          onClick={props.onSend}
-          disabled={!props.can_send}
-          aria-label={t("common.send")}
+          className={`chat-prompt-bar__btn${is_busy ? " chat-prompt-bar__btn--loading" : props.can_send ? " chat-prompt-bar__btn--send" : ""}`}
+          onClick={is_busy ? undefined : props.onSend}
+          disabled={is_busy || !props.can_send}
+          aria-label={is_busy ? t("chat.sending") : t("common.send")}
+          aria-busy={is_busy}
         >
-          {props.sending ? "…" : "↑"}
+          {is_busy ? (
+            <>
+              <span className="chat-send-dot" />
+              <span className="chat-send-dot" />
+              <span className="chat-send-dot" />
+            </>
+          ) : "↑"}
         </button>
       </div>
 

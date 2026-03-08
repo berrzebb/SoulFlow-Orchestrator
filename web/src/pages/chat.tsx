@@ -284,6 +284,7 @@ export default function ChatPage() {
             input={input}
             setInput={setInput}
             sending={sending}
+            is_streaming={is_streaming}
             can_send={can_send}
             onSend={() => void (is_mirror ? send_mirror() : send())}
             pending_media={is_mirror ? [] : pending_media}
