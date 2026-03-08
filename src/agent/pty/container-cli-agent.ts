@@ -323,6 +323,10 @@ export class ContainerCliAgent implements AgentBackend {
     if (this.tool_bridge) swallow(this.tool_bridge.stop());
   }
 
+  async release_session(task_id: string): Promise<void> {
+    await this.bus.remove_session(task_id);
+  }
+
   private relay_output_event(
     msg: AgentOutputMessage,
     source: AgentEventSource,

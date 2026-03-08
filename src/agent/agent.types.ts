@@ -268,4 +268,6 @@ export interface AgentBackend {
   is_available(): boolean;
   /** 백엔드가 보유한 자식 프로세스/소켓 등 리소스 정리. */
   stop?(): void;
+  /** 특정 task_id 세션 리소스 해제. 장시간 실행 후 명시적 정리에 사용. */
+  release_session?(task_id: string): Promise<void>;
 }

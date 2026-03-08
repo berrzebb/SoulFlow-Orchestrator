@@ -149,6 +149,8 @@ export function create_workflow_ops(deps: {
   create_task?: (opts: { title: string; objective: string; channel?: string; chat_id?: string; max_turns?: number; initial_memory?: Record<string, unknown> }) => Promise<{ task_id: string; status: string; result?: unknown; error?: string }>;
   query_db?: (datasource: string, query: string, params?: Record<string, unknown>) => Promise<{ rows: unknown[]; affected_rows: number }>;
   on_kanban_trigger_waiting?: (workflow_id: string) => void;
+  /** 워크플로우 시작 시 칸반 보드 자동 생성에 사용. */
+  kanban_store?: import("../../services/kanban-store.js").KanbanStoreLike;
   hitl_pending_store: import("../../orchestration/hitl-pending-store.js").HitlPendingStore;
   renderer?: import("../../channels/persona-message-renderer.js").PersonaMessageRendererLike | null;
   /** 템플릿 저장/삭제 후 트리거 재동기화 콜백. */
@@ -333,7 +335,7 @@ export function create_workflow_ops(deps: {
         initial_memory: { origin },
         workspace,
         field_mappings,
-      }, { subagents, store, logger, load_template: (name) => load_workflow_template(workspace, name), providers: deps.providers, decision_service: deps.decision_service, promise_service: deps.promise_service, embed: deps.embed, vector_store: deps.vector_store, oauth_fetch: deps.oauth_fetch, get_webhook_data: deps.get_webhook_data, wait_kanban_event: deps.wait_kanban_event, create_task: deps.create_task, query_db: deps.query_db, on_kanban_trigger_waiting: deps.on_kanban_trigger_waiting, on_event: on_workflow_event }).catch((err) => {
+      }, { subagents, store, logger, load_template: (name) => load_workflow_template(workspace, name), providers: deps.providers, decision_service: deps.decision_service, promise_service: deps.promise_service, embed: deps.embed, vector_store: deps.vector_store, oauth_fetch: deps.oauth_fetch, get_webhook_data: deps.get_webhook_data, wait_kanban_event: deps.wait_kanban_event, create_task: deps.create_task, query_db: deps.query_db, on_kanban_trigger_waiting: deps.on_kanban_trigger_waiting, kanban_store: deps.kanban_store, on_event: on_workflow_event }).catch((err) => {
         logger.error("workflow_create_run_error", { workflow_id, error: String(err) });
       });
 
@@ -480,7 +482,7 @@ export function create_workflow_ops(deps: {
         workspace,
         initial_memory: state.memory,
         resume_state: state,
-      }, { subagents, store, logger, load_template: (name) => load_workflow_template(workspace, name), providers: deps.providers, decision_service: deps.decision_service, promise_service: deps.promise_service, embed: deps.embed, vector_store: deps.vector_store, oauth_fetch: deps.oauth_fetch, get_webhook_data: deps.get_webhook_data, wait_kanban_event: deps.wait_kanban_event, create_task: deps.create_task, query_db: deps.query_db, on_kanban_trigger_waiting: deps.on_kanban_trigger_waiting, on_event: on_workflow_event }).catch((err) => {
+      }, { subagents, store, logger, load_template: (name) => load_workflow_template(workspace, name), providers: deps.providers, decision_service: deps.decision_service, promise_service: deps.promise_service, embed: deps.embed, vector_store: deps.vector_store, oauth_fetch: deps.oauth_fetch, get_webhook_data: deps.get_webhook_data, wait_kanban_event: deps.wait_kanban_event, create_task: deps.create_task, query_db: deps.query_db, on_kanban_trigger_waiting: deps.on_kanban_trigger_waiting, kanban_store: deps.kanban_store, on_event: on_workflow_event }).catch((err) => {
         logger.error("workflow_resume_run_error", { workflow_id, error: String(err) });
       });
 

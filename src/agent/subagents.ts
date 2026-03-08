@@ -610,6 +610,11 @@ export class SubagentRegistry {
           is_error: true,
         });
       }
+    } finally {
+      // native_tool_loop 백엔드가 사용한 PTY 세션을 명시적으로 해제 (stdin_mode=keep 리소스 누수 방지).
+      if (executor_backend) {
+        void executor_backend.release_session?.(`subagent:${id}`).catch(() => {});
+      }
     }
   }
 

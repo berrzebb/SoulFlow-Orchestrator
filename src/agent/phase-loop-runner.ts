@@ -67,6 +67,8 @@ export type PhaseLoopRunnerDeps = {
   query_db?: (datasource: string, query: string, params?: Record<string, unknown>) => Promise<{ rows: unknown[]; affected_rows: number }>;
   /** kanban_trigger waiting 전환 시 즉시 알림 (watcher 30초 지연 제거). */
   on_kanban_trigger_waiting?: (workflow_id: string) => void;
+  /** 칸반 보드 스토어 — 워크플로우 시작 시 자동 보드 생성. */
+  kanban_store?: import("../services/kanban-store.js").KanbanStoreLike;
 };
 
 /** 페이즈 루프 메인 실행 함수. */
@@ -114,6 +116,24 @@ export async function run_phase_loop(
   await store.upsert(state);
   emit(on_event, { type: "workflow_started", workflow_id: state.workflow_id });
   logger.info("phase_loop_start", { workflow_id: state.workflow_id, nodes: all_nodes.length, phases: state.phases.length, resume: is_resume });
+
+  // 워크플로우 칸반 보드 find-or-create
+  let workflow_kanban_board_id: string | undefined;
+  if (deps.kanban_store) {
+    try {
+      const existing = await deps.kanban_store.list_boards("workflow", options.workflow_id);
+      workflow_kanban_board_id = existing.length > 0
+        ? existing[0]!.board_id
+        : (await deps.kanban_store.create_board({
+            name: (options.title || options.objective).slice(0, 60),
+            scope_type: "workflow",
+            scope_id: options.workflow_id,
+          })).board_id;
+      logger.debug("workflow_kanban_board", { workflow_id: options.workflow_id, board_id: workflow_kanban_board_id });
+    } catch (e) {
+      logger.warn("kanban_board_init_failed", { workflow_id: options.workflow_id, error: error_message(e) });
+    }
+  }
 
   /** goto 루프 카운터: phase_id별 goto 횟수 추적. */
   const goto_counts = new Map<string, number>();
@@ -343,7 +363,7 @@ export async function run_phase_loop(
 
       // 모드에 따른 실행 분기
       const mode = phase_def.mode || "parallel";
-      const agent_deps: AgentRunDeps = { subagents, store, logger, on_event, options };
+      const agent_deps: AgentRunDeps = { subagents, store, logger, on_event, options, kanban_board_id: workflow_kanban_board_id };
 
       if (mode === "interactive") {
         await run_looping_phase(state, phase_def, phase_state, prev_context, agent_deps, INTERACTIVE_CONFIG);
@@ -543,6 +563,8 @@ type AgentRunDeps = {
   logger: Logger;
   on_event?: (event: PhaseLoopEvent) => void;
   options: PhaseLoopRunOptions;
+  /** 워크플로우 칸반 보드 ID — 에이전트 컨텍스트에 주입. */
+  kanban_board_id?: string;
 };
 
 async function run_phase_agents(
@@ -599,8 +621,9 @@ async function run_phase_agents(
         ? `\n\n## Workspace\nYour isolated workspace directory: ${workspace_path}\nAll file operations must be within this directory.`
         : "";
 
+      const merged_tools = merge_tools(agent_def.tools, phase_def.tools);
       const { subagent_id } = await subagents.spawn({
-        task: build_agent_task(agent_def, state.objective, prev_context, merge_tools(agent_def.tools, phase_def.tools), state.memory) + isolation_instruction,
+        task: build_agent_task(agent_def, state.objective, prev_context, merged_tools, state.memory, deps.kanban_board_id) + isolation_instruction,
         role: agent_def.role,
         label: agent_def.label,
         model: agent_def.model,
@@ -612,7 +635,7 @@ async function run_phase_agents(
         parent_id: `workflow:${state.workflow_id}`,
         skip_controller: true,
         skill_names: phase_def.skills,
-        allowed_tools: merge_tools(agent_def.tools, phase_def.tools),
+        allowed_tools: ensure_kanban(merged_tools),
       });
       agent_state.subagent_id = subagent_id;
 
@@ -949,11 +972,35 @@ function merge_tools(agent_tools?: string[], phase_tools?: string[]): string[] |
   return [...new Set([...(agent_tools || []), ...(phase_tools || [])])];
 }
 
-function build_agent_task(agent_def: PhaseAgentDefinition, objective: string, prev_context: string, tools?: string[], memory?: Record<string, unknown>): string {
+/** 도구 제한이 있을 때 kanban을 강제 포함 — 제한 없으면 전체 허용 유지. */
+function ensure_kanban(tools?: string[]): string[] | undefined {
+  if (!tools) return undefined;
+  return tools.includes("kanban") ? tools : [...tools, "kanban"];
+}
+
+function build_agent_task(
+  agent_def: PhaseAgentDefinition,
+  objective: string,
+  prev_context: string,
+  tools?: string[],
+  memory?: Record<string, unknown>,
+  kanban_board_id?: string,
+): string {
   const parts = [agent_def.system_prompt];
   if (tools?.length) parts.push(`\n## Available Tools\n${tools.join(", ")}`);
   if (prev_context) parts.push(`\n## Previous Phase Context\n${prev_context}`);
   if (memory?.origin) parts.push(`\n## Origin Channel\n${JSON.stringify(memory.origin)}`);
+  if (kanban_board_id) {
+    parts.push([
+      "\n## Kanban Board (워크플로우 공유 보드)",
+      `board_id: ${kanban_board_id}`,
+      "scope_type: \"workflow\"",
+      "kanban 도구로 작업을 카드로 등록·추적하세요:",
+      "- 시작 시: list_cards(board_id)로 기존 카드 확인",
+      "- 작업 중: create_card → move_card(in_progress) → comment 로 진행상황 기록",
+      "- 완료 시: move_card(done) + 결과 comment",
+    ].join("\n"));
+  }
   parts.push(`\n## Objective\n${objective}`);
   return parts.join("\n");
 }

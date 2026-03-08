@@ -6,7 +6,7 @@ import type { KanbanStoreLike, RelationType, ScopeType, Priority, KanbanRule } f
 import type { KanbanRuleExecutor } from "../../services/kanban-rule-executor.js";
 
 const ACTIONS = [
-  "create_board", "list_boards",
+  "create_board", "update_board", "list_boards",
   "create_card", "move_card", "update_card", "archive_card",
   "list_cards", "get_card", "board_summary",
   "comment", "list_comments",
@@ -40,12 +40,12 @@ export class KanbanTool extends Tool {
     properties: {
       action: { type: "string", enum: [...ACTIONS] },
       /* board */
-      name: { type: "string", description: "보드 이름 (create_board)" },
+      name: { type: "string", description: "보드 이름 (create_board, update_board)" },
       scope_type: { type: "string", enum: ["channel", "session", "workflow"], description: "보드 범위 타입" },
       scope_id: { type: "string", description: "보드 범위 ID" },
       columns: { type: "array", description: "커스텀 컬럼 [{id, name, color}]" },
       /* card */
-      board_id: { type: "string", description: "보드 ID (create_card, list_cards)" },
+      board_id: { type: "string", description: "보드 ID (update_board, create_card, list_cards 등)" },
       card_id: { type: "string", description: "카드 ID — 예: ISS-3 (move_card, update_card, get_card 등)" },
       title: { type: "string", description: "카드 제목" },
       description: { type: "string", description: "카드 설명 (마크다운)" },
@@ -108,6 +108,7 @@ export class KanbanTool extends Tool {
     try {
       switch (action) {
         case "create_board": return await this.handle_create_board(params);
+        case "update_board": return await this.handle_update_board(params);
         case "list_boards": return await this.handle_list_boards(params);
         case "create_card": return await this.handle_create_card(params, agent_id);
         case "move_card": return await this.handle_move_card(params, agent_id);
@@ -153,6 +154,17 @@ export class KanbanTool extends Tool {
     const columns = p.columns as Array<{ id: string; name: string; color: string }> | undefined;
     const board = await this.store.create_board({ name, scope_type, scope_id, columns });
     return JSON.stringify({ ok: true, board_id: board.board_id, prefix: board.prefix, columns: board.columns.map(c => c.id) });
+  }
+
+  private async handle_update_board(p: Record<string, unknown>): Promise<string> {
+    const board_id = str(p.board_id);
+    if (!board_id) return "Error: board_id is required";
+    const updates: { name?: string; columns?: import("../../services/kanban-store.js").KanbanColumnDef[] } = {};
+    if (p.name) updates.name = str(p.name);
+    if (p.columns) updates.columns = p.columns as import("../../services/kanban-store.js").KanbanColumnDef[];
+    const board = await this.store.update_board(board_id, updates);
+    if (!board) return `Error: board ${board_id} not found`;
+    return JSON.stringify({ ok: true, board_id: board.board_id, name: board.name });
   }
 
   private async handle_list_boards(p: Record<string, unknown>): Promise<string> {
