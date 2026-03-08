@@ -1,7 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { api } from "../api/client";
-import { useToast } from "../components/toast";
 import { useT } from "../i18n";
 import { useAsyncState } from "../hooks/use-async-state";
 import { PROVIDER_TYPE_LABELS as TYPE_LABELS } from "../utils/constants";
@@ -17,10 +17,7 @@ const NEEDS_TOKEN = new Set(["openrouter", "claude_sdk", "openai_compatible"]);
 export default function SetupPage() {
   const t = useT();
   const navigate = useNavigate();
-  const { toast } = useToast();
-
   const [step, setStep] = useState(0);
-  const [providerTypes, setProviderTypes] = useState<string[]>([]);
   const [providers, setProviders] = useState<Record<string, ProviderEntry>>({});
   const [executor, setExecutor] = useState("");
   const [orchestrator, setOrchestrator] = useState("");
@@ -28,9 +25,11 @@ export default function SetupPage() {
   const [personaName, setPersonaName] = useState("");
   const { pending: submitting, run: run_finish } = useAsyncState();
 
-  useEffect(() => {
-    void api.get<string[]>("/api/agents/providers/types").then(setProviderTypes).catch(() => toast(t("setup.load_failed"), "err"));
-  }, [toast, t]);
+  const { data: providerTypes = [] } = useQuery({
+    queryKey: ["provider-types"],
+    queryFn: () => api.get<string[]>("/api/agents/providers/types"),
+    staleTime: 300_000,
+  });
 
   const selected = Object.entries(providers).filter(([, v]) => v.enabled);
 

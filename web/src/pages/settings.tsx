@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
 import { Badge } from "../components/badge";
@@ -384,18 +384,11 @@ function InstancePicker({
   isPending: boolean;
 }) {
   const t = useT();
-  const [instances, setInstances] = useState<ProviderInstanceInfo[]>([]);
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    api.get<ProviderInstanceInfo[]>(`/api/config/provider-instances?purpose=${purpose}`)
-      .then((data) => { if (!cancelled) setInstances(data); })
-      .catch(() => { if (!cancelled) setInstances([]); })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
-  }, [purpose]);
+  const { data: instances = [], isLoading: loading } = useQuery({
+    queryKey: ["provider-instances", purpose],
+    queryFn: () => api.get<ProviderInstanceInfo[]>(`/api/config/provider-instances?purpose=${purpose}`),
+    staleTime: 30_000,
+  });
 
   return (
     <div className="cfg-edit-row cfg-edit-row--col">
@@ -461,47 +454,26 @@ function ModelPicker({
   isPending: boolean;
 }) {
   const t = useT();
-  const [models, setModels] = useState<ModelListItem[]>([]);
-  const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
 
-  useEffect(() => {
-    if (!instanceId) {
-      setModels([]);
-      return;
-    }
-    let cancelled = false;
-    setLoading(true);
-    // 인스턴스 정보를 조회해서 connection_id 또는 provider_type으로 모델 목록 가져오기
-    api.get<ProviderInstanceInfo[]>(`/api/config/provider-instances?purpose=chat`)
-      .then((instances) => {
-        const inst = instances.find((i) => i.instance_id === instanceId);
-        if (!inst && !cancelled) { setModels([]); setLoading(false); return; }
-        if (cancelled) return;
-        // embedding 인스턴스도 시도
-        if (!inst) {
-          return api.get<ProviderInstanceInfo[]>(`/api/config/provider-instances?purpose=embedding`)
-            .then((embed_instances) => {
-              const e_inst = embed_instances.find((i) => i.instance_id === instanceId);
-              if (!e_inst || cancelled) { setModels([]); setLoading(false); return; }
-              return fetch_models_for_instance(e_inst, cancelled);
-            });
-        }
-        return fetch_models_for_instance(inst, cancelled);
-      })
-      .catch(() => { if (!cancelled) { setModels([]); setLoading(false); } });
-
-    function fetch_models_for_instance(inst: ProviderInstanceInfo, cancelled: boolean) {
+  const { data: models = [], isLoading: loading } = useQuery({
+    queryKey: ["models-for-instance", instanceId],
+    enabled: !!instanceId,
+    staleTime: 60_000,
+    queryFn: async () => {
+      const chat_instances = await api.get<ProviderInstanceInfo[]>(`/api/config/provider-instances?purpose=chat`);
+      let inst: ProviderInstanceInfo | undefined = chat_instances.find((i) => i.instance_id === instanceId);
+      if (!inst) {
+        const embed_instances = await api.get<ProviderInstanceInfo[]>(`/api/config/provider-instances?purpose=embedding`);
+        inst = embed_instances.find((i) => i.instance_id === instanceId);
+      }
+      if (!inst) return [];
       const url = inst.connection_id
         ? `/api/agents/connections/${encodeURIComponent(inst.connection_id)}/models`
         : `/api/agents/providers/models/${encodeURIComponent(inst.provider_type)}`;
-      return api.get<ModelListItem[]>(url)
-        .then((data) => { if (!cancelled) setModels(data); })
-        .catch(() => { if (!cancelled) setModels([]); })
-        .finally(() => { if (!cancelled) setLoading(false); });
-    }
-    return () => { cancelled = true; };
-  }, [instanceId]);
+      return api.get<ModelListItem[]>(url);
+    },
+  });
 
   const q = search.toLowerCase();
   const filtered = q ? models.filter((m) => m.id.toLowerCase().includes(q) || m.name.toLowerCase().includes(q)) : models;
