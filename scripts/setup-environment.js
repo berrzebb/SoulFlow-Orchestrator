@@ -226,6 +226,11 @@ function main() {
     config.redisPort = parseInt(envRedisPort, 10);
   }
 
+  // prod 환경에서는 컨테이너 내부 경로 /data 사용 (호스트 경로와 무관)
+  if (profile === 'prod') {
+    config.workspace = '/data';
+  }
+
   console.log(`\n🔧 ${config.name} 환경 설정 생성 중...\n`);
 
   // Redis 컨테이너 실행 여부 확인
