@@ -6,19 +6,20 @@ function GateEditPanel({ node, update, t }: EditPanelProps) {
     <>
       <div className="builder-row">
         <label className="label">{t("workflows.gate_quorum")}</label>
-        <input autoFocus className="input input--sm" type="number" min={1} value={String(node.quorum ?? 1)} onChange={(e) => update({ quorum: Number(e.target.value) })} />
+        <input autoFocus className="input input--sm" type="number" min={1} value={String(node.quorum ?? 1)} onChange={(e) => update({ quorum: Number(e.target.value) })} aria-label={t("workflows.gate_quorum")} />
         <span className="builder-hint">{t("workflows.gate_quorum_hint")}{sources.length ? ` (${sources.length} sources)` : ""}</span>
       </div>
       <div className="builder-row">
         <label className="label">{t("workflows.gate_on_timeout")}</label>
-        <select className="input input--sm" value={String(node.on_timeout || "proceed")} onChange={(e) => update({ on_timeout: e.target.value })}>
+        <select className="input input--sm" value={String(node.on_timeout || "proceed")} onChange={(e) => update({ on_timeout: e.target.value })} aria-label={t("workflows.gate_on_timeout")}>
           <option value="proceed">{t("workflows.gate_on_timeout_proceed")}</option>
           <option value="fail">{t("workflows.gate_on_timeout_fail")}</option>
         </select>
       </div>
       <div className="builder-row">
         <label className="label">{t("workflows.hitl_timeout")}</label>
-        <input className="input input--sm" type="number" min={0} value={String(node.timeout_ms ?? 300000)} onChange={(e) => update({ timeout_ms: Number(e.target.value) })} />
+        <input className="input input--sm" type="number" min={0} value={String(node.timeout_ms ?? 300000)} onChange={(e) => update({ timeout_ms: Number(e.target.value) })} aria-label={t("workflows.hitl_timeout")} />
+        <span className="builder-hint">{t("workflows.hitl_timeout_hint")}</span>
       </div>
     </>
   );
