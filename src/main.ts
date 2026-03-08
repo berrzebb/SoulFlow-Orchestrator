@@ -139,7 +139,7 @@ export async function createRuntime(): Promise<RuntimeApp> {
     phase_workflow_store, kanban_store, kanban_tool, kanban_automation,
     hitl_pending_store, persona_renderer, broadcaster, channel_manager,
     embed_service, vector_store_service, webhook_store, query_db_service,
-    oauth_fetch_service, create_task_fn, logger,
+    oauth_fetch_service, create_task_fn, logger, tool_index,
   });
 
   await register_late_commands({ command_router, workflow_ops_result, orchestrator_llm_runtime });
@@ -150,7 +150,7 @@ export async function createRuntime(): Promise<RuntimeApp> {
     bus, broadcaster, channel_manager, channels, instance_store,
     cli_auth, decisions, events, heartbeat, mcp, ops,
     orchestrator_llm_runtime, orchestration, process_tracker, cron,
-    sessions, dlq_store, oauth_store, oauth_flow,
+    sessions, dlq_store, dispatch, oauth_store, oauth_flow,
     kanban_store, kanban_automation, reference_store, webhook_store,
     workflow_ops_result,
   });

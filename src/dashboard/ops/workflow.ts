@@ -138,6 +138,7 @@ export function create_workflow_ops(deps: {
   providers?: import("../../providers/service.js").ProviderRegistry | null;
   get_tool_summaries?: () => Array<{ name: string; description: string; category: string }>;
   get_provider_summaries?: () => Array<{ backend: string; label: string; provider_type: string; models: string[] }>;
+  tool_index?: import("../../orchestration/tool-index.js").ToolIndex | null;
   decision_service?: import("../../decision/service.js").DecisionService | null;
   promise_service?: import("../../decision/promise.service.js").PromiseService | null;
   embed?: (texts: string[], opts: { model?: string; dimensions?: number }) => Promise<{ embeddings: number[][]; token_usage?: number }>;
@@ -532,14 +533,197 @@ export function create_workflow_ops(deps: {
     async suggest(instruction, workflow, options) {
       if (!deps.providers) return { ok: false, error: "providers_not_configured" };
       try {
-        if (!suggest_node_catalog_cache) suggest_node_catalog_cache = build_node_catalog();
-        const node_catalog = suggest_node_catalog_cache;
+        /** 수정 중인 워크플로우 사본. update_section이 in-place로 패치. */
+        const wf = JSON.parse(JSON.stringify(workflow)) as Record<string, unknown>;
 
-        const tool_section = deps.get_tool_summaries
-          ? deps.get_tool_summaries()
-              .map((t) => `- ${t.name} [${t.category}]: ${t.description}`)
-              .join("\n")
-          : "";
+        // ── Section type → array 매핑 ──────────────────────────────────
+        const SECTION_MAP: Record<string, { arr: string; key: string }> = {
+          node:    { arr: "nodes",         key: "node_id"   },
+          phase:   { arr: "phases",        key: "phase_id"  },
+          trigger: { arr: "trigger_nodes", key: "id"        },
+          tool:    { arr: "tool_nodes",    key: "id"        },
+          skill:   { arr: "skill_nodes",   key: "id"        },
+          orche:   { arr: "orche_nodes",   key: "node_id"   },
+        };
+
+        function read_section(path: string): string {
+          if (path === "overview") {
+            const to_compact = (arr: unknown[], id_key: string, extra?: string[]) =>
+              (arr as Array<Record<string, unknown>>).map(x => {
+                const item: Record<string, unknown> = { [id_key]: x[id_key] };
+                if (x.node_type || x.trigger_type) item.type = x.node_type ?? x.trigger_type;
+                if (x.title) item.title = x.title;
+                if (x.depends_on) item.depends_on = x.depends_on;
+                extra?.forEach(k => { if (x[k] !== undefined) item[k] = x[k]; });
+                return item;
+              });
+            return JSON.stringify({
+              title: wf.title,
+              nodes: to_compact((wf.nodes as unknown[] | undefined) ?? [], "node_id"),
+              phases: to_compact((wf.phases as unknown[] | undefined) ?? [], "phase_id"),
+              trigger_nodes: to_compact((wf.trigger_nodes as unknown[] | undefined) ?? [], "id", ["trigger_type"]),
+              tool_nodes: ((wf.tool_nodes as Array<Record<string, unknown>> | undefined) ?? []).map(t => ({ id: t.id, tool_id: t.tool_id, description: t.description })),
+              skill_nodes: ((wf.skill_nodes as Array<Record<string, unknown>> | undefined) ?? []).map(s => ({ id: s.id, skill_name: s.skill_name })),
+              orche_nodes: to_compact((wf.orche_nodes as unknown[] | undefined) ?? [], "node_id"),
+            }, null, 2);
+          }
+          if (path === "metadata") {
+            return JSON.stringify({ title: wf.title, objective: wf.objective, variables: wf.variables }, null, 2);
+          }
+          if (path === "field_mappings") {
+            return JSON.stringify(wf.field_mappings ?? [], null, 2);
+          }
+          const colon = path.indexOf(":");
+          if (colon < 0) return `# unknown path: ${path}`;
+          const type = path.slice(0, colon);
+          const id   = path.slice(colon + 1);
+          const m    = SECTION_MAP[type];
+          if (!m) return `# unknown section type: ${type}`;
+          const arr  = (wf[m.arr] as Array<Record<string, unknown>> | undefined) ?? [];
+          const item = arr.find(x => String(x[m.key]) === id);
+          return item ? JSON.stringify(item, null, 2) : `# ${path} not found`;
+        }
+
+        function update_section(path: string, content: string): string {
+          let parsed: Record<string, unknown>;
+          try {
+            const trimmed = content.trim().replace(/^```(?:json|yaml)?\s*\n?/, "").replace(/```\s*$/, "").trim();
+            parsed = JSON.parse(trimmed) as Record<string, unknown>;
+          } catch {
+            return `error: invalid JSON in update_section(${path})`;
+          }
+          if (path === "metadata") {
+            if (parsed.title     !== undefined) wf.title     = parsed.title;
+            if (parsed.objective !== undefined) wf.objective = parsed.objective;
+            if (parsed.variables !== undefined) wf.variables = parsed.variables;
+            return "ok";
+          }
+          if (path === "field_mappings") {
+            wf.field_mappings = parsed;
+            return "ok";
+          }
+          const colon = path.indexOf(":");
+          if (colon < 0) return `error: unknown path: ${path}`;
+          const type = path.slice(0, colon);
+          const id   = path.slice(colon + 1);
+          const m    = SECTION_MAP[type];
+          if (!m) return `error: unknown section type: ${type}`;
+          const arr = (wf[m.arr] as Array<Record<string, unknown>> | undefined) ?? [];
+          const idx = arr.findIndex(x => String(x[m.key]) === id);
+          if (idx < 0) {
+            arr.push({ [m.key]: id, ...parsed });
+          } else {
+            arr[idx] = { ...arr[idx], ...parsed };
+          }
+          wf[m.arr] = arr;
+          return "ok";
+        }
+
+        async function search_tool(query: string): Promise<string> {
+          if (!deps.get_tool_summaries) return "[]";
+          // ToolIndex(FTS5+벡터)가 있으면 기존 검색 인프라 활용
+          if (deps.tool_index) {
+            try {
+              const names = await deps.tool_index.select(query, { max_tools: 10 });
+              const all = deps.get_tool_summaries();
+              const results = [...names].map(n => all.find(t => t.name === n)).filter(Boolean);
+              return JSON.stringify(results, null, 2);
+            } catch { /* fallback */ }
+          }
+          const lower = query.toLowerCase();
+          const results = deps.get_tool_summaries().filter(t =>
+            t.name.toLowerCase().includes(lower) ||
+            t.description.toLowerCase().includes(lower) ||
+            t.category.toLowerCase().includes(lower),
+          ).slice(0, 10);
+          return JSON.stringify(results, null, 2);
+        }
+
+        function search_skill(query: string): string {
+          if (!skills_loader) return "[]";
+          const lower = query.toLowerCase();
+          return JSON.stringify(
+            skills_loader.list_skills(true)
+              .filter(s => s.name.toLowerCase().includes(lower) || (s.summary ?? "").toLowerCase().includes(lower))
+              .slice(0, 10)
+              .map(s => ({ name: s.name, summary: s.summary })),
+            null, 2,
+          );
+        }
+
+        // ── LLM tools 정의 ──────────────────────────────────────────────
+        const SUGGEST_TOOLS: Record<string, unknown>[] = [
+          {
+            type: "function",
+            function: {
+              name: "get_overview",
+              description: "워크플로우의 모든 노드 ID, 타입, 의존성 구조를 반환. 작업 시작 시 먼저 호출.",
+              parameters: { type: "object", properties: {} },
+            },
+          },
+          {
+            type: "function",
+            function: {
+              name: "read_section",
+              description: "특정 섹션을 JSON으로 읽기. path 예시: 'overview' | 'metadata' | 'node:{node_id}' | 'phase:{phase_id}' | 'trigger:{id}' | 'tool:{id}' | 'skill:{id}' | 'field_mappings'",
+              parameters: {
+                type: "object",
+                properties: { path: { type: "string" } },
+                required: ["path"],
+              },
+            },
+          },
+          {
+            type: "function",
+            function: {
+              name: "update_section",
+              description: "섹션을 수정. 기존 필드는 merge됨. yaml_content는 JSON 형식.",
+              parameters: {
+                type: "object",
+                properties: {
+                  path: { type: "string" },
+                  yaml_content: { type: "string", description: "수정할 내용 (JSON)" },
+                },
+                required: ["path", "yaml_content"],
+              },
+            },
+          },
+          {
+            type: "function",
+            function: {
+              name: "search_tool",
+              description: "자연어 쿼리로 사용 가능한 tool 검색 (tool_id 찾을 때 사용).",
+              parameters: {
+                type: "object",
+                properties: { query: { type: "string" } },
+                required: ["query"],
+              },
+            },
+          },
+          {
+            type: "function",
+            function: {
+              name: "search_skill",
+              description: "자연어 쿼리로 사용 가능한 skill 검색 (skill_name 찾을 때 사용).",
+              parameters: {
+                type: "object",
+                properties: { query: { type: "string" } },
+                required: ["query"],
+              },
+            },
+          },
+          {
+            type: "function",
+            function: {
+              name: "done",
+              description: "모든 수정 완료. 작업 종료 신호. 반드시 마지막에 호출.",
+              parameters: { type: "object", properties: {} },
+            },
+          },
+        ];
+
+        // ── System prompt (도구 + 스키마만, 전체 워크플로우 제외) ──────
+        if (!suggest_node_catalog_cache) suggest_node_catalog_cache = build_node_catalog();
 
         const provider_section = deps.get_provider_summaries
           ? deps.get_provider_summaries()
@@ -547,52 +731,76 @@ export function create_workflow_ops(deps: {
               .join("\n")
           : "";
 
-        const skill_section = skills_loader
-          ? skills_loader.list_skills(true).map((s) => `- ${s.name}: ${s.summary}`).join("\n")
-          : "";
-
         const system = [
-          "You are a workflow editor agent. You receive a workflow definition (JSON) and an edit instruction from the user.",
-          "Return ONLY the modified workflow definition as valid JSON \u2014 no markdown fences, no explanation.",
-          "Preserve all existing fields unless the instruction explicitly asks to change them.",
-          "If the instruction is unclear or impossible, return the original workflow unchanged.",
-          "",
-          node_catalog,
+          "You are a workflow editor agent. Modify the workflow using the provided tools.",
+          "STRATEGY:",
+          "1. Call get_overview() to see all node/phase IDs.",
+          "2. Call read_section('node:{id}') or 'phase:{id}' for the target section.",
+          "3. Modify only the necessary fields and call update_section(path, json).",
+          "4. Repeat for each section that needs changes.",
+          "5. Call done() when finished. Never skip done().",
+          "RULES: Preserve untouched fields. Use search_tool/search_skill to find IDs by description.",
+          provider_section ? `\n## Available Backends\n${provider_section}` : "",
           "",
           WORKFLOW_SCHEMA_REFERENCE,
-          tool_section ? `\n## Available Tools (for tool_invoke / tool_nodes)\n${tool_section}` : "",
-          provider_section ? `\n## Available Backends & Models (for ai_agent/llm nodes)\n${provider_section}` : "",
-          skill_section ? `\n## Available Skills (for skill_nodes / phase skills)\n${skill_section}` : "",
-        ].filter(Boolean).join("\n");
-        const prompt = [
-          "## Current Workflow",
-          JSON.stringify(workflow, null, 2),
           "",
-          "## Instruction",
-          instruction,
-        ].join("\n");
+          suggest_node_catalog_cache,
+        ].filter(Boolean).join("\n");
+
+        // ── Tool-call 루프 (최대 10 turn) ────────────────────────────────
+        const MAX_TURNS = 10;
         const messages: import("../../providers/types.js").ChatMessage[] = [];
-        if (system?.trim()) messages.push({ role: "system", content: system });
-        messages.push({ role: "user", content: prompt });
-        const res = await deps.providers.run_orchestrator({
-          messages,
-          provider_id: options?.provider_id as import("../../providers/types.js").ProviderId | undefined,
-          model: options?.model,
-          max_tokens: 8192,
-          temperature: 0.2,
-        });
-        const raw = String(res.content || "").trim();
-        let parsed: Record<string, unknown> | null = null;
-        try { parsed = JSON.parse(raw); } catch {
-          const cb = raw.match(/```(?:json)?\s*\n?([\s\S]*?)```/);
-          if (cb?.[1]) { try { parsed = JSON.parse(cb[1].trim()); } catch { /* */ } }
-          if (!parsed) {
-            const idx = raw.indexOf("{");
-            if (idx >= 0) { try { parsed = JSON.parse(raw.slice(idx)); } catch { /* */ } }
+        if (system.trim()) messages.push({ role: "system", content: system });
+        messages.push({ role: "user", content: `## Instruction\n${instruction}` });
+
+        for (let turn = 0; turn < MAX_TURNS; turn++) {
+          const res = await deps.providers.run_orchestrator({
+            messages,
+            tools: SUGGEST_TOOLS,
+            provider_id: options?.provider_id as import("../../providers/types.js").ProviderId | undefined,
+            model: options?.model,
+            max_tokens: 4096,
+            temperature: 0.2,
+          });
+
+          messages.push({
+            role: "assistant",
+            content: res.content,
+            tool_calls: res.tool_calls.length > 0
+              ? res.tool_calls.map(tc => ({
+                  id: tc.id, type: "function",
+                  function: { name: tc.name, arguments: JSON.stringify(tc.arguments) },
+                }))
+              : undefined,
+          });
+
+          if (res.tool_calls.length === 0) break;
+
+          let is_done = false;
+          for (const tc of res.tool_calls) {
+            let result: string;
+            if (tc.name === "done") {
+              is_done = true;
+              result = "ok";
+            } else if (tc.name === "get_overview") {
+              result = read_section("overview");
+            } else if (tc.name === "read_section") {
+              result = read_section(String(tc.arguments.path ?? ""));
+            } else if (tc.name === "update_section") {
+              result = update_section(String(tc.arguments.path ?? ""), String(tc.arguments.yaml_content ?? ""));
+            } else if (tc.name === "search_tool") {
+              result = await search_tool(String(tc.arguments.query ?? ""));
+            } else if (tc.name === "search_skill") {
+              result = search_skill(String(tc.arguments.query ?? ""));
+            } else {
+              result = `unknown tool: ${tc.name}`;
+            }
+            messages.push({ role: "tool", tool_call_id: tc.id, content: result });
           }
+          if (is_done) break;
         }
-        if (!parsed || typeof parsed !== "object") return { ok: false, error: "llm_returned_invalid_json" };
-        return { ok: true, workflow: parsed };
+
+        return { ok: true, workflow: wf };
       } catch (err) {
         return { ok: false, error: String(err) };
       }

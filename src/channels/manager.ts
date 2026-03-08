@@ -322,12 +322,6 @@ export class ChannelManager implements ServiceLike {
     if (!provider) return;
     const ck = render_key(provider, message.chat_id);
 
-    // ingress-level dedupe: recovery 메시지가 아닌 경우, 동일 메시지 재진입 방지
-    const meta = (message.metadata || {}) as Record<string, unknown>;
-    if (!meta.is_recovery && this.is_duplicate(message)) {
-      this.logger.debug("inbound_dedupe_skip", { provider, chat_id: message.chat_id, id: message.id });
-      return;
-    }
     this.mark_seen(message);
     this.on_activity_start?.();
 
