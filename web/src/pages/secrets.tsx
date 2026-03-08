@@ -142,9 +142,11 @@ export default function SecretsPage() {
         <div className="form-group">
           <label className="form-label">{t("common.name")}</label>
           <input
+            autoFocus
             className="form-input"
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
+            disabled={newName && names.includes(newName)}
             placeholder={t("secrets.name_placeholder")}
           />
         </div>
@@ -155,6 +157,7 @@ export default function SecretsPage() {
             type="password"
             value={newValue}
             onChange={(e) => setNewValue(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter" && newName.trim()) void add(); }}
             placeholder={t("secrets.value_placeholder")}
           />
         </div>
