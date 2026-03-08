@@ -16,7 +16,6 @@ NC='\033[0m'
 COMMAND=${1:-help}
 WORKSPACE=
 WEB_PORT=
-REDIS_PORT=
 INSTANCE=
 
 shift || true
@@ -34,8 +33,6 @@ while [ $# -gt 0 ]; do
     --workspace) shift; WORKSPACE="$1" ;;
     --web-port=* | --webport=*) WEB_PORT="${1#*=}" ;;
     --web-port | --webport) shift; WEB_PORT="$1" ;;
-    --redis-port=* | --redisport=*) REDIS_PORT="${1#*=}" ;;
-    --redis-port | --redisport) shift; REDIS_PORT="$1" ;;
     --instance=* | --name=*) INSTANCE="${1#*=}" ;;
     --instance | --name) shift; INSTANCE="$1" ;;
   esac
@@ -46,10 +43,10 @@ done
 get_preset() {
   local profile=$1
   case $profile in
-    dev)     BUILD_TARGET=dev;        NODE_ENV=development; DEBUG=true;  MEMORY=1G; CPUS=2; DEFAULT_WEB_PORT=4200; DEFAULT_REDIS_PORT=6379 ;;
-    test)    BUILD_TARGET=production; NODE_ENV=test;        DEBUG=true;  MEMORY=1G; CPUS=2; DEFAULT_WEB_PORT=4201; DEFAULT_REDIS_PORT=6380 ;;
-    staging) BUILD_TARGET=production; NODE_ENV=production;  DEBUG=false; MEMORY=1G; CPUS=2; DEFAULT_WEB_PORT=4202; DEFAULT_REDIS_PORT=6381 ;;
-    prod)    BUILD_TARGET=full;       NODE_ENV=production;  DEBUG=false; MEMORY=2G; CPUS=4; DEFAULT_WEB_PORT=4200; DEFAULT_REDIS_PORT=6379 ;;
+    dev)     BUILD_TARGET=dev;        NODE_ENV=development; DEBUG=true;  MEMORY=1G; CPUS=2; DEFAULT_WEB_PORT=4200 ;;
+    test)    BUILD_TARGET=production; NODE_ENV=test;        DEBUG=true;  MEMORY=1G; CPUS=2; DEFAULT_WEB_PORT=4201 ;;
+    staging) BUILD_TARGET=production; NODE_ENV=production;  DEBUG=false; MEMORY=1G; CPUS=2; DEFAULT_WEB_PORT=4202 ;;
+    prod)    BUILD_TARGET=full;       NODE_ENV=production;  DEBUG=false; MEMORY=2G; CPUS=4; DEFAULT_WEB_PORT=4200 ;;
     *) echo -e "${RED}알 수 없는 프로필: $profile${NC}"; exit 1 ;;
   esac
 }
@@ -83,7 +80,6 @@ show_help() {
   echo "  --workspace=PATH   - 워크스페이스 경로 (필수)"
   echo "  --instance=NAME    - 인스턴스 이름 (다중 인스턴스 스케일링)"
   echo "  --web-port=PORT    - 웹 포트 (기본값: 환경별 다름)"
-  echo "  --redis-port=PORT  - Redis 포트 (기본값: 환경별 다름)"
   echo ""
   echo -e "${YELLOW}예시:${NC}"
   echo "  ./run.sh dev --workspace=/home/user/soulflow"
@@ -127,7 +123,7 @@ run_env() {
   export HOST_WORKSPACE="$WORKSPACE"
   export PROJECT_NAME="$project_name"
   export WEB_PORT="${WEB_PORT:-$DEFAULT_WEB_PORT}"
-  export REDIS_PORT="${REDIS_PORT:-$DEFAULT_REDIS_PORT}"
+
 
   # compose 실행
   local compose_args=("-f" "docker/docker-compose.yml")

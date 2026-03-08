@@ -15,7 +15,6 @@ $ErrorActionPreference = "Continue"
 # Named 파라미터 파싱
 $Workspace = $null
 $WebPort = $null
-$RedisPort = $null
 $Instance = $null
 
 for ($i = 0; $i -lt $Arguments.Count; $i++) {
@@ -30,16 +29,12 @@ for ($i = 0; $i -lt $Arguments.Count; $i++) {
     $Workspace = $val
   } elseif ($arg -match "^--(web-port|webport)=(.+)$") {
     $WebPort = $matches[2]
-  } elseif ($arg -match "^--(redis-port|redisport)=(.+)$") {
-    $RedisPort = $matches[2]
   } elseif ($arg -match "^--(instance|name)=(.+)$") {
     $Instance = $matches[2]
   } elseif ($arg -match "^--(workspace)$" -and $i + 1 -lt $Arguments.Count) {
     $i++; $Workspace = $Arguments[$i]
   } elseif ($arg -match "^--(web-port|webport)$" -and $i + 1 -lt $Arguments.Count) {
     $i++; $WebPort = $Arguments[$i]
-  } elseif ($arg -match "^--(redis-port|redisport)$" -and $i + 1 -lt $Arguments.Count) {
-    $i++; $RedisPort = $Arguments[$i]
   } elseif ($arg -match "^--(instance|name)$" -and $i + 1 -lt $Arguments.Count) {
     $i++; $Instance = $Arguments[$i]
   }
@@ -47,10 +42,10 @@ for ($i = 0; $i -lt $Arguments.Count; $i++) {
 
 # 환경별 프리셋 (docker-compose 환경변수만)
 $Presets = @{
-  dev     = @{ BUILD_TARGET="dev";        NODE_ENV="development"; DEBUG="true";  MEMORY="1G"; CPUS="2"; WEB_PORT="4200"; REDIS_PORT="6379" }
-  test    = @{ BUILD_TARGET="production"; NODE_ENV="test";        DEBUG="true";  MEMORY="1G"; CPUS="2"; WEB_PORT="4201"; REDIS_PORT="6380" }
-  staging = @{ BUILD_TARGET="production"; NODE_ENV="production";  DEBUG="false"; MEMORY="1G"; CPUS="2"; WEB_PORT="4202"; REDIS_PORT="6381" }
-  prod    = @{ BUILD_TARGET="full";       NODE_ENV="production";  DEBUG="false"; MEMORY="2G"; CPUS="4"; WEB_PORT="4200"; REDIS_PORT="6379" }
+  dev     = @{ BUILD_TARGET="dev";        NODE_ENV="development"; DEBUG="true";  MEMORY="1G"; CPUS="2"; WEB_PORT="4200" }
+  test    = @{ BUILD_TARGET="production"; NODE_ENV="test";        DEBUG="true";  MEMORY="1G"; CPUS="2"; WEB_PORT="4201" }
+  staging = @{ BUILD_TARGET="production"; NODE_ENV="production";  DEBUG="false"; MEMORY="1G"; CPUS="2"; WEB_PORT="4202" }
+  prod    = @{ BUILD_TARGET="full";       NODE_ENV="production";  DEBUG="false"; MEMORY="2G"; CPUS="4"; WEB_PORT="4200" }
 }
 
 function Write-Title {
@@ -87,7 +82,6 @@ function Show-Help {
   Write-Host "  --workspace=PATH   - 워크스페이스 경로 (필수)"
   Write-Host "  --instance=NAME    - 인스턴스 이름 (다중 인스턴스 스케일링)"
   Write-Host "  --web-port=PORT    - 웹 포트 (기본값: 환경별 다름)"
-  Write-Host "  --redis-port=PORT  - Redis 포트 (기본값: 환경별 다름)"
   Write-Host ""
   Write-Host "예시:" -ForegroundColor Yellow
   Write-Host "  .\run.ps1 dev --workspace=D:\soulflow"
@@ -140,7 +134,6 @@ function Start-Environment {
   $env:HOST_WORKSPACE = $Workspace
   $env:PROJECT_NAME = $projectName
   $env:WEB_PORT = if ($WebPort) { $WebPort } else { $p.WEB_PORT }
-  $env:REDIS_PORT = if ($RedisPort) { $RedisPort } else { $p.REDIS_PORT }
 
   # compose 실행
   $composeArgs = @("-f", "docker/docker-compose.yml")

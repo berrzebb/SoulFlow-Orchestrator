@@ -18,7 +18,6 @@ set "DOCKER_BUILDKIT=0"
 REM 파라미터 파싱
 set "WORKSPACE="
 set "WEB_PORT="
-set "REDIS_PORT="
 set "INSTANCE="
 
 set "COMMAND=%~1"
@@ -31,7 +30,6 @@ for %%a in (%*) do (
   if defined PREV_KEY (
     if "!PREV_KEY!"=="workspace" set "WORKSPACE=!arg!"
     if "!PREV_KEY!"=="web-port" set "WEB_PORT=!arg!"
-    if "!PREV_KEY!"=="redis-port" set "REDIS_PORT=!arg!"
     if "!PREV_KEY!"=="instance" set "INSTANCE=!arg!"
     set "PREV_KEY="
   ) else (
@@ -40,9 +38,6 @@ for %%a in (%*) do (
     if "!arg:~0,11!"=="--web-port=" set "WEB_PORT=!arg:~11!"
     if "!arg!"=="--web-port" set "PREV_KEY=web-port"
     if "!arg:~0,10!"=="--webport=" set "WEB_PORT=!arg:~10!"
-    if "!arg:~0,13!"=="--redis-port=" set "REDIS_PORT=!arg:~13!"
-    if "!arg!"=="--redis-port" set "PREV_KEY=redis-port"
-    if "!arg:~0,12!"=="--redisport=" set "REDIS_PORT=!arg:~12!"
     if "!arg:~0,11!"=="--instance=" set "INSTANCE=!arg:~11!"
     if "!arg!"=="--instance" set "PREV_KEY=instance"
     if "!arg:~0,7!"=="--name=" set "INSTANCE=!arg:~7!"
@@ -78,7 +73,6 @@ if /i "%COMMAND%"=="dev" (
   set "MEMORY=1G"
   set "CPUS=2"
   if "%WEB_PORT%"=="" set "WEB_PORT=4200"
-  if "%REDIS_PORT%"=="" set "REDIS_PORT=6379"
 )
 if /i "%COMMAND%"=="test" (
   set "BUILD_TARGET=production"
@@ -87,7 +81,6 @@ if /i "%COMMAND%"=="test" (
   set "MEMORY=1G"
   set "CPUS=2"
   if "%WEB_PORT%"=="" set "WEB_PORT=4201"
-  if "%REDIS_PORT%"=="" set "REDIS_PORT=6380"
 )
 if /i "%COMMAND%"=="staging" (
   set "BUILD_TARGET=production"
@@ -96,7 +89,6 @@ if /i "%COMMAND%"=="staging" (
   set "MEMORY=1G"
   set "CPUS=2"
   if "%WEB_PORT%"=="" set "WEB_PORT=4202"
-  if "%REDIS_PORT%"=="" set "REDIS_PORT=6381"
 )
 if /i "%COMMAND%"=="prod" (
   set "BUILD_TARGET=full"
@@ -105,7 +97,6 @@ if /i "%COMMAND%"=="prod" (
   set "MEMORY=2G"
   set "CPUS=4"
   if "%WEB_PORT%"=="" set "WEB_PORT=4200"
-  if "%REDIS_PORT%"=="" set "REDIS_PORT=6379"
 )
 
 REM 프로젝트명: soulflow-{profile}[-{instance}]
@@ -222,7 +213,6 @@ echo %YELLOW%옵션:%NC%
 echo   --workspace=PATH   - 워크스페이스 경로 (필수)
 echo   --instance=NAME    - 인스턴스 이름
 echo   --web-port=PORT    - 웹 포트
-echo   --redis-port=PORT  - Redis 포트
 echo.
 goto end
 
