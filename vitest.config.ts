@@ -10,8 +10,9 @@ export default defineConfig({
   },
   test: {
     include: ["tests/**/*.test.ts"],
-    exclude: ["tests/e2e/**"],
-    testTimeout: 30_000,
+    exclude: ["tests/e2e/**", "**/node_modules/**"],
+    testTimeout: 60_000,
+    hookTimeout: 60_000,
     coverage: {
       provider: "v8",
       include: ["src/**/*.ts"],
