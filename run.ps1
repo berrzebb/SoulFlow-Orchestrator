@@ -164,8 +164,13 @@ function Start-Environment {
     $env:BASE_PROFILE = $ProfileName
     $composeArgs += @("-f", "docker/docker-compose.instance.override.yml")
   }
-  $composeArgs += @("-p", $projectName, "up", "-d", "--build")
+  # 기존 컨테이너 정지 (포트 해제 보장)
+  $downArgs = $composeArgs + @("-p", $projectName, "down", "--remove-orphans")
+  docker compose @downArgs 2>$null
 
+  # watch=web: 이미지 빌드 없이 기존 이미지 사용
+  $composeArgs += @("-p", $projectName, "up", "-d")
+  if ($effectiveWatch -ne "web") { $composeArgs += "--build" }
   docker compose @composeArgs
 
   if ($LASTEXITCODE -eq 0) {
@@ -174,6 +179,17 @@ function Start-Environment {
     Write-Host "   프로젝트: $projectName" -ForegroundColor Green
     Write-Host "   웹 포트: $($env:WEB_PORT)" -ForegroundColor Green
     Write-Host ""
+
+    # watch=web: 호스트에서 vite build --watch 실행 (dist/web → 컨테이너 마운트)
+    if ($effectiveWatch -eq "web") {
+      if (-not (Test-Path "dist/web")) { New-Item -ItemType Directory -Path "dist/web" -Force | Out-Null }
+      Write-Host "👀 웹 소스 변경 감시 중... (Ctrl+C로 종료)" -ForegroundColor Cyan
+      Write-Host "   web/src 변경 → dist/web 자동 빌드 → 컨테이너 반영" -ForegroundColor Cyan
+      Write-Host ""
+      Push-Location web
+      try { npx vite build --watch }
+      finally { Pop-Location }
+    }
   } else {
     Write-Host ""
     Write-Host "환경 시작 실패" -ForegroundColor Red

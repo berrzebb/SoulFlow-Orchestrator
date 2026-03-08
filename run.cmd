@@ -138,7 +138,14 @@ if not "%INSTANCE%"=="" (
   set "BASE_PROFILE=%COMMAND%"
   set "COMPOSE_CMD=!COMPOSE_CMD! -f docker/docker-compose.instance.override.yml"
 )
-set "COMPOSE_CMD=!COMPOSE_CMD! -p !PROJECT_NAME! up -d --build"
+REM 기존 컨테이너 정지 (포트 해제 보장)
+!COMPOSE_CMD! -p !PROJECT_NAME! down --remove-orphans 2>nul
+REM watch=web: 이미지 빌드 없이 기존 이미지 사용
+if "!EFFECTIVE_WATCH!"=="web" (
+  set "COMPOSE_CMD=!COMPOSE_CMD! -p !PROJECT_NAME! up -d"
+) else (
+  set "COMPOSE_CMD=!COMPOSE_CMD! -p !PROJECT_NAME! up -d --build"
+)
 !COMPOSE_CMD!
 
 if !errorlevel! equ 0 (
@@ -146,6 +153,16 @@ if !errorlevel! equ 0 (
   echo %GREEN%✅ %COMMAND% 환경이 시작되었습니다!%NC%
   echo %GREEN%   프로젝트: !PROJECT_NAME!%NC%
   echo %GREEN%   웹 포트: !WEB_PORT!%NC%
+  if "!EFFECTIVE_WATCH!"=="web" (
+    if not exist "dist\web" mkdir "dist\web"
+    echo.
+    echo %YELLOW%👀 웹 소스 변경 감시 중... ^(Ctrl+C로 종료^)%NC%
+    echo %YELLOW%   web\src 변경 → dist\web 자동 빌드 → 컨테이너 반영%NC%
+    echo.
+    cd web
+    npx vite build --watch
+    cd ..
+  )
 ) else (
   echo.
   echo %RED%환경 시작 실패%NC%

@@ -151,14 +151,27 @@ run_env() {
     export BASE_PROFILE="$profile"
     compose_args+=("-f" "docker/docker-compose.instance.override.yml")
   fi
-  compose_args+=("-p" "$project_name" "up" "-d" "--build")
+  # 기존 컨테이너 정지 (포트 해제 보장)
+  docker compose "${compose_args[@]}" -p "$project_name" down --remove-orphans 2>/dev/null || true
 
+  # watch=web: 이미지 빌드 없이 기존 이미지 사용
+  compose_args+=("-p" "$project_name" "up" "-d")
+  [ "$effective_watch" != "web" ] && compose_args+=("--build")
   docker compose "${compose_args[@]}"
 
   echo -e "\n${GREEN}✅ $profile 환경이 시작되었습니다!${NC}"
   echo -e "${GREEN}   프로젝트: $project_name${NC}"
   echo -e "${GREEN}   웹 포트: $WEB_PORT${NC}"
   echo ""
+
+  # watch=web: 호스트에서 vite build --watch 실행 (dist/web → 컨테이너 마운트)
+  if [ "$effective_watch" = "web" ]; then
+    mkdir -p dist/web
+    echo -e "${YELLOW}👀 웹 소스 변경 감시 중... (Ctrl+C로 종료)${NC}"
+    echo -e "${YELLOW}   web/src 변경 → dist/web 자동 빌드 → 컨테이너 반영${NC}"
+    echo ""
+    cd web && npx vite build --watch
+  fi
 }
 
 agent_login() {

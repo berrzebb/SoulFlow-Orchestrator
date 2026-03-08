@@ -48,16 +48,20 @@ jobs:
       - name: Coverage summary
         if: always()
         run: |
-          node -e "
-            const s = require('./coverage/coverage-summary.json').total;
-            const fmt = (v) => v.pct.toFixed(1) + '%';
-            console.log('| Metric | Coverage |');
-            console.log('|--------|----------|');
-            console.log('| Lines | ' + fmt(s.lines) + ' |');
-            console.log('| Statements | ' + fmt(s.statements) + ' |');
-            console.log('| Functions | ' + fmt(s.functions) + ' |');
-            console.log('| Branches | ' + fmt(s.branches) + ' |');
-          " >> "$GITHUB_STEP_SUMMARY"
+          if [ -f ./coverage/coverage-summary.json ]; then
+            node -e "
+              const s = require('./coverage/coverage-summary.json').total;
+              const fmt = (v) => v.pct.toFixed(1) + '%';
+              console.log('| Metric | Coverage |');
+              console.log('|--------|----------|');
+              console.log('| Lines | ' + fmt(s.lines) + ' |');
+              console.log('| Statements | ' + fmt(s.statements) + ' |');
+              console.log('| Functions | ' + fmt(s.functions) + ' |');
+              console.log('| Branches | ' + fmt(s.branches) + ' |');
+            " >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "⚠️ Coverage report not generated (tests may have failed)" >> "$GITHUB_STEP_SUMMARY"
+          fi
 
   coverage-badge:
     name: Update Coverage Badge
