@@ -143,21 +143,21 @@ case "$COMMAND" in
     case "$AGENT" in
       claude)
         echo -e "\n${YELLOW}🔑 Claude 에이전트 로그인 중...${NC}"
-        echo -e "${GRAY}   인증 정보 저장: $AGENTS_DIR/claude${NC}"
-        mkdir -p "$AGENTS_DIR/claude"
-        docker run --rm -it -v "$AGENTS_DIR/claude:/root/.claude" soulflow-orchestrator claude login
+        echo -e "${GRAY}   인증 정보 저장: $AGENTS_DIR/.claude${NC}"
+        mkdir -p "$AGENTS_DIR/.claude"
+        docker run --rm -it -v "$AGENTS_DIR/.claude:/root/.claude" soulflow-orchestrator claude login
         ;;
       codex)
         echo -e "\n${YELLOW}🔑 Codex 에이전트 로그인 중...${NC}"
-        echo -e "${GRAY}   인증 정보 저장: $AGENTS_DIR/codex${NC}"
-        mkdir -p "$AGENTS_DIR/codex"
-        docker run --rm -it -p 1455:1456 -v "$AGENTS_DIR/codex:/root/.codex" -v "$(pwd)/scripts/oauth-relay.mjs:/tmp/relay.mjs:ro" soulflow-orchestrator bash -c "node /tmp/relay.mjs 1456 1455 & codex auth login"
+        echo -e "${GRAY}   인증 정보 저장: $AGENTS_DIR/.codex${NC}"
+        mkdir -p "$AGENTS_DIR/.codex"
+        docker run --rm -it -p 1455:1456 -v "$AGENTS_DIR/.codex:/root/.codex" -v "$(pwd)/scripts/oauth-relay.mjs:/tmp/relay.mjs:ro" soulflow-orchestrator bash -c "node /tmp/relay.mjs 1456 1455 & codex auth login"
         ;;
       gemini)
         echo -e "\n${YELLOW}🔑 Gemini 에이전트 로그인 중...${NC}"
-        echo -e "${GRAY}   인증 정보 저장: $AGENTS_DIR/gemini${NC}"
-        mkdir -p "$AGENTS_DIR/gemini"
-        docker run --rm -it -v "$AGENTS_DIR/gemini:/root/.gemini" soulflow-orchestrator gemini auth login
+        echo -e "${GRAY}   인증 정보 저장: $AGENTS_DIR/.gemini${NC}"
+        mkdir -p "$AGENTS_DIR/.gemini"
+        docker run --rm -it -v "$AGENTS_DIR/.gemini:/root/.gemini" soulflow-orchestrator gemini auth login
         ;;
       *)
         echo "알 수 없는 에이전트: $AGENT"

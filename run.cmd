@@ -226,19 +226,19 @@ if not exist "!AGENTS_DIR!" mkdir "!AGENTS_DIR!"
 
 if /i "%2"=="claude" (
   echo %YELLOW%🔑 Claude 에이전트 로그인 중...%RESET%
-  echo %YELLOW%   인증 정보 저장: !AGENTS_DIR!\claude%RESET%
-  if not exist "!AGENTS_DIR!\claude" mkdir "!AGENTS_DIR!\claude"
-  docker run --rm -it -v "!AGENTS_DIR!\claude:/root/.claude" soulflow-orchestrator claude login
+  echo %YELLOW%   인증 정보 저장: !AGENTS_DIR!\.claude%RESET%
+  if not exist "!AGENTS_DIR!\.claude" mkdir "!AGENTS_DIR!\.claude"
+  docker run --rm -it -v "!AGENTS_DIR!\.claude:/root/.claude" soulflow-orchestrator claude login
 ) else if /i "%2"=="codex" (
   echo %YELLOW%🔑 Codex 에이전트 로그인 중...%RESET%
-  echo %YELLOW%   인증 정보 저장: !AGENTS_DIR!\codex%RESET%
-  if not exist "!AGENTS_DIR!\codex" mkdir "!AGENTS_DIR!\codex"
-  docker run --rm -it -p 1455:1456 -v "!AGENTS_DIR!\codex:/root/.codex" -v "%cd%\scripts\oauth-relay.mjs:/tmp/relay.mjs:ro" soulflow-orchestrator bash -c "node /tmp/relay.mjs 1456 1455 & codex auth login"
+  echo %YELLOW%   인증 정보 저장: !AGENTS_DIR!\.codex%RESET%
+  if not exist "!AGENTS_DIR!\.codex" mkdir "!AGENTS_DIR!\.codex"
+  docker run --rm -it -p 1455:1456 -v "!AGENTS_DIR!\.codex:/root/.codex" -v "%cd%\scripts\oauth-relay.mjs:/tmp/relay.mjs:ro" soulflow-orchestrator bash -c "node /tmp/relay.mjs 1456 1455 & codex auth login"
 ) else if /i "%2"=="gemini" (
   echo %YELLOW%🔑 Gemini 에이전트 로그인 중...%RESET%
-  echo %YELLOW%   인증 정보 저장: !AGENTS_DIR!\gemini%RESET%
-  if not exist "!AGENTS_DIR!\gemini" mkdir "!AGENTS_DIR!\gemini"
-  docker run --rm -it -v "!AGENTS_DIR!\gemini:/root/.gemini" soulflow-orchestrator gemini auth login
+  echo %YELLOW%   인증 정보 저장: !AGENTS_DIR!\.gemini%RESET%
+  if not exist "!AGENTS_DIR!\.gemini" mkdir "!AGENTS_DIR!\.gemini"
+  docker run --rm -it -v "!AGENTS_DIR!\.gemini:/root/.gemini" soulflow-orchestrator gemini auth login
 ) else (
   echo %BLUE%❌ 알 수 없는 에이전트: %2%RESET%
   echo 사용법: run.cmd login [claude^|codex^|gemini]

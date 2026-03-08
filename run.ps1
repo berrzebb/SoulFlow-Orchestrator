@@ -169,22 +169,22 @@ function Start-AgentLogin {
   switch ($Agent.ToLower()) {
     "claude" {
       Write-Host "🔑 Claude 에이전트 로그인 중..." -ForegroundColor Yellow
-      Write-Host "   인증 정보 저장: $AgentsDir\claude" -ForegroundColor Gray
-      $claudeDir = "$AgentsDir\claude"
+      Write-Host "   인증 정보 저장: $AgentsDir\.claude" -ForegroundColor Gray
+      $claudeDir = "$AgentsDir\.claude"
       if (-not (Test-Path $claudeDir)) { New-Item -ItemType Directory -Path $claudeDir -Force | Out-Null }
       docker run --rm -it -v "$claudeDir`:/root/.claude" soulflow-orchestrator claude login
     }
     "codex" {
       Write-Host "🔑 Codex 에이전트 로그인 중..." -ForegroundColor Yellow
-      Write-Host "   인증 정보 저장: $AgentsDir\codex" -ForegroundColor Gray
-      $codexDir = "$AgentsDir\codex"
+      Write-Host "   인증 정보 저장: $AgentsDir\.codex" -ForegroundColor Gray
+      $codexDir = "$AgentsDir\.codex"
       if (-not (Test-Path $codexDir)) { New-Item -ItemType Directory -Path $codexDir -Force | Out-Null }
       docker run --rm -it -p 1455:1456 -v "$codexDir`:/root/.codex" -v "$(Get-Location)\scripts\oauth-relay.mjs:/tmp/relay.mjs:ro" soulflow-orchestrator bash -c "node /tmp/relay.mjs 1456 1455 & codex auth login"
     }
     "gemini" {
       Write-Host "🔑 Gemini 에이전트 로그인 중..." -ForegroundColor Yellow
-      Write-Host "   인증 정보 저장: $AgentsDir\gemini" -ForegroundColor Gray
-      $geminiDir = "$AgentsDir\gemini"
+      Write-Host "   인증 정보 저장: $AgentsDir\.gemini" -ForegroundColor Gray
+      $geminiDir = "$AgentsDir\.gemini"
       if (-not (Test-Path $geminiDir)) { New-Item -ItemType Directory -Path $geminiDir -Force | Out-Null }
       docker run --rm -it -v "$geminiDir`:/root/.gemini" soulflow-orchestrator gemini auth login
     }
