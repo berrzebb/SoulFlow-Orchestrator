@@ -54,9 +54,6 @@ COPY --from=build /build/dist/ dist/
 # 빌트인 스킬 (.md, .sh, .py)
 COPY src/skills/ src/skills/
 
-# 기본 워크플로우 템플릿 (WORKSPACE에 없으면 자동 시드)
-COPY workspace/workflows/ default-workflows/
-
 ENV WORKSPACE=/data
 ENV NODE_ENV=production
 
