@@ -118,7 +118,7 @@ export function InstanceModal({ mode, onClose, onSaved }: InstanceModalProps) {
 
       <div className="form-group">
         <FormLabel label={t("channels.label")} required />
-        <input className="form-input" value={label} onChange={(e) => setLabel(e.target.value)} placeholder={t("channels.label_placeholder")} required aria-required="true" />
+        <input autoFocus className="form-input" value={label} onChange={(e) => setLabel(e.target.value)} placeholder={t("channels.label_placeholder")} required aria-required="true" />
       </div>
 
       <div className="form-group form-group--row">
