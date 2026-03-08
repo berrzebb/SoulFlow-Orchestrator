@@ -5,7 +5,7 @@ function WebScrapeEditPanel({ node, update, t }: EditPanelProps) {
     <>
       <div className="builder-row">
         <label className="label">{t("workflows.scrape_url")}</label>
-        <input className="input" value={String(node.url || "")} onChange={(e) => update({ url: e.target.value })} placeholder="https://example.com/page" />
+        <input autoFocus className="input" value={String(node.url || "")} onChange={(e) => update({ url: e.target.value })} placeholder="https://example.com/page" />
       </div>
       <div className="builder-row-pair">
         <div className="builder-row">
