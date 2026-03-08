@@ -42,7 +42,7 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(function
           />
         ))}
 
-        {props.sending && props.last_is_user && !props.is_streaming && (
+        {props.sending && !props.is_streaming && (
           <div className="chat-msg chat-msg--assistant">
             <div className="chat-msg__avatar">{t("chat.avatar")}</div>
             <div className="chat-msg__body">

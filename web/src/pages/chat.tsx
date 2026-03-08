@@ -24,6 +24,8 @@ export default function ChatPage() {
   const [mirrorKey, setMirrorKey] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  /** 전송 후 어시스턴트가 응답 시작할 때까지의 대기 상태 */
+  const [waiting_response, setWaitingResponse] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -154,6 +156,7 @@ export default function ChatPage() {
   const send = async () => {
     if (!activeId || (!input.trim() && pending_media.length === 0) || sending) return;
     setSending(true);
+    setWaitingResponse(true);
     try {
       const body: Record<string, unknown> = { content: input.trim() };
       if (pending_media.length > 0) body.media = pending_media;
@@ -165,6 +168,7 @@ export default function ChatPage() {
       void qc.invalidateQueries({ queryKey: ["chat-session", activeId] });
     } catch {
       toast(t("chat.send_failed"), "err");
+      setWaitingResponse(false);
     } finally {
       setSending(false);
     }
@@ -173,11 +177,13 @@ export default function ChatPage() {
   const send_mirror = async () => {
     if (!mirrorKey || !input.trim() || sending) return;
     setSending(true);
+    setWaitingResponse(true);
     try {
       await api.post(`/api/chat/mirror/${encodeURIComponent(mirrorKey)}/messages`, { content: input.trim() });
       setInput("");
     } catch {
       toast(t("chat.send_failed"), "err");
+      setWaitingResponse(false);
     } finally {
       setSending(false);
     }
@@ -188,6 +194,13 @@ export default function ChatPage() {
     : activeSession?.messages ?? [];
   const stream_active = !is_mirror && web_stream?.chat_id === activeId && !!web_stream.content;
   const is_streaming = stream_active && !web_stream!.done;
+
+  // 스트리밍 시작 or 어시스턴트 메시지 도착 시 대기 상태 해제
+  useEffect(() => {
+    if (!waiting_response) return;
+    const last = raw_messages[raw_messages.length - 1];
+    if (is_streaming || last?.direction === "assistant") setWaitingResponse(false);
+  }, [raw_messages, is_streaming, waiting_response]);
 
   // done 후 refetch된 메시지가 도착하면 web_stream 정리
   useEffect(() => {
@@ -211,6 +224,8 @@ export default function ChatPage() {
   const last_is_user = last_msg?.direction === "user";
   const has_active = !!activeId || is_mirror;
   const can_send = !sending && (is_mirror ? !!input.trim() : (!!input.trim() || pending_media.length > 0));
+  /** sending + waiting_response: 전송~응답 시작 전까지 통합 로딩 상태 */
+  const is_busy = sending || waiting_response;
 
   return (
     <div className="chat-page">
@@ -274,7 +289,7 @@ export default function ChatPage() {
           <MessageList
             ref={messagesRef}
             messages={messages}
-            sending={sending}
+            sending={is_busy}
             last_is_user={last_is_user}
             is_streaming={is_streaming}
             pending_approvals={is_mirror ? [] : pending_approvals}
@@ -283,7 +298,7 @@ export default function ChatPage() {
           <ChatPromptBar
             input={input}
             setInput={setInput}
-            sending={sending}
+            sending={is_busy}
             is_streaming={is_streaming}
             can_send={can_send}
             onSend={() => void (is_mirror ? send_mirror() : send())}
