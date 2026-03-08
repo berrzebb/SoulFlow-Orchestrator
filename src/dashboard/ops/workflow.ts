@@ -157,6 +157,22 @@ export function create_workflow_ops(deps: {
   const { store, subagents, workspace, logger, skills_loader, on_workflow_event, bus, cron } = deps;
   let suggest_node_catalog_cache: string | null = null;
 
+  /** LLM 응답 텍스트에서 JSON 객체 추출. 마크다운 펜스·앞뒤 텍스트 무시. */
+  function extract_json_from_response(text: string): Record<string, unknown> | null {
+    // ```json ... ``` 또는 ``` ... ``` 블록 우선
+    const fenced = text.match(/```(?:json|yaml)?\s*\n?([\s\S]*?)```/);
+    if (fenced) {
+      try { return JSON.parse(fenced[1].trim()) as Record<string, unknown>; } catch { /* continue */ }
+    }
+    // 첫 { ~ 마지막 } 구간
+    const first = text.indexOf("{");
+    const last = text.lastIndexOf("}");
+    if (first >= 0 && last > first) {
+      try { return JSON.parse(text.slice(first, last + 1)) as Record<string, unknown>; } catch { /* continue */ }
+    }
+    return null;
+  }
+
   const pending_responses = deps.hitl_pending_store;
 
   function build_ask_user(workflow_id: string, target_channel: string, target_chat_id: string) {
@@ -794,34 +810,38 @@ export function create_workflow_ops(deps: {
 
           if (res.tool_calls.length === 0) {
             // tool loop를 지원하지 않는 프로바이더(CLI, 일부 Ollama)는 텍스트로 응답.
-            // 첫 turn에서만 single-shot JSON 폴백: 전체 워크플로우를 포함해 수정된 완전한 JSON 반환 요청.
-            if (turn === 0 && res.content) {
+            // single-shot JSON 폴백: 간결한 시스템 프롬프트로 완전한 수정 JSON 요청.
+            if (turn === 0) {
+              const fallback_system = [
+                "You are a workflow JSON editor.",
+                "Modify the workflow JSON according to the instruction and return the COMPLETE modified workflow.",
+                "Rules:",
+                "- Output ONLY the raw JSON object — no markdown fences, no explanation.",
+                "- Preserve all fields that are not mentioned in the instruction.",
+                "- Apply every change the instruction asks for.",
+              ].join("\n");
               const fallback_res = await deps.providers.run_orchestrator({
                 messages: [
-                  ...(system.trim() ? [{ role: "system" as const, content: system }] : []),
+                  { role: "system" as const, content: fallback_system },
                   {
                     role: "user" as const,
                     content: [
-                      `## Instruction\n${instruction}`,
-                      `## Current Workflow (JSON)\n\`\`\`json\n${JSON.stringify(wf, null, 2)}\n\`\`\``,
-                      "Return the complete modified workflow as a single JSON object. Output only the JSON — no explanation, no markdown fences.",
+                      `Instruction: ${instruction}`,
+                      `Current workflow:\n${JSON.stringify(wf, null, 2)}`,
                     ].join("\n\n"),
                   },
                 ],
                 provider_id: options?.provider_id as import("../../providers/types.js").ProviderId | undefined,
                 model: options?.model,
                 max_tokens: 8192,
-                temperature: 0.2,
+                temperature: 0.1,
                 abort_signal: loop_abort,
               });
-              const raw = String(fallback_res.content || "").trim()
-                .replace(/^```(?:json|yaml)?\s*\n?/, "").replace(/```\s*$/, "").trim();
-              try {
-                const patched = JSON.parse(raw) as Record<string, unknown>;
+              const patched = extract_json_from_response(String(fallback_res.content || ""));
+              if (patched) {
                 Object.assign(wf, patched);
-                // 전체 워크플로우를 단일 patch 이벤트로 전송
                 options?.on_patch?.("metadata", { title: wf.title, objective: wf.objective, variables: wf.variables });
-              } catch { /* JSON 파싱 실패 시 원본 반환 */ }
+              }
             }
             break;
           }
