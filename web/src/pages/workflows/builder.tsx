@@ -97,6 +97,8 @@ export default function WorkflowBuilderPage() {
   const [nodeRunResult, setNodeRunResult] = useState<{ id: string; mode: string; result?: Record<string, unknown>; error?: string; loading: boolean } | null>(null);
   /** 우측 인스펙터 패널 대상 노드. */
   const [inspectorNodeId, setInspectorNodeId] = useState<string | null>(null);
+  /** 저장 상태 시각화 (펄스 효과용). */
+  const [saveStatusPulse, setSaveStatusPulse] = useState<"success" | "error" | null>(null);
 
   // Ctrl+Z / Ctrl+Y 바인딩
   useEffect(() => {
@@ -280,6 +282,8 @@ export default function WorkflowBuilderPage() {
       api.put<{ ok: boolean; name: string }>(`/api/workflow/templates/${encodeURIComponent(data.name)}`, data.def),
     onSuccess: (result) => {
       toast(t("workflows.template_saved"), "ok");
+      setSaveStatusPulse("success");
+      setTimeout(() => setSaveStatusPulse(null), 2000);
       void qc.invalidateQueries({ queryKey: ["workflow-templates"] });
       // 단일 템플릿 캐시를 현재 데이터로 업데이트 — refetch로 인한 되돌림 방지
       const slug = result.name || templateName || workflow.title || "untitled";
@@ -292,6 +296,8 @@ export default function WorkflowBuilderPage() {
     onError: (err: any) => {
       const msg = err?.response?.data?.error?.message || t("workflows.save_failed");
       toast(msg, "err");
+      setSaveStatusPulse("error");
+      setTimeout(() => setSaveStatusPulse(null), 3000);
     },
   });
 
@@ -616,16 +622,27 @@ export default function WorkflowBuilderPage() {
             </svg>
             YAML
           </button>
-          <button className="btn btn--sm btn--accent" onClick={handleSave} disabled={saveMut.isPending} aria-busy={saveMut.isPending}>
-            {saveMut.isPending ? (
-              <span className="btn__spinner" />
-            ) : (
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z" /><polyline points="17 21 17 13 7 13 7 21" /><polyline points="7 3 7 8 15 8" />
-              </svg>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <button className="btn btn--sm btn--accent" onClick={handleSave} disabled={saveMut.isPending} aria-busy={saveMut.isPending}>
+              {saveMut.isPending ? (
+                <span className="btn__spinner" />
+              ) : (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z" /><polyline points="17 21 17 13 7 13 7 21" /><polyline points="7 3 7 8 15 8" />
+                </svg>
+              )}
+              {saveMut.isPending ? t("workflows.saving") : t("workflows.save_template")}
+            </button>
+            {saveStatusPulse && (
+              <span
+                className={`badge badge--${saveStatusPulse === "success" ? "ok" : "err"}`}
+                style={{ animation: "fade-pulse 2s ease-out" }}
+                aria-live="polite"
+              >
+                {saveStatusPulse === "success" ? "✓ " + t("workflows.saved") : "✗ " + t("workflows.save_error")}
+              </span>
             )}
-            {saveMut.isPending ? t("workflows.saving") : t("workflows.save_template")}
-          </button>
+          </div>
           <button className="btn btn--sm btn--ok" onClick={handleRun} disabled={runMut.isPending} aria-busy={runMut.isPending}>
             {runMut.isPending ? (
               <span className="btn__spinner" />
@@ -664,7 +681,18 @@ export default function WorkflowBuilderPage() {
               }}
               className="graph-layout__yaml-cm"
             />
-            {yamlError && <div className="yaml-error">{yamlError}</div>}
+            {yamlError && (
+              <div className="yaml-error-banner" role="alert">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={{ flexShrink: 0 }}>
+                  <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" strokeWidth="2" />
+                  <path d="M12 8v4M12 16h.01" strokeWidth="2" strokeLinecap="round" />
+                </svg>
+                <div>
+                  <strong>{t("workflows.yaml_error")}</strong>
+                  <p>{yamlError}</p>
+                </div>
+              </div>
+            )}
           </div>
           {/* YAML 패널 리사이즈 핸들 */}
           {yamlSideOpen && (

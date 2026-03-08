@@ -70,6 +70,12 @@
   50% { opacity: 0.5; }
 }
 
+/* 상태 배지 페이드 아웃 애니메이션 */
+@keyframes fade-pulse {
+  0% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
 /* ===== Sidebar ===== */
 .sidebar {
   width: 200px;
@@ -1790,9 +1796,10 @@ a:focus-visible > .stat-card {
 
   .section-header { flex-wrap: wrap; gap: var(--sp-2); }
 
-  .btn { padding: var(--sp-2) var(--sp-3); font-size: var(--fs-sm); min-height: 40px; }
-  .btn--sm { padding: var(--sp-2) var(--sp-2); min-height: 36px; }
-  .btn--xs { padding: var(--sp-1) var(--sp-2); font-size: var(--fs-xs); min-height: 32px; }
+  /* 모바일: WCAG 권장 터치 타겟 최소 크기 44px */
+  .btn { padding: var(--sp-2) var(--sp-3); font-size: var(--fs-sm); min-height: 44px; }
+  .btn--sm { padding: var(--sp-2) var(--sp-2); min-height: 44px; }
+  .btn--xs { padding: var(--sp-1) var(--sp-2); font-size: var(--fs-xs); min-height: 44px; }
   .tool-grid { grid-template-columns: 1fr; }
   .stat-grid--narrow { grid-template-columns: 1fr; }
 }
@@ -1844,7 +1851,7 @@ a:focus-visible > .stat-card {
   }
   .ws-tab { padding: 10px 14px; font-size: var(--fs-xs); }
   .ws-item { padding: 12px 14px; min-height: 44px; }
-  .filter-btn { min-height: 36px; }
+  .filter-btn { min-height: 44px; }
   .ws-chip-row { gap: var(--sp-2); }
   .ws-chip-row .chip { min-height: 28px; }
 }
@@ -2591,6 +2598,35 @@ a:focus-visible > .stat-card {
 
 .code-textarea { font-family: var(--mono, 'Fira Code', 'Cascadia Code', monospace); font-size: var(--fs-xs); line-height: 1.6; min-height: 120px; resize: vertical; tab-size: 2; }
 .yaml-error { color: var(--err); font-size: var(--fs-xs); margin-top: var(--sp-1); }
+
+/* YAML 에러 배너 — 명확한 에러 표시 */
+.yaml-error-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  padding: var(--sp-2);
+  margin-top: var(--sp-2);
+  background: color-mix(in srgb, var(--err) 8%, transparent);
+  border-left: 3px solid var(--err);
+  border-radius: var(--br-sm);
+  color: var(--err);
+  font-size: var(--fs-sm);
+}
+
+.yaml-error-banner strong {
+  display: block;
+  font-weight: 600;
+  margin-bottom: var(--sp-1);
+}
+
+.yaml-error-banner p {
+  margin: 0;
+  word-break: break-word;
+  white-space: pre-wrap;
+  font-family: monospace;
+  font-size: var(--fs-xs);
+  opacity: 0.9;
+}
 
 .builder-row { display: flex; flex-direction: column; gap: 4px; flex: 1; }
 .builder-row--conditional {
