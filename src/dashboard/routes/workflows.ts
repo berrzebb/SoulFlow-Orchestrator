@@ -2,6 +2,7 @@
 
 import type { RouteHandler } from "../route-context.js";
 import type { DashboardWorkflowOps } from "../service.js";
+import { set_no_cache } from "../route-context.js";
 
 export const handle_workflow: RouteHandler = async (ctx) => {
   const { req, res, url, json, read_body, options } = ctx;
@@ -135,7 +136,7 @@ export const handle_workflow: RouteHandler = async (ctx) => {
     }
   }
 
-  // POST /api/workflow/suggest — LLM 기반 워크플로우 편집 제안
+  // POST /api/workflow/suggest — LLM 기반 워크플로우 편집 제안 (단발 응답)
   if (path === "/api/workflow/suggest" && method === "POST") {
     if (!ops.suggest) { json(res, 501, { error: "not_implemented" }); return true; }
     const body = await read_body(req);
@@ -144,8 +145,42 @@ export const handle_workflow: RouteHandler = async (ctx) => {
     const result = await ops.suggest(body.instruction, body.workflow as Record<string, unknown>, {
       provider_id: typeof body.provider_instance_id === "string" ? body.provider_instance_id : undefined,
       model: typeof body.model === "string" ? body.model : undefined,
+      save: body.save === true,
     });
     json(res, result.ok ? 200 : 400, result);
+    return true;
+  }
+
+  // POST /api/workflow/suggest/stream — SSE 스트리밍 (patch 이벤트 실시간 전달)
+  if (path === "/api/workflow/suggest/stream" && method === "POST") {
+    if (!ops.suggest) { json(res, 501, { error: "not_implemented" }); return true; }
+    const body = await read_body(req);
+    if (!body?.instruction || typeof body.instruction !== "string") { json(res, 400, { error: "instruction_required" }); return true; }
+    if (!body.workflow || typeof body.workflow !== "object") { json(res, 400, { error: "workflow_required" }); return true; }
+
+    set_no_cache(res);
+    res.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Connection": "keep-alive",
+    });
+
+    const send_event = (event: string, data: unknown) => {
+      if (!res.destroyed) res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    };
+
+    try {
+      const result = await ops.suggest(body.instruction, body.workflow as Record<string, unknown>, {
+        provider_id: typeof body.provider_instance_id === "string" ? body.provider_instance_id : undefined,
+        model: typeof body.model === "string" ? body.model : undefined,
+        save: body.save === true,
+        on_patch: (patch_path, section) => send_event("patch", { path: patch_path, section }),
+      });
+      send_event(result.ok ? "done" : "error", result);
+    } catch (err) {
+      send_event("error", { ok: false, error: String(err) });
+    }
+
+    if (!res.destroyed) res.end();
     return true;
   }
 

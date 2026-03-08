@@ -134,12 +134,14 @@ export async function createRuntime(): Promise<RuntimeApp> {
   });
 
   // WorkflowOps는 대시보드 + WorkflowTool 양쪽에서 사용
+  const trigger_sync_args = { workspace, app_config, bus, orchestration, cron, webhook_store, kanban_store, primary_provider, default_chat_id, logger };
   const { workflow_ops: workflow_ops_result } = await create_workflow_ops_bundle({
     workspace, agent, agent_runtime: agent_runtime, bus, providers, provider_store, decisions,
     phase_workflow_store, kanban_store, kanban_tool, kanban_automation,
     hitl_pending_store, persona_renderer, broadcaster, channel_manager,
     embed_service, vector_store_service, webhook_store, query_db_service,
-    oauth_fetch_service, create_task_fn, logger, tool_index,
+    oauth_fetch_service, create_task_fn, logger, tool_index, cron,
+    on_template_changed: () => run_trigger_sync(trigger_sync_args),
   });
 
   await register_late_commands({ command_router, workflow_ops_result, orchestrator_llm_runtime });
@@ -180,10 +182,7 @@ export async function createRuntime(): Promise<RuntimeApp> {
 
   await services.start();
 
-  await run_trigger_sync({
-    workspace, app_config, bus, orchestration, cron,
-    webhook_store, kanban_store, primary_provider, default_chat_id, logger,
-  });
+  await run_trigger_sync(trigger_sync_args);
 
   const { session_prune_timer } = run_post_boot({
     instance_store, primary_provider,

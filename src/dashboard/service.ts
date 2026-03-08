@@ -319,8 +319,8 @@ export interface DashboardWorkflowOps {
   run_single_node?(node: Record<string, unknown>, input_memory: Record<string, unknown>): Promise<{ ok: boolean; output?: unknown; duration_ms?: number; error?: string }>;
   /** 단일 노드 테스트 (Dry-run). */
   test_single_node?(node: Record<string, unknown>, input_memory: Record<string, unknown>): { ok: boolean; preview?: unknown; warnings?: string[] };
-  /** 자연어 instruction으로 워크플로우 수정 제안. */
-  suggest?(instruction: string, workflow: Record<string, unknown>, options?: { provider_id?: string; model?: string }): Promise<{ ok: boolean; workflow?: Record<string, unknown>; error?: string }>;
+  /** 자연어 instruction으로 워크플로우 수정 제안. save:true 시 완료 후 템플릿으로 저장. */
+  suggest?(instruction: string, workflow: Record<string, unknown>, options?: { provider_id?: string; model?: string; save?: boolean; on_patch?: (path: string, section: Record<string, unknown> | unknown[]) => void }): Promise<{ ok: boolean; workflow?: Record<string, unknown>; name?: string; error?: string }>;
 }
 
 export interface DashboardCliAuthOps {
@@ -525,6 +525,7 @@ export class DashboardService implements ServiceLike {
     this.route_map.set("/api/tasks", handle_task);
     this.route_map.set("/api/secrets", handle_secret);
     this.route_map.set("/api/config", handle_config);
+    this.route_map.set("/api/locale", handle_config);
     this.route_map.set("/api/skills", handle_skill);
     this.route_map.set("/api/tools", handle_health);
     this.route_map.set("/api/templates", handle_template);
@@ -543,6 +544,7 @@ export class DashboardService implements ServiceLike {
     this.route_map.set("/api/workflow/roles", handle_workflow);
     this.route_map.set("/api/workflow/templates", handle_workflow);
     this.route_map.set("/api/workflow/suggest", handle_workflow);
+    this.route_map.set("/api/workflow/suggest/stream", handle_workflow);
     this.route_map.set("/api/workflow/node", handle_workflow_node);
     this.route_map.set("/api/kanban", handle_kanban);
     this.route_map.set("/api/references", handle_references);

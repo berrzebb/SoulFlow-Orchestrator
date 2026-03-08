@@ -38,12 +38,29 @@ export function GlobalSettingsSection() {
     return undefined;
   };
 
-  const save = (path: string, value: unknown) =>
-    run_action(
-      () => api.put("/api/config/values", { path, value }).then(() => { void qc.invalidateQueries({ queryKey: ["config"] }); }),
+  const save = (path: string, value: unknown) => {
+    // 즉시 캐시 업데이트 — 서버 응답 전 UI 반영
+    qc.setQueryData<ConfigResponse>(["config"], (old) => {
+      if (!old) return old;
+      return {
+        ...old,
+        sections: old.sections.map((sec) => ({
+          ...sec,
+          fields: sec.fields.map((f) => (f.path === path ? { ...f, value } : f)),
+        })),
+      };
+    });
+    return run_action(
+      async () => {
+        await api.put("/api/config/values", { path, value });
+        void qc.invalidateQueries({ queryKey: ["config"] });
+      },
       undefined,
       t("channels.toggle_failed"),
-    );
+    ).catch(() => {
+      void qc.invalidateQueries({ queryKey: ["config"] }); // 실패 시 서버 값으로 복원
+    });
+  };
 
   const commit_edit = (key: string, type: FieldType) => {
     if (!editing || editing.key !== key) return;

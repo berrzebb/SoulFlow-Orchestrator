@@ -20,6 +20,7 @@ import type { MutableBroadcaster } from "../dashboard/broadcaster.js";
 import type { create_logger } from "../logger.js";
 import type { EmbedServiceFn } from "./agent-core.js";
 import type { ToolIndex } from "../orchestration/tool-index.js";
+import type { CronService } from "../cron/index.js";
 import { create_workflow_ops } from "../dashboard/ops-factory.js";
 import { make_wait_kanban_event } from "./orchestration.js";
 
@@ -50,6 +51,9 @@ export interface WorkflowOpsBundleDeps {
   create_task_fn: ReturnType<typeof import("../services/create-task.service.js").create_task_service>;
   logger: ReturnType<typeof create_logger>;
   tool_index?: ToolIndex | null;
+  cron?: CronService;
+  /** 템플릿 저장/삭제 후 트리거 재동기화 콜백. */
+  on_template_changed?: () => Promise<void>;
 }
 
 export interface WorkflowOpsBundleResult {
@@ -62,13 +66,13 @@ export async function create_workflow_ops_bundle(deps: WorkflowOpsBundleDeps): P
     phase_workflow_store, kanban_store, kanban_tool, kanban_automation,
     hitl_pending_store, persona_renderer, broadcaster, channel_manager,
     embed_service, vector_store_service, webhook_store, query_db_service,
-    oauth_fetch_service, create_task_fn, logger, tool_index,
+    oauth_fetch_service, create_task_fn, logger, tool_index, cron, on_template_changed,
   } = deps;
 
   const workflow_ops = create_workflow_ops({
     hitl_pending_store, renderer: persona_renderer,
     store: phase_workflow_store, subagents: agent.subagents, workspace, logger, bus,
-    skills_loader: agent.context.skills_loader, tool_index,
+    skills_loader: agent.context.skills_loader, tool_index, cron, on_template_changed,
     on_workflow_event: (e) => broadcaster.broadcast_workflow_event(e),
     invoke_tool: (tool_id, params, ctx) => agent.tools.execute(tool_id, params, ctx ? { channel: ctx.channel, chat_id: ctx.chat_id, sender_id: ctx.sender_id, task_id: ctx.workflow_id } : undefined),
     providers,

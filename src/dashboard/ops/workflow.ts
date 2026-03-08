@@ -4,7 +4,7 @@ import type { PhaseWorkflowStoreLike } from "../../agent/phase-workflow-store.js
 import type { SubagentRegistry } from "../../agent/subagents.js";
 import type { SkillsLoader } from "../../agent/skills.service.js";
 import type { DashboardWorkflowOps } from "../service.js";
-import type { PhaseLoopRunOptions, ChannelSendRequest, ChannelResponse } from "../../agent/phase-loop.types.js";
+import type { PhaseLoopRunOptions, ChannelSendRequest, ChannelResponse, WorkflowDefinition } from "../../agent/phase-loop.types.js";
 import {
   load_workflow_templates, load_workflow_template,
   substitute_variables, save_workflow_template,
@@ -151,6 +151,8 @@ export function create_workflow_ops(deps: {
   on_kanban_trigger_waiting?: (workflow_id: string) => void;
   hitl_pending_store: import("../../orchestration/hitl-pending-store.js").HitlPendingStore;
   renderer?: import("../../channels/persona-message-renderer.js").PersonaMessageRendererLike | null;
+  /** 템플릿 저장/삭제 후 트리거 재동기화 콜백. */
+  on_template_changed?: () => Promise<void>;
 }): DashboardWorkflowOps & { hitl_bridge: import("../../channels/manager.js").WorkflowHitlBridge } {
   const { store, subagents, workspace, logger, skills_loader, on_workflow_event, bus, cron } = deps;
   let suggest_node_catalog_cache: string | null = null;
@@ -372,19 +374,25 @@ export function create_workflow_ops(deps: {
 
     save_template(name, definition) {
       const slug = save_workflow_template(workspace, name, definition);
-      if (cron && definition.trigger?.type === "cron" && definition.trigger.schedule) {
+      // trigger_nodes 또는 레거시 trigger 필드 중 하나라도 cron이 있으면 즉시 등록
+      const cron_trigger = definition.trigger_nodes?.find((t) => t.trigger_type === "cron" && t.schedule)
+        ?? (definition.trigger?.type === "cron" && definition.trigger.schedule ? definition.trigger : null);
+      if (cron && cron_trigger) {
         const cron_name = `workflow:${slug}`;
+        const schedule = "schedule" in cron_trigger ? cron_trigger.schedule! : definition.trigger!.schedule;
+        const timezone = "timezone" in cron_trigger ? (cron_trigger.timezone ?? null) : (definition.trigger!.timezone ?? null);
         cron.list_jobs(true).then((jobs) => {
           const existing = jobs.find((j) => j.name === cron_name);
           if (existing) return cron.remove_job(existing.id);
         }).then(() =>
           cron.add_job(cron_name, {
-            kind: "cron", expr: definition.trigger!.schedule,
-            tz: definition.trigger!.timezone ?? null,
-            at_ms: null, every_ms: null,
+            kind: "cron", expr: schedule,
+            tz: timezone, at_ms: null, every_ms: null,
           }, `workflow_trigger:${slug}`, false, null, null, false),
         ).catch((e) => logger.warn("workflow_cron_register_failed", { slug, error: String(e) }));
       }
+      // 전체 트리거 재동기화 (webhook/channel_message/kanban 포함)
+      void deps.on_template_changed?.().catch((e) => logger.warn("trigger_resync_failed", { error: String(e) }));
       return slug;
     },
 
@@ -397,6 +405,7 @@ export function create_workflow_ops(deps: {
           if (existing) return cron.remove_job(existing.id);
         }).catch((e) => logger.warn("workflow_cron_unregister_failed", { name, error: String(e) }));
       }
+      if (removed) void deps.on_template_changed?.().catch((e) => logger.warn("trigger_resync_failed", { error: String(e) }));
       return removed;
     },
 
@@ -596,10 +605,12 @@ export function create_workflow_ops(deps: {
             if (parsed.title     !== undefined) wf.title     = parsed.title;
             if (parsed.objective !== undefined) wf.objective = parsed.objective;
             if (parsed.variables !== undefined) wf.variables = parsed.variables;
+            options?.on_patch?.(path, { title: wf.title, objective: wf.objective, variables: wf.variables });
             return "ok";
           }
           if (path === "field_mappings") {
             wf.field_mappings = parsed;
+            options?.on_patch?.(path, wf.field_mappings as unknown[]);
             return "ok";
           }
           const colon = path.indexOf(":");
@@ -616,6 +627,7 @@ export function create_workflow_ops(deps: {
             arr[idx] = { ...arr[idx], ...parsed };
           }
           wf[m.arr] = arr;
+          options?.on_patch?.(path, arr[idx < 0 ? arr.length - 1 : idx]);
           return "ok";
         }
 
@@ -747,13 +759,17 @@ export function create_workflow_ops(deps: {
           suggest_node_catalog_cache,
         ].filter(Boolean).join("\n");
 
-        // ── Tool-call 루프 (최대 10 turn) ────────────────────────────────
+        // ── Tool-call 루프 (최대 10 turn, 전체 110초 제한) ──────────────
+        // 프론트엔드 30초 타임아웃보다 넉넉하게 110초로 설정.
+        // 타임아웃 도달 시 현재까지 패치된 wf를 그대로 반환.
         const MAX_TURNS = 10;
+        const loop_abort = AbortSignal.timeout(110_000);
         const messages: import("../../providers/types.js").ChatMessage[] = [];
         if (system.trim()) messages.push({ role: "system", content: system });
         messages.push({ role: "user", content: `## Instruction\n${instruction}` });
 
         for (let turn = 0; turn < MAX_TURNS; turn++) {
+          if (loop_abort.aborted) break;
           const res = await deps.providers.run_orchestrator({
             messages,
             tools: SUGGEST_TOOLS,
@@ -761,6 +777,7 @@ export function create_workflow_ops(deps: {
             model: options?.model,
             max_tokens: 4096,
             temperature: 0.2,
+            abort_signal: loop_abort,
           });
 
           messages.push({
@@ -774,7 +791,39 @@ export function create_workflow_ops(deps: {
               : undefined,
           });
 
-          if (res.tool_calls.length === 0) break;
+          if (res.tool_calls.length === 0) {
+            // tool loop를 지원하지 않는 프로바이더(CLI, 일부 Ollama)는 텍스트로 응답.
+            // 첫 turn에서만 single-shot JSON 폴백: 전체 워크플로우를 포함해 수정된 완전한 JSON 반환 요청.
+            if (turn === 0 && res.content) {
+              const fallback_res = await deps.providers.run_orchestrator({
+                messages: [
+                  ...(system.trim() ? [{ role: "system" as const, content: system }] : []),
+                  {
+                    role: "user" as const,
+                    content: [
+                      `## Instruction\n${instruction}`,
+                      `## Current Workflow (JSON)\n\`\`\`json\n${JSON.stringify(wf, null, 2)}\n\`\`\``,
+                      "Return the complete modified workflow as a single JSON object. Output only the JSON — no explanation, no markdown fences.",
+                    ].join("\n\n"),
+                  },
+                ],
+                provider_id: options?.provider_id as import("../../providers/types.js").ProviderId | undefined,
+                model: options?.model,
+                max_tokens: 8192,
+                temperature: 0.2,
+                abort_signal: loop_abort,
+              });
+              const raw = String(fallback_res.content || "").trim()
+                .replace(/^```(?:json|yaml)?\s*\n?/, "").replace(/```\s*$/, "").trim();
+              try {
+                const patched = JSON.parse(raw) as Record<string, unknown>;
+                Object.assign(wf, patched);
+                // 전체 워크플로우를 단일 patch 이벤트로 전송
+                options?.on_patch?.("metadata", { title: wf.title, objective: wf.objective, variables: wf.variables });
+              } catch { /* JSON 파싱 실패 시 원본 반환 */ }
+            }
+            break;
+          }
 
           let is_done = false;
           for (const tc of res.tool_calls) {
@@ -800,6 +849,11 @@ export function create_workflow_ops(deps: {
           if (is_done) break;
         }
 
+        if (options?.save && workspace) {
+          const title = typeof wf.title === "string" && wf.title.trim() ? wf.title.trim() : "untitled";
+          const slug = save_workflow_template(workspace, title, wf as unknown as WorkflowDefinition);
+          return { ok: true, workflow: wf, name: slug };
+        }
         return { ok: true, workflow: wf };
       } catch (err) {
         return { ok: false, error: String(err) };
