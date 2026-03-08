@@ -350,6 +350,15 @@ export async function run_phase_loop(
         continue;
       }
 
+      // resume 시: 에이전트가 모두 completed이면 phase를 completed로 복구하고 스킵
+      if (is_resume && phase_state.agents.length > 0 && phase_state.agents.every((a) => a.status === "completed")) {
+        phase_state.status = "completed";
+        state.updated_at = now_iso();
+        await store.upsert(state);
+        node_idx++;
+        continue;
+      }
+
       // 이전 Phase 결과를 컨텍스트로 구성
       const prev_phase_idx = phase_idx > 0 ? phase_idx - 1 : -1;
       const prev_context = prev_phase_idx >= 0 ? build_phase_context(state.phases[prev_phase_idx]!, phase_def.context_template) : "";
