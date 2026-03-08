@@ -1861,6 +1861,7 @@
   "workflows.cache_ttl_hint": "Cache lifetime in milliseconds (300000 = 5 min)",
   "workflows.cancel": "Cancel",
   "workflows.cancel_confirm_desc": "Are you sure you want to cancel this running workflow? This cannot be undone.",
+  "workflows.cancel_confirm_ok": "Cancel Workflow",
   "workflows.cancel_confirm_title": "Cancel Workflow",
   "workflows.cancel_failed": "Failed to cancel workflow",
   "workflows.cancelled": "Cancelled",

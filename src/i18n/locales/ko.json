@@ -1861,6 +1861,7 @@
   "workflows.cache_ttl_hint": "캐시 유효 시간 (밀리초, 300000 = 5분)",
   "workflows.cancel": "취소",
   "workflows.cancel_confirm_desc": "실행 중인 워크플로우를 취소하시겠습니까? 이 작업은 되돌릴 수 없습니다.",
+  "workflows.cancel_confirm_ok": "취소하기",
   "workflows.cancel_confirm_title": "워크플로우 취소",
   "workflows.cancel_failed": "워크플로우 취소 실패",
   "workflows.cancelled": "취소됨",

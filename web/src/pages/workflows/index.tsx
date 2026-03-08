@@ -330,7 +330,7 @@ export default function WorkflowsPage() {
         message={t("workflows.cancel_confirm_desc")}
         onClose={() => setCancelTarget(null)}
         onConfirm={() => cancelTarget && cancelMut.mutate(cancelTarget)}
-        confirmLabel={t("workflows.cancel")}
+        confirmLabel={t("workflows.cancel_confirm_ok")}
       />
 
       {/* Running 탭 */}
