@@ -4,7 +4,7 @@
  * 인메모리 SQLite DB를 사용. 전역 singleton 금지 (주입형).
  */
 
-import { with_sqlite } from "../utils/sqlite-helper.js";
+import Database from "better-sqlite3";
 import type { SkillMetadata } from "../agent/skills.types.js";
 import { extract_intents, extract_file_extensions, extract_code_hints } from "./intent-patterns.js";
 
@@ -34,7 +34,6 @@ export class SkillIndex {
   private readonly db: import("better-sqlite3").Database;
 
   constructor() {
-    const Database = require("better-sqlite3");
     this.db = new Database(this.db_path);
     this._init_schema();
   }

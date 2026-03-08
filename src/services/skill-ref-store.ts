@@ -7,7 +7,7 @@
  */
 
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
 import { join, extname, basename } from "node:path";
 import Database from "better-sqlite3";
 import * as sqliteVec from "sqlite-vec";
@@ -193,7 +193,7 @@ export class SkillRefStore implements ReferenceStoreLike {
             const qvec = normalize_vec(embeddings[0]!);
             const qbuf = new Float32Array(qvec);
 
-            let vec_sql = `SELECT v.rowid, v.distance FROM skill_ref_chunks_vec v WHERE v.embedding MATCH ? AND k = ? ORDER BY v.distance`;
+            const vec_sql = `SELECT v.rowid, v.distance FROM skill_ref_chunks_vec v WHERE v.embedding MATCH ? AND k = ? ORDER BY v.distance`;
             const vec_rows = db.prepare(vec_sql).all(qbuf, limit * 2) as { rowid: number; distance: number }[];
 
             if (vec_rows.length > 0) {

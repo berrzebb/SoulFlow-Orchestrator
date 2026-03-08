@@ -124,7 +124,7 @@ export async function execute_dispatch(
       const skills_loader = deps.runtime.get_context_builder()?.skills_loader;
       const skill_metas = skill_names
         .map((n) => skills_loader?.get_skill_metadata(n))
-        .filter((m): m is NonNullable<typeof m> => m != null);
+        .filter((m): m is NonNullable<typeof m> => m !== null && m !== undefined);
       const check = generate_completion_checks(result.tools_used ?? [], skill_metas, result.tool_calls_count);
       if (check.has_checks) {
         const follow_up = format_follow_up(check.questions);

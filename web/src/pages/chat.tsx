@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState, useRef, useEffect, useReducer, useMemo } from "react";
+import { useState, useRef, useEffect, useReducer } from "react";
 import { api } from "../api/client";
 import { Badge } from "../components/badge";
 import { DeleteConfirmModal } from "../components/modal";
@@ -35,6 +35,8 @@ export default function ChatPage() {
   const [selectedModel, setSelectedModel] = useState("");
   const messagesRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  /** 전송 시점의 메시지 수 스냅샷 — 렌더 타임 waiting_response 리셋 오판 방지 */
+  const [sent_msg_count, setSentMsgCount] = useState(0);
   const web_stream = useDashboardStore((s) => s.web_stream);
   const set_web_stream = useDashboardStore((s) => s.set_web_stream);
   const mirror_event = useDashboardStore((s) => s.mirror_event);
@@ -141,6 +143,7 @@ export default function ChatPage() {
 
   const send = async () => {
     if (!activeId || (!input.trim() && pending_media.length === 0) || sending) return;
+    setSentMsgCount(raw_messages.length);
     setSending(true);
     setWaitingResponse(true);
     try {
@@ -162,6 +165,7 @@ export default function ChatPage() {
 
   const send_mirror = async () => {
     if (!mirrorKey || !input.trim() || sending) return;
+    setSentMsgCount(raw_messages.length);
     setSending(true);
     setWaitingResponse(true);
     try {
@@ -175,26 +179,31 @@ export default function ChatPage() {
     }
   };
 
-  const raw_messages = useMemo(
-    () => is_mirror
-      ? [...(mirrorSession?.messages ?? []), ...mirrorLiveMessages]
-      : activeSession?.messages ?? [],
-    [is_mirror, mirrorSession?.messages, mirrorLiveMessages, activeSession?.messages],
-  );
+  // React Compiler가 최적화 관리 — optional chain deps로 useMemo 수동 지정 불가
+  const raw_messages = is_mirror
+    ? [...(mirrorSession?.messages ?? []), ...mirrorLiveMessages]
+    : activeSession?.messages ?? [];
   const stream_active = !is_mirror && web_stream?.chat_id === activeId && !!web_stream.content;
   const is_streaming = stream_active && !web_stream!.done;
 
-  // 스트리밍 시작 or 어시스턴트 메시지 도착 시 대기 상태 해제 (렌더 타임 파생)
-  if (waiting_response && (is_streaming || raw_messages[raw_messages.length - 1]?.direction === "assistant")) {
+  // 스트리밍 시작 or 전송 이후 새로 도착한 assistant 메시지 시 대기 상태 해제
+  // sent_msg_count_ref로 전송 시점의 스냅샷과 비교 — 이전 대화의 assistant 메시지로 오판 방지
+  const new_assistant_arrived =
+    raw_messages.length > sent_msg_count &&
+    raw_messages[raw_messages.length - 1]?.direction === "assistant";
+  if (waiting_response && (is_streaming || new_assistant_arrived)) {
     setWaitingResponse(false);
   }
 
   // done 후 refetch된 메시지가 도착하면 web_stream 정리
   useEffect(() => {
     if (!web_stream?.done || web_stream.chat_id !== activeId) return;
-    const last = raw_messages[raw_messages.length - 1];
+    const msgs = is_mirror
+      ? [...(mirrorSession?.messages ?? []), ...mirrorLiveMessages]
+      : activeSession?.messages ?? [];
+    const last = msgs[msgs.length - 1];
     if (last?.direction === "assistant") set_web_stream(null);
-  }, [raw_messages, web_stream, activeId, set_web_stream]);
+  }, [is_mirror, mirrorSession?.messages, mirrorLiveMessages, activeSession?.messages, web_stream, activeId, set_web_stream]);
 
   // 스트리밍 콘텐츠를 가상 메시지로 합쳐서 연속적 버블링
   const messages = (() => {
