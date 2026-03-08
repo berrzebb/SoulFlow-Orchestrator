@@ -8,7 +8,7 @@ function MediaEditPanel({ node, update, t }: EditPanelProps) {
     <>
       <div className="builder-row">
         <label className="label">{t("workflows.operation")}</label>
-        <select className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
+        <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
           {OPERATIONS.map((o) => <option key={o} value={o}>{t(`node.media.op.${o}`)}</option>)}
         </select>
       </div>

@@ -7,7 +7,7 @@ function NotifyEditPanel({ node, update, t, options }: EditPanelProps) {
     <>
       <div className="builder-row">
         <label className="label">{t("workflows.notify_content")}</label>
-        <textarea className="input" rows={3} value={String(node.content || "")} onChange={(e) => update({ content: e.target.value })} placeholder={t("workflows.notify_content_hint")} />
+        <textarea autoFocus className="input" rows={3} value={String(node.content || "")} onChange={(e) => update({ content: e.target.value })} placeholder={t("workflows.notify_content_hint")} />
       </div>
       <div className="builder-row">
         <label className="label">{t("workflows.notify_target")}</label>

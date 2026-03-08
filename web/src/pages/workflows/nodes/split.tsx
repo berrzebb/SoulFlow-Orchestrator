@@ -5,7 +5,7 @@ function SplitEditPanel({ node, update, t }: EditPanelProps) {
     <>
       <div className="builder-row">
         <label className="label">{t("workflows.split_array_field")}</label>
-        <input className="input input--sm" value={String(node.array_field || "")} onChange={(e) => update({ array_field: e.target.value })} placeholder="body.users" />
+        <input autoFocus className="input input--sm" value={String(node.array_field || "")} onChange={(e) => update({ array_field: e.target.value })} placeholder="body.users" />
       </div>
       <div className="builder-row">
         <label className="label">{t("workflows.split_batch_size")}</label>

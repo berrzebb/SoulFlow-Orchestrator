@@ -5,7 +5,7 @@ function GraphqlEditPanel({ node, update, t }: EditPanelProps) {
     <>
       <div className="builder-row">
         <label className="label">{t("node.graphql.input.url")}</label>
-        <input className="input input--sm" value={String(node.url || "")} onChange={(e) => update({ url: e.target.value })} />
+        <input autoFocus className="input input--sm" value={String(node.url || "")} onChange={(e) => update({ url: e.target.value })} />
       </div>
       <div className="builder-row">
         <label className="label">{t("node.graphql.input.query")}</label>
