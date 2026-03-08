@@ -156,7 +156,7 @@ services:
       REDIS_URL: redis://redis:6379
       DEBUG: ${config.debug}
     volumes:
-      - \${WORKSPACE}:/data
+      - ${config.hostWorkspace}:/data
 ${devVolumes}
 ${dependsOnRedis}
 ${devCommand}
@@ -226,7 +226,9 @@ function main() {
     config.redisPort = parseInt(envRedisPort, 10);
   }
 
-  // prod 환경에서는 컨테이너 내부 경로 /data 사용 (호스트 경로와 무관)
+  // prod 환경에서는 컨테이너 내부 경로 /data 사용
+  // 호스트 경로는 환경변수로 유지 (docker-compose volume mount용)
+  config.hostWorkspace = envWorkspace || config.workspace;
   if (profile === 'prod') {
     config.workspace = '/data';
   }
