@@ -42,7 +42,12 @@ export function Modal({ open, title, children, onClose, onConfirm, confirmLabel,
       'input:not([disabled]), button:not([disabled]), [tabindex]:not([tabindex="-1"])'
     );
     if (focusableElements?.length) {
-      (focusableElements[0] as HTMLElement).focus();
+      const firstElement = focusableElements[0] as HTMLElement;
+      firstElement.focus();
+      // 모바일: 포커스된 입력 필드가 키보드 뒤에 숨기지 않도록 자동 스크롤
+      if (/mobile|android|iphone/i.test(navigator.userAgent)) {
+        setTimeout(() => firstElement.scrollIntoView({ block: "center", behavior: "smooth" }), 100);
+      }
     } else {
       modalRef.current?.focus();
     }
@@ -115,7 +120,12 @@ export function FormModal({ open, title, children, onClose, onSubmit, submitLabe
       'input:not([disabled]), button:not([disabled]), [tabindex]:not([tabindex="-1"])'
     );
     if (focusableElements?.length) {
-      (focusableElements[0] as HTMLElement).focus();
+      const firstElement = focusableElements[0] as HTMLElement;
+      firstElement.focus();
+      // 모바일: 포커스된 입력 필드가 키보드 뒤에 숨기지 않도록 자동 스크롤
+      if (/mobile|android|iphone/i.test(navigator.userAgent)) {
+        setTimeout(() => firstElement.scrollIntoView({ block: "center", behavior: "smooth" }), 100);
+      }
     } else {
       modalRef.current?.focus();
     }
