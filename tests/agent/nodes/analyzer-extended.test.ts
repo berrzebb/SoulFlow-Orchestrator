@@ -157,4 +157,12 @@ describe("analyzer_handler — test() 경고", () => {
     const r = analyzer_handler.test!(make_node({ output_json_schema: undefined }));
     expect(r.preview?.has_schema).toBe(false);
   });
+
+  it("output_json_schema 순환 참조 → catch 경고 (L103)", () => {
+    // JSON.stringify가 순환 참조에서 throw → catch { warnings.push(...) }
+    const circular: Record<string, unknown> = { type: "object" };
+    circular.self = circular; // 순환 참조
+    const r = analyzer_handler.test!(make_node({ output_json_schema: circular }));
+    expect(r.warnings?.some((w: string) => w.includes("output_json_schema"))).toBe(true);
+  });
 });

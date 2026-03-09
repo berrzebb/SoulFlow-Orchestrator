@@ -109,6 +109,13 @@ describe("GitTool — 각 operation", () => {
     await make_git().execute({ operation: "tag", args: "v1.0.0" });
     expect(mock_shell.mock.calls[0][0]).toContain("git tag v1.0.0");
   });
+
+  it("알 수 없는 operation → default null → unsupported (L73)", async () => {
+    // build_command의 default case를 트리거하기 위해 스위치에 없는 operation 사용
+    const r = await make_git().execute({ operation: "unknown_git_op" as never });
+    expect(r).toContain("unsupported");
+    expect(mock_shell).not.toHaveBeenCalled();
+  });
 });
 
 describe("GitTool — 출력 처리", () => {

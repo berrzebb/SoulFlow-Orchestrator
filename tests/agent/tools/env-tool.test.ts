@@ -115,4 +115,10 @@ describe("EnvTool — defaults", () => {
     const r = await exec({ action: "defaults", defaults: "not-json" });
     expect(String(r)).toContain("Error");
   });
+
+  it("지원하지 않는 action → Error (L66)", async () => {
+    const r = await exec({ action: "unsupported_action" });
+    expect(String(r)).toContain("Error");
+    expect(String(r)).toContain("unsupported");
+  });
 });

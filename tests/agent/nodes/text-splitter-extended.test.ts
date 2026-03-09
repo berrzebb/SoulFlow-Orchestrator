@@ -150,3 +150,16 @@ describe("text_splitter_handler — create_default", () => {
     expect(d.separator).toBe("\n\n");
   });
 });
+
+describe("text_splitter_handler — non-object 경로 (L65)", () => {
+  it("중첩 필드 탐색 중 중간 값이 non-object → else { text=undefined; break } (L65)", async () => {
+    // input_field="a.b.c", memory.a = "string" (non-object) → 두 번째 루프에서 else 분기
+    const node = make_node({ input_field: "a.b.c" });
+    const ctx = make_ctx({ a: "string_not_object" });
+    const r = await text_splitter_handler.execute(node, ctx);
+    // text=undefined → { chunks: [], chunk_count: 0 }
+    const out = r.output as { chunks: unknown[]; chunk_count: number };
+    expect(out.chunks).toEqual([]);
+    expect(out.chunk_count).toBe(0);
+  });
+});
