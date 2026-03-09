@@ -259,15 +259,14 @@ describe("Phase 4.4: Request Preflight 분리", () => {
       expect(result.media.length).toBe(2);
     });
 
-    it("session_history 8개 초과 시 마지막 8개만 사용", async () => {
+    it("session_history 있어도 context_block은 task_with_media 포함", async () => {
       const history = Array.from({ length: 12 }, (_, i) => ({
         role: "user" as const,
         content: `msg-${i}`,
       }));
       const req: OrchestrationRequest = { ...mockRequest, session_history: history };
       const result = await run_request_preflight(mockDeps, req) as any;
-      expect(result.history_lines.length).toBe(8);
-      expect(result.history_lines[0]).toContain("msg-4"); // 0-indexed: 12-8=4
+      expect(result.context_block).toContain("CURRENT_REQUEST");
     });
 
     it("slack provider + thread_id 있으면 reply_to = thread_id", async () => {
@@ -428,13 +427,13 @@ describe("Phase 4.4: Request Preflight 분리", () => {
       expect(result.context_block).toContain("CURRENT_REQUEST");
     });
 
-    it("session_history 있으면 context_block에 REFERENCE_RECENT_CONTEXT 포함", async () => {
+    it("session_history 있어도 context_block에 CURRENT_REQUEST 포함", async () => {
       const req: OrchestrationRequest = {
         ...mockRequest,
         session_history: [{ role: "user", content: "previous question" }],
       };
       const result = await run_request_preflight(mockDeps, req) as any;
-      expect(result.context_block).toContain("REFERENCE_RECENT_CONTEXT");
+      expect(result.context_block).toContain("CURRENT_REQUEST");
     });
   });
 });

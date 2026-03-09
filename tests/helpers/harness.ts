@@ -79,6 +79,7 @@ export class FakeChannelRegistry {
   async set_typing(): Promise<void> {}
   get_typing_state() { return null; }
   get_health() { return []; }
+  get_channels_by_provider(_provider: ChannelProvider): unknown[] { return []; }
 }
 
 // --- Fake Dispatch Service ---

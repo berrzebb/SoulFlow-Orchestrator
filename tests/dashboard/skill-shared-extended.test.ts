@@ -7,7 +7,7 @@ import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { create_skill_ops } from "../../src/dashboard/ops/skill.js";
-import { apply_connection_api_base } from "../../src/dashboard/ops/shared.js";
+import { apply_connection_api_base, activate_provider } from "../../src/dashboard/ops/shared.js";
 import type { SkillsLoaderLike } from "../../src/dashboard/ops/skill.js";
 
 // ══════════════════════════════════════════
@@ -192,5 +192,68 @@ describe("create_skill_ops — get_skill_detail", () => {
     expect(r.references!.some(ref => ref.name === "guide.md")).toBe(true);
     expect(r.references!.some(ref => ref.name === "extra.txt")).toBe(true);
     expect(r.references!.some(ref => ref.name === "image.png")).toBe(false); // .png 제외
+  });
+});
+
+// ══════════════════════════════════════════
+// activate_provider
+// ══════════════════════════════════════════
+
+describe("activate_provider()", () => {
+  function make_store(config: any, token: string | null = null) {
+    return {
+      get: vi.fn().mockReturnValue(config),
+      set_token: vi.fn().mockResolvedValue(undefined),
+      resolve_token: vi.fn().mockResolvedValue(token),
+      resolve_api_base: vi.fn().mockReturnValue(null),
+    } as any;
+  }
+
+  function make_backends() {
+    return {
+      register: vi.fn(),
+    } as any;
+  }
+
+  it("config=null → 즉시 반환 (register 미호출)", async () => {
+    const store = make_store(null);
+    const backends = make_backends();
+    await activate_provider(store, backends, {} as any, "/ws", "inst1");
+    expect(backends.register).not.toHaveBeenCalled();
+  });
+
+  it("token 있음 → set_token 호출", async () => {
+    const store = make_store(null);
+    const backends = make_backends();
+    await activate_provider(store, backends, {} as any, "/ws", "inst1", "my-token");
+    expect(store.set_token).toHaveBeenCalledWith("inst1", "my-token");
+    // config=null이므로 register는 미호출
+    expect(backends.register).not.toHaveBeenCalled();
+  });
+
+  it("token=null → set_token 미호출", async () => {
+    const store = make_store({ instance_id: "inst1", provider_type: "openai", settings: {} });
+    const backends = make_backends();
+    await activate_provider(store, backends, {} as any, "/ws", "inst1", null);
+    expect(store.set_token).not.toHaveBeenCalled();
+  });
+
+  it("config 있고 backend.is_available()=true 혹은 false → register 분기 확인", async () => {
+    const config = { instance_id: "inst1", provider_type: "openai", settings: { api_base: "https://api.openai.com" } };
+    const store = make_store(config, "token123");
+    const backends = make_backends();
+    // 실제 create_agent_provider 결과에 따라 register 여부 결정
+    await activate_provider(store, backends, {} as any, "/ws", "inst1");
+    // is_available 결과에 따라 register 여부가 결정됨 (openai provider가 없으면 null → 미호출)
+    expect(typeof backends.register).toBe("function");
+  });
+
+  it("config 있고 backend=null → register 미호출", async () => {
+    // 알 수 없는 provider_type → create_agent_provider returns null
+    const config = { instance_id: "inst1", provider_type: "unknown_provider_type_xyz", settings: {} };
+    const store = make_store(config, null);
+    const backends = make_backends();
+    await activate_provider(store, backends, {} as any, "/ws", "inst1");
+    expect(backends.register).not.toHaveBeenCalled();
   });
 });

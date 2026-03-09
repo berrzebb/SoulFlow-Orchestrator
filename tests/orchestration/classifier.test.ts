@@ -1,406 +1,288 @@
-/** Phase 4.5+: classifier 모듈 테스트
+/**
+ * classifier.ts — 키워드 휴리스틱 분류기 테스트.
  *
- * 목표: classify_execution_mode 함수와 관련 유틸리티 검증
- *       - 실행 모드 분류 (LLM 위임)
- *       - 에스컬레이션 감지 (need task loop, need agent loop)
- *       - 유틸리티 함수 (is_once_escalation, is_agent_escalation)
+ * 대상:
+ * - fast_classify(): builtin / identity / inquiry / once 분류
+ * - classify_execution_mode(): fast_classify 래퍼 (logger 검증)
+ * - parse_execution_mode(): JSON/단어 파싱
+ * - detect_escalation(): NEED TASK LOOP / NEED AGENT LOOP
+ * - is_once_escalation(), is_agent_escalation()
  */
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import {
   classify_execution_mode,
+  fast_classify,
+  parse_execution_mode,
+  detect_escalation,
   is_once_escalation,
   is_agent_escalation,
 } from "@src/orchestration/classifier.js";
 import type { ClassifierContext } from "@src/orchestration/classifier.js";
 import type { Logger } from "@src/logger.js";
 
-/* ── Mock Data ── */
-
-const mockLogger: Partial<Logger> = {
+const noop_logger: Logger = {
   debug: vi.fn(),
   info: vi.fn(),
   warn: vi.fn(),
   error: vi.fn(),
-};
+} as unknown as Logger;
 
-const mockProviders = {
-  run_orchestrator: vi.fn(async () => ({ content: '{"mode":"once"}' })),
-};
+function ctx(overrides: Partial<ClassifierContext> = {}): ClassifierContext {
+  return { ...overrides };
+}
 
-const createMockContext = (overrides?: Partial<ClassifierContext>): ClassifierContext => ({
-  active_tasks: undefined,
-  recent_history: undefined,
-  available_tool_categories: undefined,
-  available_skills: undefined,
-  ...overrides,
-});
+// ══════════════════════════════════════════════════
+// fast_classify
+// ══════════════════════════════════════════════════
 
-/* ── Tests ── */
-
-describe("classify_execution_mode — 실행 모드 분류", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
+describe("fast_classify — 휴리스틱 분류", () => {
   describe("기본 경로", () => {
-    it("빈 task → once 모드 기본값", async () => {
-      const result = await classify_execution_mode(
-        "",
-        createMockContext(),
-        mockProviders as any,
-        mockLogger as Logger,
-      );
-
-      expect(result.mode).toBe("once");
-      expect(mockProviders.run_orchestrator).not.toHaveBeenCalled();
+    it("빈 문자열 → once", () => {
+      expect(fast_classify("", ctx()).mode).toBe("once");
     });
 
-    it("공백 task → once 모드 기본값", async () => {
-      const result = await classify_execution_mode(
-        "   ",
-        createMockContext(),
-        mockProviders as any,
-        mockLogger as Logger,
-      );
-
-      expect(result.mode).toBe("once");
+    it("공백만 → once", () => {
+      expect(fast_classify("   ", ctx()).mode).toBe("once");
     });
 
-    it("orchestrator 없음 → once 모드 기본값", async () => {
-      const result = await classify_execution_mode(
-        "some task",
-        createMockContext(),
-        {} as any,
-        mockLogger as Logger,
-      );
-
-      expect(result.mode).toBe("once");
+    it("일반 질문 → once", () => {
+      expect(fast_classify("오늘 날씨 알려줘", ctx()).mode).toBe("once");
     });
   });
 
-  describe("LLM 분류", () => {
-    it("once 모드 응답", async () => {
-      mockProviders.run_orchestrator.mockResolvedValue({
-        content: '{"mode":"once"}',
-      });
-
-      const result = await classify_execution_mode(
-        "simple task",
-        createMockContext(),
-        mockProviders as any,
-        mockLogger as Logger,
-      );
-
-      expect(result.mode).toBe("once");
-      expect(mockLogger.info).toHaveBeenCalledWith("classify_result", expect.any(Object));
+  describe("builtin: /커맨드", () => {
+    it("/help → builtin, command='help'", () => {
+      const r = fast_classify("/help", ctx());
+      expect(r.mode).toBe("builtin");
+      expect(r.command).toBe("help");
     });
 
-    it("agent 모드 응답", async () => {
-      mockProviders.run_orchestrator.mockResolvedValue({
-        content: '{"mode":"agent"}',
-      });
-
-      const result = await classify_execution_mode(
-        "multi-step task",
-        createMockContext(),
-        mockProviders as any,
-        mockLogger as Logger,
-      );
-
-      expect(result.mode).toBe("agent");
+    it("/task list → builtin, command='task', args='list'", () => {
+      const r = fast_classify("/task list", ctx());
+      expect(r.mode).toBe("builtin");
+      expect(r.command).toBe("task");
+      expect(r.args).toBe("list");
     });
 
-    it("task 모드 응답", async () => {
-      mockProviders.run_orchestrator.mockResolvedValue({
-        content: '{"mode":"task"}',
-      });
-
-      const result = await classify_execution_mode(
-        "long task",
-        createMockContext(),
-        mockProviders as any,
-        mockLogger as Logger,
-      );
-
-      expect(result.mode).toBe("task");
-    });
-
-    it("phase 모드 응답", async () => {
-      mockProviders.run_orchestrator.mockResolvedValue({
-        content: '{"mode":"phase","workflow_id":"wf-123"}',
-      });
-
-      const result = await classify_execution_mode(
-        "workflow task",
-        createMockContext(),
-        mockProviders as any,
-        mockLogger as Logger,
-      );
-
-      expect(result.mode).toBe("phase");
-      expect(result.workflow_id).toBe("wf-123");
-    });
-
-    it("inquiry 모드 응답", async () => {
-      mockProviders.run_orchestrator.mockResolvedValue({
-        content: '{"mode":"inquiry"}',
-      });
-
-      const result = await classify_execution_mode(
-        "question for user",
-        createMockContext(),
-        mockProviders as any,
-        mockLogger as Logger,
-      );
-
-      expect(result.mode).toBe("inquiry");
-    });
-
-    it("identity 모드 응답", async () => {
-      mockProviders.run_orchestrator.mockResolvedValue({
-        content: '{"mode":"identity"}',
-      });
-
-      const result = await classify_execution_mode(
-        "who are you",
-        createMockContext(),
-        mockProviders as any,
-        mockLogger as Logger,
-      );
-
-      expect(result.mode).toBe("identity");
-    });
-
-    it("builtin 모드 응답", async () => {
-      mockProviders.run_orchestrator.mockResolvedValue({
-        content: '{"mode":"builtin","command":"help"}',
-      });
-
-      const result = await classify_execution_mode(
-        "help",
-        createMockContext(),
-        mockProviders as any,
-        mockLogger as Logger,
-      );
-
-      expect(result.mode).toBe("builtin");
-      expect(result.command).toBe("help");
+    it("/cmd → args=undefined (인자 없음)", () => {
+      const r = fast_classify("/cmd", ctx());
+      expect(r.mode).toBe("builtin");
+      expect(r.args).toBeUndefined();
     });
   });
 
-  describe("LLM 호출 파라미터", () => {
-    it("최대 120 토큰, 온도 0으로 호출", async () => {
-      await classify_execution_mode(
-        "test task",
-        createMockContext(),
-        mockProviders as any,
-        mockLogger as Logger,
-      );
-
-      expect(mockProviders.run_orchestrator).toHaveBeenCalledWith({
-        messages: expect.any(Array),
-        max_tokens: 120,
-        temperature: 0,
-      });
+  describe("identity: 봇 정체성 질문", () => {
+    it("'너 누구야' → identity", () => {
+      expect(fast_classify("너 누구야", ctx()).mode).toBe("identity");
     });
 
-    it("active_tasks 없음 → BASE_FLOWCHART 사용", async () => {
-      await classify_execution_mode(
-        "task",
-        createMockContext({ active_tasks: undefined }),
-        mockProviders as any,
-        mockLogger as Logger,
-      );
-
-      const call = (mockProviders.run_orchestrator as any).mock.calls[0][0];
-      const system = call.messages[0].content;
-      expect(system).toContain("mode classifier");
-      expect(system).toContain("Mode Definitions");
+    it("'who are you' → identity", () => {
+      expect(fast_classify("who are you", ctx()).mode).toBe("identity");
     });
 
-    it("active_tasks 있음 → INQUIRY_DEFINITION + 컨텍스트 포함", async () => {
-      const activeTasks = [
-        {
-          taskId: "task-1",
-          title: "Running Task",
-          objective: "Do something",
-          channel: "slack",
-          chatId: "chat-1",
-          status: "in_progress" as const,
-          memory: {},
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          currentTurn: 1,
-        },
-      ];
-
-      await classify_execution_mode(
-        "task",
-        createMockContext({ active_tasks: activeTasks }),
-        mockProviders as any,
-        mockLogger as Logger,
-      );
-
-      const call = (mockProviders.run_orchestrator as any).mock.calls[0][0];
-      const system = call.messages[0].content;
-      expect(system).toContain("Running Task");
-    });
-
-    it("available_tool_categories + skills 포함", async () => {
-      const ctx = createMockContext({
-        available_tool_categories: ["file", "web"],
-        available_skills: [
-          { name: "research", summary: "Research skill", triggers: [] },
-        ],
-      });
-
-      await classify_execution_mode(
-        "task",
-        ctx,
-        mockProviders as any,
-        mockLogger as Logger,
-      );
-
-      const call = (mockProviders.run_orchestrator as any).mock.calls[0][0];
-      const user = call.messages[1].content;
-      expect(user).toContain("research");
-    });
-
-    it("recent_history 포함", async () => {
-      const ctx = createMockContext({
-        recent_history: [
-          { role: "user", content: "previous message" },
-          { role: "assistant", content: "previous response" },
-        ],
-      });
-
-      await classify_execution_mode(
-        "task",
-        ctx,
-        mockProviders as any,
-        mockLogger as Logger,
-      );
-
-      const call = (mockProviders.run_orchestrator as any).mock.calls[0][0];
-      const user = call.messages[1].content;
-      expect(user).toContain("previous message");
-      expect(user).toContain("RECENT_CONTEXT");
+    it("'소개해줘' → identity", () => {
+      expect(fast_classify("소개해줘", ctx()).mode).toBe("identity");
     });
   });
 
-  describe("LLM 에러 처리", () => {
-    it("orchestrator 에러 → once 기본값 + 경고 로그", async () => {
-      mockProviders.run_orchestrator.mockRejectedValue(new Error("LLM error"));
+  describe("inquiry: 활성 태스크 상태 조회", () => {
+    const task_state: any = {
+      taskId: "t1",
+      title: "T",
+      status: "in_progress",
+      memory: {},
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      currentTurn: 1,
+      objective: "",
+      channel: "slack",
+      chatId: "C1",
+    };
 
-      const result = await classify_execution_mode(
-        "task",
-        createMockContext(),
-        mockProviders as any,
-        mockLogger as Logger,
-      );
-
-      expect(result.mode).toBe("once");
-      expect(mockLogger.warn).toHaveBeenCalledWith("classify_error", expect.any(Object));
+    it("active_tasks 있음 + '상태' 키워드 → inquiry", () => {
+      expect(fast_classify("작업 상태 어때?", ctx({ active_tasks: [task_state] })).mode).toBe("inquiry");
     });
 
-    it("파싱 실패 → once 기본값 + 경고 로그", async () => {
-      mockProviders.run_orchestrator.mockResolvedValue({
-        content: "invalid json response",
-      });
-
-      const result = await classify_execution_mode(
-        "task",
-        createMockContext(),
-        mockProviders as any,
-        mockLogger as Logger,
-      );
-
-      expect(result.mode).toBe("once");
-      expect(mockLogger.warn).toHaveBeenCalledWith("classify_parse_failed", expect.any(Object));
+    it("active_tasks 있음 + 'status' 키워드 → inquiry", () => {
+      expect(fast_classify("what is the status", ctx({ active_tasks: [task_state] })).mode).toBe("inquiry");
     });
 
-    it("응답 없음 → once 기본값", async () => {
-      mockProviders.run_orchestrator.mockResolvedValue({
-        content: undefined,
-      });
-
-      const result = await classify_execution_mode(
-        "task",
-        createMockContext(),
-        mockProviders as any,
-        mockLogger as Logger,
-      );
-
-      expect(result.mode).toBe("once");
-    });
-  });
-
-  describe("모드별 추가 정보", () => {
-    it("phase 모드: workflow_id 추출", async () => {
-      mockProviders.run_orchestrator.mockResolvedValue({
-        content: '{"mode":"phase","workflow_id":"custom-wf"}',
-      });
-
-      const result = await classify_execution_mode(
-        "run workflow",
-        createMockContext(),
-        mockProviders as any,
-        mockLogger as Logger,
-      );
-
-      expect(result.workflow_id).toBe("custom-wf");
+    it("active_tasks 없음 + '상태' 키워드 → once (inquiry 아님)", () => {
+      expect(fast_classify("상태 알려줘", ctx()).mode).toBe("once");
     });
 
-    it("phase 모드: nodes 배열 추출", async () => {
-      mockProviders.run_orchestrator.mockResolvedValue({
-        content: '{"mode":"phase","nodes":["node1","node2"]}',
-      });
-
-      const result = await classify_execution_mode(
-        "run workflow",
-        createMockContext(),
-        mockProviders as any,
-        mockLogger as Logger,
-      );
-
-      expect(result.nodes).toEqual(["node1", "node2"]);
-    });
-
-    it("once/agent/task 모드: tools 배열 추출", async () => {
-      mockProviders.run_orchestrator.mockResolvedValue({
-        content: '{"mode":"agent","tools":["tool1","tool2"]}',
-      });
-
-      const result = await classify_execution_mode(
-        "task",
-        createMockContext(),
-        mockProviders as any,
-        mockLogger as Logger,
-      );
-
-      expect(result.tools).toEqual(["tool1", "tool2"]);
-    });
-
-    it("builtin 모드: command + args", async () => {
-      mockProviders.run_orchestrator.mockResolvedValue({
-        content: '{"mode":"builtin","command":"task","args":"list all"}',
-      });
-
-      const result = await classify_execution_mode(
-        "task list",
-        createMockContext(),
-        mockProviders as any,
-        mockLogger as Logger,
-      );
-
-      expect(result.command).toBe("task");
-      expect(result.args).toBe("list all");
+    it("active_tasks 빈 배열 → inquiry 미발동", () => {
+      expect(fast_classify("진행 상황은?", ctx({ active_tasks: [] })).mode).toBe("once");
     });
   });
 });
 
-describe("is_once_escalation — once 에스컬레이션 판별", () => {
+// ══════════════════════════════════════════════════
+// classify_execution_mode (래퍼)
+// ══════════════════════════════════════════════════
+
+describe("classify_execution_mode — 래퍼", () => {
+  it("logger.info 호출", async () => {
+    const logger = { ...noop_logger, info: vi.fn() } as unknown as Logger;
+    await classify_execution_mode("hello", ctx(), null, logger);
+    expect(logger.info).toHaveBeenCalledWith("classify_result", expect.objectContaining({ source: "heuristic" }));
+  });
+
+  it("빈 task → once 반환", async () => {
+    const result = await classify_execution_mode("", ctx(), null, noop_logger);
+    expect(result.mode).toBe("once");
+  });
+
+  it("identity 키워드 → identity 반환", async () => {
+    const result = await classify_execution_mode("introduce yourself", ctx(), null, noop_logger);
+    expect(result.mode).toBe("identity");
+  });
+});
+
+// ══════════════════════════════════════════════════
+// parse_execution_mode
+// ══════════════════════════════════════════════════
+
+describe("parse_execution_mode — JSON/단어 파싱", () => {
+  it("빈 문자열 → null", () => {
+    expect(parse_execution_mode("")).toBeNull();
+  });
+
+  it("JSON {mode:'once'} → {mode:'once'}", () => {
+    expect(parse_execution_mode('{"mode":"once"}')).toMatchObject({ mode: "once" });
+  });
+
+  it("JSON {mode:'agent'} → {mode:'agent'}", () => {
+    expect(parse_execution_mode('{"mode":"agent"}')).toMatchObject({ mode: "agent" });
+  });
+
+  it("JSON {mode:'task'} → {mode:'task'}", () => {
+    expect(parse_execution_mode('{"mode":"task"}')).toMatchObject({ mode: "task" });
+  });
+
+  it("JSON {mode:'inquiry'} → {mode:'inquiry'}", () => {
+    expect(parse_execution_mode('{"mode":"inquiry"}')).toMatchObject({ mode: "inquiry" });
+  });
+
+  it("JSON {mode:'identity'} → {mode:'identity'}", () => {
+    expect(parse_execution_mode('{"mode":"identity"}')).toMatchObject({ mode: "identity" });
+  });
+
+  it("JSON phase + workflow_id → {mode:'phase', workflow_id}", () => {
+    const r = parse_execution_mode('{"mode":"phase","workflow_id":"wf-123"}');
+    expect(r?.mode).toBe("phase");
+    expect(r?.workflow_id).toBe("wf-123");
+  });
+
+  it("JSON phase + nodes 배열 → nodes 포함", () => {
+    const r = parse_execution_mode('{"mode":"phase","nodes":["n1","n2"]}');
+    expect(r?.mode).toBe("phase");
+    expect(r?.nodes).toEqual(["n1", "n2"]);
+  });
+
+  it("JSON phase + workflow_id + nodes 둘 다 → 모두 포함", () => {
+    const r = parse_execution_mode('{"mode":"phase","workflow_id":"wf-x","nodes":["a","b"]}');
+    expect(r?.workflow_id).toBe("wf-x");
+    expect(r?.nodes).toEqual(["a", "b"]);
+  });
+
+  it("JSON phase 빈 nodes → nodes 미포함", () => {
+    const r = parse_execution_mode('{"mode":"phase","nodes":[]}');
+    expect(r?.mode).toBe("phase");
+    expect(r?.nodes).toBeUndefined();
+  });
+
+  it("JSON once + tools 배열 → tools 포함", () => {
+    const r = parse_execution_mode('{"mode":"once","tools":["tool1","tool2"]}');
+    expect(r?.mode).toBe("once");
+    expect(r?.tools).toEqual(["tool1", "tool2"]);
+  });
+
+  it("JSON agent + tools → tools 포함", () => {
+    const r = parse_execution_mode('{"mode":"agent","tools":["t1"]}');
+    expect(r?.tools).toEqual(["t1"]);
+  });
+
+  it("JSON task + 빈 tools → tools 미포함", () => {
+    const r = parse_execution_mode('{"mode":"task","tools":[]}');
+    expect(r?.mode).toBe("task");
+    expect(r?.tools).toBeUndefined();
+  });
+
+  it("JSON builtin + command → command 포함", () => {
+    const r = parse_execution_mode('{"mode":"builtin","command":"help"}');
+    expect(r?.mode).toBe("builtin");
+    expect(r?.command).toBe("help");
+  });
+
+  it("JSON builtin + args → args 포함", () => {
+    const r = parse_execution_mode('{"mode":"builtin","command":"task","args":"list all"}');
+    expect(r?.args).toBe("list all");
+  });
+
+  it("JSON builtin command 없음 → null", () => {
+    expect(parse_execution_mode('{"mode":"builtin"}')).toBeNull();
+  });
+
+  it("단어 'once' 포함 텍스트 → {mode:'once'}", () => {
+    expect(parse_execution_mode("the mode is once")).toMatchObject({ mode: "once" });
+  });
+
+  it("단어 'task' 포함 텍스트 → {mode:'task'}", () => {
+    expect(parse_execution_mode("use task mode")).toMatchObject({ mode: "task" });
+  });
+
+  it("단어 'phase' 포함 텍스트 → {mode:'phase'}", () => {
+    expect(parse_execution_mode("run in phase mode")).toMatchObject({ mode: "phase" });
+  });
+
+  it("단어 'identity' 포함 텍스트 → {mode:'identity'}", () => {
+    expect(parse_execution_mode("this is identity mode")).toMatchObject({ mode: "identity" });
+  });
+
+  it("알 수 없는 텍스트 → null", () => {
+    expect(parse_execution_mode("some random text")).toBeNull();
+  });
+
+  it("잘못된 JSON은 단어 파싱 fallback", () => {
+    const r = parse_execution_mode("{invalid} once mode");
+    // 단어 파싱으로 'once' 추출
+    expect(r?.mode).toBe("once");
+  });
+});
+
+// ══════════════════════════════════════════════════
+// detect_escalation
+// ══════════════════════════════════════════════════
+
+describe("detect_escalation — 에스컬레이션 감지", () => {
+  it("NEED TASK LOOP (once 기본) → once_requires_task_loop", () => {
+    expect(detect_escalation("NEED TASK LOOP")).toBe("once_requires_task_loop");
+  });
+
+  it("NEED TASK LOOP (agent) → agent_requires_task_loop", () => {
+    expect(detect_escalation("NEED TASK LOOP", "agent")).toBe("agent_requires_task_loop");
+  });
+
+  it("NEED AGENT LOOP → once_requires_agent_loop", () => {
+    expect(detect_escalation("NEED AGENT LOOP")).toBe("once_requires_agent_loop");
+  });
+
+  it("need_task_loop (소문자+언더스코어) → 감지됨", () => {
+    expect(detect_escalation("need_task_loop")).toBe("once_requires_task_loop");
+  });
+
+  it("관련 없는 텍스트 → null", () => {
+    expect(detect_escalation("일반 텍스트")).toBeNull();
+  });
+});
+
+// ══════════════════════════════════════════════════
+// is_once_escalation
+// ══════════════════════════════════════════════════
+
+describe("is_once_escalation", () => {
   it("once_requires_task_loop → true", () => {
     expect(is_once_escalation("once_requires_task_loop")).toBe(true);
   });
@@ -413,20 +295,16 @@ describe("is_once_escalation — once 에스컬레이션 판별", () => {
     expect(is_once_escalation("agent_requires_task_loop")).toBe(false);
   });
 
-  it("null → false", () => {
-    expect(is_once_escalation(null)).toBe(false);
-  });
-
-  it("undefined → false", () => {
-    expect(is_once_escalation(undefined)).toBe(false);
-  });
-
-  it("다른 에러 → false", () => {
-    expect(is_once_escalation("some_error")).toBe(false);
-  });
+  it("null → false", () => { expect(is_once_escalation(null)).toBe(false); });
+  it("undefined → false", () => { expect(is_once_escalation(undefined)).toBe(false); });
+  it("다른 에러 → false", () => { expect(is_once_escalation("some_error")).toBe(false); });
 });
 
-describe("is_agent_escalation — agent 에스컬레이션 판별", () => {
+// ══════════════════════════════════════════════════
+// is_agent_escalation
+// ══════════════════════════════════════════════════
+
+describe("is_agent_escalation", () => {
   it("agent_requires_task_loop → true", () => {
     expect(is_agent_escalation("agent_requires_task_loop")).toBe(true);
   });
@@ -439,15 +317,7 @@ describe("is_agent_escalation — agent 에스컬레이션 판별", () => {
     expect(is_agent_escalation("once_requires_agent_loop")).toBe(false);
   });
 
-  it("null → false", () => {
-    expect(is_agent_escalation(null)).toBe(false);
-  });
-
-  it("undefined → false", () => {
-    expect(is_agent_escalation(undefined)).toBe(false);
-  });
-
-  it("다른 에러 → false", () => {
-    expect(is_agent_escalation("some_error")).toBe(false);
-  });
+  it("null → false", () => { expect(is_agent_escalation(null)).toBe(false); });
+  it("undefined → false", () => { expect(is_agent_escalation(undefined)).toBe(false); });
+  it("다른 에러 → false", () => { expect(is_agent_escalation("some_error")).toBe(false); });
 });

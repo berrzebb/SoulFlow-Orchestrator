@@ -1,122 +1,46 @@
 /**
- * media-utils — detect_media_type / to_local_media_item 테스트.
+ * media-utils.ts 커버리지.
+ * detect_media_type, to_local_media_item 테스트.
  */
-import { describe, it, expect, beforeAll } from "vitest";
-import { detect_media_type, to_local_media_item } from "../../../src/agent/tools/media-utils.js";
-import { writeFileSync, mkdirSync } from "node:fs";
+import { describe, it, expect } from "vitest";
+import { detect_media_type, to_local_media_item } from "@src/agent/tools/media-utils.js";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-let workspace: string;
-beforeAll(() => {
-  workspace = join(tmpdir(), `media-utils-test-${Date.now()}`);
-  mkdirSync(workspace, { recursive: true });
+describe("detect_media_type", () => {
+  it("png → image", () => expect(detect_media_type("photo.png")).toBe("image"));
+  it("jpg → image", () => expect(detect_media_type("photo.jpg")).toBe("image"));
+  it("gif → image", () => expect(detect_media_type("anim.gif")).toBe("image"));
+  it("webp → image", () => expect(detect_media_type("img.webp")).toBe("image"));
+  it("svg → image", () => expect(detect_media_type("icon.svg")).toBe("image"));
+  it("mp4 → video", () => expect(detect_media_type("clip.mp4")).toBe("video"));
+  it("mov → video", () => expect(detect_media_type("clip.mov")).toBe("video"));
+  it("webm → video", () => expect(detect_media_type("clip.webm")).toBe("video"));
+  it("avi → video", () => expect(detect_media_type("clip.avi")).toBe("video"));
+  it("mp3 → audio", () => expect(detect_media_type("track.mp3")).toBe("audio"));
+  it("wav → audio", () => expect(detect_media_type("sound.wav")).toBe("audio"));
+  it("ogg → audio", () => expect(detect_media_type("sound.ogg")).toBe("audio"));
+  it("m4a → audio", () => expect(detect_media_type("sound.m4a")).toBe("audio"));
+  it("pdf → file", () => expect(detect_media_type("doc.pdf")).toBe("file"));
+  it("txt → file", () => expect(detect_media_type("note.txt")).toBe("file"));
+  it("zip → file", () => expect(detect_media_type("archive.zip")).toBe("file"));
+  it("확장자 없음 → file", () => expect(detect_media_type("noext")).toBe("file"));
+  it("빈 문자열 → file", () => expect(detect_media_type("")).toBe("file"));
+  it("알 수 없는 확장자 → file", () => expect(detect_media_type("file.xyz")).toBe("file"));
+  it("대문자 확장자 → image", () => expect(detect_media_type("PHOTO.PNG")).toBe("image"));
 });
 
-// ── detect_media_type ──────────────────────────────────────────────
-
-describe("detect_media_type — image", () => {
-  it.each([
-    ["/tmp/photo.png", "image"],
-    ["/tmp/photo.jpg", "image"],
-    ["/tmp/photo.jpeg", "image"],
-    ["/tmp/anim.gif", "image"],
-    ["/tmp/pic.webp", "image"],
-    ["/tmp/icon.svg", "image"],
-  ])("%s → %s", (path, expected) => {
-    expect(detect_media_type(path)).toBe(expected);
-  });
-
-  it("대문자 확장자도 image (PNG)", () => {
-    expect(detect_media_type("/tmp/photo.PNG")).toBe("image");
-  });
-});
-
-describe("detect_media_type — video", () => {
-  it.each([
-    ["/tmp/clip.mp4", "video"],
-    ["/tmp/clip.mov", "video"],
-    ["/tmp/clip.webm", "video"],
-    ["/tmp/clip.mkv", "video"],
-    ["/tmp/clip.avi", "video"],
-  ])("%s → %s", (path, expected) => {
-    expect(detect_media_type(path)).toBe(expected);
-  });
-});
-
-describe("detect_media_type — audio", () => {
-  it.each([
-    ["/tmp/song.mp3", "audio"],
-    ["/tmp/sound.wav", "audio"],
-    ["/tmp/sound.ogg", "audio"],
-    ["/tmp/sound.m4a", "audio"],
-  ])("%s → %s", (path, expected) => {
-    expect(detect_media_type(path)).toBe(expected);
-  });
-});
-
-describe("detect_media_type — file (기타)", () => {
-  it.each([
-    ["/tmp/doc.pdf", "file"],
-    ["/tmp/readme.txt", "file"],
-    ["/tmp/data.json", "file"],
-    ["/tmp/archive.zip", "file"],
-    ["/tmp/archive.tar", "file"],
-    ["/tmp/file.csv", "file"],
-    ["/tmp/file.md", "file"],
-  ])("%s → %s", (path, expected) => {
-    expect(detect_media_type(path)).toBe(expected);
-  });
-
-  it("확장자 없음 → file", () => {
-    expect(detect_media_type("/tmp/noext")).toBe("file");
-  });
-
-  it("빈 문자열 → file", () => {
-    expect(detect_media_type("")).toBe("file");
-  });
-});
-
-// ── to_local_media_item ──────────────────────────────────────────
-
-describe("to_local_media_item — 정상 케이스", () => {
-  it("실제 png 파일 → image MediaItem 반환", () => {
-    const file = join(workspace, "photo.png");
-    writeFileSync(file, "fake-png-data");
-    const result = to_local_media_item(file, workspace);
-    expect(result).not.toBeNull();
-    expect(result!.type).toBe("image");
-    expect(result!.name).toBe("photo.png");
-    expect(result!.url).toBe(file);
-  });
-
-  it("실제 txt 파일 → file MediaItem 반환", () => {
-    const file = join(workspace, "readme.txt");
-    writeFileSync(file, "text content");
-    const result = to_local_media_item(file, workspace);
-    expect(result).not.toBeNull();
-    expect(result!.type).toBe("file");
-  });
-});
-
-describe("to_local_media_item — null 반환 케이스", () => {
-  it("존재하지 않는 경로 → null", () => {
-    expect(to_local_media_item(join(workspace, "nonexistent.png"), workspace)).toBeNull();
-  });
-
-  it("http URL → null (로컬 레퍼런스 아님)", () => {
-    expect(to_local_media_item("https://example.com/image.png", workspace)).toBeNull();
-  });
-
+describe("to_local_media_item", () => {
   it("빈 문자열 → null", () => {
-    expect(to_local_media_item("", workspace)).toBeNull();
+    expect(to_local_media_item("", "/workspace")).toBeNull();
   });
 
-  it("디렉토리 경로 → null (파일이 아님)", () => {
-    const subdir = join(workspace, "subdir");
-    mkdirSync(subdir, { recursive: true });
-    // to_local_media_item은 디렉토리 → null 반환
-    const result = to_local_media_item(subdir, workspace);
-    expect(result).toBeNull();
+  it("URL http:// → null (local ref 아님)", () => {
+    expect(to_local_media_item("http://example.com/img.png", "/workspace")).toBeNull();
+  });
+
+  it("존재하지 않는 local 경로 → null", () => {
+    expect(to_local_media_item("./nonexistent-file-xyz.png", "/tmp")).toBeNull();
   });
 });

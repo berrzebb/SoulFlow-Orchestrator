@@ -173,25 +173,11 @@ describe("helpers — 실행 헬퍼 함수", () => {
       expect(result).toContain("2. file2.docx");
     });
 
-    it("build_context_message: 히스토리 없음", () => {
+    it("build_context_message: [CURRENT_REQUEST] 블록 포함", () => {
       const task = "current task";
-
-      const result = build_context_message(task, []);
-
+      const result = build_context_message(task);
       expect(result).toContain("[CURRENT_REQUEST]");
       expect(result).toContain("current task");
-      expect(result).not.toContain("[REFERENCE_RECENT_CONTEXT]");
-    });
-
-    it("build_context_message: 히스토리 있음", () => {
-      const task = "current task";
-      const history = ["previous line 1", "previous line 2"];
-
-      const result = build_context_message(task, history);
-
-      expect(result).toContain("[CURRENT_REQUEST]");
-      expect(result).toContain("[REFERENCE_RECENT_CONTEXT]");
-      expect(result).toContain("previous line 1");
     });
   });
 
