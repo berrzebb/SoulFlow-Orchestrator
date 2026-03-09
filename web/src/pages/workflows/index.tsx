@@ -289,6 +289,7 @@ export default function WorkflowsPage() {
                 return tplMatch ? (
                 <TemplateDetailPanel
                   template={tplMatch}
+                  initialObjective={quickObjective.trim() || undefined}
                   onClose={() => setSelectedTpl(null)}
                   onRun={(body) => {
                     runFromTplMut.mutate(body);
@@ -401,8 +402,9 @@ export default function WorkflowsPage() {
 
 // ── Template Detail Panel (카탈로그 상세) ──
 
-function TemplateDetailPanel({ template, onClose, onRun, onEdit, onDelete, running }: {
+function TemplateDetailPanel({ template, initialObjective, onClose, onRun, onEdit, onDelete, running }: {
   template: WorkflowTemplate;
+  initialObjective?: string;
   onClose: () => void;
   onRun: (body: { template_name: string; title: string; objective: string }) => void;
   onEdit: () => void;
@@ -412,25 +414,27 @@ function TemplateDetailPanel({ template, onClose, onRun, onEdit, onDelete, runni
   const t = useT();
   const [currentSlug, setCurrentSlug] = useState(template.slug);
   const [title, setTitle] = useState(template.title);
-  const [objective, setObjective] = useState(template.objective);
+  const [objective, setObjective] = useState(initialObjective ?? template.objective);
   const [hasChanges, setHasChanges] = useState(false);
 
   // template.slug 변경 시 로컬 편집 상태 리셋 — 렌더 중 setState (cascading 렌더 방지에 React가 최적화)
   if (currentSlug !== template.slug) {
     setCurrentSlug(template.slug);
     setTitle(template.title);
-    setObjective(template.objective);
+    setObjective(initialObjective ?? template.objective);
     setHasChanges(false);
   }
 
+  const baseObjective = initialObjective ?? template.objective;
+
   const handleChangeTitle = (e: React.ChangeEvent<HTMLInputElement>) => {
     setTitle(e.target.value);
-    setHasChanges(e.target.value !== template.title || objective !== template.objective);
+    setHasChanges(e.target.value !== template.title || objective !== baseObjective);
   };
 
   const handleChangeObjective = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setObjective(e.target.value);
-    setHasChanges(title !== template.title || e.target.value !== template.objective);
+    setHasChanges(title !== template.title || e.target.value !== baseObjective);
   };
 
   const handleClose = () => {
