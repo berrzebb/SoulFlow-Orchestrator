@@ -216,6 +216,18 @@ describe("DataFormatTool — jsonpath 비객체 세그먼트 접근 (L387)", () 
 });
 
 // ══════════════════════════════════════════
+// L303: yaml_serialize fallback (non-standard JS type)
+// ══════════════════════════════════════════
+
+describe("DataFormatTool — yaml_serialize fallback (L303)", () => {
+  it("BigInt 값 → String 변환 fallback (L303)", () => {
+    // BigInt는 null/boolean/number/string/Array/object에 해당하지 않음 → L303
+    const r = (tool as any).yaml_serialize(BigInt(42));
+    expect(r).toContain("42");
+  });
+});
+
+// ══════════════════════════════════════════
 // L260: yaml_parse_block i++ (콜론 없는 줄)
 // ══════════════════════════════════════════
 

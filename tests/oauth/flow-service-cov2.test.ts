@@ -413,3 +413,30 @@ describe("OAuthFlowService — 커스텀 프리셋 관리", () => {
     expect(url).toContain("client_id=my_client_id");
   });
 });
+
+// ══════════════════════════════════════════
+// L238: exchange_code_for_token — access_token 없음 → throw
+// ══════════════════════════════════════════
+
+describe("OAuthFlowService — _exchange_code: access_token 없음 (L238)", () => {
+  it("_post_token이 access_token 없는 응답 → throw Error (L238)", async () => {
+    const config = make_config();
+    (service as any)._post_token = vi.fn().mockResolvedValue({
+      error: "invalid_client",
+      error_description: "bad client credentials",
+    });
+    await expect(
+      (service as any)._exchange_code(config, "auth_code", "client_id", "client_secret"),
+    ).rejects.toThrow("bad client credentials");
+  });
+
+  it("error_description 없음 → error 필드 사용 (L238)", async () => {
+    const config = make_config();
+    (service as any)._post_token = vi.fn().mockResolvedValue({
+      error: "access_denied",
+    });
+    await expect(
+      (service as any)._exchange_code(config, "auth_code", "client_id", "client_secret"),
+    ).rejects.toThrow("access_denied");
+  });
+});

@@ -290,8 +290,13 @@ describe("parse_status_quick_action — 텍스트 기반 skills", () => {
     expect(parse_status_quick_action("능력", null)).toBe("skills");
   });
 
-  it("빈 텍스트, null 명령 → null", () => {
+  it("빈 텍스트, null 명령 → null (L104)", () => {
     expect(parse_status_quick_action("", null)).toBeNull();
+  });
+
+  it("도구/스킬 무관 텍스트, null 명령 → null (L108)", () => {
+    // 비어있지 않은 텍스트이지만 어떤 패턴에도 일치하지 않음 → L108 return null
+    expect(parse_status_quick_action("hello world", null)).toBeNull();
   });
 });
 

@@ -333,6 +333,13 @@ describe("JsonSchemaTool", () => {
     expect(result).toBeNull();
   });
 
+  // L136: infer_schema — undefined 등 미분류 타입 → {} 반환
+  it("infer_schema: undefined → {} 반환 (L136)", () => {
+    // undefined는 null/boolean/number/string/Array/object 분기를 모두 통과 → L136 return {}
+    const r = (tool as any).infer_schema(undefined);
+    expect(r).toEqual({});
+  });
+
   // L189: dereference — $ref 경로 중간에 비객체 → return obj
   it("dereference: $ref 경로 중간에 비객체 → obj 반환 (L189)", async () => {
     const schema = JSON.stringify({

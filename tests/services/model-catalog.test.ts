@@ -347,4 +347,26 @@ describe("model-catalog — fetch mock (네트워크)", () => {
     await fetch_openrouter_models();
     expect(vi.mocked(fetch).mock.calls.length).toBe(call_count_after_first);
   });
+
+  // L335: invalidate_model_cache(provider) — cache.delete 실행 경로
+  it("invalidate_model_cache: 일치하는 캐시 키 존재 시 cache.delete 호출 (L335)", async () => {
+    // anthropic 캐시 채우기 (api_key 있어야 to_cache 호출됨)
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: [{ id: "claude-3", display_name: "Claude 3" }] }),
+    } as unknown as Response);
+    await fetch_anthropic_models("fake-api-key");
+
+    // provider prefix로 무효화 → L335 cache.delete 실행
+    expect(() => invalidate_model_cache("anthropic")).not.toThrow();
+
+    // 무효화 후 재조회 시 fetch 재호출됨 (캐시가 실제로 제거됨)
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: [] }),
+    } as unknown as Response);
+    const prev_count = vi.mocked(fetch).mock.calls.length;
+    await fetch_anthropic_models("fake-api-key");
+    expect(vi.mocked(fetch).mock.calls.length).toBeGreaterThan(prev_count);
+  });
 });
