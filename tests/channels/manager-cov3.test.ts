@@ -186,6 +186,9 @@ describe("ChannelManager — extract_ts numeric ts 및 date fallback (L1300-1305
       // Prime the target so we skip the priming step and reach the sort (L504)
       (manager_ref as any).primed_targets.set("inst-1:chat-1", Date.now());
 
+      // running = true 설정 (start() 없이 직접 호출)
+      (manager_ref as any).running = true;
+
       // Run the poll loop — one iteration, then abort
       await (manager_ref as any).run_poll_loop();
 
@@ -235,6 +238,9 @@ describe("ChannelManager — extract_ts numeric ts 및 date fallback (L1300-1305
       }));
 
       (manager_ref as any).primed_targets.set("inst-2:chat-1", Date.now());
+
+      // running = true 설정 (start() 없이 직접 호출)
+      (manager_ref as any).running = true;
 
       await (manager_ref as any).run_poll_loop();
       expect(true).toBe(true);
