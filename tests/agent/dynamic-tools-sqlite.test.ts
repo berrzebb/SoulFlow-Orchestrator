@@ -4,6 +4,30 @@ import { tmpdir } from "node:os";
 import { afterAll, describe, it, expect } from "vitest";
 import { ToolInstallerService } from "@src/agent/tools/installer.ts";
 import { DynamicToolRuntimeLoader } from "@src/agent/tools/runtime-loader.ts";
+import { SqliteDynamicToolStore } from "@src/agent/tools/store.ts";
+import { with_sqlite } from "@src/utils/sqlite-helper.js";
+
+// L31: normalize_entry catch — 잘못된 parameters_json → { type: "object" }
+describe("SqliteDynamicToolStore — bad parameters_json catch (L31)", () => {
+  it("잘못된 parameters_json → catch → { type: 'object' } (L31)", async () => {
+    const ws = await mkdtemp(join(tmpdir(), "store-bad-json-"));
+    try {
+      const store = new SqliteDynamicToolStore(ws);
+      // 정상 도구 추가
+      store.upsert_tool({ name: "test_tool", description: "test", enabled: true, kind: "shell", parameters: { type: "object" }, command_template: "echo test", requires_approval: false });
+      // DB에서 parameters_json을 잘못된 JSON으로 교체
+      with_sqlite(store.sqlite_path, (db) => {
+        db.prepare("UPDATE dynamic_tools SET parameters_json = ? WHERE name = ?").run("{{{bad json", "test_tool");
+      });
+      const tools = store.list_tools();
+      const tool = tools.find((t) => t.name === "test_tool");
+      // 잘못된 JSON → catch → parameters = { type: "object" }
+      expect(tool?.parameters).toEqual({ type: "object" });
+    } finally {
+      await rm(ws, { recursive: true, force: true }).catch(() => {});
+    }
+  });
+});
 
 describe("dynamic tools sqlite", () => {
   let workspace: string;
