@@ -134,4 +134,27 @@ describe("UnitConvertTool — 에러 처리", () => {
     const r = await exec({ action: "convert", value: 1, from: "xyz", to: "abc" }) as Record<string, unknown>;
     expect(r.error).toBeDefined();
   });
+
+  it("unknown action → error 반환 (default 분기)", async () => {
+    const r = await exec({ action: "unknown_op", value: 1 }) as Record<string, unknown>;
+    expect(r.error).toBeDefined();
+  });
+
+  it("kelvin→celsius 변환 (convert_temp case 'k')", async () => {
+    // from='k' → case 'k': celsius = value - 273.15
+    const r = await exec({ action: "temperature", value: 373.15, from: "k", to: "c" }) as Record<string, unknown>;
+    expect(r.result).toBeCloseTo(100, 1);
+  });
+
+  it("convert_temp: 알 수 없는 from → NaN→null 반환 (default: return NaN)", async () => {
+    // from이 c/f/k가 아닌 경우 → default → NaN → JSON.stringify(NaN)=null
+    const r = await exec({ action: "temperature", value: 100, from: "x", to: "c" }) as Record<string, unknown>;
+    expect(r.result).toBeNull();
+  });
+
+  it("convert_temp: 알 수 없는 to → NaN→null 반환 (default: return NaN)", async () => {
+    // from='c'(valid) → celsius=100, to='z'(invalid) → default → NaN → null
+    const r = await exec({ action: "temperature", value: 100, from: "c", to: "z" }) as Record<string, unknown>;
+    expect(r.result).toBeNull();
+  });
 });

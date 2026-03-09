@@ -60,4 +60,13 @@ describe("i18n index — get_t / t", () => {
     const result = fn("nonexistent_key_xyz_abc");
     expect(typeof result).toBe("string");
   });
+
+  it("load_dict: 존재하지 않는 로케일 파일 → catch → dict={}", () => {
+    // 존재하지 않는 로케일로 설정하면 readFileSync 실패 → catch → dict={}
+    set_locale("fr" as any);
+    const result = t("any_key");
+    expect(typeof result).toBe("string"); // dict={} → 키 없음 → 키 그대로 반환
+    // 복구
+    set_locale(DEFAULT_LOCALE);
+  });
 });

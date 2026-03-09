@@ -80,4 +80,21 @@ describe("ConsecutiveToolCallGuard", () => {
     const result = guard.observe(null as unknown as ToolCallRequest[]);
     expect(result.blocked).toBe(false);
   });
+
+  it("constructor max_repeated_rounds=0 → || 2 fallback으로 2 사용", () => {
+    const guard = new ConsecutiveToolCallGuard(0);
+    const calls = [make_call("tool")];
+    guard.observe(calls);
+    guard.observe(calls); // repeated_rounds=1
+    const result = guard.observe(calls); // repeated_rounds=2 >= 2 → blocked
+    expect(result.blocked).toBe(true);
+  });
+
+  it("name 없는 tool_call → row.name||'' fallback 경로", () => {
+    const guard = new ConsecutiveToolCallGuard(2);
+    const calls = [{ id: "c1", name: "" as any, arguments: {} }] as ToolCallRequest[];
+    guard.observe(calls);
+    const result = guard.observe(calls); // repeated_rounds=1 < 2
+    expect(result.blocked).toBe(false);
+  });
 });
