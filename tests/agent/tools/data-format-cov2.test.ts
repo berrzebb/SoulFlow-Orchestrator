@@ -214,3 +214,19 @@ describe("DataFormatTool — jsonpath 비객체 세그먼트 접근 (L387)", () 
     expect(r).toBe("null");
   });
 });
+
+// ══════════════════════════════════════════
+// L260: yaml_parse_block i++ (콜론 없는 줄)
+// ══════════════════════════════════════════
+
+describe("DataFormatTool — yaml_parse_block: 콜론 없는 줄 → i++ (L260)", () => {
+  it("YAML에 콜론 없는 단순 텍스트 줄 → 파싱 오류 없음", async () => {
+    // "orphan_line"은 콜론이 없고 "- " prefix도 없는 줄 → i++ (L260)
+    const yaml_with_orphan = "name: Alice\norphan line without colon\nage: 30";
+    const r = await run({ operation: "convert", input: yaml_with_orphan, from: "yaml", to: "json" });
+    // orphan 줄은 무시됨
+    const parsed = JSON.parse(r);
+    expect(parsed.name).toBe("Alice");
+    expect(parsed.age).toBe(30);
+  });
+});

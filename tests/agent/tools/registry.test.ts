@@ -121,4 +121,22 @@ describe("ToolRegistry", () => {
     expect(reg.has("dyn3")).toBe(true);
     expect(reg.has("static")).toBe(true);
   });
+
+  // L182: execute catch — tool.execute throw → Error 반환
+  it("execute: tool.execute throw → catch → Error 메시지 반환 (L182)", async () => {
+    const reg = new ToolRegistry();
+    const throwing_tool: any = {
+      name: "throw_tool",
+      description: "throws",
+      category: "memory" as const,
+      parameters: { type: "object", properties: {} },
+      execute: vi.fn().mockRejectedValue(new Error("tool crashed")),
+      validate_params: vi.fn().mockReturnValue([]),
+      to_schema: () => ({ type: "function", function: { name: "throw_tool", description: "throws", parameters: { type: "object" } } }),
+    };
+    reg.register(throwing_tool);
+    const result = await reg.execute("throw_tool", {});
+    expect(result).toContain("Error executing throw_tool");
+    expect(result).toContain("tool crashed");
+  });
 });

@@ -152,3 +152,20 @@ describe("JsonPatchTool — test (action)", () => {
     expect(r.error).toBeDefined();
   });
 });
+
+// L177: set_value에서 last_key === "-" → array.push (RFC 6902 배열 끝 추가)
+describe("JsonPatchTool — add op: path/-  (배열 끝 추가, L177)", () => {
+  it("배열에 /- 경로로 add → 배열 끝에 push", async () => {
+    const doc = JSON.stringify({ items: [1, 2, 3] });
+    const patch = JSON.stringify([{ op: "add", path: "/items/-", value: 99 }]);
+    const r = await exec({ action: "apply", document: doc, patch }) as any;
+    expect(r.result.items).toEqual([1, 2, 3, 99]);
+  });
+
+  it("빈 배열에 /- 경로로 add → [value]", async () => {
+    const doc = JSON.stringify({ list: [] });
+    const patch = JSON.stringify([{ op: "add", path: "/list/-", value: "first" }]);
+    const r = await exec({ action: "apply", document: doc, patch }) as any;
+    expect(r.result.list).toEqual(["first"]);
+  });
+});

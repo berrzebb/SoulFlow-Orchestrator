@@ -156,4 +156,10 @@ describe("GraphTool", () => {
     const r = JSON.parse(await make_tool().execute({ action: "bfs", graph: "invalid" }));
     expect(r.error).toBeDefined();
   });
+
+  // L186: default branch — unknown action
+  it("알 수 없는 action → error 반환 (L186)", async () => {
+    const r = JSON.parse(await make_tool().execute({ action: "unknown_action" as any, graph: simple_graph }));
+    expect(r.error).toContain("unknown action");
+  });
 });
