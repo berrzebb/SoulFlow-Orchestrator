@@ -45,7 +45,9 @@ describe("MemoryStore — get_paths / resolve_daily_path", () => {
 
   it("resolve_daily_path() 날짜 없음 → 오늘 날짜 URI 반환", async () => {
     const uri = await store.resolve_daily_path();
-    const today = new Date().toISOString().slice(0, 10);
+    // toISOString()은 UTC, today_key()는 로컬 시간 사용 → getDate() 기반으로 로컬 날짜 사용
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
     expect(uri).toContain(today);
   });
 });
@@ -254,8 +256,9 @@ describe("MemoryStore — consolidate_with_provider", () => {
     const session = make_session(msgs, 0);
     const r = await store.consolidate_with_provider(session, provider, "claude", { memory_window: 10 });
     expect(r).toBe(true);
-    // history_entry가 daily에 추가됨
-    const today = new Date().toISOString().slice(0, 10);
+    // history_entry가 daily에 추가됨 (today_key()는 로컬 시간 사용)
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
     const daily = await store.read_daily(today);
     expect(daily).toContain("오늘의 요약");
     // memory_update가 longterm에 저장됨
@@ -283,7 +286,8 @@ describe("MemoryStore — consolidate_with_provider", () => {
     const session = make_session(msgs, 0);
     const r = await store.consolidate_with_provider(session, provider, "claude", { memory_window: 10 });
     expect(r).toBe(true);
-    const today = new Date().toISOString().slice(0, 10);
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
     const daily = await store.read_daily(today);
     expect(daily).toContain("요약본");
   });

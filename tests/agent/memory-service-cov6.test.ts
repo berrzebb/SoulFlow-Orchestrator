@@ -51,7 +51,9 @@ describe("MemoryStore — append_longterm / append_daily", () => {
 
   it("append_daily: 날짜 없이 호출 → 오늘 daily에 추가", async () => {
     await store.append_daily("오늘 추가 내용\n");
-    const today = new Date().toISOString().slice(0, 10);
+    // today_key()는 로컬 시간 사용 → getDate() 기반
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
     const result = await store.read_daily(today);
     expect(result).toContain("오늘 추가 내용");
   });
