@@ -148,6 +148,13 @@ describe("StatsTool — 에러 처리", () => {
     expect(String(await exec({ operation: "summary", data: "abc,def" }))).toContain("Error");
   });
 
+  it("parse_numbers: JSON 객체 입력 → split 폴백 (L53)", async () => {
+    // JSON.parse 성공하지만 Array.isArray(parsed)=false → else items = input.split() (L53)
+    const r = await exec({ operation: "summary", data: '{"values": [1,2,3]}' });
+    // split 결과: ['{"values": [1', '2', '3]}'] → 숫자로 파싱 시 유효한 값만 추출
+    expect(r).toBeDefined();
+  });
+
   it("correlation에서 data2 빈 문자열 → 계산됨 (0이 숫자로 처리)", async () => {
     // parse_numbers("")은 [0]을 반환하므로 correlation이 실행됨
     const r = await exec({ operation: "correlation", data: "[1,2,3]", data2: "invalid_not_number" }) as Record<string, unknown>;

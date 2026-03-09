@@ -93,6 +93,13 @@ describe("TokenizerTool", () => {
       // claude는 ratio=3.5이므로 기본(4)보다 토큰 수 많음
       expect(r.estimated_tokens).toBeGreaterThan(0);
     });
+
+    it("gpt4 모델 추정 (L100 else-if 브랜치)", async () => {
+      // model="gpt4" → else if (model === "gpt4") ratio = 4 (L100)
+      const r = JSON.parse(await make_tool().execute({ action: "token_estimate", text: "Hello world test", model: "gpt4" }));
+      expect(r.model).toBe("gpt4");
+      expect(r.estimated_tokens).toBeGreaterThan(0);
+    });
   });
 
   it("알 수 없는 액션 → 에러", async () => {

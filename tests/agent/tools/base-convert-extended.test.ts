@@ -78,6 +78,13 @@ describe("BaseConvertTool — convert (미커버 base)", () => {
     const r = JSON.parse(await tool.execute({ action: "convert", value: "10", from: "dec", to: "base999" }));
     expect(r.result).toBeDefined();
   });
+
+  it("base36 → dec 변환 (L97 to_decimal case)", async () => {
+    // "73" in base36 = 7*36 + 3 = 255
+    const r = JSON.parse(await tool.execute({ action: "convert", value: "73", from: "base36", to: "dec" }));
+    expect(r.decimal).toBe(255);
+    expect(r.result).toBe("255");
+  });
 });
 
 describe("BaseConvertTool — bytes_parse", () => {
