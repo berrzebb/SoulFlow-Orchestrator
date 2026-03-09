@@ -103,3 +103,29 @@ describe("YamlTool — to_yaml 비표준 타입 fallback (L251)", () => {
     expect(r).toContain("42");
   });
 });
+
+// ══════════════════════════════════════════
+// L42: parse_yaml catch → Error 문자열
+// ══════════════════════════════════════════
+
+describe("YamlTool — parse_yaml catch (L42)", () => {
+  it("yaml_parse 예외 → parse_yaml catch → Error 문자열 (L42)", () => {
+    const tool = new YamlTool();
+    (tool as any).yaml_parse = () => { throw new Error("parse error in yaml"); };
+    const r = (tool as any).parse_yaml("any yaml");
+    expect(r).toContain("Error: parse error in yaml");
+  });
+});
+
+// ══════════════════════════════════════════
+// L65: merge_yaml catch → Error 문자열
+// ══════════════════════════════════════════
+
+describe("YamlTool — merge_yaml catch (L65)", () => {
+  it("yaml_parse 예외 → merge_yaml catch → Error 문자열 (L65)", () => {
+    const tool = new YamlTool();
+    (tool as any).yaml_parse = () => { throw new Error("merge parse error"); };
+    const r = (tool as any).merge_yaml("yaml1", "yaml2");
+    expect(r).toContain("Error: merge parse error");
+  });
+});

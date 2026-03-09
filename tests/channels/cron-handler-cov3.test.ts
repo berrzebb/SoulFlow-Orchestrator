@@ -151,13 +151,26 @@ describe("CronHandler — parse_add_tokens text regex (L93-96)", () => {
 // ══════════════════════════════════════════
 
 describe("CronHandler — cron tz= 형식 (L132)", () => {
-  it("/cron add cron * * * * * tz=Asia/Seoul body → add 성공", async () => {
+  it("/cron add cron * * * * * tz=Asia/Seoul body → add 성공 (tz=형식)", async () => {
     const cron = make_cron();
     const h = new CronHandler(cron as any);
     const ctx = make_ctx({ cmd_name: "cron", cmd_args: ["add", "cron", "*", "*", "*", "*", "*", "tz=Asia/Seoul", "reminder"], content: "" });
     const r = await h.handle(ctx);
     expect(r).toBe(true);
     expect(cron.add_job).toHaveBeenCalled();
+  });
+
+  it("/cron add cron * * * * * tz Asia/Seoul body → add 성공 (space 형식 L132)", async () => {
+    const cron = make_cron();
+    const h = new CronHandler(cron as any);
+    // "tz Asia/Seoul" 공백 구분 → L132: tokens[idx].toLowerCase() === "tz" && tokens[idx + 1]
+    const ctx = make_ctx({ cmd_name: "cron", cmd_args: ["add", "cron", "*", "*", "*", "*", "*", "tz", "Asia/Seoul", "reminder"], content: "" });
+    const r = await h.handle(ctx);
+    expect(r).toBe(true);
+    expect(cron.add_job).toHaveBeenCalled();
+    // add_job(name, schedule, message, ...) — schedule은 두 번째 인자 (index 1)
+    const schedule = cron.add_job.mock.calls[0][1];
+    expect(schedule?.tz).toBe("Asia/Seoul");
   });
 });
 

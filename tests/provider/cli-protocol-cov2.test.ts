@@ -127,10 +127,21 @@ describe("extract_json_event_text — full='' (L249, L265)", () => {
 // ══════════════════════════════════════════
 
 describe("extract_json_event_text — delta dedup (L268, L287)", () => {
-  it("type=result, last_full_text prefix match → delta = suffix (L268)", () => {
+  it("type=result, last_full_text prefix match → delta = suffix (Gemini result path)", () => {
     const state = { last_full_text: "Hello" };
     const r = extract_json_event_text({ type: "result", response: "Hello World" }, state);
     expect((r as any).delta).toBe(" World");
+  });
+
+  it("item.completed assistant_message, last_full_text prefix match → delta = suffix (L268)", () => {
+    // type="item.completed", item.type="assistant_message" → L263 분기 → L268 delta 계산
+    const state = { last_full_text: "Hello" };
+    const r = extract_json_event_text({
+      type: "item.completed",
+      item: { type: "assistant_message", text: "Hello World" },
+    }, state);
+    expect((r as any).delta).toBe(" World");
+    expect((r as any).final).toBe("Hello World");
   });
 
   it("type=message.completed, last_full_text prefix match → delta = suffix (L287)", () => {
@@ -163,6 +174,16 @@ describe("parse_tool_calls_from_output — json→text + protocol→text (L337-3
       },
     });
     const r = parse_tool_calls_from_output(tool_json);
+    expect(Array.isArray(r)).toBe(true);
+  });
+
+  it("result JSON 이벤트 final에 TOOL block → json→text 경로 (L337-338)", () => {
+    // Gemini result 이벤트: response에 TOOL block 포함 → extract_final_from_json_output → final text에 TOOL block
+    // parse_tool_calls_from_json_events는 이 구조에서 tool call을 찾지 못함 (from_events=empty)
+    // → extract_final_from_json_output → extract_last_block_re → parse_tool_calls_from_text (L337-338)
+    const tool_block = `${TOOL_BLOCK_START}\n{"tool":"read_file","params":{"path":"/test"}}\n${TOOL_BLOCK_END}`;
+    const event_line = JSON.stringify({ type: "result", response: tool_block });
+    const r = parse_tool_calls_from_output(event_line);
     expect(Array.isArray(r)).toBe(true);
   });
 
