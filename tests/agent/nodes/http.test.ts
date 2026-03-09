@@ -82,6 +82,18 @@ describe("HTTP Node Handler", () => {
       expect(result.output.body).toBeDefined();
     });
 
+    it("should handle POST with string body (L56 body_str = resolved)", async () => {
+      // body가 문자열이면 typeof resolved === "string" → body_str = resolved (L56)
+      const node = createMockHttpNode({
+        url: "https://httpbin.org/post",
+        method: "POST",
+        body: "raw string body",
+      });
+      const ctx = createMockContext();
+      const result = await http_handler.execute(node, ctx);
+      expect(result.output.status).toBeGreaterThanOrEqual(200);
+    });
+
     it("should handle POST request with JSON body", async () => {
       const node = createMockHttpNode({
         url: "https://httpbin.org/post",

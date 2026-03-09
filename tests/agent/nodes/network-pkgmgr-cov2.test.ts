@@ -23,6 +23,7 @@ vi.mock("@src/agent/orche-node-executor.js", () => ({
 
 import { network_handler } from "@src/agent/nodes/network.js";
 import { package_manager_handler } from "@src/agent/nodes/package-manager.js";
+import { NetworkTool } from "@src/agent/tools/network.js";
 
 // ─── 공통 context ─────────────────────────────────────────────────────────────
 
@@ -503,5 +504,19 @@ describe("package_manager_handler — test()", () => {
     expect((r.preview as any).manager).toBe("pip");
     expect((r.preview as any).operation).toBe("install");
     expect((r.preview as any).package_name).toBe("requests");
+  });
+});
+
+// ══════════════════════════════════════════
+// NetworkTool — catch 블록 (L76)
+// ══════════════════════════════════════════
+
+describe("NetworkTool — exec 실패 시 catch 블록 (L76)", () => {
+  it("run_shell_command throw → Error 반환 (L76)", async () => {
+    mock_run_shell.mockRejectedValue(new Error("network unreachable"));
+    const tool = new NetworkTool({ workspace: "/tmp" });
+    const r = await tool.execute({ operation: "ping", host: "example.com" });
+    expect(String(r)).toContain("Error");
+    expect(String(r)).toContain("network unreachable");
   });
 });
