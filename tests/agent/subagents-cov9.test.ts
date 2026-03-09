@@ -138,4 +138,48 @@ describe("SubagentRegistry — tool execution loop (L545-566)", () => {
     // No execute calls
     expect(tool_registry.execute).not.toHaveBeenCalled();
   });
+
+  it("run_headless on_stream 소량 청크 → stream_buffer 누적 → L522-529 flush 시 L528 clear_stream_buffer 실행", async () => {
+    const providers = {
+      get_orchestrator_provider_id: vi.fn().mockReturnValue("openrouter"),
+      run_orchestrator: vi.fn()
+        .mockResolvedValueOnce({
+          content: JSON.stringify({ done: false, executor_prompt: "work with streaming" }),
+        })
+        .mockResolvedValueOnce({
+          content: JSON.stringify({ done: true, final_answer: "stream done" }),
+        }),
+      run_headless: vi.fn().mockImplementation(async (args: any) => {
+        // on_stream 소량 청크 호출 → L496 stream_buffer 누적 → L498 조기 반환 (< 120자)
+        // → stream_buffer에 잔류 → L522-529 flush 시 L528 clear_stream_buffer 실행
+        await args.on_stream?.("small streaming chunk");
+        return {
+          content: "no tool calls",
+          has_tool_calls: false,
+          tool_calls: [],
+          finish_reason: "stop",
+          metadata: {},
+        };
+      }),
+    } as any;
+
+    const tool_registry = make_tool_registry();
+
+    const reg = new SubagentRegistry({
+      workspace: "/tmp/cov9c",
+      providers,
+      bus: null,
+      build_tools: () => tool_registry,
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } as any,
+      agent_backends: null,
+    });
+
+    const { subagent_id } = await reg.spawn({
+      task: "streaming test",
+      max_iterations: 3,
+    });
+
+    const result = await reg.wait_for_completion(subagent_id, 8000, 20);
+    expect(result?.status).toBe("completed");
+  });
 });
