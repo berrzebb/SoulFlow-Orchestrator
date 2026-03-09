@@ -206,6 +206,21 @@ describe("save_workflow_template + delete_workflow_template", () => {
     expect(delete_workflow_template(tmp_dir, "any")).toBe(false);
   });
 
+  it("delete_workflow_template: workflows 디렉토리 있으나 파일 없음 → false (L142)", async () => {
+    // workflows 디렉토리는 존재하지만 일치하는 yaml/yml 파일이 없는 경우 → return false (L142)
+    await mkdir(join(tmp_dir, "workflows"), { recursive: true });
+    const result = delete_workflow_template(tmp_dir, "no-such-template");
+    expect(result).toBe(false);
+  });
+
+  it("load_workflow_template: exact match 경로에서 readFileSync 실패 → null (L64)", async () => {
+    // 파일 대신 디렉토리를 생성하면 readFileSync가 EISDIR 예외 발생 → catch { return null }
+    await mkdir(join(tmp_dir, "workflows"), { recursive: true });
+    await mkdir(join(tmp_dir, "workflows", "bad-template.yaml"), { recursive: true });
+    const result = load_workflow_template(tmp_dir, "bad-template");
+    expect(result).toBeNull();
+  });
+
   it("slug 변환 포함 저장 (특수문자 → 하이픈)", () => {
     const slug = save_workflow_template(tmp_dir, "My WF & More!", SIMPLE_WF);
     expect(slug).toBe("my-wf-more");

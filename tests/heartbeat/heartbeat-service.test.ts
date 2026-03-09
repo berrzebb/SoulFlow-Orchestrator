@@ -249,4 +249,12 @@ describe("HeartbeatService", () => {
     await (svc as any)._tick();
     expect(on_heartbeat).not.toHaveBeenCalled();
   });
+
+  it("_read_heartbeat_file: 경로가 디렉토리면 readFile EISDIR → catch null 반환 (L59)", async () => {
+    // HEARTBEAT.md 위치에 디렉토리 생성 → file_exists=true, readFile=EISDIR → catch { return null }
+    await mkdir(join(workspace, "HEARTBEAT.md"), { recursive: true });
+    const svc = new HeartbeatService(workspace, { interval_s: 9999 });
+    const result = await (svc as any)._read_heartbeat_file();
+    expect(result).toBeNull();
+  });
 });

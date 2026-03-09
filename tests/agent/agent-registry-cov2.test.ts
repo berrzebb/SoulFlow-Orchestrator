@@ -7,6 +7,8 @@
  */
 import { describe, it, expect, vi } from "vitest";
 import { AgentBackendRegistry } from "@src/agent/agent-registry.js";
+import { FailoverError } from "@src/agent/pty/types.js";
+import { CircuitBreaker } from "@src/providers/circuit-breaker.js";
 import type { AgentBackend, AgentRunResult } from "@src/agent/agent.types.js";
 
 function make_backend(
@@ -151,5 +153,54 @@ describe("AgentBackendRegistry — _try_fallback catch 경로", () => {
 
     // primary throw → _try_fallback(primary_id) → fallback.run throws → fb_breaker.record_failure → throw error
     await expect(reg.run("primary_fail", { task: "test" })).rejects.toThrow("fallback error");
+  });
+});
+
+// ══════════════════════════════════════════
+// _handle_failover_circuit default case (L267)
+// ══════════════════════════════════════════
+
+describe("AgentBackendRegistry — _handle_failover_circuit default (L267)", () => {
+  it("FailoverError reason='timeout' → default 브랜치 record_failure (L267)", async () => {
+    const failover_err = new FailoverError("timeout error", {
+      reason: "timeout",
+      provider: "claude_code",
+    });
+    const backend = make_backend("b_timeout", { run_throws: failover_err });
+    const reg = new AgentBackendRegistry({ provider_registry: stub_registry, backends: [backend] });
+    // fallback 없으므로 _try_fallback → throw. 하지만 _handle_failover_circuit(default branch)는 실행됨
+    await expect(reg.run("b_timeout", { task: "test" })).rejects.toThrow();
+  });
+
+  it("FailoverError reason='unknown' → default 브랜치 record_failure (L267)", async () => {
+    const failover_err = new FailoverError("unknown error", {
+      reason: "unknown",
+      provider: "chatgpt",
+    });
+    const backend = make_backend("b_unknown", { run_throws: failover_err });
+    const reg = new AgentBackendRegistry({ provider_registry: stub_registry, backends: [backend] });
+    await expect(reg.run("b_unknown", { task: "test" })).rejects.toThrow();
+  });
+});
+
+// ══════════════════════════════════════════
+// _circuit_state return "open" (L358)
+// ══════════════════════════════════════════
+
+describe("AgentBackendRegistry — list_backend_status circuit_state='open' (L358)", () => {
+  it("서킷 브레이커가 open 상태일 때 circuit_state='open' (L358)", () => {
+    // failure_threshold=1로 설정 → 1번 실패 즉시 open 상태
+    const breaker = new CircuitBreaker({ failure_threshold: 1, reset_timeout_ms: 60_000 });
+    breaker.record_failure(); // state=open, timeout 미경과 → can_acquire()=false
+
+    const backend = make_backend("b_open");
+    const reg = new AgentBackendRegistry({ provider_registry: stub_registry, backends: [backend] });
+
+    // 내부 breakers에 열린 서킷 브레이커를 주입
+    (reg as any).breakers.set("b_open", breaker);
+
+    const statuses = reg.list_backend_status();
+    const b_status = statuses.find((s) => s.id === "b_open");
+    expect(b_status?.circuit_state).toBe("open");
   });
 });
