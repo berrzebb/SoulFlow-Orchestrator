@@ -7,6 +7,7 @@ import { ChatPromptBar } from "../components/chat-prompt-bar";
 import { useToast } from "../components/toast";
 import { useAsyncState } from "../hooks/use-async-state";
 import { useApprovals } from "../hooks/use-approvals";
+import { useNdjsonStream } from "../hooks/use-ndjson-stream";
 import { useDashboardStore } from "../store";
 import { useT } from "../i18n";
 import { time_ago } from "../utils/format";
@@ -31,6 +32,8 @@ export default function ChatPage() {
   const { pending: creating, run: run_create } = useAsyncState();
   const { pending: deleting, run: run_delete } = useAsyncState();
   const [pending_media, setPendingMedia] = useState<ChatMediaItem[]>([]);
+  /** React 배칭으로 sending state가 즉시 반영되지 않으므로 ref로 동기 중복 방지 */
+  const stream_inflight = useRef(false);
   const [selectedProvider, setSelectedProvider] = useState("");
   const [selectedModel, setSelectedModel] = useState("");
   const messagesRef = useRef<HTMLDivElement>(null);
@@ -40,6 +43,7 @@ export default function ChatPage() {
   const web_stream = useDashboardStore((s) => s.web_stream);
   const set_web_stream = useDashboardStore((s) => s.set_web_stream);
   const mirror_event = useDashboardStore((s) => s.mirror_event);
+  const { stream: ndjson_stream, start: start_stream, cancel: cancel_stream } = useNdjsonStream();
 
   const is_mirror = !!mirrorKey;
 
@@ -141,26 +145,23 @@ export default function ChatPage() {
     e.target.value = "";
   };
 
-  const send = async () => {
-    if (!activeId || (!input.trim() && pending_media.length === 0) || sending) return;
+  const send = () => {
+    if (!activeId || (!input.trim() && pending_media.length === 0) || sending || stream_inflight.current) return;
+    stream_inflight.current = true;
     setSentMsgCount(raw_messages.length);
     setSending(true);
     setWaitingResponse(true);
-    try {
-      const body: Record<string, unknown> = { content: input.trim() };
-      if (pending_media.length > 0) body.media = pending_media;
-      if (selectedProvider) body.provider_instance_id = selectedProvider;
-      if (selectedModel) body.model = selectedModel;
-      await api.post(`/api/chat/sessions/${encodeURIComponent(activeId!)}/messages`, body);
-      setInput("");
-      setPendingMedia([]);
-      void qc.invalidateQueries({ queryKey: ["chat-session", activeId] });
-    } catch {
-      toast(t("chat.send_failed"), "err");
-      setWaitingResponse(false);
-    } finally {
-      setSending(false);
-    }
+    const body: Record<string, unknown> = { content: input.trim() };
+    if (pending_media.length > 0) body.media = pending_media;
+    if (selectedProvider) body.provider_instance_id = selectedProvider;
+    if (selectedModel) body.model = selectedModel;
+    setInput("");
+    setPendingMedia([]);
+    setSending(false);
+    start_stream(activeId!, body).then(
+      () => { stream_inflight.current = false; void qc.invalidateQueries({ queryKey: ["chat-session", activeId] }); },
+      () => { stream_inflight.current = false; toast(t("chat.send_failed"), "err"); setWaitingResponse(false); },
+    );
   };
 
   const send_mirror = async () => {
@@ -183,11 +184,15 @@ export default function ChatPage() {
   const raw_messages = is_mirror
     ? [...(mirrorSession?.messages ?? []), ...mirrorLiveMessages]
     : activeSession?.messages ?? [];
-  const stream_active = !is_mirror && web_stream?.chat_id === activeId && !!web_stream.content;
-  const is_streaming = stream_active && !web_stream!.done;
+
+  // NDJSON 로컬 스트림 우선, 없으면 SSE 글로벌 스트림 fallback
+  const active_stream = !is_mirror
+    ? (ndjson_stream?.chat_id === activeId ? ndjson_stream : (web_stream?.chat_id === activeId ? web_stream : null))
+    : null;
+  const stream_active = !!active_stream?.content;
+  const is_streaming = stream_active && !active_stream!.done;
 
   // 스트리밍 시작 or 전송 이후 새로 도착한 assistant 메시지 시 대기 상태 해제
-  // sent_msg_count_ref로 전송 시점의 스냅샷과 비교 — 이전 대화의 assistant 메시지로 오판 방지
   const new_assistant_arrived =
     raw_messages.length > sent_msg_count &&
     raw_messages[raw_messages.length - 1]?.direction === "assistant";
@@ -195,22 +200,20 @@ export default function ChatPage() {
     setWaitingResponse(false);
   }
 
-  // done 후 refetch된 메시지가 도착하면 web_stream 정리
+  // done 후 refetch된 메시지가 도착하면 스트림 정리
   useEffect(() => {
-    if (!web_stream?.done || web_stream.chat_id !== activeId) return;
-    const msgs = is_mirror
-      ? [...(mirrorSession?.messages ?? []), ...mirrorLiveMessages]
-      : activeSession?.messages ?? [];
-    const last = msgs[msgs.length - 1];
-    if (last?.direction === "assistant") set_web_stream(null);
-  }, [is_mirror, mirrorSession?.messages, mirrorLiveMessages, activeSession?.messages, web_stream, activeId, set_web_stream]);
+    const last = activeSession?.messages[activeSession.messages.length - 1];
+    if (!last || last.direction !== "assistant") return;
+    if (ndjson_stream?.done && ndjson_stream.chat_id === activeId) cancel_stream();
+    if (web_stream?.done && web_stream.chat_id === activeId) set_web_stream(null);
+  }, [activeSession?.messages, ndjson_stream, web_stream, activeId, cancel_stream, set_web_stream]);
 
   // 스트리밍 콘텐츠를 가상 메시지로 합쳐서 연속적 버블링
   const messages = (() => {
     if (!stream_active) return raw_messages;
     const virtual_msg: ChatMessage = {
       direction: "assistant",
-      content: web_stream!.content,
+      content: active_stream!.content,
       at: new Date().toISOString(),
     };
     return [...raw_messages, virtual_msg];

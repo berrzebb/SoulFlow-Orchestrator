@@ -1,17 +1,7 @@
-/** 실행 모드 분류: 오케스트레이터 LLM 기반 once/agent/task/builtin/inquiry 판정. */
+/** 실행 모드 분류: 키워드 휴리스틱 기반 once/agent/task/builtin/inquiry/identity 판정. LLM 미사용. */
 
-import type { ChatMessage } from "../providers/types.js";
 import type { Logger } from "../logger.js";
 import type { ClassificationResult } from "./types.js";
-import {
-  EXECUTION_MODE_DEFINITIONS,
-  BASE_FLOWCHART,
-  INQUIRY_DEFINITION,
-  INQUIRY_FLOWCHART,
-  build_active_task_context,
-  build_classifier_capabilities,
-} from "./prompts.js";
-import { error_message } from "../utils/common.js";
 
 export type SkillEntry = { name: string; summary: string; triggers: string[] };
 
@@ -22,78 +12,124 @@ export type ClassifierContext = {
   available_skills?: SkillEntry[];
 };
 
-type OrchestratorProvider = {
-  run_orchestrator(args: { messages: ChatMessage[]; max_tokens?: number; temperature?: number }): Promise<{ content?: unknown }>;
-};
+// ── 결정론적 패턴 ────────────────────────────────────────────────────────────
 
-/** 오케스트레이터 LLM에게 실행 모드 분류를 위임. */
-export async function classify_execution_mode(
-  task: string,
-  ctx: ClassifierContext,
-  providers: OrchestratorProvider,
-  logger: Logger,
-): Promise<ClassificationResult> {
-  const text = String(task || "").trim();
-  if (!text) return { mode: "once" };
-  if (!has_orchestrator(providers)) return { mode: "once" };
+/** /커맨드 인자 파싱. */
+const RE_BUILTIN = /^\/(\S+)(?:\s+(.*))?$/s;
 
-  const has_active = ctx.active_tasks && ctx.active_tasks.length > 0;
+/** 봇 정체성 질문 키워드. */
+const IDENTITY_WORDS = [
+  "누구야", "누구니", "누구세요", "소개해", "뭐야", "뭐니", "뭐세요",
+  "who are you", "what are you", "introduce yourself",
+];
 
-  const parts = [EXECUTION_MODE_DEFINITIONS];
-  if (has_active) {
-    parts.push(INQUIRY_DEFINITION);
-    parts.push(INQUIRY_FLOWCHART);
-    parts.push(build_active_task_context(ctx.active_tasks!));
-  } else {
-    parts.push(BASE_FLOWCHART);
-  }
-  const prompt = parts.join("\n");
+/** 진행 중인 작업 조회 키워드 (active_tasks 존재 시에만 inquiry로 분류). */
+const INQUIRY_WORDS = [
+  "상태", "진행", "어떻게", "됐어", "됐나", "완료", "끝났어", "끝났나",
+  "status", "progress", "done", "finished", "how is", "how's",
+];
 
-  const user_parts = [`[REQUEST]\n${text}`];
-  if (ctx.available_tool_categories?.length || ctx.available_skills?.length) {
-    user_parts.push(build_classifier_capabilities(
-      ctx.available_tool_categories || [],
-      ctx.available_skills || [],
-    ));
-  }
-  if (ctx.recent_history && ctx.recent_history.length > 0) {
-    const history_block = ctx.recent_history.map((r) => `[${r.role}] ${r.content}`).join("\n");
-    user_parts.push(`\n[RECENT_CONTEXT]\n${history_block}`);
-  }
+// ── 복잡도 휴리스틱 ──────────────────────────────────────────────────────────
 
-  try {
-    const response = await providers.run_orchestrator({
-      messages: [
-        { role: "system", content: prompt },
-        { role: "user", content: user_parts.join("\n\n") },
-      ],
-      max_tokens: 120,
-      temperature: 0,
-    });
-    const raw = String(response.content || "");
-    const parsed = parse_execution_mode(raw);
-    if (parsed) {
-      logger.info("classify_result", { mode: parsed.mode, raw: raw.slice(0, 120) });
-      return parsed;
-    }
-    logger.warn("classify_parse_failed", { raw: raw.slice(0, 120) });
-  } catch (e) {
-    logger.warn("classify_error", { error: error_message(e) });
-  }
-
-  return { mode: "once" };
+/**
+ * once/agent/task 중 하나를 결정하는 핵심 로직.
+ *
+ * 판단 기준:
+ * - `task`: 장시간 실행 + 명시적 "백그라운드/비동기/나중에" 키워드
+ * - `agent`: 여러 단계 수행 필요 + 도구 연계 필요
+ * - `once`: 단일 질문/조회/응답
+ *
+ * 이 함수를 구현하세요 (5-10줄).
+ * 힌트: 아래 상수들을 활용하거나 직접 정의하세요.
+ */
+function classify_execution_complexity(_text: string, _ctx: ClassifierContext): "once" | "agent" | "task" {
+  // TODO: 직접 구현 — once/agent/task 구분 휴리스틱
+  // 예시 접근법:
+  //   task 신호: "백그라운드", "비동기", "나중에 알려줘", "background", "async", "schedule"
+  //   agent 신호: 여러 동사 연결 ("하고", "그다음", "그리고 나서"), 파일 작업 + 전송 조합
+  //   once: 그 외 단순 질문/대화
+  return "once";
 }
 
-const RE_JSON_BLOCK = /\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/;
-const RE_MODE_WORD = /\b(?:once|task|agent|inquiry|identity|phase)\b/;
-const RE_WHITESPACE_NORMALIZE = /[\s_-]+/g;
-const RE_NEED_TASK_LOOP = /NEED\s*TASK\s*LOOP/i;
-const RE_NEED_AGENT_LOOP = /NEED\s*AGENT\s*LOOP/i;
+// ── 공개 API ─────────────────────────────────────────────────────────────────
+
+/**
+ * 키워드 휴리스틱으로 실행 모드를 분류. 0ms, LLM 호출 없음.
+ *
+ * 우선순위:
+ * 1. builtin  — /커맨드
+ * 2. identity — 봇 정체성 질문
+ * 3. inquiry  — 활성 태스크 상태 조회
+ * 4. once/agent/task — 복잡도 휴리스틱
+ */
+export function classify_execution_mode(
+  task: string,
+  ctx: ClassifierContext,
+  _providers: unknown,
+  logger: Logger,
+): Promise<ClassificationResult> {
+  const result = fast_classify(task, ctx);
+  logger.info("classify_result", { mode: result.mode, source: "heuristic" });
+  return Promise.resolve(result);
+}
+
+/** @internal — exported for unit testing. */
+export function fast_classify(task: string, ctx: ClassifierContext): ClassificationResult {
+  const text = String(task || "").trim();
+  if (!text) return { mode: "once" };
+
+  // 1. builtin: /커맨드
+  const builtin_match = text.match(RE_BUILTIN);
+  if (builtin_match) {
+    return { mode: "builtin", command: builtin_match[1], args: builtin_match[2]?.trim() || undefined };
+  }
+
+  const lower = text.toLowerCase();
+
+  // 2. identity: 봇 소개 질문
+  if (IDENTITY_WORDS.some((w) => lower.includes(w))) {
+    return { mode: "identity" };
+  }
+
+  // 3. inquiry: 활성 태스크 있을 때 상태 조회
+  const has_active = (ctx.active_tasks?.length ?? 0) > 0;
+  if (has_active && INQUIRY_WORDS.some((w) => lower.includes(w))) {
+    return { mode: "inquiry" };
+  }
+
+  // 4. once / agent / task
+  return { mode: classify_execution_complexity(text, ctx) };
+}
+
+// ── 이하 호환성 유지 (에스컬레이션 판별) ────────────────────────────────────
+
+/** @internal — exported for unit testing. */
+export function detect_escalation(text: string, source_mode: "once" | "agent" = "once"): string | null {
+  const normalized = text.replace(/[\s_-]+/g, " ").toUpperCase().trim();
+  if (normalized.includes("NEED TASK LOOP")) {
+    return source_mode === "agent" ? "agent_requires_task_loop" : "once_requires_task_loop";
+  }
+  if (normalized.includes("NEED AGENT LOOP")) return "once_requires_agent_loop";
+  return null;
+}
+
+export function is_once_escalation(error?: string | null): boolean {
+  if (!error) return false;
+  return error === "once_requires_task_loop" || error === "once_requires_agent_loop";
+}
+
+/** agent 모드에서 task 에스컬레이션이 필요한지 판별. */
+export function is_agent_escalation(error?: string | null): boolean {
+  if (!error) return false;
+  return error === "agent_requires_task_loop";
+}
 
 /** @internal — exported for unit testing. */
 export function parse_execution_mode(raw: string): ClassificationResult | null {
   const text = String(raw || "").trim();
   if (!text) return null;
+  const RE_JSON_BLOCK = /\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/;
+  const RE_MODE_WORD = /\b(?:once|task|agent|inquiry|identity|phase)\b/;
   const json_match = text.match(RE_JSON_BLOCK);
   if (json_match) {
     try {
@@ -128,29 +164,4 @@ export function parse_execution_mode(raw: string): ClassificationResult | null {
     return { mode: word[0] as "once" | "agent" | "task" | "inquiry" };
   }
   return null;
-}
-
-/** @internal — exported for unit testing. */
-export function detect_escalation(text: string, source_mode: "once" | "agent" = "once"): string | null {
-  const normalized = text.replace(RE_WHITESPACE_NORMALIZE, " ").toUpperCase().trim();
-  if (RE_NEED_TASK_LOOP.test(normalized)) {
-    return source_mode === "agent" ? "agent_requires_task_loop" : "once_requires_task_loop";
-  }
-  if (RE_NEED_AGENT_LOOP.test(normalized)) return "once_requires_agent_loop";
-  return null;
-}
-
-function has_orchestrator(providers: unknown): boolean {
-  return !!providers && typeof (providers as Record<string, unknown>).run_orchestrator === "function";
-}
-
-export function is_once_escalation(error?: string | null): boolean {
-  if (!error) return false;
-  return error === "once_requires_task_loop" || error === "once_requires_agent_loop";
-}
-
-/** agent 모드에서 task 에스컬레이션이 필요한지 판별. */
-export function is_agent_escalation(error?: string | null): boolean {
-  if (!error) return false;
-  return error === "agent_requires_task_loop";
 }

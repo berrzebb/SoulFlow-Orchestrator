@@ -679,7 +679,7 @@ export function create_workflow_ops(deps: {
           source = { title: "", objective: "", phases: [] };
         }
         /** 수정 중인 워크플로우 사본. update_section이 in-place로 패치. */
-        const wf = JSON.parse(JSON.stringify(source)) as Record<string, unknown>;
+        const wf = structuredClone(source) as Record<string, unknown>;
 
         // ── Section type → array 매핑 ──────────────────────────────────
         const SECTION_MAP: Record<string, { arr: string; key: string }> = {

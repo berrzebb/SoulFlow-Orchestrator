@@ -1,6 +1,7 @@
 import { now_iso } from "../utils/common.js";
 import { createHash } from "node:crypto";
 import { mkdir, open, readFile, unlink } from "node:fs/promises";
+import { hostname as os_hostname } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 
@@ -9,6 +10,7 @@ type LockPayload = {
   started_at: string;
   cwd: string;
   key: string;
+  hostname?: string;
 };
 
 export type RuntimeInstanceLockHandle = {
@@ -19,13 +21,21 @@ export type RuntimeInstanceLockHandle = {
   release: () => Promise<void>;
 };
 
-function process_alive(pid: number): boolean {
-  if (!Number.isFinite(pid) || pid <= 0) return false;
+const PROCESS_HOSTNAME = os_hostname();
+
+/** PID가 살아있는지 체크. 컨테이너 재시작 시 PID가 재사용되므로 hostname도 비교. */
+function is_stale_lock(holder: LockPayload): boolean {
+  const pid = holder.pid;
+  if (!Number.isFinite(pid) || pid <= 0) return true;
+  // 다른 hostname에서 만든 lock → 죽은 컨테이너의 lock
+  if (holder.hostname && holder.hostname !== PROCESS_HOSTNAME) return true;
+  // 같은 PID지만 시작 시간이 다르면 재사용된 PID → stale
+  // process.kill(pid, 0)으로 PID 존재 확인
   try {
     process.kill(pid, 0);
-    return true;
+    return false; // 살아있음
   } catch {
-    return false;
+    return true; // 프로세스 없음 → stale
   }
 }
 
@@ -59,6 +69,7 @@ async function read_lock_payload(lock_path: string): Promise<LockPayload | null>
       started_at: String(obj.started_at || ""),
       cwd: String(obj.cwd || ""),
       key: String(obj.key || ""),
+      hostname: obj.hostname ? String(obj.hostname) : undefined,
     };
   } catch {
     return null;
@@ -75,6 +86,7 @@ async function try_acquire_lock(lock_path: string, key: string): Promise<{ ok: b
         started_at: now_iso(),
         cwd: process.cwd(),
         key,
+        hostname: PROCESS_HOSTNAME,
       };
       await fd.writeFile(`${JSON.stringify(payload)}\n`, "utf-8");
     } finally {
@@ -88,11 +100,20 @@ async function try_acquire_lock(lock_path: string, key: string): Promise<{ ok: b
 
   const holder = await read_lock_payload(lock_path);
   const holder_pid = Number(holder?.pid || 0) || null;
-  if (holder_pid && process_alive(holder_pid)) {
+  if (holder && !is_stale_lock(holder)) {
     return { ok: false, holder_pid };
   }
+  // stale lock 제거 후 즉시 재획득 시도
   await unlink(lock_path).catch(() => undefined);
-  return { ok: false, holder_pid };
+  const fd = await open(lock_path, "wx").catch(() => null);
+  if (!fd) return { ok: false, holder_pid };
+  try {
+    const payload: LockPayload = { pid: process.pid, started_at: now_iso(), cwd: process.cwd(), key, hostname: PROCESS_HOSTNAME };
+    await fd.writeFile(`${JSON.stringify(payload)}\n`, "utf-8");
+  } finally {
+    await fd.close();
+  }
+  return { ok: true, holder_pid: process.pid };
 }
 
 export async function acquire_runtime_instance_lock(args: {

@@ -112,17 +112,19 @@ export class ContextBuilder {
     const skill_summary = this.skills_loader.build_skill_summary();
     const oauth_section = await this._build_oauth_section();
     const current_session = this._build_current_session_section(session_context?.channel, session_context?.chat_id);
+    // 안정적 내용을 앞에 → Gemini/OpenRouter implicit cache hit 최대화
+    // 변동적 내용(memory, decisions, promises)을 뒤에 배치
     return [
       security_override,
       bootstrap,
-      memory_context,
-      decisions || "",
-      promises || "",
       skills_content ? `# Skills In Context\n${skills_content}` : "",
       `# Skills Summary\n${skill_summary || "(no skills found)"}`,
       oauth_section,
       MODEL_ROUTING_GUIDE,
       current_session,
+      memory_context,
+      decisions || "",
+      promises || "",
     ]
       .filter(Boolean)
       .join("\n\n")

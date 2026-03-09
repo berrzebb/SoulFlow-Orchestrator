@@ -18,6 +18,7 @@ import {
 } from "../agent-hooks-builder.js";
 import { error_result, reply_result, suppress_result } from "./helpers.js";
 import type { RunExecutionArgs, RunnerDeps } from "./runner-deps.js";
+import { streaming_cfg_for } from "./runner-deps.js";
 import type { OrchestrationResult } from "../types.js";
 
 export async function run_once(deps: RunnerDeps, args: RunExecutionArgs): Promise<OrchestrationResult> {
@@ -37,9 +38,11 @@ export async function run_once(deps: RunnerDeps, args: RunExecutionArgs): Promis
     if (backend?.native_tool_loop) {
       try {
         const caps = backend.capabilities;
+        // once 모드는 매 요청 fresh thread — resume하면 세션 무한 누적으로 토큰 폭증
+        const once_task_id = `once:${args.req.provider}:${args.req.message.chat_id}:${Date.now()}`;
         const result = await deps.agent_backends.run(backend.id, {
           task: args.context_block,
-          task_id: `once:${args.req.provider}:${args.req.message.chat_id}`,
+          task_id: once_task_id,
           system_prompt: String(messages[0].content || ""),
           tools: args.tool_definitions as ToolSchema[],
           tool_executors: deps.runtime.get_tool_executors(),
@@ -77,7 +80,7 @@ export async function run_once(deps: RunnerDeps, args: RunExecutionArgs): Promis
       temperature: 0.3,
       runtime_policy: args.runtime_policy,
       abort_signal: args.req.signal,
-      on_stream: create_stream_handler(deps.streaming_cfg, stream, args.req.on_stream),
+      on_stream: create_stream_handler(streaming_cfg_for(deps.streaming_cfg, args.req.provider), stream, args.req.on_stream),
     });
 
     const err = extract_provider_error(String(response.content || ""));
@@ -109,7 +112,7 @@ export async function run_once(deps: RunnerDeps, args: RunExecutionArgs): Promis
         max_tokens: 800,
         temperature: 0.2,
         abort_signal: args.req.signal,
-        on_stream: create_stream_handler(deps.streaming_cfg, stream, args.req.on_stream),
+        on_stream: create_stream_handler(streaming_cfg_for(deps.streaming_cfg, args.req.provider), stream, args.req.on_stream),
       });
       flush_remaining(stream, args.req.on_stream);
       const followup_text = sanitize_provider_output(String(followup.content || "")).trim();

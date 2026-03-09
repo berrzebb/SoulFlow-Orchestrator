@@ -6,18 +6,21 @@ import type { TaskState } from "../contracts.js";
 import type { ProgressEvent } from "../bus/types.js";
 import type { AgentEvent } from "../agent/agent.types.js";
 import type { RecentMessage } from "./service.js";
-import type { SseBroadcasterLike } from "./broadcaster.js";
+import type { SseBroadcasterLike, WebStreamEvent } from "./broadcaster.js";
 import { now_iso, short_id } from "../utils/common.js";
 import { set_no_cache } from "./route-context.js";
 import { pick_agent_event_fields } from "./state-builder.js";
 
 type SseClient = { id: string; res: ServerResponse };
+type RichStreamListener = (event: WebStreamEvent) => void;
 
 const MAX_RECENT_MESSAGES = 40;
 
 export class SseManager implements SseBroadcasterLike {
   private readonly clients = new Map<string, SseClient>();
   readonly recent_messages: RecentMessage[] = [];
+  /** 세션별 WebStreamEvent 리스너 (chat_id → 리스너 집합 + 텍스트 offset). */
+  private readonly rich_listeners = new Map<string, { listeners: Set<RichStreamListener>; offset: number }>();
 
   get client_count(): number { return this.clients.size; }
 
@@ -66,8 +69,44 @@ export class SseManager implements SseBroadcasterLike {
   }
 
   broadcast_web_stream(chat_id: string, content: string, done: boolean): void {
-    if (this.clients.size === 0) return;
-    this._broadcast(`event: web_stream\ndata: ${JSON.stringify({ chat_id, content, done })}\n\n`);
+    // SSE 전역 브로드캐스트 (기존)
+    if (this.clients.size > 0) {
+      this._broadcast(`event: web_stream\ndata: ${JSON.stringify({ chat_id, content, done })}\n\n`);
+    }
+    // 세션별 rich 리스너: 텍스트 delta 발행
+    const entry = this.rich_listeners.get(chat_id);
+    if (entry && entry.listeners.size > 0) {
+      const delta = content.slice(entry.offset);
+      entry.offset = content.length;
+      if (delta) {
+        const ev: WebStreamEvent = { type: "delta", content: delta };
+        for (const fn of entry.listeners) fn(ev);
+      }
+      if (done) {
+        const ev: WebStreamEvent = { type: "done" };
+        for (const fn of entry.listeners) fn(ev);
+        this.rich_listeners.delete(chat_id);
+      }
+    }
+  }
+
+  /** 세션별 WebStreamEvent 리스너 등록. 반환값은 해제 함수. */
+  add_rich_stream_listener(chat_id: string, fn: RichStreamListener): () => void {
+    if (!this.rich_listeners.has(chat_id)) {
+      this.rich_listeners.set(chat_id, { listeners: new Set(), offset: 0 });
+    }
+    this.rich_listeners.get(chat_id)!.listeners.add(fn);
+    return () => {
+      const e = this.rich_listeners.get(chat_id);
+      if (e) { e.listeners.delete(fn); if (e.listeners.size === 0) this.rich_listeners.delete(chat_id); }
+    };
+  }
+
+  /** 에이전트 이벤트(도구, usage)를 세션 rich 리스너로 라우팅. */
+  broadcast_web_rich_event(chat_id: string, event: WebStreamEvent): void {
+    const entry = this.rich_listeners.get(chat_id);
+    if (!entry || entry.listeners.size === 0) return;
+    for (const fn of entry.listeners) fn(event);
   }
 
   /** 어시스턴트 메시지가 세션에 저장된 직후 발송. */

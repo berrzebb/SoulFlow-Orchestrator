@@ -332,6 +332,45 @@ export class TelegramChannel extends BaseChannel {
     }
   }
 
+  /** Telegram Bot API 9.3 sendMessageDraft: 스트리밍 드래프트 메시지 생성/갱신. */
+  async send_draft(chat_id: string, text: string, reply_to_message_id?: string, draft_message_id?: string): Promise<{ ok: boolean; draft_id?: string; error?: string }> {
+    if (!this.bot_token) return { ok: false, error: "telegram_bot_token_missing" };
+    const url = `${this.api_base}/bot${this.bot_token}/sendMessageDraft`;
+    const payload: Record<string, unknown> = { chat_id, text: String(text || "").slice(0, 4000) };
+    if (draft_message_id) payload.message_id = Number(draft_message_id);
+    else if (reply_to_message_id) payload.reply_to_message_id = Number(reply_to_message_id);
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      });
+      const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+      if (!response.ok || data.ok !== true) {
+        return { ok: false, error: as_string(data.description || `http_${response.status}`) };
+      }
+      const result = (data.result && typeof data.result === "object") ? (data.result as Record<string, unknown>) : {};
+      const draft_id = as_string(result.message_id || draft_message_id || "");
+      return { ok: true, draft_id };
+    } catch (error) {
+      return { ok: false, error: error_message(error) };
+    }
+  }
+
+  /** Telegram Bot API 9.3 native streaming: 드래프트 메시지 시작. */
+  async start_native_stream(chat_id: string, reply_to: string): Promise<{ ok: boolean; stream_id?: string; error?: string }> {
+    const res = await this.send_draft(chat_id, "…", reply_to || undefined);
+    if (!res.ok) return { ok: false, error: res.error };
+    return { ok: true, stream_id: res.draft_id };
+  }
+
+  /** Telegram Bot API 9.3 native streaming: 드래프트 내용 갱신. */
+  async append_native_stream(chat_id: string, stream_id: string, text: string): Promise<{ ok: boolean; error?: string }> {
+    const res = await this.send_draft(chat_id, text, undefined, stream_id);
+    return { ok: res.ok, error: res.error };
+  }
+
   async edit_message(chat_id: string, message_id: string, content: string, parse_mode?: string): Promise<{ ok: boolean; error?: string }> {
     if (!this.bot_token) return { ok: false, error: "telegram_bot_token_missing" };
     if (!chat_id || !message_id) return { ok: false, error: "chat_id_and_message_id_required" };

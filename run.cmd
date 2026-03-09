@@ -20,6 +20,7 @@ set "WORKSPACE="
 set "WEB_PORT="
 set "INSTANCE="
 set "WATCH="
+set "SKIP_LOCK=0"
 
 set "COMMAND=%~1"
 if "%COMMAND%"=="" set "COMMAND=help"
@@ -45,6 +46,7 @@ for %%a in (%*) do (
     if "!arg!"=="--name" set "PREV_KEY=instance"
     if "!arg:~0,8!"=="--watch=" set "WATCH=!arg:~8!"
     if "!arg!"=="--watch" set "WATCH=all"
+    if /i "!arg!"=="--skip-lock" set "SKIP_LOCK=1"
   )
 )
 
@@ -108,11 +110,13 @@ set "PROJECT_NAME=soulflow-%COMMAND%"
 if not "%INSTANCE%"=="" set "PROJECT_NAME=!PROJECT_NAME!-!INSTANCE!"
 
 set "HOST_WORKSPACE=%WORKSPACE%"
+set "SKIP_INSTANCE_LOCK=%SKIP_LOCK%"
 
 echo.
 echo %YELLOW%🚀 %COMMAND% 환경 시작 중...%NC%
 echo    워크스페이스: %WORKSPACE%
 echo    프로젝트: !PROJECT_NAME!
+if "%SKIP_LOCK%"=="1" echo    skip lock: enabled
 
 REM .agents 디렉토리 사전 생성
 if not exist "%WORKSPACE%\.agents\.claude" mkdir "%WORKSPACE%\.agents\.claude"
@@ -153,6 +157,7 @@ if !errorlevel! equ 0 (
   echo %GREEN%✅ %COMMAND% 환경이 시작되었습니다!%NC%
   echo %GREEN%   프로젝트: !PROJECT_NAME!%NC%
   echo %GREEN%   웹 포트: !WEB_PORT!%NC%
+  if "%SKIP_LOCK%"=="1" echo %YELLOW%⚠ WARNING: instance lock disabled%NC%
   if "!EFFECTIVE_WATCH!"=="web" (
     if not exist "dist\web" mkdir "dist\web"
     echo.
@@ -277,6 +282,7 @@ echo   --instance=NAME    - 인스턴스 이름
 echo   --web-port=PORT    - 웹 포트
 echo   --watch            - 전체 소스 마운트 + 핫 리로드 (tsx watch)
 echo   --watch=web        - 웹 소스만 마운트 + 핫 리로드
+echo   --skip-lock        - 인스턴스 락 비활성화 (복구/디버그 전용)
 echo.
 goto end
 

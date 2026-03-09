@@ -13,6 +13,7 @@ export function parse_executor_preference(raw: string): ExecutorProvider {
   if (normalized === "claude_code") return "claude_code";
   if (normalized === "openrouter") return "openrouter";
   if (normalized === "orchestrator_llm") return "orchestrator_llm";
+  if (normalized === "gemini" || normalized === "gemini_cli") return "gemini";
   return "chatgpt";
 }
 

@@ -576,6 +576,7 @@ export class DashboardService implements ServiceLike {
       oauth_callback_html: (s, m) => this._oauth_callback_html(s, m),
       resolve_request_origin: (r) => this._resolve_request_origin(r),
       bus: this.options.bus,
+      add_rich_stream_listener: (id, fn) => this._sse.add_rich_stream_listener(id, fn),
     };
   }
 

@@ -125,7 +125,7 @@ async function select_with_keyword_index(
   const explicit_tools = [...(classifier_tools || []), ...skill_tool_names];
 
   const selected_names = await index.select(request_text, {
-    max_tools: mode === "once" ? 25 : 35,
+    max_tools: mode === "once" ? 10 : 35,
     mode,
     classifier_tools: explicit_tools,
     classifier_categories,

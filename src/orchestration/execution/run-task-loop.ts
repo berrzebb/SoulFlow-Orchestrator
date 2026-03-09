@@ -19,6 +19,7 @@ import {
 } from "../agent-hooks-builder.js";
 import { error_result, reply_result, suppress_result, raw_message_id } from "./helpers.js";
 import type { RunExecutionArgs, RunnerDeps } from "./runner-deps.js";
+import { streaming_cfg_for } from "./runner-deps.js";
 import type { OrchestrationResult } from "../types.js";
 
 /** task execute 노드에서 네이티브 백엔드로 실행 시도. 성공 시 AgentRunResult, 불가 시 null. */
@@ -149,7 +150,7 @@ export async function run_task_loop(
           max_tokens: 1800,
           temperature: 0.3,
           abort_signal: args.req.signal,
-          on_stream: create_stream_handler(deps.streaming_cfg, stream, args.req.on_stream),
+          on_stream: create_stream_handler(streaming_cfg_for(deps.streaming_cfg, args.req.provider), stream, args.req.on_stream),
           check_should_continue: async () => false,
           on_tool_calls: create_tool_call_handler(deps.tool_deps, task_tool_ctx, state, {
             buffer: stream, on_stream: args.req.on_stream, on_tool_block: args.req.on_tool_block,

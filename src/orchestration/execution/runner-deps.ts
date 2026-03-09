@@ -42,6 +42,11 @@ export type StreamingConfig = {
   min_chars: number;
 };
 
+/** web 채널은 Slack/Telegram API rate limit이 없으므로 훨씬 빠른 flush 주기 사용. */
+export function streaming_cfg_for(base: StreamingConfig, provider: string): StreamingConfig {
+  return provider === "web" ? { enabled: base.enabled, interval_ms: 80, min_chars: 1 } : base;
+}
+
 /** OrchestrationService에서 runner 함수로 전달되는 공유 의존성. */
 export type RunnerDeps = {
   providers: ProviderRegistry;

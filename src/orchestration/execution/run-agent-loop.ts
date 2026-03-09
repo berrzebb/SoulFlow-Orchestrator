@@ -18,11 +18,12 @@ import {
 } from "../agent-hooks-builder.js";
 import { error_result, reply_result, suppress_result, append_no_tool_notice } from "./helpers.js";
 import type { RunExecutionArgs, RunnerDeps } from "./runner-deps.js";
+import { streaming_cfg_for } from "./runner-deps.js";
 import type { OrchestrationResult } from "../types.js";
 
 export async function run_agent_loop(
   deps: RunnerDeps,
-  args: RunExecutionArgs & { media: string[]; history_lines: string[] },
+  args: RunExecutionArgs & { media: string[] },
 ): Promise<OrchestrationResult> {
   const stream = new StreamBuffer();
   emit_execution_info(stream, args.req.on_stream, "agent", args.executor, deps.logger);
@@ -92,7 +93,7 @@ export async function run_agent_loop(
     max_tokens: 1800,
     temperature: 0.3,
     abort_signal: args.req.signal,
-    on_stream: create_stream_handler(deps.streaming_cfg, stream, args.req.on_stream),
+    on_stream: create_stream_handler(streaming_cfg_for(deps.streaming_cfg, args.req.provider), stream, args.req.on_stream),
     check_should_continue: async ({ state: s }) => {
       if (s.currentTurn >= (deps.config.agent_loop_max_turns ?? 10)) return false;
       return AGENT_TOOL_NUDGE;

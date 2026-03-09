@@ -25,6 +25,7 @@ export type RouteContext = {
   oauth_callback_html: (success: boolean, message: string) => string;
   resolve_request_origin: (req: IncomingMessage) => string;
   bus: DashboardOptions["bus"];
+  add_rich_stream_listener: (chat_id: string, fn: (event: import("./broadcaster.js").WebStreamEvent) => void) => () => void;
 };
 
 export type RouteHandler = (ctx: RouteContext) => Promise<boolean>;

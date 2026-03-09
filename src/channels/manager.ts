@@ -35,6 +35,19 @@ import { parse_tone_override, type PersonaMessageIntent, type PersonaMessageRend
 import { extract_media_items } from "./media-extractor.js";
 import { prune_ttl_map, sleep, error_message, now_iso, normalize_text } from "../utils/common.js";
 import { LaneQueue } from "../agent/pty/lane-queue.js";
+import { ChannelBlockRenderer } from "./channel-block-renderer.js";
+
+/** Native streaming을 지원하는 채널 인터페이스 (Slack / Telegram). */
+type NativeStreamChannel = {
+  start_native_stream(chat_id: string, reply_to: string): Promise<{ ok: boolean; stream_id?: string; error?: string }>;
+  append_native_stream(chat_id: string, stream_id: string, text: string): Promise<{ ok: boolean; error?: string }>;
+  stop_native_stream?(chat_id: string, stream_id: string): Promise<{ ok: boolean; error?: string }>;
+};
+
+function is_native_stream_channel(ch: unknown): ch is NativeStreamChannel {
+  return typeof (ch as NativeStreamChannel)?.start_native_stream === "function"
+    && typeof (ch as NativeStreamChannel)?.append_native_stream === "function";
+}
 
 /** status mode: 도구 이름 → 상태 아이콘 매핑. */
 const STATUS_ICONS: Record<string, string> = {
@@ -103,6 +116,8 @@ export type ChannelManagerDeps = {
   on_agent_event?: ((event: import("../agent/agent.types.js").AgentEvent) => void) | null;
   /** 웹 채팅 스트리밍 텍스트 릴레이 콜백 (chat_id, content, done). */
   on_web_stream?: ((chat_id: string, content: string, done: boolean) => void) | null;
+  /** 웹 채널 실행 중 에이전트 이벤트(도구, usage)를 세션별 NDJSON 스트림으로 라우팅. */
+  on_web_rich_event?: ((chat_id: string, event: import("../agent/agent.types.js").AgentEvent) => void) | null;
   /** 워크플로우 HITL: 채널 응답을 워크플로우 pending_response로 라우팅. */
   workflow_hitl?: WorkflowHitlBridge | null;
   /** 실행 전 확인 가드. */
@@ -143,6 +158,7 @@ export class ChannelManager implements ServiceLike {
   private readonly logger: Logger;
   private readonly on_agent_event: ((event: import("../agent/agent.types.js").AgentEvent) => void) | null;
   private readonly on_web_stream: ((chat_id: string, content: string, done: boolean) => void) | null;
+  private readonly on_web_rich_event: ((chat_id: string, event: import("../agent/agent.types.js").AgentEvent) => void) | null;
   private readonly session_store: import("../session/service.js").SessionStoreLike | null;
   private readonly bot_identity: BotIdentitySource;
   private workflow_hitl: WorkflowHitlBridge | null;
@@ -187,6 +203,7 @@ export class ChannelManager implements ServiceLike {
     this.logger = deps.logger;
     this.on_agent_event = deps.on_agent_event || null;
     this.on_web_stream = deps.on_web_stream || null;
+    this.on_web_rich_event = deps.on_web_rich_event || null;
     this.session_store = deps.session_store ?? null;
     this.bot_identity = deps.bot_identity;
     this.workflow_hitl = deps.workflow_hitl ?? null;
@@ -582,7 +599,15 @@ export class ChannelManager implements ServiceLike {
       accumulated: "",
       tool_count: 0,
       status_creating: false,
+      /** true = message_id가 native stream ID (Slack stream_ts / Telegram draft_id) */
+      native_stream_active: false,
+      /** native stream 종료 콜백 (Slack stopStream). */
+      finalize_native_stream: null as (() => Promise<void>) | null,
     };
+
+    // web 채널은 NDJSON 스트림으로 처리 → 채널(Slack/Telegram 등)에서만 활성화
+    const block_renderer = provider !== "web" ? new ChannelBlockRenderer() : null;
+    const block_msg = { id: "" };
 
     try {
       if (!meta.is_recovery) await this.recorder.record_user(provider, message, alias);
@@ -592,7 +617,8 @@ export class ChannelManager implements ServiceLike {
         12, this.config.sessionHistoryMaxAgeMs,
       );
 
-      const is_status_mode = this.config.streaming.enabled && this.config.streaming.mode === "status";
+      // web 채널은 status 메시지 편집 API가 없으므로 항상 live 모드로 강제
+      const is_status_mode = provider !== "web" && this.config.streaming.enabled && this.config.streaming.mode === "status";
 
       const msg_meta = (message.metadata || {}) as Record<string, unknown>;
       const preferred_provider_id = typeof msg_meta.preferred_provider_id === "string" ? msg_meta.preferred_provider_id : undefined;
@@ -630,7 +656,19 @@ export class ChannelManager implements ServiceLike {
             this.logger.debug("progress_publish_failed", { error: error_message(e) }),
           );
         },
-        on_agent_event: this.on_agent_event || undefined,
+        on_agent_event: (this.on_agent_event || this.on_web_rich_event || block_renderer)
+          ? (event) => {
+              this.on_agent_event?.(event);
+              // web 채널: rich 이벤트를 세션별 NDJSON 스트림으로 추가 라우팅
+              if (provider === "web") this.on_web_rich_event?.(message.chat_id, event);
+              // 채널: 블록 완성 시 실시간 편집
+              if (block_renderer?.push(event)) {
+                stream_state.chain = stream_state.chain
+                  .then(() => this._flush_block_render(provider, message, alias, block_renderer, block_msg))
+                  .catch((e) => this.logger.debug("block_render_failed", { error: error_message(e) }));
+              }
+            }
+          : undefined,
         on_tool_block: is_status_mode
           ? (tool_name: string) => {
               stream_state.tool_count++;
@@ -673,6 +711,11 @@ export class ChannelManager implements ServiceLike {
       }
 
       await stream_state.chain;
+      if (stream_state.finalize_native_stream) {
+        await stream_state.finalize_native_stream().catch((e) =>
+          this.logger.debug("native_stream_stop_failed", { error: error_message(e) }),
+        );
+      }
       await this.deliver_result(provider, message, alias, result, stream_state.message_id);
     } catch (e) {
       if (run_id) this.tracker!.end(run_id, "failed", error_message(e));
@@ -721,8 +764,8 @@ export class ChannelManager implements ServiceLike {
       return m;
     };
 
-    // status mode: 상태 메시지 → "✓ 완료" + 최종 답변 새 메시지
-    const is_status_mode = this.config.streaming.enabled && this.config.streaming.mode === "status";
+    // status mode: 상태 메시지 → "✓ 완료" + 최종 답변 새 메시지 (web은 제외)
+    const is_status_mode = provider !== "web" && this.config.streaming.enabled && this.config.streaming.mode === "status";
     if (is_status_mode && stream_message_id) {
       try {
         await this.registry.edit_message(provider, message.chat_id, stream_message_id, this.render_msg({ kind: "status_completed" }, render_key(provider, message.chat_id)));
@@ -757,11 +800,14 @@ export class ChannelManager implements ServiceLike {
 
   private async send_or_edit_stream(
     provider: ChannelProvider, message: InboundMessage, alias: string, content: string,
-    state: { message_id: string; last_update: number; last_kind: "" | "stream" | "tool_block"; tool_count: number },
+    state: {
+      message_id: string; last_update: number; last_kind: "" | "stream" | "tool_block"; tool_count: number;
+      native_stream_active: boolean; finalize_native_stream: (() => Promise<void>) | null;
+    },
   ): Promise<void> {
     if (provider === "web") {
       const now = Date.now();
-      if (now - state.last_update < 400) return;
+      if (now - state.last_update < 80) return;
       state.last_update = now;
       this.on_web_stream?.(message.chat_id, content, false);
       return;
@@ -769,20 +815,46 @@ export class ChannelManager implements ServiceLike {
     const now = Date.now();
     if (now - state.last_update < 1200) return;
 
-    // 스트리밍은 최종 메시지로 교체되므로 진행 표시 역할 — 플랫폼 제한만 적용
-    const char_limit = provider === "telegram" ? 4000 : 3800;
     const trimmed = content.trim();
     if (!trimmed) return;
 
-    // 플랫폼 제한 초과 시 후미만 표시 (앞부분은 어차피 최종 메시지에 포함)
+    // Native streaming 경로: Slack(chat.startStream/appendStream) / Telegram(sendMessageDraft)
+    if (state.native_stream_active || !state.message_id) {
+      const [native_ch] = this.registry.get_channels_by_provider(provider);
+      if (is_native_stream_channel(native_ch)) {
+        if (!state.native_stream_active) {
+          const reply_to = resolve_reply_to(provider, message);
+          const start = await native_ch.start_native_stream(message.chat_id, reply_to);
+          if (start.ok && start.stream_id) {
+            state.message_id = start.stream_id;
+            state.native_stream_active = true;
+            if (native_ch.stop_native_stream) {
+              const ch = native_ch, chat_id = message.chat_id, stream_id = start.stream_id;
+              state.finalize_native_stream = async () => { await ch.stop_native_stream!(chat_id, stream_id); };
+            }
+          }
+        }
+        if (state.native_stream_active) {
+          const res = await native_ch.append_native_stream(message.chat_id, state.message_id, trimmed);
+          if (res.ok) {
+            state.last_kind = "stream";
+            state.last_update = now;
+          } else {
+            this.logger.debug("native_stream_append_failed", { error: res.error });
+          }
+          return;
+        }
+        // start 실패 시 기존 edit 방식으로 폴백
+      }
+    }
+
+    // 기존 edit 방식 (Slack/Telegram native 미지원 또는 start 실패 시 폴백)
+    const char_limit = provider === "telegram" ? 4000 : 3800;
     const display = trimmed.length > char_limit
       ? "…\n" + trimmed.slice(trimmed.length - char_limit + 2)
       : trimmed;
-
     let text = display;
-    if (state.tool_count > 0) {
-      text = `[${state.tool_count} tool calls]\n${text}`;
-    }
+    if (state.tool_count > 0) text = `[${state.tool_count} tool calls]\n${text}`;
 
     // 스트림 편집은 plain text — 잘린 HTML/마크다운 파싱 에러 방지
     if (state.message_id) {
@@ -837,6 +909,33 @@ export class ChannelManager implements ServiceLike {
       state.last_update = now;
     } catch (e) {
       this.logger.debug("status_edit_failed", { error: error_message(e) });
+    }
+  }
+
+  /** 블록 렌더러 내용을 채널 메시지에 생성/편집. 첫 호출 시 새 메시지 전송, 이후 편집. */
+  private async _flush_block_render(
+    provider: ChannelProvider, message: InboundMessage, alias: string,
+    renderer: ChannelBlockRenderer, state: { id: string },
+  ): Promise<void> {
+    if (!renderer.has_content()) return;
+    const profile = this.effective_render_profile(provider, message.chat_id);
+    const text = renderer.render(profile.mode);
+    if (!text) return;
+
+    if (state.id) {
+      try {
+        await this.registry.edit_message(provider, message.chat_id, state.id, text);
+      } catch (e) {
+        this.logger.debug("block_render_edit_failed", { error: error_message(e) });
+      }
+    } else {
+      const result = await this.dispatch.send(provider, {
+        id: `blocks-${Date.now()}`, provider, channel: provider, sender_id: alias,
+        chat_id: message.chat_id, content: text, at: now_iso(),
+        reply_to: resolve_reply_to(provider, message), thread_id: message.thread_id,
+        metadata: { kind: "agent_blocks", agent_alias: alias },
+      });
+      if (result.ok && result.message_id) state.id = result.message_id;
     }
   }
 

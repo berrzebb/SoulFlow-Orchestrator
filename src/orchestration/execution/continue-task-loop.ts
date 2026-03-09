@@ -19,6 +19,7 @@ import {
 import { error_result, suppress_result, reply_result, build_tool_context, build_context_message, inbound_scope_id } from "./helpers.js";
 import { try_native_task_execute } from "./run-task-loop.js";
 import type { RunnerDeps } from "./runner-deps.js";
+import { streaming_cfg_for } from "./runner-deps.js";
 import type { OrchestrationRequest, OrchestrationResult } from "../types.js";
 
 /** continue_task_loop 전용 추가 의존성. */
@@ -54,8 +55,7 @@ export async function continue_task_loop(
   }
 
   const user_input = String(task.memory.__user_input || task_with_media);
-  const history_lines = req.session_history.slice(-8).map((r) => `[${r.role}] ${r.content}`);
-  const context_block = build_context_message(user_input, history_lines);
+  const context_block = build_context_message(user_input);
 
   const prior_session = deps.agent_backends?.get_session_store()?.find_by_task(`task:${task.taskId}`) ?? undefined;
 
@@ -116,7 +116,7 @@ export async function continue_task_loop(
           max_tokens: 1800,
           temperature: 0.3,
           abort_signal: req.signal,
-          on_stream: create_stream_handler(deps.streaming_cfg, stream, req.on_stream),
+          on_stream: create_stream_handler(streaming_cfg_for(deps.streaming_cfg, req.provider), stream, req.on_stream),
           check_should_continue: async () => false,
           on_tool_calls: create_tool_call_handler(deps.tool_deps, tool_ctx, state, {
             buffer: stream, on_stream: req.on_stream, on_tool_block: req.on_tool_block,

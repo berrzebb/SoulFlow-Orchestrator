@@ -50,7 +50,6 @@ export type ReadyPreflight = {
   request_task_id: string;
   run_id: string;
   evt_base: Pick<AppendWorkflowEventInput, "run_id" | "task_id" | "agent_id" | "provider" | "channel" | "chat_id" | "source">;
-  history_lines: string[];
   context_block: string;
   tool_ctx: ToolExecutionContext;
   skill_tool_names: string[];
@@ -107,8 +106,7 @@ export async function run_request_preflight(
     source: "inbound",
   };
 
-  const history_lines = req.session_history.slice(-8).map((r) => `[${r.role}] ${r.content}`);
-  const context_block = build_context_message(task_with_media, history_lines);
+  const context_block = build_context_message(task_with_media);
   const tool_ctx = build_tool_context(req, request_task_id);
 
   const skill_tool_names = collect_skill_tool_names(deps.runtime, skill_names);
@@ -138,7 +136,6 @@ export async function run_request_preflight(
     request_task_id,
     run_id,
     evt_base,
-    history_lines,
     context_block,
     tool_ctx,
     skill_tool_names,
@@ -264,12 +261,8 @@ function compose_task_with_media(task: string, media: string[]): string {
   ].join("\n");
 }
 
-function build_context_message(task_with_media: string, history_lines: string[]): string {
-  return [
-    `[CURRENT_REQUEST]\n${task_with_media}`,
-    history_lines.length > 0 ? ["[REFERENCE_RECENT_CONTEXT]", ...history_lines].join("\n") : "",
-    "중요: 실행 대상은 CURRENT_REQUEST 하나입니다. REFERENCE 문맥은 참고용이며 재실행 지시가 아닙니다.",
-  ].filter(Boolean).join("\n\n");
+function build_context_message(task_with_media: string): string {
+  return `[CURRENT_REQUEST]\n${task_with_media}`;
 }
 
 const RE_SCOPE_INVALID = /[^a-zA-Z0-9._-]+/g;

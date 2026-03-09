@@ -57,6 +57,7 @@ import {
   execute_dispatch,
   type ExecuteDispatcherDeps,
 } from "./execution/execute-dispatcher.js";
+import { streaming_cfg_for } from "./execution/runner-deps.js";
 
 type OrchestratorConfig = {
   executor_provider: ExecutorProvider;
@@ -213,7 +214,10 @@ export class OrchestrationService {
 
   /** 공통 AgentHooks 구성. args.req + stream + backend_id 조합. */
   private _hooks_for(stream: StreamBuffer, args: { req: OrchestrationRequest; runtime_policy: RuntimeExecutionPolicy }, backend_id: string, task_id?: string, tools_accumulator?: string[]) {
-    return build_agent_hooks(this.hooks_deps, {
+    const hooks_deps = args.req.provider === "web"
+      ? { ...this.hooks_deps, streaming_config: streaming_cfg_for(this.streaming_cfg, "web") }
+      : this.hooks_deps;
+    return build_agent_hooks(hooks_deps, {
       buffer: stream, on_stream: args.req.on_stream, runtime_policy: args.runtime_policy,
       channel_context: { channel: args.req.provider, chat_id: String(args.req.message.chat_id || ""), task_id },
       on_tool_block: args.req.on_tool_block, backend_id, on_progress: args.req.on_progress,

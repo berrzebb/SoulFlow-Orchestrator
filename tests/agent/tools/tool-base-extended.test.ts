@@ -283,3 +283,27 @@ describe("Tool — validate_params: 중첩 객체", () => {
     expect(errors.some((e) => e.includes("integer"))).toBe(true);
   });
 });
+
+// ── TYPE_MAP number/boolean 분기 (L26, L27) ────────────────────────────
+
+describe("Tool — validate_params: number/boolean TYPE_MAP 검증 (L26, L27)", () => {
+  it("number 타입에 문자열 → 에러 (TYPE_MAP number 호출)", () => {
+    const tool = make_tool({
+      type: "object",
+      required: ["price"],
+      properties: { price: { type: "number" } },
+    });
+    const errors = tool.validate_params({ price: "not-a-number" });
+    expect(errors.some((e) => e.includes("number"))).toBe(true);
+  });
+
+  it("boolean 타입에 문자열 → 에러 (TYPE_MAP boolean 호출)", () => {
+    const tool = make_tool({
+      type: "object",
+      required: ["active"],
+      properties: { active: { type: "boolean" } },
+    });
+    const errors = tool.validate_params({ active: "yes" });
+    expect(errors.some((e) => e.includes("boolean"))).toBe(true);
+  });
+});

@@ -1,9 +1,56 @@
 import { MAX_CHAT_SESSIONS, MAX_MESSAGES_PER_SESSION, type ChatMediaItem, type ChatSession, type ChatSessionMessage } from "../service.js";
 import { now_iso, short_id } from "../../utils/common.js";
 import type { RouteContext } from "../route-context.js";
+import { set_no_cache } from "../route-context.js";
+
+type ParsedBody = {
+  text: string;
+  media: ChatMediaItem[];
+  model: string | undefined;
+  provider_instance_id: string | undefined;
+};
+
+function parse_chat_body(body: Record<string, unknown> | null): ParsedBody {
+  const text = String(body?.content || "").trim();
+  const media_raw = Array.isArray(body?.media) ? (body.media as unknown[]) : [];
+  const media: ChatMediaItem[] = media_raw
+    .filter((m): m is Record<string, unknown> => typeof m === "object" && m !== null)
+    .map((m) => ({ type: String(m.type || "file"), url: String(m.url || ""), mime: m.mime ? String(m.mime) : undefined, name: m.name ? String(m.name) : undefined }))
+    .filter((m) => m.url);
+  const model = typeof body?.model === "string" ? body.model.trim() || undefined : undefined;
+  const provider_instance_id = typeof body?.provider_instance_id === "string"
+    ? body.provider_instance_id.trim() || undefined : undefined;
+  return { text, media, model, provider_instance_id };
+}
+
+function append_user_message(session: ChatSession, parsed: ParsedBody): void {
+  const msg: ChatSessionMessage = { direction: "user", content: parsed.text, at: now_iso() };
+  if (parsed.media.length > 0) msg.media = parsed.media;
+  if (parsed.model) msg.model = parsed.model;
+  if (parsed.provider_instance_id) msg.provider_instance_id = parsed.provider_instance_id;
+  session.messages.push(msg);
+  if (session.messages.length > MAX_MESSAGES_PER_SESSION) {
+    session.messages.splice(0, session.messages.length - MAX_MESSAGES_PER_SESSION);
+  }
+}
+
+function build_publish_payload(session: ChatSession, parsed: ParsedBody) {
+  return {
+    id: `web_msg_${short_id(8)}`,
+    provider: "web" as const, channel: "web", sender_id: "web_user",
+    chat_id: session.id, content: parsed.text, at: now_iso(),
+    media: parsed.media.length > 0
+      ? parsed.media.map((m) => ({ type: m.type as import("../../bus/types.js").MediaItemType, url: m.url, mime: m.mime, name: m.name }))
+      : undefined,
+    metadata: {
+      ...(parsed.provider_instance_id ? { preferred_provider_id: parsed.provider_instance_id } : {}),
+      ...(parsed.model ? { preferred_model: parsed.model } : {}),
+    },
+  };
+}
 
 export async function handle_chat(ctx: RouteContext): Promise<boolean> {
-  const { req, url, res, json, read_body, chat_sessions, session_store, session_store_key, bus } = ctx;
+  const { req, url, res, json, read_body, chat_sessions, session_store, session_store_key, bus, add_rich_stream_listener } = ctx;
   const path = url.pathname;
 
   // GET /api/chat/sessions
@@ -52,6 +99,45 @@ export async function handle_chat(ctx: RouteContext): Promise<boolean> {
     return true;
   }
 
+  // POST /api/chat/sessions/:id/messages/stream — NDJSON 스트리밍 응답
+  const stream_match = path.match(/^\/api\/chat\/sessions\/([^/]+)\/messages\/stream$/);
+  if (stream_match && req.method === "POST") {
+    const session_id = decodeURIComponent(stream_match[1]);
+    const session = chat_sessions.get(session_id);
+    if (!session) { json(res, 404, { error: "session_not_found" }); return true; }
+    const body = await read_body(req);
+    const parsed = parse_chat_body(body);
+    if (!parsed.text && parsed.media.length === 0) { json(res, 400, { error: "content_or_media_required" }); return true; }
+
+    res.statusCode = 200;
+    res.setHeader("Content-Type", "application/x-ndjson; charset=utf-8");
+    set_no_cache(res);
+
+    // 리스너를 발행 전에 등록해야 초기 delta를 놓치지 않음
+    const unsubscribe = add_rich_stream_listener(session_id, (event) => {
+      if (res.writableEnded) return;
+      res.write(JSON.stringify(event) + "\n");
+      if (event.type === "done") res.end();
+    });
+
+    const timeout = setTimeout(() => {
+      unsubscribe();
+      if (!res.writableEnded) { res.write(JSON.stringify({ type: "error", error: "timeout" }) + "\n"); res.end(); }
+    }, 120_000);
+
+    req.on("close", () => { clearTimeout(timeout); unsubscribe(); });
+
+    append_user_message(session, parsed);
+
+    res.write(JSON.stringify({ type: "start" }) + "\n");
+    bus.publish_inbound(build_publish_payload(session, parsed)).catch(() => {
+      unsubscribe();
+      clearTimeout(timeout);
+      if (!res.writableEnded) { res.write(JSON.stringify({ type: "error", error: "publish_failed" }) + "\n"); res.end(); }
+    });
+    return true;
+  }
+
   // POST /api/chat/sessions/:id/messages { content, media? }
   const msg_match = path.match(/^\/api\/chat\/sessions\/([^/]+)\/messages$/);
   if (msg_match && req.method === "POST") {
@@ -59,41 +145,10 @@ export async function handle_chat(ctx: RouteContext): Promise<boolean> {
     const session = chat_sessions.get(session_id);
     if (!session) { json(res, 404, { error: "session_not_found" }); return true; }
     const body = await read_body(req);
-    const text = String(body?.content || "").trim();
-    const media_raw = Array.isArray(body?.media) ? (body.media as unknown[]) : [];
-    const media: ChatMediaItem[] = media_raw
-      .filter((m): m is Record<string, unknown> => typeof m === "object" && m !== null)
-      .map((m) => ({ type: String(m.type || "file"), url: String(m.url || ""), mime: m.mime ? String(m.mime) : undefined, name: m.name ? String(m.name) : undefined }))
-      .filter((m) => m.url);
-    if (!text && media.length === 0) { json(res, 400, { error: "content_or_media_required" }); return true; }
-
-    // 선택적: 모델 및 프로바이더 인스턴스 ID
-    const model = typeof body?.model === "string" ? body.model.trim() || undefined : undefined;
-    const provider_instance_id = typeof body?.provider_instance_id === "string"
-      ? body.provider_instance_id.trim() || undefined : undefined;
-
-    const user_msg: ChatSessionMessage = { direction: "user", content: text, at: now_iso() };
-    if (media.length > 0) user_msg.media = media;
-    if (model) user_msg.model = model;
-    if (provider_instance_id) user_msg.provider_instance_id = provider_instance_id;
-    session.messages.push(user_msg);
-    if (session.messages.length > MAX_MESSAGES_PER_SESSION) {
-      session.messages.splice(0, session.messages.length - MAX_MESSAGES_PER_SESSION);
-    }
-    await bus.publish_inbound({
-      id: `web_msg_${short_id(8)}`,
-      provider: "web",
-      channel: "web",
-      sender_id: "web_user",
-      chat_id: session.id,
-      content: text,
-      at: now_iso(),
-      media: media.length > 0 ? media.map((m) => ({ type: m.type as import("../../bus/types.js").MediaItemType, url: m.url, mime: m.mime, name: m.name })) : undefined,
-      metadata: {
-        ...(provider_instance_id ? { preferred_provider_id: provider_instance_id } : {}),
-        ...(model ? { preferred_model: model } : {}),
-      },
-    });
+    const parsed = parse_chat_body(body);
+    if (!parsed.text && parsed.media.length === 0) { json(res, 400, { error: "content_or_media_required" }); return true; }
+    append_user_message(session, parsed);
+    await bus.publish_inbound(build_publish_payload(session, parsed));
     json(res, 200, { ok: true, message_count: session.messages.length });
     return true;
   }

@@ -26,6 +26,7 @@ import type { ConfirmationGuard } from "../orchestration/confirmation-guard.js";
 import type { ProviderRegistry } from "../providers/index.js";
 import type { SessionStoreLike } from "../session/index.js";
 import type { MutableBroadcaster } from "../dashboard/broadcaster.js";
+import { agent_event_to_web_stream } from "../dashboard/broadcaster.js";
 import { create_logger } from "../logger.js";
 import { ChannelManager } from "../channels/index.js";
 import { create_command_router } from "../channels/create-command-router.js";
@@ -123,6 +124,10 @@ export function create_channel_wiring(deps: ChannelWiringDeps): ChannelWiringRes
     bot_identity,
     on_agent_event: (event) => broadcaster.broadcast_agent_event(event),
     on_web_stream: (chat_id, content, done) => broadcaster.broadcast_web_stream(chat_id, content, done),
+    on_web_rich_event: (chat_id, event) => {
+      const ev = agent_event_to_web_stream(event);
+      if (ev) broadcaster.broadcast_web_rich_event(chat_id, ev);
+    },
     confirmation_guard,
     on_activity_start: () => memory_consolidation.touch_start(),
     on_activity_end: () => memory_consolidation.touch_end(),

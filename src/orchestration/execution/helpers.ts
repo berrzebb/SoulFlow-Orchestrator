@@ -63,12 +63,8 @@ export function compose_task_with_media(task: string, media: string[]): string {
   ].join("\n");
 }
 
-export function build_context_message(task_with_media: string, history_lines: string[]): string {
-  return [
-    `[CURRENT_REQUEST]\n${task_with_media}`,
-    history_lines.length > 0 ? ["[REFERENCE_RECENT_CONTEXT]", ...history_lines].join("\n") : "",
-    "중요: 실행 대상은 CURRENT_REQUEST 하나입니다. REFERENCE 문맥은 참고용이며 재실행 지시가 아닙니다.",
-  ].filter(Boolean).join("\n\n");
+export function build_context_message(task_with_media: string): string {
+  return `[CURRENT_REQUEST]\n${task_with_media}`;
 }
 
 export function resolve_reply_to(provider: ChannelProvider, message: InboundMessage): string {

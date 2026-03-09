@@ -31,6 +31,7 @@ services:
       WORKSPACE: /data
       REDIS_URL: redis://redis:6379
       DEBUG: ${DEBUG:-false}
+      SKIP_INSTANCE_LOCK: ${SKIP_INSTANCE_LOCK:-0}
     volumes:
       - ${HOST_WORKSPACE:-.}:/data
       - ${HOST_WORKSPACE:-.}/.agents/.claude:/root/.claude

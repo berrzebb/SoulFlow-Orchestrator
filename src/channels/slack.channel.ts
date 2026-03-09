@@ -76,6 +76,8 @@ export class SlackChannel extends BaseChannel {
   private readonly thread_cache = new Map<string, ThreadCacheEntry>();
   private static readonly THREAD_CACHE_TTL_MS = 300_000;
   private static readonly MAX_THREAD_FETCHES_PER_READ = 3;
+  /** appendStream 호출 시 이미 전송한 누적 char 수: stream_ts → sent_length */
+  private readonly stream_positions = new Map<string, number>();
 
   constructor(options?: SlackChannelOptions) {
     super("slack", options?.instance_id);
@@ -320,6 +322,47 @@ export class SlackChannel extends BaseChannel {
       const args: Record<string, unknown> = { channel_id: channel, file, filename, title: filename };
       if (thread_ts) args.thread_ts = thread_ts;
       await (this.client.filesUploadV2 as (a: unknown) => Promise<unknown>)(args);
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: error_message(error) };
+    }
+  }
+
+  /** Slack chat.startStream: 스레드 내 스트리밍 메시지 시작. thread_ts 필수. */
+  async start_native_stream(channel: string, thread_ts: string): Promise<{ ok: boolean; stream_id?: string; error?: string }> {
+    if (!thread_ts) return { ok: false, error: "thread_ts_required_for_streaming" };
+    try {
+      const result = await this.client.apiCall("chat.startStream", { channel, thread_ts }) as unknown as Record<string, unknown>;
+      if (!result.ok) return { ok: false, error: String(result.error || "start_stream_failed") };
+      const stream_id = String(result.ts || "");
+      if (stream_id) this.stream_positions.set(stream_id, 0);
+      return { ok: true, stream_id };
+    } catch (error) {
+      return { ok: false, error: error_message(error) };
+    }
+  }
+
+  /** Slack chat.appendStream: 누적 텍스트에서 새 청크만 추출해 append. */
+  async append_native_stream(channel: string, stream_id: string, accumulated_text: string): Promise<{ ok: boolean; error?: string }> {
+    const last_sent = this.stream_positions.get(stream_id) ?? 0;
+    const new_text = accumulated_text.slice(last_sent);
+    if (!new_text.trim()) return { ok: true };
+    try {
+      const result = await this.client.apiCall("chat.appendStream", { channel, ts: stream_id, message_text: new_text }) as unknown as Record<string, unknown>;
+      if (!result.ok) return { ok: false, error: String(result.error || "append_stream_failed") };
+      this.stream_positions.set(stream_id, accumulated_text.length);
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: error_message(error) };
+    }
+  }
+
+  /** Slack chat.stopStream: 스트리밍 종료 후 최종 메시지로 확정. */
+  async stop_native_stream(channel: string, stream_id: string): Promise<{ ok: boolean; error?: string }> {
+    this.stream_positions.delete(stream_id);
+    try {
+      const result = await this.client.apiCall("chat.stopStream", { channel, ts: stream_id }) as unknown as Record<string, unknown>;
+      if (!result.ok) return { ok: false, error: String(result.error || "stop_stream_failed") };
       return { ok: true };
     } catch (error) {
       return { ok: false, error: error_message(error) };

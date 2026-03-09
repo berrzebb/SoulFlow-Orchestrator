@@ -83,7 +83,7 @@ export class JsonPatchTool extends Tool {
   }
 
   private apply_patch(doc: unknown, patch: PatchOp[]): { value?: unknown; error?: string } {
-    let result = JSON.parse(JSON.stringify(doc));
+    let result = structuredClone(doc);
     for (let i = 0; i < patch.length; i++) {
       const op = patch[i]!;
       switch (op.op) {
@@ -135,7 +135,7 @@ export class JsonPatchTool extends Tool {
           const from_resolved = this.resolve_pointer(result, op.from);
           if (!from_resolved || from_resolved.parent === null) return { error: `op ${i}: from path not found` };
           if (!(from_resolved.key in (from_resolved.parent as Record<string, unknown>))) return { error: `op ${i}: from path not found` };
-          const val = JSON.parse(JSON.stringify(from_resolved.value));
+          const val = structuredClone(from_resolved.value);
           if (Array.isArray(from_resolved.parent)) from_resolved.parent.splice(Number(from_resolved.key), 1);
           else delete (from_resolved.parent as Record<string, unknown>)[from_resolved.key];
           result = this.set_value(result, op.path, val);
@@ -146,7 +146,7 @@ export class JsonPatchTool extends Tool {
           const from_resolved = this.resolve_pointer(result, op.from);
           if (!from_resolved) return { error: `op ${i}: from path not found` };
           if (from_resolved.parent !== null && !(from_resolved.key in (from_resolved.parent as Record<string, unknown>))) return { error: `op ${i}: from path not found` };
-          result = this.set_value(result, op.path, JSON.parse(JSON.stringify(from_resolved.value)));
+          result = this.set_value(result, op.path, structuredClone(from_resolved.value));
           break;
         }
         default:
@@ -159,7 +159,7 @@ export class JsonPatchTool extends Tool {
   private set_value(doc: unknown, path: string, value: unknown): unknown {
     if (path === "") return value;
     const parts = path.split("/").slice(1).map((p) => p.replace(/~1/g, "/").replace(/~0/g, "~"));
-    const result = JSON.parse(JSON.stringify(doc ?? {}));
+    const result = structuredClone(doc ?? {});
     let current: unknown = result;
     for (let i = 0; i < parts.length - 1; i++) {
       const key = parts[i]!;

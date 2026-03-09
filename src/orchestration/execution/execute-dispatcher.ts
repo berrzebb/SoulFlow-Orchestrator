@@ -39,7 +39,7 @@ export type ExecuteDispatcherDeps = {
   build_system_prompt: (names: string[], provider: string, chat_id: string, cats?: ReadonlySet<string>, alias?: string) => Promise<string>;
   generate_guard_summary: (task_text: string) => Promise<string>;
   run_once: (args: RunExecutionArgs) => Promise<OrchestrationResult>;
-  run_agent_loop: (args: RunExecutionArgs & { media: string[]; history_lines: string[] }) => Promise<OrchestrationResult>;
+  run_agent_loop: (args: RunExecutionArgs & { media: string[] }) => Promise<OrchestrationResult>;
   run_task_loop: (args: RunExecutionArgs & { media: string[] }) => Promise<OrchestrationResult>;
   run_phase_loop: (req: OrchestrationRequest, task_with_media: string, workflow_hint?: string, node_categories?: string[]) => Promise<OrchestrationResult>;
   caps: () => ProviderCapabilities;
@@ -53,13 +53,14 @@ export async function execute_dispatch(
 ): Promise<OrchestrationResult> {
   const {
     task_with_media, media, skill_names, runtime_policy, all_tool_definitions,
-    request_scope, evt_base, history_lines,
+    request_scope, evt_base,
     context_block, tool_ctx, skill_tool_names, skill_provider_prefs,
     category_map, tool_categories, active_tasks_in_chat,
   } = preflight;
 
-  // Gateway: 분류 + 라우팅 결정
-  const decision = await resolve_gateway(
+  // Gateway: 분류 + 도구 임베딩 워밍업을 병렬 실행 (서로 독립적)
+  const [decision] = await Promise.all([
+    resolve_gateway(
     task_with_media,
     {
       active_tasks: active_tasks_in_chat,
@@ -79,8 +80,9 @@ export async function execute_dispatch(
       executor_preference: deps.config.executor_provider,
       session_lookup: (task_id: string) => deps.runtime.find_session_by_task(task_id),
       logger: deps.logger,
-    },
-  );
+    }),
+    deps.tool_index?.warm_up(task_with_media).catch(() => {}),
+  ]);
 
   // Short-circuit: identity
   if (decision.action === "identity") {
@@ -169,9 +171,12 @@ export async function execute_dispatch(
   try {
     let escalation_error: string | undefined;
     if (mode === "once") {
+      // 도구 카테고리가 지정되지 않은 once 요청 → 도구 없이 먼저 시도.
+      // LLM이 도구가 필요하면 "NEED AGENT LOOP"를 출력 → 에스컬레이션 후 전체 도구 제공.
+      const once_tools = classifier_cats?.length ? tool_definitions : [];
       const once_result = await deps.run_once({
         req, executor, task_with_media, context_block, skill_names, system_base,
-        runtime_policy, tool_definitions, tool_ctx, skill_provider_prefs, request_scope,
+        runtime_policy, tool_definitions: once_tools, tool_ctx, skill_provider_prefs, request_scope,
         preferred_model: req.preferred_model,
       });
       if (!is_once_escalation(once_result.error)) {
@@ -195,7 +200,7 @@ export async function execute_dispatch(
       };
       return loop_mode === "task"
         ? deps.run_task_loop(loop_args)
-        : deps.run_agent_loop({ ...loop_args, history_lines });
+        : deps.run_agent_loop(loop_args);
     };
 
     const first = await run_loop(executor);

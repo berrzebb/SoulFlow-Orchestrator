@@ -16,7 +16,8 @@ import type {
 const log = create_logger("redis-bus");
 
 const DEFAULT_BLOCK_MS = 5_000;
-const DEFAULT_CLAIM_IDLE_MS = 30_000;
+/** 크래시 후 메시지 재처리 방지: 5분 이상 idle인 경우에만 reclaim. */
+const DEFAULT_CLAIM_IDLE_MS = 300_000;
 const DEFAULT_MAXLEN = 10_000;
 
 export type RedisMessageBusOptions = {
@@ -56,6 +57,8 @@ export class RedisMessageBus implements MessageBusRuntime, ReliableMessageBus {
   private _closed = false;
   private bootstrap_done = false;
   private bootstrap_lock: Promise<void> | null = null;
+  /** XAUTOCLAIM cursor — stream별로 마지막 scan 위치 추적하여 동일 메시지 반복 claim 방지. */
+  private readonly claim_cursors: Partial<Record<StreamName, string>> = {};
   private cached_metrics: BusMetrics;
   private metrics_timer: ReturnType<typeof setInterval> | null = null;
 
@@ -237,15 +240,21 @@ export class RedisMessageBus implements MessageBusRuntime, ReliableMessageBus {
     return this.build_lease<T>(payload, key, group, entry_id);
   }
 
-  private async try_claim_idle<T>(key: string, group: string, _stream: StreamName): Promise<MessageLease<T> | null> {
+  private async try_claim_idle<T>(key: string, group: string, stream: StreamName): Promise<MessageLease<T> | null> {
     try {
+      const start = this.claim_cursors[stream] ?? "0-0";
       const result = await this.client.xautoclaim(
         key, group, this.consumer_name,
         String(this.claim_idle_ms),
-        "0-0", "COUNT", "1",
+        start, "COUNT", "1",
       ) as [string, Array<[string, string[]]>, string[]];
 
+      const next_cursor = result?.[0];
       const entries = result?.[1];
+
+      // cursor가 "0-0"으로 돌아오면 한 바퀴 완료 — 다음 scan은 처음부터
+      this.claim_cursors[stream] = (next_cursor && next_cursor !== "0-0") ? next_cursor : undefined;
+
       if (!entries || entries.length === 0) return null;
 
       const [entry_id, fields] = entries[0];
@@ -255,7 +264,7 @@ export class RedisMessageBus implements MessageBusRuntime, ReliableMessageBus {
         return null;
       }
 
-      log.info("claimed idle message", { key, entry_id });
+      log.info("claimed idle message", { key, entry_id, cursor: start });
       return this.build_lease<T>(payload, key, group, entry_id);
     } catch {
       return null;

@@ -16,11 +16,20 @@ import * as sqliteVec from "sqlite-vec";
 import type { ToolSchema } from "../agent/tools/types.js";
 import type { EmbedFn } from "../agent/memory.service.js";
 
-/** 항상 포함되는 core 도구. 사용자 상호작용 + 기본 실행에 필수. */
+/** 모든 모드에서 항상 포함되는 core 도구. */
 const CORE_TOOLS = new Set([
   "message", "ask_user", "request_file", "send_file",
   "read_file", "write_file", "edit_file", "list_dir", "search_files",
   "exec", "memory", "datetime", "chain",
+]);
+
+/**
+ * once 모드 전용 minimal core.
+ * 단순 대화·조회에는 파일시스템/셸 도구가 불필요 — FTS5/벡터가 요청별로 추가.
+ * 파일 관련 요청은 키워드 매칭으로 read_file 등이 자동 포함됨.
+ */
+const CORE_TOOLS_ONCE = new Set([
+  "message", "ask_user", "request_file", "send_file", "memory", "datetime",
 ]);
 
 /** 도구 description/name에서 제거할 불용어. */
@@ -198,18 +207,44 @@ function extract_tags(schema: ToolSchema, category: string): string {
   return [...new Set(parts)].join(" ");
 }
 
+/** 쿼리 임베딩 캐시 최대 항목 수. */
+const QUERY_CACHE_MAX = 16;
+/** 도구 임베딩 freshness 체크 TTL (ms). 5분 내 재요청은 DB 스캔 생략. */
+const FRESH_CHECK_TTL_MS = 300_000;
+
+type MemTool = { name: string; category: string; core: boolean };
+
 export class ToolIndex {
   private db_path: string | null = null;
   private tool_count = 0;
   private embed_fn: EmbedFn | null = null;
+  /** 마지막 build() 시 도구 목록 해시. 동일하면 rebuild 스킵. */
+  private last_build_hash = "";
+  /** 도구 임베딩 freshness 마지막 확인 시각. */
+  private fresh_checked_at = 0;
+  /** 쿼리 임베딩 LRU 캐시. 동일 텍스트 재요청 시 embed 호출 0. */
+  private query_cache = new Map<string, Float32Array>();
+
+  // ── 인메모리 역인덱스 (FTS5 대체, 디스크 I/O 0) ──
+  /** 전체 도구 목록 (이름·카테고리·core 여부). */
+  private mem_tools: MemTool[] = [];
+  /** 토큰 → [{name, idf_weight}] 역인덱스. */
+  private mem_inv = new Map<string, Array<{ name: string; w: number }>>();
+  /** 카테고리 → 도구 이름 목록. 카테고리 폴백 전용. */
+  private mem_cats = new Map<string, string[]>();
 
   /** 임베딩 함수를 주입하여 벡터 시멘틱 검색 활성화. */
   set_embed(fn: EmbedFn): void { this.embed_fn = fn; }
 
-  /** 도구 스키마 + 카테고리 정보로 FTS5 인덱스를 빌드. */
+  /** 도구 스키마 + 카테고리 정보로 FTS5 인덱스를 빌드. 도구 목록이 변경되지 않으면 no-op. */
   build(schemas: ToolSchema[], category_map: Record<string, string>, db_path?: string): void {
     if (db_path) this.db_path = db_path;
     if (!this.db_path) return;
+    // 도구 목록이 변경되지 않으면 DB 재빌드 및 임베딩 재생성 스킵
+    const build_hash = simple_hash(schemas.map((s) => s.function.name).join(","));
+    if (build_hash === this.last_build_hash && this.mem_tools.length > 0) return;
+    this.last_build_hash = build_hash;
+    this.fresh_checked_at = 0; // 강제 freshness 재확인
 
     mkdirSync(dirname(this.db_path), { recursive: true });
     const db = new Database(this.db_path);
@@ -281,9 +316,85 @@ export class ToolIndex {
     } finally {
       db.close();
     }
+    this._build_mem(schemas, category_map);
   }
 
-  /** 요청 텍스트에서 관련 도구를 선택 (FTS5 + 벡터 하이브리드). */
+  /** 인메모리 역인덱스 구성. build() 후 호출. IDF 가중치로 토큰별 도구 목록 색인. */
+  private _build_mem(schemas: ToolSchema[], category_map: Record<string, string>): void {
+    this.mem_tools = [];
+    this.mem_inv = new Map();
+    this.mem_cats = new Map();
+
+    const N = schemas.length;
+    const token_df = new Map<string, number>();
+    const doc_tokens: Array<{ name: string; tokens: string[] }> = [];
+
+    for (const schema of schemas) {
+      const name = schema.function.name;
+      const category = category_map[name] ?? "external";
+      const core = CORE_TOOLS.has(name);
+      this.mem_tools.push({ name, category, core });
+
+      if (!this.mem_cats.has(category)) this.mem_cats.set(category, []);
+      this.mem_cats.get(category)!.push(name);
+
+      const desc = String(schema.function.description || "");
+      const tags = extract_tags(schema, category);
+      const tset = new Set<string>();
+
+      for (const t of tokenize(name + " " + desc + " " + tags)) {
+        if (!STOP_WORDS.has(t) && t.length >= 2) tset.add(t);
+      }
+      for (const [ko, en_tags] of Object.entries(KO_KEYWORD_MAP)) {
+        if ((name + desc).includes(ko)) for (const t of en_tags) tset.add(t);
+      }
+      for (const id of (name + " " + desc).match(/[a-zA-Z_][a-zA-Z0-9_]{2,}/g) ?? []) {
+        const lower = id.toLowerCase();
+        tset.add(lower);
+        for (const p of lower.split("_")) if (p.length >= 3 && !STOP_WORDS.has(p)) tset.add(p);
+      }
+
+      const tokens = [...tset];
+      doc_tokens.push({ name, tokens });
+      for (const t of tokens) token_df.set(t, (token_df.get(t) ?? 0) + 1);
+    }
+
+    for (const { name, tokens } of doc_tokens) {
+      for (const t of tokens) {
+        const idf = Math.log(N / (token_df.get(t) ?? 1) + 1);
+        if (!this.mem_inv.has(t)) this.mem_inv.set(t, []);
+        this.mem_inv.get(t)!.push({ name, w: idf });
+      }
+    }
+  }
+
+  /** 인메모리 BM25-like 스코어링. FTS5 DB 쿼리 대체 (~<1ms). */
+  private _mem_search(query: string, max: number, exclude: Set<string>): string[] {
+    const qtoks = new Set<string>();
+    for (const t of tokenize(query)) if (!STOP_WORDS.has(t) && t.length >= 2) qtoks.add(t);
+    for (const [ko, en_tags] of Object.entries(KO_KEYWORD_MAP)) {
+      if (query.includes(ko)) for (const t of en_tags) qtoks.add(t);
+    }
+    for (const id of query.match(/[a-zA-Z_][a-zA-Z0-9_]{2,}/g) ?? []) {
+      const lower = id.toLowerCase();
+      qtoks.add(lower);
+      for (const p of lower.split("_")) if (p.length >= 3 && !STOP_WORDS.has(p)) qtoks.add(p);
+    }
+
+    const scores = new Map<string, number>();
+    for (const t of qtoks) {
+      for (const { name, w } of this.mem_inv.get(t) ?? []) {
+        if (!exclude.has(name)) scores.set(name, (scores.get(name) ?? 0) + w);
+      }
+    }
+    return [...scores.entries()].sort((a, b) => b[1] - a[1]).slice(0, max).map(([n]) => n);
+  }
+
+  /**
+   * 요청 텍스트에서 관련 도구를 선택. 디스크 I/O 0 (인메모리 역인덱스 우선).
+   * 1) Core 도구 (인메모리) → 2) 분류기 명시 도구 → 3) 역인덱스 BM25-like →
+   * 4) 카테고리 폴백 → 5) 벡터 KNN (embed 설정 시 + 결과 부족 시에만)
+   */
   async select(
     request_text: string,
     opts?: {
@@ -293,83 +404,54 @@ export class ToolIndex {
       classifier_categories?: string[];
     },
   ): Promise<Set<string>> {
-    if (!this.db_path) return new Set();
-
     const max = opts?.max_tools ?? 30;
     const selected = new Set<string>();
 
-    // DB 또는 테이블이 손상/누락된 경우 빈 셋 반환 (다음 build()에서 복구됨)
-    let db: InstanceType<typeof Database> | null = null;
-    try {
-      db = new Database(this.db_path, { readonly: true });
+    // 인메모리 인덱스 미빌드 시 빈 셋 (다음 build() 후 복구)
+    if (this.mem_tools.length === 0) return selected;
 
-      // 스키마 무결성 확인: tools 테이블이 없으면 빈 셋 반환
-      const has_tools = db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='tools'").get();
-      if (!has_tools) return selected;
-
-      // 1) Core 도구 항상 포함
-      const core_rows = db.prepare("SELECT name FROM tools WHERE core = 1").all() as { name: string }[];
-      for (const r of core_rows) selected.add(r.name);
-
-      // 2) 분류기가 명시적으로 지정한 도구
-      if (opts?.classifier_tools?.length) {
-        const placeholders = opts.classifier_tools.map(() => "?").join(",");
-        const rows = db.prepare(`SELECT name FROM tools WHERE name IN (${placeholders})`).all(...opts.classifier_tools) as { name: string }[];
-        for (const r of rows) selected.add(r.name);
-      }
-
-      // 3) FTS5 쿼리 구성 (shadow 테이블 손상 대비 방어)
-      const query_terms = this.build_fts_query(request_text);
-      if (query_terms) {
-        const remaining = max - selected.size;
-        if (remaining > 0) {
-          try {
-            const fts_rows = db.prepare(`
-              SELECT c.name, bm25(tools_fts, 5.0, 2.0, 1.0) AS rank
-              FROM tools_fts f
-              JOIN tool_docs c ON c.rowid = f.rowid
-              WHERE tools_fts MATCH ?
-              ORDER BY rank
-              LIMIT ?
-            `).all(query_terms, remaining + selected.size) as { name: string; rank: number }[];
-
-            for (const r of fts_rows) {
-              if (selected.size >= max) break;
-              selected.add(r.name);
-            }
-          } catch {
-            // FTS5 shadow 테이블 손상 — 다음 build()에서 복구됨. 카테고리 폴백으로 진행.
-          }
-        }
-      }
-
-      // 4) 카테고리 폴백 — 매칭 도구가 부족하면 카테고리로 보강
-      if (selected.size < 15 && opts?.classifier_categories?.length) {
-        const placeholders = opts.classifier_categories.map(() => "?").join(",");
-        const cat_rows = db.prepare(
-          `SELECT name FROM tools WHERE category IN (${placeholders}) LIMIT ?`,
-        ).all(...opts.classifier_categories, max - selected.size) as { name: string }[];
-        for (const r of cat_rows) {
-          if (selected.size >= max) break;
-          selected.add(r.name);
-        }
-      }
-    } catch {
-      // DB 파일 손상, 테이블 누락 등 — 빈 셋 반환, 다음 build()에서 복구
-      return selected;
-    } finally {
-      db?.close();
+    // 1) Core 도구 — once 모드는 minimal core만 포함
+    const active_core = opts?.mode === "once" ? CORE_TOOLS_ONCE : CORE_TOOLS;
+    for (const { name, core } of this.mem_tools) {
+      if (core && active_core.has(name)) selected.add(name);
     }
 
-    // 5) 벡터 시멘틱 보강 — FTS5 결과가 부족할 때 벡터 KNN으로 추가
-    if (this.embed_fn && selected.size < max) {
+    // 2) 분류기가 명시적으로 지정한 도구
+    if (opts?.classifier_tools?.length) {
+      const tool_set = new Set(this.mem_tools.map((t) => t.name));
+      for (const name of opts.classifier_tools) {
+        if (tool_set.has(name)) selected.add(name);
+      }
+    }
+
+    // 3) 인메모리 역인덱스 BM25-like 검색 (FTS5 대체, ~<1ms)
+    if (this.mem_inv.size > 0 && selected.size < max) {
+      for (const name of this._mem_search(request_text, max - selected.size, selected)) {
+        if (selected.size >= max) break;
+        selected.add(name);
+      }
+    }
+
+    // 4) 카테고리 폴백 — 매칭 도구 부족 시 카테고리로 보강
+    if (selected.size < 15 && opts?.classifier_categories?.length) {
+      for (const cat of opts.classifier_categories) {
+        for (const name of this.mem_cats.get(cat) ?? []) {
+          if (selected.size >= max) break;
+          if (!selected.has(name)) selected.add(name);
+        }
+        if (selected.size >= max) break;
+      }
+    }
+
+    // 5) 벡터 시멘틱 보강 — 결과 부족 시 KNN으로 추가 (SQLite-vec, async)
+    if (this.embed_fn && this.db_path && selected.size < max) {
       try {
         const vec_names = await this.vector_search(request_text, max - selected.size + 5);
         for (const name of vec_names) {
           if (selected.size >= max) break;
           selected.add(name);
         }
-      } catch { /* 벡터 검색 실패 시 FTS5 결과만 사용 */ }
+      } catch { /* 벡터 검색 실패 시 역인덱스 결과만 사용 */ }
     }
 
     return selected;
@@ -382,12 +464,9 @@ export class ToolIndex {
     // lazy 임베딩: 아직 벡터가 없는 도구 임베딩
     await this.ensure_embeddings_fresh();
 
-    // 쿼리 벡터 생성
-    const truncated = query_text.slice(0, MAX_EMBED_CHARS);
-    const { embeddings } = await this.embed_fn([truncated], { dimensions: VEC_DIMENSIONS });
-    if (!embeddings.length) return [];
-    const query_vec = normalize_vec(embeddings[0]);
-    const query_buf = new Float32Array(query_vec);
+    // 쿼리 벡터 생성 (캐시 우선)
+    const query_buf = await this._get_or_embed_query(query_text);
+    if (!query_buf) return [];
 
     // KNN
     const db = new Database(this.db_path, { readonly: true });
@@ -414,9 +493,41 @@ export class ToolIndex {
     }
   }
 
-  /** content_hash가 변경된 도구만 배치 임베딩하여 vec0 갱신. */
+  /** 쿼리 임베딩 캐시 조회 또는 신규 생성. */
+  private async _get_or_embed_query(query_text: string): Promise<Float32Array | null> {
+    if (!this.embed_fn) return null;
+    const truncated = query_text.slice(0, MAX_EMBED_CHARS);
+    const cached = this.query_cache.get(truncated);
+    if (cached) return cached;
+
+    const { embeddings } = await this.embed_fn([truncated], { dimensions: VEC_DIMENSIONS });
+    if (!embeddings.length) return null;
+    const buf = new Float32Array(normalize_vec(embeddings[0]));
+
+    if (this.query_cache.size >= QUERY_CACHE_MAX) {
+      this.query_cache.delete(this.query_cache.keys().next().value!);
+    }
+    this.query_cache.set(truncated, buf);
+    return buf;
+  }
+
+  /**
+   * classify와 병렬로 실행 가능한 사전 워밍업.
+   * - 도구 임베딩 freshness 체크 + 쿼리 임베딩 캐시 적재.
+   * 오류는 무시하며 선택적 호출임.
+   */
+  async warm_up(query_text?: string): Promise<void> {
+    if (!this.embed_fn) return;
+    await this.ensure_embeddings_fresh();
+    if (query_text) await this._get_or_embed_query(query_text);
+  }
+
+  /** content_hash가 변경된 도구만 배치 임베딩하여 vec0 갱신. TTL 내 중복 호출은 스킵. */
   private async ensure_embeddings_fresh(): Promise<void> {
     if (!this.embed_fn || !this.db_path) return;
+    const now = Date.now();
+    if (now - this.fresh_checked_at < FRESH_CHECK_TTL_MS) return;
+    this.fresh_checked_at = now;
 
     const db = new Database(this.db_path);
     try {

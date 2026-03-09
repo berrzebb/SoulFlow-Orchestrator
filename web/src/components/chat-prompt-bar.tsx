@@ -70,6 +70,13 @@ export function ChatPromptBar(props: ChatPromptBarProps) {
     el.style.height = Math.min(el.scrollHeight, 160) + "px";
   }, [props.input]);
 
+  // is_busy 해제 시 포커스 복원 (disabled 전환으로 인한 포커스 손실 방지)
+  const prev_busy = useRef(false);
+  useEffect(() => {
+    if (prev_busy.current && !is_busy) textarea_ref.current?.focus();
+    prev_busy.current = is_busy;
+  }, [is_busy]);
+
   // 팝업 외부 클릭 시 닫기
   useEffect(() => {
     if (!open_picker) return;

@@ -5,6 +5,7 @@
 param(
   [Parameter(Position = 0)]
   [string]$Command = "help",
+  [switch]$SkipLock,
 
   [Parameter(ValueFromRemainingArguments = $true)]
   [string[]]$Arguments
@@ -42,6 +43,8 @@ for ($i = 0; $i -lt $Arguments.Count; $i++) {
     $Watch = $matches[1]
   } elseif ($arg -eq "--watch") {
     $Watch = "all"
+  } elseif ($arg -eq "--skip-lock") {
+    $SkipLock = $true
   }
 }
 
@@ -90,6 +93,8 @@ function Show-Help {
   Write-Host "  --web-port=PORT    - 웹 포트 (기본값: 환경별 다름)"
   Write-Host "  --watch            - 전체 소스 마운트 + 핫 리로드 (tsx watch)"
   Write-Host "  --watch=web        - 웹 소스만 마운트 + 핫 리로드"
+  Write-Host "  --skip-lock        - 인스턴스 락 비활성화 (복구/디버그 전용)"
+  Write-Host "  -SkipLock          - PowerShell named switch (동일 기능)"
   Write-Host ""
   Write-Host "예시:" -ForegroundColor Yellow
   Write-Host "  .\run.ps1 dev --workspace=D:\soulflow"
@@ -123,6 +128,7 @@ function Start-Environment {
   Write-Host "   프로젝트: $projectName"
   if ($Instance) { Write-Host "   인스턴스: $Instance" }
   if ($Watch) { Write-Host "   watch: $Watch" -ForegroundColor Cyan }
+  if ($SkipLock) { Write-Host "   skip lock: enabled" -ForegroundColor Yellow }
   Write-Host ""
 
   # .agents 디렉토리 사전 생성 (볼륨 마운트 요구사항)
@@ -143,6 +149,7 @@ function Start-Environment {
   $env:HOST_WORKSPACE = $Workspace
   $env:PROJECT_NAME = $projectName
   $env:WEB_PORT = if ($WebPort) { $WebPort } else { $p.WEB_PORT }
+  $env:SKIP_INSTANCE_LOCK = if ($SkipLock) { "1" } else { "0" }
 
   # instance 모드: 기본 인프라(redis, docker-proxy)를 먼저 보장
   if ($Instance) {
@@ -178,6 +185,7 @@ function Start-Environment {
     Write-Host "✅ $ProfileName 환경이 시작되었습니다!" -ForegroundColor Green
     Write-Host "   프로젝트: $projectName" -ForegroundColor Green
     Write-Host "   웹 포트: $($env:WEB_PORT)" -ForegroundColor Green
+    if ($SkipLock) { Write-Host "⚠ WARNING: instance lock disabled" -ForegroundColor Yellow }
     Write-Host ""
 
     # watch=web: 호스트에서 vite build --watch 실행 (dist/web → 컨테이너 마운트)

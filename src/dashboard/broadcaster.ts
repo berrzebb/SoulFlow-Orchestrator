@@ -14,6 +14,37 @@ export type MirrorMessageEvent = {
   at: string;
 };
 
+/**
+ * 웹 채팅 세션별 NDJSON 스트리밍 이벤트.
+ * 프로바이더 무관하게 통일된 포맷 — 텍스트 delta, 도구 사용, usage 통계 포함.
+ */
+export type WebStreamEvent =
+  | { type: "delta"; content: string }
+  | { type: "tool_start"; name: string; id: string; params?: Record<string, unknown> }
+  | { type: "tool_result"; name: string; id: string; result: string; is_error?: boolean }
+  | { type: "usage"; input: number; output: number; cache_read?: number; cache_creation?: number }
+  | { type: "done" };
+
+/** AgentEvent → WebStreamEvent 변환. 관련 없는 이벤트는 null 반환. */
+export function agent_event_to_web_stream(event: AgentEvent): WebStreamEvent | null {
+  switch (event.type) {
+    case "tool_use":
+      return { type: "tool_start", name: event.tool_name, id: event.tool_id, params: event.params };
+    case "tool_result":
+      return { type: "tool_result", name: event.tool_name, id: event.tool_id, result: event.result, is_error: event.is_error };
+    case "usage":
+      return {
+        type: "usage",
+        input: event.tokens.input,
+        output: event.tokens.output,
+        cache_read: event.tokens.cache_read,
+        cache_creation: event.tokens.cache_creation,
+      };
+    default:
+      return null;
+  }
+}
+
 export interface SseBroadcasterLike {
   broadcast_process_event(type: "start" | "end", entry: ProcessEntry): void;
   broadcast_message_event(direction: "inbound" | "outbound", sender_id: string, content?: string, chat_id?: string): void;
@@ -26,6 +57,10 @@ export interface SseBroadcasterLike {
   broadcast_mirror_message(event: MirrorMessageEvent): void;
   broadcast_workflow_event(event: PhaseLoopEvent): void;
   broadcast_agent_event(event: AgentEvent): void;
+  /** 웹 채팅 세션에 rich 이벤트(도구, usage) 발행 — on_web_rich_event에서 호출. */
+  broadcast_web_rich_event(chat_id: string, event: WebStreamEvent): void;
+  /** 세션별 WebStreamEvent 리스너 등록. 반환값은 해제 함수. */
+  add_rich_stream_listener?(chat_id: string, fn: (event: WebStreamEvent) => void): () => void;
 }
 
 /** dashboard가 비활성일 때 사용하는 no-op broadcaster. */
@@ -40,6 +75,7 @@ export const NULL_BROADCASTER: SseBroadcasterLike = {
   broadcast_mirror_message() {},
   broadcast_workflow_event() {},
   broadcast_agent_event() {},
+  broadcast_web_rich_event() {},
 };
 
 /**
@@ -62,4 +98,8 @@ export class MutableBroadcaster implements SseBroadcasterLike {
   broadcast_mirror_message(...args: Parameters<SseBroadcasterLike["broadcast_mirror_message"]>): void { this.target.broadcast_mirror_message(...args); }
   broadcast_workflow_event(...args: Parameters<SseBroadcasterLike["broadcast_workflow_event"]>): void { this.target.broadcast_workflow_event(...args); }
   broadcast_agent_event(...args: Parameters<SseBroadcasterLike["broadcast_agent_event"]>): void { this.target.broadcast_agent_event(...args); }
+  broadcast_web_rich_event(...args: Parameters<SseBroadcasterLike["broadcast_web_rich_event"]>): void { this.target.broadcast_web_rich_event(...args); }
+  add_rich_stream_listener(chat_id: string, fn: (event: WebStreamEvent) => void): () => void {
+    return this.target.add_rich_stream_listener?.(chat_id, fn) ?? (() => undefined);
+  }
 }

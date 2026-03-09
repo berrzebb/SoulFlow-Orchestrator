@@ -5,6 +5,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { with_sqlite } from "@src/utils/sqlite-helper.js";
 
 // ══════════════════════════════════════════
 // CircuitBreakerTool
@@ -494,5 +495,19 @@ describe("TaskStore — CRUD 전체", () => {
     expect(found?.objective).toBe("mem-obj");
     expect(found?.channel).toBe("telegram");
     expect(found?.chatId).toBe("T-456");
+  });
+
+  it("row_to_task: 잘못된 JSON payload_json → catch → null (L90)", async () => {
+    // DB에 직접 잘못된 JSON 삽입
+    const db_path = join(tasks_dir, "tasks.db");
+    const task = make_task({ taskId: "bad-json-task" });
+    await store.upsert(task); // 먼저 row 생성
+    // payload_json을 잘못된 JSON으로 덮어씀
+    with_sqlite(db_path, (db) => {
+      db.prepare("UPDATE tasks SET payload_json = ? WHERE task_id = ?").run("{invalid json{{{", "bad-json-task");
+    });
+    // get() → row_to_task → JSON.parse throw → catch → null
+    const found = await store.get("bad-json-task");
+    expect(found).toBeNull();
   });
 });

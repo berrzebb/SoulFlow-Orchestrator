@@ -465,6 +465,31 @@ describe("AgentLoopStore.run_agent_loop — tool_calls", () => {
     });
     expect(flush).toHaveBeenCalledOnce();
   });
+
+  it("compaction_flush: flush throw → catch → logger.warn (L282)", async () => {
+    const warn_fn = vi.fn();
+    const logger = { info: vi.fn(), warn: warn_fn, error: vi.fn(), debug: vi.fn() } as any;
+    const store = make_store({ logger });
+    const flush = vi.fn().mockRejectedValue(new Error("flush failed"));
+    const providers = make_providers([
+      { content: "ok", usage: { prompt_tokens: 200_000 } },
+    ]);
+    let n = 0;
+    await store.run_agent_loop({
+      loop_id: "flush-fail-loop",
+      agent_id: "a1",
+      objective: "test",
+      context_builder: { get_messages: vi.fn().mockResolvedValue([]) } as any,
+      providers,
+      tools: [],
+      provider_id: "test",
+      max_turns: 5,
+      compaction_flush: { context_window: 200_000, reserve_floor: 0, soft_threshold: 0, flush },
+      check_should_continue: async () => { n++; return n < 2; },
+    });
+    // flush throw → catch → logger.warn 호출
+    expect(warn_fn).toHaveBeenCalledWith("compaction_flush_failed", expect.any(Object));
+  });
 });
 
 // ══════════════════════════════════════════
