@@ -232,3 +232,14 @@ describe("StreamBuffer — edge cases", () => {
     expect(full).toContain("결과를 정리하겠습니다.");
   });
 });
+
+// L51: get_last_flushed
+describe("StreamBuffer — get_last_flushed (L51)", () => {
+  it("flush 후 get_last_flushed → normalized key 반환 (L51)", () => {
+    const buf = new StreamBuffer();
+    buf.append("Hello World");
+    buf.flush();
+    // flush는 content.replace(/\s+/g, " ").toLowerCase()를 key로 저장
+    expect(buf.get_last_flushed()).toBe("hello world");
+  });
+});

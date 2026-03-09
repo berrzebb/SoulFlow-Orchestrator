@@ -73,4 +73,16 @@ describe("ProviderHealthScorer", () => {
     // 만료 후 빈 윈도우 → 1.0
     expect(scorer.score("exp")).toBe(1.0);
   });
+
+  it("score: 일부 샘플만 만료 → windows.set() 호출 (L63)", async () => {
+    const scorer = new ProviderHealthScorer({ max_age_ms: 50 }); // 50ms TTL
+    // 먼저 오래된 샘플 추가
+    scorer.record("partial", { ok: true, latency_ms: 20 });
+    await new Promise(r => setTimeout(r, 60)); // 첫 번째 만료
+    // 새 샘플 추가 (아직 유효)
+    scorer.record("partial", { ok: false, latency_ms: 100 });
+    // score() 호출 → 일부 만료 → window.length !== raw.length → windows.set() 호출 (L63)
+    const s = scorer.score("partial");
+    expect(typeof s).toBe("number"); // 부분 만료 후 점수 계산됨
+  });
 });

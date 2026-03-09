@@ -99,3 +99,12 @@ describe("resolve_local_reference", () => {
     expect(resolve_local_reference("/workspace", "")).toBe("");
   });
 });
+
+// L27: normalize_local_candidate_path — Windows 절대 경로 file URL
+describe("normalize_local_candidate_path — Windows file:// URL (L27)", () => {
+  it("file:///C:/Users/foo/bar.txt → C:\\Users\\foo\\bar.txt (L27)", () => {
+    const result = normalize_local_candidate_path("file:///C:/Users/foo/bar.txt");
+    // /^\/[A-Za-z]:\//.test("/C:/...") → true → decoded.slice(1).replace(/\//g, "\\")
+    expect(result).toBe("C:\\Users\\foo\\bar.txt");
+  });
+});
