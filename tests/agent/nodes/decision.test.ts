@@ -644,4 +644,17 @@ describe("Decision Node Handler", () => {
       expect(result.output.count).toBe(2);
     });
   });
+
+  describe("execute — unknown operation (L79)", () => {
+    it("지원하지 않는 operation → default 브랜치 → error 반환 (L79)", async () => {
+      const node = createMockDecisionNode({ operation: "unknown_op" as never });
+      const ctx = createMockContext();
+      const mockRunner = createMockRunnerContext({
+        services: { decision: { append: vi.fn(), list: vi.fn(), get_effective: vi.fn(), archive: vi.fn() } },
+      });
+      const result = await decision_handler.runner_execute!(node, ctx, mockRunner as RunnerContext);
+      expect(result.output.action).toBe("error");
+      expect(String(result.output.error)).toContain("unknown operation");
+    });
+  });
 });

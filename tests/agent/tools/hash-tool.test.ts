@@ -101,4 +101,10 @@ describe("HashTool — verify", () => {
     const r = await exec({ action: "verify", input: "hello" });
     expect(String(r)).toContain("Error");
   });
+
+  it("지원하지 않는 action → Error (L59)", async () => {
+    const r = await exec({ action: "unsupported_action" });
+    expect(String(r)).toContain("Error");
+    expect(String(r)).toContain("unsupported");
+  });
 });

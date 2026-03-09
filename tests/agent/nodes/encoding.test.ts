@@ -699,7 +699,20 @@ describe("Encoding Node Handler", () => {
       expect(result.output.result).toBe(originalUrl);
     });
 
-    it("should hash different algorithms produce different results", async () => {
+    it("URL decode 잘못된 인코딩 → catch 블록 실행 (L61)", async () => {
+    // decodeURIComponent("%XY") → URIError → catch { return { result: err.message, success: false } }
+    const node = createMockEncodingNode({
+      operation: "decode",
+      format: "url",
+      input: "%XY%ZZ",
+    });
+    const ctx = createMockContext();
+    const result = await encoding_handler.execute(node, ctx);
+    expect(result.output.success).toBe(false);
+    expect(result.output.result).toBeDefined();
+  });
+
+  it("should hash different algorithms produce different results", async () => {
       const input = "test data";
 
       let node = createMockEncodingNode({

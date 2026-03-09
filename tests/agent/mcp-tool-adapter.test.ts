@@ -90,6 +90,20 @@ describe("McpToolAdapter", () => {
     expect(result).toBe("Error: something failed");
   });
 
+  it("execute handles unknown content type → [type] placeholder (L42)", async () => {
+    // type이 "text"도 "image"도 아닌 경우 → `[${c.type}]` 반환 (L42)
+    const mcp = {
+      list_all_tools: vi.fn(() => []),
+      call_tool: vi.fn(async () => ({
+        is_error: false,
+        content: [{ type: "resource" }],
+      })),
+    } as unknown as McpClientManager;
+    const adapter = new McpToolAdapter(make_entry(), mcp);
+    const result = await adapter.execute({});
+    expect(result).toBe("[resource]");
+  });
+
   it("execute handles image content type", async () => {
     const mcp = {
       list_all_tools: vi.fn(() => []),
