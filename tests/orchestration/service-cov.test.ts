@@ -353,6 +353,79 @@ describe("format_hitl_prompt", () => {
   });
 });
 
+// ══════════════════════════════════════════
+// L465-466: _convert_agent_result — normalize_agent_reply → null
+// ══════════════════════════════════════════
+
+describe("OrchestrationService — _convert_agent_result normalize_agent_reply=null (L465-466)", () => {
+  it("content이 leading-mention만 있을 때 → normalize 후 null → L465-466 warn + fallback reply", () => {
+    const { service } = make_service({ renderer: true });
+    const stream = new StreamBuffer();
+    const req = { provider: "slack", message: { sender_id: "U001", chat_id: "C1" }, alias: "" } as any;
+    // "@U001" → sanitize_provider_output("@U001") = "@U001" (non-empty) → normalize_agent_reply strips leading @mention → null
+    const r = (service as any)._convert_agent_result(
+      { finish_reason: "stop", content: "@U001", tool_calls_count: 0, usage: undefined },
+      "agent", stream, req,
+    );
+    // L466: reply_result with safe fallback
+    expect(r.reply).toBeTruthy();
+    expect(r.mode).toBe("agent");
+  });
+});
+
+// ══════════════════════════════════════════
+// L478-507: _build_system_prompt — role_skill / concierge_skill 분기
+// ══════════════════════════════════════════
+
+describe("OrchestrationService — _build_system_prompt (L478-507)", () => {
+  it("alias 있고 role_skill 존재 → build_role_system_prompt 호출 (L483-487)", async () => {
+    const { service, cb } = make_service();
+    // alias="assistant" → get_role_skill("assistant") 반환값 있음
+    cb.skills_loader.get_role_skill = vi.fn().mockReturnValue({ heart: "role persona" });
+    cb.build_role_system_prompt = vi.fn().mockResolvedValue("role_system_prompt");
+
+    const result = await (service as any)._build_system_prompt(
+      ["skill1"], "slack", "C1", undefined, "assistant",
+    );
+
+    expect(cb.build_role_system_prompt).toHaveBeenCalledWith(
+      "assistant", ["skill1"], undefined, { channel: "slack", chat_id: "C1" },
+    );
+    expect(result).toBe("role_system_prompt");
+  });
+
+  it("alias 없음 + concierge_skill heart 있음 → 기본 프롬프트 + Active Role 힌트 (L493-497)", async () => {
+    const { service, cb } = make_service();
+    // alias 없음 → role_skill check 스킵
+    cb.skills_loader.get_role_skill = vi.fn().mockImplementation((role: string) =>
+      role === "concierge" ? { heart: "concierge persona" } : null,
+    );
+    cb.build_system_prompt = vi.fn().mockResolvedValue("base_system");
+
+    const result = await (service as any)._build_system_prompt(
+      [], "slack", "C1", undefined, undefined,
+    );
+
+    expect(cb.build_system_prompt).toHaveBeenCalled();
+    expect(result).toContain("base_system");
+    expect(result).toContain("Active Role: concierge");
+    expect(result).toContain("concierge persona");
+  });
+
+  it("alias 없음 + concierge_skill heart 없음 → 기본 프롬프트만 (L494 else)", async () => {
+    const { service, cb } = make_service();
+    cb.skills_loader.get_role_skill = vi.fn().mockReturnValue(null);
+    cb.build_system_prompt = vi.fn().mockResolvedValue("base_system_only");
+
+    const result = await (service as any)._build_system_prompt(
+      [], "slack", "C1", undefined, undefined,
+    );
+
+    expect(result).toBe("base_system_only");
+    expect(result).not.toContain("Active Role");
+  });
+});
+
 describe("detect_hitl_type", () => {
   it("빈 문자열 → question", () => {
     expect(detect_hitl_type("")).toBe("question");
