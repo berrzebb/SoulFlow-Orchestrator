@@ -14,10 +14,19 @@ describe("parse_executor_preference", () => {
     expect(parse_executor_preference("orchestrator_llm")).toBe("orchestrator_llm");
   });
 
+  it("recognizes gemini and gemini_cli", () => {
+    expect(parse_executor_preference("gemini")).toBe("gemini");
+    expect(parse_executor_preference("gemini_cli")).toBe("gemini");
+  });
+
+  it("gemini always returns itself regardless of caps", () => {
+    const caps = { chatgpt_available: true, claude_available: true, openrouter_available: true };
+    expect(resolve_executor_provider("gemini", caps)).toBe("gemini");
+  });
+
   it("defaults to chatgpt for unknown values", () => {
     expect(parse_executor_preference("unknown")).toBe("chatgpt");
     expect(parse_executor_preference("")).toBe("chatgpt");
-    expect(parse_executor_preference("gemini")).toBe("chatgpt");
   });
 
   it("normalizes whitespace and casing", () => {

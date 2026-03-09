@@ -221,42 +221,43 @@ describe("ApprovalService — resolved.ok=false → handled: false", () => {
 });
 
 // ══════════════════════════════════════════
-// prune_seen — max_size overflow
+// prune_seen — max_size overflow (L96-98)
 // ══════════════════════════════════════════
 
 describe("ApprovalService — prune_seen overflow", () => {
-  it("reaction_seen이 max_size 초과 → 가장 오래된 항목 제거", async () => {
+  it("reaction_seen이 max_size 초과 → 가장 오래된 항목 제거 (L96-98)", () => {
+    const svc = new ApprovalService(make_deps(null));
+    // TTL로 제거되지 않도록 현재 시각으로 직접 채움 (ttl_ms=99999이면 만료 안 됨)
+    const map = (svc as any).reaction_seen as Map<string, number>;
+    for (let i = 0; i < 5; i++) map.set(`key-${i}`, Date.now());
+
+    // max_size=2, ttl_ms=99999 → TTL 만료 없음, overflow=3 항목 제거
+    svc.prune_seen(99999, 2);
+    expect(map.size).toBeLessThanOrEqual(2);
+  });
+});
+
+// ══════════════════════════════════════════
+// reaction_to_decision — null 반환 (L235)
+// ══════════════════════════════════════════
+
+describe("ApprovalService — 알 수 없는 리액션 → handled: false (L235)", () => {
+  it("unknown 이모지(smile)는 결정 불가 → handled: false", async () => {
     const runtime = make_runtime({
       list_approval_requests: vi.fn().mockReturnValue([{
-        request_id: "req-px",
-        context: { channel: "slack", chat_id: "Cpx" },
+        request_id: "req-unk",
+        context: { channel: "slack", chat_id: "C000" },
         tool_name: "t",
       }]),
-      get_approval_request: vi.fn().mockReturnValue({
-        request_id: "req-px", tool_name: "t",
-        context: { channel: "slack", chat_id: "Cpx" },
-      }),
-      resolve_approval_request: vi.fn().mockReturnValue({
-        ok: true, status: "approved", decision: "yes",
-      }),
-      execute_approved_request: vi.fn().mockResolvedValue({ ok: true, result: "ok" }),
     });
     const svc = new ApprovalService(make_deps(runtime));
-
-    // 여러 리액션으로 seen map 채우기 (overflow 유발)
-    for (let i = 0; i < 5; i++) {
-      await svc.try_handle_approval_reactions("slack", [{
-        id: `m${i}`, provider: "slack", channel: "slack",
-        sender_id: "U001", chat_id: "Cpx",
-        content: `req-px reaction ${i}`, at: "2025-01-01T00:00:00Z",
-        metadata: { slack: { reactions: [{ name: "white_check_mark" }] } },
-      } as any]);
-    }
-
-    // max_size=2로 prune → overflow 항목 제거
-    svc.prune_seen(0, 2);
-    // 에러 없이 실행됨
-    expect(true).toBe(true);
+    const msg = make_message({
+      chat_id: "C000",
+      metadata: { slack: { reactions: [{ name: "smile" }] } },
+    });
+    const r = await svc.try_handle_approval_reactions("slack", [msg]);
+    // reaction_to_decision returns null for "smile" → continue → handled: false
+    expect(r.handled).toBe(false);
   });
 });
 
