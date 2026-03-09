@@ -440,4 +440,27 @@ describe("ToolIndex — FTS5 + 벡터 하이브리드 도구 인덱싱", () => {
       expect(existsSync(testDbPath)).toBe(true);
     });
   });
+
+  describe("warm_up", () => {
+    it("embed_fn 없을 때 → 조기 반환 (에러 없음)", async () => {
+      index.build(mockTools, mockCategories, testDbPath);
+      // embed_fn 미설정 → warm_up은 즉시 반환
+      await expect(index.warm_up()).resolves.toBeUndefined();
+    });
+
+    it("embed_fn + query_text → _get_or_embed_query 호출", async () => {
+      index.build(mockTools, mockCategories, testDbPath);
+      mockEmbedFn.mockClear();
+      index.set_embed(mockEmbedFn);
+      // embed_fn 설정 후 warm_up with query_text → 예외 없이 완료
+      await expect(index.warm_up("find files")).resolves.toBeUndefined();
+      expect(mockEmbedFn).toHaveBeenCalled();
+    });
+
+    it("embed_fn + query_text 없음 → ensure_embeddings_fresh만 실행", async () => {
+      index.build(mockTools, mockCategories, testDbPath);
+      index.set_embed(mockEmbedFn);
+      await expect(index.warm_up()).resolves.toBeUndefined();
+    });
+  });
 });

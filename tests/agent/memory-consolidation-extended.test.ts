@@ -223,6 +223,26 @@ describe("MemoryConsolidationService — store_consolidate fallback", () => {
 // stop — 타이머 정리
 // ══════════════════════════════════════════
 
+describe("MemoryConsolidationService — touch_start idle_timer 정리 (L86-87)", () => {
+  it("touch() 후 touch_start() → idle_timer 즉시 취소", async () => {
+    const store = make_store_with_consolidate();
+    const svc = new MemoryConsolidationService({
+      memory_store: store as any,
+      config: make_config({ idle_after_ms: 5000 }),
+      logger: noop_logger,
+    });
+    await svc.start();
+    // touch()로 idle_timer를 생성
+    svc.touch();
+    // touch_start()가 idle_timer를 정리해야 함 (L86-87)
+    svc.touch_start();
+    // 시간이 지나도 consolidation 미호출 (timer 취소됨)
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(store.consolidate).not.toHaveBeenCalled();
+    await svc.stop();
+  });
+});
+
 describe("MemoryConsolidationService — stop 정리", () => {
   it("idle_timer 정리: stop 후 timer 발동 안 함", async () => {
     const store = make_store([]);
