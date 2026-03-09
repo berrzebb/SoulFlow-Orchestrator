@@ -85,4 +85,28 @@ describe("ChannelInstanceStore", () => {
     expect(updated.settings.default_channel).toBe("random");
     expect(updated.settings.bot_self_id).toBe("U123");
   });
+
+  it("update_settings — 존재하지 않는 ID → false 반환", async () => {
+    workspace = await mkdtemp(join(tmpdir(), "cs-upd-miss-"));
+    const vault = new SecretVaultService(workspace);
+    const store = new ChannelInstanceStore(join(workspace, "channels.db"), vault);
+    const result = store.update_settings("nonexistent", { label: "test" });
+    expect(result).toBe(false);
+  });
+
+  it("list_by_provider — 특정 provider 인스턴스만 반환", async () => {
+    workspace = await mkdtemp(join(tmpdir(), "cs-listprov-"));
+    const vault = new SecretVaultService(workspace);
+    const store = new ChannelInstanceStore(join(workspace, "channels.db"), vault);
+    store.upsert(make_input({ instance_id: "s1", provider: "slack" }));
+    store.upsert(make_input({ instance_id: "d1", provider: "discord" }));
+    store.upsert(make_input({ instance_id: "s2", provider: "slack" }));
+
+    const slack_list = store.list_by_provider("slack");
+    expect(slack_list).toHaveLength(2);
+    expect(slack_list.every(i => i.provider === "slack")).toBe(true);
+
+    const discord_list = store.list_by_provider("discord");
+    expect(discord_list).toHaveLength(1);
+  });
 });

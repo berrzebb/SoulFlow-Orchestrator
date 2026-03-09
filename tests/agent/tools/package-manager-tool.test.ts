@@ -285,3 +285,24 @@ describe("PackageManagerTool — 에러 처리", () => {
     expect(mock_run).not.toHaveBeenCalled();
   });
 });
+
+// ══════════════════════════════════════════
+// build_command — default: return null 경로 (내부 private 메서드)
+// ══════════════════════════════════════════
+
+describe("PackageManagerTool — build_command null 경로", () => {
+  it("npm + unknown op → null → 'Error: unsupported operation'", async () => {
+    const r = await make_tool().execute({ operation: "unknown_op", manager: "npm" });
+    expect(r).toContain("Error");
+  });
+
+  it("pip + unknown op → null → Error", async () => {
+    const r = await make_tool().execute({ operation: "unknown_op", manager: "pip" });
+    expect(r).toContain("Error");
+  });
+
+  it("cargo + unknown op → null → Error", async () => {
+    const r = await make_tool().execute({ operation: "unknown_op", manager: "cargo" });
+    expect(r).toContain("Error");
+  });
+});
