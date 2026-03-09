@@ -44,7 +44,7 @@ export interface UseResourceCRUDResult<T> {
   queryClient: ReturnType<typeof useQueryClient>;
 }
 
-export function useResourceCRUD<T extends Record<string, unknown>>({
+export function useResourceCRUD<T extends object>({
   queryKey,
   queryFn,
   deleteEndpoint,
