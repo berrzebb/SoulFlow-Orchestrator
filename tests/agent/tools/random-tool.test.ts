@@ -152,3 +152,11 @@ describe("RandomTool — dice", () => {
     expect(r.sum).toBe(expected_sum);
   });
 });
+
+// L96: unknown action → error (default branch)
+describe("RandomTool — unknown action (L96)", () => {
+  it("알 수 없는 action → Error 반환 (L96)", async () => {
+    const r = await exec({ action: "unknown_action" }) as string;
+    expect(String(r)).toContain("unsupported action");
+  });
+});

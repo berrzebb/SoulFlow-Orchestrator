@@ -144,3 +144,11 @@ describe("DotenvTool — diff", () => {
     expect(r.unchanged).toBe(2);
   });
 });
+
+// L71: unknown action → error (default branch)
+describe("DotenvTool — unknown action (L71)", () => {
+  it("알 수 없는 action → Error 반환 (L71)", async () => {
+    const r = await tool.execute({ action: "unknown_action" });
+    expect(String(r)).toContain("unsupported action");
+  });
+});

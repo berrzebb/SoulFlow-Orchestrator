@@ -116,3 +116,11 @@ describe("EmailValidateTool — bulk_validate", () => {
     expect(r.error).toBeDefined();
   });
 });
+
+// L89: unknown action → error (default branch)
+describe("EmailValidateTool — unknown action (L89)", () => {
+  it("알 수 없는 action → error 반환 (L89)", async () => {
+    const r = await exec({ action: "unknown_action" }) as Record<string, unknown>;
+    expect(r.error).toContain("unknown action");
+  });
+});

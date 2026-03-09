@@ -66,12 +66,25 @@ describe("ChannelBlockRenderer — html 포맷터 (L30-32)", () => {
 // L39: plain.compact
 // ══════════════════════════════════════════
 
-describe("ChannelBlockRenderer — plain compact 포맷터 (L39)", () => {
+describe("ChannelBlockRenderer — plain compact 포맷터 (L40)", () => {
   it("compact_boundary + plain → [Context compacted:] 포함", () => {
     const r = new ChannelBlockRenderer();
     r.push(compact_event(5000));
     const out = r.render("plain");
     expect(out).toContain("Context compacted");
     expect(out).toContain("5,000");
+  });
+});
+
+// ══════════════════════════════════════════
+// L39: plain.rate_rejected
+// ══════════════════════════════════════════
+
+describe("ChannelBlockRenderer — plain rate_rejected 포맷터 (L39)", () => {
+  it("rate_limit rejected + plain → [Rate limit exceeded] 포함 (L39)", () => {
+    const r = new ChannelBlockRenderer();
+    r.push(rate_limit_event("rejected"));
+    const out = r.render("plain");
+    expect(out).toContain("Rate limit exceeded");
   });
 });

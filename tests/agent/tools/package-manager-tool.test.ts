@@ -305,4 +305,9 @@ describe("PackageManagerTool — build_command null 경로", () => {
     const r = await make_tool().execute({ operation: "unknown_op", manager: "cargo" });
     expect(r).toContain("Error");
   });
+
+  it("unknown manager → default: null → Error (L109)", async () => {
+    const r = await make_tool().execute({ operation: "list", manager: "unknown_manager" });
+    expect(r).toContain("Error");
+  });
 });

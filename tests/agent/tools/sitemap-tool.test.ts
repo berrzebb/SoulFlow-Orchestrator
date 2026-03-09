@@ -122,3 +122,11 @@ describe("SitemapTool — to_index", () => {
     expect(r.error).toBeDefined();
   });
 });
+
+// L69: unknown action → error (default branch)
+describe("SitemapTool — unknown action (L69)", () => {
+  it("알 수 없는 action → error 반환 (L69)", async () => {
+    const r = await exec({ action: "unknown_action" }) as Record<string, unknown>;
+    expect(r.error).toContain("unknown action");
+  });
+});

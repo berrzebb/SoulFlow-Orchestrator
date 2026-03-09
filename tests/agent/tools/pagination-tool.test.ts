@@ -125,3 +125,11 @@ describe("PaginationTool — parse_link_header", () => {
     expect(r.count).toBe(3);
   });
 });
+
+// L109: unknown action → error (default branch)
+describe("PaginationTool — unknown action (L109)", () => {
+  it("알 수 없는 action → error 반환 (L109)", async () => {
+    const r = await exec({ action: "unknown_action" }) as Record<string, unknown>;
+    expect(r.error).toContain("unknown action");
+  });
+});
