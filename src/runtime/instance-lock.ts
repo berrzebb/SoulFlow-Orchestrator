@@ -1,8 +1,7 @@
 import { now_iso } from "../utils/common.js";
 import { createHash } from "node:crypto";
 import { mkdir, open, readFile, unlink } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 
 type LockPayload = {
@@ -67,7 +66,7 @@ async function read_lock_payload(lock_path: string): Promise<LockPayload | null>
 }
 
 async function try_acquire_lock(lock_path: string, key: string): Promise<{ ok: boolean; holder_pid: number | null }> {
-  await mkdir(join(tmpdir(), "soulflow-orchestrator", "locks"), { recursive: true });
+  await mkdir(dirname(lock_path), { recursive: true });
   try {
     const fd = await open(lock_path, "wx");
     try {
@@ -105,7 +104,7 @@ export async function acquire_runtime_instance_lock(args: {
   const retries = Math.max(1, Number(args?.retries || 20));
   const retry_ms = Math.max(50, Number(args?.retry_ms || 200));
   const key = build_lock_key(workspace);
-  const lock_path = join(tmpdir(), "soulflow-orchestrator", "locks", `${key}.lock`);
+  const lock_path = join(resolve(workspace), "runtime", ".locks", `${key}.lock`);
   let last_holder_pid: number | null = null;
 
   for (let i = 0; i < retries; i += 1) {

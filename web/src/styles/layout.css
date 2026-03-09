@@ -2451,9 +2451,61 @@ a:focus-visible > .stat-card {
   box-shadow: var(--shadow-sm);
 }
 
-/* ?ъ빱???먮뒗 ?몃쾭 ???쒖떆 */
+/* 접근성 설명 hover 표시 */
 .aria-description-wrapper:hover .aria-description,
 .aria-description-wrapper:focus-within .aria-description {
   display: block;
+}
+
+/* ── 참고자료 탭 ── */
+.ws-references { display: flex; flex-direction: column; height: 100%; }
+.ws-references__header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 12px; border-bottom: 1px solid var(--line); flex-shrink: 0;
+}
+.ws-references__stats { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ws-references__actions { display: flex; gap: 6px; }
+.ws-references__search {
+  display: flex; gap: 6px; padding: 8px 12px;
+  border-bottom: 1px solid var(--line); flex-shrink: 0;
+}
+.ws-references__search > :first-child { flex: 1; }
+.ws-references__results {
+  border-bottom: 1px solid var(--line); background: var(--panel-elevated);
+  max-height: 300px; overflow-y: auto; flex-shrink: 0;
+}
+.ws-references__results-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 6px 12px; border-bottom: 1px solid var(--line);
+}
+.ws-references__result-list { display: flex; flex-direction: column; }
+.ws-references__result-item {
+  padding: 8px 12px; border-bottom: 1px solid var(--line);
+}
+.ws-references__result-item:last-child { border-bottom: none; }
+.ws-references__result-meta { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+.ws-references__result-content {
+  margin: 0; font-size: var(--fs-xs); white-space: pre-wrap;
+  color: var(--muted); line-height: 1.5;
+}
+.ws-references__file-icon { margin-right: 6px; }
+.ws-references__preview-textarea { resize: vertical; font-family: var(--font-mono); }
+.ws-references__image-preview {
+  max-width: 100%; max-height: 240px; object-fit: contain;
+  border-radius: var(--radius); border: 1px solid var(--line);
+  background: var(--panel-elevated);
+}
+.ws-references__progress {
+  position: relative; height: 20px; background: var(--panel-elevated);
+  border-radius: var(--radius); overflow: hidden; margin: 4px 0;
+}
+.ws-references__progress-bar {
+  position: absolute; inset: 0; background: var(--accent);
+  transition: width 0.2s ease; border-radius: var(--radius);
+}
+.ws-references__progress-label {
+  position: absolute; inset: 0; display: flex; align-items: center;
+  justify-content: center; font-size: var(--fs-xs); font-weight: 600;
+  color: var(--text); mix-blend-mode: difference;
 }
 

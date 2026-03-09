@@ -48,7 +48,7 @@ export interface ReferenceSearchResult {
 
 export interface ReferenceStoreLike {
   set_embed(fn: EmbedFn): void;
-  sync(): Promise<{ added: number; updated: number; removed: number }>;
+  sync(opts?: { force?: boolean }): Promise<{ added: number; updated: number; removed: number }>;
   search(query: string, opts?: { limit?: number; doc_filter?: string }): Promise<ReferenceSearchResult[]>;
   list_documents(): { path: string; chunks: number; size: number; updated_at: string }[];
   get_stats(): { total_docs: number; total_chunks: number; last_sync: string | null };
@@ -126,9 +126,9 @@ export class ReferenceStore implements ReferenceStoreLike {
     }
   }
 
-  async sync(): Promise<{ added: number; updated: number; removed: number }> {
+  async sync(opts?: { force?: boolean }): Promise<{ added: number; updated: number; removed: number }> {
     const now = Date.now();
-    if (now - this.last_sync < SYNC_DEBOUNCE_MS) return { added: 0, updated: 0, removed: 0 };
+    if (!opts?.force && now - this.last_sync < SYNC_DEBOUNCE_MS) return { added: 0, updated: 0, removed: 0 };
     this.last_sync = now;
     this.ensure_init();
 

@@ -40,27 +40,27 @@ describe("generate_completion_checks", () => {
   });
 
   it("write_file 사용 시 파일 내용 체크 질문 추가", () => {
-    const result = generate_completion_checks(["write_file"], [], 0);
+    const result = generate_completion_checks(["write_file"], [], 0, true);
     expect(result.questions).toContain("변경된 파일의 내용이 의도와 일치하나요?");
   });
 
   it("exec/bash 사용 시 실행 결과 체크 질문 추가", () => {
-    const result = generate_completion_checks(["bash"], [], 0);
+    const result = generate_completion_checks(["bash"], [], 0, true);
     expect(result.questions).toContain("실행 결과에 에러가 없었나요?");
   });
 
   it("web_search 사용 시 출처 체크 질문 추가", () => {
-    const result = generate_completion_checks(["web_search"], [], 0);
+    const result = generate_completion_checks(["web_search"], [], 0, true);
     expect(result.questions).toContain("검색 결과의 출처가 신뢰할 수 있나요?");
   });
 
   it("oauth_fetch 사용 시 민감 정보 체크 추가", () => {
-    const result = generate_completion_checks(["oauth_fetch"], [], 0);
+    const result = generate_completion_checks(["oauth_fetch"], [], 0, true);
     expect(result.questions).toContain("민감한 정보가 노출되지 않았나요?");
   });
 
   it("tool_calls_count > 10 시 전체 검토 체크 추가", () => {
-    const result = generate_completion_checks([], [], 11);
+    const result = generate_completion_checks([], [], 11, true);
     expect(result.questions).toContain("최종 결과물을 전체적으로 검토했나요?");
   });
 
@@ -68,7 +68,7 @@ describe("generate_completion_checks", () => {
     const skill = make_skill([
       "체크 1", "체크 2", "체크 3", "체크 4", "체크 5", "체크 6",
     ]);
-    const result = generate_completion_checks(["write_file", "bash", "web_search"], [skill], 15);
+    const result = generate_completion_checks(["write_file", "bash", "web_search"], [skill], 15, true);
     expect(result.questions.length).toBeLessThanOrEqual(5);
   });
 

@@ -66,6 +66,8 @@ describe("KanbanTool", () => {
   describe("보드 액션", () => {
     it("create_board", async () => {
       const store = make_mock_store();
+      // 기존 보드 없음 → create_board 호출
+      (store.list_boards as ReturnType<typeof vi.fn>).mockResolvedValue([]);
       const tool = new KanbanTool(store);
       const result = await tool.execute({ action: "create_board", name: "Sprint", scope_type: "channel", scope_id: "ch1" }, ctx);
       expect(result).toContain("ok");
@@ -208,6 +210,8 @@ describe("KanbanTool", () => {
 
     it("store 예외 → Error 메시지", async () => {
       const store = make_mock_store();
+      // 기존 보드 없어야 create_board까지 진입
+      (store.list_boards as ReturnType<typeof vi.fn>).mockResolvedValue([]);
       (store.create_board as ReturnType<typeof vi.fn>).mockRejectedValue(new Error("db locked"));
       const tool = new KanbanTool(store);
       const result = await tool.execute({ action: "create_board", name: "X", scope_type: "channel", scope_id: "x" }, ctx);

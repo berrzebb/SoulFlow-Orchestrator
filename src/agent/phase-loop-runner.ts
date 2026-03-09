@@ -67,7 +67,7 @@ export type PhaseLoopRunnerDeps = {
   query_db?: (datasource: string, query: string, params?: Record<string, unknown>) => Promise<{ rows: unknown[]; affected_rows: number }>;
   /** kanban_trigger waiting 전환 시 즉시 알림 (watcher 30초 지연 제거). */
   on_kanban_trigger_waiting?: (workflow_id: string) => void;
-  /** 칸반 보드 스토어 — 워크플로우 시작 시 자동 보드 생성. */
+  /** 칸반 보드 스토어 — PL이 생성한 보드를 페이즈 실행 전 조회하여 에이전트에 전달. */
   kanban_store?: import("../services/kanban-store.js").KanbanStoreLike;
 };
 
@@ -117,23 +117,7 @@ export async function run_phase_loop(
   emit(on_event, { type: "workflow_started", workflow_id: state.workflow_id });
   logger.info("phase_loop_start", { workflow_id: state.workflow_id, nodes: all_nodes.length, phases: state.phases.length, resume: is_resume });
 
-  // 워크플로우 칸반 보드 find-or-create
-  let workflow_kanban_board_id: string | undefined;
-  if (deps.kanban_store) {
-    try {
-      const existing = await deps.kanban_store.list_boards("workflow", options.workflow_id);
-      workflow_kanban_board_id = existing.length > 0
-        ? existing[0]!.board_id
-        : (await deps.kanban_store.create_board({
-            name: (options.title || options.objective).slice(0, 60),
-            scope_type: "workflow",
-            scope_id: options.workflow_id,
-          })).board_id;
-      logger.debug("workflow_kanban_board", { workflow_id: options.workflow_id, board_id: workflow_kanban_board_id });
-    } catch (e) {
-      logger.warn("kanban_board_init_failed", { workflow_id: options.workflow_id, error: error_message(e) });
-    }
-  }
+
 
   /** goto 루프 카운터: phase_id별 goto 횟수 추적. */
   const goto_counts = new Map<string, number>();
@@ -372,7 +356,15 @@ export async function run_phase_loop(
 
       // 모드에 따른 실행 분기
       const mode = phase_def.mode || "parallel";
-      const agent_deps: AgentRunDeps = { subagents, store, logger, on_event, options, kanban_board_id: workflow_kanban_board_id };
+      // PL이 생성한 칸반 보드 조회 (자동 생성 없음 — find-only)
+      let kanban_board_id: string | undefined;
+      if (deps.kanban_store) {
+        try {
+          const boards = await deps.kanban_store.list_boards("workflow", options.workflow_id);
+          kanban_board_id = boards[0]?.board_id;
+        } catch { /* 무시 */ }
+      }
+      const agent_deps: AgentRunDeps = { subagents, store, logger, on_event, options, kanban_board_id };
 
       if (mode === "interactive") {
         await run_looping_phase(state, phase_def, phase_state, prev_context, agent_deps, INTERACTIVE_CONFIG);
@@ -640,7 +632,7 @@ async function run_phase_agents(
 
       const merged_tools = merge_tools(agent_def.tools, phase_def.tools);
       const { subagent_id } = await subagents.spawn({
-        task: build_agent_task(agent_def, state.objective, prev_context, merged_tools, state.memory, deps.kanban_board_id) + isolation_instruction,
+        task: build_agent_task(agent_def, state.objective, prev_context, merged_tools, state.memory, KANBAN_ROLES.has(agent_def.role ?? "") ? deps.kanban_board_id : undefined) + isolation_instruction,
         role: agent_def.role,
         label: agent_def.label,
         model: agent_def.model,
@@ -863,7 +855,7 @@ async function run_looping_phase(
 
     const history = config.format_history(phase_state.loop_results);
     const merged = merge_tools(agent_def.tools, phase_def.tools);
-    const task = build_agent_task(agent_def, state.objective, prev_context, merged, state.memory);
+    const task = build_agent_task(agent_def, state.objective, prev_context, merged, state.memory, KANBAN_ROLES.has(agent_def.role ?? "") ? deps.kanban_board_id : undefined);
     const full_task = history
       ? `${task}\n\n## ${config.history_header}\n${history}\n\n## ${config.iteration_label}: ${i + 1}/${max}`
       : task;
@@ -989,6 +981,18 @@ function merge_tools(agent_tools?: string[], phase_tools?: string[]): string[] |
   return [...new Set([...(agent_tools || []), ...(phase_tools || [])])];
 }
 
+/** 칸반 보드를 활용하는 역할 — 이 역할에만 board_id 컨텍스트 주입. */
+const KANBAN_ROLES = new Set([
+  "implementer",
+  "reviewer",
+  "validator",
+  "debugger",
+  "pm",
+  "pl",
+  "generalist",
+  "concierge",
+]);
+
 /** 도구 제한이 있을 때 kanban을 강제 포함 — 제한 없으면 전체 허용 유지. */
 function ensure_kanban(tools?: string[]): string[] | undefined {
   if (!tools) return undefined;
@@ -1011,11 +1015,11 @@ function build_agent_task(
     parts.push([
       "\n## Kanban Board (워크플로우 공유 보드)",
       `board_id: ${kanban_board_id}`,
-      "scope_type: \"workflow\"",
-      "kanban 도구로 작업을 카드로 등록·추적하세요:",
-      "- 시작 시: list_cards(board_id)로 기존 카드 확인",
-      "- 작업 중: create_card → move_card(in_progress) → comment 로 진행상황 기록",
-      "- 완료 시: move_card(done) + 결과 comment",
+      "모든 에이전트는 작업 전 반드시 list_cards(board_id)로 현황을 파악하고 카드를 업데이트해야 합니다:",
+      "- Implementer: 담당 카드 → move_card(\"In Progress\") → 작업 → move_card(\"Done\") + 결과 comment",
+      "- Reviewer/Validator: list_cards → Done 카드 검토 → comment(card_id, 리뷰 결과)",
+      "- Debugger: 버그 카드 확인 → move_card(\"In Progress\") → RCA 분석 → comment(원인·수정사항) → move_card(\"Done\")",
+      "- 카드가 없는 항목만 create_card. 기존 카드를 재생성하지 마세요.",
     ].join("\n"));
   }
   parts.push(`\n## Objective\n${objective}`);

@@ -49,7 +49,7 @@ export async function handle_references(ctx: RouteContext): Promise<boolean> {
     await mkdir(refs_dir, { recursive: true });
 
     if (body?.base64) {
-      // 바이너리 파일 (PDF/DOCX/PPTX/HWPX): base64 디코딩 후 원본 바이너리로 저장
+      // 바이너리 파일 (PDF/DOCX/PPTX/HWPX/이미지): base64 디코딩 후 원본 바이너리로 저장
       const buf = Buffer.from(String(body.base64), "base64");
       await writeFile(join(refs_dir, filename), buf);
     } else {
@@ -58,8 +58,9 @@ export async function handle_references(ctx: RouteContext): Promise<boolean> {
       await writeFile(join(refs_dir, filename), content, "utf-8");
     }
 
-    const result = await store.sync();
-    json(res, 200, { ok: true, filename, sync: result });
+    // 파일 저장 즉시 응답 — 인덱싱은 백그라운드에서 비동기 처리
+    json(res, 200, { ok: true, filename });
+    void store.sync({ force: true }).catch(() => {});
     return true;
   }
 
@@ -72,8 +73,8 @@ export async function handle_references(ctx: RouteContext): Promise<boolean> {
     if (!existsSync(filepath)) { json(res, 404, { error: "file not found" }); return true; }
 
     await unlink(filepath);
-    const result = await store.sync();
-    json(res, 200, { ok: true, deleted: filename, sync: result });
+    json(res, 200, { ok: true, deleted: filename });
+    void store.sync({ force: true }).catch(() => {});
     return true;
   }
 

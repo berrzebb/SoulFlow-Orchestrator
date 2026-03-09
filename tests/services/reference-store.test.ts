@@ -90,11 +90,11 @@ describe("ReferenceStore", () => {
   it("sync: 지원되지 않는 확장자 무시", async () => {
     const refs_dir = join(tmp_dir, "references");
     await mkdir(refs_dir, { recursive: true });
-    await writeFile(join(refs_dir, "image.png"), "fake png data");
+    await writeFile(join(refs_dir, "archive.zip"), "fake zip data");
     await writeFile(join(refs_dir, "doc.md"), "# Doc");
 
     const result = await store.sync();
-    expect(result.added).toBe(1); // only .md
+    expect(result.added).toBe(1); // only .md (.zip은 미지원)
   });
 
   // ── set_embed ──

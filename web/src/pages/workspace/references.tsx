@@ -48,6 +48,7 @@ export function ReferencesTab() {
   const [uploadName, setUploadName] = useState("");
   const [uploadContent, setUploadContent] = useState("");
   const [uploadBase64, setUploadBase64] = useState<string | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<RefSearchResult[] | null>(null);
@@ -73,18 +74,35 @@ export function ReferencesTab() {
     onError: () => toast(t("references.sync_failed"), "err"),
   });
 
-  const upload = useMutation({
-    mutationFn: (body: { filename: string; content?: string; base64?: string }) => api.post("/api/references/upload", body),
-    onSuccess: () => {
-      toast(t("references.uploaded"), "ok");
-      setShowUpload(false);
-      setUploadName("");
-      setUploadContent("");
-      setUploadBase64(null);
-      void qc.invalidateQueries({ queryKey: ["references"] });
-    },
-    onError: () => toast(t("references.upload_failed"), "err"),
-  });
+  const reset_upload = () => {
+    setShowUpload(false);
+    setUploadName("");
+    setUploadContent("");
+    setUploadBase64(null);
+    setUploadProgress(null);
+  };
+
+  const do_upload = (body: { filename: string; content?: string; base64?: string }) => {
+    setUploadProgress(0);
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", "/api/references/upload");
+    xhr.setRequestHeader("Content-Type", "application/json");
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) setUploadProgress(Math.round((e.loaded / e.total) * 100));
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        toast(t("references.uploaded"), "ok");
+        reset_upload();
+        void qc.invalidateQueries({ queryKey: ["references"] });
+      } else {
+        toast(t("references.upload_failed"), "err");
+        setUploadProgress(null);
+      }
+    };
+    xhr.onerror = () => { toast(t("references.upload_failed"), "err"); setUploadProgress(null); };
+    xhr.send(JSON.stringify(body));
+  };
 
   const remove = useMutation({
     mutationFn: (filename: string) => api.del(`/api/references/${encodeURIComponent(filename)}`),
@@ -105,17 +123,32 @@ export function ReferencesTab() {
   };
 
   const BINARY_EXTS = new Set(["pdf", "docx", "pptx", "hwpx"]);
+  const IMAGE_EXTS = new Set(["jpg", "jpeg", "png", "gif", "webp"]);
+
+  // 대용량 파일도 안전하게 처리하는 청크 기반 base64 인코딩
+  const to_base64 = (buf: ArrayBuffer): string => {
+    const bytes = new Uint8Array(buf);
+    let binary = "";
+    const CHUNK = 8192;
+    for (let i = 0; i < bytes.length; i += CHUNK) {
+      binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+    }
+    return btoa(binary);
+  };
 
   const handle_file_select = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
     setUploadName(file.name);
-    if (BINARY_EXTS.has(ext)) {
+    if (IMAGE_EXTS.has(ext) || BINARY_EXTS.has(ext)) {
       const buf = await file.arrayBuffer();
-      const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
+      const b64 = to_base64(buf);
       setUploadBase64(b64);
-      setUploadContent(`[바이너리 파일: ${file.name}, ${(file.size / 1024).toFixed(1)} KB]`);
+      setUploadContent(IMAGE_EXTS.has(ext)
+        ? `data:${file.type};base64,${b64}`
+        : `[바이너리 파일: ${file.name}, ${(file.size / 1024).toFixed(1)} KB]`
+      );
     } else {
       const text = await file.text();
       setUploadContent(text);
@@ -243,22 +276,23 @@ export function ReferencesTab() {
       <Modal
         open={showUpload}
         title={t("references.upload_title")}
-        onClose={() => { setShowUpload(false); setUploadName(""); setUploadContent(""); }}
+        onClose={reset_upload}
         onConfirm={() => {
           if (!uploadName) return;
-          if (uploadBase64) upload.mutate({ filename: uploadName, base64: uploadBase64 });
-          else if (uploadContent) upload.mutate({ filename: uploadName, content: uploadContent });
+          if (uploadBase64) do_upload({ filename: uploadName, base64: uploadBase64 });
+          else if (uploadContent) do_upload({ filename: uploadName, content: uploadContent });
         }}
-        confirmLabel={t("references.upload")}
-        submitDisabled={!uploadName || (!uploadContent && !uploadBase64)}
+        confirmLabel={uploadProgress !== null ? `${uploadProgress}%` : t("references.upload")}
+        submitDisabled={!uploadName || (!uploadContent && !uploadBase64) || uploadProgress !== null}
       >
         <div className="modal__form-body">
           <FormGroup label={t("references.select_file")}>
             <input
               type="file"
               className="form-input"
-              accept=".md,.txt,.json,.yaml,.yml,.csv,.xml,.html,.log,.ts,.js,.py,.sh,.sql,.toml,.ini,.cfg,.pdf,.docx,.pptx,.hwpx"
+              accept=".md,.txt,.json,.yaml,.yml,.csv,.xml,.html,.log,.ts,.js,.py,.sh,.sql,.toml,.ini,.cfg,.pdf,.docx,.pptx,.hwpx,.jpg,.jpeg,.png,.gif,.webp"
               onChange={(e) => void handle_file_select(e)}
+              disabled={uploadProgress !== null}
             />
           </FormGroup>
           <FormGroup label={t("references.filename")}>
@@ -268,19 +302,36 @@ export function ReferencesTab() {
               onChange={(e) => setUploadName(e.target.value)}
               placeholder="document.md"
               autoFocus
-              onKeyDown={(e) => { if (e.key === "Enter" && uploadName && uploadContent) upload.mutate({ filename: uploadName, content: uploadContent }); }}
+              disabled={uploadProgress !== null}
+              onKeyDown={(e) => { if (e.key === "Enter" && uploadName && uploadContent) do_upload({ filename: uploadName, content: uploadContent }); }}
             />
           </FormGroup>
+          {uploadProgress !== null && (
+            <div className="ws-references__progress">
+              <div className="ws-references__progress-bar" style={{ width: `${uploadProgress}%` }} />
+              <span className="ws-references__progress-label">{uploadProgress}%</span>
+            </div>
+          )}
           <FormGroup label={t("references.content_preview")}>
-            <textarea
-              className="form-input ws-references__preview-textarea"
-              value={uploadContent.slice(0, 2000)}
-              readOnly
-              rows={6}
-              placeholder={t("references.content_preview_hint")}
-            />
-            {uploadContent.length > 2000 && (
-              <span className="text-xs text-muted">{t("references.content_truncated", { total: uploadContent.length })}</span>
+            {uploadContent.startsWith("data:image/") ? (
+              <img
+                src={uploadContent}
+                alt={uploadName}
+                className="ws-references__image-preview"
+              />
+            ) : (
+              <>
+                <textarea
+                  className="form-input ws-references__preview-textarea"
+                  value={uploadContent.startsWith("[바이너리") ? uploadContent : uploadContent.slice(0, 2000)}
+                  readOnly
+                  rows={6}
+                  placeholder={t("references.content_preview_hint")}
+                />
+                {!uploadContent.startsWith("[바이너리") && uploadContent.length > 2000 && (
+                  <span className="text-xs text-muted">{t("references.content_truncated", { total: uploadContent.length })}</span>
+                )}
+              </>
             )}
           </FormGroup>
         </div>
@@ -310,6 +361,7 @@ function ext_icon(ext: string): string {
     case "ts": case "js": case "py": case "sh": case "sql": return "💻";
     case "csv": return "📈";
     case "html": case "xml": return "🌐";
+    case "jpg": case "jpeg": case "png": case "gif": case "webp": return "🖼️";
     default: return "📄";
   }
 }
