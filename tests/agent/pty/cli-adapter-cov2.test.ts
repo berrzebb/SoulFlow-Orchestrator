@@ -131,6 +131,18 @@ describe("ClaudeCliAdapter — root user (getuid=0) → --dangerously-skip-permi
 // CodexCliAdapter — extract_tool_input rest spread
 // ══════════════════════════════════════════
 
+describe("CodexCliAdapter — parse_output 엣지 케이스", () => {
+  it("잘못된 JSON → catch → null (L187)", () => {
+    const adapter = new CodexCliAdapter();
+    expect(adapter.parse_output("not valid json")).toBeNull();
+  });
+
+  it("미인식 type → null (L220)", () => {
+    const adapter = new CodexCliAdapter();
+    expect(adapter.parse_output('{"type":"unknown_codex_event"}')).toBeNull();
+  });
+});
+
 describe("CodexCliAdapter — extract_tool_input 비 arguments 필드", () => {
   let adapter: CodexCliAdapter;
   beforeEach(() => { adapter = new CodexCliAdapter(); });
@@ -295,5 +307,191 @@ describe("GeminiCliAdapter — init 이벤트: session_id + last_text 리셋", (
     if (complete?.type === "complete") {
       expect(complete.result).toBe("fresh start");
     }
+  });
+});
+
+// ══════════════════════════════════════════
+// ClaudeCliAdapter — messages.length===1 (L102) + tool_result 처리
+// ══════════════════════════════════════════
+
+describe("ClaudeCliAdapter — messages.length===1 → 단일 메시지 반환 (배열 아님)", () => {
+  it("tool_use 블록 하나 → 배열 아닌 단일 AgentOutputMessage 반환", () => {
+    const adapter = new ClaudeCliAdapter();
+    const line = JSON.stringify({
+      type: "assistant",
+      message: {
+        content: [
+          { type: "tool_use", id: "tu-single", name: "read_file", input: { path: "/etc/hosts" } },
+        ],
+      },
+    });
+    const result = adapter.parse_output(line);
+    expect(Array.isArray(result)).toBe(false);
+    expect(result?.type).toBe("tool_use");
+  });
+
+  it("tool_result 블록 (content 문자열) → tool_result 메시지 반환", () => {
+    const adapter = new ClaudeCliAdapter();
+    const line = JSON.stringify({
+      type: "assistant",
+      message: {
+        content: [
+          { type: "tool_result", tool_use_id: "tu-1", content: "file content here" },
+        ],
+      },
+    });
+    const result = adapter.parse_output(line);
+    expect(result?.type).toBe("tool_result");
+    if (result?.type === "tool_result") expect(result.output).toBe("file content here");
+  });
+
+  it("tool_result 블록 (content 배열) → 텍스트 추출 후 join", () => {
+    const adapter = new ClaudeCliAdapter();
+    const line = JSON.stringify({
+      type: "assistant",
+      message: {
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: "tu-2",
+            content: [
+              { type: "text", text: "line one" },
+              { type: "text", text: "line two" },
+            ],
+          },
+        ],
+      },
+    });
+    const result = adapter.parse_output(line);
+    expect(result?.type).toBe("tool_result");
+    if (result?.type === "tool_result") expect(result.output).toContain("line one");
+  });
+
+  it("tool_result 블록 (content 숫자/기타) → String() fallback", () => {
+    const adapter = new ClaudeCliAdapter();
+    const line = JSON.stringify({
+      type: "assistant",
+      message: {
+        content: [
+          { type: "tool_result", tool_use_id: "tu-3", content: 42 },
+        ],
+      },
+    });
+    const result = adapter.parse_output(line);
+    expect(result?.type).toBe("tool_result");
+    if (result?.type === "tool_result") expect(result.output).toBe("42");
+  });
+});
+
+// ══════════════════════════════════════════
+// CodexCliAdapter — parse_item return null (L273)
+// ══════════════════════════════════════════
+
+describe("CodexCliAdapter — parse_item return null 경로 (L273)", () => {
+  it("item 없음 (undefined) → null", () => {
+    const adapter = new CodexCliAdapter();
+    // item 필드 없으면 parse_item(undefined, ...) → null
+    const result = adapter.parse_output('{"type":"item.started"}');
+    expect(result).toBeNull();
+  });
+
+  it("item.type=agent_message + event=item.started → null (L273)", () => {
+    const adapter = new CodexCliAdapter();
+    // agent_message는 item.completed 시에만 처리됨 → item.started는 null
+    const result = adapter.parse_output('{"type":"item.started","item":{"type":"agent_message","text":"hi"}}');
+    expect(result).toBeNull();
+  });
+});
+
+// ══════════════════════════════════════════
+// ClaudeCliAdapter — parse_output 미인식 type (L120)
+// ══════════════════════════════════════════
+
+describe("ClaudeCliAdapter — 미인식 type → null (L120)", () => {
+  it("알 수 없는 type → null 반환", () => {
+    const adapter = new ClaudeCliAdapter();
+    const result = adapter.parse_output('{"type":"unknown_event","data":"xyz"}');
+    expect(result).toBeNull();
+  });
+});
+
+// ══════════════════════════════════════════
+// extract_tool_result_text — 배열 내 비 text-type 항목 처리 (L288)
+// ══════════════════════════════════════════
+
+describe("ClaudeCliAdapter — tool_result 배열 내 혼합 항목 처리 (L288)", () => {
+  it("배열 내 비 text 항목 → '' (filter 후 제거)", () => {
+    const adapter = new ClaudeCliAdapter();
+    const line = JSON.stringify({
+      type: "assistant",
+      message: {
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: "tu-mixed",
+            content: [
+              { type: "image", url: "https://example.com/img.png" },  // non-text type
+              { type: "text", text: "actual text" },
+            ],
+          },
+        ],
+      },
+    });
+    const result = adapter.parse_output(line);
+    if (result?.type === "tool_result") expect(result.output).toBe("actual text");
+  });
+});
+
+// ══════════════════════════════════════════
+// GeminiCliAdapter — 미인식 type → return null (L428)
+// ══════════════════════════════════════════
+
+describe("GeminiCliAdapter — 미인식 type → null 반환 (L428)", () => {
+  it("unknown type → null", () => {
+    const adapter = new GeminiCliAdapter();
+    const result = adapter.parse_output('{"type":"unknown_event","data":"xyz"}');
+    expect(result).toBeNull();
+  });
+});
+
+// ══════════════════════════════════════════
+// map_gemini_error_code — billing + fatal 에러 (L441-443)
+// ══════════════════════════════════════════
+
+describe("GeminiCliAdapter — billing + fatal 에러 분기", () => {
+  it("'billing issue' → billing 코드 (L441)", () => {
+    const adapter = new GeminiCliAdapter();
+    const msg = adapter.parse_output('{"type":"error","message":"billing issue, please check your account"}');
+    if (msg?.type === "error") expect(msg.code).toBe("billing");
+  });
+
+  it("알 수 없는 에러 → fatal 코드 (L443)", () => {
+    const adapter = new GeminiCliAdapter();
+    const msg = adapter.parse_output('{"type":"error","message":"some unexpected service error occurred"}');
+    if (msg?.type === "error") expect(msg.code).toBe("fatal");
+  });
+});
+
+// ══════════════════════════════════════════
+// map_claude_error_code — rate/billing/fatal 분기 (L300-302)
+// ══════════════════════════════════════════
+
+describe("ClaudeCliAdapter — map_claude_error_code rate/billing/fatal 분기", () => {
+  it("rate 에러 → rate_limit 코드", () => {
+    const adapter = new ClaudeCliAdapter();
+    const msg = adapter.parse_output('{"type":"error","error":"rate limit exceeded"}');
+    if (msg?.type === "error") expect(msg.code).toBe("rate_limit");
+  });
+
+  it("billing 에러 → billing 코드", () => {
+    const adapter = new ClaudeCliAdapter();
+    const msg = adapter.parse_output('{"type":"error","error":"billing quota exceeded"}');
+    if (msg?.type === "error") expect(msg.code).toBe("billing");
+  });
+
+  it("알 수 없는 에러 → fatal 코드", () => {
+    const adapter = new ClaudeCliAdapter();
+    const msg = adapter.parse_output('{"type":"error","error":"unexpected service failure"}');
+    if (msg?.type === "error") expect(msg.code).toBe("fatal");
   });
 });

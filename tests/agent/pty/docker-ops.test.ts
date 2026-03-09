@@ -80,6 +80,22 @@ describe("CliDockerOps", () => {
         name: "dup", image: "img", cmd: [],
       })).rejects.toThrow("name already in use");
     });
+
+    it("volumes 옵션 전달", async () => {
+      stub_exec("cid\n");
+      await ops.create({ name: "v", image: "img", cmd: [], volumes: ["/host:/container"] });
+      const call_args = mock_exec.mock.calls[0]![1] as string[];
+      expect(call_args).toContain("-v");
+      expect(call_args).toContain("/host:/container");
+    });
+
+    it("secrets 옵션 전달", async () => {
+      stub_exec("cid\n");
+      await ops.create({ name: "s", image: "img", cmd: [], secrets: ["mysecret"] });
+      const call_args = mock_exec.mock.calls[0]![1] as string[];
+      expect(call_args).toContain("--secret");
+      expect(call_args).toContain("mysecret");
+    });
   });
 
   describe("start", () => {
@@ -107,6 +123,14 @@ describe("CliDockerOps", () => {
       const call_args = mock_spawn.mock.calls[0]![1] as string[];
       expect(call_args).toContain("attach");
       expect(call_args).toContain("abc123");
+    });
+
+    it("stdin/stdout 없으면 에러 발생", async () => {
+      const proc = new EventEmitter() as any;
+      proc.stdin = null;
+      proc.stdout = null;
+      mock_spawn.mockReturnValue(proc);
+      await expect(ops.attach("bad")).rejects.toThrow("docker attach failed");
     });
   });
 

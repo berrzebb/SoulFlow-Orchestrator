@@ -39,6 +39,19 @@ describe("Lane", () => {
     resolve_fn!();
     await a;
   });
+
+  it("is_idle — 실행 중 false, 완료 후 true", async () => {
+    const lane = new Lane();
+    expect(lane.is_idle).toBe(true); // 초기엔 유휴
+    let resolve_fn: () => void;
+    const blocker = new Promise<void>((r) => { resolve_fn = r; });
+    const p = lane.enqueue(() => blocker);
+    await new Promise((r) => setTimeout(r, 5));
+    expect(lane.is_idle).toBe(false); // 실행 중
+    resolve_fn!();
+    await p;
+    expect(lane.is_idle).toBe(true); // 완료 후 유휴
+  });
 });
 
 describe("LaneQueue", () => {
@@ -122,5 +135,36 @@ describe("LaneQueue", () => {
     expect(lq.drain_followups("s1")).toEqual([]);
     expect(lq.drain_collected("s1")).toBeNull();
     expect(lq.session_count).toBe(0);
+  });
+
+  it("global_concurrency로 동시성을 제한한다", async () => {
+    const lq = new LaneQueue({ global_concurrency: 1 });
+    const order: number[] = [];
+    const a = lq.execute("s1", async () => { order.push(1); });
+    const b = lq.execute("s2", async () => { order.push(2); });
+    await Promise.all([a, b]);
+    expect(order).toEqual([1, 2]);
+  });
+
+  it("prune_idle — 유휴 레인을 정리한다", async () => {
+    const lq = new LaneQueue();
+    await lq.execute("s1", async () => {});
+    await lq.execute("s2", async () => {});
+    expect(lq.session_count).toBe(2);
+    const pruned = lq.prune_idle();
+    expect(pruned).toBe(2);
+    expect(lq.session_count).toBe(0);
+  });
+
+  it("prune_idle — 실행 중인 레인은 정리하지 않는다", async () => {
+    const lq = new LaneQueue();
+    let resolve_fn: () => void;
+    const blocker = new Promise<void>((r) => { resolve_fn = r; });
+    const p = lq.execute("s1", () => blocker);
+    await new Promise((r) => setTimeout(r, 5));
+    const pruned = lq.prune_idle();
+    expect(pruned).toBe(0);
+    resolve_fn!();
+    await p;
   });
 });
