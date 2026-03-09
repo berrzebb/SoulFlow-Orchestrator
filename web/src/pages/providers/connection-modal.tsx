@@ -34,7 +34,7 @@ export function ConnectionModal({ mode, onClose, onSaved }: ConnectionModalProps
   const { pending: saving, run } = useAsyncState();
 
   const typeOptions = types.length > 0 ? types : Object.keys(TYPE_LABELS);
-  const showApiBase = providerType === "openai_compatible" || providerType === "openrouter";
+  const showApiBase = providerType === "openai_compatible" || providerType === "openrouter" || providerType === "ollama";
 
   const hasChanges = (): boolean => {
     if (!isEdit) return true;

@@ -54,6 +54,11 @@ export function create_agent_provider_ops(deps: {
       case "codex_appserver":
         if (api_key) return fetch_openai_models("https://api.openai.com/v1", api_key);
         return get_static_openai_models();
+      case "ollama":
+        return fetch_ollama_models(
+          // api_base는 /v1 포함 형태일 수 있으므로 올라마 native base로 변환
+          (api_base || "http://ollama:11434").replace(/\/v1\/?$/, ""),
+        );
       case "container_cli": {
         const [a, g, o] = await Promise.all([fetch_anthropic_models(), fetch_gemini_models(), Promise.resolve(get_static_openai_models())]);
         return [...a, ...g, ...o];

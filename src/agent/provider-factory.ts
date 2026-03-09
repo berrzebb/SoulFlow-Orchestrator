@@ -211,6 +211,13 @@ register_agent_provider_factory("openrouter", (config, token) => {
   });
 });
 
+register_agent_provider_factory("ollama", (config, _token) => {
+  return new OpenAiCompatibleAgent(config.instance_id, {
+    ...extract_openai_settings(config.settings, { api_base: "http://ollama:11434/v1", model: "llama3.2" }),
+    api_key: "",
+  });
+});
+
 register_agent_provider_factory("container_cli", (config, _token, deps) => {
   const s = config.settings;
   const cli_type = typeof s.cli_type === "string" ? s.cli_type : "claude";

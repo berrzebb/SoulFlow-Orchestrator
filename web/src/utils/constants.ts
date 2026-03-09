@@ -12,4 +12,5 @@ export const PROVIDER_TYPE_LABELS: Record<string, string> = {
   openrouter: "OpenRouter",
   openai_compatible: "OpenAI Compatible",
   gemini_cli: "Gemini CLI",
+  ollama: "Ollama",
 };

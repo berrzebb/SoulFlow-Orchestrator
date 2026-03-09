@@ -59,10 +59,10 @@ export interface LoginResult {
 export const MODE_OPTIONS = ["once", "agent", "task"] as const;
 export const PURPOSE_OPTIONS = ["chat", "embedding"] as const;
 
-export const TYPES_WITH_SETTINGS = new Set(["openai_compatible", "openrouter"]);
+export const TYPES_WITH_SETTINGS = new Set(["openai_compatible", "openrouter", "ollama"]);
 
 /** 모델 목록 동적 조회를 지원하는 프로바이더 타입. */
 export const TYPES_WITH_MODELS = new Set([
   "openrouter", "openai_compatible", "claude_sdk", "claude_cli",
-  "gemini_cli", "codex_cli", "codex_appserver", "container_cli",
+  "gemini_cli", "codex_cli", "codex_appserver", "container_cli", "ollama",
 ]);

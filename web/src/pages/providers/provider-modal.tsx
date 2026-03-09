@@ -130,7 +130,7 @@ export function ProviderModal({ mode, connections, onClose, onSaved }: ProviderM
 
   function build_settings(): Record<string, unknown> {
     const out: Record<string, unknown> = {};
-    if (resolvedType === "openai_compatible" && apiBase && !connectionId) out.api_base = apiBase;
+    if ((resolvedType === "openai_compatible" || resolvedType === "ollama") && apiBase && !connectionId) out.api_base = apiBase;
     if (model) out.model = model;
     if (maxTokens) out.max_tokens = Number(maxTokens);
     if (temperature) out.temperature = Number(temperature);
@@ -295,9 +295,10 @@ export function ProviderModal({ mode, connections, onClose, onSaved }: ProviderM
       <fieldset className="form-fieldset">
         <legend className="form-fieldset__legend">{t("providers.model_settings")}</legend>
 
-        {showExtendedSettings && resolvedType === "openai_compatible" && !connectionId && (
+        {showExtendedSettings && (resolvedType === "openai_compatible" || resolvedType === "ollama") && !connectionId && (
           <FormGroup label={t("providers.api_base")} hint={t("providers.api_base_hint")}>
-            <input className="form-input" value={apiBase} onChange={(e) => setApiBase(e.target.value)} placeholder="https://api.openai.com/v1" />
+            <input className="form-input" value={apiBase} onChange={(e) => setApiBase(e.target.value)}
+              placeholder={resolvedType === "ollama" ? "http://ollama:11434/v1" : "https://api.openai.com/v1"} />
           </FormGroup>
         )}
 
