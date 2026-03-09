@@ -8,6 +8,7 @@ import { tmpdir } from "node:os";
 import { afterAll, describe, it, expect, beforeEach } from "vitest";
 import { SqliteDispatchDlqStore } from "@src/channels/dlq-store.ts";
 import type { DispatchDlqRecord } from "@src/channels/dlq-store.ts";
+import { with_sqlite } from "@src/utils/sqlite-helper.js";
 
 let root: string;
 let db_path: string;
@@ -127,5 +128,15 @@ describe("SqliteDispatchDlqStore — metadata JSON fallback", () => {
     const rows = await store.list();
     expect(rows[0]?.metadata?.kind).toBe("test");
     expect(rows[0]?.metadata?.count).toBe(3);
+  });
+
+  it("잘못된 metadata_json → catch → {} 반환 (L158)", async () => {
+    await store.append(make_record());
+    // DB에서 직접 metadata_json을 잘못된 JSON으로 교체
+    with_sqlite(db_path, (db) => {
+      db.prepare("UPDATE outbound_dlq SET metadata_json = ? WHERE rowid = (SELECT MAX(rowid) FROM outbound_dlq)").run("{{{invalid json");
+    });
+    const rows = await store.list();
+    expect(rows[0]?.metadata).toEqual({});
   });
 });

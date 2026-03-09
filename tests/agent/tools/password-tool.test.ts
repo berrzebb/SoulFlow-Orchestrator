@@ -139,3 +139,17 @@ describe("PasswordTool — entropy", () => {
     expect(r.pool_size).toBe(10);
   });
 });
+
+// L104: unknown action (default branch)
+describe("PasswordTool — unknown action + strong score (L104, L125)", () => {
+  it("알 수 없는 action → error 반환 (L104)", async () => {
+    const r = await exec({ action: "unknown_action" }) as Record<string, unknown>;
+    expect(r.error).toContain("unknown action");
+  });
+
+  it("10자 혼합 비밀번호 → score=strong (entropy 60-80 범위) (L125)", async () => {
+    // pool=95 (upper+lower+digit+special), length=10 → entropy≈65.7 → strong
+    const r = await exec({ action: "strength", password: "Abc1!Xyz2@" }) as Record<string, unknown>;
+    expect(r.score).toBe("strong");
+  });
+});

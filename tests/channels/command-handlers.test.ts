@@ -223,6 +223,15 @@ describe("ToneHandler — handle: tone 설정", () => {
     await h.handle(ctx);
     expect(ctx.replies[0]).not.toContain("@user1");
   });
+
+  it("concept pack 토큰 (fantasy_hero) → pref.concept 설정 (L73)", async () => {
+    const h = new ToneHandler(store, (ctx) => ctx.message.chat_id);
+    const ctx = make_ctx("tone", ["fantasy_hero"]);
+    await h.handle(ctx);
+    // concept pack 토큰 인식 → 저장 성공
+    expect(ctx.replies[0]).toContain("저장되었습니다");
+    expect(ctx.replies[0]).toContain("fantasy_hero");
+  });
 });
 
 // ── ModelHandler 테스트 ──

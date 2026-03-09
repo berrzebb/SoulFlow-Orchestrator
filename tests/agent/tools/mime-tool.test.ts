@@ -111,3 +111,11 @@ describe("MimeTool — list", () => {
     expect(entries[".json"]).toBe("application/json");
   });
 });
+
+// L97: unknown action (default branch)
+describe("MimeTool — unknown action (L97)", () => {
+  it("알 수 없는 action → error 반환 (L97)", async () => {
+    const r = await exec({ action: "unknown_action" }) as Record<string, unknown>;
+    expect(r.error).toContain("unknown action");
+  });
+});

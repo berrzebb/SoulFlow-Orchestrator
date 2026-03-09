@@ -132,3 +132,11 @@ describe("RegexTool — 에러 케이스", () => {
     expect(String(r)).toContain("Error");
   });
 });
+
+// L56: unknown operation (default branch)
+describe("RegexTool — unknown operation (L56)", () => {
+  it("알 수 없는 operation → Error 반환 (L56)", async () => {
+    const r = await exec({ operation: "unknown_op", input: "hello", pattern: "h" });
+    expect(String(r)).toContain("unsupported operation");
+  });
+});
