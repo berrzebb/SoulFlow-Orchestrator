@@ -21,6 +21,9 @@ import { error_message } from "../../utils/common.js";
 import { select_tools_for_request } from "../tool-selector.js";
 import { is_once_escalation, is_agent_escalation } from "../classifier.js";
 import { error_result } from "./helpers.js";
+import { generate_completion_checks, format_follow_up } from "../completion-checker.js";
+
+const VALIDATION_ROLES = new Set(["validator", "reviewer"]);
 
 export type ExecuteDispatcherDeps = {
   providers: ProviderRegistry;
@@ -107,7 +110,7 @@ export async function execute_dispatch(
   // 사용자 지정 프로바이더가 있으면 gateway 선택을 오버라이드
   const executor = (req.preferred_provider_id as import("../../providers/executor.js").ExecutorProvider | undefined) ?? decision.executor;
 
-  // finalize: done/blocked 이벤트 기록 + process tracker 종료 + completion check 추가
+  // finalize: done/blocked 이벤트 기록 + process tracker 종료 + completion check 추가 (검증 역할 전용)
   const finalize = (result: OrchestrationResult): OrchestrationResult => {
     const phase = result.error ? "blocked" : "done";
     deps.log_event({
@@ -120,6 +123,17 @@ export async function execute_dispatch(
     if (req.run_id) {
       deps.process_tracker?.set_tool_count(req.run_id, result.tool_calls_count);
       deps.process_tracker?.end(req.run_id, result.error ? "failed" : "completed", result.error || undefined);
+    }
+    // 검증 역할(validator, reviewer)일 때만 완료 체크리스트 추가
+    if (result.reply && !result.error && req.alias && VALIDATION_ROLES.has(req.alias)) {
+      const skill_metas = (result.matched_skills ?? [])
+        .map((n) => deps.runtime.get_skill_metadata(n))
+        .filter((s): s is NonNullable<typeof s> => s !== null);
+      const { questions } = generate_completion_checks(
+        result.tools_used ?? [], skill_metas, result.tool_calls_count, true,
+      );
+      const follow_up = format_follow_up(questions);
+      if (follow_up) return { ...result, reply: `${result.reply}\n\n${follow_up}` };
     }
     return result;
   };

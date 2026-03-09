@@ -387,6 +387,8 @@ export type ChatSession = {
   id: string;
   created_at: string;
   messages: ChatSessionMessage[];
+  /** 사용자 지정 탭 이름 */
+  name?: string;
 };
 
 export class DashboardService implements ServiceLike {

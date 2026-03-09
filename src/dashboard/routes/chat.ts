@@ -59,6 +59,7 @@ export async function handle_chat(ctx: RouteContext): Promise<boolean> {
       id: s.id,
       created_at: s.created_at,
       message_count: s.messages.length,
+      ...(s.name ? { name: s.name } : {}),
     }));
     json(res, 200, sessions);
     return true;
@@ -87,6 +88,18 @@ export async function handle_chat(ctx: RouteContext): Promise<boolean> {
     const session_id = decodeURIComponent(id_match[1]);
     const session = chat_sessions.get(session_id);
     json(res, session ? 200 : 404, session ?? { error: "not_found" });
+    return true;
+  }
+
+  // PATCH /api/chat/sessions/:id — 세션 이름 변경
+  if (id_match && req.method === "PATCH") {
+    const session_id = decodeURIComponent(id_match[1]);
+    const session = chat_sessions.get(session_id);
+    if (!session) { json(res, 404, { error: "not_found" }); return true; }
+    const body = await read_body(req);
+    const name = typeof body?.name === "string" ? body.name.trim().slice(0, 100) : undefined;
+    if (name !== undefined) session.name = name || undefined;
+    json(res, 200, { id: session.id, name: session.name ?? null });
     return true;
   }
 

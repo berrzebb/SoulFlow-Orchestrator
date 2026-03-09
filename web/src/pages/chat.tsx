@@ -14,6 +14,7 @@ import { MessageList } from "./chat/message-list";
 import { EmptyState } from "./chat/empty-state";
 import { ChatSessionTabs } from "./chat/chat-session-tabs";
 import { ChatBottomBar } from "./chat/chat-status-bar";
+import { SessionBrowser } from "./chat/session-browser";
 import type { ChatSessionSummary, ChatSession, ChatMessage, ChatMediaItem } from "./chat/types";
 
 type MirrorSessionEntry = { key: string; provider: string; chat_id: string; alias: string; thread?: string; updated_at: string; message_count: number };
@@ -30,6 +31,7 @@ export default function ChatPage() {
   /** 전송 후 어시스턴트가 응답 시작할 때까지의 대기 상태 */
   const [waiting_response, setWaitingResponse] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [sessions_open, setSessionsOpen] = useState(false);
   const { pending: creating, run: run_create } = useAsyncState();
   const { run: run_delete } = useAsyncState();
   const [pending_media, setPendingMedia] = useState<ChatMediaItem[]>([]);
@@ -111,12 +113,17 @@ export default function ChatPage() {
     related_query_keys: activeId ? [["chat-session", activeId]] : [],
   });
 
-  const has_stream_content = !!web_stream?.content;
+  // 세션 전환/브라우저 닫기/스트리밍 시 bottom 스크롤
+  const stream_content_len = (ndjson_stream?.content?.length ?? 0) + (web_stream?.content?.length ?? 0);
   useEffect(() => {
-    if (messagesRef.current) {
-      messagesRef.current.scrollTop = messagesRef.current.scrollHeight;
-    }
-  }, [activeSession?.messages?.length, mirrorLiveMessages.length, has_stream_content]);
+    if (!messagesRef.current) return;
+    // DOM 레이아웃 완료 후 스크롤 (세션 전환 직후 scrollHeight가 0일 수 있음)
+    requestAnimationFrame(() => {
+      if (messagesRef.current) {
+        messagesRef.current.scrollTop = messagesRef.current.scrollHeight;
+      }
+    });
+  }, [activeId, mirrorKey, sessions_open, activeSession?.messages?.length, mirrorLiveMessages.length, stream_content_len]);
 
   const create_session = () => run_create(async () => {
     const res = await api.post<{ id: string }>("/api/chat/sessions");
@@ -129,6 +136,11 @@ export default function ChatPage() {
     if (activeId === id) setActiveId(null);
     void qc.invalidateQueries({ queryKey: ["chat-sessions"] });
   }, t("chat.session_deleted"), t("chat.delete_failed"));
+
+  const rename_session = async (id: string, name: string) => {
+    await api.patch(`/api/chat/sessions/${encodeURIComponent(id)}`, { name });
+    void qc.invalidateQueries({ queryKey: ["chat-sessions"] });
+  };
 
   const handle_file = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -225,8 +237,8 @@ export default function ChatPage() {
   const last_is_user = last_msg?.direction === "user";
   const has_active = !!activeId || is_mirror;
   const can_send = !sending && (is_mirror ? !!input.trim() : (!!input.trim() || pending_media.length > 0));
-  /** sending + waiting_response: 전송~응답 시작 전까지 통합 로딩 상태 */
-  const is_busy = sending || waiting_response;
+  /** sending + waiting_response + is_streaming: 전송~스트리밍 완료까지 통합 로딩 상태 */
+  const is_busy = sending || waiting_response || is_streaming;
 
   // 세션 레이블: mirror alias, 또는 선택된 provider label, 또는 기본값
   const session_label = is_mirror
@@ -238,39 +250,50 @@ export default function ChatPage() {
     if (web_stream?.chat_id === activeId) set_web_stream(null);
   };
 
+  const select_and_close = (id: string) => { select_session(id); setSessionsOpen(false); };
+  const mirror_and_close = (key: string) => { select_mirror(key); setSessionsOpen(false); };
+
   return (
     <div className="chat-page">
       {/* 세션 탭바 */}
       <div className="chat-header">
+        {/* 햄버거 / 닫기 버튼 — 전체 세션 브라우저 토글 */}
+        <button
+          className={`chat-header__burger${sessions_open ? " chat-header__burger--open" : ""}`}
+          onClick={() => setSessionsOpen((o) => !o)}
+          aria-label={sessions_open ? t("common.close") : t("chat.session_browser_title")}
+        >
+          {sessions_open ? "✕" : "≡"}
+        </button>
         <ChatSessionTabs
           sessions={sessions}
           activeId={is_mirror ? null : activeId}
           creating={creating}
-          onSelect={select_session}
+          onSelect={select_and_close}
           onClose={(id) => setDeleteConfirmId(id)}
           onNew={() => void create_session()}
+          onRename={(id, name) => void rename_session(id, name)}
         />
-        {mirror_sessions.length > 0 && (
-          <select
-            className="chat-header__select chat-header__select--mirror"
-            value={mirrorKey ?? ""}
-            onChange={(e) => e.target.value ? select_mirror(e.target.value) : select_session(null)}
-          >
-            <option value="">{t("chat.mirror_select")}</option>
-            {mirror_sessions.map((m) => (
-              <option key={m.key} value={m.key}>
-                {m.provider}:{m.alias || m.chat_id} · {m.message_count}msg
-              </option>
-            ))}
-          </select>
-        )}
         {is_mirror && <Badge status={t("chat.mirror_badge")} variant="info" />}
         {pending_approvals.length > 0 && (
           <Badge status={`🔐 ${pending_approvals.length}`} variant="warn" />
         )}
       </div>
 
-      {!has_active ? (
+      {sessions_open ? (
+        <SessionBrowser
+          sessions={sessions}
+          mirror_sessions={mirror_sessions}
+          active_id={activeId}
+          mirror_key={mirrorKey}
+          creating={creating}
+          onSelectSession={select_and_close}
+          onSelectMirror={mirror_and_close}
+          onNew={() => void create_session()}
+          onRename={(id, name) => void rename_session(id, name)}
+          onDelete={(id) => setDeleteConfirmId(id)}
+        />
+      ) : !has_active ? (
         <EmptyState onNewSession={create_session} />
       ) : (activeSessionLoading || mirrorSessionLoading) ? (
         <div className="chat-loading">
