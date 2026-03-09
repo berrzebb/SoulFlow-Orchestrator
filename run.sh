@@ -18,6 +18,8 @@ WORKSPACE=
 WEB_PORT=
 INSTANCE=
 WATCH=
+SKIP_LOCK=0
+POSITIONAL_ARGS=()
 
 shift || true
 while [ $# -gt 0 ]; do
@@ -38,6 +40,9 @@ while [ $# -gt 0 ]; do
     --instance | --name) shift; INSTANCE="$1" ;;
     --watch=*) WATCH="${1#*=}" ;;
     --watch) WATCH=all ;;
+    --skip-lock) SKIP_LOCK=1 ;;
+    --*) ;;  # 미인식 옵션 무시
+    *) POSITIONAL_ARGS+=("$1") ;;  # 비-옵션 인자 수집
   esac
   shift
 done
@@ -86,6 +91,7 @@ show_help() {
   echo "  --web-port=PORT    - 웹 포트 (기본값: 환경별 다름)"
   echo "  --watch            - 전체 소스 마운트 + 핫 리로드 (tsx watch)"
   echo "  --watch=web        - 웹 소스만 마운트 + 핫 리로드"
+  echo "  --skip-lock        - 인스턴스 락 비활성화 (복구/디버그 전용)"
   echo ""
   echo -e "${YELLOW}예시:${NC}"
   echo "  ./run.sh dev --workspace=/home/user/soulflow"
@@ -114,6 +120,7 @@ run_env() {
   echo "   프로젝트: $project_name"
   [ -n "$INSTANCE" ] && echo "   인스턴스: $INSTANCE"
   [ -n "$WATCH" ] && echo "   watch: $WATCH"
+  [ "$SKIP_LOCK" = "1" ] && echo "   skip lock: enabled"
 
   # .agents 디렉토리 사전 생성 (볼륨 마운트 요구사항)
   for agent in .claude .codex .gemini; do
@@ -130,6 +137,7 @@ run_env() {
   export HOST_WORKSPACE="$WORKSPACE"
   export PROJECT_NAME="$project_name"
   export WEB_PORT="${WEB_PORT:-$DEFAULT_WEB_PORT}"
+  export SKIP_INSTANCE_LOCK="$SKIP_LOCK"
 
 
   # instance 모드: 기본 인프라(redis, docker-proxy)를 먼저 보장
@@ -162,6 +170,7 @@ run_env() {
   echo -e "\n${GREEN}✅ $profile 환경이 시작되었습니다!${NC}"
   echo -e "${GREEN}   프로젝트: $project_name${NC}"
   echo -e "${GREEN}   웹 포트: $WEB_PORT${NC}"
+  [ "$SKIP_LOCK" = "1" ] && echo -e "${YELLOW}⚠ WARNING: instance lock disabled${NC}"
   echo ""
 
   # watch=web: 호스트에서 vite build --watch 실행 (dist/web → 컨테이너 마운트)
@@ -228,8 +237,7 @@ case "$COMMAND" in
     docker compose ps 2>/dev/null || echo "실행 중인 환경 없음"
     ;;
   logs)
-    # 첫 번째 비-옵션 인자를 프로필로 사용 (e.g. ./run.sh logs prod --instance=worker1)
-    PROFILE_ARG=$(echo "$@" | tr ' ' '\n' | grep -v '^--' | head -1)
+    PROFILE_ARG="${POSITIONAL_ARGS[0]:-}"
     if [ -n "$PROFILE_ARG" ]; then
       PROJECT="soulflow-$PROFILE_ARG"
       [ -n "$INSTANCE" ] && PROJECT="$PROJECT-$INSTANCE"
@@ -241,7 +249,7 @@ case "$COMMAND" in
     fi
     ;;
   login)
-    AGENT=${2:-}
+    AGENT="${POSITIONAL_ARGS[0]:-}"
     if [ -z "$AGENT" ]; then
       echo -e "${RED}에이전트를 지정하세요${NC}"
       echo "사용법: ./run.sh login [claude|codex|gemini]"
