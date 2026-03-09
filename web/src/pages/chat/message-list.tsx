@@ -42,18 +42,7 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(function
           />
         ))}
 
-        {props.sending && !props.is_streaming && (
-          <div className="chat-msg chat-msg--assistant">
-            <div className="chat-msg__avatar">{t("chat.avatar")}</div>
-            <div className="chat-msg__body">
-              <div className="chat-msg__content chat-typing">
-                <span className="chat-typing__dot" />
-                <span className="chat-typing__dot" />
-                <span className="chat-typing__dot" />
-              </div>
-            </div>
-          </div>
-        )}
+        {/* thinking dots → ChatBottomBar로 이전 */}
       </div>
     </div>
   );

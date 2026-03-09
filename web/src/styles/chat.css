@@ -350,6 +350,171 @@
 }
 
 /* ??? ChatPromptBar (?듯빀 ?낅젰 + 紐⑤뜽 ?좏깮 ?앹뾽) ??? */
+/* ===== Session Tabs ===== */
+.chat-tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.chat-tabs::-webkit-scrollbar { display: none; }
+.chat-tabs__tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  background: none;
+  color: var(--muted);
+  font-size: var(--fs-sm);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+  flex-shrink: 0;
+}
+.chat-tabs__tab:hover { background: var(--hover); color: var(--text); }
+.chat-tabs__tab--active {
+  background: var(--surface);
+  border-color: var(--line);
+  color: var(--text);
+}
+.chat-tabs__index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.chat-tabs__tab--active .chat-tabs__index {
+  background: var(--accent);
+  color: #fff;
+}
+.chat-tabs__id {
+  font-family: "SFMono-Regular", "Consolas", monospace;
+  font-size: var(--fs-xs);
+  letter-spacing: 0.03em;
+}
+.chat-tabs__close {
+  font-size: 14px;
+  line-height: 1;
+  color: var(--muted);
+  padding: 0 2px;
+  border-radius: 2px;
+  opacity: 0;
+  transition: opacity 0.1s, background 0.1s;
+  cursor: pointer;
+}
+.chat-tabs__tab:hover .chat-tabs__close,
+.chat-tabs__tab--active .chat-tabs__close { opacity: 1; }
+.chat-tabs__close:hover { color: var(--err); }
+.chat-tabs__add {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-size: 18px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.12s, color 0.12s;
+}
+.chat-tabs__add:hover { background: var(--hover); color: var(--text); }
+.chat-tabs__add:disabled { opacity: 0.4; cursor: not-allowed; }
+.chat-header__select--mirror { max-width: 180px; flex: 0 1 180px; }
+
+/* ===== Bottom Bar ===== */
+.chat-bottom-bar {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(700px, calc(100% - var(--sp-8)));
+  padding: 0 var(--sp-4);
+  z-index: 9;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  height: 36px;
+  font-size: var(--fs-xs);
+  color: var(--muted);
+}
+/* busy 상태일 때는 floating pill로 중앙 배치 */
+.chat-bottom-bar--busy {
+  color: var(--text);
+  width: auto;
+  max-width: min(600px, calc(100% - var(--sp-8)));
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  box-shadow: var(--shadow-md);
+  padding: 0 var(--sp-3);
+  gap: var(--sp-3);
+}
+.chat-bottom-bar__run-id {
+  font-family: "SFMono-Regular", "Consolas", monospace;
+  font-size: var(--fs-xs);
+  padding: 2px 7px;
+  border-radius: var(--radius-sm);
+  background: var(--hover);
+  color: var(--muted);
+  flex-shrink: 0;
+  letter-spacing: 0.03em;
+}
+.chat-bottom-bar__dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
+  animation: chat-blink 1.2s ease-in-out infinite;
+}
+.chat-bottom-bar__label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  color: var(--text);
+  flex-shrink: 0;
+}
+.chat-bottom-bar__phase { flex: 1; min-width: 0; color: var(--muted); }
+.chat-bottom-bar__elapsed {
+  font-family: "SFMono-Regular", "Consolas", monospace;
+  font-size: var(--fs-xs);
+  color: var(--muted);
+  flex-shrink: 0;
+}
+.chat-bottom-bar__stop {
+  padding: 3px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid color-mix(in srgb, var(--err) 40%, transparent);
+  background: color-mix(in srgb, var(--err) 10%, transparent);
+  color: var(--err);
+  font-size: var(--fs-xs);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.1s;
+}
+.chat-bottom-bar__stop:hover { background: color-mix(in srgb, var(--err) 20%, transparent); }
+@media (max-width: 768px) {
+  .chat-bottom-bar { height: 32px; }
+  .chat-bottom-bar__shortcut { display: none; }
+}
+
 .chat-prompt-bar {
   position: absolute;
   bottom: max(var(--sp-4), env(safe-area-inset-bottom));

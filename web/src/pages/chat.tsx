@@ -10,9 +10,10 @@ import { useApprovals } from "../hooks/use-approvals";
 import { useNdjsonStream } from "../hooks/use-ndjson-stream";
 import { useDashboardStore } from "../store";
 import { useT } from "../i18n";
-import { time_ago } from "../utils/format";
 import { MessageList } from "./chat/message-list";
 import { EmptyState } from "./chat/empty-state";
+import { ChatSessionTabs } from "./chat/chat-session-tabs";
+import { ChatBottomBar } from "./chat/chat-status-bar";
 import type { ChatSessionSummary, ChatSession, ChatMessage, ChatMediaItem } from "./chat/types";
 
 type MirrorSessionEntry = { key: string; provider: string; chat_id: string; alias: string; thread?: string; updated_at: string; message_count: number };
@@ -30,7 +31,7 @@ export default function ChatPage() {
   const [waiting_response, setWaitingResponse] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const { pending: creating, run: run_create } = useAsyncState();
-  const { pending: deleting, run: run_delete } = useAsyncState();
+  const { run: run_delete } = useAsyncState();
   const [pending_media, setPendingMedia] = useState<ChatMediaItem[]>([]);
   /** React 배칭으로 sending state가 즉시 반영되지 않으므로 ref로 동기 중복 방지 */
   const stream_inflight = useRef(false);
@@ -189,7 +190,8 @@ export default function ChatPage() {
   const active_stream = !is_mirror
     ? (ndjson_stream?.chat_id === activeId ? ndjson_stream : (web_stream?.chat_id === activeId ? web_stream : null))
     : null;
-  const stream_active = !!active_stream?.content;
+  // 스트림 객체가 생성되는 순간 버블 예약 (content 유무 무관) → 레이아웃 shift 방지
+  const stream_active = !!active_stream;
   const is_streaming = stream_active && !active_stream!.done;
 
   // 스트리밍 시작 or 전송 이후 새로 도착한 assistant 메시지 시 대기 상태 해제
@@ -226,25 +228,31 @@ export default function ChatPage() {
   /** sending + waiting_response: 전송~응답 시작 전까지 통합 로딩 상태 */
   const is_busy = sending || waiting_response;
 
+  // 세션 레이블: mirror alias, 또는 선택된 provider label, 또는 기본값
+  const session_label = is_mirror
+    ? (mirror_sessions.find((m) => m.key === mirrorKey)?.alias || "Mirror")
+    : "Chat";
+
+  const cancel_active = () => {
+    cancel_stream();
+    if (web_stream?.chat_id === activeId) set_web_stream(null);
+  };
+
   return (
     <div className="chat-page">
+      {/* 세션 탭바 */}
       <div className="chat-header">
-        <h2 className="chat-header__title">{t("chat.title")}</h2>
-        <select
-          className="chat-header__select"
-          value={is_mirror ? "" : (activeId ?? "")}
-          onChange={(e) => select_session(e.target.value || null)}
-        >
-          <option value="">{t("chat.select_session")}</option>
-          {sessions.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.id.slice(0, 12)} · {t("chat.msgs_fmt", { count: s.message_count })} · {time_ago(s.created_at)}
-            </option>
-          ))}
-        </select>
+        <ChatSessionTabs
+          sessions={sessions}
+          activeId={is_mirror ? null : activeId}
+          creating={creating}
+          onSelect={select_session}
+          onClose={(id) => setDeleteConfirmId(id)}
+          onNew={() => void create_session()}
+        />
         {mirror_sessions.length > 0 && (
           <select
-            className="chat-header__select"
+            className="chat-header__select chat-header__select--mirror"
             value={mirrorKey ?? ""}
             onChange={(e) => e.target.value ? select_mirror(e.target.value) : select_session(null)}
           >
@@ -255,19 +263,6 @@ export default function ChatPage() {
               </option>
             ))}
           </select>
-        )}
-        <button className="btn btn--sm btn--ok" disabled={creating} onClick={() => void create_session()}>
-          {t("chat.new_session")}
-        </button>
-        {activeId && !is_mirror && (
-          <button
-            className="btn btn--xs btn--danger"
-            disabled={deleting}
-            onClick={() => setDeleteConfirmId(activeId)}
-            aria-label={t("chat.delete_session")}
-          >
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="2" y1="2" x2="10" y2="10" /><line x1="10" y1="2" x2="2" y2="10" /></svg>
-          </button>
         )}
         {is_mirror && <Badge status={t("chat.mirror_badge")} variant="info" />}
         {pending_approvals.length > 0 && (
@@ -308,6 +303,14 @@ export default function ChatPage() {
             selectedModel={is_mirror ? undefined : selectedModel}
             onProviderChange={is_mirror ? undefined : setSelectedProvider}
             onModelChange={is_mirror ? undefined : setSelectedModel}
+          />
+          {/* 하단 상태바: 처리 중 Thinking/Tool, 대기 중 세션 정보 */}
+          <ChatBottomBar
+            session_label={session_label}
+            is_busy={is_busy}
+            is_streaming={is_streaming}
+            active_session_id={is_mirror ? mirrorKey : activeId}
+            onStop={cancel_active}
           />
           {!is_mirror && (
             <input

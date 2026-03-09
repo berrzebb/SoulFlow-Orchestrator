@@ -21,7 +21,6 @@ import { error_message } from "../../utils/common.js";
 import { select_tools_for_request } from "../tool-selector.js";
 import { is_once_escalation, is_agent_escalation } from "../classifier.js";
 import { error_result } from "./helpers.js";
-import { generate_completion_checks, format_follow_up } from "../completion-checker.js";
 
 export type ExecuteDispatcherDeps = {
   providers: ProviderRegistry;
@@ -58,9 +57,11 @@ export async function execute_dispatch(
     category_map, tool_categories, active_tasks_in_chat,
   } = preflight;
 
-  // Gateway: 분류 + 도구 임베딩 워밍업을 병렬 실행 (서로 독립적)
-  const [decision] = await Promise.all([
-    resolve_gateway(
+  // warm_up은 비동기 fire-and-forget: gateway를 블로킹하지 않음
+  // select_tools_for_request 호출 시점에 완료되어 있으면 캐시 활용, 아니면 그때 임베딩
+  deps.tool_index?.warm_up(task_with_media).catch(() => {});
+
+  const decision = await resolve_gateway(
     task_with_media,
     {
       active_tasks: active_tasks_in_chat,
@@ -80,9 +81,8 @@ export async function execute_dispatch(
       executor_preference: deps.config.executor_provider,
       session_lookup: (task_id: string) => deps.runtime.find_session_by_task(task_id),
       logger: deps.logger,
-    }),
-    deps.tool_index?.warm_up(task_with_media).catch(() => {}),
-  ]);
+    },
+  );
 
   // Short-circuit: identity
   if (decision.action === "identity") {
@@ -120,20 +120,6 @@ export async function execute_dispatch(
     if (req.run_id) {
       deps.process_tracker?.set_tool_count(req.run_id, result.tool_calls_count);
       deps.process_tracker?.end(req.run_id, result.error ? "failed" : "completed", result.error || undefined);
-    }
-    // CompletionChecker: 성공 응답에만 체크리스트 추가 (오류/억제 제외)
-    if (result.reply && !result.error && !result.suppress_reply && result.tool_calls_count > 0) {
-      const skills_loader = deps.runtime.get_context_builder()?.skills_loader;
-      const skill_metas = skill_names
-        .map((n) => skills_loader?.get_skill_metadata(n))
-        .filter((m): m is NonNullable<typeof m> => m !== null && m !== undefined);
-      const has_role = skill_metas.some((m) => m.type === "role" && m.shared_protocols.includes("phase-gates"));
-      const check = generate_completion_checks(result.tools_used ?? [], skill_metas, result.tool_calls_count, has_role);
-      if (check.has_checks) {
-        const follow_up = format_follow_up(check.questions);
-        result.reply = `${result.reply}\n\n${follow_up}`;
-        result.matched_skills = skill_names;
-      }
     }
     return result;
   };
