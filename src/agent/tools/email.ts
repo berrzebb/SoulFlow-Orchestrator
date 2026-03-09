@@ -88,6 +88,7 @@ export class EmailTool extends Tool {
       ].join("\r\n");
 
       let rcpt_idx = 0;
+      let tls_started = false;
 
       socket.on("data", (chunk: Buffer) => {
         buffer += chunk.toString();
@@ -101,7 +102,7 @@ export class EmailTool extends Tool {
             case 0: send(`EHLO local`); step++; break;
             case 1:
               if (line.startsWith("250 ") || (line.startsWith("250-") && !line.includes("250-"))) {
-                if (opts.user && !use_tls && opts.port === 587) { send("STARTTLS"); step = 10; }
+                if (opts.user && !use_tls && opts.port === 587 && !tls_started) { send("STARTTLS"); step = 10; tls_started = true; }
                 else if (opts.user) { send("AUTH LOGIN"); step = 2; }
                 else { send(`MAIL FROM:<${opts.from}>`); step = 4; }
               }
