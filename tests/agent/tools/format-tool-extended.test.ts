@@ -165,3 +165,19 @@ describe("FormatTool — unsupported operation", () => {
     expect(r).toContain("foobar");
   });
 });
+
+// ══════════════════════════════════════════
+// 잘못된 locale catch (L59, L79)
+// ══════════════════════════════════════════
+
+describe("FormatTool — 잘못된 locale catch (L59, L79)", () => {
+  it("number: 잘못된 locale → Error: invalid locale (L59)", async () => {
+    const r = await exec({ operation: "number", value: "42", locale: "!invalid-locale!" });
+    expect(r).toContain("Error");
+  });
+
+  it("percent: 잘못된 locale → Error: invalid locale (L79)", async () => {
+    const r = await exec({ operation: "percent", value: "0.5", locale: "!invalid-locale!" });
+    expect(r).toContain("Error");
+  });
+});

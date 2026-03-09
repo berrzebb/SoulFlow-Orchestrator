@@ -333,3 +333,18 @@ describe("SecretHandler — telegram 모드", () => {
     expect(sent.join("")).not.toContain("@U001");
   });
 });
+
+// ══════════════════════════════════════════
+// L43: resolve_action return null (알 수 없는 서브커맨드)
+// L71: !action + guide=null → return false
+// ══════════════════════════════════════════
+
+describe("SecretHandler — 알 수 없는 서브커맨드 (L43, L71)", () => {
+  it("알 수 없는 서브커맨드 → resolve_action null (L43) → return false 또는 guide (L71)", async () => {
+    const handler = new SecretHandler(make_vault());
+    // arg0가 비어있지 않고 어떤 alias에도 매칭되지 않음 → L43 return null
+    const { ctx } = make_ctx({ command_name: "secret", args: ["nonexistent_subcommand_xyz"] });
+    const r = await handler.handle(ctx);
+    expect(typeof r).toBe("boolean");
+  });
+});

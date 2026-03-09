@@ -11,6 +11,7 @@ import { join } from "node:path";
 import { SecretVaultService } from "@src/security/secret-vault.js";
 import { AgentProviderStore } from "@src/agent/provider-store.js";
 import type { CreateAgentProviderInput, CreateProviderConnectionInput } from "@src/agent/agent.types.js";
+import { with_sqlite } from "@src/utils/sqlite-helper.js";
 
 let tmp_dir: string;
 let store: AgentProviderStore;
@@ -274,5 +275,42 @@ describe("AgentProviderStore — Connection 토큰", () => {
     await store.remove_connection_token("c1");
     expect(await store.has_connection_token("c1")).toBe(false);
     expect(await store.get_connection_token("c1")).toBeNull();
+  });
+});
+
+// ══════════════════════════════════════════
+// L107: safe_parse_modes 폴백 — 잘못된 JSON
+// ══════════════════════════════════════════
+
+describe("AgentProviderStore — safe_parse_modes 폴백 (L107)", () => {
+  it("supported_modes에 잘못된 JSON → 폴백 ['once','agent','task'] (L107)", () => {
+    store.upsert(make_provider({ instance_id: "modes-bad" }));
+    const db_path = join(tmp_dir, "providers.db");
+    // DB에서 직접 supported_modes를 잘못된 JSON으로 교체
+    with_sqlite(db_path, (db) => {
+      db.prepare("UPDATE agent_providers SET supported_modes = ? WHERE instance_id = ?")
+        .run("{{{invalid json", "modes-bad");
+    });
+    const config = store.get("modes-bad");
+    // safe_parse_modes catch → return ["once", "agent", "task"] (L107)
+    expect(config?.supported_modes).toEqual(["once", "agent", "task"]);
+  });
+});
+
+// ══════════════════════════════════════════
+// L293: has_resolved_token — connection 없는 인스턴스 → has_token 호출
+// ══════════════════════════════════════════
+
+describe("AgentProviderStore — has_resolved_token connection 없음 (L293)", () => {
+  it("connection_id 없는 인스턴스 + 토큰 있음 → true (L293)", async () => {
+    store.upsert(make_provider({ instance_id: "no-conn-prov", connection_id: undefined }));
+    await store.set_token("no-conn-prov", "my-token");
+    // config.connection_id 없음 → L289 if 스킵 → L293 return has_token(...)
+    expect(await store.has_resolved_token("no-conn-prov")).toBe(true);
+  });
+
+  it("connection_id 없는 인스턴스 + 토큰 없음 → false (L293)", async () => {
+    store.upsert(make_provider({ instance_id: "no-conn-no-tok", connection_id: undefined }));
+    expect(await store.has_resolved_token("no-conn-no-tok")).toBe(false);
   });
 });

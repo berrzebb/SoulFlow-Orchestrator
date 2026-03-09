@@ -164,3 +164,44 @@ describe("create_default_tool_registry — dynamic_store_path", () => {
     expect(registry).toBeDefined();
   });
 });
+
+// ══════════════════════════════════════════
+// L598: sender 클로저 — bus.publish_outbound 호출
+// ══════════════════════════════════════════
+
+describe("create_default_tool_registry — bus.publish_outbound 호출 (L598)", () => {
+  it("message 도구 execute → sender → bus.publish_outbound 호출 (L598)", async () => {
+    const publish_outbound = vi.fn().mockResolvedValue(undefined);
+    const bus = { publish_outbound, subscribe: vi.fn() };
+    const { registry } = create_default_tool_registry({ workspace, bus: bus as any });
+    const result = await registry.execute("message", {
+      channel: "slack",
+      chat_id: "C123",
+      content: "Hello from test",
+    });
+    // sender가 호출됨 → publish_outbound 호출됨 (L598)
+    expect(publish_outbound).toHaveBeenCalled();
+    expect(String(result)).toContain("Event sent");
+  });
+});
+
+// ══════════════════════════════════════════
+// L624, L627-629: runtime_admin 도구 — list_registered_tool_names + refresh_dynamic_tools
+// ══════════════════════════════════════════
+
+describe("create_default_tool_registry — runtime_admin 콜백 (L624, L627-629)", () => {
+  it("tool_install_shell → list_registered_tool_names + refresh_dynamic_tools 호출 (L624, L627-629)", async () => {
+    const { registry } = create_default_tool_registry({ workspace });
+    const result = await registry.execute("runtime_admin", {
+      action: "tool_install_shell",
+      tool_name: "test_shell_tool",
+      tool_description: "Test shell tool",
+      tool_command_template: "echo {{input}}",
+      tool_overwrite: true,
+    });
+    const parsed = JSON.parse(String(result));
+    // tool 설치 성공 → refresh_dynamic_tools 호출됨 (L627-629)
+    expect(parsed.ok).toBe(true);
+    expect(parsed.tool_name).toBe("test_shell_tool");
+  });
+});

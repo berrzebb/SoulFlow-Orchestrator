@@ -197,3 +197,22 @@ describe("request-preflight — resolve_reply_to 기타 provider (L251)", () => 
     }
   });
 });
+
+// ══════════════════════════════════════════
+// L167-168: seal_list — 비로컬 문자열 → seal_text 호출
+// ══════════════════════════════════════════
+
+describe("request-preflight — seal_list 비로컬 문자열 (L167-168)", () => {
+  it("media_inputs에 로컬 경로가 아닌 텍스트 → seal_text 호출 (L167-168)", async () => {
+    // "some context text" → is_local_reference = false → L167 seal_text 호출
+    const req = make_req({
+      media_inputs: ["some context text that is not a file path"],
+    });
+    const result = await run_request_preflight(make_deps(), req);
+    expect(result.kind).toBe("ready");
+    if (result.kind === "ready") {
+      // sealed 결과가 비어있지 않으면 media에 포함됨
+      expect(Array.isArray(result.media)).toBe(true);
+    }
+  });
+});
