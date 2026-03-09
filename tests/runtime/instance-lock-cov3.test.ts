@@ -130,4 +130,17 @@ describe("instance-lock — read_lock_payload 비정상 데이터", () => {
     expect(h2.acquired).toBe(true);
     await h2.release();
   });
+
+  it("완전히 잘못된 JSON (파싱 불가) → L75 catch → null 반환 → stale 처리", async () => {
+    const h = await acquire_runtime_instance_lock({ workspace: test_dir });
+    const lock_path = h.lock_path;
+    await h.release();
+
+    // JSON.parse("{invalid}") throws → L75: return null → stale 처리
+    await writeFile(lock_path, "{invalid: json syntax}", "utf-8");
+
+    const h2 = await acquire_runtime_instance_lock({ workspace: test_dir, retries: 2 });
+    expect(h2.acquired).toBe(true);
+    await h2.release();
+  });
 });
