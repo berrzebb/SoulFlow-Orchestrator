@@ -106,6 +106,23 @@ describe("LocalPty", () => {
     });
   });
 
+  it("stderr 출력을 data 리스너로 수신한다 (L29)", async () => {
+    const pty = new LocalPty("node", ["-e", 'process.stderr.write("err_output\\n"); process.exit(0)'], {
+      name: "test-stderr",
+      cwd: process.cwd(),
+      env: {},
+    });
+
+    const chunks: string[] = [];
+    pty.onData((data) => chunks.push(data));
+
+    await new Promise<void>((resolve) => {
+      pty.onExit(() => resolve());
+    });
+
+    expect(chunks.join("")).toContain("err_output");
+  });
+
   it("이미 종료된 프로세스의 onExit는 즉시 콜백을 호출한다", async () => {
     const pty = new LocalPty("node", ["-e", ""], {
       name: "test-immediate-exit",
