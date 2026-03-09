@@ -49,7 +49,7 @@ import { create_command_router } from "@src/channels/create-command-router.js";
 import {
   StopHandler, MemoryHandler, DecisionHandler, PromiseHandler,
   TaskHandler, StatusHandler, SkillHandler, DoctorHandler,
-  AgentHandler, VerifyHandler,
+  AgentHandler, VerifyHandler, StatsHandler,
 } from "@src/channels/commands/index.js";
 
 // ─── 헬퍼 ──────────────────────────────────────────────────────────────────
@@ -443,6 +443,20 @@ describe("create_command_router — AgentHandler cancel/send/count 람다", () =
 // ══════════════════════════════════════════════════════
 // VerifyHandler deps 람다
 // ══════════════════════════════════════════════════════
+
+// ══════════════════════════════════════════════════════
+// StatsHandler deps 람다 (L134)
+// ══════════════════════════════════════════════════════
+
+describe("create_command_router — StatsHandler deps 람다 (L134)", () => {
+  it("reset_cd() → orchestration.reset_cd_score() 위임 (L134)", () => {
+    const reset_cd_score = vi.fn();
+    create_command_router(make_deps({ orchestration: { get_cd_score: vi.fn().mockReturnValue(0), reset_cd_score } as any }));
+    const stats_deps = vi.mocked(StatsHandler).mock.calls[0][0] as any;
+    stats_deps.reset_cd();
+    expect(reset_cd_score).toHaveBeenCalled();
+  });
+});
 
 describe("create_command_router — VerifyHandler deps 람다", () => {
   it("get_last_output → session_recorder.get_last_assistant_content 위임", () => {

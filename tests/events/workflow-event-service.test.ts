@@ -1,13 +1,14 @@
 /**
  * WorkflowEventService — append/list/get_task_detail CRUD 테스트.
  */
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { WorkflowEventService } from "../../src/events/service.js";
 import type { TaskStoreLike } from "../../src/agent/task-store.js";
 import type { TaskState } from "../../src/contracts.js";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { with_sqlite } from "../../src/utils/sqlite-helper.js";
 
 describe("WorkflowEventService", () => {
   let workspace: string;
@@ -264,5 +265,65 @@ describe("WorkflowEventService — bind_task_store (sync_task_state)", () => {
   it("null task_store bind 후 append → 에러 없음", async () => {
     svc.bind_task_store(null);
     await expect(svc.append({ phase: "done", summary: "완료" })).resolves.toBeDefined();
+  });
+});
+
+// ══════════════════════════════════════════════════════════════
+// L206: row_to_event catch — 잘못된 payload_json → null 필터됨
+// ══════════════════════════════════════════════════════════════
+
+describe("WorkflowEventService — row_to_event catch (L206)", () => {
+  let workspace5: string;
+  let svc: WorkflowEventService;
+
+  beforeEach(async () => {
+    workspace5 = await mkdtemp(join(tmpdir(), "evt-rte-"));
+    svc = new WorkflowEventService(workspace5);
+  });
+
+  afterEach(async () => {
+    await rm(workspace5, { recursive: true, force: true }).catch(() => {});
+  });
+
+  it("잘못된 payload_json → row_to_event catch → null → list에서 제외 (L206)", async () => {
+    // 이벤트 정상 저장
+    await svc.append({ phase: "done", summary: "정상 이벤트", task_id: "t-rte" });
+
+    // DB에서 직접 payload_json을 잘못된 JSON으로 교체
+    const sqlite_path = join(workspace5, "runtime", "events", "events.db");
+    with_sqlite(sqlite_path, (db) => {
+      db.prepare("UPDATE workflow_events SET payload_json = ? WHERE task_id = ?")
+        .run("{{{invalid json", "t-rte");
+    });
+
+    // list() → row_to_event catch → null → filter → 빈 배열
+    const events = await svc.list({ task_id: "t-rte" });
+    // payload_json 파싱 실패 → row_to_event catch (L206) → null → filtered out
+    expect(events.length).toBe(0);
+  });
+});
+
+// ══════════════════════════════════════════════════════════════
+// L182: schema initialization failed — logger.error 호출
+// ══════════════════════════════════════════════════════════════
+
+describe("WorkflowEventService — schema init failed → logger.error (L182)", () => {
+  it("DB 경로가 디렉토리 → with_sqlite 실패 → !initialized → logger.error (L182)", async () => {
+    const tmp = await mkdtemp(join(tmpdir(), "evt-init-fail-"));
+    try {
+      const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } as any;
+      // events_dir_override를 tmp 경로로 직접 지정
+      // events.db 위치에 미리 디렉토리 생성 → better-sqlite3 열기 실패
+      const events_dir = join(tmp, "events");
+      await mkdir(events_dir, { recursive: true });
+      // events.db 자리에 디렉토리 생성 → DB 열기 불가
+      await mkdir(join(events_dir, "events.db"), { recursive: true });
+      const svc2 = new WorkflowEventService(tmp, events_dir, logger);
+      // ensure_initialized 완료 대기 (내부적으로 Promise)
+      await svc2.append({ phase: "assign", summary: "test" }).catch(() => {});
+      expect(logger.error).toHaveBeenCalledWith("schema initialization failed");
+    } finally {
+      await rm(tmp, { recursive: true, force: true }).catch(() => {});
+    }
   });
 });

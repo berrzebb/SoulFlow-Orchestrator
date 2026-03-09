@@ -218,6 +218,30 @@ describe("SessionRecorder — emit_mirror 예외 격리", () => {
 });
 
 // ══════════════════════════════════════════════════════════
+// L167: append_daily_memory throw → catch → logger.warn (L167)
+// ══════════════════════════════════════════════════════════
+
+describe("SessionRecorder — append_daily_memory throw → logger.warn (L167)", () => {
+  it("daily_memory.append_daily_memory throw → logger.warn 호출 (L167)", async () => {
+    const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } as any;
+    const daily_memory = {
+      append_daily_memory: vi.fn().mockRejectedValue(new Error("disk full")),
+    };
+    const sessions = make_sessions([]);
+    const recorder = new SessionRecorder({
+      sessions, daily_memory,
+      sanitize_for_storage: (s) => s,
+      logger,
+    });
+    // record_user → append_daily → append_daily_memory throw → catch → logger.warn
+    await expect(
+      recorder.record_user("slack", make_message({ content: "hello" }), "assistant")
+    ).resolves.toBeUndefined();
+    expect(logger.warn).toHaveBeenCalledWith("daily memory write failed", expect.any(Object));
+  });
+});
+
+// ══════════════════════════════════════════════════════════
 // record_user
 // ══════════════════════════════════════════════════════════
 
