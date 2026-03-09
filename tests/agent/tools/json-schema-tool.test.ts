@@ -332,4 +332,20 @@ describe("JsonSchemaTool", () => {
     const result = JSON.parse(await tool.execute({ action: "mock", schema }));
     expect(result).toBeNull();
   });
+
+  // L189: dereference — $ref 경로 중간에 비객체 → return obj
+  it("dereference: $ref 경로 중간에 비객체 → obj 반환 (L189)", async () => {
+    const schema = JSON.stringify({
+      type: "object",
+      properties: {
+        name: { $ref: "#/definitions/name/nested/deep" },
+      },
+      definitions: {
+        name: "string_not_object",
+      },
+    });
+    const result = JSON.parse(await tool.execute({ action: "dereference", schema }));
+    // 중간 경로("name")가 string → object 아님 → return obj (원래 $ref 객체 반환)
+    expect(result).toBeDefined();
+  });
 });

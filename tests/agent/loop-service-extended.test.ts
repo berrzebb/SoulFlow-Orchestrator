@@ -567,4 +567,98 @@ describe("AgentLoopStore.run_task_loop — 추가 경로", () => {
     expect(result.state.status).toBe("waiting_approval");
     expect(next_run).not.toHaveBeenCalled();
   });
+
+  it("start_step_index >= nodes.length → 즉시 workflow_completed (L403-406)", async () => {
+    // 새 task에서 start_step_index가 노드 수 이상이면 즉시 완료
+    const store = make_store();
+    const result = await store.run_task_loop({
+      task_id: "over-idx",
+      title: "Over",
+      objective: "obj",
+      nodes: [{ id: "n1", run: vi.fn() }, { id: "n2", run: vi.fn() }],
+      max_turns: 5,
+      start_step_index: 5, // 5 >= 2 nodes
+    });
+    expect(result.state.status).toBe("completed");
+    expect(result.state.exitReason).toBe("workflow_completed");
+  });
+
+  it("next_step_index === nodes.length → L430-432 workflow_completed", async () => {
+    // L430-432 커버: next_index >= options.nodes.length
+    const store = make_store();
+    const result = await store.run_task_loop({
+      task_id: "last-step",
+      title: "Last",
+      objective: "obj",
+      nodes: [
+        { id: "n1", run: async () => ({ memory_patch: {}, next_step_index: 2 }) },
+        { id: "n2", run: async () => ({ memory_patch: {}, next_step_index: 2 }) },
+      ],
+      max_turns: 5,
+    });
+    expect(result.state.status).toBe("completed");
+    expect(result.state.exitReason).toBe("workflow_completed");
+  });
+});
+
+// ══════════════════════════════════════════
+// on_task_change throw → catch (L149, L177)
+// persist_task reject → catch (L147, L175)
+// ══════════════════════════════════════════
+
+describe("AgentLoopStore — on_task_change throw → catch (오류 전파 안 됨)", () => {
+  it("expire_stale_tasks: on_task_change throw → 오류 전파 안 됨 (L149)", () => {
+    const on_change = vi.fn().mockImplementation(() => { throw new Error("broadcast error"); });
+    const store = make_store({ on_task_change: on_change });
+    const old_time = new Date(Date.now() - 700_000).toISOString();
+    (store as any).tasks.set("stale", {
+      taskId: "stale",
+      status: "waiting_approval",
+      memory: { __updated_at_seoul: old_time },
+    });
+    (store as any).persist_task = vi.fn().mockResolvedValue(undefined);
+    // on_task_change throw가 expire_stale_tasks를 차단하면 안 됨
+    expect(() => store.expire_stale_tasks(600_000)).not.toThrow();
+    expect(on_change).toHaveBeenCalled();
+  });
+
+  it("cancel_task: on_task_change throw → 오류 전파 안 됨 (L177)", async () => {
+    const on_change = vi.fn().mockImplementation(() => { throw new Error("change error"); });
+    const store = make_store({ on_task_change: on_change });
+    (store as any).tasks.set("t-throw", make_task({ taskId: "t-throw" }));
+    (store as any).persist_task = vi.fn().mockResolvedValue(undefined);
+    // on_task_change throw가 cancel_task를 차단하면 안 됨
+    const r = await store.cancel_task("t-throw");
+    expect(r?.status).toBe("cancelled");
+    expect(on_change).toHaveBeenCalled();
+  });
+
+  it("expire_stale_tasks: persist_task reject → catch → logger.error 호출 (L147)", async () => {
+    const err_fn = vi.fn();
+    const logger = { info: vi.fn(), warn: vi.fn(), error: err_fn, debug: vi.fn() } as any;
+    const store = make_store({ logger });
+    const old_time = new Date(Date.now() - 700_000).toISOString();
+    (store as any).tasks.set("stale2", {
+      taskId: "stale2",
+      status: "waiting_approval",
+      memory: { __updated_at_seoul: old_time },
+    });
+    // persist_task reject → catch → logger.error
+    (store as any).persist_task = vi.fn().mockRejectedValue(new Error("db fail"));
+    store.expire_stale_tasks(600_000);
+    // 비동기 reject이므로 짧게 대기
+    await new Promise((r) => setTimeout(r, 20));
+    expect(err_fn).toHaveBeenCalledWith("expire_stale persist failed", expect.any(Object));
+  });
+
+  it("cancel_task: persist_task reject → catch → logger.error 호출 (L175)", async () => {
+    const err_fn = vi.fn();
+    const logger = { info: vi.fn(), warn: vi.fn(), error: err_fn, debug: vi.fn() } as any;
+    const store = make_store({ logger });
+    (store as any).tasks.set("t-persist-err", make_task({ taskId: "t-persist-err" }));
+    (store as any).persist_task = vi.fn().mockRejectedValue(new Error("db write fail"));
+    await store.cancel_task("t-persist-err");
+    await new Promise((r) => setTimeout(r, 20));
+    expect(err_fn).toHaveBeenCalledWith("cancel_task persist failed", expect.any(Object));
+  });
 });
