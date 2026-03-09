@@ -36,7 +36,37 @@ function empty_phase(index: number, defaultBackend = ""): PhaseDef {
 }
 
 function empty_workflow(): WorkflowDef {
-  return { title: "", objective: "{{objective}}", phases: [empty_phase(0)] };
+  return {
+    title: "",
+    objective: "{{objective}}",
+    phases: [
+      {
+        phase_id: "implementation",
+        title: "구현",
+        agents: [{ agent_id: "implementer", role: "implementer", label: "구현자", backend: "", system_prompt: "", max_turns: 5 }],
+      },
+      {
+        // reviewer → debugger 순서로 반복. critic이 pass 판정 시 루프 탈출.
+        phase_id: "review_cycle",
+        title: "리뷰 & 수정",
+        mode: "sequential_loop",
+        max_loop_iterations: 3,
+        depends_on: ["implementation"],
+        agents: [
+          { agent_id: "reviewer", role: "reviewer", label: "코드 리뷰어", backend: "", system_prompt: "", max_turns: 3 },
+          { agent_id: "debugger", role: "debugger", label: "이슈 픽서", backend: "", system_prompt: "", max_turns: 5 },
+        ],
+        critic: { backend: "", system_prompt: "", gate: true, on_rejection: "retry_all" },
+      },
+      {
+        phase_id: "validation",
+        title: "검증",
+        depends_on: ["review_cycle"],
+        agents: [{ agent_id: "validator", role: "validator", label: "검증자", backend: "", system_prompt: "", max_turns: 3 }],
+        critic: { backend: "", system_prompt: "", gate: true, on_rejection: "goto", goto_phase: "review_cycle", max_retries: 2 },
+      },
+    ],
+  };
 }
 
 // ── Page ──
