@@ -44,6 +44,9 @@
   font-size: var(--fs-xs);
   font-weight: 600;
   letter-spacing: 0.03em;
+  min-width: 72px;
+  text-align: center;
+  white-space: nowrap;
 }
 .topbar__conn--connected { background: color-mix(in srgb, var(--ok) 15%, transparent); color: var(--ok); }
 .topbar__conn--disconnected { background: color-mix(in srgb, var(--err) 15%, transparent); color: var(--err); }
@@ -52,12 +55,19 @@
   align-items: center;
   gap: 8px;
 }
-.topbar__theme-btn,
+.topbar__theme-btn {
+  font-size: var(--fs-xs);
+  letter-spacing: 0.03em;
+  padding: 4px 12px;
+  min-height: 32px;
+}
 .topbar__locale-btn {
   font-size: var(--fs-xs);
   letter-spacing: 0.03em;
   padding: 4px 12px;
   min-height: 32px;
+  min-width: 72px;
+  text-align: center;
 }
 .topbar__conn--reconnecting {
   background: color-mix(in srgb, var(--warn) 15%, transparent);
