@@ -12,6 +12,7 @@ import { SqliteDynamicToolStore } from "@src/agent/tools/store.js";
 import type { DynamicToolManifestEntry } from "@src/agent/tools/dynamic.js";
 import { SetTool } from "@src/agent/tools/set.js";
 import { HealthcheckTool } from "@src/agent/tools/healthcheck.js";
+import { with_sqlite } from "@src/utils/sqlite-helper.js";
 
 // ══════════════════════════════════════════
 // SqliteDynamicToolStore
@@ -155,6 +156,20 @@ describe("SqliteDynamicToolStore — sqlite_path_override", () => {
     const override = join(tmp_dir, "custom.db");
     const s2 = new SqliteDynamicToolStore(tmp_dir, override);
     expect(s2.get_path()).toBe(override);
+  });
+});
+
+describe("SqliteDynamicToolStore — normalize_entry: parameters_json 잘못된 JSON (L31)", () => {
+  it("잘못된 parameters_json → { type: 'object' } 폴백 (L31)", () => {
+    // 정상 도구 추가 후 DB에서 직접 parameters_json을 잘못된 JSON으로 변경
+    store.upsert_tool(make_tool("json_fallback_tool"));
+    with_sqlite(store.get_path(), (db) => {
+      db.prepare("UPDATE dynamic_tools SET parameters_json = ? WHERE name = ?")
+        .run("{{{invalid json", "json_fallback_tool");
+    });
+    const tools = store.list_tools();
+    const found = tools.find((t) => t.name === "json_fallback_tool");
+    expect(found?.parameters).toEqual({ type: "object" });
   });
 });
 

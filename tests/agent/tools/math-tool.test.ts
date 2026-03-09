@@ -196,3 +196,20 @@ describe("MathTool — fibonacci", () => {
     expect(String(r)).toContain("Error");
   });
 });
+
+// L58: default case — 미지원 operation
+describe("MathTool — 미지원 operation (L58)", () => {
+  it("unknown operation → Error: unsupported operation (L58)", async () => {
+    const r = await exec({ operation: "unknown_op" });
+    expect(String(r)).toContain("unsupported operation");
+  });
+});
+
+// L73: safe_eval catch — SyntaxError (잘못된 표현식)
+describe("MathTool — safe_eval catch (L73)", () => {
+  it("구문 에러 표현식 → Error 반환 (L73)", async () => {
+    // '1 + +' — SyntaxError when new Function is created
+    const r = await exec({ operation: "eval", expression: "1 + +" });
+    expect(String(r)).toContain("Error");
+  });
+});
