@@ -66,10 +66,10 @@ describe("create_message_bus — redis", () => {
   });
 
   it("잘못된 URL 형식(URL 파싱 불가) → redact_url catch → replace로 마스킹", async () => {
-    // "not-a-valid-url://user:pass@host" — URL 파싱 실패 → catch → replace 경로 실행
+    // "completely invalid url" — new URL() throws → catch → replace 경로 실행
     const bus = await create_message_bus({
       backend: "redis",
-      redis: { url: "not-valid://user:pass@host:6379" },
+      redis: { url: "completely invalid url with user:pass@host" },
     });
     expect((bus as any).name).toBe("redis");
   });

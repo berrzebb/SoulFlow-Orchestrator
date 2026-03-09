@@ -176,6 +176,13 @@ describe("create_workspace_ops", () => {
     const content = await ops.read_file("nonexistent.txt");
     expect(content).toBeNull();
   });
+
+  it("존재하지 않는 디렉토리 list_files → catch → [] 반환", async () => {
+    const ops = create_workspace_ops(workspace);
+    // readdirSync on non-existent path → throws → catch → return []
+    const files = await ops.list_files("nonexistent_dir_xyz");
+    expect(files).toEqual([]);
+  });
 });
 
 // ─── Config ─────────────────────────────────────────────────────────────────

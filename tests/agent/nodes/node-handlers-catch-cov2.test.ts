@@ -117,6 +117,9 @@ vi.mock("@src/agent/tools/hash.js", () => ({ HashTool: class { execute = hash_ex
 const markdown_execute = vi.fn();
 vi.mock("@src/agent/tools/markdown.js", () => ({ MarkdownTool: class { execute = markdown_execute; } }));
 
+const jwt_execute = vi.fn();
+vi.mock("@src/agent/tools/jwt.js", () => ({ JwtTool: class { execute = jwt_execute; } }));
+
 // ── handler imports ────────────────────────────────────────────────
 
 import { csv_handler } from "@src/agent/nodes/csv.js";
@@ -156,6 +159,7 @@ import { crypto_handler } from "@src/agent/nodes/crypto.js";
 import { date_calc_handler } from "@src/agent/nodes/date-calc.js";
 import { hash_handler } from "@src/agent/nodes/hash.js";
 import { markdown_handler } from "@src/agent/nodes/markdown.js";
+import { jwt_handler } from "@src/agent/nodes/jwt.js";
 
 // ── 공통 헬퍼 ─────────────────────────────────────────────────────
 
@@ -204,6 +208,7 @@ const cases: Array<{ name: string; execute_fn: ReturnType<typeof vi.fn>; handler
   { name: "date_calc",     execute_fn: datetime_execute,     handler: date_calc_handler,    catch_key: "result" },
   { name: "hash",          execute_fn: hash_execute,         handler: hash_handler,         catch_key: "digest" },
   { name: "markdown",      execute_fn: markdown_execute,     handler: markdown_handler,     catch_key: "result" },
+  { name: "jwt",           execute_fn: jwt_execute,          handler: jwt_handler,          catch_key: "token" },
 ];
 
 describe("node handlers — catch 분기 (cov2)", () => {
