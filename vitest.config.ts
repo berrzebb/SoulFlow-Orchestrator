@@ -13,6 +13,8 @@ export default defineConfig({
     exclude: ["tests/e2e/**", "**/node_modules/**"],
     testTimeout: 60_000,
     hookTimeout: 60_000,
+    pool: "forks",
+    poolOptions: { forks: { singleFork: true } },
     coverage: {
       provider: "v8",
       include: ["src/**/*.ts"],

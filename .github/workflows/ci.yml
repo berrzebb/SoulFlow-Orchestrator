@@ -35,7 +35,7 @@ jobs:
           set -o pipefail
           npm run test:coverage 2>&1 | tee test-output.txt
         env:
-          NODE_OPTIONS: --max-old-space-size=8192
+          NODE_OPTIONS: --max-old-space-size=4096
         timeout-minutes: 60
       - name: Upload coverage artifact
         if: always()
