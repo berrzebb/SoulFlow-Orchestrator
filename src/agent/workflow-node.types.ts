@@ -1811,6 +1811,46 @@ export interface JsonPatchNodeDefinition extends NodeBase {
   target?: string;
 }
 
+// ── SVG Node ─────────────────────────────────────────
+
+export interface SvgNodeDefinition extends NodeBase {
+  node_type: "svg";
+  /** rect / circle / line / path / text / group / viewBox / to_data_uri / chart. */
+  action?: string;
+  x?: number; y?: number;
+  width?: number; height?: number;
+  cx?: number; cy?: number; r?: number;
+  x1?: number; y1?: number; x2?: number; y2?: number;
+  d?: string;
+  content?: string;
+  fill?: string; stroke?: string; stroke_width?: number;
+  rx?: number; ry?: number;
+  font_size?: number;
+  children?: string;
+  svg?: string;
+  view_box?: string;
+  chart_type?: string;
+  data?: string;
+  /** 차트 제목 (NodeBase.title과 충돌 방지). */
+  chart_title?: string;
+}
+
+// ── Prometheus Node ───────────────────────────────────
+
+export interface PrometheusNodeDefinition extends NodeBase {
+  node_type: "prometheus";
+  /** format / parse / push / query_format. */
+  action?: string;
+  metrics?: string;
+  input?: string;
+  pushgateway_url?: string;
+  job?: string;
+  query?: string;
+  start?: string;
+  end?: string;
+  step?: string;
+}
+
 // ── Union Types ─────────────────────────────────────
 
 export type OrcheNodeType = "http" | "code" | "if" | "merge" | "set" | "split"
@@ -1850,6 +1890,8 @@ export type OrcheNodeType = "http" | "code" | "if" | "merge" | "set" | "split"
   | "jsonl"
   | "ical"
   | "json_patch"
+  | "svg"
+  | "prometheus"
   | "end";
 
 export type OrcheNodeDefinition =
@@ -1985,6 +2027,8 @@ export type OrcheNodeDefinition =
   | JsonlNodeDefinition
   | IcalNodeDefinition
   | JsonPatchNodeDefinition
+  | SvgNodeDefinition
+  | PrometheusNodeDefinition
   | EndNodeDefinition;
 
 export type WorkflowNodeDefinition = PhaseNodeDefinition | OrcheNodeDefinition | TriggerNodeDefinition;

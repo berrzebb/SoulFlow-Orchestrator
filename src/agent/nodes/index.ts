@@ -132,6 +132,8 @@ import { country_handler } from "./country.js";
 import { jsonl_handler } from "./jsonl.js";
 import { ical_handler } from "./ical.js";
 import { json_patch_handler } from "./json-patch.js";
+import { svg_handler } from "./svg.js";
+import { prometheus_handler } from "./prometheus.js";
 
 const ALL_HANDLERS = [
   http_handler,
@@ -268,6 +270,8 @@ const ALL_HANDLERS = [
   jsonl_handler,
   ical_handler,
   json_patch_handler,
+  svg_handler,
+  prometheus_handler,
 ];
 
 let registered = false;

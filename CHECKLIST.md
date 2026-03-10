@@ -1,7 +1,7 @@
 # 워크플로우 노드/도구 종합 체크리스트
 
 > 이 문서는 이터레이션마다 읽고 업데이트합니다.
-> 마지막 업데이트: 2026-03-10 (이터레이션 6)
+> 마지막 업데이트: 2026-03-10 (이터레이션 7)
 
 ## 프로젝트 루트
 `d:/claude-tools/.claude/mcp-servers/slack/next/`
@@ -431,6 +431,8 @@
 9. `refactor: document 노드 핸들러 4파일 → make_document_handler 팩토리 통합` — DRY 리팩토링
 10. `feat: Phase 5 — geo/country/jsonl/ical/json_patch 신규 노드 추가` — 5개 도구 대응 신규 노드, i18n 완성, yaml INI/network IP 통합 완성, CHECKLIST 최종 업데이트
 11. `feat: Phase 6 — timeseries/dependency/mime/http-header/license 도구 기존 노드 통합` — stats/package-manager/data-format/changelog 노드 확장, 프론트엔드 UI 업데이트, i18n 완성
+12. `fix: geo.tsx DMS placeholder 따옴표 이스케이프 오류 수정`
+13. `feat: Phase 7 — svg/prometheus 신규 노드 추가` — SVG 프리미티브/차트 + Prometheus 메트릭 노드, i18n 완성
 
 ---
 

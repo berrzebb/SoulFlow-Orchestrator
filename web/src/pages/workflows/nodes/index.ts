@@ -134,6 +134,8 @@ import { country_descriptor } from "./country";
 import { jsonl_descriptor } from "./jsonl";
 import { ical_descriptor } from "./ical";
 import { json_patch_descriptor } from "./json-patch";
+import { svg_descriptor } from "./svg";
+import { prometheus_descriptor } from "./prometheus";
 import { trigger_cron_descriptor, trigger_webhook_descriptor, trigger_manual_descriptor, trigger_channel_message_descriptor, trigger_kanban_event_descriptor, trigger_filesystem_watch_descriptor } from "./triggers";
 
 const ALL_DESCRIPTORS = [
@@ -270,6 +272,8 @@ const ALL_DESCRIPTORS = [
   jsonl_descriptor,
   ical_descriptor,
   json_patch_descriptor,
+  svg_descriptor,
+  prometheus_descriptor,
   trigger_cron_descriptor,
   trigger_webhook_descriptor,
   trigger_manual_descriptor,
