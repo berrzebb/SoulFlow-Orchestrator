@@ -33,3 +33,11 @@ describe("secret_read_handler", () => {
     expect(result.preview).toBeDefined();
   });
 });
+
+describe("secret-read — test() key 없음 경고 (L41)", () => {
+  it("key 없음 → 'key is required' 경고 (L41)", () => {
+    const node = { node_id: "n1", node_type: "secret_read", key: "" } as OrcheNodeDefinition;
+    const result = secret_read_handler.test(node);
+    expect(result.warnings.some((w: string) => w.includes("key"))).toBe(true);
+  });
+});

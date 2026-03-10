@@ -79,3 +79,18 @@ describe("validator_handler", () => {
     expect(result.output).toBeDefined();
   });
 });
+
+describe("validator — test() schema 경고 (L49)", () => {
+  const mk = (overrides: Partial<ValidatorNodeDefinition>): OrcheNodeDefinition =>
+    ({ node_id: "n1", node_type: "validator", rules: [], data: "", operation: "schema", ...overrides } as OrcheNodeDefinition);
+
+  it("operation=schema + schema='{}' → schema 경고 (L49)", () => {
+    const result = validator_handler.test(mk({ schema: "{}" }));
+    expect(result.warnings.some((w: string) => w.includes("schema"))).toBe(true);
+  });
+
+  it("operation=schema + schema 없음 → schema 경고 (L49)", () => {
+    const result = validator_handler.test(mk({ schema: "" }));
+    expect(result.warnings.some((w: string) => w.includes("schema"))).toBe(true);
+  });
+});

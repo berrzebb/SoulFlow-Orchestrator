@@ -495,3 +495,11 @@ describe("ClaudeCliAdapter — map_claude_error_code rate/billing/fatal 분기",
     if (msg?.type === "error") expect(msg.code).toBe("fatal");
   });
 });
+
+describe("CodexCliAdapter — parse_output 빈 줄 (L183)", () => {
+  it("빈 줄 → null 반환 (L183)", () => {
+    const adapter = new CodexCliAdapter();
+    expect(adapter.parse_output("")).toBeNull();
+    expect(adapter.parse_output("   ")).toBeNull();
+  });
+});

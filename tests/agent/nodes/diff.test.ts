@@ -97,3 +97,12 @@ describe("diff_handler", () => {
     expect(result.output).toBeDefined();
   });
 });
+
+describe("diff — test() patch 경고 (L51)", () => {
+  it("operation=patch + diff_text 없음 → 경고 포함 (L51)", async () => {
+    const { diff_handler } = await import("@src/agent/nodes/diff.js");
+    const node: any = { id: "n1", kind: "diff", name: "d", operation: "patch", diff_text: "" };
+    const result = diff_handler.test(node);
+    expect(result.warnings.some((w: string) => w.includes("diff_text"))).toBe(true);
+  });
+});

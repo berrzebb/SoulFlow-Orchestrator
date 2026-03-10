@@ -630,3 +630,15 @@ describe("Batch Node Handler", () => {
     });
   });
 });
+
+describe("batch — get_array null 중간 경로 (L114)", () => {
+  it("memory.nested = null → L114 return [] (L114)", async () => {
+    // array_field = "nested.items", memory.nested = null
+    // → get_array: 두 번째 이터레이션에서 current=null → L114 return []
+    const node = createMockBatchNode({ array_field: "nested.items" });
+    const ctx = createMockContext({ memory: { nested: null } });
+    const result = await batch_handler.execute(node, ctx);
+    // get_array returns [] → total = 0
+    expect(result.output.total).toBe(0);
+  });
+});

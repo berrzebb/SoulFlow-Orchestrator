@@ -89,3 +89,18 @@ describe("ttl_cache_handler", () => {
     expect(result.output).toBeDefined();
   });
 });
+
+describe("ttl-cache — test() key 없음 경고 (L50)", () => {
+  const mk = (overrides: Partial<TtlCacheNodeDefinition>): OrcheNodeDefinition =>
+    ({ node_id: "n1", node_type: "ttl_cache", operation: "set", key: "k", ttl_ms: 60000, ...overrides } as OrcheNodeDefinition);
+
+  it("operation=set + key 빈 문자열 → key 경고 (L50)", () => {
+    const result = ttl_cache_handler.test(mk({ operation: "set", key: "" }));
+    expect(result.warnings.some((w: string) => w.includes("key"))).toBe(true);
+  });
+
+  it("operation=get + key undefined → key 경고 (L50)", () => {
+    const result = ttl_cache_handler.test(mk({ operation: "get", key: undefined }));
+    expect(result.warnings.some((w: string) => w.includes("key"))).toBe(true);
+  });
+});

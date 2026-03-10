@@ -525,3 +525,14 @@ describe("Aggregate Node Handler", () => {
     });
   });
 });
+
+describe("aggregate — get_nested_value 빈 path (L75)", () => {
+  it("array_field 빈 문자열 → get_nested_value('') → L75 return obj", async () => {
+    // array_field = "" → get_nested_value(memory, "") → L75 return memory itself
+    const node = createMockAggregateNode({ array_field: "" });
+    const ctx = createMockContext();
+    const result = await aggregate_handler.execute(node, ctx);
+    // memory is not an array → items = [] → count = 0
+    expect(result.output.count).toBe(0);
+  });
+});
