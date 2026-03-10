@@ -18,10 +18,20 @@ export class WorkflowTool extends Tool {
   readonly description =
     "IMPORTANT: Always use this tool to create/update/delete workflows. Never use write_file to create workflow YAML files directly.\n" +
     "Create, list, run, get, update, delete workflow templates.\n" +
-    "Use 'create' with a structured definition (title + phases/orche_nodes) to build a new workflow.\n" +
+    "Use 'create' with a structured definition (title + phases or orche_nodes) to build a new workflow.\n" +
     "Use 'run' with a template name to execute, or with an inline definition.\n" +
-    "Use 'node_types' to discover available workflow node types and their schemas.\n" +
-    "Use 'models' to list available backends (providers) and their models — use these values for backend/model fields.";
+    "Use 'node_types' to discover available workflow node types, schemas, and the FULL workflow definition format including closed-loop critic patterns.\n" +
+    "Use 'models' to list available backends (providers) and their models — use these values for backend/model fields.\n" +
+    "\n" +
+    "## Closed-Loop (Critic + Goto) Pattern\n" +
+    "To build a self-improving workflow that retries until quality gates pass:\n" +
+    "1. Add a `critic` to the final review phase with `gate: true`\n" +
+    "2. Set `on_rejection: 'goto'` and `goto_phase: '<earlier_phase_id>'`\n" +
+    "3. Set `max_retries` to control how many feedback cycles to allow\n" +
+    "When the critic rejects, the workflow automatically jumps back to `goto_phase`,\n" +
+    "re-runs all intermediate phases with the critic's feedback injected as context,\n" +
+    "then the critic evaluates the new output. This creates an autonomous quality loop.\n" +
+    "Use 'node_types' to see the full phase + critic schema with examples.";
 
   readonly parameters: JsonSchema = {
     type: "object",
@@ -34,7 +44,12 @@ export class WorkflowTool extends Tool {
       name: { type: "string", description: "Workflow template name or slug" },
       definition: {
         type: "object",
-        description: "WorkflowDefinition object (for create/update/run-inline). Must include title and phases array.",
+        description:
+          "WorkflowDefinition object (for create/update/run-inline). " +
+          "Phase-based: { title, phases: [{ phase_id, agents: [{agent_id, role, label, backend, system_prompt}], critic?: { gate, on_rejection, goto_phase, max_retries, system_prompt } }] }. " +
+          "Orche-based: { title, orche_nodes: [{ node_id, node_type, title, depends_on?, ...params }] }. " +
+          "For closed-loop: set critic.on_rejection='goto' and critic.goto_phase to an earlier phase_id. " +
+          "Call node_types action to see the complete schema with all options and examples.",
       },
       variables: {
         type: "object",
@@ -132,7 +147,7 @@ export class WorkflowTool extends Tool {
       aliases: (t as { aliases?: string[] }).aliases || [],
       phases: t.phases?.length ?? 0,
       orche_nodes: t.orche_nodes?.length ?? 0,
-      trigger: t.trigger ?? null,
+      trigger_nodes: t.trigger_nodes ?? null,
     }));
     return JSON.stringify(summary);
   }
