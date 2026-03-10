@@ -53,10 +53,34 @@ export const encoding_handler: NodeHandler = {
           result = Array.from({ length: count }, () => randomUUID()).join("\n");
           break;
         }
+        case "base_convert": {
+          const { BaseConvertTool } = await import("../tools/base-convert.js");
+          const tool = new BaseConvertTool();
+          const raw = await tool.execute({ action: "convert", value: input, from: n.base_from || "dec", to: n.base_to || "hex" });
+          const parsed = JSON.parse(raw);
+          result = parsed.result ?? parsed.error ?? raw;
+          break;
+        }
+        case "msgpack_encode": {
+          const { MsgpackTool } = await import("../tools/msgpack.js");
+          const tool = new MsgpackTool();
+          const raw = await tool.execute({ action: "encode", data: input });
+          const parsed = JSON.parse(raw);
+          result = parsed.hex ?? parsed.error ?? raw;
+          break;
+        }
+        case "msgpack_decode": {
+          const { MsgpackTool } = await import("../tools/msgpack.js");
+          const tool = new MsgpackTool();
+          const raw = await tool.execute({ action: "decode", hex: input });
+          const parsed = JSON.parse(raw);
+          result = parsed.error ? parsed.error : JSON.stringify(parsed.data);
+          break;
+        }
         default:
           result = `Unsupported: ${op}`;
       }
-      return { output: { result, success: true } };
+      return { output: { result, success: !String(result).startsWith("Error:") && !String(result).startsWith("Unsupported:") } };
     } catch (err) {
       return { output: { result: (err as Error).message, success: false } };
     }

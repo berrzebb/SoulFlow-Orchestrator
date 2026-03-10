@@ -32,6 +32,21 @@ export const analyzer_handler: NodeHandler = {
   async execute(node: OrcheNodeDefinition, ctx: OrcheNodeExecutorContext): Promise<OrcheNodeExecuteResult> {
     const n = node as AnalyzerNodeDefinition;
     const tpl_ctx = { memory: ctx.memory };
+
+    if (n.mode === "sentiment") {
+      try {
+        const { SentimentTool } = await import("../tools/sentiment.js");
+        const tool = new SentimentTool();
+        const text = resolve_templates(n.input_field || "", tpl_ctx);
+        const action = n.sentiment_action || "analyze";
+        const raw = await tool.execute({ action, text, texts: text });
+        const parsed = JSON.parse(raw) as Record<string, unknown>;
+        return { output: { analysis: parsed, category: String(parsed.label ?? "neutral"), confidence: Math.min(1, Math.abs(Number(parsed.score ?? 0)) / 5), raw_output: "" } };
+      } catch (err) {
+        return { output: { analysis: {}, category: "error", confidence: 0, raw_output: "", error: error_message(err) } };
+      }
+    }
+
     const prompt = resolve_templates(n.prompt_template, tpl_ctx);
     const input_field = resolve_templates(n.input_field, tpl_ctx);
 
@@ -51,6 +66,9 @@ export const analyzer_handler: NodeHandler = {
   },
 
   async runner_execute(node: OrcheNodeDefinition, ctx: OrcheNodeExecutorContext, runner: RunnerContext): Promise<OrcheNodeExecuteResult> {
+    const n_check = node as AnalyzerNodeDefinition;
+    if (n_check.mode === "sentiment") return this.execute(node, ctx);
+
     const invoke = runner.services?.invoke_llm;
     if (!invoke) return this.execute(node, ctx);
 

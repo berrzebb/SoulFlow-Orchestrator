@@ -22,19 +22,24 @@ export const yaml_handler: NodeHandler = {
 
   async execute(node: OrcheNodeDefinition, ctx: OrcheNodeExecutorContext): Promise<OrcheNodeExecuteResult> {
     const n = node as YamlNodeDefinition;
+    const tpl = { memory: ctx.memory };
+    const action = n.action || "parse";
+    const data = resolve_templates(n.data || "", tpl);
+    const data2 = resolve_templates(n.data2 || "", tpl);
+
     try {
-      const { YamlTool } = await import("../tools/yaml.js");
-      const tool = new YamlTool();
-      const tpl = { memory: ctx.memory };
-      const result = await tool.execute({
-        action: n.action || "parse",
-        data: resolve_templates(n.data || "", tpl),
-        data2: resolve_templates(n.data2 || "", tpl),
-        path: n.path || "",
-        indent: n.indent || 2,
-      });
-      const parsed = result.startsWith("{") || result.startsWith("[") ? JSON.parse(result) : result;
-      return { output: { result: parsed, success: !String(result).startsWith("Error:") } };
+      let raw: string;
+      if (n.format === "toml") {
+        const { TomlTool } = await import("../tools/toml.js");
+        const tool = new TomlTool();
+        raw = await tool.execute({ action, input: data, path: n.path || "", second: data2 });
+      } else {
+        const { YamlTool } = await import("../tools/yaml.js");
+        const tool = new YamlTool();
+        raw = await tool.execute({ action, data, data2, path: n.path || "", indent: n.indent || 2 });
+      }
+      const parsed = raw.startsWith("{") || raw.startsWith("[") ? JSON.parse(raw) : raw;
+      return { output: { result: parsed, success: !String(raw).startsWith("Error:") } };
     } catch {
       return { output: { result: null, success: false } };
     }

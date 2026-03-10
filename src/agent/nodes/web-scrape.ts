@@ -15,39 +15,40 @@ export const web_scrape_handler: NodeHandler = {
   color: "#e67e22",
   shape: "rect",
   output_schema: [
-    { name: "text",         type: "string", description: "Extracted text content" },
-    { name: "title",        type: "string", description: "Page title" },
-    { name: "status",       type: "number", description: "HTTP status code" },
-    { name: "content_type", type: "string", description: "Content-Type" },
+    { name: "text",         type: "string",  description: "Extracted text or parsed JSON" },
+    { name: "title",        type: "string",  description: "Page title (scrape only)" },
+    { name: "status",       type: "number",  description: "HTTP status code" },
+    { name: "content_type", type: "string",  description: "Content-Type" },
   ],
   input_schema: [
-    { name: "url",     type: "string", description: "URL to scrape" },
+    { name: "action",   type: "string", description: "scrape / robots_txt / sitemap" },
+    { name: "url",      type: "string", description: "URL to scrape" },
     { name: "selector", type: "string", description: "CSS-like filter hint" },
   ],
-  create_default: () => ({ url: "", selector: "", max_chars: 50000 }),
+  create_default: () => ({ action: "scrape", url: "", selector: "", max_chars: 50000 }),
 
   async execute(node: OrcheNodeDefinition, ctx: OrcheNodeExecutorContext): Promise<OrcheNodeExecuteResult> {
     const n = node as WebScrapeNodeDefinition;
     const tpl = { memory: ctx.memory };
     const url_str = resolve_templates(n.url || "", tpl).trim();
+    const action = n.action || "scrape";
 
     if (!url_str) return { output: { text: "", title: "", status: 0, error: "url is empty" } };
 
+    let base_url: URL;
     try {
-      const parsed = new URL(url_str);
-      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-        return { output: { text: "", title: "", status: 0, error: `unsupported protocol: ${parsed.protocol}` } };
+      base_url = new URL(url_str);
+      if (base_url.protocol !== "http:" && base_url.protocol !== "https:") {
+        return { output: { text: "", title: "", status: 0, error: `unsupported protocol: ${base_url.protocol}` } };
       }
-      // Node.js URL.hostname은 IPv6를 브래킷 포함으로 반환 (예: [::1])
-      const hostname = parsed.hostname.replace(/^\[|\]$/g, "");
+      const hostname = base_url.hostname.replace(/^\[|\]$/g, "");
       if (PRIVATE_HOST_RE.test(hostname)) {
-        return { output: { text: "", title: "", status: 0, error: `blocked private host: ${parsed.hostname}` } };
+        return { output: { text: "", title: "", status: 0, error: `blocked private host: ${base_url.hostname}` } };
       }
     } catch {
       return { output: { text: "", title: "", status: 0, error: "invalid URL" } };
     }
 
-    const max_chars = Math.min(100_000, Math.max(1000, n.max_chars || 50_000));
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 30_000);
     const signal = ctx.abort_signal
@@ -55,6 +56,28 @@ export const web_scrape_handler: NodeHandler = {
       : controller.signal;
 
     try {
+      if (action === "robots_txt") {
+        const robots_url = `${base_url.origin}/robots.txt`;
+        const res = await fetch(robots_url, { headers: { "User-Agent": "Mozilla/5.0 (compatible; SoulFlowBot/1.0)" }, signal });
+        const content = await res.text();
+        const { RobotsTxtTool } = await import("../tools/robots-txt.js");
+        const tool = new RobotsTxtTool();
+        const parsed = await tool.execute({ action: "parse", robots: content });
+        return { output: { text: parsed, title: "", status: res.status, content_type: "application/json" } };
+      }
+
+      if (action === "sitemap") {
+        const sitemap_url = `${base_url.origin}/sitemap.xml`;
+        const res = await fetch(sitemap_url, { headers: { "User-Agent": "Mozilla/5.0 (compatible; SoulFlowBot/1.0)" }, signal });
+        const content = await res.text();
+        const { SitemapTool } = await import("../tools/sitemap.js");
+        const tool = new SitemapTool();
+        const parsed = await tool.execute({ action: "parse", sitemap: content });
+        return { output: { text: parsed, title: "", status: res.status, content_type: "application/json" } };
+      }
+
+      // 기본: scrape
+      const max_chars = Math.min(100_000, Math.max(1000, n.max_chars || 50_000));
       const res = await fetch(url_str, {
         headers: { "User-Agent": "Mozilla/5.0 (compatible; SoulFlowBot/1.0)" },
         signal,

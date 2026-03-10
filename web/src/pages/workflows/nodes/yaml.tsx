@@ -5,26 +5,28 @@ const ACTIONS = ["parse", "generate", "merge", "validate", "query"];
 
 function YamlEditPanel({ node, update, t }: EditPanelProps) {
   const action = String(node.action || "parse");
+  const format = String(node.format || "yaml");
   return (
     <>
-      {action === "generate" ? (
-        <BuilderRowPair>
-          <BuilderField label={t("workflows.action")} required>
-            <select autoFocus className="input input--sm" required value={action} onChange={(e) => update({ action: e.target.value })} aria-required="true">
-              {ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
-            </select>
-          </BuilderField>
-          <BuilderField label={t("workflows.yaml_indent")}>
-            <input className="input input--sm" type="number" min={1} max={8} value={String(node.indent ?? 2)} onChange={(e) => update({ indent: Number(e.target.value) || 2 })} />
-          </BuilderField>
-        </BuilderRowPair>
-      ) : (
+      <BuilderRowPair>
         <BuilderField label={t("workflows.action")} required>
           <select autoFocus className="input input--sm" required value={action} onChange={(e) => update({ action: e.target.value })} aria-required="true">
             {ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
           </select>
         </BuilderField>
-      )}
+        {action === "generate" && format === "yaml" ? (
+          <BuilderField label={t("workflows.yaml_indent")}>
+            <input className="input input--sm" type="number" min={1} max={8} value={String(node.indent ?? 2)} onChange={(e) => update({ indent: Number(e.target.value) || 2 })} />
+          </BuilderField>
+        ) : (
+          <BuilderField label={t("workflows.field_format")}>
+            <select className="input input--sm" value={format} onChange={(e) => update({ format: e.target.value })}>
+              <option value="yaml">YAML</option>
+              <option value="toml">TOML</option>
+            </select>
+          </BuilderField>
+        )}
+      </BuilderRowPair>
       <BuilderField label={t("workflows.field_input")} required>
         <textarea className="input" required rows={4} value={String(node.data || "")} onChange={(e) => update({ data: e.target.value })} placeholder={action === "generate" ? '{"key": "value"}' : "key: value"} aria-required="true" />
       </BuilderField>
@@ -57,6 +59,6 @@ export const yaml_descriptor: FrontendNodeDescriptor = {
     { name: "action", type: "string", description: "node.yaml.input.action" },
     { name: "data", type: "string", description: "node.yaml.input.data" },
   ],
-  create_default: () => ({ action: "parse", data: "", data2: "", path: "", indent: 2 }),
+  create_default: () => ({ action: "parse", data: "", data2: "", path: "", indent: 2, format: "yaml" }),
   EditPanel: YamlEditPanel,
 };

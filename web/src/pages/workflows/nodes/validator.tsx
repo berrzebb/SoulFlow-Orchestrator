@@ -1,17 +1,26 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 import { BuilderField } from "../builder-field";
 
+const EMAIL_ACTIONS = ["validate", "parse", "normalize", "check_disposable", "check_free", "bulk_validate"];
+
 function ValidatorEditPanel({ node, update, t }: EditPanelProps) {
   const op = String(node.operation || "format");
   return (
     <>
       <BuilderField label={t("workflows.operation")} required>
         <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
-          {["schema", "format", "rules"].map((o) => <option key={o} value={o}>{o}</option>)}
+          {["schema", "format", "rules", "email"].map((o) => <option key={o} value={o}>{o}</option>)}
         </select>
       </BuilderField>
+      {op === "email" && (
+        <BuilderField label={t("workflows.validator_email_action")}>
+          <select className="input input--sm" value={String(node.email_action || "validate")} onChange={(e) => update({ email_action: e.target.value })}>
+            {EMAIL_ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
+          </select>
+        </BuilderField>
+      )}
       <BuilderField label={t("workflows.input_data")}>
-        <textarea className="input code-textarea" rows={3} value={String(node.input || "")} onChange={(e) => update({ input: e.target.value })} placeholder='{"email": "test@test.com"}' />
+        <textarea className="input code-textarea" rows={3} value={String(node.input || "")} onChange={(e) => update({ input: e.target.value })} placeholder={op === "email" && node.email_action === "bulk_validate" ? '["a@b.com","c@d.com"]' : 'test@example.com'} />
       </BuilderField>
       {op === "format" && (
         <BuilderField label={t("workflows.format")}>
@@ -50,6 +59,6 @@ export const validator_descriptor: FrontendNodeDescriptor = {
     { name: "operation", type: "string", description: "node.validator.input.operation" },
     { name: "input",     type: "string", description: "node.validator.input.input" },
   ],
-  create_default: () => ({ operation: "format", input: "", format: "json", schema: "{}", rules: "[]" }),
+  create_default: () => ({ operation: "format", input: "", format: "json", schema: "{}", rules: "[]", email_action: "validate" }),
   EditPanel: ValidatorEditPanel,
 };
