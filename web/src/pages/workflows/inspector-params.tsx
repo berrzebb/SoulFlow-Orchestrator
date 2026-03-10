@@ -110,6 +110,19 @@ export function PhaseParamsPanel({ phase, workflow, onChange, onPhaseIdChange, t
         </select>
       </BuilderField>
 
+      {phase.mode === "sequential_loop" && (
+        <BuilderField label={t("workflows.loop_until")} hint={t("workflows.loop_until_hint")}>
+          <input className="input input--sm inspector-droppable"
+            value={phase.loop_until || ""}
+            placeholder="{{memory.done}} === true"
+            onChange={(e) => updatePhase({ loop_until: e.target.value || undefined })}
+            onDrop={(e) => handleFieldDrop(e, (ref) => updatePhase({ loop_until: (phase.loop_until || "") + ref }))}
+            onDragOver={handleDragOver}
+            data-droppable="true"
+          />
+        </BuilderField>
+      )}
+
       {(phase.mode === "interactive" || phase.mode === "sequential_loop") && (
         <BuilderField label={t("workflows.max_loop_iterations")}>
           <input className="input input--sm" type="number" min={1}
@@ -117,6 +130,24 @@ export function PhaseParamsPanel({ phase, workflow, onChange, onPhaseIdChange, t
             onChange={(e) => updatePhase({ max_loop_iterations: Number(e.target.value) || undefined })} />
         </BuilderField>
       )}
+
+      <BuilderRowPair>
+        <BuilderField label={t("workflows.failure_policy")}>
+          <select className="input input--sm" value={phase.failure_policy || "best_effort"}
+            onChange={(e) => updatePhase({ failure_policy: e.target.value as PhaseDef["failure_policy"], quorum_count: e.target.value !== "quorum" ? undefined : (phase.quorum_count ?? 1) })}>
+            <option value="best_effort">best_effort</option>
+            <option value="fail_fast">fail_fast</option>
+            <option value="quorum">quorum</option>
+          </select>
+        </BuilderField>
+        {phase.failure_policy === "quorum" && (
+          <BuilderField label={t("workflows.quorum_count")}>
+            <input className="input input--sm" type="number" min={1}
+              value={phase.quorum_count ?? 1}
+              onChange={(e) => updatePhase({ quorum_count: Number(e.target.value) || 1 })} />
+          </BuilderField>
+        )}
+      </BuilderRowPair>
 
       <BuilderField label={t("workflows.context_template")} hint={t("workflows.context_template_hint")}>
         <textarea className="input input--sm inspector-droppable" rows={2}
@@ -293,11 +324,21 @@ export function AgentSummaryCard({ agent, index, phase, workflow, onChange, onNo
             backendLabel={t("workflows.backend")}
             modelLabel={t("workflows.model")}
           />
-          <BuilderField label={t("workflows.max_turns")}>
-            <input className="input input--sm" type="number" min={0}
-              value={agent.max_turns ?? 3}
-              onChange={(e) => updateAgent({ max_turns: Number(e.target.value) })} />
-          </BuilderField>
+          <BuilderRowPair>
+            <BuilderField label={t("workflows.max_turns")}>
+              <input className="input input--sm" type="number" min={0}
+                value={agent.max_turns ?? 3}
+                onChange={(e) => updateAgent({ max_turns: Number(e.target.value) })} />
+            </BuilderField>
+            <BuilderField label={t("workflows.filesystem_isolation")}>
+              <select className="input input--sm" value={agent.filesystem_isolation || "none"}
+                onChange={(e) => updateAgent({ filesystem_isolation: e.target.value as AgentDef["filesystem_isolation"] })}>
+                <option value="none">none</option>
+                <option value="directory">directory</option>
+                <option value="worktree">worktree</option>
+              </select>
+            </BuilderField>
+          </BuilderRowPair>
           <BuilderField label={t("workflows.system_prompt")}>
             <textarea className="input input--sm inspector-droppable" rows={4}
               value={agent.system_prompt}
@@ -355,14 +396,33 @@ export function CriticSummaryCard({ critic, phase, workflow, onChange, t, option
             </BuilderField>
             <BuilderField label={t("workflows.on_rejection")}>
               <select className="input input--sm" value={critic.on_rejection || ""}
-                onChange={(e) => updateCritic({ on_rejection: e.target.value || undefined })}>
+                onChange={(e) => updateCritic({ on_rejection: e.target.value || undefined, goto_phase: e.target.value !== "goto" ? undefined : critic.goto_phase })}>
                 <option value="">-</option>
                 <option value="retry_all">retry_all</option>
                 <option value="retry_targeted">retry_targeted</option>
                 <option value="escalate">escalate</option>
+                <option value="goto">goto</option>
               </select>
             </BuilderField>
           </BuilderRowPair>
+          {critic.on_rejection === "goto" && (
+            <BuilderField label={t("workflows.goto_phase")}>
+              <select className="input input--sm" value={critic.goto_phase || ""}
+                onChange={(e) => updateCritic({ goto_phase: e.target.value || undefined })}>
+                <option value="">— {t("workflows.select_phase")} —</option>
+                {workflow.phases.filter((p) => p.phase_id !== phase.phase_id).map((p) => (
+                  <option key={p.phase_id} value={p.phase_id}>{p.title || p.phase_id}</option>
+                ))}
+              </select>
+            </BuilderField>
+          )}
+          {critic.on_rejection && critic.on_rejection !== "escalate" && (
+            <BuilderField label={t("workflows.max_retries")}>
+              <input className="input input--sm" type="number" min={1} max={10}
+                value={critic.max_retries ?? 1}
+                onChange={(e) => updateCritic({ max_retries: parseInt(e.target.value) || 1 })} />
+            </BuilderField>
+          )}
           <BuilderField label={t("workflows.system_prompt")}>
             <textarea className="input input--sm inspector-droppable" rows={4}
               value={critic.system_prompt}

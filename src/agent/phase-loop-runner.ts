@@ -461,9 +461,16 @@ export async function run_phase_loop(
               reset_phase_state(state.phases[j]);
             }
 
-            // goto 대상의 node_idx를 찾아 점프
+            // goto 대상의 node_idx를 찾아 점프 (node_id === goto_phase 또는 target_idx 기반 폴백)
             const goto_node_idx = all_nodes.findIndex((n) => n.node_id === phase_def.critic!.goto_phase);
-            if (goto_node_idx >= 0) node_idx = goto_node_idx;
+            if (goto_node_idx >= 0) {
+              node_idx = goto_node_idx;
+            } else {
+              // node_id 미매칭 시 target_idx 기준으로 phase 노드를 직접 탐색
+              const fallback_idx = all_nodes.findIndex((n) => !is_orche_node(n) && node_to_phase(n as PhaseNodeDefinition).phase_id === phase_def.critic!.goto_phase);
+              if (fallback_idx >= 0) node_idx = fallback_idx;
+              // 그래도 못 찾으면 node_idx는 현재값 유지 → 현재 Phase부터 재실행 (차선책)
+            }
             break; // critic 루프 탈출 → while 루프에서 goto 대상부터 재실행
           }
 

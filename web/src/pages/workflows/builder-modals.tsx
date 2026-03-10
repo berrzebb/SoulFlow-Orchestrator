@@ -14,7 +14,7 @@ import type { WorkflowDef, PhaseDef, AgentDef, CriticDef, OrcheNodeDef, TriggerN
 type ChannelInstanceInfo = { instance_id: string; provider: string; label: string; enabled: boolean; running: boolean };
 type BackendOption = { value: string; label: string };
 
-const REJECTION_POLICIES = ["retry_all", "retry_targeted", "escalate"];
+const REJECTION_POLICIES = ["retry_all", "retry_targeted", "escalate", "goto"];
 
 export function PhaseEditModal({ workflow, phaseId, onChange, onPhaseIdChange, onClose }: {
   workflow: WorkflowDef;
@@ -91,6 +91,15 @@ export function PhaseEditModal({ workflow, phaseId, onChange, onPhaseIdChange, o
               <option value="sequential_loop">{t("workflows.mode_sequential_loop")}</option>
             </select>
           </BuilderField>
+          {phase.mode === "sequential_loop" && (
+            <BuilderField label={t("workflows.loop_until")} hint={t("workflows.loop_until_hint")}>
+              <input className="input input--sm"
+                value={phase.loop_until || ""}
+                placeholder="{{memory.done}} === true"
+                onChange={(e) => updatePhase({ loop_until: e.target.value || undefined })}
+              />
+            </BuilderField>
+          )}
           {(phase.mode === "interactive" || phase.mode === "sequential_loop") && (
             <BuilderField label={t("workflows.max_loop_iterations")} hint={t("workflows.loop_iterations_hint")}>
               <input
@@ -103,6 +112,23 @@ export function PhaseEditModal({ workflow, phaseId, onChange, onPhaseIdChange, o
               />
             </BuilderField>
           )}
+          <BuilderRowPair>
+            <BuilderField label={t("workflows.failure_policy")}>
+              <select className="input input--sm" value={phase.failure_policy || "best_effort"}
+                onChange={(e) => updatePhase({ failure_policy: e.target.value as PhaseDef["failure_policy"], quorum_count: e.target.value !== "quorum" ? undefined : (phase.quorum_count ?? 1) })}>
+                <option value="best_effort">best_effort</option>
+                <option value="fail_fast">fail_fast</option>
+                <option value="quorum">quorum</option>
+              </select>
+            </BuilderField>
+            {phase.failure_policy === "quorum" && (
+              <BuilderField label={t("workflows.quorum_count")}>
+                <input className="input input--sm" type="number" min={1}
+                  value={phase.quorum_count ?? 1}
+                  onChange={(e) => updatePhase({ quorum_count: Number(e.target.value) || 1 })} />
+              </BuilderField>
+            )}
+          </BuilderRowPair>
           <div className="builder-meta-hint">
             {t("workflows.agents_count", { n: String(phase.agents.length) })}
             {phase.critic ? ` + ${t("workflows.critic")}` : ""}
@@ -502,12 +528,29 @@ export function AgentEditModal({ workflow, subNodeId, onChange, onClose, onSubNo
                 </select>
               </BuilderField>
               <BuilderField label={t("workflows.on_rejection")}>
-                <select className="input input--sm" value={critic.on_rejection || ""} onChange={(e) => updateCritic({ on_rejection: e.target.value || undefined })}>
+                <select className="input input--sm" value={critic.on_rejection || ""} onChange={(e) => updateCritic({ on_rejection: e.target.value || undefined, goto_phase: e.target.value !== "goto" ? undefined : critic.goto_phase })}>
                   <option value="">-</option>
                   {REJECTION_POLICIES.map((p) => <option key={p} value={p}>{p}</option>)}
                 </select>
               </BuilderField>
             </BuilderRowPair>
+            {critic.on_rejection === "goto" && (
+              <BuilderField label={t("workflows.goto_phase")}>
+                <select className="input input--sm" value={critic.goto_phase || ""} onChange={(e) => updateCritic({ goto_phase: e.target.value || undefined })}>
+                  <option value="">— {t("workflows.select_phase")} —</option>
+                  {workflow.phases.filter((p) => p.phase_id !== phaseId).map((p) => (
+                    <option key={p.phase_id} value={p.phase_id}>{p.title || p.phase_id}</option>
+                  ))}
+                </select>
+              </BuilderField>
+            )}
+            {critic.on_rejection && critic.on_rejection !== "escalate" && (
+              <BuilderField label={t("workflows.max_retries")}>
+                <input className="input input--sm" type="number" min={1} max={10}
+                  value={critic.max_retries ?? 1}
+                  onChange={(e) => updateCritic({ max_retries: parseInt(e.target.value) || 1 })} />
+              </BuilderField>
+            )}
             <BuilderField label={t("workflows.system_prompt")}>
               <textarea className="input input--sm" rows={4} value={critic.system_prompt} onChange={(e) => updateCritic({ system_prompt: e.target.value })} />
             </BuilderField>

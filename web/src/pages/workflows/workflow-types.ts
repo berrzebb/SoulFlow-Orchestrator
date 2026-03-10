@@ -20,6 +20,7 @@ export interface AgentDef {
   system_prompt: string;
   tools?: string[];
   max_turns?: number;
+  filesystem_isolation?: "none" | "directory" | "worktree";
 }
 
 export interface CriticDef {
@@ -39,7 +40,8 @@ export interface PhaseDef {
   agents: AgentDef[];
   critic?: CriticDef;
   context_template?: string;
-  failure_policy?: string;
+  failure_policy?: "best_effort" | "fail_fast" | "quorum";
+  quorum_count?: number;
   mode?: "parallel" | "interactive" | "sequential_loop";
   max_loop_iterations?: number;
   loop_until?: string;
