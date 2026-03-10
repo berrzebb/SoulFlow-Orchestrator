@@ -122,8 +122,9 @@
   border-top-left-radius: var(--radius-sm);
   white-space: normal;
 }
-/* 스트리밍 중 어시스턴트 버블 — 조용한 border 하이라이트만 */
+/* 스트리밍 중 어시스턴트 버블 — 영역 사전 확보 + 조용한 border 하이라이트 */
 .chat-msg--assistant .chat-msg__content:has(.chat-cursor) {
+  min-height: min(180px, 28vh);
   border-color: color-mix(in srgb, var(--accent) 40%, transparent);
 }
 
