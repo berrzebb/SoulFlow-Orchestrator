@@ -8,7 +8,7 @@ import type {
   AgentRunOptions, AgentRunResult, BackendCapabilities,
 } from "../agent.types.js";
 import { agent_options_to_chat } from "./convert.js";
-import { now_iso, error_message} from "../../utils/common.js";
+import { now_iso, error_message, swallow } from "../../utils/common.js";
 import {
   build_executor_map, execute_single_tool, map_finish_reason,
   fire, accum_usage, emit_usage,
@@ -68,11 +68,14 @@ export class OpenAiCompatibleAgent implements AgentBackend {
     let total_tool_calls = 0;
     const usage: UsageAccumulator = { input: 0, output: 0, cache_read: 0, cache_creation: 0, cost: 0 };
 
+    const on_stream = options.hooks?.on_stream;
+
     try {
       let raw = await this._call_api(conversation, tools, {
         abort_signal: options.abort_signal,
         max_tokens: options.max_tokens,
         temperature: options.temperature,
+        on_stream,
       });
       let parsed = parse_openai_response(raw);
       accum_usage(usage, parsed.usage);
@@ -110,10 +113,12 @@ export class OpenAiCompatibleAgent implements AgentBackend {
           });
         }
 
+        // 도구 사용 후 후속 턴 — on_stream 연속 전달
         raw = await this._call_api(conversation, tools, {
           abort_signal: options.abort_signal,
           max_tokens: options.max_tokens,
           temperature: options.temperature,
+          on_stream,
         });
         parsed = parse_openai_response(raw);
         accum_usage(usage, parsed.usage);
@@ -171,9 +176,16 @@ export class OpenAiCompatibleAgent implements AgentBackend {
   private async _call_api(
     messages: ChatMessage[],
     tools: Record<string, unknown>[],
-    options?: { abort_signal?: AbortSignal; max_tokens?: number; temperature?: number },
+    options?: {
+      abort_signal?: AbortSignal;
+      max_tokens?: number;
+      temperature?: number;
+      on_stream?: (chunk: string) => void | Promise<void>;
+    },
   ): Promise<Record<string, unknown>> {
     const url = `${this.config.api_base.replace(/\/+$/, "")}/chat/completions`;
+    const use_stream = !!options?.on_stream;
+
     const body: Record<string, unknown> = {
       model: this.config.model,
       messages: sanitize_messages_for_api(messages),
@@ -181,6 +193,10 @@ export class OpenAiCompatibleAgent implements AgentBackend {
     if (tools.length > 0) {
       body.tools = tools;
       if (!this.config.no_tool_choice) body.tool_choice = "auto";
+    }
+    if (use_stream) {
+      body.stream = true;
+      body.stream_options = { include_usage: true };
     }
 
     const max_tokens = options?.max_tokens ?? this.config.max_tokens;
@@ -207,10 +223,107 @@ export class OpenAiCompatibleAgent implements AgentBackend {
         signal: controller.signal,
       });
       if (!res.ok) throw new Error(`OpenAI API ${res.status}: ${await res.text()}`);
-      return await res.json() as Record<string, unknown>;
+
+      if (!use_stream) {
+        return await res.json() as Record<string, unknown>;
+      }
+
+      return await this._parse_sse_stream(res, options.on_stream!);
     } finally {
       clearTimeout(timeout);
       options?.abort_signal?.removeEventListener("abort", relay);
     }
+  }
+
+  /** SSE 스트림을 읽어 텍스트·도구 호출을 누적 후 parse_openai_response 호환 객체 반환. */
+  private async _parse_sse_stream(
+    res: Response,
+    on_stream: (chunk: string) => void | Promise<void>,
+  ): Promise<Record<string, unknown>> {
+    // 인덱스별 도구 호출 버퍼
+    type ToolBuf = { id: string; name: string; arguments: string };
+    const tool_bufs = new Map<number, ToolBuf>();
+    let content = "";
+    let finish_reason = "stop";
+    let usage: Record<string, number> = {};
+
+    const reader = res.body!.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        // SSE 이벤트는 빈 줄로 구분
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const data = line.slice(6).trim();
+          if (data === "[DONE]") continue;
+
+          let chunk: Record<string, unknown>;
+          try { chunk = JSON.parse(data) as Record<string, unknown>; }
+          catch { continue; }
+
+          const choices = Array.isArray(chunk.choices) ? chunk.choices : [];
+          const choice = (choices[0] as Record<string, unknown>) || {};
+          const delta = (choice.delta as Record<string, unknown>) || {};
+
+          // 텍스트 delta
+          if (typeof delta.content === "string" && delta.content) {
+            content += delta.content;
+            swallow(on_stream(delta.content));
+          }
+
+          // 도구 호출 조각 누적
+          if (Array.isArray(delta.tool_calls)) {
+            for (const tc of delta.tool_calls as Record<string, unknown>[]) {
+              const idx = typeof tc.index === "number" ? tc.index : 0;
+              if (!tool_bufs.has(idx)) {
+                tool_bufs.set(idx, { id: "", name: "", arguments: "" });
+              }
+              const buf = tool_bufs.get(idx)!;
+              if (typeof tc.id === "string") buf.id = tc.id;
+              const fn = (tc.function as Record<string, unknown>) || {};
+              if (typeof fn.name === "string") buf.name += fn.name;
+              if (typeof fn.arguments === "string") buf.arguments += fn.arguments;
+            }
+          }
+
+          if (typeof choice.finish_reason === "string") finish_reason = choice.finish_reason;
+
+          // 최종 청크에 usage 포함 (stream_options.include_usage)
+          if (chunk.usage && typeof chunk.usage === "object") {
+            usage = chunk.usage as Record<string, number>;
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
+
+    // parse_openai_response 호환 구조로 조합
+    const tool_calls = [...tool_bufs.values()].map((buf) => ({
+      id: buf.id,
+      type: "function",
+      function: { name: buf.name, arguments: buf.arguments },
+    }));
+
+    return {
+      choices: [{
+        message: {
+          role: "assistant",
+          content: content || null,
+          ...(tool_calls.length > 0 ? { tool_calls } : {}),
+        },
+        finish_reason,
+      }],
+      usage,
+    };
   }
 }
