@@ -6,7 +6,7 @@
 import { Tool } from "./base.js";
 import type { JsonSchema, ToolExecutionContext } from "./types.js";
 import type { DashboardWorkflowOps, DashboardAgentProviderOps } from "../../dashboard/service.js";
-import { normalize_workflow_definition, slugify } from "../../orchestration/workflow-loader.js";
+import { normalize_workflow_definition, slugify, workflow_to_flowchart, workflow_to_sequence } from "../../orchestration/workflow-loader.js";
 import { build_node_catalog } from "./workflow-catalog.js";
 import { select_nodes_for_request } from "../../orchestration/node-selector.js";
 import { get_all_handlers } from "../node-registry.js";
@@ -28,8 +28,8 @@ export class WorkflowTool extends Tool {
     properties: {
       action: {
         type: "string",
-        enum: ["create", "list", "get", "run", "update", "delete", "export", "node_types", "models"],
-        description: "Action to perform (node_types: show available node type catalog, models: list backends and models)",
+        enum: ["create", "list", "get", "run", "update", "delete", "export", "flowchart", "sequence", "node_types", "models"],
+        description: "Action to perform. flowchart: Mermaid flowchart LR diagram. sequence: Mermaid sequence diagram. node_types: show available node type catalog. models: list backends and models.",
       },
       name: { type: "string", description: "Workflow template name or slug" },
       definition: {
@@ -71,9 +71,11 @@ export class WorkflowTool extends Tool {
       case "update": return this.handle_update(params);
       case "delete": return this.handle_delete(params);
       case "export": return this.handle_export(params);
+      case "flowchart": return this.handle_diagram(params, "flowchart");
+      case "sequence": return this.handle_diagram(params, "sequence");
       case "node_types": return this.handle_node_types(params);
       case "models": return this.handle_models();
-      default: return `Error: unsupported action '${action}'. Use: create, list, get, run, update, delete, export, node_types, models`;
+      default: return `Error: unsupported action '${action}'. Use: create, list, get, run, update, delete, export, flowchart, sequence, node_types, models`;
     }
   }
 
@@ -203,6 +205,16 @@ export class WorkflowTool extends Tool {
     const yaml = this.ops.export_template(name);
     if (!yaml) return `Error: template '${name}' not found`;
     return yaml;
+  }
+
+  private handle_diagram(params: Record<string, unknown>, format: "flowchart" | "sequence"): string {
+    const name = String(params.name || "");
+    if (!name) return "Error: name is required";
+
+    const template = this.ops.get_template(name);
+    if (!template) return `Error: template '${name}' not found`;
+
+    return format === "flowchart" ? workflow_to_flowchart(template) : workflow_to_sequence(template);
   }
 
   /** 사용 가능한 backends(프로바이더)와 각 프로바이더의 모델 목록을 반환. */

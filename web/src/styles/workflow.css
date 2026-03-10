@@ -88,10 +88,67 @@
 .workflow-prompt-bar--loading {
   position: relative;
   overflow: hidden;
+  border-bottom-color: var(--accent);
+  border-bottom-width: 2px;
 }
 .workflow-prompt-bar--loading .workflow-prompt-bar__input {
   border-color: var(--accent);
   opacity: 0.7;
+}
+
+/* 상태 헤더 — 경과 시간 + 취소 버튼 */
+.workflow-stream-log__status {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding-bottom: var(--sp-1);
+  border-bottom: 1px solid var(--line);
+  margin-bottom: var(--sp-1);
+}
+.workflow-stream-log__spinner {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: prompt-spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+.workflow-stream-log__status-text {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--accent);
+  letter-spacing: 0.01em;
+}
+.workflow-stream-log__elapsed {
+  font-size: 0.7rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  min-width: 2.2em;
+}
+.workflow-stream-log__patch-count {
+  font-size: 0.7rem;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--ok) 15%, transparent);
+  color: var(--ok);
+  font-weight: 500;
+}
+.workflow-stream-log__abort {
+  margin-left: auto;
+  font-size: 0.7rem;
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: color 0.12s, border-color 0.12s;
+}
+.workflow-stream-log__abort:hover {
+  color: var(--err);
+  border-color: var(--err);
 }
 .workflow-prompt-bar__shimmer {
   position: absolute;
@@ -1125,6 +1182,66 @@
   font-weight: 600;
   font-size: var(--fs-sm);
   white-space: nowrap;
+}
+/* YAML 사이드 탭 */
+.yaml-side-tabs {
+  display: flex;
+  gap: 2px;
+  flex: 1;
+}
+.yaml-side-tab {
+  padding: 2px 10px;
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--subtext);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.yaml-side-tab:hover { color: var(--text); }
+.yaml-side-tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+/* Diagram 탭 내용 */
+.yaml-diagram-tab {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+.yaml-diagram-tab__source {
+  padding: var(--sp-2) var(--sp-3);
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+  overflow-x: auto;
+  max-height: 160px;
+  overflow-y: auto;
+}
+.yaml-diagram-tab__source pre {
+  margin: 0;
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--subtext);
+  font-family: var(--font-mono, monospace);
+  white-space: pre;
+}
+.yaml-diagram-tab__svg {
+  flex: 1;
+  overflow: auto;
+  padding: var(--sp-3);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+}
+.yaml-diagram-tab__svg svg { max-width: 100%; height: auto; }
+.yaml-diagram-tab__error {
+  padding: var(--sp-2) var(--sp-3);
+  color: var(--err);
+  font-size: var(--fs-xs);
 }
 .graph-layout__yaml-side .code-textarea {
   flex: 1;

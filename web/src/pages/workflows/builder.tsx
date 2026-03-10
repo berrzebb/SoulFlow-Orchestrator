@@ -13,6 +13,44 @@ import { NodeInspector, type UpstreamRef } from "./node-inspector";
 import { get_output_fields } from "./output-schema";
 import { PhaseEditModal, CronEditModal, TriggerNodeEditModal, ChannelEditModal, OrcheNodeEditModal, AgentEditModal } from "./builder-modals";
 import { WorkflowPromptBar, NodeRunInputBar } from "./builder-bars";
+import { workflow_def_to_mermaid } from "./workflow-diagram";
+
+// ── Diagram Preview Tab ──
+
+function YamlSideDiagramTab({ workflow, type }: { workflow: WorkflowDef; type: "flowchart" | "sequence" }) {
+  const [svg, setSvg] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const source = useMemo(() => workflow_def_to_mermaid(workflow, type), [workflow, type]);
+
+  useEffect(() => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    setSvg(null); setError(null);
+    timerRef.current = setTimeout(async () => {
+      try {
+        const res = await fetch("/api/workflow/diagram/preview", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ source, format: "svg" }),
+        });
+        const data = await res.json() as { ok: boolean; output?: string; error?: string };
+        if (data.ok && data.output) setSvg(data.output);
+        else setError(data.error ?? "render_failed");
+      } catch { setError("network_error"); }
+    }, 400);
+    return () => { if (timerRef.current) clearTimeout(timerRef.current); };
+  }, [source]);
+
+  return (
+    <div className="yaml-diagram-tab">
+      <div className="yaml-diagram-tab__source">
+        <pre>{source}</pre>
+      </div>
+      {error && <div className="yaml-diagram-tab__error">{error}</div>}
+      {svg && <div className="yaml-diagram-tab__svg" dangerouslySetInnerHTML={{ __html: svg }} />}
+    </div>
+  );
+}
 
 /** /api/tools 응답. */
 type ToolsApiResponse = { names: string[]; definitions: Array<Record<string, unknown>>; mcp_servers: Array<{ name: string; tools: string[] }> };
@@ -93,6 +131,7 @@ export default function WorkflowBuilderPage() {
   const paletteBtnRef = useRef<HTMLButtonElement>(null);
   const [yamlSideOpen, setYamlSideOpen] = useState(false);
   const [yamlSideWidth, setYamlSideWidth] = useState<number | null>(null);
+  const [yamlSideTab, setYamlSideTab] = useState<"yaml" | "flowchart" | "sequence">("yaml");
   const [yamlSideDirty, setYamlSideDirty] = useState(false);
   const yamlDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [editOrcheNodeId, setEditOrcheNodeId] = useState<string | null>(null);
@@ -676,35 +715,51 @@ export default function WorkflowBuilderPage() {
             style={yamlSideOpen && yamlSideWidth ? { width: yamlSideWidth } : undefined}
           >
             <div className="graph-layout__yaml-side-header">
-              <span>YAML</span>
+              <div className="yaml-side-tabs">
+                {(["yaml", "flowchart", "sequence"] as const).map((tab) => (
+                  <button
+                    key={tab}
+                    className={`yaml-side-tab${yamlSideTab === tab ? " active" : ""}`}
+                    onClick={() => setYamlSideTab(tab)}
+                  >
+                    {tab === "yaml" ? "YAML" : tab === "flowchart" ? "⬡ Flow" : "⇄ Seq"}
+                  </button>
+                ))}
+              </div>
               <button className="btn btn--xs btn--ghost" onClick={() => setYamlSideOpen(false)} aria-label={t("workflows.close")}>
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
               </button>
             </div>
-            <YamlEditor
-              value={effectiveYamlText}
-              onChange={(v) => {
-                setYamlText(v);
-                setYamlSideDirty(true);
-                if (yamlDebounceRef.current) clearTimeout(yamlDebounceRef.current);
-                yamlDebounceRef.current = setTimeout(() => {
-                  setYamlSideDirty(false);
-                  sync_form_from_yaml();
-                }, 800);
-              }}
-              className="graph-layout__yaml-cm"
-            />
-            {yamlError && (
-              <div className="yaml-error-banner" role="alert">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={{ flexShrink: 0 }}>
-                  <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" strokeWidth="2" />
-                  <path d="M12 8v4M12 16h.01" strokeWidth="2" strokeLinecap="round" />
-                </svg>
-                <div>
-                  <strong>{t("workflows.yaml_error")}</strong>
-                  <p>{yamlError}</p>
-                </div>
-              </div>
+            {yamlSideTab === "yaml" ? (
+              <>
+                <YamlEditor
+                  value={effectiveYamlText}
+                  onChange={(v) => {
+                    setYamlText(v);
+                    setYamlSideDirty(true);
+                    if (yamlDebounceRef.current) clearTimeout(yamlDebounceRef.current);
+                    yamlDebounceRef.current = setTimeout(() => {
+                      setYamlSideDirty(false);
+                      sync_form_from_yaml();
+                    }, 800);
+                  }}
+                  className="graph-layout__yaml-cm"
+                />
+                {yamlError && (
+                  <div className="yaml-error-banner" role="alert">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={{ flexShrink: 0 }}>
+                      <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" strokeWidth="2" />
+                      <path d="M12 8v4M12 16h.01" strokeWidth="2" strokeLinecap="round" />
+                    </svg>
+                    <div>
+                      <strong>{t("workflows.yaml_error")}</strong>
+                      <p>{yamlError}</p>
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              <YamlSideDiagramTab workflow={workflow} type={yamlSideTab} />
             )}
           </div>
           {/* YAML 패널 리사이즈 핸들 */}

@@ -156,6 +156,137 @@ export function serialize_to_yaml(definition: WorkflowDefinition): string {
 /** normalize를 외부에서도 사용할 수 있도록 export. */
 export { normalize_workflow_definition };
 
+// ── Diagram Export ──────────────────────────────────────────────────────────
+
+const TRIGGER_ICONS: Record<string, string> = {
+  cron: "⏰", webhook: "↗", manual: "▶", channel_message: "💬", kanban_event: "📋", filesystem_watch: "📁",
+};
+const MODE_ICONS: Record<string, string> = {
+  sequential_loop: "🔁", interactive: "🔄", parallel: "⚡",
+};
+
+/** Mermaid-safe ID: 영숫자 + 하이픈 + 밑줄만 허용. */
+function mid(id: string): string { return id.replace(/[^a-zA-Z0-9_-]/g, "_"); }
+/** Mermaid 레이블 안전 처리: 큰따옴표·개행 제거. */
+function mlabel(s: string, max = 36): string { return s.replace(/"/g, "'").replace(/\n/g, " ").slice(0, max); }
+
+/** WorkflowDefinition → Mermaid flowchart LR 다이어그램 문자열. */
+export function workflow_to_flowchart(def: WorkflowDefinition): string {
+  const lines: string[] = ["```mermaid", "flowchart LR"];
+  const phase_ids = new Set((def.phases || []).map((p) => p.phase_id));
+
+  for (const tn of def.trigger_nodes || []) {
+    const icon = TRIGGER_ICONS[tn.trigger_type] || "▶";
+    const detail = tn.schedule || tn.webhook_path || tn.channel_type || tn.trigger_type;
+    lines.push(`  ${mid(tn.id)}(["${icon} ${mlabel(detail)}"])`);
+  }
+
+  for (const p of def.phases || []) {
+    const mode_icon = MODE_ICONS[p.mode || "parallel"];
+    const agents_label = `${p.agents.length}a${p.critic ? "+c" : ""}`;
+    lines.push(`  ${mid(p.phase_id)}["${mlabel(p.title || p.phase_id)}\\n${mode_icon} ${agents_label}"]`);
+  }
+
+  for (const on of def.orche_nodes || []) {
+    if (on.node_type === "if" || on.node_type === "switch") {
+      lines.push(`  ${mid(on.node_id)}{{"${mlabel(on.title || on.node_id)}"}}`);
+    } else {
+      lines.push(`  ${mid(on.node_id)}["${mlabel(on.title || on.node_id)}\\n${on.node_type}"]`);
+    }
+  }
+
+  for (const en of def.end_nodes || []) {
+    lines.push(`  ${mid(en.node_id)}(["⏹ ${mlabel(en.output_targets?.join(", ") || "End")}"])`);
+  }
+
+  lines.push("");
+
+  for (const tn of def.trigger_nodes || []) {
+    const target = (def.phases || []).find((p) => p.depends_on?.includes(tn.id));
+    if (target) lines.push(`  ${mid(tn.id)} --> ${mid(target.phase_id)}`);
+  }
+
+  for (const p of def.phases || []) {
+    for (const dep of p.depends_on || []) {
+      if (phase_ids.has(dep)) lines.push(`  ${mid(dep)} --> ${mid(p.phase_id)}`);
+    }
+    if (p.critic?.on_rejection === "goto" && p.critic.goto_phase && phase_ids.has(p.critic.goto_phase)) {
+      lines.push(`  ${mid(p.phase_id)} -.->|FAIL| ${mid(p.critic.goto_phase)}`);
+    }
+  }
+
+  for (const on of def.orche_nodes || []) {
+    for (const dep of on.depends_on || []) {
+      lines.push(`  ${mid(dep)} --> ${mid(on.node_id)}`);
+    }
+  }
+
+  for (const en of def.end_nodes || []) {
+    for (const dep of en.depends_on || []) {
+      lines.push(`  ${mid(dep)} --> ${mid(en.node_id)}`);
+    }
+  }
+
+  lines.push("```");
+  return lines.join("\n");
+}
+
+/** WorkflowDefinition → Mermaid sequenceDiagram 문자열 (실행 흐름 시각화). */
+export function workflow_to_sequence(def: WorkflowDefinition): string {
+  const lines: string[] = ["```mermaid", "sequenceDiagram"];
+  lines.push("  autonumber");
+
+  const participants: string[] = [];
+  for (const tn of def.trigger_nodes || []) {
+    const icon = TRIGGER_ICONS[tn.trigger_type] || "▶";
+    participants.push(`  participant ${mid(tn.id)} as ${icon} ${mlabel(tn.trigger_type, 20)}`);
+  }
+  for (const p of def.phases || []) {
+    const mode_icon = MODE_ICONS[p.mode || "parallel"];
+    participants.push(`  participant ${mid(p.phase_id)} as ${mode_icon} ${mlabel(p.title || p.phase_id, 20)}`);
+    if (p.critic) participants.push(`  participant ${mid(p.phase_id)}_critic as ⚖ Critic`);
+  }
+  lines.push(...participants, "");
+
+  // 트리거 → 페이즈 이벤트
+  for (const tn of def.trigger_nodes || []) {
+    const target = (def.phases || []).find((p) => p.depends_on?.includes(tn.id));
+    if (target) lines.push(`  ${mid(tn.id)}->>+${mid(target.phase_id)}: trigger`);
+  }
+
+  // 페이즈 실행 흐름 (depends_on 순서대로)
+  const phase_map = new Map((def.phases || []).map((p) => [p.phase_id, p]));
+  const visited = new Set<string>();
+  const emit_phase = (p: typeof def.phases extends Array<infer T> ? T : never) => {
+    if (visited.has(p.phase_id)) return;
+    visited.add(p.phase_id);
+    if (p.mode === "sequential_loop") {
+      lines.push(`  loop ${mlabel(p.loop_until || "loop", 30)}`);
+    }
+    for (const a of p.agents) {
+      lines.push(`  ${mid(p.phase_id)}->>+${mid(p.phase_id)}: ${mlabel(a.label || a.agent_id, 20)}`);
+    }
+    if (p.critic) {
+      lines.push(`  ${mid(p.phase_id)}->>+${mid(p.phase_id)}_critic: review`);
+      lines.push(`  ${mid(p.phase_id)}_critic-->>-${mid(p.phase_id)}: gate result`);
+    }
+    if (p.mode === "sequential_loop") lines.push("  end");
+    lines.push(`  ${mid(p.phase_id)}-->>-${mid(p.phase_id)}: done`);
+  };
+
+  // 의존성 순서로 페이즈 출력
+  for (const p of def.phases || []) {
+    for (const dep of p.depends_on || []) {
+      const dep_phase = phase_map.get(dep);
+      if (dep_phase) emit_phase(dep_phase);
+    }
+    emit_phase(p);
+  }
+
+  lines.push("```");
+  return lines.join("\n");
+}
+
 /** raw YAML 객체를 WorkflowDefinition으로 정규화. */
 function normalize_workflow_definition(raw: Record<string, unknown>): WorkflowDefinition | null {
   if (!raw.title) return null;
@@ -291,11 +422,28 @@ function normalize_workflow_definition(raw: Record<string, unknown>): WorkflowDe
     trigger_nodes = [{ id: "__cron__", trigger_type: "cron", schedule: trigger.schedule, timezone: trigger.timezone }];
   }
 
-  // 필드 매핑
+  // 필드 매핑 — 중복 및 존재하지 않는 노드 참조 제거
+  const valid_node_ids = new Set<string>([
+    ...phases.map((p) => p.phase_id),
+    ...(trigger_nodes || []).map((t) => t.id),
+    ...(orche_nodes || []).map((n) => n.node_id),
+    ...(tool_nodes || []).map((t) => t.id),
+    ...(skill_nodes || []).map((s) => s.id),
+    ...(hitl_channel ? ["__channel__"] : []),
+  ]);
+  const seen_mappings = new Set<string>();
   const field_mappings: FieldMapping[] | undefined = Array.isArray(raw.field_mappings)
-    ? (raw.field_mappings as Array<Record<string, unknown>>).filter(
-        (m) => m.from_node && m.from_field && m.to_node,
-      ).map((m) => ({
+    ? (raw.field_mappings as Array<Record<string, unknown>>).filter((m) => {
+        if (!m.from_node || !m.from_field || !m.to_node) return false;
+        const from = String(m.from_node), to = String(m.to_node);
+        // 존재하지 않는 노드 참조 제거
+        if (!valid_node_ids.has(from) || !valid_node_ids.has(to)) return false;
+        // 중복 제거
+        const key = `${from}→${to}:${m.from_field}→${m.to_field || ""}`;
+        if (seen_mappings.has(key)) return false;
+        seen_mappings.add(key);
+        return true;
+      }).map((m) => ({
         from_node: String(m.from_node),
         from_field: String(m.from_field),
         to_node: String(m.to_node),

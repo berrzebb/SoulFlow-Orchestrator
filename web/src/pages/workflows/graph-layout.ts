@@ -153,22 +153,34 @@ export function compute_aux_positions(
       : [];
   const trigger_out = TRIGGER_OUTPUT;
   const trigger_w = 160, trigger_h = compute_orche_node_height(trigger_out.length);
-  effective_triggers.forEach((tn, ti) => {
-    const first_phase = workflow.phases[0];
-    const anchor = first_phase ? phase_positions.get(first_phase.phase_id) : null;
-    const x = anchor ? anchor.x - trigger_w - GAP_X : PADDING;
-    const y = anchor ? anchor.y + ti * (trigger_h + GAP_Y) : PADDING + ti * (trigger_h + GAP_Y);
+  // 트리거: 타겟 페이즈 수직 범위 중앙에 정렬, 타겟 페이즈 순서로 정렬해 교차 최소화
+  const first_phase = workflow.phases[0];
+  const first_anchor = first_phase ? phase_positions.get(first_phase.phase_id) : null;
+  const trigger_x = first_anchor ? first_anchor.x - trigger_w - GAP_X : PADDING;
+  const phase_ys = [...phase_positions.values()];
+  const phases_min_y = phase_ys.length ? Math.min(...phase_ys.map((p) => p.y)) : PADDING;
+  const phases_max_y = phase_ys.length ? Math.max(...phase_ys.map((p) => p.y + p.height)) : PADDING + NODE_H;
+  const phases_center_y = (phases_min_y + phases_max_y) / 2;
+  const total_trigger_h = effective_triggers.length * trigger_h + Math.max(0, effective_triggers.length - 1) * GAP_Y;
+  const trigger_start_y = phases_center_y - total_trigger_h / 2;
+  const phase_order = new Map(workflow.phases.map((p, i) => [p.phase_id, i]));
+  const sorted_triggers = [...effective_triggers].sort((a, b) => {
+    const pa = workflow.phases.find((p) => p.depends_on?.includes(a.id));
+    const pb = workflow.phases.find((p) => p.depends_on?.includes(b.id));
+    return (phase_order.get(pa?.phase_id ?? "") ?? 999) - (phase_order.get(pb?.phase_id ?? "") ?? 999);
+  });
+  sorted_triggers.forEach((tn, ti) => {
     const label = tn.trigger_type === "cron" ? (tn.schedule || "cron") : tn.trigger_type;
     const trigger_detail = tn.trigger_type === "cron" ? tn.schedule
       : tn.trigger_type === "webhook" ? tn.webhook_path
       : undefined;
     nodes.push({ id: tn.id, type: "trigger", label, sub_label: tn.trigger_type, output_fields: trigger_out, trigger_detail });
-    positions.set(tn.id, { x, y, width: trigger_w, height: trigger_h });
+    positions.set(tn.id, { x: trigger_x, y: trigger_start_y + ti * (trigger_h + GAP_Y), width: trigger_w, height: trigger_h });
   });
 
-  // Orchestration nodes
+  // Orchestration nodes — 충돌 감지용 all_positions: phase + 이미 배치된 trigger 포함
   const orche_nodes = workflow.orche_nodes || [];
-  const all_positions = new Map(phase_positions);
+  const all_positions = new Map([...phase_positions, ...positions]);
   const anchor_child_count = new Map<string, number>();
   let unanchored_idx = 0;
   for (const on of orche_nodes) {
@@ -422,8 +434,11 @@ export function compute_aux_edges(workflow: WorkflowDef): Edge[] {
       ? [{ id: "__cron__", trigger_type: "cron" as const, schedule: workflow.trigger.schedule }]
       : [];
   for (const tn of eff_triggers) {
-    if (workflow.phases[0]) {
-      edges.push({ from: tn.id, to: workflow.phases[0].phase_id, type: "trigger", from_port: "payload", to_port: "prompt" });
+    // phase.depends_on에서 이 트리거를 참조하는 페이즈를 찾아 연결
+    const target_phase = workflow.phases.find((p) => p.depends_on?.includes(tn.id));
+    const target_id = target_phase?.phase_id ?? workflow.phases[0]?.phase_id;
+    if (target_id) {
+      edges.push({ from: tn.id, to: target_id, type: "trigger", from_port: "payload", to_port: "prompt" });
     }
   }
 
@@ -444,7 +459,11 @@ export function compute_aux_edges(workflow: WorkflowDef): Edge[] {
     }
   }
 
+  const seen_mappings = new Set<string>();
   for (const m of workflow.field_mappings || []) {
+    const key = `${m.from_node}→${m.to_node}:${m.from_field}→${m.to_field}`;
+    if (seen_mappings.has(key)) continue;
+    seen_mappings.add(key);
     edges.push({ from: m.from_node, to: m.to_node, from_port: m.from_field, to_port: m.to_field, type: "mapping", label: m.from_field });
   }
 
