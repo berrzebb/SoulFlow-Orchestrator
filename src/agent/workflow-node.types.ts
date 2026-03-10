@@ -56,6 +56,8 @@ export interface HttpNodeDefinition extends NodeBase {
   headers?: Record<string, string>;
   body?: unknown;
   timeout_ms?: number;
+  /** User-Agent 헤더 편의 필드. headers에 이미 있으면 무시. */
+  user_agent?: string;
 }
 
 // ── Code Node ───────────────────────────────────────
@@ -265,6 +267,8 @@ export interface FileNodeDefinition extends NodeBase {
 
 export interface AnalyzerNodeDefinition extends NodeBase {
   node_type: "analyzer";
+  /** llm (기본) | sentiment (AFINN 어휘 기반 감성 분석). */
+  mode?: string;
   /** LLM 백엔드 (openrouter, claude_sdk 등). */
   backend: string;
   model?: string;
@@ -277,6 +281,8 @@ export interface AnalyzerNodeDefinition extends NodeBase {
   /** 분류/판정 결과에 사용할 카테고리 목록. */
   categories?: string[];
   temperature?: number;
+  /** sentiment mode 전용: analyze/batch/compare/keywords/score_text. */
+  sentiment_action?: string;
 }
 
 // ── Retriever Node ────────────────────────────────
@@ -712,6 +718,8 @@ export interface WebSearchNodeDefinition extends NodeBase {
 
 export interface WebScrapeNodeDefinition extends NodeBase {
   node_type: "web_scrape";
+  /** 동작: scrape (기본) / robots_txt / sitemap. */
+  action?: string;
   /** 스크래핑 URL (템플릿 지원). */
   url: string;
   /** CSS 셀렉터 힌트. */
@@ -851,12 +859,16 @@ export interface DataFormatNodeDefinition extends NodeBase {
 
 export interface EncodingNodeDefinition extends NodeBase {
   node_type: "encoding";
-  /** encode / decode / hash / uuid. */
+  /** encode / decode / hash / uuid / base_convert / msgpack_encode / msgpack_decode. */
   operation: string;
   input?: string;
   /** base64 / hex / url / sha256 / sha512 / md5. */
   format?: string;
   count?: number;
+  /** base_convert 전용: 변환 원본 진법 (bin/oct/dec/hex/base32/base36/base62). */
+  base_from?: string;
+  /** base_convert 전용: 변환 대상 진법. */
+  base_to?: string;
 }
 
 // ── Regex Node ──────────────────────────────────────
@@ -921,12 +933,14 @@ export interface TemplateEngineNodeDefinition extends NodeBase {
 
 export interface ValidatorNodeDefinition extends NodeBase {
   node_type: "validator";
-  /** schema / format / rules. */
+  /** schema / format / rules / email. */
   operation: string;
   input?: string;
   format?: string;
   schema?: string;
   rules?: string;
+  /** email operation 전용: EmailValidateTool action (validate/parse/normalize/check_disposable/check_free/bulk_validate). */
+  email_action?: string;
 }
 
 // ── Queue Node ──────────────────────────────────────
@@ -1003,7 +1017,7 @@ export interface StatsNodeDefinition extends NodeBase {
 
 export interface TextNodeDefinition extends NodeBase {
   node_type: "text";
-  /** upper/lower/title/camel/snake/kebab/slugify/truncate/pad/count/dedup/similarity/reverse/join/wrap/trim_lines. */
+  /** upper/lower/title/camel/snake/kebab/slugify/filename_safe/transliterate/truncate/pad/count/dedup/similarity/reverse/join/wrap/trim_lines. */
   operation: string;
   input?: string;
   input2?: string;
@@ -1290,6 +1304,8 @@ export interface XmlNodeDefinition extends NodeBase {
 export interface YamlNodeDefinition extends NodeBase {
   node_type: "yaml";
   action?: string;
+  /** yaml (기본) | toml. */
+  format?: string;
   data?: string;
   data2?: string;
   path?: string;

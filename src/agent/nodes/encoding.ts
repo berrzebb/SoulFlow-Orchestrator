@@ -20,7 +20,7 @@ export const encoding_handler: NodeHandler = {
     { name: "input",     type: "string", description: "Input string" },
     { name: "format",    type: "string", description: "Format (base64/hex/url/sha256/sha512/md5)" },
   ],
-  create_default: () => ({ operation: "encode", input: "", format: "base64", count: 1 }),
+  create_default: () => ({ operation: "encode", input: "", format: "base64", count: 1, base_from: "dec", base_to: "hex" }),
 
   async execute(node: OrcheNodeDefinition, ctx: OrcheNodeExecutorContext): Promise<OrcheNodeExecuteResult> {
     const n = node as EncodingNodeDefinition;

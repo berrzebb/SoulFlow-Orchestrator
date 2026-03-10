@@ -23,10 +23,12 @@ export const analyzer_handler: NodeHandler = {
     { name: "schema",   type: "object",  description: "Expected output structure" },
   ],
   create_default: () => ({
+    mode: "llm",
     backend: "openrouter",
     prompt_template: "Analyze the following:\n\n{{input}}",
     input_field: "input",
     categories: [],
+    sentiment_action: "analyze",
   }),
 
   async execute(node: OrcheNodeDefinition, ctx: OrcheNodeExecutorContext): Promise<OrcheNodeExecuteResult> {

@@ -18,7 +18,7 @@ export const yaml_handler: NodeHandler = {
     { name: "action", type: "string", description: "parse / generate / merge / validate / query" },
     { name: "data", type: "string", description: "YAML or JSON data" },
   ],
-  create_default: () => ({ action: "parse", data: "", data2: "", path: "", indent: 2 }),
+  create_default: () => ({ action: "parse", data: "", data2: "", path: "", indent: 2, format: "yaml" }),
 
   async execute(node: OrcheNodeDefinition, ctx: OrcheNodeExecutorContext): Promise<OrcheNodeExecuteResult> {
     const n = node as YamlNodeDefinition;
