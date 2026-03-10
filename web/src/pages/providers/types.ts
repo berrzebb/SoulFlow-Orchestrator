@@ -42,20 +42,6 @@ export interface ModelInfo {
 export type ModalMode = { kind: "add"; defaultPurpose?: "chat" | "embedding" } | { kind: "edit"; instance: ProviderInstance };
 export type ConnectionModalMode = { kind: "add" } | { kind: "edit"; connection: ProviderConnection };
 
-export interface CliAuthStatus {
-  cli: string;
-  authenticated: boolean;
-  account?: string;
-  error?: string;
-}
-
-export interface LoginResult {
-  cli: string;
-  state: string;
-  login_url?: string;
-  error?: string;
-}
-
 export const MODE_OPTIONS = ["once", "agent", "task"] as const;
 export const PURPOSE_OPTIONS = ["chat", "embedding"] as const;
 

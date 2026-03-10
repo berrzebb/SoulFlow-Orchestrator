@@ -450,24 +450,6 @@ a:focus-visible > .stat-card {
   background: color-mix(in srgb, var(--accent) 8%, transparent);
 }
 
-/* ===== CLI Auth Section ===== */
-.cli-auth-section {
-  margin-top: var(--sp-6);
-}
-.cli-auth-section__result {
-  margin-top: var(--sp-4);
-  padding: var(--sp-4);
-}
-.cli-auth-section__url {
-  word-break: break-all;
-  color: var(--accent);
-}
-.cli-auth-section__actions {
-  margin-top: var(--sp-2);
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-2);
-}
 
 /* ===== Agent / Desk Cards ===== */
 .office-grid {

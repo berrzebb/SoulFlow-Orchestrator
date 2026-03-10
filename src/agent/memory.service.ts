@@ -26,12 +26,12 @@ import { rrf_merge, apply_temporal_decay, mmr_rerank } from "./memory-scoring.js
 const SAVE_MEMORY_TOOL = [
   {
     name: "save_memory",
-    description: "Persist consolidated history and long-term memory update.",
+    description: "Persist consolidated history and new long-term memory insights.",
     input_schema: {
       type: "object",
       properties: {
         history_entry: { type: "string", description: "Append-only history summary entry" },
-        memory_update: { type: "string", description: "Full replacement content for long-term memory stored in memory.db" },
+        memory_new_insights: { type: "string", description: "New facts, conclusions, and insights NOT already present in current long-term memory. Do NOT repeat existing content." },
       },
       required: [],
     },
@@ -753,11 +753,11 @@ export class MemoryStore implements MemoryStoreLike {
       if (text.trim()) await this.append_daily(`${text}\n`);
     }
 
-    const memory_update = args.memory_update;
-    if (memory_update !== undefined && memory_update !== null) {
-      const raw = typeof memory_update === "string" ? memory_update : JSON.stringify(memory_update);
-      const text = sanitize_untrusted_text(raw).text;
-      if (text !== current_memory) await this.write_longterm(text);
+    const memory_new_insights = args.memory_new_insights ?? args.memory_update; // 하위 호환
+    if (memory_new_insights !== undefined && memory_new_insights !== null) {
+      const raw = typeof memory_new_insights === "string" ? memory_new_insights : JSON.stringify(memory_new_insights);
+      const text = sanitize_untrusted_text(raw).text.trim();
+      if (text) await this.append_longterm(`\n${text}\n`);
     }
 
     session.last_consolidated = archive_all ? 0 : Math.max(0, session.messages.length - keep_count);

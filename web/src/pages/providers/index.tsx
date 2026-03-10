@@ -11,7 +11,6 @@ import { useT } from "../../i18n";
 import { time_ago } from "../../utils/format";
 import { PROVIDER_TYPE_LABELS as TYPE_LABELS } from "../../utils/constants";
 import type { ProviderInstance, ProviderConnection, ModalMode, ConnectionModalMode } from "./types";
-import { CliAuthSection } from "./cli-auth-section";
 import { ProviderModal } from "./provider-modal";
 import { ConnectionModal } from "./connection-modal";
 
@@ -129,7 +128,6 @@ export default function ProvidersPage() {
             </div>
           )}
 
-          <CliAuthSection />
         </div>
       )}
 

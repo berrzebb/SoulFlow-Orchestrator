@@ -18,6 +18,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { to: "/workflows", key: "nav.workflows", icon: "\u25b7" },
       { to: "/kanban", key: "nav.kanban", icon: "\u25a3" },
+      { to: "/wbs", key: "nav.wbs", icon: "\u2630" },
       { to: "/workspace", key: "nav.workspace", icon: "\u25a6" },
     ],
   },

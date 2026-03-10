@@ -90,8 +90,12 @@ export function safe_stringify(value: unknown): string {
 /** unknown 에러를 메시지 문자열로 변환. */
 export function error_message(e: unknown): string {
   if (!(e instanceof Error)) return String(e);
-  // Node.js fetch 등 래퍼 에러는 .cause에 실제 원인이 있음
-  if (e.cause instanceof Error) return `${e.message}: ${e.cause.message}`;
+  // Node.js fetch 등 래퍼 에러 — .cause.message가 없으면 .code(ECONNRESET 등) 사용
+  if (e.cause instanceof Error) {
+    const cause = e.cause as Error & { code?: string };
+    const detail = cause.message || cause.code || "";
+    return detail ? `${e.message}: ${detail}` : e.message;
+  }
   return e.message;
 }
 

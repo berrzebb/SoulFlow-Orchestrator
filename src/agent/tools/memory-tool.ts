@@ -7,15 +7,15 @@ import type { JsonSchema } from "./types.js";
 export class MemoryTool extends Tool {
   readonly name = "memory";
   readonly category = "memory" as const;
-  readonly description = "메모리 조회·검색·갱신. action=search|read_longterm|write_longterm|append_longterm|read_daily|list_daily|append_daily";
+  readonly description = "메모리 조회·검색·갱신. action=search|read_longterm|append_longterm|read_daily|list_daily|append_daily";
   readonly parameters: JsonSchema = {
     type: "object",
     required: ["action"],
     properties: {
-      action: { type: "string", enum: ["search", "read_longterm", "write_longterm", "append_longterm", "read_daily", "list_daily", "append_daily"] },
+      action: { type: "string", enum: ["search", "read_longterm", "append_longterm", "read_daily", "list_daily", "append_daily"] },
       query: { type: "string", description: "search 시 검색어" },
       day: { type: "string", description: "YYYY-MM-DD 형식 날짜 (read_daily/append_daily)" },
-      content: { type: "string", description: "write_longterm/append_longterm/append_daily 시 내용" },
+      content: { type: "string", description: "append_longterm/append_daily 시 추가할 내용" },
       limit: { type: "integer", minimum: 1, maximum: 200, description: "search 결과 최대 수 (기본 20)" },
     },
   };
@@ -42,13 +42,6 @@ export class MemoryTool extends Tool {
     if (action === "read_longterm") {
       const content = await this.store.read_longterm();
       return content || "(장기 메모리 비어 있음)";
-    }
-
-    if (action === "write_longterm") {
-      const content = String(params.content || "").trim();
-      if (!content) return "Error: content is required for write_longterm";
-      await this.store.write_longterm(content);
-      return "장기 메모리 덮어쓰기 완료.";
     }
 
     if (action === "append_longterm") {

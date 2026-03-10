@@ -1,9 +1,8 @@
-/** CLI 에이전트(Claude Code, Codex)의 OAuth 인증 상태 확인 및 로그인 플로우 관리. */
+/** CLI 에이전트(Claude Code, Codex, Gemini)의 인증 상태 확인. 로그인은 CLI에서 직접 수행. */
 
-import { execFile, spawn, type ChildProcess } from "node:child_process";
+import { execFile } from "node:child_process";
 import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { EventEmitter } from "node:events";
 import type { Logger } from "../logger.js";
 
 // ── 타입 ───────────────────────────────────────────────────────────────────────
@@ -17,42 +16,17 @@ export interface CliAuthStatus {
   error?: string;
 }
 
-export interface LoginProgress {
-  cli: CliType;
-  state: "waiting_url" | "url_ready" | "completed" | "failed";
-  login_url?: string;
-  error?: string;
-}
-
-// ── CLI별 로그인 커맨드 ──────────────────────────────────────────────────────────
-
-const LOGIN_COMMANDS: Record<CliType, { cmd: string; args: string[] }> = {
-  claude: { cmd: "claude", args: ["login"] },
-  codex: { cmd: "codex", args: ["auth", "login"] },
-  gemini: { cmd: "gemini", args: ["auth", "login"] },
-};
-
-// ── URL 추출 정규식 ────────────────────────────────────────────────────────────
-
-const URL_PATTERN = /https?:\/\/[^\s"'<>]+/;
-
 // ── 서비스 ─────────────────────────────────────────────────────────────────────
 
 export interface CliAuthServiceOptions {
   logger: Logger;
 }
 
-export class CliAuthService extends EventEmitter {
+export class CliAuthService {
   private readonly logger: Logger;
-  private readonly login_processes = new Map<CliType, ChildProcess>();
   private readonly status_cache = new Map<CliType, CliAuthStatus>();
-  private readonly login_progress_cache = new Map<CliType, LoginProgress>();
-  private readonly oauth_ports = new Map<CliType, number>();
-  /** localhost URL 전체 (포트 + 경로). 프록시 라우트에서 경로 복원에 사용. */
-  private readonly oauth_local_urls = new Map<CliType, string>();
 
   constructor(opts: CliAuthServiceOptions) {
-    super();
     this.logger = opts.logger;
   }
 
@@ -82,21 +56,6 @@ export class CliAuthService extends EventEmitter {
   /** 모든 CLI의 캐시된 상태 반환. */
   get_all_cached(): CliAuthStatus[] {
     return [this.get_cached("claude"), this.get_cached("codex"), this.get_cached("gemini")];
-  }
-
-  /** 진행 중인 로그인의 최신 진행 상태 반환 (URL 폴링용). */
-  get_login_progress(cli: CliType): LoginProgress | null {
-    return this.login_progress_cache.get(cli) ?? null;
-  }
-
-  /** localhost OAuth 서버 포트 반환 (HTTP 프록시 라우트용). */
-  get_oauth_port(cli: CliType): number | null {
-    return this.oauth_ports.get(cli) ?? null;
-  }
-
-  /** localhost OAuth 서버 전체 URL 반환 (경로 복원용). */
-  get_oauth_local_url(cli: CliType): string | null {
-    return this.oauth_local_urls.get(cli) ?? null;
   }
 
   // ── Claude Code ────────────────────────────────────────────────────────────
@@ -197,179 +156,6 @@ export class CliAuthService extends EventEmitter {
     }
 
     return { cli: "gemini", authenticated: false, error: "no auth files in ~/.gemini/" };
-  }
-
-  // ── 로그인 플로우 ──────────────────────────────────────────────────────────
-
-  /** OAuth 로그인 프로세스를 시작. stdout에서 로그인 URL을 파싱하여 반환. */
-  start_login(cli: CliType): Promise<LoginProgress> {
-    if (this.login_processes.has(cli)) {
-      return Promise.resolve({
-        cli,
-        state: "failed",
-        error: "Login already in progress",
-      });
-    }
-
-    const { cmd, args } = LOGIN_COMMANDS[cli];
-    this.oauth_ports.delete(cli);       // 이전 세션 포트 초기화
-    this.oauth_local_urls.delete(cli);
-    this.logger.info("starting CLI login", { cli });
-
-    return new Promise<LoginProgress>((resolve) => {
-      const proc = spawn(cmd, args, {
-        stdio: ["pipe", "pipe", "pipe"],
-        timeout: 120_000,
-      });
-
-      this.login_processes.set(cli, proc);
-      let url_found = false;      // URL이 출력에서 감지됐는지 (중복 on_url_found 방지)
-      let promise_resolved = false; // Promise.resolve()가 호출됐는지 (초기 응답 한 번만)
-      let stdout_buf = "";
-      let stderr_buf = "";
-
-      const emit_progress = (p: LoginProgress) => {
-        this.login_progress_cache.set(cli, p);
-        this.emit("login_progress", p);
-      };
-
-      const try_extract_url = (buf: string): string | null => {
-        const m = buf.match(URL_PATTERN);
-        return m ? m[0] : null;
-      };
-
-      /** 출력에서 "Enter 입력 대기" 패턴을 감지하면 stdin에 \n 전송. */
-      const try_send_enter = (buf: string) => {
-        const ENTER_PATTERNS = /press\s+enter|hit\s+enter|press\s+return|\[enter\]|\(enter\)/i;
-        if (ENTER_PATTERNS.test(buf)) {
-          proc.stdin?.write("\n");
-        }
-      };
-
-      // 비-TTY 환경에서도 초기 프롬프트를 넘기기 위해 1초 후 Enter 전송
-      const initial_enter_timer = setTimeout(() => {
-        if (!url_found) proc.stdin?.write("\n");
-      }, 1_000);
-
-      const on_url_found = (raw_url: string) => {
-        url_found = true;
-        clearTimeout(initial_enter_timer);
-        // localhost URL이면 포트 + 전체 URL 저장 (프록시 경로 복원에 사용)
-        const local_match = raw_url.match(/https?:\/\/(localhost|127\.0\.0\.1):(\d+)/);
-        if (local_match) {
-          this.oauth_ports.set(cli, parseInt(local_match[2]));
-          this.oauth_local_urls.set(cli, raw_url);
-        } else {
-          // OAuth 공급자 URL에 localhost redirect_uri가 포함된 경우
-          // 예: https://claude.ai/oauth/authorize?...&redirect_uri=http://localhost:8400/callback
-          try {
-            const u = new URL(raw_url);
-            const ruri = u.searchParams.get("redirect_uri");
-            if (ruri) {
-              const port_m = ruri.match(/https?:\/\/(?:localhost|127\.0\.0\.1):(\d+)/);
-              if (port_m) this.oauth_ports.set(cli, parseInt(port_m[1]));
-            }
-          } catch { /* URL 파싱 실패 무시 */ }
-        }
-        const p: LoginProgress = { cli, state: "url_ready", login_url: raw_url };
-        emit_progress(p);
-        if (!promise_resolved) { promise_resolved = true; resolve(p); }
-      };
-
-      proc.stdout?.on("data", (chunk: Buffer) => {
-        stdout_buf += chunk.toString();
-        if (!url_found) {
-          try_send_enter(stdout_buf);
-          const u = try_extract_url(stdout_buf);
-          if (u) on_url_found(u);
-        }
-      });
-
-      proc.stderr?.on("data", (chunk: Buffer) => {
-        stderr_buf += chunk.toString();
-        if (!url_found) {
-          try_send_enter(stderr_buf);
-          const u = try_extract_url(stderr_buf);
-          if (u) on_url_found(u);
-        }
-      });
-
-      proc.on("close", async (code) => {
-        clearTimeout(initial_enter_timer);
-        this.login_processes.delete(cli);
-        if (code === 0) {
-          const status = await this.check(cli);
-          const p: LoginProgress = {
-            cli,
-            state: status.authenticated ? "completed" : "failed",
-            error: status.authenticated ? undefined : "Login completed but auth check failed",
-          };
-          emit_progress(p);
-          // 인증 완료 시에만 포트 정리 — URL 출력 후 바로 종료하는 CLI(Codex 등)는
-          // OAuth 콜백이 아직 안 왔을 수 있으므로 포트를 유지해야 함
-          if (status.authenticated) {
-            this.oauth_ports.delete(cli);
-            this.oauth_local_urls.delete(cli);
-          }
-          if (!promise_resolved) { promise_resolved = true; resolve(p); }
-        } else {
-          const p: LoginProgress = {
-            cli,
-            state: "failed",
-            error: stderr_buf.trim() || `Process exited with code ${code}`,
-          };
-          emit_progress(p);
-          if (!promise_resolved) { promise_resolved = true; resolve(p); }
-        }
-        this.login_progress_cache.delete(cli);
-      });
-
-      proc.on("error", (err) => {
-        clearTimeout(initial_enter_timer);
-        this.login_processes.delete(cli);
-        const p: LoginProgress = { cli, state: "failed", error: err.message };
-        emit_progress(p);
-        this.login_progress_cache.delete(cli);
-        if (!promise_resolved) { promise_resolved = true; resolve(p); }
-      });
-
-      // URL이 10초 내에 안 나오면 waiting_url 상태로 반환 (프로세스는 계속 실행)
-      // url_found를 건드리지 않아 이후 URL이 출력되면 계속 감지함
-      setTimeout(() => {
-        if (!promise_resolved) {
-          promise_resolved = true;
-          const p: LoginProgress = { cli, state: "waiting_url" };
-          this.login_progress_cache.set(cli, p);
-          resolve(p);
-        }
-      }, 10_000);
-    });
-  }
-
-  /** 진행 중인 로그인 프로세스 취소. */
-  cancel_login(cli: CliType): boolean {
-    const proc = this.login_processes.get(cli);
-    if (!proc) return false;
-
-    proc.kill("SIGTERM");
-    this.login_processes.delete(cli);
-    this.login_progress_cache.delete(cli);
-    this.oauth_ports.delete(cli);
-    this.oauth_local_urls.delete(cli);
-    this.logger.info("login cancelled", { cli });
-    return true;
-  }
-
-  /** 진행 중인 모든 로그인 프로세스 정리. */
-  dispose(): void {
-    for (const [cli, proc] of this.login_processes) {
-      proc.kill("SIGTERM");
-      this.logger.debug("disposing login process", { cli });
-    }
-    this.login_processes.clear();
-    this.login_progress_cache.clear();
-    this.oauth_ports.clear();
-    this.oauth_local_urls.clear();
   }
 }
 

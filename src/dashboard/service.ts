@@ -330,11 +330,6 @@ export interface DashboardCliAuthOps {
   get_status(): Array<{ cli: string; authenticated: boolean; account?: string; error?: string }>;
   check(cli: string): Promise<{ cli: string; authenticated: boolean; account?: string; error?: string }>;
   check_all(): Promise<Array<{ cli: string; authenticated: boolean; account?: string; error?: string }>>;
-  start_login(cli: string): Promise<{ cli: string; state: string; login_url?: string; error?: string }>;
-  get_login_progress(cli: string): { cli: string; state: string; login_url?: string; error?: string } | null;
-  get_oauth_port(cli: string): number | null;
-  get_oauth_local_url(cli: string): string | null;
-  cancel_login(cli: string): { ok: boolean };
 }
 
 export type DashboardOptions = {
