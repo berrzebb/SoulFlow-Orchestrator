@@ -1,5 +1,6 @@
 import type { CommandContext, CommandHandler } from "./types.js";
 import { escape_regexp } from "../../utils/common.js";
+import { levenshtein } from "../../utils/string-match.js";
 
 /** 등록된 핸들러를 순회하며 첫 번째 매칭되는 핸들러에 위임. 오타 시 퍼지 매칭. */
 export class CommandRouter {
@@ -59,25 +60,5 @@ export class CommandRouter {
       message: { ...ctx.message, content: fixed_content },
     };
   }
-}
-
-function levenshtein(a: string, b: string): number {
-  if (a === b) return 0;
-  if (!a.length) return b.length;
-  if (!b.length) return a.length;
-  const m = a.length;
-  const n = b.length;
-  let prev = Array.from({ length: n + 1 }, (_, i) => i);
-  let curr = new Array<number>(n + 1);
-  for (let i = 1; i <= m; i++) {
-    curr[0] = i;
-    for (let j = 1; j <= n; j++) {
-      curr[j] = a[i - 1] === b[j - 1]
-        ? prev[j - 1]
-        : 1 + Math.min(prev[j - 1], prev[j], curr[j - 1]);
-    }
-    [prev, curr] = [curr, prev];
-  }
-  return prev[n];
 }
 
