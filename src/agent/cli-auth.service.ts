@@ -222,12 +222,27 @@ export class CliAuthService extends EventEmitter {
         return m ? m[0] : null;
       };
 
+      /** 출력에서 "Enter 입력 대기" 패턴을 감지하면 stdin에 \n 전송. */
+      const try_send_enter = (buf: string) => {
+        const ENTER_PATTERNS = /press\s+enter|hit\s+enter|press\s+return|\[enter\]|\(enter\)/i;
+        if (ENTER_PATTERNS.test(buf)) {
+          proc.stdin?.write("\n");
+        }
+      };
+
+      // 비-TTY 환경에서도 초기 프롬프트를 넘기기 위해 1초 후 Enter 전송
+      const initial_enter_timer = setTimeout(() => {
+        if (!url_resolved) proc.stdin?.write("\n");
+      }, 1_000);
+
       proc.stdout?.on("data", (chunk: Buffer) => {
         stdout_buf += chunk.toString();
         if (!url_resolved) {
+          try_send_enter(stdout_buf);
           const url = try_extract_url(stdout_buf);
           if (url) {
             url_resolved = true;
+            clearTimeout(initial_enter_timer);
             const p: LoginProgress = { cli, state: "url_ready", login_url: url };
             emit_progress(p);
             resolve(p);
@@ -238,9 +253,11 @@ export class CliAuthService extends EventEmitter {
       proc.stderr?.on("data", (chunk: Buffer) => {
         stderr_buf += chunk.toString();
         if (!url_resolved) {
+          try_send_enter(stderr_buf);
           const url = try_extract_url(stderr_buf);
           if (url) {
             url_resolved = true;
+            clearTimeout(initial_enter_timer);
             const p: LoginProgress = { cli, state: "url_ready", login_url: url };
             emit_progress(p);
             resolve(p);
@@ -249,6 +266,7 @@ export class CliAuthService extends EventEmitter {
       });
 
       proc.on("close", async (code) => {
+        clearTimeout(initial_enter_timer);
         this.login_processes.delete(cli);
         if (code === 0) {
           const status = await this.check(cli);
@@ -272,6 +290,7 @@ export class CliAuthService extends EventEmitter {
       });
 
       proc.on("error", (err) => {
+        clearTimeout(initial_enter_timer);
         this.login_processes.delete(cli);
         const p: LoginProgress = { cli, state: "failed", error: err.message };
         emit_progress(p);
