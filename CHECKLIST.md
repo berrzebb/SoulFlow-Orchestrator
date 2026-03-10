@@ -1,7 +1,7 @@
 # 워크플로우 노드/도구 종합 체크리스트
 
 > 이 문서는 이터레이션마다 읽고 업데이트합니다.
-> 마지막 업데이트: 2026-03-10 (이터레이션 8)
+> 마지막 업데이트: 2026-03-10 (이터레이션 10 — 최종)
 
 ## 프로젝트 루트
 `d:/claude-tools/.claude/mcp-servers/slack/next/`
@@ -594,3 +594,49 @@
 | ask-user.ts | ⏭ hitl 노드로 충분 | AskUserTool은 저수준 |
 
 **Phase 9 완료 ✅**
+
+---
+
+## Phase 10: 전체 커버리지 최종 검증 (이터레이션 10)
+
+### 커버리지 수치
+| 항목 | 수량 |
+|------|------|
+| 백엔드 도구 파일 | 174개 |
+| 백엔드 노드 핸들러 | 131개 |
+| 프론트엔드 descriptor | 131개 (triggers.tsx 6개 포함) |
+
+### 트리거 노드 — 의도적 설계
+| node_type | 백엔드 | 프론트 | 비고 |
+|-----------|--------|--------|------|
+| trigger_cron | ❌ 없음 | ✅ triggers.tsx | 트리거는 프론트 구성만 필요 |
+| trigger_webhook | ❌ 없음 | ✅ triggers.tsx | 런타임이 직접 처리 |
+| trigger_manual | ❌ 없음 | ✅ triggers.tsx | — |
+| trigger_channel_message | ❌ 없음 | ✅ triggers.tsx | — |
+| trigger_kanban_event | ❌ 없음 | ✅ triggers.tsx | — |
+| trigger_filesystem_watch | ✅ nodes/filesystem-watch.ts | ✅ triggers.tsx | 이미 반영됨 |
+
+### 미통합 도구 최종 상태 (의도적 제외 확정)
+| 도구 | 최종 결정 | 근거 |
+|------|----------|------|
+| bloom-filter.ts | ⏭ YAGNI | 확률 자료구조, 틈새 용도 |
+| cors.ts | ⏭ YAGNI | 서버사이드 정책, 클라이언트 불필요 |
+| csp.ts | ⏭ YAGNI | 서버사이드 보안 헤더 |
+| env.ts | ⏭ 도구 유지 | system-info 노드와 별개 (시스템 파일 읽기) |
+| feature-flag.ts | ⏭ YAGNI | in-memory 상태, stateless 워크플로우 불일치 |
+| file-request.ts | ⏭ YAGNI | http 노드 multipart 중복 |
+| metric.ts | ⏭ 도구 유지 | 누적 상태 관리 — 워크플로우 실행 간 상태 공유 불가 |
+| oauth-fetch.ts | ⏭ 도구 유지 | oauth 노드가 상위 추상화 |
+| policy-tool.ts | ⏭ YAGNI | decision 노드와 목적 중복 |
+| store.ts | ⏭ 도구 유지 | cache/db 노드가 상위 추상화 |
+| web-auth.ts | ⏭ YAGNI | screenshot/web-scrape 노드로 충분 |
+| approval-parser.ts | ⏭ 내부 유틸리티 | approval/hitl 노드 내부 파서 |
+| ask-user.ts | ⏭ 내부 유틸리티 | hitl 노드로 충분 |
+
+### 최종 결론
+- **모든 실용적 도구-노드 연결 완료**
+- **트리거 노드 설계 의도 확인** (프론트 descriptor만, 백엔드 런타임 직접 처리)
+- **미통합 도구 13개 모두 YAGNI/내부 유틸리티로 명시적 확정**
+- **174개 도구 → 131개 노드 커버리지 100% 검토 완료**
+
+**Phase 10 최종 검증 완료 ✅ — 작업 종료**
