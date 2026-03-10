@@ -360,7 +360,15 @@ describe("JsonSchemaTool", () => {
   // 미커버 catch 분기 (L49, L61, L66)
   // ══════════════════════════════════════════
 
-  it("merge: schema2 잘못된 JSON → L49 invalid schema2 JSON", async () => {
+  it("merge: schema 잘못된 JSON → L49 invalid schema JSON (merge case)", async () => {
+    const r = JSON.parse(await tool.execute({
+      action: "merge",
+      schema: "{invalid",
+    }));
+    expect(r.error).toContain("invalid schema JSON");
+  });
+
+  it("merge: schema2 잘못된 JSON → L50 invalid schema2 JSON", async () => {
     const r = JSON.parse(await tool.execute({
       action: "merge",
       schema: JSON.stringify({ type: "object" }),

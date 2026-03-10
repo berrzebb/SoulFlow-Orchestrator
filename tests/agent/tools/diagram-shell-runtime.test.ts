@@ -149,6 +149,24 @@ describe("DiagramRenderTool — 유효성 검사", () => {
     const r = await tool.execute({ action: "render", diagram: "graph TD; A-->B", max_chars: Infinity });
     expect(r).toContain("(truncated)");
   });
+
+  it("THEMES가 배열이면 → L19 return {} → names.length=0 → 테마 없이 렌더 (L19)", async () => {
+    const original = (beautiful_mermaid as any).THEMES;
+    (beautiful_mermaid as any).THEMES = []; // array → L19 fires
+    mock_render.mockResolvedValue("<svg>no-theme</svg>");
+    const r = await tool.execute({ action: "render", diagram: "graph TD; A-->B", format: "svg" });
+    (beautiful_mermaid as any).THEMES = original;
+    expect(r).toContain("<svg>");
+  });
+
+  it("THEMES에 비객체 값 포함 → L22 continue (L22)", async () => {
+    const original = (beautiful_mermaid as any).THEMES;
+    (beautiful_mermaid as any).THEMES = { "bad-theme": null, "vercel-dark": { primaryColor: "#000" } };
+    mock_render.mockResolvedValue("<svg>themed</svg>");
+    const r = await tool.execute({ action: "render", diagram: "graph TD; A-->B", format: "svg", theme: "vercel-dark" });
+    (beautiful_mermaid as any).THEMES = original;
+    expect(r).toContain("<svg>");
+  });
 });
 
 // ══════════════════════════════════════════
