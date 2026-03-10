@@ -145,3 +145,23 @@ describe("MarkdownTool — code_block / details", () => {
     expect(r).toContain("</details>");
   });
 });
+
+describe("MarkdownTool — 미커버 분기", () => {
+  it("table: data가 객체 JSON (배열 아님) → L54 Error", async () => {
+    const r = await exec({ operation: "table", data: '{"a":1}' });
+    expect(String(r)).toContain("Error");
+    expect(String(r)).toContain("array");
+  });
+
+  it("list: data가 객체 JSON (배열 아님) → L90 Error", async () => {
+    const r = await exec({ operation: "list", data: '{"a":1}' });
+    expect(String(r)).toContain("Error");
+    expect(String(r)).toContain("array");
+  });
+
+  it("checklist: data가 객체 JSON (배열 아님) → L104 Error", async () => {
+    const r = await exec({ operation: "checklist", data: '{"a":1}' });
+    expect(String(r)).toContain("Error");
+    expect(String(r)).toContain("array");
+  });
+});
