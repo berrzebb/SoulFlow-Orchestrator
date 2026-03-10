@@ -753,6 +753,8 @@ export function GraphEditor({
   };
   const zoomIn = () => zoomTo(1);
   const zoomOut = () => zoomTo(-1);
+  /** 현재 뷰포트 중심 좌표 (SVG 월드 기준) — 노드 피커 버튼 클릭 시 배치 기준점. */
+  const viewport_center = () => ({ x: pan.x + svgSize.w / zoom / 2, y: pan.y + svgSize.h / zoom / 2 });
   /** Fit-to-content 리셋: 모든 노드가 보이도록 줌+팬 조정. */
   const zoomReset = () => {
     const zx = svgSize.w / contentBox.w;
@@ -1245,7 +1247,7 @@ export function GraphEditor({
         <button
           className="graph-editor__add-btn"
           title={t("workflows.add_node")}
-          onClick={() => { setPickerSource(null); setPickerDropPos(null); setPickerOpen(true); }}
+          onClick={() => { setPickerSource(null); setPickerDropPos(viewport_center()); setPickerOpen(true); }}
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         </button>
@@ -1283,7 +1285,7 @@ export function GraphEditor({
           <p>{t("workflows.empty_canvas")}</p>
           <button
             className="btn btn--sm btn--accent"
-            onClick={() => { setPickerSource(null); setPickerDropPos(null); setPickerOpen(true); }}
+            onClick={() => { setPickerSource(null); setPickerDropPos(viewport_center()); setPickerOpen(true); }}
           >
             + {t("workflows.empty_canvas_hint")}
           </button>
