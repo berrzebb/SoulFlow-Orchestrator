@@ -618,8 +618,8 @@ export function GraphEditor({
       return;
     }
 
-    // 특수 타입: End (Output) — 복수 인스턴스 가능
-    if (node_type === "end") {
+    // 특수 타입: End (Output) — 복수 인스턴스 가능 (__end__: NodePicker 특수 ID)
+    if (node_type === "end" || node_type === "__end__") {
       const existing_ends = workflow.end_nodes || [];
       const idx = existing_ends.length + 1;
       const newEnd: EndNodeDef = {
