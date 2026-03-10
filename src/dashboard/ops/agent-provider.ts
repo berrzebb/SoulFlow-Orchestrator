@@ -5,7 +5,7 @@ import { create_logger } from "../../logger.js";
 import { create_agent_provider, list_registered_provider_types } from "../../agent/provider-factory.js";
 import {
   fetch_openrouter_models, fetch_openai_models, fetch_anthropic_models,
-  fetch_gemini_models, fetch_ollama_models, get_static_openai_models,
+  fetch_gemini_models, get_static_openai_models,
 } from "../../services/model-catalog.js";
 import { activate_provider, apply_connection_api_base } from "./shared.js";
 import type { DashboardAgentProviderOps, ProviderConnectionInfo } from "../service.js";
@@ -54,17 +54,17 @@ export function create_agent_provider_ops(deps: {
       case "codex_appserver":
         if (api_key) return fetch_openai_models("https://api.openai.com/v1", api_key);
         return get_static_openai_models();
-      case "ollama":
-        return fetch_ollama_models(
-          // api_base는 /v1 포함 형태일 수 있으므로 올라마 native base로 변환
-          (api_base || "http://ollama:11434").replace(/\/v1\/?$/, ""),
-        );
+      case "ollama": {
+        // vLLM/Ollama 모두 OpenAI 호환 /v1/models 사용
+        const models = await fetch_openai_models(api_base || "http://ollama:11434/v1");
+        return models.map((m) => ({ ...m, provider: "ollama" as const }));
+      }
       case "container_cli": {
         const [a, g, o] = await Promise.all([fetch_anthropic_models(), fetch_gemini_models(), Promise.resolve(get_static_openai_models())]);
         return [...a, ...g, ...o];
       }
       default:
-        if (api_base) return fetch_ollama_models(api_base);
+        if (api_base) return fetch_openai_models(api_base);
         return [];
     }
   }
