@@ -2286,7 +2286,7 @@
   "workflows.import_yaml": "YAML 가져오기",
   "workflows.info_category": "Info category",
   "workflows.input_data": "입력 데이터",
-  "workflows.input_data_secondary": "입력 데이터 (2)",
+  "workflows.input_data_n": "입력 데이터 ({{n}})",
   "workflows.invalid_json": "유효하지 않은 JSON",
   "workflows.invalid_sub_node_id": "유효하지 않은 서브노드 ID",
   "workflows.iterations": "반복",

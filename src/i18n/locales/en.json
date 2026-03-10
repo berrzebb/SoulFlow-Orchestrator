@@ -2286,7 +2286,7 @@
   "workflows.import_yaml": "Import YAML",
   "workflows.info_category": "Info category",
   "workflows.input_data": "Input data",
-  "workflows.input_data_secondary": "Input data (2)",
+  "workflows.input_data_n": "Input data ({{n}})",
   "workflows.invalid_json": "Invalid JSON",
   "workflows.invalid_sub_node_id": "Invalid sub-node ID",
   "workflows.iterations": "iterations",
