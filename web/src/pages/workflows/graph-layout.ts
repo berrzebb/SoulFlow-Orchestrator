@@ -82,15 +82,19 @@ function compute_layers(phases: PhaseDef[]): Map<string, number> {
 /** 한 행에 들어갈 수 있는 최대 서브노드 수 (phase 열 너비 기준). */
 const SUB_MAX_PER_ROW = Math.max(1, Math.floor((NODE_W + GAP_X * 0.4) / (SUB_D + SUB_GAP)));
 
-/** 트리거별 수영 레인 할당 — phase_id → trigger_id 맵.
- *  트리거가 2개 이상일 때만 의미 있음.
- *  직접 depends_on에 trigger.id를 가진 phase부터 BFS로 하위 phase까지 동일 레인 할당.
+/** 트리거별 수영 레인 할당 — phase_id → lane_id 맵.
+ *  - 단일 트리거에서만 도달 가능 → 해당 trigger.id 레인
+ *  - 복수 트리거에서 도달 가능(합류 지점) → "shared" 레인 (모든 트리거 레인 아래 배치)
+ *  - 트리거에서 도달 불가 → "default" 레인
+ *  트리거가 2개 이상일 때만 레인 분리; 이하이면 빈 맵 반환.
  */
 export function compute_trigger_lanes(workflow: WorkflowDef): Map<string, string> {
   const triggers = workflow.trigger_nodes || [];
   const phase_lane = new Map<string, string>();
   if (triggers.length <= 1) return phase_lane;
 
+  // 각 phase에 도달 가능한 trigger_id 집합 계산
+  const reachable_from = new Map<string, Set<string>>();
   for (const trigger of triggers) {
     const roots = workflow.phases
       .filter((p) => p.depends_on?.includes(trigger.id))
@@ -101,13 +105,19 @@ export function compute_trigger_lanes(workflow: WorkflowDef): Map<string, string
       const pid = queue.shift()!;
       if (visited.has(pid)) continue;
       visited.add(pid);
-      if (!phase_lane.has(pid)) phase_lane.set(pid, trigger.id);
+      if (!reachable_from.has(pid)) reachable_from.set(pid, new Set());
+      reachable_from.get(pid)!.add(trigger.id);
       for (const p of workflow.phases) {
         if (p.depends_on?.includes(pid) && !visited.has(p.phase_id)) queue.push(p.phase_id);
       }
     }
   }
-  // 어느 트리거에도 속하지 않는 phase는 "default" 레인
+
+  for (const [phase_id, trigger_set] of reachable_from) {
+    // 하나의 트리거에서만 도달 가능 → 전용 레인, 복수 → 합류 레인
+    phase_lane.set(phase_id, trigger_set.size === 1 ? ([...trigger_set][0] ?? "default") : "shared");
+  }
+  // 트리거와 무관한 phase → default 레인
   for (const p of workflow.phases) {
     if (!phase_lane.has(p.phase_id)) phase_lane.set(p.phase_id, "default");
   }
@@ -146,10 +156,11 @@ export function compute_positions(phases: PhaseDef[], workflow?: WorkflowDef, di
     const use_lanes = phase_lanes.size > 0;
 
     if (use_lanes) {
-      // 수영 레인 배치: 트리거 순서대로 레인을 수직 스택
+      // 수영 레인 배치: 트리거 전용 레인 → shared(합류) → default 순으로 수직 스택
       const trigger_order = new Map((workflow!.trigger_nodes || []).map((t, i) => [t.id, i]));
+      const SPECIAL_ORDER: Record<string, number> = { shared: 9000, default: 9001 };
       const lane_ids = [...new Set([...phase_lanes.values()])].sort(
-        (a, b) => (trigger_order.get(a) ?? 999) - (trigger_order.get(b) ?? 999),
+        (a, b) => (trigger_order.get(a) ?? SPECIAL_ORDER[a] ?? 999) - (trigger_order.get(b) ?? SPECIAL_ORDER[b] ?? 999),
       );
       let lane_y = PADDING;
       for (const lane_id of lane_ids) {
