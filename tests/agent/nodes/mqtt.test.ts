@@ -58,3 +58,11 @@ describe("mqtt_handler", () => {
     expect(result.output).toBeDefined();
   });
 });
+
+describe("mqtt — test() topic 없음 경고 (L51)", () => {
+  it("host 있음 + topic 없음 → 경고 (L51)", () => {
+    const node = { node_id: "n1", node_type: "mqtt", host: "localhost", topic: "", action: "publish" } as any;
+    const result = mqtt_handler.test(node);
+    expect(result.warnings.some((w: string) => w.includes("topic"))).toBe(true);
+  });
+});

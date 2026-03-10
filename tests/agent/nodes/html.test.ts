@@ -78,3 +78,11 @@ describe("html_handler", () => {
     expect(result.output).toBeDefined();
   });
 });
+
+describe("html — test() html 없음 경고 (L44)", () => {
+  it("html 없음 → 'html content is empty' 경고 (L44)", () => {
+    const node = { node_id: "n1", node_type: "html", html: "", action: "render" } as any;
+    const result = html_handler.test(node);
+    expect(result.warnings.some((w: string) => w.includes("html"))).toBe(true);
+  });
+});

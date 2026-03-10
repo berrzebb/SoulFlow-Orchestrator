@@ -78,3 +78,11 @@ describe("phone_handler", () => {
     expect(result.output).toBeDefined();
   });
 });
+
+describe("phone — test() number 없음 경고 (L46)", () => {
+  it("number 없음 + action != 'country_info' → 경고 (L46)", () => {
+    const node = { node_id: "n1", node_type: "phone", number: "", action: "validate" } as any;
+    const result = phone_handler.test(node);
+    expect(result.warnings.some((w: string) => w.includes("number"))).toBe(true);
+  });
+});
