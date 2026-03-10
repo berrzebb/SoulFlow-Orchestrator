@@ -19,6 +19,13 @@ function JsonSchemaEditPanel({ node, update, t }: EditPanelProps) {
       {action === "validate" && (
         <JsonField label={t("workflows.json_schema_data_json")} value={node.data} onUpdate={(v) => update({ data: v })} placeholder='{"key": "value"}' />
       )}
+      {action === "draft_convert" && (
+        <BuilderField label={t("workflows.json_schema_target_draft")}>
+          <select className="input input--sm" value={String(node.target_draft || "draft-07")} onChange={(e) => update({ target_draft: e.target.value })}>
+            {["draft-04", "draft-06", "draft-07", "draft-2019-09", "draft-2020-12"].map((d) => <option key={d} value={d}>{d}</option>)}
+          </select>
+        </BuilderField>
+      )}
       {needs_schema2 && (
         <JsonField label={t("workflows.json_schema_schema2_json")} value={node.schema2} onUpdate={(v) => update({ schema2: v })} placeholder='{"type": "object"}' />
       )}
