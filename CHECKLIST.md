@@ -1,7 +1,7 @@
 # 워크플로우 노드/도구 종합 체크리스트
 
 > 이 문서는 이터레이션마다 읽고 업데이트합니다.
-> 마지막 업데이트: 2026-03-10 (이터레이션 4)
+> 마지막 업데이트: 2026-03-10 (이터레이션 5)
 
 ## 프로젝트 루트
 `d:/claude-tools/.claude/mcp-servers/slack/next/`
@@ -377,6 +377,14 @@
 | semver.ts → semver 노드 신규 구현 | ✅ 완료 |
 | color.ts → color 노드 신규 구현 | ✅ 완료 |
 
+### 추가 통합 (이터레이션 5) — 완료 ✅
+| 작업 | 상태 |
+|------|------|
+| math에 currency 통합 (info/format/convert/list/compare/parse) | ✅ 완료 |
+| encoding에 protobuf 통합 (define/encode/decode/to_proto) | ✅ 완료 |
+| regex에 glob_test/glob_filter 추가 | ✅ 완료 |
+| document-*.ts 4파일 → document.ts 팩토리 통합 (DRY) | ✅ 완료 |
+
 ---
 
 ## Phase 3: i18n 체크
@@ -394,6 +402,11 @@
 - ✅ `workflows.analyzer_mode`
 - ✅ `workflows.http_user_agent`
 - ✅ i18n 중복 키 제거 (이전 세션 실수, en.json/ko.json 정리)
+- ✅ `workflows.math_currency_action/code/amount` (이터레이션 5)
+- ✅ `workflows.encoding_protobuf_schema/hint` (이터레이션 5)
+- ✅ `workflows.field_to` 추가 (이터레이션 5)
+- ✅ url/random/semver/color 신규 노드 i18n 전체 완료 (이터레이션 5)
+- ✅ `workflows.ini_section` / `workflows.ini_key` — yaml.tsx INI query 누락 키 추가 (이터레이션 5)
 
 ---
 
@@ -414,5 +427,52 @@
 5. `feat: hash crc32/adler32 지원, network whois 추가`
 6. `feat: 워크플로우 노드 Phase 2 — 도구 통합 및 액션 확장` — encoding base_convert/msgpack, yaml TOML, validator email, analyzer sentiment, web-scrape robots_txt/sitemap
 7. `fix: Phase 2 타입/i18n 정비` — workflow-node.types.ts 타입 정의 보완, i18n 중복 키 제거, validator create_default 수정
-8. `feat: Phase 3 — url/random/semver/color 신규 노드 추가` — 4개 도구 대응 노드 구현, i18n 완성
-9. (다음) Phase 5 최종 검증 (전체 노드 재검토)
+8. `feat: Phase 3 — url/random/semver/color 신규 노드 추가` — 4개 도구 대응 노드 구현, i18n 완성, math/encoding/regex 추가 통합
+9. `refactor: document 노드 핸들러 4파일 → make_document_handler 팩토리 통합` — DRY 리팩토링
+
+---
+
+## Phase 5: 최종 검증
+
+### 도구-노드 연결 확인 (이터레이션 5)
+| 도구 | 통합 결과 |
+|------|---------|
+| base-convert | ✅ encoding.base_convert |
+| checksum | ✅ hash.crc32/adler32 (ChecksumTool 위임) |
+| dns | ✅ network.dns → DnsTool (MX/TXT/NS/CNAME 지원) |
+| email-validate | ✅ validator.email |
+| glob-match | ✅ regex.glob_test/glob_filter |
+| msgpack | ✅ encoding.msgpack_encode/decode |
+| protobuf | ✅ encoding.protobuf_define/encode/decode/to_proto |
+| robots-txt | ✅ web-scrape.robots_txt |
+| sentiment | ✅ analyzer.sentiment mode |
+| sitemap | ✅ web-scrape.sitemap |
+| slug | ✅ text.filename_safe/transliterate |
+| toml | ✅ yaml.format=toml |
+| url | ✅ 신규 url 노드 |
+| random | ✅ 신규 random 노드 |
+| semver | ✅ 신규 semver 노드 |
+| color | ✅ 신규 color 노드 |
+| currency | ✅ math.currency |
+| user-agent | ✅ http.user_agent 필드 |
+| whois | ✅ network.whois |
+
+### 미통합 도구 (의도적 제외)
+| 도구 | 이유 |
+|------|------|
+| bloom-filter | set-ops와 도메인 다름, 독립 노드로 가치 낮음 |
+| cors | HTTP 요청과 CORS 헤더 생성은 다른 도메인 |
+| country | 독립 노드로 가치 있지만 우선순위 낮음 |
+| dotenv/env | system-info에 통합 가능하나 사용 빈도 낮음 |
+| feature-flag | gate 노드와 의존성 깊음 (store 필요) |
+| file-request | http와 목적 중복, multipart upload는 별도 고려 |
+| geo | 독립 노드 후보지만 현재 충분히 커버됨 |
+| pagination | aggregate와 목적 다름, 독립 노드 후보 |
+| policy-tool | DecisionService store 의존성 — 직접 노드로 적합하지 않음 |
+| tree | file 노드에 통합 가능하나 우선순위 낮음 |
+| vcard | 독립 노드 후보, 사용 빈도 낮음 |
+| web-auth | oauth 노드와 복잡한 통합 필요 |
+
+**결론: 모든 실용적 통합 완료. 나머지는 YAGNI.**
+
+**Phase 5 검증 완료 ✅**

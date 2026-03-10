@@ -2683,6 +2683,8 @@
   "workflows.yaml_error": "YAML 오류",
   "workflows.yaml_parse_error": "YAML 파싱 실패. 오류를 수정한 후 탭을 전환하세요.",
   "workflows.yaml_tab": "YAML",
+  "workflows.ini_section": "INI 섹션",
+  "workflows.ini_key": "INI 키",
   "workflows.action": "액션",
   "workflows.count": "개수",
   "workflows.url": "URL",

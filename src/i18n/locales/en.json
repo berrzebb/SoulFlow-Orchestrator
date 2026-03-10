@@ -2683,6 +2683,8 @@
   "workflows.yaml_error": "YAML Error",
   "workflows.yaml_parse_error": "YAML parsing failed. Fix errors before switching tabs.",
   "workflows.yaml_tab": "YAML",
+  "workflows.ini_section": "INI Section",
+  "workflows.ini_key": "INI Key",
   "workflows.action": "Action",
   "workflows.count": "Count",
   "workflows.url": "URL",
