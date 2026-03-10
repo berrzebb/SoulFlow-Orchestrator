@@ -69,6 +69,7 @@ export class OpenAiCompatibleAgent implements AgentBackend {
     const usage: UsageAccumulator = { input: 0, output: 0, cache_read: 0, cache_creation: 0, cost: 0 };
 
     const on_stream = options.hooks?.on_stream;
+    const model_override = options.model || undefined;
 
     try {
       let raw = await this._call_api(conversation, tools, {
@@ -76,6 +77,7 @@ export class OpenAiCompatibleAgent implements AgentBackend {
         max_tokens: options.max_tokens,
         temperature: options.temperature,
         on_stream,
+        model_override,
       });
       let parsed = parse_openai_response(raw);
       accum_usage(usage, parsed.usage);
@@ -119,6 +121,7 @@ export class OpenAiCompatibleAgent implements AgentBackend {
           max_tokens: options.max_tokens,
           temperature: options.temperature,
           on_stream,
+          model_override,
         });
         parsed = parse_openai_response(raw);
         accum_usage(usage, parsed.usage);
@@ -181,13 +184,15 @@ export class OpenAiCompatibleAgent implements AgentBackend {
       max_tokens?: number;
       temperature?: number;
       on_stream?: (chunk: string) => void | Promise<void>;
+      /** 채팅 UI 등에서 per-run으로 지정한 모델. config.model보다 우선. */
+      model_override?: string;
     },
   ): Promise<Record<string, unknown>> {
     const url = `${this.config.api_base.replace(/\/+$/, "")}/chat/completions`;
     const use_stream = !!options?.on_stream;
 
     const body: Record<string, unknown> = {
-      model: this.config.model,
+      model: options?.model_override || this.config.model,
       messages: sanitize_messages_for_api(messages),
     };
     if (tools.length > 0) {

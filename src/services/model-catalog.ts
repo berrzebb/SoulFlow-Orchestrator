@@ -291,36 +291,31 @@ export async function fetch_gemini_models(api_key?: string): Promise<ModelInfo[]
   }
 }
 
-/** Ollama: /api/tags API. */
+/** Ollama: /api/tags API. 실패 시 throw. */
 export async function fetch_ollama_models(ollama_base: string): Promise<ModelInfo[]> {
   const cache_key = `ollama:${ollama_base}`;
   const cached = from_cache(cache_key);
   if (cached) return cached;
 
-  try {
-    const url = `${ollama_base.replace(/\/$/, "")}/api/tags`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT_MS) });
-    if (!res.ok) { log.warn("ollama /api/tags failed", { status: res.status }); return []; }
+  const url = `${ollama_base.replace(/\/$/, "")}/api/tags`;
+  const res = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT_MS) });
+  if (!res.ok) throw new Error(`Ollama /api/tags 요청 실패 (HTTP ${res.status}): ${url}`);
 
-    const json = await res.json() as { models: Array<{ name: string; size?: number; details?: { family?: string } }> };
+  const json = await res.json() as { models: Array<{ name: string; size?: number; details?: { family?: string } }> };
 
-    const models: ModelInfo[] = (json.models || []).map((m) => {
-      const is_embed = m.name.includes("embed") || m.details?.family === "bert";
-      return {
-        id: m.name,
-        name: m.name,
-        provider: "ollama",
-        purpose: is_embed ? "embedding" : "chat",
-      };
-    });
+  const models: ModelInfo[] = (json.models || []).map((m) => {
+    const is_embed = m.name.includes("embed") || m.details?.family === "bert";
+    return {
+      id: m.name,
+      name: m.name,
+      provider: "ollama",
+      purpose: is_embed ? "embedding" : "chat",
+    };
+  });
 
-    to_cache(cache_key, models);
-    log.info("ollama models fetched", { base: ollama_base, count: models.length });
-    return models;
-  } catch (e) {
-    log.warn("ollama models fetch error", { base: ollama_base, error: String(e) });
-    return [];
-  }
+  to_cache(cache_key, models);
+  log.info("ollama models fetched", { base: ollama_base, count: models.length });
+  return models;
 }
 
 /** OpenAI 정적 카탈로그 (API 키 없을 때 사용). */

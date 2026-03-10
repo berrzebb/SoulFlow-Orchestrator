@@ -1,4 +1,5 @@
 import type { RouteContext } from "../route-context.js";
+import { error_message } from "../../utils/common.js";
 
 export async function handle_agent_provider(ctx: RouteContext): Promise<boolean> {
   const { req, url, res, options, json, read_body } = ctx;
@@ -19,8 +20,12 @@ export async function handle_agent_provider(ctx: RouteContext): Promise<boolean>
     if (!ops) { json(res, 503, { error: "agent_provider_ops_unavailable" }); return true; }
     const provider_type = decodeURIComponent(type_models_match[1]);
     const api_base = url.searchParams.get("api_base") || undefined;
-    const models = await ops.list_models(provider_type, { api_base });
-    json(res, 200, models);
+    try {
+      const models = await ops.list_models(provider_type, { api_base });
+      json(res, 200, models);
+    } catch (e) {
+      json(res, 502, { error: error_message(e) });
+    }
     return true;
   }
 
@@ -68,8 +73,12 @@ export async function handle_agent_provider(ctx: RouteContext): Promise<boolean>
       const conn = await ops.get_connection(config.connection_id);
       if (conn?.api_base) api_base = conn.api_base;
     }
-    const models = await ops.list_models(config.provider_type, { api_base });
-    json(res, 200, models);
+    try {
+      const models = await ops.list_models(config.provider_type, { api_base });
+      json(res, 200, models);
+    } catch (e) {
+      json(res, 502, { error: error_message(e) });
+    }
     return true;
   }
 
@@ -146,8 +155,12 @@ export async function handle_agent_provider(ctx: RouteContext): Promise<boolean>
     const id = decodeURIComponent(conn_models_match[1]);
     const conn = await ops.get_connection(id);
     if (!conn) { json(res, 404, { error: "not_found" }); return true; }
-    const models = await ops.list_models(conn.provider_type, { api_base: conn.api_base });
-    json(res, 200, models);
+    try {
+      const models = await ops.list_models(conn.provider_type, { api_base: conn.api_base });
+      json(res, 200, models);
+    } catch (e) {
+      json(res, 502, { error: error_message(e) });
+    }
     return true;
   }
 
