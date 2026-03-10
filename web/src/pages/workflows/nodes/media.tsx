@@ -1,7 +1,7 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 import { BuilderField, BuilderRowPair } from "../builder-field";
 
-const OPERATIONS = ["detect_type", "extract_metadata", "transcode", "generate_thumbnail", "to_base64", "from_base64"] as const;
+const OPERATIONS = ["detect_type", "extract_metadata", "to_base64", "from_base64"] as const;
 
 function MediaEditPanel({ node, update, t }: EditPanelProps) {
   const op = String(node.operation || "detect_type");
@@ -39,45 +39,7 @@ function MediaEditPanel({ node, update, t }: EditPanelProps) {
           </BuilderField>
         </>
       )}
-      {op === "transcode" && (
-        <BuilderRowPair>
-          <BuilderField label={t("node.media.target_format")}>
-            <input className="input input--sm" value={String(node.target_format || "")}
-              onChange={(e) => update({ target_format: e.target.value })}
-              placeholder="mp4"
-            />
-          </BuilderField>
-          <BuilderField label={t("node.media.output_path")}>
-            <input className="input input--sm" value={String(node.output_path || "")}
-              onChange={(e) => update({ output_path: e.target.value })}
-              placeholder="output.mp4"
-            />
-          </BuilderField>
-        </BuilderRowPair>
-      )}
-      {op === "generate_thumbnail" && (
-        <>
-          <BuilderRowPair>
-            <BuilderField label={t("node.media.thumb_width")}>
-              <input className="input input--sm" type="number" min={1} value={String(node.thumb_width ?? 320)}
-                onChange={(e) => update({ thumb_width: Number(e.target.value) || 320 })}
-              />
-            </BuilderField>
-            <BuilderField label={t("node.media.thumb_height")}>
-              <input className="input input--sm" type="number" min={1} value={String(node.thumb_height ?? 240)}
-                onChange={(e) => update({ thumb_height: Number(e.target.value) || 240 })}
-              />
-            </BuilderField>
-          </BuilderRowPair>
-          <BuilderField label={t("node.media.output_path")}>
-            <input className="input input--sm" value={String(node.output_path || "")}
-              onChange={(e) => update({ output_path: e.target.value })}
-              placeholder="thumbnail.jpg"
-            />
-          </BuilderField>
-        </>
-      )}
-      {op === "to_base64" && (
+{op === "to_base64" && (
         <BuilderField label={t("node.media.mime_override")}>
           <input className="input input--sm" value={String(node.mime_type || "")}
             onChange={(e) => update({ mime_type: e.target.value })}
@@ -107,14 +69,6 @@ export const media_descriptor: FrontendNodeDescriptor = {
     { name: "operation",  type: "string", description: "node.media.input.operation" },
     { name: "input_path", type: "string", description: "node.media.input.input_path" },
   ],
-  create_default: () => ({
-    operation: "detect_type",
-    input_path: "",
-    output_path: "",
-    target_format: "",
-    thumb_width: 320,
-    thumb_height: 240,
-    mime_type: "",
-  }),
+  create_default: () => ({ operation: "detect_type", input_path: "", output_path: "", mime_type: "" }),
   EditPanel: MediaEditPanel,
 };

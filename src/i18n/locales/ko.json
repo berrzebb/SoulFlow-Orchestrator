@@ -2055,6 +2055,7 @@
   "workflows.field_data_2": "데이터 2",
   "workflows.field_datasource": "데이터소스",
   "workflows.field_date": "날짜",
+  "workflows.date_calc_step_days": "간격 (일)",
   "workflows.field_date_2": "날짜 2",
   "workflows.field_delay_ms": "지연 (ms)",
   "workflows.field_diff_text": "Diff 텍스트",

@@ -20,6 +20,11 @@ function DateCalcEditPanel({ node, update, t }: EditPanelProps) {
           <input className="input" value={String(node.date2 || "")} onChange={(e) => update({ date2: e.target.value })} placeholder="2025-12-31" />
         </BuilderField>
       )}
+      {op === "range" && (
+        <BuilderField label={t("workflows.date_calc_step_days")}>
+          <input className="input input--sm" type="number" min={1} value={String(node.step_days ?? 1)} onChange={(e) => update({ step_days: Number(e.target.value) || 1 })} />
+        </BuilderField>
+      )}
       {op === "add" && (
         <BuilderRowPair>
           <BuilderField label={t("workflows.field_amount")}>
@@ -66,6 +71,6 @@ export const date_calc_descriptor: FrontendNodeDescriptor = {
     { name: "operation", type: "string", description: "node.date_calc.input.operation" },
     { name: "date",      type: "string", description: "node.date_calc.input.date" },
   ],
-  create_default: () => ({ operation: "now", date: "", date2: "", amount: 0, unit: "d", from_tz: "UTC", to_tz: "UTC", format: "YYYY-MM-DD" }),
+  create_default: () => ({ operation: "now", date: "", date2: "", amount: 0, unit: "d", from_tz: "UTC", to_tz: "UTC", format: "YYYY-MM-DD", step_days: 1 }),
   EditPanel: DateCalcEditPanel,
 };
