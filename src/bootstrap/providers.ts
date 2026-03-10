@@ -83,7 +83,7 @@ export async function create_provider_bundle(deps: ProviderBundleDeps): Promise<
     openrouter_app_title: (openrouter_config?.settings.app_title as string) || undefined,
     orchestrator_llm_api_key: orchestrator_llm_key,
     orchestrator_llm_api_base:
-      (orchestrator_llm_config?.settings.api_base as string) ||
+      (orchestrator_llm_config ? provider_store.resolve_api_base(orchestrator_llm_config.instance_id) : undefined) ||
       app_config.orchestratorLlm.apiBase ||
       undefined,
     orchestrator_llm_model:
