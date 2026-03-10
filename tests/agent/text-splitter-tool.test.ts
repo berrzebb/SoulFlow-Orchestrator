@@ -78,4 +78,27 @@ describe("TextSplitterTool", () => {
     // chunk_size가 50으로 클램핑됨
     expect(result.chunks[0]).toHaveLength(50);
   });
+
+  describe("sentence", () => {
+    it("문장 단위 분할 (L37-38)", async () => {
+      const text = "First sentence. Second sentence! Third sentence? Fourth sentence.";
+      const result = JSON.parse(await make_tool().execute({
+        action: "sentence", text, chunk_size: 1000, chunk_overlap: 0,
+      }));
+      expect(result.chunk_count).toBeGreaterThanOrEqual(1);
+      expect(Array.isArray(result.chunks)).toBe(true);
+    });
+  });
+
+  describe("regex invalid pattern", () => {
+    it("잘못된 정규식 → catch → split_fixed fallback (L77)", async () => {
+      const text = "a".repeat(200);
+      // "[" is invalid regex
+      const result = JSON.parse(await make_tool().execute({
+        action: "regex", text, separator: "[", chunk_size: 100, chunk_overlap: 0,
+      }));
+      // catch block → split_fixed fallback → chunk_count >= 1
+      expect(result.chunk_count).toBeGreaterThanOrEqual(1);
+    });
+  });
 });

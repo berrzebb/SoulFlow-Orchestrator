@@ -109,6 +109,25 @@ describe("parse_slash_command_from_message", () => {
     const msg = { ...base_msg, content: "hello world" };
     expect(parse_slash_command_from_message(msg)).toBeNull();
   });
+
+  it("metadata.command.args가 배열이 아님 → clean_args [] 반환 (L24)", () => {
+    const msg = {
+      ...base_msg,
+      metadata: { command: { name: "/help", args: "not-an-array", raw: "/help" } },
+    };
+    const result = parse_slash_command_from_message(msg);
+    expect(result).not.toBeNull();
+    expect(result!.args).toEqual([]);
+  });
+
+  it("metadata.command.name이 슬래시만 → normalize 후 빈 name → null (L49)", () => {
+    const msg = {
+      ...base_msg,
+      metadata: { command: { name: "/", args: [], raw: "/" } },
+    };
+    const result = parse_slash_command_from_message(msg);
+    expect(result).toBeNull();
+  });
 });
 
 describe("slash_token_in", () => {

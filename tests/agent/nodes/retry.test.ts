@@ -604,6 +604,44 @@ describe("Retry Node Handler", () => {
       expect(result?.output.succeeded).toBe(true);
     });
 
+    it("linear backoff 실패 시 delay 계산 (L124)", async () => {
+      const node = createMockRetryNode({
+        target_node: "target-1",
+        backoff: "linear",
+        initial_delay_ms: 1,
+        max_attempts: 3,
+      });
+      const ctx = createMockContext();
+      const execute_node = vi.fn()
+        .mockRejectedValueOnce(new Error("first fail"))
+        .mockResolvedValueOnce({ output: { ok: true } });
+      const runner = createMockRunner({
+        all_nodes: [{ node_id: "target-1", node_type: "set", label: "Target" } as OrcheNodeDefinition],
+        execute_node,
+      });
+      const result = await retry_handler.runner_execute?.(node, ctx, runner);
+      expect(result?.output.succeeded).toBe(true);
+    });
+
+    it("unknown backoff → default delay (L126)", async () => {
+      const node = createMockRetryNode({
+        target_node: "target-1",
+        backoff: "unknown_strategy" as any,
+        initial_delay_ms: 1,
+        max_attempts: 3,
+      });
+      const ctx = createMockContext();
+      const execute_node = vi.fn()
+        .mockRejectedValueOnce(new Error("fail"))
+        .mockResolvedValueOnce({ output: { ok: true } });
+      const runner = createMockRunner({
+        all_nodes: [{ node_id: "target-1", node_type: "set", label: "Target" } as OrcheNodeDefinition],
+        execute_node,
+      });
+      const result = await retry_handler.runner_execute?.(node, ctx, runner);
+      expect(result?.output.succeeded).toBe(true);
+    });
+
     it("should handle uses uses depends_on as target", async () => {
       const node = createMockRetryNode({
         target_node: undefined,
