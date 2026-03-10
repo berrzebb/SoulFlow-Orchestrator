@@ -46,7 +46,7 @@ export const tokenizer_descriptor: FrontendNodeDescriptor = {
   toolbar_label: "node.tokenizer.label",
   category: "advanced",
   output_schema: [
-    { name: "result", type: "string", description: "node.tokenizer.output.result" },
+    { name: "result", type: "object", description: "node.tokenizer.output.result" },
     { name: "success", type: "boolean", description: "node.tokenizer.output.success" },
   ],
   input_schema: [

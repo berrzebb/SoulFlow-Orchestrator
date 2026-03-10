@@ -46,7 +46,7 @@ export const state_machine_descriptor: FrontendNodeDescriptor = {
   toolbar_label: "node.state_machine.label",
   category: "advanced",
   output_schema: [
-    { name: "result", type: "string", description: "node.state_machine.output.result" },
+    { name: "result", type: "object", description: "node.state_machine.output.result" },
     { name: "success", type: "boolean", description: "node.state_machine.output.success" },
   ],
   input_schema: [

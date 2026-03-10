@@ -39,7 +39,7 @@ export const password_descriptor: FrontendNodeDescriptor = {
   toolbar_label: "node.password.label",
   category: "advanced",
   output_schema: [
-    { name: "result", type: "string", description: "node.password.output.result" },
+    { name: "result", type: "object", description: "node.password.output.result" },
     { name: "success", type: "boolean", description: "node.password.output.success" },
   ],
   input_schema: [

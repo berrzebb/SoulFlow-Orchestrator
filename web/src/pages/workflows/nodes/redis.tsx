@@ -65,7 +65,7 @@ export const redis_descriptor: FrontendNodeDescriptor = {
   toolbar_label: "node.redis.label",
   category: "integration",
   output_schema: [
-    { name: "result", type: "string", description: "node.redis.output.result" },
+    { name: "result", type: "object", description: "node.redis.output.result" },
     { name: "success", type: "boolean", description: "node.redis.output.success" },
   ],
   input_schema: [

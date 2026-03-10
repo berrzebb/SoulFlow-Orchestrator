@@ -61,7 +61,7 @@ export const s3_descriptor: FrontendNodeDescriptor = {
   toolbar_label: "node.s3.label",
   category: "integration",
   output_schema: [
-    { name: "result", type: "string", description: "node.s3.output.result" },
+    { name: "result", type: "object", description: "node.s3.output.result" },
     { name: "success", type: "boolean", description: "node.s3.output.success" },
   ],
   input_schema: [

@@ -39,7 +39,7 @@ export const cookie_descriptor: FrontendNodeDescriptor = {
   toolbar_label: "node.cookie.label",
   category: "integration",
   output_schema: [
-    { name: "result", type: "string", description: "node.cookie.output.result" },
+    { name: "result", type: "object", description: "node.cookie.output.result" },
     { name: "success", type: "boolean", description: "node.cookie.output.success" },
   ],
   input_schema: [

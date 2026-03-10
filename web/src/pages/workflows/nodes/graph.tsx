@@ -42,7 +42,7 @@ export const graph_descriptor: FrontendNodeDescriptor = {
   toolbar_label: "node.graph.label",
   category: "advanced",
   output_schema: [
-    { name: "result", type: "string", description: "node.graph.output.result" },
+    { name: "result", type: "object", description: "node.graph.output.result" },
     { name: "success", type: "boolean", description: "node.graph.output.success" },
   ],
   input_schema: [

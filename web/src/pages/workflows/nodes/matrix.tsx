@@ -43,7 +43,7 @@ export const matrix_descriptor: FrontendNodeDescriptor = {
   toolbar_label: "node.matrix.label",
   category: "advanced",
   output_schema: [
-    { name: "result", type: "string", description: "node.matrix.output.result" },
+    { name: "result", type: "object", description: "node.matrix.output.result" },
     { name: "success", type: "boolean", description: "node.matrix.output.success" },
   ],
   input_schema: [

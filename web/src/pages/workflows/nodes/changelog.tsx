@@ -47,7 +47,7 @@ export const changelog_descriptor: FrontendNodeDescriptor = {
   toolbar_label: "node.changelog.label",
   category: "advanced",
   output_schema: [
-    { name: "result", type: "string", description: "node.changelog.output.result" },
+    { name: "result", type: "object", description: "node.changelog.output.result" },
     { name: "success", type: "boolean", description: "node.changelog.output.success" },
   ],
   input_schema: [
