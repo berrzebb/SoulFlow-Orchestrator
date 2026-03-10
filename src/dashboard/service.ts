@@ -332,6 +332,7 @@ export interface DashboardCliAuthOps {
   check_all(): Promise<Array<{ cli: string; authenticated: boolean; account?: string; error?: string }>>;
   start_login(cli: string): Promise<{ cli: string; state: string; login_url?: string; error?: string }>;
   get_login_progress(cli: string): { cli: string; state: string; login_url?: string; error?: string } | null;
+  get_oauth_port(cli: string): number | null;
   cancel_login(cli: string): { ok: boolean };
 }
 

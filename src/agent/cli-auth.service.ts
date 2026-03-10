@@ -47,6 +47,7 @@ export class CliAuthService extends EventEmitter {
   private readonly login_processes = new Map<CliType, ChildProcess>();
   private readonly status_cache = new Map<CliType, CliAuthStatus>();
   private readonly login_progress_cache = new Map<CliType, LoginProgress>();
+  private readonly oauth_ports = new Map<CliType, number>();
 
   constructor(opts: CliAuthServiceOptions) {
     super();
@@ -84,6 +85,11 @@ export class CliAuthService extends EventEmitter {
   /** 진행 중인 로그인의 최신 진행 상태 반환 (URL 폴링용). */
   get_login_progress(cli: CliType): LoginProgress | null {
     return this.login_progress_cache.get(cli) ?? null;
+  }
+
+  /** localhost OAuth 서버 포트 반환 (HTTP 프록시 라우트용). */
+  get_oauth_port(cli: CliType): number | null {
+    return this.oauth_ports.get(cli) ?? null;
   }
 
   // ── Claude Code ────────────────────────────────────────────────────────────
@@ -235,18 +241,23 @@ export class CliAuthService extends EventEmitter {
         if (!url_resolved) proc.stdin?.write("\n");
       }, 1_000);
 
+      const on_url_found = (raw_url: string) => {
+        url_resolved = true;
+        clearTimeout(initial_enter_timer);
+        // localhost URL이면 포트 저장 (OAuth 프록시 라우트에서 사용)
+        const local_match = raw_url.match(/https?:\/\/(localhost|127\.0\.0\.1):(\d+)/);
+        if (local_match) this.oauth_ports.set(cli, parseInt(local_match[2]));
+        const p: LoginProgress = { cli, state: "url_ready", login_url: raw_url };
+        emit_progress(p);
+        resolve(p);
+      };
+
       proc.stdout?.on("data", (chunk: Buffer) => {
         stdout_buf += chunk.toString();
         if (!url_resolved) {
           try_send_enter(stdout_buf);
-          const url = try_extract_url(stdout_buf);
-          if (url) {
-            url_resolved = true;
-            clearTimeout(initial_enter_timer);
-            const p: LoginProgress = { cli, state: "url_ready", login_url: url };
-            emit_progress(p);
-            resolve(p);
-          }
+          const u = try_extract_url(stdout_buf);
+          if (u) on_url_found(u);
         }
       });
 
@@ -254,14 +265,8 @@ export class CliAuthService extends EventEmitter {
         stderr_buf += chunk.toString();
         if (!url_resolved) {
           try_send_enter(stderr_buf);
-          const url = try_extract_url(stderr_buf);
-          if (url) {
-            url_resolved = true;
-            clearTimeout(initial_enter_timer);
-            const p: LoginProgress = { cli, state: "url_ready", login_url: url };
-            emit_progress(p);
-            resolve(p);
-          }
+          const u = try_extract_url(stderr_buf);
+          if (u) on_url_found(u);
         }
       });
 
@@ -318,6 +323,7 @@ export class CliAuthService extends EventEmitter {
     proc.kill("SIGTERM");
     this.login_processes.delete(cli);
     this.login_progress_cache.delete(cli);
+    this.oauth_ports.delete(cli);
     this.logger.info("login cancelled", { cli });
     return true;
   }
@@ -330,6 +336,7 @@ export class CliAuthService extends EventEmitter {
     }
     this.login_processes.clear();
     this.login_progress_cache.clear();
+    this.oauth_ports.clear();
   }
 }
 

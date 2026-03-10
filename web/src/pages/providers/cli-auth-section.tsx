@@ -137,18 +137,23 @@ export function CliAuthSection() {
         </div>
       )}
 
-      {loginResult?.login_url && (
+      {loginResult?.login_url && (() => {
+        const is_local = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/.test(loginResult.login_url);
+        const effective_url = is_local
+          ? `${window.location.origin}/api/auth/cli/oauth-proxy/${encodeURIComponent(loginResult.cli)}`
+          : loginResult.login_url;
+        return (
         <div className="stat-card cli-auth-section__result">
           <p className="mb-2">
             <strong>{loginResult.cli}</strong> — {t("cli_auth.open_url")}
           </p>
           <a
             className="cli-auth-section__url"
-            href={loginResult.login_url}
+            href={effective_url}
             target="_blank"
             rel="noopener noreferrer"
           >
-            {loginResult.login_url}
+            {effective_url}
           </a>
           <div className="cli-auth-section__actions">
             <button className="btn btn--sm" onClick={() => cancel.mutate(loginResult.cli)}>
@@ -159,7 +164,8 @@ export function CliAuthSection() {
             </button>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {loginResult?.state === "failed" && loginResult.error && (
         <div className="stat-card desk--err cli-auth-section__result">

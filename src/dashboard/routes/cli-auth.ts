@@ -9,7 +9,7 @@ function cli_auth_ops_or_503(ctx: RouteContext) {
 }
 
 export async function handle_cli_auth(ctx: RouteContext): Promise<boolean> {
-  const { req, url, res, options, json, read_body } = ctx;
+  const { req, url, res, options, json, read_body, resolve_request_origin } = ctx;
   const ops = cli_auth_ops_or_503(ctx);
   const path = url.pathname;
 
@@ -65,5 +65,95 @@ export async function handle_cli_auth(ctx: RouteContext): Promise<boolean> {
     return true;
   }
 
+  // GET /api/auth/cli/oauth-proxy/:cli — localhost OAuth 서버 프록시 (redirect_uri 재작성)
+  const proxy_match = path.match(/^\/api\/auth\/cli\/oauth-proxy\/([^/]+)$/);
+  if (proxy_match && req.method === "GET") {
+    if (!ops) return true;
+    const cli = decodeURIComponent(proxy_match[1]);
+    const port = ops.get_oauth_port(cli);
+    if (!port) { json(res, 404, { error: "no active oauth session" }); return true; }
+
+    try {
+      const origin = resolve_request_origin(req);
+      const callback_url = `${origin}/api/auth/cli/oauth-callback/${encodeURIComponent(cli)}`;
+      const target_res = await fetch(`http://localhost:${port}${url.search || "/"}`);
+
+      if (target_res.status >= 300 && target_res.status < 400) {
+        // redirect_uri 재작성: OAuth provider가 콜백을 dashboard로 보내게 함
+        let location = target_res.headers.get("location") || "";
+        location = rewrite_redirect_uri(location, callback_url);
+        res.writeHead(302, { "Location": location, "Cache-Control": "no-store" });
+        res.end();
+      } else {
+        // HTML 응답이면 그대로 전달 (추가 리다이렉트 처리 포함)
+        const content_type = target_res.headers.get("content-type") || "text/html";
+        const body_text = await target_res.text();
+        const rewritten = body_text.replace(
+          /href="(https?:\/\/[^"]*redirect_uri=[^"]+)"/g,
+          (_, href) => `href="${rewrite_redirect_uri(href, callback_url)}"`,
+        );
+        res.writeHead(target_res.status, { "Content-Type": content_type, "Cache-Control": "no-store" });
+        res.end(rewritten);
+      }
+    } catch {
+      json(res, 502, { error: "oauth_server_unreachable" });
+    }
+    return true;
+  }
+
+  // GET /api/auth/cli/oauth-callback/:cli — OAuth 콜백 수신 후 CLI 서버로 포워드
+  const callback_match = path.match(/^\/api\/auth\/cli\/oauth-callback\/([^/]+)$/);
+  if (callback_match && req.method === "GET") {
+    if (!ops) return true;
+    const cli = decodeURIComponent(callback_match[1]);
+    const port = ops.get_oauth_port(cli);
+    if (!port) { json(res, 404, { error: "no active oauth session" }); return true; }
+
+    try {
+      const forward_url = `http://localhost:${port}/callback${url.search || ""}`;
+      const target_res = await fetch(forward_url);
+      const content_type = target_res.headers.get("content-type") || "text/html";
+
+      if (target_res.status >= 300 && target_res.status < 400) {
+        // CLI가 성공 페이지로 리다이렉트 — 대신 완료 페이지 표시
+        res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+        res.end(oauth_done_html(cli));
+      } else {
+        const body_text = await target_res.text();
+        res.writeHead(target_res.status, { "Content-Type": content_type });
+        res.end(body_text);
+      }
+    } catch {
+      // CLI가 이미 토큰을 처리하고 종료했을 수 있음 — 성공으로 간주
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      res.end(oauth_done_html(cli));
+    }
+    return true;
+  }
+
   return false;
+}
+
+/** URL의 redirect_uri 파라미터를 새 값으로 재작성. */
+function rewrite_redirect_uri(url_str: string, new_redirect_uri: string): string {
+  try {
+    const u = new URL(url_str);
+    if (u.searchParams.has("redirect_uri")) {
+      u.searchParams.set("redirect_uri", new_redirect_uri);
+      return u.toString();
+    }
+  } catch { /* URL 파싱 실패 시 원본 반환 */ }
+  return url_str;
+}
+
+function oauth_done_html(cli: string): string {
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Login Complete</title>
+<style>body{font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;background:#0f0f0f;color:#e0e0e0}
+.box{text-align:center;padding:2rem;border:1px solid #333;border-radius:8px;max-width:400px}
+h2{color:#4caf50;margin-bottom:1rem}p{color:#aaa;margin-bottom:1.5rem}
+button{background:#1976d2;color:#fff;border:none;padding:.6rem 1.2rem;border-radius:4px;cursor:pointer;font-size:1rem}
+button:hover{background:#1565c0}</style></head>
+<body><div class="box"><h2>✓ Login Complete</h2>
+<p>${cli} authentication successful. You can close this tab.</p>
+<button onclick="window.close()">Close</button></div></body></html>`;
 }
