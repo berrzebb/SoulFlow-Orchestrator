@@ -1,7 +1,7 @@
 # 워크플로우 노드/도구 종합 체크리스트
 
 > 이 문서는 이터레이션마다 읽고 업데이트합니다.
-> 마지막 업데이트: 2026-03-10 (이터레이션 7)
+> 마지막 업데이트: 2026-03-10 (이터레이션 8)
 
 ## 프로젝트 루트
 `d:/claude-tools/.claude/mcp-servers/slack/next/`
@@ -434,6 +434,7 @@
 12. `fix: geo.tsx DMS placeholder 따옴표 이스케이프 오류 수정`
 13. `feat: Phase 7 — svg/prometheus 신규 노드 추가` — SVG 프리미티브/차트 + Prometheus 메트릭 노드, i18n 완성
 14. `fix: Phase 7 i18n 보충 — pdf/csv/xml/graph/matrix/similarity/tokenizer 스키마 설명 키 추가` — 30개 node.xxx.input/output 누락 키 추가
+15. `feat: Phase 8 — vcard/ascii_art/pagination/tree_data 신규 노드 추가` — 미통합 도구 4개 신규 노드 구현, i18n 완성
 
 ---
 
@@ -539,3 +540,31 @@
 - ✅ geo.tsx DMS placeholder 따옴표 이스케이프 오류 수정
 
 **Phase 7 검증 완료 ✅**
+
+---
+
+## Phase 8: 미통합 도구 신규 노드 추가
+
+### 도구 분석 결과 (이터레이션 8)
+| 도구 | 결정 | 이유 |
+|------|------|------|
+| ascii-art.ts | ✅ 신규 ascii_art 노드 | 텍스트 포매팅 특화 (6 actions) |
+| vcard.ts | ✅ 신규 vcard 노드 | 연락처 포맷 변환 (5 actions) |
+| pagination.ts | ✅ 신규 pagination 노드 | API 메타데이터 계산 (6 actions) |
+| tree.ts | ✅ 신규 tree_data 노드 | 트리 자료구조 알고리즘 (7 actions) |
+| glob-match.ts | ⏭ 이미 regex 노드에 glob_test/glob_filter로 통합 (Phase 2) |
+| cors.ts | ⏭ YAGNI (서버사이드 정책 전용, 워크플로우 클라이언트 불필요) |
+| bloom-filter.ts | ⏭ YAGNI (틈새 확률 자료구조, 사용 빈도 낮음) |
+| feature-flag.ts | ⏭ YAGNI (in-memory 상태, 워크플로우 stateless 특성과 불일치) |
+| web-auth.ts | ⏭ YAGNI (브라우저 자동화 세션, screenshot/web-scrape 노드로 충분) |
+| policy-tool.ts | ⏭ YAGNI (decision 노드와 목적 유사, 중복) |
+
+### 노드 매핑 테이블 추가
+| 노드 | 백엔드 | 도구 | 프론트 |
+|------|--------|------|--------|
+| vcard | nodes/vcard.ts | tools/vcard.ts | nodes/vcard.tsx |
+| ascii_art | nodes/ascii-art.ts | tools/ascii-art.ts | nodes/ascii-art.tsx |
+| pagination | nodes/pagination.ts | tools/pagination.ts | nodes/pagination.tsx |
+| tree_data | nodes/tree-data.ts | tools/tree.ts | nodes/tree-data.tsx |
+
+**Phase 8 완료 ✅**

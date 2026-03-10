@@ -1811,6 +1811,70 @@ export interface JsonPatchNodeDefinition extends NodeBase {
   target?: string;
 }
 
+// ── vCard Node ────────────────────────────────────────
+
+export interface VcardNodeDefinition extends NodeBase {
+  node_type: "vcard";
+  action?: string;
+  name?: string;
+  email?: string;
+  phone?: string;
+  org?: string;
+  /** 직책 (NodeBase.title 충돌 방지). */
+  job_title?: string;
+  url?: string;
+  address?: string;
+  note?: string;
+  vcard?: string;
+  data?: string;
+  version?: string;
+}
+
+// ── ASCII Art Node ────────────────────────────────────
+
+export interface AsciiArtNodeDefinition extends NodeBase {
+  node_type: "ascii_art";
+  action?: string;
+  text?: string;
+  char?: string;
+  width?: number;
+  padding?: number;
+  style?: string;
+  data?: string;
+  headers?: string;
+}
+
+// ── Pagination Node ───────────────────────────────────
+
+export interface PaginationNodeDefinition extends NodeBase {
+  node_type: "pagination";
+  action?: string;
+  page?: number;
+  per_page?: number;
+  total?: number;
+  cursor?: string;
+  next_cursor?: string;
+  prev_cursor?: string;
+  has_more?: boolean;
+  sort_key?: string;
+  last_value?: string;
+  base_url?: string;
+  header?: string;
+}
+
+// ── Tree Data Node ────────────────────────────────────
+
+export interface TreeDataNodeDefinition extends NodeBase {
+  node_type: "tree_data";
+  action?: string;
+  tree?: string;
+  order?: string;
+  target?: string;
+  node_a?: string;
+  node_b?: string;
+  parents?: string;
+}
+
 // ── SVG Node ─────────────────────────────────────────
 
 export interface SvgNodeDefinition extends NodeBase {
@@ -1892,6 +1956,10 @@ export type OrcheNodeType = "http" | "code" | "if" | "merge" | "set" | "split"
   | "json_patch"
   | "svg"
   | "prometheus"
+  | "vcard"
+  | "ascii_art"
+  | "pagination"
+  | "tree_data"
   | "end";
 
 export type OrcheNodeDefinition =
@@ -2029,6 +2097,10 @@ export type OrcheNodeDefinition =
   | JsonPatchNodeDefinition
   | SvgNodeDefinition
   | PrometheusNodeDefinition
+  | VcardNodeDefinition
+  | AsciiArtNodeDefinition
+  | PaginationNodeDefinition
+  | TreeDataNodeDefinition
   | EndNodeDefinition;
 
 export type WorkflowNodeDefinition = PhaseNodeDefinition | OrcheNodeDefinition | TriggerNodeDefinition;

@@ -134,6 +134,10 @@ import { ical_handler } from "./ical.js";
 import { json_patch_handler } from "./json-patch.js";
 import { svg_handler } from "./svg.js";
 import { prometheus_handler } from "./prometheus.js";
+import { vcard_handler } from "./vcard.js";
+import { ascii_art_handler } from "./ascii-art.js";
+import { pagination_handler } from "./pagination.js";
+import { tree_data_handler } from "./tree-data.js";
 
 const ALL_HANDLERS = [
   http_handler,
@@ -272,6 +276,10 @@ const ALL_HANDLERS = [
   json_patch_handler,
   svg_handler,
   prometheus_handler,
+  vcard_handler,
+  ascii_art_handler,
+  pagination_handler,
+  tree_data_handler,
 ];
 
 let registered = false;
