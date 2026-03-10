@@ -2,7 +2,7 @@
  * TtlCacheTool — 미커버 경로 보충.
  * unsupported operation, evict_lru (500개 항목 초과 시 LRU 제거).
  */
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { CacheTool } from "../../../src/agent/tools/ttl-cache.js";
 
 // ══════════════════════════════════════════
@@ -46,5 +46,74 @@ describe("TtlCacheTool — evict_lru (MAX_ENTRIES 초과)", () => {
     const t = new CacheTool();
     // 직접 evict_lru 호출 (store가 비어있어도 안전해야 함)
     expect(() => (t as any).evict_lru()).not.toThrow();
+  });
+});
+
+// ══════════════════════════════════════════
+// 미커버 분기 보충
+// ══════════════════════════════════════════
+
+describe("CacheTool — 미커버 분기", () => {
+  it("set: value > MAX_VALUE_SIZE → Error (L43)", async () => {
+    const t = new CacheTool();
+    const big = "x".repeat(1024 * 256 + 1); // 256KB + 1
+    const r = String(await t.execute({ operation: "set", key: "big", value: big }));
+    expect(r).toContain("Error");
+    expect(r).toContain("exceeds");
+  });
+
+  it("get: key 없음 → Error (L53)", async () => {
+    const t = new CacheTool();
+    const r = String(await t.execute({ operation: "get" }));
+    expect(r).toContain("Error");
+  });
+
+  it("get: evict_expired 통과 후 만료 → L57 delete (Date.now mock)", async () => {
+    const t = new CacheTool();
+    const store = (t as any).store as Map<string, { value: string; expires_at: number; created_at: number; hits: number }>;
+    const T = 1_000_000;
+    // entry expires at T+50 (valid during evict_expired at T, expired during get at T+100)
+    store.set("race-key", { value: "v", expires_at: T + 50, created_at: T - 100, hits: 0 });
+    let call_n = 0;
+    vi.spyOn(Date, "now").mockImplementation(() => call_n++ === 0 ? T : T + 100);
+    const r = String(await t.execute({ operation: "get", key: "race-key" }));
+    vi.restoreAllMocks();
+    expect(r).toContain("Error");
+    expect(store.has("race-key")).toBe(false); // L57: 삭제됨
+  });
+
+  it("invalidate: key 없음 → Error (L66)", async () => {
+    const t = new CacheTool();
+    const r = String(await t.execute({ operation: "invalidate" }));
+    expect(r).toContain("Error");
+  });
+
+  it("has: key 없음 → Error (L71)", async () => {
+    const t = new CacheTool();
+    const r = String(await t.execute({ operation: "has" }));
+    expect(r).toContain("Error");
+  });
+
+  it("stats: evict_expired 통과 후 만료 → expired 카운트 (L83, Date.now mock)", async () => {
+    const t = new CacheTool();
+    const store = (t as any).store as Map<string, { value: string; expires_at: number; created_at: number; hits: number }>;
+    const T = 2_000_000;
+    // entry expires at T+50 → valid during evict_expired(T), expired during stats loop(T+100)
+    store.set("semi-expired", { value: "v", expires_at: T + 50, created_at: T - 100, hits: 0 });
+    let call_n = 0;
+    vi.spyOn(Date, "now").mockImplementation(() => call_n++ === 0 ? T : T + 100);
+    const r = JSON.parse(String(await t.execute({ operation: "stats" })));
+    vi.restoreAllMocks();
+    expect(r.expired).toBe(1); // L83: expired++ 실행됨
+  });
+
+  it("evict_expired: 만료 항목 실제 삭제 (L112)", async () => {
+    const t = new CacheTool();
+    const store = (t as any).store as Map<string, { value: string; expires_at: number; created_at: number; hits: number }>;
+    store.set("old", { value: "v", expires_at: Date.now() - 1000, created_at: Date.now() - 2000, hits: 0 });
+    expect(store.has("old")).toBe(true);
+    // run() 호출 시 evict_expired 실행 → old 삭제
+    await t.execute({ operation: "keys" });
+    expect(store.has("old")).toBe(false); // L112: 삭제됨
   });
 });
