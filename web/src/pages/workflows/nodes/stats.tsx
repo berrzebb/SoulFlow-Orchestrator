@@ -10,8 +10,8 @@ function StatsEditPanel({ node, update, t }: EditPanelProps) {
     <>
       <BuilderField label={t("workflows.operation")} required>
         <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
-          <optgroup label="Statistics">{STATS_OPS.map((o) => <option key={o} value={o}>{o}</option>)}</optgroup>
-          <optgroup label="Time Series">{TIMESERIES_OPS.map((o) => <option key={o} value={o}>{o}</option>)}</optgroup>
+          <optgroup label={t("workflows.stats_group_statistics")}>{STATS_OPS.map((o) => <option key={o} value={o}>{t(`node.action.${o}`)}</option>)}</optgroup>
+          <optgroup label={t("workflows.stats_group_timeseries")}>{TIMESERIES_OPS.map((o) => <option key={o} value={o}>{t(`node.action.${o}`)}</option>)}</optgroup>
         </select>
       </BuilderField>
       <BuilderField label={t("workflows.input_data")}>

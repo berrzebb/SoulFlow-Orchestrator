@@ -15,7 +15,7 @@ function EncodingEditPanel({ node, update, t }: EditPanelProps) {
         <BuilderRowPair>
           <BuilderField label={t("workflows.operation")} required>
             <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
-              {ALL_OPS.map((o) => <option key={o} value={o}>{o}</option>)}
+              {ALL_OPS.map((o) => <option key={o} value={o}>{t(`node.action.${o}`)}</option>)}
             </select>
           </BuilderField>
           <BuilderField label={t("workflows.format")}>
@@ -30,7 +30,7 @@ function EncodingEditPanel({ node, update, t }: EditPanelProps) {
         <>
           <BuilderField label={t("workflows.operation")} required>
             <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
-              {ALL_OPS.map((o) => <option key={o} value={o}>{o}</option>)}
+              {ALL_OPS.map((o) => <option key={o} value={o}>{t(`node.action.${o}`)}</option>)}
             </select>
           </BuilderField>
           <BuilderRowPair>
@@ -69,7 +69,7 @@ function EncodingEditPanel({ node, update, t }: EditPanelProps) {
               op === "msgpack_encode" || op === "protobuf_encode" ? '{"name": "Alice"}'
               : op === "msgpack_decode" || op === "protobuf_decode" ? "hex bytes..."
               : op === "base_convert" ? "255"
-              : op === "protobuf_define" || op === "protobuf_to_proto" ? "(schema used above)"
+              : op === "protobuf_define" || op === "protobuf_to_proto" ? t("node.encoding.schema_above_hint")
               : "Hello World"
             }
             disabled={op === "protobuf_define" || op === "protobuf_to_proto"}

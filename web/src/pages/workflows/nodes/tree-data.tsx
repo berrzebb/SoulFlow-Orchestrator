@@ -22,7 +22,7 @@ function TreeDataEditPanel({ node, update, t }: EditPanelProps) {
       {action === "traverse" && (
         <BuilderField label={t("workflows.tree_data_order")}>
           <select className="input input--sm" value={String(node.order || "pre")} onChange={(e) => update({ order: e.target.value })}>
-            {TRAVERSE_ORDERS.map((o) => <option key={o} value={o}>{o}</option>)}
+            {TRAVERSE_ORDERS.map((o) => <option key={o} value={o}>{t(`node.action.${o}`)}</option>)}
           </select>
         </BuilderField>
       )}

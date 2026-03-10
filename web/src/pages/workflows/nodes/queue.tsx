@@ -8,7 +8,7 @@ function QueueEditPanel({ node, update, t }: EditPanelProps) {
       <BuilderRowPair>
         <BuilderField label={t("workflows.operation")} required>
           <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
-            {["enqueue", "dequeue", "peek", "size", "drain", "list", "clear", "delete"].map((o) => <option key={o} value={o}>{o}</option>)}
+            {["enqueue", "dequeue", "peek", "size", "drain", "list", "clear", "delete"].map((o) => <option key={o} value={o}>{t(`node.action.${o}`)}</option>)}
           </select>
         </BuilderField>
         <BuilderField label={t("workflows.field_queue")}>

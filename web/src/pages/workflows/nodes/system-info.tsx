@@ -5,7 +5,7 @@ function SystemInfoEditPanel({ node, update, t }: EditPanelProps) {
   return (
     <BuilderField label={t("workflows.info_category")}>
       <select autoFocus className="input input--sm" value={String(node.category || "all")} onChange={(e) => update({ category: e.target.value })}>
-        {["all", "os", "uptime", "cpu", "memory", "disk", "network"].map((c) => <option key={c} value={c}>{c}</option>)}
+        {["all", "os", "uptime", "cpu", "memory", "disk", "network"].map((c) => <option key={c} value={c}>{t(`node.action.${c}`)}</option>)}
       </select>
     </BuilderField>
   );

@@ -7,7 +7,7 @@ function DateCalcEditPanel({ node, update, t }: EditPanelProps) {
     <>
       <BuilderField label={t("workflows.operation")} required>
         <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
-          {["now", "add", "diff", "timezone", "business_days", "format", "parse", "day_info", "range"].map((o) => <option key={o} value={o}>{o}</option>)}
+          {["now", "add", "diff", "timezone", "business_days", "format", "parse", "day_info", "range"].map((o) => <option key={o} value={o}>{t(`node.action.${o}`)}</option>)}
         </select>
       </BuilderField>
       {op !== "now" && (

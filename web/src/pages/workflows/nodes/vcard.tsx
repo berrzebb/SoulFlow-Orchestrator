@@ -48,7 +48,7 @@ function VcardEditPanel({ node, update, t }: EditPanelProps) {
             <input className="input input--sm" value={String(node.address || "")} onChange={(e) => update({ address: e.target.value })} placeholder="123 Main St, Seoul" />
           </BuilderField>
           <BuilderField label={t("workflows.vcard_note")}>
-            <input className="input input--sm" value={String(node.note || "")} onChange={(e) => update({ note: e.target.value })} placeholder="Optional note" />
+            <input className="input input--sm" value={String(node.note || "")} onChange={(e) => update({ note: e.target.value })} placeholder={t("node.vcard.note_placeholder")} />
           </BuilderField>
         </>
       )}

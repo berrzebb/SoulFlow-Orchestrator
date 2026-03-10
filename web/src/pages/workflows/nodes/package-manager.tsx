@@ -11,8 +11,8 @@ function PkgManagerEditPanel({ node, update, t }: EditPanelProps) {
     <>
       <BuilderField label={t("workflows.pkg_operation")} required>
         <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
-          <optgroup label="Package Manager">{PKG_OPS.map((o) => <option key={o} value={o}>{o}</option>)}</optgroup>
-          <optgroup label="Dependency Analysis">{DEP_OPS.map((o) => <option key={o} value={o}>{o}</option>)}</optgroup>
+          <optgroup label={t("workflows.pkg_group_manager")}>{PKG_OPS.map((o) => <option key={o} value={o}>{t(`node.action.${o}`)}</option>)}</optgroup>
+          <optgroup label={t("workflows.pkg_group_dependency")}>{DEP_OPS.map((o) => <option key={o} value={o}>{t(`node.action.${o}`)}</option>)}</optgroup>
         </select>
       </BuilderField>
       {!is_dep && (

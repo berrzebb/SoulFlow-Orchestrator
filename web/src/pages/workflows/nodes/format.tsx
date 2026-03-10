@@ -7,7 +7,7 @@ function FormatEditPanel({ node, update, t }: EditPanelProps) {
     <>
       <BuilderField label={t("workflows.operation")} required>
         <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
-          {["number", "currency", "percent", "bytes", "relative_time", "mask", "ordinal", "plural", "duration", "pad", "truncate"].map((o) => <option key={o} value={o}>{o}</option>)}
+          {["number", "currency", "percent", "bytes", "relative_time", "mask", "ordinal", "plural", "duration", "pad", "truncate"].map((o) => <option key={o} value={o}>{t(`node.action.${o}`)}</option>)}
         </select>
       </BuilderField>
       <BuilderField label={t("workflows.field_value")}>
@@ -32,7 +32,7 @@ function FormatEditPanel({ node, update, t }: EditPanelProps) {
         <BuilderRowPair>
           <BuilderField label={t("workflows.field_mask_type")}>
             <select className="input input--sm" value={String(node.mask_type || "custom")} onChange={(e) => update({ mask_type: e.target.value })}>
-              {["email", "phone", "card", "custom"].map((m) => <option key={m} value={m}>{m}</option>)}
+              {["email", "phone", "card", "custom"].map((m) => <option key={m} value={m}>{t(`node.action.${m}`)}</option>)}
             </select>
           </BuilderField>
           <BuilderField label={t("workflows.format_mask_char")}>

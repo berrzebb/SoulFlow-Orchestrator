@@ -7,7 +7,7 @@ function TableEditPanel({ node, update, t }: EditPanelProps) {
     <>
       <BuilderField label={t("workflows.operation")} required>
         <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
-          {["sort", "filter", "group_by", "join", "pivot", "aggregate", "distinct", "slice", "pluck", "count_by"].map((o) => <option key={o} value={o}>{o}</option>)}
+          {["sort", "filter", "group_by", "join", "pivot", "aggregate", "distinct", "slice", "pluck", "count_by"].map((o) => <option key={o} value={o}>{t(`node.action.${o}`)}</option>)}
         </select>
       </BuilderField>
       <BuilderField label={t("workflows.input_data")}>

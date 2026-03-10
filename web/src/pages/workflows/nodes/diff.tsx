@@ -8,7 +8,7 @@ function DiffEditPanel({ node, update, t }: EditPanelProps) {
       <BuilderRowPair>
         <BuilderField label={t("workflows.operation")}>
           <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
-            {["compare", "patch", "stats"].map((o) => <option key={o} value={o}>{o}</option>)}
+            {["compare", "patch", "stats"].map((o) => <option key={o} value={o}>{t(`node.action.${o}`)}</option>)}
           </select>
         </BuilderField>
         <BuilderField label={t("workflows.field_context_lines")} hint={t("workflows.diff_context_lines_hint")}>
@@ -18,10 +18,10 @@ function DiffEditPanel({ node, update, t }: EditPanelProps) {
       {(op === "compare" || op === "stats") && (
         <>
           <BuilderField label={t("workflows.field_old_text")}>
-            <textarea className="input code-textarea" rows={4} value={String(node.old_text || "")} onChange={(e) => update({ old_text: e.target.value })} placeholder="Original text or @file:path" />
+            <textarea className="input code-textarea" rows={4} value={String(node.old_text || "")} onChange={(e) => update({ old_text: e.target.value })} placeholder={t("node.diff.old_text_placeholder")} />
           </BuilderField>
           <BuilderField label={t("workflows.field_new_text")}>
-            <textarea className="input code-textarea" rows={4} value={String(node.new_text || "")} onChange={(e) => update({ new_text: e.target.value })} placeholder="Modified text or @file:path" />
+            <textarea className="input code-textarea" rows={4} value={String(node.new_text || "")} onChange={(e) => update({ new_text: e.target.value })} placeholder={t("node.diff.new_text_placeholder")} />
           </BuilderField>
         </>
       )}

@@ -36,7 +36,7 @@ function CountryEditPanel({ node, update, t }: EditPanelProps) {
         <BuilderField label={t("workflows.country_continent")} required>
           <select className="input input--sm" value={String(node.continent || "")} onChange={(e) => update({ continent: e.target.value })}>
             <option value="">-- select --</option>
-            {["Asia", "Europe", "North America", "South America", "Africa", "Oceania"].map((c) => <option key={c} value={c}>{c}</option>)}
+            {[["Asia","asia"],["Europe","europe"],["North America","north_america"],["South America","south_america"],["Africa","africa"],["Oceania","oceania"]].map(([v,k]) => <option key={v} value={v}>{t(`node.continent.${k}`)}</option>)}
           </select>
         </BuilderField>
       )}

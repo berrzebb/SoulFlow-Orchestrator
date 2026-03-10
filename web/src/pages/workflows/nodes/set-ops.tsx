@@ -7,7 +7,7 @@ function SetOpsEditPanel({ node, update, t }: EditPanelProps) {
     <>
       <BuilderField label={t("workflows.operation")} required>
         <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
-          {["union", "intersection", "difference", "symmetric_difference", "is_subset", "is_superset", "equals", "power_set", "cartesian_product"].map((o) => <option key={o} value={o}>{o}</option>)}
+          {["union", "intersection", "difference", "symmetric_difference", "is_subset", "is_superset", "equals", "power_set", "cartesian_product"].map((o) => <option key={o} value={o}>{t(`node.action.${o}`)}</option>)}
         </select>
       </BuilderField>
       <BuilderField label={t("workflows.field_set_a")}>

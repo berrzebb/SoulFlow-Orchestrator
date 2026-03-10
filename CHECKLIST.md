@@ -680,3 +680,62 @@
 17. `feat: i18n — 노드 액션 드롭다운 및 placeholder 완전 현지화 (이터레이션 10)` — `76cf516`
 
 **Phase 11 완료 ✅ — 모든 드롭다운 및 placeholder 현지화 완료**
+
+---
+
+## Phase 12: i18n 전체 정밀 검증 (이터레이션 12)
+
+### 발견된 추가 누락 케이스
+
+#### A. 액션 배열 미적용 파일 (t() 없이 원문 노출)
+| 파일 | 배열/인라인 | 비고 |
+|------|-----------|------|
+| `archive.tsx` | `["create","extract","list"]` | 인라인 |
+| `compress.tsx` | `["compress","decompress","compress_string","decompress_string"]` | 인라인 (gzip/brotli 제외) |
+| `data-format.tsx` | DATA_OPS + MIME_OPS + HEADER_OPS | 3개 배열, 중복 2곳 |
+| `date-calc.tsx` | `["now","add","diff","timezone","business_days","format","parse","day_info","range"]` | 인라인 |
+| `diff.tsx` | `["compare","patch","stats"]` | 인라인 |
+| `docker.tsx` | `["ps","run","stop","rm","logs","exec","images","inspect"]` | 인라인 |
+| `encoding.tsx` | ALL_OPS (11개) | 3곳 중복 |
+| `format.tsx` | 포맷 액션 + 마스크 타입 | 2개 인라인 |
+| `git.tsx` | git 명령 15개 | 인라인 |
+| `image.tsx` | 이미지 액션 + 포맷 제외 | 인라인 |
+| `lookup.tsx` | 조회 타입 4개 | 인라인 |
+| `package-manager.tsx` | PKG_OPS + DEP_OPS | 2개 배열 |
+| `process.tsx` | `["list","start","stop","info"]` | 인라인 |
+| `queue.tsx` | 큐 액션 8개 (fifo/lifo/priority 제외) | 인라인 |
+| `regex.tsx` | REGEX_OPS (8개) | 배열 |
+| `set-ops.tsx` | 집합 연산 9개 | 인라인 |
+| `stats.tsx` | STATS_OPS + TIMESERIES_OPS | 2개 배열 |
+| `system-info.tsx` | `["all","os","uptime","cpu","memory","disk","network"]` | 인라인 |
+| `table.tsx` | 테이블 액션 10개 (inner/left/right/full 제외) | 인라인 |
+| `text.tsx` | 텍스트 변환 18개 | 인라인 |
+| `tree-data.tsx` | TRAVERSE_ORDERS (pre/in/post/level) | 배열 |
+| `ttl-cache.tsx` | 캐시 액션 7개 | 인라인 2곳 |
+| `validator.tsx` | `["schema","format","rules","email"]` | 인라인 |
+| `country.tsx` | 대륙명 6개 | 별도 `node.continent.*` 키 사용 |
+
+#### B. optgroup label 하드코딩
+| 파일 | 라벨 |
+|------|------|
+| `stats.tsx` | "Statistics", "Time Series" |
+| `data-format.tsx` | "Data Format", "MIME", "HTTP Header" |
+| `package-manager.tsx` | "Package Manager", "Dependency Analysis" |
+| `changelog.tsx` | "Changelog", "License" |
+
+#### C. 추가 placeholder 누락
+| 파일 | 텍스트 |
+|------|--------|
+| `diff.tsx` L21 | "Original text or @file:path" |
+| `diff.tsx` L24 | "Modified text or @file:path" |
+| `vcard.tsx` L51 | "Optional note" |
+| `encoding.tsx` L72 | "(schema used above)" |
+
+#### D. 신규 i18n 키 목록
+| 범주 | 신규 키 | 수량 |
+|------|---------|------|
+| `node.action.*` | decompress, compress_string, decompress_string, unflatten, pick, omit, mime_lookup, mime_detect, mime_parse, mime_reverse, header_parse, header_content_type, header_cache_control, header_authorization, header_content_disposition, now, timezone, business_days, day_info, patch, ps, run, stop, rm, logs, images, inspect, uuid, base_convert, msgpack_encode, msgpack_decode, protobuf_define, protobuf_encode, protobuf_decode, protobuf_to_proto, number, percent, relative_time, mask, ordinal, plural, duration, pad, truncate, email, phone, card, custom, log, commit, pull, fetch, rebase, branch, checkout, stash, tag, show, resize, crop, rotate, thumbnail, http_status, mime_type, country, currency_symbol, install, uninstall, audit, outdated, parse_deps, parse_reqs, dep_tree, circular_deps, dep_stats, dep_compare, start, enqueue, dequeue, peek, size, drain, clear, match, match_all, replace, extract, split, glob_test, glob_filter, union, intersection, difference, symmetric_difference, is_subset, is_superset, equals, power_set, cartesian_product, summary, percentile, histogram, correlation, outliers, moving_average, ema, linear_forecast, anomaly, cumsum, autocorrelation, all, os, uptime, cpu, memory, disk, network, group_by, pivot, aggregate, distinct, slice, pluck, count_by, upper, lower, title, camel, snake, kebab, slugify, filename_safe, transliterate, dedup, similarity, reverse, wrap, trim_lines, pre, in, post, level, invalidate, has, schema, rules | ~115개 |
+| `node.continent.*` | asia, europe, north_america, south_america, africa, oceania | 6개 |
+| `workflows.*` | stats_group_statistics, stats_group_timeseries, data_format_group_data, data_format_group_mime, data_format_group_header, pkg_group_manager, pkg_group_dependency, changelog_group_changelog, changelog_group_license | 9개 |
+| placeholder | node.diff.old_text_placeholder, node.diff.new_text_placeholder, node.vcard.note_placeholder, node.encoding.schema_above_hint | 4개 |
+| **합계** | | **~134개** |

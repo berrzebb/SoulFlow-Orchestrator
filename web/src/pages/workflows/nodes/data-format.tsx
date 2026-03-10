@@ -16,9 +16,9 @@ function DataFormatEditPanel({ node, update, t }: EditPanelProps) {
         <BuilderRowPair>
           <BuilderField label={t("workflows.operation")} required>
             <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
-              <optgroup label="Data Format">{DATA_OPS.map((o) => <option key={o} value={o}>{o}</option>)}</optgroup>
-              <optgroup label="MIME">{MIME_OPS.map((o) => <option key={o} value={o}>{o}</option>)}</optgroup>
-              <optgroup label="HTTP Header">{HEADER_OPS.map((o) => <option key={o} value={o}>{o}</option>)}</optgroup>
+              <optgroup label={t("workflows.data_format_group_data")}>{DATA_OPS.map((o) => <option key={o} value={o}>{t(`node.action.${o}`)}</option>)}</optgroup>
+              <optgroup label={t("workflows.data_format_group_mime")}>{MIME_OPS.map((o) => <option key={o} value={o}>{t(`node.action.${o}`)}</option>)}</optgroup>
+              <optgroup label={t("workflows.data_format_group_header")}>{HEADER_OPS.map((o) => <option key={o} value={o}>{t(`node.action.${o}`)}</option>)}</optgroup>
             </select>
           </BuilderField>
           <BuilderField label={t("workflows.from_format")}>
@@ -30,9 +30,9 @@ function DataFormatEditPanel({ node, update, t }: EditPanelProps) {
       ) : (
         <BuilderField label={t("workflows.operation")} required>
           <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
-            <optgroup label="Data Format">{DATA_OPS.map((o) => <option key={o} value={o}>{o}</option>)}</optgroup>
-            <optgroup label="MIME">{MIME_OPS.map((o) => <option key={o} value={o}>{o}</option>)}</optgroup>
-            <optgroup label="HTTP Header">{HEADER_OPS.map((o) => <option key={o} value={o}>{o}</option>)}</optgroup>
+            <optgroup label={t("workflows.data_format_group_data")}>{DATA_OPS.map((o) => <option key={o} value={o}>{t(`node.action.${o}`)}</option>)}</optgroup>
+            <optgroup label={t("workflows.data_format_group_mime")}>{MIME_OPS.map((o) => <option key={o} value={o}>{t(`node.action.${o}`)}</option>)}</optgroup>
+            <optgroup label={t("workflows.data_format_group_header")}>{HEADER_OPS.map((o) => <option key={o} value={o}>{t(`node.action.${o}`)}</option>)}</optgroup>
           </select>
         </BuilderField>
       )}

@@ -7,7 +7,7 @@ function ProcessEditPanel({ node, update, t }: EditPanelProps) {
     <>
       <BuilderField label={t("workflows.process_operation")}>
         <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
-          {["list", "start", "stop", "info"].map((o) => <option key={o} value={o}>{o}</option>)}
+          {["list", "start", "stop", "info"].map((o) => <option key={o} value={o}>{t(`node.action.${o}`)}</option>)}
         </select>
       </BuilderField>
       {op === "list" && (

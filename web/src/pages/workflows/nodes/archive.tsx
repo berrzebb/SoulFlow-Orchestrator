@@ -7,7 +7,7 @@ function ArchiveEditPanel({ node, update, t }: EditPanelProps) {
       <BuilderRowPair>
         <BuilderField label={t("workflows.archive_operation")} required>
           <select autoFocus className="input input--sm" value={String(node.operation || "list")} onChange={(e) => update({ operation: e.target.value })}>
-            {["create", "extract", "list"].map((o) => <option key={o} value={o}>{o}</option>)}
+            {["create", "extract", "list"].map((o) => <option key={o} value={o}>{t(`node.action.${o}`)}</option>)}
           </select>
         </BuilderField>
         <BuilderField label={t("workflows.archive_format")}>
