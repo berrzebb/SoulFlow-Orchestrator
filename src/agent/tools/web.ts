@@ -6,34 +6,13 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve, isAbsolute, dirname } from "node:path";
 import { Tool } from "./base.js";
 import type { JsonSchema, ToolExecutionContext } from "./types.js";
+import { validate_url as _validate_url } from "./http-utils.js";
 
 const exec_file_async = promisify(execFile);
 
 function validate_url(url: string): string | null {
-  try {
-    const parsed = new URL(url);
-    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-      return `invalid_protocol:${parsed.protocol}`;
-    }
-    // Node.js URL.hostname은 IPv6를 브래킷 포함으로 반환 (예: [::1])
-    const host = parsed.hostname.replace(/^\[|\]$/g, "").toLowerCase();
-    if (
-      host === "localhost" ||
-      host === "0.0.0.0" ||
-      host === "::1" ||
-      host.endsWith(".local") ||
-      /^127\.\d+\.\d+\.\d+$/.test(host) ||
-      /^10\.\d+\.\d+\.\d+$/.test(host) ||
-      /^192\.168\.\d+\.\d+$/.test(host) ||
-      /^169\.254\.\d+\.\d+$/.test(host) ||
-      /^172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+$/.test(host)
-    ) {
-      return "blocked_private_host";
-    }
-    return null;
-  } catch {
-    return "invalid_url";
-  }
+  const result = _validate_url(url);
+  return typeof result === "string" ? result : null;
 }
 
 

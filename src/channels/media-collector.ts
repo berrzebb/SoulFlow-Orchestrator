@@ -5,6 +5,7 @@ import type { InboundMessage } from "../bus/types.js";
 import type { ChannelProvider } from "./types.js";
 import { is_local_reference, resolve_local_reference } from "../utils/local-ref.js";
 import type { Logger } from "../logger.js";
+import { validate_url } from "../agent/tools/http-utils.js";
 
 type ProviderTokens = {
   slack_bot_token?: string;
@@ -21,7 +22,6 @@ export type MediaCollectorOptions = {
 const FILE_EXTENSION_RE = /\.(txt|md|csv|json|xml|yaml|yml|pdf|log|zip|tar|gz|png|jpg|jpeg|webp|gif|mp3|wav|ogg|mp4|mov|webm)(?:$|\?)/i;
 const MAX_REMOTE_FILE_SIZE = 20 * 1024 * 1024;
 const FETCH_TIMEOUT_MS = 15_000;
-const PRIVATE_HOST_RE = /^(?:localhost|127\.|10\.|172\.(?:1[6-9]|2\d|3[01])\.|192\.168\.|169\.254\.|0\.|::1|\[::1\]|fc|fd)/i;
 
 const MIME_TO_EXT: Record<string, string> = {
   "image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp",
@@ -259,13 +259,5 @@ function safe_filename(name: string): string {
 }
 
 function is_private_url(url: string): boolean {
-  try {
-    const parsed = new URL(url);
-    if (!["http:", "https:"].includes(parsed.protocol)) return true;
-    // Node.js URL.hostname은 IPv6를 브래킷 포함으로 반환 (예: [::1])
-    const hostname = parsed.hostname.replace(/^\[|\]$/g, "");
-    return PRIVATE_HOST_RE.test(hostname);
-  } catch {
-    return true;
-  }
+  return typeof validate_url(url) === "string";
 }

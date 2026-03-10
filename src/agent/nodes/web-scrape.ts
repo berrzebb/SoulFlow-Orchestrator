@@ -5,9 +5,7 @@ import type { WebScrapeNodeDefinition, OrcheNodeDefinition } from "../workflow-n
 import type { OrcheNodeExecutorContext, OrcheNodeExecuteResult, OrcheNodeTestResult } from "../orche-node-executor.js";
 import { resolve_templates } from "../orche-node-executor.js";
 import { error_message } from "../../utils/common.js";
-
-const PRIVATE_HOST_RE =
-  /^(localhost|127\.\d+\.\d+\.\d+|::1|0\.0\.0\.0|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+|169\.254\.\d+\.\d+)$/i;
+import { validate_url } from "../tools/http-utils.js";
 
 export const web_scrape_handler: NodeHandler = {
   node_type: "web_scrape",
@@ -35,19 +33,11 @@ export const web_scrape_handler: NodeHandler = {
 
     if (!url_str) return { output: { text: "", title: "", status: 0, error: "url is empty" } };
 
-    let base_url: URL;
-    try {
-      base_url = new URL(url_str);
-      if (base_url.protocol !== "http:" && base_url.protocol !== "https:") {
-        return { output: { text: "", title: "", status: 0, error: `unsupported protocol: ${base_url.protocol}` } };
-      }
-      const hostname = base_url.hostname.replace(/^\[|\]$/g, "");
-      if (PRIVATE_HOST_RE.test(hostname)) {
-        return { output: { text: "", title: "", status: 0, error: `blocked private host: ${base_url.hostname}` } };
-      }
-    } catch {
-      return { output: { text: "", title: "", status: 0, error: "invalid URL" } };
+    const url_result = validate_url(url_str);
+    if (typeof url_result === "string") {
+      return { output: { text: "", title: "", status: 0, error: url_result } };
     }
+    const base_url = url_result;
 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 30_000);

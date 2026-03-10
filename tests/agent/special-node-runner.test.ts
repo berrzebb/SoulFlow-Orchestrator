@@ -283,4 +283,11 @@ describe("node test() warnings", () => {
     const result = test_orche_node(node, base_ctx);
     expect(result.warnings.some((w: string) => w.includes("depends_on"))).toBe(true);
   });
+
+  // L144: 알 수 없는 node_type → throw
+  it("unknown node_type → L144 throw Error", () => {
+    expect(() =>
+      test_orche_node({ node_id: "x", node_type: "totally_unknown_xyz" } as any, base_ctx),
+    ).toThrow("unknown node type");
+  });
 });

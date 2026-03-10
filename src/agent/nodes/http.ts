@@ -4,9 +4,7 @@ import type { NodeHandler } from "../node-registry.js";
 import type { HttpNodeDefinition, OrcheNodeDefinition } from "../workflow-node.types.js";
 import type { OrcheNodeExecutorContext, OrcheNodeExecuteResult, OrcheNodeTestResult } from "../orche-node-executor.js";
 import { resolve_templates, resolve_deep } from "../orche-node-executor.js";
-
-const PRIVATE_HOST_RE =
-  /^(localhost|127\.\d+\.\d+\.\d+|::1|0\.0\.0\.0|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+|169\.254\.\d+\.\d+)$/i;
+import { validate_url } from "../tools/http-utils.js";
 
 export const http_handler: NodeHandler = {
   node_type: "http",
@@ -31,15 +29,8 @@ export const http_handler: NodeHandler = {
     const tpl_ctx = { memory: ctx.memory };
     const url_str = resolve_templates(n.url, tpl_ctx);
 
-    const parsed_url = new URL(url_str);
-    if (parsed_url.protocol !== "http:" && parsed_url.protocol !== "https:") {
-      throw new Error(`unsupported protocol "${parsed_url.protocol}"`);
-    }
-    // Node.js URL.hostname은 IPv6를 브래킷 포함으로 반환 (예: [::1])
-    const hostname = parsed_url.hostname.replace(/^\[|\]$/g, "");
-    if (PRIVATE_HOST_RE.test(hostname)) {
-      throw new Error(`private/loopback host blocked "${parsed_url.hostname}"`);
-    }
+    const parsed_url = validate_url(url_str);
+    if (typeof parsed_url === "string") throw new Error(parsed_url);
 
     const timeout_ms = Math.min(30_000, Math.max(100, n.timeout_ms || 10_000));
     const req_headers: Record<string, string> = {};

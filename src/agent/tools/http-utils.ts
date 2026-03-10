@@ -18,7 +18,7 @@ export function validate_url(url_str: string): URL | string {
   }
   // Node.js URL.hostname은 IPv6를 브래킷 포함으로 반환 (예: [::1])
   const hostname = parsed.hostname.replace(/^\[|\]$/g, "");
-  if (PRIVATE_HOST_RE.test(hostname)) {
+  if (PRIVATE_HOST_RE.test(hostname) || hostname.endsWith(".local")) {
     return `private/loopback host blocked "${parsed.hostname}"`;
   }
   return parsed;

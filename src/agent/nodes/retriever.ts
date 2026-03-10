@@ -6,9 +6,7 @@ import type { NodeHandler, RunnerContext } from "../node-registry.js";
 import type { RetrieverNodeDefinition, OrcheNodeDefinition } from "../workflow-node.types.js";
 import type { OrcheNodeExecutorContext, OrcheNodeExecuteResult, OrcheNodeTestResult } from "../orche-node-executor.js";
 import { resolve_templates } from "../orche-node-executor.js";
-
-const PRIVATE_HOST_RE =
-  /^(localhost|127\.\d+\.\d+\.\d+|::1|0\.0\.0\.0|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+|169\.254\.\d+\.\d+)$/i;
+import { validate_url } from "../tools/http-utils.js";
 
 export const retriever_handler: NodeHandler = {
   node_type: "retriever",
@@ -37,12 +35,8 @@ export const retriever_handler: NodeHandler = {
         const url = resolve_templates(n.url || "", tpl_ctx);
         if (!url) throw new Error("retriever: url is required for http source");
 
-        const parsed = new URL(url);
-        // Node.js URL.hostname은 IPv6를 브래킷 포함으로 반환 (예: [::1])
-        const hostname = parsed.hostname.replace(/^\[|\]$/g, "");
-        if (PRIVATE_HOST_RE.test(hostname)) {
-          throw new Error(`retriever: private/loopback host blocked "${parsed.hostname}"`);
-        }
+        const parsed = validate_url(url);
+        if (typeof parsed === "string") throw new Error(`retriever: ${parsed}`);
 
         const method = n.method || "GET";
         const fetchUrl = method === "GET"
