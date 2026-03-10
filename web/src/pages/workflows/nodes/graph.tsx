@@ -15,7 +15,6 @@ function GraphEditPanel({ node, update, t }: EditPanelProps) {
           </select>
         </BuilderField>
       </BuilderRowPair>
-      <JsonField label={t("workflows.graph_nodes_json")} value={node.nodes} onUpdate={(v) => update({ nodes: v })} placeholder="[1,2,3]" />
       <JsonField label={t("workflows.graph_edges_json")} value={node.edges} onUpdate={(v) => update({ edges: v })} placeholder="[[1,2],[2,3]]" />
       {needs_endpoints && (
         <BuilderRowPair>
@@ -24,7 +23,7 @@ function GraphEditPanel({ node, update, t }: EditPanelProps) {
           </BuilderField>
           {action === "shortest_path" && (
             <BuilderField label={t("workflows.graph_end_node")} required>
-              <input className="input input--sm" required value={String(node.end ?? "")} onChange={(e) => update({ end: e.target.value })} placeholder="3" aria-required="true" />
+              <input className="input input--sm" required value={String(node.end_node ?? "")} onChange={(e) => update({ end_node: e.target.value })} placeholder="3" aria-required="true" />
             </BuilderField>
           )}
         </BuilderRowPair>
@@ -46,9 +45,8 @@ export const graph_descriptor: FrontendNodeDescriptor = {
   ],
   input_schema: [
     { name: "action", type: "string", description: "node.graph.input.action" },
-    { name: "nodes", type: "string", description: "node.graph.input.nodes" },
     { name: "edges", type: "string", description: "node.graph.input.edges" },
   ],
-  create_default: () => ({ action: "bfs", nodes: "", edges: "", start: "", end: "" }),
+  create_default: () => ({ action: "bfs", edges: "", start: "", end_node: "" }),
   EditPanel: GraphEditPanel,
 };

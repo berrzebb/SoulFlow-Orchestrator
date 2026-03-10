@@ -13,18 +13,20 @@ function TokenizerEditPanel({ node, update, t }: EditPanelProps) {
             {ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
           </select>
         </BuilderField>
-        <BuilderField label={t("workflows.field_language")}>
-          <input className="input input--sm" value={String(node.language || "en")} onChange={(e) => update({ language: e.target.value })} placeholder="en" style={{ maxWidth: "80px" }} />
-        </BuilderField>
+        {action === "ngrams" && (
+          <BuilderField label={t("workflows.tokenizer_n")}>
+            <input className="input input--sm" type="number" min={1} max={10} value={String(node.n ?? 2)} onChange={(e) => update({ n: Number(e.target.value) || 2 })} />
+          </BuilderField>
+        )}
+        {(action === "keyword_extract" || action === "tf_idf") && (
+          <BuilderField label={t("workflows.tokenizer_top_k")}>
+            <input className="input input--sm" type="number" min={1} value={String(node.top_k ?? 10)} onChange={(e) => update({ top_k: Number(e.target.value) || 10 })} />
+          </BuilderField>
+        )}
       </BuilderRowPair>
       <BuilderField label={t("workflows.field_text")} required>
         <textarea className="input" required rows={4} value={String(node.text || "")} onChange={(e) => update({ text: e.target.value })} placeholder="Enter text to tokenize..." aria-required="true" />
       </BuilderField>
-      {action === "ngrams" && (
-        <BuilderField label={t("workflows.tokenizer_n")}>
-          <input className="input input--sm" type="number" min={1} max={10} value={String(node.n ?? 2)} onChange={(e) => update({ n: Number(e.target.value) || 2 })} />
-        </BuilderField>
-      )}
     </>
   );
 }
@@ -44,6 +46,6 @@ export const tokenizer_descriptor: FrontendNodeDescriptor = {
     { name: "action", type: "string", description: "node.tokenizer.input.action" },
     { name: "text", type: "string", description: "node.tokenizer.input.text" },
   ],
-  create_default: () => ({ action: "word_tokenize", text: "", language: "en", n: 2 }),
+  create_default: () => ({ action: "word_tokenize", text: "", n: 2, top_k: 10 }),
   EditPanel: TokenizerEditPanel,
 };

@@ -2,9 +2,11 @@ import { BuilderField, BuilderRowPair } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
 const ACTIONS = ["cosine", "jaccard", "levenshtein", "hamming", "dice", "jaro_winkler", "euclidean"];
+const MODES = ["char", "word", "token"];
 
 function SimilarityEditPanel({ node, update, t }: EditPanelProps) {
   const action = String(node.action || "cosine");
+  const has_mode = ["cosine", "jaccard"].includes(action);
   return (
     <>
       <BuilderRowPair>
@@ -13,12 +15,19 @@ function SimilarityEditPanel({ node, update, t }: EditPanelProps) {
             {ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
           </select>
         </BuilderField>
+        {has_mode && (
+          <BuilderField label={t("workflows.similarity_mode")}>
+            <select className="input input--sm" value={String(node.mode || "word")} onChange={(e) => update({ mode: e.target.value })}>
+              {MODES.map((m) => <option key={m} value={m}>{m}</option>)}
+            </select>
+          </BuilderField>
+        )}
       </BuilderRowPair>
       <BuilderField label={t("workflows.similarity_text_a")} required>
-        <input className="input input--sm" required value={String(node.text_a || "")} onChange={(e) => update({ text_a: e.target.value })} placeholder="hello world" aria-required="true" />
+        <input className="input input--sm" required value={String(node.a || "")} onChange={(e) => update({ a: e.target.value })} placeholder="hello world" aria-required="true" />
       </BuilderField>
       <BuilderField label={t("workflows.similarity_text_b")} required>
-        <input className="input input--sm" required value={String(node.text_b || "")} onChange={(e) => update({ text_b: e.target.value })} placeholder="hello there" aria-required="true" />
+        <input className="input input--sm" required value={String(node.b || "")} onChange={(e) => update({ b: e.target.value })} placeholder="hello there" aria-required="true" />
       </BuilderField>
     </>
   );
@@ -37,9 +46,9 @@ export const similarity_descriptor: FrontendNodeDescriptor = {
   ],
   input_schema: [
     { name: "action", type: "string", description: "node.similarity.input.action" },
-    { name: "text_a", type: "string", description: "node.similarity.input.text_a" },
-    { name: "text_b", type: "string", description: "node.similarity.input.text_b" },
+    { name: "a", type: "string", description: "node.similarity.input.a" },
+    { name: "b", type: "string", description: "node.similarity.input.b" },
   ],
-  create_default: () => ({ action: "cosine", text_a: "", text_b: "" }),
+  create_default: () => ({ action: "cosine", a: "", b: "", mode: "word" }),
   EditPanel: SimilarityEditPanel,
 };
