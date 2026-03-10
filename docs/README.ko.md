@@ -14,7 +14,7 @@
 
 Slack · Telegram · Discord 메시지를 **헤드리스 에이전트**로 처리하는 비동기 오케스트레이션 런타임.
 
-8개 에이전트 백엔드(Claude/Codex/Gemini × CLI/SDK + OpenAI 호환 + OpenRouter + 컨테이너), 8개 역할 기반 스킬 시스템, CircuitBreaker 기반 프로바이더 복원력, AES-256-GCM 보안 Vault, OAuth 2.0 연동, 124종 노드 워크플로우 그래프 에디터, 에이전트 기반 WorkflowTool CRUD, React + Vite 웹 대시보드(i18n, 마크다운 렌더링)를 내장한 올인원 솔루션입니다.
+9개 에이전트 백엔드(Claude/Codex/Gemini × CLI/SDK + OpenAI 호환 + OpenRouter + Ollama + 컨테이너), 8개 역할 기반 스킬 시스템, CircuitBreaker 기반 프로바이더 복원력, AES-256-GCM 보안 Vault, OAuth 2.0 연동, 141종 노드 워크플로우 그래프 에디터, 에이전트 기반 WorkflowTool CRUD, React + Vite 웹 대시보드(i18n, 마크다운 렌더링)를 내장한 올인원 솔루션입니다.
 
 ## 목차
 
@@ -43,11 +43,11 @@ flowchart TD
     subgraph Pipeline["처리 파이프라인"]
         direction TB
         SEAL[민감정보 Sealing]
-        CMD[슬래시 커맨드 · 가드 · 23종 핸들러]
+        CMD[슬래시 커맨드 · 가드 · 21종 핸들러]
         ORCH[오케스트레이터 · 분류기 · ToolIndex FTS5]
     end
 
-    subgraph Backends["에이전트 백엔드 (8)"]
+    subgraph Backends["에이전트 백엔드 (9)"]
         direction LR
         CSDK[claude_sdk]
         CCLI[claude_cli]
@@ -56,13 +56,14 @@ flowchart TD
         GCLI[gemini_cli]
         OAI[openai_compatible]
         ORT[openrouter]
+        OLL[ollama]
         CTR[container_cli]
     end
 
     subgraph Workflows["워크플로우 엔진"]
         direction TB
         PL[Phase Loop · Agent/Task Loop]
-        DAG[DAG 실행기 · 120종 노드]
+        DAG[DAG 실행기 · 141종 노드]
         INTERACT[인터랙션 · HITL · 승인 · 폼]
     end
 
@@ -172,7 +173,7 @@ flowchart TD
 | **역할 스킬** | 8개 역할 계층적 분담 | concierge → pm/pl → implementer/reviewer/validator/debugger |
 | **보안 Vault** | AES-256-GCM 민감정보 관리 | 인바운드 자동 sealing · 도구 경로 복호화만 허용 |
 | **OAuth 연동** | 외부 서비스 인증 | GitHub · Google · Custom OAuth 2.0 |
-| **워크플로우 엔진** | Phase Loop · DAG 실행 | 124종 노드 그래프 에디터 · 6개 카테고리 · HITL 인터랙션 노드 |
+| **워크플로우 엔진** | Phase Loop · DAG 실행 | 141종 노드 그래프 에디터 · 6개 카테고리 · HITL 인터랙션 노드 |
 | **메시지 버스** | 내부 이벤트 라우팅 | 인메모리 (기본) · Redis Streams (다중 인스턴스) |
 | **도메인 서비스** | 임베딩 · 벡터 스토어 · 웹훅 · 칸반 | sqlite-vec KNN · 하이브리드 검색 · 칸반 자동화 규칙 |
 | **대시보드** | 웹 기반 실시간 모니터링 | SSE 피드 · 에이전트/태스크/결정/프로바이더 관리 |
@@ -181,7 +182,7 @@ flowchart TD
 
 ### 에이전트 백엔드
 
-`claude_sdk` · `claude_cli` · `codex_appserver` · `codex_cli` · `gemini_cli` · `openai_compatible` · `openrouter` · `container_cli` — CircuitBreaker · 자동 fallback.
+`claude_sdk` · `claude_cli` · `codex_appserver` · `codex_cli` · `gemini_cli` · `openai_compatible` · `openrouter` · `ollama` · `container_cli` — CircuitBreaker · 자동 fallback.
 
 → [에이전트 백엔드 선택 가이드](ko/core-concepts/agents.md)
 
@@ -248,9 +249,9 @@ cd SoulFlow-Orchestrator
 | Channels | `/channels` | 채널 연결 상태 · 글로벌 설정 |
 | Providers | `/providers` | 에이전트 프로바이더 CRUD · Circuit Breaker 상태 |
 | Secrets | `/secrets` | AES-256-GCM 시크릿 관리 |
-| Models | `/models` | 오케스트레이터 LLM 런타임 · 모델 pull/삭제/전환 |
-| Workflows | `/workflows` | Phase Loop 워크플로우 관리 · 120종 노드 그래프 에디터 · 에이전트 채팅 |
-| Kanban | `/kanban` | 드래그앤드롭 칸반 태스크 보드 |
+| Workflows | `/workflows` | Phase Loop 워크플로우 관리 · 141종 노드 그래프 에디터 · 에이전트 채팅 |
+| Kanban | `/kanban` | 드래그앤드롭 칸반 보드 · 자동화 규칙 |
+| WBS | `/wbs` | 칸반 카드 계층 트리 뷰 (parent_id 기반) |
 | Settings | `/settings` | 글로벌 런타임 설정 |
 
 → 상세: [대시보드 가이드](ko/guide/dashboard.md) · [워크플로우 가이드](ko/guide/workflows.md)
@@ -386,7 +387,7 @@ next/
   src/
     agent/
       backends/     ← SDK/AppServer/OpenAI 백엔드 어댑터 (7개)
-      nodes/        ← 124종 워크플로우 노드 핸들러 (OCP 플러그인 아키텍처)
+      nodes/        ← 141종 워크플로우 노드 핸들러 (OCP 플러그인 아키텍처)
       pty/          ← PTY 기반 CLI 통합 (ContainerPool, AgentBus, NDJSON 와이어)
       tools/        ← 에이전트 도구 구현 (oauth_fetch, workflow, ask-user 등)
     bootstrap/      ← 15개 부트스트랩 모듈 (main.ts 분해)
@@ -422,7 +423,7 @@ next/
     skills/         ← 사용자 정의 스킬
     templates/      ← 시스템 프롬프트 템플릿
   web/              ← 대시보드 프론트엔드 (React + Vite + i18n)
-    src/pages/workflows/  ← 그래프 에디터 · 노드 인스펙터 · 124종 노드 UI
+    src/pages/workflows/  ← 그래프 에디터 · 노드 인스펙터 · 141종 노드 UI
   docs/
     diagrams/       ← SVG 아키텍처 다이어그램
     */guide/        ← 사용자 가이드

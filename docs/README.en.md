@@ -12,7 +12,7 @@
 
 An asynchronous orchestration runtime that processes Slack · Telegram · Discord messages through **headless agents**.
 
-The batteries-included solution featuring 8 agent backends (Claude/Codex/Gemini × CLI/SDK + OpenAI-compatible + OpenRouter + container), an 8-role skill system, CircuitBreaker-based provider resilience, AES-256-GCM security vault, OAuth 2.0 integrations, a 124-node workflow graph editor, WorkflowTool for agent-driven CRUD, and a React + Vite web dashboard with i18n and markdown rendering.
+The batteries-included solution featuring 9 agent backends (Claude/Codex/Gemini × CLI/SDK + OpenAI-compatible + OpenRouter + Ollama + container), an 8-role skill system, CircuitBreaker-based provider resilience, AES-256-GCM security vault, OAuth 2.0 integrations, a 141-node workflow graph editor, WorkflowTool for agent-driven CRUD, and a React + Vite web dashboard with i18n and markdown rendering.
 
 ## Table of Contents
 
@@ -41,11 +41,11 @@ flowchart TD
     subgraph Pipeline["Processing Pipeline"]
         direction TB
         SEAL[Sensitive Data Sealing]
-        CMD[Slash Commands · Guard · 23 Handlers]
+        CMD[Slash Commands · Guard · 21 Handlers]
         ORCH[Orchestrator · Classifier · ToolIndex FTS5]
     end
 
-    subgraph Backends["Agent Backends (8)"]
+    subgraph Backends["Agent Backends (9)"]
         direction LR
         CSDK[claude_sdk]
         CCLI[claude_cli]
@@ -54,13 +54,14 @@ flowchart TD
         GCLI[gemini_cli]
         OAI[openai_compatible]
         ORT[openrouter]
+        OLL[ollama]
         CTR[container_cli]
     end
 
     subgraph Workflows["Workflow Engine"]
         direction TB
         PL[Phase Loop · Agent/Task Loop]
-        DAG[DAG Executor · 120 Nodes]
+        DAG[DAG Executor · 141 Nodes]
         INTERACT[Interaction · HITL · Approval · Form]
     end
 
@@ -170,7 +171,7 @@ An **orchestration runtime** that receives messages from chat channels and dispa
 | **Role Skills** | 8-role hierarchical delegation | concierge → pm/pl → implementer/reviewer/validator/debugger |
 | **Security Vault** | AES-256-GCM secret management | Auto inbound sealing · decrypt only in tool path |
 | **OAuth Integration** | External service authentication | GitHub · Google · Custom OAuth 2.0 |
-| **Workflow Engine** | Phase Loop · DAG execution | 124-node graph editor · 6 categories · HITL interaction nodes |
+| **Workflow Engine** | Phase Loop · DAG execution | 141-node graph editor · 6 categories · HITL interaction nodes |
 | **Message Bus** | Internal event routing | In-memory (default) · Redis Streams (multi-instance) |
 | **Domain Services** | Embedding · vector store · webhook · kanban | sqlite-vec KNN · hybrid search · kanban automation rules |
 | **Dashboard** | Web-based real-time monitoring | SSE feed · agent/task/decision/provider management |
@@ -179,7 +180,7 @@ An **orchestration runtime** that receives messages from chat channels and dispa
 
 ### Agent Backends
 
-`claude_sdk` · `claude_cli` · `codex_appserver` · `codex_cli` · `gemini_cli` · `openai_compatible` · `openrouter` · `container_cli` — CircuitBreaker · auto-fallback.
+`claude_sdk` · `claude_cli` · `codex_appserver` · `codex_cli` · `gemini_cli` · `openai_compatible` · `openrouter` · `ollama` · `container_cli` — CircuitBreaker · auto-fallback.
 
 → [Choosing an Agent Backend](en/core-concepts/agents.md)
 
@@ -246,9 +247,9 @@ Open `http://localhost:4200` in your browser and complete the **Setup Wizard**.
 | Channels | `/channels` | Channel connection status · global settings |
 | Providers | `/providers` | Agent provider CRUD · Circuit Breaker state |
 | Secrets | `/secrets` | AES-256-GCM secret management |
-| Models | `/models` | Orchestrator LLM runtime · model pull/delete/switch |
-| Workflows | `/workflows` | Phase Loop workflow management · 120-node graph editor · agent chat |
-| Kanban | `/kanban` | Task board with drag-and-drop columns |
+| Workflows | `/workflows` | Phase Loop workflow management · 141-node graph editor · agent chat |
+| Kanban | `/kanban` | Drag-and-drop kanban board · automation rules |
+| WBS | `/wbs` | Kanban card hierarchy tree view (parent_id based) |
 | Settings | `/settings` | Global runtime settings |
 
 → Details: [Dashboard Guide](en/guide/dashboard.md) · [Workflows Guide](en/guide/workflows.md)
@@ -384,7 +385,7 @@ next/
   src/
     agent/
       backends/     ← SDK/AppServer/OpenAI backend adapters (7 backends)
-      nodes/        ← 124 workflow node handlers (OCP plugin architecture)
+      nodes/        ← 141 workflow node handlers (OCP plugin architecture)
       pty/          ← PTY-based CLI integration (ContainerPool, AgentBus, NDJSON wire)
       tools/        ← Agent tool implementations (oauth_fetch, workflow, ask-user, etc.)
     bootstrap/      ← 15 bootstrap modules (decomposed from main.ts)
@@ -420,7 +421,7 @@ next/
     skills/         ← User-defined skills
     templates/      ← System prompt templates
   web/              ← Dashboard frontend (React + Vite + i18n)
-    src/pages/workflows/  ← Graph editor · Node Inspector · 124-node UI
+    src/pages/workflows/  ← Graph editor · Node Inspector · 141-node UI
   docs/
     diagrams/       ← SVG architecture diagrams
     */guide/        ← User guides
