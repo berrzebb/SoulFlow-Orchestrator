@@ -63,6 +63,6 @@ export const ssh_descriptor: FrontendNodeDescriptor = {
     { name: "host", type: "string", description: "node.ssh.input.host" },
     { name: "command", type: "string", description: "node.ssh.input.command" },
   ],
-  create_default: () => ({ action: "exec", host: "", port: 22, identity_file: "", command: "", timeout_ms: 30000 }),
+  create_default: () => ({ action: "exec", host: "", port: 22, identity_file: "", command: "", timeout_ms: 30000, local_path: "", remote_path: "" }),
   EditPanel: SshEditPanel,
 };

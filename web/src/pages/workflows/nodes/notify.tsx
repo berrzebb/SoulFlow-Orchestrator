@@ -55,6 +55,6 @@ export const notify_descriptor: FrontendNodeDescriptor = {
     { name: "channel", type: "string", description: "node.notify.input.channel" },
     { name: "chat_id", type: "string", description: "node.notify.input.chat_id" },
   ],
-  create_default: () => ({ content: "", target: "origin" }),
+  create_default: () => ({ content: "", target: "origin", channel: "", chat_id: "", parse_mode: "" }),
   EditPanel: NotifyEditPanel,
 };

@@ -91,6 +91,6 @@ export const oauth_descriptor: FrontendNodeDescriptor = {
     { name: "headers", type: "object", description: "node.oauth.input.headers" },
     { name: "body",    type: "object", description: "node.oauth.input.body" },
   ],
-  create_default: () => ({ service_id: "", url: "", method: "GET", timeout_ms: 10000 }),
+  create_default: () => ({ service_id: "", url: "", method: "GET", timeout_ms: 10000, auth_url: "", token_url: "", client_id: "", client_secret: "", scopes: "" }),
   EditPanel: OauthEditPanel,
 };

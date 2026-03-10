@@ -49,6 +49,6 @@ export const webhook_descriptor: FrontendNodeDescriptor = {
     { name: "query",   type: "object", description: "node.webhook.output.query" },
   ],
   input_schema: [],
-  create_default: () => ({ path: "", http_method: "POST", response_mode: "immediate" }),
+  create_default: () => ({ path: "", http_method: "POST", response_mode: "immediate", response_status: 200, response_body: "" }),
   EditPanel: WebhookEditPanel,
 };

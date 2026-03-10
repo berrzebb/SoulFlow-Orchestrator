@@ -44,6 +44,6 @@ export const wait_descriptor: FrontendNodeDescriptor = {
   input_schema: [
     { name: "data", type: "object", description: "node.wait.input.data" },
   ],
-  create_default: () => ({ wait_type: "timer", delay_ms: 5000 }),
+  create_default: () => ({ wait_type: "timer", delay_ms: 5000, webhook_path: "", approval_message: "" }),
   EditPanel: WaitEditPanel,
 };
