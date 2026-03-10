@@ -40,6 +40,18 @@ function ImageEditPanel({ node, update, t }: EditPanelProps) {
           <input className="input input--sm" type="number" value={String(node.angle ?? 90)} onChange={(e) => update({ angle: Number(e.target.value) })} />
         </BuilderField>
       )}
+      {op === "crop" && (
+        <BuilderField label={t("workflows.image_gravity")}>
+          <select className="input input--sm" value={String(node.gravity || "center")} onChange={(e) => update({ gravity: e.target.value })}>
+            {["center", "north", "south", "east", "west", "northwest", "northeast", "southwest", "southeast"].map((g) => <option key={g} value={g}>{g}</option>)}
+          </select>
+        </BuilderField>
+      )}
+      {(op === "convert" || op === "thumbnail") && (
+        <BuilderField label={t("workflows.image_quality")}>
+          <input className="input input--sm" type="number" min={1} max={100} value={String(node.quality ?? 85)} onChange={(e) => update({ quality: Number(e.target.value) || 85 })} />
+        </BuilderField>
+      )}
     </>
   );
 }

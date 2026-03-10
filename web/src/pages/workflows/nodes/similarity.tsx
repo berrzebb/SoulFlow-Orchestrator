@@ -1,11 +1,26 @@
-import { BuilderField } from "../builder-field";
+import { BuilderField, BuilderRowPair } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
-function SimilarityEditPanel({ t }: EditPanelProps) {
+const ACTIONS = ["cosine", "jaccard", "levenshtein", "hamming", "dice", "jaro_winkler", "euclidean"];
+
+function SimilarityEditPanel({ node, update, t }: EditPanelProps) {
+  const action = String(node.action || "cosine");
   return (
-    <BuilderField label={t("node.similarity.description")} hint={t("node.similarity.hint")}>
-      {null}
-    </BuilderField>
+    <>
+      <BuilderRowPair>
+        <BuilderField label={t("workflows.action")} required>
+          <select autoFocus className="input input--sm" required value={action} onChange={(e) => update({ action: e.target.value })} aria-required="true">
+            {ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
+          </select>
+        </BuilderField>
+      </BuilderRowPair>
+      <BuilderField label={t("workflows.similarity_text_a")} required>
+        <input className="input input--sm" required value={String(node.text_a || "")} onChange={(e) => update({ text_a: e.target.value })} placeholder="hello world" aria-required="true" />
+      </BuilderField>
+      <BuilderField label={t("workflows.similarity_text_b")} required>
+        <input className="input input--sm" required value={String(node.text_b || "")} onChange={(e) => update({ text_b: e.target.value })} placeholder="hello there" aria-required="true" />
+      </BuilderField>
+    </>
   );
 }
 
@@ -21,8 +36,10 @@ export const similarity_descriptor: FrontendNodeDescriptor = {
     { name: "success", type: "boolean", description: "node.similarity.output.success" },
   ],
   input_schema: [
-    { name: "data", type: "string", description: "node.similarity.input.data" },
+    { name: "action", type: "string", description: "node.similarity.input.action" },
+    { name: "text_a", type: "string", description: "node.similarity.input.text_a" },
+    { name: "text_b", type: "string", description: "node.similarity.input.text_b" },
   ],
-  create_default: () => ({}),
+  create_default: () => ({ action: "cosine", text_a: "", text_b: "" }),
   EditPanel: SimilarityEditPanel,
 };

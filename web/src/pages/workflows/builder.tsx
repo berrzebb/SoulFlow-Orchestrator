@@ -165,6 +165,11 @@ export default function WorkflowBuilderPage() {
     queryFn: () => api.get("/api/workflow/templates"),
     staleTime: 60_000,
   });
+  const { data: kanbanBoardsData } = useQuery<{ board_id: string; name: string }[]>({
+    queryKey: ["kanban-boards"],
+    queryFn: () => api.get("/api/kanban/boards"),
+    staleTime: 60_000,
+  });
 
   const availableTools: string[] = toolsData?.names || [];
   const availableSkills: string[] = (skillsData || []).map((s) => s.name);
@@ -183,6 +188,11 @@ export default function WorkflowBuilderPage() {
     available_tools: availableTools,
     tool_definitions: (toolsData?.definitions || []) as Array<Record<string, unknown>>,
     available_skills: availableSkills,
+    kanban_boards: kanbanBoardsData || [],
+    workflow_nodes: [
+      ...workflow.phases.map((p) => ({ id: p.phase_id, label: p.title || p.phase_id, type: "phase" })),
+      ...(workflow.orche_nodes || []).map((n) => ({ id: n.node_id, label: n.title || n.node_id, type: n.node_type })),
+    ],
   };
 
   // 기존 템플릿 로드

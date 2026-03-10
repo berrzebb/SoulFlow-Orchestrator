@@ -1,11 +1,40 @@
-import { BuilderField } from "../builder-field";
+import { BuilderField, BuilderRowPair } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
-function RssEditPanel({ t }: EditPanelProps) {
+const ACTIONS = ["parse", "generate", "add_item", "fetch_parse"];
+
+function RssEditPanel({ node, update, t }: EditPanelProps) {
+  const action = String(node.action || "fetch_parse");
   return (
-    <BuilderField label={t("node.rss.description")} hint={t("node.rss.hint")}>
-      {null}
-    </BuilderField>
+    <>
+      <BuilderRowPair>
+        <BuilderField label={t("workflows.action")} required>
+          <select autoFocus className="input input--sm" required value={action} onChange={(e) => update({ action: e.target.value })} aria-required="true">
+            {ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
+          </select>
+        </BuilderField>
+      </BuilderRowPair>
+      {action === "fetch_parse" && (
+        <BuilderField label={t("workflows.field_url")} required>
+          <input className="input input--sm" required value={String(node.url || "")} onChange={(e) => update({ url: e.target.value })} placeholder="https://example.com/feed.rss" aria-required="true" />
+        </BuilderField>
+      )}
+      {(action === "parse" || action === "add_item") && (
+        <BuilderField label={t("workflows.rss_input_xml")} required>
+          <textarea className="input input--sm" required rows={4} value={String(node.input || "")} onChange={(e) => update({ input: e.target.value })} placeholder="<rss>...</rss>" aria-required="true" />
+        </BuilderField>
+      )}
+      {(action === "generate" || action === "add_item") && (
+        <>
+          <BuilderField label={t("workflows.field_title")} required>
+            <input className="input input--sm" required value={String(node.title || "")} onChange={(e) => update({ title: e.target.value })} placeholder="My Feed" aria-required="true" />
+          </BuilderField>
+          <BuilderField label={t("workflows.field_link")} required>
+            <input className="input input--sm" required value={String(node.link || "")} onChange={(e) => update({ link: e.target.value })} placeholder="https://example.com" aria-required="true" />
+          </BuilderField>
+        </>
+      )}
+    </>
   );
 }
 
@@ -21,8 +50,9 @@ export const rss_descriptor: FrontendNodeDescriptor = {
     { name: "success", type: "boolean", description: "node.rss.output.success" },
   ],
   input_schema: [
-    { name: "data", type: "string", description: "node.rss.input.data" },
+    { name: "action", type: "string", description: "node.rss.input.action" },
+    { name: "url", type: "string", description: "node.rss.input.url" },
   ],
-  create_default: () => ({}),
+  create_default: () => ({ action: "fetch_parse", url: "", input: "", title: "", link: "" }),
   EditPanel: RssEditPanel,
 };

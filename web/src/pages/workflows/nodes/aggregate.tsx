@@ -1,16 +1,16 @@
 import { BuilderField } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
-const OPERATIONS = [
-  { value: "collect", label: "Collect (passthrough)" },
-  { value: "count",   label: "Count" },
-  { value: "sum",     label: "Sum" },
-  { value: "avg",     label: "Average" },
-  { value: "min",     label: "Min" },
-  { value: "max",     label: "Max" },
-  { value: "join",    label: "Join (string)" },
-  { value: "unique",  label: "Unique" },
-  { value: "flatten", label: "Flatten" },
+const OPERATIONS: { value: string; i18n: string }[] = [
+  { value: "collect", i18n: "workflows.aggregate_op_collect" },
+  { value: "count",   i18n: "workflows.aggregate_op_count" },
+  { value: "sum",     i18n: "workflows.aggregate_op_sum" },
+  { value: "avg",     i18n: "workflows.aggregate_op_avg" },
+  { value: "min",     i18n: "workflows.aggregate_op_min" },
+  { value: "max",     i18n: "workflows.aggregate_op_max" },
+  { value: "join",    i18n: "workflows.aggregate_op_join" },
+  { value: "unique",  i18n: "workflows.aggregate_op_unique" },
+  { value: "flatten", i18n: "workflows.aggregate_op_flatten" },
 ];
 
 function AggregateEditPanel({ node, update, t }: EditPanelProps) {
@@ -19,7 +19,7 @@ function AggregateEditPanel({ node, update, t }: EditPanelProps) {
     <>
       <BuilderField label={t("workflows.aggregate_operation")} required>
         <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
-          {OPERATIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          {OPERATIONS.map((o) => <option key={o.value} value={o.value}>{t(o.i18n)}</option>)}
         </select>
       </BuilderField>
       <BuilderField label={t("workflows.aggregate_array_field")}>

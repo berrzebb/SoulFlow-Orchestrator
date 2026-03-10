@@ -28,6 +28,11 @@ function StatsEditPanel({ node, update, t }: EditPanelProps) {
           <input className="input input--sm" type="number" min={2} max={100} value={String(node.bins ?? 10)} onChange={(e) => update({ bins: Number(e.target.value) })} />
         </BuilderField>
       )}
+      {op === "outliers" && (
+        <BuilderField label={t("workflows.stats_threshold_zscore")}>
+          <input className="input input--sm" type="number" min={1} max={10} step={0.5} value={String(node.threshold ?? 2)} onChange={(e) => update({ threshold: Number(e.target.value) || 2 })} />
+        </BuilderField>
+      )}
     </>
   );
 }

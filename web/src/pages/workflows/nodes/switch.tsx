@@ -1,15 +1,39 @@
-import { BuilderField, JsonField } from "../builder-field";
+import { BuilderField, NodeMultiSelect } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
-function SwitchEditPanel({ node, update, t }: EditPanelProps) {
+type SwitchCase = { value: string; targets: string[] };
+
+function SwitchEditPanel({ node, update, t, options }: EditPanelProps) {
+  const cases = (node.cases as SwitchCase[]) || [];
+  const default_targets = (node.default_targets as string[]) || [];
+  const wf_nodes = options?.workflow_nodes;
+
+  const update_case = (i: number, patch: Partial<SwitchCase>) => {
+    update({ cases: cases.map((c, j) => j === i ? { ...c, ...patch } : c) });
+  };
+  const add_case = () => update({ cases: [...cases, { value: "", targets: [] }] });
+  const remove_case = (i: number) => update({ cases: cases.filter((_, j) => j !== i) });
+
   return (
     <>
       <BuilderField label={t("workflows.switch_expression")} hint={t("workflows.expression_hint")}>
         <input autoFocus className="input input--sm" value={String(node.expression || "")} onChange={(e) => update({ expression: e.target.value })} placeholder="memory.status" />
       </BuilderField>
-      <JsonField label={t("workflows.switch_cases")} value={node.cases || []} onUpdate={(v) => update({ cases: (v as unknown[]) ?? [] })} rows={4} placeholder='[{"value": "success", "targets": ["next-1"]}]' emptyValue={[]} />
+      <div className="builder-row">
+        <label className="label">{t("workflows.switch_cases")}</label>
+        {cases.map((c, i) => (
+          <div key={i} style={{ border: "1px solid var(--border)", borderRadius: "4px", padding: "8px", marginBottom: "6px" }}>
+            <div style={{ display: "flex", gap: "4px", alignItems: "center", marginBottom: "4px" }}>
+              <input className="input input--sm" style={{ flex: 1 }} value={c.value} onChange={(e) => update_case(i, { value: e.target.value })} placeholder="success" />
+              <button type="button" className="btn btn--xs btn--danger" onClick={() => remove_case(i)} style={{ flexShrink: 0 }}>✕</button>
+            </div>
+            <NodeMultiSelect value={c.targets} onChange={(ids) => update_case(i, { targets: ids })} nodes={wf_nodes} placeholder="target-node" />
+          </div>
+        ))}
+        <button type="button" className="btn btn--xs" onClick={add_case}>+ {t("workflows.switch_add_case")}</button>
+      </div>
       <BuilderField label={t("workflows.switch_default")}>
-        <input className="input input--sm" value={((node.default_targets as string[]) || []).join(", ")} onChange={(e) => update({ default_targets: e.target.value.split(",").map((s: string) => s.trim()).filter(Boolean) })} placeholder="fallback-node" />
+        <NodeMultiSelect value={default_targets} onChange={(ids) => update({ default_targets: ids })} nodes={wf_nodes} placeholder="fallback-node" />
       </BuilderField>
     </>
   );

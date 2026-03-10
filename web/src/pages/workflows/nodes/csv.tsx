@@ -1,11 +1,36 @@
-import { BuilderField } from "../builder-field";
+import { BuilderField, BuilderRowPair } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
-function CsvEditPanel({ t }: EditPanelProps) {
+const ACTIONS = ["parse", "generate", "count", "headers", "filter"];
+
+function CsvEditPanel({ node, update, t }: EditPanelProps) {
+  const action = String(node.action || "parse");
   return (
-    <BuilderField label={t("node.csv.description")} hint={t("node.csv.hint")}>
-      {null}
-    </BuilderField>
+    <>
+      <BuilderRowPair>
+        <BuilderField label={t("workflows.action")} required>
+          <select autoFocus className="input input--sm" required value={action} onChange={(e) => update({ action: e.target.value })} aria-required="true">
+            {ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
+          </select>
+        </BuilderField>
+        <BuilderField label={t("workflows.csv_delimiter")}>
+          <input className="input input--sm" value={String(node.delimiter || ",")} onChange={(e) => update({ delimiter: e.target.value })} placeholder="," style={{ maxWidth: "80px" }} />
+        </BuilderField>
+      </BuilderRowPair>
+      <BuilderField label={t("workflows.field_input")} required>
+        <textarea className="input input--sm" required rows={4} value={String(node.input || "")} onChange={(e) => update({ input: e.target.value })} placeholder="col1,col2" aria-required="true" />
+      </BuilderField>
+      {action === "filter" && (
+        <BuilderRowPair>
+          <BuilderField label={t("workflows.csv_filter_column")} required>
+            <input className="input input--sm" required value={String(node.filter_col || "")} onChange={(e) => update({ filter_col: e.target.value })} placeholder="column name" aria-required="true" />
+          </BuilderField>
+          <BuilderField label={t("workflows.csv_filter_value")} required>
+            <input className="input input--sm" required value={String(node.filter_val || "")} onChange={(e) => update({ filter_val: e.target.value })} placeholder="value" aria-required="true" />
+          </BuilderField>
+        </BuilderRowPair>
+      )}
+    </>
   );
 }
 
@@ -21,8 +46,9 @@ export const csv_descriptor: FrontendNodeDescriptor = {
     { name: "success", type: "boolean", description: "node.csv.output.success" },
   ],
   input_schema: [
-    { name: "data", type: "string", description: "node.csv.input.data" },
+    { name: "action", type: "string", description: "node.csv.input.action" },
+    { name: "input", type: "string", description: "node.csv.input.input" },
   ],
-  create_default: () => ({}),
+  create_default: () => ({ action: "parse", input: "", delimiter: "," }),
   EditPanel: CsvEditPanel,
 };

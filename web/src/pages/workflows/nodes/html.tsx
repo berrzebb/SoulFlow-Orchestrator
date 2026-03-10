@@ -1,11 +1,23 @@
-import { BuilderField } from "../builder-field";
+import { BuilderField, BuilderRowPair } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
-function HtmlEditPanel({ t }: EditPanelProps) {
+const ACTIONS = ["extract_text", "extract_links", "extract_tables", "sanitize", "to_markdown"];
+
+function HtmlEditPanel({ node, update, t }: EditPanelProps) {
+  const action = String(node.action || "extract_text");
   return (
-    <BuilderField label={t("node.html.description")} hint={t("node.html.hint")}>
-      {null}
-    </BuilderField>
+    <>
+      <BuilderRowPair>
+        <BuilderField label={t("workflows.action")} required>
+          <select autoFocus className="input input--sm" required value={action} onChange={(e) => update({ action: e.target.value })} aria-required="true">
+            {ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
+          </select>
+        </BuilderField>
+      </BuilderRowPair>
+      <BuilderField label={t("workflows.html_input")} required>
+        <textarea className="input input--sm" required rows={5} value={String(node.input || "")} onChange={(e) => update({ input: e.target.value })} placeholder="<html>...</html>" aria-required="true" />
+      </BuilderField>
+    </>
   );
 }
 
@@ -21,8 +33,9 @@ export const html_descriptor: FrontendNodeDescriptor = {
     { name: "success", type: "boolean", description: "node.html.output.success" },
   ],
   input_schema: [
-    { name: "data", type: "string", description: "node.html.input.data" },
+    { name: "action", type: "string", description: "node.html.input.action" },
+    { name: "input", type: "string", description: "node.html.input.input" },
   ],
-  create_default: () => ({}),
+  create_default: () => ({ action: "extract_text", input: "" }),
   EditPanel: HtmlEditPanel,
 };

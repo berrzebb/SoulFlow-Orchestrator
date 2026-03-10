@@ -1,5 +1,5 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
-import { BuilderField, BuilderRowPair } from "../builder-field";
+import { BuilderField, BuilderRowPair, JsonField } from "../builder-field";
 
 function VectorStoreEditPanel({ node, update, t }: EditPanelProps) {
   const op = String(node.operation || "query");
@@ -50,9 +50,7 @@ function VectorStoreEditPanel({ node, update, t }: EditPanelProps) {
           <input className="input input--sm" value={String(node.ids_field || "")} onChange={(e) => update({ ids_field: e.target.value })} placeholder="memory.delete_ids" />
         </BuilderField>
       )}
-      <BuilderField label={t("workflows.vs_filter")} hint={t("workflows.vs_filter_hint")}>
-        <input className="input input--sm" value={String(node.filter || "")} onChange={(e) => update({ filter: e.target.value || undefined })} placeholder='{"category": "docs"}' />
-      </BuilderField>
+      <JsonField label={t("workflows.vs_filter")} hint={t("workflows.vs_filter_hint")} value={node.filter} onUpdate={(v) => update({ filter: v })} rows={2} small placeholder='{"category": "docs"}' emptyValue={undefined} />
     </>
   );
 }

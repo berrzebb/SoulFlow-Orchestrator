@@ -1,11 +1,28 @@
-import { BuilderField } from "../builder-field";
+import { BuilderField, BuilderRowPair, JsonField } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
-function JsonSchemaEditPanel({ t }: EditPanelProps) {
+const ACTIONS = ["validate", "generate", "draft_convert", "merge", "diff", "dereference", "mock"];
+
+function JsonSchemaEditPanel({ node, update, t }: EditPanelProps) {
+  const action = String(node.action || "validate");
+  const needs_schema2 = ["merge", "diff"].includes(action);
   return (
-    <BuilderField label={t("node.json_schema.description")} hint={t("node.json_schema.hint")}>
-      {null}
-    </BuilderField>
+    <>
+      <BuilderRowPair>
+        <BuilderField label={t("workflows.action")} required>
+          <select autoFocus className="input input--sm" required value={action} onChange={(e) => update({ action: e.target.value })} aria-required="true">
+            {ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
+          </select>
+        </BuilderField>
+      </BuilderRowPair>
+      <JsonField label={t("workflows.json_schema_schema_json")} value={node.schema} onUpdate={(v) => update({ schema: v })} placeholder='{"type": "object"}' />
+      {action === "validate" && (
+        <JsonField label={t("workflows.json_schema_data_json")} value={node.data} onUpdate={(v) => update({ data: v })} placeholder='{"key": "value"}' />
+      )}
+      {needs_schema2 && (
+        <JsonField label={t("workflows.json_schema_schema2_json")} value={node.schema2} onUpdate={(v) => update({ schema2: v })} placeholder='{"type": "object"}' />
+      )}
+    </>
   );
 }
 
@@ -21,8 +38,10 @@ export const json_schema_descriptor: FrontendNodeDescriptor = {
     { name: "success", type: "boolean", description: "node.json_schema.output.success" },
   ],
   input_schema: [
+    { name: "action", type: "string", description: "node.json_schema.input.action" },
+    { name: "schema", type: "string", description: "node.json_schema.input.schema" },
     { name: "data", type: "string", description: "node.json_schema.input.data" },
   ],
-  create_default: () => ({}),
+  create_default: () => ({ action: "validate", schema: "", data: "" }),
   EditPanel: JsonSchemaEditPanel,
 };

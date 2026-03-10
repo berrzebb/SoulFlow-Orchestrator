@@ -394,6 +394,26 @@ export function compute_aux_edges(workflow: WorkflowDef): Edge[] {
     for (const dep of on.depends_on || []) {
       edges.push({ from: dep, to: on.node_id, type: "flow" });
     }
+    // if/switch 분기 노드의 아웃고잉 엣지 렌더링
+    if (on.node_type === "if") {
+      const outputs = on.outputs as Record<string, unknown> | undefined;
+      for (const id of (outputs?.true_branch as string[]) || []) {
+        edges.push({ from: on.node_id, to: id, type: "flow", label: "true" });
+      }
+      for (const id of (outputs?.false_branch as string[]) || []) {
+        edges.push({ from: on.node_id, to: id, type: "flow", label: "false" });
+      }
+    } else if (on.node_type === "switch") {
+      const cases = on.cases as Array<{ value: string; targets: string[] }> | undefined;
+      for (const c of cases || []) {
+        for (const id of c.targets || []) {
+          edges.push({ from: on.node_id, to: id, type: "flow", label: c.value });
+        }
+      }
+      for (const id of (on.default_targets as string[]) || []) {
+        edges.push({ from: on.node_id, to: id, type: "flow", label: "default" });
+      }
+    }
   }
 
   const eff_triggers: TriggerNodeDef[] = workflow.trigger_nodes?.length

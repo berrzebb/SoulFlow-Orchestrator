@@ -43,10 +43,25 @@ function MathEditPanel({ node, update, t }: EditPanelProps) {
           </BuilderField>
         </>
       )}
+      {op === "roi" && (
+        <BuilderRowPair>
+          <BuilderField label={t("workflows.math_cost")}>
+            <input className="input input--sm" type="number" value={String(node.cost ?? 0)} onChange={(e) => update({ cost: Number(e.target.value) })} />
+          </BuilderField>
+          <BuilderField label={t("workflows.math_gain")}>
+            <input className="input input--sm" type="number" value={String(node.gain ?? 0)} onChange={(e) => update({ gain: Number(e.target.value) })} />
+          </BuilderField>
+        </BuilderRowPair>
+      )}
       {["round", "percentage"].includes(op) && (
-        <BuilderField label={t("workflows.field_value")}>
-          <input className="input input--sm" type="number" value={String(node.value ?? 0)} onChange={(e) => update({ value: Number(e.target.value) })} />
-        </BuilderField>
+        <BuilderRowPair>
+          <BuilderField label={t("workflows.field_value")}>
+            <input className="input input--sm" type="number" value={String(node.value ?? 0)} onChange={(e) => update({ value: Number(e.target.value) })} />
+          </BuilderField>
+          <BuilderField label={t("workflows.field_decimals")}>
+            <input className="input input--sm" type="number" min={0} max={10} value={String(node.decimals ?? 2)} onChange={(e) => update({ decimals: Number(e.target.value) })} />
+          </BuilderField>
+        </BuilderRowPair>
       )}
       {["gcd", "lcm"].includes(op) && (
         <BuilderRowPair>
@@ -82,6 +97,6 @@ export const math_descriptor: FrontendNodeDescriptor = {
     { name: "operation",  type: "string", description: "node.math.input.operation" },
     { name: "expression", type: "string", description: "node.math.input.expression" },
   ],
-  create_default: () => ({ operation: "eval", expression: "", value: 0, from: "", to: "", principal: 0, rate: 0, periods: 0, a: 0, b: 0, n: 0, decimals: 2 }),
+  create_default: () => ({ operation: "eval", expression: "", value: 0, from: "", to: "", principal: 0, rate: 0, periods: 0, cost: 0, gain: 0, a: 0, b: 0, n: 0, decimals: 2 }),
   EditPanel: MathEditPanel,
 };

@@ -1,20 +1,23 @@
-import { BuilderField, BuilderRowPair } from "../builder-field";
+import { BuilderField, NodeMultiSelect } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
-function IfEditPanel({ node, update, t }: EditPanelProps) {
+function IfEditPanel({ node, update, t, options }: EditPanelProps) {
+  const outputs = (node.outputs as Record<string, unknown>) || {};
+  const true_branch = (outputs.true_branch as string[]) || [];
+  const false_branch = (outputs.false_branch as string[]) || [];
+  const wf_nodes = options?.workflow_nodes;
+
   return (
     <>
       <BuilderField label={t("workflows.if_condition")} hint={t("workflows.condition_hint")}>
         <input autoFocus className="input input--sm" value={String(node.condition || "")} onChange={(e) => update({ condition: e.target.value })} placeholder="memory.prev.status === 200" />
       </BuilderField>
-      <BuilderRowPair>
-        <BuilderField label={t("workflows.if_true_branch")}>
-          <input className="input input--sm" value={(((node.outputs as Record<string, unknown>)?.true_branch as string[]) || []).join(", ")} onChange={(e) => update({ outputs: { ...((node.outputs as Record<string, unknown>) || {}), true_branch: e.target.value.split(",").map((s: string) => s.trim()).filter(Boolean) } })} placeholder="next-node" />
-        </BuilderField>
-        <BuilderField label={t("workflows.if_false_branch")}>
-          <input className="input input--sm" value={(((node.outputs as Record<string, unknown>)?.false_branch as string[]) || []).join(", ")} onChange={(e) => update({ outputs: { ...((node.outputs as Record<string, unknown>) || {}), false_branch: e.target.value.split(",").map((s: string) => s.trim()).filter(Boolean) } })} placeholder="fallback-node" />
-        </BuilderField>
-      </BuilderRowPair>
+      <BuilderField label={t("workflows.if_true_branch")}>
+        <NodeMultiSelect value={true_branch} onChange={(ids) => update({ outputs: { ...outputs, true_branch: ids } })} nodes={wf_nodes} placeholder="next-node" />
+      </BuilderField>
+      <BuilderField label={t("workflows.if_false_branch")}>
+        <NodeMultiSelect value={false_branch} onChange={(ids) => update({ outputs: { ...outputs, false_branch: ids } })} nodes={wf_nodes} placeholder="fallback-node" />
+      </BuilderField>
     </>
   );
 }

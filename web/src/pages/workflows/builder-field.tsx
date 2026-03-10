@@ -3,6 +3,7 @@ import { useT } from "../../i18n";
 import { useProviderModels } from "./use-provider-models";
 import { useJsonField } from "./use-json-field";
 import type { NodeOptions } from "./node-registry";
+import { handleContainerDrop, handleContainerDragOver } from "./inspector-dnd";
 
 /** 워크플로우 빌더 폼 필드 — label + input + hint/error 표준화. */
 export function BuilderField({ label, required, optional, hint, error, children }: {
@@ -14,7 +15,7 @@ export function BuilderField({ label, required, optional, hint, error, children 
   children: ReactNode;
 }) {
   return (
-    <div className="builder-row">
+    <div className="builder-row" onDrop={handleContainerDrop} onDragOver={handleContainerDragOver}>
       <label className="label">
         {label}
         {required && <span className="label__required">*</span>}
@@ -102,6 +103,48 @@ export function JsonField({ label, value, onUpdate, rows = 3, placeholder, small
         placeholder={placeholder}
       />
     </BuilderField>
+  );
+}
+
+/** 워크플로우 노드 다중 선택 — 분기 노드의 대상 노드 선택용. 노드 목록이 없으면 텍스트 입력 fallback. */
+export function NodeMultiSelect({ value, onChange, nodes, placeholder }: {
+  value: string[];
+  onChange: (ids: string[]) => void;
+  nodes?: { id: string; label: string; type: string }[];
+  placeholder?: string;
+}) {
+  if (!nodes?.length) {
+    return (
+      <input
+        className="input input--sm"
+        value={value.join(", ")}
+        onChange={(e) => onChange(e.target.value.split(",").map((s) => s.trim()).filter(Boolean))}
+        placeholder={placeholder || "node-id-1, node-id-2"}
+      />
+    );
+  }
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: "4px" }}>
+      {nodes.map((n) => {
+        const checked = value.includes(n.id);
+        return (
+          <button
+            key={n.id}
+            type="button"
+            onClick={() => onChange(checked ? value.filter((id) => id !== n.id) : [...value, n.id])}
+            style={{
+              cursor: "pointer", padding: "2px 8px", borderRadius: "4px",
+              border: "1px solid var(--border)",
+              background: checked ? "var(--accent)" : "transparent",
+              color: checked ? "#fff" : "var(--text-secondary)",
+              fontSize: "12px",
+            }}
+          >
+            {n.label || n.id}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 

@@ -53,6 +53,10 @@ export interface NodeOptions {
   available_tools?: string[];
   tool_definitions?: Array<Record<string, unknown>>;
   available_skills?: string[];
+  /** 현재 워크플로우의 오케스트레이션 노드 목록 — 분기 대상 선택용. */
+  workflow_nodes?: { id: string; label: string; type: string }[];
+  /** 칸반 보드 목록 — 트리거/노드에서 보드 선택용. */
+  kanban_boards?: { board_id: string; name: string }[];
 }
 
 export interface EditPanelProps {

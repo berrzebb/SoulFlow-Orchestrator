@@ -1,18 +1,29 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
-import { BuilderField } from "../builder-field";
+import { BuilderField, BuilderRowPair } from "../builder-field";
+
+const ACTIONS = ["get", "set", "delete", "list"];
 
 function MemoryRwEditPanel({ node, update, t }: EditPanelProps) {
+  const action = String(node.action || "get");
   return (
     <>
-      <BuilderField label={t("node.memory_rw.input.action")}>
-        <input autoFocus className="input input--sm" value={String(node.action || "")} onChange={(e) => update({ action: e.target.value })} />
-      </BuilderField>
-      <BuilderField label={t("node.memory_rw.input.key")}>
-        <input className="input input--sm" value={String(node.key || "")} onChange={(e) => update({ key: e.target.value })} />
-      </BuilderField>
-      <BuilderField label={t("node.memory_rw.input.value")}>
-        <input className="input input--sm" value={String(node.value || "")} onChange={(e) => update({ value: e.target.value })} />
-      </BuilderField>
+      <BuilderRowPair>
+        <BuilderField label={t("workflows.action")} required>
+          <select autoFocus className="input input--sm" required value={action} onChange={(e) => update({ action: e.target.value })} aria-required="true">
+            {ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
+          </select>
+        </BuilderField>
+        {action !== "list" && (
+          <BuilderField label={t("node.memory_rw.input.key")} required>
+            <input className="input input--sm" required value={String(node.key || "")} onChange={(e) => update({ key: e.target.value })} placeholder="my_key" aria-required="true" />
+          </BuilderField>
+        )}
+      </BuilderRowPair>
+      {action === "set" && (
+        <BuilderField label={t("node.memory_rw.input.value")}>
+          <input className="input input--sm" value={String(node.value || "")} onChange={(e) => update({ value: e.target.value })} placeholder="{{memory.result}}" />
+        </BuilderField>
+      )}
     </>
   );
 }
@@ -33,6 +44,6 @@ export const memory_rw_descriptor: FrontendNodeDescriptor = {
     { name: "key", type: "string", description: "node.memory_rw.input.key" },
     { name: "value", type: "string", description: "node.memory_rw.input.value" },
   ],
-  create_default: () => ({ action: "", key: "", value: "" }),
+  create_default: () => ({ action: "get", key: "", value: "" }),
   EditPanel: MemoryRwEditPanel,
 };

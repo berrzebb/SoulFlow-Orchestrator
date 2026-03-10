@@ -6,7 +6,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import { useModalEffects, useConfirm } from "../../components/modal";
-import { BuilderField, BuilderRowPair } from "./builder-field";
+import { BuilderField, BuilderRowPair, NodeMultiSelect } from "./builder-field";
 import { useT } from "../../i18n";
 import { get_frontend_node } from "./node-registry";
 import type { WorkflowDef, PhaseDef, AgentDef, CriticDef, OrcheNodeDef, TriggerNodeDef, RolePreset } from "./workflow-types";
@@ -176,10 +176,10 @@ export function CronEditModal({ trigger, onChange, onRemove, onClose }: {
 
 // ── Trigger Node 편집 모달 ──
 
-type TriggerType = "cron" | "webhook" | "manual" | "channel_message" | "kanban";
-const TRIGGER_TYPES: TriggerType[] = ["cron", "webhook", "manual", "channel_message", "kanban"];
+type TriggerType = "cron" | "webhook" | "manual" | "channel_message" | "kanban_event";
+const TRIGGER_TYPES: TriggerType[] = ["cron", "webhook", "manual", "channel_message", "kanban_event"];
 const TRIGGER_LABEL_KEYS: Record<TriggerType, string> = {
-  cron: "workflows.trigger_cron", webhook: "workflows.trigger_webhook", manual: "workflows.trigger_manual", channel_message: "workflows.trigger_channel", kanban: "workflows.kanban_trigger",
+  cron: "workflows.trigger_cron", webhook: "workflows.trigger_webhook", manual: "workflows.trigger_manual", channel_message: "workflows.trigger_channel", kanban_event: "workflows.kanban_trigger",
 };
 
 export function TriggerNodeEditModal({ node, onChange, onRemove, onClose }: {
@@ -197,19 +197,19 @@ export function TriggerNodeEditModal({ node, onChange, onRemove, onClose }: {
   const [webhookPath, setWebhookPath] = useState(node.webhook_path || "");
   const [channelType, setChannelType] = useState(node.channel_type || "slack");
   const [chatId, setChatId] = useState(node.chat_id || "");
-  const [boardId, setBoardId] = useState(node.board_id || "");
-  const [actions, setActions] = useState((node.actions || []).join(","));
-  const [columnId, setColumnId] = useState(node.column_id || "");
+  const [boardId, setBoardId] = useState(node.kanban_board_id || "");
+  const [actions, setActions] = useState((node.kanban_actions || []).join(","));
+  const [columnId, setColumnId] = useState(node.kanban_column_id || "");
 
   const handleSave = () => {
     const updated: TriggerNodeDef = { id: node.id, trigger_type: triggerType };
     if (triggerType === "cron") { updated.schedule = schedule; if (timezone) updated.timezone = timezone; }
     if (triggerType === "webhook") { updated.webhook_path = webhookPath; }
     if (triggerType === "channel_message") { updated.channel_type = channelType; if (chatId) updated.chat_id = chatId; }
-    if (triggerType === "kanban") {
-      updated.board_id = boardId;
-      if (actions) updated.actions = actions.split(",").map(a => a.trim()).filter(a => a);
-      if (columnId) updated.column_id = columnId;
+    if (triggerType === "kanban_event") {
+      updated.kanban_board_id = boardId;
+      if (actions) updated.kanban_actions = actions.split(",").map(a => a.trim()).filter(a => a);
+      if (columnId) updated.kanban_column_id = columnId;
     }
     onChange(updated);
     onClose();
@@ -252,7 +252,7 @@ export function TriggerNodeEditModal({ node, onChange, onRemove, onClose }: {
               <input className="input input--sm" value={chatId} onChange={(e) => setChatId(e.target.value)} placeholder="C01234567" onKeyDown={(e) => { if (e.key === "Enter") handleSave(); }} />
             </BuilderField>
           </>)}
-          {triggerType === "kanban" && (<>
+          {triggerType === "kanban_event" && (<>
             <BuilderField label={t("workflows.kanban_trigger_board_id")} required>
               <input autoFocus className="input input--sm" required value={boardId} onChange={(e) => setBoardId(e.target.value)} placeholder="board-id" onKeyDown={(e) => { if (e.key === "Enter") handleSave(); }} />
             </BuilderField>
@@ -413,10 +413,10 @@ export function OrcheNodeEditModal({ workflow, nodeId, onChange, onClose, onNode
             <input className="input input--sm" value={node.title} onChange={(e) => update({ title: e.target.value })} />
           </BuilderField>
           <BuilderField label={t("workflows.depends_on")}>
-            <input
-              className="input input--sm"
-              value={(node.depends_on || []).join(", ")}
-              onChange={(e) => update({ depends_on: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) })}
+            <NodeMultiSelect
+              value={node.depends_on || []}
+              onChange={(ids) => update({ depends_on: ids })}
+              nodes={(nodeOptions?.workflow_nodes as { id: string; label: string; type: string }[] | undefined)?.filter((n) => n.id !== node.node_id)}
               placeholder="node-1, phase-1"
             />
           </BuilderField>

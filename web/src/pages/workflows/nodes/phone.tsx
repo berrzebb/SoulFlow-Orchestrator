@@ -1,11 +1,31 @@
-import { BuilderField } from "../builder-field";
+import { BuilderField, BuilderRowPair } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
-function PhoneEditPanel({ t }: EditPanelProps) {
+const ACTIONS = ["parse", "format", "validate", "normalize", "country_info", "compare"];
+
+function PhoneEditPanel({ node, update, t }: EditPanelProps) {
+  const action = String(node.action || "parse");
   return (
-    <BuilderField label={t("node.phone.description")} hint={t("node.phone.hint")}>
-      {null}
-    </BuilderField>
+    <>
+      <BuilderRowPair>
+        <BuilderField label={t("workflows.action")} required>
+          <select autoFocus className="input input--sm" required value={action} onChange={(e) => update({ action: e.target.value })} aria-required="true">
+            {ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
+          </select>
+        </BuilderField>
+        <BuilderField label={t("workflows.field_region")}>
+          <input className="input input--sm" value={String(node.region || "")} onChange={(e) => update({ region: e.target.value })} placeholder="US" style={{ maxWidth: "80px" }} />
+        </BuilderField>
+      </BuilderRowPair>
+      <BuilderField label={t("workflows.phone_number")} required>
+        <input className="input input--sm" required value={String(node.number || "")} onChange={(e) => update({ number: e.target.value })} placeholder="+1-555-555-5555" aria-required="true" />
+      </BuilderField>
+      {action === "compare" && (
+        <BuilderField label={t("workflows.phone_number_2")} required>
+          <input className="input input--sm" required value={String(node.number2 || "")} onChange={(e) => update({ number2: e.target.value })} placeholder="+1-555-555-5556" aria-required="true" />
+        </BuilderField>
+      )}
+    </>
   );
 }
 
@@ -21,8 +41,9 @@ export const phone_descriptor: FrontendNodeDescriptor = {
     { name: "success", type: "boolean", description: "node.phone.output.success" },
   ],
   input_schema: [
-    { name: "data", type: "string", description: "node.phone.input.data" },
+    { name: "action", type: "string", description: "node.phone.input.action" },
+    { name: "number", type: "string", description: "node.phone.input.number" },
   ],
-  create_default: () => ({}),
+  create_default: () => ({ action: "parse", number: "", region: "" }),
   EditPanel: PhoneEditPanel,
 };

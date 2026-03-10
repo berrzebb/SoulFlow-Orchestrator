@@ -25,6 +25,11 @@ function DockerEditPanel({ node, update, t }: EditPanelProps) {
           <input className="input" value={String(node.command || "")} onChange={(e) => update({ command: e.target.value })} placeholder="sh -c 'echo hello'" />
         </BuilderField>
       )}
+      {op === "logs" && (
+        <BuilderField label={t("workflows.docker_tail_lines")}>
+          <input className="input input--sm" type="number" min={1} max={10000} value={String(node.tail ?? 50)} onChange={(e) => update({ tail: Number(e.target.value) || 50 })} />
+        </BuilderField>
+      )}
       <BuilderField label={t("workflows.extra_args")}>
         <input className="input input--sm" value={String(node.args || "")} onChange={(e) => update({ args: e.target.value })} placeholder="--rm -e FOO=bar" />
       </BuilderField>

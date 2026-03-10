@@ -47,6 +47,22 @@ export function handleDragOver(e: DragEvent<HTMLTextAreaElement | HTMLInputEleme
   }
 }
 
+/**
+ * BuilderField 컨테이너 div에 연결하면 자식 input/textarea로 드롭이 위임됨.
+ * select 등 다른 요소는 무시.
+ */
+export function handleContainerDrop(e: DragEvent<HTMLDivElement>) {
+  const tgt = e.target as HTMLElement;
+  if (tgt.tagName !== "INPUT" && tgt.tagName !== "TEXTAREA") return;
+  handleFieldDrop(e as unknown as DragEvent<HTMLInputElement>, () => {});
+}
+
+export function handleContainerDragOver(e: DragEvent<HTMLDivElement>) {
+  const tgt = e.target as HTMLElement;
+  if (tgt.tagName !== "INPUT" && tgt.tagName !== "TEXTAREA") return;
+  handleDragOver(e as unknown as DragEvent<HTMLInputElement>);
+}
+
 /** 필드 드래그 시작 — 전체 dot-path를 {{path}} 형태로 전달. */
 export function handleTreeFieldDrag(e: DragEvent, fullPath: string) {
   const ref = `{{${fullPath}}}`;

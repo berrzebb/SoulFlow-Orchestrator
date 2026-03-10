@@ -1,11 +1,31 @@
-import { BuilderField } from "../builder-field";
+import { BuilderField, BuilderRowPair } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
-function TokenizerEditPanel({ t }: EditPanelProps) {
+const ACTIONS = ["word_tokenize", "sentence_split", "ngrams", "tf_idf", "keyword_extract", "stopword_filter", "token_estimate"];
+
+function TokenizerEditPanel({ node, update, t }: EditPanelProps) {
+  const action = String(node.action || "word_tokenize");
   return (
-    <BuilderField label={t("node.tokenizer.description")} hint={t("node.tokenizer.hint")}>
-      {null}
-    </BuilderField>
+    <>
+      <BuilderRowPair>
+        <BuilderField label={t("workflows.action")} required>
+          <select autoFocus className="input input--sm" required value={action} onChange={(e) => update({ action: e.target.value })} aria-required="true">
+            {ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
+          </select>
+        </BuilderField>
+        <BuilderField label={t("workflows.field_language")}>
+          <input className="input input--sm" value={String(node.language || "en")} onChange={(e) => update({ language: e.target.value })} placeholder="en" style={{ maxWidth: "80px" }} />
+        </BuilderField>
+      </BuilderRowPair>
+      <BuilderField label={t("workflows.field_text")} required>
+        <textarea className="input input--sm" required rows={4} value={String(node.text || "")} onChange={(e) => update({ text: e.target.value })} placeholder="Enter text to tokenize..." aria-required="true" />
+      </BuilderField>
+      {action === "ngrams" && (
+        <BuilderField label={t("workflows.tokenizer_n")}>
+          <input className="input input--sm" type="number" min={1} max={10} value={String(node.n ?? 2)} onChange={(e) => update({ n: Number(e.target.value) || 2 })} />
+        </BuilderField>
+      )}
+    </>
   );
 }
 
@@ -21,8 +41,9 @@ export const tokenizer_descriptor: FrontendNodeDescriptor = {
     { name: "success", type: "boolean", description: "node.tokenizer.output.success" },
   ],
   input_schema: [
-    { name: "data", type: "string", description: "node.tokenizer.input.data" },
+    { name: "action", type: "string", description: "node.tokenizer.input.action" },
+    { name: "text", type: "string", description: "node.tokenizer.input.text" },
   ],
-  create_default: () => ({}),
+  create_default: () => ({ action: "word_tokenize", text: "", language: "en", n: 2 }),
   EditPanel: TokenizerEditPanel,
 };
