@@ -20,18 +20,24 @@ function QueueEditPanel({ node, update, t }: EditPanelProps) {
           <BuilderField label={t("workflows.field_value")}>
             <textarea className="input code-textarea" rows={2} value={String(node.value || "")} onChange={(e) => update({ value: e.target.value })} />
           </BuilderField>
-          <BuilderRowPair>
+          {String(node.mode) === "priority" ? (
+            <BuilderRowPair>
+              <BuilderField label={t("workflows.field_mode")}>
+                <select className="input input--sm" value={String(node.mode || "fifo")} onChange={(e) => update({ mode: e.target.value })}>
+                  {["fifo", "lifo", "priority"].map((m) => <option key={m} value={m}>{m}</option>)}
+                </select>
+              </BuilderField>
+              <BuilderField label={t("workflows.field_priority")}>
+                <input className="input input--sm" type="number" min={0} max={100} value={String(node.priority ?? 50)} onChange={(e) => update({ priority: Number(e.target.value) })} />
+              </BuilderField>
+            </BuilderRowPair>
+          ) : (
             <BuilderField label={t("workflows.field_mode")}>
               <select className="input input--sm" value={String(node.mode || "fifo")} onChange={(e) => update({ mode: e.target.value })}>
                 {["fifo", "lifo", "priority"].map((m) => <option key={m} value={m}>{m}</option>)}
               </select>
             </BuilderField>
-            {String(node.mode) === "priority" && (
-              <BuilderField label={t("workflows.field_priority")}>
-                <input className="input input--sm" type="number" min={0} max={100} value={String(node.priority ?? 50)} onChange={(e) => update({ priority: Number(e.target.value) })} />
-              </BuilderField>
-            )}
-          </BuilderRowPair>
+          )}
         </>
       )}
       {op === "drain" && (
