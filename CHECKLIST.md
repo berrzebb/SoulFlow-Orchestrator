@@ -435,6 +435,7 @@
 13. `feat: Phase 7 — svg/prometheus 신규 노드 추가` — SVG 프리미티브/차트 + Prometheus 메트릭 노드, i18n 완성
 14. `fix: Phase 7 i18n 보충 — pdf/csv/xml/graph/matrix/similarity/tokenizer 스키마 설명 키 추가` — 30개 node.xxx.input/output 누락 키 추가
 15. `feat: Phase 8 — vcard/ascii_art/pagination/tree_data 신규 노드 추가` — 미통합 도구 4개 신규 노드 구현, i18n 완성
+16. `fix: Phase 9 — vcard.tsx 미사용 변수 제거, yaml 노드 dotenv 통합` — dotenv parse/generate/merge/validate/diff, required_keys 필드 추가
 
 ---
 
@@ -568,3 +569,28 @@
 | tree_data | nodes/tree-data.ts | tools/tree.ts | nodes/tree-data.tsx |
 
 **Phase 8 완료 ✅**
+
+---
+
+## Phase 9: 버그 수정 및 dotenv 통합
+
+### 수정 사항
+| 항목 | 내용 |
+|------|------|
+| vcard.tsx | ✅ 미사용 변수 `needs_input_fields` 제거 (논리 오류 포함) |
+| yaml 노드 | ✅ dotenv 포맷 통합 (format="dotenv") — DotenvTool 위임 |
+| yaml.tsx | ✅ `.env` 옵션 추가 (parse/generate/merge/validate/diff actions) |
+| yaml.tsx | ✅ dotenv validate용 `required_keys` 입력 필드 추가 |
+| YamlNodeDefinition | ✅ required_keys 필드 추가 |
+
+### 이터레이션 9 도구 재검토
+| 도구 | 결정 | 이유 |
+|------|------|------|
+| csp.ts | ⏭ YAGNI | 서버사이드 보안 헤더, 낮은 사용 빈도 |
+| dotenv.ts | ✅ yaml 노드 통합 | TOML/INI 패턴과 동일한 확장 |
+| env.ts | ⏭ 도구로 유지 | system-info와 별개 관심사 |
+| metric.ts | ⏭ 도구로 유지 | in-memory 상태, 워크플로우 부적합 |
+| approval-parser.ts | ⏭ 내부 유틸리티 | 별도 Tool 클래스 아님 |
+| ask-user.ts | ⏭ hitl 노드로 충분 | AskUserTool은 저수준 |
+
+**Phase 9 완료 ✅**

@@ -5,7 +5,6 @@ const VCARD_ACTIONS = ["generate", "parse", "validate", "to_json", "from_json"] 
 
 function VcardEditPanel({ node, update, t }: EditPanelProps) {
   const action = String(node.action || "generate");
-  const needs_input_fields = action === "generate" || action === "from_json" === false;
   return (
     <>
       <BuilderField label={t("workflows.action")} required>

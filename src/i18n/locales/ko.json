@@ -3193,5 +3193,7 @@
   "workflows.tree_data_node_a": "노드 A",
   "workflows.tree_data_node_b": "노드 B",
   "workflows.tree_data_parents": "부모 목록 (JSON)",
-  "workflows.tree_data_parents_hint": "[{id, parent, label?}] — parent=null이 루트"
+  "workflows.tree_data_parents_hint": "[{id, parent, label?}] — parent=null이 루트",
+  "workflows.dotenv_required_keys": "필수 키",
+  "workflows.dotenv_required_keys_hint": "검증 필수 변수명 (쉼표로 구분)"
 }

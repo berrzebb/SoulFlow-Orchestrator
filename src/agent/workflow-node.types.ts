@@ -1349,6 +1349,8 @@ export interface YamlNodeDefinition extends NodeBase {
   ini_section?: string;
   /** ini format query 전용: 키 이름. */
   ini_key?: string;
+  /** dotenv format validate 전용: 쉼표로 구분된 필수 키 목록. */
+  required_keys?: string;
 }
 
 // ── FTP Node ────────────────────────────────────────

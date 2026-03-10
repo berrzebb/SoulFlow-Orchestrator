@@ -1,17 +1,20 @@
 import { BuilderField, BuilderRowPair } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
-const ACTIONS = ["parse", "generate", "merge", "validate", "query"];
+const YAML_ACTIONS = ["parse", "generate", "merge", "validate", "query"];
+const DOTENV_ACTIONS = ["parse", "generate", "merge", "validate", "diff"];
 
 function YamlEditPanel({ node, update, t }: EditPanelProps) {
   const action = String(node.action || "parse");
   const format = String(node.format || "yaml");
+  const is_dotenv = format === "dotenv";
+  const actions = is_dotenv ? DOTENV_ACTIONS : YAML_ACTIONS;
   return (
     <>
       <BuilderRowPair>
         <BuilderField label={t("workflows.action")} required>
           <select autoFocus className="input input--sm" required value={action} onChange={(e) => update({ action: e.target.value })} aria-required="true">
-            {ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
+            {actions.map((a) => <option key={a} value={a}>{a}</option>)}
           </select>
         </BuilderField>
         {action === "generate" && format === "yaml" ? (
@@ -24,19 +27,31 @@ function YamlEditPanel({ node, update, t }: EditPanelProps) {
               <option value="yaml">YAML</option>
               <option value="toml">TOML</option>
               <option value="ini">INI</option>
+              <option value="dotenv">.env</option>
             </select>
           </BuilderField>
         )}
       </BuilderRowPair>
       <BuilderField label={t("workflows.field_input")} required>
-        <textarea className="input" required rows={4} value={String(node.data || "")} onChange={(e) => update({ data: e.target.value })} placeholder={action === "generate" ? '{"key": "value"}' : "key: value"} aria-required="true" />
+        <textarea className="input" required rows={4} value={String(node.data || "")}
+          onChange={(e) => update({ data: e.target.value })}
+          placeholder={action === "generate" ? (is_dotenv ? '{"KEY":"value","DEBUG":"true"}' : '{"key": "value"}') : (is_dotenv ? "KEY=value\nDEBUG=true" : "key: value")}
+          aria-required="true" />
       </BuilderField>
-      {action === "merge" && (
+      {(action === "merge" || action === "diff") && (
         <BuilderField label={t("workflows.field_input_2")} required>
-          <textarea className="input" required rows={3} value={String(node.data2 || "")} onChange={(e) => update({ data2: e.target.value })} placeholder="other: value" aria-required="true" />
+          <textarea className="input" required rows={3} value={String(node.data2 || "")}
+            onChange={(e) => update({ data2: e.target.value })}
+            placeholder={is_dotenv ? "KEY=other\nNEW_KEY=value" : "other: value"}
+            aria-required="true" />
         </BuilderField>
       )}
-      {action === "query" && format !== "ini" && (
+      {action === "validate" && is_dotenv && (
+        <BuilderField label={t("workflows.dotenv_required_keys")} hint={t("workflows.dotenv_required_keys_hint")}>
+          <input className="input input--sm" value={String(node.required_keys || "")} onChange={(e) => update({ required_keys: e.target.value })} placeholder="DATABASE_URL,SECRET_KEY" />
+        </BuilderField>
+      )}
+      {action === "query" && format !== "ini" && !is_dotenv && (
         <BuilderField label={t("workflows.field_query")} required>
           <input className="input input--sm" required value={String(node.path || "")} onChange={(e) => update({ path: e.target.value })} placeholder=".key.nested" aria-required="true" />
         </BuilderField>
@@ -70,6 +85,6 @@ export const yaml_descriptor: FrontendNodeDescriptor = {
     { name: "action", type: "string", description: "node.yaml.input.action" },
     { name: "data", type: "string", description: "node.yaml.input.data" },
   ],
-  create_default: () => ({ action: "parse", data: "", data2: "", path: "", indent: 2, format: "yaml" }),
+  create_default: () => ({ action: "parse", data: "", data2: "", path: "", indent: 2, format: "yaml", required_keys: "" }),
   EditPanel: YamlEditPanel,
 };

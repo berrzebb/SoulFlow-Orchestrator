@@ -3193,5 +3193,7 @@
   "workflows.tree_data_node_a": "Node A",
   "workflows.tree_data_node_b": "Node B",
   "workflows.tree_data_parents": "Parent List (JSON)",
-  "workflows.tree_data_parents_hint": "[{id, parent, label?}] — parent=null for root"
+  "workflows.tree_data_parents_hint": "[{id, parent, label?}] — parent=null for root",
+  "workflows.dotenv_required_keys": "Required Keys",
+  "workflows.dotenv_required_keys_hint": "Comma-separated list of required variable names"
 }

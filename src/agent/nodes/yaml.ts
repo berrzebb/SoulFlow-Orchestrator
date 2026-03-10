@@ -18,7 +18,7 @@ export const yaml_handler: NodeHandler = {
     { name: "action", type: "string", description: "parse / generate / merge / validate / query" },
     { name: "data", type: "string", description: "YAML or JSON data" },
   ],
-  create_default: () => ({ action: "parse", data: "", data2: "", path: "", indent: 2, format: "yaml" }),
+  create_default: () => ({ action: "parse", data: "", data2: "", path: "", indent: 2, format: "yaml", required_keys: "" }),
 
   async execute(node: OrcheNodeDefinition, ctx: OrcheNodeExecutorContext): Promise<OrcheNodeExecuteResult> {
     const n = node as YamlNodeDefinition;
@@ -37,6 +37,10 @@ export const yaml_handler: NodeHandler = {
         const { IniTool } = await import("../tools/ini.js");
         const tool = new IniTool();
         raw = await tool.execute({ action, input: data, data, section: n.ini_section || "", key: n.ini_key || "", second: data2 });
+      } else if (n.format === "dotenv") {
+        const { DotenvTool } = await import("../tools/dotenv.js");
+        const tool = new DotenvTool();
+        raw = await tool.execute({ action, input: data, data, second: data2, required_keys: n.required_keys || "" });
       } else {
         const { YamlTool } = await import("../tools/yaml.js");
         const tool = new YamlTool();
