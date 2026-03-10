@@ -132,3 +132,24 @@ describe("FilterTool — 에러 케이스", () => {
     expect(String(r)).toContain("Error");
   });
 });
+
+describe("FilterTool — 미커버 분기", () => {
+  it("unknown action → L45 default Error", async () => {
+    const r = await tool.execute({ action: "unknown_op", data: USERS });
+    expect(String(r)).toContain("Error");
+    expect(String(r)).toContain("unsupported");
+  });
+
+  it("중첩 경로에서 null 중간값 → L52 return undefined (get_path)", async () => {
+    const data = JSON.stringify([{ a: null }]);
+    // path "a.b" → get_path: current[a]=null → typeof null !== "object" 체크 → undefined
+    const r = await exec({ action: "where", data, path: "a.b", operator: "exists" }) as unknown[];
+    expect(r).toHaveLength(0);
+  });
+
+  it("unknown operator → L79 default f===v 비교", async () => {
+    const r = await exec({ action: "where", data: USERS, path: "role", operator: "custom_op", value: "admin" }) as unknown[];
+    // default: return f === v → 일치 항목 반환
+    expect(r).toHaveLength(2);
+  });
+});
