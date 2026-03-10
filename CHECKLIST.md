@@ -1,7 +1,7 @@
 # 워크플로우 노드/도구 종합 체크리스트
 
 > 이 문서는 이터레이션마다 읽고 업데이트합니다.
-> 마지막 업데이트: 2026-03-10 (이터레이션 2)
+> 마지막 업데이트: 2026-03-10 (이터레이션 3)
 
 ## 프로젝트 루트
 `d:/claude-tools/.claude/mcp-servers/slack/next/`
@@ -62,7 +62,7 @@
 | escalation | nodes/escalation.ts | tools/approval-notifier.ts | nodes/escalation.tsx |
 | eval | nodes/eval.ts | tools/eval.ts | nodes/eval.tsx |
 | file | nodes/file.ts | tools/filesystem.ts | nodes/file.tsx |
-| filesystem_watch | nodes/filesystem-watch.ts | — | ❌ 없음 |
+| filesystem_watch | nodes/filesystem-watch.ts | — | nodes/triggers.tsx (trigger_filesystem_watch) |
 | filter | nodes/filter.ts | tools/filter.ts | nodes/filter.tsx |
 | form | nodes/form.ts | — | nodes/form.tsx |
 | format | nodes/format.ts | tools/format.ts | nodes/format.tsx |
@@ -281,66 +281,68 @@
 | xml | generate placeholder 수정 |
 | yaml | generate placeholder, create_default 수정 |
 
-### 미완료 (🔍) — 이터레이션 2 대상
-| 노드 | 파일 경로 |
+### 이터레이션 3에서 완료 (✅)
+| 노드 | 수정 내용 |
 |------|---------|
-| ai-agent | web/src/pages/workflows/nodes/ai-agent.tsx |
-| analyzer | web/src/pages/workflows/nodes/analyzer.tsx |
-| approval | web/src/pages/workflows/nodes/approval.tsx |
-| assert | web/src/pages/workflows/nodes/assert.tsx |
-| barcode | web/src/pages/workflows/nodes/barcode.tsx |
-| cache | web/src/pages/workflows/nodes/cache.tsx |
-| circuit_breaker | web/src/pages/workflows/nodes/circuit_breaker.tsx |
-| code | web/src/pages/workflows/nodes/code.tsx |
-| code_diagram | web/src/pages/workflows/nodes/code_diagram.tsx |
-| data_mask | web/src/pages/workflows/nodes/data_mask.tsx |
-| db | web/src/pages/workflows/nodes/db.tsx |
-| decision | web/src/pages/workflows/nodes/decision.tsx |
-| diff | web/src/pages/workflows/nodes/diff.tsx |
-| embedding | web/src/pages/workflows/nodes/embedding.tsx |
-| error-handler | web/src/pages/workflows/nodes/error-handler.tsx |
-| escalation | web/src/pages/workflows/nodes/escalation.tsx |
-| form | web/src/pages/workflows/nodes/form.tsx |
-| gate | web/src/pages/workflows/nodes/gate.tsx |
-| graphql | web/src/pages/workflows/nodes/graphql.tsx |
-| healthcheck | web/src/pages/workflows/nodes/healthcheck.tsx |
-| hitl | web/src/pages/workflows/nodes/hitl.tsx |
-| http | web/src/pages/workflows/nodes/http.tsx |
-| if | web/src/pages/workflows/nodes/if.tsx |
-| kanban-trigger | web/src/pages/workflows/nodes/kanban-trigger.tsx |
-| llm | web/src/pages/workflows/nodes/llm.tsx |
-| lookup | web/src/pages/workflows/nodes/lookup.tsx |
-| loop | web/src/pages/workflows/nodes/loop.tsx |
-| merge | web/src/pages/workflows/nodes/merge.tsx |
-| notify | web/src/pages/workflows/nodes/notify.tsx |
-| oauth | web/src/pages/workflows/nodes/oauth.tsx |
-| phone | web/src/pages/workflows/nodes/phone.tsx |
-| promise | web/src/pages/workflows/nodes/promise.tsx |
-| qr | web/src/pages/workflows/nodes/qr.tsx |
-| rate_limit | web/src/pages/workflows/nodes/rate_limit.tsx |
-| retriever | web/src/pages/workflows/nodes/retriever.tsx |
-| retry | web/src/pages/workflows/nodes/retry.tsx |
-| screenshot | web/src/pages/workflows/nodes/screenshot.tsx |
-| secret-read | web/src/pages/workflows/nodes/secret-read.tsx |
-| send-file | web/src/pages/workflows/nodes/send-file.tsx |
-| set | web/src/pages/workflows/nodes/set.tsx |
-| set-ops | web/src/pages/workflows/nodes/set-ops.tsx |
-| spawn-agent | web/src/pages/workflows/nodes/spawn-agent.tsx |
-| ssh | web/src/pages/workflows/nodes/ssh.tsx |
-| sub-workflow | web/src/pages/workflows/nodes/sub-workflow.tsx |
-| switch | web/src/pages/workflows/nodes/switch.tsx |
-| system-info | web/src/pages/workflows/nodes/system-info.tsx |
-| table | web/src/pages/workflows/nodes/table.tsx |
-| task | web/src/pages/workflows/nodes/task.tsx |
-| template | web/src/pages/workflows/nodes/template.tsx |
-| tool-invoke | web/src/pages/workflows/nodes/tool-invoke.tsx |
-| triggers | web/src/pages/workflows/nodes/triggers.tsx |
-| vector-store | web/src/pages/workflows/nodes/vector-store.tsx |
-| wait | web/src/pages/workflows/nodes/wait.tsx |
-| web-form | web/src/pages/workflows/nodes/web-form.tsx |
-| web-scrape | web/src/pages/workflows/nodes/web-scrape.tsx |
-| web-table | web/src/pages/workflows/nodes/web-table.tsx |
-| webhook | web/src/pages/workflows/nodes/webhook.tsx |
+| ai-agent | 이상 없음 |
+| analyzer | 이상 없음 |
+| approval | channel/chat_id 추가 |
+| assert | 이상 없음 |
+| barcode | 이상 없음 |
+| cache | 이상 없음 |
+| circuit_breaker | 이상 없음 |
+| code | 이상 없음 |
+| code_diagram | actors/messages 추가 |
+| data_mask | 이상 없음 |
+| db | 이상 없음 |
+| decision | rationale/priority/tags/scope_id/target_id 추가 |
+| diff | 이상 없음 |
+| embedding | 이상 없음 |
+| error-handler | fallback_nodes 추가 |
+| escalation | 이상 없음 |
+| form | channel/chat_id 추가 |
+| gate | 이상 없음 |
+| graphql | 이상 없음 |
+| healthcheck | host/endpoints 추가 |
+| hitl | channel/chat_id/fallback_value 추가 |
+| http | 이상 없음 |
+| if | 이상 없음 |
+| kanban-trigger | 이상 없음 |
+| llm | 이상 없음 |
+| lookup | 이상 없음 |
+| loop | 이상 없음 (이전 확인) |
+| merge | 이상 없음 (이전 확인) |
+| notify | channel/chat_id/parse_mode 추가 (이전 확인) |
+| oauth | auth_url 등 추가 (이전 확인) |
+| phone | number2/format_type 추가 |
+| promise | rationale/priority/tags/scope_id/target_id 추가 |
+| qr | 이상 없음 |
+| rate_limit | output_schema: allowed/remaining으로 수정 |
+| retriever | method/file_path 추가 |
+| retry | 이상 없음 (이전 확인) |
+| screenshot | 이상 없음 |
+| secret-read | 이상 없음 |
+| send-file | caption/channel/chat_id 추가 |
+| set | 이상 없음 |
+| set-ops | 이상 없음 |
+| spawn-agent | 이상 없음 |
+| ssh | local_path/remote_path 추가 (이전 확인) |
+| sub-workflow | 이상 없음 |
+| switch | 이상 없음 (이전 확인) |
+| system-info | 이상 없음 |
+| table | 이상 없음 |
+| task | channel/chat_id 추가 |
+| template | 이상 없음 |
+| tool-invoke | 이상 없음 |
+| triggers | 이상 없음 (filesystem_watch trigger 포함 확인) |
+| vector-store | query_vector_field 등 추가 |
+| wait | webhook_path/approval_message 추가 (이전 확인) |
+| web-form | 이상 없음 |
+| web-scrape | 이상 없음 |
+| web-table | 이상 없음 |
+| webhook | response_status/response_body 추가 (이전 확인) |
+
+**Phase 1 완료! ✅ 모든 노드 점검 완료**
 
 ---
 
@@ -394,7 +396,7 @@
 
 | 노드 | 문제 | 상태 |
 |------|------|------|
-| filesystem_watch | 프론트엔드 없음 | ❌ |
+| filesystem_watch | triggers.tsx에 trigger_filesystem_watch로 구현됨 | ✅ |
 | media (transcode/thumbnail) | 백엔드 미구현 | ✅ 수정됨 |
 
 ---
@@ -402,5 +404,7 @@
 ## 커밋 이력
 1. `fix: 워크플로우 노드 UI/파라미터 결함 수정 (1차)` — output_schema, media 수정
 2. `fix: 워크플로우 노드 UI/파라미터 결함 수정 (2차)` — create_default, i18n, ftp local_path
-3. (다음) Phase 1 미완료 노드 검토
-4. (다음) Phase 2 통합/신규 액션 추가
+3. `fix: 워크플로우 노드 UI/파라미터 결함 수정 (3차)` — notify/oauth/ssh/wait/webhook + CHECKLIST.md
+4. `fix: 워크플로우 노드 UI/파라미터 결함 수정 (4차)` — approval/code_diagram/decision/error-handler/form/healthcheck/hitl/phone/promise/retriever/send-file/task/vector-store/rate_limit
+5. (다음) Phase 2 통합/신규 액션 추가
+6. (다음) Phase 3 i18n 전체 스캔
