@@ -13,6 +13,7 @@ import { describe, it, expect, vi, beforeAll } from "vitest";
 import { register_all_nodes } from "@src/agent/nodes/index.js";
 import { run_phase_loop } from "@src/agent/phase-loop-runner.js";
 import type { PhaseLoopRunOptions } from "@src/agent/phase-loop.types.js";
+import type { IfNodeDefinition, SwitchNodeDefinition } from "@src/agent/workflow-node.types.js";
 
 beforeAll(() => {
   register_all_nodes();
@@ -400,6 +401,385 @@ describe("run_phase_loop — resume 완료 phase 스킵", () => {
 
     expect(result.status).toBe("completed");
     // resume 시 이미 완료된 phase는 spawn 호출 없이 스킵됨
+    expect(subagents.spawn).not.toHaveBeenCalled();
+  });
+});
+
+// ──────────────────────────────────────────────────
+// IF 노드 + skipped_nodes 처리 (L160-167, L250-254)
+// ──────────────────────────────────────────────────
+
+describe("run_phase_loop — IF 노드 분기 + skipped", () => {
+  it("condition=true → false_branch 노드 스킵 처리", async () => {
+    const store = make_store();
+    const subagents = make_subagents();
+    const events: Array<{ type: string; node_id?: string; reason?: string }> = [];
+
+    const if_node: IfNodeDefinition = {
+      node_id: "if1",
+      node_type: "if",
+      title: "IF",
+      condition: "true",
+      outputs: {
+        true_branch: ["set_true"],
+        false_branch: ["set_false"],
+      },
+    };
+
+    await run_phase_loop({
+      workflow_id: "wf-if",
+      title: "IF WF",
+      objective: "obj",
+      channel: "slack",
+      chat_id: "C1",
+      workspace: "/tmp",
+      phases: [],
+      nodes: [
+        if_node as any,
+        { node_id: "set_true", node_type: "set", title: "Set True", assignments: [{ key: "r", value: "true_path" }] } as any,
+        { node_id: "set_false", node_type: "set", title: "Set False", assignments: [{ key: "r", value: "false_path" }] } as any,
+      ],
+    }, {
+      subagents: subagents as any,
+      store: store as any,
+      logger: noop_logger,
+      on_event: (e) => events.push(e as any),
+    });
+
+    const skipped = events.filter((e) => e.type === "node_skipped" && e.node_id === "set_false");
+    expect(skipped.length).toBeGreaterThan(0);
+    expect((skipped[0] as any).reason).toBe("if_branch_inactive");
+  });
+});
+
+// ──────────────────────────────────────────────────
+// Switch 노드 + skipped_nodes 처리 (L257-267)
+// ──────────────────────────────────────────────────
+
+describe("run_phase_loop — Switch 노드 분기 + skipped", () => {
+  it("switch 매칭 case_a → case_b targets 스킵", async () => {
+    const store = make_store();
+    const subagents = make_subagents();
+    const events: Array<{ type: string; node_id?: string }> = [];
+
+    const sw_node: SwitchNodeDefinition = {
+      node_id: "sw1",
+      node_type: "switch",
+      title: "Switch",
+      expression: '"case_a"',
+      cases: [
+        { value: "case_a", targets: ["set_a"] },
+        { value: "case_b", targets: ["set_b"] },
+      ],
+    };
+
+    await run_phase_loop({
+      workflow_id: "wf-switch",
+      title: "Switch WF",
+      objective: "obj",
+      channel: "slack",
+      chat_id: "C1",
+      workspace: "/tmp",
+      phases: [],
+      nodes: [
+        sw_node as any,
+        { node_id: "set_a", node_type: "set", title: "Set A", assignments: [{ key: "r", value: "a" }] } as any,
+        { node_id: "set_b", node_type: "set", title: "Set B", assignments: [{ key: "r", value: "b" }] } as any,
+      ],
+    }, {
+      subagents: subagents as any,
+      store: store as any,
+      logger: noop_logger,
+      on_event: (e) => events.push(e as any),
+    });
+
+    const skipped = events.filter((e) => e.type === "node_skipped" && e.node_id === "set_b");
+    expect(skipped.length).toBeGreaterThan(0);
+  });
+});
+
+// ──────────────────────────────────────────────────
+// Resume: orche_states 완료 노드 스킵 (L131-132)
+// ──────────────────────────────────────────────────
+
+describe("run_phase_loop — resume orche_states 완료 노드", () => {
+  it("resume_state.orche_states에 completed 노드 → completed_node_ids 추가 후 스킵", async () => {
+    const store = make_store();
+    const subagents = make_subagents();
+    const events: Array<{ type: string; node_id?: string }> = [];
+
+    const resume_state: any = {
+      workflow_id: "wf-orche-resume",
+      title: "Orche Resume WF",
+      objective: "obj",
+      channel: "slack",
+      chat_id: "C1",
+      status: "running",
+      current_phase: 0,
+      memory: {},
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      phases: [],
+      orche_states: [
+        { node_id: "set1", node_type: "set", status: "completed", result: { r: "done" } },
+      ],
+      definition: {
+        title: "Orche Resume WF",
+        objective: "obj",
+        phases: [],
+        nodes: [
+          { node_id: "set1", node_type: "set", title: "Set1", assignments: [{ key: "r", value: "v" }] },
+        ],
+      },
+    };
+
+    await run_phase_loop({
+      workflow_id: "wf-orche-resume",
+      title: "Orche Resume WF",
+      objective: "obj",
+      channel: "slack",
+      chat_id: "C1",
+      workspace: "/tmp",
+      phases: [],
+      nodes: [
+        { node_id: "set1", node_type: "set", title: "Set1", assignments: [{ key: "r", value: "v" }] } as any,
+      ],
+      resume_state,
+    }, {
+      subagents: subagents as any,
+      store: store as any,
+      logger: noop_logger,
+      on_event: (e) => events.push(e as any),
+    });
+
+    const skipped = events.filter((e) => e.type === "node_skipped" && e.node_id === "set1");
+    expect(skipped.length).toBeGreaterThan(0);
+    expect((skipped[0] as any).reason).toBe("already_completed");
+  });
+});
+
+// ──────────────────────────────────────────────────
+// depends_on: 존재하지 않는 의존성 → unmet (L178-182)
+// ──────────────────────────────────────────────────
+
+describe("run_phase_loop — depends_on 미충족 (unfound dep)", () => {
+  it("depends_on에 존재하지 않는 노드 → 해당 노드 스킵, workflow completed", async () => {
+    const store = make_store();
+    const subagents = make_subagents();
+
+    const result = await run_phase_loop({
+      workflow_id: "wf-dep",
+      title: "Dep WF",
+      objective: "obj",
+      channel: "slack",
+      chat_id: "C1",
+      workspace: "/tmp",
+      phases: [],
+      nodes: [
+        { node_id: "set_a", node_type: "set", title: "Set A", assignments: [{ key: "a", value: 1 }] } as any,
+        // depends_on "nonexistent" 은 노드 목록에 없어 unmet 상태 유지
+        { node_id: "set_b", node_type: "set", title: "Set B", depends_on: ["nonexistent_xyz"], assignments: [{ key: "b", value: 2 }] } as any,
+      ],
+    }, {
+      subagents: subagents as any,
+      store: store as any,
+      logger: noop_logger,
+    });
+
+    expect(result.status).toBe("completed");
+    // set_b는 unmet dep으로 실행되지 않음 (memory에 b 없음)
+    expect(result.memory["set_b"]).toBeUndefined();
+  });
+});
+
+// ──────────────────────────────────────────────────
+// field_mappings (L245-247)
+// ──────────────────────────────────────────────────
+
+describe("run_phase_loop — field_mappings", () => {
+  it("from_node 출력 필드를 to_node 메모리에 주입", async () => {
+    const store = make_store();
+    const subagents = make_subagents();
+
+    const result = await run_phase_loop({
+      workflow_id: "wf-field-map",
+      title: "FieldMap WF",
+      objective: "obj",
+      channel: "slack",
+      chat_id: "C1",
+      workspace: "/tmp",
+      phases: [],
+      nodes: [
+        { node_id: "src", node_type: "set", title: "Src", assignments: [{ key: "val", value: "mapped_value" }] } as any,
+      ],
+      // to_node "target_slot"은 실제 노드가 아니므로 덮어쓰이지 않음
+      field_mappings: [
+        { from_node: "src", from_field: "val", to_node: "target_slot", to_field: "injected" },
+      ],
+    }, {
+      subagents: subagents as any,
+      store: store as any,
+      logger: noop_logger,
+    });
+
+    expect(result.status).toBe("completed");
+    expect((result.memory["target_slot"] as any)?.injected).toBe("mapped_value");
+  });
+});
+
+// ──────────────────────────────────────────────────
+// interactive 모드 (L369-379)
+// ──────────────────────────────────────────────────
+
+describe("run_phase_loop — interactive 모드", () => {
+  it("[SPEC_COMPLETE] 토큰 → 루프 종료 후 completed", async () => {
+    const store = make_store();
+    const subagents = {
+      spawn: vi.fn().mockResolvedValue({ subagent_id: "sa1" }),
+      wait_for_completion: vi.fn()
+        .mockResolvedValueOnce({ status: "completed", content: "interactive response [SPEC_COMPLETE]" }),
+      stop: vi.fn(),
+      list: vi.fn().mockReturnValue([]),
+    };
+
+    const result = await run_phase_loop(single_phase_opts({
+      phases: [{
+        phase_id: "p1",
+        title: "Interactive Phase",
+        mode: "interactive" as any,
+        max_loop_iterations: 5,
+        agents: [{ agent_id: "a1", role: "analyst", label: "A", backend: "openrouter", system_prompt: "s" }],
+      }],
+    }), { subagents: subagents as any, store: store as any, logger: noop_logger });
+
+    expect(result.status).toBe("completed");
+  });
+});
+
+// ──────────────────────────────────────────────────
+// Critic retry_all 거부 정책 (L483-494)
+// ──────────────────────────────────────────────────
+
+describe("run_phase_loop — critic retry_all 정책", () => {
+  it("1회 거부 후 retry_all → 재실행 후 승인 → completed", async () => {
+    const store = make_store();
+    const reject = JSON.stringify({ approved: false, summary: "needs work", agent_reviews: [] });
+    const approve = JSON.stringify({ approved: true, summary: "good", agent_reviews: [] });
+    const subagents = {
+      spawn: vi.fn()
+        .mockResolvedValueOnce({ subagent_id: "sa1" })       // 1st agent
+        .mockResolvedValueOnce({ subagent_id: "critic1" })   // 1st critic
+        .mockResolvedValueOnce({ subagent_id: "sa2" })       // retry agent
+        .mockResolvedValueOnce({ subagent_id: "critic2" }),  // 2nd critic
+      wait_for_completion: vi.fn()
+        .mockResolvedValueOnce({ status: "completed", content: "output" })
+        .mockResolvedValueOnce({ status: "completed", content: reject })
+        .mockResolvedValueOnce({ status: "completed", content: "improved" })
+        .mockResolvedValueOnce({ status: "completed", content: approve }),
+      stop: vi.fn(),
+      list: vi.fn().mockReturnValue([]),
+    };
+
+    const result = await run_phase_loop(single_phase_opts({
+      phases: [{
+        phase_id: "p1",
+        title: "Phase 1",
+        agents: [{ agent_id: "a1", role: "analyst", label: "A", backend: "openrouter", system_prompt: "s" }],
+        critic: { backend: "openrouter", system_prompt: "review", gate: true, on_rejection: "retry_all" as any, max_retries: 2 },
+      }],
+    }), { subagents: subagents as any, store: store as any, logger: noop_logger });
+
+    expect(result.status).toBe("completed");
+    expect(subagents.spawn).toHaveBeenCalledTimes(4);
+  });
+});
+
+// ──────────────────────────────────────────────────
+// Critic retry_targeted 거부 정책 (L498-520)
+// ──────────────────────────────────────────────────
+
+describe("run_phase_loop — critic retry_targeted 정책", () => {
+  it("1회 거부 후 retry_targeted → 지적된 에이전트 재실행 후 승인 → completed", async () => {
+    const store = make_store();
+    const reject = JSON.stringify({
+      approved: false,
+      summary: "a1 needs improvement",
+      agent_reviews: [{ agent_id: "a1", quality: "needs_improvement", feedback: "improve" }],
+    });
+    const approve = JSON.stringify({ approved: true, summary: "good", agent_reviews: [] });
+    const subagents = {
+      spawn: vi.fn()
+        .mockResolvedValueOnce({ subagent_id: "sa1" })
+        .mockResolvedValueOnce({ subagent_id: "critic1" })
+        .mockResolvedValueOnce({ subagent_id: "sa2" })
+        .mockResolvedValueOnce({ subagent_id: "critic2" }),
+      wait_for_completion: vi.fn()
+        .mockResolvedValueOnce({ status: "completed", content: "output" })
+        .mockResolvedValueOnce({ status: "completed", content: reject })
+        .mockResolvedValueOnce({ status: "completed", content: "improved" })
+        .mockResolvedValueOnce({ status: "completed", content: approve }),
+      stop: vi.fn(),
+      list: vi.fn().mockReturnValue([]),
+    };
+
+    const result = await run_phase_loop(single_phase_opts({
+      phases: [{
+        phase_id: "p1",
+        title: "Phase 1",
+        agents: [{ agent_id: "a1", role: "analyst", label: "A", backend: "openrouter", system_prompt: "s" }],
+        critic: { backend: "openrouter", system_prompt: "review", gate: true, on_rejection: "retry_targeted" as any, max_retries: 2 },
+      }],
+    }), { subagents: subagents as any, store: store as any, logger: noop_logger });
+
+    expect(result.status).toBe("completed");
+    expect(subagents.spawn).toHaveBeenCalledTimes(4);
+  });
+});
+
+// ──────────────────────────────────────────────────
+// Resume: 에이전트 전원 completed → phase 완료 스킵 (L338-344)
+// ──────────────────────────────────────────────────
+
+describe("run_phase_loop — resume 에이전트 전원 completed", () => {
+  it("resume 시 agents 전원 completed 이지만 phase_state.status=running → phase completed로 승격 후 스킵", async () => {
+    const store = make_store();
+    const subagents = make_subagents();
+
+    const resume_state: any = {
+      workflow_id: "wf-agents-done",
+      title: "Agents Done WF",
+      objective: "obj",
+      channel: "slack",
+      chat_id: "C1",
+      status: "running",
+      current_phase: 0,
+      memory: {},
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      orche_states: [],
+      phases: [{
+        phase_id: "p1",
+        title: "Phase 1",
+        // status가 running이지만 agents는 전원 completed
+        status: "running",
+        agents: [{
+          agent_id: "a1", role: "analyst", label: "A", model: "",
+          status: "completed", result: "done", messages: [],
+        }],
+      }],
+      definition: {
+        title: "Agents Done WF",
+        objective: "obj",
+        phases: [{ phase_id: "p1", title: "Phase 1", agents: [{ agent_id: "a1", role: "analyst", label: "A", backend: "openrouter", system_prompt: "s" }] }],
+      },
+    };
+
+    const result = await run_phase_loop(single_phase_opts({
+      workflow_id: "wf-agents-done",
+      resume_state,
+    }), { subagents: subagents as any, store: store as any, logger: noop_logger });
+
+    expect(result.status).toBe("completed");
     expect(subagents.spawn).not.toHaveBeenCalled();
   });
 });
