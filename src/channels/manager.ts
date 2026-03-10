@@ -638,6 +638,8 @@ export class ChannelManager implements ServiceLike {
                 stream_state.accumulated += "\n";
               }
               stream_state.accumulated += chunk;
+              // 도구 사용 시작 후엔 출력 억제 — 완료 후 새 메시지로 전송
+              if (stream_state.tool_count > 0) return;
               stream_state.chain = stream_state.chain
                 .then(() => this.send_or_edit_stream(provider, message, alias, stream_state.accumulated, stream_state))
                 .catch((e) => this.logger.debug("stream_update_failed", { error: error_message(e) }));
@@ -660,7 +662,8 @@ export class ChannelManager implements ServiceLike {
               }
             }
           : undefined,
-        on_tool_block: is_status_mode
+        on_tool_block: provider !== "web"
+          // 비web 채널: 도구 진행 상태를 status 메시지로 표시 (live/status 모드 공통)
           ? (tool_name: string) => {
               stream_state.tool_count++;
               const icon = STATUS_ICONS[tool_name] || "🔧";
@@ -707,7 +710,7 @@ export class ChannelManager implements ServiceLike {
           this.logger.debug("native_stream_stop_failed", { error: error_message(e) }),
         );
       }
-      await this.deliver_result(provider, message, alias, result, stream_state.message_id);
+      await this.deliver_result(provider, message, alias, result, stream_state.message_id, stream_state.tool_count);
     } catch (e) {
       if (run_id) this.tracker!.end(run_id, "failed", error_message(e));
       this.logger.error("invoke failed", { alias, error: error_message(e) });
@@ -722,7 +725,7 @@ export class ChannelManager implements ServiceLike {
 
   private async deliver_result(
     provider: ChannelProvider, message: InboundMessage, alias: string,
-    result: OrchestrationResult, stream_message_id?: string,
+    result: OrchestrationResult, stream_message_id?: string, tool_count = 0,
   ): Promise<void> {
     if (result.suppress_reply) return;
     if (!result.reply) {
@@ -755,9 +758,9 @@ export class ChannelManager implements ServiceLike {
       return m;
     };
 
-    // status mode: 상태 메시지 → "✓ 완료" + 최종 답변 새 메시지 (web은 제외)
+    // status mode 또는 도구 사용: 상태 메시지 → "✓ 완료" + 최종 답변 새 메시지 (web은 제외)
     const is_status_mode = provider !== "web" && this.config.streaming.enabled && this.config.streaming.mode === "status";
-    if (is_status_mode && stream_message_id) {
+    if ((is_status_mode || (provider !== "web" && tool_count > 0)) && stream_message_id) {
       try {
         await this.registry.edit_message(provider, message.chat_id, stream_message_id, this.render_msg({ kind: "status_completed" }, render_key(provider, message.chat_id)));
       } catch { /* 상태 메시지 마무리 실패는 무시 */ }
