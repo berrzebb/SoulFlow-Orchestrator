@@ -20,19 +20,22 @@ function ProcessEditPanel({ node, update, t }: EditPanelProps) {
           <input className="input" value={String(node.command || "")} onChange={(e) => update({ command: e.target.value })} placeholder="npm run start" />
         </BuilderField>
       )}
-      {(op === "stop" || op === "info") && (
+      {op === "stop" && (
         <BuilderRowPair>
           <BuilderField label={t("workflows.field_pid")}>
             <input className="input input--sm" type="number" min={1} value={String(node.pid ?? "")} onChange={(e) => update({ pid: Number(e.target.value) || 0 })} />
           </BuilderField>
-          {op === "stop" && (
-            <BuilderField label={t("workflows.signal")}>
-              <select className="input input--sm" value={String(node.signal || "SIGTERM")} onChange={(e) => update({ signal: e.target.value })}>
-                {["SIGTERM", "SIGKILL", "SIGINT", "SIGHUP"].map((s) => <option key={s} value={s}>{s}</option>)}
-              </select>
-            </BuilderField>
-          )}
+          <BuilderField label={t("workflows.signal")}>
+            <select className="input input--sm" value={String(node.signal || "SIGTERM")} onChange={(e) => update({ signal: e.target.value })}>
+              {["SIGTERM", "SIGKILL", "SIGINT", "SIGHUP"].map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </BuilderField>
         </BuilderRowPair>
+      )}
+      {op === "info" && (
+        <BuilderField label={t("workflows.field_pid")}>
+          <input className="input input--sm" type="number" min={1} value={String(node.pid ?? "")} onChange={(e) => update({ pid: Number(e.target.value) || 0 })} />
+        </BuilderField>
       )}
     </>
   );

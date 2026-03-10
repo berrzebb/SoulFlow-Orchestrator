@@ -7,23 +7,35 @@ function WebsocketEditPanel({ node, update, t }: EditPanelProps) {
   const action = String(node.action || "connect");
   return (
     <>
-      <BuilderRowPair>
+      {action === "connect" ? (
+        <BuilderRowPair>
+          <BuilderField label={t("workflows.action")} required>
+            <select autoFocus className="input input--sm" required value={action} onChange={(e) => update({ action: e.target.value })} aria-required="true">
+              {ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
+            </select>
+          </BuilderField>
+          <BuilderField label={t("workflows.field_url")} required>
+            <input className="input input--sm" required value={String(node.url || "")} onChange={(e) => update({ url: e.target.value })} placeholder="wss://example.com/ws" aria-required="true" />
+          </BuilderField>
+        </BuilderRowPair>
+      ) : action !== "list" ? (
+        <BuilderRowPair>
+          <BuilderField label={t("workflows.action")} required>
+            <select autoFocus className="input input--sm" required value={action} onChange={(e) => update({ action: e.target.value })} aria-required="true">
+              {ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
+            </select>
+          </BuilderField>
+          <BuilderField label={t("workflows.websocket_connection_id")} required>
+            <input className="input input--sm" required value={String(node.id || "")} onChange={(e) => update({ id: e.target.value })} placeholder="conn-1" aria-required="true" />
+          </BuilderField>
+        </BuilderRowPair>
+      ) : (
         <BuilderField label={t("workflows.action")} required>
           <select autoFocus className="input input--sm" required value={action} onChange={(e) => update({ action: e.target.value })} aria-required="true">
             {ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
           </select>
         </BuilderField>
-        {action === "connect" && (
-          <BuilderField label={t("workflows.field_url")} required>
-            <input className="input input--sm" required value={String(node.url || "")} onChange={(e) => update({ url: e.target.value })} placeholder="wss://example.com/ws" aria-required="true" />
-          </BuilderField>
-        )}
-        {action !== "connect" && action !== "list" && (
-          <BuilderField label={t("workflows.websocket_connection_id")} required>
-            <input className="input input--sm" required value={String(node.id || "")} onChange={(e) => update({ id: e.target.value })} placeholder="conn-1" aria-required="true" />
-          </BuilderField>
-        )}
-      </BuilderRowPair>
+      )}
       {action === "send" && (
         <BuilderField label={t("workflows.field_message")} required>
           <input className="input input--sm" required value={String(node.message || "")} onChange={(e) => update({ message: e.target.value })} aria-required="true" />

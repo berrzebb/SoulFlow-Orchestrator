@@ -13,22 +13,29 @@ function CryptoEditPanel({ node, update, t }: EditPanelProps) {
         </select>
       </BuilderField>
       {action === "generate_key" ? (
-        <BuilderRowPair>
-          <BuilderField label={t("workflows.crypto_key_type")}>
-            <select className="input input--sm" value={String(node.key_type || "aes")} onChange={(e) => update({ key_type: e.target.value })}>
-              <option value="aes">aes</option>
-              <option value="rsa">rsa</option>
-            </select>
-          </BuilderField>
-          {String(node.key_type || "aes") === "rsa" && (
+        String(node.key_type || "aes") === "rsa" ? (
+          <BuilderRowPair>
+            <BuilderField label={t("workflows.crypto_key_type")}>
+              <select className="input input--sm" value={String(node.key_type || "aes")} onChange={(e) => update({ key_type: e.target.value })}>
+                <option value="aes">aes</option>
+                <option value="rsa">rsa</option>
+              </select>
+            </BuilderField>
             <BuilderField label={t("workflows.crypto_key_size")}>
               <select className="input input--sm" value={String(node.key_size || 2048)} onChange={(e) => update({ key_size: Number(e.target.value) })}>
                 <option value="2048">2048</option>
                 <option value="4096">4096</option>
               </select>
             </BuilderField>
-          )}
-        </BuilderRowPair>
+          </BuilderRowPair>
+        ) : (
+          <BuilderField label={t("workflows.crypto_key_type")}>
+            <select className="input input--sm" value={String(node.key_type || "aes")} onChange={(e) => update({ key_type: e.target.value })}>
+              <option value="aes">aes</option>
+              <option value="rsa">rsa</option>
+            </select>
+          </BuilderField>
+        )
       ) : (
         <>
           <BuilderField label={t("workflows.field_input")} required>

@@ -7,18 +7,24 @@ function MemoryRwEditPanel({ node, update, t }: EditPanelProps) {
   const action = String(node.action || "get");
   return (
     <>
-      <BuilderRowPair>
+      {action !== "list" ? (
+        <BuilderRowPair>
+          <BuilderField label={t("workflows.action")} required>
+            <select autoFocus className="input input--sm" required value={action} onChange={(e) => update({ action: e.target.value })} aria-required="true">
+              {ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
+            </select>
+          </BuilderField>
+          <BuilderField label={t("workflows.field_key")} required>
+            <input className="input input--sm" required value={String(node.key || "")} onChange={(e) => update({ key: e.target.value })} placeholder="my_key" aria-required="true" />
+          </BuilderField>
+        </BuilderRowPair>
+      ) : (
         <BuilderField label={t("workflows.action")} required>
           <select autoFocus className="input input--sm" required value={action} onChange={(e) => update({ action: e.target.value })} aria-required="true">
             {ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
           </select>
         </BuilderField>
-        {action !== "list" && (
-          <BuilderField label={t("workflows.field_key")} required>
-            <input className="input input--sm" required value={String(node.key || "")} onChange={(e) => update({ key: e.target.value })} placeholder="my_key" aria-required="true" />
-          </BuilderField>
-        )}
-      </BuilderRowPair>
+      )}
       {action === "set" && (
         <BuilderField label={t("workflows.field_value")}>
           <input className="input input--sm" value={String(node.value || "")} onChange={(e) => update({ value: e.target.value })} placeholder="{{memory.result}}" />

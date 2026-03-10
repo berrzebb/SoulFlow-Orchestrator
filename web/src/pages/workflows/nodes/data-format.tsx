@@ -5,20 +5,26 @@ function DataFormatEditPanel({ node, update, t }: EditPanelProps) {
   const op = String(node.operation || "convert");
   return (
     <>
-      <BuilderRowPair>
-        <BuilderField label={t("workflows.operation")} required>
-          <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
-            {["convert", "query", "validate", "pretty", "flatten", "unflatten", "merge", "pick", "omit"].map((o) => <option key={o} value={o}>{o}</option>)}
-          </select>
-        </BuilderField>
-        {op === "convert" && (
+      {op === "convert" ? (
+        <BuilderRowPair>
+          <BuilderField label={t("workflows.operation")} required>
+            <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
+              {["convert", "query", "validate", "pretty", "flatten", "unflatten", "merge", "pick", "omit"].map((o) => <option key={o} value={o}>{o}</option>)}
+            </select>
+          </BuilderField>
           <BuilderField label={t("workflows.from_format")}>
             <select className="input input--sm" value={String(node.from || "json")} onChange={(e) => update({ from: e.target.value })}>
               {["json", "csv", "yaml", "toml"].map((f) => <option key={f} value={f}>{f.toUpperCase()}</option>)}
             </select>
           </BuilderField>
-        )}
-      </BuilderRowPair>
+        </BuilderRowPair>
+      ) : (
+        <BuilderField label={t("workflows.operation")} required>
+          <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
+            {["convert", "query", "validate", "pretty", "flatten", "unflatten", "merge", "pick", "omit"].map((o) => <option key={o} value={o}>{o}</option>)}
+          </select>
+        </BuilderField>
+      )}
       {op === "convert" && (
         <BuilderField label={t("workflows.to_format")}>
           <select className="input input--sm" value={String(node.to || "csv")} onChange={(e) => update({ to: e.target.value })}>

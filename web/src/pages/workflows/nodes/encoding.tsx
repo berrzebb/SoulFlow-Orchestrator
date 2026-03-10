@@ -5,13 +5,13 @@ function EncodingEditPanel({ node, update, t }: EditPanelProps) {
   const op = String(node.operation || "encode");
   return (
     <>
-      <BuilderRowPair>
-        <BuilderField label={t("workflows.operation")} required>
-          <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
-            {["encode", "decode", "hash", "uuid"].map((o) => <option key={o} value={o}>{o}</option>)}
-          </select>
-        </BuilderField>
-        {op !== "uuid" && (
+      {op !== "uuid" ? (
+        <BuilderRowPair>
+          <BuilderField label={t("workflows.operation")} required>
+            <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
+              {["encode", "decode", "hash", "uuid"].map((o) => <option key={o} value={o}>{o}</option>)}
+            </select>
+          </BuilderField>
           <BuilderField label={t("workflows.format")}>
             <select className="input input--sm" value={String(node.format || "base64")} onChange={(e) => update({ format: e.target.value })}>
               {op === "hash"
@@ -19,8 +19,14 @@ function EncodingEditPanel({ node, update, t }: EditPanelProps) {
                 : ["base64", "hex", "url"].map((f) => <option key={f} value={f}>{f}</option>)}
             </select>
           </BuilderField>
-        )}
-      </BuilderRowPair>
+        </BuilderRowPair>
+      ) : (
+        <BuilderField label={t("workflows.operation")} required>
+          <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
+            {["encode", "decode", "hash", "uuid"].map((o) => <option key={o} value={o}>{o}</option>)}
+          </select>
+        </BuilderField>
+      )}
       {op !== "uuid" && (
         <BuilderField label={t("workflows.input_data")}>
           <textarea className="input code-textarea" rows={3} value={String(node.input || "")} onChange={(e) => update({ input: e.target.value })} placeholder="Hello World" />

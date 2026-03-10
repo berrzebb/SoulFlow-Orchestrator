@@ -8,20 +8,26 @@ function JwtEditPanel({ node, update, t }: EditPanelProps) {
   const action = String(node.action || "create");
   return (
     <>
-      <BuilderRowPair>
-        <BuilderField label={t("workflows.action")} required>
-          <select autoFocus className="input input--sm" required value={action} onChange={(e) => update({ action: e.target.value })} aria-required="true">
-            {ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
-          </select>
-        </BuilderField>
-        {action !== "decode" && (
+      {action !== "decode" ? (
+        <BuilderRowPair>
+          <BuilderField label={t("workflows.action")} required>
+            <select autoFocus className="input input--sm" required value={action} onChange={(e) => update({ action: e.target.value })} aria-required="true">
+              {ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
+            </select>
+          </BuilderField>
           <BuilderField label={t("workflows.field_algorithm")}>
             <select className="input input--sm" value={String(node.algorithm || "HS256")} onChange={(e) => update({ algorithm: e.target.value })}>
               {ALGORITHMS.map((a) => <option key={a} value={a}>{a}</option>)}
             </select>
           </BuilderField>
-        )}
-      </BuilderRowPair>
+        </BuilderRowPair>
+      ) : (
+        <BuilderField label={t("workflows.action")} required>
+          <select autoFocus className="input input--sm" required value={action} onChange={(e) => update({ action: e.target.value })} aria-required="true">
+            {ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
+          </select>
+        </BuilderField>
+      )}
       {action === "create" ? (
         <>
           <BuilderField label={t("workflows.jwt_payload_json")} required>

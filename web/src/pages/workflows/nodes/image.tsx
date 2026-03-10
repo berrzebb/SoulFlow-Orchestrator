@@ -5,20 +5,26 @@ function ImageEditPanel({ node, update, t }: EditPanelProps) {
   const op = String(node.operation || "info");
   return (
     <>
-      <BuilderRowPair>
-        <BuilderField label={t("workflows.operation")} required>
-          <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
-            {["resize", "crop", "rotate", "convert", "info", "thumbnail"].map((o) => <option key={o} value={o}>{o}</option>)}
-          </select>
-        </BuilderField>
-        {op === "convert" && (
+      {op === "convert" ? (
+        <BuilderRowPair>
+          <BuilderField label={t("workflows.operation")} required>
+            <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
+              {["resize", "crop", "rotate", "convert", "info", "thumbnail"].map((o) => <option key={o} value={o}>{o}</option>)}
+            </select>
+          </BuilderField>
           <BuilderField label={t("workflows.format")}>
             <select className="input input--sm" value={String(node.format || "png")} onChange={(e) => update({ format: e.target.value })}>
               {["png", "jpeg", "webp", "gif", "bmp", "tiff"].map((f) => <option key={f} value={f}>{f}</option>)}
             </select>
           </BuilderField>
-        )}
-      </BuilderRowPair>
+        </BuilderRowPair>
+      ) : (
+        <BuilderField label={t("workflows.operation")} required>
+          <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
+            {["resize", "crop", "rotate", "convert", "info", "thumbnail"].map((o) => <option key={o} value={o}>{o}</option>)}
+          </select>
+        </BuilderField>
+      )}
       <BuilderField label={t("workflows.field_input_path")}>
         <input className="input" value={String(node.input_path || "")} onChange={(e) => update({ input_path: e.target.value })} placeholder="/path/to/image.png" />
       </BuilderField>
