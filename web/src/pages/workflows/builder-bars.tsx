@@ -65,6 +65,9 @@ export function WorkflowPromptBar({ name, workflow, onApply, initialPrompt }: {
   const auto_fired = useRef(false);
   const [selectedProvider, setSelectedProvider] = useState("");
   const [selectedModel, setSelectedModel] = useState("");
+  const [streamText, setStreamText] = useState("");
+  const [patchLog, setPatchLog] = useState<string[]>([]);
+  const logEndRef = useRef<HTMLDivElement>(null);
 
   const send = (override_text?: string) => {
     const text = (override_text ?? value).trim();
@@ -73,6 +76,8 @@ export function WorkflowPromptBar({ name, workflow, onApply, initialPrompt }: {
     // 현재 워크플로우 스냅샷 (스트리밍 중 점진적 패치 대상)
     const wf = workflow ? JSON.parse(JSON.stringify(workflow)) as WorkflowDef : null;
     setLoading(true);
+    setStreamText("");
+    setPatchLog([]);
 
     void (async () => {
       try {
@@ -110,11 +115,16 @@ export function WorkflowPromptBar({ name, workflow, onApply, initialPrompt }: {
             if (!raw) continue;
             try {
               const data = JSON.parse(raw) as Record<string, unknown>;
-              if (event === "patch") {
+              if (event === "stream") {
+                setStreamText((prev) => prev + String(data.text ?? ""));
+                logEndRef.current?.scrollIntoView({ behavior: "smooth" });
+              } else if (event === "patch") {
                 if (wf) {
                   apply_patch(wf, data.path as string, data.section as Record<string, unknown>);
                   onApply({ ...wf, phases: [...(wf.phases ?? [])] as PhaseDef[] });
                 }
+                setPatchLog((prev) => [...prev, String(data.path ?? "")]);
+                logEndRef.current?.scrollIntoView({ behavior: "smooth" });
               } else if (event === "done") {
                 if (data.workflow) onApply(data.workflow as WorkflowDef);
                 setValue("");
@@ -148,6 +158,21 @@ export function WorkflowPromptBar({ name, workflow, onApply, initialPrompt }: {
 
   return (
     <div className={`workflow-prompt-bar${loading ? " workflow-prompt-bar--loading" : ""}`}>
+      {loading && (streamText || patchLog.length > 0) && (
+        <div className="workflow-stream-log">
+          {streamText && (
+            <div className="workflow-stream-log__text">{streamText}<span className="chat-cursor" /></div>
+          )}
+          {patchLog.length > 0 && (
+            <div className="workflow-stream-log__patches">
+              {patchLog.map((p, i) => (
+                <span key={i} className="workflow-stream-log__patch">✓ {p}</span>
+              ))}
+            </div>
+          )}
+          <div ref={logEndRef} />
+        </div>
+      )}
       <ChatPromptBar
         input={value}
         setInput={setValue}

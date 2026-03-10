@@ -924,6 +924,7 @@ export function create_workflow_ops(deps: {
             max_tokens: 4096,
             temperature: 0.2,
             abort_signal: loop_abort,
+            on_stream: options?.on_stream,
           });
 
           logger?.debug?.("[suggest] turn response", {
@@ -987,6 +988,7 @@ export function create_workflow_ops(deps: {
                 max_tokens: 8192,
                 temperature: 0.1,
                 abort_signal: loop_abort,
+                on_stream: options?.on_stream,
               });
               logger?.debug?.("[suggest] fallback response", {
                 content_len: String(fallback_res.content ?? "").length,

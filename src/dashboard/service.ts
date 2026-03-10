@@ -323,7 +323,7 @@ export interface DashboardWorkflowOps {
   test_single_node?(node: Record<string, unknown>, input_memory: Record<string, unknown>): { ok: boolean; preview?: unknown; warnings?: string[] };
   /** 자연어 instruction으로 워크플로우 수정 제안. save:true 시 완료 후 템플릿으로 저장. */
   /** name: 파일 저장소에서 로드. workflow: 비저장 상태(미저장 변경 포함) 직접 전달. 둘 중 하나 필수. */
-  suggest?(instruction: string, options: { name?: string; workflow?: Record<string, unknown>; provider_id?: string; model?: string; save?: boolean; on_patch?: (path: string, section: Record<string, unknown> | unknown[]) => void }): Promise<{ ok: boolean; workflow?: Record<string, unknown>; name?: string; error?: string }>;
+  suggest?(instruction: string, options: { name?: string; workflow?: Record<string, unknown>; provider_id?: string; model?: string; save?: boolean; on_patch?: (path: string, section: Record<string, unknown> | unknown[]) => void; on_stream?: (text: string) => void }): Promise<{ ok: boolean; workflow?: Record<string, unknown>; name?: string; error?: string }>;
 }
 
 export interface DashboardCliAuthOps {

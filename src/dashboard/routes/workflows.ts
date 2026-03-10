@@ -203,6 +203,7 @@ export const handle_workflow: RouteHandler = async (ctx) => {
         model: typeof body.model === "string" ? body.model : undefined,
         save: body.save === true,
         on_patch: (patch_path, section) => send_event("patch", { path: patch_path, section }),
+        on_stream: (text) => send_event("stream", { text }),
       });
       send_event(result.ok ? "done" : "error", result);
     } catch (err) {

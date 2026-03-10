@@ -53,6 +53,37 @@
   color: var(--muted);
   cursor: not-allowed;
 }
+/* Streaming log panel */
+.workflow-stream-log {
+  max-height: 160px;
+  overflow-y: auto;
+  padding: var(--sp-2) var(--sp-3);
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+.workflow-stream-log__text {
+  font-size: 0.75rem;
+  color: var(--muted);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.workflow-stream-log__patches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.workflow-stream-log__patch {
+  font-size: 0.7rem;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--ok) 12%, transparent);
+  color: var(--ok);
+  font-weight: 500;
+}
+
 /* Loading state */
 .workflow-prompt-bar--loading {
   position: relative;
