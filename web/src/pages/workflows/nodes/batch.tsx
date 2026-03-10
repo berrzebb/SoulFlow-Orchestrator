@@ -1,14 +1,17 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 import { BuilderField, BuilderRowPair } from "../builder-field";
 
-function BatchEditPanel({ node, update, t }: EditPanelProps) {
+function BatchEditPanel({ node, update, t, options }: EditPanelProps) {
+  const wf_nodes = options?.workflow_nodes;
+  const list_id = "batch-body-node-list";
   return (
     <>
       <BuilderField label={t("workflows.batch_array_field")} hint={t("workflows.batch_array_field_hint")}>
         <input autoFocus className="input input--sm" value={String(node.array_field || "")} onChange={(e) => update({ array_field: e.target.value })} placeholder="memory.items" aria-label={t("workflows.batch_array_field")} />
       </BuilderField>
       <BuilderField label={t("workflows.batch_body_node")} hint={t("workflows.batch_body_node_hint")}>
-        <input className="input input--sm" value={String(node.body_node || "")} onChange={(e) => update({ body_node: e.target.value })} placeholder="process_item" aria-label={t("workflows.batch_body_node")} />
+        {wf_nodes && <datalist id={list_id}>{wf_nodes.map((n) => <option key={n.id} value={n.id}>{n.label}</option>)}</datalist>}
+        <input className="input input--sm" list={wf_nodes ? list_id : undefined} value={String(node.body_node || "")} onChange={(e) => update({ body_node: e.target.value })} placeholder="process_item" aria-label={t("workflows.batch_body_node")} />
       </BuilderField>
       <BuilderRowPair>
         <BuilderField label={t("workflows.batch_concurrency")} hint={t("workflows.batch_concurrency_hint")}>

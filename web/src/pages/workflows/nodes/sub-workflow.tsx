@@ -5,7 +5,7 @@ function SubWorkflowEditPanel({ node, update, t, options }: EditPanelProps) {
   const templates = options?.workflow_templates || [];
   return (
     <>
-      <BuilderField label={t("workflows.sub_workflow_name")}>
+      <BuilderField label={t("workflows.sub_workflow_name")} required>
         {templates.length > 0 ? (
           <select autoFocus className="input input--sm" value={String(node.workflow_name || "")} onChange={(e) => update({ workflow_name: e.target.value })}>
             <option value="">{t("common.select")}</option>

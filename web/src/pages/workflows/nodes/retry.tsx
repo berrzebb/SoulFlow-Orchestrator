@@ -1,11 +1,14 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 import { BuilderField, BuilderRowPair } from "../builder-field";
 
-function RetryEditPanel({ node, update, t }: EditPanelProps) {
+function RetryEditPanel({ node, update, t, options }: EditPanelProps) {
+  const wf_nodes = options?.workflow_nodes;
+  const list_id = "retry-target-node-list";
   return (
     <>
       <BuilderField label={t("workflows.retry_target")} hint={t("workflows.retry_target_hint")}>
-        <input autoFocus className="input input--sm" value={String(node.target_node || "")} onChange={(e) => update({ target_node: e.target.value })} placeholder="node_id" aria-label={t("workflows.retry_target")} />
+        {wf_nodes && <datalist id={list_id}>{wf_nodes.map((n) => <option key={n.id} value={n.id}>{n.label}</option>)}</datalist>}
+        <input autoFocus className="input input--sm" list={wf_nodes ? list_id : undefined} value={String(node.target_node || "")} onChange={(e) => update({ target_node: e.target.value })} placeholder="node_id" aria-label={t("workflows.retry_target")} />
       </BuilderField>
       <BuilderRowPair>
         <BuilderField label={t("workflows.retry_max_attempts")} hint={t("workflows.retry_max_attempts_hint")}>
