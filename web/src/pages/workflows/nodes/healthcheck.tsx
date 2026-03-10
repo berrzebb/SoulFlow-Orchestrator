@@ -7,22 +7,30 @@ function HealthcheckEditPanel({ node, update, t }: EditPanelProps) {
   const action = String(node.action || "http");
   return (
     <>
-      <BuilderRowPair>
+      {action === "multi" ? (
         <BuilderField label={t("workflows.action")} required>
           <select autoFocus className="input input--sm" required value={action} onChange={(e) => update({ action: e.target.value })} aria-required="true">
             {ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
           </select>
         </BuilderField>
-        {action === "http" ? (
-          <BuilderField label={t("workflows.field_url")} required>
-            <input className="input input--sm" required value={String(node.url || "")} onChange={(e) => update({ url: e.target.value })} placeholder="https://example.com/health" aria-required="true" />
+      ) : (
+        <BuilderRowPair>
+          <BuilderField label={t("workflows.action")} required>
+            <select autoFocus className="input input--sm" required value={action} onChange={(e) => update({ action: e.target.value })} aria-required="true">
+              {ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
+            </select>
           </BuilderField>
-        ) : action !== "multi" ? (
-          <BuilderField label={t("workflows.host")} required>
-            <input className="input input--sm" required value={String(node.host || "")} onChange={(e) => update({ host: e.target.value })} placeholder="example.com" aria-required="true" />
-          </BuilderField>
-        ) : null}
-      </BuilderRowPair>
+          {action === "http" ? (
+            <BuilderField label={t("workflows.field_url")} required>
+              <input className="input input--sm" required value={String(node.url || "")} onChange={(e) => update({ url: e.target.value })} placeholder="https://example.com/health" aria-required="true" />
+            </BuilderField>
+          ) : (
+            <BuilderField label={t("workflows.host")} required>
+              <input className="input input--sm" required value={String(node.host || "")} onChange={(e) => update({ host: e.target.value })} placeholder="example.com" aria-required="true" />
+            </BuilderField>
+          )}
+        </BuilderRowPair>
+      )}
       {action === "multi" && (
         <BuilderField label={t("workflows.healthcheck_endpoints")} required>
           <textarea className="input" required rows={3} value={String(node.endpoints || "")} onChange={(e) => update({ endpoints: e.target.value })} placeholder='[{"url":"https://example.com/health"},...]' aria-required="true" />

@@ -8,13 +8,11 @@ function OpenapiEditPanel({ node, update, t }: EditPanelProps) {
   const action = String(node.action || "parse");
   return (
     <>
-      <BuilderRowPair>
-        <BuilderField label={t("workflows.action")} required>
-          <select autoFocus className="input input--sm" required value={action} onChange={(e) => update({ action: e.target.value })} aria-required="true">
-            {ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
-          </select>
-        </BuilderField>
-      </BuilderRowPair>
+      <BuilderField label={t("workflows.action")} required>
+        <select autoFocus className="input input--sm" required value={action} onChange={(e) => update({ action: e.target.value })} aria-required="true">
+          {ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
+        </select>
+      </BuilderField>
       <BuilderField label={t("workflows.openapi_spec")} required>
         <textarea className="input" required rows={5} value={String(node.spec || "")} onChange={(e) => update({ spec: e.target.value })} placeholder='{"openapi": "3.0.0", ...}' aria-required="true" />
       </BuilderField>

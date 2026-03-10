@@ -7,18 +7,24 @@ function YamlEditPanel({ node, update, t }: EditPanelProps) {
   const action = String(node.action || "parse");
   return (
     <>
-      <BuilderRowPair>
+      {action === "generate" ? (
+        <BuilderRowPair>
+          <BuilderField label={t("workflows.action")} required>
+            <select autoFocus className="input input--sm" required value={action} onChange={(e) => update({ action: e.target.value })} aria-required="true">
+              {ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
+            </select>
+          </BuilderField>
+          <BuilderField label={t("workflows.yaml_indent")}>
+            <input className="input input--sm" type="number" min={1} max={8} value={String(node.indent ?? 2)} onChange={(e) => update({ indent: Number(e.target.value) || 2 })} />
+          </BuilderField>
+        </BuilderRowPair>
+      ) : (
         <BuilderField label={t("workflows.action")} required>
           <select autoFocus className="input input--sm" required value={action} onChange={(e) => update({ action: e.target.value })} aria-required="true">
             {ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
           </select>
         </BuilderField>
-        {action === "generate" && (
-          <BuilderField label={t("workflows.yaml_indent")}>
-            <input className="input input--sm" type="number" min={1} max={8} value={String(node.indent ?? 2)} onChange={(e) => update({ indent: Number(e.target.value) || 2 })} />
-          </BuilderField>
-        )}
-      </BuilderRowPair>
+      )}
       <BuilderField label={t("workflows.field_input")} required>
         <textarea className="input" required rows={4} value={String(node.data || "")} onChange={(e) => update({ data: e.target.value })} placeholder="key: value" aria-required="true" />
       </BuilderField>

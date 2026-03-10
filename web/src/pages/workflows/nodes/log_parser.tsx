@@ -7,13 +7,11 @@ function LogParserEditPanel({ node, update, t }: EditPanelProps) {
   const action = String(node.action || "parse_json");
   return (
     <>
-      <BuilderRowPair>
-        <BuilderField label={t("workflows.action")} required>
-          <select autoFocus className="input input--sm" required value={action} onChange={(e) => update({ action: e.target.value })} aria-required="true">
-            {ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
-          </select>
-        </BuilderField>
-      </BuilderRowPair>
+      <BuilderField label={t("workflows.action")} required>
+        <select autoFocus className="input input--sm" required value={action} onChange={(e) => update({ action: e.target.value })} aria-required="true">
+          {ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
+        </select>
+      </BuilderField>
       <BuilderField label={t("workflows.log_input")} required>
         <textarea className="input" required rows={4} value={String(node.input || "")} onChange={(e) => update({ input: e.target.value })} placeholder="log lines..." aria-required="true" />
       </BuilderField>

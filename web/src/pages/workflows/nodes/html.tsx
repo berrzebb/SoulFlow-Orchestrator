@@ -8,18 +8,24 @@ function HtmlEditPanel({ node, update, t }: EditPanelProps) {
   const action = String(node.action || "extract_text");
   return (
     <>
-      <BuilderRowPair>
+      {SELECTOR_ACTIONS.includes(action) ? (
+        <BuilderRowPair>
+          <BuilderField label={t("workflows.action")} required>
+            <select autoFocus className="input input--sm" required value={action} onChange={(e) => update({ action: e.target.value })} aria-required="true">
+              {ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
+            </select>
+          </BuilderField>
+          <BuilderField label={t("workflows.html_selector")}>
+            <input className="input input--sm" value={String(node.selector || "")} onChange={(e) => update({ selector: e.target.value })} placeholder="div.content" />
+          </BuilderField>
+        </BuilderRowPair>
+      ) : (
         <BuilderField label={t("workflows.action")} required>
           <select autoFocus className="input input--sm" required value={action} onChange={(e) => update({ action: e.target.value })} aria-required="true">
             {ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
           </select>
         </BuilderField>
-        {SELECTOR_ACTIONS.includes(action) && (
-          <BuilderField label={t("workflows.html_selector")}>
-            <input className="input input--sm" value={String(node.selector || "")} onChange={(e) => update({ selector: e.target.value })} placeholder="div.content" />
-          </BuilderField>
-        )}
-      </BuilderRowPair>
+      )}
       <BuilderField label={t("workflows.html_input")} required>
         <textarea className="input" required rows={5} value={String(node.html || "")} onChange={(e) => update({ html: e.target.value })} placeholder="<html>...</html>" aria-required="true" />
       </BuilderField>

@@ -8,20 +8,26 @@ function BarcodeEditPanel({ node, update, t }: EditPanelProps) {
   const action = String(node.action || "generate");
   return (
     <>
-      <BuilderRowPair>
-        <BuilderField label={t("workflows.action")} required>
-          <select autoFocus className="input input--sm" required value={action} onChange={(e) => update({ action: e.target.value })} aria-required="true">
-            {ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
-          </select>
-        </BuilderField>
-        {action === "generate" && (
+      {action === "generate" ? (
+        <BuilderRowPair>
+          <BuilderField label={t("workflows.action")} required>
+            <select autoFocus className="input input--sm" required value={action} onChange={(e) => update({ action: e.target.value })} aria-required="true">
+              {ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
+            </select>
+          </BuilderField>
           <BuilderField label={t("workflows.field_format")}>
             <select className="input input--sm" value={String(node.format || "code128")} onChange={(e) => update({ format: e.target.value })}>
               {FORMATS.map((f) => <option key={f} value={f}>{f}</option>)}
             </select>
           </BuilderField>
-        )}
-      </BuilderRowPair>
+        </BuilderRowPair>
+      ) : (
+        <BuilderField label={t("workflows.action")} required>
+          <select autoFocus className="input input--sm" required value={action} onChange={(e) => update({ action: e.target.value })} aria-required="true">
+            {ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
+          </select>
+        </BuilderField>
+      )}
       <BuilderField label={t("workflows.field_data")} required>
         <input className="input input--sm" required value={String(node.data || "")} onChange={(e) => update({ data: e.target.value })} placeholder="1234567890128" aria-required="true" />
       </BuilderField>

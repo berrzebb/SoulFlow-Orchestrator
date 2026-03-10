@@ -7,23 +7,30 @@ function TokenizerEditPanel({ node, update, t }: EditPanelProps) {
   const action = String(node.action || "word_tokenize");
   return (
     <>
-      <BuilderRowPair>
+      {(action === "ngrams" || action === "keyword_extract" || action === "tf_idf") ? (
+        <BuilderRowPair>
+          <BuilderField label={t("workflows.action")} required>
+            <select autoFocus className="input input--sm" required value={action} onChange={(e) => update({ action: e.target.value })} aria-required="true">
+              {ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
+            </select>
+          </BuilderField>
+          {action === "ngrams" ? (
+            <BuilderField label={t("workflows.tokenizer_n")}>
+              <input className="input input--sm" type="number" min={1} max={10} value={String(node.n ?? 2)} onChange={(e) => update({ n: Number(e.target.value) || 2 })} />
+            </BuilderField>
+          ) : (
+            <BuilderField label={t("workflows.tokenizer_top_k")}>
+              <input className="input input--sm" type="number" min={1} value={String(node.top_k ?? 10)} onChange={(e) => update({ top_k: Number(e.target.value) || 10 })} />
+            </BuilderField>
+          )}
+        </BuilderRowPair>
+      ) : (
         <BuilderField label={t("workflows.action")} required>
           <select autoFocus className="input input--sm" required value={action} onChange={(e) => update({ action: e.target.value })} aria-required="true">
             {ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
           </select>
         </BuilderField>
-        {action === "ngrams" && (
-          <BuilderField label={t("workflows.tokenizer_n")}>
-            <input className="input input--sm" type="number" min={1} max={10} value={String(node.n ?? 2)} onChange={(e) => update({ n: Number(e.target.value) || 2 })} />
-          </BuilderField>
-        )}
-        {(action === "keyword_extract" || action === "tf_idf") && (
-          <BuilderField label={t("workflows.tokenizer_top_k")}>
-            <input className="input input--sm" type="number" min={1} value={String(node.top_k ?? 10)} onChange={(e) => update({ top_k: Number(e.target.value) || 10 })} />
-          </BuilderField>
-        )}
-      </BuilderRowPair>
+      )}
       <BuilderField label={t("workflows.field_text")} required>
         <textarea className="input" required rows={4} value={String(node.text || "")} onChange={(e) => update({ text: e.target.value })} placeholder="Enter text to tokenize..." aria-required="true" />
       </BuilderField>

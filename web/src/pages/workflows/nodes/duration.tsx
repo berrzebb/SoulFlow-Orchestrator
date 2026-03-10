@@ -1,4 +1,4 @@
-import { BuilderField, BuilderRowPair } from "../builder-field";
+import { BuilderField } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
 const ACTIONS = ["parse", "format", "to_ms", "from_ms", "add", "subtract", "humanize", "compare"];
@@ -7,13 +7,11 @@ function DurationEditPanel({ node, update, t }: EditPanelProps) {
   const action = String(node.action || "parse");
   return (
     <>
-      <BuilderRowPair>
-        <BuilderField label={t("workflows.action")} required>
-          <select autoFocus className="input input--sm" required value={action} onChange={(e) => update({ action: e.target.value })} aria-required="true">
-            {ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
-          </select>
-        </BuilderField>
-      </BuilderRowPair>
+      <BuilderField label={t("workflows.action")} required>
+        <select autoFocus className="input input--sm" required value={action} onChange={(e) => update({ action: e.target.value })} aria-required="true">
+          {ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
+        </select>
+      </BuilderField>
       {action === "from_ms" ? (
         <BuilderField label={t("workflows.duration_ms")} required>
           <input className="input input--sm" required type="number" min={0} value={String(node.ms ?? "")} onChange={(e) => update({ ms: e.target.value ? Number(e.target.value) : undefined })} placeholder="86400000" aria-required="true" />

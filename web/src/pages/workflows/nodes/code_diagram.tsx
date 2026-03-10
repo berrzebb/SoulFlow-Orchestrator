@@ -9,20 +9,26 @@ function CodeDiagramEditPanel({ node, update, t }: EditPanelProps) {
   const is_sequence = action === "sequence_diagram";
   return (
     <>
-      <BuilderRowPair>
-        <BuilderField label={t("workflows.action")} required>
-          <select autoFocus className="input input--sm" required value={action} onChange={(e) => update({ action: e.target.value })} aria-required="true">
-            {ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
-          </select>
-        </BuilderField>
-        {!is_sequence && (
+      {!is_sequence ? (
+        <BuilderRowPair>
+          <BuilderField label={t("workflows.action")} required>
+            <select autoFocus className="input input--sm" required value={action} onChange={(e) => update({ action: e.target.value })} aria-required="true">
+              {ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
+            </select>
+          </BuilderField>
           <BuilderField label={t("workflows.code_diagram_direction")}>
             <select className="input input--sm" value={String(node.direction || "LR")} onChange={(e) => update({ direction: e.target.value })}>
               {DIRECTIONS.map((d) => <option key={d} value={d}>{d}</option>)}
             </select>
           </BuilderField>
-        )}
-      </BuilderRowPair>
+        </BuilderRowPair>
+      ) : (
+        <BuilderField label={t("workflows.action")} required>
+          <select autoFocus className="input input--sm" required value={action} onChange={(e) => update({ action: e.target.value })} aria-required="true">
+            {ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
+          </select>
+        </BuilderField>
+      )}
       {!is_sequence ? (
         <BuilderField label={t("workflows.code_diagram_source")} required>
           <textarea className="input" required rows={5} value={String(node.source || "")} onChange={(e) => update({ source: e.target.value })} placeholder="// Paste source code here" aria-required="true" />

@@ -1,4 +1,4 @@
-import { BuilderField, BuilderRowPair, JsonField } from "../builder-field";
+import { BuilderField, JsonField } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
 const ACTIONS = ["multiply", "transpose", "inverse", "determinant", "add", "subtract", "scalar", "solve", "identity", "trace"];
@@ -10,13 +10,11 @@ function MatrixEditPanel({ node, update, t }: EditPanelProps) {
   const needs_size = action === "identity";
   return (
     <>
-      <BuilderRowPair>
-        <BuilderField label={t("workflows.action")} required>
-          <select autoFocus className="input input--sm" required value={action} onChange={(e) => update({ action: e.target.value })} aria-required="true">
-            {ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
-          </select>
-        </BuilderField>
-      </BuilderRowPair>
+      <BuilderField label={t("workflows.action")} required>
+        <select autoFocus className="input input--sm" required value={action} onChange={(e) => update({ action: e.target.value })} aria-required="true">
+          {ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
+        </select>
+      </BuilderField>
       {!needs_size && (
         <JsonField label={t("workflows.matrix_a_json")} value={node.a} onUpdate={(v) => update({ a: v })} placeholder="[[1,2],[3,4]]" />
       )}

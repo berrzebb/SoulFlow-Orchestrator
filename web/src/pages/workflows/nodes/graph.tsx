@@ -8,25 +8,27 @@ function GraphEditPanel({ node, update, t }: EditPanelProps) {
   const needs_endpoints = ["bfs", "dfs", "shortest_path"].includes(action);
   return (
     <>
-      <BuilderRowPair>
-        <BuilderField label={t("workflows.action")} required>
-          <select autoFocus className="input input--sm" required value={action} onChange={(e) => update({ action: e.target.value })} aria-required="true">
-            {ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
-          </select>
-        </BuilderField>
-      </BuilderRowPair>
+      <BuilderField label={t("workflows.action")} required>
+        <select autoFocus className="input input--sm" required value={action} onChange={(e) => update({ action: e.target.value })} aria-required="true">
+          {ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
+        </select>
+      </BuilderField>
       <JsonField label={t("workflows.graph_edges_json")} value={node.edges} onUpdate={(v) => update({ edges: v })} placeholder="[[1,2],[2,3]]" />
       {needs_endpoints && (
-        <BuilderRowPair>
-          <BuilderField label={t("workflows.graph_start_node")} required>
-            <input className="input input--sm" required value={String(node.start ?? "")} onChange={(e) => update({ start: e.target.value })} placeholder="1" aria-required="true" />
-          </BuilderField>
-          {action === "shortest_path" && (
+        action === "shortest_path" ? (
+          <BuilderRowPair>
+            <BuilderField label={t("workflows.graph_start_node")} required>
+              <input className="input input--sm" required value={String(node.start ?? "")} onChange={(e) => update({ start: e.target.value })} placeholder="1" aria-required="true" />
+            </BuilderField>
             <BuilderField label={t("workflows.graph_end_node")} required>
               <input className="input input--sm" required value={String(node.end_node ?? "")} onChange={(e) => update({ end_node: e.target.value })} placeholder="3" aria-required="true" />
             </BuilderField>
-          )}
-        </BuilderRowPair>
+          </BuilderRowPair>
+        ) : (
+          <BuilderField label={t("workflows.graph_start_node")} required>
+            <input className="input input--sm" required value={String(node.start ?? "")} onChange={(e) => update({ start: e.target.value })} placeholder="1" aria-required="true" />
+          </BuilderField>
+        )
       )}
     </>
   );

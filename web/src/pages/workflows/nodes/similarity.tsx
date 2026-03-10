@@ -9,20 +9,26 @@ function SimilarityEditPanel({ node, update, t }: EditPanelProps) {
   const has_mode = ["cosine", "jaccard"].includes(action);
   return (
     <>
-      <BuilderRowPair>
-        <BuilderField label={t("workflows.action")} required>
-          <select autoFocus className="input input--sm" required value={action} onChange={(e) => update({ action: e.target.value })} aria-required="true">
-            {ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
-          </select>
-        </BuilderField>
-        {has_mode && (
+      {has_mode ? (
+        <BuilderRowPair>
+          <BuilderField label={t("workflows.action")} required>
+            <select autoFocus className="input input--sm" required value={action} onChange={(e) => update({ action: e.target.value })} aria-required="true">
+              {ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
+            </select>
+          </BuilderField>
           <BuilderField label={t("workflows.similarity_mode")}>
             <select className="input input--sm" value={String(node.mode || "word")} onChange={(e) => update({ mode: e.target.value })}>
               {MODES.map((m) => <option key={m} value={m}>{m}</option>)}
             </select>
           </BuilderField>
-        )}
-      </BuilderRowPair>
+        </BuilderRowPair>
+      ) : (
+        <BuilderField label={t("workflows.action")} required>
+          <select autoFocus className="input input--sm" required value={action} onChange={(e) => update({ action: e.target.value })} aria-required="true">
+            {ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
+          </select>
+        </BuilderField>
+      )}
       <BuilderField label={t("workflows.similarity_text_a")} required>
         <input className="input input--sm" required value={String(node.a || "")} onChange={(e) => update({ a: e.target.value })} placeholder="hello world" aria-required="true" />
       </BuilderField>

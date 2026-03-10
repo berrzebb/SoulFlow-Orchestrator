@@ -1,4 +1,4 @@
-import { BuilderField, BuilderRowPair } from "../builder-field";
+import { BuilderField } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
 const ACTIONS = ["strength", "check_policy", "hash", "verify", "generate", "entropy"];
@@ -7,13 +7,11 @@ function PasswordEditPanel({ node, update, t }: EditPanelProps) {
   const action = String(node.action || "strength");
   return (
     <>
-      <BuilderRowPair>
-        <BuilderField label={t("workflows.action")} required>
-          <select autoFocus className="input input--sm" required value={action} onChange={(e) => update({ action: e.target.value })} aria-required="true">
-            {ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
-          </select>
-        </BuilderField>
-      </BuilderRowPair>
+      <BuilderField label={t("workflows.action")} required>
+        <select autoFocus className="input input--sm" required value={action} onChange={(e) => update({ action: e.target.value })} aria-required="true">
+          {ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
+        </select>
+      </BuilderField>
       {action !== "generate" && (
         <BuilderField label={t("workflows.password")} required>
           <input className="input input--sm" type="password" required value={String(node.password_input || "")} onChange={(e) => update({ password_input: e.target.value })} aria-required="true" />

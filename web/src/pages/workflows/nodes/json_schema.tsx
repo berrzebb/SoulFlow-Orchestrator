@@ -1,4 +1,4 @@
-import { BuilderField, BuilderRowPair, JsonField } from "../builder-field";
+import { BuilderField, JsonField } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
 const ACTIONS = ["validate", "generate", "draft_convert", "merge", "diff", "dereference", "mock"];
@@ -8,13 +8,11 @@ function JsonSchemaEditPanel({ node, update, t }: EditPanelProps) {
   const needs_schema2 = ["merge", "diff"].includes(action);
   return (
     <>
-      <BuilderRowPair>
-        <BuilderField label={t("workflows.action")} required>
-          <select autoFocus className="input input--sm" required value={action} onChange={(e) => update({ action: e.target.value })} aria-required="true">
-            {ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
-          </select>
-        </BuilderField>
-      </BuilderRowPair>
+      <BuilderField label={t("workflows.action")} required>
+        <select autoFocus className="input input--sm" required value={action} onChange={(e) => update({ action: e.target.value })} aria-required="true">
+          {ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
+        </select>
+      </BuilderField>
       <JsonField label={t("workflows.json_schema_schema_json")} value={node.schema} onUpdate={(v) => update({ schema: v })} placeholder='{"type": "object"}' />
       {action === "validate" && (
         <JsonField label={t("workflows.json_schema_data_json")} value={node.data} onUpdate={(v) => update({ data: v })} placeholder='{"key": "value"}' />

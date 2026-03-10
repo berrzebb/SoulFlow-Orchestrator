@@ -7,18 +7,24 @@ function ChangelogEditPanel({ node, update, t }: EditPanelProps) {
   const action = String(node.action || "generate");
   return (
     <>
-      <BuilderRowPair>
+      {(action === "generate" || action === "parse_commits") ? (
+        <BuilderRowPair>
+          <BuilderField label={t("workflows.action")} required>
+            <select autoFocus className="input input--sm" required value={action} onChange={(e) => update({ action: e.target.value })} aria-required="true">
+              {ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
+            </select>
+          </BuilderField>
+          <BuilderField label={t("workflows.changelog_version")}>
+            <input className="input input--sm" value={String(node.version || "")} onChange={(e) => update({ version: e.target.value })} placeholder="v1.1.0" />
+          </BuilderField>
+        </BuilderRowPair>
+      ) : (
         <BuilderField label={t("workflows.action")} required>
           <select autoFocus className="input input--sm" required value={action} onChange={(e) => update({ action: e.target.value })} aria-required="true">
             {ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
           </select>
         </BuilderField>
-        {(action === "generate" || action === "parse_commits") && (
-          <BuilderField label={t("workflows.changelog_version")}>
-            <input className="input input--sm" value={String(node.version || "")} onChange={(e) => update({ version: e.target.value })} placeholder="v1.1.0" />
-          </BuilderField>
-        )}
-      </BuilderRowPair>
+      )}
       {(action === "parse_commits" || action === "generate" || action === "group_by_type") && (
         <BuilderField label={t("workflows.changelog_commits")} required>
           <textarea className="input" required rows={4} value={String(node.commits || "")} onChange={(e) => update({ commits: e.target.value })} placeholder="feat: add new feature&#10;fix: resolve bug" aria-required="true" />
