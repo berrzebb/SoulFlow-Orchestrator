@@ -27,6 +27,6 @@ export const template_descriptor: FrontendNodeDescriptor = {
   input_schema: [
     { name: "input", type: "object", description: "node.template.input.input" },
   ],
-  create_default: () => ({ template: "{{input}}" }),
+  create_default: () => ({ template: "{{input}}", output_field: "text" }),
   EditPanel: TemplateEditPanel,
 };

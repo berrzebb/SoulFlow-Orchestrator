@@ -43,7 +43,7 @@ export const batch_descriptor: FrontendNodeDescriptor = {
     { name: "errors",    type: "array",  description: "node.batch.output.errors" },
   ],
   input_schema: [
-    { name: "items",       type: "array",  description: "node.batch.input.items" },
+    { name: "array_field", type: "string", description: "node.batch.input.array_field" },
     { name: "concurrency", type: "number", description: "node.batch.input.concurrency" },
   ],
   create_default: () => ({ array_field: "", concurrency: 5, body_node: "", on_item_error: "continue" }),

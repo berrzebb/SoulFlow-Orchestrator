@@ -26,8 +26,8 @@ export const transform_descriptor: FrontendNodeDescriptor = {
     { name: "count", type: "number", description: "node.transform.output.count" },
   ],
   input_schema: [
-    { name: "array",      type: "array",  description: "node.transform.input.array" },
-    { name: "expression", type: "string", description: "node.transform.input.expression" },
+    { name: "array_field", type: "string", description: "node.transform.input.array_field" },
+    { name: "expression",  type: "string", description: "node.transform.input.expression" },
   ],
   create_default: () => ({ expression: "item", array_field: "items" }),
   EditPanel: TransformEditPanel,

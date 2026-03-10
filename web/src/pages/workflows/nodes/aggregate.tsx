@@ -46,7 +46,8 @@ export const aggregate_descriptor: FrontendNodeDescriptor = {
     { name: "count",  type: "number",  description: "node.aggregate.output.count" },
   ],
   input_schema: [
-    { name: "items", type: "array", description: "node.aggregate.input.items" },
+    { name: "array_field", type: "string", description: "node.aggregate.input.array_field" },
+    { name: "operation",   type: "string", description: "node.aggregate.input.operation" },
   ],
   create_default: () => ({ operation: "collect", array_field: "" }),
   EditPanel: AggregateEditPanel,

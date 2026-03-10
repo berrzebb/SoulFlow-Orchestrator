@@ -27,7 +27,8 @@ export const split_descriptor: FrontendNodeDescriptor = {
     { name: "total", type: "number",  description: "node.split.output.total" },
   ],
   input_schema: [
-    { name: "array", type: "array", description: "node.split.input.array" },
+    { name: "array_field", type: "string", description: "node.split.input.array_field" },
+    { name: "batch_size",  type: "number", description: "node.split.input.batch_size" },
   ],
   create_default: () => ({ array_field: "" }),
   EditPanel: SplitEditPanel,

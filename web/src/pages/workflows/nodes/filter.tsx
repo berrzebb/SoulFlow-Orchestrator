@@ -27,8 +27,8 @@ export const filter_descriptor: FrontendNodeDescriptor = {
     { name: "rejected", type: "number", description: "node.filter.output.rejected" },
   ],
   input_schema: [
-    { name: "array",     type: "array",  description: "node.filter.input.array" },
-    { name: "condition", type: "string", description: "node.filter.input.condition" },
+    { name: "array_field", type: "string", description: "node.filter.input.array_field" },
+    { name: "condition",   type: "string", description: "node.filter.input.condition" },
   ],
   create_default: () => ({ condition: "true", array_field: "items" }),
   EditPanel: FilterEditPanel,

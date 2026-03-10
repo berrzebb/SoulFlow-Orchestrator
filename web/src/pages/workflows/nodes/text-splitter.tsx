@@ -34,9 +34,9 @@ export const text_splitter_descriptor: FrontendNodeDescriptor = {
     { name: "chunk_count", type: "number", description: "node.text_splitter.output.chunk_count" },
   ],
   input_schema: [
-    { name: "text",       type: "string", description: "node.text_splitter.input.text" },
-    { name: "chunk_size", type: "number", description: "node.text_splitter.input.chunk_size" },
-    { name: "overlap",    type: "number", description: "node.text_splitter.input.overlap" },
+    { name: "input_field",   type: "string", description: "node.text_splitter.input.input_field" },
+    { name: "chunk_size",    type: "number", description: "node.text_splitter.input.chunk_size" },
+    { name: "chunk_overlap", type: "number", description: "node.text_splitter.input.chunk_overlap" },
   ],
   create_default: () => ({ input_field: "text", chunk_size: 1000, chunk_overlap: 200, separator: "\n\n" }),
   EditPanel: TextSplitterEditPanel,
