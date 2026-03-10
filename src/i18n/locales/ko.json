@@ -342,6 +342,7 @@
   "cli_auth.no_agents": "구성된 CLI 에이전트가 없습니다",
   "cli_auth.not_authenticated": "미인증",
   "cli_auth.open_url": "브라우저에서 이 URL을 여세요:",
+  "cli_auth.waiting_url": "로그인 URL을 기다리는 중... (2초마다 확인)",
   "cli_auth.title": "CLI 인증",
   "cmd._footer": "세부 기능 확인: /{command} 입력",
   "cmd._header": "사용 가능한 공통 명령",

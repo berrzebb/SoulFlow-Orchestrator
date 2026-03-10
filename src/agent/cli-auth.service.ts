@@ -46,6 +46,7 @@ export class CliAuthService extends EventEmitter {
   private readonly logger: Logger;
   private readonly login_processes = new Map<CliType, ChildProcess>();
   private readonly status_cache = new Map<CliType, CliAuthStatus>();
+  private readonly login_progress_cache = new Map<CliType, LoginProgress>();
 
   constructor(opts: CliAuthServiceOptions) {
     super();
@@ -78,6 +79,11 @@ export class CliAuthService extends EventEmitter {
   /** 모든 CLI의 캐시된 상태 반환. */
   get_all_cached(): CliAuthStatus[] {
     return [this.get_cached("claude"), this.get_cached("codex"), this.get_cached("gemini")];
+  }
+
+  /** 진행 중인 로그인의 최신 진행 상태 반환 (URL 폴링용). */
+  get_login_progress(cli: CliType): LoginProgress | null {
+    return this.login_progress_cache.get(cli) ?? null;
   }
 
   // ── Claude Code ────────────────────────────────────────────────────────────
@@ -206,6 +212,11 @@ export class CliAuthService extends EventEmitter {
       let stdout_buf = "";
       let stderr_buf = "";
 
+      const emit_progress = (p: LoginProgress) => {
+        this.login_progress_cache.set(cli, p);
+        this.emit("login_progress", p);
+      };
+
       const try_extract_url = (buf: string): string | null => {
         const m = buf.match(URL_PATTERN);
         return m ? m[0] : null;
@@ -218,7 +229,7 @@ export class CliAuthService extends EventEmitter {
           if (url) {
             url_resolved = true;
             const p: LoginProgress = { cli, state: "url_ready", login_url: url };
-            this.emit("login_progress", p);
+            emit_progress(p);
             resolve(p);
           }
         }
@@ -231,7 +242,7 @@ export class CliAuthService extends EventEmitter {
           if (url) {
             url_resolved = true;
             const p: LoginProgress = { cli, state: "url_ready", login_url: url };
-            this.emit("login_progress", p);
+            emit_progress(p);
             resolve(p);
           }
         }
@@ -246,7 +257,7 @@ export class CliAuthService extends EventEmitter {
             state: status.authenticated ? "completed" : "failed",
             error: status.authenticated ? undefined : "Login completed but auth check failed",
           };
-          this.emit("login_progress", p);
+          emit_progress(p);
           if (!url_resolved) resolve(p);
         } else {
           const p: LoginProgress = {
@@ -254,23 +265,27 @@ export class CliAuthService extends EventEmitter {
             state: "failed",
             error: stderr_buf.trim() || `Process exited with code ${code}`,
           };
-          this.emit("login_progress", p);
+          emit_progress(p);
           if (!url_resolved) resolve(p);
         }
+        this.login_progress_cache.delete(cli);
       });
 
       proc.on("error", (err) => {
         this.login_processes.delete(cli);
         const p: LoginProgress = { cli, state: "failed", error: err.message };
-        this.emit("login_progress", p);
+        emit_progress(p);
+        this.login_progress_cache.delete(cli);
         if (!url_resolved) resolve(p);
       });
 
-      // URL이 10초 내에 안 나오면 waiting_url 상태로 반환
+      // URL이 10초 내에 안 나오면 waiting_url 상태로 반환 (프로세스는 계속 실행)
       setTimeout(() => {
         if (!url_resolved) {
           url_resolved = true;
-          resolve({ cli, state: "waiting_url" });
+          const p: LoginProgress = { cli, state: "waiting_url" };
+          this.login_progress_cache.set(cli, p);
+          resolve(p);
         }
       }, 10_000);
     });
@@ -283,6 +298,7 @@ export class CliAuthService extends EventEmitter {
 
     proc.kill("SIGTERM");
     this.login_processes.delete(cli);
+    this.login_progress_cache.delete(cli);
     this.logger.info("login cancelled", { cli });
     return true;
   }
@@ -294,6 +310,7 @@ export class CliAuthService extends EventEmitter {
       this.logger.debug("disposing login process", { cli });
     }
     this.login_processes.clear();
+    this.login_progress_cache.clear();
   }
 }
 

@@ -6,21 +6,50 @@ import { SectionHeader } from "../../components/section-header";
 import { useToast } from "../../components/toast";
 import { useT } from "../../i18n";
 import type { CliAuthStatus, LoginResult } from "./types";
+import { useEffect, useRef, useState } from "react";
 
 export function CliAuthSection() {
   const t = useT();
   const { toast } = useToast();
+
+  const [pollingCli, setPollingCli] = useState<string | null>(null);
+  const [polledResult, setPolledResult] = useState<LoginResult | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const refetchRef = useRef<(() => void) | null>(null);
+
+  const stop_polling = () => {
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+    setPollingCli(null);
+  };
+
+  useEffect(() => {
+    if (!pollingCli) return;
+    pollRef.current = setInterval(async () => {
+      try {
+        const result = await api.get<LoginResult>(`/api/auth/cli/sessions/${encodeURIComponent(pollingCli)}`);
+        if (result.state === "url_ready" || result.state === "completed" || result.state === "failed") {
+          setPolledResult(result);
+          stop_polling();
+          if (result.state === "completed") refetchRef.current?.();
+        }
+      } catch {
+        stop_polling();
+      }
+    }, 2_000);
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, [pollingCli]);
 
   const { data: statuses, refetch } = useQuery<CliAuthStatus[]>({
     queryKey: ["cli-auth-status"],
     queryFn: () => api.get("/api/auth/cli/status"),
     refetchInterval: 30_000,
   });
+  refetchRef.current = () => { void refetch(); };
 
   const checkAll = useMutation({
     mutationFn: () => api.post<CliAuthStatus[]>("/api/auth/cli/check"),
     onSuccess: (data) => {
-      void refetch();
+      refetchRef.current?.();
       for (const s of data) {
         toast(`${s.cli}: ${s.authenticated ? t("cli_auth.authenticated") : t("cli_auth.not_authenticated")}`, s.authenticated ? "ok" : "err");
       }
@@ -30,14 +59,21 @@ export function CliAuthSection() {
 
   const login = useMutation({
     mutationFn: (cli: string) => api.post<LoginResult>("/api/auth/cli/sessions", { cli }),
+    onSuccess: (result) => {
+      if (result.state === "waiting_url") {
+        setPolledResult(null);
+        setPollingCli(result.cli);
+      }
+    },
   });
 
   const cancel = useMutation({
     mutationFn: (cli: string) => api.del(`/api/auth/cli/sessions/${encodeURIComponent(cli)}`),
-    onSuccess: () => { login.reset(); void refetch(); },
+    onSuccess: () => { login.reset(); setPolledResult(null); stop_polling(); refetchRef.current?.(); },
   });
 
-  const loginResult = login.data;
+  // 최신 로그인 결과: 폴링이 URL을 가져오면 우선 사용
+  const loginResult = polledResult ?? login.data;
 
   return (
     <div className="cli-auth-section">
@@ -88,6 +124,19 @@ export function CliAuthSection() {
         </div>
       )}
 
+      {(loginResult?.state === "waiting_url" || pollingCli) && !loginResult?.login_url && (
+        <div className="stat-card cli-auth-section__result">
+          <p className="mb-2">
+            <strong>{loginResult?.cli ?? pollingCli}</strong> — {t("cli_auth.waiting_url")}
+          </p>
+          <div className="cli-auth-section__actions">
+            <button className="btn btn--sm" onClick={() => { cancel.mutate(loginResult?.cli ?? pollingCli ?? ""); }}>
+              {t("cli_auth.cancel_login")}
+            </button>
+          </div>
+        </div>
+      )}
+
       {loginResult?.login_url && (
         <div className="stat-card cli-auth-section__result">
           <p className="mb-2">
@@ -105,7 +154,7 @@ export function CliAuthSection() {
             <button className="btn btn--sm" onClick={() => cancel.mutate(loginResult.cli)}>
               {t("cli_auth.cancel_login")}
             </button>
-            <button className="btn btn--sm" onClick={() => { login.reset(); void refetch(); }}>
+            <button className="btn btn--sm" onClick={() => { login.reset(); setPolledResult(null); stop_polling(); refetchRef.current?.(); }}>
               {t("cli_auth.done")}
             </button>
           </div>

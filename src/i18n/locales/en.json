@@ -342,6 +342,7 @@
   "cli_auth.no_agents": "No CLI agents configured",
   "cli_auth.not_authenticated": "Not Authenticated",
   "cli_auth.open_url": "Open this URL in your browser:",
+  "cli_auth.waiting_url": "Waiting for login URL... (checking every 2s)",
   "cli_auth.title": "CLI Auth",
   "cmd._footer": "See subcommands: type /{command}",
   "cmd._header": "Available Commands",
