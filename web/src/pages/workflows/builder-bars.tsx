@@ -66,8 +66,8 @@ export function WorkflowPromptBar({ name, workflow, onApply, initialPrompt }: {
   const [selectedProvider, setSelectedProvider] = useState("");
   const [selectedModel, setSelectedModel] = useState("");
 
-  const send = () => {
-    const text = value.trim();
+  const send = (override_text?: string) => {
+    const text = (override_text ?? value).trim();
     if (!text || loading) return;
 
     // 현재 워크플로우 스냅샷 (스트리밍 중 점진적 패치 대상)
@@ -137,11 +137,11 @@ export function WorkflowPromptBar({ name, workflow, onApply, initialPrompt }: {
     })();
   };
 
-  // initialPrompt가 있으면 마운트 시 1회 자동 실행
+  // initialPrompt가 있으면 마운트 시 1회 자동 실행 — 클로저 의존 우회를 위해 텍스트 직접 전달
   useEffect(() => {
     if (initialPrompt && !auto_fired.current) {
       auto_fired.current = true;
-      send();
+      send(initialPrompt);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
