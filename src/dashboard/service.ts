@@ -553,6 +553,7 @@ export class DashboardService implements ServiceLike {
     this.route_map.set("/api/workflow/templates", handle_workflow);
     this.route_map.set("/api/workflow/suggest", handle_workflow);
     this.route_map.set("/api/workflow/suggest/stream", handle_workflow);
+    this.route_map.set("/api/workflow/diagram", handle_workflow);
     this.route_map.set("/api/workflow/node", handle_workflow_node);
     this.route_map.set("/api/kanban", handle_kanban);
     this.route_map.set("/api/references", handle_references);
