@@ -92,3 +92,33 @@ describe("SessionStore — save() + evict_if_full + cache.set", () => {
     expect(loaded2.messages.length).toBeGreaterThan(0);
   });
 });
+
+// ══════════════════════════════════════════
+// L355-356: prune_expired → 만료된 캐시 항목 제거
+// ══════════════════════════════════════════
+
+describe("SessionStore — prune_expired → 만료 캐시 항목 삭제 (L355-356)", () => {
+  it("만료된 세션 DB+캐시에 있을 때 → 캐시에서도 제거됨", async () => {
+    const key = "expire:cache-evict";
+    // append_message → DB에 세션 행 생성
+    await store.append_message(key, { role: "user", content: "hello" });
+
+    const old_date = "2020-01-01T00:00:00.000Z";
+    const db_path = join(tmp_dir, "sessions", "sessions.db");
+
+    // DB updated_at을 과거로 설정
+    with_sqlite(db_path, (db) => {
+      db.prepare("UPDATE sessions SET updated_at = ? WHERE key = ?").run(old_date, key);
+    });
+
+    // 캐시 세션의 updated_at도 과거로 설정
+    const cached = (store as any).cache.get(key);
+    if (cached) cached.updated_at = old_date;
+
+    // prune_expired → count=1 → cache 루프 실행 (L355-356)
+    const count = await store.prune_expired(60_000);
+    expect(count).toBe(1);
+    // 캐시에서도 제거됨
+    expect((store as any).cache.has(key)).toBe(false);
+  });
+});

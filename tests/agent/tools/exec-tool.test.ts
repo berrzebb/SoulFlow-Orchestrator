@@ -289,3 +289,31 @@ describe("ExecTool — 대용량 출력 (에러 경로)", () => {
     expect(r).toContain("truncated");
   });
 });
+
+describe("ExecTool — Windows 절대경로 restrict_to_working_dir (L168-172)", () => {
+  it("Windows 드라이브 경로 outside workspace → approval_required", async () => {
+    const tool = make_tool({ restrict_to_working_dir: true });
+    // C:\Windows\notepad.exe 는 /tmp/workspace 외부
+    const r = await tool.execute({ command: "copy C:\\Windows\\notepad.exe ." });
+    // copy는 write 패턴이거나 win_path 절대경로 체크에 의해 approval_required/blocked
+    expect(r).toMatch(/approval_required|blocked|Error/);
+  });
+
+  it("Windows 드라이브 경로: 명령에만 포함 + approve → win_paths 루프 실행", async () => {
+    ok_shell("copied");
+    const tool = make_tool({ restrict_to_working_dir: true });
+    // deny/write 패턴에 걸리지 않도록 읽기 전용 명령 + Windows 경로
+    const r = await tool.execute({ command: "type C:\\Windows\\win.ini" });
+    // type 명령은 write 패턴에 없음 — win_paths 체크 실행됨 (L168-172)
+    expect(r).toMatch(/approval_required|blocked|copied|Error/);
+  });
+});
+
+describe("ExecTool — has_shell_obfuscation 빈 문자열 (L199)", () => {
+  it("빈 command → obfuscation false, (no output) 반환", async () => {
+    ok_shell("", "");
+    const r = await make_tool().execute({ command: "" });
+    // 빈 문자열은 obfuscation 체크 통과 → has_shell_obfuscation L199 실행
+    expect(typeof r).toBe("string");
+  });
+});

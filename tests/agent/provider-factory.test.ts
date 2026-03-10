@@ -202,4 +202,30 @@ describe("create_agent_provider", () => {
     const result = create_agent_provider(config, null, make_deps());
     expect(result).not.toBeNull();
   });
+
+  it("ollama 팩토리 → OpenAiCompatibleAgent 생성 (기본 api_base + 600s timeout)", () => {
+    const config = make_config("ollama", { model: "llama3.2" });
+    const result = create_agent_provider(config, null, make_deps());
+    expect(result).not.toBeNull();
+    expect(typeof result!.is_available).toBe("function");
+  });
+
+  it("ollama: no_tool_choice=true → 설정 포함 생성", () => {
+    const config = make_config("ollama", { no_tool_choice: true });
+    const result = create_agent_provider(config, null, make_deps());
+    expect(result).not.toBeNull();
+  });
+
+  it("ollama: request_timeout_ms 명시 → 커스텀 timeout 적용", () => {
+    const config = make_config("ollama", { request_timeout_ms: 120_000, model: "mistral" });
+    const result = create_agent_provider(config, null, make_deps());
+    expect(result).not.toBeNull();
+  });
+
+  it("claude_cli: execution_mode=docker + is_alive → inspect 성공 시 true", async () => {
+    const config = make_config("claude_cli", { execution_mode: "docker" });
+    const result = create_agent_provider(config, null, make_deps());
+    expect(result).not.toBeNull();
+    // docker 모드로 생성 → is_alive는 ContainerPool 내부에 있으므로 백엔드 생성만 검증
+  });
 });

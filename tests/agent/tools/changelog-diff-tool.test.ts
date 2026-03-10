@@ -142,6 +142,19 @@ describe("ChangelogTool — generate", () => {
     // type이 없으면 필터링
     expect(r).not.toContain("WIP stuff");
   });
+
+  it("TYPE_LABELS에 없는 커밋 타입 → remaining groups 섹션 포함 (L152-157)", async () => {
+    // 'custom' 타입은 TYPE_LABELS에 없음 → format_changelog의 remaining 루프 실행
+    const r = await cl.execute({
+      action: "generate",
+      version: "1.0.0",
+      date: "2024-01-01",
+      commits: "custom(scope): my custom thing\ncustom: another custom",
+    });
+    expect(r).toContain("custom");
+    expect(r).toContain("my custom thing");
+    expect(r).toContain("**scope:**");
+  });
 });
 
 describe("ChangelogTool — group_by_type", () => {
