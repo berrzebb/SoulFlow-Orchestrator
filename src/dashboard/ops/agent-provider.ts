@@ -224,9 +224,13 @@ export function create_agent_provider_ops(deps: {
       const conn = provider_store.get_connection(connection_id);
       if (!conn) return { ok: false, error: "connection_not_found" };
       const token = await provider_store.get_connection_token(connection_id);
-      if (!token) return { ok: false, error: "token_not_configured" };
+      // 토큰 불필요 프로바이더 (로컬 서버 등)는 토큰 체크 생략
+      const TOKEN_OPTIONAL = new Set(["ollama", "container_cli"]);
+      if (!TOKEN_OPTIONAL.has(conn.provider_type) && !token) {
+        return { ok: false, error: "token_not_configured" };
+      }
       try {
-        const models = await do_list_models(conn.provider_type, { api_key: token, api_base: conn.api_base });
+        const models = await do_list_models(conn.provider_type, { api_key: token ?? undefined, api_base: conn.api_base });
         return { ok: true, detail: `${models.length} models available` };
       } catch (e) {
         return { ok: false, error: error_message(e) };

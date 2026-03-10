@@ -24,6 +24,8 @@ export type OpenAiCompatibleConfig = {
   request_timeout_ms?: number;
   /** 요청마다 추가할 커스텀 헤더 (OpenRouter HTTP-Referer/X-Title 등). */
   extra_headers?: Record<string, string>;
+  /** true면 tool_choice 파라미터를 전송하지 않음. 함수 호출 미지원 모델(일부 Ollama 모델 등)용. */
+  no_tool_choice?: boolean;
 };
 
 export class OpenAiCompatibleAgent implements AgentBackend {
@@ -178,7 +180,7 @@ export class OpenAiCompatibleAgent implements AgentBackend {
     };
     if (tools.length > 0) {
       body.tools = tools;
-      body.tool_choice = "auto";
+      if (!this.config.no_tool_choice) body.tool_choice = "auto";
     }
 
     const max_tokens = options?.max_tokens ?? this.config.max_tokens;

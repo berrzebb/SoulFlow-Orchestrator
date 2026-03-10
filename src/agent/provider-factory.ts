@@ -212,9 +212,12 @@ register_agent_provider_factory("openrouter", (config, token) => {
 });
 
 register_agent_provider_factory("ollama", (config, _token) => {
+  const s = config.settings;
   return new OpenAiCompatibleAgent(config.instance_id, {
-    ...extract_openai_settings(config.settings, { api_base: "http://ollama:11434/v1", model: "llama3.2" }),
+    ...extract_openai_settings(s, { api_base: "http://ollama:11434/v1", model: "llama3.2" }),
     api_key: "",
+    // 함수 호출 미지원 모델을 위해 no_tool_choice를 settings에서 제어 가능 (기본값: false)
+    no_tool_choice: s.no_tool_choice === true,
   });
 });
 
