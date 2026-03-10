@@ -124,9 +124,17 @@
 }
 /* 스트리밍 중 어시스턴트 버블 — 영역 사전 확보 + border 하이라이트 */
 .chat-msg--assistant .chat-msg__content:has(.chat-cursor) {
-  min-height: 72px;
+  min-height: min(180px, 28vh);
   border-color: color-mix(in srgb, var(--accent) 50%, transparent);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 8%, transparent);
+  transition: border-color 0.9s ease-out, box-shadow 0.9s ease-out;
+}
+/* 스트리밍 버블 첫 등장 시 border glow — @starting-style로 bright → muted transition */
+@starting-style {
+  .chat-msg--assistant .chat-msg__content:has(.chat-cursor) {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 8px color-mix(in srgb, var(--accent) 28%, transparent);
+  }
 }
 
 /* ?? Typing indicator (thinking dots) ?? */
@@ -575,6 +583,20 @@
 .chat-prompt-bar__btn:disabled { opacity: 0.65; color: var(--muted); cursor: not-allowed; }
 .chat-prompt-bar__btn--loading { background: var(--accent); color: #fff; cursor: default; gap: 3px; }
 .chat-prompt-bar__btn--loading:hover { opacity: 1; }
+/* 전송 시 pill ring pulse */
+@keyframes pill-send-ring {
+  0%   { box-shadow: var(--shadow-md), 0 0 0 0 color-mix(in srgb, var(--accent) 70%, transparent); border-color: var(--accent); }
+  65%  { box-shadow: var(--shadow-md), 0 0 0 10px transparent; }
+  100% { box-shadow: var(--shadow-md); border-color: var(--line); }
+}
+.chat-prompt-bar__pill--sending {
+  animation: pill-send-ring 0.55s ease-out forwards;
+}
+/* 스트리밍 중 plain text (마크다운 파싱 생략 → 번쩍임 방지) */
+.chat-stream-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
 .chat-send-dot {
   width: 5px;
   height: 5px;

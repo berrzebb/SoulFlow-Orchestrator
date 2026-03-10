@@ -60,6 +60,16 @@ export function ChatPromptBar(props: ChatPromptBarProps) {
   const is_busy = props.sending || !!props.is_streaming;
   const textarea_ref = useRef<HTMLTextAreaElement>(null);
   const popup_ref = useRef<HTMLDivElement>(null);
+  const pill_ref = useRef<HTMLDivElement>(null);
+
+  const trigger_send_pulse = () => {
+    const el = pill_ref.current;
+    if (!el) return;
+    el.classList.remove("chat-prompt-bar__pill--sending");
+    void el.offsetWidth; // reflow 강제로 animation 재시작
+    el.classList.add("chat-prompt-bar__pill--sending");
+    el.addEventListener("animationend", () => el.classList.remove("chat-prompt-bar__pill--sending"), { once: true });
+  };
 
   const has_model_selector = !!(props.onProviderChange && props.onModelChange);
   const [open_picker, setOpenPicker] = useState<PickerKind>(null);
@@ -178,7 +188,7 @@ export function ChatPromptBar(props: ChatPromptBarProps) {
         <MediaPreviewBar items={props.pending_media!} onRemove={props.onRemoveMedia} />
       )}
 
-      <div className="chat-prompt-bar__pill">
+      <div ref={pill_ref} className="chat-prompt-bar__pill">
         {props.onAttach && (
           <button
             className="chat-prompt-bar__btn"
@@ -288,7 +298,7 @@ export function ChatPromptBar(props: ChatPromptBarProps) {
 
         <button
           className={`chat-prompt-bar__btn${is_busy ? " chat-prompt-bar__btn--loading" : props.can_send ? " chat-prompt-bar__btn--send" : ""}`}
-          onClick={is_busy ? undefined : () => props.onSend()}
+          onClick={is_busy ? undefined : () => { trigger_send_pulse(); props.onSend(); }}
           disabled={is_busy || !props.can_send}
           aria-label={is_busy ? t("chat.sending") : t("common.send")}
           aria-busy={is_busy}

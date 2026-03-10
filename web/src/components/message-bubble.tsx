@@ -39,7 +39,11 @@ export function MessageBubble({
       {!is_user && avatar && <div className="chat-msg__avatar">{avatar}</div>}
       <div className="chat-msg__body">
         <div className="chat-msg__content">
-          {is_user ? text : <MarkdownContent content={text} />}
+          {is_user
+            ? text
+            : streaming
+              ? <span className="chat-stream-text">{text}</span>
+              : <MarkdownContent content={text} />}
           {streaming && <span className="chat-cursor" />}
           {children}
         </div>

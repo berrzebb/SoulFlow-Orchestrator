@@ -114,17 +114,15 @@ export default function ChatPage() {
     related_query_keys: activeId ? [["chat-session", activeId]] : [],
   });
 
-  // 세션 전환/브라우저 닫기/스트리밍 시 bottom 스크롤
-  const stream_content_len = (ndjson_stream?.content?.length ?? 0) + (web_stream?.content?.length ?? 0);
-  useEffect(() => {
-    if (!messagesRef.current) return;
-    // DOM 레이아웃 완료 후 스크롤 (세션 전환 직후 scrollHeight가 0일 수 있음)
+  // 새 메시지 도착·세션 전환 시 항상 bottom 스크롤 (1회성)
+  const scroll_to_bottom = () => {
     requestAnimationFrame(() => {
-      if (messagesRef.current) {
-        messagesRef.current.scrollTop = messagesRef.current.scrollHeight;
-      }
+      if (messagesRef.current) messagesRef.current.scrollTop = messagesRef.current.scrollHeight;
     });
-  }, [activeId, mirrorKey, sessions_open, activeSession?.messages?.length, mirrorLiveMessages.length, stream_content_len]);
+  };
+  useEffect(scroll_to_bottom, [activeId, mirrorKey, sessions_open, activeSession?.messages?.length, mirrorLiveMessages.length]);
+
+  const stream_content_len = (ndjson_stream?.content?.length ?? 0) + (web_stream?.content?.length ?? 0);
 
   const create_session = () => run_create(async () => {
     const res = await api.post<{ id: string }>("/api/chat/sessions");
@@ -216,6 +214,14 @@ export default function ChatPage() {
   if (waiting_response && (is_streaming || new_assistant_arrived)) {
     setWaitingResponse(false);
   }
+
+  // 스트리밍 중 smart-follow: 사용자가 하단 120px 내에 있을 때만 스크롤
+  useEffect(() => {
+    const el = messagesRef.current;
+    if (!el || !is_streaming) return;
+    const near_bottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+    if (near_bottom) requestAnimationFrame(() => { if (messagesRef.current) messagesRef.current.scrollTop = messagesRef.current.scrollHeight; });
+  }, [stream_content_len, is_streaming]);
 
   // done 후 refetch된 메시지가 도착하면 스트림 정리
   useEffect(() => {
