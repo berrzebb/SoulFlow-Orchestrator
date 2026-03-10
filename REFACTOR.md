@@ -134,7 +134,7 @@
 |------|------|------|
 | `agent/backends/codex-appserver.agent.ts` vs `claude-sdk.agent.ts` | SDK vs JSON-RPC 구현 차이 | 의도적 다형성 — DRY 아님 |
 | `channels/telegram.channel.ts` vs `slack.channel.ts` | 채널 인터페이스 구현 | 의도적 다형성 — DRY 아님 |
-| `dashboard/routes/kanban.ts` + 기타 라우트 | `if (!store) {...}` 가드 반복 | 라우트마다 다른 컨텍스트, 추출 시 오버엔지니어링 |
+| `dashboard/routes/kanban.ts` + 기타 라우트 | `if (!store) {...}` 가드 반복 | ~~라우트마다 다른 컨텍스트, 추출 시 오버엔지니어링~~ → **재평가: 완전 동일 코드 32회** → I8-A 처리 |
 | `agent/phase-loop-runner.ts` | `state.updated_at = now_iso(); store.upsert(state)` 다수 반복 | 상태기계 특성상 각 전환 지점이 다름 — YAGNI |
 | `agent/skills.service.ts` | inline regex 5개 (L407, L422, L427, L434, L441) | 각 1회 사용, 메서드 내부 — 추출 불필요 |
 | `providers/orchestrator-llm.runtime.ts` | Docker/Podman 엔진 처리 | 의도적 분기 — DRY 아님 |
@@ -178,14 +178,71 @@
 
 ---
 
+## 이터레이션 7 신규 발견
+
+### 전체 코드베이스 SRP/God class 스캔 결과
+
+| 파일 | 줄 수 | 결론 |
+|------|-------|------|
+| `channels/manager.ts` | 1338L | 채널 메시지 생명주기 오케스트레이터 — 의도적 조율자 패턴. SRP 준수 |
+| `orchestration/service.ts` | 622L | execute() 위임 패턴. 이미 세분화됨 |
+| `services/kanban-store.ts` | 1280L | 대형 인터페이스+구현. DB 서비스 특성상 적절 |
+| `agent/workflow-node.types.ts` | 2121L | 순수 타입 덤프. 클래스 아님 |
+| `dashboard/ops/workflow.ts` | 1087L | 긴 스키마 문서 상수 + 단일 팩토리 함수. 클래스 아님 |
+| `agent/phase-loop-runner.ts` | 1314L | 페이즈 실행 엔진 단일 책임 |
+| `agent/memory.service.ts` | 794L | 내장 SQL 스키마 포함. 적절 |
+
+### ✅ I7-A: `resolve_reply_to` 3중 정의 + 잘못된 위치 [DRY, SRP]
+- **위치**: `orchestration/service.ts` L613, `orchestration/request-preflight.ts` L243, `orchestration/execution/helpers.ts` L70
+- **문제**: 동일한 채널 계층 함수가 orchestration 레이어에 3중 복제. `channels/`가 `orchestration/`에서 import하는 역방향 의존성 발생.
+- **해결**: `channels/types.ts`에 정규 정의 추가. 3개 중복 제거. `channels/manager.ts`, `bootstrap/channels.ts` import 경로 수정. `orchestration/service.ts`는 `export { resolve_reply_to } from "../channels/types.js"` 하위 호환 re-export 유지.
+
+---
+
+## 이터레이션 8 신규 발견
+
+### ✅ I8-A: `dashboard/routes/kanban.ts` — `store_or_503` 가드 32중복 [DRY, KISS]
+- **위치**: 32개 라우트 핸들러 블록
+- **문제**: `const store = get_store(ctx); if (!store) { json(res, 503, { error: "kanban_unavailable" }); return true; }` 완전 동일 2라인이 32회 반복
+- **해결**: `store_or_503(ctx)` 헬퍼 추출. 503 에러 코드+메시지 한 곳 집중. 호출부는 `const store = store_or_503(ctx); if (!store) return true;` 로 단순화
+
+### ✅ I8-B: `sleep` 유틸 산재 5곳 [DRY]
+- **위치**: `agent/nodes/retry.ts`, `agent/pty/container-cli-agent.ts`, `providers/service.ts`, `agent/nodes/wait.ts`, `agent/tools/screenshot.ts`
+- **문제**: `utils/common.ts`에 `sleep(ms)` 이미 export 되어 있으나 5개 파일에서 로컬 재정의 또는 인라인 `setTimeout` 사용
+- **해결**: 5개 파일 모두 `utils/common.ts`에서 `sleep` import로 교체. 로컬 정의 삭제.
+
+### ✅ I8-C: `request-preflight.ts` — `helpers.ts` 함수 4중 복사 [DRY, SRP]
+- **위치**: `orchestration/request-preflight.ts`
+- **문제**: `build_tool_context`, `compose_task_with_media`, `build_context_message`, `inbound_scope_id` + 관련 regex 2개가 `execution/helpers.ts`와 완전 동일하게 복사됨
+- **해결**: 로컬 복사본 전부 삭제 → `./execution/helpers.js` import로 교체
+
+---
+
+## 이터레이션 9 신규 발견
+
+### ✅ I9-A: `dashboard/routes/` — ops_or_503 가드 패턴 전파 [DRY, KISS]
+- **위치**: `agent-provider.ts`(16), `oauth.ts`(12), `channel.ts`(8), `cron.ts`(6), `skill.ts`(5), `cli-auth.ts`(4), `memory.ts`(5) — 총 56회
+- **문제**: I8-A와 동일한 패턴이 kanban.ts 외 7개 파일에도 존재. 에러 문자열과 503 코드가 파일당 최대 16곳 산재.
+- **해결**: 각 파일에 `xxx_or_503(ctx)` 헬퍼 추가. `replace_all`로 일괄 제거.
+
+### ✅ I9-B: `agent/tools/web.ts` — agent-browser 7개 함수 중복 구현 [DRY, SRP]
+- **위치**: `agent/tools/web.ts` L19-135 (7개 함수: `detect_agent_browser_binary`, `parse_last_json_line`, `quote_cmd_arg`, `compact_session_name`, `run_agent_browser_cli`, `agent_browser_error`, `parsed_browser_data`)
+- **문제**: `agent-browser-client.ts`에 이미 정규 구현이 export되어 있으나 `web.ts`가 독립적으로 재구현. 파일 주석("web/web-table/web-form/screenshot 공유")에 명시된 설계 의도 미반영.
+- **해결**: 7개 로컬 함수 삭제. `agent-browser-client.ts`에서 import. `run_agent_browser_cli` → 1줄 어댑터로 교체. `compact_session_name` 호출 시그니처 4곳 수정.
+
+---
+
 ## 최종 요약
 
 **이터레이션 3 완료**: 6개 항목 (P1-A~F)
 **이터레이션 4 완료**: 3개 항목 (I4-A~C)
 **이터레이션 5 완료**: 3개 항목 (I5-A~C)
 **이터레이션 6 완료**: 3개 항목 (I6-A~C)
-**총 완료**: 26개 항목
-**SKIP (YAGNI/의도적 설계)**: 18개 항목
-**신규 헬퍼/유틸**: `runner_deps`, `finalize_phase`, `html-strip.ts`, `string-match.ts`, `make_document_handler`, `make_abort_signal`
+**이터레이션 7 완료**: 1개 항목 (I7-A) + God class 스캔 완료
+**이터레이션 8 완료**: 3개 항목 (I8-A~C)
+**이터레이션 9 완료**: 2개 항목 (I9-A~B)
+**총 완료**: 32개 항목
+**SKIP (YAGNI/의도적 설계)**: 25개 항목 (이터레이션 7 스캔: 7개 추가)
+**신규 헬퍼/유틸**: `runner_deps`, `finalize_phase`, `html-strip.ts`, `string-match.ts`, `make_document_handler`, `make_abort_signal`, `resolve_reply_to` (channels/types.ts로 이동), `store_or_503` (kanban.ts)
 **보안 개선**: `validate_url`에 `.local` mDNS 도메인 차단 추가
-**코드 제거**: ~127줄 (4 document 핸들러 통합) + 9줄 (AbortController 잔존) + relay 패턴 3곳
+**코드 제거**: ~127줄 (4 document 핸들러 통합) + 9줄 (AbortController 잔존) + relay 패턴 3곳 + `resolve_reply_to` 2중복 제거 + sleep 5중복 제거 + request-preflight 4함수 복사본 제거 + kanban 가드 32중복 단순화

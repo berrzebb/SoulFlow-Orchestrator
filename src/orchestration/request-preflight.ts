@@ -19,6 +19,7 @@ import { seal_inbound_sensitive_text } from "../security/inbound-seal.js";
 import { redact_sensitive_text } from "../security/sensitive.js";
 import { is_local_reference } from "../utils/local-ref.js";
 import { now_ms } from "../utils/common.js";
+import { inbound_scope_id, compose_task_with_media, build_context_message, build_tool_context } from "./execution/helpers.js";
 import { rebuild_tool_index } from "./tool-selector.js";
 
 export type RequestPreflightDeps = {
@@ -228,51 +229,5 @@ export function collect_skill_provider_prefs(runtime: AgentRuntimeLike, skill_na
   return prefs;
 }
 
-function build_tool_context(req: OrchestrationRequest, task_id: string): ToolExecutionContext {
-  return {
-    task_id,
-    signal: req.signal,
-    channel: req.provider,
-    chat_id: req.message.chat_id,
-    sender_id: req.message.sender_id,
-    reply_to: resolve_reply_to(req.provider, req.message) || undefined,
-  };
-}
 
-/** provider별 reply_to 계산. */
-function resolve_reply_to(provider: ChannelProvider, message: InboundMessage): string {
-  const meta = (message.metadata || {}) as Record<string, unknown>;
-  if (provider === "slack") {
-    const thread = String(message.thread_id || "").trim();
-    if (thread) return thread;
-    return String(meta.message_id || message.id || "").trim();
-  }
-  if (provider === "telegram") return "";
-  return String(meta.message_id || message.id || "").trim();
-}
 
-function compose_task_with_media(task: string, media: string[]): string {
-  if (!media.length) return task;
-  const lines = media.map((m, i) => `${i + 1}. ${m}`);
-  return [
-    task || "첨부 파일을 분석하세요.",
-    "", "[ATTACHED_FILES]", ...lines, "",
-    "요구사항:", "- 첨부 파일을 우선 분석하고 핵심 결과를 요약할 것", "- 표/코드/로그가 포함되면 핵심만 구조화해 보고할 것",
-  ].join("\n");
-}
-
-function build_context_message(task_with_media: string): string {
-  return `[CURRENT_REQUEST]\n${task_with_media}`;
-}
-
-const RE_SCOPE_INVALID = /[^a-zA-Z0-9._-]+/g;
-const RE_MULTI_DASH = /-+/g;
-
-function inbound_scope_id(message: InboundMessage): string {
-  const meta = (message.metadata || {}) as Record<string, unknown>;
-  const raw = String(meta.message_id || message.id || "").trim();
-  if (!raw) return `msg-${now_ms()}`;
-  RE_SCOPE_INVALID.lastIndex = 0;
-  RE_MULTI_DASH.lastIndex = 0;
-  return raw.replace(RE_SCOPE_INVALID, "-").replace(RE_MULTI_DASH, "-").slice(0, 96) || `msg-${now_ms()}`;
-}

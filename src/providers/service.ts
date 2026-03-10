@@ -7,14 +7,11 @@ import { redact_sensitive_text, redact_sensitive_unknown } from "../security/sen
 import type { SecretVaultService } from "../security/secret-vault.js";
 import { CircuitBreaker, type CircuitBreakerOptions } from "./circuit-breaker.js";
 import { ProviderHealthScorer, type HealthScorerOptions } from "./health-scorer.js";
+import { sleep } from "../utils/common.js";
 
 /** 일시적 오류 재시도 설정. */
 const MAX_TRANSIENT_RETRIES = 2;
 const RETRY_BASE_MS = 1000;
-
-function sleep_ms(ms: number): Promise<void> {
-  return new Promise((r) => setTimeout(r, ms));
-}
 
 const TRANSIENT_ERROR_PATTERNS = [
   /rate.?limit/i,
@@ -285,7 +282,7 @@ export class ProviderRegistry {
     for (let attempt = 0; attempt <= MAX_TRANSIENT_RETRIES; attempt++) {
       if (attempt > 0) {
         if (args.abort_signal?.aborted) throw last_error;
-        await sleep_ms(RETRY_BASE_MS * 2 ** (attempt - 1));
+        await sleep(RETRY_BASE_MS * 2 ** (attempt - 1));
         if (args.abort_signal?.aborted) throw last_error;
       }
 

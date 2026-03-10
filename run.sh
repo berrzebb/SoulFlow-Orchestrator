@@ -51,10 +51,10 @@ done
 get_preset() {
   local profile=$1
   case $profile in
-    dev)     BUILD_TARGET=dev;        NODE_ENV=development; DEBUG=true;  MEMORY=1G; CPUS=2; DEFAULT_WEB_PORT=4200 ;;
-    test)    BUILD_TARGET=production; NODE_ENV=test;        DEBUG=true;  MEMORY=1G; CPUS=2; DEFAULT_WEB_PORT=4201 ;;
-    staging) BUILD_TARGET=production; NODE_ENV=production;  DEBUG=false; MEMORY=1G; CPUS=2; DEFAULT_WEB_PORT=4202 ;;
-    prod)    BUILD_TARGET=full;       NODE_ENV=production;  DEBUG=false; MEMORY=2G; CPUS=4; DEFAULT_WEB_PORT=4200 ;;
+    dev)     BUILD_TARGET=dev;        NODE_ENV=development; DEBUG=true;  MEMORY=1G; CPUS=2; DEFAULT_WEB_PORT=4200; NODE_HEAP_MB=768  ;;
+    test)    BUILD_TARGET=production; NODE_ENV=test;        DEBUG=true;  MEMORY=1G; CPUS=2; DEFAULT_WEB_PORT=4201; NODE_HEAP_MB=768  ;;
+    staging) BUILD_TARGET=production; NODE_ENV=production;  DEBUG=false; MEMORY=1G; CPUS=2; DEFAULT_WEB_PORT=4202; NODE_HEAP_MB=768  ;;
+    prod)    BUILD_TARGET=full;       NODE_ENV=production;  DEBUG=false; MEMORY=2G; CPUS=4; DEFAULT_WEB_PORT=4200; NODE_HEAP_MB=1536 ;;
     *) echo -e "${RED}알 수 없는 프로필: $profile${NC}"; exit 1 ;;
   esac
 }
@@ -138,6 +138,7 @@ run_env() {
   export PROJECT_NAME="$project_name"
   export WEB_PORT="${WEB_PORT:-$DEFAULT_WEB_PORT}"
   export SKIP_INSTANCE_LOCK="$SKIP_LOCK"
+  export NODE_HEAP_MB
 
 
   # instance 모드: 기본 인프라(redis, docker-proxy)를 먼저 보장

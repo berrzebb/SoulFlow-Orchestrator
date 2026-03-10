@@ -1,7 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { InboundMessage } from "../bus/types.js";
-import type { ChannelProvider } from "../channels/types.js";
 import type { AgentRuntimeLike } from "../agent/runtime.types.js";
 import type { ProviderRegistry } from "../providers/service.js";
 import type { RuntimeExecutionPolicy } from "../providers/types.js";
@@ -610,13 +608,4 @@ function _extract_usage(raw: Record<string, unknown> | undefined): import("./typ
   };
 }
 
-export function resolve_reply_to(provider: ChannelProvider, message: InboundMessage): string {
-  const meta = (message.metadata || {}) as Record<string, unknown>;
-  if (provider === "slack") {
-    const thread = String(message.thread_id || "").trim();
-    if (thread) return thread;
-    return String(meta.message_id || message.id || "").trim();
-  }
-  if (provider === "telegram") return "";
-  return String(meta.message_id || message.id || "").trim();
-}
+export { resolve_reply_to } from "../channels/types.js";

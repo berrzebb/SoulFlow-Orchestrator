@@ -2,6 +2,7 @@
 
 import type { InboundMessage } from "../../bus/types.js";
 import type { ChannelProvider } from "../../channels/types.js";
+import { resolve_reply_to } from "../../channels/types.js";
 import type { ToolExecutionContext } from "../../agent/tools/types.js";
 import type { ExecutionMode, OrchestrationRequest, OrchestrationResult, ResultUsage } from "../types.js";
 import type { StreamBuffer } from "../../channels/stream-buffer.js";
@@ -67,16 +68,7 @@ export function build_context_message(task_with_media: string): string {
   return `[CURRENT_REQUEST]\n${task_with_media}`;
 }
 
-export function resolve_reply_to(provider: ChannelProvider, message: InboundMessage): string {
-  const meta = (message.metadata || {}) as Record<string, unknown>;
-  if (provider === "slack") {
-    const thread = String(message.thread_id || "").trim();
-    if (thread) return thread;
-    return String(meta.message_id || message.id || "").trim();
-  }
-  if (provider === "telegram") return "";
-  return String(meta.message_id || message.id || "").trim();
-}
+export { resolve_reply_to };
 
 export function raw_message_id(message: InboundMessage): string {
   const meta = (message.metadata || {}) as Record<string, unknown>;

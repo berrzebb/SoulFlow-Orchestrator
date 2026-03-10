@@ -1,37 +1,43 @@
 import type { RouteContext } from "../route-context.js";
 
+function channel_ops_or_503(ctx: RouteContext) {
+  const ops = ctx.options.channel_ops ?? null;
+  if (!ops) ctx.json(ctx.res, 503, { error: "channel_ops_unavailable" });
+  return ops;
+}
+
 export async function handle_channel(ctx: RouteContext): Promise<boolean> {
   const { req, url, res, options, json, read_body } = ctx;
   const path = url.pathname;
 
   // GET /api/channels/providers
   if (path === "/api/channels/providers" && req.method === "GET") {
-    const ops = options.channel_ops;
-    if (!ops) { json(res, 503, { error: "channel_ops_unavailable" }); return true; }
+    const ops = channel_ops_or_503(ctx);
+    if (!ops) return true;
     json(res, 200, ops.list_providers());
     return true;
   }
 
   // GET /api/channels/status
   if (path === "/api/channels/status" && req.method === "GET") {
-    const ops = options.channel_ops;
-    if (!ops) { json(res, 503, { error: "channel_ops_unavailable" }); return true; }
+    const ops = channel_ops_or_503(ctx);
+    if (!ops) return true;
     json(res, 200, await ops.list());
     return true;
   }
 
   // GET /api/channels/instances
   if (path === "/api/channels/instances" && req.method === "GET") {
-    const ops = options.channel_ops;
-    if (!ops) { json(res, 503, { error: "channel_ops_unavailable" }); return true; }
+    const ops = channel_ops_or_503(ctx);
+    if (!ops) return true;
     json(res, 200, await ops.list());
     return true;
   }
 
   // POST /api/channels/instances { ...fields }
   if (path === "/api/channels/instances" && req.method === "POST") {
-    const ops = options.channel_ops;
-    if (!ops) { json(res, 503, { error: "channel_ops_unavailable" }); return true; }
+    const ops = channel_ops_or_503(ctx);
+    if (!ops) return true;
     const body = await read_body(req);
     if (!body) { json(res, 400, { error: "invalid_body" }); return true; }
     const result = await ops.create(body as Parameters<typeof ops.create>[0]);
@@ -42,8 +48,8 @@ export async function handle_channel(ctx: RouteContext): Promise<boolean> {
   // GET /api/channels/instances/:id
   const id_match = path.match(/^\/api\/channels\/instances\/([^/]+)$/);
   if (id_match && req.method === "GET") {
-    const ops = options.channel_ops;
-    if (!ops) { json(res, 503, { error: "channel_ops_unavailable" }); return true; }
+    const ops = channel_ops_or_503(ctx);
+    if (!ops) return true;
     const id = decodeURIComponent(id_match[1]);
     const info = await ops.get(id);
     json(res, info ? 200 : 404, info ?? { error: "not_found" });
@@ -52,8 +58,8 @@ export async function handle_channel(ctx: RouteContext): Promise<boolean> {
 
   // PUT /api/channels/instances/:id { ...fields }
   if (id_match && req.method === "PUT") {
-    const ops = options.channel_ops;
-    if (!ops) { json(res, 503, { error: "channel_ops_unavailable" }); return true; }
+    const ops = channel_ops_or_503(ctx);
+    if (!ops) return true;
     const id = decodeURIComponent(id_match[1]);
     const body = await read_body(req);
     if (!body) { json(res, 400, { error: "invalid_body" }); return true; }
@@ -64,8 +70,8 @@ export async function handle_channel(ctx: RouteContext): Promise<boolean> {
 
   // DELETE /api/channels/instances/:id
   if (id_match && req.method === "DELETE") {
-    const ops = options.channel_ops;
-    if (!ops) { json(res, 503, { error: "channel_ops_unavailable" }); return true; }
+    const ops = channel_ops_or_503(ctx);
+    if (!ops) return true;
     const id = decodeURIComponent(id_match[1]);
     const result = await ops.remove(id);
     json(res, result.ok ? 200 : 404, result);
@@ -75,8 +81,8 @@ export async function handle_channel(ctx: RouteContext): Promise<boolean> {
   // POST /api/channels/instances/:id/test
   const test_match = path.match(/^\/api\/channels\/instances\/([^/]+)\/test$/);
   if (test_match && req.method === "POST") {
-    const ops = options.channel_ops;
-    if (!ops) { json(res, 503, { error: "channel_ops_unavailable" }); return true; }
+    const ops = channel_ops_or_503(ctx);
+    if (!ops) return true;
     const id = decodeURIComponent(test_match[1]);
     const result = await ops.test_connection(id);
     json(res, result.ok ? 200 : 400, result);

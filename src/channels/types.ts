@@ -17,6 +17,18 @@ export function resolve_provider(msg: { provider?: string; channel?: string }): 
   return raw || null;
 }
 
+/** 메시지에 대한 reply_to 값을 provider 규칙에 따라 결정. */
+export function resolve_reply_to(provider: ChannelProvider, message: InboundMessage): string {
+  const meta = (message.metadata || {}) as Record<string, unknown>;
+  if (provider === "slack") {
+    const thread = String(message.thread_id || "").trim();
+    if (thread) return thread;
+    return String(meta.message_id || message.id || "").trim();
+  }
+  if (provider === "telegram") return "";
+  return String(meta.message_id || message.id || "").trim();
+}
+
 export type ChannelTypingState = {
   chat_id: string;
   typing: boolean;

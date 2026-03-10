@@ -32,6 +32,7 @@ services:
       REDIS_URL: redis://redis:6379
       DEBUG: ${DEBUG:-false}
       SKIP_INSTANCE_LOCK: ${SKIP_INSTANCE_LOCK:-0}
+      NODE_OPTIONS: "--max-old-space-size=${NODE_HEAP_MB:-768}"
     volumes:
       - ${HOST_WORKSPACE:-.}:/data
       - ${HOST_WORKSPACE:-.}/.agents/.claude:/root/.claude

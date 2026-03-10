@@ -2,7 +2,7 @@
 
 import { Tool } from "./base.js";
 import type { JsonSchema, ToolExecutionContext } from "./types.js";
-import { error_message } from "../../utils/common.js";
+import { error_message, sleep } from "../../utils/common.js";
 import { run_agent_browser } from "./agent-browser-client.js";
 import { join } from "node:path";
 
@@ -61,7 +61,7 @@ export class ScreenshotTool extends Tool {
       await run_ab([...base, "wait", "--load", "domcontentloaded", "--json"], context?.signal, 15_000);
 
       if (delay_ms > 0) {
-        await new Promise((resolve) => setTimeout(resolve, delay_ms));
+        await sleep(delay_ms);
       }
 
       const screenshot_args = [...base, "screenshot", output_path, "--json"];

@@ -26,7 +26,7 @@ import { SessionRecorder } from "../channels/session-recorder.js";
 import { ProcessTracker } from "../orchestration/process-tracker.js";
 import { ConfirmationGuard } from "../orchestration/confirmation-guard.js";
 import { HitlPendingStore } from "../orchestration/hitl-pending-store.js";
-import { resolve_reply_to } from "../orchestration/service.js";
+import { resolve_reply_to } from "../channels/types.js";
 import { create_logger } from "../logger.js";
 
 export interface ChannelBundleDeps {

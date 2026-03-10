@@ -3,7 +3,7 @@
 import type { NodeHandler, RunnerContext } from "../node-registry.js";
 import type { RetryNodeDefinition, BackoffStrategy, OrcheNodeDefinition } from "../workflow-node.types.js";
 import type { OrcheNodeExecutorContext, OrcheNodeExecuteResult, OrcheNodeTestResult } from "../orche-node-executor.js";
-import { now_iso, error_message } from "../../utils/common.js";
+import { now_iso, error_message, sleep } from "../../utils/common.js";
 import { is_orche_node } from "../workflow-node.types.js";
 
 export const retry_handler: NodeHandler = {
@@ -128,6 +128,3 @@ function compute_backoff_delay(strategy: BackoffStrategy, attempt: number, initi
   return Math.min(delay, max_delay);
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}

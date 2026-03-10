@@ -1,21 +1,27 @@
 import type { RouteContext } from "../route-context.js";
 
+function skill_ops_or_503(ctx: RouteContext) {
+  const ops = ctx.options.skill_ops ?? null;
+  if (!ops) ctx.json(ctx.res, 503, { error: "skills_unavailable" });
+  return ops;
+}
+
 export async function handle_skill(ctx: RouteContext): Promise<boolean> {
   const { req, url, res, options, json, read_body } = ctx;
   const path = url.pathname;
 
   // GET /api/skills
   if (path === "/api/skills" && req.method === "GET") {
-    const ops = options.skill_ops;
-    if (!ops) { json(res, 503, { error: "skills_unavailable" }); return true; }
+    const ops = skill_ops_or_503(ctx);
+    if (!ops) return true;
     json(res, 200, ops.list_skills());
     return true;
   }
 
   // POST /api/skills { name, zip_b64 } — import (= 생성)
   if (path === "/api/skills" && req.method === "POST") {
-    const ops = options.skill_ops;
-    if (!ops) { json(res, 503, { error: "skills_unavailable" }); return true; }
+    const ops = skill_ops_or_503(ctx);
+    if (!ops) return true;
     const body = await read_body(req);
     const name = String(body?.name || "").trim();
     const zip_b64 = String(body?.zip_b64 || "").trim();
@@ -29,8 +35,8 @@ export async function handle_skill(ctx: RouteContext): Promise<boolean> {
 
   // POST /api/skills/refresh — 목록 새로고침
   if (path === "/api/skills/refresh" && req.method === "POST") {
-    const ops = options.skill_ops;
-    if (!ops) { json(res, 503, { error: "skills_unavailable" }); return true; }
+    const ops = skill_ops_or_503(ctx);
+    if (!ops) return true;
     ops.refresh();
     json(res, 200, { ok: true });
     return true;
@@ -39,8 +45,8 @@ export async function handle_skill(ctx: RouteContext): Promise<boolean> {
   // GET /api/skills/:name
   const name_match = path.match(/^\/api\/skills\/([^/]+)$/);
   if (name_match && req.method === "GET") {
-    const ops = options.skill_ops;
-    if (!ops) { json(res, 503, { error: "skills_unavailable" }); return true; }
+    const ops = skill_ops_or_503(ctx);
+    if (!ops) return true;
     const name = decodeURIComponent(name_match[1]);
     const detail = ops.get_skill_detail(name);
     json(res, detail.metadata ? 200 : 404, detail);
@@ -50,8 +56,8 @@ export async function handle_skill(ctx: RouteContext): Promise<boolean> {
   // PUT /api/skills/:name/files { file, content }
   const files_match = path.match(/^\/api\/skills\/([^/]+)\/files$/);
   if (files_match && req.method === "PUT") {
-    const ops = options.skill_ops;
-    if (!ops) { json(res, 503, { error: "skills_unavailable" }); return true; }
+    const ops = skill_ops_or_503(ctx);
+    if (!ops) return true;
     const name = decodeURIComponent(files_match[1]);
     const body = await read_body(req);
     const file = String(body?.file || "").trim();

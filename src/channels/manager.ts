@@ -1,5 +1,5 @@
 import type { InboundMessage, MediaItem, MessageBusLike, ReliableMessageBus } from "../bus/types.js";
-import { resolve_provider, type ChannelRegistryLike } from "./types.js";
+import { resolve_provider, resolve_reply_to, type ChannelRegistryLike } from "./types.js";
 type ChannelProvider = string;
 import type { ProviderRegistry } from "../providers/service.js";
 import type { ServiceLike } from "../runtime/service.types.js";
@@ -20,7 +20,6 @@ import type { ActiveRunControllerLike, ActiveRun } from "./active-run-controller
 import { ActiveRunController } from "./active-run-controller.js";
 import type { RenderProfileStore } from "./commands/render.handler.js";
 import { InMemoryRenderProfileStore } from "./commands/render.handler.js";
-import { resolve_reply_to } from "../orchestration/service.js";
 import { get_command_descriptors } from "./commands/registry.js";
 import { parse_slash_command_from_message, parse_slash_command } from "./slash-command.js";
 import {

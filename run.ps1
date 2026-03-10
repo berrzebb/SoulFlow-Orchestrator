@@ -13,11 +13,12 @@ param(
 
 $ErrorActionPreference = "Continue"
 
-# Named 파라미터 파싱
+# Named 파라미터 파싱 — 소비된 값은 PositionalArgs에서 제외
 $Workspace = $null
 $WebPort = $null
 $Instance = $null
 $Watch = $null
+$PositionalArgs = @()
 
 for ($i = 0; $i -lt $Arguments.Count; $i++) {
   $arg = $Arguments[$i]
@@ -45,15 +46,17 @@ for ($i = 0; $i -lt $Arguments.Count; $i++) {
     $Watch = "all"
   } elseif ($arg -eq "--skip-lock") {
     $SkipLock = $true
+  } elseif ($arg -notmatch "^--") {
+    $PositionalArgs += $arg
   }
 }
 
 # 환경별 프리셋 (docker-compose 환경변수만)
 $Presets = @{
-  dev     = @{ BUILD_TARGET="dev";        NODE_ENV="development"; DEBUG="true";  MEMORY="1G"; CPUS="2"; WEB_PORT="4200" }
-  test    = @{ BUILD_TARGET="production"; NODE_ENV="test";        DEBUG="true";  MEMORY="1G"; CPUS="2"; WEB_PORT="4201" }
-  staging = @{ BUILD_TARGET="production"; NODE_ENV="production";  DEBUG="false"; MEMORY="1G"; CPUS="2"; WEB_PORT="4202" }
-  prod    = @{ BUILD_TARGET="full";       NODE_ENV="production";  DEBUG="false"; MEMORY="2G"; CPUS="4"; WEB_PORT="4200" }
+  dev     = @{ BUILD_TARGET="dev";        NODE_ENV="development"; DEBUG="true";  MEMORY="1G"; CPUS="2"; WEB_PORT="4200"; NODE_HEAP_MB="768"  }
+  test    = @{ BUILD_TARGET="production"; NODE_ENV="test";        DEBUG="true";  MEMORY="1G"; CPUS="2"; WEB_PORT="4201"; NODE_HEAP_MB="768"  }
+  staging = @{ BUILD_TARGET="production"; NODE_ENV="production";  DEBUG="false"; MEMORY="1G"; CPUS="2"; WEB_PORT="4202"; NODE_HEAP_MB="768"  }
+  prod    = @{ BUILD_TARGET="full";       NODE_ENV="production";  DEBUG="false"; MEMORY="2G"; CPUS="4"; WEB_PORT="4200"; NODE_HEAP_MB="1536" }
 }
 
 function Write-Title {
@@ -150,6 +153,7 @@ function Start-Environment {
   $env:PROJECT_NAME = $projectName
   $env:WEB_PORT = if ($WebPort) { $WebPort } else { $p.WEB_PORT }
   $env:SKIP_INSTANCE_LOCK = if ($SkipLock) { "1" } else { "0" }
+  $env:NODE_HEAP_MB = $p.NODE_HEAP_MB
 
   # instance 모드: 기본 인프라(redis, docker-proxy)를 먼저 보장
   if ($Instance) {
@@ -311,11 +315,11 @@ switch ($Command.ToLower()) {
   "down"    { Stop-AllEnvironments }
   "status"  { Show-Status }
   "logs" {
-    $ProfileArg = $Arguments | Where-Object { $_ -notmatch "^--" } | Select-Object -First 1
+    $ProfileArg = $PositionalArgs | Select-Object -First 1
     Show-Logs $ProfileArg
   }
   "login" {
-    $Agent = $Arguments | Where-Object { $_ -notmatch "^--" } | Select-Object -First 1
+    $Agent = $PositionalArgs | Select-Object -First 1
     if ([string]::IsNullOrWhiteSpace($Agent)) {
       Write-Host "에이전트를 지정하세요" -ForegroundColor Red
       Write-Host "사용법: .\run.ps1 login [claude|codex|gemini]"

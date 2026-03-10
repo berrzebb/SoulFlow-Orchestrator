@@ -35,7 +35,14 @@ for %%a in (%*) do (
     if "!PREV_KEY!"=="instance" set "INSTANCE=!arg!"
     set "PREV_KEY="
   ) else (
-    if "!arg:~0,12!"=="--workspace=" set "WORKSPACE=!arg:~12!"
+    if "!arg:~0,12!"=="--workspace=" (
+      set "WORKSPACE=!arg:~12!"
+      if "!WORKSPACE:~0,1!"=="=" (
+        echo %RED%파라미터 오류: --workspace==... ^(= 기호가 두 개^)%NC%
+        echo %YELLOW%올바른 형식: --workspace=D:\path ^(= 한 개^)%NC%
+        goto end
+      )
+    )
     if "!arg!"=="--workspace" set "PREV_KEY=workspace"
     if "!arg:~0,11!"=="--web-port=" set "WEB_PORT=!arg:~11!"
     if "!arg!"=="--web-port" set "PREV_KEY=web-port"
@@ -78,6 +85,7 @@ if /i "%COMMAND%"=="dev" (
   set "DEBUG=true"
   set "MEMORY=1G"
   set "CPUS=2"
+  set "NODE_HEAP_MB=768"
   if "%WEB_PORT%"=="" set "WEB_PORT=4200"
 )
 if /i "%COMMAND%"=="test" (
@@ -86,6 +94,7 @@ if /i "%COMMAND%"=="test" (
   set "DEBUG=true"
   set "MEMORY=1G"
   set "CPUS=2"
+  set "NODE_HEAP_MB=768"
   if "%WEB_PORT%"=="" set "WEB_PORT=4201"
 )
 if /i "%COMMAND%"=="staging" (
@@ -94,6 +103,7 @@ if /i "%COMMAND%"=="staging" (
   set "DEBUG=false"
   set "MEMORY=1G"
   set "CPUS=2"
+  set "NODE_HEAP_MB=768"
   if "%WEB_PORT%"=="" set "WEB_PORT=4202"
 )
 if /i "%COMMAND%"=="prod" (
@@ -102,6 +112,7 @@ if /i "%COMMAND%"=="prod" (
   set "DEBUG=false"
   set "MEMORY=2G"
   set "CPUS=4"
+  set "NODE_HEAP_MB=1536"
   if "%WEB_PORT%"=="" set "WEB_PORT=4200"
 )
 
@@ -116,6 +127,8 @@ echo.
 echo %YELLOW%🚀 %COMMAND% 환경 시작 중...%NC%
 echo    워크스페이스: %WORKSPACE%
 echo    프로젝트: !PROJECT_NAME!
+if not "!INSTANCE!"=="" echo    인스턴스: !INSTANCE!
+if not "%WATCH%"=="" echo    watch: %WATCH%
 if "%SKIP_LOCK%"=="1" echo    skip lock: enabled
 
 REM .agents 디렉토리 사전 생성
@@ -206,8 +219,23 @@ docker compose ps
 goto end
 
 :logs
-REM 두 번째 인자를 프로필로 사용 (e.g. run.cmd logs prod --instance=worker1)
-set "LOG_PROFILE=%2"
+REM non-`--` 인자 중 첫 번째를 프로필로 사용 (space-separated flag value 제외)
+set "LOG_PROFILE="
+set "_skip_next="
+for %%a in (%*) do (
+  set "_a=%%a"
+  if defined _skip_next (
+    set "_skip_next="
+  ) else if "!_a:~0,2!"=="--" (
+    if "!_a!"=="--instance" set "_skip_next=1"
+    if "!_a!"=="--name" set "_skip_next=1"
+    if "!_a!"=="--workspace" set "_skip_next=1"
+    if "!_a!"=="--web-port" set "_skip_next=1"
+    if "!_a!"=="--webport" set "_skip_next=1"
+  ) else if not defined LOG_PROFILE (
+    if not "!_a!"=="%COMMAND%" set "LOG_PROFILE=!_a!"
+  )
+)
 if not "!LOG_PROFILE!"=="" (
   set "LOG_PROJECT=soulflow-!LOG_PROFILE!"
   if not "!INSTANCE!"=="" set "LOG_PROJECT=!LOG_PROJECT!-!INSTANCE!"

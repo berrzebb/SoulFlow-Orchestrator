@@ -1,5 +1,6 @@
 import { now_iso } from "../utils/common.js";
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { mkdir, open, readFile, unlink } from "node:fs/promises";
 import { hostname as os_hostname } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -11,7 +12,26 @@ type LockPayload = {
   cwd: string;
   key: string;
   hostname?: string;
+  /** /proc/{pid}/stat의 starttime 필드(jiffies since boot) — PID 재사용 감지용 */
+  start_jiffies?: number;
 };
+
+/** /proc/{pid}/stat에서 프로세스 시작 시간(jiffies) 읽기. Linux 전용, 실패 시 null. */
+function get_pid_start_jiffies(pid: number): number | null {
+  try {
+    const stat = readFileSync(`/proc/${pid}/stat`, "utf-8");
+    // comm 필드가 괄호+공백 포함 가능 → 마지막 ')' 이후부터 파싱
+    const rp = stat.lastIndexOf(")");
+    if (rp < 0) return null;
+    // ')' 뒤: state ppid pgrp session tty_nr tty_pgrp flags minflt cminflt
+    //         majflt cmajflt utime stime cutime cstime priority nice
+    //         num_threads itrealvalue starttime(19번째)
+    const fields = stat.slice(rp + 2).split(" ");
+    return Number(fields[19]) || null;
+  } catch {
+    return null;
+  }
+}
 
 export type RuntimeInstanceLockHandle = {
   key: string;
@@ -23,17 +43,21 @@ export type RuntimeInstanceLockHandle = {
 
 const PROCESS_HOSTNAME = os_hostname();
 
-/** PID가 살아있는지 체크. 컨테이너 재시작 시 PID가 재사용되므로 hostname도 비교. */
+/** PID가 살아있는지 체크. tini/PID1 환경에서 PID 재사용을 start_jiffies로 감지. */
 function is_stale_lock(holder: LockPayload): boolean {
   const pid = holder.pid;
   if (!Number.isFinite(pid) || pid <= 0) return true;
   // 다른 hostname에서 만든 lock → 죽은 컨테이너의 lock
   if (holder.hostname && holder.hostname !== PROCESS_HOSTNAME) return true;
-  // 같은 PID지만 시작 시간이 다르면 재사용된 PID → stale
-  // process.kill(pid, 0)으로 PID 존재 확인
   try {
     process.kill(pid, 0);
-    return false; // 살아있음
+    // PID 존재 확인 성공 — start_jiffies로 PID 재사용 여부 검증
+    // (tini 환경에서 컨테이너 재시작 후 node가 동일 PID를 받는 경우 대응)
+    if (holder.start_jiffies != null) {
+      const current_jiffies = get_pid_start_jiffies(pid);
+      if (current_jiffies !== null && current_jiffies !== holder.start_jiffies) return true;
+    }
+    return false;
   } catch {
     return true; // 프로세스 없음 → stale
   }
@@ -70,6 +94,7 @@ async function read_lock_payload(lock_path: string): Promise<LockPayload | null>
       cwd: String(obj.cwd || ""),
       key: String(obj.key || ""),
       hostname: obj.hostname ? String(obj.hostname) : undefined,
+      start_jiffies: obj.start_jiffies != null ? Number(obj.start_jiffies) : undefined,
     };
   } catch {
     return null;
@@ -87,6 +112,7 @@ async function try_acquire_lock(lock_path: string, key: string): Promise<{ ok: b
         cwd: process.cwd(),
         key,
         hostname: PROCESS_HOSTNAME,
+        start_jiffies: get_pid_start_jiffies(process.pid) ?? undefined,
       };
       await fd.writeFile(`${JSON.stringify(payload)}\n`, "utf-8");
     } finally {

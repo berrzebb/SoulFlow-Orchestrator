@@ -8,7 +8,7 @@ import type {
 import type { AgentOutputMessage, CliAdapter, BuildArgsOptions } from "./types.js";
 import { classify_error, FailoverError } from "./types.js";
 import { AgentBus } from "./agent-bus.js";
-import { now_iso, error_message, swallow } from "../../utils/common.js";
+import { now_iso, error_message, swallow, sleep } from "../../utils/common.js";
 import type { CliAuthService, CliType } from "../cli-auth.service.js";
 import { AuthProfileTracker } from "./auth-profile-tracker.js";
 import { evaluate_context_window_guard } from "./context-window-guard.js";
@@ -400,6 +400,3 @@ export class ContainerCliAgent implements AgentBackend {
   }
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}

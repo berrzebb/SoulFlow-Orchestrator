@@ -14,6 +14,12 @@ function get_rule_executor(ctx: RouteContext): KanbanRuleExecutor | null {
   return val as KanbanRuleExecutor | null ?? null;
 }
 
+function store_or_503(ctx: RouteContext): KanbanStoreLike | null {
+  const store = get_store(ctx);
+  if (!store) ctx.json(ctx.res, 503, { error: "kanban_unavailable" });
+  return store;
+}
+
 export async function handle_kanban(ctx: RouteContext): Promise<boolean> {
   const { req, url, res, json, read_body } = ctx;
   const path = url.pathname;
@@ -23,8 +29,8 @@ export async function handle_kanban(ctx: RouteContext): Promise<boolean> {
 
   // GET /api/kanban/boards
   if (path === "/api/kanban/boards" && method === "GET") {
-    const store = get_store(ctx);
-    if (!store) { json(res, 503, { error: "kanban_unavailable" }); return true; }
+    const store = store_or_503(ctx);
+    if (!store) return true;
     const scope_param = url.searchParams.get("scope");
     let scope_type: ScopeType | undefined;
     let scope_id: string | undefined;
@@ -40,8 +46,8 @@ export async function handle_kanban(ctx: RouteContext): Promise<boolean> {
 
   // POST /api/kanban/boards
   if (path === "/api/kanban/boards" && method === "POST") {
-    const store = get_store(ctx);
-    if (!store) { json(res, 503, { error: "kanban_unavailable" }); return true; }
+    const store = store_or_503(ctx);
+    if (!store) return true;
     const body = await read_body(req);
     if (!body?.name || !body?.scope_type || !body?.scope_id) {
       json(res, 400, { error: "name, scope_type, scope_id required" });
@@ -64,8 +70,8 @@ export async function handle_kanban(ctx: RouteContext): Promise<boolean> {
   // GET /api/kanban/boards/:id
   const board_match = path.match(/^\/api\/kanban\/boards\/([^/]+)$/);
   if (board_match && method === "GET") {
-    const store = get_store(ctx);
-    if (!store) { json(res, 503, { error: "kanban_unavailable" }); return true; }
+    const store = store_or_503(ctx);
+    if (!store) return true;
     const board_id = decodeURIComponent(board_match[1]);
     const board = await store.get_board(board_id);
     if (!board) { json(res, 404, { error: "not_found" }); return true; }
@@ -85,8 +91,8 @@ export async function handle_kanban(ctx: RouteContext): Promise<boolean> {
 
   // PUT /api/kanban/boards/:id
   if (board_match && method === "PUT") {
-    const store = get_store(ctx);
-    if (!store) { json(res, 503, { error: "kanban_unavailable" }); return true; }
+    const store = store_or_503(ctx);
+    if (!store) return true;
     const board_id = decodeURIComponent(board_match[1]);
     const body = await read_body(req);
     const board = await store.update_board(board_id, {
@@ -99,8 +105,8 @@ export async function handle_kanban(ctx: RouteContext): Promise<boolean> {
 
   // DELETE /api/kanban/boards/:id
   if (board_match && method === "DELETE") {
-    const store = get_store(ctx);
-    if (!store) { json(res, 503, { error: "kanban_unavailable" }); return true; }
+    const store = store_or_503(ctx);
+    if (!store) return true;
     const board_id = decodeURIComponent(board_match[1]);
     const ok = await store.delete_board(board_id);
     json(res, ok ? 200 : 404, ok ? { ok: true } : { error: "not_found" });
@@ -112,8 +118,8 @@ export async function handle_kanban(ctx: RouteContext): Promise<boolean> {
   // POST /api/kanban/boards/:id/cards
   const board_cards_match = path.match(/^\/api\/kanban\/boards\/([^/]+)\/cards$/);
   if (board_cards_match && method === "POST") {
-    const store = get_store(ctx);
-    if (!store) { json(res, 503, { error: "kanban_unavailable" }); return true; }
+    const store = store_or_503(ctx);
+    if (!store) return true;
     const board_id = decodeURIComponent(board_cards_match[1]);
     const body = await read_body(req);
     if (!body?.title) { json(res, 400, { error: "title required" }); return true; }
@@ -141,8 +147,8 @@ export async function handle_kanban(ctx: RouteContext): Promise<boolean> {
   // PUT /api/kanban/cards/:id
   const card_match = path.match(/^\/api\/kanban\/cards\/([^/]+)$/);
   if (card_match && method === "PUT") {
-    const store = get_store(ctx);
-    if (!store) { json(res, 503, { error: "kanban_unavailable" }); return true; }
+    const store = store_or_503(ctx);
+    if (!store) return true;
     const card_id = decodeURIComponent(card_match[1]);
     const body = await read_body(req);
     if (!body) { json(res, 400, { error: "body required" }); return true; }
@@ -184,8 +190,8 @@ export async function handle_kanban(ctx: RouteContext): Promise<boolean> {
 
   // DELETE /api/kanban/cards/:id
   if (card_match && method === "DELETE") {
-    const store = get_store(ctx);
-    if (!store) { json(res, 503, { error: "kanban_unavailable" }); return true; }
+    const store = store_or_503(ctx);
+    if (!store) return true;
     const card_id = decodeURIComponent(card_match[1]);
     const ok = await store.delete_card(card_id);
     json(res, ok ? 200 : 404, ok ? { ok: true } : { error: "not_found" });
@@ -196,8 +202,8 @@ export async function handle_kanban(ctx: RouteContext): Promise<boolean> {
 
   const comments_match = path.match(/^\/api\/kanban\/cards\/([^/]+)\/comments$/);
   if (comments_match && method === "GET") {
-    const store = get_store(ctx);
-    if (!store) { json(res, 503, { error: "kanban_unavailable" }); return true; }
+    const store = store_or_503(ctx);
+    if (!store) return true;
     const card_id = decodeURIComponent(comments_match[1]);
     const limit = url.searchParams.has("limit") ? Number(url.searchParams.get("limit")) : undefined;
     const comments = await store.list_comments(card_id, limit);
@@ -206,8 +212,8 @@ export async function handle_kanban(ctx: RouteContext): Promise<boolean> {
   }
 
   if (comments_match && method === "POST") {
-    const store = get_store(ctx);
-    if (!store) { json(res, 503, { error: "kanban_unavailable" }); return true; }
+    const store = store_or_503(ctx);
+    if (!store) return true;
     const card_id = decodeURIComponent(comments_match[1]);
     const body = await read_body(req);
     if (!body?.text) { json(res, 400, { error: "text required" }); return true; }
@@ -220,8 +226,8 @@ export async function handle_kanban(ctx: RouteContext): Promise<boolean> {
 
   const card_relations_match = path.match(/^\/api\/kanban\/cards\/([^/]+)\/relations$/);
   if (card_relations_match && method === "POST") {
-    const store = get_store(ctx);
-    if (!store) { json(res, 503, { error: "kanban_unavailable" }); return true; }
+    const store = store_or_503(ctx);
+    if (!store) return true;
     const source_card_id = decodeURIComponent(card_relations_match[1]);
     const body = await read_body(req);
     if (!body?.target_card_id || !body?.type) { json(res, 400, { error: "target_card_id and type required" }); return true; }
@@ -232,8 +238,8 @@ export async function handle_kanban(ctx: RouteContext): Promise<boolean> {
 
   // GET /api/kanban/cards/:id/relations
   if (card_relations_match && method === "GET") {
-    const store = get_store(ctx);
-    if (!store) { json(res, 503, { error: "kanban_unavailable" }); return true; }
+    const store = store_or_503(ctx);
+    if (!store) return true;
     const card_id = decodeURIComponent(card_relations_match[1]);
     const relations = await store.list_relations(card_id);
     json(res, 200, relations);
@@ -243,8 +249,8 @@ export async function handle_kanban(ctx: RouteContext): Promise<boolean> {
   // DELETE /api/kanban/relations/:id
   const rel_match = path.match(/^\/api\/kanban\/relations\/([^/]+)$/);
   if (rel_match && method === "DELETE") {
-    const store = get_store(ctx);
-    if (!store) { json(res, 503, { error: "kanban_unavailable" }); return true; }
+    const store = store_or_503(ctx);
+    if (!store) return true;
     const relation_id = decodeURIComponent(rel_match[1]);
     const ok = await store.remove_relation(relation_id);
     json(res, ok ? 200 : 404, ok ? { ok: true } : { error: "not_found" });
@@ -255,8 +261,8 @@ export async function handle_kanban(ctx: RouteContext): Promise<boolean> {
 
   const summary_match = path.match(/^\/api\/kanban\/boards\/([^/]+)\/summary$/);
   if (summary_match && method === "GET") {
-    const store = get_store(ctx);
-    if (!store) { json(res, 503, { error: "kanban_unavailable" }); return true; }
+    const store = store_or_503(ctx);
+    if (!store) return true;
     const board_id = decodeURIComponent(summary_match[1]);
     const summary = await store.board_summary(board_id);
     json(res, summary ? 200 : 404, summary ?? { error: "not_found" });
@@ -267,8 +273,8 @@ export async function handle_kanban(ctx: RouteContext): Promise<boolean> {
 
   const subtasks_match = path.match(/^\/api\/kanban\/cards\/([^/]+)\/subtasks$/);
   if (subtasks_match && method === "GET") {
-    const store = get_store(ctx);
-    if (!store) { json(res, 503, { error: "kanban_unavailable" }); return true; }
+    const store = store_or_503(ctx);
+    if (!store) return true;
     const card_id = decodeURIComponent(subtasks_match[1]);
     const subtasks = await store.get_subtasks(card_id);
     json(res, 200, subtasks);
@@ -280,8 +286,8 @@ export async function handle_kanban(ctx: RouteContext): Promise<boolean> {
   // GET /api/kanban/boards/:id/activities
   const board_activities_match = path.match(/^\/api\/kanban\/boards\/([^/]+)\/activities$/);
   if (board_activities_match && method === "GET") {
-    const store = get_store(ctx);
-    if (!store) { json(res, 503, { error: "kanban_unavailable" }); return true; }
+    const store = store_or_503(ctx);
+    if (!store) return true;
     const board_id = decodeURIComponent(board_activities_match[1]);
     const limit = url.searchParams.has("limit") ? Number(url.searchParams.get("limit")) : 100;
     const activities = await store.list_activities({ board_id, limit });
@@ -292,8 +298,8 @@ export async function handle_kanban(ctx: RouteContext): Promise<boolean> {
   // GET /api/kanban/cards/:id/activities
   const card_activities_match = path.match(/^\/api\/kanban\/cards\/([^/]+)\/activities$/);
   if (card_activities_match && method === "GET") {
-    const store = get_store(ctx);
-    if (!store) { json(res, 503, { error: "kanban_unavailable" }); return true; }
+    const store = store_or_503(ctx);
+    if (!store) return true;
     const card_id = decodeURIComponent(card_activities_match[1]);
     const limit = url.searchParams.has("limit") ? Number(url.searchParams.get("limit")) : 50;
     const activities = await store.list_activities({ card_id, limit });
@@ -306,8 +312,8 @@ export async function handle_kanban(ctx: RouteContext): Promise<boolean> {
   // GET /api/kanban/boards/:id/rules
   const board_rules_match = path.match(/^\/api\/kanban\/boards\/([^/]+)\/rules$/);
   if (board_rules_match && method === "GET") {
-    const store = get_store(ctx);
-    if (!store) { json(res, 503, { error: "kanban_unavailable" }); return true; }
+    const store = store_or_503(ctx);
+    if (!store) return true;
     const board_id = decodeURIComponent(board_rules_match[1]);
     const rules = await store.list_rules(board_id);
     json(res, 200, rules);
@@ -316,8 +322,8 @@ export async function handle_kanban(ctx: RouteContext): Promise<boolean> {
 
   // POST /api/kanban/boards/:id/rules
   if (board_rules_match && method === "POST") {
-    const store = get_store(ctx);
-    if (!store) { json(res, 503, { error: "kanban_unavailable" }); return true; }
+    const store = store_or_503(ctx);
+    if (!store) return true;
     const board_id = decodeURIComponent(board_rules_match[1]);
     const body = await read_body(req);
     if (!body?.trigger || !body?.action_type) {
@@ -343,8 +349,8 @@ export async function handle_kanban(ctx: RouteContext): Promise<boolean> {
   // PUT /api/kanban/rules/:id
   const rule_match = path.match(/^\/api\/kanban\/rules\/([^/]+)$/);
   if (rule_match && method === "PUT") {
-    const store = get_store(ctx);
-    if (!store) { json(res, 503, { error: "kanban_unavailable" }); return true; }
+    const store = store_or_503(ctx);
+    if (!store) return true;
     const rule_id = decodeURIComponent(rule_match[1]);
     const body = await read_body(req);
     const rule = await store.update_rule(rule_id, {
@@ -359,8 +365,8 @@ export async function handle_kanban(ctx: RouteContext): Promise<boolean> {
 
   // DELETE /api/kanban/rules/:id
   if (rule_match && method === "DELETE") {
-    const store = get_store(ctx);
-    if (!store) { json(res, 503, { error: "kanban_unavailable" }); return true; }
+    const store = store_or_503(ctx);
+    if (!store) return true;
     const rule_id = decodeURIComponent(rule_match[1]);
     const ok = await store.remove_rule(rule_id);
     json(res, ok ? 200 : 404, ok ? { ok: true } : { error: "not_found" });
@@ -371,8 +377,8 @@ export async function handle_kanban(ctx: RouteContext): Promise<boolean> {
 
   // GET /api/kanban/templates
   if (path === "/api/kanban/templates" && method === "GET") {
-    const store = get_store(ctx);
-    if (!store) { json(res, 503, { error: "kanban_unavailable" }); return true; }
+    const store = store_or_503(ctx);
+    if (!store) return true;
     const templates = await store.list_templates();
     json(res, 200, templates);
     return true;
@@ -380,8 +386,8 @@ export async function handle_kanban(ctx: RouteContext): Promise<boolean> {
 
   // POST /api/kanban/templates
   if (path === "/api/kanban/templates" && method === "POST") {
-    const store = get_store(ctx);
-    if (!store) { json(res, 503, { error: "kanban_unavailable" }); return true; }
+    const store = store_or_503(ctx);
+    if (!store) return true;
     const body = await read_body(req);
     if (!body?.name || !body?.cards) {
       json(res, 400, { error: "name and cards required" });
@@ -404,8 +410,8 @@ export async function handle_kanban(ctx: RouteContext): Promise<boolean> {
   // GET /api/kanban/templates/:id
   const template_match = path.match(/^\/api\/kanban\/templates\/([^/]+)$/);
   if (template_match && method === "GET") {
-    const store = get_store(ctx);
-    if (!store) { json(res, 503, { error: "kanban_unavailable" }); return true; }
+    const store = store_or_503(ctx);
+    if (!store) return true;
     const template_id = decodeURIComponent(template_match[1]);
     const template = await store.get_template(template_id);
     json(res, template ? 200 : 404, template ?? { error: "not_found" });
@@ -414,8 +420,8 @@ export async function handle_kanban(ctx: RouteContext): Promise<boolean> {
 
   // DELETE /api/kanban/templates/:id
   if (template_match && method === "DELETE") {
-    const store = get_store(ctx);
-    if (!store) { json(res, 503, { error: "kanban_unavailable" }); return true; }
+    const store = store_or_503(ctx);
+    if (!store) return true;
     const template_id = decodeURIComponent(template_match[1]);
     const ok = await store.delete_template(template_id);
     json(res, ok ? 200 : 404, ok ? { ok: true } : { error: "not_found" });
@@ -427,8 +433,8 @@ export async function handle_kanban(ctx: RouteContext): Promise<boolean> {
   // GET /api/kanban/boards/:id/metrics
   const metrics_match = path.match(/^\/api\/kanban\/boards\/([^/]+)\/metrics$/);
   if (metrics_match && method === "GET") {
-    const store = get_store(ctx);
-    if (!store) { json(res, 503, { error: "kanban_unavailable" }); return true; }
+    const store = store_or_503(ctx);
+    if (!store) return true;
     const board_id = decodeURIComponent(metrics_match[1]);
     const days = url.searchParams.has("days") ? Number(url.searchParams.get("days")) : 30;
     const metrics = await store.get_board_metrics(board_id, days);
@@ -441,8 +447,8 @@ export async function handle_kanban(ctx: RouteContext): Promise<boolean> {
   // GET /api/kanban/cards/:id/time-tracking
   const time_tracking_match = path.match(/^\/api\/kanban\/cards\/([^/]+)\/time-tracking$/);
   if (time_tracking_match && method === "GET") {
-    const store = get_store(ctx);
-    if (!store) { json(res, 503, { error: "kanban_unavailable" }); return true; }
+    const store = store_or_503(ctx);
+    if (!store) return true;
     const card_id = decodeURIComponent(time_tracking_match[1]);
     const tracking = await store.get_card_time_tracking(card_id);
     json(res, tracking ? 200 : 404, tracking ?? { error: "not_found" });
@@ -453,8 +459,8 @@ export async function handle_kanban(ctx: RouteContext): Promise<boolean> {
 
   // GET /api/kanban/search?q=...&board_id=...&limit=...
   if (path === "/api/kanban/search" && method === "GET") {
-    const store = get_store(ctx);
-    if (!store) { json(res, 503, { error: "kanban_unavailable" }); return true; }
+    const store = store_or_503(ctx);
+    if (!store) return true;
     const q = url.searchParams.get("q") ?? "";
     if (!q) { json(res, 400, { error: "q parameter required" }); return true; }
     const board_id = url.searchParams.get("board_id") ?? undefined;
@@ -469,8 +475,8 @@ export async function handle_kanban(ctx: RouteContext): Promise<boolean> {
   // GET /api/kanban/boards/:id/filters
   const board_filters_match = path.match(/^\/api\/kanban\/boards\/([^/]+)\/filters$/);
   if (board_filters_match && method === "GET") {
-    const store = get_store(ctx);
-    if (!store) { json(res, 503, { error: "kanban_unavailable" }); return true; }
+    const store = store_or_503(ctx);
+    if (!store) return true;
     const board_id = decodeURIComponent(board_filters_match[1]);
     const filters = await store.list_filters(board_id);
     json(res, 200, filters);
@@ -479,8 +485,8 @@ export async function handle_kanban(ctx: RouteContext): Promise<boolean> {
 
   // POST /api/kanban/boards/:id/filters
   if (board_filters_match && method === "POST") {
-    const store = get_store(ctx);
-    if (!store) { json(res, 503, { error: "kanban_unavailable" }); return true; }
+    const store = store_or_503(ctx);
+    if (!store) return true;
     const board_id = decodeURIComponent(board_filters_match[1]);
     const body = await read_body(req);
     if (!body?.name) { json(res, 400, { error: "name required" }); return true; }
@@ -500,8 +506,8 @@ export async function handle_kanban(ctx: RouteContext): Promise<boolean> {
   // DELETE /api/kanban/filters/:id
   const filter_match = path.match(/^\/api\/kanban\/filters\/([^/]+)$/);
   if (filter_match && method === "DELETE") {
-    const store = get_store(ctx);
-    if (!store) { json(res, 503, { error: "kanban_unavailable" }); return true; }
+    const store = store_or_503(ctx);
+    if (!store) return true;
     const filter_id = decodeURIComponent(filter_match[1]);
     const ok = await store.delete_filter(filter_id);
     json(res, ok ? 200 : 404, ok ? { ok: true } : { error: "not_found" });
@@ -513,8 +519,8 @@ export async function handle_kanban(ctx: RouteContext): Promise<boolean> {
   // GET /api/kanban/boards/:id/events
   const events_match = path.match(/^\/api\/kanban\/boards\/([^/]+)\/events$/);
   if (events_match && method === "GET") {
-    const store = get_store(ctx);
-    if (!store) { json(res, 503, { error: "kanban_unavailable" }); return true; }
+    const store = store_or_503(ctx);
+    if (!store) return true;
     const board_id = decodeURIComponent(events_match[1]);
 
     res.writeHead(200, {
