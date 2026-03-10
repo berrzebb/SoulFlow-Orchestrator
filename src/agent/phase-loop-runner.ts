@@ -30,6 +30,7 @@ import {
 } from "./workflow-node.types.js";
 import { execute_orche_node, apply_preset } from "./orche-node-executor.js";
 import { get_node_handler, type RunnerContext } from "./node-registry.js";
+import { resolve_executor_provider } from "../providers/executor.js";
 import {
   create_worktree,
   create_isolated_directory,
@@ -1153,7 +1154,13 @@ function build_runner_services(
   if (deps.providers) {
     const providers = deps.providers;
     services.invoke_llm = async (opts) => {
-      const provider_id = backend_to_provider(opts.provider_id) || "openrouter";
+      const raw_provider = backend_to_provider(opts.provider_id) || "openrouter";
+      const caps = subagents.get_provider_caps();
+      const provider_id = resolve_executor_provider(raw_provider, caps);
+      // 폴백 발생 시 OpenRouter 형식 모델명("provider/model")은 제거
+      const provider_changed = raw_provider !== provider_id;
+      const model = (provider_changed && opts.model?.includes("/")) ? undefined : opts.model;
+
       const messages: import("../providers/types.js").ChatMessage[] = [];
       if (opts.system) messages.push({ role: "system", content: opts.system });
 
@@ -1166,7 +1173,7 @@ function build_runner_services(
       const result = await providers.run_headless({
         provider_id,
         messages,
-        model: opts.model,
+        model,
         temperature: opts.temperature,
         max_tokens: opts.max_tokens,
         abort_signal: opts.abort_signal,

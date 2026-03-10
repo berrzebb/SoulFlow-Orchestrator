@@ -109,6 +109,10 @@ export class SubagentRegistry {
     return this.agent_backends;
   }
 
+  get_provider_caps(): ProviderCapabilities {
+    return this.provider_caps;
+  }
+
   upsert(ref: SubagentRef): void {
     const prev = this.items.get(ref.id);
     this.items.set(ref.id, {
@@ -269,7 +273,11 @@ export class SubagentRegistry {
     const max_iterations = Math.max(1, Number(options.max_iterations || 15));
     const controller_provider_id = providers.get_orchestrator_provider_id();
     const executor_provider_id = resolve_executor_provider(options.provider_id || "claude_code", this.provider_caps);
-    const model = options.model;
+    // 폴백 발생 시 (요청한 provider != 실제 provider) OpenRouter 형식 모델명("provider/model")은 제거
+    // — 해당 모델이 폴백 provider(예: orchestrator_llm/Ollama)에 존재하지 않을 수 있음
+    const provider_changed = options.provider_id && options.provider_id !== executor_provider_id;
+    const model_is_remote = options.model?.includes("/");
+    const model = (provider_changed && model_is_remote) ? undefined : options.model;
     const max_tokens = options.max_tokens ?? 4096;
     const temperature = options.temperature ?? 0.4;
 

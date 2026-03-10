@@ -178,6 +178,7 @@ async function generate_dynamic_workflow(
       `  - preset_id: "${p.preset_id}" (${p.label}): ${p.description}`,
     ).join("\n");
 
+    const agent_backend = deps.providers.get_orchestrator_provider_id();
     const planner_prompt = [
       "Design a multi-agent workflow for the following objective.",
       `Objective: "${objective}"`,
@@ -189,13 +190,13 @@ async function generate_dynamic_workflow(
       "Constraints:",
       "- Maximum 3 phases",
       "- Maximum 4 agents per phase",
-      "- Each agent needs: agent_id (snake_case), role, label, backend (use \"openrouter\")",
+      `- Each agent needs: agent_id (snake_case), role, label, backend (use "${agent_backend}")`,
       "- If a preset matches the role, add preset_id to the agent definition (system_prompt will be auto-filled)",
       "- If no preset matches, provide a custom system_prompt",
       "- Add a critic to each phase with gate=true",
       "",
       "Return ONLY valid JSON matching this schema:",
-      '{ "title": string, "objective": string, "phases": [{ "phase_id": string, "title": string, "agents": [{ "agent_id": string, "role": string, "label": string, "backend": "openrouter", "preset_id"?: string, "system_prompt"?: string }], "critic": { "backend": "openrouter", "system_prompt": string, "gate": true } }] }',
+      `{ "title": string, "objective": string, "phases": [{ "phase_id": string, "title": string, "agents": [{ "agent_id": string, "role": string, "label": string, "backend": "${agent_backend}", "preset_id"?: string, "system_prompt"?: string }], "critic": { "backend": "${agent_backend}", "system_prompt": string, "gate": true } }] }`,
     ].join("\n");
 
     const llm_response = await deps.providers.run_orchestrator({
