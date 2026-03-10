@@ -408,3 +408,31 @@ describe("WhoisTool — unknown action", () => {
     expect(r.error).toBeTruthy();
   });
 });
+
+// ══════════════════════════════════════════
+// LicenseTool — 미커버 detect 분기
+// ══════════════════════════════════════════
+
+describe("LicenseTool — detect 미커버 분기", () => {
+  const tool = new LicenseTool();
+
+  it("GPL 텍스트 → GPL 감지 (L164 gnu general public)", async () => {
+    const r = JSON.parse(await tool.execute({ action: "detect", text: "GNU General Public License GPL-3.0" }));
+    expect(r.detected).toContain("GPL");
+  });
+
+  it("ISC 텍스트 → ISC 감지 (L165 isc license)", async () => {
+    const r = JSON.parse(await tool.execute({ action: "detect", text: "ISC License ISC" }));
+    expect(r.detected).toBe("ISC");
+  });
+
+  it("BSD-2-Clause 텍스트 → BSD-2-Clause 감지 (L166)", async () => {
+    const r = JSON.parse(await tool.execute({ action: "detect", text: "BSD 2-Clause BSD-2-Clause" }));
+    expect(r.detected).toBe("BSD-2-Clause");
+  });
+
+  it("BSD-3-Clause 텍스트 → BSD-3-Clause 감지 (L167)", async () => {
+    const r = JSON.parse(await tool.execute({ action: "detect", text: "BSD 3-Clause BSD-3-Clause" }));
+    expect(r.detected).toBe("BSD-3-Clause");
+  });
+});

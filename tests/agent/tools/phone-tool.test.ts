@@ -95,3 +95,40 @@ describe("PhoneTool — compare", () => {
     expect(r.match).toBe(false);
   });
 });
+
+// ══════════════════════════════════════════
+// 미커버 분기 보충
+// ══════════════════════════════════════════
+
+describe("PhoneTool — 미커버 분기", () => {
+  it("parse: + 로 시작하지만 알 수 없는 국가코드 → country_code 없음 (L90)", async () => {
+    const r = await exec({ action: "parse", number: "+9991234567" }) as Record<string, unknown>;
+    expect(r.digits).toBeDefined();
+    expect(r.country_code).toBeUndefined();
+  });
+
+  it("format: 알 수 없는 + 번호 → country_code 없음 → format_phone digits 반환 (L102)", async () => {
+    const r = await exec({ action: "format", number: "+9991234567", format_type: "international" }) as Record<string, unknown>;
+    expect(r.formatted).toBeDefined();
+  });
+
+  it("format: KR national 포맷 ≥9자리 (L108)", async () => {
+    const r = await exec({ action: "format", number: "+821023456789", format_type: "national" }) as Record<string, unknown>;
+    expect(String(r.formatted)).toContain("010");
+  });
+
+  it("format: GB national 포맷 → 0{digits} 반환 (L109)", async () => {
+    const r = await exec({ action: "format", number: "+441234567890", format_type: "national" }) as Record<string, unknown>;
+    expect(String(r.formatted)).toContain("0");
+  });
+
+  it("format: 알 수 없는 format_type → digits 그대로 반환 (L111)", async () => {
+    const r = await exec({ action: "format", number: "+12125551234", format_type: "raw" }) as Record<string, unknown>;
+    expect(r.formatted).toBeDefined();
+  });
+
+  it("unknown action → error (L78)", async () => {
+    const r = await exec({ action: "lookup", number: "+12125551234" }) as Record<string, unknown>;
+    expect(r.error).toBeDefined();
+  });
+});

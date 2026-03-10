@@ -156,3 +156,33 @@ describe("UserAgentTool — random", () => {
     expect(String(r.ua).startsWith("Mozilla/5.0")).toBe(true);
   });
 });
+
+// ══════════════════════════════════════════
+// 미커버 분기 보충
+// ══════════════════════════════════════════
+
+describe("UserAgentTool — 미커버 분기", () => {
+  const EDGE_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0";
+  const OPERA_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 OPR/106.0.0.0";
+  const IPAD_UA = "Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1";
+
+  it("parse: Edge UA → browser=Edge (L83)", async () => {
+    const r = await exec({ action: "parse", ua: EDGE_UA }) as Record<string, unknown>;
+    expect(r.browser).toBe("Edge");
+  });
+
+  it("parse: Opera UA → browser=Opera (L84)", async () => {
+    const r = await exec({ action: "parse", ua: OPERA_UA }) as Record<string, unknown>;
+    expect(r.browser).toBe("Opera");
+  });
+
+  it("parse: iPad UA → device=iPad (L107)", async () => {
+    const r = await exec({ action: "parse", ua: IPAD_UA }) as Record<string, unknown>;
+    expect(r.device).toBe("iPad");
+  });
+
+  it("unknown action → error (L75)", async () => {
+    const r = await exec({ action: "detect", ua: CHROME_WINDOWS_UA }) as Record<string, unknown>;
+    expect(r.error).toBeDefined();
+  });
+});

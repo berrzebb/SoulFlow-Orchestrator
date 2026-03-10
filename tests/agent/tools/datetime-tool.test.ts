@@ -143,3 +143,41 @@ describe("DateTimeTool — range", () => {
     expect(r.length).toBe(5);
   });
 });
+
+// ══════════════════════════════════════════
+// 미커버 분기 보충
+// ══════════════════════════════════════════
+
+describe("DateTimeTool — 미커버 분기", () => {
+  it("timezone: invalid date → Error (L95)", async () => {
+    const r = await exec({ action: "timezone", date: "not-a-date", from_tz: "UTC", to_tz: "Asia/Seoul" });
+    expect(String(r)).toContain("Error");
+  });
+
+  it("business_days: invalid date → Error (L111)", async () => {
+    const r = await exec({ action: "business_days", date: "bad-date", date2: "2024-01-10" });
+    expect(String(r)).toContain("Error");
+  });
+
+  it("day_info: invalid date → Error (L148)", async () => {
+    const r = await exec({ action: "day_info", date: "" });
+    expect(String(r)).toContain("Error");
+  });
+
+  it("range: invalid start date → Error (L167)", async () => {
+    const r = await exec({ action: "range", start_date: "bad", end_date: "2024-01-05" });
+    expect(String(r)).toContain("Error");
+  });
+
+  it("range: step < 1 → Error (L168)", async () => {
+    // step_days=0 은 falsy → Number(0||1)=1 로 되므로 음수를 써야 step<1 조건 통과
+    const r = await exec({ action: "range", start_date: "2024-01-01", end_date: "2024-01-05", step_days: -1 });
+    expect(String(r)).toContain("Error");
+  });
+
+  it("safe_parse: 빈 문자열 → null → Error (L180)", async () => {
+    // timezone 에 빈 date 전달 → safe_parse("") → L180 null → "Error: invalid date"
+    const r = await exec({ action: "timezone", date: "", from_tz: "UTC", to_tz: "Asia/Seoul" });
+    expect(String(r)).toContain("Error");
+  });
+});

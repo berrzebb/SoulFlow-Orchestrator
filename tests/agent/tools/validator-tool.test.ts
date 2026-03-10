@@ -230,3 +230,57 @@ describe("ValidatorTool — rules", () => {
     expect(r).toContain("Error");
   });
 });
+
+// ══════════════════════════════════════════
+// 미커버 분기 보충
+// ══════════════════════════════════════════
+
+describe("ValidatorTool — 미커버 분기", () => {
+  it("unknown operation → Error (L45)", async () => {
+    const r = await exec({ operation: "validate", input: "{}" });
+    expect(String(r)).toContain("Error");
+  });
+
+  it("schema: number maximum 초과 → 오류 (L104)", async () => {
+    const schema = JSON.stringify({ type: "object", properties: { score: { type: "number", maximum: 100 } } });
+    const r = await exec({ operation: "schema", input: JSON.stringify({ score: 150 }), schema }) as Record<string, unknown>;
+    expect(r.valid).toBe(false);
+  });
+
+  it("rules: invalid JSON input → 오류 (L126)", async () => {
+    const rules = JSON.stringify([{ field: "name", required: true }]);
+    const r = await exec({ operation: "rules", input: "not-json", rules }) as Record<string, unknown>;
+    expect(r.valid).toBe(false);
+  });
+
+  it("rules: rule.field 없음 → continue (L133)", async () => {
+    // field 없는 rule → skip (L133 continue)
+    const rules = JSON.stringify([{ required: true }]);
+    const r = await exec({ operation: "rules", input: JSON.stringify({ a: 1 }), rules }) as Record<string, unknown>;
+    expect(r.valid).toBe(true);
+  });
+
+  it("rules: 필드 존재하지 않음 + not required → skip (L141)", async () => {
+    const rules = JSON.stringify([{ field: "missing", type: "string" }]);
+    const r = await exec({ operation: "rules", input: JSON.stringify({ a: 1 }), rules }) as Record<string, unknown>;
+    expect(r.valid).toBe(true);
+  });
+
+  it("rules: 필드 타입 불일치 → 오류 (L145)", async () => {
+    const rules = JSON.stringify([{ field: "age", type: "string" }]);
+    const r = await exec({ operation: "rules", input: JSON.stringify({ age: 30 }), rules }) as Record<string, unknown>;
+    expect(r.valid).toBe(false);
+  });
+
+  it("format: ip 비숫자 → 정규식 실패 → is_valid_ip false (L166)", async () => {
+    // "not-an-ip" → IPV4_RE 실패 → L166 return false
+    const r = await exec({ operation: "format", input: "not-an-ip", format: "ip" }) as Record<string, unknown>;
+    expect(r.valid).toBe(false);
+  });
+
+  it("rules: min 미만 값 → 오류 (L148)", async () => {
+    const rules = JSON.stringify([{ field: "score", min: 50 }]);
+    const r = await exec({ operation: "rules", input: JSON.stringify({ score: 10 }), rules }) as Record<string, unknown>;
+    expect(r.valid).toBe(false);
+  });
+});
