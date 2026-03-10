@@ -1,18 +1,20 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
-import { BuilderField } from "../builder-field";
+import { BuilderField, BuilderRowPair } from "../builder-field";
 
 function DocumentXlsxEditPanel({ node, update, t }: EditPanelProps) {
   return (
     <>
-      <BuilderField label={t("node.document_xlsx.input.content")}>
-        <input autoFocus className="input input--sm" value={String(node.content || "")} onChange={(e) => update({ content: e.target.value })} />
+      <BuilderField label={t("workflows.field_content")} required>
+        <textarea autoFocus className="input" required rows={5} value={String(node.content || "")} onChange={(e) => update({ content: e.target.value })} placeholder="col1,col2,col3&#10;val1,val2,val3" aria-required="true" />
       </BuilderField>
-      <BuilderField label={t("node.document_xlsx.input.output")}>
-        <input className="input input--sm" value={String(node.output || "")} onChange={(e) => update({ output: e.target.value })} />
-      </BuilderField>
-      <BuilderField label={t("node.document_xlsx.input.delimiter")}>
-        <input className="input input--sm" value={String(node.delimiter || "")} onChange={(e) => update({ delimiter: e.target.value })} />
-      </BuilderField>
+      <BuilderRowPair>
+        <BuilderField label={t("workflows.field_output_path")} required>
+          <input className="input input--sm" required value={String(node.output || "")} onChange={(e) => update({ output: e.target.value })} placeholder="/tmp/output.xlsx" aria-required="true" />
+        </BuilderField>
+        <BuilderField label={t("workflows.csv_delimiter")}>
+          <input className="input input--sm" value={String(node.delimiter || ",")} onChange={(e) => update({ delimiter: e.target.value })} placeholder="," style={{ maxWidth: "80px" }} />
+        </BuilderField>
+      </BuilderRowPair>
     </>
   );
 }
@@ -34,6 +36,6 @@ export const document_xlsx_descriptor: FrontendNodeDescriptor = {
     { name: "output", type: "string", description: "node.document_xlsx.input.output" },
     { name: "delimiter", type: "string", description: "node.document_xlsx.input.delimiter" },
   ],
-  create_default: () => ({ content: "", output: "", delimiter: "" }),
+  create_default: () => ({ content: "", output: "", delimiter: "," }),
   EditPanel: DocumentXlsxEditPanel,
 };

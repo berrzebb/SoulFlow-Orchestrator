@@ -1,17 +1,21 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 import { BuilderField } from "../builder-field";
 
+const SLIDE_FORMATS = ["markdown", "json", "text"];
+
 function DocumentPptxEditPanel({ node, update, t }: EditPanelProps) {
   return (
     <>
-      <BuilderField label={t("node.document_pptx.input.content")}>
-        <input autoFocus className="input input--sm" value={String(node.content || "")} onChange={(e) => update({ content: e.target.value })} />
+      <BuilderField label={t("workflows.document_pptx_slide_format")}>
+        <select autoFocus className="input input--sm" value={String(node.slide_format || "markdown")} onChange={(e) => update({ slide_format: e.target.value })}>
+          {SLIDE_FORMATS.map((f) => <option key={f} value={f}>{f}</option>)}
+        </select>
       </BuilderField>
-      <BuilderField label={t("node.document_pptx.input.output")}>
-        <input className="input input--sm" value={String(node.output || "")} onChange={(e) => update({ output: e.target.value })} />
+      <BuilderField label={t("workflows.field_content")} required>
+        <textarea className="input" required rows={6} value={String(node.content || "")} onChange={(e) => update({ content: e.target.value })} placeholder="# Slide 1&#10;Content&#10;---&#10;# Slide 2" aria-required="true" />
       </BuilderField>
-      <BuilderField label={t("node.document_pptx.input.slide_format")}>
-        <input className="input input--sm" value={String(node.slide_format || "")} onChange={(e) => update({ slide_format: e.target.value })} />
+      <BuilderField label={t("workflows.field_output_path")} required>
+        <input className="input input--sm" required value={String(node.output || "")} onChange={(e) => update({ output: e.target.value })} placeholder="/tmp/output.pptx" aria-required="true" />
       </BuilderField>
     </>
   );
@@ -34,6 +38,6 @@ export const document_pptx_descriptor: FrontendNodeDescriptor = {
     { name: "output", type: "string", description: "node.document_pptx.input.output" },
     { name: "slide_format", type: "string", description: "node.document_pptx.input.slide_format" },
   ],
-  create_default: () => ({ content: "", output: "", slide_format: "" }),
+  create_default: () => ({ content: "", output: "", slide_format: "markdown" }),
   EditPanel: DocumentPptxEditPanel,
 };
