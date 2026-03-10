@@ -22,10 +22,13 @@ function TaskEditPanel({ node, update, t, options }: EditPanelProps) {
             <input className="input input--sm" value={String(node.channel || "")} onChange={(e) => update({ channel: e.target.value })} placeholder="slack" />
           )}
         </BuilderField>
-        <BuilderField label={t("workflows.max_turns")} required hint={t("workflows.task_max_turns_hint")}>
-          <input required className="input input--sm" type="number" min={1} max={200} value={String(node.max_turns ?? 20)} onChange={(e) => update({ max_turns: Number(e.target.value) || 20 })} aria-required="true" />
+        <BuilderField label={t("workflows.hitl_chat_id")}>
+          <input className="input input--sm" value={String(node.chat_id || "")} onChange={(e) => update({ chat_id: e.target.value || undefined })} placeholder="C01234567" />
         </BuilderField>
       </BuilderRowPair>
+      <BuilderField label={t("workflows.max_turns")} required hint={t("workflows.task_max_turns_hint")}>
+        <input required className="input input--sm" type="number" min={1} max={200} value={String(node.max_turns ?? 20)} onChange={(e) => update({ max_turns: Number(e.target.value) || 20 })} aria-required="true" />
+      </BuilderField>
       <JsonField label={t("workflows.task_memory")} value={node.initial_memory} onUpdate={(v) => update({ initial_memory: v })} rows={2} placeholder='{"context": "{{memory.prev.result}}"}' />
     </>
   );

@@ -68,6 +68,6 @@ export const code_descriptor: FrontendNodeDescriptor = {
   input_schema: [
     { name: "input", type: "object", description: "node.code.input.input" },
   ],
-  create_default: () => ({ language: "javascript", code: "" }),
+  create_default: () => ({ language: "javascript", code: "", timeout_ms: 10000 }),
   EditPanel: CodeEditPanel,
 };
