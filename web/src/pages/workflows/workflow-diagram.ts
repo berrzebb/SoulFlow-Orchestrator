@@ -10,7 +10,10 @@ const MODE_ICONS: Record<string, string> = {
 };
 
 function mid(id: string): string { return id.replace(/[^a-zA-Z0-9_-]/g, "_"); }
-function mlabel(s: string, max = 36): string { return s.replace(/"/g, "'").replace(/\n/g, " ").slice(0, max); }
+function mlabel(s: string, max = 36): string {
+  const clean = s.replace(/"/g, "'").replace(/\n/g, " ");
+  return clean.length > max ? clean.slice(0, max) + "…" : clean;
+}
 
 export function workflow_def_to_mermaid(def: WorkflowDef, type: "flowchart" | "sequence"): string {
   return type === "flowchart" ? to_flowchart(def) : to_sequence(def);
@@ -29,14 +32,14 @@ function to_flowchart(def: WorkflowDef): string {
   for (const p of def.phases) {
     const mode_icon = MODE_ICONS[p.mode || "parallel"];
     const agents_label = `${p.agents.length}a${p.critic ? "+c" : ""}`;
-    lines.push(`  ${mid(p.phase_id)}["${mlabel(p.title || p.phase_id)}\\n${mode_icon} ${agents_label}"]`);
+    lines.push(`  ${mid(p.phase_id)}["${mlabel(p.title || p.phase_id)}<br/>${mode_icon} ${agents_label}"]`);
   }
 
   for (const on of def.orche_nodes || []) {
     if (on.node_type === "if" || on.node_type === "switch") {
       lines.push(`  ${mid(on.node_id)}{{"${mlabel(on.title || on.node_id)}"}}`);
     } else {
-      lines.push(`  ${mid(on.node_id)}["${mlabel(on.title || on.node_id)}\\n${on.node_type}"]`);
+      lines.push(`  ${mid(on.node_id)}["${mlabel(on.title || on.node_id)}<br/>${on.node_type}"]`);
     }
   }
 
@@ -81,11 +84,11 @@ function to_sequence(def: WorkflowDef): string {
 
   for (const tn of def.trigger_nodes || []) {
     const icon = TRIGGER_ICONS[tn.trigger_type] || "▶";
-    lines.push(`  participant ${mid(tn.id)} as ${icon} ${mlabel(tn.trigger_type, 20)}`);
+    lines.push(`  participant ${mid(tn.id)} as ${icon} ${mlabel(tn.trigger_type, 24)}`);
   }
   for (const p of def.phases) {
     const mode_icon = MODE_ICONS[p.mode || "parallel"];
-    lines.push(`  participant ${mid(p.phase_id)} as ${mode_icon} ${mlabel(p.title || p.phase_id, 20)}`);
+    lines.push(`  participant ${mid(p.phase_id)} as ${mode_icon} ${mlabel(p.title || p.phase_id, 28)}`);
     if (p.critic) lines.push(`  participant ${mid(p.phase_id)}_c as ⚖`);
   }
   lines.push("");
@@ -103,7 +106,7 @@ function to_sequence(def: WorkflowDef): string {
       lines.push(`  loop ${mlabel(p.loop_until || "until done", 30)}`);
     }
     for (const a of p.agents) {
-      lines.push(`  Note over ${mid(p.phase_id)}: ${mlabel(a.label || a.agent_id, 20)}`);
+      lines.push(`  Note over ${mid(p.phase_id)}: ${mlabel(a.label || a.agent_id, 28)}`);
     }
     if (p.critic) {
       lines.push(`  ${mid(p.phase_id)}->>+${mid(p.phase_id)}_c: review`);

@@ -167,8 +167,11 @@ const MODE_ICONS: Record<string, string> = {
 
 /** Mermaid-safe ID: 영숫자 + 하이픈 + 밑줄만 허용. */
 function mid(id: string): string { return id.replace(/[^a-zA-Z0-9_-]/g, "_"); }
-/** Mermaid 레이블 안전 처리: 큰따옴표·개행 제거. */
-function mlabel(s: string, max = 36): string { return s.replace(/"/g, "'").replace(/\n/g, " ").slice(0, max); }
+/** Mermaid 레이블 안전 처리: 큰따옴표·개행 제거, 초과 시 … 추가. */
+function mlabel(s: string, max = 36): string {
+  const clean = s.replace(/"/g, "'").replace(/\n/g, " ");
+  return clean.length > max ? clean.slice(0, max) + "…" : clean;
+}
 
 /** WorkflowDefinition → Mermaid flowchart LR 다이어그램 문자열. */
 export function workflow_to_flowchart(def: WorkflowDefinition): string {
@@ -184,14 +187,14 @@ export function workflow_to_flowchart(def: WorkflowDefinition): string {
   for (const p of def.phases || []) {
     const mode_icon = MODE_ICONS[p.mode || "parallel"];
     const agents_label = `${p.agents.length}a${p.critic ? "+c" : ""}`;
-    lines.push(`  ${mid(p.phase_id)}["${mlabel(p.title || p.phase_id)}\\n${mode_icon} ${agents_label}"]`);
+    lines.push(`  ${mid(p.phase_id)}["${mlabel(p.title || p.phase_id)}<br/>${mode_icon} ${agents_label}"]`);
   }
 
   for (const on of def.orche_nodes || []) {
     if (on.node_type === "if" || on.node_type === "switch") {
       lines.push(`  ${mid(on.node_id)}{{"${mlabel(on.title || on.node_id)}"}}`);
     } else {
-      lines.push(`  ${mid(on.node_id)}["${mlabel(on.title || on.node_id)}\\n${on.node_type}"]`);
+      lines.push(`  ${mid(on.node_id)}["${mlabel(on.title || on.node_id)}<br/>${on.node_type}"]`);
     }
   }
 
@@ -239,11 +242,11 @@ export function workflow_to_sequence(def: WorkflowDefinition): string {
   const participants: string[] = [];
   for (const tn of def.trigger_nodes || []) {
     const icon = TRIGGER_ICONS[tn.trigger_type] || "▶";
-    participants.push(`  participant ${mid(tn.id)} as ${icon} ${mlabel(tn.trigger_type, 20)}`);
+    participants.push(`  participant ${mid(tn.id)} as ${icon} ${mlabel(tn.trigger_type, 24)}`);
   }
   for (const p of def.phases || []) {
     const mode_icon = MODE_ICONS[p.mode || "parallel"];
-    participants.push(`  participant ${mid(p.phase_id)} as ${mode_icon} ${mlabel(p.title || p.phase_id, 20)}`);
+    participants.push(`  participant ${mid(p.phase_id)} as ${mode_icon} ${mlabel(p.title || p.phase_id, 28)}`);
     if (p.critic) participants.push(`  participant ${mid(p.phase_id)}_critic as ⚖ Critic`);
   }
   lines.push(...participants, "");
@@ -264,7 +267,7 @@ export function workflow_to_sequence(def: WorkflowDefinition): string {
       lines.push(`  loop ${mlabel(p.loop_until || "loop", 30)}`);
     }
     for (const a of p.agents) {
-      lines.push(`  ${mid(p.phase_id)}->>+${mid(p.phase_id)}: ${mlabel(a.label || a.agent_id, 20)}`);
+      lines.push(`  ${mid(p.phase_id)}->>+${mid(p.phase_id)}: ${mlabel(a.label || a.agent_id, 28)}`);
     }
     if (p.critic) {
       lines.push(`  ${mid(p.phase_id)}->>+${mid(p.phase_id)}_critic: review`);
