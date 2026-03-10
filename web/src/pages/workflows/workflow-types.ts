@@ -93,7 +93,7 @@ export interface SkillNodeDef {
   attach_to?: string[];
 }
 
-export type TriggerType = "cron" | "webhook" | "manual" | "channel_message" | "kanban_event";
+export type TriggerType = "cron" | "webhook" | "manual" | "channel_message" | "kanban_event" | "filesystem_watch";
 
 export interface TriggerNodeDef {
   id: string;
@@ -106,6 +106,10 @@ export interface TriggerNodeDef {
   kanban_board_id?: string;
   kanban_actions?: string[];
   kanban_column_id?: string;
+  watch_path?: string;
+  watch_events?: string[];
+  watch_pattern?: string;
+  watch_batch_ms?: number;
 }
 
 /** 필드 레벨 데이터 매핑 (소스 노드 필드 → 타겟 노드). */

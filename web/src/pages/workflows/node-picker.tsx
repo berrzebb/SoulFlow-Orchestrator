@@ -42,8 +42,9 @@ const SPECIAL_NODES: { id: string; label_key: string; color: string; category: s
   { id: "__trigger_cron__", label_key: "workflows.cron_trigger", color: "#e67e22", category: "trigger", desc_key: "workflows.cron_trigger_desc" },
   { id: "__trigger_webhook__", label_key: "workflows.webhook_trigger", color: "#3498db", category: "trigger", desc_key: "workflows.webhook_trigger_desc" },
   { id: "__trigger_manual__", label_key: "workflows.manual_trigger", color: "#2ecc71", category: "trigger", desc_key: "workflows.manual_trigger_desc" },
-  { id: "__trigger_channel__", label_key: "workflows.channel_trigger", color: "#f1c40f", category: "trigger", desc_key: "workflows.channel_trigger_desc" },
+  { id: "__trigger_channel_message__", label_key: "workflows.channel_trigger", color: "#f1c40f", category: "trigger", desc_key: "workflows.channel_trigger_desc" },
   { id: "__trigger_kanban_event__", label_key: "workflows.kanban_trigger", color: "#9b59b6", category: "trigger", desc_key: "workflows.kanban_trigger_desc" },
+  { id: "__trigger_filesystem_watch__", label_key: "workflows.filesystem_watch_trigger", color: "#00897b", category: "trigger", desc_key: "workflows.filesystem_watch_trigger_desc" },
   { id: "__end__", label_key: "workflows.node_end", color: "#e74c3c", category: "core", desc_key: "workflows.node_end_desc" },
 ];
 
