@@ -17,19 +17,6 @@ export type ClassifierContext = {
 /** /커맨드 인자 파싱. */
 const RE_BUILTIN = /^\/(\S+)(?:\s+(.*))?$/s;
 
-/** 봇 정체성 질문 레퍼런스 문장 — Jaccard 유사도 비교 대상. */
-const IDENTITY_REFS = [
-  "너 누구야", "너 누구니", "너 누구세요",
-  "당신 누구세요", "당신은 누구세요",
-  "넌 누구야", "넌 뭐야", "너 뭐야",
-  "자기소개 해줘", "자기 소개 해줘", "자기소개해줘",
-  "누구", "넌 누구", "너 누구",    // 단형 ("누구?", "넌 누구?" 커버)
-  "who are you", "what are you", "introduce yourself",
-];
-
-/** 유사도 임계값: 이 값 이상이면 identity 분류. */
-const IDENTITY_THRESHOLD = 0.4;
-
 /** 구두점 제거 후 공백 분리 토큰 집합 반환. */
 function tokenize(text: string): Set<string> {
   return new Set(
@@ -44,64 +31,70 @@ function jaccard(a: Set<string>, b: Set<string>): number {
   return intersection / (a.size + b.size - intersection);
 }
 
-/** 레퍼런스 문장과의 최대 Jaccard 유사도가 임계값 이상이면 identity 질문으로 판단. */
-function is_identity_question(text: string): boolean {
-  const tokens = tokenize(text);
-  if (tokens.size === 0) return false;
-  return IDENTITY_REFS.some((ref) => jaccard(tokens, tokenize(ref)) >= IDENTITY_THRESHOLD);
+/**
+ * 사전 계산된 레퍼런스 토큰 집합과 비교.
+ * 호출마다 tokenize() 재실행 없이 O(k·n) → 조기 종료.
+ */
+function exceeds_similarity(tokens: Set<string>, ref_sets: Set<string>[], threshold: number): boolean {
+  for (const ref of ref_sets) {
+    if (jaccard(tokens, ref) >= threshold) return true;
+  }
+  return false;
 }
 
-/** 태스크 상태 조회 레퍼런스 문장 — Jaccard 유사도 비교 대상. */
-const INQUIRY_REFS = [
+// ── 사전 계산 (모듈 로드 시 1회) ─────────────────────────────────────────────
+
+const IDENTITY_TOKEN_SETS = [
+  "너 누구야", "너 누구니", "너 누구세요",
+  "당신 누구세요", "당신은 누구세요",
+  "넌 누구야", "넌 뭐야", "너 뭐야",
+  "자기소개 해줘", "자기 소개 해줘", "자기소개해줘",
+  "누구", "넌 누구", "너 누구",
+  "who are you", "what are you", "introduce yourself",
+].map(tokenize);
+
+const INQUIRY_TOKEN_SETS = [
   "작업 어떻게 됐어", "작업 됐어", "작업 끝났어", "작업 완료됐어",
   "태스크 상태 어때", "태스크 진행 어떻게", "백그라운드 작업 어때",
   "진행 중인 작업", "작업 진행상황",
   "what's the status", "how's the task", "task done", "task finished",
   "is it done", "task progress", "background task status",
+].map(tokenize);
+
+/** 단일 토큰 다단계 연결어 집합 — 토큰 교집합으로 "하고싶어요" 오매칭 방지. */
+const AGENT_CONNECTOR_TOKENS = new Set([
+  "하고", "하고서", "그다음", "그리고", "후에",
+  "then",
+]);
+
+/** 다단계 연결 구문 (두 단어 이상) — 토큰 분리 불가하여 구문 매칭 유지. */
+const AGENT_CONNECTOR_PHRASES = ["하고 나서", "그 다음에", "그리고 나서", "한 다음", "그 후", "and then", "after that"];
+
+/** 명시적 비동기 실행 신호 — 구문 의미가 중요하여 구문 매칭 유지. */
+const TASK_SIGNAL_PHRASES = [
+  "백그라운드", "비동기", "나중에 알려", "background", "async", "schedule", "notify when done", "run in background",
 ];
 
-const INQUIRY_THRESHOLD = 0.3;
+/** 도구 조합 쌍 — 두 토큰이 모두 있으면 다단계 작업으로 판단. */
+const AGENT_TOOL_PAIRS: [string, string][] = [
+  ["파일", "보내"], ["읽", "요약"], ["검색", "정리"],
+  ["분석", "보고"], ["가져", "저장"],
+  ["file", "send"], ["read", "summar"], ["search", "send"], ["fetch", "save"],
+];
 
-/** 활성 태스크 상태 조회 문장인지 판단. */
+// ── 유사도 판별 함수 ──────────────────────────────────────────────────────────
+
+function is_identity_question(text: string): boolean {
+  const tokens = tokenize(text);
+  return tokens.size > 0 && exceeds_similarity(tokens, IDENTITY_TOKEN_SETS, 0.4);
+}
+
 function is_inquiry_question(text: string): boolean {
   const tokens = tokenize(text);
-  if (tokens.size === 0) return false;
-  return INQUIRY_REFS.some((ref) => jaccard(tokens, tokenize(ref)) >= INQUIRY_THRESHOLD);
+  return tokens.size > 0 && exceeds_similarity(tokens, INQUIRY_TOKEN_SETS, 0.3);
 }
 
 // ── 복잡도 휴리스틱 ──────────────────────────────────────────────────────────
-
-/** 명시적 백그라운드/비동기 실행 요청 신호. */
-const TASK_SIGNALS = [
-  "백그라운드", "백그라운드로", "비동기", "나중에 알려", "나중에 알려줘",
-  "background", "async", "schedule", "notify when done", "run in background",
-];
-
-/**
- * 다단계 동작 연결 동사 — 앞뒤 행동이 연속될 때 agent로 판단.
- * "읽고 요약해서 보내줘"처럼 두 개 이상 동사가 연결된 경우.
- */
-const AGENT_CONNECTORS = [
-  "하고", "하고서", "하고 나서", "그다음", "그 다음에",
-  "그리고", "그리고 나서", "후에", "한 다음", "그 후",
-  "and then", "after that", "then",
-];
-
-/**
- * 도구 조합 쌍 — 각 쌍의 두 단어가 모두 포함되면 agent 신호.
- * "파일 읽고 요약", "검색해서 정리" 등 도구 연계를 의미함.
- */
-const AGENT_TOOL_PAIRS: [string, string][] = [
-  ["파일", "보내"],
-  ["읽", "요약"],
-  ["검색", "정리"],
-  ["분석", "보고"],
-  ["가져", "저장"],
-  ["file", "send"],
-  ["read", "summar"],
-  ["search", "send"],
-  ["fetch", "save"],
-];
 
 /**
  * once/agent/task 중 하나를 결정.
@@ -112,14 +105,15 @@ const AGENT_TOOL_PAIRS: [string, string][] = [
  */
 function classify_execution_complexity(text: string, _ctx: ClassifierContext): "once" | "agent" | "task" {
   const lower = text.toLowerCase();
+  const tokens = tokenize(text);
 
-  // task: 명시적 비동기 실행 요청
-  if (TASK_SIGNALS.some((s) => lower.includes(s))) return "task";
+  if (TASK_SIGNAL_PHRASES.some((s) => lower.includes(s))) return "task";
 
-  // agent: 다단계 동사 연결
-  if (AGENT_CONNECTORS.some((c) => lower.includes(c))) return "agent";
-
-  // agent: 도구 조합 쌍 (두 단어 모두 포함)
+  // 단일 연결어: 토큰 교집합 (오매칭 방지)
+  if ([...tokens].some((t) => AGENT_CONNECTOR_TOKENS.has(t))) return "agent";
+  // 다단계 연결 구문: 구문 매칭
+  if (AGENT_CONNECTOR_PHRASES.some((p) => lower.includes(p))) return "agent";
+  // 도구 조합 쌍
   if (AGENT_TOOL_PAIRS.some(([a, b]) => lower.includes(a) && lower.includes(b))) return "agent";
 
   return "once";
