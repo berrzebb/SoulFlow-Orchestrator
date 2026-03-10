@@ -20,6 +20,7 @@ import { workflow_def_to_mermaid } from "./workflow-diagram";
 function YamlSideDiagramTab({ workflow, type }: { workflow: WorkflowDef; type: "flowchart" | "sequence" }) {
   const [svg, setSvg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showSource, setShowSource] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const source = useMemo(() => workflow_def_to_mermaid(workflow, type), [workflow, type]);
 
@@ -43,11 +44,20 @@ function YamlSideDiagramTab({ workflow, type }: { workflow: WorkflowDef; type: "
 
   return (
     <div className="yaml-diagram-tab">
-      <div className="yaml-diagram-tab__source">
-        <pre>{source}</pre>
+      <div className="yaml-diagram-tab__toolbar">
+        <button
+          className={`btn btn--xs${showSource ? " btn--ok" : " btn--ghost"}`}
+          onClick={() => setShowSource((v) => !v)}
+          title="Mermaid 소스 보기"
+        >{"</>"}</button>
       </div>
-      {error && <div className="yaml-diagram-tab__error">{error}</div>}
-      {svg && <div className="yaml-diagram-tab__svg" dangerouslySetInnerHTML={{ __html: svg }} />}
+      {showSource
+        ? <pre className="yaml-diagram-tab__source">{source}</pre>
+        : <>
+            {error && <div className="yaml-diagram-tab__error">{error}</div>}
+            {svg && <div className="yaml-diagram-tab__svg" dangerouslySetInnerHTML={{ __html: svg }} />}
+          </>
+      }
     </div>
   );
 }

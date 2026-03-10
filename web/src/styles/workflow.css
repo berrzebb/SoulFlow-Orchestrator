@@ -1213,21 +1213,24 @@
   min-height: 0;
   overflow: hidden;
 }
-.yaml-diagram-tab__source {
-  padding: var(--sp-2) var(--sp-3);
+.yaml-diagram-tab__toolbar {
+  display: flex;
+  justify-content: flex-end;
+  padding: var(--sp-1) var(--sp-2);
   border-bottom: 1px solid var(--line);
-  background: var(--panel);
-  overflow-x: auto;
-  max-height: 160px;
-  overflow-y: auto;
+  flex-shrink: 0;
 }
-.yaml-diagram-tab__source pre {
+.yaml-diagram-tab__source {
+  flex: 1;
   margin: 0;
+  padding: var(--sp-2) var(--sp-3);
   font-size: 10px;
   line-height: 1.5;
   color: var(--subtext);
   font-family: var(--font-mono, monospace);
   white-space: pre;
+  overflow: auto;
+  background: var(--panel);
 }
 .yaml-diagram-tab__svg {
   flex: 1;
