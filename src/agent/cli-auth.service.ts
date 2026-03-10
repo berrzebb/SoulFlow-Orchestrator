@@ -292,6 +292,7 @@ export class CliAuthService extends EventEmitter {
           if (!url_resolved) resolve(p);
         }
         this.login_progress_cache.delete(cli);
+        this.oauth_ports.delete(cli);
       });
 
       proc.on("error", (err) => {
@@ -300,6 +301,7 @@ export class CliAuthService extends EventEmitter {
         const p: LoginProgress = { cli, state: "failed", error: err.message };
         emit_progress(p);
         this.login_progress_cache.delete(cli);
+        this.oauth_ports.delete(cli);
         if (!url_resolved) resolve(p);
       });
 
