@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { web_form_handler } from "../../../src/agent/nodes/web-form.js";
 import type { WebFormNodeDefinition, OrcheNodeDefinition } from "../../../src/agent/nodes/workflow-node.types.js";
 import type { OrcheNodeExecutorContext } from "../../../src/agent/nodes/orche-node-executor.js";
@@ -99,6 +99,29 @@ describe("web_form_handler", () => {
     });
     const ctx = createMockContext();
     const result = await web_form_handler.execute(node, ctx);
+    expect(result.output).toBeDefined();
+  });
+
+  // L37 setTimeout 콜백 커버 — fetch 걸림 + fake timer로 60초 타임아웃 발생
+  it("execute: url + fields 설정 후 fetch 걸림 → 타임아웃 (L37)", async () => {
+    vi.useFakeTimers();
+    const original_fetch = globalThis.fetch;
+    globalThis.fetch = vi.fn((_url: unknown, opts: RequestInit) =>
+      new Promise<Response>((_, reject) => {
+        opts.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
+      }),
+    );
+    const node = {
+      node_id: "n1",
+      node_type: "web_form",
+      url: "https://example.com/form",
+      fields: { email: "test@example.com" },
+    } as any;
+    const promise = web_form_handler.execute(node, { memory: {}, workspace: "/tmp", abort_signal: undefined });
+    await vi.advanceTimersByTimeAsync(60_000);
+    const result = await promise;
+    globalThis.fetch = original_fetch;
+    vi.useRealTimers();
     expect(result.output).toBeDefined();
   });
 });

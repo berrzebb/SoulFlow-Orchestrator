@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { web_table_handler } from "../../../src/agent/nodes/web-table.js";
 import type { WebTableNodeDefinition, OrcheNodeDefinition } from "../../../src/agent/nodes/workflow-node.types.js";
 import type { OrcheNodeExecutorContext } from "../../../src/agent/nodes/orche-node-executor.js";
@@ -87,6 +87,24 @@ describe("web_table_handler", () => {
     const node = createMockNode();
     const ctx = createMockContext();
     const result = await web_table_handler.execute(node, ctx);
+    expect(result.output).toBeDefined();
+  });
+
+  // L36 setTimeout 콜백 커버 — fetch 걸림 + fake timer로 30초 타임아웃 발생
+  it("execute: fetch 걸림 → 30초 타임아웃 → AbortError (L36)", async () => {
+    vi.useFakeTimers();
+    const original_fetch = globalThis.fetch;
+    globalThis.fetch = vi.fn((_url: unknown, opts: RequestInit) =>
+      new Promise<Response>((_, reject) => {
+        opts.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
+      }),
+    );
+    const node = createMockNode({ url: "https://example.com/table" });
+    const promise = web_table_handler.execute(node, createMockContext());
+    await vi.advanceTimersByTimeAsync(30_000);
+    const result = await promise;
+    globalThis.fetch = original_fetch;
+    vi.useRealTimers();
     expect(result.output).toBeDefined();
   });
 });

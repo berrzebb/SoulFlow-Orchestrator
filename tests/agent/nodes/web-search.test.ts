@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { web_search_handler } from "../../../src/agent/nodes/web-search.js";
 import type { WebSearchNodeDefinition, OrcheNodeDefinition } from "../../../src/agent/nodes/workflow-node.types.js";
 import type { OrcheNodeExecutorContext } from "../../../src/agent/nodes/orche-node-executor.js";
@@ -80,6 +80,24 @@ describe("web_search_handler", () => {
     });
     const ctx = createMockContext();
     const result = await web_search_handler.execute(node, ctx);
+    expect(result.output).toBeDefined();
+  });
+
+  // L37 setTimeout 콜백 커버 — fetch 걸림 + fake timer로 타임아웃 발생
+  it("execute: fetch 걸림 → 15초 타임아웃 → AbortError → 에러 반환 (L37)", async () => {
+    vi.useFakeTimers();
+    const original_fetch = globalThis.fetch;
+    globalThis.fetch = vi.fn((_url: unknown, opts: RequestInit) =>
+      new Promise<Response>((_, reject) => {
+        opts.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
+      }),
+    );
+    const node = createMockNode({ query: "timeout test" });
+    const promise = web_search_handler.execute(node, createMockContext());
+    await vi.advanceTimersByTimeAsync(15_000);
+    const result = await promise;
+    globalThis.fetch = original_fetch;
+    vi.useRealTimers();
     expect(result.output).toBeDefined();
   });
 });
