@@ -44,15 +44,8 @@ interface TriggerEntry {
 function extract_triggers(templates: TemplateWithSlug[]): TriggerEntry[] {
   const results: TriggerEntry[] = [];
   for (const t of templates) {
-    if (t.trigger_nodes?.length) {
-      for (const tn of t.trigger_nodes) {
-        results.push({ slug: t.slug, trigger: tn });
-      }
-    } else if (t.trigger?.type === "cron" && t.trigger.schedule) {
-      results.push({
-        slug: t.slug,
-        trigger: { id: "__cron__", trigger_type: "cron", schedule: t.trigger.schedule, timezone: t.trigger.timezone },
-      });
+    for (const tn of t.trigger_nodes ?? []) {
+      results.push({ slug: t.slug, trigger: tn });
     }
   }
   return results;
@@ -206,7 +199,11 @@ function subscribe_kanban_triggers(
     const listener = (event: KanbanEvent) => {
       const activity = event.data;
       if (actions.size && !actions.has(activity.action)) return;
-      if (column_id && activity.detail?.column_id !== column_id) return;
+      if (column_id) {
+        // created → detail.column_id, moved → detail.to
+        const dest = (activity.detail?.column_id ?? activity.detail?.to) as string | undefined;
+        if (dest !== column_id) return;
+      }
       log.info("kanban_event trigger fired", { slug: entry.slug, board_id, action: activity.action, card_id: activity.card_id });
       const channel = entry.trigger.channel_type || default_channel;
       const chat_id = entry.trigger.chat_id || default_chat_id;

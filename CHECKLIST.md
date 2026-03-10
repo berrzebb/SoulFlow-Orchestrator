@@ -831,7 +831,7 @@
 | `node.action.sub` | Subtree | 하위 트리 |
 
 ### 커밋
-20. `feat: i18n — builder-modals/inspector-params 시맨틱 옵션값 현지화 (Phase 15)` — (예정)
+20. `feat: i18n — builder-modals/inspector-params 시맨틱 옵션값 현지화 (Phase 15)` — `f3509f8`
 
 **Phase 15 완료 ✅**
 
