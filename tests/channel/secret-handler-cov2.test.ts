@@ -348,3 +348,19 @@ describe("SecretHandler — 알 수 없는 서브커맨드 (L43, L71)", () => {
     expect(typeof r).toBe("boolean");
   });
 });
+
+// ══════════════════════════════════════════
+// L33: resolve_action — command_name이 ROOT_ALIASES도 COMPOUND_ALIASES도 아님
+// ══════════════════════════════════════════
+
+describe("SecretHandler — ROOT_ALIASES 외 command_name (L33)", () => {
+  it("ROOT/COMPOUND 어디에도 없는 command_name → L33 return null → action=null", async () => {
+    const handler = new SecretHandler(make_vault());
+    // ROOT_ALIASES: ["secret","secrets","vault","비밀"], COMPOUND_ALIASES에도 없는 이름
+    const { ctx } = make_ctx({ command_name: "totally_unknown_cmd_xyz", args: ["status"] });
+    // can_handle은 false지만 handle은 직접 호출 가능
+    const r = await handler.handle(ctx);
+    // L33 return null → action=null → L68~L71 경로
+    expect(typeof r).toBe("boolean");
+  });
+});

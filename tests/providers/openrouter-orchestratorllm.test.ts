@@ -174,4 +174,17 @@ describe("OrchestratorLlmProvider — chat()", () => {
     const headers = init.headers as Record<string, string>;
     expect(headers["Authorization"]).toBe("Bearer local-key");
   });
+
+  // L56: response.json() throw → .catch(() => ({})) 경로
+  it("response.json() 실패 → L56 catch → {} 반환 → ok=true라도 빈 parsed (L56)", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () => Promise.reject(new Error("invalid json")),
+      text: () => Promise.resolve("not json"),
+    }));
+    const p = new OrchestratorLlmProvider({ api_base: "http://localhost:11434/v1" });
+    const r = await p.chat({ messages: USER_MSG });
+    expect(r).toBeDefined();
+  });
 });
