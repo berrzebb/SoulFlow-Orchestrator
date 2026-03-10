@@ -504,12 +504,16 @@ export default function WorkflowBuilderPage() {
     // Trigger node
     const tn = (workflow.trigger_nodes || []).find((n) => n.id === id);
     if (tn) {
+      // 구버전 trigger_type 정규화: "channel" → "channel_message", "kanban" → "kanban_event"
+      const TRIGGER_TYPE_ALIASES: Record<string, string> = { channel: "channel_message", kanban: "kanban_event" };
+      const trigger_type = TRIGGER_TYPE_ALIASES[tn.trigger_type] ?? tn.trigger_type;
+      const node_data = trigger_type !== tn.trigger_type ? { ...tn, trigger_type } as TriggerNodeDef : tn;
       return {
-        node: tn as unknown as Record<string, unknown>,
-        node_type: `trigger_${tn.trigger_type}`,
-        node_label: `Trigger: ${tn.trigger_type}`,
+        node: node_data as unknown as Record<string, unknown>,
+        node_type: `trigger_${trigger_type}`,
+        node_label: `Trigger: ${trigger_type}`,
         onUpdate: (partial) => {
-          const nodes = (workflow.trigger_nodes || []).map((n) => n.id === id ? { ...n, ...partial } as TriggerNodeDef : n);
+          const nodes = (workflow.trigger_nodes || []).map((n) => n.id === id ? { ...node_data, ...partial } as TriggerNodeDef : n);
           setWorkflow({ ...workflow, trigger_nodes: nodes });
         },
       };
