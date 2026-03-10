@@ -201,3 +201,69 @@ export const trigger_kanban_event_descriptor: FrontendNodeDescriptor = {
   create_default: () => ({ trigger_type: "kanban_event", kanban_board_id: "", kanban_actions: ["created"] }),
   EditPanel: KanbanEventTriggerEditPanel,
 };
+
+// ── Filesystem Watch ──────────────────────────────────────────────────────────
+
+const FS_WATCH_EVENTS: Array<{ value: "add" | "change" | "unlink"; label: string }> = [
+  { value: "add",    label: "Add" },
+  { value: "change", label: "Change" },
+  { value: "unlink", label: "Delete" },
+];
+
+function FilesystemWatchTriggerEditPanel({ node, update, t }: EditPanelProps) {
+  const events = (node.watch_events as string[]) || ["add"];
+  const toggle_event = (value: string) => {
+    const next = events.includes(value) ? events.filter((e) => e !== value) : [...events, value];
+    update({ watch_events: next });
+  };
+
+  return (
+    <>
+      <BuilderField label={t("workflows.fs_watch_path")} required hint={t("workflows.fs_watch_path_hint")}>
+        <input autoFocus required className="input input--sm" value={String(node.watch_path || "")} onChange={(e) => update({ watch_path: e.target.value })} placeholder="inbox/" />
+      </BuilderField>
+      <BuilderField label={t("workflows.fs_watch_events")}>
+        <div style={{ display: "flex", gap: "4px" }}>
+          {FS_WATCH_EVENTS.map(({ value, label }) => (
+            <button key={value} type="button" onClick={() => toggle_event(value)}
+              style={{
+                cursor: "pointer", padding: "2px 10px", borderRadius: "4px",
+                border: "1px solid var(--border)",
+                background: events.includes(value) ? "var(--accent)" : "transparent",
+                color: events.includes(value) ? "#fff" : "var(--text-secondary)",
+                fontSize: "12px",
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </BuilderField>
+      <BuilderRowPair>
+        <BuilderField label={t("workflows.fs_watch_pattern")} hint={t("workflows.fs_watch_pattern_hint")}>
+          <input className="input input--sm" value={String(node.watch_pattern || "")} onChange={(e) => update({ watch_pattern: e.target.value || undefined })} placeholder="**/*.pdf" />
+        </BuilderField>
+        <BuilderField label={t("workflows.fs_watch_batch_ms")} hint={t("workflows.fs_watch_batch_ms_hint")}>
+          <input className="input input--sm" type="number" min={0} value={String(node.watch_batch_ms ?? 500)} onChange={(e) => update({ watch_batch_ms: parseInt(e.target.value) || 500 })} />
+        </BuilderField>
+      </BuilderRowPair>
+    </>
+  );
+}
+
+export const trigger_filesystem_watch_descriptor: FrontendNodeDescriptor = {
+  node_type: "trigger_filesystem_watch",
+  icon: "📁",
+  color: "#00897b",
+  shape: "rect",
+  toolbar_label: "node.trigger_filesystem_watch.label",
+  output_schema: [
+    { name: "files",        type: "array",  description: "node.trigger_filesystem_watch.output.files" },
+    { name: "batch_id",     type: "string", description: "node.trigger_filesystem_watch.output.batch_id" },
+    { name: "triggered_at", type: "string", description: "node.trigger_filesystem_watch.output.triggered_at" },
+    { name: "watch_path",   type: "string", description: "node.trigger_filesystem_watch.output.watch_path" },
+  ],
+  input_schema: [],
+  create_default: () => ({ trigger_type: "filesystem_watch", watch_path: "", watch_events: ["add"], watch_pattern: "", watch_batch_ms: 500 }),
+  EditPanel: FilesystemWatchTriggerEditPanel,
+};

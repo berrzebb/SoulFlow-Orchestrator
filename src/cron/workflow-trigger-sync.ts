@@ -4,9 +4,15 @@
  * - webhook → WebhookStore 폴링
  * - channel_message → bus inbound 구독
  * - kanban_event → KanbanStore subscribe
+ * - filesystem_watch → fs.watch 폴더 감시
  * - manual → 대시보드 수동 실행 (별도 처리 불필요)
  */
 
+import { watch as fs_watch } from "node:fs";
+import { stat } from "node:fs/promises";
+import { resolve as path_resolve, relative as path_relative } from "node:path";
+import { randomUUID } from "node:crypto";
+import { minimatch } from "minimatch";
 import type { CronScheduler } from "./contracts.js";
 import type { TemplateWithSlug } from "../orchestration/workflow-loader.js";
 import type { TriggerNodeRecord } from "../agent/phase-loop.types.js";
@@ -26,6 +32,7 @@ export interface TriggerSyncResult {
   webhook: { registered: number };
   channel_message: { registered: number };
   kanban_event: { registered: number };
+  filesystem_watch: { registered: number };
 }
 
 interface TriggerEntry {
@@ -216,6 +223,104 @@ function subscribe_kanban_triggers(
   return kb_entries.length;
 }
 
+// ── Filesystem Watch ──
+
+const DEFAULT_BATCH_MS = 500;
+
+const _fs_watchers: Array<() => void> = [];
+
+function start_filesystem_watch_triggers(
+  entries: TriggerEntry[],
+  execute: WorkflowExecuteFn,
+  default_channel: string,
+  default_chat_id: string,
+  workspace: string,
+): number {
+  // 이전 감시자 정리
+  for (const stop of _fs_watchers) stop();
+  _fs_watchers.length = 0;
+
+  const fs_entries = entries.filter((e) => e.trigger.trigger_type === "filesystem_watch" && e.trigger.watch_path);
+  if (!fs_entries.length) return 0;
+
+  for (const entry of fs_entries) {
+    const rel_path = entry.trigger.watch_path!;
+    const abs_path = path_resolve(workspace, rel_path);
+    const events_filter = new Set(entry.trigger.watch_events?.length ? entry.trigger.watch_events : ["add"]);
+    const pattern = entry.trigger.watch_pattern?.trim() || undefined;
+    const batch_ms = entry.trigger.watch_batch_ms ?? DEFAULT_BATCH_MS;
+
+    // 배치 수집 버퍼
+    type FileChange = { path: string; event: string };
+    const pending = new Map<string, FileChange>();
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const flush = () => {
+      timer = null;
+      if (!pending.size) return;
+      const snapshot = [...pending.values()];
+      pending.clear();
+
+      const channel = entry.trigger.channel_type || default_channel;
+      const chat_id = entry.trigger.chat_id || default_chat_id;
+
+      // 파일 크기 비동기 조회 후 실행
+      void Promise.all(
+        snapshot.map(async (f) => {
+          let size_bytes = 0;
+          if (f.event !== "unlink") {
+            try { size_bytes = (await stat(f.path)).size; } catch { /* 삭제 직후 등 무시 */ }
+          }
+          return { path: path_relative(workspace, f.path), event: f.event, size_bytes };
+        }),
+      ).then((files) => {
+        const payload = {
+          files,
+          batch_id: randomUUID(),
+          triggered_at: new Date().toISOString(),
+          watch_path: rel_path,
+        };
+        log.info("filesystem_watch trigger fired", { slug: entry.slug, count: files.length, watch_path: rel_path });
+        void execute(entry.slug, channel, chat_id, { filesystem_event: payload }).catch((e) => {
+          log.warn("filesystem_watch trigger failed", { slug: entry.slug, error: String(e) });
+        });
+      });
+    };
+
+    let watcher: ReturnType<typeof fs_watch> | null = null;
+    try {
+      watcher = fs_watch(abs_path, { recursive: true }, (event_type, filename) => {
+        if (!filename) return;
+        const abs_file = path_resolve(abs_path, filename);
+        const rel_file = path_relative(workspace, abs_file);
+
+        // glob 패턴 필터
+        if (pattern && !minimatch(rel_file, pattern, { dot: true })) return;
+
+        // fs.watch는 "rename" | "change" 두 종류만 발생 — "rename"은 add/unlink 모두 포함
+        // stat으로 존재 여부 확인 후 add/unlink 구분은 flush 시점에 처리
+        const mapped_event = event_type === "change" ? "change" : "add";
+        if (!events_filter.has(mapped_event as "add" | "change" | "unlink")) return;
+
+        pending.set(abs_file, { path: abs_file, event: mapped_event });
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(flush, batch_ms);
+      });
+    } catch (err) {
+      log.warn("filesystem_watch setup failed", { slug: entry.slug, watch_path: abs_path, error: String(err) });
+      continue;
+    }
+
+    _fs_watchers.push(() => {
+      if (timer) clearTimeout(timer);
+      watcher?.close();
+    });
+  }
+
+  log.info("filesystem_watch triggers started", { count: fs_entries.length, paths: fs_entries.map((e) => e.trigger.watch_path) });
+  return fs_entries.length;
+}
+
 // ── Public API ──
 
 export interface WorkflowTriggerSyncDeps {
@@ -226,6 +331,8 @@ export interface WorkflowTriggerSyncDeps {
   execute: WorkflowExecuteFn;
   default_channel: string;
   default_chat_id: string;
+  /** 파일시스템 트리거의 기준 디렉토리 (workspace 루트). */
+  workspace?: string;
 }
 
 let _abort: AbortController | null = null;
@@ -258,10 +365,17 @@ export async function sync_all_workflow_triggers(
     deps.default_channel, deps.default_chat_id,
   );
 
+  const fs_registered = start_filesystem_watch_triggers(
+    all_triggers, deps.execute,
+    deps.default_channel, deps.default_chat_id,
+    deps.workspace ?? process.cwd(),
+  );
+
   return {
     cron: cron_result,
     webhook: { registered: webhook_registered },
     channel_message: { registered: channel_registered },
     kanban_event: { registered: kanban_registered },
+    filesystem_watch: { registered: fs_registered },
   };
 }

@@ -116,7 +116,7 @@ export interface SplitNodeDefinition extends NodeBase {
 
 // ── Trigger Node ────────────────────────────────────
 
-export type TriggerType = "cron" | "webhook" | "manual" | "channel_message" | "kanban_event";
+export type TriggerType = "cron" | "webhook" | "manual" | "channel_message" | "kanban_event" | "filesystem_watch";
 
 export interface TriggerNodeDefinition extends NodeBase {
   node_type: "trigger";
@@ -133,6 +133,11 @@ export interface TriggerNodeDefinition extends NodeBase {
   kanban_board_id?: string;
   kanban_actions?: string[];
   kanban_column_id?: string;
+  /** filesystem_watch */
+  watch_path?: string;
+  watch_events?: Array<"add" | "change" | "unlink">;
+  watch_pattern?: string;
+  watch_batch_ms?: number;
 }
 
 // ── LLM Node ───────────────────────────────────────

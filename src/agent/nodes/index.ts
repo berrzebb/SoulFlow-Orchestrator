@@ -121,6 +121,7 @@ import { similarity_handler } from "./similarity.js";
 import { data_mask_handler } from "./data-mask.js";
 import { circuit_breaker_handler } from "./circuit-breaker.js";
 import { kanban_trigger_handler } from "./kanban-trigger.js";
+import { filesystem_watch_handler } from "./filesystem-watch.js";
 import { document_pdf_handler } from "./document-pdf.js";
 import { document_docx_handler } from "./document-docx.js";
 import { document_xlsx_handler } from "./document-xlsx.js";
@@ -247,6 +248,7 @@ const ALL_HANDLERS = [
   data_mask_handler,
   circuit_breaker_handler,
   kanban_trigger_handler,
+  filesystem_watch_handler,
   document_pdf_handler,
   document_docx_handler,
   document_xlsx_handler,

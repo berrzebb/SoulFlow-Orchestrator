@@ -228,7 +228,7 @@ export interface OrcheNodeRecord {
 /** 트리거 노드 레코드. */
 export interface TriggerNodeRecord {
   id: string;
-  trigger_type: "cron" | "webhook" | "manual" | "channel_message" | "kanban_event";
+  trigger_type: "cron" | "webhook" | "manual" | "channel_message" | "kanban_event" | "filesystem_watch";
   schedule?: string;
   timezone?: string;
   webhook_path?: string;
@@ -237,6 +237,10 @@ export interface TriggerNodeRecord {
   kanban_board_id?: string;
   kanban_actions?: string[];
   kanban_column_id?: string;
+  watch_path?: string;
+  watch_events?: Array<"add" | "change" | "unlink">;
+  watch_pattern?: string;
+  watch_batch_ms?: number;
 }
 
 /** 노드 간 필드 레벨 데이터 매핑. */

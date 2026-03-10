@@ -63,6 +63,8 @@ export interface RunnerServices {
   get_webhook_data?: (path: string) => Promise<{ method: string; headers: Record<string, string>; body: unknown; query: Record<string, string> } | null>;
   /** 칸반 이벤트 대기 (kanban_trigger 노드용). */
   wait_kanban_event?: (board_id: string, filter: { actions?: string[]; column_id?: string }) => Promise<{ card_id: string; board_id: string; action: string; actor: string; detail: Record<string, unknown>; created_at: string } | null>;
+  /** 파일시스템 변경 이벤트 대기 (filesystem_watch 노드용). */
+  wait_filesystem_event?: (watch_path: string, filter: { events?: Array<"add" | "change" | "unlink">; pattern?: string; batch_ms?: number }) => Promise<{ files: Array<{ path: string; event: string; size_bytes: number }>; batch_id: string; triggered_at: string; watch_path: string } | null>;
 }
 
 /** 런너 레벨 실행에 필요한 컨텍스트. 채널 콜백, 로거, 이벤트 emitter 등. */

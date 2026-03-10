@@ -37,7 +37,7 @@ function MarkdownEditPanel({ node, update, t }: EditPanelProps) {
       )}
       {["link", "badge", "image"].includes(op) && (
         <BuilderRowPair>
-          <BuilderField label={op === "image" ? "Alt" : "Label"}>
+          <BuilderField label={op === "image" ? t("workflows.field_alt") : t("workflows.field_label")}>
             <input className="input input--sm" value={String(node.label || node.alt || "")} onChange={(e) => update(op === "image" ? { alt: e.target.value } : { label: e.target.value })} />
           </BuilderField>
           <BuilderField label={t("workflows.field_url")}>
@@ -49,7 +49,7 @@ function MarkdownEditPanel({ node, update, t }: EditPanelProps) {
         <div className="builder-row">
           <label className="label" style={{ display: "flex", alignItems: "center", gap: "6px" }}>
             <input type="checkbox" checked={Boolean(node.ordered)} onChange={(e) => update({ ordered: e.target.checked })} />
-            Ordered
+            {t("workflows.opt_ordered")}
           </label>
         </div>
       )}
