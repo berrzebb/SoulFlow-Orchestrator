@@ -902,3 +902,191 @@ describe("run_phase_loop — is_waiting: kanban_trigger null 이벤트", () => {
     expect(kanban_waiting_cb).toHaveBeenCalledWith("wf-kanban-wait");
   });
 });
+
+// ──────────────────────────────────────────────────
+// [ASK_USER] in interactive mode (L900-912)
+// ──────────────────────────────────────────────────
+
+describe("run_phase_loop — interactive 모드 [ASK_USER]", () => {
+  it("[ASK_USER] 토큰 → ask_user 호출 후 loop 계속, [SPEC_COMPLETE]로 종료", async () => {
+    const store = make_store();
+    const subagents = {
+      spawn: vi.fn().mockResolvedValue({ subagent_id: "sa1" }),
+      wait_for_completion: vi.fn()
+        .mockResolvedValueOnce({ status: "completed", content: "[ASK_USER] 선호도를 알려주세요" })
+        .mockResolvedValueOnce({ status: "completed", content: "완료 [SPEC_COMPLETE]" }),
+      stop: vi.fn(),
+      list: vi.fn().mockReturnValue([]),
+    };
+    const ask_user = vi.fn().mockResolvedValue("내 선호도는 A입니다");
+
+    const result = await run_phase_loop(single_phase_opts({
+      phases: [{
+        phase_id: "p1",
+        title: "Interactive Phase",
+        mode: "interactive" as any,
+        max_loop_iterations: 5,
+        agents: [{ agent_id: "a1", role: "analyst", label: "A", backend: "openrouter", system_prompt: "s" }],
+      }],
+      ask_user,
+    }), { subagents: subagents as any, store: store as any, logger: noop_logger });
+
+    expect(result.status).toBe("completed");
+    expect(ask_user).toHaveBeenCalledWith("선호도를 알려주세요");
+    expect(subagents.spawn).toHaveBeenCalledTimes(2);
+  });
+});
+
+// ──────────────────────────────────────────────────
+// sequential_loop 최대 반복 도달 (L923-926)
+// ──────────────────────────────────────────────────
+
+describe("run_phase_loop — sequential_loop 최대 반복 도달", () => {
+  it("max_loop_iterations 도달 후 DONE 없으면 last result로 완료", async () => {
+    const store = make_store();
+    const subagents = {
+      spawn: vi.fn().mockResolvedValue({ subagent_id: "sa1" }),
+      // [DONE] 없는 응답 → 최대 반복(2)에 도달
+      wait_for_completion: vi.fn()
+        .mockResolvedValueOnce({ status: "completed", content: "first iteration result" })
+        .mockResolvedValueOnce({ status: "completed", content: "second iteration result" }),
+      stop: vi.fn(),
+      list: vi.fn().mockReturnValue([]),
+    };
+
+    const result = await run_phase_loop(single_phase_opts({
+      phases: [{
+        phase_id: "p1",
+        title: "Loop Phase",
+        mode: "sequential_loop",
+        max_loop_iterations: 2,
+        agents: [{ agent_id: "a1", role: "analyst", label: "A", backend: "openrouter", system_prompt: "s" }],
+      }],
+    }), { subagents: subagents as any, store: store as any, logger: noop_logger });
+
+    expect(result.status).toBe("completed");
+    expect(subagents.spawn).toHaveBeenCalledTimes(2);
+  });
+});
+
+// ──────────────────────────────────────────────────
+// Resume: agent 일부만 completed → 나머지만 재실행 (L616-618)
+// ──────────────────────────────────────────────────
+
+describe("run_phase_loop — resume 에이전트 일부 completed", () => {
+  it("a1 completed, a2 pending → a2만 spawn, a1은 스킵", async () => {
+    const store = make_store();
+    const subagents = {
+      spawn: vi.fn().mockResolvedValue({ subagent_id: "sa2" }),
+      wait_for_completion: vi.fn().mockResolvedValue({ status: "completed", content: "a2 result" }),
+      stop: vi.fn(),
+      list: vi.fn().mockReturnValue([]),
+    };
+
+    const resume_state: any = {
+      workflow_id: "wf-partial",
+      title: "Partial Resume WF",
+      objective: "obj",
+      channel: "slack",
+      chat_id: "C1",
+      status: "running",
+      current_phase: 0,
+      memory: {},
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      orche_states: [],
+      phases: [{
+        phase_id: "p1",
+        title: "Phase 1",
+        status: "running",
+        agents: [
+          { agent_id: "a1", role: "analyst", label: "A1", model: "", status: "completed", result: "a1 done", messages: [] },
+          { agent_id: "a2", role: "analyst", label: "A2", model: "", status: "pending", messages: [] },
+        ],
+      }],
+      definition: {
+        title: "Partial Resume WF",
+        objective: "obj",
+        phases: [{
+          phase_id: "p1",
+          title: "Phase 1",
+          agents: [
+            { agent_id: "a1", role: "analyst", label: "A1", backend: "openrouter", system_prompt: "s" },
+            { agent_id: "a2", role: "analyst", label: "A2", backend: "openrouter", system_prompt: "s" },
+          ],
+        }],
+      },
+    };
+
+    const result = await run_phase_loop({
+      workflow_id: "wf-partial",
+      title: "Partial Resume WF",
+      objective: "obj",
+      channel: "slack",
+      chat_id: "C1",
+      workspace: "/tmp",
+      phases: [{
+        phase_id: "p1",
+        title: "Phase 1",
+        agents: [
+          { agent_id: "a1", role: "analyst", label: "A1", backend: "openrouter", system_prompt: "s" },
+          { agent_id: "a2", role: "analyst", label: "A2", backend: "openrouter", system_prompt: "s" },
+        ],
+      }],
+      resume_state,
+    }, { subagents: subagents as any, store: store as any, logger: noop_logger });
+
+    expect(result.status).toBe("completed");
+    // a1은 스킵되고 a2만 spawn
+    expect(subagents.spawn).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ──────────────────────────────────────────────────
+// sub_workflow with load_template (L217-219, L234)
+// ──────────────────────────────────────────────────
+
+describe("run_phase_loop — sub_workflow load_template", () => {
+  it("load_template 제공 시 sub_workflow 노드 → 재귀 실행 후 결과 반환", async () => {
+    const store = make_store();
+    const subagents = make_subagents();
+
+    const result = await run_phase_loop({
+      workflow_id: "wf-parent",
+      title: "Parent WF",
+      objective: "obj",
+      channel: "slack",
+      chat_id: "C1",
+      workspace: "/tmp",
+      phases: [],
+      nodes: [{
+        node_id: "sub1",
+        node_type: "sub_workflow" as any,
+        title: "Sub Workflow",
+        workflow_name: "child_template",
+      } as any],
+    }, {
+      subagents: subagents as any,
+      store: store as any,
+      logger: noop_logger,
+      load_template: (name) => {
+        if (name === "child_template") {
+          return {
+            title: "Child WF",
+            objective: "child obj",
+            phases: [{
+              phase_id: "cp1",
+              title: "Child Phase",
+              agents: [{ agent_id: "ca1", role: "analyst", label: "Child A", backend: "openrouter", system_prompt: "s" }],
+            }],
+          };
+        }
+        return null;
+      },
+    });
+
+    expect(result.status).toBe("completed");
+    // sub1 메모리에 sub_workflow 결과가 들어있어야 함
+    expect(result.memory["sub1"]).toBeDefined();
+  });
+});
