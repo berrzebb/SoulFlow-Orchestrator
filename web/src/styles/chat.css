@@ -98,6 +98,9 @@
   max-width: 92%;
   min-width: 0;
 }
+.chat-msg--assistant .chat-msg__body {
+  width: 92%;
+}
 .chat-msg__content {
   padding: var(--sp-3) var(--sp-4);
   border-radius: var(--radius-lg);

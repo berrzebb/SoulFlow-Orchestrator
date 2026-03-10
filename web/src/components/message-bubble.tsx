@@ -13,7 +13,8 @@ function useStreamingMinHeight(enabled: boolean): [React.RefObject<HTMLDivElemen
       if (!el) return;
       const container = el.closest(".chat-messages") as HTMLElement | null;
       if (!container) return;
-      const remaining = container.getBoundingClientRect().bottom - el.getBoundingClientRect().top - 16;
+      const pb = parseFloat(getComputedStyle(container).paddingBottom) || 0;
+      const remaining = container.getBoundingClientRect().bottom - pb - el.getBoundingClientRect().top - 16;
       setHeight(Math.max(remaining, 80));
     };
     compute();
