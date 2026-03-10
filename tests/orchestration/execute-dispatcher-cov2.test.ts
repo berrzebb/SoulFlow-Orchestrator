@@ -101,10 +101,10 @@ afterEach(() => {
 // ══════════════════════════════════════════════════════════
 
 describe("execute_dispatch — check.has_checks 분기 (L131-133)", () => {
-  it("skill에 checks[] 있고 tool_calls_count>0 → reply에 completion check 추가됨", async () => {
+  it("validator alias + bash 도구 사용 → reply에 completion check 추가됨", async () => {
     const deps = make_deps();
     gatewaySpy.mockResolvedValue({ action: "execute", mode: "once", executor: "chatgpt" } as GatewayDecision);
-    // run_once → reply 있음 + tool_calls_count > 0 → completion check 분기 진입
+    // run_once → reply 있음 + bash 도구 사용 → validation role 시 completion check 분기 진입
     (deps.run_once as any).mockResolvedValue({
       reply: "I implemented feature X",
       mode: "once" as const,
@@ -113,12 +113,13 @@ describe("execute_dispatch — check.has_checks 분기 (L131-133)", () => {
       tools_used: ["bash"],
     });
 
-    const result = await execute_dispatch(deps, mockRequest, mockPreflight);
+    // VALIDATION_ROLES.has("reviewer") === true → completion check 코드 블록 진입
+    const reviewer_request = { ...mockRequest, alias: "reviewer" };
+    const result = await execute_dispatch(deps, reviewer_request, mockPreflight);
 
-    // skill "coder"에 checks가 있으므로 completion check가 reply에 추가됨
+    // bash 도구 사용으로 동적 체크 질문이 reply에 추가됨
     expect(result.reply).toContain("I implemented feature X");
-    // has_checks=true → reply 수정 + matched_skills 설정
-    expect(result.matched_skills).toContain("coder");
+    expect(result.reply).toContain("완료 체크리스트");
   });
 });
 
