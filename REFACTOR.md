@@ -162,13 +162,30 @@
 
 ---
 
+## 이터레이션 6 신규 발견
+
+### ✅ I6-A: AbortController relay 패턴 3곳 [DRY, perf]
+- **위치**: `backends/anthropic-native.agent.ts`, `backends/openai-compatible.agent.ts`, `cron/runtime-handler.ts`
+- **해결**: `make_abort_signal(timeout, external?)` 단일 호출. try/finally 블록 제거 (`4f88bf1`)
+
+### ✅ I6-B: TS2312 — `interface extends OrcheNodeDefinition` (union type) 9곳 [타입 정확성]
+- **위치**: `nodes/color/country/geo/ical/json-patch/jsonl/random/semver/url.ts`
+- **해결**: `type Xxx = OrcheNodeDefinition & { ... }` 로 변경
+
+### ✅ I6-C: TS2339 — 미커밋 변경에서 타입 정의 누락 [타입 정확성]
+- **위치**: `workflow-node.types.ts`
+- **해결**: ChangelogNodeDef/DataFormatNodeDef/FtpNodeDef/PackageManagerNodeDef/StatsNodeDef 필드 추가
+
+---
+
 ## 최종 요약
 
 **이터레이션 3 완료**: 6개 항목 (P1-A~F)
 **이터레이션 4 완료**: 3개 항목 (I4-A~C)
 **이터레이션 5 완료**: 3개 항목 (I5-A~C)
-**총 완료**: 23개 항목
+**이터레이션 6 완료**: 3개 항목 (I6-A~C)
+**총 완료**: 26개 항목
 **SKIP (YAGNI/의도적 설계)**: 18개 항목
 **신규 헬퍼/유틸**: `runner_deps`, `finalize_phase`, `html-strip.ts`, `string-match.ts`, `make_document_handler`, `make_abort_signal`
 **보안 개선**: `validate_url`에 `.local` mDNS 도메인 차단 추가
-**코드 제거**: ~127줄 (4 document 핸들러 파일 통합) + 9줄 (AbortController 잔존 제거)
+**코드 제거**: ~127줄 (4 document 핸들러 통합) + 9줄 (AbortController 잔존) + relay 패턴 3곳
