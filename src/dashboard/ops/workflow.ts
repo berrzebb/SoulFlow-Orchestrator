@@ -633,6 +633,7 @@ export function create_workflow_ops(deps: {
         codex_cli: "chatgpt", codex_appserver: "chatgpt",
         gemini_cli: "gemini",
         openrouter: "openrouter",
+        ollama: "orchestrator_llm", openai_compatible: "orchestrator_llm", container_cli: "orchestrator_llm",
       };
       const VALID_PROVIDER_IDS = new Set<string>(["chatgpt", "claude_code", "openrouter", "orchestrator_llm", "gemini"]);
       const requested = options?.provider_id;
@@ -650,7 +651,7 @@ export function create_workflow_ops(deps: {
           seen.add(id);
           return deps.providers!.list_providers().includes(id);
         });
-        const fallback: import("../../providers/types.js").ProviderId[] = ["claude_code", "chatgpt", "gemini", "openrouter"];
+        const fallback: import("../../providers/types.js").ProviderId[] = ["claude_code", "chatgpt", "gemini", "openrouter", "orchestrator_llm"];
         suggest_provider_id = deduped[0] ?? fallback.find((id) => deps.providers!.list_providers().includes(id));
       } else if (VALID_PROVIDER_IDS.has(requested)) {
         // 이미 유효한 ProviderId
@@ -659,7 +660,7 @@ export function create_workflow_ops(deps: {
         // instance_id (프론트엔드 프로바이더 선택기) → provider_type → ProviderId 변환
         const summary = summaries.find((p) => p.backend === requested);
         const mapped = summary ? PROVIDER_TYPE_TO_ID[summary.provider_type] : undefined;
-        const fallback: import("../../providers/types.js").ProviderId[] = ["claude_code", "chatgpt", "gemini", "openrouter"];
+        const fallback: import("../../providers/types.js").ProviderId[] = ["claude_code", "chatgpt", "gemini", "openrouter", "orchestrator_llm"];
         suggest_provider_id = mapped ?? fallback.find((id) => deps.providers!.list_providers().includes(id));
       }
 

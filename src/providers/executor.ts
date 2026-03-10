@@ -30,16 +30,16 @@ export function resolve_executor_provider(
     if (caps.openrouter_available) return "openrouter";
     if (caps.chatgpt_available) return "chatgpt";
     if (caps.claude_available) return "claude_code";
-    return preferred;
+    return "orchestrator_llm";
   }
   if (preferred === "claude_code") {
     if (caps.claude_available) return "claude_code";
     if (caps.chatgpt_available) return "chatgpt";
     if (caps.openrouter_available) return "openrouter";
-    return preferred;
+    return "orchestrator_llm";
   }
   if (caps.chatgpt_available) return "chatgpt";
   if (caps.claude_available) return "claude_code";
   if (caps.openrouter_available) return "openrouter";
-  return preferred;
+  return "orchestrator_llm";
 }
