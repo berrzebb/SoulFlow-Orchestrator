@@ -114,11 +114,11 @@ export default function ChatPage() {
     related_query_keys: activeId ? [["chat-session", activeId]] : [],
   });
 
-  // 새 메시지 도착·세션 전환 시 항상 bottom 스크롤 (1회성)
+  // 새 메시지 도착·세션 전환 시 항상 bottom 스크롤 (더블 RAF로 렌더 완료 후 실행)
   const scroll_to_bottom = () => {
-    requestAnimationFrame(() => {
+    requestAnimationFrame(() => requestAnimationFrame(() => {
       if (messagesRef.current) messagesRef.current.scrollTop = messagesRef.current.scrollHeight;
-    });
+    }));
   };
   useEffect(scroll_to_bottom, [activeId, mirrorKey, sessions_open, activeSession?.messages?.length, mirrorLiveMessages.length]);
 
