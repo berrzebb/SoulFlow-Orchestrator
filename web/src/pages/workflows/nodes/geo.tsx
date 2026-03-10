@@ -19,7 +19,7 @@ function GeoEditPanel({ node, update, t }: EditPanelProps) {
         </BuilderField>
       ) : action === "dms_to_decimal" ? (
         <BuilderField label={t("workflows.geo_dms")} required>
-          <input className="input" value={String(node.dms || "")} onChange={(e) => update({ dms: e.target.value })} placeholder='37°33'"'"'36"N' />
+          <input className="input" value={String(node.dms || "")} onChange={(e) => update({ dms: e.target.value })} placeholder={"37°33'36\"N"} />
         </BuilderField>
       ) : (
         <>
