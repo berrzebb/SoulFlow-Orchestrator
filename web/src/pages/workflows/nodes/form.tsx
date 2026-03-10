@@ -109,6 +109,11 @@ function FormEditPanel({ node, update, t, options }: EditPanelProps) {
                   <input className="input input--sm" value={(f.options || []).join(", ")} onChange={(e) => updateField(i, { options: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) })} placeholder="option1, option2, option3" />
                 </BuilderField>
               )}
+              {f.type !== "boolean" && (
+                <BuilderField label={t("workflows.form_field_placeholder")}>
+                  <input className="input input--sm" value={f.placeholder || ""} onChange={(e) => updateField(i, { placeholder: e.target.value || undefined })} />
+                </BuilderField>
+              )}
               <BuilderField label={t("workflows.form_field_default")}>
                 <input className="input input--sm" value={f.default_value || ""} onChange={(e) => updateField(i, { default_value: e.target.value || undefined })} />
               </BuilderField>

@@ -13,18 +13,23 @@ function YamlEditPanel({ node, update, t }: EditPanelProps) {
             {ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
           </select>
         </BuilderField>
+        {action === "generate" && (
+          <BuilderField label={t("workflows.yaml_indent")}>
+            <input className="input input--sm" type="number" min={1} max={8} value={String(node.indent ?? 2)} onChange={(e) => update({ indent: Number(e.target.value) || 2 })} />
+          </BuilderField>
+        )}
       </BuilderRowPair>
       <BuilderField label={t("workflows.field_input")} required>
-        <textarea className="input" required rows={4} value={String(node.input || "")} onChange={(e) => update({ input: e.target.value })} placeholder="key: value" aria-required="true" />
+        <textarea className="input" required rows={4} value={String(node.data || "")} onChange={(e) => update({ data: e.target.value })} placeholder="key: value" aria-required="true" />
       </BuilderField>
       {action === "merge" && (
         <BuilderField label={t("workflows.field_input_2")} required>
-          <textarea className="input" required rows={3} value={String(node.input2 || "")} onChange={(e) => update({ input2: e.target.value })} placeholder="other: value" aria-required="true" />
+          <textarea className="input" required rows={3} value={String(node.data2 || "")} onChange={(e) => update({ data2: e.target.value })} placeholder="other: value" aria-required="true" />
         </BuilderField>
       )}
       {action === "query" && (
         <BuilderField label={t("workflows.field_query")} required>
-          <input className="input input--sm" required value={String(node.query || "")} onChange={(e) => update({ query: e.target.value })} placeholder=".key.nested" aria-required="true" />
+          <input className="input input--sm" required value={String(node.path || "")} onChange={(e) => update({ path: e.target.value })} placeholder=".key.nested" aria-required="true" />
         </BuilderField>
       )}
     </>
@@ -44,8 +49,8 @@ export const yaml_descriptor: FrontendNodeDescriptor = {
   ],
   input_schema: [
     { name: "action", type: "string", description: "node.yaml.input.action" },
-    { name: "input", type: "string", description: "node.yaml.input.input" },
+    { name: "data", type: "string", description: "node.yaml.input.data" },
   ],
-  create_default: () => ({ action: "parse", input: "" }),
+  create_default: () => ({ action: "parse", data: "", indent: 2 }),
   EditPanel: YamlEditPanel,
 };

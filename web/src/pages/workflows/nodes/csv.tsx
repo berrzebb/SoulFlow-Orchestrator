@@ -17,9 +17,20 @@ function CsvEditPanel({ node, update, t }: EditPanelProps) {
           <input className="input input--sm" value={String(node.delimiter || ",")} onChange={(e) => update({ delimiter: e.target.value })} placeholder="," style={{ maxWidth: "80px" }} />
         </BuilderField>
       </BuilderRowPair>
+      <div className="builder-row">
+        <label className="label-inline">
+          <input type="checkbox" checked={Boolean(node.has_header ?? true)} onChange={(e) => update({ has_header: e.target.checked })} />
+          {t("workflows.csv_has_header")}
+        </label>
+      </div>
       <BuilderField label={t("workflows.field_input")} required>
-        <textarea className="input" required rows={4} value={String(node.input || "")} onChange={(e) => update({ input: e.target.value })} placeholder="col1,col2" aria-required="true" />
+        <textarea className="input" required rows={4} value={String(node.data || "")} onChange={(e) => update({ data: e.target.value })} placeholder="col1,col2" aria-required="true" />
       </BuilderField>
+      {action === "generate" && (
+        <BuilderField label={t("workflows.csv_columns")}>
+          <input className="input input--sm" value={String(node.columns || "")} onChange={(e) => update({ columns: e.target.value })} placeholder="name,age,email" />
+        </BuilderField>
+      )}
       {action === "filter" && (
         <BuilderRowPair>
           <BuilderField label={t("workflows.csv_filter_column")} required>
@@ -49,6 +60,6 @@ export const csv_descriptor: FrontendNodeDescriptor = {
     { name: "action", type: "string", description: "node.csv.input.action" },
     { name: "input", type: "string", description: "node.csv.input.input" },
   ],
-  create_default: () => ({ action: "parse", input: "", delimiter: "," }),
+  create_default: () => ({ action: "parse", data: "", delimiter: ",", has_header: true }),
   EditPanel: CsvEditPanel,
 };

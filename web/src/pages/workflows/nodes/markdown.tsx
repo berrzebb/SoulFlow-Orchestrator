@@ -16,13 +16,27 @@ function MarkdownEditPanel({ node, update, t }: EditPanelProps) {
         </BuilderField>
       )}
       {op === "table" && (
-        <BuilderField label={t("workflows.field_columns")}>
-          <input className="input" value={String(node.columns || "")} onChange={(e) => update({ columns: e.target.value })} placeholder="name, value (auto-detect if empty)" />
-        </BuilderField>
+        <>
+          <BuilderField label={t("workflows.field_columns")}>
+            <input className="input" value={String(node.columns || "")} onChange={(e) => update({ columns: e.target.value })} placeholder="name, value (auto-detect if empty)" />
+          </BuilderField>
+          <BuilderField label={t("workflows.markdown_align")}>
+            <select className="input input--sm" value={String(node.align || "left")} onChange={(e) => update({ align: e.target.value })}>
+              <option value="left">left</option>
+              <option value="center">center</option>
+              <option value="right">right</option>
+            </select>
+          </BuilderField>
+        </>
       )}
       {["toc", "html_to_md", "details"].includes(op) && (
         <BuilderField label={t("workflows.field_text")}>
           <textarea className="input code-textarea" rows={4} value={String(node.text || "")} onChange={(e) => update({ text: e.target.value })} />
+        </BuilderField>
+      )}
+      {op === "details" && (
+        <BuilderField label={t("workflows.markdown_summary")}>
+          <input className="input input--sm" value={String(node.summary || "")} onChange={(e) => update({ summary: e.target.value })} placeholder="Click to expand" />
         </BuilderField>
       )}
       {op === "code_block" && (
@@ -44,6 +58,11 @@ function MarkdownEditPanel({ node, update, t }: EditPanelProps) {
             <input className="input input--sm" value={String(node.url || "")} onChange={(e) => update({ url: e.target.value })} />
           </BuilderField>
         </BuilderRowPair>
+      )}
+      {op === "badge" && (
+        <BuilderField label={t("workflows.markdown_badge_color")}>
+          <input className="input input--sm" value={String(node.color || "")} onChange={(e) => update({ color: e.target.value })} placeholder="blue" />
+        </BuilderField>
       )}
       {op === "list" && (
         <div className="builder-row">
@@ -72,6 +91,6 @@ export const markdown_descriptor: FrontendNodeDescriptor = {
     { name: "operation", type: "string", description: "node.markdown.input.operation" },
     { name: "data",      type: "string", description: "node.markdown.input.data" },
   ],
-  create_default: () => ({ operation: "table", data: "", text: "", columns: "", ordered: false, label: "", url: "", language: "", code: "" }),
+  create_default: () => ({ operation: "table", data: "", text: "", columns: "", align: "left", ordered: false, label: "", url: "", color: "", language: "", code: "", summary: "" }),
   EditPanel: MarkdownEditPanel,
 };

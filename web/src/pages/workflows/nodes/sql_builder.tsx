@@ -31,9 +31,22 @@ function SqlBuilderEditPanel({ node, update, t }: EditPanelProps) {
         </BuilderField>
       )}
       {action === "select" && (
-        <BuilderField label={t("workflows.sql_where")}>
-          <input className="input input--sm" value={String(node.where || "")} onChange={(e) => update({ where: e.target.value })} placeholder="id = 1" />
-        </BuilderField>
+        <>
+          <BuilderField label={t("workflows.sql_columns")}>
+            <input className="input input--sm" value={String(node.columns || "")} onChange={(e) => update({ columns: e.target.value })} placeholder="id, name, email (empty = *)" />
+          </BuilderField>
+          <BuilderField label={t("workflows.sql_where")}>
+            <input className="input input--sm" value={String(node.where || "")} onChange={(e) => update({ where: e.target.value })} placeholder="id = 1" />
+          </BuilderField>
+          <BuilderRowPair>
+            <BuilderField label={t("workflows.sql_order_by")}>
+              <input className="input input--sm" value={String(node.order_by || "")} onChange={(e) => update({ order_by: e.target.value })} placeholder="created_at DESC" />
+            </BuilderField>
+            <BuilderField label={t("workflows.sql_limit")}>
+              <input className="input input--sm" type="number" min={1} value={String(node.limit ?? "")} onChange={(e) => update({ limit: e.target.value ? Number(e.target.value) : undefined })} placeholder="100" />
+            </BuilderField>
+          </BuilderRowPair>
+        </>
       )}
       {(action === "insert" || action === "update") && (
         <BuilderField label={t("workflows.sql_values_json")} required>
@@ -59,6 +72,6 @@ export const sql_builder_descriptor: FrontendNodeDescriptor = {
     { name: "action", type: "string", description: "node.sql_builder.input.action" },
     { name: "table", type: "string", description: "node.sql_builder.input.table" },
   ],
-  create_default: () => ({ action: "select", table: "", dialect: "sqlite", where: "", values: "" }),
+  create_default: () => ({ action: "select", table: "", dialect: "sqlite", columns: "", where: "", order_by: "", values: "" }),
   EditPanel: SqlBuilderEditPanel,
 };

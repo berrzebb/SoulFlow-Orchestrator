@@ -25,6 +25,14 @@ function MqttEditPanel({ node, update, t }: EditPanelProps) {
           <input className="input input--sm" value={String(node.client_id || "")} onChange={(e) => update({ client_id: e.target.value })} placeholder="client-1" />
         </BuilderField>
       </BuilderRowPair>
+      <BuilderRowPair>
+        <BuilderField label={t("workflows.username")}>
+          <input className="input input--sm" value={String(node.username || "")} onChange={(e) => update({ username: e.target.value })} placeholder="(optional)" />
+        </BuilderField>
+        <BuilderField label={t("workflows.password")}>
+          <input className="input input--sm" type="password" value={String(node.password || "")} onChange={(e) => update({ password: e.target.value })} />
+        </BuilderField>
+      </BuilderRowPair>
       {action !== "info" && (
         <BuilderField label={t("workflows.mqtt_topic")} required>
           <input className="input input--sm" required value={String(node.topic || "")} onChange={(e) => update({ topic: e.target.value })} placeholder="sensors/temp" aria-required="true" />
@@ -64,6 +72,6 @@ export const mqtt_descriptor: FrontendNodeDescriptor = {
     { name: "host", type: "string", description: "node.mqtt.input.host" },
     { name: "topic", type: "string", description: "node.mqtt.input.topic" },
   ],
-  create_default: () => ({ action: "publish", host: "", port: 1883, client_id: "", topic: "", message: "", qos: 0 }),
+  create_default: () => ({ action: "publish", host: "", port: 1883, client_id: "", username: "", password: "", topic: "", message: "", qos: 0 }),
   EditPanel: MqttEditPanel,
 };

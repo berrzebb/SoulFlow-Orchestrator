@@ -18,6 +18,11 @@ function S3EditPanel({ node, update, t }: EditPanelProps) {
           <input className="input input--sm" required value={String(node.bucket || "")} onChange={(e) => update({ bucket: e.target.value })} placeholder="my-bucket" aria-required="true" />
         </BuilderField>
       </BuilderRowPair>
+      {action === "list" && (
+        <BuilderField label={t("workflows.s3_prefix")}>
+          <input className="input input--sm" value={String(node.prefix || "")} onChange={(e) => update({ prefix: e.target.value })} placeholder="folder/subfolder/" />
+        </BuilderField>
+      )}
       {needs_key && (
         <BuilderField label={t("workflows.field_key")} required>
           <input className="input input--sm" required value={String(node.key || "")} onChange={(e) => update({ key: e.target.value })} placeholder="path/to/file.txt" aria-required="true" />
@@ -64,6 +69,6 @@ export const s3_descriptor: FrontendNodeDescriptor = {
     { name: "bucket", type: "string", description: "node.s3.input.bucket" },
     { name: "key", type: "string", description: "node.s3.input.key" },
   ],
-  create_default: () => ({ action: "list", bucket: "", key: "", region: "us-east-1", endpoint: "", access_key: "", secret_key: "" }),
+  create_default: () => ({ action: "list", bucket: "", key: "", prefix: "", region: "us-east-1", endpoint: "", access_key: "", secret_key: "" }),
   EditPanel: S3EditPanel,
 };
