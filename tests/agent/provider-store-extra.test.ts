@@ -314,3 +314,49 @@ describe("AgentProviderStore — has_resolved_token connection 없음 (L293)", (
     expect(await store.has_resolved_token("no-conn-no-tok")).toBe(false);
   });
 });
+
+// ══════════════════════════════════════════
+// L128/L133: 마이그레이션 분기 — 구버전 스키마 DB
+// ══════════════════════════════════════════
+
+describe("AgentProviderStore — 마이그레이션 분기 (L128/L133)", () => {
+  it("model_purpose 컬럼 없는 구 DB → L128 ALTER TABLE 실행", async () => {
+    const old_dir = await import("node:fs/promises").then((m) => m.mkdtemp(require("node:path").join(require("node:os").tmpdir(), "ps-migrate-")));
+    try {
+      const db_path = require("node:path").join(old_dir, "providers.db");
+      // 구버전 스키마: model_purpose, connection_id 없음
+      with_sqlite(db_path, (db) => {
+        db.exec(`
+          CREATE TABLE IF NOT EXISTS agent_providers (
+            instance_id TEXT PRIMARY KEY,
+            provider_type TEXT NOT NULL,
+            label TEXT NOT NULL DEFAULT '',
+            enabled INTEGER NOT NULL DEFAULT 1,
+            priority INTEGER NOT NULL DEFAULT 100,
+            supported_modes TEXT NOT NULL DEFAULT '["once","agent","task"]',
+            settings_json TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+          );
+          CREATE TABLE IF NOT EXISTS provider_connections (
+            connection_id TEXT PRIMARY KEY,
+            provider_type TEXT NOT NULL,
+            label TEXT NOT NULL DEFAULT '',
+            enabled INTEGER NOT NULL DEFAULT 1,
+            api_base TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+          );
+        `);
+      });
+      const vault = new SecretVaultService(old_dir);
+      // 생성자가 _ensure_initialized → L128, L133 실행
+      const migrated_store = new AgentProviderStore(db_path, vault);
+      // 마이그레이션 후 upsert 가능한지 확인
+      migrated_store.upsert({ instance_id: "mig1", provider_type: "claude_cli", label: "L", enabled: true, priority: 50, supported_modes: ["once"], settings: {} });
+      expect(migrated_store.get("mig1")).not.toBeNull();
+    } finally {
+      await import("node:fs/promises").then((m) => m.rm(old_dir, { recursive: true, force: true })).catch(() => {});
+    }
+  });
+});
