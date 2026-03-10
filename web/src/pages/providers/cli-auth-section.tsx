@@ -139,9 +139,27 @@ export function CliAuthSection() {
 
       {loginResult?.login_url && (() => {
         const is_local = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/.test(loginResult.login_url);
-        const effective_url = is_local
-          ? `${window.location.origin}/api/auth/cli/oauth-proxy/${encodeURIComponent(loginResult.cli)}`
-          : loginResult.login_url;
+        let effective_url: string;
+        if (is_local) {
+          effective_url = `${window.location.origin}/api/auth/cli/oauth-proxy/${encodeURIComponent(loginResult.cli)}`;
+        } else {
+          // OAuth 공급자 URL의 redirect_uri가 localhost를 가리키는 경우 → 대시보드 콜백으로 재작성
+          try {
+            const u = new URL(loginResult.login_url);
+            const ruri = u.searchParams.get("redirect_uri");
+            if (ruri && /https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/.test(ruri)) {
+              u.searchParams.set(
+                "redirect_uri",
+                `${window.location.origin}/api/auth/cli/oauth-callback/${encodeURIComponent(loginResult.cli)}`,
+              );
+              effective_url = u.toString();
+            } else {
+              effective_url = loginResult.login_url;
+            }
+          } catch {
+            effective_url = loginResult.login_url;
+          }
+        }
         return (
         <div className="stat-card cli-auth-section__result">
           <p className="mb-2">

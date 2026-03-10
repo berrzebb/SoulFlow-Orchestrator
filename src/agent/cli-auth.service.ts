@@ -214,7 +214,8 @@ export class CliAuthService extends EventEmitter {
       });
 
       this.login_processes.set(cli, proc);
-      let url_resolved = false;
+      let url_found = false;      // URL이 출력에서 감지됐는지 (중복 on_url_found 방지)
+      let promise_resolved = false; // Promise.resolve()가 호출됐는지 (초기 응답 한 번만)
       let stdout_buf = "";
       let stderr_buf = "";
 
@@ -238,23 +239,36 @@ export class CliAuthService extends EventEmitter {
 
       // 비-TTY 환경에서도 초기 프롬프트를 넘기기 위해 1초 후 Enter 전송
       const initial_enter_timer = setTimeout(() => {
-        if (!url_resolved) proc.stdin?.write("\n");
+        if (!url_found) proc.stdin?.write("\n");
       }, 1_000);
 
       const on_url_found = (raw_url: string) => {
-        url_resolved = true;
+        url_found = true;
         clearTimeout(initial_enter_timer);
-        // localhost URL이면 포트 저장 (OAuth 프록시 라우트에서 사용)
+        // localhost URL이면 포트 저장 (OAuth 콜백 포워딩에 사용)
         const local_match = raw_url.match(/https?:\/\/(localhost|127\.0\.0\.1):(\d+)/);
-        if (local_match) this.oauth_ports.set(cli, parseInt(local_match[2]));
+        if (local_match) {
+          this.oauth_ports.set(cli, parseInt(local_match[2]));
+        } else {
+          // OAuth 공급자 URL에 localhost redirect_uri가 포함된 경우
+          // 예: https://claude.ai/oauth/authorize?...&redirect_uri=http://localhost:8400/callback
+          try {
+            const u = new URL(raw_url);
+            const ruri = u.searchParams.get("redirect_uri");
+            if (ruri) {
+              const port_m = ruri.match(/https?:\/\/(?:localhost|127\.0\.0\.1):(\d+)/);
+              if (port_m) this.oauth_ports.set(cli, parseInt(port_m[1]));
+            }
+          } catch { /* URL 파싱 실패 무시 */ }
+        }
         const p: LoginProgress = { cli, state: "url_ready", login_url: raw_url };
         emit_progress(p);
-        resolve(p);
+        if (!promise_resolved) { promise_resolved = true; resolve(p); }
       };
 
       proc.stdout?.on("data", (chunk: Buffer) => {
         stdout_buf += chunk.toString();
-        if (!url_resolved) {
+        if (!url_found) {
           try_send_enter(stdout_buf);
           const u = try_extract_url(stdout_buf);
           if (u) on_url_found(u);
@@ -263,7 +277,7 @@ export class CliAuthService extends EventEmitter {
 
       proc.stderr?.on("data", (chunk: Buffer) => {
         stderr_buf += chunk.toString();
-        if (!url_resolved) {
+        if (!url_found) {
           try_send_enter(stderr_buf);
           const u = try_extract_url(stderr_buf);
           if (u) on_url_found(u);
@@ -281,7 +295,7 @@ export class CliAuthService extends EventEmitter {
             error: status.authenticated ? undefined : "Login completed but auth check failed",
           };
           emit_progress(p);
-          if (!url_resolved) resolve(p);
+          if (!promise_resolved) { promise_resolved = true; resolve(p); }
         } else {
           const p: LoginProgress = {
             cli,
@@ -289,7 +303,7 @@ export class CliAuthService extends EventEmitter {
             error: stderr_buf.trim() || `Process exited with code ${code}`,
           };
           emit_progress(p);
-          if (!url_resolved) resolve(p);
+          if (!promise_resolved) { promise_resolved = true; resolve(p); }
         }
         this.login_progress_cache.delete(cli);
         this.oauth_ports.delete(cli);
@@ -302,13 +316,14 @@ export class CliAuthService extends EventEmitter {
         emit_progress(p);
         this.login_progress_cache.delete(cli);
         this.oauth_ports.delete(cli);
-        if (!url_resolved) resolve(p);
+        if (!promise_resolved) { promise_resolved = true; resolve(p); }
       });
 
       // URL이 10초 내에 안 나오면 waiting_url 상태로 반환 (프로세스는 계속 실행)
+      // url_found를 건드리지 않아 이후 URL이 출력되면 계속 감지함
       setTimeout(() => {
-        if (!url_resolved) {
-          url_resolved = true;
+        if (!promise_resolved) {
+          promise_resolved = true;
           const p: LoginProgress = { cli, state: "waiting_url" };
           this.login_progress_cache.set(cli, p);
           resolve(p);
