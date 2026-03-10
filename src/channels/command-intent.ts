@@ -25,14 +25,18 @@ const DECISION_STATUS_ARG_ALIASES = ["status", "state", "상태", "확인", "조
 const DECISION_LIST_ARG_ALIASES = ["list", "show", "목록", "리스트"] as const;
 const DECISION_SET_ARG_ALIASES = ["set", "update", "upsert", "설정", "수정", "변경"] as const;
 
+const RE_SLACK_MENTION = /^<@!?[A-Za-z0-9]+>\s*/i;
+const RE_AT_MENTION = /^[@＠][A-Za-z0-9._-]+\s*/i;
+const RE_BOT_ALIAS = /^(?:assistant|sebastian|bot|오케스트레이터|에이전트)\s*[:,]?\s*/i;
+
 export function strip_leading_mentions_and_aliases(text: string): string {
   let out = String(text || "").trim();
   if (!out) return "";
   for (let i = 0; i < 3; i += 1) {
     const next = out
-      .replace(/^<@!?[A-Za-z0-9]+>\s*/i, "")
-      .replace(/^[@＠][A-Za-z0-9._-]+\s*/i, "")
-      .replace(/^(?:assistant|sebastian|bot|오케스트레이터|에이전트)\s*[:,]?\s*/i, "")
+      .replace(RE_SLACK_MENTION, "")
+      .replace(RE_AT_MENTION, "")
+      .replace(RE_BOT_ALIAS, "")
       .trim();
     if (next === out) break;
     out = next;
@@ -44,6 +48,13 @@ export function normalize_common_command_text(content: string): string {
   const stripped = strip_leading_mentions_and_aliases(String(content || ""));
   return normalize_text(stripped);
 }
+
+const RE_MEM_STATUS   = /^(?:메모리|memory)\s*(?:상태|status|state|확인|조회)?$/;
+const RE_MEM_LIST     = /^(?:메모리|memory)\s*(?:목록|list|리스트)$/;
+const RE_MEM_TODAY    = /^(?:오늘\s*메모리|메모리\s*오늘|memory\s*today)$/;
+const RE_MEM_LONGTERM = /^(?:장기\s*메모리|메모리\s*장기|memory\s*longterm|longterm\s*memory)$/;
+const RE_MEM_SEARCH   = /^(?:메모리|memory)\s*(?:검색|search)(?:\b|$|\s)/;
+const RE_MEM_SEARCH_QUERY = /^(?:메모리|memory)\s*(?:검색|search)\s+(.+)$/i;
 
 export function parse_memory_quick_action(
   text_raw: string,
@@ -65,11 +76,11 @@ export function parse_memory_quick_action(
   }
   const text = normalize_common_command_text(text_raw).toLowerCase();
   if (!text || text.startsWith("/")) return null;
-  if (/^(?:메모리|memory)\s*(?:상태|status|state|확인|조회)?$/.test(text)) return "status";
-  if (/^(?:메모리|memory)\s*(?:목록|list|리스트)$/.test(text)) return "list";
-  if (/^(?:오늘\s*메모리|메모리\s*오늘|memory\s*today)$/.test(text)) return "today";
-  if (/^(?:장기\s*메모리|메모리\s*장기|memory\s*longterm|longterm\s*memory)$/.test(text)) return "longterm";
-  if (/^(?:메모리|memory)\s*(?:검색|search)(?:\b|$|\s)/.test(text)) return "search";
+  if (RE_MEM_STATUS.test(text)) return "status";
+  if (RE_MEM_LIST.test(text)) return "list";
+  if (RE_MEM_TODAY.test(text)) return "today";
+  if (RE_MEM_LONGTERM.test(text)) return "longterm";
+  if (RE_MEM_SEARCH.test(text)) return "search";
   return null;
 }
 
@@ -84,10 +95,13 @@ export function extract_memory_search_query(text_raw: string, command: ParsedSla
     return args.slice(1).join(" ").trim();
   }
   const text = normalize_common_command_text(text_raw);
-  const m = text.match(/^(?:메모리|memory)\s*(?:검색|search)\s+(.+)$/i);
+  const m = text.match(RE_MEM_SEARCH_QUERY);
   if (!m) return "";
   return String(m[1] || "").trim();
 }
+
+const RE_STATUS_TOOLS  = /(?:도구|tool|command|명령)/i;
+const RE_STATUS_SKILLS = /(?:스킬|skill|기능|능력)/i;
 
 export type StatusQuickAction = "tools" | "skills" | "overview";
 
@@ -103,10 +117,19 @@ export function parse_status_quick_action(
   const text = normalize_common_command_text(text_raw).toLowerCase();
   if (!text) return null;
 
-  if (/(?:도구|tool|command|명령)/i.test(text)) return "tools";
-  if (/(?:스킬|skill|기능|능력)/i.test(text)) return "skills";
+  if (RE_STATUS_TOOLS.test(text)) return "tools";
+  if (RE_STATUS_SKILLS.test(text)) return "skills";
   return null;
 }
+
+const RE_DEC_STATUS_KO = /^(?:현재\s*)?(?:지침|정책)(?:은|는|이|가)?\s*\??$/;
+const RE_DEC_LIST_KO   = /(?:결정\s*사항|지침|정책)\s*(?:상태|확인|조회|목록|리스트)/;
+const RE_DEC_LIST_EN   = /^(?:decision|policy)\s*(?:status|state|list|show)\b/;
+const RE_DEC_SET_KO    = /(?:지침|정책|결정\s*사항)\s*(?:수정|변경|업데이트)/;
+const RE_DEC_SET_EN    = /^(?:decision|policy)\s*set\b/;
+const RE_DEC_SET_QUERY_KO = /^(?:지침|정책|결정\s*사항)\s*(?:수정|변경|업데이트)\s*[:：]?\s*(.+)$/i;
+const RE_DEC_SET_QUERY_EN = /^(?:decision|policy)\s*set\s+(.+)$/i;
+const RE_KEY_VALUE     = /^([^=:=]{1,120})\s*[:=]\s*(.+)$/;
 
 export function parse_decision_quick_action(
   text_raw: string,
@@ -124,18 +147,16 @@ export function parse_decision_quick_action(
   }
   const text = normalize_common_command_text(text_raw).toLowerCase();
   if (!text || text.startsWith("/")) return null;
-  if (/^(?:현재\s*)?(?:지침|정책)(?:은|는|이|가)?\s*\??$/.test(text)) return "status";
-  if (/(?:결정\s*사항|지침|정책)\s*(?:상태|확인|조회|목록|리스트)/.test(text)) return "list";
-  if (/^(?:decision|policy)\s*(?:status|state|list|show)\b/.test(text)) return "list";
-  if (/(?:지침|정책|결정\s*사항)\s*(?:수정|변경|업데이트)/.test(text)) return "set";
-  if (/^(?:decision|policy)\s*set\b/.test(text)) return "set";
+  if (RE_DEC_STATUS_KO.test(text)) return "status";
+  if (RE_DEC_LIST_KO.test(text) || RE_DEC_LIST_EN.test(text)) return "list";
+  if (RE_DEC_SET_KO.test(text) || RE_DEC_SET_EN.test(text)) return "set";
   return null;
 }
 
 export function parse_decision_set_pair(raw: string): { key: string; value: string } | null {
   const text = String(raw || "").trim();
   if (!text) return null;
-  const eq = text.match(/^([^=:=]{1,120})\s*[:=]\s*(.+)$/);
+  const eq = text.match(RE_KEY_VALUE);
   if (eq) {
     const key = String(eq[1] || "").trim();
     const value = String(eq[2] || "").trim();
@@ -164,8 +185,7 @@ export function extract_decision_set_pair(
     return parse_decision_set_pair(args.slice(1).join(" "));
   }
   const text = normalize_common_command_text(text_raw);
-  const m = text.match(/^(?:지침|정책|결정\s*사항)\s*(?:수정|변경|업데이트)\s*[:：]?\s*(.+)$/i)
-    || text.match(/^(?:decision|policy)\s*set\s+(.+)$/i);
+  const m = text.match(RE_DEC_SET_QUERY_KO) || text.match(RE_DEC_SET_QUERY_EN);
   if (!m) return null;
   return parse_decision_set_pair(String(m[1] || ""));
 }
