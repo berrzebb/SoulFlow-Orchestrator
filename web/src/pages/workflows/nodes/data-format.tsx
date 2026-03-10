@@ -40,7 +40,7 @@ function DataFormatEditPanel({ node, update, t }: EditPanelProps) {
         </BuilderField>
       )}
       {op === "merge" && (
-        <BuilderField label={`${t("workflows.input_data")} 2`}>
+        <BuilderField label={t("workflows.input_data_secondary")}>
           <textarea className="input code-textarea" rows={3} value={String(node.input2 || "")} onChange={(e) => update({ input2: e.target.value })} placeholder='{"extra": true}' />
         </BuilderField>
       )}

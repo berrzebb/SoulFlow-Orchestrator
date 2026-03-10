@@ -22,10 +22,10 @@ function SwitchEditPanel({ node, update, t, options }: EditPanelProps) {
       <div className="builder-row">
         <label className="label">{t("workflows.switch_cases")}</label>
         {cases.map((c, i) => (
-          <div key={i} style={{ border: "1px solid var(--border)", borderRadius: "4px", padding: "8px", marginBottom: "6px" }}>
-            <div style={{ display: "flex", gap: "4px", alignItems: "center", marginBottom: "4px" }}>
+          <div key={i} className="builder-nested-block">
+            <div className="builder-inline-row" style={{ marginBottom: "4px" }}>
               <input className="input input--sm" style={{ flex: 1 }} value={c.value} onChange={(e) => update_case(i, { value: e.target.value })} placeholder="success" />
-              <button type="button" className="btn btn--xs btn--danger" onClick={() => remove_case(i)} style={{ flexShrink: 0 }}>✕</button>
+              <button type="button" className="btn btn--xs btn--danger" onClick={() => remove_case(i)}>✕</button>
             </div>
             <NodeMultiSelect value={c.targets} onChange={(ids) => update_case(i, { targets: ids })} nodes={wf_nodes} placeholder="target-node" />
           </div>

@@ -1,14 +1,16 @@
-import { BuilderField } from "../builder-field";
+import { BuilderField, NodeMultiSelect } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
-function LoopEditPanel({ node, update, t }: EditPanelProps) {
+function LoopEditPanel({ node, update, t, options }: EditPanelProps) {
+  const body_nodes = (node.body_nodes as string[]) || [];
+  const wf_nodes = options?.workflow_nodes;
   return (
     <>
       <BuilderField label={t("workflows.loop_array")} hint={t("workflows.loop_array_hint")}>
         <input autoFocus className="input input--sm" value={String(node.array_field || "")} onChange={(e) => update({ array_field: e.target.value })} placeholder="items" aria-label={t("workflows.loop_array")} />
       </BuilderField>
       <BuilderField label={t("workflows.loop_body")} hint={t("workflows.loop_body_hint")}>
-        <input className="input input--sm" value={Array.isArray(node.body_nodes) ? (node.body_nodes as string[]).join(", ") : ""} onChange={(e) => update({ body_nodes: e.target.value.split(",").map((s: string) => s.trim()).filter(Boolean) })} placeholder="code-1, http-1" aria-label={t("workflows.loop_body")} />
+        <NodeMultiSelect value={body_nodes} onChange={(ids) => update({ body_nodes: ids })} nodes={wf_nodes} placeholder="node-id" />
       </BuilderField>
       <BuilderField label={t("workflows.loop_max")} hint={t("workflows.loop_max_hint")}>
         <input className="input input--sm" type="number" min={1} max={10000} value={String(node.max_iterations ?? 100)} onChange={(e) => update({ max_iterations: Number(e.target.value) || 100 })} aria-label={t("workflows.loop_max")} />

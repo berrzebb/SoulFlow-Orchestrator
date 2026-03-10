@@ -16,7 +16,7 @@ function EmailEditPanel({ node, update, t }: EditPanelProps) {
         <input className="input input--sm" required value={String(node.subject || "")} onChange={(e) => update({ subject: e.target.value })} placeholder="Email subject" aria-required="true" />
       </BuilderField>
       <BuilderField label={t("node.email.input.body")} required>
-        <textarea className="input input--sm" required rows={4} value={String(node.body || "")} onChange={(e) => update({ body: e.target.value })} placeholder="Email body with {{memory.var}} templates" aria-required="true" />
+        <textarea className="input" required rows={4} value={String(node.body || "")} onChange={(e) => update({ body: e.target.value })} placeholder="Email body with {{memory.var}} templates" aria-required="true" />
       </BuilderField>
       <BuilderRowPair>
         <BuilderField label={t("workflows.smtp_host")} required>

@@ -979,6 +979,8 @@
 }
 
 .builder-row { display: flex; flex-direction: column; gap: 4px; flex: 1; }
+.builder-nested-block { border: 1px solid var(--border); border-radius: 4px; padding: var(--sp-2); margin-bottom: var(--sp-1); }
+.builder-nested-toggle { margin-right: var(--sp-1); font-size: var(--fs-xs); color: var(--muted); }
 .builder-row--conditional {
   border-left: 3px solid var(--accent);
   padding-left: var(--sp-2);
