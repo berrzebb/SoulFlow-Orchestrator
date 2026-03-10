@@ -205,6 +205,7 @@ export class CliAuthService extends EventEmitter {
     }
 
     const { cmd, args } = LOGIN_COMMANDS[cli];
+    this.oauth_ports.delete(cli); // 이전 세션 포트 초기화
     this.logger.info("starting CLI login", { cli });
 
     return new Promise<LoginProgress>((resolve) => {
@@ -295,6 +296,9 @@ export class CliAuthService extends EventEmitter {
             error: status.authenticated ? undefined : "Login completed but auth check failed",
           };
           emit_progress(p);
+          // 인증 완료 시에만 포트 정리 — URL 출력 후 바로 종료하는 CLI(Codex 등)는
+          // OAuth 콜백이 아직 안 왔을 수 있으므로 포트를 유지해야 함
+          if (status.authenticated) this.oauth_ports.delete(cli);
           if (!promise_resolved) { promise_resolved = true; resolve(p); }
         } else {
           const p: LoginProgress = {
@@ -306,7 +310,6 @@ export class CliAuthService extends EventEmitter {
           if (!promise_resolved) { promise_resolved = true; resolve(p); }
         }
         this.login_progress_cache.delete(cli);
-        this.oauth_ports.delete(cli);
       });
 
       proc.on("error", (err) => {
@@ -315,7 +318,6 @@ export class CliAuthService extends EventEmitter {
         const p: LoginProgress = { cli, state: "failed", error: err.message };
         emit_progress(p);
         this.login_progress_cache.delete(cli);
-        this.oauth_ports.delete(cli);
         if (!promise_resolved) { promise_resolved = true; resolve(p); }
       });
 
