@@ -59,8 +59,9 @@ Priority 10: openrouter (standby)
 | `codex_appserver` | Native AppServer | Parallel execution · built-in tool loop | → `codex_cli` |
 | `codex_cli` | Headless CLI wrapper | Sandbox mode support | — |
 | `gemini_cli` | Headless CLI wrapper | Gemini CLI integration | — |
-| `openai_compatible` | OpenAI-compatible API | vLLM · Ollama · LM Studio · Together AI · Gemini and other local/remote models | — |
+| `openai_compatible` | OpenAI-compatible API | vLLM · LM Studio · Together AI · Gemini and other local/remote models | — |
 | `openrouter` | OpenRouter API | Multi-model routing · 100+ model access | — |
+| `ollama` | Ollama local API | Local LLM direct execution (default: `http://ollama:11434/v1`) | — |
 | `container_cli` | Container CLI wrapper | Docker/Podman sandboxed isolation | — |
 
 ### Container CLI Backend

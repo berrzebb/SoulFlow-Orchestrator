@@ -13,8 +13,9 @@ SoulFlow의 에이전트 시스템은 두 계층으로 구성됩니다: **백엔
 | `codex_appserver` | 네이티브 AppServer | 병렬 실행, tool loop 내장 | → `codex_cli` |
 | `codex_cli` | Headless CLI 래퍼 | 샌드박스 모드 지원 | — |
 | `gemini_cli` | Headless CLI 래퍼 | Gemini CLI 통합 | — |
-| `openai_compatible` | OpenAI 호환 API | vLLM · Ollama · LM Studio · Together AI · Gemini 등 로컬/원격 모델 | — |
+| `openai_compatible` | OpenAI 호환 API | vLLM · LM Studio · Together AI · Gemini 등 로컬/원격 모델 | — |
 | `openrouter` | OpenRouter API | 멀티 모델 라우팅 · 100+ 모델 접근 | — |
+| `ollama` | Ollama 로컬 API | 로컬 LLM 직접 실행 (기본: `http://ollama:11434/v1`) | — |
 | `container_cli` | 컨테이너 CLI 래퍼 | Docker/Podman 샌드박스 격리 실행 | — |
 
 ### 백엔드 선택 기준

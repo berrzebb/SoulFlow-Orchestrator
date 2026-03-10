@@ -29,9 +29,9 @@ On first launch with no providers configured, the dashboard auto-redirects to `/
 | Channels | `/channels` | Channel connection status · global settings |
 | Providers | `/providers` | Agent provider CRUD |
 | Secrets | `/secrets` | AES-256-GCM secret management |
-| Models | `/models` | Orchestrator LLM runtime · model pull/delete/switch |
-| Workflows | `/workflows` | Phase Loop workflow management · 87-node graph editor · agent chat |
-| Kanban | `/kanban` | Task board with drag-and-drop columns |
+| Workflows | `/workflows` | Phase Loop workflow management · 141-node graph editor · agent chat |
+| Kanban | `/kanban` | Drag-and-drop kanban board · automation rules |
+| WBS | `/wbs` | Kanban card hierarchy tree view (parent_id-based) |
 | Settings | `/settings` | Global runtime settings (section tabs, inline edit, ToggleSwitch) |
 
 ## Overview
@@ -99,6 +99,18 @@ Edit system prompt templates.
 ### OAuth
 Manage OAuth 2.0 external service integrations → [OAuth Guide](./oauth.md)
 
+### Models
+Manage the orchestrator LLM runtime and models. The orchestrator is a lightweight classifier that determines the execution mode (`once`/`agent`/`task`/`phase`) for each user message. Hot-swap local LLMs (Phi-4, Qwen, DeepSeek, Gemma, etc.) used as the classifier — zero code changes required.
+
+| Feature | Description |
+|---------|-------------|
+| **Model list** | All locally installed models — name, size, parameter count (e.g., 3.8B), quantization level (e.g., Q4_K_M) |
+| **Pull** | Download models from the Ollama registry — streaming progress display |
+| **Delete** | Remove models from disk (with confirmation) |
+| **Switch** | Change the active classifier model — config update + automatic warmup |
+| **VRAM monitor** | Currently VRAM-loaded models + memory usage |
+| **Runtime status** | running/stopped · engine (`native`/`docker`/`podman`) · GPU utilization · API Base |
+
 ## Chat Page
 
 Web-based agent conversation for testing without Slack/Telegram.
@@ -134,56 +146,11 @@ Each instance configures a specific model within a connection.
 
 Circuit breaker state (`closed` / `half_open` / `open`) is shown as a badge on each card.
 
-## Models Page
-
-Manage the orchestrator LLM runtime and models. The orchestrator is a lightweight classifier that determines the execution mode (`once`/`agent`/`task`/`phase`) for each user message. Hot-swap local LLMs (Phi-4, Qwen, DeepSeek, Gemma, etc.) used as the classifier directly from the dashboard — zero code changes required.
-
-### Runtime Status Card
-
-| Item | Content |
-|------|---------|
-| **Status** | running / stopped |
-| **Engine** | `native` (host Ollama) / `docker` / `podman` |
-| **GPU** | GPU utilization (%) |
-| **Active model** | Model currently used for classification |
-| **API Base** | Ollama API endpoint (default: `http://localhost:11434`) |
-
-### Model Management
-
-| Feature | Description |
-|---------|-------------|
-| **Model list** | All locally installed models — name, size, parameter count (e.g., 3.8B), quantization level (e.g., Q4_K_M) |
-| **Pull** | Download models from the Ollama registry — streaming progress display |
-| **Delete** | Remove models from disk (with confirmation) |
-| **Switch** | Change the active classifier model — config update + automatic warmup |
-| **VRAM monitor** | Currently VRAM-loaded models + memory usage |
-
-### Model Management API
-
-| Endpoint | Function |
-|----------|----------|
-| `GET /api/models` | List all installed models |
-| `POST /api/models` | Download a model (`{ name }`) |
-| `DELETE /api/models` | Delete a model (`{ name }`) |
-| `GET /api/models/active` | List VRAM-loaded models |
-| `GET /api/models/runtime` | Query runtime status |
-| `PATCH /api/models/runtime` | Change active model (`{ name }`) |
-
-### Engine Configuration
-
-The runtime engine is auto-detected in `auto` mode:
-
-| Engine | Condition | Features |
-|--------|-----------|----------|
-| `native` | Ollama installed on host | Fastest startup, direct GPU access |
-| `docker` | Docker available | Auto-manages `ollama/ollama:latest` image |
-| `podman` | Podman available | Same interface as Docker |
-
 ## Workflows Page
 
 Manage Phase Loop workflows and chat with agents. Phase Loop differs from Agent Loop (1:1 single agent) and Task Loop (sequential N:1) by implementing a **2-dimensional execution model: parallel agents within a phase + critic review → next phase**.
 
-The Workflows page includes a **Graph Editor** with 87 node types across 6 categories (flow, data, AI, integration, interaction, advanced), a **Node Inspector** for editing node properties, and a **Node Picker** palette for drag-and-drop workflow construction.
+The Workflows page includes a **Graph Editor** with 141 node types across 6 categories (flow, data, AI, integration, interaction, advanced), a **Node Inspector** for editing node properties, and a **Node Picker** palette for drag-and-drop workflow construction.
 
 ### Comparison with Other Loops
 
@@ -346,6 +313,15 @@ Rules can trigger workflow executions or task creation based on Kanban events:
 | `card_moved` | Card moved to a specific column |
 | `subtasks_done` | All subtasks on a card completed |
 | `card_stale` | Card idle for a configured duration |
+
+## WBS Page
+
+Visualize kanban cards as a `parent_id`-based hierarchy tree. Use parent-child card relationships to view project structure in a Work Breakdown Structure format.
+
+- **Tree view** — hierarchical display from top-level cards down to nested subtasks
+- **Progress rollup** — child card completion rate aggregated to parent cards
+- **Board integration** — shares the same card data as the Kanban board (no separate storage)
+- **Quick navigation** — click a tree node to jump to the corresponding kanban card
 
 ## Secrets Page
 

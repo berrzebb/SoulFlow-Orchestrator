@@ -29,9 +29,9 @@
 | Channels | `/channels` | 채널 연결 상태 · 글로벌 설정 |
 | Providers | `/providers` | 에이전트 프로바이더 CRUD |
 | Secrets | `/secrets` | AES-256-GCM 시크릿 관리 |
-| Models | `/models` | 오케스트레이터 LLM 런타임 · 모델 pull/delete/switch |
-| Workflows | `/workflows` | Phase Loop 워크플로우 관리 · 87종 노드 그래프 에디터 · 에이전트 채팅 |
-| Kanban | `/kanban` | 드래그앤드롭 칸반 태스크 보드 |
+| Workflows | `/workflows` | Phase Loop 워크플로우 관리 · 141종 노드 그래프 에디터 · 에이전트 채팅 |
+| Kanban | `/kanban` | 드래그앤드롭 칸반 보드 · 자동화 규칙 |
+| WBS | `/wbs` | 칸반 카드 계층 트리 뷰 (parent_id 기반) |
 | Settings | `/settings` | 글로벌 런타임 설정 (섹션 탭, 인라인 편집, ToggleSwitch) |
 
 ## Overview
@@ -104,6 +104,18 @@ Workspace는 10개 탭으로 구성됩니다.
 ### OAuth
 OAuth 2.0 외부 서비스 연동 관리 → [OAuth 가이드](./oauth.md) 참고
 
+### Models
+오케스트레이터 LLM 런타임과 모델을 관리합니다. 오케스트레이터는 사용자 메시지를 분류하여 실행 모드(`once`/`agent`/`task`/`phase`)를 결정하는 경량 분류기입니다. 이 분류기에 사용되는 로컬 LLM(Phi-4, Qwen, DeepSeek, Gemma 등)을 코드 변경 없이 핫스왑할 수 있습니다.
+
+| 기능 | 설명 |
+|------|------|
+| **모델 목록** | 로컬 설치된 전체 모델 — 이름, 크기, 파라미터 수(예: 3.8B), 양자화 수준(예: Q4_K_M) |
+| **Pull** | Ollama 레지스트리에서 모델 다운로드 — 스트리밍 진행률 표시 |
+| **Delete** | 디스크에서 모델 제거 (확인 후) |
+| **Switch** | 활성 분류기 모델 변경 — 설정 업데이트 + warmup 자동 수행 |
+| **VRAM 모니터** | 현재 VRAM에 로드된 모델 목록 + 메모리 사용량 |
+| **런타임 상태** | running/stopped · 엔진(`native`/`docker`/`podman`) · GPU 사용률 · API Base |
+
 ## Chat 페이지
 
 Slack/Telegram 없이 웹에서 에이전트와 직접 대화합니다.
@@ -139,56 +151,11 @@ Connection은 공유 API 엔드포인트를 나타냅니다 (예: 하나의 Open
 
 서킷 브레이커 상태(`closed` / `half_open` / `open`)는 카드 배지로 표시됩니다.
 
-## Models 페이지
-
-오케스트레이터 LLM 런타임과 모델을 관리합니다. 오케스트레이터는 사용자 메시지를 분류하여 실행 모드(`once`/`agent`/`task`/`phase`)를 결정하는 경량 분류기입니다. 이 분류기에 사용되는 로컬 LLM(Phi-4, Qwen, DeepSeek, Gemma 등)을 대시보드에서 코드 변경 없이 핫스왑할 수 있습니다.
-
-### 런타임 상태 카드
-
-| 항목 | 내용 |
-|------|------|
-| **상태** | running / stopped |
-| **엔진** | `native` (호스트 Ollama) / `docker` / `podman` |
-| **GPU** | GPU 사용률 (%) |
-| **활성 모델** | 현재 분류에 사용 중인 모델명 |
-| **API Base** | Ollama API 엔드포인트 (기본: `http://localhost:11434`) |
-
-### 모델 관리
-
-| 기능 | 설명 |
-|------|------|
-| **모델 목록** | 로컬 설치된 전체 모델 — 이름, 크기, 파라미터 수(예: 3.8B), 양자화 수준(예: Q4_K_M) |
-| **Pull** | Ollama 레지스트리에서 모델 다운로드 — 스트리밍 진행률 표시 |
-| **Delete** | 디스크에서 모델 제거 (확인 후) |
-| **Switch** | 활성 분류기 모델 변경 — 설정 업데이트 + warmup 자동 수행 |
-| **VRAM 모니터** | 현재 VRAM에 로드된 모델 목록 + 메모리 사용량 |
-
-### 모델 관리 API
-
-| 엔드포인트 | 기능 |
-|-----------|------|
-| `GET /api/models` | 설치된 전체 모델 목록 |
-| `POST /api/models` | 모델 다운로드 (`{ name }`) |
-| `DELETE /api/models` | 모델 삭제 (`{ name }`) |
-| `GET /api/models/active` | VRAM에 로드된 모델 목록 |
-| `GET /api/models/runtime` | 런타임 상태 조회 |
-| `PATCH /api/models/runtime` | 활성 모델 변경 (`{ name }`) |
-
-### 엔진 설정
-
-런타임 엔진은 `auto` 모드에서 자동 감지됩니다:
-
-| 엔진 | 조건 | 특징 |
-|------|------|------|
-| `native` | 호스트에 Ollama 설치됨 | 가장 빠른 시작, GPU 직접 접근 |
-| `docker` | Docker 사용 가능 | `ollama/ollama:latest` 이미지 자동 관리 |
-| `podman` | Podman 사용 가능 | Docker와 동일한 인터페이스 |
-
 ## Workflows 페이지
 
 Phase Loop 워크플로우를 관리하고 에이전트와 대화합니다. Phase Loop는 Agent Loop(1:1 단일 에이전트)·Task Loop(순차 N:1)와 달리, **페이즈 내 병렬 에이전트 + critic 검토 → 다음 페이즈**의 2차원 실행 모델입니다.
 
-Workflows 페이지에는 6개 카테고리 87종 노드 타입을 지원하는 **그래프 에디터**, 노드 속성 편집을 위한 **노드 인스펙터**, 드래그앤드롭 워크플로우 구성을 위한 **노드 피커** 팔레트가 포함됩니다.
+Workflows 페이지에는 6개 카테고리 141종 노드 타입을 지원하는 **그래프 에디터**, 노드 속성 편집을 위한 **노드 인스펙터**, 드래그앤드롭 워크플로우 구성을 위한 **노드 피커** 팔레트가 포함됩니다.
 
 ### 기존 루프와의 비교
 
@@ -351,6 +318,15 @@ Critic이 승인을 거절하면 per-critic 설정에 따라 동작합니다:
 | `card_moved` | 카드가 특정 컬럼으로 이동 |
 | `subtasks_done` | 카드의 모든 서브태스크 완료 |
 | `card_stale` | 설정된 기간 동안 카드 미갱신 |
+
+## WBS 페이지
+
+칸반 카드를 `parent_id` 기반 계층 트리로 시각화합니다. 카드 간 부모-자식 관계를 이용해 WBS(Work Breakdown Structure) 형태로 프로젝트 구조를 파악할 수 있습니다.
+
+- **트리 뷰** — 최상위 카드부터 하위 서브태스크까지 계층적으로 표시
+- **진행률 롤업** — 하위 카드 완료율을 상위 카드에 집계
+- **보드 연동** — 칸반 보드와 동일한 카드 데이터 공유 (별도 저장소 없음)
+- **빠른 탐색** — 트리 노드 클릭으로 해당 칸반 카드로 이동
 
 ## Secrets 페이지
 
