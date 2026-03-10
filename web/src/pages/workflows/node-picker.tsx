@@ -17,8 +17,9 @@ function SpecialNodeIcon({ id, color }: { id: string; color: string }) {
   if (id === "__trigger_cron__") return <svg {...s}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>;
   if (id === "__trigger_webhook__") return <svg {...s}><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>;
   if (id === "__trigger_manual__") return <svg {...s} fill={color} stroke="none"><polygon points="5 3 19 12 5 21 5 3"/></svg>;
-  if (id === "__trigger_channel__") return <svg {...s}><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>;
+  if (id === "__trigger_channel_message__") return <svg {...s}><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>;
   if (id === "__trigger_kanban_event__") return <svg {...s}><rect x="3" y="3" width="4" height="6" rx="1"/><rect x="9" y="3" width="4" height="8" rx="1"/><rect x="15" y="3" width="4" height="10" rx="1"/></svg>;
+  if (id === "__trigger_filesystem_watch__") return <svg {...s}><path d="M3 3h6l2 3h10a2 2 0 012 2v10a2 2 0 01-2 2H3a2 2 0 01-2-2V5a2 2 0 012-2z"/><path d="M12 11v6M9 14l3-3 3 3"/></svg>;
   if (id === "__end__") return <svg {...s}><circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-5" strokeWidth={2.5} fill="none"/></svg>;
   return null;
 }

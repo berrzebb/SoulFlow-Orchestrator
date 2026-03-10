@@ -330,10 +330,10 @@ function ClusterSubNode({ node, pos, onDoubleClick }: {
 }
 
 const TRIGGER_COLORS: Record<string, string> = {
-  cron: "#e67e22", webhook: "#3498db", manual: "#2ecc71", channel_message: "#f1c40f", kanban_event: "#9b59b6",
+  cron: "#e67e22", webhook: "#3498db", manual: "#2ecc71", channel_message: "#f1c40f", kanban_event: "#9b59b6", filesystem_watch: "#00897b",
 };
 const TRIGGER_ICONS: Record<string, string> = {
-  cron: "⏰", webhook: "↗", manual: "▶", channel_message: "💬", kanban_event: "📋",
+  cron: "⏰", webhook: "↗", manual: "▶", channel_message: "💬", kanban_event: "📋", filesystem_watch: "📁",
 };
 
 function TriggerNode({ node, pos, onFieldDragStart }: {
