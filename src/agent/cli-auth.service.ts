@@ -48,6 +48,8 @@ export class CliAuthService extends EventEmitter {
   private readonly status_cache = new Map<CliType, CliAuthStatus>();
   private readonly login_progress_cache = new Map<CliType, LoginProgress>();
   private readonly oauth_ports = new Map<CliType, number>();
+  /** localhost URL 전체 (포트 + 경로). 프록시 라우트에서 경로 복원에 사용. */
+  private readonly oauth_local_urls = new Map<CliType, string>();
 
   constructor(opts: CliAuthServiceOptions) {
     super();
@@ -90,6 +92,11 @@ export class CliAuthService extends EventEmitter {
   /** localhost OAuth 서버 포트 반환 (HTTP 프록시 라우트용). */
   get_oauth_port(cli: CliType): number | null {
     return this.oauth_ports.get(cli) ?? null;
+  }
+
+  /** localhost OAuth 서버 전체 URL 반환 (경로 복원용). */
+  get_oauth_local_url(cli: CliType): string | null {
+    return this.oauth_local_urls.get(cli) ?? null;
   }
 
   // ── Claude Code ────────────────────────────────────────────────────────────
@@ -205,7 +212,8 @@ export class CliAuthService extends EventEmitter {
     }
 
     const { cmd, args } = LOGIN_COMMANDS[cli];
-    this.oauth_ports.delete(cli); // 이전 세션 포트 초기화
+    this.oauth_ports.delete(cli);       // 이전 세션 포트 초기화
+    this.oauth_local_urls.delete(cli);
     this.logger.info("starting CLI login", { cli });
 
     return new Promise<LoginProgress>((resolve) => {
@@ -246,10 +254,11 @@ export class CliAuthService extends EventEmitter {
       const on_url_found = (raw_url: string) => {
         url_found = true;
         clearTimeout(initial_enter_timer);
-        // localhost URL이면 포트 저장 (OAuth 콜백 포워딩에 사용)
+        // localhost URL이면 포트 + 전체 URL 저장 (프록시 경로 복원에 사용)
         const local_match = raw_url.match(/https?:\/\/(localhost|127\.0\.0\.1):(\d+)/);
         if (local_match) {
           this.oauth_ports.set(cli, parseInt(local_match[2]));
+          this.oauth_local_urls.set(cli, raw_url);
         } else {
           // OAuth 공급자 URL에 localhost redirect_uri가 포함된 경우
           // 예: https://claude.ai/oauth/authorize?...&redirect_uri=http://localhost:8400/callback
@@ -298,7 +307,10 @@ export class CliAuthService extends EventEmitter {
           emit_progress(p);
           // 인증 완료 시에만 포트 정리 — URL 출력 후 바로 종료하는 CLI(Codex 등)는
           // OAuth 콜백이 아직 안 왔을 수 있으므로 포트를 유지해야 함
-          if (status.authenticated) this.oauth_ports.delete(cli);
+          if (status.authenticated) {
+            this.oauth_ports.delete(cli);
+            this.oauth_local_urls.delete(cli);
+          }
           if (!promise_resolved) { promise_resolved = true; resolve(p); }
         } else {
           const p: LoginProgress = {
@@ -343,6 +355,7 @@ export class CliAuthService extends EventEmitter {
     this.login_processes.delete(cli);
     this.login_progress_cache.delete(cli);
     this.oauth_ports.delete(cli);
+    this.oauth_local_urls.delete(cli);
     this.logger.info("login cancelled", { cli });
     return true;
   }
@@ -356,6 +369,7 @@ export class CliAuthService extends EventEmitter {
     this.login_processes.clear();
     this.login_progress_cache.clear();
     this.oauth_ports.clear();
+    this.oauth_local_urls.clear();
   }
 }
 

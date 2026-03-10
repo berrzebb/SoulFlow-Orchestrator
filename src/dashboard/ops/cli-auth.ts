@@ -32,6 +32,11 @@ export function create_cli_auth_ops(deps: {
       if (!t) return null;
       return deps.cli_auth.get_oauth_port(t);
     },
+    get_oauth_local_url: (cli) => {
+      const t = valid_cli(cli);
+      if (!t) return null;
+      return deps.cli_auth.get_oauth_local_url(t);
+    },
     cancel_login: (cli) => {
       const t = valid_cli(cli);
       if (!t) return { ok: false };

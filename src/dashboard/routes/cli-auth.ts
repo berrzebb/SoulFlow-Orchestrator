@@ -76,7 +76,14 @@ export async function handle_cli_auth(ctx: RouteContext): Promise<boolean> {
     try {
       const origin = resolve_request_origin(req);
       const callback_url = `${origin}/api/auth/cli/oauth-callback/${encodeURIComponent(cli)}`;
-      const target_res = await fetch(`http://localhost:${port}${url.search || "/"}`);
+      // 저장된 원본 URL에서 경로+쿼리 복원 (예: /oauth/start) — 없으면 "/" 사용
+      const local_url = ops.get_oauth_local_url(cli);
+      const target_path = (() => {
+        if (!local_url) return url.search || "/";
+        try { const u = new URL(local_url); return u.pathname + u.search; }
+        catch { return "/"; }
+      })();
+      const target_res = await fetch(`http://localhost:${port}${target_path}`);
 
       if (target_res.status >= 300 && target_res.status < 400) {
         // redirect_uri 재작성: OAuth provider가 콜백을 dashboard로 보내게 함
