@@ -94,3 +94,40 @@ describe("ColorTool — complement/palette", () => {
     expect((r.palette as unknown[]).length).toBe(5);
   });
 });
+
+// ══════════════════════════════════════════
+// 미커버 분기 보충
+// ══════════════════════════════════════════
+
+describe("ColorTool — 미커버 분기", () => {
+  it("convert: 지원하지 않는 format → Error (L39)", async () => {
+    const r = await exec({ action: "convert", color: "#ff0000", format: "cmyk" });
+    expect(r).toContain("Error");
+  });
+
+  it("contrast: invalid color2 → Error (L54)", async () => {
+    const r = await exec({ action: "contrast", color: "#ff0000", color2: "invalid" });
+    expect(r).toContain("Error");
+  });
+
+  it("unsupported action → Error (L90)", async () => {
+    const r = await exec({ action: "invert", color: "#ff0000" });
+    expect(r).toContain("Error");
+  });
+
+  it("parse_color: 3자리 hex 단축형 #fff (L99)", async () => {
+    const r = await exec({ action: "parse", color: "#fff" }) as Record<string, unknown>;
+    expect(r.hex).toBeDefined();
+  });
+
+  it("parse_color: hsl 형식 hsl(0,100%,50%) (L105)", async () => {
+    const r = await exec({ action: "parse", color: "hsl(0,100%,50%)" }) as Record<string, unknown>;
+    expect(r.hex).toBeDefined();
+  });
+
+  it("to_hsl: max===g 분기 — 초록 우세 색상 (L122)", async () => {
+    // #00ff00: r=0, g=255, b=0 → max===g → L122 분기
+    const r = await exec({ action: "parse", color: "#00ff00" }) as Record<string, unknown>;
+    expect(Array.isArray(r.hsl)).toBe(true);
+  });
+});

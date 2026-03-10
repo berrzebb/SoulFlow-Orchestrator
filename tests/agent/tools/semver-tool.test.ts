@@ -160,3 +160,39 @@ describe("SemverTool — valid", () => {
     expect(r.normalized).toBeNull();
   });
 });
+
+// ══════════════════════════════════════════
+// 미커버 분기 보충
+// ══════════════════════════════════════════
+
+describe("SemverTool — 미커버 분기", () => {
+  it("diff: 유효하지 않은 버전 → Error (L70)", async () => {
+    const r = await new (await import("@src/agent/tools/semver.js")).SemverTool().execute({ action: "diff", version: "invalid", version2: "1.0.0" });
+    expect(r).toContain("Error");
+  });
+
+  it("to_string: build 메타데이터 포함 버전 (L97)", async () => {
+    const r = await exec({ action: "valid", version: "1.2.3+build.001" });
+    expect((r as any).valid).toBe(true);
+  });
+
+  it("satisfies: > operator (L148)", async () => {
+    const r = await exec({ action: "satisfies", version: "2.0.0", range: ">1.0.0" }) as Record<string, unknown>;
+    expect(r.satisfies).toBe(true);
+  });
+
+  it("satisfies: <= operator (L150)", async () => {
+    const r = await exec({ action: "satisfies", version: "1.0.0", range: "<=1.0.0" }) as Record<string, unknown>;
+    expect(r.satisfies).toBe(true);
+  });
+
+  it("satisfies: = operator (L151)", async () => {
+    const r = await exec({ action: "satisfies", version: "1.0.0", range: "=1.0.0" }) as Record<string, unknown>;
+    expect(r.satisfies).toBe(true);
+  });
+
+  it("satisfies: no operator (L154 default, compat cmp=0)", async () => {
+    const r = await exec({ action: "satisfies", version: "1.2.3", range: "1.2.3" }) as Record<string, unknown>;
+    expect(r.satisfies).toBe(true);
+  });
+});

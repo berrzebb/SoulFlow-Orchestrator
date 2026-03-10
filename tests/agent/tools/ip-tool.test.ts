@@ -161,3 +161,37 @@ describe("IpTool — to_int / from_int", () => {
     expect(from.ip).toBe("192.168.1.1");
   });
 });
+
+// ══════════════════════════════════════════
+// 미커버 분기 보충
+// ══════════════════════════════════════════
+
+describe("IpTool — 미커버 분기", () => {
+  it("parse: 다중 :: IPv6 → invalid IPv6 (L33+L140)", async () => {
+    // expand_v6("::1::2"): split("::") → 3개 → L140 null → L33 error
+    const r = await exec({ action: "parse", ip: "::1::2" }) as Record<string, unknown>;
+    expect(r.error).toContain("invalid IPv6");
+  });
+
+  it("parse: 9그룹 IPv6 → missing<0 → invalid IPv6 (L33+L144)", async () => {
+    // expand_v6("1:2:3:4:5:6:7:8:9"): 9 groups, missing=-1 < 0 → L144 null → L33 error
+    const r = await exec({ action: "parse", ip: "1:2:3:4:5:6:7:8:9" }) as Record<string, unknown>;
+    expect(r.error).toContain("invalid IPv6");
+  });
+
+  it("cidr_contains: net_parts.length !== 4 → Error (L56)", async () => {
+    // "10.0.0/24" → net_parts 3개 → only IPv4 supported error
+    const r = await exec({ action: "cidr_contains", cidr: "10.0.0/24", ip: "10.0.0.1" });
+    expect(String(r)).toContain("Error");
+  });
+
+  it("subnet: cidr에 / 없음 → Error (L66)", async () => {
+    const r = await exec({ action: "subnet", cidr: "192.168.1.0" });
+    expect(String(r)).toContain("Error");
+  });
+
+  it("unsupported action → Error (L114)", async () => {
+    const r = await exec({ action: "lookup", ip: "1.2.3.4" });
+    expect(String(r)).toContain("Error");
+  });
+});

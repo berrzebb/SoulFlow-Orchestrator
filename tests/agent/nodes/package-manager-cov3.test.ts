@@ -108,3 +108,23 @@ describe("package_manager_handler — cargo 미커버 (L88-92)", () => {
     expect(mock_run).not.toHaveBeenCalled();
   });
 });
+
+
+// ══════════════════════════════════════════
+// DEP_OPS 분기 (L34-53)
+// ══════════════════════════════════════════
+
+describe("package_manager_handler — DEP_OPS DependencyTool 위임", () => {
+  const ctx = { memory: {}, workspace: "/tmp", abort_signal: undefined };
+
+  it("operation=parse_deps → DependencyTool 위임 (L34-51)", async () => {
+    const r = await package_manager_handler.execute({ node_id: "n1", node_type: "package_manager", operation: "parse_deps", dep_input: '{"dependencies":{"react":"^18"}}' } as any, ctx);
+    expect(r.output).toBeDefined();
+    expect((r.output as any).success).toBe(true);
+  });
+
+  it("operation=dep_tree → DependencyTool 위임", async () => {
+    const r = await package_manager_handler.execute({ node_id: "n1", node_type: "package_manager", operation: "dep_tree", dep_input: '{"dependencies":{"a":"1"}}' } as any, ctx);
+    expect(r.output).toBeDefined();
+  });
+});

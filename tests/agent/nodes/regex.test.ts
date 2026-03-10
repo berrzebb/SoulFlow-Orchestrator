@@ -704,3 +704,24 @@ describe("Regex Node Handler", () => {
     });
   });
 });
+
+// ══════════════════════════════════════════
+// glob_test / glob_filter 분기 (L32-37)
+// ══════════════════════════════════════════
+
+describe("regex_handler — glob_test/glob_filter 분기", () => {
+  const ctx = { memory: {}, workspace: "/tmp", abort_signal: undefined };
+
+  it("operation=glob_test → GlobMatchTool 위임 (L33-37)", async () => {
+    const node = { node_id: "n1", node_type: "regex", operation: "glob_test", pattern: "*.ts", input: "index.ts" } as any;
+    const r = await regex_handler.execute(node, ctx);
+    expect(r.output).toBeDefined();
+    expect(typeof r.output.result).toBe("string");
+  });
+
+  it("operation=glob_filter → GlobMatchTool 위임", async () => {
+    const node = { node_id: "n1", node_type: "regex", operation: "glob_filter", pattern: "*.ts", input: "index.ts\nmain.js\napp.ts" } as any;
+    const r = await regex_handler.execute(node, ctx);
+    expect(r.output).toBeDefined();
+  });
+});
