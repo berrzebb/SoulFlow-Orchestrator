@@ -5,6 +5,7 @@ import type { HttpNodeDefinition, OrcheNodeDefinition } from "../workflow-node.t
 import type { OrcheNodeExecutorContext, OrcheNodeExecuteResult, OrcheNodeTestResult } from "../orche-node-executor.js";
 import { resolve_templates, resolve_deep } from "../orche-node-executor.js";
 import { validate_url } from "../tools/http-utils.js";
+import { make_abort_signal } from "../../utils/common.js";
 
 export const http_handler: NodeHandler = {
   node_type: "http",
@@ -57,36 +58,27 @@ export const http_handler: NodeHandler = {
       }
     }
 
-    const controller = new AbortController();
-    const combined = ctx.abort_signal
-      ? AbortSignal.any([ctx.abort_signal, controller.signal])
-      : controller.signal;
-    const timer = setTimeout(() => controller.abort(), timeout_ms);
+    const signal = make_abort_signal(timeout_ms, ctx.abort_signal);
+    const res = await fetch(url_str, {
+      method: n.method || "GET",
+      headers: req_headers,
+      body: body_str,
+      signal,
+    });
+    const content_type = res.headers.get("content-type") || "";
+    const raw_text = await res.text();
+    const max_chars = 50_000;
+    const truncated = raw_text.length > max_chars;
+    const text_out = truncated ? `${raw_text.slice(0, max_chars)}...(truncated)` : raw_text;
 
-    try {
-      const res = await fetch(url_str, {
-        method: n.method || "GET",
-        headers: req_headers,
-        body: body_str,
-        signal: combined,
-      });
-      const content_type = res.headers.get("content-type") || "";
-      const raw_text = await res.text();
-      const max_chars = 50_000;
-      const truncated = raw_text.length > max_chars;
-      const text_out = truncated ? `${raw_text.slice(0, max_chars)}...(truncated)` : raw_text;
-
-      let body_out: unknown = text_out;
-      if (content_type.includes("application/json") && !truncated) {
-        try { body_out = JSON.parse(raw_text); } catch { /* keep as string */ }
-      }
-
-      return {
-        output: { status: res.status, status_text: res.statusText, content_type, body: body_out, truncated },
-      };
-    } finally {
-      clearTimeout(timer);
+    let body_out: unknown = text_out;
+    if (content_type.includes("application/json") && !truncated) {
+      try { body_out = JSON.parse(raw_text); } catch { /* keep as string */ }
     }
+
+    return {
+      output: { status: res.status, status_text: res.statusText, content_type, body: body_out, truncated },
+    };
   },
 
   test(node: OrcheNodeDefinition, ctx: OrcheNodeExecutorContext): OrcheNodeTestResult {

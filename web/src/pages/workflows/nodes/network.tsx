@@ -1,5 +1,5 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
-import { BuilderField } from "../builder-field";
+import { BuilderField, BuilderRowPair } from "../builder-field";
 
 function NetworkEditPanel({ node, update, t }: EditPanelProps) {
   const op = String(node.operation || "ping");
@@ -7,13 +7,30 @@ function NetworkEditPanel({ node, update, t }: EditPanelProps) {
     <>
       <BuilderField label={t("workflows.network_operation")}>
         <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
-          {["ping", "dns", "whois", "port_check", "http_head", "netstat"].map((o) => <option key={o} value={o}>{o}</option>)}
+          {["ping", "dns", "whois", "port_check", "http_head", "netstat", "ip"].map((o) => <option key={o} value={o}>{o}</option>)}
         </select>
       </BuilderField>
-      {op !== "netstat" && (
+      {op !== "netstat" && op !== "ip" && (
         <BuilderField label={t("workflows.host")}>
           <input className="input" value={String(node.host || "")} onChange={(e) => update({ host: e.target.value })} placeholder="example.com" />
         </BuilderField>
+      )}
+      {op === "ip" && (
+        <>
+          <BuilderField label={t("workflows.network_ip_action")}>
+            <select className="input input--sm" value={String(node.ip_action || "parse")} onChange={(e) => update({ ip_action: e.target.value })}>
+              {["parse", "validate", "cidr_contains", "subnet", "is_private", "is_v6", "range", "to_int", "from_int"].map((a) => <option key={a} value={a}>{a}</option>)}
+            </select>
+          </BuilderField>
+          <BuilderRowPair>
+            <BuilderField label={t("workflows.network_ip")} required>
+              <input className="input input--sm" value={String(node.ip || "")} onChange={(e) => update({ ip: e.target.value })} placeholder="192.168.1.1" />
+            </BuilderField>
+            <BuilderField label={t("workflows.network_cidr")}>
+              <input className="input input--sm" value={String(node.cidr || "")} onChange={(e) => update({ cidr: e.target.value })} placeholder="192.168.1.0/24" />
+            </BuilderField>
+          </BuilderRowPair>
+        </>
       )}
       {op === "dns" && (
         <BuilderField label={t("workflows.network_dns_record_type")}>

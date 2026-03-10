@@ -23,6 +23,7 @@ function YamlEditPanel({ node, update, t }: EditPanelProps) {
             <select className="input input--sm" value={format} onChange={(e) => update({ format: e.target.value })}>
               <option value="yaml">YAML</option>
               <option value="toml">TOML</option>
+              <option value="ini">INI</option>
             </select>
           </BuilderField>
         )}
@@ -35,10 +36,20 @@ function YamlEditPanel({ node, update, t }: EditPanelProps) {
           <textarea className="input" required rows={3} value={String(node.data2 || "")} onChange={(e) => update({ data2: e.target.value })} placeholder="other: value" aria-required="true" />
         </BuilderField>
       )}
-      {action === "query" && (
+      {action === "query" && format !== "ini" && (
         <BuilderField label={t("workflows.field_query")} required>
           <input className="input input--sm" required value={String(node.path || "")} onChange={(e) => update({ path: e.target.value })} placeholder=".key.nested" aria-required="true" />
         </BuilderField>
+      )}
+      {action === "query" && format === "ini" && (
+        <BuilderRowPair>
+          <BuilderField label={t("workflows.ini_section")}>
+            <input className="input input--sm" value={String(node.ini_section || "")} onChange={(e) => update({ ini_section: e.target.value })} placeholder="[section]" />
+          </BuilderField>
+          <BuilderField label={t("workflows.ini_key")}>
+            <input className="input input--sm" value={String(node.ini_key || "")} onChange={(e) => update({ ini_key: e.target.value })} placeholder="key" />
+          </BuilderField>
+        </BuilderRowPair>
       )}
     </>
   );

@@ -1,4 +1,4 @@
-import { error_message } from "../utils/common.js";
+import { error_message, make_abort_signal } from "../utils/common.js";
 import { BaseLlmProvider } from "./base.js";
 import { create_logger } from "../logger.js";
 import { LlmResponse, parse_openai_response, sanitize_messages_for_api, type ChatOptions } from "./types.js";
@@ -42,10 +42,7 @@ export class OrchestratorLlmProvider extends BaseLlmProvider {
       const headers: Record<string, string> = { "Content-Type": "application/json" };
       if (this.api_key) headers.Authorization = `Bearer ${this.api_key}`;
 
-      const timeout_signal = AbortSignal.timeout(this.per_call_timeout_ms);
-      const signal = options.abort_signal
-        ? AbortSignal.any([options.abort_signal, timeout_signal])
-        : timeout_signal;
+      const signal = make_abort_signal(this.per_call_timeout_ms, options.abort_signal);
 
       const response = await fetch(`${this.api_base}/chat/completions`, {
         method: "POST",

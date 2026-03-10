@@ -1,7 +1,7 @@
 /** GraphQL 도구 — GraphQL 쿼리/뮤테이션 실행. */
 
 import { Tool } from "./base.js";
-import { error_message } from "../../utils/common.js";
+import { error_message, make_abort_signal } from "../../utils/common.js";
 import type { JsonSchema, ToolExecutionContext } from "./types.js";
 
 export class GraphqlTool extends Tool {
@@ -63,7 +63,7 @@ export class GraphqlTool extends Tool {
         method: "POST",
         headers: { "Content-Type": "application/json", ...custom_headers },
         body: JSON.stringify(body),
-        signal: context?.signal ? AbortSignal.any([context.signal, AbortSignal.timeout(30_000)]) : AbortSignal.timeout(30_000),
+        signal: make_abort_signal(30_000, context?.signal),
       });
 
       const text = await res.text();

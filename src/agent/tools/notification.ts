@@ -1,7 +1,7 @@
 /** Notification 도구 — 시스템 알림 전송 (로컬 로그 + 선택적 외부 webhook). */
 
 import { Tool } from "./base.js";
-import { error_message } from "../../utils/common.js";
+import { error_message, make_abort_signal } from "../../utils/common.js";
 import type { JsonSchema, ToolExecutionContext } from "./types.js";
 
 type NotifyCallback = (payload: { level: string; title: string; body: string; metadata?: Record<string, unknown> }) => Promise<void>;
@@ -61,7 +61,7 @@ export class NotificationTool extends Tool {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ level, title, body, timestamp: new Date().toISOString() }),
-          signal: context?.signal ? AbortSignal.any([context.signal, AbortSignal.timeout(10_000)]) : AbortSignal.timeout(10_000),
+          signal: make_abort_signal(10_000, context?.signal),
         });
         results.push(`webhook: ${res.status} ${res.statusText}`);
       } catch (err) {

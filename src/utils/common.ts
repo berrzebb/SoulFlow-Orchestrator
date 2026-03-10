@@ -117,4 +117,10 @@ export function swallow(p: void | Promise<unknown>): void {
   if (p instanceof Promise) void p.catch(() => {});
 }
 
+/** AbortSignal.timeout + 외부 시그널 병합. 외부 시그널 없으면 타임아웃 전용 반환. */
+export function make_abort_signal(timeout_ms: number, external?: AbortSignal): AbortSignal {
+  const timeout = AbortSignal.timeout(timeout_ms);
+  return external ? AbortSignal.any([external, timeout]) : timeout;
+}
+
 

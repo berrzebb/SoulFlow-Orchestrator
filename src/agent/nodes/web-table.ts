@@ -4,7 +4,7 @@ import type { NodeHandler } from "../node-registry.js";
 import type { WebTableNodeDefinition, OrcheNodeDefinition } from "../workflow-node.types.js";
 import type { OrcheNodeExecutorContext, OrcheNodeExecuteResult, OrcheNodeTestResult } from "../orche-node-executor.js";
 import { resolve_templates } from "../orche-node-executor.js";
-import { error_message } from "../../utils/common.js";
+import { error_message, make_abort_signal } from "../../utils/common.js";
 
 export const web_table_handler: NodeHandler = {
   node_type: "web_table",
@@ -32,20 +32,14 @@ export const web_table_handler: NodeHandler = {
     if (!url) return { output: { headers: [], rows: [], total: 0, error: "url is empty" } };
 
     try {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 30_000);
-      const signal = ctx.abort_signal ? AbortSignal.any([ctx.abort_signal, controller.signal]) : controller.signal;
-      try {
-        const res = await fetch(url, {
-          headers: { "User-Agent": "Mozilla/5.0 (compatible; SoulFlowBot/1.0)" },
-          signal,
-        });
-        const html = await res.text();
-        const table = parse_html_table(html, selector, max_rows);
-        return { output: table };
-      } finally {
-        clearTimeout(timer);
-      }
+      const signal = make_abort_signal(30_000, ctx.abort_signal);
+      const res = await fetch(url, {
+        headers: { "User-Agent": "Mozilla/5.0 (compatible; SoulFlowBot/1.0)" },
+        signal,
+      });
+      const html = await res.text();
+      const table = parse_html_table(html, selector, max_rows);
+      return { output: table };
     } catch (err) {
       return { output: { headers: [], rows: [], total: 0, error: error_message(err) } };
     }

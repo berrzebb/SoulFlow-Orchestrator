@@ -33,6 +33,10 @@ export const yaml_handler: NodeHandler = {
         const { TomlTool } = await import("../tools/toml.js");
         const tool = new TomlTool();
         raw = await tool.execute({ action, input: data, path: n.path || "", second: data2 });
+      } else if (n.format === "ini") {
+        const { IniTool } = await import("../tools/ini.js");
+        const tool = new IniTool();
+        raw = await tool.execute({ action, input: data, data, section: n.ini_section || "", key: n.ini_key || "", second: data2 });
       } else {
         const { YamlTool } = await import("../tools/yaml.js");
         const tool = new YamlTool();

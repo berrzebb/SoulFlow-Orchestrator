@@ -119,6 +119,11 @@
 - **문제**: `DocumentTool` 호출 패턴 4중복. icon/color/action/extra_param 이름만 다름.
 - **해결**: `make_document_handler(cfg)` 팩토리로 `agent/nodes/document.ts` 통합 (77줄). 4개 파일 삭제. ~127줄 제거.
 
+### ✅ I4-C: AbortController + timer 패턴 10중복 [DRY, KISS]
+- **위치**: `nodes/web-scrape.ts`, `nodes/http.ts`, `nodes/web-search.ts`, `nodes/web-table.ts`, `nodes/web-form.ts`, `tools/graphql.ts`, `tools/embedding.ts`, `tools/notification.ts`, `providers/orchestrator-llm.provider.ts`, `providers/openrouter.provider.ts`
+- **문제**: `new AbortController + setTimeout + AbortSignal.any(...)` 패턴 10곳 산재. `clearTimeout` 누락 위험.
+- **해결**: `make_abort_signal(timeout_ms, external?)` → `utils/common.ts` 추가. 10개 파일 단일 호출로 교체. `AbortSignal.timeout()` 기반으로 자동 정리됨.
+
 ---
 
 ## 코드베이스 전체 스캔 결과 (이터레이션 3)
@@ -143,9 +148,9 @@
 ## 최종 요약
 
 **이터레이션 3 완료**: 6개 항목 (P1-A~F)
-**이터레이션 4 완료**: 2개 항목 (I4-A~B)
-**총 완료**: 17개 항목
+**이터레이션 4 완료**: 3개 항목 (I4-A~C)
+**총 완료**: 20개 항목
 **SKIP (YAGNI/의도적 설계)**: 18개 항목
-**신규 헬퍼/유틸**: `runner_deps`, `finalize_phase`, `html-strip.ts`, `string-match.ts`, `make_document_handler`
+**신규 헬퍼/유틸**: `runner_deps`, `finalize_phase`, `html-strip.ts`, `string-match.ts`, `make_document_handler`, `make_abort_signal`
 **보안 개선**: `validate_url`에 `.local` mDNS 도메인 차단 추가
 **코드 제거**: ~127줄 (4 document 핸들러 파일 통합)

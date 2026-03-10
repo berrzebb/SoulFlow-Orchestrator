@@ -1,7 +1,7 @@
 /** Embedding 도구 — 텍스트 임베딩 생성 (OpenAI 호환 API). */
 
 import { Tool } from "./base.js";
-import { error_message } from "../../utils/common.js";
+import { error_message, make_abort_signal } from "../../utils/common.js";
 import type { JsonSchema, ToolExecutionContext } from "./types.js";
 
 export class EmbeddingTool extends Tool {
@@ -87,7 +87,7 @@ export class EmbeddingTool extends Tool {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${api_key}` },
         body: JSON.stringify(body),
-        signal: ctx?.signal ? AbortSignal.any([ctx.signal, AbortSignal.timeout(60_000)]) : AbortSignal.timeout(60_000),
+        signal: make_abort_signal(60_000, ctx?.signal),
       });
       if (!res.ok) return `Error: API ${res.status} — ${(await res.text()).slice(0, 500)}`;
       return await res.json() as { model: string; data: Array<{ embedding: number[] }> };

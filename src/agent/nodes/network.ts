@@ -31,6 +31,25 @@ export const network_handler: NodeHandler = {
     const port = n.port || 0;
     const count = Math.max(1, Math.min(10, n.count || 3));
 
+    // ip 작업은 IpTool로 위임 (파싱/CIDR/서브넷/사설망 판별)
+    if (op === "ip") {
+      try {
+        const { IpTool } = await import("../tools/ip.js");
+        const tool = new IpTool();
+        const ip_action = n.ip_action || "parse";
+        const result = await tool.execute({
+          action: ip_action,
+          ip:    resolve_templates(n.ip || n.host || "", tpl),
+          cidr:  resolve_templates(n.cidr || "", tpl) || undefined,
+          start: resolve_templates(n.ip_start || "", tpl) || undefined,
+          end:   resolve_templates(n.ip_end || "", tpl) || undefined,
+        });
+        return { output: { output: result, success: !result.startsWith("{\"error") } };
+      } catch (err) {
+        return { output: { output: error_message(err), success: false } };
+      }
+    }
+
     // dns 작업은 DnsTool로 위임 (MX/TXT/NS/CNAME 등 레코드 타입 지원)
     if (op === "dns") {
       try {

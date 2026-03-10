@@ -4,7 +4,7 @@ import type { NodeHandler } from "../node-registry.js";
 import type { WebSearchNodeDefinition, OrcheNodeDefinition } from "../workflow-node.types.js";
 import type { OrcheNodeExecutorContext, OrcheNodeExecuteResult, OrcheNodeTestResult } from "../orche-node-executor.js";
 import { resolve_templates } from "../orche-node-executor.js";
-import { error_message } from "../../utils/common.js";
+import { error_message, make_abort_signal } from "../../utils/common.js";
 
 export const web_search_handler: NodeHandler = {
   node_type: "web_search",
@@ -33,23 +33,14 @@ export const web_search_handler: NodeHandler = {
 
     try {
       const url = `https://www.google.com/search?q=${encodeURIComponent(query)}&num=${max_results}`;
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 15_000);
-      const signal = ctx.abort_signal
-        ? AbortSignal.any([ctx.abort_signal, controller.signal])
-        : controller.signal;
-
-      try {
-        const res = await fetch(url, {
-          headers: { "User-Agent": "Mozilla/5.0 (compatible; SoulFlowBot/1.0)" },
-          signal,
-        });
-        const html = await res.text();
-        const results = extract_search_results(html, max_results);
-        return { output: { results, query, count: results.length } };
-      } finally {
-        clearTimeout(timer);
-      }
+      const signal = make_abort_signal(15_000, ctx.abort_signal);
+      const res = await fetch(url, {
+        headers: { "User-Agent": "Mozilla/5.0 (compatible; SoulFlowBot/1.0)" },
+        signal,
+      });
+      const html = await res.text();
+      const results = extract_search_results(html, max_results);
+      return { output: { results, query, count: results.length } };
     } catch (err) {
       return { output: { results: [], query, count: 0, error: error_message(err) } };
     }

@@ -4,7 +4,7 @@ import type { NodeHandler } from "../node-registry.js";
 import type { WebScrapeNodeDefinition, OrcheNodeDefinition } from "../workflow-node.types.js";
 import type { OrcheNodeExecutorContext, OrcheNodeExecuteResult, OrcheNodeTestResult } from "../orche-node-executor.js";
 import { resolve_templates } from "../orche-node-executor.js";
-import { error_message } from "../../utils/common.js";
+import { error_message, make_abort_signal } from "../../utils/common.js";
 import { validate_url } from "../tools/http-utils.js";
 
 export const web_scrape_handler: NodeHandler = {
@@ -39,11 +39,7 @@ export const web_scrape_handler: NodeHandler = {
     }
     const base_url = url_result;
 
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 30_000);
-    const signal = ctx.abort_signal
-      ? AbortSignal.any([ctx.abort_signal, controller.signal])
-      : controller.signal;
+    const signal = make_abort_signal(30_000, ctx.abort_signal);
 
     try {
       if (action === "robots_txt") {
@@ -81,8 +77,6 @@ export const web_scrape_handler: NodeHandler = {
       return { output: { text, title, status: res.status, content_type } };
     } catch (err) {
       return { output: { text: "", title: "", status: 0, error: error_message(err) } };
-    } finally {
-      clearTimeout(timer);
     }
   },
 

@@ -1,4 +1,4 @@
-import { error_message } from "../utils/common.js";
+import { error_message, make_abort_signal } from "../utils/common.js";
 import { BaseLlmProvider } from "./base.js";
 import { create_logger } from "../logger.js";
 import { LlmResponse, parse_openai_response, sanitize_messages_for_api, type ChatOptions } from "./types.js";
@@ -50,10 +50,7 @@ export class OpenRouterProvider extends BaseLlmProvider {
       if (this.http_referer) headers["HTTP-Referer"] = this.http_referer;
       if (this.app_title) headers["X-Title"] = this.app_title;
 
-      const timeout_signal = AbortSignal.timeout(DEFAULT_TIMEOUT_MS);
-      const signal = options.abort_signal
-        ? AbortSignal.any([options.abort_signal, timeout_signal])
-        : timeout_signal;
+      const signal = make_abort_signal(DEFAULT_TIMEOUT_MS, options.abort_signal);
 
       const response = await fetch(`${this.api_base}/chat/completions`, {
         method: "POST",

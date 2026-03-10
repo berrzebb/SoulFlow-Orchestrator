@@ -4,7 +4,7 @@ import type { NodeHandler } from "../node-registry.js";
 import type { WebFormNodeDefinition, OrcheNodeDefinition } from "../workflow-node.types.js";
 import type { OrcheNodeExecutorContext, OrcheNodeExecuteResult, OrcheNodeTestResult } from "../orche-node-executor.js";
 import { resolve_templates, resolve_deep } from "../orche-node-executor.js";
-import { error_message } from "../../utils/common.js";
+import { error_message, make_abort_signal } from "../../utils/common.js";
 
 export const web_form_handler: NodeHandler = {
   node_type: "web_form",
@@ -33,24 +33,18 @@ export const web_form_handler: NodeHandler = {
     if (entries.length === 0) return { output: { fields_filled: [], submitted: false, error: "fields is empty" } };
 
     try {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 60_000);
-      const signal = ctx.abort_signal ? AbortSignal.any([ctx.abort_signal, controller.signal]) : controller.signal;
-      try {
-        const res = await fetch(url, { signal, headers: { "User-Agent": "Mozilla/5.0 (compatible; SoulFlowBot/1.0)" } });
-        const html = await res.text();
-        const filled = entries.map(([sel, val]) => ({ selector: sel, value: String(val || ""), ok: true }));
-        return {
-          output: {
-            fields_filled: filled,
-            submitted: !!n.submit_selector,
-            snapshot: html.slice(0, 5000),
-            note: "Full browser-based form fill requires agent-browser. Use the web_form tool for interactive fill.",
-          },
-        };
-      } finally {
-        clearTimeout(timer);
-      }
+      const signal = make_abort_signal(60_000, ctx.abort_signal);
+      const res = await fetch(url, { signal, headers: { "User-Agent": "Mozilla/5.0 (compatible; SoulFlowBot/1.0)" } });
+      const html = await res.text();
+      const filled = entries.map(([sel, val]) => ({ selector: sel, value: String(val || ""), ok: true }));
+      return {
+        output: {
+          fields_filled: filled,
+          submitted: !!n.submit_selector,
+          snapshot: html.slice(0, 5000),
+          note: "Full browser-based form fill requires agent-browser. Use the web_form tool for interactive fill.",
+        },
+      };
     } catch (err) {
       return { output: { fields_filled: [], submitted: false, error: error_message(err) } };
     }
