@@ -1,4 +1,4 @@
-import { BuilderField, BuilderRowPair, JsonField } from "../builder-field";
+import { BuilderField, JsonField } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
 function SubWorkflowEditPanel({ node, update, t, options }: EditPanelProps) {
@@ -16,11 +16,9 @@ function SubWorkflowEditPanel({ node, update, t, options }: EditPanelProps) {
         )}
       </BuilderField>
       <JsonField label={t("workflows.sub_input_mapping")} value={node.input_mapping} onUpdate={(v) => update({ input_mapping: v })} rows={3} placeholder='{"prompt": "{{memory.prev.result}}"}' />
-      <BuilderRowPair>
-        <BuilderField label={t("workflows.timeout_ms")} hint={t("workflows.timeout_ms_hint")}>
-          <input className="input input--sm" type="number" min={1000} value={String(node.timeout_ms ?? 30000)} onChange={(e) => update({ timeout_ms: Number(e.target.value) || 30000 })} />
-        </BuilderField>
-      </BuilderRowPair>
+      <BuilderField label={t("workflows.timeout_ms")} hint={t("workflows.timeout_ms_hint")}>
+        <input className="input input--sm" type="number" min={1000} value={String(node.timeout_ms ?? 30000)} onChange={(e) => update({ timeout_ms: Number(e.target.value) || 30000 })} />
+      </BuilderField>
     </>
   );
 }
