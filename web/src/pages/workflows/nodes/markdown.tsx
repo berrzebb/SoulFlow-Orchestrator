@@ -47,7 +47,7 @@ function MarkdownEditPanel({ node, update, t }: EditPanelProps) {
       )}
       {op === "list" && (
         <div className="builder-row">
-          <label className="label" style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+          <label className="label-inline">
             <input type="checkbox" checked={Boolean(node.ordered)} onChange={(e) => update({ ordered: e.target.checked })} />
             {t("workflows.opt_ordered")}
           </label>

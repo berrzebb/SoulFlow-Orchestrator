@@ -55,6 +55,16 @@ function TableEditPanel({ node, update, t }: EditPanelProps) {
           </select>
         </BuilderField>
       )}
+      {op === "slice" && (
+        <BuilderRowPair>
+          <BuilderField label={t("workflows.field_start")}>
+            <input className="input input--sm" type="number" min={0} value={String(node.start ?? 0)} onChange={(e) => update({ start: Number(e.target.value) })} />
+          </BuilderField>
+          <BuilderField label={t("workflows.field_end")}>
+            <input className="input input--sm" type="number" min={0} value={String(node.end ?? 10)} onChange={(e) => update({ end: Number(e.target.value) })} />
+          </BuilderField>
+        </BuilderRowPair>
+      )}
     </>
   );
 }
@@ -74,6 +84,6 @@ export const table_descriptor: FrontendNodeDescriptor = {
     { name: "operation", type: "string", description: "node.table.input.operation" },
     { name: "data",      type: "string", description: "node.table.input.data" },
   ],
-  create_default: () => ({ operation: "sort", data: "", data2: "", field: "", condition: "", join_field: "id", join_type: "inner", agg: "count" }),
+  create_default: () => ({ operation: "sort", data: "", data2: "", field: "", condition: "", join_field: "id", join_type: "inner", agg: "count", start: 0, end: 10 }),
   EditPanel: TableEditPanel,
 };
