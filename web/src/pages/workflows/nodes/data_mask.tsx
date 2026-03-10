@@ -7,13 +7,11 @@ function DataMaskEditPanel({ node, update, t }: EditPanelProps) {
   const action = String(node.action || "detect_pii");
   return (
     <>
-      <BuilderRowPair>
-        <BuilderField label={t("workflows.action")} required>
-          <select autoFocus className="input input--sm" required value={action} onChange={(e) => update({ action: e.target.value })} aria-required="true">
-            {ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
-          </select>
-        </BuilderField>
-      </BuilderRowPair>
+      <BuilderField label={t("workflows.action")} required>
+        <select autoFocus className="input input--sm" required value={action} onChange={(e) => update({ action: e.target.value })} aria-required="true">
+          {ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
+        </select>
+      </BuilderField>
       <BuilderField label={t("workflows.field_text")} required>
         <textarea className="input" required rows={3} value={String(node.text || "")} onChange={(e) => update({ text: e.target.value })} placeholder="Contact: john@example.com" aria-required="true" />
       </BuilderField>
