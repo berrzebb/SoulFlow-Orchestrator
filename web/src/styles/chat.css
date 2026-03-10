@@ -95,14 +95,14 @@
   color: var(--accent);
 }
 .chat-msg__body {
-  max-width: 85%;
+  max-width: 92%;
   min-width: 0;
 }
 .chat-msg__content {
-  padding: var(--sp-2) var(--sp-3);
+  padding: var(--sp-3) var(--sp-4);
   border-radius: var(--radius-lg);
-  font-size: var(--fs-sm);
-  line-height: 1.6;
+  font-size: var(--fs-base, 0.9375rem);
+  line-height: 1.65;
   white-space: pre-wrap;
   word-break: break-word;
 }
@@ -122,19 +122,9 @@
   border-top-left-radius: var(--radius-sm);
   white-space: normal;
 }
-/* 스트리밍 중 어시스턴트 버블 — 영역 사전 확보 + border 하이라이트 */
+/* 스트리밍 중 어시스턴트 버블 — 조용한 border 하이라이트만 */
 .chat-msg--assistant .chat-msg__content:has(.chat-cursor) {
-  min-height: min(180px, 28vh);
-  border-color: color-mix(in srgb, var(--accent) 50%, transparent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 8%, transparent);
-  transition: border-color 0.9s ease-out, box-shadow 0.9s ease-out;
-}
-/* 스트리밍 버블 첫 등장 시 border glow — @starting-style로 bright → muted transition */
-@starting-style {
-  .chat-msg--assistant .chat-msg__content:has(.chat-cursor) {
-    border-color: var(--accent);
-    box-shadow: 0 0 0 8px color-mix(in srgb, var(--accent) 28%, transparent);
-  }
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
 }
 
 /* ?? Typing indicator (thinking dots) ?? */
@@ -246,8 +236,8 @@
   animation: chat-cursor-pulse 1s ease-in-out infinite;
 }
 @keyframes chat-cursor-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.15; }
+  0%, 45% { opacity: 1; }
+  55%, 100% { opacity: 0; }
 }
 
 /* Floating input bar */
