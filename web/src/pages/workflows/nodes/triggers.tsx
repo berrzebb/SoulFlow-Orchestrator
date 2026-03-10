@@ -102,19 +102,25 @@ export const trigger_manual_descriptor: FrontendNodeDescriptor = {
 
 function ChannelTriggerEditPanel({ node, update, t, options }: EditPanelProps) {
   const channels = options?.channels || [];
-  const providers = [...new Set(channels.map((c) => c.provider))];
-  const chat_ids = channels.filter((c) => !node.channel_type || c.provider === String(node.channel_type || ""));
+  const channel_type = String(node.channel_type || "");
   return (
-    <BuilderRowPair>
-      <BuilderField label={t("workflows.channel_type")}>
-        {providers.length > 0 && <datalist id="ch-provider-list">{providers.map((p) => <option key={p} value={p} />)}</datalist>}
-        <input autoFocus className="input input--sm" list={providers.length > 0 ? "ch-provider-list" : undefined} value={String(node.channel_type || "")} onChange={(e) => update({ channel_type: e.target.value })} placeholder="slack" />
+    <>
+      <BuilderField label={t("workflows.channel_type")} required hint={t("workflows.channel_type_hint")}>
+        {channels.length > 0 ? (
+          <select autoFocus className="input input--sm" required value={channel_type} onChange={(e) => update({ channel_type: e.target.value })} aria-required="true">
+            <option value="">{t("workflows.channel_any")}</option>
+            {channels.map((c) => (
+              <option key={c.channel_id} value={c.provider}>{c.label || c.provider}</option>
+            ))}
+          </select>
+        ) : (
+          <input autoFocus className="input input--sm" value={channel_type} onChange={(e) => update({ channel_type: e.target.value })} placeholder="slack" />
+        )}
       </BuilderField>
       <BuilderField label={t("workflows.channel_chat_id")} hint={t("workflows.channel_chat_id_hint")}>
-        {chat_ids.length > 0 && <datalist id="ch-chatid-list">{chat_ids.map((c) => <option key={c.channel_id} value={c.channel_id}>{c.label}</option>)}</datalist>}
-        <input className="input input--sm" list={chat_ids.length > 0 ? "ch-chatid-list" : undefined} value={String(node.chat_id || "")} onChange={(e) => update({ chat_id: e.target.value || undefined })} placeholder="C01234567" />
+        <input className="input input--sm" value={String(node.chat_id || "")} onChange={(e) => update({ chat_id: e.target.value || undefined })} placeholder="C01234567" />
       </BuilderField>
-    </BuilderRowPair>
+    </>
   );
 }
 
