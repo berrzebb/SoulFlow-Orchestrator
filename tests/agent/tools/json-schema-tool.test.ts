@@ -355,4 +355,35 @@ describe("JsonSchemaTool", () => {
     // 중간 경로("name")가 string → object 아님 → return obj (원래 $ref 객체 반환)
     expect(result).toBeDefined();
   });
+
+  // ══════════════════════════════════════════
+  // 미커버 catch 분기 (L49, L61, L66)
+  // ══════════════════════════════════════════
+
+  it("merge: schema2 잘못된 JSON → L49 invalid schema2 JSON", async () => {
+    const r = JSON.parse(await tool.execute({
+      action: "merge",
+      schema: JSON.stringify({ type: "object" }),
+      schema2: "{invalid",
+    }));
+    expect(r.error).toContain("invalid schema2 JSON");
+  });
+
+  it("dereference: 잘못된 JSON → L61 invalid schema JSON", async () => {
+    const r = JSON.parse(await tool.execute({ action: "dereference", schema: "{bad" }));
+    expect(r.error).toContain("invalid schema JSON");
+  });
+
+  it("mock: 잘못된 JSON → L66 invalid schema JSON", async () => {
+    const r = JSON.parse(await tool.execute({ action: "mock", schema: "{bad" }));
+    expect(r.error).toContain("invalid schema JSON");
+  });
+
+  // L180: dereference — 배열 노드 → Array.isArray 분기
+  it("dereference: 배열 타입 필드 포함 스키마 → L180 Array.isArray 경로", async () => {
+    const schema = JSON.stringify({ type: ["string", "null"], description: "test" });
+    const result = JSON.parse(await tool.execute({ action: "dereference", schema }));
+    // type 필드가 배열 → dereference 내부에서 L180 경로 통과
+    expect(result.type).toEqual(["string", "null"]);
+  });
 });

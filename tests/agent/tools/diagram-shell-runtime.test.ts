@@ -143,6 +143,12 @@ describe("DiagramRenderTool — 유효성 검사", () => {
     expect(r).toContain("Error");
     expect(r).toContain("unsupported format");
   });
+
+  it("max_chars=Infinity → L7 clamp(Infinity) → min=1000 적용 → truncate", async () => {
+    mock_render.mockResolvedValue("x".repeat(5000));
+    const r = await tool.execute({ action: "render", diagram: "graph TD; A-->B", max_chars: Infinity });
+    expect(r).toContain("(truncated)");
+  });
 });
 
 // ══════════════════════════════════════════
