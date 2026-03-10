@@ -60,13 +60,20 @@ const INQUIRY_TOKEN_SETS = [
   "작업 어떻게 됐어", "작업 됐어", "작업 끝났어", "작업 완료됐어",
   "태스크 상태 어때", "태스크 진행 어떻게", "백그라운드 작업 어때",
   "진행 중인 작업", "작업 진행상황",
+  "다 됐어", "결과 나왔어", "완료됐어", "끝났어",
+  "작업 취소", "작업 중단", "취소해줘", "그만해",
   "what's the status", "how's the task", "task done", "task finished",
   "is it done", "task progress", "background task status",
+  "cancel task", "stop task", "cancel it", "stop it",
 ].map(tokenize);
 
-/** 단일 토큰 다단계 연결어 집합 — 토큰 교집합으로 "하고싶어요" 오매칭 방지. */
+/**
+ * 단일 토큰 다단계 연결어 집합.
+ * 주의: "하고", "그리고"는 한국어 일반 조사로 오매칭 위험 (예: "파이썬 하고 자바 차이")
+ * → 이들은 AGENT_CONNECTOR_PHRASES("하고 나서" 등)에만 포함.
+ */
 const AGENT_CONNECTOR_TOKENS = new Set([
-  "하고", "하고서", "그다음", "그리고", "후에",
+  "하고서", "그다음", "후에",
   "then",
 ]);
 
@@ -97,20 +104,45 @@ function is_inquiry_question(text: string): boolean {
   return tokens.size > 0 && exceeds_similarity(tokens, INQUIRY_TOKEN_SETS, INQUIRY_THRESHOLD);
 }
 
+/**
+ * 스킬 트리거/별칭과 Jaccard 유사도 비교.
+ * 일치하면 스킬 이름을 반환 — 단일 호출(once)로 단락.
+ */
+const SKILL_TRIGGER_THRESHOLD = 0.45;
+
+function match_skill_trigger(tokens: Set<string>, skills: SkillEntry[]): string | null {
+  for (const skill of skills) {
+    const candidates = [...skill.triggers, ...(skill.aliases ?? [])];
+    for (const phrase of candidates) {
+      const ref = tokenize(phrase);
+      if (ref.size > 0 && jaccard(tokens, ref) >= SKILL_TRIGGER_THRESHOLD) return skill.name;
+    }
+  }
+  return null;
+}
+
 // ── 복잡도 휴리스틱 ──────────────────────────────────────────────────────────
+
+/** 토큰 수 기준 — 이 이상이면 다단계 복합 요청으로 판단. */
+const AGENT_LENGTH_THRESHOLD = 50;
 
 /**
  * once/agent/task 중 하나를 결정.
  *
  * - `task`: 명시적 백그라운드/비동기/스케줄 신호
- * - `agent`: 다단계 동사 연결 or 도구 조합 쌍 감지
+ * - `agent`: 다단계 동사 연결 or 도구 조합 쌍 or 문장 길이 임계치 초과
  * - `once`: 단일 질문/조회/응답 (기본값 — 불확실하면 once로 시작 후 에스컬레이션)
+ *
+ * 스킬 트리거 매칭 시 once 단락 — 스킬은 항상 단일 호출.
  */
-function classify_execution_complexity(text: string, _ctx: ClassifierContext): "once" | "agent" | "task" {
+function classify_execution_complexity(text: string, ctx: ClassifierContext): "once" | "agent" | "task" {
   const lower = text.toLowerCase();
   const tokens = tokenize(text);
 
   if (TASK_SIGNAL_PHRASES.some((s) => lower.includes(s))) return "task";
+
+  // 스킬 트리거 직접 매칭 → 항상 once (LLM이 skill 호출)
+  if (ctx.available_skills?.length && match_skill_trigger(tokens, ctx.available_skills)) return "once";
 
   // 단일 연결어: 토큰 교집합 (오매칭 방지)
   if ([...tokens].some((t) => AGENT_CONNECTOR_TOKENS.has(t))) return "agent";
@@ -118,6 +150,8 @@ function classify_execution_complexity(text: string, _ctx: ClassifierContext): "
   if (AGENT_CONNECTOR_PHRASES.some((p) => lower.includes(p))) return "agent";
   // 도구 조합 쌍
   if (AGENT_TOOL_PAIRS.some(([a, b]) => lower.includes(a) && lower.includes(b))) return "agent";
+  // 50토큰 이상 복잡 요청 → agent (단일 once 응답으로 처리하기엔 복잡도가 높음)
+  if (tokens.size >= AGENT_LENGTH_THRESHOLD) return "agent";
 
   return "once";
 }
