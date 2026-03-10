@@ -44,6 +44,9 @@ function exceeds_similarity(tokens: Set<string>, ref_sets: Set<string>[], thresh
 
 // ── 사전 계산 (모듈 로드 시 1회) ─────────────────────────────────────────────
 
+const IDENTITY_THRESHOLD = 0.4;
+const INQUIRY_THRESHOLD  = 0.3;
+
 const IDENTITY_TOKEN_SETS = [
   "너 누구야", "너 누구니", "너 누구세요",
   "당신 누구세요", "당신은 누구세요",
@@ -86,12 +89,12 @@ const AGENT_TOOL_PAIRS: [string, string][] = [
 
 function is_identity_question(text: string): boolean {
   const tokens = tokenize(text);
-  return tokens.size > 0 && exceeds_similarity(tokens, IDENTITY_TOKEN_SETS, 0.4);
+  return tokens.size > 0 && exceeds_similarity(tokens, IDENTITY_TOKEN_SETS, IDENTITY_THRESHOLD);
 }
 
 function is_inquiry_question(text: string): boolean {
   const tokens = tokenize(text);
-  return tokens.size > 0 && exceeds_similarity(tokens, INQUIRY_TOKEN_SETS, 0.3);
+  return tokens.size > 0 && exceeds_similarity(tokens, INQUIRY_TOKEN_SETS, INQUIRY_THRESHOLD);
 }
 
 // ── 복잡도 휴리스틱 ──────────────────────────────────────────────────────────
