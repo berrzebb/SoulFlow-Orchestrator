@@ -2,7 +2,6 @@ import { BuilderField } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
 function GateEditPanel({ node, update, t }: EditPanelProps) {
-  const sources = Array.isArray(node.depends_on) ? (node.depends_on as string[]) : [];
   return (
     <>
       <BuilderField label={t("workflows.gate_quorum")} hint={t("workflows.gate_quorum_hint")}>

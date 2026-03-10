@@ -3,6 +3,7 @@
 import type { RouteHandler } from "../route-context.js";
 import type { DashboardWorkflowOps } from "../service.js";
 import { set_no_cache } from "../route-context.js";
+import { renderMermaid, renderMermaidAscii } from "@vercel/beautiful-mermaid";
 
 export const handle_workflow: RouteHandler = async (ctx) => {
   const { req, res, url, json, read_body, options } = ctx;
@@ -219,6 +220,23 @@ export const handle_workflow: RouteHandler = async (ctx) => {
     if (!yaml_text) { json(res, 404, { error: "template_not_found" }); return true; }
     res.writeHead(200, { "Content-Type": "text/yaml; charset=utf-8" });
     res.end(yaml_text);
+    return true;
+  }
+
+  // POST /api/workflow/diagram/preview — Mermaid 실시간 미리보기
+  if (path === "/api/workflow/diagram/preview" && method === "POST") {
+    const body = await read_body(req);
+    const source = typeof body?.source === "string" ? body.source.trim() : "";
+    const format = body?.format === "ascii" ? "ascii" : "svg";
+    if (!source) { json(res, 400, { error: "source_required" }); return true; }
+    try {
+      const output = format === "ascii"
+        ? renderMermaidAscii(source)
+        : await renderMermaid(source);
+      json(res, 200, { ok: true, output, format });
+    } catch (err) {
+      json(res, 422, { ok: false, error: String(err) });
+    }
     return true;
   }
 

@@ -944,6 +944,11 @@
 .code-textarea { font-family: var(--mono, 'Fira Code', 'Cascadia Code', monospace); font-size: var(--fs-xs); line-height: 1.6; min-height: 120px; resize: vertical; tab-size: 2; }
 .yaml-error { color: var(--err); font-size: var(--fs-xs); margin-top: var(--sp-1); }
 
+.diagram-preview { margin-top: var(--sp-2); border-radius: 6px; overflow: auto; background: var(--panel); padding: var(--sp-2); max-height: 320px; }
+.diagram-preview svg { max-width: 100%; height: auto; display: block; }
+.diagram-preview--ascii { font-family: var(--mono); font-size: var(--fs-xs); white-space: pre; }
+.diagram-preview--error { color: var(--err); font-size: var(--fs-xs); padding: var(--sp-2); }
+
 /* YAML 에러 배너 — 명확한 에러 표시 */
 .yaml-error-banner {
   display: flex;
