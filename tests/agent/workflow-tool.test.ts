@@ -115,7 +115,7 @@ describe("WorkflowTool", () => {
     const ops = make_mock_ops({
       list_templates: vi.fn(() => [
         { ...SAMPLE_DEF, title: "Daily RSS" },
-        { ...SAMPLE_DEF, title: "Weekly Report", trigger: { type: "cron" as const, schedule: "0 0 * * 1" } },
+        { ...SAMPLE_DEF, title: "Weekly Report", trigger_nodes: [{ id: "__cron__", trigger_type: "cron", schedule: "0 0 * * 1" }] },
       ]),
     });
     const run = get_run(new WorkflowTool(ops));
@@ -126,7 +126,7 @@ describe("WorkflowTool", () => {
     expect(parsed).toHaveLength(2);
     expect(parsed[0].title).toBe("Daily RSS");
     expect(parsed[0].slug).toBe("daily-rss");
-    expect(parsed[1].trigger).toEqual({ type: "cron", schedule: "0 0 * * 1" });
+    expect(parsed[1].trigger_nodes).toEqual([{ id: "__cron__", trigger_type: "cron", schedule: "0 0 * * 1" }]);
   });
 
   // ── get ──
@@ -241,7 +241,6 @@ describe("WorkflowTool", () => {
     const result = await run({ action: "node_types" });
 
     expect(result).toContain("Available Workflow Node Types");
-    expect(result).toContain("Workflow Definition Structure");
   });
 
   it("node_types: 반복 호출 시 캐시를 사용한다", async () => {

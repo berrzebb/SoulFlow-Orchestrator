@@ -150,3 +150,42 @@ describe("SimilarityTool — unknown action", () => {
     expect(r.error).toBeDefined();
   });
 });
+
+// ══════════════════════════════════════════
+// 미커버 분기 보충
+// ══════════════════════════════════════════
+
+describe("SimilarityTool — 미커버 분기", () => {
+  it("hamming: 같은 길이 문자열 → L59 거리 계산", async () => {
+    // "abc" vs "axc" → hamming distance = 1 (b≠x)
+    const r = await exec({ action: "hamming", a: "abc", b: "axc" }) as Record<string, unknown>;
+    expect(r.distance).toBe(1);
+  });
+
+  it("jaro: 완전 같은 문자열 → L151 return 1.0 (early exit)", async () => {
+    // a === b → L151 return 1
+    const r = await exec({ action: "jaro_winkler", a: "hello", b: "hello" }) as Record<string, unknown>;
+    expect(Number(r.jaro)).toBe(1);
+  });
+
+  it("jaro: matches=0 → L166 return 0", async () => {
+    // 'aaa' vs 'zzz' → no matching chars → L166 return 0
+    const r = await exec({ action: "jaro_winkler", a: "aaa", b: "zzz" }) as Record<string, unknown>;
+    expect(Number(r.jaro)).toBe(0);
+  });
+
+  it("jaro: 빈 문자열 → L153 return 0", async () => {
+    // len_a=0 → L153: return 0
+    const r = await exec({ action: "jaro_winkler", a: "", b: "hello" }) as Record<string, unknown>;
+    expect(Number(r.jaro)).toBe(0);
+  });
+
+  it("jaro: 일부만 매칭 → L169 continue + L170 while skip (abcdef vs axxxxf)", async () => {
+    // a_matches: [true, false, false, false, false, true] (only 'a' and 'f' match)
+    // transpositions loop: L169 fires for i=1..4 (not matched), L170 fires for i=5 (skip unmatched b positions)
+    const r = await exec({ action: "jaro_winkler", a: "abcdef", b: "axxxxf" }) as Record<string, unknown>;
+    // jaro = (2/6 + 2/6 + 2/2) / 3 ≈ 0.444
+    expect(Number(r.jaro)).toBeGreaterThan(0);
+    expect(Number(r.jaro)).toBeLessThan(1);
+  });
+});

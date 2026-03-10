@@ -178,3 +178,23 @@ describe("TreeTool — 에러 케이스", () => {
     expect(r.error).toBeDefined();
   });
 });
+
+// ══════════════════════════════════════════
+// 미커버 분기 보충
+// ══════════════════════════════════════════
+
+describe("TreeTool — 미커버 분기", () => {
+  it("parse_tree: id 없는 JSON → L113 return null → error", async () => {
+    // parse_tree({}) → !t.id → return null → action finds null tree
+    const r = await exec({ action: "traverse", tree: '{"noId": true}' }) as Record<string, unknown>;
+    expect(r.error).toBeDefined();
+  });
+});
+
+describe("TreeTool — lca: node_a 없음 → L96 error", () => {
+  it("node_a가 존재하지 않음 → L96 path_a null → error", async () => {
+    const r = await exec({ action: "lca", tree: TREE, node_a: "ghost", node_b: "leaf1" }) as Record<string, unknown>;
+    expect(r.error).toBeDefined();
+    expect(String(r.error)).toContain("ghost");
+  });
+});

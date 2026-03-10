@@ -213,3 +213,90 @@ describe("CorsTool — 미커버 catch 분기", () => {
     expect(r.allowed).toBe(false);
   });
 });
+
+// ══════════════════════════════════════════
+// 미커버 분기 보충
+// ══════════════════════════════════════════
+
+describe("CorsTool — 미커버 분기", () => {
+  it("build_headers: allowed_methods 비JSON 문자열 → L47 catch fallback 단일값", async () => {
+    const r = await exec({ action: "build_headers", origin: "https://a.com", allowed_methods: "POST" }) as Record<string, unknown>;
+    expect(String(r["Access-Control-Allow-Methods"])).toContain("POST");
+  });
+
+  it("build_headers: allowed_headers 비JSON 문자열 → L52 catch fallback", async () => {
+    const r = await exec({ action: "build_headers", origin: "https://a.com", allowed_headers: "Authorization" }) as Record<string, unknown>;
+    expect(String(r["Access-Control-Allow-Headers"])).toContain("Authorization");
+  });
+
+  it("build_headers: expose_headers 비JSON 문자열 → L57 catch fallback", async () => {
+    const r = await exec({ action: "build_headers", origin: "https://a.com", expose_headers: "X-Custom" }) as Record<string, unknown>;
+    expect(String(r["Access-Control-Expose-Headers"])).toContain("X-Custom");
+  });
+
+  it("preflight: allowed_headers 지정 → L83 Access-Control-Allow-Headers", async () => {
+    const r = await exec({
+      action: "preflight",
+      origin: "https://app.com",
+      method: "POST",
+      allowed_headers: "Authorization,Content-Type",
+      max_age: 600,
+      credentials: true,
+    }) as Record<string, unknown>;
+    expect(r.allowed).toBe(true);
+    const hdrs = r.headers as Record<string, string>;
+    expect(hdrs["Access-Control-Allow-Headers"]).toContain("Authorization");
+    expect(hdrs["Access-Control-Max-Age"]).toBe("600");
+    expect(hdrs["Access-Control-Allow-Credentials"]).toBe("true");
+  });
+
+  it("preflight: request_headers 지정 → L84 fallback", async () => {
+    const r = await exec({
+      action: "preflight",
+      origin: "https://app.com",
+      method: "GET",
+      request_headers: "X-Request-Header",
+    }) as Record<string, unknown>;
+    const hdrs = r.headers as Record<string, string>;
+    expect(hdrs["Access-Control-Allow-Headers"]).toContain("X-Request-Header");
+  });
+
+  it("parse: expose_headers 포함 → L99", async () => {
+    const headers = JSON.stringify({
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Expose-Headers": "X-Custom, X-Other",
+    });
+    const r = await exec({ action: "parse", headers }) as Record<string, unknown>;
+    expect(Array.isArray(r.expose_headers)).toBe(true);
+    expect((r.expose_headers as string[])).toContain("X-Custom");
+  });
+
+  it("validate: 잘못된 headers JSON → L106 error", async () => {
+    const r = await exec({ action: "validate", headers: "bad-json" }) as Record<string, unknown>;
+    expect(r.error).toContain("invalid headers JSON");
+  });
+
+  it("unknown action → L118 error", async () => {
+    const r = await exec({ action: "unknown_action" }) as Record<string, unknown>;
+    expect(r.error).toContain("unknown action");
+  });
+
+  it("match_origin: 와일드카드 서브도메인 → L128 try 성공", async () => {
+    const r = await exec({
+      action: "check_origin",
+      origin: "https://sub.example.com",
+      allowed_origins: JSON.stringify(["*.example.com"]),
+    }) as Record<string, unknown>;
+    expect(r.allowed).toBe(true);
+  });
+
+  it("match_origin: 유효하지 않은 URL + 와일드카드 → L128 catch return false", async () => {
+    // new URL("not-a-url") throws → catch { return false }
+    const r = await exec({
+      action: "check_origin",
+      origin: "not-a-url",
+      allowed_origins: JSON.stringify(["*.example.com"]),
+    }) as Record<string, unknown>;
+    expect(r.allowed).toBe(false);
+  });
+});

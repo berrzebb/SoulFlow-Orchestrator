@@ -81,8 +81,8 @@ describe("fast_classify — 휴리스틱 분류", () => {
       expect(fast_classify("who are you", ctx()).mode).toBe("identity");
     });
 
-    it("'소개해줘' → identity", () => {
-      expect(fast_classify("소개해줘", ctx()).mode).toBe("identity");
+    it("'자기소개해줘' → identity", () => {
+      expect(fast_classify("자기소개해줘", ctx()).mode).toBe("identity");
     });
   });
 

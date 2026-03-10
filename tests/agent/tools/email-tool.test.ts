@@ -287,3 +287,61 @@ describe("EmailTool — SMTP 오류 응답", () => {
     expect(String(r)).toContain("Error");
   });
 });
+
+describe("EmailTool — STARTTLS port 587 (L105)", () => {
+  it("port=587 + user → STARTTLS → step=10 → step=1 → AUTH LOGIN → 성공", async () => {
+    // case 10은 write()를 호출하지 않으므로, STARTTLS 응답과 다음 EHLO 응답을 하나의 청크로 전달
+    // MockSmtpSocket.write()는 Buffer.from(resp + "\r\n")으로 보내므로
+    // resp에 "\r\n"을 넣으면 두 줄이 하나의 data 이벤트로 전달됨
+    set_smtp_responses(
+      "250 smtp.example.com Hello",
+      // STARTTLS 응답 + 2nd EHLO 응답을 하나의 data 이벤트로 결합:
+      // "220 TLS\r\n250 Hello 2" → mock이 "\r\n" 추가 → 2줄이 동시 처리됨
+      "220 Ready to start TLS\r\n250 smtp.example.com Hello 2",
+      "334 Username:",    // AUTH LOGIN → case 2
+      "334 Password:",    // username → case 3
+      "235 Auth OK",      // password → case 4 MAIL FROM
+      "250 OK",           // MAIL FROM → case 5 RCPT TO
+      "354 Start",        // RCPT TO → DATA (L117)
+      "250 OK",           // DATA content → case 7 QUIT
+    );
+    const r = JSON.parse(await make_tool().execute({
+      action: "send",
+      to: "user@example.com",
+      from: "sender@example.com",
+      subject: "STARTTLS Test",
+      body: "Hello",
+      smtp_host: "smtp.example.com",
+      smtp_port: 587,
+      smtp_user: "testuser",
+      smtp_pass: "testpass",
+    }));
+    expect(r.ok).toBe(true);
+  });
+});
+
+describe("EmailTool — 빈 수신자 목록 (L115)", () => {
+  it("to 빈 문자열 → recipients=[] → case5 else DATA (L115)", async () => {
+    // to="" → recipients=[] → rcpt_idx(0) >= length(0) → L115 else: send DATA, step=6
+    // L117도 실행되어 DATA 두 번 전송, step=7
+    // response[3]="354 Start" → step=7 → case 7: QUIT, resolve
+    set_smtp_responses(
+      "250 smtp.example.com Hello",  // EHLO → no user → L107 MAIL FROM, step=4
+      "250 OK",                      // MAIL FROM 1 → case 4: MAIL FROM 2, step=5
+      "250 OK",                      // MAIL FROM 2 → case 5 (empty): L115 DATA, L117 DATA, step=7
+      "354 Start",                   // DATA #1 → step=7 → case 7: QUIT, resolve
+      "250 OK",                      // DATA #2 → step=8 (무시됨)
+    );
+    // to="," → split(",").filter(Boolean) = [] → recipients 빈 배열
+    const r = JSON.parse(await make_tool().execute({
+      action: "send",
+      to: ",",
+      from: "sender@example.com",
+      subject: "No Recipients",
+      body: "Hello",
+      smtp_host: "smtp.example.com",
+      smtp_port: 25,
+    }));
+    expect(typeof r).toBe("object");
+  });
+});

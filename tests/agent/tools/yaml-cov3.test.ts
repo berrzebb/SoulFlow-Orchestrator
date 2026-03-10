@@ -129,3 +129,61 @@ describe("YamlTool — merge_yaml catch (L65)", () => {
     expect(r).toContain("Error: merge parse error");
   });
 });
+
+// ══════════════════════════════════════════
+// L130: parse_mapping 빈 줄 skip (base_indent=0, i=임의, !trimmed)
+// L127: parse_mapping dedent break (base_indent>0, i>0, indent<base_indent)
+// ══════════════════════════════════════════
+
+describe("YamlTool — parse_mapping 빈 줄 처리 (L127/L130)", () => {
+  it("최상위 매핑 내 빈 줄 → L130 skip (base_indent=0)", async () => {
+    const tool = new YamlTool();
+    // a: 1 \n \n b: 2 → cleaned에 빈 줄 포함, base_indent=0이라 L127 미작동, L130으로 skip
+    const yaml = "a: 1\n\nb: 2";
+    const r = await tool.execute({ action: "parse", data: yaml });
+    const parsed = JSON.parse(r);
+    expect(parsed.a).toBe(1);
+    expect(parsed.b).toBe(2);
+  });
+
+  it("중첩 매핑 내 빈 줄 → L127 break (base_indent=2, indent=0)", async () => {
+    const tool = new YamlTool();
+    // child_lines: ["  first: val", "", "  second: other"]
+    // parse_mapping(base_indent=2): i=1 시 indent=0 < 2 → L127 break
+    const yaml = "parent:\n  first: val\n\n  second: other";
+    const r = await tool.execute({ action: "parse", data: yaml });
+    const parsed = JSON.parse(r);
+    // first만 파싱됨 (empty line에서 break)
+    expect(parsed.parent?.first).toBe("val");
+  });
+});
+
+// ══════════════════════════════════════════
+// L173: parse_sequence 빈 줄 skip (base_indent=0)
+// L170: parse_sequence dedent break (base_indent>0, i>0, indent<base_indent)
+// ══════════════════════════════════════════
+
+describe("YamlTool — parse_sequence 빈 줄 처리 (L170/L173)", () => {
+  it("최상위 시퀀스 내 빈 줄 → L173 skip (base_indent=0)", async () => {
+    const tool = new YamlTool();
+    // cleaned: ["- item1", "", "- item2"] → base_indent=0, i=1: 0<0 false, L173 fires
+    const yaml = "- item1\n\n- item2";
+    const r = await tool.execute({ action: "parse", data: yaml });
+    const parsed = JSON.parse(r);
+    expect(Array.isArray(parsed)).toBe(true);
+    expect(parsed).toContain("item1");
+    expect(parsed).toContain("item2");
+  });
+
+  it("중첩 시퀀스 내 빈 줄 → L170 break (base_indent=2, indent=0)", async () => {
+    const tool = new YamlTool();
+    // child_lines: ["  - item1", "", "  - item2"]
+    // parse_sequence(base_indent=2): i=1 시 indent=0 < 2 → L170 break
+    const yaml = "list:\n  - item1\n\n  - item2";
+    const r = await tool.execute({ action: "parse", data: yaml });
+    const parsed = JSON.parse(r);
+    expect(Array.isArray(parsed.list)).toBe(true);
+    // item1만 파싱됨 (empty line에서 break)
+    expect(parsed.list).toContain("item1");
+  });
+});

@@ -90,13 +90,13 @@ describe("WebFetchTool — validate_url IPv6/0.0.0.0", () => {
   it("::1 (IPv6 loopback) → blocked_private_host", async () => {
     const tool = new WebFetchTool();
     const r = await tool.execute({ url: "http://[::1]/path" });
-    expect(String(r)).toContain("blocked_private_host");
+    expect(String(r)).toContain("private/loopback host blocked");
   });
 
   it("0.0.0.0 → blocked_private_host", async () => {
     const tool = new WebFetchTool();
     const r = await tool.execute({ url: "http://0.0.0.0/path" });
-    expect(String(r)).toContain("blocked_private_host");
+    expect(String(r)).toContain("private/loopback host blocked");
   });
 });
 

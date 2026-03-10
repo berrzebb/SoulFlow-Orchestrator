@@ -144,3 +144,24 @@ describe("WhoisTool — parse (net mock)", () => {
     expect(r.raw).toBeUndefined();
   });
 });
+
+// ══════════════════════════════════════════
+// 미커버 분기 보충
+// ══════════════════════════════════════════
+
+describe("WhoisTool — 미커버 분기 (L103)", () => {
+  it("parse: 빈 값을 가진 필드 → L103 continue (값 없는 줄 skip)", async () => {
+    // "Domain Name: " (빈 값) → value="" → !value → continue
+    net_state.response = [
+      "Domain Name: ",          // empty value → L103 skip
+      "Domain Name: EXAMPLE.COM",
+      "Updated Date: 2024-01-01",
+    ].join("\r\n");
+    const tool = (await import("@src/agent/tools/whois.js")).WhoisTool;
+    const t = new tool();
+    const r = JSON.parse(await t.execute({ action: "parse", domain: "example.com" }));
+    // domain_name is from "Domain Name: EXAMPLE.COM", registered = !!domain_name
+    expect(r.registered).toBe(true);
+    expect(r.domain_name).toBe("EXAMPLE.COM");
+  });
+});

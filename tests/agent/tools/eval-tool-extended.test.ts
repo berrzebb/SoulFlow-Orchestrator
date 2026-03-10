@@ -109,3 +109,16 @@ describe("EvalTool — 코드 실행 에러", () => {
     expect(r).toContain("Error");
   });
 });
+
+// ══════════════════════════════════════════
+// 미커버 분기 보충
+// ══════════════════════════════════════════
+
+describe("EvalTool — format_result 미커버 분기 (L56)", () => {
+  it("순환 참조 객체 → JSON.stringify throw → catch → String(result) (L56)", async () => {
+    // obj.self = obj → JSON.stringify(obj) throws TypeError: Converting circular structure to JSON
+    const r = await exec({ code: "const obj = {}; obj.self = obj; return obj;" });
+    // catch branch fires → String(obj) = "[object Object]"
+    expect(r).toContain("[object Object]");
+  });
+});

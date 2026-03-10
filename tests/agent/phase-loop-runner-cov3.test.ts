@@ -370,6 +370,7 @@ describe("run_phase_loop — build_runner_services with providers (L1154-1179)",
       wait_for_completion: vi.fn().mockResolvedValue({ status: "completed", content: "agent done" }),
       stop: vi.fn(),
       list: vi.fn().mockReturnValue([]),
+      get_provider_caps: vi.fn().mockReturnValue({ chatgpt_available: false, claude_available: false, openrouter_available: true }),
     };
 
     const result = await run_phase_loop(
@@ -415,6 +416,7 @@ describe("run_phase_loop — build_runner_services with providers (L1154-1179)",
       wait_for_completion: vi.fn().mockResolvedValue({ status: "completed", content: "done" }),
       stop: vi.fn(),
       list: vi.fn().mockReturnValue([]),
+      get_provider_caps: vi.fn().mockReturnValue({ chatgpt_available: false, claude_available: false, openrouter_available: true }),
     };
 
     const result = await run_phase_loop(
@@ -472,6 +474,7 @@ describe("run_phase_loop — build_runner_services with providers (L1154-1179)",
       wait_for_completion: vi.fn().mockResolvedValue({ status: "completed", content: "done" }),
       stop: vi.fn(),
       list: vi.fn().mockReturnValue([]),
+      get_provider_caps: vi.fn().mockReturnValue({ chatgpt_available: false, claude_available: false, openrouter_available: true }),
     };
 
     const result = await run_phase_loop(

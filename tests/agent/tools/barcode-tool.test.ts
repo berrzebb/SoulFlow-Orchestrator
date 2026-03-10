@@ -165,3 +165,17 @@ describe("BarcodeTool — 알 수 없는 action", () => {
     expect(parsed.error).toContain("unknown action");
   });
 });
+
+// ══════════════════════════════════════════
+// 미커버 분기 보충
+// ══════════════════════════════════════════
+
+describe("BarcodeTool — 미커버 분기", () => {
+  it("code128: ASCII 128+ 문자 포함 → L104 continue (out of range)", async () => {
+    // charCode 128 → code = 128 - 32 = 96 > 95 → continue, 나머지 문자만 처리
+    // generate_code128은 SVG 문자열 반환
+    const result = await tool.execute({ action: "generate", format: "code128", data: "ABC\x80DEF" });
+    // 에러 없이 SVG 반환됨 (range 밖 문자는 skip됨)
+    expect(result).toContain("<svg");
+  });
+});

@@ -67,8 +67,8 @@ describe("resolve_executor_provider", () => {
     })).toBe("claude_code");
   });
 
-  it("openrouter returns preferred when nothing available", () => {
-    expect(resolve_executor_provider("openrouter", NONE_AVAILABLE)).toBe("openrouter");
+  it("openrouter returns orchestrator_llm when nothing available", () => {
+    expect(resolve_executor_provider("openrouter", NONE_AVAILABLE)).toBe("orchestrator_llm");
   });
 
   it("claude_code returns claude_code when available", () => {
@@ -99,7 +99,7 @@ describe("resolve_executor_provider", () => {
     })).toBe("openrouter");
   });
 
-  it("chatgpt returns preferred when nothing available", () => {
-    expect(resolve_executor_provider("chatgpt", NONE_AVAILABLE)).toBe("chatgpt");
+  it("chatgpt returns orchestrator_llm when nothing available", () => {
+    expect(resolve_executor_provider("chatgpt", NONE_AVAILABLE)).toBe("orchestrator_llm");
   });
 });

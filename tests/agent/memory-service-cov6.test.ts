@@ -241,7 +241,7 @@ function make_provider(response: any = {}) {
 }
 
 describe("MemoryStore — consolidate_with_provider memory_update 동일 내용", () => {
-  it("memory_update가 현재 longterm과 동일 → write_longterm 미호출", async () => {
+  it("memory_update(하위호환) → append_longterm으로 기존 내용 보존", async () => {
     // 현재 longterm 내용 설정
     const current = "현재 장기 기억 내용";
     await store.write_longterm(current);
@@ -253,7 +253,7 @@ describe("MemoryStore — consolidate_with_provider memory_update 동일 내용"
         name: "save_memory",
         arguments: {
           history_entry: "새 히스토리",
-          memory_update: current, // 동일 내용 → 저장 안 함
+          memory_update: current, // 하위 호환 필드 — append됨
         },
       }],
     });
@@ -265,9 +265,9 @@ describe("MemoryStore — consolidate_with_provider memory_update 동일 내용"
     const session = make_session(msgs, 0);
     const r = await store.consolidate_with_provider(session, provider, "claude", { memory_window: 10 });
     expect(r).toBe(true);
-    // longterm은 변경 안 됨 (write_longterm 호출 안 됨)
+    // append 방식 → 기존 내용이 보존됨
     const longterm = await store.read_longterm();
-    expect(longterm).toBe(current);
+    expect(longterm).toContain(current);
   });
 
   it("memory_update가 객체형 → JSON.stringify 후 저장", async () => {

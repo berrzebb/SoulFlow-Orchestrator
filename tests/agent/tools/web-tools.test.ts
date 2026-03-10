@@ -117,20 +117,20 @@ describe("WebFetchTool — URL 유효성 검사", () => {
     expect(r).toContain("Error");
   });
 
-  it("file:// 프로토콜 → Error: invalid_protocol", async () => {
+  it("file:// 프로토콜 → Error: unsupported protocol", async () => {
     const r = await tool.execute({ url: "file:///etc/passwd" });
     expect(r).toContain("Error");
-    expect(r).toContain("invalid_protocol");
+    expect(r).toContain("unsupported protocol");
   });
 
-  it("localhost → Error: blocked_private_host", async () => {
+  it("localhost → Error: private/loopback host blocked", async () => {
     const r = await tool.execute({ url: "http://localhost/api" });
-    expect(r).toContain("blocked_private_host");
+    expect(r).toContain("private/loopback host blocked");
   });
 
-  it("127.0.0.1 → Error: blocked_private_host", async () => {
+  it("127.0.0.1 → Error: private/loopback host blocked", async () => {
     const r = await tool.execute({ url: "http://127.0.0.1/api" });
-    expect(r).toContain("blocked_private_host");
+    expect(r).toContain("private/loopback host blocked");
   });
 
   it("192.168.x.x → Error: blocked_private_host", async () => {
@@ -247,7 +247,7 @@ describe("WebBrowserTool — 유효성 검사", () => {
 
   it("open: private host → Error 반환", async () => {
     const r = await tool.execute({ action: "open", url: "http://localhost:3000" });
-    expect(r).toContain("blocked_private_host");
+    expect(r).toContain("private/loopback host blocked");
   });
 
   it("click: selector 없음 → Error 반환", async () => {

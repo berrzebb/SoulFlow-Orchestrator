@@ -297,7 +297,7 @@ describe("continue_task_loop — 재개된 task 실행", () => {
       await continue_task_loop(deps, mockRequest, mockTask, "test task", []);
 
       expect(deps.process_tracker.set_mode).toHaveBeenCalledWith("run-1", "task");
-      expect(deps.process_tracker.set_executor).toHaveBeenCalledWith("run-1", "chatgpt");
+      expect(deps.process_tracker.set_executor).toHaveBeenCalledWith("run-1", "orchestrator_llm");
       expect(deps.process_tracker.link_task).toHaveBeenCalledWith("run-1", mockTask.taskId);
     });
   });

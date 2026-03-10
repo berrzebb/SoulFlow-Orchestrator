@@ -130,3 +130,17 @@ describe("SitemapTool — unknown action (L69)", () => {
     expect(r.error).toContain("unknown action");
   });
 });
+
+// ══════════════════════════════════════════
+// 미커버 분기 보충
+// ══════════════════════════════════════════
+
+describe("SitemapTool — 미커버 분기 (L47)", () => {
+  it("validate: priority 범위 초과 → L47 에러 메시지 추가", async () => {
+    // priority: 2.0 → u.priority > 1 → L47 fires
+    const xml = `<?xml version="1.0"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://example.com/</loc><priority>2.0</priority></url></urlset>`;
+    const r = await exec({ action: "validate", sitemap: xml }) as Record<string, unknown>;
+    expect(r.valid).toBe(false);
+    expect((r.errors as string[]).some((e: string) => e.includes("invalid priority"))).toBe(true);
+  });
+});

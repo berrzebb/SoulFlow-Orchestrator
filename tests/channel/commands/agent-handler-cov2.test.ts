@@ -58,7 +58,7 @@ function make_ctx(args: string[] = [], command_name = "agent") {
   return {
     provider: "slack",
     message: { sender_id: "U1", chat_id: "C1" },
-    command: { name: command_name, args },
+    command: { name: command_name, args, args_lower: args.map(a => a.toLowerCase()) },
     send_reply: vi.fn().mockResolvedValue(undefined),
   } as any;
 }

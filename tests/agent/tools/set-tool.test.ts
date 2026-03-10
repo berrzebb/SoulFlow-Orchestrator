@@ -129,3 +129,15 @@ describe("SetTool — 에러 처리", () => {
     expect(String(await exec({ operation: "power_set", a: large }))).toContain("Error");
   });
 });
+
+// ══════════════════════════════════════════
+// 미커버 분기 보충
+// ══════════════════════════════════════════
+
+describe("SetTool — 미커버 분기", () => {
+  it("parse_set: 객체 JSON → 배열 아님 → null → L27 Error", async () => {
+    // parse_set("{}") → JSON.parse 성공하지만 Array.isArray({}) = false → null 반환 → L27
+    const r = String(await exec({ operation: "union", a: "{}", b: "[1,2]" }));
+    expect(r).toContain("Error");
+  });
+});

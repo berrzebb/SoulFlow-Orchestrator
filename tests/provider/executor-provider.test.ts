@@ -55,8 +55,8 @@ describe("resolve_executor_provider", () => {
     })).toBe("openrouter");
   });
 
-  it("chatgpt 선호 + 전부 불가 → chatgpt (원래 선호 반환)", () => {
-    expect(resolve_executor_provider("chatgpt", NONE_AVAILABLE)).toBe("chatgpt");
+  it("chatgpt 선호 + 전부 불가 → orchestrator_llm (최종 폴백)", () => {
+    expect(resolve_executor_provider("chatgpt", NONE_AVAILABLE)).toBe("orchestrator_llm");
   });
 
   it("openrouter 선호 + openrouter 가용 → openrouter", () => {

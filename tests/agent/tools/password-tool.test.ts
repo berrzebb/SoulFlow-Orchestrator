@@ -184,3 +184,27 @@ describe("PasswordTool — check_policy 미커버 분기", () => {
     expect(parsed.errors.some((e: string) => e.includes("sequential"))).toBe(true);
   });
 });
+
+// ══════════════════════════════════════════
+// 미커버 분기 보충
+// ══════════════════════════════════════════
+
+describe("PasswordTool — 미커버 분기 (L48)", () => {
+  it("check_policy: req_digit=true + 숫자 없음 → L48 missing digit 에러", async () => {
+    const r = await tool.execute({
+      action: "check_policy",
+      password: "NoDigitsHere!",
+      require_digit: true,
+    });
+    const parsed = JSON.parse(r);
+    expect(parsed.errors.some((e: string) => e.includes("digit"))).toBe(true);
+  });
+});
+
+describe("PasswordTool — analyze_strength 'weak' score (L123)", () => {
+  it("7자리 소문자 → entropy≈32.9 → 'weak' score (L123)", async () => {
+    // entropy = 7 * log2(26) ≈ 32.9 → 28 <= 32.9 < 36 → L123 score="weak"
+    const r = JSON.parse(await tool.execute({ action: "strength", password: "abcdefg" }));
+    expect(r.score).toBe("weak");
+  });
+});

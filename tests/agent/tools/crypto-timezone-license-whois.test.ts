@@ -436,3 +436,29 @@ describe("LicenseTool — detect 미커버 분기", () => {
     expect(r.detected).toBe("BSD-3-Clause");
   });
 });
+
+// ══════════════════════════════════════════
+// CryptoTool — sign/verify catch 분기 (L85, L95)
+// ══════════════════════════════════════════
+
+import { CryptoTool } from "@src/agent/tools/crypto.js";
+
+const crypto_tool = new CryptoTool();
+
+describe("CryptoTool — sign catch (L85)", () => {
+  it("sign: 형식 맞지만 내용이 잘못된 PRIVATE KEY → L85 catch", async () => {
+    const fake_key = "-----BEGIN PRIVATE KEY-----\ndGVzdA==\n-----END PRIVATE KEY-----";
+    const r = await crypto_tool.execute({ action: "sign", input: "hello", key: fake_key });
+    expect(r).toContain("Error");
+    expect(r).toContain("signing failed");
+  });
+});
+
+describe("CryptoTool — verify catch (L95)", () => {
+  it("verify: 유효한 PUBLIC KEY 형식이지만 서명이 잘못됨 → L95 catch", async () => {
+    const fake_key = "-----BEGIN PUBLIC KEY-----\ndGVzdA==\n-----END PUBLIC KEY-----";
+    const r = await crypto_tool.execute({ action: "verify", input: "hello", key: fake_key, signature: "aabbcc" });
+    expect(r).toContain("Error");
+    expect(r).toContain("verification failed");
+  });
+});

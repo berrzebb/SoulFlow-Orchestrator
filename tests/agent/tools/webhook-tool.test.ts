@@ -211,3 +211,40 @@ describe("WebhookTool — unsupported action", () => {
     expect(String(r)).toContain("bogus");
   });
 });
+
+// ══════════════════════════════════════════
+// 미커버 분기 보충
+// ══════════════════════════════════════════
+
+describe("WebhookTool — 미커버 분기", () => {
+  it("L129: MAX_REQUESTS_PER_HOOK 초과 → shift() (가장 오래된 요청 제거)", async () => {
+    const tool = make_tool();
+    try {
+      const reg = JSON.parse(await tool.execute({ action: "register", path: "/hooks/overflow" }));
+      const hooks = (tool as any).hooks as Map<string, { requests: Array<{ body: string; timestamp: string; method: string; headers: Record<string, string> }> }>;
+      const hook = hooks.get(reg.id)!;
+
+      // MAX_REQUESTS_PER_HOOK(50)개를 직접 삽입
+      for (let i = 0; i < 50; i++) {
+        hook.requests.push({ timestamp: new Date().toISOString(), method: "POST", headers: {}, body: `req-${i}` });
+      }
+      expect(hook.requests.length).toBe(50);
+
+      // 51번째 실제 HTTP 요청 전송 → L129 shift() 발동
+      await fetch(`http://localhost:${reg.port}/hooks/overflow`, {
+        method: "POST",
+        body: "overflow-body",
+      });
+      await new Promise(r => setTimeout(r, 30));
+
+      // shift 후에도 50개, 첫 항목은 req-0이 아닌 req-1
+      expect(hook.requests.length).toBe(50);
+      expect(hook.requests[0].body).toBe("req-1");
+    } finally {
+      const list = JSON.parse(await tool.execute({ action: "list" }));
+      for (const h of (list.webhooks as Array<{ id: string }>) ) {
+        await tool.execute({ action: "remove", webhook_id: h.id });
+      }
+    }
+  });
+});

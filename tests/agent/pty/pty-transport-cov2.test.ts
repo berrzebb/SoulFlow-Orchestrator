@@ -263,9 +263,9 @@ describe("PtyTransport — wait_for_terminal crash path", () => {
     expect((result as any).code).toBe("crash");
   });
 
-  it("pty not found (pool.get=null) → no-op dispose", async () => {
+  it("pty not found (pool.get=null) → no-op dispose (error 반환)", async () => {
     const pty = make_pty();
-    const pool = make_pool(null); // pool.get = null
+    const pool = make_pool(null); // pool.get = null → wait_for_terminal이 즉시 error resolve
     pool.ensure_running.mockReturnValue(pty);
     const transport = new PtyTransport({
       pool: pool as any,
@@ -273,11 +273,10 @@ describe("PtyTransport — wait_for_terminal crash path", () => {
       logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } as any,
     });
 
-    const p = transport.send("sess-null", { task: "t" } as any, {} as any);
-    // complete 메시지로 해소
-    transport["emit_output"]("sess-null", { type: "complete" as const, reply: "ok" });
-    const result = await p;
-    expect(result.type).toBe("complete");
+    const result = await transport.send("sess-null", { task: "t" } as any, {} as any);
+    // pool.get=null → cleanup() 즉시 호출 후 error로 resolve
+    expect(result.type).toBe("error");
+    expect((result as any).code).toBe("crash");
   });
 });
 

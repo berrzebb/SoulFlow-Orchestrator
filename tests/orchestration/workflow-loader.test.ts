@@ -175,18 +175,18 @@ describe("normalize_workflow_definition", () => {
     expect(result!.variables).toEqual({ key: "value", num: "42" });
   });
 
-  it("trigger (cron) 파싱", () => {
+  it("trigger (cron) 파싱 → trigger_nodes 변환 + timezone 보존", () => {
     const raw = {
       title: "T",
       phases: [{ phase_id: "p", agents: [{ role: "a" }] }],
       trigger: { type: "cron", schedule: "0 9 * * *", timezone: "Asia/Seoul" },
     };
     const result = normalize_workflow_definition(raw);
-    expect(result!.trigger).toEqual({
-      type: "cron",
-      schedule: "0 9 * * *",
-      timezone: "Asia/Seoul",
-    });
+    expect(result!.trigger_nodes).toHaveLength(1);
+    const tn = result!.trigger_nodes![0];
+    expect(tn.trigger_type).toBe("cron");
+    expect(tn.schedule).toBe("0 9 * * *");
+    expect(tn.timezone).toBe("Asia/Seoul");
   });
 
   it("trigger → trigger_nodes 자동 변환", () => {
@@ -225,7 +225,7 @@ describe("normalize_workflow_definition", () => {
   it("field_mappings 파싱", () => {
     const raw = {
       title: "T",
-      nodes: [{ node_id: "n1", node_type: "llm" }],
+      phases: [{ phase_id: "n1", agents: [{ role: "a" }] }, { phase_id: "n2", agents: [{ role: "b" }] }],
       field_mappings: [
         { from_node: "n1", from_field: "output", to_node: "n2", to_field: "input" },
         { from_node: "n1" }, // from_field 없음 → 필터링

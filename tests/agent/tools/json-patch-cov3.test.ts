@@ -115,3 +115,101 @@ describe("JsonPatchTool — set_value array splice (L177)", () => {
     expect(r.result).toEqual([10, 99, 20, 30]);
   });
 });
+
+// ── 추가 미커버 분기 ──────────────────────────────────────────
+describe("JsonPatchTool — 추가 미커버 분기", () => {
+  it("diff: invalid target JSON → Error (L42)", async () => {
+    const r = await exec({ action: "diff", document: '{"a":1}', target: "{bad" });
+    expect(String(r)).toContain("Error");
+    expect(String(r)).toContain("invalid target JSON");
+  });
+
+  it("unknown action → Error (L68)", async () => {
+    const r = await exec({ action: "unknown_op" });
+    expect(String(r)).toContain("Error");
+    expect(String(r)).toContain("unsupported");
+  });
+
+  it("remove from array /0 → L100 splice (성공)", async () => {
+    const doc = JSON.stringify([1, 2, 3]);
+    const r = await exec({ action: "apply", document: doc, patch: '[{"op":"remove","path":"/0"}]' }) as Record<string, unknown>;
+    expect(r.result).toEqual([2, 3]);
+  });
+
+  it("remove /missing_key from object → L102 error", async () => {
+    const doc = JSON.stringify({ a: 1 });
+    const r = await exec({ action: "apply", document: doc, patch: '[{"op":"remove","path":"/missing_key"}]' }) as Record<string, unknown>;
+    expect(r.error).toContain("path not found");
+  });
+
+  it("replace array[1] → L113 parent[idx]=value (성공)", async () => {
+    const doc = JSON.stringify([10, 20, 30]);
+    const r = await exec({ action: "apply", document: doc, patch: '[{"op":"replace","path":"/1","value":99}]' }) as Record<string, unknown>;
+    expect(r.result).toEqual([10, 99, 30]);
+  });
+
+  it("replace /missing from object → L115 error", async () => {
+    const doc = JSON.stringify({ a: 1 });
+    const r = await exec({ action: "apply", document: doc, patch: '[{"op":"replace","path":"/missing","value":99}]' }) as Record<string, unknown>;
+    expect(r.error).toContain("path not found");
+  });
+
+  it("test op key not found → L127 error", async () => {
+    const doc = JSON.stringify({ a: 1 });
+    const r = await exec({ action: "apply", document: doc, patch: '[{"op":"test","path":"/nonexistent","value":1}]' }) as Record<string, unknown>;
+    expect(r.error).toContain("path not found");
+  });
+
+  it("move without from → L134 error", async () => {
+    const doc = JSON.stringify({ a: 1 });
+    const r = await exec({ action: "apply", document: doc, patch: '[{"op":"move","path":"/b"}]' }) as Record<string, unknown>;
+    expect(r.error).toContain("from");
+  });
+
+  it("move from key not found → L137 error", async () => {
+    const doc = JSON.stringify({ a: 1 });
+    const r = await exec({ action: "apply", document: doc, patch: '[{"op":"move","from":"/nonexistent","path":"/b"}]' }) as Record<string, unknown>;
+    expect(r.error).toContain("from path not found");
+  });
+
+  it("move from array /0 → L139 splice (성공)", async () => {
+    const doc = JSON.stringify({ arr: [10, 20], b: 0 });
+    const r = await exec({ action: "apply", document: doc, patch: '[{"op":"move","from":"/arr/0","path":"/b"}]' }) as Record<string, unknown>;
+    expect((r.result as Record<string, unknown>).b).toBe(10);
+  });
+
+  it("copy without from → L145 error", async () => {
+    const doc = JSON.stringify({ a: 1 });
+    const r = await exec({ action: "apply", document: doc, patch: '[{"op":"copy","path":"/b"}]' }) as Record<string, unknown>;
+    expect(r.error).toContain("from");
+  });
+
+  it("copy from key not found → L148 error", async () => {
+    const doc = JSON.stringify({ a: 1 });
+    const r = await exec({ action: "apply", document: doc, patch: '[{"op":"copy","from":"/nonexistent","path":"/b"}]' }) as Record<string, unknown>;
+    expect(r.error).toContain("from path not found");
+  });
+
+  it("unknown op → L153 error", async () => {
+    const doc = JSON.stringify({ a: 1 });
+    const r = await exec({ action: "apply", document: doc, patch: '[{"op":"bogus","path":"/a"}]' }) as Record<string, unknown>;
+    expect(r.error).toContain("unknown operation");
+  });
+
+  it("add path='' → L160 return value (전체 문서 교체)", async () => {
+    const r = await exec({ action: "apply", document: '{"a":1}', patch: '[{"op":"add","path":"","value":{"x":99}}]' }) as Record<string, unknown>;
+    expect(r.result).toEqual({ x: 99 });
+  });
+
+  it("add /new/nested → L168 자동 중간 객체 생성", async () => {
+    const doc = JSON.stringify({ a: 1 });
+    const r = await exec({ action: "apply", document: doc, patch: '[{"op":"add","path":"/new/nested","value":42}]' }) as Record<string, unknown>;
+    expect((r.result as Record<string, unknown>).new).toEqual({ nested: 42 });
+  });
+
+  it("diff: type mismatch at root → L189 replace path='/'", async () => {
+    const r = await exec({ action: "diff", document: '"string"', target: '{"a":1}' }) as Record<string, unknown>;
+    expect(Array.isArray(r.patch)).toBe(true);
+    expect((r.patch as unknown[])[0]).toMatchObject({ op: "replace" });
+  });
+});

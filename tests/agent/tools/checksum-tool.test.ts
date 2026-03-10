@@ -70,4 +70,20 @@ describe("ChecksumTool — 미커버 분기", () => {
     const r = await exec({ action: "unknown_algo" }) as Record<string, unknown>;
     expect(String(r.error)).toContain("unknown action");
   });
+
+  it("crc32 action → L60/61 실행", async () => {
+    const r = await exec({ action: "crc32", data: "hello world" }) as Record<string, unknown>;
+    expect(r.algorithm).toBe("crc32");
+    expect(typeof r.checksum).toBe("string");
+  });
+
+  it("verify: adler32 알고리즘 → L72 adler32 분기", async () => {
+    const r = await exec({ action: "verify", data: "test", algorithm: "adler32", expected: "00000000" }) as Record<string, unknown>;
+    expect(r.algorithm).toBe("adler32");
+  });
+
+  it("hmac: key 없음 → L104 error", async () => {
+    const r = await exec({ action: "hmac", data: "test" }) as Record<string, unknown>;
+    expect(r.error).toContain("key is required");
+  });
 });

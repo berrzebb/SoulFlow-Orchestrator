@@ -129,3 +129,21 @@ describe("VcardTool — from_json", () => {
     expect(r.error).toBeDefined();
   });
 });
+
+// ══════════════════════════════════════════
+// 미커버 분기 보충
+// ══════════════════════════════════════════
+
+describe("VcardTool — 미커버 분기", () => {
+  it("validate: VERSION 없음 → L67 에러 추가", async () => {
+    const vcard = "BEGIN:VCARD\nFN:Test User\nEND:VCARD";
+    const r = await exec({ action: "validate", vcard }) as Record<string, unknown>;
+    expect(r.valid).toBe(false);
+    expect((r.errors as string[]).some((e: string) => e.includes("VERSION"))).toBe(true);
+  });
+
+  it("unknown action → L88 error", async () => {
+    const r = await exec({ action: "unknown_action_x" }) as Record<string, unknown>;
+    expect(r.error).toBeDefined();
+  });
+});

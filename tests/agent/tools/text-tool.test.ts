@@ -149,3 +149,33 @@ describe("TextTool — 에러 처리", () => {
     expect(String(await exec({ operation: "invalid", input: "x" }))).toContain("Error");
   });
 });
+
+// ══════════════════════════════════════════
+// 미커버 분기 보충
+// ══════════════════════════════════════════
+
+describe("TextTool — 미커버 분기", () => {
+  it("levenshtein: 5000자 초과 → L135 math.abs 빠른 경로", async () => {
+    // a.length > 5000 → L135 return Math.abs(a.length - b.length)
+    const long_a = "a".repeat(5001);
+    const short_b = "b".repeat(3);
+    const r = await exec({ operation: "similarity", input: long_a, input2: short_b }) as Record<string, unknown>;
+    expect(r.levenshtein_distance).toBe(Math.abs(5001 - 3));
+  });
+
+  it("wrap: 짧은 줄 + 긴 줄 혼합 → L152 short line pass-through", async () => {
+    // "Short\n" + 긴 줄 → "Short"은 width보다 짧아 L152 return line
+    const input = "Short\n" + "word ".repeat(20);
+    const r = String(await exec({ operation: "wrap", input, width: 30 }));
+    expect(r).toContain("Short");
+  });
+});
+
+describe("TextTool — MAX_INPUT 초과 → L37 Error", () => {
+  it("512KB 초과 입력 → L37 Error: input exceeds", async () => {
+    const big = "x".repeat(1024 * 512 + 1);
+    const r = String(await exec({ operation: "upper", input: big }));
+    expect(r).toContain("Error");
+    expect(r).toContain("exceeds");
+  });
+});

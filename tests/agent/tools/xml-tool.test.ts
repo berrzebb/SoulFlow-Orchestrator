@@ -76,3 +76,38 @@ describe("XmlTool — pretty", () => {
     expect(r).toContain("Alice");
   });
 });
+
+// ══════════════════════════════════════════
+// 미커버 분기 보충
+// ══════════════════════════════════════════
+
+describe("XmlTool — 미커버 분기", () => {
+  it("query: current가 배열이고 part가 비정수 → map 반환 (L64)", async () => {
+    // <root><item>a</item><item>b</item></root> → item은 배열, .name은 비정수 인덱스
+    const xml = `<root><item><name>Alice</name></item><item><name>Bob</name></item></root>`;
+    const r = await exec({ action: "query", data: xml, path: "root.item.name" });
+    // map 결과: 배열로 반환되거나 undefined — 에러 없이 반환되어야 함
+    expect(r).toBeDefined();
+  });
+
+  it("generate: 배열 JSON → L155 Array.isArray 분기", async () => {
+    // json_to_xml([...], 0) → L155: Array.isArray fires
+    const data = JSON.stringify([{ tag: "item1" }, { tag: "item2" }]);
+    const r = String(await exec({ action: "generate", data }));
+    expect(r).toContain("item1");
+  });
+
+  it("generate: null 포함 배열 → L153 null/undefined 분기", async () => {
+    // json_to_xml([null, {tag:"x"}], 0) → L155 array, item null → L153
+    const data = JSON.stringify([null, { tag: "x" }]);
+    const r = String(await exec({ action: "generate", data }));
+    expect(r).toBeDefined();
+  });
+
+  it("generate: 문자열 포함 배열 → L154 non-object 분기", async () => {
+    // json_to_xml(["hello", "world"], 0) → L155 array, item "hello" → L154
+    const data = JSON.stringify(["hello", "world"]);
+    const r = String(await exec({ action: "generate", data }));
+    expect(r).toContain("hello");
+  });
+});

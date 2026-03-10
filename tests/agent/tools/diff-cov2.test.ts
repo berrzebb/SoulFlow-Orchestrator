@@ -66,6 +66,24 @@ describe("DiffTool — apply_patch --- +++ 헤더 라인 처리", () => {
     expect(patched).toContain("MODIFIED");
     expect(patched).not.toContain("line2");
   });
+
+  it("다중 hunk 패치 → L204 inner loop에서 @@ break", async () => {
+    // 두 변경이 8줄 이상 떨어져 있어야 두 개의 hunk로 분리됨 (context=3이면 6줄 이상)
+    const lines = Array.from({ length: 20 }, (_, i) => `line${i + 1}`);
+    const old_text = lines.join("\n");
+    const new_lines = [...lines];
+    new_lines[1] = "CHANGED_2";   // line 2 변경
+    new_lines[18] = "CHANGED_19"; // line 19 변경 (13줄 떨어짐 → 두 hunk)
+    const new_text = new_lines.join("\n");
+    const diff = await tool.execute({ operation: "compare", old_text, new_text });
+    // 두 개의 @@ hunk가 있어야 L204 inner loop break 트리거
+    const hunk_count = (diff.match(/^@@/gm) || []).length;
+    expect(hunk_count).toBeGreaterThanOrEqual(2);
+    // patch 적용 → 두 번째 @@ 만났을 때 L204 break
+    const patched = await tool.execute({ operation: "patch", diff_text: diff, old_text });
+    expect(patched).toContain("CHANGED_2");
+    expect(patched).toContain("CHANGED_19");
+  });
 });
 
 // ══════════════════════════════════════════

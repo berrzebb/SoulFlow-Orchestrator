@@ -230,3 +230,61 @@ describe("StateMachineTool — validate_params", () => {
     expect(errors).toHaveLength(0);
   });
 });
+
+// ══════════════════════════════════════════
+// 미커버 분기 보충
+// ══════════════════════════════════════════
+
+describe("StateMachineTool — 미커버 분기", () => {
+  it("transition: 잘못된 machine → L50 invalid machine JSON error", async () => {
+    const r = JSON.parse(await tool.execute({ action: "transition", machine: "bad-json" }));
+    expect(r.error).toContain("invalid machine JSON");
+  });
+
+  it("validate: 잘못된 machine → L67 invalid machine JSON error", async () => {
+    const r = JSON.parse(await tool.execute({ action: "validate", machine: "{}" }));
+    expect(r.error).toContain("invalid machine JSON");
+  });
+
+  it("history: 잘못된 machine → L124 invalid machine JSON error", async () => {
+    const r = JSON.parse(await tool.execute({ action: "history", machine: "not-json" }));
+    expect(r.error).toContain("invalid machine JSON");
+  });
+
+  it("parse_machine: initial/states 없음 → L147 return null", async () => {
+    // parse_machine({}) → !m.initial || !Array.isArray(m.states) → null
+    const r = JSON.parse(await tool.execute({ action: "define", machine: '{"foo": "bar"}' }));
+    expect(r.error).toContain("invalid machine JSON");
+  });
+
+  it("reachable: 다이아몬드 그래프 → L111 visited.has(cur) continue (B,C 둘다 D를 큐에 추가)", async () => {
+    // A→B, A→C, B→D, C→D: BFS에서 D가 queue에 두 번 추가됨 → 두 번째 shift 시 L111 continue
+    const diamond = JSON.stringify({
+      initial: "A",
+      states: [
+        { name: "A", on: { go_b: "B", go_c: "C" } },
+        { name: "B", on: { next: "D" } },
+        { name: "C", on: { next: "D" } },
+        { name: "D" },
+      ],
+    });
+    const r = JSON.parse(await tool.execute({ action: "reachable", machine: diamond }));
+    expect((r.reachable as string[]).sort()).toEqual(["A", "B", "C", "D"]);
+  });
+
+  it("validate: 다이아몬드 그래프 → L157 find_unreachable visited.has(cur) continue", async () => {
+    // validate → find_unreachable → BFS에서 D가 queue에 두 번 추가됨 → L157 continue
+    const diamond = JSON.stringify({
+      initial: "A",
+      states: [
+        { name: "A", on: { go_b: "B", go_c: "C" } },
+        { name: "B", on: { next: "D" } },
+        { name: "C", on: { next: "D" } },
+        { name: "D" },
+      ],
+    });
+    const r = JSON.parse(await tool.execute({ action: "validate", machine: diamond }));
+    expect(r.valid).toBe(true);
+    expect((r.warnings as Record<string, string[]>).unreachable_states).toEqual([]);
+  });
+});

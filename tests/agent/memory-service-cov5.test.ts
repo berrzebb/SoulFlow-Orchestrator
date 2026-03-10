@@ -261,9 +261,9 @@ describe("MemoryStore — consolidate_with_provider", () => {
     const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
     const daily = await store.read_daily(today);
     expect(daily).toContain("오늘의 요약");
-    // memory_update가 longterm에 저장됨
+    // memory_update(하위호환) → append_longterm으로 저장됨 (기존 내용 보존)
     const longterm = await store.read_longterm();
-    expect(longterm).toBe("업데이트된 장기 기억");
+    expect(longterm).toContain("업데이트된 장기 기억");
   });
 
   it("history_entry가 객체 → JSON.stringify 후 저장", async () => {

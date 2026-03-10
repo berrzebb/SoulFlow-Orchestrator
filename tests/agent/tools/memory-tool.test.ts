@@ -96,23 +96,6 @@ describe("MemoryTool — read_longterm", () => {
   });
 });
 
-describe("MemoryTool — write_longterm", () => {
-  it("내용 저장 성공", async () => {
-    const store = make_store();
-    const tool = new MemoryTool(store);
-    const result = await tool.execute({ action: "write_longterm", content: "새 메모리" });
-    expect(result).toContain("덮어쓰기 완료");
-    expect(await store.read_longterm()).toBe("새 메모리");
-  });
-
-  it("content 없음 → Error", async () => {
-    const tool = new MemoryTool(make_store());
-    const result = await tool.execute({ action: "write_longterm", content: "" });
-    expect(result).toContain("Error");
-    expect(result).toContain("content");
-  });
-});
-
 describe("MemoryTool — append_longterm", () => {
   it("내용 추가 성공", async () => {
     const store = make_store();

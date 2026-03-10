@@ -117,3 +117,15 @@ describe("AsciiArtTool — border", () => {
     expect(lines[0]).toBe("#".repeat(30));
   });
 });
+
+// ══════════════════════════════════════════
+// 미커버 분기 보충
+// ══════════════════════════════════════════
+
+describe("AsciiArtTool — 미커버 분기 (L117)", () => {
+  it("table: 헤더 없이 빈 데이터 → L117 all.length===0 → 빈 문자열", async () => {
+    // data=[], no headers → all=[] → L117 return ""
+    const r = await exec({ action: "table", data: "[]" });
+    expect(r).toBe("");
+  });
+});

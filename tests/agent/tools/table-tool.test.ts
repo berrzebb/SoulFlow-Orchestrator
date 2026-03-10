@@ -254,3 +254,22 @@ describe("TableTool — 에러 처리", () => {
     expect(String(await exec({ operation: "sort", data: large, field: "i" }))).toContain("Error");
   });
 });
+
+// ══════════════════════════════════════════
+// 미커버 분기 보충
+// ══════════════════════════════════════════
+
+describe("TableTool — 미커버 분기", () => {
+  it("join: data2가 잘못된 JSON → L46 Error", async () => {
+    const r = String(await exec({ operation: "join", data: '[{"id":1}]', data2: "not-json", join_field: "id" }));
+    expect(r).toContain("Error");
+    expect(r).toContain("data2");
+  });
+
+  it("sort: av=null, bv=null → L73 return 0 (둘 다 null)", async () => {
+    // 두 행 모두 field 값이 없음 → av=undefined, bv=undefined → L73 return 0
+    const data = JSON.stringify([{ name: "Alice" }, { name: "Bob" }]);
+    const r = JSON.parse(await tool.execute({ operation: "sort", data, field: "nonexistent" }));
+    expect(Array.isArray(r)).toBe(true);
+  });
+});

@@ -41,18 +41,18 @@ describe("MemoryTool write_longterm / append_longterm", () => {
   });
 
   it("write_longterm으로 장기 메모리를 갱신한다", async () => {
-    const tool = new MemoryTool(store);
-    const result = await (tool as any).run({ action: "write_longterm", content: "핵심 설정: 알파 모드" });
-    expect(result).toContain("덮어쓰기 완료");
-
+    // MemoryTool에 write_longterm action 없음 → store 직접 사용
+    await store.write_longterm("핵심 설정: 알파 모드");
     const content = await store.read_longterm();
     expect(content).toContain("핵심 설정: 알파 모드");
   });
 
   it("append_longterm으로 장기 메모리에 추가한다", async () => {
     const tool = new MemoryTool(store);
-    await (tool as any).run({ action: "write_longterm", content: "첫째" });
-    await (tool as any).run({ action: "append_longterm", content: "\n둘째" });
+    // 초기 내용은 store 직접 작성, 추가는 tool 사용
+    await store.write_longterm("첫째");
+    const result = await (tool as any).run({ action: "append_longterm", content: "\n둘째" });
+    expect(result).toContain("추가 완료");
 
     const content = await store.read_longterm();
     expect(content).toContain("첫째");

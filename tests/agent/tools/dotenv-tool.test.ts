@@ -152,3 +152,17 @@ describe("DotenvTool — unknown action (L71)", () => {
     expect(String(r)).toContain("unsupported action");
   });
 });
+
+// ══════════════════════════════════════════
+// 미커버 분기 보충
+// ══════════════════════════════════════════
+
+describe("DotenvTool — 미커버 분기", () => {
+  it("parse: '=' 없는 라인 → L82 continue (eq_idx === -1)", async () => {
+    // "KEY" 라인에 = 없음 → eq_idx=-1 → continue, 해당 줄 skip
+    const r = await tool.execute({ action: "parse", input: "KEY\nANOTHER=value" });
+    const parsed = JSON.parse(r);
+    expect(parsed.variables.ANOTHER).toBe("value");
+    expect(parsed.variables.KEY).toBeUndefined();
+  });
+});

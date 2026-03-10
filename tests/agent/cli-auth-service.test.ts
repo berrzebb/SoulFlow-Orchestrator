@@ -4,13 +4,11 @@
  * - check_codex: ~/.codex 없음, auth 파일, config 파일, 파일 없음
  * - check_gemini: GEMINI_API_KEY, ~/.gemini 파일 탐색
  * - check_all, get_cached, get_all_cached
- * - login/cancel_login
  */
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("node:child_process", () => ({
   execFile: vi.fn(),
-  spawn: vi.fn(),
 }));
 
 vi.mock("node:fs", () => ({
@@ -18,10 +16,9 @@ vi.mock("node:fs", () => ({
   readdirSync: vi.fn(),
 }));
 
-import { execFile, spawn } from "node:child_process";
+import { execFile } from "node:child_process";
 import { existsSync, readdirSync } from "node:fs";
 import { CliAuthService } from "@src/agent/cli-auth.service.js";
-import { EventEmitter } from "node:events";
 
 function make_logger() {
   return {

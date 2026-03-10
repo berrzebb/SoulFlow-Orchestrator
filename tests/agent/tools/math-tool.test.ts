@@ -213,3 +213,22 @@ describe("MathTool — safe_eval catch (L73)", () => {
     expect(String(r)).toContain("Error");
   });
 });
+
+// ══════════════════════════════════════════
+// 미커버 분기 보충
+// ══════════════════════════════════════════
+
+describe("MathTool — 미커버 분기", () => {
+  it("eval: Infinity 반환 → L70 !isFinite → Error", async () => {
+    // 1/0 = Infinity → !isFinite(Infinity) → L70 fires
+    const r = await tool.execute({ operation: "eval", expression: "1/0" });
+    expect(r).toContain("Error");
+    expect(r).toContain("Infinity");
+  });
+
+  it("convert: F→C 변환 → L94 to==='c' 분기", async () => {
+    // temp_convert(32, "f", "c") → celsius = (32-32)*5/9 = 0 → L94 return 0
+    const r = await tool.execute({ operation: "convert", value: 32, from: "f", to: "c" });
+    expect(r).toBe("0");
+  });
+});

@@ -156,3 +156,44 @@ describe("DurationTool — 파싱 실패 (L35, L40, L65)", () => {
     expect(r.error).toContain("cannot parse duration");
   });
 });
+
+// ══════════════════════════════════════════
+// 미커버 분기 보충 (L58, L71, L76, L114, L146-148, L160-162)
+// ══════════════════════════════════════════
+
+describe("DurationTool — 미커버 분기", () => {
+  it("subtract: 잘못된 duration → L58 error", async () => {
+    const r = await exec({ action: "subtract", duration: "not-a-duration", duration2: "PT1H" }) as Record<string, unknown>;
+    expect(r.error).toContain("cannot parse duration");
+  });
+
+  it("compare: 잘못된 duration → L71 error", async () => {
+    const r = await exec({ action: "compare", duration: "garbage", duration2: "PT1H" }) as Record<string, unknown>;
+    expect(r.error).toContain("cannot parse duration");
+  });
+
+  it("unknown action → L76 Error", async () => {
+    const r = await tool.execute({ action: "unsupported_xyz" });
+    expect(String(r)).toContain("Error");
+    expect(String(r)).toContain("unsupported");
+  });
+
+  it("parse_duration: 숫자 문자열 → L114 from_ms (밀리초 직접 입력)", async () => {
+    // input = "3600000" → !matched → ms=3600000 → from_ms
+    const r = await exec({ action: "format", duration: "3600000" }) as Record<string, unknown>;
+    expect(r.iso).toBeDefined();
+  });
+
+  it("to_iso: years/months/weeks 포함 → L146-148", async () => {
+    // parse ISO with years/months/weeks → to_iso includes Y/M/W
+    const r = await exec({ action: "format", duration: "P2Y3M1W5D" }) as Record<string, unknown>;
+    expect(String(r.iso)).toContain("Y");
+  });
+
+  it("humanize: years/months/weeks 포함 → L160-162", async () => {
+    const r = await exec({ action: "humanize", duration: "P1Y2M3W" }) as Record<string, unknown>;
+    expect(String(r.human)).toContain("year");
+    expect(String(r.human)).toContain("month");
+    expect(String(r.human)).toContain("week");
+  });
+});

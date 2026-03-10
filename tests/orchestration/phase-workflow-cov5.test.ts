@@ -83,7 +83,7 @@ describe("run_phase_loop — store.upsert reject (L83)", () => {
     const run_orchestrator = vi.fn().mockResolvedValue({ content: DYNAMIC_WF });
 
     const deps = make_base_deps({
-      providers: { run_orchestrator } as never,
+      providers: { run_orchestrator, get_orchestrator_provider_id: vi.fn().mockReturnValue("openrouter") } as never,
       phase_workflow_store: { upsert } as never,
       logger: logger as never,
     });

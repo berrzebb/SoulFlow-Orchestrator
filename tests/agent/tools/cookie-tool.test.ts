@@ -91,9 +91,21 @@ describe("CookieTool — build_set_cookie", () => {
     const r = String(await exec({ action: "build_set_cookie", name: "x", value: "y" }));
     expect(r).toBe("x=y");
   });
+
+  it("expires 포함 빌드 → L155 Expires 헤더", async () => {
+    const r = String(await exec({ action: "build_set_cookie", name: "sess", value: "abc", expires: "Thu, 01 Jan 2099 00:00:00 GMT" }));
+    expect(r).toContain("Expires=Thu, 01 Jan 2099 00:00:00 GMT");
+  });
 });
 
 describe("CookieTool — validate", () => {
+  it("이름에 특수문자 → L89 invalid characters error", async () => {
+    // cookie name contains ";" → /[\s,;=]/.test(name) → L89 실행
+    const r = await exec({ action: "validate", cookie: "bad;name=value" }) as Record<string, unknown>;
+    expect(r.valid).toBe(false);
+    expect((r.errors as string[]).some((e: unknown) => String(e).includes("invalid characters"))).toBe(true);
+  });
+
   it("유효한 Cookie → valid: true", async () => {
     const r = await exec({ action: "validate", cookie: "session=abc123" }) as Record<string, unknown>;
     expect(r.valid).toBe(true);
@@ -136,6 +148,11 @@ describe("CookieTool — jar_merge", () => {
   it("잘못된 jar JSON → error", async () => {
     const r = await exec({ action: "jar_merge", jar: "bad", jar2: "[]" }) as Record<string, unknown>;
     expect(r.error).toBeDefined();
+  });
+
+  it("잘못된 jar2 JSON → L101 error", async () => {
+    const r = await exec({ action: "jar_merge", jar: "[]", jar2: "{bad}" }) as Record<string, unknown>;
+    expect(r.error).toContain("jar2");
   });
 });
 

@@ -119,3 +119,30 @@ describe("UuidTool — nil", () => {
     expect(r.uuid).toBe("00000000-0000-0000-0000-000000000000");
   });
 });
+
+// ══════════════════════════════════════════
+// 미커버 분기 보충
+// ══════════════════════════════════════════
+
+describe("UuidTool — 미커버 분기", () => {
+  it("unknown action → L50 Error", async () => {
+    const r = await tool.execute({ action: "unknown_action" });
+    expect(String(r)).toContain("Error");
+    expect(String(r)).toContain("unsupported");
+  });
+
+  it("parse: v7 UUID → L99 timestamp/date 포함", async () => {
+    // generate v7 first, then parse
+    const v7 = await exec({ action: "generate", version: 7 }) as Record<string, unknown>;
+    const r = await exec({ action: "parse", uuid: String(v7.uuid) }) as Record<string, unknown>;
+    expect(r.version).toBe(7);
+    expect(r.timestamp).toBeDefined();
+    expect(r.date).toBeDefined();
+  });
+
+  it("parse: nil UUID → L104 nil=true", async () => {
+    // nil UUID: 00000000-0000-0000-0000-000000000000 → result.nil = true
+    const r = await exec({ action: "parse", uuid: "00000000-0000-0000-0000-000000000000" }) as Record<string, unknown>;
+    expect(r.nil).toBe(true);
+  });
+});

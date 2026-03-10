@@ -110,4 +110,15 @@ describe("CircuitBreakerTool", () => {
       expect(r.threshold).toBe(10);
     });
   });
+
+  describe("get_or_create 자동 생성 L126/127", () => {
+    it("create 없이 record_success → 기본값으로 자동 생성", async () => {
+      const name = uid();
+      const tool = make_tool();
+      // create 없이 바로 record_success → get_or_create L126/127 실행
+      const r = JSON.parse(await tool.execute({ action: "record_success", name }));
+      expect(r.name).toBe(name);
+      expect(r.state).toBe("closed");
+    });
+  });
 });

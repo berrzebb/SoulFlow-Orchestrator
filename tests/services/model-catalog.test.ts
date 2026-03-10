@@ -183,14 +183,14 @@ describe("model-catalog — fetch mock (네트워크)", () => {
     expect(models.find((m) => m.id === "nomic-embed-text")?.purpose).toBe("embedding");
   });
 
-  it("fetch_ollama_models: 실패 → 빈 배열", async () => {
+  it("fetch_ollama_models: 네트워크 실패 → 에러 throw", async () => {
     vi.mocked(fetch).mockRejectedValue(new Error("connection refused"));
-    expect(await fetch_ollama_models("http://localhost:11434")).toEqual([]);
+    await expect(fetch_ollama_models("http://localhost:11434")).rejects.toThrow("connection refused");
   });
 
-  it("fetch_ollama_models: HTTP 실패 → 빈 배열", async () => {
+  it("fetch_ollama_models: HTTP 실패 → 에러 throw", async () => {
     vi.mocked(fetch).mockResolvedValue({ ok: false, status: 503 } as Response);
-    expect(await fetch_ollama_models("http://localhost:11434")).toEqual([]);
+    await expect(fetch_ollama_models("http://localhost:11434")).rejects.toThrow("503");
   });
 
   it("fetch_openrouter_models: frontend API embed 모델 보충", async () => {

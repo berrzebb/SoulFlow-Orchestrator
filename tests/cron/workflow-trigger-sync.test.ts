@@ -158,13 +158,16 @@ describe("sync_all_workflow_triggers — cron 동기화", () => {
   });
 });
 
-describe("sync_all_workflow_triggers — 레거시 trigger.schedule 지원", () => {
-  it("trigger_nodes 없고 trigger.schedule 있을 때 cron 등록", async () => {
+describe("sync_all_workflow_triggers — trigger_nodes cron 지원", () => {
+  it("trigger_nodes에 cron 트리거 있을 때 cron 등록", async () => {
     const cron = make_cron();
     const deps = make_deps({ cron });
     const template: TemplateWithSlug = {
-      slug: "legacy-cron",
-      trigger: { type: "cron", schedule: "0 8 * * *" },
+      slug: "scheduled-cron",
+      title: "Scheduled Workflow",
+      objective: "",
+      phases: [],
+      trigger_nodes: [{ id: "__cron__", trigger_type: "cron", schedule: "0 8 * * *" }],
     } as unknown as TemplateWithSlug;
 
     const result = await sync_all_workflow_triggers([template], deps);

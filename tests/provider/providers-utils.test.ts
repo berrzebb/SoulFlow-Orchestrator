@@ -60,8 +60,8 @@ describe("resolve_executor_provider", () => {
     expect(resolve_executor_provider("openrouter", claude_only)).toBe("claude_code");
   });
 
-  it("openrouter + 모두 없음 → openrouter (preferred 반환)", () => {
-    expect(resolve_executor_provider("openrouter", empty)).toBe("openrouter");
+  it("openrouter + 모두 없음 → orchestrator_llm (최종 폴백)", () => {
+    expect(resolve_executor_provider("openrouter", empty)).toBe("orchestrator_llm");
   });
 
   it("claude_code + claude_available=true → claude_code", () => {
@@ -77,8 +77,8 @@ describe("resolve_executor_provider", () => {
     expect(resolve_executor_provider("claude_code", caps)).toBe("openrouter");
   });
 
-  it("claude_code + 모두 없음 → claude_code (preferred)", () => {
-    expect(resolve_executor_provider("claude_code", empty)).toBe("claude_code");
+  it("claude_code + 모두 없음 → orchestrator_llm (최종 폴백)", () => {
+    expect(resolve_executor_provider("claude_code", empty)).toBe("orchestrator_llm");
   });
 
   it("chatgpt preferred + chatgpt=true → chatgpt", () => {
@@ -89,8 +89,8 @@ describe("resolve_executor_provider", () => {
     expect(resolve_executor_provider("chatgpt", claude_only)).toBe("claude_code");
   });
 
-  it("chatgpt preferred + 모두 없음 → chatgpt (preferred)", () => {
-    expect(resolve_executor_provider("chatgpt", empty)).toBe("chatgpt");
+  it("chatgpt preferred + 모두 없음 → orchestrator_llm (최종 폴백)", () => {
+    expect(resolve_executor_provider("chatgpt", empty)).toBe("orchestrator_llm");
   });
 });
 

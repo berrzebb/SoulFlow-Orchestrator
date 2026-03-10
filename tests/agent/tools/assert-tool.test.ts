@@ -201,3 +201,15 @@ describe("AssertTool — 에러 처리", () => {
     expect(String(await exec({ action: "unknown_action", value: "test" }))).toContain("Error");
   });
 });
+
+// ══════════════════════════════════════════
+// 미커버 분기 보충
+// ══════════════════════════════════════════
+
+describe("AssertTool — 미커버 분기", () => {
+  it("schema: type 없는 스키마 → validate_type L114 → pass: true", async () => {
+    // schema without 'type' → !type is true → return true
+    const r = await exec({ action: "schema", value: '"hello"', expected: "{}" }) as Record<string, unknown>;
+    expect(r.pass).toBe(true);
+  });
+});

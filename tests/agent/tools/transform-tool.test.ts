@@ -324,3 +324,17 @@ describe("TransformTool — 에러 케이스", () => {
     expect(r).toContain("Error");
   });
 });
+
+// ══════════════════════════════════════════
+// 미커버 분기 보충
+// ══════════════════════════════════════════
+
+describe("TransformTool — 미커버 분기 (L145)", () => {
+  it("map: 중간 경로가 비객체 → get_path L145 return undefined", async () => {
+    // data=[{a:1}], path="a.b" → get a=1 (number, not object) → L145 return undefined
+    const r = await tool.execute({ action: "map", data: JSON.stringify([{ a: 1 }]), path: "a.b" });
+    const parsed = JSON.parse(r);
+    expect(Array.isArray(parsed)).toBe(true);
+    expect(parsed[0]).toBeNull(); // JSON.stringify converts undefined → null
+  });
+});

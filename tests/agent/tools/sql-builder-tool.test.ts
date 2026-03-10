@@ -258,3 +258,23 @@ describe("SqlBuilderTool — unknown action", () => {
     expect(String(r)).toContain("Error");
   });
 });
+
+// ══════════════════════════════════════════
+// 미커버 분기 보충
+// ══════════════════════════════════════════
+
+describe("SqlBuilderTool — 미커버 분기", () => {
+  it("delete: table 없음 → L78 Error", async () => {
+    const r = await exec({ action: "delete", where: '{"id": 1}' });
+    expect(String(r)).toContain("Error");
+    expect(String(r)).toContain("table");
+  });
+
+  it("build_where: where가 잘못된 JSON → L127 catch → 빈 clause", async () => {
+    // where=bad-json → JSON.parse 실패 → catch → {clause:"", bind_params:[]}
+    // clause 없으면 DELETE Error 반환
+    const r = await exec({ action: "delete", table: "users", where: "not-json" });
+    expect(String(r)).toContain("Error");
+    expect(String(r)).toContain("WHERE");
+  });
+});

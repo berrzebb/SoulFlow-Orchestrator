@@ -181,3 +181,15 @@ describe("FormatTool — 잘못된 locale catch (L59, L79)", () => {
     expect(r).toContain("Error");
   });
 });
+
+// ══════════════════════════════════════════
+// 미커버 분기 보충
+// ══════════════════════════════════════════
+
+describe("FormatTool — 미커버 분기 (L65)", () => {
+  it("currency: 숫자 아닌 값 → L65 isFinite false → Error", async () => {
+    const r = await exec({ operation: "currency", value: "notanumber", currency: "USD" });
+    expect(r).toContain("Error");
+    expect(r).toContain("invalid number");
+  });
+});

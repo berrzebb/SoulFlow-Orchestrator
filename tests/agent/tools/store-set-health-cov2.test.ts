@@ -263,3 +263,58 @@ describe("HealthcheckTool — multi mixed endpoints", () => {
 });
 
 const tool = new HealthcheckTool();
+
+// ══════════════════════════════════════════
+// 미커버 분기 보충 (L21, L23, L67)
+// ══════════════════════════════════════════
+
+describe("SqliteDynamicToolStore — normalize_entry L21/L23", () => {
+  let tmp2: string;
+  let s2: SqliteDynamicToolStore;
+
+  beforeEach(() => {
+    tmp2 = join(tmpdir(), `store-l21-${Date.now()}`);
+    mkdirSync(tmp2, { recursive: true });
+    s2 = new SqliteDynamicToolStore(tmp2);
+  });
+
+  afterEach(() => {
+    try { rmSync(tmp2, { recursive: true, force: true }); } catch {}
+  });
+
+  it("name 빈 행 → normalize_entry L21 return null → list_tools에서 제외", () => {
+    // name이 빈 문자열인 행을 DB에 직접 삽입
+    with_sqlite(s2.get_path(), (db) => {
+      db.prepare("INSERT OR REPLACE INTO dynamic_tools (name,description,enabled,kind,parameters_json,command_template,requires_approval,updated_at_ms) VALUES (?,?,?,?,?,?,?,?)")
+        .run("", "desc", 1, "shell", "{}", "echo", 0, Date.now());
+    });
+    const tools = s2.list_tools();
+    // name="" → normalize_entry returns null → filtered out
+    expect(tools.find((t) => t.name === "")).toBeUndefined();
+  });
+
+  it("kind=python 행 → normalize_entry L23 return null → list_tools에서 제외", () => {
+    with_sqlite(s2.get_path(), (db) => {
+      db.prepare("INSERT OR REPLACE INTO dynamic_tools (name,description,enabled,kind,parameters_json,command_template,requires_approval,updated_at_ms) VALUES (?,?,?,?,?,?,?,?)")
+        .run("python_tool", "desc", 1, "python", "{}", "python3 hello.py", 0, Date.now());
+    });
+    const tools = s2.list_tools();
+    // kind="python" → normalize_entry returns null → filtered out
+    expect(tools.find((t) => t.name === "python_tool")).toBeUndefined();
+  });
+});
+
+describe("SqliteDynamicToolStore — remove_if_empty L67", () => {
+  it("0바이트 파일 존재 시 생성자에서 삭제 후 재초기화", () => {
+    const { writeFileSync } = require("node:fs");
+    const tmp3 = join(tmpdir(), `store-l67-${Date.now()}`);
+    mkdirSync(tmp3, { recursive: true });
+    const db_path = join(tmp3, "runtime", "custom-tools", "tools.db");
+    mkdirSync(require("node:path").dirname(db_path), { recursive: true });
+    // 0바이트 파일 생성 → remove_if_empty → unlinkSync 호출 → L67 커버
+    writeFileSync(db_path, "");
+    const s3 = new SqliteDynamicToolStore(tmp3);
+    expect(s3.get_path()).toBe(db_path);
+    try { rmSync(tmp3, { recursive: true, force: true }); } catch {}
+  });
+});
