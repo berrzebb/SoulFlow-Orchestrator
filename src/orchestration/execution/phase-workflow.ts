@@ -109,7 +109,7 @@ export async function run_phase_loop(
     objective: task_with_media,
     channel: req.provider,
     chat_id: req.message.chat_id,
-    phases: definition.phases,
+    phases: definition.phases ?? [],
     nodes: definition.nodes,
     workspace,
     initial_memory: { origin, ...(node_categories?.length ? { node_categories } : {}) },
@@ -223,8 +223,8 @@ async function generate_dynamic_workflow(
 /** 동적 생성 워크플로우 미리보기 텍스트. */
 function format_workflow_preview(def: import("../../agent/phase-loop.types.js").WorkflowDefinition): string {
   const lines = [`다음 워크플로우를 생성했습니다:\n`];
-  for (let i = 0; i < def.phases.length; i++) {
-    const p = def.phases[i];
+  for (let i = 0; i < (def.phases?.length ?? 0); i++) {
+    const p = def.phases![i];
     const critic_note = p.critic ? " + critic" : "";
     lines.push(`**Phase ${i + 1}: ${p.title}** (${p.agents.length} agents${critic_note})`);
     for (const a of p.agents) {

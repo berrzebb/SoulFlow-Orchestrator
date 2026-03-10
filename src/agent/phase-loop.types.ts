@@ -1,6 +1,6 @@
 /** Phase Loop — Multi-Agent Phase-Based Workflow 타입 정의. */
 
-import type { OrcheNodeState, OrcheNodeType, WorkflowNodeDefinition } from "./workflow-node.types.js";
+import type { OrcheNodeState, OrcheNodeType, TriggerType, WorkflowNodeDefinition } from "./workflow-node.types.js";
 
 // ── State ────────────────────────────────────────────
 
@@ -179,12 +179,6 @@ export interface SkillNodeDefinition {
 }
 
 /** Cron 트리거 정의. */
-export interface WorkflowTriggerDefinition {
-  type: "cron";
-  schedule: string;
-  timezone?: string;
-}
-
 /** HITL 채널 바인딩. */
 export interface HitlChannelDefinition {
   channel_type: string;
@@ -194,8 +188,8 @@ export interface HitlChannelDefinition {
 export interface WorkflowDefinition {
   title: string;
   objective: string;
-  /** 레거시: Phase 전용 배열. nodes[]가 없을 때 사용. */
-  phases: PhaseDefinition[];
+  /** 레거시: Phase 전용 배열. nodes[]가 없을 때 사용. nodes[]가 있으면 이쪽이 우선. */
+  phases?: PhaseDefinition[];
   /** 통합 노드 배열 (Phase + 오케스트레이션). 있으면 phases[]보다 우선. */
   nodes?: WorkflowNodeDefinition[];
   /** 변수: `{{objective}}`, `{{channel}}` 등 런타임 치환. */
@@ -204,8 +198,6 @@ export interface WorkflowDefinition {
   tool_nodes?: ToolNodeDefinition[];
   /** 보조 Skill 노드 목록. */
   skill_nodes?: SkillNodeDefinition[];
-  /** @deprecated trigger_nodes 사용. */
-  trigger?: WorkflowTriggerDefinition;
   /** 트리거 노드 (복수 지원). */
   trigger_nodes?: TriggerNodeRecord[];
   /** HITL 채널 바인딩 (interactive/sequential_loop 모드용). */
@@ -246,7 +238,7 @@ export interface EndNodeRecord {
 /** 트리거 노드 레코드. */
 export interface TriggerNodeRecord {
   id: string;
-  trigger_type: "cron" | "webhook" | "manual" | "channel_message" | "kanban_event" | "filesystem_watch";
+  trigger_type: TriggerType;
   schedule?: string;
   timezone?: string;
   webhook_path?: string;

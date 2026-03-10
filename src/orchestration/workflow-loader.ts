@@ -2,7 +2,7 @@
 
 import { readdirSync, readFileSync, writeFileSync, unlinkSync, existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
-import type { WorkflowDefinition, PhaseDefinition, ToolNodeDefinition, SkillNodeDefinition, WorkflowTriggerDefinition, HitlChannelDefinition, OrcheNodeRecord, FieldMapping, TriggerNodeRecord } from "../agent/phase-loop.types.js";
+import type { WorkflowDefinition, PhaseDefinition, ToolNodeDefinition, SkillNodeDefinition, HitlChannelDefinition, OrcheNodeRecord, FieldMapping, TriggerNodeRecord } from "../agent/phase-loop.types.js";
 import type { WorkflowNodeDefinition } from "../agent/workflow-node.types.js";
 
 /** YAML 의존성 없이 간단한 YAML-like 파싱 (JSON 직렬화된 YAML 지원). */
@@ -260,7 +260,7 @@ export function workflow_to_sequence(def: WorkflowDefinition): string {
   // 페이즈 실행 흐름 (depends_on 순서대로)
   const phase_map = new Map((def.phases || []).map((p) => [p.phase_id, p]));
   const visited = new Set<string>();
-  const emit_phase = (p: typeof def.phases extends Array<infer T> ? T : never) => {
+  const emit_phase = (p: PhaseDefinition) => {
     if (visited.has(p.phase_id)) return;
     visited.add(p.phase_id);
     if (p.mode === "sequential_loop") {
@@ -373,15 +373,6 @@ function normalize_workflow_definition(raw: Record<string, unknown>): WorkflowDe
       }))
     : undefined;
 
-  const trigger: WorkflowTriggerDefinition | undefined =
-    raw.trigger && typeof raw.trigger === "object" && (raw.trigger as Record<string, unknown>).type === "cron"
-      ? {
-          type: "cron" as const,
-          schedule: String((raw.trigger as Record<string, unknown>).schedule || ""),
-          timezone: (raw.trigger as Record<string, unknown>).timezone ? String((raw.trigger as Record<string, unknown>).timezone) : undefined,
-        }
-      : undefined;
-
   const hitl_channel: HitlChannelDefinition | undefined =
     raw.hitl_channel && typeof raw.hitl_channel === "object"
       ? {
@@ -420,9 +411,12 @@ function normalize_workflow_definition(raw: Record<string, unknown>): WorkflowDe
         kanban_column_id: n.kanban_column_id ? String(n.kanban_column_id) : undefined,
       }))
     : undefined;
-  // 레거시 trigger → trigger_nodes 자동 변환
-  if (!trigger_nodes && trigger) {
-    trigger_nodes = [{ id: "__cron__", trigger_type: "cron", schedule: trigger.schedule, timezone: trigger.timezone }];
+  // 레거시 trigger (raw YAML) → trigger_nodes 자동 변환
+  if (!trigger_nodes) {
+    const raw_trigger = raw.trigger as Record<string, unknown> | undefined;
+    if (raw_trigger?.type === "cron" && raw_trigger.schedule) {
+      trigger_nodes = [{ id: "__cron__", trigger_type: "cron", schedule: String(raw_trigger.schedule), timezone: raw_trigger.timezone ? String(raw_trigger.timezone) : undefined }];
+    }
   }
 
   // 필드 매핑 — 중복 및 존재하지 않는 노드 참조 제거
@@ -464,7 +458,6 @@ function normalize_workflow_definition(raw: Record<string, unknown>): WorkflowDe
       : undefined,
     tool_nodes,
     skill_nodes,
-    trigger,
     trigger_nodes,
     hitl_channel,
     orche_nodes,

@@ -343,7 +343,7 @@ export function create_workflow_ops(deps: {
           ? Object.fromEntries(Object.entries(input.variables as Record<string, unknown>).map(([k, v]) => [k, String(v)]))
           : {};
         const substituted = substitute_variables(template, { ...(template.variables || {}), ...user_vars, objective, channel });
-        phases = substituted.phases;
+        phases = substituted.phases ?? [];
         nodes = substituted.nodes;
         field_mappings = substituted.field_mappings;
       } else if (Array.isArray(input.nodes)) {
@@ -358,7 +358,7 @@ export function create_workflow_ops(deps: {
           || load_workflow_templates(workspace)[0];
         if (!fallback) return { ok: false, error: "no_default_template" };
         const substituted = substitute_variables(fallback, { ...(fallback.variables || {}), objective, channel });
-        phases = substituted.phases;
+        phases = substituted.phases ?? [];
         nodes = substituted.nodes;
         field_mappings = substituted.field_mappings;
       }
@@ -445,13 +445,12 @@ export function create_workflow_ops(deps: {
 
     save_template(name, definition) {
       const slug = save_workflow_template(workspace, name, definition);
-      // trigger_nodes 또는 레거시 trigger 필드 중 하나라도 cron이 있으면 즉시 등록
-      const cron_trigger = definition.trigger_nodes?.find((t) => t.trigger_type === "cron" && t.schedule)
-        ?? (definition.trigger?.type === "cron" && definition.trigger.schedule ? definition.trigger : null);
+      // cron trigger_node가 있으면 즉시 cron에 등록
+      const cron_trigger = definition.trigger_nodes?.find((t) => t.trigger_type === "cron" && t.schedule);
       if (cron && cron_trigger) {
         const cron_name = `workflow:${slug}`;
-        const schedule = "schedule" in cron_trigger ? cron_trigger.schedule! : definition.trigger!.schedule;
-        const timezone = "timezone" in cron_trigger ? (cron_trigger.timezone ?? null) : (definition.trigger!.timezone ?? null);
+        const schedule = cron_trigger.schedule!;
+        const timezone = cron_trigger.timezone ?? null;
         cron.list_jobs(true).then((jobs) => {
           const existing = jobs.find((j) => j.name === cron_name);
           if (existing) return cron.remove_job(existing.id);
