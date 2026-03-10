@@ -182,3 +182,49 @@ describe("TemplateTool — 에러 처리", () => {
     expect(await exec({ template: "{{x}}", partials: "not-json" })).toContain("Error");
   });
 });
+
+// ══════════════════════════════════════════
+// 미커버 분기 보충
+// ══════════════════════════════════════════
+
+describe("TemplateEngineTool — 미커버 분기", () => {
+  it("재귀 partial 10단계 초과 → Error (L45+L50)", async () => {
+    const partials = JSON.stringify({ self: "{{> self}}" });
+    const r = await exec({ template: "{{> self}}", data: "{}", partials });
+    expect(String(r)).toContain("Error");
+    expect(String(r)).toContain("recursion");
+  });
+
+  it("trim helper → trim 결과 반환 (L109)", async () => {
+    const r = await exec({ template: "{{trim msg}}", data: JSON.stringify({ msg: "  hello  " }) });
+    expect(r).toBe("hello");
+  });
+
+  it("unknown helper → 원본 표현식 반환 (L110)", async () => {
+    const r = await exec({ template: "{{unknown msg}}", data: JSON.stringify({ msg: "test" }) });
+    expect(r).toContain("unknown");
+  });
+
+  it("interpolate: 객체 값 → JSON 직렬화 (L119)", async () => {
+    const r = await exec({ template: "{{obj}}", data: JSON.stringify({ obj: { a: 1 } }) });
+    expect(r).toContain("{");
+    expect(r).toContain("a");
+  });
+
+  it("resolve: 중간 경로 null → undefined (L128)", async () => {
+    // data.a = null → data.a.b 접근 → null 경로 → ""
+    const r = await exec({ template: "{{a.b}}", data: JSON.stringify({ a: null }) });
+    expect(r).toBe("");
+  });
+
+  it("resolve: 중간 경로 비객체 → undefined (L129)", async () => {
+    // data.a = 5 → data.a.b 접근 → 5는 객체 아님 → ""
+    const r = await exec({ template: "{{a.b}}", data: JSON.stringify({ a: 5 }) });
+    expect(r).toBe("");
+  });
+
+  it("is_truthy: 빈 배열 → false → #if 조건 미충족 (L137)", async () => {
+    const r = await exec({ template: "{{#if items}}yes{{/if}}", data: JSON.stringify({ items: [] }) });
+    expect(r).toBe("");
+  });
+});

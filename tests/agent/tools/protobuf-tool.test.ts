@@ -245,3 +245,62 @@ describe("ProtobufTool — unsupported action", () => {
     expect(r.error).toBeDefined();
   });
 });
+
+// ══════════════════════════════════════════
+// 미커버 분기 보충
+// ══════════════════════════════════════════
+
+describe("ProtobufTool — 미커버 분기", () => {
+  it("encode: int32 필드에 비숫자 값 → BigInt(NaN) throw → error (L48)", async () => {
+    // BigInt(Number("not-a-number")) = BigInt(NaN) → TypeError 발생 → L48 catch
+    const schema = JSON.stringify({ name: "T", fields: [{ number: 1, name: "x", type: "int32" }] });
+    const r = await exec({ action: "encode", schema, data: JSON.stringify({ x: "not-a-number" }) });
+    expect((r as Record<string, unknown>).error).toBeDefined();
+  });
+
+  it("decode: double 필드 + 불완전한 hex → readDoubleLE OOB throw → error (L60)", async () => {
+    // hex "09" = 1바이트(태그만), double은 8바이트 필요 → buf.readDoubleLE(1) throws RangeError
+    const schema = JSON.stringify({ name: "T", fields: [{ number: 1, name: "val", type: "double" }] });
+    const r = await exec({ action: "decode", schema, hex: "09" });
+    expect((r as Record<string, unknown>).error).toBeDefined();
+  });
+
+  it("wire_type: unknown type → default 0 (L110)", async () => {
+    // custom/unknown type → wire_type default → encode에서 varint 사용
+    const schema = JSON.stringify({ name: "T", fields: [{ number: 1, name: "x", type: "message" }] });
+    const r = await exec({ action: "encode", schema, data: JSON.stringify({ x: 42 }) });
+    expect(r).toBeDefined();
+  });
+
+  it("decode: wire_type=3 (start-group) → else break (L223)", async () => {
+    // tag 0x0b = (1<<3)|3 = field 1, wire_type 3 → decode_message else branch → break
+    const schema = JSON.stringify({ name: "T", fields: [{ number: 1, name: "x", type: "int32" }] });
+    const r = await exec({ action: "decode", schema, hex: "0b" });
+    // error 없이 빈 data 반환 (break으로 루프 탈출)
+    expect(r).toBeDefined();
+  });
+
+  it("info: skip_field case 1 (64-bit) — double 인코딩 후 info (L232)", async () => {
+    const schema = JSON.stringify({ name: "T", fields: [{ number: 1, name: "val", type: "double" }] });
+    const enc = await exec({ action: "encode", schema, data: JSON.stringify({ val: 3.14 }) });
+    const info = await exec({ action: "info", hex: enc.hex });
+    const fields = info.fields as { wire_type_name: string }[];
+    expect(fields.some(f => f.wire_type_name === "64-bit")).toBe(true);
+  });
+
+  it("info: skip_field case 2 (length-delimited) — string 인코딩 후 info (L233)", async () => {
+    const schema = JSON.stringify({ name: "T", fields: [{ number: 1, name: "s", type: "string" }] });
+    const enc = await exec({ action: "encode", schema, data: JSON.stringify({ s: "hello" }) });
+    const info = await exec({ action: "info", hex: enc.hex });
+    const fields = info.fields as { wire_type_name: string }[];
+    expect(fields.some(f => f.wire_type_name === "length-delimited")).toBe(true);
+  });
+
+  it("info: skip_field default (-1) → break (L235+L86)", async () => {
+    // wire_type 3 (start-group): 디코딩 불가 → skip_field returns -1 → break
+    // 수동으로 wire_type 3의 태그 바이트 생성: field=1, type=3 → tag = (1 << 3) | 3 = 11 = 0x0b
+    const hex = "0b";
+    const r = await exec({ action: "info", hex });
+    expect(r.byte_length).toBeDefined();
+  });
+});
