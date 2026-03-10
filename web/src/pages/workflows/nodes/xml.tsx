@@ -15,7 +15,7 @@ function XmlEditPanel({ node, update, t }: EditPanelProps) {
         </BuilderField>
       </BuilderRowPair>
       <BuilderField label={t("workflows.field_input")} required>
-        <textarea className="input input--sm" required rows={4} value={String(node.input || "")} onChange={(e) => update({ input: e.target.value })} placeholder="<root><item>value</item></root>" aria-required="true" />
+        <textarea className="input" required rows={4} value={String(node.input || "")} onChange={(e) => update({ input: e.target.value })} placeholder="<root><item>value</item></root>" aria-required="true" />
       </BuilderField>
       {action === "query" && (
         <BuilderField label={t("workflows.field_xpath")} required>

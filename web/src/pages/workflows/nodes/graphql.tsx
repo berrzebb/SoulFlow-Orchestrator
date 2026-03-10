@@ -20,10 +20,10 @@ function GraphqlEditPanel({ node, update, t }: EditPanelProps) {
       {action === "query" && (
         <>
           <BuilderField label={t("workflows.graphql_query")} required>
-            <textarea className="input input--sm" required rows={4} value={String(node.query || "")} onChange={(e) => update({ query: e.target.value })} placeholder="{ user(id: 1) { name email } }" aria-required="true" />
+            <textarea className="input" required rows={4} value={String(node.query || "")} onChange={(e) => update({ query: e.target.value })} placeholder="{ user(id: 1) { name email } }" aria-required="true" />
           </BuilderField>
           <BuilderField label={t("workflows.graphql_variables")}>
-            <textarea className="input input--sm" rows={2} value={String(node.variables || "")} onChange={(e) => update({ variables: e.target.value })} placeholder='{"id": 1}' />
+            <textarea className="input" rows={2} value={String(node.variables || "")} onChange={(e) => update({ variables: e.target.value })} placeholder='{"id": 1}' />
           </BuilderField>
           <BuilderRowPair>
             <BuilderField label={t("workflows.graphql_headers")}>

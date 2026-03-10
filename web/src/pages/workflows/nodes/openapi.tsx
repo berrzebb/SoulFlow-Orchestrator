@@ -16,7 +16,7 @@ function OpenapiEditPanel({ node, update, t }: EditPanelProps) {
         </BuilderField>
       </BuilderRowPair>
       <BuilderField label={t("workflows.openapi_spec")} required>
-        <textarea className="input input--sm" required rows={5} value={String(node.input || "")} onChange={(e) => update({ input: e.target.value })} placeholder='{"openapi": "3.0.0", ...}' aria-required="true" />
+        <textarea className="input" required rows={5} value={String(node.input || "")} onChange={(e) => update({ input: e.target.value })} placeholder='{"openapi": "3.0.0", ...}' aria-required="true" />
       </BuilderField>
       {action === "get_operation" && (
         <BuilderRowPair>

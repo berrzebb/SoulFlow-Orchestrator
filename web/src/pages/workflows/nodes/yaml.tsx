@@ -15,11 +15,11 @@ function YamlEditPanel({ node, update, t }: EditPanelProps) {
         </BuilderField>
       </BuilderRowPair>
       <BuilderField label={t("workflows.field_input")} required>
-        <textarea className="input input--sm" required rows={4} value={String(node.input || "")} onChange={(e) => update({ input: e.target.value })} placeholder="key: value" aria-required="true" />
+        <textarea className="input" required rows={4} value={String(node.input || "")} onChange={(e) => update({ input: e.target.value })} placeholder="key: value" aria-required="true" />
       </BuilderField>
       {action === "merge" && (
         <BuilderField label={t("workflows.field_input_2")} required>
-          <textarea className="input input--sm" required rows={3} value={String(node.input2 || "")} onChange={(e) => update({ input2: e.target.value })} placeholder="other: value" aria-required="true" />
+          <textarea className="input" required rows={3} value={String(node.input2 || "")} onChange={(e) => update({ input2: e.target.value })} placeholder="other: value" aria-required="true" />
         </BuilderField>
       )}
       {action === "query" && (

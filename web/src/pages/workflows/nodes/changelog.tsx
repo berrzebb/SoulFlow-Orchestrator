@@ -15,7 +15,7 @@ function ChangelogEditPanel({ node, update, t }: EditPanelProps) {
         </BuilderField>
       </BuilderRowPair>
       <BuilderField label={t("workflows.field_input")} required>
-        <textarea className="input input--sm" required rows={4} value={String(node.input || "")} onChange={(e) => update({ input: e.target.value })} placeholder="feat: add new feature&#10;fix: resolve bug" aria-required="true" />
+        <textarea className="input" required rows={4} value={String(node.input || "")} onChange={(e) => update({ input: e.target.value })} placeholder="feat: add new feature&#10;fix: resolve bug" aria-required="true" />
       </BuilderField>
       {(action === "generate" || action === "parse_commits") && (
         <BuilderRowPair>

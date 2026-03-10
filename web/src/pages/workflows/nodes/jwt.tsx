@@ -25,7 +25,7 @@ function JwtEditPanel({ node, update, t }: EditPanelProps) {
       {action === "create" ? (
         <>
           <BuilderField label={t("workflows.jwt_payload_json")} required>
-            <textarea className="input input--sm" required rows={3} value={String(node.payload || "")} onChange={(e) => update({ payload: e.target.value })} placeholder='{"sub": "user123"}' aria-required="true" />
+            <textarea className="input" required rows={3} value={String(node.payload || "")} onChange={(e) => update({ payload: e.target.value })} placeholder='{"sub": "user123"}' aria-required="true" />
           </BuilderField>
           <BuilderRowPair>
             <BuilderField label={t("workflows.field_secret")} required>
@@ -39,7 +39,7 @@ function JwtEditPanel({ node, update, t }: EditPanelProps) {
       ) : (
         <>
           <BuilderField label={t("workflows.field_token")} required>
-            <textarea className="input input--sm" required rows={3} value={String(node.token || "")} onChange={(e) => update({ token: e.target.value })} placeholder="eyJ..." aria-required="true" />
+            <textarea className="input" required rows={3} value={String(node.token || "")} onChange={(e) => update({ token: e.target.value })} placeholder="eyJ..." aria-required="true" />
           </BuilderField>
           {action === "verify" && (
             <BuilderField label={t("workflows.field_secret")} required>

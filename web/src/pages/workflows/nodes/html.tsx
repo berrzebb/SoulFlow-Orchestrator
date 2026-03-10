@@ -15,7 +15,7 @@ function HtmlEditPanel({ node, update, t }: EditPanelProps) {
         </BuilderField>
       </BuilderRowPair>
       <BuilderField label={t("workflows.html_input")} required>
-        <textarea className="input input--sm" required rows={5} value={String(node.input || "")} onChange={(e) => update({ input: e.target.value })} placeholder="<html>...</html>" aria-required="true" />
+        <textarea className="input" required rows={5} value={String(node.input || "")} onChange={(e) => update({ input: e.target.value })} placeholder="<html>...</html>" aria-required="true" />
       </BuilderField>
     </>
   );

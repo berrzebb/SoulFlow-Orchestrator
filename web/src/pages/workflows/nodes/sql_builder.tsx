@@ -27,7 +27,7 @@ function SqlBuilderEditPanel({ node, update, t }: EditPanelProps) {
       )}
       {(action === "validate" || action === "parameterize") && (
         <BuilderField label={t("workflows.field_sql")} required>
-          <textarea className="input input--sm" required rows={4} value={String(node.sql || "")} onChange={(e) => update({ sql: e.target.value })} placeholder="SELECT * FROM users WHERE id = ?" aria-required="true" />
+          <textarea className="input" required rows={4} value={String(node.sql || "")} onChange={(e) => update({ sql: e.target.value })} placeholder="SELECT * FROM users WHERE id = ?" aria-required="true" />
         </BuilderField>
       )}
       {action === "select" && (
@@ -37,7 +37,7 @@ function SqlBuilderEditPanel({ node, update, t }: EditPanelProps) {
       )}
       {(action === "insert" || action === "update") && (
         <BuilderField label={t("workflows.sql_values_json")} required>
-          <textarea className="input input--sm" required rows={3} value={String(node.values || "")} onChange={(e) => update({ values: e.target.value })} placeholder="{...}" aria-required="true" />
+          <textarea className="input" required rows={3} value={String(node.values || "")} onChange={(e) => update({ values: e.target.value })} placeholder="{...}" aria-required="true" />
         </BuilderField>
       )}
     </>

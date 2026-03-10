@@ -15,7 +15,7 @@ function DataMaskEditPanel({ node, update, t }: EditPanelProps) {
         </BuilderField>
       </BuilderRowPair>
       <BuilderField label={t("workflows.field_text")} required>
-        <textarea className="input input--sm" required rows={3} value={String(node.text || "")} onChange={(e) => update({ text: e.target.value })} placeholder="Contact: john@example.com" aria-required="true" />
+        <textarea className="input" required rows={3} value={String(node.text || "")} onChange={(e) => update({ text: e.target.value })} placeholder="Contact: john@example.com" aria-required="true" />
       </BuilderField>
       {action === "custom_mask" && (
         <BuilderRowPair>

@@ -21,7 +21,7 @@ function RssEditPanel({ node, update, t }: EditPanelProps) {
       )}
       {(action === "parse" || action === "add_item") && (
         <BuilderField label={t("workflows.rss_input_xml")} required>
-          <textarea className="input input--sm" required rows={4} value={String(node.input || "")} onChange={(e) => update({ input: e.target.value })} placeholder="<rss>...</rss>" aria-required="true" />
+          <textarea className="input" required rows={4} value={String(node.input || "")} onChange={(e) => update({ input: e.target.value })} placeholder="<rss>...</rss>" aria-required="true" />
         </BuilderField>
       )}
       {(action === "generate" || action === "add_item") && (

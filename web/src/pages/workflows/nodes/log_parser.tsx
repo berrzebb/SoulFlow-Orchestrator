@@ -15,7 +15,7 @@ function LogParserEditPanel({ node, update, t }: EditPanelProps) {
         </BuilderField>
       </BuilderRowPair>
       <BuilderField label={t("workflows.log_input")} required>
-        <textarea className="input input--sm" required rows={4} value={String(node.input || "")} onChange={(e) => update({ input: e.target.value })} placeholder="log lines..." aria-required="true" />
+        <textarea className="input" required rows={4} value={String(node.input || "")} onChange={(e) => update({ input: e.target.value })} placeholder="log lines..." aria-required="true" />
       </BuilderField>
       {action === "parse_custom" && (
         <BuilderField label={t("workflows.field_pattern_regex")}>

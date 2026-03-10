@@ -24,7 +24,7 @@ function MediaEditPanel({ node, update, t }: EditPanelProps) {
       {op === "from_base64" && (
         <>
           <BuilderField label={t("node.media.base64_input")}>
-            <textarea className="input input--sm inspector-droppable" rows={3}
+            <textarea className="input inspector-droppable" rows={3}
               value={String(node.input_path || "")}
               onChange={(e) => update({ input_path: e.target.value })}
               placeholder="data:image/png;base64,... or {{prev_node.result}}"

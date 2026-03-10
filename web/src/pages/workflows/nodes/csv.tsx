@@ -18,7 +18,7 @@ function CsvEditPanel({ node, update, t }: EditPanelProps) {
         </BuilderField>
       </BuilderRowPair>
       <BuilderField label={t("workflows.field_input")} required>
-        <textarea className="input input--sm" required rows={4} value={String(node.input || "")} onChange={(e) => update({ input: e.target.value })} placeholder="col1,col2" aria-required="true" />
+        <textarea className="input" required rows={4} value={String(node.input || "")} onChange={(e) => update({ input: e.target.value })} placeholder="col1,col2" aria-required="true" />
       </BuilderField>
       {action === "filter" && (
         <BuilderRowPair>

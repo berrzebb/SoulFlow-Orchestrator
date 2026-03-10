@@ -44,7 +44,7 @@ function AssertEditPanel({ node, update, t }: EditPanelProps) {
         <div key={i} className="builder-nested-block">
           <div className="builder-row" style={{ cursor: "pointer" }} role="button" tabIndex={0} onClick={() => setExpanded(expanded === i ? null : i)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setExpanded(expanded === i ? null : i); } }}>
             <span className="builder-nested-toggle">{expanded === i ? "▾" : "▸"}</span>
-            <code style={{ fontSize: 12 }}>{a.condition || `Assertion ${i + 1}`}</code>
+            <code style={{ fontSize: 12 }}>{a.condition || `#${i + 1}`}</code>
             <button className="btn btn--xs btn--danger ml-auto" onClick={(e) => { e.stopPropagation(); removeAssertion(i); }} aria-label={`${t("workflows.remove_item")} ${i + 1}`}><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
           </div>
           {expanded === i && (

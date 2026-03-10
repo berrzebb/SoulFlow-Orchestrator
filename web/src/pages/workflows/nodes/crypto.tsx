@@ -32,10 +32,10 @@ function CryptoEditPanel({ node, update, t }: EditPanelProps) {
       ) : (
         <>
           <BuilderField label={t("workflows.field_input")} required>
-            <textarea className="input input--sm" required rows={3} value={String(node.input || "")} onChange={(e) => update({ input: e.target.value })} placeholder={action === "decrypt" ? "Ciphertext (hex)" : "Plaintext"} aria-required="true" />
+            <textarea className="input" required rows={3} value={String(node.input || "")} onChange={(e) => update({ input: e.target.value })} placeholder={action === "decrypt" ? "Ciphertext (hex)" : "Plaintext"} aria-required="true" />
           </BuilderField>
           <BuilderField label={t("workflows.field_key")} required>
-            <textarea className="input input--sm" required rows={2} value={String(node.key || "")} onChange={(e) => update({ key: e.target.value })} placeholder={action === "sign" || action === "verify" ? "PEM key" : "64 hex chars (AES-256)"} aria-required="true" />
+            <textarea className="input" required rows={2} value={String(node.key || "")} onChange={(e) => update({ key: e.target.value })} placeholder={action === "sign" || action === "verify" ? "PEM key" : "64 hex chars (AES-256)"} aria-required="true" />
           </BuilderField>
           {action === "decrypt" && (
             <BuilderRowPair>

@@ -25,7 +25,7 @@ function S3EditPanel({ node, update, t }: EditPanelProps) {
       )}
       {action === "put" && (
         <BuilderField label={t("workflows.field_body")}>
-          <textarea className="input input--sm" rows={3} value={String(node.body || "")} onChange={(e) => update({ body: e.target.value })} placeholder="file content" />
+          <textarea className="input" rows={3} value={String(node.body || "")} onChange={(e) => update({ body: e.target.value })} placeholder="file content" />
         </BuilderField>
       )}
       <BuilderRowPair>
