@@ -139,3 +139,20 @@ describe("DurationTool — compare", () => {
     expect(r.result).toBe(-1);
   });
 });
+
+describe("DurationTool — 파싱 실패 (L35, L40, L65)", () => {
+  it("format: 잘못된 duration → error (L35)", async () => {
+    const r = JSON.parse(await new (await import("@src/agent/tools/duration.js")).DurationTool().execute({ action: "format", duration: "not-a-duration" }));
+    expect(r.error).toContain("cannot parse duration");
+  });
+
+  it("to_ms: 잘못된 duration → error (L40)", async () => {
+    const r = JSON.parse(await new (await import("@src/agent/tools/duration.js")).DurationTool().execute({ action: "to_ms", duration: "invalid" }));
+    expect(r.error).toContain("cannot parse duration");
+  });
+
+  it("humanize: 잘못된 duration → error (L65)", async () => {
+    const r = JSON.parse(await new (await import("@src/agent/tools/duration.js")).DurationTool().execute({ action: "humanize", duration: "garbage" }));
+    expect(r.error).toContain("cannot parse duration");
+  });
+});

@@ -243,3 +243,16 @@ describe("StreamBuffer — get_last_flushed (L51)", () => {
     expect(buf.get_last_flushed()).toBe("hello world");
   });
 });
+
+// L72: overlap_suffix_prefix 빈 문자열 early return
+describe("StreamBuffer — overlap_suffix_prefix 빈 인자 (L72)", () => {
+  it("a가 빈 문자열 → 0 반환 (L72)", () => {
+    const buf = new StreamBuffer();
+    expect((buf as any).overlap_suffix_prefix("", "hello")).toBe(0);
+  });
+
+  it("b가 빈 문자열 → 0 반환 (L72)", () => {
+    const buf = new StreamBuffer();
+    expect((buf as any).overlap_suffix_prefix("hello", "")).toBe(0);
+  });
+});

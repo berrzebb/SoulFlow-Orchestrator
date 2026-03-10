@@ -144,3 +144,29 @@ describe("BaseLlmProvider — 생성자", () => {
     expect(p.supports_tool_loop).toBe(true);
   });
 });
+
+describe("BaseLlmProvider — sanitize_messages Array content 비객체 항목 (L38)", () => {
+  it("content 배열에 null 항목 → !item → return true (L38)", () => {
+    const provider = make_provider();
+    const result = (provider as any).sanitize_messages([
+      {
+        role: "user",
+        content: [null, { type: "text", text: "hello" }],
+      },
+    ]);
+    // null은 !item → true → 필터 통과
+    expect(result[0].content).toContain(null);
+    expect(result[0].content.some((x: unknown) => x && (x as any).text === "hello")).toBe(true);
+  });
+
+  it("content 배열에 string 항목 → typeof !== 'object' → return true (L38)", () => {
+    const provider = make_provider();
+    const result = (provider as any).sanitize_messages([
+      {
+        role: "user",
+        content: ["plain string", { type: "text", text: "structured" }],
+      },
+    ]);
+    expect(result[0].content).toContain("plain string");
+  });
+});

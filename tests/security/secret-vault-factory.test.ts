@@ -102,3 +102,9 @@ describe("secret vault mask cache", () => {
     expect(masked).toContain("value-x-secret");
   });
 });
+
+describe("set_default_vault_workspace — 빈 인자 (L9)", () => {
+  it("빈 문자열 → 'workspace is required' throw", () => {
+    expect(() => set_default_vault_workspace("")).toThrow("workspace is required");
+  });
+});
