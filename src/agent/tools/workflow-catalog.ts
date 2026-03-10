@@ -44,7 +44,7 @@ export function build_node_catalog(handlers?: NodeHandler[]): string {
     '          | "interactive",     // interactive HITL loop',
     '    agents: [{',
     '      agent_id: string,',
-    '      role: string,            // role identifier',
+    '      role: string,            // role: implementer|debugger|reviewer|validator|pl|pm|concierge|generalist (src/skills/roles/)',
     '      label: string,           // display name',
     '      backend: string,         // provider instance_id',
     '      model?: string,',

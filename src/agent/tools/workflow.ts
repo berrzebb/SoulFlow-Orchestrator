@@ -16,22 +16,41 @@ export class WorkflowTool extends Tool {
   readonly name = "workflow";
   readonly category = "external" as const;
   readonly description =
-    "IMPORTANT: Always use this tool to create/update/delete workflows. Never use write_file to create workflow YAML files directly.\n" +
-    "Create, list, run, get, update, delete workflow templates.\n" +
-    "Use 'create' with a structured definition (title + phases or orche_nodes) to build a new workflow.\n" +
-    "Use 'run' with a template name to execute, or with an inline definition.\n" +
-    "Use 'node_types' to discover available workflow node types, schemas, and the FULL workflow definition format including closed-loop critic patterns.\n" +
-    "Use 'models' to list available backends (providers) and their models — use these values for backend/model fields.\n" +
+    "IMPORTANT: 워크플로우 생성·수정은 반드시 이 도구(create/update action)를 사용한다. write_file로 YAML을 직접 쓰지 말 것.\n" +
+    "create/update 호출 시 workspace/workflows/<slug>.yaml에 자동 저장된다. read_file로 현재 YAML 확인만 가능.\n" +
     "\n" +
-    "## Closed-Loop (Critic + Goto) Pattern\n" +
-    "To build a self-improving workflow that retries until quality gates pass:\n" +
-    "1. Add a `critic` to the final review phase with `gate: true`\n" +
-    "2. Set `on_rejection: 'goto'` and `goto_phase: '<earlier_phase_id>'`\n" +
-    "3. Set `max_retries` to control how many feedback cycles to allow\n" +
-    "When the critic rejects, the workflow automatically jumps back to `goto_phase`,\n" +
-    "re-runs all intermediate phases with the critic's feedback injected as context,\n" +
-    "then the critic evaluates the new output. This creates an autonomous quality loop.\n" +
-    "Use 'node_types' to see the full phase + critic schema with examples.";
+    "## 워크플로우 작성 순서 (반드시 준수)\n" +
+    "1. models 호출 → 사용 가능한 backend ID와 model ID 확인\n" +
+    "2. node_types 호출 → 노드 타입 카탈로그 확인 (DAG Style B 사용 시)\n" +
+    "3. create 호출 — 아래 검증 통과 후에만\n" +
+    "\n" +
+    "## 에이전트 역할(role) 작성 기준\n" +
+    "agents[].role 값은 src/skills/roles/ 하위 역할을 따른다.\n" +
+    "표준 역할: implementer, debugger, reviewer, validator, pl, pm, concierge, generalist\n" +
+    "커스텀 역할 작성 시: 해당 SKILL.md의 soul/heart를 read_file로 읽어 system_prompt에 반영한다.\n" +
+    "\n" +
+    "## create 전 필수 검증\n" +
+    "- [ ] 모든 phase에 phase_id가 있는가?\n" +
+    "- [ ] 모든 phase의 agents[]가 비어 있지 않은가?\n" +
+    "- [ ] backend 값이 실제 조회한 backend ID와 일치하는가?\n" +
+    "- [ ] closed-loop 사용 시: goto_phase가 실제로 존재하는 phase_id인가?\n" +
+    "- [ ] closed-loop 사용 시: 비평 phase가 goto_phase보다 뒤에 오는가?\n" +
+    "하나라도 아니면 definition을 수정하고 다시 검증한다.\n" +
+    "\n" +
+    "## 최소 구조 예시 (phases 기반)\n" +
+    '{"title":"요약","phases":[{"phase_id":"draft","agents":[{"agent_id":"a1","role":"writer","backend":"<backend_id>","system_prompt":"요약하라"}]},{"phase_id":"review","agents":[{"agent_id":"a2","role":"reviewer","backend":"<backend_id>","system_prompt":"검토하라"}],"critic":{"backend":"<backend_id>","gate":true,"on_rejection":"goto","goto_phase":"draft","max_retries":3,"system_prompt":"APPROVED 또는 REJECTED\\n이유:"}}]}\n' +
+    "\n" +
+    "## Closed-Loop (Critic + Goto) 패턴\n" +
+    "품질 기준 통과 시까지 자동 재시도하는 루프:\n" +
+    "1. 최종 검토 phase에 critic 추가, gate: true 설정\n" +
+    "2. on_rejection: 'goto', goto_phase: '<이전_phase_id>' 설정\n" +
+    "3. critic system_prompt는 반드시 APPROVED / REJECTED 판정을 명시적으로 출력해야 함\n" +
+    "전체 스키마: node_types 호출로 확인.\n" +
+    "\n" +
+    "## 수정 흐름\n" +
+    "get name=<slug>(현재 확인) → (definition 수정) → update name=<slug>(자동 YAML 저장) → flowchart name=<slug>(시각화)\n" +
+    "\n" +
+    "Actions: create, list, get, run, update, delete, export, flowchart, sequence, node_types, models";
 
   readonly parameters: JsonSchema = {
     type: "object",
@@ -46,8 +65,12 @@ export class WorkflowTool extends Tool {
         type: "object",
         description:
           "WorkflowDefinition object (for create/update/run-inline). " +
-          "Phase-based: { title, phases: [{ phase_id, agents: [{agent_id, role, label, backend, system_prompt}], critic?: { gate, on_rejection, goto_phase, max_retries, system_prompt } }] }. " +
+          "Phase-based: { title, phases: [{ phase_id, agents: [{agent_id, role, backend, system_prompt}], critic?: { backend, gate, on_rejection, goto_phase, max_retries, system_prompt } }] }. " +
           "Orche-based: { title, orche_nodes: [{ node_id, node_type, title, depends_on?, ...params }] }. " +
+          "agents[].role: use standard roles (implementer/debugger/reviewer/validator/pl/pm/concierge/generalist) or extended roles (researcher/writer/analyst/summarizer/extractor). " +
+          "agents[].system_prompt: include role declaration + input context + output format. For standard roles, read src/skills/roles/<role>/SKILL.md soul/heart and reflect in prompt. " +
+          "critic.system_prompt: must explicitly output APPROVED or REJECTED with reason. REJECTED must include improvement instructions for next iteration. " +
+          "critic.backend: required field — must be set to a valid backend ID from models action. " +
           "For closed-loop: set critic.on_rejection='goto' and critic.goto_phase to an earlier phase_id. " +
           "Call node_types action to see the complete schema with all options and examples.",
       },

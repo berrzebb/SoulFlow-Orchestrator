@@ -105,9 +105,9 @@ export const BUILTIN_PRESETS: NodePreset[] = [
 
   // ── Spawn Agent role presets ──
   { node_type: "spawn_agent", preset_id: "spawn-researcher", label: "Spawn Researcher", description: "research sub-agent",
-    defaults: { task: "{{memory.query}}", role: "researcher", await_completion: true, max_iterations: 15 } },
+    defaults: { task: "{{memory.query}}", role: "generalist", await_completion: true, max_iterations: 15 } },
   { node_type: "spawn_agent", preset_id: "spawn-coder", label: "Spawn Coder", description: "coding sub-agent",
-    defaults: { task: "{{memory.coding_task}}", role: "developer", await_completion: true, max_iterations: 20 } },
+    defaults: { task: "{{memory.coding_task}}", role: "implementer", await_completion: true, max_iterations: 20 } },
   { node_type: "spawn_agent", preset_id: "spawn-reviewer", label: "Spawn Reviewer", description: "review sub-agent",
     defaults: { task: "Review: {{memory.output}}", role: "reviewer", await_completion: true, max_iterations: 5 } },
 ];

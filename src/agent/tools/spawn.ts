@@ -25,9 +25,9 @@ export class SpawnTool extends Tool {
     properties: {
       task: { type: "string", description: "Task description for the subagent" },
       label: { type: "string", description: "Optional short label for tracking" },
-      role: { type: "string", description: "Optional role hint for subagent (e.g. lead, implementer)" },
-      soul: { type: "string", description: "Optional soul override for subagent persona" },
-      heart: { type: "string", description: "Optional heart override for subagent tone" },
+      role: { type: "string", description: "Optional role hint for subagent. Standard roles: implementer, debugger, reviewer, validator, pl, pm, concierge, generalist. Each role loads its SKILL.md soul/heart/protocols automatically." },
+      soul: { type: "string", description: "Optional soul override — behavioral rule (e.g. '항상 가설 3개 이상 먼저 세운다'). Overrides role default." },
+      heart: { type: "string", description: "Optional heart override — output style rule. Overrides role default." },
       model: { type: "string", description: "Optional model override" },
       max_turns: { type: "integer", minimum: 1, maximum: 500, description: "Turn budget for spawned loop" },
     },

@@ -64,7 +64,7 @@ export const ai_agent_handler: NodeHandler = {
     try {
       const { agent_id } = await spawn({
         task: user_prompt,
-        role: n.node_id,
+        role: "generalist",
         soul: system_prompt,
         model: n.model,
         provider_id: n.backend as import("../../providers/types.js").ProviderId | undefined,

@@ -23,7 +23,7 @@ export const spawn_agent_handler: NodeHandler = {
   ],
   create_default: () => ({
     task: "",
-    role: "assistant",
+    role: "generalist",
     await_completion: true,
     max_iterations: 10,
   }),
@@ -39,7 +39,7 @@ export const spawn_agent_handler: NodeHandler = {
         status: "pending",
         result: null,
         _meta: {
-          task, role: n.role || "assistant", model: n.model,
+          task, role: n.role || "generalist", model: n.model,
           origin_channel: n.origin_channel, origin_chat_id: n.origin_chat_id,
           await_completion: n.await_completion ?? true,
           max_iterations: n.max_iterations ?? 10, resolved: true,
@@ -60,7 +60,7 @@ export const spawn_agent_handler: NodeHandler = {
     try {
       const { agent_id, status } = await spawn({
         task,
-        role: n.role || "assistant",
+        role: n.role || "generalist",
         model: n.model,
         max_iterations: n.max_iterations ?? 10,
         origin_channel: n.origin_channel || runner.state.channel,
@@ -99,7 +99,7 @@ export const spawn_agent_handler: NodeHandler = {
     return {
       preview: {
         task: n.task,
-        role: n.role || "assistant",
+        role: n.role || "generalist",
         model: n.model || "auto",
         await: n.await_completion ?? true,
       },
