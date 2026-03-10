@@ -51,31 +51,77 @@ function is_identity_question(text: string): boolean {
   return IDENTITY_REFS.some((ref) => jaccard(tokens, tokenize(ref)) >= IDENTITY_THRESHOLD);
 }
 
-/** 진행 중인 작업 조회 키워드 (active_tasks 존재 시에만 inquiry로 분류). */
-const INQUIRY_WORDS = [
-  "상태", "진행", "어떻게", "됐어", "됐나", "완료", "끝났어", "끝났나",
-  "status", "progress", "done", "finished", "how is", "how's",
+/** 태스크 상태 조회 레퍼런스 문장 — Jaccard 유사도 비교 대상. */
+const INQUIRY_REFS = [
+  "작업 어떻게 됐어", "작업 됐어", "작업 끝났어", "작업 완료됐어",
+  "태스크 상태 어때", "태스크 진행 어떻게", "백그라운드 작업 어때",
+  "진행 중인 작업", "작업 진행상황",
+  "what's the status", "how's the task", "task done", "task finished",
+  "is it done", "task progress", "background task status",
 ];
+
+const INQUIRY_THRESHOLD = 0.3;
+
+/** 활성 태스크 상태 조회 문장인지 판단. */
+function is_inquiry_question(text: string): boolean {
+  const tokens = tokenize(text);
+  if (tokens.size === 0) return false;
+  return INQUIRY_REFS.some((ref) => jaccard(tokens, tokenize(ref)) >= INQUIRY_THRESHOLD);
+}
 
 // ── 복잡도 휴리스틱 ──────────────────────────────────────────────────────────
 
+/** 명시적 백그라운드/비동기 실행 요청 신호. */
+const TASK_SIGNALS = [
+  "백그라운드", "백그라운드로", "비동기", "나중에 알려", "나중에 알려줘",
+  "background", "async", "schedule", "notify when done", "run in background",
+];
+
 /**
- * once/agent/task 중 하나를 결정하는 핵심 로직.
- *
- * 판단 기준:
- * - `task`: 장시간 실행 + 명시적 "백그라운드/비동기/나중에" 키워드
- * - `agent`: 여러 단계 수행 필요 + 도구 연계 필요
- * - `once`: 단일 질문/조회/응답
- *
- * 이 함수를 구현하세요 (5-10줄).
- * 힌트: 아래 상수들을 활용하거나 직접 정의하세요.
+ * 다단계 동작 연결 동사 — 앞뒤 행동이 연속될 때 agent로 판단.
+ * "읽고 요약해서 보내줘"처럼 두 개 이상 동사가 연결된 경우.
  */
-function classify_execution_complexity(_text: string, _ctx: ClassifierContext): "once" | "agent" | "task" {
-  // TODO: 직접 구현 — once/agent/task 구분 휴리스틱
-  // 예시 접근법:
-  //   task 신호: "백그라운드", "비동기", "나중에 알려줘", "background", "async", "schedule"
-  //   agent 신호: 여러 동사 연결 ("하고", "그다음", "그리고 나서"), 파일 작업 + 전송 조합
-  //   once: 그 외 단순 질문/대화
+const AGENT_CONNECTORS = [
+  "하고", "하고서", "하고 나서", "그다음", "그 다음에",
+  "그리고", "그리고 나서", "후에", "한 다음", "그 후",
+  "and then", "after that", "then",
+];
+
+/**
+ * 도구 조합 쌍 — 각 쌍의 두 단어가 모두 포함되면 agent 신호.
+ * "파일 읽고 요약", "검색해서 정리" 등 도구 연계를 의미함.
+ */
+const AGENT_TOOL_PAIRS: [string, string][] = [
+  ["파일", "보내"],
+  ["읽", "요약"],
+  ["검색", "정리"],
+  ["분석", "보고"],
+  ["가져", "저장"],
+  ["file", "send"],
+  ["read", "summar"],
+  ["search", "send"],
+  ["fetch", "save"],
+];
+
+/**
+ * once/agent/task 중 하나를 결정.
+ *
+ * - `task`: 명시적 백그라운드/비동기/스케줄 신호
+ * - `agent`: 다단계 동사 연결 or 도구 조합 쌍 감지
+ * - `once`: 단일 질문/조회/응답 (기본값 — 불확실하면 once로 시작 후 에스컬레이션)
+ */
+function classify_execution_complexity(text: string, _ctx: ClassifierContext): "once" | "agent" | "task" {
+  const lower = text.toLowerCase();
+
+  // task: 명시적 비동기 실행 요청
+  if (TASK_SIGNALS.some((s) => lower.includes(s))) return "task";
+
+  // agent: 다단계 동사 연결
+  if (AGENT_CONNECTORS.some((c) => lower.includes(c))) return "agent";
+
+  // agent: 도구 조합 쌍 (두 단어 모두 포함)
+  if (AGENT_TOOL_PAIRS.some(([a, b]) => lower.includes(a) && lower.includes(b))) return "agent";
+
   return "once";
 }
 
@@ -112,8 +158,6 @@ export function fast_classify(task: string, ctx: ClassifierContext): Classificat
     return { mode: "builtin", command: builtin_match[1], args: builtin_match[2]?.trim() || undefined };
   }
 
-  const lower = text.toLowerCase();
-
   // 2. identity: 봇 소개 질문 (유사도 기반)
   if (is_identity_question(text)) {
     return { mode: "identity" };
@@ -121,7 +165,7 @@ export function fast_classify(task: string, ctx: ClassifierContext): Classificat
 
   // 3. inquiry: 활성 태스크 있을 때 상태 조회
   const has_active = (ctx.active_tasks?.length ?? 0) > 0;
-  if (has_active && INQUIRY_WORDS.some((w) => lower.includes(w))) {
+  if (has_active && is_inquiry_question(text)) {
     return { mode: "inquiry" };
   }
 
