@@ -6,6 +6,7 @@
  */
 
 import { escape_regexp, normalize_text } from "../utils/common.js";
+import { RE_HAS_HTML, apply_html_to_markdown } from "../utils/html-strip.js";
 
 // ── Line Matchers ──
 
@@ -168,30 +169,23 @@ export function strip_secret_reference_tokens(raw: string): string {
     .replace(CIPHERTEXT_RE, "[REDACTED:CIPHERTEXT]");
 }
 
+const RE_CODE_BLOCK    = /(`{3,}|~{3,})[^\n]*\n[\s\S]*?\1/g;
+const RE_PLACEHOLDER   = /\x00CB(\d+)\x00/g;
+
 /** 위험 HTML 태그만 제거. 안전한 포맷팅 태그는 마크다운 등가물로 변환. 코드블록 내부는 건드리지 않음. */
 function strip_dangerous_html(input: string): string {
   const out = String(input || "");
-  if (!/<[a-z/][a-z0-9]*[\s>/]/i.test(out)) return out;
+  if (!RE_HAS_HTML.test(out)) return out;
 
   // 코드블록을 플레이스홀더로 대체 → HTML 변환 → 복원
   const blocks: string[] = [];
-  const placeholder = (i: number) => `\x00CB${i}\x00`;
-  const preserved = out.replace(/(`{3,}|~{3,})[^\n]*\n[\s\S]*?\1/g, (match) => {
+  const preserved = out.replace(RE_CODE_BLOCK, (match) => {
     blocks.push(match);
-    return placeholder(blocks.length - 1);
+    return `\x00CB${blocks.length - 1}\x00`;
   });
 
-  const cleaned = preserved
-    .replace(/<(?:script|style|iframe|object|embed)[^>]*>[\s\S]*?<\/(?:script|style|iframe|object|embed)>/gi, "")
-    .replace(/<(?:script|style|iframe|object|embed|img)[^>]*\/?>/gi, "")
-    .replace(/<code>([^<]*)<\/code>/gi, "`$1`")
-    .replace(/<(?:b|strong)>([^<]*)<\/(?:b|strong)>/gi, "**$1**")
-    .replace(/<(?:i|em)>([^<]*)<\/(?:i|em)>/gi, "*$1*")
-    .replace(/<a\s+href="([^"]*)"[^>]*>([^<]*)<\/a>/gi, "[$2]($1)")
-    .replace(/<br\s*\/?>/gi, "\n");
-
-  // 플레이스홀더를 원본 코드블록으로 복원
-  return cleaned.replace(/\x00CB(\d+)\x00/g, (_, i) => blocks[Number(i)] ?? "");
+  const cleaned = apply_html_to_markdown(preserved);
+  return cleaned.replace(RE_PLACEHOLDER, (_, i) => blocks[Number(i)] ?? "");
 }
 
 // ── Public sanitize functions ──

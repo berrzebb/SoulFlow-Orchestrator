@@ -1,5 +1,6 @@
 import { sanitizeMarkdown } from "markdown-to-markdown-sanitizer";
 import { escape_html } from "../utils/common.js";
+import { RE_HAS_HTML, apply_html_to_markdown } from "../utils/html-strip.js";
 import type { ChannelProvider } from "./types.js";
 
 export type RenderMode = "markdown" | "html" | "plain";
@@ -89,20 +90,16 @@ function sanitize_markdown_output(raw: string, profile: RenderProfile): string {
   return collapse_blank_lines(sanitized).trim();
 }
 
+const RE_P_BREAK    = /<\/p>\s*<p[^>]*>/gi;
+const RE_STRIP_TAGS = /<\/?[a-z][a-z0-9]*(?:\s[^>]*)?\/?>/gi;
+
 /** LLM이 HTML을 직접 생성한 경우 마크다운 등가물로 변환. 파이프라인은 항상 markdown 입력을 기대. */
 function normalize_html_to_markdown(input: string): string {
-  let out = String(input || "");
-  if (!/<[a-z/][a-z0-9]*[\s>/]/i.test(out)) return out;
-  out = out.replace(/<(?:script|style|iframe|object|embed)[^>]*>[\s\S]*?<\/(?:script|style|iframe|object|embed)>/gi, "");
-  out = out.replace(/<(?:script|style|iframe|object|embed|img)[^>]*\/?>/gi, "");
-  out = out.replace(/<code>([^<]*)<\/code>/gi, "`$1`");
-  out = out.replace(/<(?:b|strong)>([^<]*)<\/(?:b|strong)>/gi, "**$1**");
-  out = out.replace(/<(?:i|em)>([^<]*)<\/(?:i|em)>/gi, "*$1*");
-  out = out.replace(/<a\s+href="([^"]+)"[^>]*>([^<]*)<\/a>/gi, "[$2]($1)");
-  out = out.replace(/<br\s*\/?>/gi, "\n");
-  out = out.replace(/<\/p>\s*<p[^>]*>/gi, "\n\n");
-  out = out.replace(/<\/?[a-z][a-z0-9]*(?:\s[^>]*)?\/?>/gi, "");
-  return out;
+  const out = String(input || "");
+  if (!RE_HAS_HTML.test(out)) return out;
+  return apply_html_to_markdown(out)
+    .replace(RE_P_BREAK, "\n\n")
+    .replace(RE_STRIP_TAGS, "");
 }
 
 function normalize_response_template(raw: string): string {
