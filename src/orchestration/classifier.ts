@@ -17,17 +17,39 @@ export type ClassifierContext = {
 /** /커맨드 인자 파싱. */
 const RE_BUILTIN = /^\/(\S+)(?:\s+(.*))?$/s;
 
-/** 봇 정체성 질문 키워드. 주어 없이 광범위 매칭하는 "뭐야/소개해" 는 오탐 위험이 높으므로 제외. */
-const IDENTITY_WORDS = [
-  // 사람/봇 특화 — "저 사람 누구야?" 포함 허용 (봇 대화에선 대부분 봇 지칭)
-  "누구야", "누구니", "누구세요",
-  // 명시적 주어가 있는 경우만
-  "너 뭐야", "당신 뭐야", "넌 뭐야",
-  // 자기소개 요청
-  "자기소개", "자기 소개",
-  // English
+/** 봇 정체성 질문 레퍼런스 문장 — Jaccard 유사도 비교 대상. */
+const IDENTITY_REFS = [
+  "너 누구야", "너 누구니", "너 누구세요",
+  "당신 누구세요", "당신은 누구세요",
+  "넌 누구야", "넌 뭐야", "너 뭐야",
+  "자기소개 해줘", "자기 소개 해줘", "자기소개해줘",
+  "누구", "넌 누구", "너 누구",    // 단형 ("누구?", "넌 누구?" 커버)
   "who are you", "what are you", "introduce yourself",
 ];
+
+/** 유사도 임계값: 이 값 이상이면 identity 분류. */
+const IDENTITY_THRESHOLD = 0.4;
+
+/** 구두점 제거 후 공백 분리 토큰 집합 반환. */
+function tokenize(text: string): Set<string> {
+  return new Set(
+    text.toLowerCase().replace(/[?!.,;:'"''""\s]+/g, " ").trim().split(" ").filter(Boolean),
+  );
+}
+
+/** Jaccard 유사도: |교집합| / |합집합|. */
+function jaccard(a: Set<string>, b: Set<string>): number {
+  let intersection = 0;
+  for (const t of a) if (b.has(t)) intersection++;
+  return intersection / (a.size + b.size - intersection);
+}
+
+/** 레퍼런스 문장과의 최대 Jaccard 유사도가 임계값 이상이면 identity 질문으로 판단. */
+function is_identity_question(text: string): boolean {
+  const tokens = tokenize(text);
+  if (tokens.size === 0) return false;
+  return IDENTITY_REFS.some((ref) => jaccard(tokens, tokenize(ref)) >= IDENTITY_THRESHOLD);
+}
 
 /** 진행 중인 작업 조회 키워드 (active_tasks 존재 시에만 inquiry로 분류). */
 const INQUIRY_WORDS = [
@@ -92,8 +114,8 @@ export function fast_classify(task: string, ctx: ClassifierContext): Classificat
 
   const lower = text.toLowerCase();
 
-  // 2. identity: 봇 소개 질문
-  if (IDENTITY_WORDS.some((w) => lower.includes(w))) {
+  // 2. identity: 봇 소개 질문 (유사도 기반)
+  if (is_identity_question(text)) {
     return { mode: "identity" };
   }
 
