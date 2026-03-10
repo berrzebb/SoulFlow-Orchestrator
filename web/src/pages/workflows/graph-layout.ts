@@ -20,6 +20,7 @@ export const PADDING = 40;
 export const SUB_D = 44;
 export const SUB_GAP = 12;
 export const SUB_OFFSET_Y = 24;
+export const LANE_GAP = GAP_Y * 3;
 
 // ── Port Layout Constants ──
 
@@ -81,6 +82,38 @@ function compute_layers(phases: PhaseDef[]): Map<string, number> {
 /** 한 행에 들어갈 수 있는 최대 서브노드 수 (phase 열 너비 기준). */
 const SUB_MAX_PER_ROW = Math.max(1, Math.floor((NODE_W + GAP_X * 0.4) / (SUB_D + SUB_GAP)));
 
+/** 트리거별 수영 레인 할당 — phase_id → trigger_id 맵.
+ *  트리거가 2개 이상일 때만 의미 있음.
+ *  직접 depends_on에 trigger.id를 가진 phase부터 BFS로 하위 phase까지 동일 레인 할당.
+ */
+export function compute_trigger_lanes(workflow: WorkflowDef): Map<string, string> {
+  const triggers = workflow.trigger_nodes || [];
+  const phase_lane = new Map<string, string>();
+  if (triggers.length <= 1) return phase_lane;
+
+  for (const trigger of triggers) {
+    const roots = workflow.phases
+      .filter((p) => p.depends_on?.includes(trigger.id))
+      .map((p) => p.phase_id);
+    const queue = [...roots];
+    const visited = new Set<string>();
+    while (queue.length) {
+      const pid = queue.shift()!;
+      if (visited.has(pid)) continue;
+      visited.add(pid);
+      if (!phase_lane.has(pid)) phase_lane.set(pid, trigger.id);
+      for (const p of workflow.phases) {
+        if (p.depends_on?.includes(pid) && !visited.has(p.phase_id)) queue.push(p.phase_id);
+      }
+    }
+  }
+  // 어느 트리거에도 속하지 않는 phase는 "default" 레인
+  for (const p of workflow.phases) {
+    if (!phase_lane.has(p.phase_id)) phase_lane.set(p.phase_id, "default");
+  }
+  return phase_lane;
+}
+
 /** Phase effective height including sub-nodes (tool/skill 포함, multi-row 고려). */
 function phase_effective_height(phase: PhaseDef, workflow?: WorkflowDef): number {
   const tool_count = workflow ? (workflow.tool_nodes || []).filter((t) => t.attach_to?.includes(phase.phase_id)).length : 0;
@@ -109,22 +142,58 @@ export function compute_positions(phases: PhaseDef[], workflow?: WorkflowDef, di
   const max_layer = Math.max(0, ...layer_groups.keys());
 
   if (resolved_dir === "LR") {
-    const layer_heights = new Map<number, number>();
-    for (const [layer, ids] of layer_groups) {
-      const total = ids.reduce((sum, id) => sum + phase_effective_height(phase_map.get(id)!, workflow), 0) + (ids.length - 1) * GAP_Y;
-      layer_heights.set(layer, total);
-    }
-    const max_h = Math.max(1, ...layer_heights.values());
+    const phase_lanes = workflow ? compute_trigger_lanes(workflow) : new Map<string, string>();
+    const use_lanes = phase_lanes.size > 0;
 
-    for (let layer = 0; layer <= max_layer; layer++) {
-      const ids = layer_groups.get(layer) || [];
-      const total_h = layer_heights.get(layer) || 0;
-      const offset_y = (max_h - total_h) / 2;
-      let cum_y = 0;
-      ids.forEach((id) => {
-        positions.set(id, { x: PADDING + layer * (NODE_W + GAP_X), y: PADDING + offset_y + cum_y, width: NODE_W, height: NODE_H });
-        cum_y += phase_effective_height(phase_map.get(id)!, workflow) + GAP_Y;
-      });
+    if (use_lanes) {
+      // 수영 레인 배치: 트리거 순서대로 레인을 수직 스택
+      const trigger_order = new Map((workflow!.trigger_nodes || []).map((t, i) => [t.id, i]));
+      const lane_ids = [...new Set([...phase_lanes.values()])].sort(
+        (a, b) => (trigger_order.get(a) ?? 999) - (trigger_order.get(b) ?? 999),
+      );
+      let lane_y = PADDING;
+      for (const lane_id of lane_ids) {
+        const lane_phases = phases.filter((p) => phase_lanes.get(p.phase_id) === lane_id);
+        if (!lane_phases.length) continue;
+        const lane_layers = compute_layers(lane_phases);
+        const lane_layer_groups = new Map<number, string[]>();
+        for (const [id, layer] of lane_layers) {
+          if (!lane_layer_groups.has(layer)) lane_layer_groups.set(layer, []);
+          lane_layer_groups.get(layer)!.push(id);
+        }
+        const lane_max_layer = Math.max(0, ...lane_layer_groups.keys());
+        // 레인 내 최대 phase 높이 (Y 기준선)
+        const lane_h = Math.max(...lane_phases.map((p) => phase_effective_height(p, workflow)));
+        for (let layer = 0; layer <= lane_max_layer; layer++) {
+          const ids = lane_layer_groups.get(layer) || [];
+          const total_h = ids.reduce((sum, id) => sum + phase_effective_height(phase_map.get(id)!, workflow), 0) + (ids.length - 1) * GAP_Y;
+          const offset_y = (lane_h - total_h) / 2;
+          let cum_y = 0;
+          ids.forEach((id) => {
+            positions.set(id, { x: PADDING + layer * (NODE_W + GAP_X), y: lane_y + offset_y + cum_y, width: NODE_W, height: NODE_H });
+            cum_y += phase_effective_height(phase_map.get(id)!, workflow) + GAP_Y;
+          });
+        }
+        lane_y += lane_h + LANE_GAP;
+      }
+    } else {
+      const layer_heights = new Map<number, number>();
+      for (const [layer, ids] of layer_groups) {
+        const total = ids.reduce((sum, id) => sum + phase_effective_height(phase_map.get(id)!, workflow), 0) + (ids.length - 1) * GAP_Y;
+        layer_heights.set(layer, total);
+      }
+      const max_h = Math.max(1, ...layer_heights.values());
+
+      for (let layer = 0; layer <= max_layer; layer++) {
+        const ids = layer_groups.get(layer) || [];
+        const total_h = layer_heights.get(layer) || 0;
+        const offset_y = (max_h - total_h) / 2;
+        let cum_y = 0;
+        ids.forEach((id) => {
+          positions.set(id, { x: PADDING + layer * (NODE_W + GAP_X), y: PADDING + offset_y + cum_y, width: NODE_W, height: NODE_H });
+          cum_y += phase_effective_height(phase_map.get(id)!, workflow) + GAP_Y;
+        });
+      }
     }
   } else {
     // TD: 레이어가 Y축, 같은 레이어 phase들은 X축으로 나열
@@ -210,17 +279,35 @@ export function compute_aux_positions(
 
   if (resolved_dir === "LR") {
     const trigger_x = first_anchor ? first_anchor.x - trigger_w - GAP_X : PADDING;
-    const phase_ys = [...phase_positions.values()];
-    const phases_min_y = phase_ys.length ? Math.min(...phase_ys.map((p) => p.y)) : PADDING;
-    const phases_max_y = phase_ys.length ? Math.max(...phase_ys.map((p) => p.y + p.height)) : PADDING + NODE_H;
-    const phases_center_y = (phases_min_y + phases_max_y) / 2;
-    const total_trigger_h = effective_triggers.length * trigger_h + Math.max(0, effective_triggers.length - 1) * trigger_gap;
-    const trigger_start_y = phases_center_y - total_trigger_h / 2;
+    const phase_lanes = compute_trigger_lanes(workflow);
+    const use_lanes = phase_lanes.size > 0;
+
     sorted_triggers.forEach((tn, ti) => {
       const label = tn.trigger_type === "cron" ? (tn.schedule || "cron") : tn.trigger_type;
       const trigger_detail = tn.trigger_type === "cron" ? tn.schedule : tn.trigger_type === "webhook" ? tn.webhook_path : undefined;
       nodes.push({ id: tn.id, type: "trigger", label, sub_label: tn.trigger_type, output_fields: trigger_out, trigger_detail });
-      positions.set(tn.id, { x: trigger_x, y: trigger_start_y + ti * (trigger_h + trigger_gap), width: trigger_w, height: trigger_h });
+
+      let trigger_y: number;
+      if (use_lanes) {
+        // 레인별: 해당 트리거 레인의 phase들 Y 범위 중앙
+        const lane_phases = workflow.phases.filter((p) => phase_lanes.get(p.phase_id) === tn.id);
+        const lane_pos = lane_phases.map((p) => phase_positions.get(p.phase_id)).filter(Boolean) as NodePos[];
+        if (lane_pos.length) {
+          const min_y = Math.min(...lane_pos.map((p) => p.y));
+          const max_y = Math.max(...lane_pos.map((p) => p.y + p.height));
+          trigger_y = (min_y + max_y) / 2 - trigger_h / 2;
+        } else {
+          trigger_y = PADDING + ti * (trigger_h + trigger_gap);
+        }
+      } else {
+        const phase_ys = [...phase_positions.values()];
+        const phases_min_y = phase_ys.length ? Math.min(...phase_ys.map((p) => p.y)) : PADDING;
+        const phases_max_y = phase_ys.length ? Math.max(...phase_ys.map((p) => p.y + p.height)) : PADDING + NODE_H;
+        const phases_center_y = (phases_min_y + phases_max_y) / 2;
+        const total_trigger_h = effective_triggers.length * trigger_h + Math.max(0, effective_triggers.length - 1) * trigger_gap;
+        trigger_y = phases_center_y - total_trigger_h / 2 + ti * (trigger_h + trigger_gap);
+      }
+      positions.set(tn.id, { x: trigger_x, y: trigger_y, width: trigger_w, height: trigger_h });
     });
   } else {
     // TD: 트리거를 첫 번째 phase 위에 수평 나열
