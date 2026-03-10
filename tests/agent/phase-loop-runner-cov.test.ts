@@ -783,3 +783,122 @@ describe("run_phase_loop — resume 에이전트 전원 completed", () => {
     expect(subagents.spawn).not.toHaveBeenCalled();
   });
 });
+
+// ──────────────────────────────────────────────────
+// Critic goto 거부 정책 — target not found (L453-457)
+// ──────────────────────────────────────────────────
+
+describe("run_phase_loop — critic goto: target phase 없음", () => {
+  it("goto_phase가 존재하지 않으면 critic_passed=true 처리", async () => {
+    const store = make_store();
+    const reject = JSON.stringify({ approved: false, summary: "bad", agent_reviews: [] });
+    const subagents = {
+      spawn: vi.fn()
+        .mockResolvedValueOnce({ subagent_id: "sa1" })
+        .mockResolvedValueOnce({ subagent_id: "critic1" }),
+      wait_for_completion: vi.fn()
+        .mockResolvedValueOnce({ status: "completed", content: "output" })
+        .mockResolvedValueOnce({ status: "completed", content: reject }),
+      stop: vi.fn(),
+      list: vi.fn().mockReturnValue([]),
+    };
+
+    const result = await run_phase_loop(single_phase_opts({
+      phases: [{
+        phase_id: "p1",
+        title: "Phase 1",
+        agents: [{ agent_id: "a1", role: "analyst", label: "A", backend: "openrouter", system_prompt: "s" }],
+        critic: { backend: "openrouter", system_prompt: "review", gate: true, on_rejection: "goto" as any, goto_phase: "nonexistent_phase" as any },
+      }],
+    }), { subagents: subagents as any, store: store as any, logger: noop_logger });
+
+    // goto_phase가 없으면 critic_passed=true → workflow completed
+    expect(result.status).toBe("completed");
+  });
+});
+
+// ──────────────────────────────────────────────────
+// Critic goto 거부 정책 — 실제 goto + max_retries 초과 시 escalate (L439-450)
+// ──────────────────────────────────────────────────
+
+describe("run_phase_loop — critic goto: 실제 goto 후 max_retries 초과 → escalate", () => {
+  it("goto 1회 후 max_retries(1) 초과 → waiting_user_input", async () => {
+    const store = make_store();
+    const reject = JSON.stringify({ approved: false, summary: "bad", agent_reviews: [] });
+    // goto 후 p1 재실행: agent 2번 + critic 2번
+    const subagents = {
+      spawn: vi.fn()
+        .mockResolvedValueOnce({ subagent_id: "sa1" })      // 1st p1 agent
+        .mockResolvedValueOnce({ subagent_id: "c1" })       // 1st critic → reject → goto
+        .mockResolvedValueOnce({ subagent_id: "sa2" })      // 2nd p1 agent (after goto reset)
+        .mockResolvedValueOnce({ subagent_id: "c2" }),      // 2nd critic → reject → count=2>1 → escalate
+      wait_for_completion: vi.fn()
+        .mockResolvedValueOnce({ status: "completed", content: "output1" })
+        .mockResolvedValueOnce({ status: "completed", content: reject })
+        .mockResolvedValueOnce({ status: "completed", content: "output2" })
+        .mockResolvedValueOnce({ status: "completed", content: reject }),
+      stop: vi.fn(),
+      list: vi.fn().mockReturnValue([]),
+    };
+
+    const result = await run_phase_loop(single_phase_opts({
+      phases: [{
+        phase_id: "p1",
+        title: "Phase 1",
+        agents: [{ agent_id: "a1", role: "analyst", label: "A", backend: "openrouter", system_prompt: "s" }],
+        critic: {
+          backend: "openrouter",
+          system_prompt: "review",
+          gate: true,
+          on_rejection: "goto" as any,
+          goto_phase: "p1" as any,
+          max_retries: 1,
+        },
+      }],
+    }), { subagents: subagents as any, store: store as any, logger: noop_logger });
+
+    expect(result.status).toBe("waiting_user_input");
+    expect(subagents.spawn).toHaveBeenCalledTimes(4);
+  });
+});
+
+// ──────────────────────────────────────────────────
+// is_waiting: kanban_trigger 노드가 null 반환 → waiting (L271-293)
+// ──────────────────────────────────────────────────
+
+describe("run_phase_loop — is_waiting: kanban_trigger null 이벤트", () => {
+  it("wait_kanban_event가 null 반환 → state=waiting_user_input, node_waiting 이벤트", async () => {
+    const store = make_store();
+    const subagents = make_subagents();
+    const events: Array<{ type: string }> = [];
+    const kanban_waiting_cb = vi.fn();
+
+    const result = await run_phase_loop({
+      workflow_id: "wf-kanban-wait",
+      title: "Kanban Wait WF",
+      objective: "obj",
+      channel: "slack",
+      chat_id: "C1",
+      workspace: "/tmp",
+      phases: [],
+      nodes: [{
+        node_id: "kanban1",
+        node_type: "kanban_trigger" as any,
+        title: "Kanban Trigger",
+        kanban_board_id: "board-001",
+        kanban_actions: ["created"],
+      } as any],
+    }, {
+      subagents: subagents as any,
+      store: store as any,
+      logger: noop_logger,
+      on_event: (e) => events.push(e),
+      wait_kanban_event: async () => null,
+      on_kanban_trigger_waiting: kanban_waiting_cb,
+    });
+
+    expect(result.status).toBe("waiting_user_input");
+    expect(events.some((e) => e.type === "node_waiting")).toBe(true);
+    expect(kanban_waiting_cb).toHaveBeenCalledWith("wf-kanban-wait");
+  });
+});
