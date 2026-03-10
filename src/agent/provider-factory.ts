@@ -213,8 +213,11 @@ register_agent_provider_factory("openrouter", (config, token) => {
 
 register_agent_provider_factory("ollama", (config, _token) => {
   const s = config.settings;
+  const base = extract_openai_settings(s, { api_base: "http://ollama:11434/v1", model: "llama3.2" });
   return new OpenAiCompatibleAgent(config.instance_id, {
-    ...extract_openai_settings(s, { api_base: "http://ollama:11434/v1", model: "llama3.2" }),
+    ...base,
+    // 로컬 대형 모델(120B+)은 응답 생성이 오래 걸리므로 기본 10분으로 설정
+    request_timeout_ms: base.request_timeout_ms ?? 600_000,
     api_key: "",
     // 함수 호출 미지원 모델을 위해 no_tool_choice를 settings에서 제어 가능 (기본값: false)
     no_tool_choice: s.no_tool_choice === true,
