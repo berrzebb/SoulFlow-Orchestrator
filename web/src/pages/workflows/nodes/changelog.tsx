@@ -13,19 +13,21 @@ function ChangelogEditPanel({ node, update, t }: EditPanelProps) {
             {ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
           </select>
         </BuilderField>
+        {(action === "generate" || action === "parse_commits") && (
+          <BuilderField label={t("workflows.changelog_version")}>
+            <input className="input input--sm" value={String(node.version || "")} onChange={(e) => update({ version: e.target.value })} placeholder="v1.1.0" />
+          </BuilderField>
+        )}
       </BuilderRowPair>
-      <BuilderField label={t("workflows.field_input")} required>
-        <textarea className="input" required rows={4} value={String(node.input || "")} onChange={(e) => update({ input: e.target.value })} placeholder="feat: add new feature&#10;fix: resolve bug" aria-required="true" />
-      </BuilderField>
-      {(action === "generate" || action === "parse_commits") && (
-        <BuilderRowPair>
-          <BuilderField label={t("workflows.changelog_from_tag")}>
-            <input className="input input--sm" value={String(node.from_tag || "")} onChange={(e) => update({ from_tag: e.target.value })} placeholder="v1.0.0" />
-          </BuilderField>
-          <BuilderField label={t("workflows.changelog_to_tag")}>
-            <input className="input input--sm" value={String(node.to_tag || "")} onChange={(e) => update({ to_tag: e.target.value })} placeholder="v1.1.0" />
-          </BuilderField>
-        </BuilderRowPair>
+      {(action === "parse_commits" || action === "generate" || action === "group_by_type") && (
+        <BuilderField label={t("workflows.changelog_commits")} required>
+          <textarea className="input" required rows={4} value={String(node.commits || "")} onChange={(e) => update({ commits: e.target.value })} placeholder="feat: add new feature&#10;fix: resolve bug" aria-required="true" />
+        </BuilderField>
+      )}
+      {(action === "format_entry" || action === "validate_commit") && (
+        <BuilderField label={t("workflows.changelog_commit_message")} required>
+          <input className="input input--sm" required value={String(node.commit_message || "")} onChange={(e) => update({ commit_message: e.target.value })} placeholder="feat: add new feature" aria-required="true" />
+        </BuilderField>
       )}
     </>
   );
@@ -44,8 +46,8 @@ export const changelog_descriptor: FrontendNodeDescriptor = {
   ],
   input_schema: [
     { name: "action", type: "string", description: "node.changelog.input.action" },
-    { name: "input", type: "string", description: "node.changelog.input.input" },
+    { name: "commits", type: "string", description: "node.changelog.input.commits" },
   ],
-  create_default: () => ({ action: "generate", input: "", from_tag: "", to_tag: "" }),
+  create_default: () => ({ action: "generate", commits: "", version: "", commit_message: "" }),
   EditPanel: ChangelogEditPanel,
 };

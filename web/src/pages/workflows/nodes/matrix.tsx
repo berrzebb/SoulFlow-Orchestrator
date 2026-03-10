@@ -18,10 +18,10 @@ function MatrixEditPanel({ node, update, t }: EditPanelProps) {
         </BuilderField>
       </BuilderRowPair>
       {!needs_size && (
-        <JsonField label={t("workflows.matrix_a_json")} value={node.matrix_a} onUpdate={(v) => update({ matrix_a: v })} placeholder="[[1,2],[3,4]]" />
+        <JsonField label={t("workflows.matrix_a_json")} value={node.a} onUpdate={(v) => update({ a: v })} placeholder="[[1,2],[3,4]]" />
       )}
       {needs_b && (
-        <JsonField label={t("workflows.matrix_b_json")} value={node.matrix_b} onUpdate={(v) => update({ matrix_b: v })} placeholder="[[5,6],[7,8]]" />
+        <JsonField label={t("workflows.matrix_b_json")} value={node.b} onUpdate={(v) => update({ b: v })} placeholder="[[5,6],[7,8]]" />
       )}
       {needs_scalar && (
         <BuilderField label={t("workflows.field_scalar")} required>
@@ -50,8 +50,8 @@ export const matrix_descriptor: FrontendNodeDescriptor = {
   ],
   input_schema: [
     { name: "action", type: "string", description: "node.matrix.input.action" },
-    { name: "matrix_a", type: "string", description: "node.matrix.input.matrix_a" },
+    { name: "a", type: "string", description: "node.matrix.input.a" },
   ],
-  create_default: () => ({ action: "multiply", matrix_a: "", matrix_b: "", scalar: 1 }),
+  create_default: () => ({ action: "multiply", a: "", b: "", scalar: 1 }),
   EditPanel: MatrixEditPanel,
 };

@@ -27,6 +27,11 @@ function StateMachineEditPanel({ node, update, t }: EditPanelProps) {
           )}
         </BuilderRowPair>
       )}
+      {action === "reachable" && (
+        <BuilderField label={t("workflows.state_machine_events")}>
+          <input className="input input--sm" value={String(node.events || "")} onChange={(e) => update({ events: e.target.value })} placeholder="start,stop (comma-separated)" />
+        </BuilderField>
+      )}
     </>
   );
 }
@@ -46,6 +51,6 @@ export const state_machine_descriptor: FrontendNodeDescriptor = {
     { name: "action", type: "string", description: "node.state_machine.input.action" },
     { name: "machine", type: "string", description: "node.state_machine.input.machine" },
   ],
-  create_default: () => ({ action: "define", machine: "", current: "", event: "" }),
+  create_default: () => ({ action: "define", machine: "", current: "", event: "", events: "" }),
   EditPanel: StateMachineEditPanel,
 };

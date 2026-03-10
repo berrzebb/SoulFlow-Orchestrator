@@ -2,7 +2,6 @@ import { BuilderField, BuilderRowPair } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
 const ACTIONS = ["strength", "check_policy", "hash", "verify", "generate", "entropy"];
-const HASH_ALGOS = ["bcrypt", "argon2", "sha256", "md5"];
 
 function PasswordEditPanel({ node, update, t }: EditPanelProps) {
   const action = String(node.action || "strength");
@@ -14,17 +13,10 @@ function PasswordEditPanel({ node, update, t }: EditPanelProps) {
             {ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
           </select>
         </BuilderField>
-        {(action === "hash" || action === "verify") && (
-          <BuilderField label={t("workflows.field_algorithm")}>
-            <select className="input input--sm" value={String(node.algorithm || "bcrypt")} onChange={(e) => update({ algorithm: e.target.value })}>
-              {HASH_ALGOS.map((a) => <option key={a} value={a}>{a}</option>)}
-            </select>
-          </BuilderField>
-        )}
       </BuilderRowPair>
       {action !== "generate" && (
         <BuilderField label={t("workflows.password")} required>
-          <input className="input input--sm" type="password" required value={String(node.password || "")} onChange={(e) => update({ password: e.target.value })} aria-required="true" />
+          <input className="input input--sm" type="password" required value={String(node.password_input || "")} onChange={(e) => update({ password_input: e.target.value })} aria-required="true" />
         </BuilderField>
       )}
       {action === "verify" && (
@@ -33,11 +25,9 @@ function PasswordEditPanel({ node, update, t }: EditPanelProps) {
         </BuilderField>
       )}
       {action === "generate" && (
-        <BuilderRowPair>
-          <BuilderField label={t("workflows.field_length")}>
-            <input className="input input--sm" type="number" min={8} max={128} value={String(node.length ?? 16)} onChange={(e) => update({ length: Number(e.target.value) || 16 })} />
-          </BuilderField>
-        </BuilderRowPair>
+        <BuilderField label={t("workflows.field_length")}>
+          <input className="input input--sm" type="number" min={8} max={128} value={String(node.length ?? 16)} onChange={(e) => update({ length: Number(e.target.value) || 16 })} />
+        </BuilderField>
       )}
     </>
   );
@@ -56,8 +46,8 @@ export const password_descriptor: FrontendNodeDescriptor = {
   ],
   input_schema: [
     { name: "action", type: "string", description: "node.password.input.action" },
-    { name: "password", type: "string", description: "node.password.input.password" },
+    { name: "password_input", type: "string", description: "node.password.input.password_input" },
   ],
-  create_default: () => ({ action: "strength", password: "", algorithm: "bcrypt", length: 16 }),
+  create_default: () => ({ action: "strength", password_input: "", length: 16 }),
   EditPanel: PasswordEditPanel,
 };
