@@ -301,3 +301,125 @@ describe("ProviderRegistry — redact_prompt_content (array content)", () => {
     expect(provider.chat).toHaveBeenCalledTimes(1);
   });
 });
+
+// ══════════════════════════════════════════════════════════
+// run_headless_prompt
+// ══════════════════════════════════════════════════════════
+
+describe("ProviderRegistry — run_headless_prompt", () => {
+  it("prompt + system → messages 구성 후 run_headless 호출", async () => {
+    const registry = make_registry();
+    const provider = registry.get_provider_instance("openrouter") as any;
+    provider.chat.mockResolvedValue({ content: "answer", finish_reason: "stop" });
+
+    const result = await registry.run_headless_prompt({
+      provider_id: "openrouter",
+      prompt: "What is 2+2?",
+      system: "You are a math tutor",
+    });
+
+    expect(result.content).toBe("answer");
+    const call_args = provider.chat.mock.calls[0][0];
+    expect(call_args.messages[0]).toEqual({ role: "system", content: "You are a math tutor" });
+    expect(call_args.messages[1]).toEqual({ role: "user", content: "What is 2+2?" });
+  });
+
+  it("system 없음 → user 메시지만 포함", async () => {
+    const registry = make_registry();
+    const provider = registry.get_provider_instance("openrouter") as any;
+    provider.chat.mockResolvedValue({ content: "ok", finish_reason: "stop" });
+
+    await registry.run_headless_prompt({
+      provider_id: "openrouter",
+      prompt: "Hello",
+    });
+
+    const call_args = provider.chat.mock.calls[0][0];
+    expect(call_args.messages).toHaveLength(1);
+    expect(call_args.messages[0].role).toBe("user");
+  });
+
+  it("빈 system 문자열 → system 메시지 제외", async () => {
+    const registry = make_registry();
+    const provider = registry.get_provider_instance("openrouter") as any;
+    provider.chat.mockResolvedValue({ content: "ok", finish_reason: "stop" });
+
+    await registry.run_headless_prompt({
+      provider_id: "openrouter",
+      prompt: "Hello",
+      system: "   ", // whitespace only
+    });
+
+    const call_args = provider.chat.mock.calls[0][0];
+    expect(call_args.messages).toHaveLength(1);
+  });
+});
+
+// ══════════════════════════════════════════════════════════
+// run_headless_with_context
+// ══════════════════════════════════════════════════════════
+
+describe("ProviderRegistry — run_headless_with_context", () => {
+  it("context_builder.build_messages 호출 → 결과 메시지로 run_headless", async () => {
+    const registry = make_registry();
+    const provider = registry.get_provider_instance("openrouter") as any;
+    provider.chat.mockResolvedValue({ content: "ctx reply", finish_reason: "stop" });
+
+    const built_messages = [{ role: "user", content: "built context message" }];
+    const context_builder = {
+      build_messages: vi.fn().mockResolvedValue(built_messages),
+    };
+
+    const result = await registry.run_headless_with_context({
+      provider_id: "openrouter",
+      context_builder: context_builder as any,
+      history_days: ["2024-01-01"],
+      current_message: "What happened?",
+      skill_names: ["search"],
+      media: null,
+      channel: "#general",
+      chat_id: "chat123",
+    });
+
+    expect(result.content).toBe("ctx reply");
+    expect(context_builder.build_messages).toHaveBeenCalledWith(
+      ["2024-01-01"], "What happened?", ["search"], null, "#general", "chat123",
+    );
+    const call_args = provider.chat.mock.calls[0][0];
+    expect(call_args.messages).toEqual(built_messages);
+  });
+});
+
+// ══════════════════════════════════════════════════════════
+// run_orchestrator
+// ══════════════════════════════════════════════════════════
+
+describe("ProviderRegistry — run_orchestrator", () => {
+  it("기본 → 기본 orchestrator provider(chatgpt)로 run_headless 호출", async () => {
+    // resolve_default_orchestrator_provider: priority ["chatgpt", ...] → "chatgpt" 선택
+    const registry = make_registry();
+    const chatgpt = registry.get_provider_instance("chatgpt") as any;
+    chatgpt.chat.mockResolvedValue({ content: "orchestrated", finish_reason: "stop" });
+
+    const result = await registry.run_orchestrator({
+      messages: [{ role: "user", content: "plan this" }],
+    });
+
+    expect(result.content).toBe("orchestrated");
+    expect(chatgpt.chat).toHaveBeenCalledTimes(1);
+  });
+
+  it("provider_id 오버라이드 → 지정된 provider 사용", async () => {
+    const registry = make_registry();
+    const openrouter = registry.get_provider_instance("openrouter") as any;
+    openrouter.chat.mockResolvedValue({ content: "override reply", finish_reason: "stop" });
+
+    const result = await registry.run_orchestrator({
+      messages: [{ role: "user", content: "test" }],
+      provider_id: "openrouter",
+    });
+
+    expect(result.content).toBe("override reply");
+    expect(openrouter.chat).toHaveBeenCalledTimes(1);
+  });
+});
