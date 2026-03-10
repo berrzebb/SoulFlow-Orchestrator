@@ -51,7 +51,7 @@ type ToolBlock = {
 };
 
 type SystemBlock =
-  | { kind: "usage"; input: number; output: number; cost_usd?: number }
+  | { kind: "usage"; input: number; output: number; cost_usd?: number | null }
   | { kind: "rate_limit"; status: string }
   | { kind: "compact"; pre_tokens: number };
 
@@ -132,7 +132,7 @@ export class ChannelBlockRenderer {
       const lines: string[] = [];
       for (const s of this.system) {
         if (s.kind === "usage") {
-          const cost = s.cost_usd != null ? ` ($${s.cost_usd.toFixed(4)})` : "";
+          const cost = s.cost_usd !== null && s.cost_usd !== undefined ? ` ($${s.cost_usd.toFixed(4)})` : "";
           lines.push(fmt.usage(s.input, s.output, cost));
         } else if (s.kind === "rate_limit") {
           lines.push(s.status === "rejected" ? fmt.rate_rejected() : fmt.rate_warning());
