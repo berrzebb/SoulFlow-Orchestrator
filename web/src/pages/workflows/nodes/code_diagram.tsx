@@ -71,7 +71,7 @@ export const code_diagram_descriptor: FrontendNodeDescriptor = {
   toolbar_label: "node.code_diagram.label",
   category: "advanced",
   output_schema: [
-    { name: "result", type: "string", description: "node.code_diagram.output.result" },
+    { name: "result", type: "object", description: "node.code_diagram.output.result" },
     { name: "success", type: "boolean", description: "node.code_diagram.output.success" },
   ],
   input_schema: [

@@ -47,7 +47,7 @@ export const similarity_descriptor: FrontendNodeDescriptor = {
   toolbar_label: "node.similarity.label",
   category: "advanced",
   output_schema: [
-    { name: "result", type: "string", description: "node.similarity.output.result" },
+    { name: "result", type: "object", description: "node.similarity.output.result" },
     { name: "success", type: "boolean", description: "node.similarity.output.success" },
   ],
   input_schema: [

@@ -32,7 +32,7 @@ export const xml_descriptor: FrontendNodeDescriptor = {
   toolbar_label: "node.xml.label",
   category: "data",
   output_schema: [
-    { name: "result", type: "string", description: "node.xml.output.result" },
+    { name: "result", type: "object", description: "node.xml.output.result" },
     { name: "success", type: "boolean", description: "node.xml.output.success" },
   ],
   input_schema: [

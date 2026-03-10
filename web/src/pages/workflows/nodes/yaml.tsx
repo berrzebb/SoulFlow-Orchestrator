@@ -50,7 +50,7 @@ export const yaml_descriptor: FrontendNodeDescriptor = {
   toolbar_label: "node.yaml.label",
   category: "data",
   output_schema: [
-    { name: "result", type: "string", description: "node.yaml.output.result" },
+    { name: "result", type: "object", description: "node.yaml.output.result" },
     { name: "success", type: "boolean", description: "node.yaml.output.success" },
   ],
   input_schema: [

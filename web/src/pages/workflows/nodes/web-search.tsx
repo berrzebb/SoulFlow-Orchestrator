@@ -10,14 +10,6 @@ function WebSearchEditPanel({ node, update, t }: EditPanelProps) {
       <BuilderField label={t("workflows.max_results")}>
         <input className="input input--sm" type="number" min={1} max={20} value={String(node.max_results ?? 5)} onChange={(e) => update({ max_results: Number(e.target.value) || 5 })} />
       </BuilderField>
-      <BuilderField label={t("workflows.search_engine")}>
-        <select className="input input--sm" value={String(node.search_engine || "brave")} onChange={(e) => update({ search_engine: e.target.value })}>
-          <option value="brave">Brave</option>
-          <option value="google">Google</option>
-          <option value="bing">Bing</option>
-          <option value="duckduckgo">DuckDuckGo</option>
-        </select>
-      </BuilderField>
     </>
   );
 }
@@ -38,6 +30,6 @@ export const web_search_descriptor: FrontendNodeDescriptor = {
     { name: "query",       type: "string", description: "node.web_search.input.query" },
     { name: "max_results", type: "number", description: "node.web_search.input.max_results" },
   ],
-  create_default: () => ({ query: "", max_results: 5, search_engine: "brave" }),
+  create_default: () => ({ query: "", max_results: 5 }),
   EditPanel: WebSearchEditPanel,
 };

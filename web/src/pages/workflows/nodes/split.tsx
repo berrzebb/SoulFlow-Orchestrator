@@ -30,6 +30,6 @@ export const split_descriptor: FrontendNodeDescriptor = {
     { name: "array_field", type: "string", description: "node.split.input.array_field" },
     { name: "batch_size",  type: "number", description: "node.split.input.batch_size" },
   ],
-  create_default: () => ({ array_field: "" }),
+  create_default: () => ({ array_field: "", batch_size: 1 }),
   EditPanel: SplitEditPanel,
 };

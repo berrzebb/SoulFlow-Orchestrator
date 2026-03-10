@@ -45,7 +45,7 @@ export const openapi_descriptor: FrontendNodeDescriptor = {
   toolbar_label: "node.openapi.label",
   category: "integration",
   output_schema: [
-    { name: "result", type: "string", description: "node.openapi.output.result" },
+    { name: "result", type: "object", description: "node.openapi.output.result" },
     { name: "success", type: "boolean", description: "node.openapi.output.success" },
   ],
   input_schema: [

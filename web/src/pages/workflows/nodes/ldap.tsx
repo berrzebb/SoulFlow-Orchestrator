@@ -58,7 +58,7 @@ export const ldap_descriptor: FrontendNodeDescriptor = {
   toolbar_label: "node.ldap.label",
   category: "integration",
   output_schema: [
-    { name: "result", type: "string", description: "node.ldap.output.result" },
+    { name: "result", type: "object", description: "node.ldap.output.result" },
     { name: "success", type: "boolean", description: "node.ldap.output.success" },
   ],
   input_schema: [

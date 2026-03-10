@@ -40,7 +40,7 @@ export const qr_descriptor: FrontendNodeDescriptor = {
   toolbar_label: "node.qr.label",
   category: "data",
   output_schema: [
-    { name: "result", type: "string", description: "node.qr.output.result" },
+    { name: "result", type: "object", description: "node.qr.output.result" },
     { name: "success", type: "boolean", description: "node.qr.output.success" },
   ],
   input_schema: [

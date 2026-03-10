@@ -64,7 +64,7 @@ export const mqtt_descriptor: FrontendNodeDescriptor = {
   toolbar_label: "node.mqtt.label",
   category: "integration",
   output_schema: [
-    { name: "result", type: "string", description: "node.mqtt.output.result" },
+    { name: "result", type: "object", description: "node.mqtt.output.result" },
     { name: "success", type: "boolean", description: "node.mqtt.output.success" },
   ],
   input_schema: [

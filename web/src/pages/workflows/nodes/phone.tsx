@@ -45,7 +45,7 @@ export const phone_descriptor: FrontendNodeDescriptor = {
   toolbar_label: "node.phone.label",
   category: "data",
   output_schema: [
-    { name: "result", type: "string", description: "node.phone.output.result" },
+    { name: "result", type: "object", description: "node.phone.output.result" },
     { name: "success", type: "boolean", description: "node.phone.output.success" },
   ],
   input_schema: [

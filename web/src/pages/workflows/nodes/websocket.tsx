@@ -58,7 +58,7 @@ export const websocket_descriptor: FrontendNodeDescriptor = {
   toolbar_label: "node.websocket.label",
   category: "integration",
   output_schema: [
-    { name: "result", type: "string", description: "node.websocket.output.result" },
+    { name: "result", type: "object", description: "node.websocket.output.result" },
     { name: "success", type: "boolean", description: "node.websocket.output.success" },
   ],
   input_schema: [

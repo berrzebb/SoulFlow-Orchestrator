@@ -53,7 +53,7 @@ export const barcode_descriptor: FrontendNodeDescriptor = {
   toolbar_label: "node.barcode.label",
   category: "data",
   output_schema: [
-    { name: "result", type: "string", description: "node.barcode.output.result" },
+    { name: "result", type: "object", description: "node.barcode.output.result" },
     { name: "success", type: "boolean", description: "node.barcode.output.success" },
   ],
   input_schema: [

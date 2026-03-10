@@ -39,7 +39,7 @@ export const json_schema_descriptor: FrontendNodeDescriptor = {
   toolbar_label: "node.json_schema.label",
   category: "data",
   output_schema: [
-    { name: "result", type: "string", description: "node.json_schema.output.result" },
+    { name: "result", type: "object", description: "node.json_schema.output.result" },
     { name: "success", type: "boolean", description: "node.json_schema.output.success" },
   ],
   input_schema: [

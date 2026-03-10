@@ -53,7 +53,7 @@ export const csv_descriptor: FrontendNodeDescriptor = {
   toolbar_label: "node.csv.label",
   category: "data",
   output_schema: [
-    { name: "result", type: "string", description: "node.csv.output.result" },
+    { name: "result", type: "object", description: "node.csv.output.result" },
     { name: "success", type: "boolean", description: "node.csv.output.success" },
   ],
   input_schema: [

@@ -49,7 +49,7 @@ export const rss_descriptor: FrontendNodeDescriptor = {
   toolbar_label: "node.rss.label",
   category: "integration",
   output_schema: [
-    { name: "result", type: "string", description: "node.rss.output.result" },
+    { name: "result", type: "object", description: "node.rss.output.result" },
     { name: "success", type: "boolean", description: "node.rss.output.success" },
   ],
   input_schema: [

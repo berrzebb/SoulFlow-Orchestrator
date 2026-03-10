@@ -41,7 +41,7 @@ export const html_descriptor: FrontendNodeDescriptor = {
   toolbar_label: "node.html.label",
   category: "integration",
   output_schema: [
-    { name: "result", type: "string", description: "node.html.output.result" },
+    { name: "result", type: "object", description: "node.html.output.result" },
     { name: "success", type: "boolean", description: "node.html.output.success" },
   ],
   input_schema: [

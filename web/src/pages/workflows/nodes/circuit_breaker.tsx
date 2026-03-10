@@ -44,7 +44,7 @@ export const circuit_breaker_descriptor: FrontendNodeDescriptor = {
   toolbar_label: "node.circuit_breaker.label",
   category: "advanced",
   output_schema: [
-    { name: "result", type: "string", description: "node.circuit_breaker.output.result" },
+    { name: "result", type: "object", description: "node.circuit_breaker.output.result" },
     { name: "success", type: "boolean", description: "node.circuit_breaker.output.success" },
   ],
   input_schema: [

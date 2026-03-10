@@ -37,7 +37,7 @@ export const data_mask_descriptor: FrontendNodeDescriptor = {
   toolbar_label: "node.data_mask.label",
   category: "advanced",
   output_schema: [
-    { name: "result", type: "string", description: "node.data_mask.output.result" },
+    { name: "result", type: "object", description: "node.data_mask.output.result" },
     { name: "success", type: "boolean", description: "node.data_mask.output.success" },
   ],
   input_schema: [

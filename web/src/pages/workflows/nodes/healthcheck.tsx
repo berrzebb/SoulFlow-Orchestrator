@@ -61,7 +61,7 @@ export const healthcheck_descriptor: FrontendNodeDescriptor = {
   toolbar_label: "node.healthcheck.label",
   category: "advanced",
   output_schema: [
-    { name: "result", type: "string", description: "node.healthcheck.output.result" },
+    { name: "result", type: "object", description: "node.healthcheck.output.result" },
     { name: "success", type: "boolean", description: "node.healthcheck.output.success" },
   ],
   input_schema: [

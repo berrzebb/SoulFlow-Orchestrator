@@ -38,7 +38,7 @@ export const duration_descriptor: FrontendNodeDescriptor = {
   toolbar_label: "node.duration.label",
   category: "data",
   output_schema: [
-    { name: "result", type: "string", description: "node.duration.output.result" },
+    { name: "result", type: "object", description: "node.duration.output.result" },
     { name: "success", type: "boolean", description: "node.duration.output.success" },
   ],
   input_schema: [

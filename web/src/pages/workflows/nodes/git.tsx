@@ -7,7 +7,7 @@ function GitEditPanel({ node, update, t }: EditPanelProps) {
       <BuilderRowPair>
         <BuilderField label={t("workflows.git_operation")} required>
           <select autoFocus className="input input--sm" value={String(node.operation || "status")} onChange={(e) => update({ operation: e.target.value })}>
-            {["status", "diff", "log", "commit", "push", "pull", "branch", "checkout", "stash", "tag"].map((o) => <option key={o} value={o}>{o}</option>)}
+            {["status", "diff", "log", "add", "commit", "push", "pull", "fetch", "merge", "rebase", "branch", "checkout", "stash", "tag", "show"].map((o) => <option key={o} value={o}>{o}</option>)}
           </select>
         </BuilderField>
         <BuilderField label={t("workflows.git_args")}>
