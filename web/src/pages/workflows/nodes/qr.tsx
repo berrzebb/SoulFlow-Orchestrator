@@ -20,9 +20,14 @@ function QrEditPanel({ node, update, t }: EditPanelProps) {
           </select>
         </BuilderField>
       </BuilderRowPair>
-      <BuilderField label={t("workflows.field_data")} required>
-        <input className="input input--sm" required value={String(node.data || "")} onChange={(e) => update({ data: e.target.value })} placeholder="https://example.com" aria-required="true" />
-      </BuilderField>
+      <BuilderRowPair>
+        <BuilderField label={t("workflows.field_data")} required>
+          <input className="input input--sm" required value={String(node.data || "")} onChange={(e) => update({ data: e.target.value })} placeholder="https://example.com" aria-required="true" />
+        </BuilderField>
+        <BuilderField label={t("workflows.qr_size")}>
+          <input className="input input--sm" type="number" min={64} max={1024} step={64} value={String(node.size ?? 256)} onChange={(e) => update({ size: Number(e.target.value) || 256 })} />
+        </BuilderField>
+      </BuilderRowPair>
     </>
   );
 }
@@ -42,6 +47,6 @@ export const qr_descriptor: FrontendNodeDescriptor = {
     { name: "action", type: "string", description: "node.qr.input.action" },
     { name: "data", type: "string", description: "node.qr.input.data" },
   ],
-  create_default: () => ({ action: "generate", data: "", format: "svg" }),
+  create_default: () => ({ action: "generate", data: "", format: "svg", size: 256 }),
   EditPanel: QrEditPanel,
 };

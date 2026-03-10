@@ -15,15 +15,15 @@ function PdfEditPanel({ node, update, t }: EditPanelProps) {
         </BuilderField>
       </BuilderRowPair>
       <BuilderField label={t("workflows.file_path")} required>
-        <input className="input input--sm" required value={String(node.file_path || "")} onChange={(e) => update({ file_path: e.target.value })} placeholder="/path/to/document.pdf" aria-required="true" />
+        <input className="input input--sm" required value={String(node.path || "")} onChange={(e) => update({ path: e.target.value })} placeholder="/path/to/document.pdf" aria-required="true" />
       </BuilderField>
       {action === "extract_text" && (
         <BuilderRowPair>
-          <BuilderField label={t("workflows.pdf_start_page")}>
-            <input className="input input--sm" type="number" min={1} value={String(node.start_page ?? "")} onChange={(e) => update({ start_page: e.target.value ? Number(e.target.value) : undefined })} placeholder="1" />
+          <BuilderField label={t("workflows.pdf_pages")}>
+            <input className="input input--sm" value={String(node.pages || "")} onChange={(e) => update({ pages: e.target.value || undefined })} placeholder="1-3 (empty = all)" />
           </BuilderField>
-          <BuilderField label={t("workflows.pdf_end_page")}>
-            <input className="input input--sm" type="number" min={1} value={String(node.end_page ?? "")} onChange={(e) => update({ end_page: e.target.value ? Number(e.target.value) : undefined })} placeholder="all" />
+          <BuilderField label={t("workflows.pdf_max_chars")}>
+            <input className="input input--sm" type="number" min={1} value={String(node.max_chars ?? "")} onChange={(e) => update({ max_chars: e.target.value ? Number(e.target.value) : undefined })} placeholder="unlimited" />
           </BuilderField>
         </BuilderRowPair>
       )}
@@ -44,8 +44,8 @@ export const pdf_descriptor: FrontendNodeDescriptor = {
   ],
   input_schema: [
     { name: "action", type: "string", description: "node.pdf.input.action" },
-    { name: "file_path", type: "string", description: "node.pdf.input.file_path" },
+    { name: "path", type: "string", description: "node.pdf.input.path" },
   ],
-  create_default: () => ({ action: "extract_text", file_path: "" }),
+  create_default: () => ({ action: "extract_text", path: "" }),
   EditPanel: PdfEditPanel,
 };

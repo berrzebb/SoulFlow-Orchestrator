@@ -32,9 +32,12 @@ function LogParserEditPanel({ node, update, t }: EditPanelProps) {
           </BuilderField>
         </BuilderRowPair>
       )}
-      {action === "tail" && (
-        <BuilderField label={t("workflows.field_count")}>
-          <input className="input input--sm" type="number" min={1} value={String(node.count ?? 20)} onChange={(e) => update({ count: Number(e.target.value) || 20 })} />
+      {action === "filter" && (
+        <BuilderField label={t("workflows.log_level")}>
+          <select className="input input--sm" value={String(node.level || "")} onChange={(e) => update({ level: e.target.value || undefined })}>
+            <option value="">(any)</option>
+            {["DEBUG", "INFO", "WARN", "ERROR", "FATAL"].map((l) => <option key={l} value={l}>{l}</option>)}
+          </select>
         </BuilderField>
       )}
     </>
@@ -56,6 +59,6 @@ export const log_parser_descriptor: FrontendNodeDescriptor = {
     { name: "action", type: "string", description: "node.log_parser.input.action" },
     { name: "input", type: "string", description: "node.log_parser.input.input" },
   ],
-  create_default: () => ({ action: "parse_json", input: "", pattern: "", field: "", value: "", count: 20 }),
+  create_default: () => ({ action: "parse_json", input: "", pattern: "", field: "", value: "", level: "" }),
   EditPanel: LogParserEditPanel,
 };

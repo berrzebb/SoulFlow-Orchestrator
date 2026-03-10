@@ -15,11 +15,11 @@ function XmlEditPanel({ node, update, t }: EditPanelProps) {
         </BuilderField>
       </BuilderRowPair>
       <BuilderField label={t("workflows.field_input")} required>
-        <textarea className="input" required rows={4} value={String(node.input || "")} onChange={(e) => update({ input: e.target.value })} placeholder="<root><item>value</item></root>" aria-required="true" />
+        <textarea className="input" required rows={4} value={String(node.data || "")} onChange={(e) => update({ data: e.target.value })} placeholder="<root><item>value</item></root>" aria-required="true" />
       </BuilderField>
       {action === "query" && (
         <BuilderField label={t("workflows.field_xpath")} required>
-          <input className="input input--sm" required value={String(node.xpath || "")} onChange={(e) => update({ xpath: e.target.value })} placeholder="//item/text()" aria-required="true" />
+          <input className="input input--sm" required value={String(node.path || "")} onChange={(e) => update({ path: e.target.value })} placeholder="//item/text()" aria-required="true" />
         </BuilderField>
       )}
     </>
@@ -39,8 +39,8 @@ export const xml_descriptor: FrontendNodeDescriptor = {
   ],
   input_schema: [
     { name: "action", type: "string", description: "node.xml.input.action" },
-    { name: "input", type: "string", description: "node.xml.input.input" },
+    { name: "data", type: "string", description: "node.xml.input.data" },
   ],
-  create_default: () => ({ action: "parse", input: "", xpath: "" }),
+  create_default: () => ({ action: "parse", data: "", path: "" }),
   EditPanel: XmlEditPanel,
 };

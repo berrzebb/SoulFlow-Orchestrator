@@ -27,12 +27,17 @@ function RssEditPanel({ node, update, t }: EditPanelProps) {
       {(action === "generate" || action === "add_item") && (
         <>
           <BuilderField label={t("workflows.field_title")} required>
-            <input className="input input--sm" required value={String(node.title || "")} onChange={(e) => update({ title: e.target.value })} placeholder="My Feed" aria-required="true" />
+            <input className="input input--sm" required value={String(node.feed_title || "")} onChange={(e) => update({ feed_title: e.target.value })} placeholder="My Feed" aria-required="true" />
           </BuilderField>
           <BuilderField label={t("workflows.field_link")} required>
             <input className="input input--sm" required value={String(node.link || "")} onChange={(e) => update({ link: e.target.value })} placeholder="https://example.com" aria-required="true" />
           </BuilderField>
         </>
+      )}
+      {action === "generate" && (
+        <BuilderField label={t("workflows.rss_items_json")}>
+          <textarea className="input" rows={3} value={String(node.items || "")} onChange={(e) => update({ items: e.target.value })} placeholder='[{"title":"...","link":"..."}]' />
+        </BuilderField>
       )}
     </>
   );
@@ -53,6 +58,6 @@ export const rss_descriptor: FrontendNodeDescriptor = {
     { name: "action", type: "string", description: "node.rss.input.action" },
     { name: "url", type: "string", description: "node.rss.input.url" },
   ],
-  create_default: () => ({ action: "fetch_parse", url: "", input: "", title: "", link: "" }),
+  create_default: () => ({ action: "fetch_parse", url: "", input: "", feed_title: "", link: "" }),
   EditPanel: RssEditPanel,
 };
