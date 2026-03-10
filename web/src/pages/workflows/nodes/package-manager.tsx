@@ -1,30 +1,54 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 import { BuilderField, BuilderRowPair } from "../builder-field";
 
+const DEP_OPS = ["parse_deps", "circular_deps", "dep_stats", "dep_compare"];
+const PKG_OPS = ["list", "install", "uninstall", "audit", "outdated", "info"];
+
 function PkgManagerEditPanel({ node, update, t }: EditPanelProps) {
   const op = String(node.operation || "list");
+  const is_dep = DEP_OPS.includes(op);
   return (
     <>
-      <BuilderRowPair>
-        <BuilderField label={t("workflows.pkg_manager")}>
-          <select autoFocus className="input input--sm" value={String(node.manager || "npm")} onChange={(e) => update({ manager: e.target.value })}>
-            {["npm", "pip", "cargo"].map((m) => <option key={m} value={m}>{m}</option>)}
-          </select>
-        </BuilderField>
-        <BuilderField label={t("workflows.pkg_operation")}>
-          <select className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
-            {["list", "install", "uninstall", "audit", "outdated", "info"].map((o) => <option key={o} value={o}>{o}</option>)}
-          </select>
-        </BuilderField>
-      </BuilderRowPair>
-      {["install", "uninstall", "info"].includes(op) && (
-        <BuilderField label={t("workflows.package_name")}>
-          <input className="input" value={String(node.package_name || "")} onChange={(e) => update({ package_name: e.target.value })} placeholder="lodash" />
-        </BuilderField>
-      )}
-      <BuilderField label={t("workflows.extra_args")}>
-        <input className="input input--sm" value={String(node.flags || "")} onChange={(e) => update({ flags: e.target.value })} placeholder="--save-dev" />
+      <BuilderField label={t("workflows.pkg_operation")} required>
+        <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
+          <optgroup label="Package Manager">{PKG_OPS.map((o) => <option key={o} value={o}>{o}</option>)}</optgroup>
+          <optgroup label="Dependency Analysis">{DEP_OPS.map((o) => <option key={o} value={o}>{o}</option>)}</optgroup>
+        </select>
       </BuilderField>
+      {!is_dep && (
+        <>
+          <BuilderField label={t("workflows.pkg_manager")}>
+            <select className="input input--sm" value={String(node.manager || "npm")} onChange={(e) => update({ manager: e.target.value })}>
+              {["npm", "pip", "cargo"].map((m) => <option key={m} value={m}>{m}</option>)}
+            </select>
+          </BuilderField>
+          {["install", "uninstall", "info"].includes(op) && (
+            <BuilderField label={t("workflows.package_name")}>
+              <input className="input" value={String(node.package_name || "")} onChange={(e) => update({ package_name: e.target.value })} placeholder="lodash" />
+            </BuilderField>
+          )}
+          <BuilderField label={t("workflows.extra_args")}>
+            <input className="input input--sm" value={String(node.flags || "")} onChange={(e) => update({ flags: e.target.value })} placeholder="--save-dev" />
+          </BuilderField>
+        </>
+      )}
+      {is_dep && (
+        <>
+          <BuilderField label={t("workflows.dep_input")} required hint={op === "dep_compare" ? t("workflows.dep_input_hint_compare") : t("workflows.dep_input_hint")}>
+            <textarea className="input" rows={4} value={String(node.dep_input || "")} onChange={(e) => update({ dep_input: e.target.value })} placeholder='{"name":"app","dependencies":{"lodash":"^4.0.0"}}' />
+          </BuilderField>
+          {op === "dep_compare" && (
+            <BuilderField label={t("workflows.dep_input2")} required>
+              <textarea className="input" rows={3} value={String(node.dep_input2 || "")} onChange={(e) => update({ dep_input2: e.target.value })} placeholder='{"dependencies":{"lodash":"^5.0.0"}}' />
+            </BuilderField>
+          )}
+          {op === "circular_deps" && (
+            <BuilderField label={t("workflows.dep_graph")} hint={t("workflows.dep_graph_hint")}>
+              <textarea className="input" rows={3} value={String(node.dep_graph || "")} onChange={(e) => update({ dep_graph: e.target.value })} placeholder='{"a":["b"],"b":["a"]}' />
+            </BuilderField>
+          )}
+        </>
+      )}
     </>
   );
 }
