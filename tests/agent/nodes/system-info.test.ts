@@ -33,3 +33,18 @@ describe("system_info_handler", () => {
     expect(result.preview).toBeDefined();
   });
 });
+
+describe("system_info — 미커버 분기", () => {
+  it("execute: category=unknown_cat → CATEGORY_CMDS 누락 → L40 continue", async () => {
+    const node = { node_id: "n1", node_type: "system_info", category: "unknown_cat" } as any;
+    const ctx = { memory: {}, workspace: "/tmp", abort_signal: undefined };
+    const result = await system_info_handler.execute(node, ctx);
+    expect(result.output.success).toBe(true);
+  });
+
+  it("test: 유효하지 않은 category → L61 경고 추가", () => {
+    const node = { node_id: "n1", node_type: "system_info", category: "invalid_cat" } as any;
+    const result = system_info_handler.test(node);
+    expect(result.warnings.some((w: string) => w.includes("unknown category"))).toBe(true);
+  });
+});

@@ -398,3 +398,21 @@ describe("Archive Node Handler", () => {
     });
   });
 });
+
+describe("archive — build_archive_command default 분기 (L70/L78)", () => {
+  it("format=tar.gz + op=unknown → switch default return null (L70)", async () => {
+    const node = { node_id: "n1", node_type: "archive", operation: "unknown_op", format: "tar.gz", archive_path: "a.tar.gz", files: "", output_dir: "." } as any;
+    const ctx = { memory: {}, workspace: "/tmp", abort_signal: undefined };
+    const result = await archive_handler.execute(node, ctx);
+    expect(result.output.success).toBe(false);
+    expect((result.output as any).error).toContain("unsupported");
+  });
+
+  it("format=zip + op=unknown → switch default return null (L78)", async () => {
+    const node = { node_id: "n1", node_type: "archive", operation: "unknown_op", format: "zip", archive_path: "a.zip", files: "", output_dir: "." } as any;
+    const ctx = { memory: {}, workspace: "/tmp", abort_signal: undefined };
+    const result = await archive_handler.execute(node, ctx);
+    expect(result.output.success).toBe(false);
+    expect((result.output as any).error).toContain("unsupported");
+  });
+});

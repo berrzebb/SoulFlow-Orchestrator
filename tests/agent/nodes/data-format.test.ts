@@ -33,3 +33,11 @@ describe("data_format_handler", () => {
     expect(result.preview).toBeDefined();
   });
 });
+
+describe("data_format — 미커버 분기", () => {
+  it("test: operation=convert + from===to → L56 동일 포맷 경고", () => {
+    const node = { node_id: "n1", node_type: "data_format", operation: "convert", from: "json", to: "json", input: "[]" } as any;
+    const result = data_format_handler.test(node);
+    expect(result.warnings.some((w: string) => w.includes("same"))).toBe(true);
+  });
+});

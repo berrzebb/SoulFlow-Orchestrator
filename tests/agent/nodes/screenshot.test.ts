@@ -85,3 +85,18 @@ describe("screenshot_handler", () => {
     expect(result.output).toBeDefined();
   });
 });
+
+describe("screenshot — create_default (L22)", () => {
+  it("create_default: 기본값 반환", () => {
+    const defaults = screenshot_handler.create_default?.();
+    expect(defaults).toBeDefined();
+    expect((defaults as any).url).toBe("");
+    expect((defaults as any).full_page).toBe(false);
+  });
+
+  it("test: url 없음 → url 경고 (L57)", () => {
+    const node = { node_id: "n1", node_type: "screenshot", url: "" } as any;
+    const result = screenshot_handler.test(node);
+    expect(result.warnings.some((w: string) => w.includes("url"))).toBe(true);
+  });
+});

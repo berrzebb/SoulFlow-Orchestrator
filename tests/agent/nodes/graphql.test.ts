@@ -49,3 +49,17 @@ describe("graphql_handler", () => {
     expect(result.output).toBeDefined();
   });
 });
+
+describe("graphql — test() warning guards (L49/L50)", () => {
+  it("url 없음 → L49 url 경고", () => {
+    const node = { node_id: "n1", node_type: "graphql", url: "", query: "{ q }" } as any;
+    const result = graphql_handler.test(node);
+    expect(result.warnings.some((w: string) => w.includes("url"))).toBe(true);
+  });
+
+  it("query 없음 → L50 query 경고", () => {
+    const node = { node_id: "n1", node_type: "graphql", url: "https://api.example.com/graphql", query: "" } as any;
+    const result = graphql_handler.test(node);
+    expect(result.warnings.some((w: string) => w.includes("query"))).toBe(true);
+  });
+});
