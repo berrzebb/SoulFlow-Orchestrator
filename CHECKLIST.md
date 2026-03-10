@@ -510,3 +510,30 @@
 - `src/i18n/locales/en.json` + `ko.json` — Phase 6 신규 키 추가
 
 **Phase 6 검증 완료 ✅**
+
+---
+
+## Phase 7: 미통합 도구 재검증 및 신규 노드
+
+### 검증 결과 (이터레이션 7)
+| 도구 | 상태 |
+|------|------|
+| ini.ts | ✅ yaml 노드에 이미 통합됨 (format=ini) |
+| ip.ts | ✅ network 노드에 이미 통합됨 (operation=ip) |
+| svg.ts | ✅ 신규 svg 노드 (chart/primitives/to_data_uri) |
+| prometheus.ts | ✅ 신규 prometheus 노드 (format/parse/push/query_format) |
+| metric.ts | ⏭ 스킵 (stateful, in-memory 누적 — 워크플로우 노드 부적합) |
+| dotenv.ts | ⏭ YAGNI 유지 (yaml/ini와 유사, 사용 빈도 낮음) |
+| env.ts | ⏭ YAGNI 유지 (system-info가 환경변수 커버) |
+| csp.ts | ⏭ YAGNI 유지 (보안 정책 관리, 사용 빈도 낮음) |
+| approval-parser.ts | ⏭ 내부 유틸리티, 별도 노드 불필요 |
+| ask-user.ts | ⏭ hitl/approval 노드에서 이미 구현됨 |
+
+### i18n 검증 (이터레이션 7)
+- ✅ geo/country/jsonl/ical/json_patch/data-format/changelog/package-manager 모든 키 확인 완료 (68개)
+- ✅ svg/prometheus 신규 키 추가
+
+### 버그 수정
+- ✅ geo.tsx DMS placeholder 따옴표 이스케이프 오류 수정
+
+**Phase 7 검증 완료 ✅**

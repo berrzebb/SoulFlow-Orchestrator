@@ -1,7 +1,7 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 import { BuilderField, BuilderRowPair } from "../builder-field";
 
-const DEP_OPS = ["parse_deps", "circular_deps", "dep_stats", "dep_compare"];
+const DEP_OPS = ["parse_deps", "parse_reqs", "dep_tree", "circular_deps", "dep_stats", "dep_compare"];
 const PKG_OPS = ["list", "install", "uninstall", "audit", "outdated", "info"];
 
 function PkgManagerEditPanel({ node, update, t }: EditPanelProps) {
@@ -34,17 +34,19 @@ function PkgManagerEditPanel({ node, update, t }: EditPanelProps) {
       )}
       {is_dep && (
         <>
-          <BuilderField label={t("workflows.dep_input")} required hint={op === "dep_compare" ? t("workflows.dep_input_hint_compare") : t("workflows.dep_input_hint")}>
-            <textarea className="input" rows={4} value={String(node.dep_input || "")} onChange={(e) => update({ dep_input: e.target.value })} placeholder='{"name":"app","dependencies":{"lodash":"^4.0.0"}}' />
-          </BuilderField>
+          {op !== "dep_tree" && op !== "circular_deps" && (
+            <BuilderField label={t("workflows.dep_input")} required hint={op === "dep_compare" ? t("workflows.dep_input_hint_compare") : op === "parse_reqs" ? t("workflows.dep_reqs_hint") : t("workflows.dep_input_hint")}>
+              <textarea className="input" rows={4} value={String(node.dep_input || "")} onChange={(e) => update({ dep_input: e.target.value })} placeholder={op === "parse_reqs" ? "requests>=2.0\nnumpy==1.24.0" : '{"name":"app","dependencies":{"lodash":"^4.0.0"}}'} />
+            </BuilderField>
+          )}
           {op === "dep_compare" && (
             <BuilderField label={t("workflows.dep_input2")} required>
               <textarea className="input" rows={3} value={String(node.dep_input2 || "")} onChange={(e) => update({ dep_input2: e.target.value })} placeholder='{"dependencies":{"lodash":"^5.0.0"}}' />
             </BuilderField>
           )}
-          {op === "circular_deps" && (
+          {(op === "circular_deps" || op === "dep_tree") && (
             <BuilderField label={t("workflows.dep_graph")} hint={t("workflows.dep_graph_hint")}>
-              <textarea className="input" rows={3} value={String(node.dep_graph || "")} onChange={(e) => update({ dep_graph: e.target.value })} placeholder='{"a":["b"],"b":["a"]}' />
+              <textarea className="input" rows={3} value={String(node.dep_graph || "")} onChange={(e) => update({ dep_graph: e.target.value })} placeholder='{"a":["b"],"b":["c"]}' />
             </BuilderField>
           )}
         </>

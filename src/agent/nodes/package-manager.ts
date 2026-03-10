@@ -29,13 +29,15 @@ export const package_manager_handler: NodeHandler = {
     const op = resolve_templates(n.operation || "list", tpl);
 
     // 의존성 분석은 DependencyTool로 위임
-    const DEP_OPS = ["parse_deps", "circular_deps", "dep_stats", "dep_compare"];
+    const DEP_OPS = ["parse_deps", "parse_reqs", "dep_tree", "circular_deps", "dep_stats", "dep_compare"];
     if (DEP_OPS.includes(op)) {
       try {
         const { DependencyTool } = await import("../tools/dependency.js");
         const tool = new DependencyTool();
         const action_map: Record<string, string> = {
           parse_deps: "parse_package_json",
+          parse_reqs: "parse_requirements",
+          dep_tree: "tree",
           circular_deps: "circular",
           dep_stats: "stats",
           dep_compare: "compare",
