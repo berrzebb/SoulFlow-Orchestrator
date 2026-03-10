@@ -17,10 +17,47 @@ import { workflow_def_to_mermaid } from "./workflow-diagram";
 
 // ── Diagram Preview Tab ──
 
+function DiagramFullscreenModal({ svg, title, onClose }: { svg: string; title: string; onClose: () => void }) {
+  useEffect(() => {
+    const handle = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", handle);
+    return () => document.removeEventListener("keydown", handle);
+  }, [onClose]);
+
+  const export_svg = () => {
+    const blob = new Blob([svg], { type: "image/svg+xml" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `${title}.svg`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+
+  return (
+    <div className="diagram-fullscreen-overlay" onClick={onClose}>
+      <div className="diagram-fullscreen-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="diagram-fullscreen-toolbar">
+          <span className="diagram-fullscreen-title">{title}</span>
+          <button className="btn btn--xs btn--ghost" onClick={export_svg} title="SVG 다운로드">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+          </button>
+          <button className="btn btn--xs btn--ghost" onClick={onClose} aria-label="닫기">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+        <div className="diagram-fullscreen-content" dangerouslySetInnerHTML={{ __html: svg }} />
+      </div>
+    </div>
+  );
+}
+
 function YamlSideDiagramTab({ workflow, type }: { workflow: WorkflowDef; type: "flowchart" | "sequence" }) {
   const [svg, setSvg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showSource, setShowSource] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const source = useMemo(() => workflow_def_to_mermaid(workflow, type), [workflow, type]);
 
@@ -42,6 +79,8 @@ function YamlSideDiagramTab({ workflow, type }: { workflow: WorkflowDef; type: "
     return () => { if (timerRef.current) clearTimeout(timerRef.current); };
   }, [source]);
 
+  const modal_title = `${workflow.title || "workflow"} · ${type}`;
+
   return (
     <div className="yaml-diagram-tab">
       <div className="yaml-diagram-tab__toolbar">
@@ -50,6 +89,13 @@ function YamlSideDiagramTab({ workflow, type }: { workflow: WorkflowDef; type: "
           onClick={() => setShowSource((v) => !v)}
           title="Mermaid 소스 보기"
         >{"</>"}</button>
+        {svg && !showSource && (
+          <button className="btn btn--xs btn--ghost" onClick={() => setFullscreen(true)} title="원본 크기로 보기">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/>
+            </svg>
+          </button>
+        )}
       </div>
       {showSource
         ? <pre className="yaml-diagram-tab__source">{source}</pre>
@@ -58,6 +104,7 @@ function YamlSideDiagramTab({ workflow, type }: { workflow: WorkflowDef; type: "
             {svg && <div className="yaml-diagram-tab__svg" dangerouslySetInnerHTML={{ __html: svg }} />}
           </>
       }
+      {fullscreen && svg && <DiagramFullscreenModal svg={svg} title={modal_title} onClose={() => setFullscreen(false)} />}
     </div>
   );
 }
