@@ -36,6 +36,7 @@ export const trigger_cron_descriptor: FrontendNodeDescriptor = {
   color: "#e67e22",
   shape: "rect",
   toolbar_label: "node.trigger_cron.label",
+  category: "integration",
   output_schema: [
     { name: "fired_at", type: "string", description: "node.trigger_cron.output.fired_at" },
     { name: "schedule", type: "string", description: "node.trigger_cron.output.schedule" },
@@ -61,6 +62,7 @@ export const trigger_webhook_descriptor: FrontendNodeDescriptor = {
   color: "#3498db",
   shape: "rect",
   toolbar_label: "node.trigger_webhook.label",
+  category: "integration",
   output_schema: [
     { name: "payload", type: "object", description: "node.trigger_webhook.output.payload" },
     { name: "headers", type: "object", description: "node.trigger_webhook.output.headers" },
@@ -88,6 +90,7 @@ export const trigger_manual_descriptor: FrontendNodeDescriptor = {
   color: "#2ecc71",
   shape: "rect",
   toolbar_label: "node.trigger_manual.label",
+  category: "integration",
   output_schema: [
     { name: "objective", type: "string", description: "node.trigger_manual.output.objective" },
     { name: "chat_id",   type: "string", description: "node.trigger_manual.output.chat_id" },
@@ -130,6 +133,7 @@ export const trigger_channel_message_descriptor: FrontendNodeDescriptor = {
   color: "#f1c40f",
   shape: "rect",
   toolbar_label: "node.trigger_channel_message.label",
+  category: "integration",
   output_schema: [
     { name: "message",   type: "string", description: "node.trigger_channel_message.output.message" },
     { name: "chat_id",   type: "string", description: "node.trigger_channel_message.output.chat_id" },
@@ -189,6 +193,7 @@ export const trigger_kanban_event_descriptor: FrontendNodeDescriptor = {
   color: "#9b59b6",
   shape: "rect",
   toolbar_label: "node.trigger_kanban_event.label",
+  category: "integration",
   output_schema: [
     { name: "card_id",    type: "string", description: "node.kanban_trigger.output.card_id" },
     { name: "board_id",   type: "string", description: "node.kanban_trigger.output.board_id" },
@@ -257,6 +262,7 @@ export const trigger_filesystem_watch_descriptor: FrontendNodeDescriptor = {
   color: "#00897b",
   shape: "rect",
   toolbar_label: "node.trigger_filesystem_watch.label",
+  category: "integration",
   output_schema: [
     { name: "files",        type: "array",  description: "node.trigger_filesystem_watch.output.files" },
     { name: "batch_id",     type: "string", description: "node.trigger_filesystem_watch.output.batch_id" },

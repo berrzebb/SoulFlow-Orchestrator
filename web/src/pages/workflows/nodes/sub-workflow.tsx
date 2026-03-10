@@ -37,6 +37,6 @@ export const sub_workflow_descriptor: FrontendNodeDescriptor = {
   input_schema: [
     { name: "variables", type: "object", description: "node.sub_workflow.input.variables" },
   ],
-  create_default: () => ({ workflow_name: "" }),
+  create_default: () => ({ workflow_name: "", input_mapping: "", timeout_ms: 30000 }),
   EditPanel: SubWorkflowEditPanel,
 };

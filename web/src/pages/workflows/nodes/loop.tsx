@@ -33,7 +33,7 @@ export const loop_descriptor: FrontendNodeDescriptor = {
     { name: "results", type: "array",   description: "node.loop.output.results" },
   ],
   input_schema: [
-    { name: "array", type: "array", description: "node.loop.input.array" },
+    { name: "array_field", type: "string", description: "node.loop.input.array_field" },
   ],
   create_default: () => ({ array_field: "items", body_nodes: [], max_iterations: 100 }),
   EditPanel: LoopEditPanel,
