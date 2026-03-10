@@ -68,6 +68,10 @@ import { ttl_cache_handler } from "./ttl-cache.js";
 import { image_handler } from "./image.js";
 import { stats_handler } from "./stats.js";
 import { text_handler } from "./text.js";
+import { url_handler } from "./url.js";
+import { random_handler } from "./random.js";
+import { semver_handler } from "./semver.js";
+import { color_handler } from "./color.js";
 import { compress_handler } from "./compress.js";
 import { math_handler } from "./math.js";
 import { table_handler } from "./table.js";
@@ -195,6 +199,10 @@ const ALL_HANDLERS = [
   image_handler,
   stats_handler,
   text_handler,
+  url_handler,
+  random_handler,
+  semver_handler,
+  color_handler,
   compress_handler,
   math_handler,
   table_handler,

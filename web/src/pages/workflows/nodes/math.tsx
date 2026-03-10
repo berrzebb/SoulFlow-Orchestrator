@@ -7,7 +7,7 @@ function MathEditPanel({ node, update, t }: EditPanelProps) {
     <>
       <BuilderField label={t("workflows.operation")}>
         <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
-          {["eval", "convert", "compound_interest", "loan_payment", "roi", "percentage", "round", "gcd", "lcm", "factorial", "fibonacci"].map((o) => <option key={o} value={o}>{o}</option>)}
+          {["eval", "convert", "compound_interest", "loan_payment", "roi", "percentage", "round", "gcd", "lcm", "factorial", "fibonacci", "currency"].map((o) => <option key={o} value={o}>{o}</option>)}
         </select>
       </BuilderField>
       {op === "eval" && (
@@ -78,6 +78,42 @@ function MathEditPanel({ node, update, t }: EditPanelProps) {
           <input className="input input--sm" type="number" min={0} value={String(node.n ?? 0)} onChange={(e) => update({ n: Number(e.target.value) })} />
         </BuilderField>
       )}
+      {op === "currency" && (
+        <>
+          <BuilderRowPair>
+            <BuilderField label={t("workflows.math_currency_action")}>
+              <select className="input input--sm" value={String(node.currency_action || "info")} onChange={(e) => update({ currency_action: e.target.value })}>
+                {["info", "format", "convert", "list", "compare", "parse"].map((a) => <option key={a} value={a}>{a}</option>)}
+              </select>
+            </BuilderField>
+            {["info", "format"].includes(String(node.currency_action || "info")) && (
+              <BuilderField label={t("workflows.math_currency_code")}>
+                <input className="input input--sm" value={String(node.currency_code || "USD")} onChange={(e) => update({ currency_code: e.target.value.toUpperCase() })} placeholder="USD" maxLength={3} />
+              </BuilderField>
+            )}
+          </BuilderRowPair>
+          {["convert", "compare"].includes(String(node.currency_action || "info")) && (
+            <BuilderRowPair>
+              <BuilderField label={t("workflows.field_from")}>
+                <input className="input input--sm" value={String(node.currency_from || "USD")} onChange={(e) => update({ currency_from: e.target.value.toUpperCase() })} placeholder="USD" maxLength={3} />
+              </BuilderField>
+              <BuilderField label={t("workflows.field_to")}>
+                <input className="input input--sm" value={String(node.currency_to || "EUR")} onChange={(e) => update({ currency_to: e.target.value.toUpperCase() })} placeholder="EUR" maxLength={3} />
+              </BuilderField>
+            </BuilderRowPair>
+          )}
+          {["format", "convert"].includes(String(node.currency_action || "info")) && (
+            <BuilderField label={t("workflows.math_currency_amount")}>
+              <input className="input input--sm" type="number" step="0.01" value={String(node.currency_amount ?? 1)} onChange={(e) => update({ currency_amount: Number(e.target.value) })} />
+            </BuilderField>
+          )}
+          {String(node.currency_action || "info") === "parse" && (
+            <BuilderField label={t("workflows.input_data")}>
+              <input className="input" value={String(node.expression || "")} onChange={(e) => update({ expression: e.target.value })} placeholder="USD 100 or $99.99" />
+            </BuilderField>
+          )}
+        </>
+      )}
     </>
   );
 }
@@ -97,6 +133,6 @@ export const math_descriptor: FrontendNodeDescriptor = {
     { name: "operation",  type: "string", description: "node.math.input.operation" },
     { name: "expression", type: "string", description: "node.math.input.expression" },
   ],
-  create_default: () => ({ operation: "eval", expression: "", value: 0, from: "", to: "", principal: 0, rate: 0, periods: 0, cost: 0, gain: 0, a: 0, b: 0, n: 0, decimals: 2 }),
+  create_default: () => ({ operation: "eval", expression: "", value: 0, from: "", to: "", principal: 0, rate: 0, periods: 0, cost: 0, gain: 0, a: 0, b: 0, n: 0, decimals: 2, currency_action: "info", currency_code: "USD", currency_from: "USD", currency_to: "EUR", currency_amount: 1 }),
   EditPanel: MathEditPanel,
 };

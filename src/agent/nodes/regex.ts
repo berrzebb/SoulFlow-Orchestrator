@@ -29,6 +29,14 @@ export const regex_handler: NodeHandler = {
     const flags = n.flags || "";
     const op = n.operation || "match";
 
+    if (op === "glob_test" || op === "glob_filter") {
+      const { GlobMatchTool } = await import("../tools/glob-match.js");
+      const tool = new GlobMatchTool();
+      const action = op === "glob_test" ? "test" : "filter";
+      const raw = await tool.execute({ action, pattern, input, inputs: input });
+      return { output: { result: raw, success: !raw.startsWith("{\"error\"") } };
+    }
+
     if (!pattern) return { output: { result: "Error: pattern is required", success: false } };
 
     try {

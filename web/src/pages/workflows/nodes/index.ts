@@ -68,6 +68,10 @@ import { ttl_cache_descriptor } from "./ttl-cache";
 import { image_descriptor } from "./image";
 import { stats_descriptor } from "./stats";
 import { text_descriptor } from "./text";
+import { url_descriptor } from "./url";
+import { random_descriptor } from "./random";
+import { semver_descriptor } from "./semver";
+import { color_descriptor } from "./color";
 import { compress_descriptor } from "./compress";
 import { math_descriptor } from "./math";
 import { table_descriptor } from "./table";
@@ -195,6 +199,10 @@ const ALL_DESCRIPTORS = [
   image_descriptor,
   stats_descriptor,
   text_descriptor,
+  url_descriptor,
+  random_descriptor,
+  semver_descriptor,
+  color_descriptor,
   compress_descriptor,
   math_descriptor,
   table_descriptor,

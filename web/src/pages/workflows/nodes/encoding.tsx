@@ -2,10 +2,12 @@ import { BuilderField, BuilderRowPair } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
 const BASES = ["bin", "oct", "dec", "hex", "base32", "base36", "base62"];
+const ALL_OPS = ["encode", "decode", "hash", "uuid", "base_convert", "msgpack_encode", "msgpack_decode", "protobuf_define", "protobuf_encode", "protobuf_decode", "protobuf_to_proto"];
 
 function EncodingEditPanel({ node, update, t }: EditPanelProps) {
   const op = String(node.operation || "encode");
   const isCharEncoding = op === "encode" || op === "decode" || op === "hash";
+  const isProtobuf = op.startsWith("protobuf_");
 
   return (
     <>
@@ -13,7 +15,7 @@ function EncodingEditPanel({ node, update, t }: EditPanelProps) {
         <BuilderRowPair>
           <BuilderField label={t("workflows.operation")} required>
             <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
-              {["encode", "decode", "hash", "uuid", "base_convert", "msgpack_encode", "msgpack_decode"].map((o) => <option key={o} value={o}>{o}</option>)}
+              {ALL_OPS.map((o) => <option key={o} value={o}>{o}</option>)}
             </select>
           </BuilderField>
           <BuilderField label={t("workflows.format")}>
@@ -28,7 +30,7 @@ function EncodingEditPanel({ node, update, t }: EditPanelProps) {
         <>
           <BuilderField label={t("workflows.operation")} required>
             <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
-              {["encode", "decode", "hash", "uuid", "base_convert", "msgpack_encode", "msgpack_decode"].map((o) => <option key={o} value={o}>{o}</option>)}
+              {ALL_OPS.map((o) => <option key={o} value={o}>{o}</option>)}
             </select>
           </BuilderField>
           <BuilderRowPair>
@@ -47,8 +49,13 @@ function EncodingEditPanel({ node, update, t }: EditPanelProps) {
       ) : (
         <BuilderField label={t("workflows.operation")} required>
           <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
-            {["encode", "decode", "hash", "uuid", "base_convert", "msgpack_encode", "msgpack_decode"].map((o) => <option key={o} value={o}>{o}</option>)}
+            {ALL_OPS.map((o) => <option key={o} value={o}>{o}</option>)}
           </select>
+        </BuilderField>
+      )}
+      {isProtobuf && (
+        <BuilderField label={t("workflows.encoding_protobuf_schema")} hint={t("workflows.encoding_protobuf_schema_hint")}>
+          <textarea className="input code-textarea" rows={4} value={String(node.schema || "")} onChange={(e) => update({ schema: e.target.value })} placeholder='{"name":"Person","fields":[{"number":1,"name":"name","type":"string"}]}' />
         </BuilderField>
       )}
       {op !== "uuid" && (
@@ -59,11 +66,13 @@ function EncodingEditPanel({ node, update, t }: EditPanelProps) {
             value={String(node.input || "")}
             onChange={(e) => update({ input: e.target.value })}
             placeholder={
-              op === "msgpack_encode" ? '{"key": "value"}'
-              : op === "msgpack_decode" ? "hex bytes..."
+              op === "msgpack_encode" || op === "protobuf_encode" ? '{"name": "Alice"}'
+              : op === "msgpack_decode" || op === "protobuf_decode" ? "hex bytes..."
               : op === "base_convert" ? "255"
+              : op === "protobuf_define" || op === "protobuf_to_proto" ? "(schema used above)"
               : "Hello World"
             }
+            disabled={op === "protobuf_define" || op === "protobuf_to_proto"}
           />
         </BuilderField>
       )}
@@ -92,6 +101,6 @@ export const encoding_descriptor: FrontendNodeDescriptor = {
     { name: "input",     type: "string", description: "node.encoding.input.input" },
     { name: "format",    type: "string", description: "node.encoding.input.format" },
   ],
-  create_default: () => ({ operation: "encode", input: "", format: "base64", count: 1, base_from: "dec", base_to: "hex" }),
+  create_default: () => ({ operation: "encode", input: "", format: "base64", count: 1, base_from: "dec", base_to: "hex", schema: "" }),
   EditPanel: EncodingEditPanel,
 };

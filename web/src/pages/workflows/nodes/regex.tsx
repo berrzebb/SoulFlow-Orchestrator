@@ -1,25 +1,30 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 import { BuilderField, BuilderRowPair } from "../builder-field";
 
+const REGEX_OPS = ["match", "match_all", "replace", "extract", "split", "test", "glob_test", "glob_filter"];
+
 function RegexEditPanel({ node, update, t }: EditPanelProps) {
   const op = String(node.operation || "match");
+  const isGlob = op === "glob_test" || op === "glob_filter";
   return (
     <>
       <BuilderRowPair>
         <BuilderField label={t("workflows.operation")} required>
           <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
-            {["match", "match_all", "replace", "extract", "split", "test"].map((o) => <option key={o} value={o}>{o}</option>)}
+            {REGEX_OPS.map((o) => <option key={o} value={o}>{o}</option>)}
           </select>
         </BuilderField>
-        <BuilderField label={t("workflows.field_flags")}>
-          <input className="input input--sm" value={String(node.flags || "g")} onChange={(e) => update({ flags: e.target.value })} placeholder="g" />
-        </BuilderField>
+        {!isGlob && (
+          <BuilderField label={t("workflows.field_flags")}>
+            <input className="input input--sm" value={String(node.flags || "g")} onChange={(e) => update({ flags: e.target.value })} placeholder="g" />
+          </BuilderField>
+        )}
       </BuilderRowPair>
       <BuilderField label={t("workflows.field_pattern")}>
-        <input className="input" value={String(node.pattern || "")} onChange={(e) => update({ pattern: e.target.value })} placeholder="(\w+)@(\w+)" />
+        <input className="input" value={String(node.pattern || "")} onChange={(e) => update({ pattern: e.target.value })} placeholder={isGlob ? "src/**/*.ts" : "(\\w+)@(\\w+)"} />
       </BuilderField>
       <BuilderField label={t("workflows.input_data")}>
-        <textarea className="input code-textarea" rows={3} value={String(node.input || "")} onChange={(e) => update({ input: e.target.value })} placeholder="user@example.com" />
+        <textarea className="input code-textarea" rows={3} value={String(node.input || "")} onChange={(e) => update({ input: e.target.value })} placeholder={op === "glob_filter" ? '["src/a.ts","lib/b.js"]' : "user@example.com"} />
       </BuilderField>
       {op === "replace" && (
         <BuilderField label={t("workflows.replacement")}>

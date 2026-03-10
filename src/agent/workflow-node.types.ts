@@ -863,7 +863,7 @@ export interface DataFormatNodeDefinition extends NodeBase {
 
 export interface EncodingNodeDefinition extends NodeBase {
   node_type: "encoding";
-  /** encode / decode / hash / uuid / base_convert / msgpack_encode / msgpack_decode. */
+  /** encode / decode / hash / uuid / base_convert / msgpack_encode / msgpack_decode / protobuf_define / protobuf_encode / protobuf_decode / protobuf_to_proto. */
   operation: string;
   input?: string;
   /** base64 / hex / url / sha256 / sha512 / md5. */
@@ -873,13 +873,15 @@ export interface EncodingNodeDefinition extends NodeBase {
   base_from?: string;
   /** base_convert 전용: 변환 대상 진법. */
   base_to?: string;
+  /** protobuf 전용: 메시지 정의 JSON ({name, fields}). */
+  schema?: string;
 }
 
 // ── Regex Node ──────────────────────────────────────
 
 export interface RegexNodeDefinition extends NodeBase {
   node_type: "regex";
-  /** match / match_all / replace / extract / split / test. */
+  /** match / match_all / replace / extract / split / test / glob_test / glob_filter. */
   operation: string;
   input?: string;
   pattern?: string;
@@ -1046,7 +1048,7 @@ export interface CompressNodeDefinition extends NodeBase {
 
 export interface MathNodeDefinition extends NodeBase {
   node_type: "math";
-  /** eval/convert/compound_interest/loan_payment/roi/percentage/round/gcd/lcm/factorial/fibonacci. */
+  /** eval/convert/compound_interest/loan_payment/roi/percentage/round/gcd/lcm/factorial/fibonacci/currency. */
   operation: string;
   expression?: string;
   value?: number;
@@ -1061,6 +1063,12 @@ export interface MathNodeDefinition extends NodeBase {
   a?: number;
   b?: number;
   n?: number;
+  /** currency 전용: info/format/convert/list/compare/parse. */
+  currency_action?: string;
+  currency_code?: string;
+  currency_from?: string;
+  currency_to?: string;
+  currency_amount?: number;
 }
 
 // ── Table Node ──────────────────────────────────────
@@ -1667,6 +1675,54 @@ export interface DocumentPptxNodeDefinition extends NodeBase {
 }
 
 
+export interface UrlNodeDefinition extends NodeBase {
+  node_type: "url";
+  /** parse / build / resolve / encode / decode / query_params / join / normalize. */
+  action?: string;
+  url?: string;
+  base?: string;
+  params?: string;
+  parts?: string;
+  segments?: string;
+  component?: string;
+}
+
+export interface RandomNodeDefinition extends NodeBase {
+  node_type: "random";
+  /** integer / float / choice / shuffle / sample / password / bytes / coin / dice. */
+  action?: string;
+  min?: number;
+  max?: number;
+  items?: string;
+  count?: number;
+  length?: number;
+  charset?: string;
+  sides?: number;
+}
+
+export interface SemverNodeDefinition extends NodeBase {
+  node_type: "semver";
+  /** parse / compare / satisfies / bump / sort / diff / valid. */
+  action?: string;
+  version?: string;
+  version2?: string;
+  range?: string;
+  bump_type?: string;
+  versions?: string;
+}
+
+export interface ColorNodeDefinition extends NodeBase {
+  node_type: "color";
+  /** parse / convert / blend / contrast / lighten / darken / palette / complement. */
+  action?: string;
+  color?: string;
+  color2?: string;
+  format?: string;
+  amount?: number;
+  count?: number;
+}
+
+
 // ── Union Types ─────────────────────────────────────
 
 export type OrcheNodeType = "http" | "code" | "if" | "merge" | "set" | "split"
@@ -1697,6 +1753,10 @@ export type OrcheNodeType = "http" | "code" | "if" | "merge" | "set" | "split"
   | "document_docx"
   | "document_xlsx"
   | "document_pptx"
+  | "url"
+  | "random"
+  | "semver"
+  | "color"
   | "end";
 
 export type OrcheNodeDefinition =
@@ -1823,6 +1883,10 @@ export type OrcheNodeDefinition =
   | DocumentDocxNodeDefinition
   | DocumentXlsxNodeDefinition
   | DocumentPptxNodeDefinition
+  | UrlNodeDefinition
+  | RandomNodeDefinition
+  | SemverNodeDefinition
+  | ColorNodeDefinition
   | EndNodeDefinition;
 
 export type WorkflowNodeDefinition = PhaseNodeDefinition | OrcheNodeDefinition | TriggerNodeDefinition;

@@ -77,6 +77,17 @@ export const encoding_handler: NodeHandler = {
           result = parsed.error ? parsed.error : JSON.stringify(parsed.data);
           break;
         }
+        case "protobuf_define":
+        case "protobuf_encode":
+        case "protobuf_decode":
+        case "protobuf_to_proto": {
+          const { ProtobufTool } = await import("../tools/protobuf.js");
+          const tool = new ProtobufTool();
+          const action = op.replace("protobuf_", "");
+          const raw = await tool.execute({ action, schema: n.schema || "", data: input, hex: input });
+          result = raw;
+          break;
+        }
         default:
           result = `Unsupported: ${op}`;
       }

@@ -24,6 +24,16 @@ export const math_handler: NodeHandler = {
   async execute(node: OrcheNodeDefinition, ctx: OrcheNodeExecutorContext): Promise<OrcheNodeExecuteResult> {
     const n = node as MathNodeDefinition;
     try {
+      if (n.operation === "currency") {
+        const { CurrencyTool } = await import("../tools/currency.js");
+        const tool = new CurrencyTool();
+        const result = await tool.execute({
+          action: n.currency_action || "info",
+          code: n.currency_code, from: n.currency_from, to: n.currency_to,
+          amount: n.currency_amount, text: n.expression,
+        });
+        return { output: { result, success: !result.startsWith("{\"error\"") } };
+      }
       const { MathTool } = await import("../tools/math.js");
       const tool = new MathTool();
       const tpl = { memory: ctx.memory };

@@ -369,11 +369,13 @@
 | math에 unit-convert 통합 | ✅ MathTool 이미 convert 내장 (temperature 포함) |
 | network dns DnsTool 업그레이드 | ✅ 완료 (dns_record_type 드롭다운 추가, MX/TXT/NS/CNAME/SRV 지원) |
 
-### 낮은 우선순위 (신규 노드 고려)
-- url.ts → URL 파싱 노드
-- random.ts → random 노드
-- semver.ts → semver 노드
-- color.ts → color 노드
+### 낮은 우선순위 (신규 노드) — 완료 ✅
+| 작업 | 상태 |
+|------|------|
+| url.ts → url 노드 신규 구현 | ✅ 완료 |
+| random.ts → random 노드 신규 구현 | ✅ 완료 |
+| semver.ts → semver 노드 신규 구현 | ✅ 완료 |
+| color.ts → color 노드 신규 구현 | ✅ 완료 |
 
 ---
 
@@ -412,4 +414,5 @@
 5. `feat: hash crc32/adler32 지원, network whois 추가`
 6. `feat: 워크플로우 노드 Phase 2 — 도구 통합 및 액션 확장` — encoding base_convert/msgpack, yaml TOML, validator email, analyzer sentiment, web-scrape robots_txt/sitemap
 7. `fix: Phase 2 타입/i18n 정비` — workflow-node.types.ts 타입 정의 보완, i18n 중복 키 제거, validator create_default 수정
-8. (다음) Phase 5 최종 검증 (전체 노드 재검토)
+8. `feat: Phase 3 — url/random/semver/color 신규 노드 추가` — 4개 도구 대응 노드 구현, i18n 완성
+9. (다음) Phase 5 최종 검증 (전체 노드 재검토)
