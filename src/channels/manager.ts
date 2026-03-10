@@ -632,16 +632,7 @@ export class ChannelManager implements ServiceLike {
         preferred_provider_id,
         preferred_model,
         on_stream: is_status_mode
-          ? (chunk) => {
-              stream_state.accumulated += chunk;
-              // 최초 스트림 수신 시 상태 메시지 생성
-              if (!stream_state.message_id && !stream_state.status_creating) {
-                stream_state.status_creating = true;
-                stream_state.chain = stream_state.chain
-                  .then(() => this.send_status_message(provider, message, alias, this.render_msg({ kind: "status_started" }, invoke_ck), stream_state))
-                  .catch((e) => this.logger.debug("status_create_failed", { error: error_message(e) }));
-              }
-            }
+          ? (chunk) => { stream_state.accumulated += chunk; }
           : (chunk) => {
               if (stream_state.accumulated && !stream_state.accumulated.endsWith("\n") && !chunk.startsWith("\n")) {
                 stream_state.accumulated += "\n";
@@ -676,10 +667,10 @@ export class ChannelManager implements ServiceLike {
               const label = STATUS_LABELS[tool_name] || `${tool_name} 실행 중`;
               const progress_text = this.render_msg({ kind: "status_progress", label: `${icon} ${label}`, tool_count: stream_state.tool_count }, invoke_ck);
               stream_state.chain = stream_state.chain
-                .then(() => this.update_status_message(
-                  provider, message, stream_state,
-                  progress_text,
-                ))
+                .then(() => stream_state.message_id
+                  ? this.update_status_message(provider, message, stream_state, progress_text)
+                  : this.send_status_message(provider, message, alias, progress_text, stream_state),
+                )
                 .catch((e) => this.logger.debug("status_update_failed", { error: error_message(e) }));
             }
           : this.config.streaming.toolDisplay === "inline"

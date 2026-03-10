@@ -32,6 +32,8 @@ export interface ChatPromptBarProps {
   can_send: boolean;
   onSend: () => void;
   placeholder?: string;
+  /** 이전 전송 메시지 히스토리 (오래된 순). ↑↓ 키 탐색에 사용. */
+  history?: string[];
 
   /** 파일 첨부 지원 */
   pending_media?: ChatMediaItem[];
@@ -111,10 +113,45 @@ export function ChatPromptBar(props: ChatPromptBarProps) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [models]);
 
-  const handle_key_down = (e: React.KeyboardEvent) => {
+  /** 히스토리 탐색 상태. -1 = 현재 입력 중, 0 = 마지막 전송, 1 = 그 이전, ... */
+  const history_cursor = useRef(-1);
+  /** 히스토리 탐색 시작 전 작성 중이던 draft 보존 */
+  const history_draft = useRef("");
+
+  // 히스토리 변경 시 커서 초기화 (세션 전환 등)
+  const history = props.history ?? [];
+
+  const handle_key_down = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
-      if (props.can_send) props.onSend();
+      if (props.can_send) {
+        history_cursor.current = -1;
+        props.onSend();
+      }
+      return;
+    }
+
+    if ((e.key === "ArrowUp" || e.key === "ArrowDown") && history.length > 0) {
+      const el = e.currentTarget;
+      const at_start = el.selectionStart === 0 && el.selectionEnd === 0;
+      const at_end = el.selectionStart === el.value.length;
+
+      if (e.key === "ArrowUp" && at_start) {
+        e.preventDefault();
+        if (history_cursor.current === -1) history_draft.current = props.input;
+        const next = Math.min(history_cursor.current + 1, history.length - 1);
+        history_cursor.current = next;
+        props.setInput(history[history.length - 1 - next]!);
+        return;
+      }
+
+      if (e.key === "ArrowDown" && at_end && history_cursor.current >= 0) {
+        e.preventDefault();
+        const next = history_cursor.current - 1;
+        history_cursor.current = next;
+        props.setInput(next === -1 ? history_draft.current : history[history.length - 1 - next]!);
+        return;
+      }
     }
   };
 
@@ -159,7 +196,7 @@ export function ChatPromptBar(props: ChatPromptBarProps) {
           autoFocus
           className="chat-prompt-bar__textarea"
           value={props.input}
-          onChange={(e) => props.setInput(e.target.value)}
+          onChange={(e) => { history_cursor.current = -1; props.setInput(e.target.value); }}
           onKeyDown={handle_key_down}
           placeholder={props.placeholder ?? t("chat.placeholder")}
           disabled={is_busy}

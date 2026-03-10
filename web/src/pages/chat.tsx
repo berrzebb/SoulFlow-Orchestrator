@@ -27,6 +27,7 @@ export default function ChatPage() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [mirrorKey, setMirrorKey] = useState<string | null>(null);
   const [input, setInput] = useState("");
+  const [input_history, setInputHistory] = useState<string[]>([]);
   const [sending, setSending] = useState(false);
   /** 전송 후 어시스턴트가 응답 시작할 때까지의 대기 상태 */
   const [waiting_response, setWaitingResponse] = useState(false);
@@ -164,10 +165,12 @@ export default function ChatPage() {
     setSentMsgCount(raw_messages.length);
     setSending(true);
     setWaitingResponse(true);
-    const body: Record<string, unknown> = { content: input.trim() };
+    const trimmed = input.trim();
+    const body: Record<string, unknown> = { content: trimmed };
     if (pending_media.length > 0) body.media = pending_media;
     if (selectedProvider) body.provider_instance_id = selectedProvider;
     if (selectedModel) body.model = selectedModel;
+    if (trimmed) setInputHistory((prev) => [...prev, trimmed]);
     setInput("");
     setPendingMedia([]);
     setSending(false);
@@ -315,6 +318,7 @@ export default function ChatPage() {
           <ChatPromptBar
             input={input}
             setInput={setInput}
+            history={input_history}
             sending={is_busy}
             is_streaming={is_streaming}
             can_send={can_send}
