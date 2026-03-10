@@ -433,6 +433,7 @@
 11. `feat: Phase 6 — timeseries/dependency/mime/http-header/license 도구 기존 노드 통합` — stats/package-manager/data-format/changelog 노드 확장, 프론트엔드 UI 업데이트, i18n 완성
 12. `fix: geo.tsx DMS placeholder 따옴표 이스케이프 오류 수정`
 13. `feat: Phase 7 — svg/prometheus 신규 노드 추가` — SVG 프리미티브/차트 + Prometheus 메트릭 노드, i18n 완성
+14. `fix: Phase 7 i18n 보충 — pdf/csv/xml/graph/matrix/similarity/tokenizer 스키마 설명 키 추가` — 30개 node.xxx.input/output 누락 키 추가
 
 ---
 
@@ -532,6 +533,7 @@
 ### i18n 검증 (이터레이션 7)
 - ✅ geo/country/jsonl/ical/json_patch/data-format/changelog/package-manager 모든 키 확인 완료 (68개)
 - ✅ svg/prometheus 신규 키 추가
+- ✅ pdf/csv/xml/graph/matrix/similarity/tokenizer node.xxx.input/output 스키마 설명 키 30개 추가 (이터레이션 7 보충)
 
 ### 버그 수정
 - ✅ geo.tsx DMS placeholder 따옴표 이스케이프 오류 수정
