@@ -794,7 +794,7 @@ export interface WebTableNodeDefinition extends NodeBase {
 
 export interface NetworkNodeDefinition extends NodeBase {
   node_type: "network";
-  /** ping / dns / port_check / http_head / netstat. */
+  /** ping / dns / whois / port_check / http_head / netstat. */
   operation: string;
   /** 대상 호스트 (템플릿 지원). */
   host?: string;
@@ -802,6 +802,10 @@ export interface NetworkNodeDefinition extends NodeBase {
   port?: number;
   /** ping 횟수. */
   count?: number;
+  /** dns 전용: lookup/mx/txt/ns/cname/srv/reverse/any. */
+  dns_record_type?: string;
+  /** dns lookup 전용: IP family (4 또는 6). */
+  dns_family?: number;
 }
 
 // ── Web Form Node (Workflow) ─────────────────────────

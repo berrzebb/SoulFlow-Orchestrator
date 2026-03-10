@@ -31,6 +31,19 @@ export const network_handler: NodeHandler = {
     const port = n.port || 0;
     const count = Math.max(1, Math.min(10, n.count || 3));
 
+    // dns 작업은 DnsTool로 위임 (MX/TXT/NS/CNAME 등 레코드 타입 지원)
+    if (op === "dns") {
+      try {
+        const { DnsTool } = await import("../tools/dns.js");
+        const tool = new DnsTool();
+        const record_type = n.dns_record_type || "lookup";
+        const result = await tool.execute({ action: record_type, host, family: n.dns_family });
+        return { output: { output: result, success: !result.startsWith("Error:") } };
+      } catch (err) {
+        return { output: { output: error_message(err), success: false } };
+      }
+    }
+
     const cmd = build_net_cmd(op, host, port, count);
     if (!cmd) return { output: { output: "", success: false, error: `unsupported: ${op}` } };
 

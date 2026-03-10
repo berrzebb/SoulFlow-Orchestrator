@@ -15,6 +15,13 @@ function NetworkEditPanel({ node, update, t }: EditPanelProps) {
           <input className="input" value={String(node.host || "")} onChange={(e) => update({ host: e.target.value })} placeholder="example.com" />
         </BuilderField>
       )}
+      {op === "dns" && (
+        <BuilderField label={t("workflows.network_dns_record_type")}>
+          <select className="input input--sm" value={String(node.dns_record_type || "lookup")} onChange={(e) => update({ dns_record_type: e.target.value })}>
+            {["lookup", "mx", "txt", "ns", "cname", "srv", "reverse", "any"].map((r) => <option key={r} value={r}>{r}</option>)}
+          </select>
+        </BuilderField>
+      )}
       {op === "port_check" && (
         <BuilderField label={t("workflows.port")} hint={t("workflows.network_port_hint")}>
           <input className="input input--sm" type="number" min={1} max={65535} value={String(node.port ?? "")} onChange={(e) => update({ port: Number(e.target.value) || 0 })} />
@@ -45,6 +52,6 @@ export const network_descriptor: FrontendNodeDescriptor = {
     { name: "host",      type: "string", description: "node.network.input.host" },
     { name: "port",      type: "number", description: "node.network.input.port" },
   ],
-  create_default: () => ({ operation: "ping", host: "", port: 0, count: 3 }),
+  create_default: () => ({ operation: "ping", host: "", port: 0, count: 3, dns_record_type: "lookup" }),
   EditPanel: NetworkEditPanel,
 };

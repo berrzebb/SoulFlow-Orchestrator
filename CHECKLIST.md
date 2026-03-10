@@ -361,12 +361,12 @@
 | web-scrape에 robots_txt/sitemap 추가 | ✅ 완료 |
 | log_parser syslog | ✅ 이미 구현됨 (LogParserTool.parse_syslog) |
 
-### 중간 우선순위 (미완료)
-| 작업 | 대상 파일 | 설명 |
-|------|---------|------|
-| http에 user-agent 추가 | nodes/http.tsx, nodes/http.ts | UA 파싱/설정 |
-| text에 filename_safe 추가 | nodes/text.tsx, nodes/text.ts | 파일명 안전 변환 (SlugTool) |
-| math에 unit-convert 온도 지원 | nodes/math.tsx, nodes/math.ts | 온도 변환 (UnitConvertTool) |
+### 중간 우선순위 (완료 ✅)
+| 작업 | 상태 |
+|------|------|
+| http에 user-agent 추가 | ✅ 완료 (http.tsx user_agent 필드 + http.ts 헤더 설정) |
+| text에 filename_safe/transliterate 추가 | ✅ 완료 (text.tsx + text.ts SlugTool 위임) |
+| math에 unit-convert 통합 | ✅ MathTool 이미 convert 내장 (temperature 포함) |
 
 ### 낮은 우선순위 (신규 노드 고려)
 - url.ts → URL 파싱 노드
@@ -385,8 +385,12 @@
 - ✅ `workflows.date_calc_step_days`
 - ✅ `workflows.field_local_path`
 
-### 추가 확인 필요
-- 🔍 미검토 노드 57개의 t() 키 전체 스캔
+### 추가 완료
+- ✅ `workflows.encoding_base_from` / `workflows.encoding_base_to`
+- ✅ `workflows.validator_email_action`
+- ✅ `workflows.analyzer_mode`
+- ✅ `workflows.http_user_agent`
+- ✅ i18n 중복 키 제거 (이전 세션 실수, en.json/ko.json 정리)
 
 ---
 
@@ -406,5 +410,5 @@
 4. `fix: 워크플로우 노드 UI/파라미터 결함 수정 (4차)` — approval/code_diagram/decision/error-handler/form/healthcheck/hitl/phone/promise/retriever/send-file/task/vector-store/rate_limit
 5. `feat: hash crc32/adler32 지원, network whois 추가`
 6. `feat: 워크플로우 노드 Phase 2 — 도구 통합 및 액션 확장` — encoding base_convert/msgpack, yaml TOML, validator email, analyzer sentiment, web-scrape robots_txt/sitemap
-7. (다음) Phase 2 중간 우선순위 작업 (http user-agent, text filename_safe, math 온도)
-8. (다음) Phase 5 최종 검증
+7. `fix: Phase 2 타입/i18n 정비` — workflow-node.types.ts 타입 정의 보완, i18n 중복 키 제거, validator create_default 수정
+8. (다음) Phase 5 최종 검증 (전체 노드 재검토)
