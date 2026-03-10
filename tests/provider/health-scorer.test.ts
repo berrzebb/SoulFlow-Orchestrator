@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { ProviderHealthScorer } from "@src/providers/health-scorer.ts";
 
 describe("ProviderHealthScorer", () => {
@@ -94,5 +94,39 @@ describe("ProviderHealthScorer", () => {
     scorer.record("slow", { ok: true, latency_ms: 4500 });
 
     expect(scorer.score("fast")).toBeGreaterThan(scorer.score("slow"));
+  });
+});
+
+describe("ProviderHealthScorer — 전체 만료 (L62)", () => {
+  it("모든 항목 만료 후 score() → windows 삭제 + 1.0 반환 (L62)", () => {
+    vi.useFakeTimers();
+    const scorer = new ProviderHealthScorer({ window_size: 10, max_age_ms: 100 });
+    // T=0: 항목 2개 기록
+    scorer.record("all_expired", { ok: false, latency_ms: 5000 });
+    scorer.record("all_expired", { ok: false, latency_ms: 5000 });
+    // T=200ms: 전부 만료
+    vi.advanceTimersByTime(200);
+    // score() → window.length=0 → L62: delete + return 1.0
+    const s = scorer.score("all_expired");
+    expect(s).toBe(1.0);
+    vi.useRealTimers();
+  });
+});
+
+describe("ProviderHealthScorer — 부분 만료 (L63)", () => {
+  it("일부 항목 만료 후 score() → windows 업데이트 (L63)", () => {
+    vi.useFakeTimers();
+    const scorer = new ProviderHealthScorer({ window_size: 10, max_age_ms: 100 });
+    // T=0: 오래된 2개 기록
+    scorer.record("aged_provider", { ok: true, latency_ms: 100 });
+    scorer.record("aged_provider", { ok: false, latency_ms: 200 });
+    // T=200ms: max_age_ms 초과 → 위 2개 만료
+    vi.advanceTimersByTime(200);
+    // 새 항목 1개 (만료 안 됨)
+    scorer.record("aged_provider", { ok: true, latency_ms: 50 });
+    // score() 호출 → raw.length=3, window.length=1 → L63: windows.set
+    const s = scorer.score("aged_provider");
+    expect(s).toBeGreaterThan(0.9); // 최근 1개 성공
+    vi.useRealTimers();
   });
 });
