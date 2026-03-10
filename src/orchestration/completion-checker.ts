@@ -47,15 +47,19 @@ export function generate_completion_checks(
 ): CompletionCheckResult {
   const questions: string[] = [];
 
-  // A. 스킬 정의 체크 (frontmatter checks[])
-  for (const skill of matched_skills) {
-    for (const check of (skill.checks ?? [])) {
-      if (check.trim() && !questions.includes(check)) {
-        questions.push(check);
-        if (questions.length >= 5) break;
+  // A. 스킬 정의 체크 (frontmatter checks[]) — 역할 스킬 활성화 시에만 적용
+  // always:true 스킬(just-bash, sandbox 등)은 항상 매칭되므로 역할 컨텍스트 없이는 제외
+  if (has_role) {
+    for (const skill of matched_skills) {
+      if (skill.always) continue;
+      for (const check of (skill.checks ?? [])) {
+        if (check.trim() && !questions.includes(check)) {
+          questions.push(check);
+          if (questions.length >= 5) break;
+        }
       }
+      if (questions.length >= 5) break;
     }
-    if (questions.length >= 5) break;
   }
 
   // B. 동적 체크 (도구 사용 패턴) — 역할 스킬 활성화 시에만 적용

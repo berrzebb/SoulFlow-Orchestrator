@@ -31,12 +31,19 @@ function make_skill(checks: string[], name = "test"): SkillMetadata {
 }
 
 describe("generate_completion_checks", () => {
-  it("스킬 checks[]가 우선 포함", () => {
+  it("스킬 checks[]가 우선 포함 (has_role=true 시)", () => {
     const skill = make_skill(["파일이 정상인지 확인했나요?", "한글 폰트 깨짐 없나요?"]);
-    const result = generate_completion_checks([], [skill], 0);
+    const result = generate_completion_checks([], [skill], 0, true);
     expect(result.questions).toContain("파일이 정상인지 확인했나요?");
     expect(result.questions).toContain("한글 폰트 깨짐 없나요?");
     expect(result.has_checks).toBe(true);
+  });
+
+  it("has_role=false 이면 스킬 checks[] 포함 안 됨", () => {
+    const skill = make_skill(["파일이 정상인지 확인했나요?"]);
+    const result = generate_completion_checks([], [skill], 0, false);
+    expect(result.questions).toHaveLength(0);
+    expect(result.has_checks).toBe(false);
   });
 
   it("write_file 사용 시 파일 내용 체크 질문 추가", () => {
@@ -72,10 +79,10 @@ describe("generate_completion_checks", () => {
     expect(result.questions.length).toBeLessThanOrEqual(5);
   });
 
-  it("중복 질문 제거", () => {
+  it("중복 질문 제거 (has_role=true 시)", () => {
     const skill1 = make_skill(["파일이 정상인지 확인했나요?"]);
     const skill2 = make_skill(["파일이 정상인지 확인했나요?"]);
-    const result = generate_completion_checks([], [skill1, skill2], 0);
+    const result = generate_completion_checks([], [skill1, skill2], 0, true);
     const count = result.questions.filter((q) => q === "파일이 정상인지 확인했나요?").length;
     expect(count).toBe(1);
   });
