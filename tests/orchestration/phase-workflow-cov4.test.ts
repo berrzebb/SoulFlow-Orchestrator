@@ -40,6 +40,7 @@ function make_deps(overrides?: Partial<PhaseWorkflowDeps>): PhaseWorkflowDeps {
   return {
     providers: {
       run_orchestrator: vi.fn().mockResolvedValue({ content: null }),
+      get_orchestrator_provider_id: vi.fn().mockReturnValue("openrouter"),
     } as never,
     runtime: { execute_tool: vi.fn().mockResolvedValue({ result: "tool ok" }) } as never,
     logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } as never,
@@ -343,7 +344,7 @@ describe("run_phase_loop — generate_dynamic_workflow 분기", () => {
       }],
     });
     const run_orchestrator = vi.fn().mockResolvedValue({ content: dynamic_workflow_json });
-    const deps = make_deps({ providers: { run_orchestrator } as never });
+    const deps = make_deps({ providers: { run_orchestrator, get_orchestrator_provider_id: vi.fn().mockReturnValue("openrouter") } as never });
     const result = await run_phase_loop(deps, make_req(), "test task");
     // format_workflow_preview 호출 → reply에 "다음 워크플로우를 생성했습니다" 포함
     expect(result.reply).toContain("Phase 1");
@@ -365,7 +366,7 @@ describe("run_phase_loop — generate_dynamic_workflow 분기", () => {
       }],
     });
     const run_orchestrator = vi.fn().mockResolvedValue({ content: dynamic });
-    const deps = make_deps({ providers: { run_orchestrator } as never });
+    const deps = make_deps({ providers: { run_orchestrator, get_orchestrator_provider_id: vi.fn().mockReturnValue("openrouter") } as never });
     const result = await run_phase_loop(deps, make_req(), "test");
     // critic_note="" 분기 커버: critic 없으면 " + critic" 미포함
     expect(result.reply).toContain("1 agents)");

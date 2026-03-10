@@ -77,6 +77,7 @@ const createMockPhaseWorkflowDeps = (): Partial<PhaseWorkflowDeps> => ({
         ],
       }),
     }),
+    get_orchestrator_provider_id: vi.fn().mockReturnValue("openrouter"),
   } as any,
   runtime: {
     execute_tool: vi.fn(),

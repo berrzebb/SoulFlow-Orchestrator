@@ -66,55 +66,55 @@ describe("WebFetchTool — URL 검증", () => {
   it("localhost URL → blocked_private_host", async () => {
     const tool = new WebFetchTool();
     const r = await tool.execute({ url: "http://localhost/test" });
-    expect(String(r)).toContain("blocked_private_host");
+    expect(String(r)).toContain("private/loopback host blocked");
   });
 
   it("127.0.0.1 → blocked_private_host", async () => {
     const tool = new WebFetchTool();
     const r = await tool.execute({ url: "http://127.0.0.1/path" });
-    expect(String(r)).toContain("blocked_private_host");
+    expect(String(r)).toContain("private/loopback host blocked");
   });
 
   it("10.0.0.1 (private) → blocked_private_host", async () => {
     const tool = new WebFetchTool();
     const r = await tool.execute({ url: "http://10.0.0.1/path" });
-    expect(String(r)).toContain("blocked_private_host");
+    expect(String(r)).toContain("private/loopback host blocked");
   });
 
   it("192.168.1.1 (private) → blocked_private_host", async () => {
     const tool = new WebFetchTool();
     const r = await tool.execute({ url: "http://192.168.1.1/" });
-    expect(String(r)).toContain("blocked_private_host");
+    expect(String(r)).toContain("private/loopback host blocked");
   });
 
   it("172.16.0.1 (private) → blocked_private_host", async () => {
     const tool = new WebFetchTool();
     const r = await tool.execute({ url: "http://172.16.0.1/" });
-    expect(String(r)).toContain("blocked_private_host");
+    expect(String(r)).toContain("private/loopback host blocked");
   });
 
   it("169.254.1.1 (link-local) → blocked_private_host", async () => {
     const tool = new WebFetchTool();
     const r = await tool.execute({ url: "http://169.254.1.1/" });
-    expect(String(r)).toContain("blocked_private_host");
+    expect(String(r)).toContain("private/loopback host blocked");
   });
 
   it("service.local → blocked_private_host", async () => {
     const tool = new WebFetchTool();
     const r = await tool.execute({ url: "http://myservice.local/api" });
-    expect(String(r)).toContain("blocked_private_host");
+    expect(String(r)).toContain("private/loopback host blocked");
   });
 
   it("file:// protocol → invalid_protocol", async () => {
     const tool = new WebFetchTool();
     const r = await tool.execute({ url: "file:///etc/passwd" });
-    expect(String(r)).toContain("invalid_protocol");
+    expect(String(r)).toContain("unsupported protocol");
   });
 
   it("완전히 잘못된 URL → invalid_url", async () => {
     const tool = new WebFetchTool();
     const r = await tool.execute({ url: "not-a-url" });
-    expect(String(r)).toContain("invalid_url");
+    expect(String(r)).toContain("invalid URL");
   });
 
   it("agent-browser 미설치 → agent_browser_not_installed", async () => {
@@ -173,7 +173,7 @@ describe("WebBrowserTool — action 분기 및 검증", () => {
   it("open — 잘못된 URL → invalid_url or blocked", async () => {
     const tool = new WebBrowserTool();
     const r = await tool.execute({ action: "open", url: "ftp://example.com" });
-    expect(String(r)).toContain("invalid_protocol");
+    expect(String(r)).toContain("unsupported protocol");
   });
 
   it("open — agent-browser 미설치 → not_installed error", async () => {
