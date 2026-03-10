@@ -106,7 +106,7 @@ export function GraphEditor({
   const DRAG_THRESHOLD = 5;
   const TOUCH_DRAG_THRESHOLD = 12;
 
-  const autoPositions = compute_positions(workflow.phases);
+  const autoPositions = compute_positions(workflow.phases, workflow);
   /** 보조 노드 + 위치 계산. */
   const auxData = compute_aux_positions(workflow, autoPositions);
   /** 자동 레이아웃 + 수동 오프셋 합산 (Phase + 보조 노드 모두 포함). */
@@ -668,8 +668,9 @@ export function GraphEditor({
 
     // 드롭 위치에 노드 배치: 레이아웃 자동 위치와 드롭 좌표 차이를 오프셋으로 적용
     if (pickerDropPos) {
-      const newAutoPositions = compute_positions(updatedPhases);
-      const newAuxData = compute_aux_positions({ ...workflow, phases: updatedPhases, orche_nodes: updatedOrche }, newAutoPositions);
+      const updatedWorkflow = { ...workflow, phases: updatedPhases, orche_nodes: updatedOrche };
+      const newAutoPositions = compute_positions(updatedPhases, updatedWorkflow);
+      const newAuxData = compute_aux_positions(updatedWorkflow, newAutoPositions);
       const layoutPos = newAutoPositions.get(node_id) ?? newAuxData.positions.get(node_id);
       if (layoutPos) {
         const dx = pickerDropPos.x - layoutPos.x;

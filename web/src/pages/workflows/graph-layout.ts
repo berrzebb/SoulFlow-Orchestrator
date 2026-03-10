@@ -66,14 +66,21 @@ function compute_layers(phases: PhaseDef[]): Map<string, number> {
   return layers;
 }
 
-/** Phase effective height including sub-nodes. */
-function phase_effective_height(phase: PhaseDef): number {
-  const sub_count = phase.agents.length + (phase.critic ? 1 : 0);
-  return sub_count > 0 ? NODE_H + SUB_OFFSET_Y + SUB_D : NODE_H;
+/** 한 행에 들어갈 수 있는 최대 서브노드 수 (phase 열 너비 기준). */
+const SUB_MAX_PER_ROW = Math.max(1, Math.floor((NODE_W + GAP_X * 0.4) / (SUB_D + SUB_GAP)));
+
+/** Phase effective height including sub-nodes (tool/skill 포함, multi-row 고려). */
+function phase_effective_height(phase: PhaseDef, workflow?: WorkflowDef): number {
+  const tool_count = workflow ? (workflow.tool_nodes || []).filter((t) => t.attach_to?.includes(phase.phase_id)).length : 0;
+  const skill_count = workflow ? (workflow.skill_nodes || []).filter((s) => s.attach_to?.includes(phase.phase_id)).length : 0;
+  const sub_count = phase.agents.length + (phase.critic ? 1 : 0) + tool_count + skill_count;
+  if (sub_count === 0) return NODE_H;
+  const rows = Math.ceil(sub_count / SUB_MAX_PER_ROW);
+  return NODE_H + SUB_OFFSET_Y + rows * SUB_D + (rows - 1) * SUB_GAP;
 }
 
 /** Node position calculation — left-to-right horizontal flow. */
-export function compute_positions(phases: PhaseDef[]): Map<string, NodePos> {
+export function compute_positions(phases: PhaseDef[], workflow?: WorkflowDef): Map<string, NodePos> {
   const layers = compute_layers(phases);
   const positions = new Map<string, NodePos>();
   const phase_map = new Map(phases.map((p) => [p.phase_id, p]));
@@ -86,7 +93,7 @@ export function compute_positions(phases: PhaseDef[]): Map<string, NodePos> {
 
   const layer_heights = new Map<number, number>();
   for (const [layer, ids] of layer_groups) {
-    const total = ids.reduce((sum, id) => sum + phase_effective_height(phase_map.get(id)!), 0) + (ids.length - 1) * GAP_Y;
+    const total = ids.reduce((sum, id) => sum + phase_effective_height(phase_map.get(id)!, workflow), 0) + (ids.length - 1) * GAP_Y;
     layer_heights.set(layer, total);
   }
   const max_h = Math.max(1, ...layer_heights.values());
@@ -105,7 +112,7 @@ export function compute_positions(phases: PhaseDef[]): Map<string, NodePos> {
         width: NODE_W,
         height: NODE_H,
       });
-      cum_y += phase_effective_height(phase_map.get(id)!) + GAP_Y;
+      cum_y += phase_effective_height(phase_map.get(id)!, workflow) + GAP_Y;
     });
   }
 
@@ -135,13 +142,19 @@ export function compute_aux_positions(
     ];
     if (!sub_items.length) continue;
 
-    const total_w = sub_items.length * SUB_D + (sub_items.length - 1) * SUB_GAP;
-    const start_x = pp.x + (pp.width - total_w) / 2;
-    const y = pp.y + pp.height + SUB_OFFSET_Y;
-
+    const base_y = pp.y + pp.height + SUB_OFFSET_Y;
     sub_items.forEach((item, i) => {
+      const row = Math.floor(i / SUB_MAX_PER_ROW);
+      const col = i % SUB_MAX_PER_ROW;
+      const row_len = Math.min(SUB_MAX_PER_ROW, sub_items.length - row * SUB_MAX_PER_ROW);
+      const row_w = row_len * SUB_D + (row_len - 1) * SUB_GAP;
+      const row_start_x = pp.x + (pp.width - row_w) / 2;
       nodes.push({ id: item.id, type: "sub_node", label: item.label, sub_type: item.sub_type, parent_phase_id: phase.phase_id });
-      positions.set(item.id, { x: start_x + i * (SUB_D + SUB_GAP), y, width: SUB_D, height: SUB_D });
+      positions.set(item.id, {
+        x: row_start_x + col * (SUB_D + SUB_GAP),
+        y: base_y + row * (SUB_D + SUB_GAP),
+        width: SUB_D, height: SUB_D,
+      });
     });
   }
 
@@ -152,7 +165,9 @@ export function compute_aux_positions(
       ? [{ id: "__cron__", trigger_type: "cron" as const, schedule: workflow.trigger.schedule, timezone: workflow.trigger.timezone }]
       : [];
   const trigger_out = TRIGGER_OUTPUT;
-  const trigger_w = 160, trigger_h = compute_orche_node_height(trigger_out.length);
+  // 트리거 3개 이상이면 간격을 더 넓게
+  const trigger_gap = effective_triggers.length >= 3 ? GAP_Y + 16 : GAP_Y;
+  const trigger_w = 170, trigger_h = compute_orche_node_height(trigger_out.length);
   // 트리거: 타겟 페이즈 수직 범위 중앙에 정렬, 타겟 페이즈 순서로 정렬해 교차 최소화
   const first_phase = workflow.phases[0];
   const first_anchor = first_phase ? phase_positions.get(first_phase.phase_id) : null;
@@ -161,7 +176,7 @@ export function compute_aux_positions(
   const phases_min_y = phase_ys.length ? Math.min(...phase_ys.map((p) => p.y)) : PADDING;
   const phases_max_y = phase_ys.length ? Math.max(...phase_ys.map((p) => p.y + p.height)) : PADDING + NODE_H;
   const phases_center_y = (phases_min_y + phases_max_y) / 2;
-  const total_trigger_h = effective_triggers.length * trigger_h + Math.max(0, effective_triggers.length - 1) * GAP_Y;
+  const total_trigger_h = effective_triggers.length * trigger_h + Math.max(0, effective_triggers.length - 1) * trigger_gap;
   const trigger_start_y = phases_center_y - total_trigger_h / 2;
   const phase_order = new Map(workflow.phases.map((p, i) => [p.phase_id, i]));
   const sorted_triggers = [...effective_triggers].sort((a, b) => {
@@ -175,7 +190,7 @@ export function compute_aux_positions(
       : tn.trigger_type === "webhook" ? tn.webhook_path
       : undefined;
     nodes.push({ id: tn.id, type: "trigger", label, sub_label: tn.trigger_type, output_fields: trigger_out, trigger_detail });
-    positions.set(tn.id, { x: trigger_x, y: trigger_start_y + ti * (trigger_h + GAP_Y), width: trigger_w, height: trigger_h });
+    positions.set(tn.id, { x: trigger_x, y: trigger_start_y + ti * (trigger_h + trigger_gap), width: trigger_w, height: trigger_h });
   });
 
   // Orchestration nodes — 충돌 감지용 all_positions: phase + 이미 배치된 trigger 포함
