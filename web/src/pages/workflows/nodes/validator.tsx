@@ -25,7 +25,7 @@ function ValidatorEditPanel({ node, update, t }: EditPanelProps) {
       {op === "format" && (
         <BuilderField label={t("workflows.format")}>
           <select className="input input--sm" value={String(node.format || "json")} onChange={(e) => update({ format: e.target.value })}>
-            {["email", "url", "ip", "date", "uuid", "json", "number"].map((f) => <option key={f} value={f}>{f}</option>)}
+            {["email", "url", "ip", "date", "uuid", "json", "number"].map((f) => <option key={f} value={f}>{t(`node.action.${f}`)}</option>)}
           </select>
         </BuilderField>
       )}

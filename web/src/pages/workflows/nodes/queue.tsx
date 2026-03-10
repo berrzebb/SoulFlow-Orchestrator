@@ -24,7 +24,7 @@ function QueueEditPanel({ node, update, t }: EditPanelProps) {
             <BuilderRowPair>
               <BuilderField label={t("workflows.field_mode")}>
                 <select className="input input--sm" value={String(node.mode || "fifo")} onChange={(e) => update({ mode: e.target.value })}>
-                  {["fifo", "lifo", "priority"].map((m) => <option key={m} value={m}>{m}</option>)}
+                  {["fifo", "lifo", "priority"].map((m) => <option key={m} value={m}>{t(`node.action.${m}`)}</option>)}
                 </select>
               </BuilderField>
               <BuilderField label={t("workflows.field_priority")}>
@@ -34,7 +34,7 @@ function QueueEditPanel({ node, update, t }: EditPanelProps) {
           ) : (
             <BuilderField label={t("workflows.field_mode")}>
               <select className="input input--sm" value={String(node.mode || "fifo")} onChange={(e) => update({ mode: e.target.value })}>
-                {["fifo", "lifo", "priority"].map((m) => <option key={m} value={m}>{m}</option>)}
+                {["fifo", "lifo", "priority"].map((m) => <option key={m} value={m}>{t(`node.action.${m}`)}</option>)}
               </select>
             </BuilderField>
           )}

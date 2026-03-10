@@ -40,7 +40,7 @@ function LdapEditPanel({ node, update, t }: EditPanelProps) {
             </BuilderField>
             <BuilderField label={t("workflows.field_scope")}>
               <select className="input input--sm" value={String(node.scope || "sub")} onChange={(e) => update({ scope: e.target.value })}>
-                {SCOPES.map((s) => <option key={s} value={s}>{s}</option>)}
+                {SCOPES.map((s) => <option key={s} value={s}>{t(`node.action.${s}`)}</option>)}
               </select>
             </BuilderField>
           </BuilderRowPair>

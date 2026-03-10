@@ -42,7 +42,7 @@ function TableEditPanel({ node, update, t }: EditPanelProps) {
             </BuilderField>
             <BuilderField label={t("workflows.field_join_type")}>
               <select className="input input--sm" value={String(node.join_type || "inner")} onChange={(e) => update({ join_type: e.target.value })}>
-                {["inner", "left", "right", "full"].map((t) => <option key={t} value={t}>{t}</option>)}
+                {["inner", "left", "right", "full"].map((j) => <option key={j} value={j}>{t(`node.action.${j}`)}</option>)}
               </select>
             </BuilderField>
           </BuilderRowPair>

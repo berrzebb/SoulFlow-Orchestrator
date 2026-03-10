@@ -16,7 +16,7 @@ function RateLimitEditPanel({ node, update, t }: EditPanelProps) {
         </BuilderField>
         <BuilderField label={t("workflows.field_algorithm")}>
           <select className="input input--sm" value={String(node.algorithm || "token_bucket")} onChange={(e) => update({ algorithm: e.target.value })}>
-            {ALGORITHMS.map((a) => <option key={a} value={a}>{a}</option>)}
+            {ALGORITHMS.map((a) => <option key={a} value={a}>{t(`node.action.${a}`)}</option>)}
           </select>
         </BuilderField>
       </BuilderRowPair>

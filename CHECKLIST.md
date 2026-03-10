@@ -780,3 +780,80 @@
 | `node.action.hex` | Hex | 16진수 |
 | **합계** | | **9개** |
 
+### 커밋
+19. `feat: i18n — else 분기 누락 수정 및 시맨틱 선택값 현지화 (Phase 13)` — `fd7e7df`
+
+**Phase 13 완료 ✅**
+
+---
+
+## Phase 14: i18n 시맨틱 선택값 전수 현지화 (이터레이션 14)
+
+### 번역 대상 파일 (8개)
+| 파일 | 배열 | 값 |
+|------|------|-----|
+| `phone.tsx` | `FORMAT_TYPES` | e164/international/national/rfc3966 |
+| `queue.tsx` L27+L37 | 인라인 (2곳) | fifo/lifo/priority |
+| `table.tsx` L45 | 인라인 | inner/left/right/full (변수명 `t`→`j` 충돌 수정 필요) |
+| `validator.tsx` L28 | 인라인 | email/url/ip/date/uuid/json/number |
+| `semver.tsx` L34 | `BUMP_TYPES` | major/minor/patch/prerelease |
+| `rate_limit.tsx` L19 | `ALGORITHMS` | token_bucket/sliding_window |
+| `similarity.tsx` L21 | `MODES` | char/word/token |
+| `ldap.tsx` L43 | `SCOPES` | base/one/sub |
+
+### 신규 i18n 키 (25개)
+| 키 | EN | KO |
+|----|----|----|
+| `node.action.fifo` | FIFO | FIFO (선입선출) |
+| `node.action.lifo` | LIFO | LIFO (후입선출) |
+| `node.action.priority` | Priority | 우선순위 |
+| `node.action.inner` | Inner Join | 내부 조인 |
+| `node.action.left` | Left Join | 왼쪽 조인 |
+| `node.action.right` | Right Join | 오른쪽 조인 |
+| `node.action.full` | Full Outer | 전체 외부 |
+| `node.action.major` | Major | 주 버전 |
+| `node.action.minor` | Minor | 부 버전 |
+| `node.action.prerelease` | Prerelease | 사전 릴리즈 |
+| `node.action.token_bucket` | Token Bucket | 토큰 버킷 |
+| `node.action.sliding_window` | Sliding Window | 슬라이딩 윈도우 |
+| `node.action.e164` | E.164 | E.164 |
+| `node.action.international` | International | 국제형 |
+| `node.action.national` | National | 국내형 |
+| `node.action.rfc3966` | RFC 3966 | RFC 3966 |
+| `node.action.char` | Character | 문자 단위 |
+| `node.action.word` | Word | 단어 단위 |
+| `node.action.token` | Token | 토큰 단위 |
+| `node.action.url` | URL | URL |
+| `node.action.date` | Date | 날짜 |
+| `node.action.json` | JSON | JSON |
+| `node.action.base` | Base Entry | 베이스 항목 |
+| `node.action.one` | One Level | 한 단계 |
+| `node.action.sub` | Subtree | 하위 트리 |
+
+### 번역 제외 확정 목록 (재조사 불필요)
+| 파일 | 배열/값 | 이유 |
+|------|---------|------|
+| `barcode.tsx` FORMATS | code128/ean13/code39 | 바코드 표준 규격명 |
+| `color.tsx` COLOR_FORMATS | hex/rgb/hsl | 색상 모델 약어 |
+| `code_diagram.tsx` DIRECTIONS | LR/TB/RL/BT | 다이어그램 방향 코드 |
+| `compress.tsx` | gzip/brotli | 압축 알고리즘명 |
+| `date-calc.tsx` time units | ms/s/min/h/d/week/month/year | 범용 시간 단위 약어 |
+| `document-*.tsx` INPUT_FORMATS | docx/odt/pdf 등 | 파일 포맷 확장자명 |
+| `encoding.tsx` hash algorithms | sha256/sha512/md5 | 해시 알고리즘 표준명 |
+| `encoding.tsx` encoding formats | base64/hex/url | 인코딩 포맷 표준명 |
+| `encoding.tsx` BASES | bin/oct/dec/hex/base32 등 | 진법 표기 약어 |
+| `hash.tsx` ALGORITHMS/ENCODINGS | md5/sha256/hex/base64 등 | 해시/인코딩 표준명 |
+| `http.tsx`, `oauth.tsx`, `webhook.tsx` | GET/POST/PUT/PATCH/DELETE | HTTP 프로토콜 메서드 |
+| `image.tsx` format names | png/jpeg/webp/gif/bmp/tiff | 이미지 포맷 표준명 |
+| `image.tsx` gravity | center/north/south/east/west/… | 이미지 처리 방향 용어 |
+| `json_schema.tsx` draft versions | draft-04/draft-06/draft-07/… | JSON Schema 스펙 버전명 |
+| `jwt.tsx` ALGORITHMS | HS256/RS256 등 | JWT 알고리즘 표준명 |
+| `log_parser.tsx` log levels | DEBUG/INFO/WARN/ERROR/FATAL | 표준 로그 레벨명 |
+| `network.tsx` DNS record types | lookup/mx/txt/ns/cname/srv/… | DNS 레코드 타입 프로토콜명 |
+| `openapi.tsx` LANGS | JavaScript/Python/Go 등 | 프로그래밍 언어 고유명 |
+| `package-manager.tsx` managers | npm/pip/cargo | 패키지 매니저 브랜드명 |
+| `process.tsx` Unix signals | SIGTERM/SIGKILL/SIGINT/SIGHUP | POSIX 표준 시그널명 |
+| `qr.tsx` FORMATS | svg/text | 출력 포맷 기술명 |
+| `similarity.tsx` ACTIONS | cosine/jaccard/levenshtein/… | 유사도 알고리즘명 |
+| `sql_builder.tsx` DIALECTS | mysql/postgres/sqlite/mssql | DB 브랜드명 |
+

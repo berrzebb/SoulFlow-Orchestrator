@@ -31,7 +31,7 @@ function SemverEditPanel({ node, update, t }: EditPanelProps) {
       {action === "bump" && (
         <BuilderField label={t("workflows.semver_bump_type")}>
           <select className="input input--sm" value={String(node.bump_type || "patch")} onChange={(e) => update({ bump_type: e.target.value })}>
-            {BUMP_TYPES.map((b) => <option key={b} value={b}>{b}</option>)}
+            {BUMP_TYPES.map((b) => <option key={b} value={b}>{t(`node.action.${b}`)}</option>)}
           </select>
         </BuilderField>
       )}

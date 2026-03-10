@@ -18,7 +18,7 @@ function SimilarityEditPanel({ node, update, t }: EditPanelProps) {
           </BuilderField>
           <BuilderField label={t("workflows.similarity_mode")}>
             <select className="input input--sm" value={String(node.mode || "word")} onChange={(e) => update({ mode: e.target.value })}>
-              {MODES.map((m) => <option key={m} value={m}>{m}</option>)}
+              {MODES.map((m) => <option key={m} value={m}>{t(`node.action.${m}`)}</option>)}
             </select>
           </BuilderField>
         </BuilderRowPair>

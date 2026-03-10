@@ -29,7 +29,7 @@ function PhoneEditPanel({ node, update, t }: EditPanelProps) {
       {action === "format" && (
         <BuilderField label={t("workflows.phone_format_type")}>
           <select className="input input--sm" value={String(node.format_type || "e164")} onChange={(e) => update({ format_type: e.target.value })}>
-            {FORMAT_TYPES.map((f) => <option key={f} value={f}>{f}</option>)}
+            {FORMAT_TYPES.map((f) => <option key={f} value={f}>{t(`node.action.${f}`)}</option>)}
           </select>
         </BuilderField>
       )}
