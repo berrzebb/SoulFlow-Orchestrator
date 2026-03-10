@@ -1,7 +1,7 @@
 # 워크플로우 노드/도구 종합 체크리스트
 
 > 이 문서는 이터레이션마다 읽고 업데이트합니다.
-> 마지막 업데이트: 2026-03-10 (이터레이션 3)
+> 마지막 업데이트: 2026-03-10 (이터레이션 4)
 
 ## 프로젝트 루트
 `d:/claude-tools/.claude/mcp-servers/slack/next/`
@@ -348,27 +348,25 @@
 
 ## Phase 2: 통합/신규 액션 추가 기회 (우선순위 순)
 
-### 높은 우선순위
-| 작업 | 대상 파일 | 설명 |
-|------|---------|------|
-| encoding에 base-convert 추가 | nodes/encoding.tsx, nodes/encoding.ts | base2/8/16/32/64 변환 |
-| encoding에 msgpack 추가 | nodes/encoding.tsx, nodes/encoding.ts | MessagePack 인코딩 |
-| network에 dns 추가 | nodes/network.tsx, nodes/network.ts | DNS 조회 |
-| network에 whois 추가 | nodes/network.tsx, nodes/network.ts | WHOIS 조회 |
-| math에 unit-convert 추가 | nodes/math.tsx, nodes/math.ts | 단위 변환 |
-| hash에 checksum 추가 | nodes/hash.tsx, nodes/hash.ts | CRC32, Adler32 |
-| validator에 email-validate 추가 | nodes/validator.tsx, nodes/validator.ts | 상세 이메일 검증 |
-| yaml에 toml 추가 | nodes/yaml.tsx, nodes/yaml.ts | TOML 파싱/생성 |
-| analyzer에 sentiment 추가 | nodes/analyzer.tsx, nodes/analyzer.ts | 감성 분석 |
-| text에 slug 추가 | nodes/text.tsx, nodes/text.ts | URL 슬러그 변환 |
+### 높은 우선순위 (완료 ✅)
+| 작업 | 상태 |
+|------|------|
+| encoding에 base_convert 추가 | ✅ 완료 |
+| encoding에 msgpack_encode/decode 추가 | ✅ 완료 |
+| network에 whois 추가 | ✅ 완료 |
+| hash에 crc32/adler32 추가 | ✅ 완료 |
+| validator에 email operation 추가 | ✅ 완료 |
+| yaml에 TOML format 지원 | ✅ 완료 |
+| analyzer에 sentiment mode 추가 | ✅ 완료 |
+| web-scrape에 robots_txt/sitemap 추가 | ✅ 완료 |
+| log_parser syslog | ✅ 이미 구현됨 (LogParserTool.parse_syslog) |
 
-### 중간 우선순위
+### 중간 우선순위 (미완료)
 | 작업 | 대상 파일 | 설명 |
 |------|---------|------|
-| http에 user-agent 추가 | nodes/http.tsx | UA 파싱 |
-| web-scrape에 robots-txt 추가 | nodes/web-scrape.tsx | robots.txt 파싱 |
-| web-scrape에 sitemap 추가 | nodes/web-scrape.tsx | sitemap 파싱 |
-| log_parser에 syslog 추가 | nodes/log_parser.tsx | syslog 파싱 |
+| http에 user-agent 추가 | nodes/http.tsx, nodes/http.ts | UA 파싱/설정 |
+| text에 filename_safe 추가 | nodes/text.tsx, nodes/text.ts | 파일명 안전 변환 (SlugTool) |
+| math에 unit-convert 온도 지원 | nodes/math.tsx, nodes/math.ts | 온도 변환 (UnitConvertTool) |
 
 ### 낮은 우선순위 (신규 노드 고려)
 - url.ts → URL 파싱 노드
@@ -406,5 +404,7 @@
 2. `fix: 워크플로우 노드 UI/파라미터 결함 수정 (2차)` — create_default, i18n, ftp local_path
 3. `fix: 워크플로우 노드 UI/파라미터 결함 수정 (3차)` — notify/oauth/ssh/wait/webhook + CHECKLIST.md
 4. `fix: 워크플로우 노드 UI/파라미터 결함 수정 (4차)` — approval/code_diagram/decision/error-handler/form/healthcheck/hitl/phone/promise/retriever/send-file/task/vector-store/rate_limit
-5. (다음) Phase 2 통합/신규 액션 추가
-6. (다음) Phase 3 i18n 전체 스캔
+5. `feat: hash crc32/adler32 지원, network whois 추가`
+6. `feat: 워크플로우 노드 Phase 2 — 도구 통합 및 액션 확장` — encoding base_convert/msgpack, yaml TOML, validator email, analyzer sentiment, web-scrape robots_txt/sitemap
+7. (다음) Phase 2 중간 우선순위 작업 (http user-agent, text filename_safe, math 온도)
+8. (다음) Phase 5 최종 검증

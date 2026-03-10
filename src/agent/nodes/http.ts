@@ -48,6 +48,10 @@ export const http_handler: NodeHandler = {
         req_headers[k] = resolve_templates(v, tpl_ctx);
       }
     }
+    // user_agent 필드가 설정되어 있으면 User-Agent 헤더로 추가 (headers에 이미 있으면 무시)
+    if (n.user_agent && !Object.keys(req_headers).some((k) => k.toLowerCase() === "user-agent")) {
+      req_headers["User-Agent"] = resolve_templates(n.user_agent, tpl_ctx);
+    }
 
     let body_str: string | undefined;
     if (n.body !== undefined && n.body !== null) {

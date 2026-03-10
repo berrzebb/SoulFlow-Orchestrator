@@ -7,7 +7,7 @@ function TextEditPanel({ node, update, t }: EditPanelProps) {
     <>
       <BuilderField label={t("workflows.operation")}>
         <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
-          {["upper", "lower", "title", "camel", "snake", "kebab", "slugify", "truncate", "pad", "count", "dedup", "similarity", "reverse", "join", "wrap", "trim_lines"].map((o) => <option key={o} value={o}>{o}</option>)}
+          {["upper", "lower", "title", "camel", "snake", "kebab", "slugify", "filename_safe", "transliterate", "truncate", "pad", "count", "dedup", "similarity", "reverse", "join", "wrap", "trim_lines"].map((o) => <option key={o} value={o}>{o}</option>)}
         </select>
       </BuilderField>
       <BuilderField label={t("workflows.input_data")}>

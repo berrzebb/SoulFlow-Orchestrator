@@ -2287,6 +2287,7 @@
   "workflows.http_headers": "헤더",
   "workflows.http_method": "메서드",
   "workflows.http_url": "URL",
+  "workflows.http_user_agent": "User-Agent",
   "workflows.if_condition": "조건식",
   "workflows.if_false_branch": "거짓 분기",
   "workflows.if_false_targets": "False → 대상",

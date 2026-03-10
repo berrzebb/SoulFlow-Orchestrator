@@ -18,9 +18,20 @@ function HttpEditPanel({ node, update, t }: EditPanelProps) {
       <BuilderField label={t("workflows.http_body")}>
         <textarea className="input" rows={3} value={typeof node.body === "string" ? node.body : (node.body != null ? JSON.stringify(node.body, null, 2) : "")} onChange={(e) => update({ body: e.target.value })} />
       </BuilderField>
-      <BuilderField label={t("workflows.timeout_ms")} required hint={t("workflows.timeout_ms_hint")}>
-        <input className="input input--sm" required type="number" min={100} max={30000} step={1000} value={String(node.timeout_ms ?? 10000)} onChange={(e) => update({ timeout_ms: Number(e.target.value) || 10000 })} aria-required="true" />
-      </BuilderField>
+      <BuilderRowPair>
+        <BuilderField label={t("workflows.http_user_agent")}>
+          <input className="input input--sm" value={String(node.user_agent || "")} onChange={(e) => update({ user_agent: e.target.value || undefined })} placeholder="(browser default)" list="http-ua-presets" />
+          <datalist id="http-ua-presets">
+            <option value="Mozilla/5.0 (compatible; SoulFlowBot/1.0)" />
+            <option value="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36" />
+            <option value="curl/7.88.0" />
+            <option value="PostmanRuntime/7.36.0" />
+          </datalist>
+        </BuilderField>
+        <BuilderField label={t("workflows.timeout_ms")} required hint={t("workflows.timeout_ms_hint")}>
+          <input className="input input--sm" required type="number" min={100} max={30000} step={1000} value={String(node.timeout_ms ?? 10000)} onChange={(e) => update({ timeout_ms: Number(e.target.value) || 10000 })} aria-required="true" />
+        </BuilderField>
+      </BuilderRowPair>
     </>
   );
 }

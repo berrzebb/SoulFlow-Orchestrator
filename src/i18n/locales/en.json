@@ -2287,6 +2287,7 @@
   "workflows.http_headers": "Headers",
   "workflows.http_method": "Method",
   "workflows.http_url": "URL",
+  "workflows.http_user_agent": "User-Agent",
   "workflows.if_condition": "Condition",
   "workflows.if_false_branch": "False Branch",
   "workflows.if_false_targets": "False → targets",

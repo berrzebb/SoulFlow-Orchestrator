@@ -23,13 +23,25 @@ export const text_handler: NodeHandler = {
 
   async execute(node: OrcheNodeDefinition, ctx: OrcheNodeExecutorContext): Promise<OrcheNodeExecuteResult> {
     const n = node as TextNodeDefinition;
+    const tpl = { memory: ctx.memory };
+    const input = resolve_templates(n.input || "", tpl);
+    const operation = n.operation || "count";
     try {
+      // filename_safe, transliterate는 SlugTool 위임
+      if (operation === "filename_safe" || operation === "transliterate") {
+        const { SlugTool } = await import("../tools/slug.js");
+        const tool = new SlugTool();
+        const raw = await tool.execute({ action: operation, input });
+        const parsed = JSON.parse(raw) as Record<string, unknown>;
+        const result = String(parsed.filename ?? parsed.result ?? parsed.slug ?? raw);
+        return { output: { result, success: !result.startsWith("Error:") } };
+      }
+
       const { TextTool } = await import("../tools/text.js");
       const tool = new TextTool();
-      const tpl = { memory: ctx.memory };
       const result = await tool.execute({
-        operation: n.operation || "count",
-        input: resolve_templates(n.input || "", tpl),
+        operation,
+        input,
         input2: resolve_templates(n.input2 || "", tpl),
         max_length: n.max_length,
         width: n.width,
