@@ -2,6 +2,9 @@
  * MessageTool — send_callback / event_recorder 기반 커버리지.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { mkdtemp, writeFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { MessageTool } from "@src/agent/tools/message.js";
 
 const WS = "/tmp/workspace";
@@ -228,5 +231,36 @@ describe("MessageTool — turn tracking", () => {
     await tool.execute({ content: "hi", channel: "slack", chat_id: "C1" });
     tool.start_turn();
     expect(tool.has_sent_in_turn()).toBe(false);
+  });
+});
+
+// ══════════════════════════════════════════
+// media 중복 제거 (L125)
+// ══════════════════════════════════════════
+
+describe("MessageTool — media 중복 제거 (L125)", () => {
+  it("동일 미디어 경로 두 번 전달 → L125 dedup skip → 한 번만 추가", async () => {
+    const tmp = await mkdtemp(join(tmpdir(), "msg-media-test-"));
+    const file_name = "report.txt";
+    await writeFile(join(tmp, file_name), "content");
+
+    try {
+      const send = vi.fn().mockResolvedValue(undefined);
+      const tool = new MessageTool({
+        workspace: tmp,
+        send_callback: send,
+        event_recorder: null,
+      });
+      // 같은 파일 이름을 두 번 전달 → 두 번째는 L125에서 skip
+      await tool.execute({
+        content: "with media",
+        channel: "slack",
+        chat_id: "C1",
+        media: [file_name, file_name],
+      });
+      expect(send).toHaveBeenCalledOnce();
+    } finally {
+      await rm(tmp, { recursive: true, force: true });
+    }
   });
 });
