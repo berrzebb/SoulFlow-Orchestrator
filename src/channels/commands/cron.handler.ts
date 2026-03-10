@@ -27,6 +27,16 @@ const RESUME_ARG_ALIASES = ["resume", "재개", "시작", "다시"] as const;
 const STOP_ARG_ALIASES = ["stop", "중지", "꺼"] as const;
 const NUKE_ARG_ALIASES = ["nuke", "전체삭제", "전체중지", "kill", "killall"] as const;
 
+const RE_CRON_PREFIX = "^(?:cron|크론)(?:\\s*작업)?\\s*";
+const RE_CRON_STATUS = new RegExp(`${RE_CRON_PREFIX}(?:status|상태|확인|조회)`);
+const RE_CRON_LIST   = new RegExp(`${RE_CRON_PREFIX}(?:jobs|list|목록|리스트)`);
+const RE_CRON_ADD    = new RegExp(`${RE_CRON_PREFIX}(?:add|추가|등록)\\b`);
+const RE_CRON_REMOVE = new RegExp(`${RE_CRON_PREFIX}(?:remove|delete|삭제|제거)\\b`);
+const RE_CRON_PAUSE  = new RegExp(`${RE_CRON_PREFIX}(?:pause|일시정지|멈춰|중단)\\b`);
+const RE_CRON_RESUME = new RegExp(`${RE_CRON_PREFIX}(?:resume|재개|시작|다시)\\b`);
+const RE_CRON_STOP   = new RegExp(`${RE_CRON_PREFIX}(?:stop|중지|꺼)\\b`);
+const RE_CRON_NUKE   = new RegExp(`${RE_CRON_PREFIX}(?:nuke|전체삭제|전체중지|kill)\\b`);
+
 function parse_action(message: InboundMessage, command: ParsedSlashCommand | null): CronQuickAction | null {
   const cmd = String(command?.name || "");
   const arg0 = String(command?.args_lower?.[0] || "");
@@ -52,27 +62,29 @@ function parse_action(message: InboundMessage, command: ParsedSlashCommand | nul
 
   const text = normalize_common_command_text(String(message.content || "")).toLowerCase();
   if (!text) return null;
-  if (/^(?:cron|크론)(?:\s*작업)?\s*(?:status|상태|확인|조회)/.test(text)) return "status";
-  if (/^(?:cron|크론)(?:\s*작업)?\s*(?:jobs|list|목록|리스트)/.test(text)) return "list";
-  if (/^(?:cron|크론)(?:\s*작업)?\s*(?:add|추가|등록)\b/.test(text)) return "add";
-  if (/^(?:cron|크론)(?:\s*작업)?\s*(?:remove|delete|삭제|제거)\b/.test(text)) return "remove";
-  if (/^(?:cron|크론)(?:\s*작업)?\s*(?:pause|일시정지|멈춰|중단)\b/.test(text)) return "pause";
-  if (/^(?:cron|크론)(?:\s*작업)?\s*(?:resume|재개|시작|다시)\b/.test(text)) return "resume";
-  if (/^(?:cron|크론)(?:\s*작업)?\s*(?:stop|중지|꺼)\b/.test(text)) return "stop";
-  if (/^(?:cron|크론)(?:\s*작업)?\s*(?:nuke|전체삭제|전체중지|kill)\b/.test(text)) return "nuke";
+  if (RE_CRON_STATUS.test(text))  return "status";
+  if (RE_CRON_LIST.test(text))    return "list";
+  if (RE_CRON_ADD.test(text))     return "add";
+  if (RE_CRON_REMOVE.test(text))  return "remove";
+  if (RE_CRON_PAUSE.test(text))   return "pause";
+  if (RE_CRON_RESUME.test(text))  return "resume";
+  if (RE_CRON_STOP.test(text))    return "stop";
+  if (RE_CRON_NUKE.test(text))    return "nuke";
   return null;
 }
 
+const MINUTE_UNITS = new Set(["m", "min", "mins", "minute", "minutes", "분"]);
+const HOUR_UNITS   = new Set(["h", "hr", "hrs", "hour", "hours", "시간"]);
+const RE_DURATION  = /^(\d+)(s|sec|secs|second|seconds|초|m|min|mins|minute|minutes|분|h|hr|hrs|hour|hours|시간)?$/i;
+
 function parse_duration_ms(token: string): number | null {
-  const m = String(token || "").trim().match(/^(\d+)(s|sec|secs|second|seconds|초|m|min|mins|minute|minutes|분|h|hr|hrs|hour|hours|시간)?$/i);
+  const m = String(token || "").trim().match(RE_DURATION);
   if (!m) return null;
   const value = Number(m[1]);
   if (!Number.isFinite(value) || value <= 0) return null;
   const unit = String(m[2] || "s").toLowerCase();
-  const MINUTE_UNITS = new Set(["m", "min", "mins", "minute", "minutes", "분"]);
-  const HOUR_UNITS = new Set(["h", "hr", "hrs", "hour", "hours", "시간"]);
   if (MINUTE_UNITS.has(unit)) return value * 60_000;
-  if (HOUR_UNITS.has(unit)) return value * 3_600_000;
+  if (HOUR_UNITS.has(unit))   return value * 3_600_000;
   return value * 1_000;
 }
 
