@@ -1,6 +1,8 @@
 import type { MemoryStoreLike, MemoryConsolidateOptions } from "./memory.types.js";
 import type { Logger } from "../logger.js";
 import type { ServiceLike } from "../runtime/service.types.js";
+import type { SessionStoreLike } from "../session/service.js";
+import { promote_sessions_to_daily, type SessionPromotionConfig } from "./session-memory-promoter.js";
 
 export type MemoryConsolidationConfig = {
   enabled: boolean;
@@ -15,6 +17,10 @@ export type MemoryConsolidationDeps = {
   memory_store: MemoryStoreLike;
   config: MemoryConsolidationConfig;
   logger: Logger;
+  /** 세션 스토어. 제공 시 idle 후 만료 임박 메시지를 daily 메모리로 자동 승격. */
+  sessions?: SessionStoreLike | null;
+  /** 세션 히스토리 최대 수명 (ms). sessions 제공 시 승격 타이밍 계산에 사용. */
+  session_max_age_ms?: number;
 };
 
 /**
@@ -28,6 +34,8 @@ export class MemoryConsolidationService implements ServiceLike {
   private readonly store: MemoryStoreLike;
   private readonly config: MemoryConsolidationConfig;
   private readonly logger: Logger;
+  private readonly sessions: SessionStoreLike | null;
+  private readonly promotion_config: Partial<SessionPromotionConfig>;
   private idle_timer: ReturnType<typeof setTimeout> | null = null;
   private cron_timer: ReturnType<typeof setInterval> | null = null;
   private running = false;
@@ -39,6 +47,10 @@ export class MemoryConsolidationService implements ServiceLike {
     this.store = deps.memory_store;
     this.config = deps.config;
     this.logger = deps.logger;
+    this.sessions = deps.sessions ?? null;
+    this.promotion_config = deps.session_max_age_ms
+      ? { session_max_age_ms: deps.session_max_age_ms }
+      : {};
   }
 
   async start(): Promise<void> {
@@ -127,6 +139,17 @@ export class MemoryConsolidationService implements ServiceLike {
         archived: result.archived_files.length,
         chars: result.longterm_appended_chars,
       });
+
+      // 세션 승격: 만료 임박 대화를 daily 메모리로 보존
+      if (this.sessions) {
+        const promotion = await promote_sessions_to_daily(
+          this.sessions, this.store, this.logger, this.promotion_config,
+        );
+        if (promotion.promoted > 0) {
+          this.logger.info("sessions promoted to daily", promotion);
+        }
+      }
+
       return { ok: result.ok, summary: result.summary };
     } catch (e) {
       this.logger.error("consolidation failed", { error: String(e) });

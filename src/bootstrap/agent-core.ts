@@ -193,6 +193,8 @@ export async function create_agent_core(deps: AgentCoreDeps): Promise<AgentCoreR
 
   const memory_consolidation = new MemoryConsolidationService({
     memory_store: agent.context.memory_store,
+    sessions,
+    session_max_age_ms: app_config.channel.sessionHistoryMaxAgeMs,
     config: {
       enabled: app_config.memory.consolidation.enabled,
       trigger: app_config.memory.consolidation.trigger,
