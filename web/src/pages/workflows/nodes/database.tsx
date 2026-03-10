@@ -8,7 +8,7 @@ function DatabaseEditPanel({ node, update, t }: EditPanelProps) {
       <BuilderRowPair>
         <BuilderField label={t("workflows.operation")} required>
           <select autoFocus className="input input--sm" required value={op} onChange={(e) => update({ operation: e.target.value })} aria-label={t("workflows.operation")} aria-required="true">
-            {["query", "tables", "schema", "explain"].map((o) => <option key={o} value={o}>{o}</option>)}
+            {["query", "tables", "schema", "explain"].map((o) => <option key={o} value={o}>{t(`node.action.${o}`)}</option>)}
           </select>
         </BuilderField>
         <BuilderField label={t("workflows.field_datasource")} required>

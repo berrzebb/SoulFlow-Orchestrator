@@ -19,7 +19,7 @@ function TtlCacheEditPanel({ node, update, t }: EditPanelProps) {
       ) : (
         <BuilderField label={t("workflows.operation")}>
           <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
-            {["set", "get", "invalidate", "has", "keys", "stats", "clear"].map((o) => <option key={o} value={o}>{o}</option>)}
+            {["set", "get", "invalidate", "has", "keys", "stats", "clear"].map((o) => <option key={o} value={o}>{t(`node.action.${o}`)}</option>)}
           </select>
         </BuilderField>
       )}

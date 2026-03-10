@@ -2344,7 +2344,7 @@
   "workflows.loop_iterations_hint": "최대 반복 횟수 (기본값: 20~50)",
   "workflows.max_results": "Max results",
   "workflows.max_results_hint": "최대 조회 결과 수 ({{min}}-{{max}})",
-  "workflows.max_retries": "최대 재시도",
+  "workflows.max_retries": "최대 재시도 횟수",
   "workflows.max_turns": "최대 턴 수",
   "workflows.max_turns_hint": "최대 대화 턴 (에이전트 각 단계가 한 턴으로 계산됨)",
   "workflows.merge_collect_hint": "모든 상위 브랜치 출력을 배열로 수집",
@@ -2438,7 +2438,6 @@
   "workflows.on_rejection": "거절 시",
   "workflows.goto_phase": "이동할 Phase",
   "workflows.select_phase": "Phase 선택",
-  "workflows.max_retries": "최대 재시도 횟수",
   "workflows.operation": "Operation",
   "workflows.opt_agent": "에이전트",
   "workflows.opt_append": "추가",
@@ -3678,5 +3677,14 @@
   "node.diff.old_text_placeholder": "원본 텍스트 또는 @file:경로",
   "node.diff.new_text_placeholder": "수정된 텍스트 또는 @file:경로",
   "node.vcard.note_placeholder": "메모 (선택)",
-  "node.encoding.schema_above_hint": "(위에서 정의한 스키마 사용)"
+  "node.encoding.schema_above_hint": "(위에서 정의한 스키마 사용)",
+  "node.action.tables": "테이블 목록",
+  "node.action.explain": "실행 계획",
+  "node.action.single": "단선",
+  "node.action.double": "이중선",
+  "node.action.heavy": "굵은",
+  "node.action.alphanumeric": "영숫자",
+  "node.action.symbols": "특수문자 포함",
+  "node.action.numeric": "숫자만",
+  "node.action.hex": "16진수"
 }

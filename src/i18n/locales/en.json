@@ -2438,7 +2438,6 @@
   "workflows.on_rejection": "On Rejection",
   "workflows.goto_phase": "Jump to Phase",
   "workflows.select_phase": "Select Phase",
-  "workflows.max_retries": "Max Retries",
   "workflows.operation": "Operation",
   "workflows.opt_agent": "Agent",
   "workflows.opt_append": "Append",
@@ -3679,5 +3678,14 @@
   "node.diff.old_text_placeholder": "Original text or @file:path",
   "node.diff.new_text_placeholder": "Modified text or @file:path",
   "node.vcard.note_placeholder": "Optional note",
-  "node.encoding.schema_above_hint": "(schema defined above)"
+  "node.encoding.schema_above_hint": "(schema defined above)",
+  "node.action.tables": "List Tables",
+  "node.action.explain": "Explain",
+  "node.action.single": "Single",
+  "node.action.double": "Double",
+  "node.action.heavy": "Heavy",
+  "node.action.alphanumeric": "Alphanumeric",
+  "node.action.symbols": "With Symbols",
+  "node.action.numeric": "Numeric",
+  "node.action.hex": "Hex"
 }

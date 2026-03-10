@@ -40,7 +40,7 @@ function RandomEditPanel({ node, update, t }: EditPanelProps) {
           </BuilderField>
           <BuilderField label={t("workflows.random_charset")}>
             <select className="input input--sm" value={String(node.charset || "symbols")} onChange={(e) => update({ charset: e.target.value })}>
-              {CHARSETS.map((c) => <option key={c} value={c}>{c}</option>)}
+              {CHARSETS.map((c) => <option key={c} value={c}>{t(`node.action.${c}`)}</option>)}
             </select>
           </BuilderField>
         </BuilderRowPair>

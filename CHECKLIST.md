@@ -739,3 +739,44 @@
 | `workflows.*` | stats_group_statistics, stats_group_timeseries, data_format_group_data, data_format_group_mime, data_format_group_header, pkg_group_manager, pkg_group_dependency, changelog_group_changelog, changelog_group_license | 9개 |
 | placeholder | node.diff.old_text_placeholder, node.diff.new_text_placeholder, node.vcard.note_placeholder, node.encoding.schema_above_hint | 4개 |
 | **합계** | | **~134개** |
+
+### 커밋
+18. `feat: i18n — 워크플로우 노드 액션 드롭다운 완전 현지화 (Phase 12)` — `4627eb1`
+
+**Phase 12 완료 ✅ — else 분기 포함 전체 optgroup/action t() 적용**
+
+---
+
+## Phase 13: i18n 정밀 검증 2차 (이터레이션 13)
+
+### 발견된 추가 누락 케이스
+
+#### A. 조건 분기 else 브랜치 미적용 (같은 드롭다운, 다른 렌더 경로)
+| 파일 | 브랜치 | 문제 |
+|------|--------|------|
+| `encoding.tsx` L52 | `else` (msgpack/protobuf 경우) | `{o}` — ALL_OPS 배열, t() 미적용 |
+| `image.tsx` L24 | `else` (non-convert 경우) | `{o}` — 이미지 액션 6개, t() 미적용 |
+| `ttl-cache.tsx` L22 | `else` (key-less 경우) | `{o}` — 캐시 액션 7개, t() 미적용 |
+| `changelog.tsx` L27-28 | `else` (non-generate 경우) | `label="Changelog"/"License"` 하드코딩 |
+| `database.tsx` L11 | (단일 렌더) | `{o}` — 신규 발견, Phase 12 미처리 |
+
+#### B. 시맨틱 선택값 미번역
+| 파일 | 배열 | 값 |
+|------|------|-----|
+| `ascii-art.tsx` L26 | `BOX_STYLES` | single/double/round/heavy |
+| `random.tsx` L43 | `CHARSETS` | alphanumeric/symbols/hex/numeric |
+
+#### C. 신규 i18n 키 목록
+| 키 | EN | KO |
+|----|----|----|
+| `node.action.tables` | List Tables | 테이블 목록 |
+| `node.action.explain` | Explain | 실행 계획 |
+| `node.action.single` | Single | 단선 |
+| `node.action.double` | Double | 이중선 |
+| `node.action.heavy` | Heavy | 굵은 |
+| `node.action.alphanumeric` | Alphanumeric | 영숫자 |
+| `node.action.symbols` | With Symbols | 특수문자 포함 |
+| `node.action.numeric` | Numeric | 숫자만 |
+| `node.action.hex` | Hex | 16진수 |
+| **합계** | | **9개** |
+

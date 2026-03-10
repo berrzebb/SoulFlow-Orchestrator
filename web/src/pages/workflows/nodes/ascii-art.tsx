@@ -23,7 +23,7 @@ function AsciiArtEditPanel({ node, update, t }: EditPanelProps) {
         <BuilderRowPair>
           <BuilderField label={t("workflows.ascii_art_style")}>
             <select className="input input--sm" value={String(node.style || "single")} onChange={(e) => update({ style: e.target.value })}>
-              {BOX_STYLES.map((s) => <option key={s} value={s}>{s}</option>)}
+              {BOX_STYLES.map((s) => <option key={s} value={s}>{t(`node.action.${s}`)}</option>)}
             </select>
           </BuilderField>
           <BuilderField label={t("workflows.ascii_art_padding")}>

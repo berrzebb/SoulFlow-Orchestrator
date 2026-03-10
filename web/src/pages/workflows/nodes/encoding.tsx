@@ -49,7 +49,7 @@ function EncodingEditPanel({ node, update, t }: EditPanelProps) {
       ) : (
         <BuilderField label={t("workflows.operation")} required>
           <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
-            {ALL_OPS.map((o) => <option key={o} value={o}>{o}</option>)}
+            {ALL_OPS.map((o) => <option key={o} value={o}>{t(`node.action.${o}`)}</option>)}
           </select>
         </BuilderField>
       )}
