@@ -94,14 +94,41 @@ const AGENT_TOOL_PAIRS: [string, string][] = [
 
 // ── 유사도 판별 함수 ──────────────────────────────────────────────────────────
 
-function is_identity_question(text: string): boolean {
-  const tokens = tokenize(text);
+/** 토큰 집합을 받아 identity 판정 — fast_classify에서 1회 토큰화 후 재사용. */
+function is_identity_question(tokens: Set<string>): boolean {
   return tokens.size > 0 && exceeds_similarity(tokens, IDENTITY_TOKEN_SETS, IDENTITY_THRESHOLD);
 }
 
-function is_inquiry_question(text: string): boolean {
-  const tokens = tokenize(text);
+/** 토큰 집합을 받아 inquiry 판정 — fast_classify에서 1회 토큰화 후 재사용. */
+function is_inquiry_question(tokens: Set<string>): boolean {
   return tokens.size > 0 && exceeds_similarity(tokens, INQUIRY_TOKEN_SETS, INQUIRY_THRESHOLD);
+}
+
+/**
+ * 최근 어시스턴트 메시지가 태스크 생성/실행을 언급한 직후 짧은 후속 메시지이면
+ * inquiry 가능성이 높음 (예: "됐어?", "끝났어?").
+ * 6토큰 이하 조건: 짧은 확인 질문에만 적용하여 오탐 방지.
+ */
+const RE_TASK_MENTION = /태스크|task.{0,10}id|작업.{0,6}시작|started.{0,10}task|background.task|백그라운드.{0,4}작업/i;
+
+function is_followup_inquiry(tokens: Set<string>, history: Array<{ role: string; content: string }> | undefined): boolean {
+  if (!history?.length || tokens.size > 6) return false;
+  const last_assistant = [...history].reverse().find(h => h.role === "assistant");
+  return !!last_assistant && RE_TASK_MENTION.test(last_assistant.content);
+}
+
+/**
+ * 스킬 트리거/별칭 토큰화 결과 캐시 — 매 메시지마다 동일 문구를 재토큰화하지 않음.
+ * 스킬 트리거는 런타임 중 변경되지 않으므로 영구 캐시 안전.
+ */
+const _phrase_token_cache = new Map<string, Set<string>>();
+function tokenize_phrase(phrase: string): Set<string> {
+  let cached = _phrase_token_cache.get(phrase);
+  if (!cached) {
+    cached = tokenize(phrase);
+    _phrase_token_cache.set(phrase, cached);
+  }
+  return cached;
 }
 
 /**
@@ -114,7 +141,7 @@ function match_skill_trigger(tokens: Set<string>, skills: SkillEntry[]): string 
   for (const skill of skills) {
     const candidates = [...skill.triggers, ...(skill.aliases ?? [])];
     for (const phrase of candidates) {
-      const ref = tokenize(phrase);
+      const ref = tokenize_phrase(phrase);
       if (ref.size > 0 && jaccard(tokens, ref) >= SKILL_TRIGGER_THRESHOLD) return skill.name;
     }
   }
@@ -128,6 +155,7 @@ const AGENT_LENGTH_THRESHOLD = 50;
 
 /**
  * once/agent/task 중 하나를 결정.
+ * lower/tokens는 fast_classify에서 1회 계산하여 전달 — 재토큰화 없음.
  *
  * - `task`: 명시적 백그라운드/비동기/스케줄 신호
  * - `agent`: 다단계 동사 연결 or 도구 조합 쌍 or 문장 길이 임계치 초과
@@ -135,10 +163,7 @@ const AGENT_LENGTH_THRESHOLD = 50;
  *
  * 스킬 트리거 매칭 시 once 단락 — 스킬은 항상 단일 호출.
  */
-function classify_execution_complexity(text: string, ctx: ClassifierContext): "once" | "agent" | "task" {
-  const lower = text.toLowerCase();
-  const tokens = tokenize(text);
-
+function classify_execution_complexity(lower: string, tokens: Set<string>, ctx: ClassifierContext): "once" | "agent" | "task" {
   if (TASK_SIGNAL_PHRASES.some((s) => lower.includes(s))) return "task";
 
   // 스킬 트리거 직접 매칭 → 항상 once (LLM이 skill 호출)
@@ -189,19 +214,23 @@ export function fast_classify(task: string, ctx: ClassifierContext): Classificat
     return { mode: "builtin", command: builtin_match[1], args: builtin_match[2]?.trim() || undefined };
   }
 
+  // 나머지 판정은 동일 토큰 집합을 공유 — tokenize 1회
+  const tokens = tokenize(text);
+  const lower = text.toLowerCase();
+
   // 2. identity: 봇 소개 질문 (유사도 기반)
-  if (is_identity_question(text)) {
+  if (is_identity_question(tokens)) {
     return { mode: "identity" };
   }
 
-  // 3. inquiry: 활성 태스크 있을 때 상태 조회
+  // 3. inquiry: 활성 태스크 있을 때 상태 조회 or 태스크 언급 후 짧은 후속 질문
   const has_active = (ctx.active_tasks?.length ?? 0) > 0;
-  if (has_active && is_inquiry_question(text)) {
+  if (has_active && (is_inquiry_question(tokens) || is_followup_inquiry(tokens, ctx.recent_history))) {
     return { mode: "inquiry" };
   }
 
   // 4. once / agent / task
-  return { mode: classify_execution_complexity(text, ctx) };
+  return { mode: classify_execution_complexity(lower, tokens, ctx) };
 }
 
 // ── 이하 호환성 유지 (에스컬레이션 판별) ────────────────────────────────────
