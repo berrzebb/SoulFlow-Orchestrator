@@ -66,10 +66,7 @@ export class HealthcheckTool extends Tool {
   private async check_http(url: string, timeout: number, expected: number): Promise<Record<string, unknown>> {
     const start = Date.now();
     try {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), timeout);
-      const res = await fetch(url, { signal: controller.signal, method: "GET", redirect: "follow" });
-      clearTimeout(timer);
+      const res = await fetch(url, { signal: AbortSignal.timeout(timeout), method: "GET", redirect: "follow" });
       const latency = Date.now() - start;
       return { healthy: res.status === expected, status: res.status, latency_ms: latency, url };
     } catch (e) {

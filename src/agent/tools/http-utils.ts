@@ -80,21 +80,15 @@ export async function format_response(res: Response, max_chars: number): Promise
   } satisfies HttpResponseSummary);
 }
 
-/** AbortController 기반 타임아웃 fetch. */
-export async function timed_fetch(
+/** 타임아웃 fetch. */
+export function timed_fetch(
   url: string,
   opts: { method: string; headers: Record<string, string>; body?: string; timeout_ms: number },
 ): Promise<Response> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), opts.timeout_ms);
-  try {
-    return await fetch(url, {
-      method: opts.method,
-      headers: opts.headers,
-      body: opts.body,
-      signal: controller.signal,
-    });
-  } finally {
-    clearTimeout(timer);
-  }
+  return fetch(url, {
+    method: opts.method,
+    headers: opts.headers,
+    body: opts.body,
+    signal: AbortSignal.timeout(opts.timeout_ms),
+  });
 }
