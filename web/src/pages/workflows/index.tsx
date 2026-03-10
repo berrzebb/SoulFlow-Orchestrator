@@ -158,6 +158,11 @@ export default function WorkflowsPage() {
   const handleQuickRun = (e: React.FormEvent) => {
     e.preventDefault();
     if (!quickObjective.trim()) return;
+    if (!selectedTpl) {
+      // 템플릿 미선택 → 빌더로 이동해 자연어 워크플로우 자동 생성
+      navigate(`/workflows/new?prompt=${encodeURIComponent(quickObjective.trim())}`);
+      return;
+    }
     quickRunMut.mutate(quickObjective.trim());
   };
 

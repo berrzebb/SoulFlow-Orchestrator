@@ -2,7 +2,7 @@
  * Builder utility bars — WorkflowPromptBar, NodeRunInputBar.
  */
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { ChatPromptBar } from "../../components/chat-prompt-bar";
 import { useToast } from "../../components/toast";
 import { useT } from "../../i18n";
@@ -52,15 +52,17 @@ function apply_patch(wf: WorkflowDef, path: string, section: Record<string, unkn
  * - workflow: 미저장 상태 직접 전달
  * - 둘 다 없으면 신규 생성 모드 (instruction만 전송)
  */
-export function WorkflowPromptBar({ name, workflow, onApply }: {
+export function WorkflowPromptBar({ name, workflow, onApply, initialPrompt }: {
   name?: string;
   workflow?: WorkflowDef;
   onApply: (updated: WorkflowDef) => void;
+  initialPrompt?: string;
 }) {
   const t = useT();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
-  const [value, setValue] = useState("");
+  const [value, setValue] = useState(initialPrompt ?? "");
+  const auto_fired = useRef(false);
   const [selectedProvider, setSelectedProvider] = useState("");
   const [selectedModel, setSelectedModel] = useState("");
 
@@ -134,6 +136,15 @@ export function WorkflowPromptBar({ name, workflow, onApply }: {
       }
     })();
   };
+
+  // initialPrompt가 있으면 마운트 시 1회 자동 실행
+  useEffect(() => {
+    if (initialPrompt && !auto_fired.current) {
+      auto_fired.current = true;
+      send();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className={`workflow-prompt-bar${loading ? " workflow-prompt-bar--loading" : ""}`}>

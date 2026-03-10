@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import yaml from "js-yaml";
 import { api } from "../../api/client";
@@ -45,6 +45,8 @@ export default function WorkflowBuilderPage() {
   const { name } = useParams<{ name: string }>();
   const isNew = !name || name === "new";
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const initialPrompt = isNew ? (searchParams.get("prompt") ?? undefined) : undefined;
   const qc = useQueryClient();
   const { toast } = useToast();
   const t = useT();
@@ -725,7 +727,7 @@ export default function WorkflowBuilderPage() {
           {/* 메인 그래프 영역 */}
           <div className="graph-layout__main">
             {/* 프롬프트 바: 상단에 위치 (모바일/데스크탑 모두 접근 가능) */}
-            <WorkflowPromptBar name={templateName || undefined} workflow={workflow} onApply={setWorkflow} />
+            <WorkflowPromptBar name={templateName || undefined} workflow={workflow} onApply={setWorkflow} initialPrompt={initialPrompt} />
             {/* 보조 노드 추가 toolbar */}
             <div className="ws-toolbar" style={{ position: "relative" }}>
               <button
