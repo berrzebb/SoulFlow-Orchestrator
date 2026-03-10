@@ -30,7 +30,7 @@ export const if_descriptor: FrontendNodeDescriptor = {
   toolbar_label: "node.if.label",
   category: "flow",
   output_schema: [
-    { name: "branch",           type: "string",  description: '"true" or "false"' },
+    { name: "branch",           type: "string",  description: "node.if.output.branch" },
     { name: "condition_result", type: "boolean", description: "node.if.output.condition_result" },
   ],
   input_schema: [

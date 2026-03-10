@@ -2093,6 +2093,8 @@
   "workflows.field_set_b": "집합 B",
   "workflows.field_sql": "SQL",
   "workflows.field_table": "테이블",
+  "workflows.lookup_reverse": "역방향 조회",
+  "workflows.lookup_list_all": "전체 목록",
   "workflows.field_text": "텍스트",
   "workflows.field_to_tz": "대상 시간대",
   "workflows.field_ttl_ms": "TTL (ms)",

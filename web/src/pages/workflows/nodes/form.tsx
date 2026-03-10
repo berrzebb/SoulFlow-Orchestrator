@@ -71,9 +71,9 @@ function FormEditPanel({ node, update, t, options }: EditPanelProps) {
         <div key={i} className="builder-nested-block">
           <div className="builder-row" style={{ cursor: "pointer" }} role="button" tabIndex={0} onClick={() => setExpanded(expanded === i ? null : i)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setExpanded(expanded === i ? null : i); } }}>
             <span className="builder-nested-toggle">{expanded === i ? "▾" : "▸"}</span>
-            <strong>{f.name || `Field ${i + 1}`}</strong>
+            <strong>{f.name || `#${i + 1}`}</strong>
             <span className="muted" style={{ marginLeft: 8 }}>{f.type}{f.required ? " *" : ""}</span>
-            <button className="btn btn--xs btn--danger ml-auto" onClick={(e) => { e.stopPropagation(); removeField(i); }} aria-label={`${t("workflows.remove_item")} ${f.name || `Field ${i + 1}`}`}>
+            <button className="btn btn--xs btn--danger ml-auto" onClick={(e) => { e.stopPropagation(); removeField(i); }} aria-label={`${t("workflows.remove_item")} ${f.name || `#${i + 1}`}`}>
               <svg width={12} height={12} viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round"><line x1={2} y1={2} x2={10} y2={10} /><line x1={10} y1={2} x2={2} y2={10} /></svg>
             </button>
           </div>

@@ -16,13 +16,13 @@ function LookupEditPanel({ node, update, t }: EditPanelProps) {
         <div className="builder-row">
           <label className="label" style={{ display: "flex", alignItems: "center", gap: "6px" }}>
             <input type="checkbox" checked={Boolean(node.reverse)} onChange={(e) => update({ reverse: e.target.checked })} />
-            Reverse
+            {t("workflows.lookup_reverse")}
           </label>
         </div>
         <div className="builder-row">
           <label className="label" style={{ display: "flex", alignItems: "center", gap: "6px" }}>
             <input type="checkbox" checked={Boolean(node.list)} onChange={(e) => update({ list: e.target.checked })} />
-            List All
+            {t("workflows.lookup_list_all")}
           </label>
         </div>
       </BuilderRowPair>

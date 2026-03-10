@@ -2093,6 +2093,8 @@
   "workflows.field_set_b": "Set B",
   "workflows.field_sql": "SQL",
   "workflows.field_table": "Table",
+  "workflows.lookup_reverse": "Reverse",
+  "workflows.lookup_list_all": "List All",
   "workflows.field_text": "Text",
   "workflows.field_to_tz": "To TZ",
   "workflows.field_ttl_ms": "TTL (ms)",
