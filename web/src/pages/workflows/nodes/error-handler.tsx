@@ -41,6 +41,6 @@ export const error_handler_descriptor: FrontendNodeDescriptor = {
   input_schema: [
     { name: "data", type: "object", description: "node.error_handler.input.data" },
   ],
-  create_default: () => ({ try_nodes: [], on_error: "continue" }),
+  create_default: () => ({ try_nodes: [], on_error: "continue", fallback_nodes: [] }),
   EditPanel: ErrorHandlerEditPanel,
 };

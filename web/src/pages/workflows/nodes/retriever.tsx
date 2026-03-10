@@ -60,6 +60,6 @@ export const retriever_descriptor: FrontendNodeDescriptor = {
     { name: "query",  type: "string", description: "node.retriever.input.query" },
     { name: "source", type: "string", description: "node.retriever.input.source" },
   ],
-  create_default: () => ({ source: "http", query: "", url: "", top_k: 5 }),
+  create_default: () => ({ source: "http", query: "", url: "", top_k: 5, method: "GET", file_path: "" }),
   EditPanel: RetrieverEditPanel,
 };

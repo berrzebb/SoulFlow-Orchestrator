@@ -52,6 +52,6 @@ export const phone_descriptor: FrontendNodeDescriptor = {
     { name: "action", type: "string", description: "node.phone.input.action" },
     { name: "number", type: "string", description: "node.phone.input.number" },
   ],
-  create_default: () => ({ action: "parse", number: "", country: "" }),
+  create_default: () => ({ action: "parse", number: "", country: "", number2: "", format_type: "e164" }),
   EditPanel: PhoneEditPanel,
 };

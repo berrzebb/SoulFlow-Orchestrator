@@ -52,6 +52,6 @@ export const task_descriptor: FrontendNodeDescriptor = {
     { name: "objective",  type: "string", description: "node.task.input.objective" },
     { name: "channel",    type: "string", description: "node.task.input.channel" },
   ],
-  create_default: () => ({ task_title: "", objective: "", max_turns: 20 }),
+  create_default: () => ({ task_title: "", objective: "", max_turns: 20, channel: "", chat_id: "" }),
   EditPanel: TaskEditPanel,
 };

@@ -64,6 +64,6 @@ export const approval_descriptor: FrontendNodeDescriptor = {
     { name: "message", type: "string", description: "node.approval.input.message" },
     { name: "context", type: "object", description: "node.approval.input.context" },
   ],
-  create_default: () => ({ message: "", target: "origin", require_comment: false, quorum: 1, timeout_ms: 600000 }),
+  create_default: () => ({ message: "", target: "origin", require_comment: false, quorum: 1, timeout_ms: 600000, channel: "", chat_id: "" }),
   EditPanel: ApprovalEditPanel,
 };

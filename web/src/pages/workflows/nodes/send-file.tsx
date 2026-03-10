@@ -52,6 +52,6 @@ export const send_file_descriptor: FrontendNodeDescriptor = {
     { name: "channel",   type: "string", description: "node.send_file.input.channel" },
     { name: "chat_id",   type: "string", description: "node.send_file.input.chat_id" },
   ],
-  create_default: () => ({ file_path: "", target: "origin" }),
+  create_default: () => ({ file_path: "", target: "origin", caption: "", channel: "", chat_id: "" }),
   EditPanel: SendFileEditPanel,
 };

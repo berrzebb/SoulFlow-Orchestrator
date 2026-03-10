@@ -47,8 +47,8 @@ export const rate_limit_descriptor: FrontendNodeDescriptor = {
   toolbar_label: "node.rate_limit.label",
   category: "advanced",
   output_schema: [
-    { name: "result", type: "string", description: "node.rate_limit.output.result" },
-    { name: "success", type: "boolean", description: "node.rate_limit.output.success" },
+    { name: "allowed",   type: "boolean", description: "node.rate_limit.output.allowed" },
+    { name: "remaining", type: "number",  description: "node.rate_limit.output.remaining" },
   ],
   input_schema: [
     { name: "action", type: "string", description: "node.rate_limit.input.action" },

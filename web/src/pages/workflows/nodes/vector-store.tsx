@@ -74,6 +74,6 @@ export const vector_store_descriptor: FrontendNodeDescriptor = {
     { name: "collection", type: "string", description: "node.vector_store.input.collection" },
     { name: "top_k",      type: "number", description: "node.vector_store.input.top_k" },
   ],
-  create_default: () => ({ operation: "query", store_id: "", collection: "default", top_k: 5, min_score: 0 }),
+  create_default: () => ({ operation: "query", store_id: "", collection: "default", top_k: 5, min_score: 0, query_vector_field: "", vectors_field: "", documents_field: "", ids_field: "" }),
   EditPanel: VectorStoreEditPanel,
 };

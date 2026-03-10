@@ -68,6 +68,6 @@ export const healthcheck_descriptor: FrontendNodeDescriptor = {
     { name: "action", type: "string", description: "node.healthcheck.input.action" },
     { name: "url", type: "string", description: "node.healthcheck.input.url" },
   ],
-  create_default: () => ({ action: "http", url: "", timeout_ms: 5000, expected_status: 200 }),
+  create_default: () => ({ action: "http", url: "", timeout_ms: 5000, expected_status: 200, host: "", endpoints: "" }),
   EditPanel: HealthcheckEditPanel,
 };

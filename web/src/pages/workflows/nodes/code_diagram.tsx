@@ -78,6 +78,6 @@ export const code_diagram_descriptor: FrontendNodeDescriptor = {
     { name: "action", type: "string", description: "node.code_diagram.input.action" },
     { name: "source", type: "string", description: "node.code_diagram.input.source" },
   ],
-  create_default: () => ({ action: "class_diagram", source: "", direction: "LR", show_private: false, group_by_folder: false }),
+  create_default: () => ({ action: "class_diagram", source: "", direction: "LR", show_private: false, group_by_folder: false, actors: "", messages: "" }),
   EditPanel: CodeDiagramEditPanel,
 };

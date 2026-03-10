@@ -80,6 +80,6 @@ export const decision_descriptor: FrontendNodeDescriptor = {
     { name: "key",       type: "string", description: "node.decision.input.key" },
     { name: "value",     type: "string", description: "node.decision.input.value" },
   ],
-  create_default: () => ({ operation: "append", scope: "global", key: "", value: "" }),
+  create_default: () => ({ operation: "append", scope: "global", key: "", value: "", rationale: "", priority: 1, tags: [], scope_id: "", target_id: "" }),
   EditPanel: DecisionEditPanel,
 };

@@ -55,6 +55,6 @@ export const hitl_descriptor: FrontendNodeDescriptor = {
     { name: "prompt",  type: "string", description: "node.hitl.input.prompt" },
     { name: "context", type: "object", description: "node.hitl.input.context" },
   ],
-  create_default: () => ({ prompt: "", target: "origin", timeout_ms: 300000 }),
+  create_default: () => ({ prompt: "", target: "origin", timeout_ms: 300000, channel: "", chat_id: "", fallback_value: "" }),
   EditPanel: HitlEditPanel,
 };

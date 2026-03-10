@@ -143,6 +143,6 @@ export const form_descriptor: FrontendNodeDescriptor = {
     { name: "prefill", type: "object", description: "node.form.input.prefill" },
     { name: "context", type: "object", description: "node.form.input.context" },
   ],
-  create_default: () => ({ title: "", description: "", target: "origin", fields: [], timeout_ms: 600000 }),
+  create_default: () => ({ title: "", description: "", target: "origin", fields: [], timeout_ms: 600000, channel: "", chat_id: "" }),
   EditPanel: FormEditPanel,
 };
