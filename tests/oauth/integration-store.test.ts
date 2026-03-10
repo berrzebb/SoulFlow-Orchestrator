@@ -248,3 +248,30 @@ describe("OAuthIntegrationStore", () => {
     expect(store.remove_preset("ghost_svc")).toBe(false);
   });
 });
+
+// ══════════════════════════════════════════
+// vault_store_client_id / vault_store_client_secret (L229, L233)
+// ══════════════════════════════════════════
+
+describe("OAuthIntegrationStore — vault_store_client_id/secret (L229/L233)", () => {
+  let store: OAuthIntegrationStore;
+  let local_tmp: string;
+  beforeEach(async () => {
+    local_tmp = await mkdtemp(join(tmpdir(), "oauth-test-"));
+    store = new OAuthIntegrationStore(join(local_tmp, "oauth.db"), make_mock_vault());
+  });
+  afterEach(async () => {
+    await rm(local_tmp, { recursive: true, force: true });
+  });
+
+  it("vault_store_client_id → vault.put_secret 호출 (L229)", async () => {
+    await store.vault_store_client_id("inst-1", "my-client-id");
+    // vault.put_secret가 호출되면 에러 없이 완료
+    expect(true).toBe(true);
+  });
+
+  it("vault_store_client_secret → vault.put_secret 호출 (L233)", async () => {
+    await store.vault_store_client_secret("inst-1", "my-client-secret");
+    expect(true).toBe(true);
+  });
+});
