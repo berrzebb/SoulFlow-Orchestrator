@@ -234,11 +234,12 @@
   background: var(--accent);
   margin-left: 2px;
   vertical-align: text-bottom;
-  animation: chat-blink 1s step-end infinite;
+  border-radius: 1px;
+  animation: chat-cursor-pulse 1s ease-in-out infinite;
 }
-@keyframes chat-blink {
+@keyframes chat-cursor-pulse {
   0%, 100% { opacity: 1; }
-  50% { opacity: 0; }
+  50% { opacity: 0.15; }
 }
 
 /* Floating input bar */
@@ -478,7 +479,11 @@
   border-radius: 50%;
   background: var(--accent);
   flex-shrink: 0;
-  animation: chat-blink 1.2s ease-in-out infinite;
+  animation: chat-dot-breathe 1.8s ease-in-out infinite;
+}
+@keyframes chat-dot-breathe {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.75); }
 }
 .chat-bottom-bar__label {
   display: flex;
