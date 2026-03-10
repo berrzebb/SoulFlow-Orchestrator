@@ -1,7 +1,6 @@
 /** 오케스트레이션 실행 공통 헬퍼: 결과 생성자, 요청 컨텍스트 빌더, 유틸리티. */
 
 import type { InboundMessage } from "../../bus/types.js";
-import type { ChannelProvider } from "../../channels/types.js";
 import { resolve_reply_to } from "../../channels/types.js";
 import type { ToolExecutionContext } from "../../agent/tools/types.js";
 import type { ExecutionMode, OrchestrationRequest, OrchestrationResult, ResultUsage } from "../types.js";

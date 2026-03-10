@@ -9,7 +9,6 @@ import { join } from "node:path";
 import type { RuntimeExecutionPolicy } from "../providers/types.js";
 import type { ChannelProvider } from "../channels/types.js";
 import type { ToolExecutionContext, ToolSchema } from "../agent/tools/types.js";
-import type { InboundMessage } from "../bus/types.js";
 import type { AgentRuntimeLike } from "../agent/runtime.types.js";
 import type { SecretVaultService } from "../security/secret-vault.js";
 import type { RuntimePolicyResolver } from "../channels/runtime-policy.js";

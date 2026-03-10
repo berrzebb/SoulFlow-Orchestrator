@@ -7,7 +7,7 @@ function skill_ops_or_503(ctx: RouteContext) {
 }
 
 export async function handle_skill(ctx: RouteContext): Promise<boolean> {
-  const { req, url, res, options, json, read_body } = ctx;
+  const { req, url, res, json, read_body } = ctx;
   const path = url.pathname;
 
   // GET /api/skills

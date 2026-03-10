@@ -8,7 +8,7 @@ function agent_provider_ops_or_503(ctx: RouteContext) {
 }
 
 export async function handle_agent_provider(ctx: RouteContext): Promise<boolean> {
-  const { req, url, res, options, json, read_body } = ctx;
+  const { req, url, res, json, read_body } = ctx;
   const path = url.pathname;
 
   // GET /api/agents/providers/types

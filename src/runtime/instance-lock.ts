@@ -53,7 +53,7 @@ function is_stale_lock(holder: LockPayload): boolean {
     process.kill(pid, 0);
     // PID 존재 확인 성공 — start_jiffies로 PID 재사용 여부 검증
     // (tini 환경에서 컨테이너 재시작 후 node가 동일 PID를 받는 경우 대응)
-    if (holder.start_jiffies != null) {
+    if (holder.start_jiffies !== null && holder.start_jiffies !== undefined) {
       const current_jiffies = get_pid_start_jiffies(pid);
       if (current_jiffies !== null && current_jiffies !== holder.start_jiffies) return true;
     }
@@ -94,7 +94,7 @@ async function read_lock_payload(lock_path: string): Promise<LockPayload | null>
       cwd: String(obj.cwd || ""),
       key: String(obj.key || ""),
       hostname: obj.hostname ? String(obj.hostname) : undefined,
-      start_jiffies: obj.start_jiffies != null ? Number(obj.start_jiffies) : undefined,
+      start_jiffies: obj.start_jiffies !== undefined && obj.start_jiffies !== null ? Number(obj.start_jiffies) : undefined,
     };
   } catch {
     return null;
