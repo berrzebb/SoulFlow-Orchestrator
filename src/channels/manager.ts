@@ -34,6 +34,7 @@ import { sanitize_provider_output, strip_secret_reference_tokens, RE_PROVIDER_ER
 import { parse_tone_override, type PersonaMessageIntent, type PersonaMessageRendererLike, type PersonaStyleSnapshot } from "./persona-message-renderer.js";
 import { extract_media_items } from "./media-extractor.js";
 import { prune_ttl_map, sleep, error_message, now_iso, normalize_text } from "../utils/common.js";
+import { t } from "../i18n/index.js";
 import { LaneQueue } from "../agent/pty/lane-queue.js";
 import { ChannelBlockRenderer } from "./channel-block-renderer.js";
 
@@ -427,6 +428,12 @@ export class ChannelManager implements ServiceLike {
       send_reply: (content) => this.send_command_reply(provider, message, content),
     };
     if (await this.commands.try_handle(ctx)) return;
+
+    // 인식되지 않은 슬래시 커맨드 → LLM 없이 안내 후 종료
+    if (slash) {
+      await ctx.send_reply(t("cmd.unknown", { name: slash.name }));
+      return;
+    }
 
     const channel_id = message.instance_id || provider;
     await this.try_read_ack(channel_id, message);

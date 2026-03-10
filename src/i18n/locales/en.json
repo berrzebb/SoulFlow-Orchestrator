@@ -429,6 +429,7 @@
   "cmd.workflow.sub.run.desc": "Run new workflow",
   "cmd.workflow.sub.status.desc": "Workflow details",
   "cmd.workflow.sub.templates.desc": "List workflow templates",
+  "cmd.unknown": "Unknown command: /{name}. Type /help to see available commands.",
   "common.actions": "Actions",
   "common.add": "Add",
   "common.all": "All",
