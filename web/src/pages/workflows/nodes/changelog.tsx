@@ -13,8 +13,8 @@ function ChangelogEditPanel({ node, update, t }: EditPanelProps) {
         <BuilderRowPair>
           <BuilderField label={t("workflows.action")} required>
             <select autoFocus className="input input--sm" required value={action} onChange={(e) => update({ action: e.target.value })} aria-required="true">
-              <optgroup label="Changelog">{CHANGELOG_ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}</optgroup>
-              <optgroup label="License">{LICENSE_ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}</optgroup>
+              <optgroup label="Changelog">{CHANGELOG_ACTIONS.map((a) => <option key={a} value={a}>{t(`node.action.${a}`)}</option>)}</optgroup>
+              <optgroup label="License">{LICENSE_ACTIONS.map((a) => <option key={a} value={a}>{t(`node.action.${a}`)}</option>)}</optgroup>
             </select>
           </BuilderField>
           <BuilderField label={t("workflows.changelog_version")}>
@@ -24,8 +24,8 @@ function ChangelogEditPanel({ node, update, t }: EditPanelProps) {
       ) : (
         <BuilderField label={t("workflows.action")} required>
           <select autoFocus className="input input--sm" required value={action} onChange={(e) => update({ action: e.target.value })} aria-required="true">
-            <optgroup label="Changelog">{CHANGELOG_ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}</optgroup>
-            <optgroup label="License">{LICENSE_ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}</optgroup>
+            <optgroup label="Changelog">{CHANGELOG_ACTIONS.map((a) => <option key={a} value={a}>{t(`node.action.${a}`)}</option>)}</optgroup>
+            <optgroup label="License">{LICENSE_ACTIONS.map((a) => <option key={a} value={a}>{t(`node.action.${a}`)}</option>)}</optgroup>
           </select>
         </BuilderField>
       )}

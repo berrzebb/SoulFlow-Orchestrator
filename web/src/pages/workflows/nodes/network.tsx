@@ -7,7 +7,7 @@ function NetworkEditPanel({ node, update, t }: EditPanelProps) {
     <>
       <BuilderField label={t("workflows.network_operation")}>
         <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
-          {["ping", "dns", "whois", "port_check", "http_head", "netstat", "ip"].map((o) => <option key={o} value={o}>{o}</option>)}
+          {["ping", "dns", "whois", "port_check", "http_head", "netstat", "ip"].map((o) => <option key={o} value={o}>{t(`node.action.${o}`)}</option>)}
         </select>
       </BuilderField>
       {op !== "netstat" && op !== "ip" && (
@@ -19,7 +19,7 @@ function NetworkEditPanel({ node, update, t }: EditPanelProps) {
         <>
           <BuilderField label={t("workflows.network_ip_action")}>
             <select className="input input--sm" value={String(node.ip_action || "parse")} onChange={(e) => update({ ip_action: e.target.value })}>
-              {["parse", "validate", "cidr_contains", "subnet", "is_private", "is_v6", "range", "to_int", "from_int"].map((a) => <option key={a} value={a}>{a}</option>)}
+              {["parse", "validate", "cidr_contains", "subnet", "is_private", "is_v6", "range", "to_int", "from_int"].map((a) => <option key={a} value={a}>{t(`node.action.${a}`)}</option>)}
             </select>
           </BuilderField>
           <BuilderRowPair>

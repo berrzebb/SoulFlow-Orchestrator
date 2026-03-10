@@ -10,7 +10,7 @@ function CircuitBreakerEditPanel({ node, update, t }: EditPanelProps) {
       <BuilderRowPair>
         <BuilderField label={t("workflows.action")} required>
           <select autoFocus className="input input--sm" required value={action} onChange={(e) => update({ action: e.target.value })} aria-required="true">
-            {ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
+            {ACTIONS.map((a) => <option key={a} value={a}>{t(`node.action.${a}`)}</option>)}
           </select>
         </BuilderField>
         <BuilderField label={t("workflows.circuit_breaker_name")} required>

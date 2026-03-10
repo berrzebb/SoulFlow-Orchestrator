@@ -28,10 +28,10 @@ function PromiseEditPanel({ node, update, t }: EditPanelProps) {
             <input className="input input--sm" value={String(node.key || "")} onChange={(e) => update({ key: e.target.value })} placeholder="never_delete_without_backup" />
           </BuilderField>
           <BuilderField label={t("workflows.promise_value")}>
-            <textarea className="input" rows={2} value={String(node.value || "")} onChange={(e) => update({ value: e.target.value })} placeholder="I will always create a backup before deleting data" />
+            <textarea className="input" rows={2} value={String(node.value || "")} onChange={(e) => update({ value: e.target.value })} placeholder={t("node.promise.value_placeholder")} />
           </BuilderField>
           <BuilderField label={t("workflows.promise_rationale")}>
-            <input className="input input--sm" value={String(node.rationale || "")} onChange={(e) => update({ rationale: e.target.value || undefined })} placeholder="Why this promise is important" />
+            <input className="input input--sm" value={String(node.rationale || "")} onChange={(e) => update({ rationale: e.target.value || undefined })} placeholder={t("node.promise.rationale_placeholder")} />
           </BuilderField>
           <BuilderRowPair>
             <BuilderField label={t("workflows.decision_priority")}>

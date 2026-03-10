@@ -6,7 +6,7 @@ function TaskEditPanel({ node, update, t, options }: EditPanelProps) {
   return (
     <>
       <BuilderField label={t("workflows.task_title")} required>
-        <input autoFocus required className="input input--sm" value={String(node.task_title || "")} onChange={(e) => update({ task_title: e.target.value })} placeholder="Process user request" aria-required="true" />
+        <input autoFocus required className="input input--sm" value={String(node.task_title || "")} onChange={(e) => update({ task_title: e.target.value })} placeholder={t("node.task.title_placeholder")} aria-required="true" />
       </BuilderField>
       <BuilderField label={t("workflows.task_objective")} required>
         <textarea required className="input code-textarea" rows={3} value={String(node.objective || "")} onChange={(e) => update({ objective: e.target.value })} spellCheck={false} placeholder="{{memory.user_request}}" aria-required="true" />

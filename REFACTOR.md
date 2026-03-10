@@ -232,6 +232,21 @@
 
 ---
 
+## 이터레이션 10 신규 발견
+
+### ✅ I10-A: `web/nodes/` — 하드코딩된 placeholder 텍스트 12곳 [i18n]
+- **위치**: `decision.tsx`(2), `promise.tsx`(2), `assert.tsx`(1), `email.tsx`(2), `hash.tsx`(2), `task.tsx`(1), `wait.tsx`(1), `markdown.tsx`(1)
+- **문제**: `placeholder="..."` 속성에 영문 하드코딩 — 로케일 전환 시 변경 불가
+- **해결**: `t("node.xxx.yyy_placeholder")` 키로 교체. `en.json`/`ko.json`에 13개 키 추가
+
+### ✅ I10-B: `web/nodes/` — 액션 드롭다운 옵션 텍스트 하드코딩 [i18n]
+- **위치**: 50개 이상의 노드 tsx 파일
+- **문제**: `<option>{a}</option>` 패턴으로 액션명 원문 노출 — 로케일 전환 무의미
+- **해결**: `t(\`node.action.${a}\`)` 패턴으로 교체. `en.json`/`ko.json`에 ~230개 `node.action.*` 키 추가
+- **예외**: 기술 명칭(md5/sha256/gzip/brotli/ALGORITHMS 배열 등)은 번역 불필요로 제외
+
+---
+
 ## 최종 요약
 
 **이터레이션 3 완료**: 6개 항목 (P1-A~F)
@@ -241,8 +256,10 @@
 **이터레이션 7 완료**: 1개 항목 (I7-A) + God class 스캔 완료
 **이터레이션 8 완료**: 3개 항목 (I8-A~C)
 **이터레이션 9 완료**: 2개 항목 (I9-A~B)
-**총 완료**: 32개 항목
+**이터레이션 10 완료**: 2개 항목 (I10-A~B)
+**총 완료**: 34개 항목
 **SKIP (YAGNI/의도적 설계)**: 25개 항목 (이터레이션 7 스캔: 7개 추가)
 **신규 헬퍼/유틸**: `runner_deps`, `finalize_phase`, `html-strip.ts`, `string-match.ts`, `make_document_handler`, `make_abort_signal`, `resolve_reply_to` (channels/types.ts로 이동), `store_or_503` (kanban.ts)
 **보안 개선**: `validate_url`에 `.local` mDNS 도메인 차단 추가
 **코드 제거**: ~127줄 (4 document 핸들러 통합) + 9줄 (AbortController 잔존) + relay 패턴 3곳 + `resolve_reply_to` 2중복 제거 + sleep 5중복 제거 + request-preflight 4함수 복사본 제거 + kanban 가드 32중복 단순화
+**i18n 완료**: placeholder 13키 + action명 ~230키 추가 (이터레이션 10)

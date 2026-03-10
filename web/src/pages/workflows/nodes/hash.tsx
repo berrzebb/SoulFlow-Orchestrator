@@ -11,7 +11,7 @@ function HashEditPanel({ node, update, t }: EditPanelProps) {
     <>
       <BuilderField label={t("workflows.action")} required>
         <select autoFocus className="input input--sm" required value={action} onChange={(e) => update({ action: e.target.value })} aria-required="true">
-          {ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
+          {ACTIONS.map((a) => <option key={a} value={a}>{t(`node.action.${a}`)}</option>)}
         </select>
       </BuilderField>
       <BuilderField label={t("workflows.field_input")} required>
@@ -33,12 +33,12 @@ function HashEditPanel({ node, update, t }: EditPanelProps) {
       )}
       {(action === "hmac" || action === "verify") && (
         <BuilderField label={t("workflows.field_key")} required={action === "hmac"}>
-          <input className="input input--sm" required={action === "hmac"} value={String(node.key || "")} onChange={(e) => update({ key: e.target.value })} placeholder="HMAC secret key" aria-required={action === "hmac" ? "true" : undefined} />
+          <input className="input input--sm" required={action === "hmac"} value={String(node.key || "")} onChange={(e) => update({ key: e.target.value })} placeholder={t("node.hash.key_placeholder")} aria-required={action === "hmac" ? "true" : undefined} />
         </BuilderField>
       )}
       {action === "verify" && (
         <BuilderField label={t("workflows.hash_expected")} required>
-          <input className="input input--sm" required value={String(node.expected || "")} onChange={(e) => update({ expected: e.target.value })} placeholder="Expected hash value" aria-required="true" />
+          <input className="input input--sm" required value={String(node.expected || "")} onChange={(e) => update({ expected: e.target.value })} placeholder={t("node.hash.expected_placeholder")} aria-required="true" />
         </BuilderField>
       )}
     </>

@@ -53,7 +53,7 @@ function AssertEditPanel({ node, update, t }: EditPanelProps) {
                 <input className="input input--sm" value={a.condition} onChange={(e) => updateAssertion(i, { condition: e.target.value })} placeholder="memory.count > 0" />
               </BuilderField>
               <BuilderField label={t("workflows.assert_message")}>
-                <input className="input input--sm" value={a.message} onChange={(e) => updateAssertion(i, { message: e.target.value })} placeholder="Count must be positive" />
+                <input className="input input--sm" value={a.message} onChange={(e) => updateAssertion(i, { message: e.target.value })} placeholder={t("node.assert.msg_placeholder")} />
               </BuilderField>
             </>
           )}

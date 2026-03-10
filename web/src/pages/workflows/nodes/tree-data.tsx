@@ -11,7 +11,7 @@ function TreeDataEditPanel({ node, update, t }: EditPanelProps) {
     <>
       <BuilderField label={t("workflows.action")} required>
         <select autoFocus className="input input--sm" value={action} onChange={(e) => update({ action: e.target.value })}>
-          {TREE_ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
+          {TREE_ACTIONS.map((a) => <option key={a} value={a}>{t(`node.action.${a}`)}</option>)}
         </select>
       </BuilderField>
       {needs_tree && (

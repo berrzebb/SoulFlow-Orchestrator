@@ -20,7 +20,7 @@ function AnalyzerEditPanel({ node, update, t, options }: EditPanelProps) {
         <>
           <BuilderField label={t("workflows.action")}>
             <select className="input input--sm" value={String(node.sentiment_action || "analyze")} onChange={(e) => update({ sentiment_action: e.target.value })}>
-              {SENTIMENT_ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
+              {SENTIMENT_ACTIONS.map((a) => <option key={a} value={a}>{t(`node.action.${a}`)}</option>)}
             </select>
           </BuilderField>
           <BuilderField label={t("workflows.analyzer_input")} required>

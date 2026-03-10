@@ -23,7 +23,7 @@ function WaitEditPanel({ node, update, t }: EditPanelProps) {
       )}
       {String(node.wait_type) === "approval" && (
         <BuilderField label={t("workflows.wait_approval")}>
-          <textarea className="input" rows={2} value={String(node.approval_message || "")} onChange={(e) => update({ approval_message: e.target.value })} placeholder="Please approve this step" />
+          <textarea className="input" rows={2} value={String(node.approval_message || "")} onChange={(e) => update({ approval_message: e.target.value })} placeholder={t("node.wait.approval_placeholder")} />
         </BuilderField>
       )}
     </>

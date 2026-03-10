@@ -14,7 +14,7 @@ function ColorEditPanel({ node, update, t }: EditPanelProps) {
     <>
       <BuilderField label={t("workflows.action")} required>
         <select autoFocus className="input input--sm" value={action} onChange={(e) => update({ action: e.target.value })}>
-          {COLOR_ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
+          {COLOR_ACTIONS.map((a) => <option key={a} value={a}>{t(`node.action.${a}`)}</option>)}
         </select>
       </BuilderField>
       <BuilderField label={t("workflows.color_value")} required>

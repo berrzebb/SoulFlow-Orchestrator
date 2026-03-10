@@ -51,7 +51,7 @@ function TableEditPanel({ node, update, t }: EditPanelProps) {
       {["pivot", "aggregate"].includes(op) && (
         <BuilderField label={t("workflows.field_agg")}>
           <select className="input input--sm" value={String(node.agg || "count")} onChange={(e) => update({ agg: e.target.value })}>
-            {["sum", "avg", "min", "max", "count"].map((a) => <option key={a} value={a}>{a}</option>)}
+            {["sum", "avg", "min", "max", "count"].map((a) => <option key={a} value={a}>{t(`node.action.${a}`)}</option>)}
           </select>
         </BuilderField>
       )}

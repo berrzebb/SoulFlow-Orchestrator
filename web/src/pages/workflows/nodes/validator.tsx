@@ -15,7 +15,7 @@ function ValidatorEditPanel({ node, update, t }: EditPanelProps) {
       {op === "email" && (
         <BuilderField label={t("workflows.validator_email_action")}>
           <select className="input input--sm" value={String(node.email_action || "validate")} onChange={(e) => update({ email_action: e.target.value })}>
-            {EMAIL_ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
+            {EMAIL_ACTIONS.map((a) => <option key={a} value={a}>{t(`node.action.${a}`)}</option>)}
           </select>
         </BuilderField>
       )}

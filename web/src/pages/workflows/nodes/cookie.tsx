@@ -9,7 +9,7 @@ function CookieEditPanel({ node, update, t }: EditPanelProps) {
     <>
       <BuilderField label={t("workflows.action")} required>
         <select autoFocus className="input input--sm" required value={action} onChange={(e) => update({ action: e.target.value })} aria-required="true">
-          {ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
+          {ACTIONS.map((a) => <option key={a} value={a}>{t(`node.action.${a}`)}</option>)}
         </select>
       </BuilderField>
       {(action === "parse" || action === "parse_set_cookie" || action === "is_expired" || action === "validate" || action === "jar_merge") && (

@@ -28,10 +28,10 @@ function DecisionEditPanel({ node, update, t }: EditPanelProps) {
             <input className="input input--sm" value={String(node.key || "")} onChange={(e) => update({ key: e.target.value })} placeholder="coding_style" />
           </BuilderField>
           <BuilderField label={t("workflows.decision_value")}>
-            <textarea className="input" rows={2} value={String(node.value || "")} onChange={(e) => update({ value: e.target.value })} placeholder="Always use TypeScript strict mode" />
+            <textarea className="input" rows={2} value={String(node.value || "")} onChange={(e) => update({ value: e.target.value })} placeholder={t("node.decision.value_placeholder")} />
           </BuilderField>
           <BuilderField label={t("workflows.decision_rationale")}>
-            <input className="input input--sm" value={String(node.rationale || "")} onChange={(e) => update({ rationale: e.target.value || undefined })} placeholder="Why this decision was made" />
+            <input className="input input--sm" value={String(node.rationale || "")} onChange={(e) => update({ rationale: e.target.value || undefined })} placeholder={t("node.decision.rationale_placeholder")} />
           </BuilderField>
           <BuilderRowPair>
             <BuilderField label={t("workflows.decision_priority")}>

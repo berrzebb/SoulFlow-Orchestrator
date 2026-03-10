@@ -7,7 +7,7 @@ function MarkdownEditPanel({ node, update, t }: EditPanelProps) {
     <>
       <BuilderField label={t("workflows.operation")}>
         <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
-          {["table", "list", "checklist", "toc", "html_to_md", "badge", "link", "image", "code_block", "details", "task_list"].map((o) => <option key={o} value={o}>{o}</option>)}
+          {["table", "list", "checklist", "toc", "html_to_md", "badge", "link", "image", "code_block", "details", "task_list"].map((o) => <option key={o} value={o}>{t(`node.action.${o}`)}</option>)}
         </select>
       </BuilderField>
       {["table", "list", "checklist", "task_list"].includes(op) && (
@@ -36,7 +36,7 @@ function MarkdownEditPanel({ node, update, t }: EditPanelProps) {
       )}
       {op === "details" && (
         <BuilderField label={t("workflows.markdown_summary")}>
-          <input className="input input--sm" value={String(node.summary || "")} onChange={(e) => update({ summary: e.target.value })} placeholder="Click to expand" />
+          <input className="input input--sm" value={String(node.summary || "")} onChange={(e) => update({ summary: e.target.value })} placeholder={t("node.markdown.summary_placeholder")} />
         </BuilderField>
       )}
       {op === "code_block" && (

@@ -13,7 +13,7 @@ function UrlEditPanel({ node, update, t }: EditPanelProps) {
     <>
       <BuilderField label={t("workflows.action")} required>
         <select autoFocus className="input input--sm" value={action} onChange={(e) => update({ action: e.target.value })}>
-          {URL_ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
+          {URL_ACTIONS.map((a) => <option key={a} value={a}>{t(`node.action.${a}`)}</option>)}
         </select>
       </BuilderField>
       {!NEEDS_SEGS.includes(action) && (

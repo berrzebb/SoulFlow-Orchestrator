@@ -7,7 +7,7 @@ function MathEditPanel({ node, update, t }: EditPanelProps) {
     <>
       <BuilderField label={t("workflows.operation")}>
         <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
-          {["eval", "convert", "compound_interest", "loan_payment", "roi", "percentage", "round", "gcd", "lcm", "factorial", "fibonacci", "currency"].map((o) => <option key={o} value={o}>{o}</option>)}
+          {["eval", "convert", "compound_interest", "loan_payment", "roi", "percentage", "round", "gcd", "lcm", "factorial", "fibonacci", "currency"].map((o) => <option key={o} value={o}>{t(`node.action.${o}`)}</option>)}
         </select>
       </BuilderField>
       {op === "eval" && (
@@ -83,7 +83,7 @@ function MathEditPanel({ node, update, t }: EditPanelProps) {
           <BuilderRowPair>
             <BuilderField label={t("workflows.math_currency_action")}>
               <select className="input input--sm" value={String(node.currency_action || "info")} onChange={(e) => update({ currency_action: e.target.value })}>
-                {["info", "format", "convert", "list", "compare", "parse"].map((a) => <option key={a} value={a}>{a}</option>)}
+                {["info", "format", "convert", "list", "compare", "parse"].map((a) => <option key={a} value={a}>{t(`node.action.${a}`)}</option>)}
               </select>
             </BuilderField>
             {["info", "format"].includes(String(node.currency_action || "info")) && (
