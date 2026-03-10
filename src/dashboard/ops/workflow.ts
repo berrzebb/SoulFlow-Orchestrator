@@ -15,6 +15,16 @@ import { build_node_catalog } from "../../agent/tools/workflow-catalog.js";
 import { short_id } from "../../utils/common.js";
 import type { Logger } from "../../logger.js";
 
+/** provider_type → ProviderId 매핑 (suggest 기능 공용). */
+const PROVIDER_TYPE_TO_ID: Record<string, import("../../providers/types.js").ProviderId> = {
+  claude_cli: "claude_code", claude_sdk: "claude_code",
+  codex_cli: "chatgpt", codex_appserver: "chatgpt",
+  gemini_cli: "gemini",
+  openrouter: "openrouter",
+  ollama: "orchestrator_llm", openai_compatible: "orchestrator_llm", container_cli: "orchestrator_llm",
+};
+const VALID_PROVIDER_IDS = new Set<string>(["chatgpt", "claude_code", "openrouter", "orchestrator_llm", "gemini"]);
+
 const WORKFLOW_SCHEMA_REFERENCE = `## Full Workflow Definition Schema
 \`\`\`
 WorkflowDefinition {
@@ -176,6 +186,25 @@ export function create_workflow_ops(deps: {
   }
 
   const pending_responses = deps.hitl_pending_store;
+
+  /** run_phase_loop 두 번째 인자 — create/resume/resume_orphaned 공통. */
+  const runner_deps = {
+    subagents, store, logger,
+    load_template: (name: string) => load_workflow_template(workspace, name),
+    providers: deps.providers,
+    decision_service: deps.decision_service,
+    promise_service: deps.promise_service,
+    embed: deps.embed,
+    vector_store: deps.vector_store,
+    oauth_fetch: deps.oauth_fetch,
+    get_webhook_data: deps.get_webhook_data,
+    wait_kanban_event: deps.wait_kanban_event,
+    create_task: deps.create_task,
+    query_db: deps.query_db,
+    on_kanban_trigger_waiting: deps.on_kanban_trigger_waiting,
+    kanban_store: deps.kanban_store,
+    on_event: on_workflow_event,
+  };
 
   function build_ask_user(workflow_id: string, target_channel: string, target_chat_id: string) {
     return async (question: string): Promise<string> => {
@@ -355,7 +384,7 @@ export function create_workflow_ops(deps: {
         initial_memory: { origin },
         workspace,
         field_mappings,
-      }, { subagents, store, logger, load_template: (name) => load_workflow_template(workspace, name), providers: deps.providers, decision_service: deps.decision_service, promise_service: deps.promise_service, embed: deps.embed, vector_store: deps.vector_store, oauth_fetch: deps.oauth_fetch, get_webhook_data: deps.get_webhook_data, wait_kanban_event: deps.wait_kanban_event, create_task: deps.create_task, query_db: deps.query_db, on_kanban_trigger_waiting: deps.on_kanban_trigger_waiting, kanban_store: deps.kanban_store, on_event: on_workflow_event }).catch((err) => {
+      }, runner_deps).catch((err) => {
         logger.error("workflow_create_run_error", { workflow_id, error: String(err) });
       });
 
@@ -502,7 +531,7 @@ export function create_workflow_ops(deps: {
         workspace,
         initial_memory: state.memory,
         resume_state: state,
-      }, { subagents, store, logger, load_template: (name) => load_workflow_template(workspace, name), providers: deps.providers, decision_service: deps.decision_service, promise_service: deps.promise_service, embed: deps.embed, vector_store: deps.vector_store, oauth_fetch: deps.oauth_fetch, get_webhook_data: deps.get_webhook_data, wait_kanban_event: deps.wait_kanban_event, create_task: deps.create_task, query_db: deps.query_db, on_kanban_trigger_waiting: deps.on_kanban_trigger_waiting, kanban_store: deps.kanban_store, on_event: on_workflow_event }).catch((err) => {
+      }, runner_deps).catch((err) => {
         logger.error("workflow_resume_run_error", { workflow_id, error: String(err) });
       });
 
@@ -537,17 +566,7 @@ export function create_workflow_ops(deps: {
           workspace,
           initial_memory: state.memory,
           resume_state: state,
-        }, {
-          subagents, store, logger,
-          load_template: (name) => load_workflow_template(workspace, name),
-          providers: deps.providers, decision_service: deps.decision_service,
-          promise_service: deps.promise_service, embed: deps.embed,
-          vector_store: deps.vector_store, oauth_fetch: deps.oauth_fetch,
-          get_webhook_data: deps.get_webhook_data, wait_kanban_event: deps.wait_kanban_event,
-          create_task: deps.create_task, query_db: deps.query_db,
-          on_kanban_trigger_waiting: deps.on_kanban_trigger_waiting,
-          kanban_store: deps.kanban_store, on_event: on_workflow_event,
-        }).catch((err) => {
+        }, runner_deps).catch((err) => {
           logger.error("workflow_orphan_resume_error", { workflow_id, error: String(err) });
         });
       }
@@ -628,14 +647,6 @@ export function create_workflow_ops(deps: {
       // provider_id가 "auto"이거나 미지정 시 tool-loop 지원 프로바이더 자동 선택.
       // orchestrator_llm(Ollama 등)은 multi-turn tool-call 루프를 신뢰할 수 없으므로 제외.
       // 자동 선택 시: 사용자가 Providers 페이지에서 설정한 priority 순서를 따름.
-      const PROVIDER_TYPE_TO_ID: Record<string, import("../../providers/types.js").ProviderId> = {
-        claude_cli: "claude_code", claude_sdk: "claude_code",
-        codex_cli: "chatgpt", codex_appserver: "chatgpt",
-        gemini_cli: "gemini",
-        openrouter: "openrouter",
-        ollama: "orchestrator_llm", openai_compatible: "orchestrator_llm", container_cli: "orchestrator_llm",
-      };
-      const VALID_PROVIDER_IDS = new Set<string>(["chatgpt", "claude_code", "openrouter", "orchestrator_llm", "gemini"]);
       const requested = options?.provider_id;
       const summaries = deps.get_provider_summaries?.() ?? [];
       let suggest_provider_id: import("../../providers/types.js").ProviderId | undefined;

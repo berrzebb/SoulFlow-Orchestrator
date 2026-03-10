@@ -367,6 +367,7 @@
 | http에 user-agent 추가 | ✅ 완료 (http.tsx user_agent 필드 + http.ts 헤더 설정) |
 | text에 filename_safe/transliterate 추가 | ✅ 완료 (text.tsx + text.ts SlugTool 위임) |
 | math에 unit-convert 통합 | ✅ MathTool 이미 convert 내장 (temperature 포함) |
+| network dns DnsTool 업그레이드 | ✅ 완료 (dns_record_type 드롭다운 추가, MX/TXT/NS/CNAME/SRV 지원) |
 
 ### 낮은 우선순위 (신규 노드 고려)
 - url.ts → URL 파싱 노드

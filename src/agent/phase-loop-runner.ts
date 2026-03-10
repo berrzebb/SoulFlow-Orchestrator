@@ -369,12 +369,7 @@ export async function run_phase_loop(
 
       if (mode === "interactive") {
         await run_looping_phase(state, phase_def, phase_state, prev_context, agent_deps, INTERACTIVE_CONFIG);
-        phase_state.status = "completed";
-        state.updated_at = now_iso();
-        merge_phase_results_to_memory(state, phase_state);
-        await store.upsert(state);
-        emit(on_event, { type: "phase_completed", workflow_id: state.workflow_id, phase_id: phase_def.phase_id });
-        options.on_phase_change?.(state);
+        await finalize_phase(state, phase_state, phase_def, store, on_event, options);
         node_idx++;
         continue;
       }
@@ -527,12 +522,7 @@ export async function run_phase_loop(
       }
 
       // 페이즈 완료
-      phase_state.status = "completed";
-      state.updated_at = now_iso();
-      merge_phase_results_to_memory(state, phase_state);
-      await store.upsert(state);
-      emit(on_event, { type: "phase_completed", workflow_id: state.workflow_id, phase_id: phase_def.phase_id });
-      options.on_phase_change?.(state);
+      await finalize_phase(state, phase_state, phase_def, store, on_event, options);
       node_idx++;
     }
 
@@ -1051,6 +1041,23 @@ function build_phase_context(prev_phase: PhaseState, template?: string): string 
     parts.push(`### Critic Review\n${prev_phase.critic.review}`);
   }
   return parts.join("\n\n");
+}
+
+/** 페이즈 완료 처리: 상태 전환 + 메모리 병합 + 영속 + 이벤트. */
+async function finalize_phase(
+  state: PhaseLoopState,
+  phase_state: PhaseState,
+  phase_def: PhaseDefinition,
+  store: PhaseWorkflowStoreLike,
+  on_event: ((event: PhaseLoopEvent) => void) | undefined,
+  options: PhaseLoopRunOptions,
+): Promise<void> {
+  phase_state.status = "completed";
+  state.updated_at = now_iso();
+  merge_phase_results_to_memory(state, phase_state);
+  await store.upsert(state);
+  emit(on_event, { type: "phase_completed", workflow_id: state.workflow_id, phase_id: phase_def.phase_id });
+  options.on_phase_change?.(state);
 }
 
 function merge_phase_results_to_memory(state: PhaseLoopState, phase: PhaseState): void {

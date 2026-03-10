@@ -2,7 +2,7 @@
 
 > 5대 원칙(YAGNI, DRY, SOLID, KISS, LoD) 기반 리팩토링 추적 문서.
 > 이터레이션마다 이 파일을 먼저 읽고, 처리 후 상태를 업데이트합니다.
-> 마지막 업데이트: 2026-03-10 (이터레이션 2)
+> 마지막 업데이트: 2026-03-10 (이터레이션 3)
 
 ---
 
@@ -77,8 +77,49 @@
 
 ---
 
+---
+
+## 이터레이션 3 신규 발견
+
+### ✅ P1-A: `dashboard/ops/workflow.ts` — `run_phase_loop` deps 3중복 [DRY]
+- **위치**: create/resume/resume_orphaned 3곳
+- **해결**: `runner_deps` 상수 추출 완료
+
+### ✅ P1-B: `channels/manager.ts` — `is_status_mode` 2중복 [DRY]
+- **위치**: `invoke_and_reply` L628, `deliver_result` L769
+- **해결**: `deliver_result(... is_status_mode)` 파라미터 전달로 수정 완료
+
+### ✅ P1-C: `dashboard/ops/workflow.ts` — `PROVIDER_TYPE_TO_ID`/`VALID_PROVIDER_IDS` 함수 내부 [DRY, KISS]
+- **해결**: 모듈 레벨 상수로 이동 완료
+
+### ✅ P1-D: `agent/phase-loop-runner.ts` — "페이즈 완료" 6줄 패턴 2중복 [DRY]
+- **위치**: interactive 경로(L372-378), 일반 경로(L530-535) — 동일 6줄 패턴
+- **해결**: `finalize_phase(state, phase_state, phase_def, store, on_event, options)` 헬퍼 추출 완료
+
+---
+
+## 코드베이스 전체 스캔 결과 (이터레이션 3)
+
+### 조사 완료 → SKIP 결정
+
+| 파일 | 항목 | 결론 |
+|------|------|------|
+| `agent/backends/codex-appserver.agent.ts` vs `claude-sdk.agent.ts` | SDK vs JSON-RPC 구현 차이 | 의도적 다형성 — DRY 아님 |
+| `channels/telegram.channel.ts` vs `slack.channel.ts` | 채널 인터페이스 구현 | 의도적 다형성 — DRY 아님 |
+| `dashboard/routes/kanban.ts` + 기타 라우트 | `if (!store) {...}` 가드 반복 | 라우트마다 다른 컨텍스트, 추출 시 오버엔지니어링 |
+| `agent/phase-loop-runner.ts` | `state.updated_at = now_iso(); store.upsert(state)` 다수 반복 | 상태기계 특성상 각 전환 지점이 다름 — YAGNI |
+| `agent/skills.service.ts` | inline regex 5개 (L407, L422, L427, L434, L441) | 각 1회 사용, 메서드 내부 — 추출 불필요 |
+| `providers/orchestrator-llm.runtime.ts` | Docker/Podman 엔진 처리 | 의도적 분기 — DRY 아님 |
+| `agent/subagents.ts` | 990줄, 복잡하나 단일 책임 | SRP 준수 확인 |
+| `dashboard/service.ts` | 725줄, 28개 라우트 import | 라우트 파일 분리 완료 상태 |
+| `cron/service.ts` | 828줄 | DB 스키마·스케줄 로직 분리됨, 적절 |
+| `agent/tools/index.ts` | 639줄, 100+ import | 도구 레지스트리 패턴, 정상 |
+
+---
+
 ## 최종 요약
 
-**완료**: 9개 항목 (classifier 4 + command-intent 1 + html-strip 1 + string-match 1 + cron 1 + args_lower 1)
-**SKIP (YAGNI/의도적 설계)**: 8개 항목
-**신규 유틸 생성**: `src/utils/html-strip.ts`, `src/utils/string-match.ts`
+**이터레이션 3 완료**: 4개 항목 (P1-A~D)
+**총 완료**: 13개 항목
+**SKIP (YAGNI/의도적 설계)**: 18개 항목
+**신규 헬퍼/유틸**: `runner_deps`, `finalize_phase`, `html-strip.ts`, `string-match.ts`

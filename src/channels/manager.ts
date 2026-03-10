@@ -717,7 +717,7 @@ export class ChannelManager implements ServiceLike {
           this.logger.debug("native_stream_stop_failed", { error: error_message(e) }),
         );
       }
-      await this.deliver_result(provider, message, alias, result, stream_state.message_id, stream_state.tool_count);
+      await this.deliver_result(provider, message, alias, result, stream_state.message_id, stream_state.tool_count, is_status_mode);
     } catch (e) {
       if (run_id) this.tracker!.end(run_id, "failed", error_message(e));
       this.logger.error("invoke failed", { alias, error: error_message(e) });
@@ -732,7 +732,7 @@ export class ChannelManager implements ServiceLike {
 
   private async deliver_result(
     provider: ChannelProvider, message: InboundMessage, alias: string,
-    result: OrchestrationResult, stream_message_id?: string, tool_count = 0,
+    result: OrchestrationResult, stream_message_id?: string, tool_count = 0, is_status_mode = false,
   ): Promise<void> {
     if (result.suppress_reply) return;
     if (!result.reply) {
@@ -766,7 +766,6 @@ export class ChannelManager implements ServiceLike {
     };
 
     // status mode 또는 도구 사용: 상태 메시지 → "✓ 완료" + 최종 답변 새 메시지 (web은 제외)
-    const is_status_mode = provider !== "web" && this.config.streaming.enabled && this.config.streaming.mode === "status";
     if ((is_status_mode || (provider !== "web" && tool_count > 0)) && stream_message_id) {
       try {
         await this.registry.edit_message(provider, message.chat_id, stream_message_id, this.render_msg({ kind: "status_completed" }, render_key(provider, message.chat_id)));
