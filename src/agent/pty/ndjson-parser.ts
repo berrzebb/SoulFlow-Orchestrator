@@ -2,6 +2,9 @@
 
 import type { CliAdapter, AgentOutputMessage } from "./types.js";
 
+/** 버퍼 최대 크기(바이트). 초과 시 버퍼를 버려 메모리 고갈 방지. */
+const MAX_BUFFER_BYTES = 10 * 1024 * 1024; // 10MB
+
 export class NdjsonParser {
   private buffer = "";
 
@@ -10,6 +13,10 @@ export class NdjsonParser {
   /** 스트림 청크를 받아 파싱된 메시지 배열을 반환. */
   feed(chunk: string): AgentOutputMessage[] {
     this.buffer += chunk;
+    if (this.buffer.length > MAX_BUFFER_BYTES) {
+      this.buffer = "";
+      return [{ type: "error", code: "buffer_overflow", message: "ndjson buffer overflow — discarding" }];
+    }
     const results: AgentOutputMessage[] = [];
 
     let newline_idx: number;

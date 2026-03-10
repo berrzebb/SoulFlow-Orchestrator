@@ -90,21 +90,25 @@ WorkflowDefinition {
 Example: { from_node: "fetch-1", from_field: "body.items[0].id", to_node: "set-2", to_field: "value" }
 
 ### TriggerNodeRecord
+trigger_nodes define WHEN a workflow starts, NOT how execution branches.
+For conditional branching inside the workflow, use IF/condition nodes in orche_nodes.
 \`\`\`
 {
   id: string,
-  trigger_type: "cron" | "webhook" | "manual" | "channel_message" | "kanban",
-  schedule?: string,           // cron expression (for cron)
-  timezone?: string,
-  webhook_path?: string,       // (for webhook)
-  channel_type?: string,       // (for channel_message)
-  chat_id?: string,
-  board_id?: string,           // (for kanban)
-  actions?: string[],          // (for kanban) e.g. ["created", "moved"]
-  column_id?: string,          // (for kanban) optional column filter
+  trigger_type: "cron" | "webhook" | "manual" | "channel_message" | "kanban_event" | "filesystem_watch",
+  // cron: schedule (cron expr, e.g. "0 9 * * 1-5"), timezone (optional, e.g. "Asia/Seoul")
+  // webhook: webhook_path (e.g. "/hooks/my-event")
+  // channel_message: channel_type (e.g. "slack"), chat_id (optional, specific chat)
+  // kanban_event: kanban_board_id, kanban_actions (["created","moved"]), kanban_column_id (optional)
+  // filesystem_watch: watch_path, watch_events (["add","change","unlink"]), watch_pattern (glob), watch_batch_ms
+  // manual: no extra fields required
 }
 \`\`\`
-
+Examples:
+- Cron every weekday 9am KST: { id: "trig-1", trigger_type: "cron", schedule: "0 9 * * 1-5", timezone: "Asia/Seoul" }
+- Slack message trigger: { id: "trig-1", trigger_type: "channel_message", channel_type: "slack" }
+- Webhook: { id: "trig-1", trigger_type: "webhook", webhook_path: "/hooks/deploy" }
+- Multiple triggers = same workflow starts on ANY matched trigger (OR relationship, not branching)
 ### EndNodeRecord
 \`\`\`
 {
@@ -892,14 +896,37 @@ export function create_workflow_ops(deps: {
           : "";
 
         const system = [
-          "You are a workflow editor agent. Modify the workflow using the provided tools.",
-          "STRATEGY:",
-          "1. The workflow overview is already provided in the user message — do NOT call get_overview() first.",
-          "2. Call read_section('phase:{id}') or 'node:{id}' for sections that need changes.",
-          "3. Modify only the necessary fields and call update_section(path, json).",
-          "4. Repeat for each section that needs changes.",
-          "5. Call done() when finished. Never skip done().",
-          "RULES: Preserve untouched fields. Use search_tool/search_skill to find IDs by description.",
+          "You are a workflow editor agent. Modify the workflow definition using the provided tools.",
+          "",
+          "## STRATEGY",
+          "1. Workflow overview is in the user message — do NOT call get_overview() first.",
+          "2. Call read_section('phase:{id}') or read_section('trigger:{id}') for sections needing changes.",
+          "3. Modify only necessary fields and call update_section(path, json).",
+          "4. Repeat for each section. Call done() last. NEVER skip done().",
+          "",
+          "## TRIGGER vs FLOW — critical distinction",
+          "trigger_nodes = entry conditions (WHEN workflow starts). Triggers have type-specific required fields:",
+          "  cron: schedule (e.g. '0 9 * * 1-5'), timezone optional",
+          "  channel_message: channel_type (e.g. 'slack'), chat_id optional",
+          "  webhook: webhook_path (e.g. '/hooks/my-event')",
+          "  kanban_event: kanban_board_id (string), kanban_actions (string[]), kanban_column_id optional",
+          "  filesystem_watch: watch_path, watch_events (['add','change','unlink']), watch_pattern, watch_batch_ms optional",
+          "  manual: no extra fields",
+          "Multiple triggers = OR relationship (any one can start the workflow).",
+          "",
+          "orche_nodes = workflow execution DAG (WHAT happens). Required fields: node_id, node_type, title.",
+          "  Use depends_on[] to set execution order. Use IF/condition nodes for branching.",
+          "  node_id must be unique kebab-case (e.g. 'fetch-data-1', 'if-cond-2').",
+          "",
+          "## NODE CATEGORY GUIDE",
+          "Core → ai_agent, spawn_agent, llm_call: AI processing and delegation.",
+          "Flow → if_node, merge, loop, wait, set: branching, loops, data control.",
+          "HTTP/Data → http_request, graphql, rss, web_search: external APIs and data fetching.",
+          "Text → template, json_path, regex, html_parser: text and data transformation.",
+          "Notification → slack_message, email, notification: sending alerts.",
+          "Always use search_tool()/search_skill() to verify exact tool_id/skill_name before using.",
+          "",
+          "RULES: Preserve untouched fields. Never remove existing nodes unless asked. depends_on must reference existing node_ids.",
           provider_section ? `\n## Available Backends\n${provider_section}` : "",
           "",
           WORKFLOW_SCHEMA_REFERENCE,

@@ -212,6 +212,8 @@ export interface WorkflowDefinition {
   hitl_channel?: HitlChannelDefinition;
   /** 오케스트레이션 노드 (UI에서 추가한 HTTP/Code/IF/Merge/Set). */
   orche_nodes?: OrcheNodeRecord[];
+  /** 종료 노드 — 채널/웹훅/HTTP/미디어로 최종 결과 출력. */
+  end_nodes?: EndNodeRecord[];
   /** 노드 간 필드 매핑 (UI에서 드래그 연결로 생성). */
   field_mappings?: FieldMapping[];
 }
@@ -223,6 +225,22 @@ export interface OrcheNodeRecord {
   title: string;
   depends_on?: string[];
   [key: string]: unknown;
+}
+
+/** 워크플로우 종료 노드 — 출력 대상(채널/웹훅/HTTP/미디어)으로 결과를 전송. */
+export interface EndNodeRecord {
+  node_id: string;
+  depends_on?: string[];
+  output_targets: string[];    // "channel" | "media" | "webhook" | "http"
+  target_config?: Record<string, {
+    message?: string;
+    url?: string;
+    status?: number;
+    data?: unknown;
+    mime_type?: string;
+    headers?: Record<string, string>;
+    body?: unknown;
+  }>;
 }
 
 /** 트리거 노드 레코드. */

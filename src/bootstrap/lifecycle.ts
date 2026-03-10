@@ -4,7 +4,8 @@ import { error_message } from "../utils/common.js";
 import type { RuntimeApp } from "../main.js";
 import type { Logger } from "../logger.js";
 
-const SHUTDOWN_TIMEOUT_MS = 5_000;
+/** 에이전트 LLM 응답 대기 시간을 고려해 넉넉히 설정. */
+const SHUTDOWN_TIMEOUT_MS = 30_000;
 
 export function register_shutdown_handlers(
   app: RuntimeApp,
@@ -13,14 +14,14 @@ export function register_shutdown_handlers(
 ): void {
   let shutting_down = false;
 
-  const on_signal = (sig: string) => {
+  const do_shutdown = (reason: string) => {
     if (shutting_down) return;
     shutting_down = true;
-    logger.info(`graceful shutdown start signal=${sig}`);
+    logger.info(`graceful shutdown start reason=${reason}`);
     clearInterval(app.session_prune_timer);
     const force_exit = setTimeout(() => {
       logger.warn("shutdown timeout — forcing exit");
-      process.exit(1);
+      void release_lock().finally(() => process.exit(1));
     }, SHUTDOWN_TIMEOUT_MS);
     force_exit.unref();
     void app.services.stop()
@@ -37,6 +38,16 @@ export function register_shutdown_handlers(
       });
   };
 
-  process.on("SIGINT", () => on_signal("SIGINT"));
-  process.on("SIGTERM", () => on_signal("SIGTERM"));
+  process.on("SIGINT", () => do_shutdown("SIGINT"));
+  process.on("SIGTERM", () => do_shutdown("SIGTERM"));
+
+  process.on("uncaughtException", (err: unknown) => {
+    logger.error(`uncaughtException: ${error_message(err)}`);
+    do_shutdown("uncaughtException");
+  });
+
+  process.on("unhandledRejection", (reason: unknown) => {
+    logger.error(`unhandledRejection: ${error_message(reason)}`);
+    do_shutdown("unhandledRejection");
+  });
 }

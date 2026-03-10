@@ -43,6 +43,7 @@ export type AgentOutputMessage =
 export type ErrorCode =
   | "timeout"
   | "crash"
+  | "buffer_overflow"
   | "token_limit"
   | "auth"
   | "rate_limit"

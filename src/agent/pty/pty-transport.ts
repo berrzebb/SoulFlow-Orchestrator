@@ -112,10 +112,25 @@ export class PtyTransport implements AgentTransport {
     }
   }
 
+  /** PTY 응답을 기다리는 최대 시간(ms). LLM 응답 대기를 포함해 넉넉히 설정. */
+  private static readonly TERMINAL_TIMEOUT_MS = 5 * 60_000;
+
   private wait_for_terminal(session_key: string): Promise<AgentOutputMessage> {
     return new Promise<AgentOutputMessage>((resolve) => {
       let resolved = false;
-      const cleanup = () => { resolved = true; output_sub.dispose(); exit_sub.dispose(); };
+      const cleanup = () => {
+        resolved = true;
+        clearTimeout(timeout);
+        output_sub.dispose();
+        exit_sub.dispose();
+      };
+
+      const timeout = setTimeout(() => {
+        if (resolved) return;
+        cleanup();
+        this._logger.warn(`wait_for_terminal timeout session=${session_key}`);
+        resolve({ type: "error", code: "timeout", message: "pty terminal wait timed out" });
+      }, PtyTransport.TERMINAL_TIMEOUT_MS);
 
       const output_sub = this.on_output((key, msg) => {
         if (resolved || key !== session_key) return;
@@ -136,6 +151,11 @@ export class PtyTransport implements AgentTransport {
             }, 50);
           })
         : { dispose: () => {} };
+
+      if (!pty) {
+        cleanup();
+        resolve({ type: "error", code: "crash", message: "pty not found for session" });
+      }
     });
   }
 }

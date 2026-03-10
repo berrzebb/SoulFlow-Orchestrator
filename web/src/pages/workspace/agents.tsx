@@ -98,6 +98,9 @@ export function AgentsTab() {
   const active_tasks = task_loops.filter((tl) => ACTIVE_STATUSES.has(tl.status));
   const completed_tasks = task_loops.filter((tl) => !ACTIVE_STATUSES.has(tl.status));
 
+  const DONE_STATUSES = new Set(["completed", "failed", "cancelled", "offline"]);
+  const active_agents = agents.filter((a) => !DONE_STATUSES.has(a.status));
+
   const { filtered: filtered_completed, search: completedSearch, setSearch: setCompletedSearch,
     statusFilter: completedStatusFilter, setStatusFilter: setCompletedStatusFilter,
     statusOptions: completed_statuses, isFiltered: completedIsFiltered } =
@@ -328,15 +331,15 @@ export function AgentsTab() {
         </Collapsible>
       )}
 
-      {/* 서브에이전트 */}
-      {agents.length > 0 && (
+      {/* 서브에이전트 — 완료/실패/취소 상태는 표시하지 않음 */}
+      {active_agents.length > 0 && (
         <>
           <SectionHeader className="section-header--spaced" titleClassName="li-flex" title={<>
             <span className="section-header__icon">🤖</span>
-            {t("agents.once_title", { count: agents.length })}
+            {t("agents.once_title", { count: active_agents.length })}
           </>} />
           <div className="office-grid">
-            {agents.map((a) => {
+            {active_agents.map((a) => {
               const cls = classify_agent(a.status);
               return (
                 <article key={a.id} className={`desk desk--${cls}`}>
@@ -349,7 +352,7 @@ export function AgentsTab() {
                     {cls === "working" && (
                       <>
                         <button className="btn btn--xs btn--danger" onClick={() => setCancelConfirm({ kind: "agent", id: a.id, label: a.label || a.id })}>{t("common.cancel")}</button>
-                        <button className="btn btn--xs" onClick={() => setSendTarget(a.id)}>{t("common.send")}</button>
+                        <button className="btn btn--xs btn--ok" onClick={() => setSendTarget(a.id)}>{t("agents.resume")}</button>
                       </>
                     )}
                   </div>

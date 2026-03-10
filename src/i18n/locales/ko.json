@@ -2500,6 +2500,8 @@
   "workflows.promise_value": "값",
   "workflows.prompt_applied": "제안이 워크플로우에 적용되었습니다",
   "workflows.prompt_failed": "제안 적용에 실패했습니다",
+  "workflows.prompt_generating": "생성 중...",
+  "workflows.prompt_patches": "섹션 적용됨",
   "workflows.prompt_hint_interactive": "사용자와 대화하며 명세를 작성합니다. [ASK_USER]로 질문, [SPEC_COMPLETE]로 종료하는 프롬프트를 작성하세요.",
   "workflows.prompt_hint_parallel": "각 에이전트가 독립 실행됩니다. 단일 작업에 집중하는 프롬프트를 작성하세요.",
   "workflows.prompt_hint_sequential_loop": "매 반복 fresh context로 실행됩니다. 반복 결과를 누적하며 [DONE]으로 종료하는 프롬프트를 작성하세요.",

@@ -288,7 +288,7 @@ export function ChatPromptBar(props: ChatPromptBarProps) {
 
         <button
           className={`chat-prompt-bar__btn${is_busy ? " chat-prompt-bar__btn--loading" : props.can_send ? " chat-prompt-bar__btn--send" : ""}`}
-          onClick={is_busy ? undefined : props.onSend}
+          onClick={is_busy ? undefined : () => props.onSend()}
           disabled={is_busy || !props.can_send}
           aria-label={is_busy ? t("chat.sending") : t("common.send")}
           aria-busy={is_busy}

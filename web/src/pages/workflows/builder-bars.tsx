@@ -2,7 +2,7 @@
  * Builder utility bars — WorkflowPromptBar, NodeRunInputBar.
  */
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { ChatPromptBar } from "../../components/chat-prompt-bar";
 import { useToast } from "../../components/toast";
 import { useT } from "../../i18n";
@@ -68,6 +68,19 @@ export function WorkflowPromptBar({ name, workflow, onApply, initialPrompt }: {
   const [streamText, setStreamText] = useState("");
   const [patchLog, setPatchLog] = useState<string[]>([]);
   const logEndRef = useRef<HTMLDivElement>(null);
+  const [elapsed, setElapsed] = useState(0);
+  const abort_ref = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    if (!loading) { setElapsed(0); return; }
+    const start = Date.now();
+    const id = setInterval(() => setElapsed(Math.floor((Date.now() - start) / 1000)), 500);
+    return () => clearInterval(id);
+  }, [loading]);
+
+  const handle_abort = useCallback(() => {
+    abort_ref.current?.abort();
+  }, []);
 
   const send = (override_text?: string) => {
     const text = (override_text ?? value).trim();
@@ -78,6 +91,8 @@ export function WorkflowPromptBar({ name, workflow, onApply, initialPrompt }: {
     setLoading(true);
     setStreamText("");
     setPatchLog([]);
+    const abort = new AbortController();
+    abort_ref.current = abort;
 
     void (async () => {
       try {
@@ -92,6 +107,7 @@ export function WorkflowPromptBar({ name, workflow, onApply, initialPrompt }: {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
+          signal: abort.signal,
         });
 
         if (!response.ok || !response.body) throw new Error(`HTTP ${response.status}`);
@@ -158,8 +174,28 @@ export function WorkflowPromptBar({ name, workflow, onApply, initialPrompt }: {
 
   return (
     <div className={`workflow-prompt-bar${loading ? " workflow-prompt-bar--loading" : ""}`}>
-      {loading && (streamText || patchLog.length > 0) && (
+      {loading && (
         <div className="workflow-stream-log">
+          <div className="workflow-stream-log__status">
+            <span className="workflow-stream-log__spinner" aria-hidden="true" />
+            <span className="workflow-stream-log__status-text">
+              {t("workflows.prompt_generating")}
+            </span>
+            <span className="workflow-stream-log__elapsed">{elapsed}s</span>
+            {patchLog.length > 0 && (
+              <span className="workflow-stream-log__patch-count">
+                {patchLog.length} {t("workflows.prompt_patches")}
+              </span>
+            )}
+            <button
+              className="workflow-stream-log__abort"
+              onClick={handle_abort}
+              type="button"
+              aria-label={t("common.cancel")}
+            >
+              {t("common.cancel")}
+            </button>
+          </div>
           {streamText && (
             <div className="workflow-stream-log__text">{streamText}<span className="chat-cursor" /></div>
           )}

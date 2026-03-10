@@ -2500,6 +2500,8 @@
   "workflows.promise_value": "Value",
   "workflows.prompt_applied": "Workflow updated from suggestion",
   "workflows.prompt_failed": "Failed to apply suggestion",
+  "workflows.prompt_generating": "Generating...",
+  "workflows.prompt_patches": "sections applied",
   "workflows.prompt_hint_interactive": "Agent converses with user to build a spec. Use [ASK_USER] to ask, [SPEC_COMPLETE] to finish.",
   "workflows.prompt_hint_parallel": "Each agent runs independently. Write a prompt focused on a single task.",
   "workflows.prompt_hint_sequential_loop": "Runs with fresh context each iteration. Accumulate results and use [DONE] to terminate.",
