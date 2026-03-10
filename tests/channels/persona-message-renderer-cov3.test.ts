@@ -4,8 +4,11 @@
  * - cosmic_observer: safe_fallback, status_started, guard_cancelled
  * - chunibyo: safe_fallback, status_started, guard_cancelled
  */
-import { describe, it, expect } from "vitest";
-import { PersonaMessageRenderer } from "@src/channels/persona-message-renderer.js";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { mkdtemp, rm } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { PersonaMessageRenderer, TonePreferenceStore } from "@src/channels/persona-message-renderer.js";
 import type { PersonaStyleSource, PersonaStyleSnapshot } from "@src/channels/persona-message-renderer.js";
 
 function make_source(name = "사이버봇"): PersonaStyleSource {
@@ -98,5 +101,42 @@ describe("ConceptPack — chunibyo templates", () => {
   it("guard_cancelled → 이번엔 내가 물러서겠다", () => {
     const msg = r.render({ kind: "guard_cancelled" }, { session: ov });
     expect(msg).toContain("물러서겠다");
+  });
+
+  it("identity → 봉인된 힘 (L122)", () => {
+    const msg = r.render({ kind: "identity" }, { session: ov });
+    expect(msg).toContain("봉인된");
+  });
+
+  it("status_completed → 봉인 해제 완료 (L125)", () => {
+    const msg = r.render({ kind: "status_completed" }, { session: ov });
+    expect(msg).toContain("봉인 해제");
+  });
+});
+
+// ══════════════════════════════════════════════════════════
+// TonePreferenceStore — flush dirty=false (L407)
+// ══════════════════════════════════════════════════════════
+
+describe("TonePreferenceStore — flush dirty=false early return (L407)", () => {
+  let tmp_dir: string;
+  let store_path: string;
+
+  beforeAll(async () => {
+    tmp_dir = await mkdtemp(join(tmpdir(), "persona-flush-"));
+    store_path = join(tmp_dir, "tone.json");
+  });
+
+  afterAll(async () => {
+    await rm(tmp_dir, { recursive: true, force: true }).catch(() => {});
+  });
+
+  it("dirty=false일 때 flush() 직접 호출 → 즉시 return (L407)", () => {
+    const store = new TonePreferenceStore(store_path);
+    // 새 인스턴스는 dirty=false — flush를 직접 호출하면 L407 early return
+    (store as any).flush();
+    // 파일이 만들어지지 않았음 (dirty=false → early return)
+    const { existsSync } = require("node:fs");
+    expect(existsSync(store_path)).toBe(false);
   });
 });

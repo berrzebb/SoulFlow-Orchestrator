@@ -268,6 +268,13 @@ describe("BaseChannel — parse_agent_mentions()", () => {
     expect(aliases.filter((a) => a === "alice")).toHaveLength(1);
   });
 
+  it("Slack ID 중복 → seen.has(key) continue 분기 실행 (L153)", () => {
+    const ch = new TestChannel();
+    const mentions = ch.parse_agent_mentions("<@U123> <@U123>");
+    expect(mentions).toHaveLength(1);
+    expect(mentions[0].alias).toBe("U123");
+  });
+
   it("빈 텍스트 → 빈 배열", () => {
     const ch = new TestChannel();
     expect(ch.parse_agent_mentions("")).toHaveLength(0);
