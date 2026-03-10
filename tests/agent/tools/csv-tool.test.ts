@@ -94,3 +94,54 @@ describe("CsvTool — filter", () => {
     expect(rows[0]?.city).toBe("Seoul");
   });
 });
+
+// ══════════════════════════════════════════
+// 미커버 분기 보충
+// ══════════════════════════════════════════
+
+describe("CsvTool — 미커버 분기", () => {
+  it("unknown action → Error (L37)", async () => {
+    const r = String(await exec({ action: "transform" }));
+    expect(r).toContain("Error");
+    expect(r).toContain("unsupported");
+  });
+
+  it("parse: 빈 CSV → rows에 1개 빈 행 반환 (split_rows는 항상 ≥1 반환)", async () => {
+    // L43: rows.length===0은 split_rows 구조상 도달 불가 — 기본 동작만 검증
+    const r = await exec({ action: "parse", data: "" }) as Record<string, unknown>;
+    expect(Array.isArray(r.rows)).toBe(true);
+  });
+
+  it("generate: 빈 배열 → 빈 문자열 (L61)", async () => {
+    const r = String(await exec({ action: "generate", data: "[]" }));
+    expect(r).toBe("");
+  });
+
+  it("generate: 배열의 배열 → CSV 생성 (L73)", async () => {
+    const r = String(await exec({ action: "generate", data: '[["a","b"],["1","2"]]' }));
+    expect(r).toContain("a,b");
+    expect(r).toContain("1,2");
+  });
+
+  it("generate: primitive 배열 → row가 배열 아닌 경우 (L74)", async () => {
+    // [row] 래핑 — [row]는 배열이 아닌 primitive를 row로 감싼다
+    const r = String(await exec({ action: "generate", data: '["hello","world"]' }));
+    expect(r).toContain("hello");
+    expect(r).toContain("world");
+  });
+
+  it("filter: has_header=false → Error (L91)", async () => {
+    const r = String(await exec({ action: "filter", data: BASIC_CSV, has_header: false, columns: "name" }));
+    expect(r).toContain("Error");
+  });
+
+  it("parse_line: 따옴표 내 이중 따옴표 이스케이프 (L120/L121)", async () => {
+    // "say ""hello""" → 따옴표 안에서 "" = escaped " → current += quote, i++
+    const csv = 'name\n"say ""hello"""';
+    const r = await exec({ action: "parse", data: csv }) as Record<string, unknown>;
+    const rows = r.rows as string[][];
+    expect(r.count).toBeGreaterThan(0);
+    // 파싱 결과에 이중 따옴표가 단일 따옴표로 변환됨
+    expect(JSON.stringify(rows[0])).toContain("hello");
+  });
+});
