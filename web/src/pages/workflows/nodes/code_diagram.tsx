@@ -31,7 +31,7 @@ function CodeDiagramEditPanel({ node, update, t }: EditPanelProps) {
       )}
       {!is_sequence ? (
         <BuilderField label={t("workflows.code_diagram_source")} required>
-          <textarea className="input" required rows={5} value={String(node.source || "")} onChange={(e) => update({ source: e.target.value })} placeholder="// Paste source code here" aria-required="true" />
+          <textarea className="input" required rows={5} value={String(node.source || "")} onChange={(e) => update({ source: e.target.value })} placeholder={t("node.code_diagram.source_placeholder")} aria-required="true" />
         </BuilderField>
       ) : (
         <>

@@ -12,7 +12,7 @@ function StateMachineEditPanel({ node, update, t }: EditPanelProps) {
           {ACTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
         </select>
       </BuilderField>
-      <JsonField label={t("workflows.state_machine_definition")} value={node.machine} onUpdate={(v) => update({ machine: v })} placeholder='{"initial": "idle", "states": {...}}' />
+      <JsonField label={t("workflows.state_machine_definition")} value={node.machine} onUpdate={(v) => update({ machine: v })} placeholder={t("node.state_machine.machine_placeholder")} />
       {action !== "define" && action !== "validate" && action !== "visualize" && (
         action === "transition" ? (
           <BuilderRowPair>
@@ -53,6 +53,20 @@ export const state_machine_descriptor: FrontendNodeDescriptor = {
     { name: "action", type: "string", description: "node.state_machine.input.action" },
     { name: "machine", type: "string", description: "node.state_machine.input.machine" },
   ],
-  create_default: () => ({ action: "define", machine: "", current: "", event: "", events: "" }),
+  create_default: () => ({
+    action: "define",
+    machine: JSON.stringify({
+      initial: "idle",
+      states: {
+        idle: { on: { start: "running" } },
+        running: { on: { complete: "done", error: "failed" } },
+        done: {},
+        failed: { on: { retry: "running" } },
+      },
+    }, null, 2),
+    current: "",
+    event: "",
+    events: "",
+  }),
   EditPanel: StateMachineEditPanel,
 };

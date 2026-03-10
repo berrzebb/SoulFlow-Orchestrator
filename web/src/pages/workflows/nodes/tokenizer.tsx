@@ -32,7 +32,7 @@ function TokenizerEditPanel({ node, update, t }: EditPanelProps) {
         </BuilderField>
       )}
       <BuilderField label={t("workflows.field_text")} required>
-        <textarea className="input" required rows={4} value={String(node.text || "")} onChange={(e) => update({ text: e.target.value })} placeholder="Enter text to tokenize..." aria-required="true" />
+        <textarea className="input" required rows={4} value={String(node.text || "")} onChange={(e) => update({ text: e.target.value })} placeholder={t("node.tokenizer.text_placeholder")} aria-required="true" />
       </BuilderField>
     </>
   );

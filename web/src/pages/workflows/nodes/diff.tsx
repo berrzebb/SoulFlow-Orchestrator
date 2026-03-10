@@ -27,7 +27,7 @@ function DiffEditPanel({ node, update, t }: EditPanelProps) {
       )}
       {op === "patch" && (
         <BuilderField label={t("workflows.field_diff_text")}>
-          <textarea className="input code-textarea" rows={6} value={String(node.diff_text || "")} onChange={(e) => update({ diff_text: e.target.value })} placeholder="Unified diff..." />
+          <textarea className="input code-textarea" rows={6} value={String(node.diff_text || "")} onChange={(e) => update({ diff_text: e.target.value })} placeholder={t("node.diff.diff_text_placeholder")} />
         </BuilderField>
       )}
     </>

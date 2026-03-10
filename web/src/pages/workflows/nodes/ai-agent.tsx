@@ -16,7 +16,7 @@ function AiAgentEditPanel({ node, update, t, options }: EditPanelProps) {
         modelLabel={t("workflows.llm_model")}
       />
       <BuilderField label={t("workflows.ai_agent_system")}>
-        <textarea className="input code-textarea" rows={3} value={String(node.system_prompt || "")} onChange={(e) => update({ system_prompt: e.target.value })} spellCheck={false} placeholder="You are a helpful assistant that can use tools to accomplish tasks." />
+        <textarea className="input code-textarea" rows={3} value={String(node.system_prompt || "")} onChange={(e) => update({ system_prompt: e.target.value })} spellCheck={false} placeholder={t("node.ai_agent.system_prompt_placeholder")} />
       </BuilderField>
       <BuilderField label={t("workflows.ai_agent_user")}>
         <textarea className="input code-textarea" rows={3} value={String(node.user_prompt || "")} onChange={(e) => update({ user_prompt: e.target.value })} spellCheck={false} placeholder="{{memory.user_input}}" />

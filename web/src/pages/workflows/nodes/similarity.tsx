@@ -30,10 +30,10 @@ function SimilarityEditPanel({ node, update, t }: EditPanelProps) {
         </BuilderField>
       )}
       <BuilderField label={t("workflows.similarity_text_a")} required>
-        <input className="input input--sm" required value={String(node.a || "")} onChange={(e) => update({ a: e.target.value })} placeholder="hello world" aria-required="true" />
+        <input className="input input--sm" required value={String(node.a || "")} onChange={(e) => update({ a: e.target.value })} placeholder={t("node.similarity.placeholder_a")} aria-required="true" />
       </BuilderField>
       <BuilderField label={t("workflows.similarity_text_b")} required>
-        <input className="input input--sm" required value={String(node.b || "")} onChange={(e) => update({ b: e.target.value })} placeholder="hello there" aria-required="true" />
+        <input className="input input--sm" required value={String(node.b || "")} onChange={(e) => update({ b: e.target.value })} placeholder={t("node.similarity.placeholder_b")} aria-required="true" />
       </BuilderField>
     </>
   );

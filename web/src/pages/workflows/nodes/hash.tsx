@@ -15,7 +15,7 @@ function HashEditPanel({ node, update, t }: EditPanelProps) {
         </select>
       </BuilderField>
       <BuilderField label={t("workflows.field_input")} required>
-        <input className="input input--sm" required value={String(node.input || "")} onChange={(e) => update({ input: e.target.value })} placeholder="Input string to hash" aria-required="true" />
+        <input className="input input--sm" required value={String(node.input || "")} onChange={(e) => update({ input: e.target.value })} placeholder={t("node.hash.input_placeholder")} aria-required="true" />
       </BuilderField>
       {action !== "crc32" && action !== "adler32" && (
         <BuilderRowPair>

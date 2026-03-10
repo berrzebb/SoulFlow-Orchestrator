@@ -43,7 +43,7 @@ function AnalyzerEditPanel({ node, update, t, options }: EditPanelProps) {
             <input className="input input--sm" required value={String(node.input_field || "")} onChange={(e) => update({ input_field: e.target.value })} placeholder="memory.resume_text" aria-required="true" />
           </BuilderField>
           <BuilderField label={t("workflows.analyzer_prompt")} required>
-            <textarea className="input code-textarea" required rows={4} value={String(node.prompt_template || "")} onChange={(e) => update({ prompt_template: e.target.value })} spellCheck={false} placeholder="Analyze the following resume and extract key skills, experience level, and fit score..." aria-required="true" />
+            <textarea className="input code-textarea" required rows={4} value={String(node.prompt_template || "")} onChange={(e) => update({ prompt_template: e.target.value })} spellCheck={false} placeholder={t("node.analyzer.prompt_template_placeholder")} aria-required="true" />
           </BuilderField>
           <BuilderField label={t("workflows.analyzer_categories")} optional>
             <input className="input input--sm" value={Array.isArray(node.categories) ? (node.categories as string[]).join(", ") : ""} onChange={(e) => update({ categories: e.target.value.split(",").map((s: string) => s.trim()).filter(Boolean) })} placeholder="qualified, unqualified, maybe" />
