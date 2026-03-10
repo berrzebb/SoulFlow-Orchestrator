@@ -25,6 +25,16 @@ function BarcodeEditPanel({ node, update, t }: EditPanelProps) {
       <BuilderField label={t("workflows.field_data")} required>
         <input className="input input--sm" required value={String(node.data || "")} onChange={(e) => update({ data: e.target.value })} placeholder="1234567890128" aria-required="true" />
       </BuilderField>
+      {action === "generate" && (
+        <BuilderRowPair>
+          <BuilderField label={t("workflows.barcode_width")}>
+            <input className="input input--sm" type="number" min={1} value={String(node.width ?? 200)} onChange={(e) => update({ width: Number(e.target.value) || 200 })} />
+          </BuilderField>
+          <BuilderField label={t("workflows.barcode_height")}>
+            <input className="input input--sm" type="number" min={1} value={String(node.height ?? 80)} onChange={(e) => update({ height: Number(e.target.value) || 80 })} />
+          </BuilderField>
+        </BuilderRowPair>
+      )}
     </>
   );
 }
@@ -44,6 +54,6 @@ export const barcode_descriptor: FrontendNodeDescriptor = {
     { name: "action", type: "string", description: "node.barcode.input.action" },
     { name: "data", type: "string", description: "node.barcode.input.data" },
   ],
-  create_default: () => ({ action: "generate", data: "", format: "code128" }),
+  create_default: () => ({ action: "generate", data: "", format: "code128", width: 200, height: 80 }),
   EditPanel: BarcodeEditPanel,
 };

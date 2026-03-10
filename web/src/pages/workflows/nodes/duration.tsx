@@ -14,12 +14,18 @@ function DurationEditPanel({ node, update, t }: EditPanelProps) {
           </select>
         </BuilderField>
       </BuilderRowPair>
-      <BuilderField label={t("workflows.field_input")} required>
-        <input className="input input--sm" required value={String(node.input || "")} onChange={(e) => update({ input: e.target.value })} placeholder={action === "from_ms" ? "86400000" : "1h30m"} aria-required="true" />
-      </BuilderField>
+      {action === "from_ms" ? (
+        <BuilderField label={t("workflows.duration_ms")} required>
+          <input className="input input--sm" required type="number" min={0} value={String(node.ms ?? "")} onChange={(e) => update({ ms: e.target.value ? Number(e.target.value) : undefined })} placeholder="86400000" aria-required="true" />
+        </BuilderField>
+      ) : (
+        <BuilderField label={t("workflows.field_input")} required>
+          <input className="input input--sm" required value={String(node.duration || "")} onChange={(e) => update({ duration: e.target.value })} placeholder="1h30m" aria-required="true" />
+        </BuilderField>
+      )}
       {(action === "add" || action === "subtract" || action === "compare") && (
         <BuilderField label={t("workflows.field_duration_2")} required>
-          <input className="input input--sm" required value={String(node.input2 || "")} onChange={(e) => update({ input2: e.target.value })} placeholder="30m" aria-required="true" />
+          <input className="input input--sm" required value={String(node.duration2 || "")} onChange={(e) => update({ duration2: e.target.value })} placeholder="30m" aria-required="true" />
         </BuilderField>
       )}
     </>
@@ -39,8 +45,8 @@ export const duration_descriptor: FrontendNodeDescriptor = {
   ],
   input_schema: [
     { name: "action", type: "string", description: "node.duration.input.action" },
-    { name: "input", type: "string", description: "node.duration.input.input" },
+    { name: "duration", type: "string", description: "node.duration.input.duration" },
   ],
-  create_default: () => ({ action: "parse", input: "" }),
+  create_default: () => ({ action: "parse", duration: "" }),
   EditPanel: DurationEditPanel,
 };
