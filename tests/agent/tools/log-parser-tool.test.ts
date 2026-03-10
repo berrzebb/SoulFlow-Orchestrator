@@ -227,3 +227,31 @@ describe("LogParserTool — tail", () => {
     expect(records[0]).toEqual({ raw: "raw log line" });
   });
 });
+
+describe("LogParserTool — 미커버 분기", () => {
+  it("parse_syslog: 매칭 안되는 라인 → L61 return null → filter", async () => {
+    const r = await exec({
+      action: "parse_syslog",
+      input: "this is not a syslog line\nMar  1 10:23:45 myhost sshd[1234]: message",
+    }) as Record<string, unknown>;
+    // 첫 줄 null 제거, 두 번째 줄만 파싱
+    expect(r.count).toBe(1);
+  });
+
+  it("parse_custom: 매칭 안되는 라인 → L73 return null → filter", async () => {
+    const r = await exec({
+      action: "parse_custom",
+      input: "no match here\nERROR found this",
+      pattern: "^ERROR (?<msg>.+)",
+    }) as Record<string, unknown>;
+    // 첫 줄 null 제거, 두 번째 줄만 파싱
+    expect(r.count).toBe(1);
+  });
+
+  it("filter: 비JSON 라인 포함 → L82 catch return null", async () => {
+    const mixed = "not json\n" + JSON.stringify({ level: "error", msg: "fail" });
+    const r = await exec({ action: "filter", input: mixed, level: "error" }) as Record<string, unknown>;
+    // 비JSON 라인 null → filter 제거, JSON 라인만 처리
+    expect(r.count).toBe(1);
+  });
+});

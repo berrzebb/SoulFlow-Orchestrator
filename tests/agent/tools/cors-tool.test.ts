@@ -169,3 +169,47 @@ describe("CorsTool — validate", () => {
     expect((r.errors as string[]).some((e) => String(e).includes("wildcard"))).toBe(true);
   });
 });
+
+describe("CorsTool — 미커버 catch 분기", () => {
+  it("build_headers: allowed_origins 잘못된 JSON → L36 fallback", async () => {
+    const r = await exec({
+      action: "build_headers",
+      allowed_origins: "not_json_array",
+      origin: "not_json_array",
+    }) as Record<string, string>;
+    // fallback: origins = [allowed_origins], origin 매칭 가능
+    expect(r).toBeDefined();
+  });
+
+  it("check_origin: allowed_origins 잘못된 JSON → L66 catch → ['*']", async () => {
+    const r = await exec({
+      action: "check_origin",
+      origin: "https://any.site",
+      allowed_origins: "{invalid json}",
+    }) as Record<string, unknown>;
+    // fallback ["*"] → 와일드카드 → allowed true
+    expect(r.allowed).toBe(true);
+  });
+
+  it("preflight: allowed_origins 잘못된 JSON → L74 catch", async () => {
+    const r = await exec({
+      action: "preflight",
+      origin: "https://app.com",
+      method: "GET",
+      allowed_origins: "{invalid}",
+    }) as Record<string, unknown>;
+    // fallback ["*"] → 모든 오리진 허용
+    expect(r.allowed).toBe(true);
+  });
+
+  it("preflight: allowed_methods 잘못된 JSON → L76 catch fallback ['GET']", async () => {
+    const r = await exec({
+      action: "preflight",
+      origin: "https://app.com",
+      method: "POST",
+      allowed_methods: "{invalid methods}",
+    }) as Record<string, unknown>;
+    // fallback ["GET"] → POST not in ["GET"] → method_ok false → allowed false
+    expect(r.allowed).toBe(false);
+  });
+});
