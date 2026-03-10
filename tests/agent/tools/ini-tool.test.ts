@@ -137,3 +137,30 @@ describe("IniTool — merge", () => {
     expect(result.b).toBeDefined();
   });
 });
+
+// ══════════════════════════════════════════
+// 미커버 분기
+// ══════════════════════════════════════════
+
+describe("IniTool — 미커버 분기", () => {
+  it("unsupported action (L77) → Error 문자열", async () => {
+    const r = await exec({ action: "unknown_action" });
+    expect(String(r)).toContain("Error");
+    expect(String(r)).toContain("unsupported");
+  });
+
+  it("parse: = 없는 줄 (L97 continue) → 해당 줄 무시됨", async () => {
+    const input = "bareword\n[sec]\nkey=val";
+    const r = await exec({ action: "parse", input }) as Record<string, unknown>;
+    const result = r.result as Record<string, Record<string, string>>;
+    expect(result.sec?.key).toBe("val");
+    expect(Object.keys(result)).not.toContain("bareword");
+  });
+
+  it("generate: 숫자/boolean 값 → L141 String(value) 경로", async () => {
+    const r = await exec({ action: "generate", data: JSON.stringify({ port: 8080, debug: true }) });
+    const text = String(r);
+    expect(text).toContain("port = 8080");
+    expect(text).toContain("debug = true");
+  });
+});

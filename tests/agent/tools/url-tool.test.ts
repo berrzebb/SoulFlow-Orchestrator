@@ -153,3 +153,33 @@ describe("UrlTool — normalize", () => {
     expect(r.error).toBeDefined();
   });
 });
+
+// ══════════════════════════════════════════
+// 미커버 분기
+// ══════════════════════════════════════════
+
+describe("UrlTool — 미커버 분기", () => {
+  it("build: parts.search 사용 (params 없음, L68)", async () => {
+    const r = await exec({
+      action: "build",
+      parts: JSON.stringify({ host: "example.com", search: "?foo=bar" }),
+    }) as Record<string, unknown>;
+    expect(String(r.url)).toContain("foo=bar");
+  });
+
+  it("resolve: 잘못된 base + relative → L81 error", async () => {
+    const r = await exec({ action: "resolve", base: "not-a-url", url: "relative" }) as Record<string, unknown>;
+    expect(r.error).toBeDefined();
+  });
+
+  it("query_params: 잘못된 URL → L116 error", async () => {
+    const r = await exec({ action: "query_params", url: "not-a-url" }) as Record<string, unknown>;
+    expect(r.error).toBeDefined();
+  });
+
+  it("unsupported action → L140 Error", async () => {
+    const r = await exec({ action: "unknown_op" });
+    expect(String(r)).toContain("Error");
+    expect(String(r)).toContain("unsupported");
+  });
+});

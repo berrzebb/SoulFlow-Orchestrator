@@ -6,13 +6,14 @@ import { describe, it, expect, vi } from "vitest";
 
 // ── mock 상태 ─────────────────────────────────────────
 const { udp_state, tcp_state } = vi.hoisted(() => ({
-  udp_state: { emit_error: false, error_msg: "send error" },
+  udp_state: { emit_error: false, error_msg: "send error", timeout: false },
   tcp_state: { emit_error: false, error_msg: "ECONNREFUSED", timeout: false },
 }));
 
 vi.mock("node:dgram", () => ({
   createSocket: () => ({
     send: (_buf: unknown, _off: unknown, _len: unknown, _port: unknown, _host: unknown, cb: (err: Error | null) => void) => {
+      if (udp_state.timeout) return; // timeout 시뮬레이션: 콜백 미호출
       if (udp_state.emit_error) cb(new Error(udp_state.error_msg));
       else cb(null);
     },
@@ -219,5 +220,50 @@ describe("SyslogTool — unsupported action", () => {
     const r = await make_tool().execute({ action: "bogus" });
     expect(String(r)).toContain("Error");
     expect(String(r)).toContain("bogus");
+  });
+});
+
+// ══════════════════════════════════════════
+// timeout 분기 (L92 UDP, L106 TCP)
+// ══════════════════════════════════════════
+
+describe("SyslogTool — UDP timeout (L92)", () => {
+  it("UDP send 콜백 미호출 + 타이머 경과 → success=false error=timeout", async () => {
+    vi.useFakeTimers();
+    udp_state.timeout = true;
+    const promise = make_tool().execute({
+      action: "send",
+      host: "syslog.example.com",
+      protocol: "udp",
+      message: "x",
+      timeout_ms: 50,
+    });
+    await vi.advanceTimersByTimeAsync(50);
+    const r = JSON.parse(await promise);
+    expect(r.success).toBe(false);
+    expect(r.error).toBe("timeout");
+    udp_state.timeout = false;
+    vi.useRealTimers();
+  });
+});
+
+describe("SyslogTool — TCP timeout (L106)", () => {
+  it("TCP connect 콜백 미호출 + 타이머 경과 → success=false error=timeout", async () => {
+    vi.useFakeTimers();
+    tcp_state.emit_error = false;
+    tcp_state.timeout = true;
+    const promise = make_tool().execute({
+      action: "send",
+      host: "syslog.example.com",
+      protocol: "tcp",
+      message: "x",
+      timeout_ms: 50,
+    });
+    await vi.advanceTimersByTimeAsync(50);
+    const r = JSON.parse(await promise);
+    expect(r.success).toBe(false);
+    expect(r.error).toBe("timeout");
+    tcp_state.timeout = false;
+    vi.useRealTimers();
   });
 });
