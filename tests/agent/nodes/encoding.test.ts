@@ -528,8 +528,8 @@ describe("Encoding Node Handler", () => {
 
       const result = await encoding_handler.execute(node, ctx);
 
-      expect(result.output.success).toBe(true);
-      expect(result.output.result).toContain("Unsupported");
+      expect(result.output.success).toBe(false);
+      expect(result.output.result).toContain("unsupported");
     });
 
     it("should handle unsupported decode format", async () => {
@@ -542,8 +542,8 @@ describe("Encoding Node Handler", () => {
 
       const result = await encoding_handler.execute(node, ctx);
 
-      expect(result.output.success).toBe(true);
-      expect(result.output.result).toContain("Unsupported");
+      expect(result.output.success).toBe(false);
+      expect(result.output.result).toContain("unsupported");
     });
 
     it("should handle unsupported hash format", async () => {
@@ -570,7 +570,7 @@ describe("Encoding Node Handler", () => {
 
       const result = await encoding_handler.execute(node, ctx);
 
-      expect(result.output.success).toBe(true);
+      expect(result.output.success).toBe(false);
       expect(result.output.result).toContain("Unsupported");
     });
   });

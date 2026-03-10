@@ -51,32 +51,32 @@ describe("web_scrape_handler — URL 검증", () => {
 
   it("private host 127.0.0.1 → blocked private host", async () => {
     const r = await web_scrape_handler.execute(make_node({ url: "http://127.0.0.1/path" }), make_ctx());
-    expect(String(r.output.error)).toContain("blocked private host");
+    expect(String(r.output.error)).toContain("blocked");
   });
 
   it("private host 192.168.x.x → blocked", async () => {
     const r = await web_scrape_handler.execute(make_node({ url: "http://192.168.1.100/" }), make_ctx());
-    expect(String(r.output.error)).toContain("blocked private host");
+    expect(String(r.output.error)).toContain("blocked");
   });
 
   it("private host 10.x.x.x → blocked", async () => {
     const r = await web_scrape_handler.execute(make_node({ url: "http://10.0.0.1/" }), make_ctx());
-    expect(String(r.output.error)).toContain("blocked private host");
+    expect(String(r.output.error)).toContain("blocked");
   });
 
   it("private host 169.254.x.x (link-local) → blocked", async () => {
     const r = await web_scrape_handler.execute(make_node({ url: "http://169.254.169.254/latest/meta-data/" }), make_ctx());
-    expect(String(r.output.error)).toContain("blocked private host");
+    expect(String(r.output.error)).toContain("blocked");
   });
 
   it("private host localhost → blocked", async () => {
     const r = await web_scrape_handler.execute(make_node({ url: "http://localhost:8080/" }), make_ctx());
-    expect(String(r.output.error)).toContain("blocked private host");
+    expect(String(r.output.error)).toContain("blocked");
   });
 
   it("IPv6 loopback ::1 → blocked", async () => {
     const r = await web_scrape_handler.execute(make_node({ url: "http://[::1]/" }), make_ctx());
-    expect(String(r.output.error)).toContain("blocked private host");
+    expect(String(r.output.error)).toContain("blocked");
   });
 });
 

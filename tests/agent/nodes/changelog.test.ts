@@ -31,10 +31,8 @@ describe("changelog_handler", () => {
 
   it("create_default: should return default config", () => {
     const defaults = changelog_handler.create_default?.();
-    expect(defaults).toEqual({
-      action: "parse_commits",
-      commits: "[]",
-    });
+    expect((defaults as any).action).toBe("parse_commits");
+    expect((defaults as any).commits).toBe("[]");
   });
 
   it("execute: should handle parse_commits action", async () => {

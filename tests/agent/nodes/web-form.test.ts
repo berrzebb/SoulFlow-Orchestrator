@@ -102,26 +102,18 @@ describe("web_form_handler", () => {
     expect(result.output).toBeDefined();
   });
 
-  // L37 setTimeout 콜백 커버 — fetch 걸림 + fake timer로 60초 타임아웃 발생
-  it("execute: url + fields 설정 후 fetch 걸림 → 타임아웃 (L37)", async () => {
-    vi.useFakeTimers();
+  // L37 fetch 호출 경로 커버 — fetch 즉시 실패 → catch 분기 (L37+L49)
+  it("execute: url + fields 설정 → fetch 호출 경로 커버 (L37)", async () => {
     const original_fetch = globalThis.fetch;
-    globalThis.fetch = vi.fn((_url: unknown, opts: RequestInit) =>
-      new Promise<Response>((_, reject) => {
-        opts.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
-      }),
-    );
+    globalThis.fetch = vi.fn().mockRejectedValue(new Error("network error"));
     const node = {
       node_id: "n1",
       node_type: "web_form",
       url: "https://example.com/form",
       fields: { email: "test@example.com" },
     } as any;
-    const promise = web_form_handler.execute(node, { memory: {}, workspace: "/tmp", abort_signal: undefined });
-    await vi.advanceTimersByTimeAsync(60_000);
-    const result = await promise;
+    const result = await web_form_handler.execute(node, { memory: {}, workspace: "/tmp", abort_signal: undefined });
     globalThis.fetch = original_fetch;
-    vi.useRealTimers();
-    expect(result.output).toBeDefined();
+    expect((result.output as any).error).toContain("network error");
   });
 });

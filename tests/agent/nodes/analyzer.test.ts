@@ -37,10 +37,12 @@ describe("analyzer_handler", () => {
   it("create_default: should return default config", () => {
     const defaults = analyzer_handler.create_default?.();
     expect(defaults).toEqual({
+      mode: "llm",
       backend: "openrouter",
       prompt_template: "Analyze the following:\n\n{{input}}",
       input_field: "input",
       categories: [],
+      sentiment_action: "analyze",
     });
   });
 

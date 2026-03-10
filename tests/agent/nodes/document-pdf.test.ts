@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { document_pdf_handler } from "../../../src/agent/nodes/document-pdf.js";
+import { document_pdf_handler } from "../../../src/agent/nodes/document.js";
 import type { OrcheNodeDefinition } from "../../../src/agent/nodes/workflow-node.types.js";
 import type { OrcheNodeExecutorContext } from "../../../src/agent/nodes/orche-node-executor.js";
 
