@@ -96,6 +96,29 @@
 - **위치**: interactive 경로(L372-378), 일반 경로(L530-535) — 동일 6줄 패턴
 - **해결**: `finalize_phase(state, phase_state, phase_def, store, on_event, options)` 헬퍼 추출 완료
 
+### ✅ P1-E: `PRIVATE_HOST_RE` SSRF 정규식 4중복 [DRY, 보안]
+- **위치**: `agent/nodes/http.ts`, `agent/nodes/retriever.ts`, `agent/nodes/web-scrape.ts`, `agent/tools/http-utils.ts`
+- **문제**: 동일한 보안 임계 정규식이 4곳에 복사됨. 유지보수 시 한 곳만 수정될 위험.
+- **해결**: 세 노드에서 로컬 `PRIVATE_HOST_RE` 삭제 → `validate_url` (`http-utils.ts`) 임포트로 교체. `.local` 도메인 체크를 `http-utils.ts`에 통합.
+
+### ✅ P1-F: `validate_url` 2중복 [DRY, 보안]
+- **위치**: `agent/tools/web.ts` (로컬, `string|null` 반환) vs `agent/tools/http-utils.ts` (정규, `URL|string` 반환)
+- **문제**: 유사하지만 반환 타입이 다른 중복 구현. `web.ts`에는 `.local` 체크 있으나 `http-utils.ts`에는 없었음.
+- **해결**: `.local` 체크를 `http-utils.ts`로 통합. `web.ts`는 얇은 래퍼(`null`/`string` 변환)로 교체 → 내부적으로 정규 구현 위임.
+
+---
+
+## 이터레이션 4 신규 발견
+
+### ✅ I4-A: `channels/media-collector.ts` — `PRIVATE_HOST_RE` + `is_private_url` 잔여 중복 [DRY, 보안]
+- **문제**: `PRIVATE_HOST_RE` prefix 패턴이 `http-utils.ts`와 별도 관리.
+- **해결**: `validate_url` 임포트 → `is_private_url` 1줄 위임 패턴으로 교체.
+
+### ✅ I4-B: `document-docx/pdf/pptx/xlsx` 4파일 — NodeHandler 구조 거의 동일 [DRY]
+- **위치**: `agent/nodes/document-*.ts` (각 51줄 = 총 204줄)
+- **문제**: `DocumentTool` 호출 패턴 4중복. icon/color/action/extra_param 이름만 다름.
+- **해결**: `make_document_handler(cfg)` 팩토리로 `agent/nodes/document.ts` 통합 (77줄). 4개 파일 삭제. ~127줄 제거.
+
 ---
 
 ## 코드베이스 전체 스캔 결과 (이터레이션 3)
@@ -119,7 +142,10 @@
 
 ## 최종 요약
 
-**이터레이션 3 완료**: 4개 항목 (P1-A~D)
-**총 완료**: 13개 항목
+**이터레이션 3 완료**: 6개 항목 (P1-A~F)
+**이터레이션 4 완료**: 2개 항목 (I4-A~B)
+**총 완료**: 17개 항목
 **SKIP (YAGNI/의도적 설계)**: 18개 항목
-**신규 헬퍼/유틸**: `runner_deps`, `finalize_phase`, `html-strip.ts`, `string-match.ts`
+**신규 헬퍼/유틸**: `runner_deps`, `finalize_phase`, `html-strip.ts`, `string-match.ts`, `make_document_handler`
+**보안 개선**: `validate_url`에 `.local` mDNS 도메인 차단 추가
+**코드 제거**: ~127줄 (4 document 핸들러 파일 통합)
