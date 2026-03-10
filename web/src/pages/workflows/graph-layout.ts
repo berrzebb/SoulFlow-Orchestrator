@@ -324,7 +324,12 @@ export function compute_aux_positions(
 
     sorted_triggers.forEach((tn, ti) => {
       const label = tn.trigger_type === "cron" ? (tn.schedule || "cron") : tn.trigger_type;
-      const trigger_detail = tn.trigger_type === "cron" ? tn.schedule : tn.trigger_type === "webhook" ? tn.webhook_path : undefined;
+      const trigger_detail = tn.trigger_type === "cron" ? tn.schedule
+        : tn.trigger_type === "webhook" ? tn.webhook_path
+        : tn.trigger_type === "channel_message" ? (tn.channel_type ?? "channel")
+        : tn.trigger_type === "kanban_event" ? tn.kanban_board_id
+        : tn.trigger_type === "filesystem_watch" ? tn.watch_path
+        : undefined;
       nodes.push({ id: tn.id, type: "trigger", label, sub_label: tn.trigger_type, output_fields: trigger_out, trigger_detail });
 
       let trigger_y: number;
@@ -360,7 +365,12 @@ export function compute_aux_positions(
     const trigger_start_x = phases_center_x - total_trigger_w / 2;
     sorted_triggers.forEach((tn, ti) => {
       const label = tn.trigger_type === "cron" ? (tn.schedule || "cron") : tn.trigger_type;
-      const trigger_detail = tn.trigger_type === "cron" ? tn.schedule : tn.trigger_type === "webhook" ? tn.webhook_path : undefined;
+      const trigger_detail = tn.trigger_type === "cron" ? tn.schedule
+        : tn.trigger_type === "webhook" ? tn.webhook_path
+        : tn.trigger_type === "channel_message" ? (tn.channel_type ?? "channel")
+        : tn.trigger_type === "kanban_event" ? tn.kanban_board_id
+        : tn.trigger_type === "filesystem_watch" ? tn.watch_path
+        : undefined;
       nodes.push({ id: tn.id, type: "trigger", label, sub_label: tn.trigger_type, output_fields: trigger_out, trigger_detail });
       positions.set(tn.id, { x: trigger_start_x + ti * (trigger_w + trigger_gap), y: trigger_y, width: trigger_w, height: trigger_h });
     });

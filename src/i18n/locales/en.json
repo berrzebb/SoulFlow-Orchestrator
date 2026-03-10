@@ -3712,5 +3712,21 @@
   "node.action.json": "JSON",
   "node.action.base": "Base Entry",
   "node.action.one": "One Level",
-  "node.action.sub": "Subtree"
+  "node.action.sub": "Subtree",
+  "node.action.best_effort": "Best Effort",
+  "node.action.fail_fast": "Fail Fast",
+  "node.action.quorum": "Quorum",
+  "node.action.retry_all": "Retry All",
+  "node.action.retry_targeted": "Retry Targeted",
+  "node.action.escalate": "Escalate",
+  "node.action.goto": "Goto Phase",
+  "node.action.none": "None",
+  "node.action.directory": "Directory",
+  "node.action.worktree": "Worktree",
+  "workflows.offline": "offline",
+  "workflows.watch_path": "Watch Path",
+  "workflows.watch_events": "Watch Events",
+  "workflows.watch_events_hint": "Comma-separated: created, modified, deleted",
+  "workflows.watch_pattern": "File Pattern",
+  "workflows.watch_batch_ms": "Batch Delay (ms)"
 }

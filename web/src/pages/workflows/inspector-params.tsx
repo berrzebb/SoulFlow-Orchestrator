@@ -135,9 +135,9 @@ export function PhaseParamsPanel({ phase, workflow, onChange, onPhaseIdChange, t
         <BuilderField label={t("workflows.failure_policy")}>
           <select className="input input--sm" value={phase.failure_policy || "best_effort"}
             onChange={(e) => updatePhase({ failure_policy: e.target.value as PhaseDef["failure_policy"], quorum_count: e.target.value !== "quorum" ? undefined : (phase.quorum_count ?? 1) })}>
-            <option value="best_effort">best_effort</option>
-            <option value="fail_fast">fail_fast</option>
-            <option value="quorum">quorum</option>
+            <option value="best_effort">{t("node.action.best_effort")}</option>
+            <option value="fail_fast">{t("node.action.fail_fast")}</option>
+            <option value="quorum">{t("node.action.quorum")}</option>
           </select>
         </BuilderField>
         {phase.failure_policy === "quorum" && (
@@ -333,9 +333,9 @@ export function AgentSummaryCard({ agent, index, phase, workflow, onChange, onNo
             <BuilderField label={t("workflows.filesystem_isolation")}>
               <select className="input input--sm" value={agent.filesystem_isolation || "none"}
                 onChange={(e) => updateAgent({ filesystem_isolation: e.target.value as AgentDef["filesystem_isolation"] })}>
-                <option value="none">none</option>
-                <option value="directory">directory</option>
-                <option value="worktree">worktree</option>
+                <option value="none">{t("node.action.none")}</option>
+                <option value="directory">{t("node.action.directory")}</option>
+                <option value="worktree">{t("node.action.worktree")}</option>
               </select>
             </BuilderField>
           </BuilderRowPair>
@@ -398,10 +398,10 @@ export function CriticSummaryCard({ critic, phase, workflow, onChange, t, option
               <select className="input input--sm" value={critic.on_rejection || ""}
                 onChange={(e) => updateCritic({ on_rejection: e.target.value || undefined, goto_phase: e.target.value !== "goto" ? undefined : critic.goto_phase })}>
                 <option value="">-</option>
-                <option value="retry_all">retry_all</option>
-                <option value="retry_targeted">retry_targeted</option>
-                <option value="escalate">escalate</option>
-                <option value="goto">goto</option>
+                <option value="retry_all">{t("node.action.retry_all")}</option>
+                <option value="retry_targeted">{t("node.action.retry_targeted")}</option>
+                <option value="escalate">{t("node.action.escalate")}</option>
+                <option value="goto">{t("node.action.goto")}</option>
               </select>
             </BuilderField>
           </BuilderRowPair>

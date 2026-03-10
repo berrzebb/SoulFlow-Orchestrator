@@ -3711,5 +3711,21 @@
   "node.action.json": "JSON",
   "node.action.base": "베이스 항목",
   "node.action.one": "한 단계",
-  "node.action.sub": "하위 트리"
+  "node.action.sub": "하위 트리",
+  "node.action.best_effort": "최선 시도",
+  "node.action.fail_fast": "즉시 실패",
+  "node.action.quorum": "쿼럼",
+  "node.action.retry_all": "전체 재시도",
+  "node.action.retry_targeted": "대상 재시도",
+  "node.action.escalate": "에스컬레이션",
+  "node.action.goto": "페이즈 이동",
+  "node.action.none": "없음",
+  "node.action.directory": "디렉토리",
+  "node.action.worktree": "워크트리",
+  "workflows.offline": "오프라인",
+  "workflows.watch_path": "감시 경로",
+  "workflows.watch_events": "감시 이벤트",
+  "workflows.watch_events_hint": "쉼표로 구분: created, modified, deleted",
+  "workflows.watch_pattern": "파일 패턴",
+  "workflows.watch_batch_ms": "배치 지연 (ms)"
 }

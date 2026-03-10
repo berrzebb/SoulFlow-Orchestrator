@@ -830,6 +830,40 @@
 | `node.action.one` | One Level | 한 단계 |
 | `node.action.sub` | Subtree | 하위 트리 |
 
+### 커밋
+20. `feat: i18n — builder-modals/inspector-params 시맨틱 옵션값 현지화 (Phase 15)` — (예정)
+
+**Phase 15 완료 ✅**
+
+---
+
+## Phase 15: builder-modals / inspector-params i18n (이터레이션 15)
+
+### 발견된 문제
+| 파일 | 위치 | 문제 |
+|------|------|------|
+| `builder-modals.tsx` L119-121 | `failure_policy` 드롭다운 | `best_effort/fail_fast/quorum` 원문 |
+| `builder-modals.tsx` L354 | 채널 목록 | `" - offline"` 영문 하드코딩 |
+| `builder-modals.tsx` L533 | `REJECTION_POLICIES` map | `retry_all/retry_targeted/escalate/goto` 원문 |
+| `inspector-params.tsx` L138-140 | `failure_policy` 드롭다운 | 동일 |
+| `inspector-params.tsx` L336-339 | `filesystem_isolation` 드롭다운 | `none/directory/worktree` 원문 |
+| `inspector-params.tsx` L401-404 | `on_rejection` 드롭다운 | 동일 REJECTION_POLICIES 값들 |
+
+### 신규 i18n 키 (11개)
+| 키 | EN | KO |
+|----|----|----|
+| `node.action.best_effort` | Best Effort | 최선 시도 |
+| `node.action.fail_fast` | Fail Fast | 즉시 실패 |
+| `node.action.quorum` | Quorum | 쿼럼 |
+| `node.action.retry_all` | Retry All | 전체 재시도 |
+| `node.action.retry_targeted` | Retry Targeted | 대상 재시도 |
+| `node.action.escalate` | Escalate | 에스컬레이션 |
+| `node.action.goto` | Goto Phase | 페이즈 이동 |
+| `node.action.none` | None | 없음 |
+| `node.action.directory` | Directory | 디렉토리 |
+| `node.action.worktree` | Worktree | 워크트리 |
+| `workflows.offline` | offline | 오프라인 |
+
 ### 번역 제외 확정 목록 (재조사 불필요)
 | 파일 | 배열/값 | 이유 |
 |------|---------|------|

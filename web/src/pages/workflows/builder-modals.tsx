@@ -9,7 +9,7 @@ import { useModalEffects, useConfirm } from "../../components/modal";
 import { BuilderField, BuilderRowPair, NodeMultiSelect } from "./builder-field";
 import { useT } from "../../i18n";
 import { get_frontend_node } from "./node-registry";
-import type { WorkflowDef, PhaseDef, AgentDef, CriticDef, OrcheNodeDef, TriggerNodeDef, RolePreset } from "./workflow-types";
+import type { WorkflowDef, PhaseDef, AgentDef, CriticDef, OrcheNodeDef, TriggerNodeDef, TriggerType, RolePreset } from "./workflow-types";
 
 type ChannelInstanceInfo = { instance_id: string; provider: string; label: string; enabled: boolean; running: boolean };
 type BackendOption = { value: string; label: string };
@@ -116,9 +116,9 @@ export function PhaseEditModal({ workflow, phaseId, onChange, onPhaseIdChange, o
             <BuilderField label={t("workflows.failure_policy")}>
               <select className="input input--sm" value={phase.failure_policy || "best_effort"}
                 onChange={(e) => updatePhase({ failure_policy: e.target.value as PhaseDef["failure_policy"], quorum_count: e.target.value !== "quorum" ? undefined : (phase.quorum_count ?? 1) })}>
-                <option value="best_effort">best_effort</option>
-                <option value="fail_fast">fail_fast</option>
-                <option value="quorum">quorum</option>
+                <option value="best_effort">{t("node.action.best_effort")}</option>
+                <option value="fail_fast">{t("node.action.fail_fast")}</option>
+                <option value="quorum">{t("node.action.quorum")}</option>
               </select>
             </BuilderField>
             {phase.failure_policy === "quorum" && (
@@ -202,10 +202,11 @@ export function CronEditModal({ trigger, onChange, onRemove, onClose }: {
 
 // ── Trigger Node 편집 모달 ──
 
-type TriggerType = "cron" | "webhook" | "manual" | "channel_message" | "kanban_event";
-const TRIGGER_TYPES: TriggerType[] = ["cron", "webhook", "manual", "channel_message", "kanban_event"];
+const TRIGGER_TYPES: TriggerType[] = ["cron", "webhook", "manual", "channel_message", "kanban_event", "filesystem_watch"];
 const TRIGGER_LABEL_KEYS: Record<TriggerType, string> = {
-  cron: "workflows.trigger_cron", webhook: "workflows.trigger_webhook", manual: "workflows.trigger_manual", channel_message: "workflows.trigger_channel", kanban_event: "workflows.kanban_trigger",
+  cron: "workflows.trigger_cron", webhook: "workflows.trigger_webhook", manual: "workflows.trigger_manual",
+  channel_message: "workflows.trigger_channel", kanban_event: "workflows.kanban_trigger",
+  filesystem_watch: "workflows.filesystem_watch_trigger",
 };
 
 export function TriggerNodeEditModal({ node, onChange, onRemove, onClose }: {
@@ -226,6 +227,10 @@ export function TriggerNodeEditModal({ node, onChange, onRemove, onClose }: {
   const [boardId, setBoardId] = useState(node.kanban_board_id || "");
   const [actions, setActions] = useState((node.kanban_actions || []).join(","));
   const [columnId, setColumnId] = useState(node.kanban_column_id || "");
+  const [watchPath, setWatchPath] = useState(node.watch_path || "");
+  const [watchEvents, setWatchEvents] = useState((node.watch_events || []).join(","));
+  const [watchPattern, setWatchPattern] = useState(node.watch_pattern || "");
+  const [watchBatchMs, setWatchBatchMs] = useState(String(node.watch_batch_ms || ""));
 
   const handleSave = () => {
     const updated: TriggerNodeDef = { id: node.id, trigger_type: triggerType };
@@ -236,6 +241,12 @@ export function TriggerNodeEditModal({ node, onChange, onRemove, onClose }: {
       updated.kanban_board_id = boardId;
       if (actions) updated.kanban_actions = actions.split(",").map(a => a.trim()).filter(a => a);
       if (columnId) updated.kanban_column_id = columnId;
+    }
+    if (triggerType === "filesystem_watch") {
+      if (watchPath) updated.watch_path = watchPath;
+      if (watchEvents) updated.watch_events = watchEvents.split(",").map(e => e.trim()).filter(e => e);
+      if (watchPattern) updated.watch_pattern = watchPattern;
+      if (watchBatchMs) updated.watch_batch_ms = parseInt(watchBatchMs) || undefined;
     }
     onChange(updated);
     onClose();
@@ -287,6 +298,20 @@ export function TriggerNodeEditModal({ node, onChange, onRemove, onClose }: {
             </BuilderField>
             <BuilderField label={t("workflows.kanban_trigger_column_id")}>
               <input className="input input--sm" value={columnId} onChange={(e) => setColumnId(e.target.value)} placeholder="todo, in_progress, done" onKeyDown={(e) => { if (e.key === "Enter") handleSave(); }} />
+            </BuilderField>
+          </>)}
+          {triggerType === "filesystem_watch" && (<>
+            <BuilderField label={t("workflows.watch_path")} required>
+              <input autoFocus className="input input--sm" required value={watchPath} onChange={(e) => setWatchPath(e.target.value)} placeholder="/workspace/data" onKeyDown={(e) => { if (e.key === "Enter") handleSave(); }} />
+            </BuilderField>
+            <BuilderField label={t("workflows.watch_events")} hint={t("workflows.watch_events_hint")}>
+              <input className="input input--sm" value={watchEvents} onChange={(e) => setWatchEvents(e.target.value)} placeholder="created,modified,deleted" onKeyDown={(e) => { if (e.key === "Enter") handleSave(); }} />
+            </BuilderField>
+            <BuilderField label={t("workflows.watch_pattern")}>
+              <input className="input input--sm" value={watchPattern} onChange={(e) => setWatchPattern(e.target.value)} placeholder="*.json" onKeyDown={(e) => { if (e.key === "Enter") handleSave(); }} />
+            </BuilderField>
+            <BuilderField label={t("workflows.watch_batch_ms")}>
+              <input className="input input--sm" type="number" min={0} value={watchBatchMs} onChange={(e) => setWatchBatchMs(e.target.value)} placeholder="500" onKeyDown={(e) => { if (e.key === "Enter") handleSave(); }} />
             </BuilderField>
           </>)}
         </div>
@@ -351,7 +376,7 @@ export function ChannelEditModal({ channel, onChange, onRemove, onClose, channel
               <option value="">{t("workflows.select_default")}</option>
               {channels.map((ch) => (
                 <option key={ch.instance_id} value={ch.instance_id}>
-                  {ch.label} ({ch.provider}{ch.running ? "" : " - offline"})
+                  {ch.label} ({ch.provider}{ch.running ? "" : ` - ${t("workflows.offline")}`})
                 </option>
               ))}
             </select>
@@ -530,7 +555,7 @@ export function AgentEditModal({ workflow, subNodeId, onChange, onClose, onSubNo
               <BuilderField label={t("workflows.on_rejection")}>
                 <select className="input input--sm" value={critic.on_rejection || ""} onChange={(e) => updateCritic({ on_rejection: e.target.value || undefined, goto_phase: e.target.value !== "goto" ? undefined : critic.goto_phase })}>
                   <option value="">-</option>
-                  {REJECTION_POLICIES.map((p) => <option key={p} value={p}>{p}</option>)}
+                  {REJECTION_POLICIES.map((p) => <option key={p} value={p}>{t(`node.action.${p}`)}</option>)}
                 </select>
               </BuilderField>
             </BuilderRowPair>
