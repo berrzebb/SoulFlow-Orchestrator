@@ -82,8 +82,14 @@ export async function create_provider_bundle(deps: ProviderBundleDeps): Promise<
     openrouter_http_referer: (openrouter_config?.settings.http_referer as string) || undefined,
     openrouter_app_title: (openrouter_config?.settings.app_title as string) || undefined,
     orchestrator_llm_api_key: orchestrator_llm_key,
-    orchestrator_llm_api_base: (orchestrator_llm_config?.settings.api_base as string) || undefined,
-    orchestrator_llm_model: (orchestrator_llm_config?.settings.model as string) || undefined,
+    orchestrator_llm_api_base:
+      (orchestrator_llm_config?.settings.api_base as string) ||
+      app_config.orchestratorLlm.apiBase ||
+      undefined,
+    orchestrator_llm_model:
+      (orchestrator_llm_config?.settings.model as string) ||
+      app_config.orchestratorLlm.model ||
+      undefined,
     cli_configs: {
       chatgpt: {
         command: String(codex_settings.command || "codex"),
