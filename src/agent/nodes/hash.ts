@@ -24,12 +24,23 @@ export const hash_handler: NodeHandler = {
 
   async execute(node: OrcheNodeDefinition, ctx: OrcheNodeExecutorContext): Promise<OrcheNodeExecuteResult> {
     const n = node as HashNodeDefinition;
+    const tpl = { memory: ctx.memory };
+    const action = n.action || "hash";
     try {
+      // crc32/adler32는 ChecksumTool 사용
+      if (action === "crc32" || action === "adler32") {
+        const { ChecksumTool } = await import("../tools/checksum.js");
+        const tool = new ChecksumTool();
+        const result = await tool.execute({
+          action,
+          data: resolve_templates(n.input || "", tpl),
+        });
+        return { output: { digest: result, success: !result.startsWith("Error:") } };
+      }
       const { HashTool } = await import("../tools/hash.js");
       const tool = new HashTool();
-      const tpl = { memory: ctx.memory };
       const result = await tool.execute({
-        action: n.action || "hash",
+        action,
         input: resolve_templates(n.input || "", tpl),
         algorithm: n.algorithm || "sha256",
         key: resolve_templates(n.key || "", tpl),

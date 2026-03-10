@@ -61,6 +61,7 @@ function build_net_cmd(op: string, host: string, port: number, count: number): s
   switch (op) {
     case "ping":       return host ? `ping -c ${count} -W 3 ${host}` : null;
     case "dns":        return host ? `dig +short ${host} A 2>/dev/null || nslookup ${host} 2>/dev/null` : null;
+    case "whois":      return host ? `whois ${host} 2>/dev/null | head -50` : null;
     case "port_check": return (host && port) ? `timeout 5 bash -c 'echo > /dev/tcp/${host}/${port}' 2>&1 && echo "OPEN" || echo "CLOSED/FILTERED"` : null;
     case "http_head":  return host ? `curl -sI -m 10 --max-redirs 3 "${host.startsWith("http") ? host : `https://${host}`}"` : null;
     case "netstat":    return "ss -tlnp 2>/dev/null || netstat -tlnp 2>/dev/null";

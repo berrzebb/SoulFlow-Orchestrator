@@ -7,7 +7,7 @@ function NetworkEditPanel({ node, update, t }: EditPanelProps) {
     <>
       <BuilderField label={t("workflows.network_operation")}>
         <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
-          {["ping", "dns", "port_check", "http_head", "netstat"].map((o) => <option key={o} value={o}>{o}</option>)}
+          {["ping", "dns", "whois", "port_check", "http_head", "netstat"].map((o) => <option key={o} value={o}>{o}</option>)}
         </select>
       </BuilderField>
       {op !== "netstat" && (
