@@ -48,6 +48,7 @@ export interface AgentCoreDeps {
   agent_backend_registry: AgentBackendRegistry;
   provider_caps: ProviderCapabilities;
   embed_service: EmbedServiceFn | undefined;
+  embed_worker_config: import("../agent/memory.types.js").EmbedWorkerConfig | undefined;
   image_embed_service: ImageEmbedFn | undefined;
   oauth_store: OAuthIntegrationStore;
   oauth_flow: OAuthFlowService;
@@ -86,7 +87,7 @@ export async function create_agent_core(deps: AgentCoreDeps): Promise<AgentCoreR
   const {
     workspace, data_dir, sessions_dir, app_root, app_config,
     providers, bus, events, agent_backend_registry, provider_caps,
-    embed_service, image_embed_service, oauth_store, broadcaster, logger,
+    embed_service, embed_worker_config, image_embed_service, oauth_store, broadcaster, logger,
   } = deps;
 
   const tone_pref_store = new TonePreferenceStore(join(workspace, "runtime", "tone-preferences.json"));
@@ -167,6 +168,9 @@ export async function create_agent_core(deps: AgentCoreDeps): Promise<AgentCoreR
   if (embed_service) {
     agent.context.memory_store.set_embed?.(embed_service);
     tool_index.set_embed(embed_service);
+  }
+  if (embed_worker_config) {
+    agent.context.memory_store.set_embed_worker_config?.(embed_worker_config);
   }
   agent.context.set_daily_injection(app_config.memory.dailyInjectionDays, app_config.memory.dailyInjectionMaxChars);
 

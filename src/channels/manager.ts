@@ -766,7 +766,7 @@ export class ChannelManager implements ServiceLike {
       } catch { /* 상태 메시지 마무리 실패는 무시 */ }
       if (provider === "web") this.on_web_stream?.(message.chat_id, "", true);
       await this.send_chunked(provider, message, alias, mention, rendered.content, max_len, build_meta(), rendered.media);
-      await this.recorder.record_assistant(provider, message, alias, rendered.markdown, record_meta);
+      void this.recorder.record_assistant(provider, message, alias, rendered.markdown, record_meta).catch(() => {});
       return;
     }
 
@@ -783,13 +783,13 @@ export class ChannelManager implements ServiceLike {
       if (rendered.media.length > 0) {
         await this.send_outbound(provider, message, alias, "첨부 파일을 확인해주세요.", { kind: "agent_media", agent_alias: alias }, rendered.media);
       }
-      await this.recorder.record_assistant(provider, message, alias, rendered.markdown, record_meta);
+      void this.recorder.record_assistant(provider, message, alias, rendered.markdown, record_meta).catch(() => {});
       return;
     }
 
     if (provider === "web") this.on_web_stream?.(message.chat_id, "", true);
     await this.send_chunked(provider, message, alias, mention, rendered.content, max_len, build_meta(), rendered.media);
-    await this.recorder.record_assistant(provider, message, alias, rendered.markdown, record_meta);
+    void this.recorder.record_assistant(provider, message, alias, rendered.markdown, record_meta).catch(() => {});
   }
 
   private async send_or_edit_stream(
@@ -982,7 +982,7 @@ export class ChannelManager implements ServiceLike {
       "_이 메시지에 답장하면 추가 정보를 포함하여 재시도합니다._",
     ].join("\n").trim();
     await this.send_outbound(provider, message, alias, content, { kind: "agent_error", agent_alias: alias });
-    await this.recorder.record_assistant(provider, message, alias, content, { run_id });
+    void this.recorder.record_assistant(provider, message, alias, content, { run_id }).catch(() => {});
   }
 
   private async send_command_reply(provider: ChannelProvider, message: InboundMessage, content: string): Promise<void> {
@@ -992,7 +992,7 @@ export class ChannelManager implements ServiceLike {
     const max_len = get_provider_max_length(provider);
     const meta = { kind: "command_reply", render_parse_mode: rendered.parse_mode || null };
     await this.send_chunked(provider, message, this.config.defaultAlias, "", rendered.content, max_len, meta);
-    await this.recorder.record_assistant(provider, message, this.config.defaultAlias, rendered.markdown);
+    void this.recorder.record_assistant(provider, message, this.config.defaultAlias, rendered.markdown).catch(() => {});
   }
 
   /** TTL 만료로 취소된 태스크에 대해 해당 채널에 알림 발송. */

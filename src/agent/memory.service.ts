@@ -1,5 +1,8 @@
 import { mkdir } from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+import { Worker } from "node:worker_threads";
+import type { RechunkJob } from "./memory-rechunk-worker.js";
 import Database from "better-sqlite3";
 import * as sqliteVec from "sqlite-vec";
 import { with_sqlite } from "../utils/sqlite-helper.js";
@@ -57,6 +60,8 @@ export class MemoryStore implements MemoryStoreLike {
   private readonly sqlite_path: string;
   private readonly initialized: Promise<void>;
   private embed_fn: EmbedFn | null = null;
+  private embed_worker_config: import("./memory.types.js").EmbedWorkerConfig | null = null;
+  private rechunk_worker: Worker | null = null;
 
   constructor(workspace_root: string) {
     this.root = workspace_root;
@@ -67,6 +72,11 @@ export class MemoryStore implements MemoryStoreLike {
 
   /** 임베딩 서비스를 late-inject. 설정 후 벡터 시맨틱 검색 활성화. */
   set_embed(fn: EmbedFn): void { this.embed_fn = fn; }
+
+  /** 워커 스레드용 임베딩 API 설정 주입. */
+  set_embed_worker_config(config: import("./memory.types.js").EmbedWorkerConfig): void {
+    this.embed_worker_config = config;
+  }
 
   private async ensure_initialized(): Promise<void> {
     await mkdir(this.memory_dir, { recursive: true });
@@ -205,7 +215,7 @@ export class MemoryStore implements MemoryStoreLike {
       `).run(doc_key, kind, day, path, String(content || ""), now_iso());
       return true;
     });
-    this.rechunk_document(doc_key, kind, day, String(content || ""));
+    this.schedule_rechunk(doc_key, kind, day, String(content || ""));
   }
 
   /** SQL-level atomic append — TOCTOU 방지. */
@@ -221,9 +231,39 @@ export class MemoryStore implements MemoryStoreLike {
       `).run(doc_key, kind, day, path, String(content || ""), now_iso());
       return true;
     });
-    // append 후 전체 문서를 다시 읽어 re-chunk
+    // append 후 전체 문서를 다시 읽어 워커에서 re-chunk
     const full = this.sqlite_read_document(kind, day);
-    if (full?.content) this.rechunk_document(doc_key, kind, day, full.content);
+    if (full?.content) this.schedule_rechunk(doc_key, kind, day, full.content);
+  }
+
+  /** 청킹 워커를 lazy singleton으로 반환. */
+  private get_rechunk_worker(): Worker {
+    if (!this.rechunk_worker) {
+      const __dir = dirname(fileURLToPath(import.meta.url));
+      const is_tsx = import.meta.url.endsWith(".ts");
+      const worker_file = resolve(__dir, is_tsx ? "memory-rechunk-worker.ts" : "memory-rechunk-worker.js");
+      this.rechunk_worker = new Worker(worker_file, {
+        execArgv: is_tsx ? ["--import", "tsx"] : [],
+      });
+      // 프로세스 종료 시 워커를 강제 대기하지 않음
+      this.rechunk_worker.unref();
+      this.rechunk_worker.on("error", () => { this.rechunk_worker = null; });
+    }
+    return this.rechunk_worker;
+  }
+
+  /** 청킹(+ 임베딩)을 워커 스레드로 위임. 메인 스레드 블로킹 없음. */
+  private schedule_rechunk(doc_key: string, kind: string, day: string, content: string): void {
+    try {
+      const job: RechunkJob = {
+        sqlite_path: this.sqlite_path,
+        doc_key, kind, day, content,
+        embed: this.embed_worker_config ?? undefined,
+      };
+      this.get_rechunk_worker().postMessage(job);
+    } catch {
+      // 워커 실패 시 무시 — 청킹은 eventual consistency 허용
+    }
   }
 
   /** 문서의 청크 인덱스를 갱신. 변경된 청크만 upsert, 삭제된 청크 제거. */

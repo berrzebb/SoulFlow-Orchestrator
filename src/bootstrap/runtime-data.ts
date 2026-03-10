@@ -5,6 +5,7 @@ import type { AppConfig } from "../config/schema.js";
 import type { SecretVaultService } from "../security/secret-vault.js";
 import type { create_logger } from "../logger.js";
 import type { EmbedServiceFn } from "./agent-core.js";
+import type { EmbedWorkerConfig } from "../agent/memory.types.js";
 import { resolve_from_workspace } from "./runtime-paths.js";
 import { create_message_bus } from "../bus/index.js";
 import type { MessageBusRuntime } from "../bus/types.js";
@@ -36,6 +37,7 @@ export interface RuntimeDataResult {
   oauth_store: OAuthIntegrationStore;
   oauth_flow: OAuthFlowService;
   embed_service: EmbedServiceFn | undefined;
+  embed_worker_config: EmbedWorkerConfig | undefined;
   image_embed_service: ImageEmbedFn | undefined;
   vector_store_service: ReturnType<typeof create_vector_store_service> | undefined;
   webhook_store: WebhookStore;
@@ -90,6 +92,20 @@ export async function create_runtime_data(deps: RuntimeDataDeps): Promise<Runtim
     })
     : undefined;
 
+  // 워커 스레드용 임베딩 config: API key는 skip_auth 여부에 따라 null 또는 resolved value
+  const SKIP_AUTH_EMBED = new Set(["ollama", "orchestrator_llm", "container_cli"]);
+  const embed_worker_config: EmbedWorkerConfig | undefined = embed_provider && embed_instance_id
+    ? {
+      api_base: provider_store.resolve_api_base(embed_instance_id) || "https://openrouter.ai/api/v1",
+      api_key: SKIP_AUTH_EMBED.has(embed_provider.provider_type)
+        ? null
+        : await provider_store.resolve_token(embed_instance_id),
+      model: embed_model_override
+        || (typeof embed_provider.settings.model === "string" ? embed_provider.settings.model : "openai/text-embedding-3-small"),
+      dims: 256,
+    }
+    : undefined;
+
   // 이미지(멀티모달) embed 서비스: imageInstanceId로 지정된 프로바이더 사용
   const image_instance_id = app_config.embedding.imageInstanceId || undefined;
   const image_provider = image_instance_id ? provider_store.get(image_instance_id) : null;
@@ -109,6 +125,6 @@ export async function create_runtime_data(deps: RuntimeDataDeps): Promise<Runtim
   return {
     data_dir, sessions_dir, bus, decisions, events,
     provider_store, oauth_store, oauth_flow,
-    embed_service, image_embed_service, vector_store_service, webhook_store, query_db_service,
+    embed_service, embed_worker_config, image_embed_service, vector_store_service, webhook_store, query_db_service,
   };
 }
