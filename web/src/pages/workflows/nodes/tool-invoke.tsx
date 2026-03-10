@@ -1,14 +1,11 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
-import { BuilderField } from "../builder-field";
+import { BuilderField, JsonField } from "../builder-field";
 
 function ToolInvokeEditPanel({ node, update, t, options }: EditPanelProps) {
   const available = options?.available_tools || [];
   const toolId = String(node.tool_id || "");
   const defs = options?.tool_definitions || [];
   const selectedDef = defs.find((d) => d.id === toolId || d.tool_id === toolId);
-  const paramsJson = (() => {
-    try { return JSON.stringify(node.params || {}, null, 2); } catch { return "{}"; }
-  })();
 
   return (
     <>
@@ -23,11 +20,7 @@ function ToolInvokeEditPanel({ node, update, t, options }: EditPanelProps) {
           <span className="muted">{String(selectedDef.description || "")}</span>
         </div>
       )}
-      <BuilderField label={t("workflows.tool_invoke_params")} hint={t("workflows.tool_invoke_params_hint")}>
-        <textarea className="input" rows={5} value={paramsJson} onChange={(e) => {
-          try { update({ params: JSON.parse(e.target.value) }); } catch { /* invalid json */ }
-        }} placeholder='{ "key": "{{memory.value}}" }' />
-      </BuilderField>
+      <JsonField label={t("workflows.tool_invoke_params")} hint={t("workflows.tool_invoke_params_hint")} value={node.params} onUpdate={(v) => update({ params: v })} rows={5} placeholder='{ "key": "{{memory.value}}" }' />
       <BuilderField label={t("workflows.hitl_timeout")} required>
         <input required className="input input--sm" type="number" min={0} value={String(node.timeout_ms ?? 30000)} onChange={(e) => update({ timeout_ms: Number(e.target.value) })} aria-required="true" />
       </BuilderField>

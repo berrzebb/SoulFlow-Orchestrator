@@ -7,7 +7,7 @@ function TemplateEngineEditPanel({ node, update, t }: EditPanelProps) {
       <BuilderField label={t("workflows.template")}>
         <textarea autoFocus className="input code-textarea" rows={6} value={String(node.template || "")} onChange={(e) => update({ template: e.target.value })} placeholder="Hello {{name}}! {{#if premium}}Premium user{{/if}}" />
       </BuilderField>
-      <BuilderField label={`${t("workflows.input_data")} (JSON)`}>
+      <BuilderField label={t("workflows.input_data_json")}>
         <textarea className="input code-textarea" rows={3} value={String(node.data || "{}")} onChange={(e) => update({ data: e.target.value })} placeholder='{"name": "Alice", "premium": true}' />
       </BuilderField>
       <BuilderField label={t("workflows.field_partials_json")}>

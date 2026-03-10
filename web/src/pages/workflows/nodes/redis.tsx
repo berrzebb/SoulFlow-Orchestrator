@@ -29,28 +29,28 @@ function RedisEditPanel({ node, update, t }: EditPanelProps) {
         </BuilderField>
       </BuilderRowPair>
       {needs_key && (
-        <BuilderField label={t("workflows.key")} required>
+        <BuilderField label={t("workflows.field_key")} required>
           <input className="input input--sm" required value={String(node.key || "")} onChange={(e) => update({ key: e.target.value })} placeholder="my:key" aria-required="true" />
         </BuilderField>
       )}
       {needs_field && (
-        <BuilderField label={t("workflows.field")} required>
+        <BuilderField label={t("workflows.field_field")} required>
           <input className="input input--sm" required value={String(node.field || "")} onChange={(e) => update({ field: e.target.value })} placeholder="field" aria-required="true" />
         </BuilderField>
       )}
       {needs_value && (
-        <BuilderField label={t("workflows.value")} required>
+        <BuilderField label={t("workflows.field_value")} required>
           <input className="input input--sm" required value={String(node.value || "")} onChange={(e) => update({ value: e.target.value })} placeholder="value" aria-required="true" />
         </BuilderField>
       )}
       {action === "keys" && (
-        <BuilderField label={t("workflows.pattern")}>
+        <BuilderField label={t("workflows.field_pattern")}>
           <input className="input input--sm" value={String(node.pattern || "*")} onChange={(e) => update({ pattern: e.target.value })} placeholder="*" />
         </BuilderField>
       )}
       {action === "set" && (
-        <BuilderField label={t("workflows.ttl")}>
-          <input className="input input--sm" type="number" min={0} value={String(node.ttl ?? "")} onChange={(e) => update({ ttl: e.target.value ? Number(e.target.value) : undefined })} placeholder="seconds (optional)" />
+        <BuilderField label={t("workflows.field_ttl_s")}>
+          <input className="input input--sm" type="number" min={0} value={String(node.ttl ?? "")} onChange={(e) => update({ ttl: e.target.value ? Number(e.target.value) : undefined })} placeholder="(optional)" />
         </BuilderField>
       )}
     </>

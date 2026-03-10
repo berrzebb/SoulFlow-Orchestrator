@@ -1,12 +1,14 @@
-import { BuilderField } from "../builder-field";
+import { BuilderField, NodeMultiSelect } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
-function ErrorHandlerEditPanel({ node, update, t }: EditPanelProps) {
+function ErrorHandlerEditPanel({ node, update, t, options }: EditPanelProps) {
   const on_error = String(node.on_error || "continue");
+  const try_nodes = Array.isArray(node.try_nodes) ? node.try_nodes as string[] : [];
+  const fallback_nodes = Array.isArray(node.fallback_nodes) ? node.fallback_nodes as string[] : [];
   return (
     <>
       <BuilderField label={t("workflows.error_try_nodes")} hint={t("workflows.error_try_nodes_hint")}>
-        <input autoFocus className="input input--sm" value={String(node.try_nodes || "")} onChange={(e) => update({ try_nodes: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) })} placeholder="node_1, node_2" />
+        <NodeMultiSelect value={try_nodes} onChange={(ids) => update({ try_nodes: ids })} nodes={options?.workflow_nodes} />
       </BuilderField>
       <BuilderField label={t("workflows.error_on_error")}>
         <select className="input input--sm" value={on_error} onChange={(e) => update({ on_error: e.target.value })}>
@@ -16,7 +18,7 @@ function ErrorHandlerEditPanel({ node, update, t }: EditPanelProps) {
       </BuilderField>
       {on_error === "fallback" && (
         <BuilderField label={t("workflows.error_fallback_nodes")}>
-          <input className="input input--sm" value={String(node.fallback_nodes || "")} onChange={(e) => update({ fallback_nodes: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) })} placeholder="fallback_node_1" />
+          <NodeMultiSelect value={fallback_nodes} onChange={(ids) => update({ fallback_nodes: ids })} nodes={options?.workflow_nodes} />
         </BuilderField>
       )}
     </>

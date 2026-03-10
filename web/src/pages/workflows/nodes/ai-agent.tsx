@@ -1,5 +1,5 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
-import { BuilderField, BackendModelPicker, BuilderRowPair, TemperatureField, JsonField } from "../builder-field";
+import { BuilderField, BackendModelPicker, BuilderRowPair, TemperatureField, JsonField, NodeMultiSelect } from "../builder-field";
 
 function AiAgentEditPanel({ node, update, t, options }: EditPanelProps) {
   const temp = node.temperature as number | undefined;
@@ -22,7 +22,7 @@ function AiAgentEditPanel({ node, update, t, options }: EditPanelProps) {
         <textarea className="input code-textarea" rows={3} value={String(node.user_prompt || "")} onChange={(e) => update({ user_prompt: e.target.value })} spellCheck={false} placeholder="{{memory.user_input}}" />
       </BuilderField>
       <BuilderField label={t("workflows.ai_agent_tools")} hint={t("workflows.tool_nodes_hint")}>
-        <input className="input input--sm" value={Array.isArray(node.tool_nodes) ? (node.tool_nodes as string[]).join(", ") : ""} onChange={(e) => update({ tool_nodes: e.target.value.split(",").map((s: string) => s.trim()).filter(Boolean) })} placeholder="http-1, code-1, db-1" />
+        <NodeMultiSelect value={Array.isArray(node.tool_nodes) ? node.tool_nodes as string[] : []} onChange={(ids) => update({ tool_nodes: ids })} nodes={options?.workflow_nodes} placeholder="http-1, code-1, db-1" />
       </BuilderField>
       <BuilderRowPair>
         <BuilderField label={t("workflows.max_turns")} hint={t("workflows.max_turns_hint")}>
