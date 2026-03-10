@@ -162,26 +162,55 @@ export function compute_positions(phases: PhaseDef[], workflow?: WorkflowDef, di
       const lane_ids = [...new Set([...phase_lanes.values()])].sort(
         (a, b) => (trigger_order.get(a) ?? SPECIAL_ORDER[a] ?? 999) - (trigger_order.get(b) ?? SPECIAL_ORDER[b] ?? 999),
       );
+
+      // ── 전역 컬럼 인덱스 계산 ──
+      // Pass 1: 트리거 전용 레인 — 레인 내 위상 정렬로 col 0부터 시작
+      const global_col = new Map<string, number>();
+      const SPECIAL_LANES = new Set(["shared", "default"]);
+      for (const lane_id of lane_ids.filter((id) => !SPECIAL_LANES.has(id))) {
+        const lp = phases.filter((p) => phase_lanes.get(p.phase_id) === lane_id);
+        const ll = compute_layers(lp);
+        for (const [pid, col] of ll) global_col.set(pid, col);
+      }
+      // Pass 2: shared/default — 의존 phase의 max col + 1 (여러 번 순회로 체인 처리)
+      const special_ids = phases.filter((p) => SPECIAL_LANES.has(phase_lanes.get(p.phase_id) ?? "")).map((p) => p.phase_id);
+      for (let iter = 0; iter < phases.length; iter++) {
+        let changed = false;
+        for (const pid of special_ids) {
+          if (global_col.has(pid)) continue;
+          const p = phase_map.get(pid);
+          const deps = (p?.depends_on || []).filter((d) => phase_map.has(d));
+          if (deps.every((d) => global_col.has(d))) {
+            const dep_cols = deps.map((d) => global_col.get(d)!);
+            global_col.set(pid, dep_cols.length ? Math.max(...dep_cols) + 1 : 0);
+            changed = true;
+          }
+        }
+        if (!changed) break;
+      }
+      for (const pid of special_ids) {
+        if (!global_col.has(pid)) global_col.set(pid, 0);
+      }
+
+      // ── Y 오프셋 + 포지션 배정 ──
       let lane_y = PADDING;
       for (const lane_id of lane_ids) {
         const lane_phases = phases.filter((p) => phase_lanes.get(p.phase_id) === lane_id);
         if (!lane_phases.length) continue;
-        const lane_layers = compute_layers(lane_phases);
-        const lane_layer_groups = new Map<number, string[]>();
-        for (const [id, layer] of lane_layers) {
-          if (!lane_layer_groups.has(layer)) lane_layer_groups.set(layer, []);
-          lane_layer_groups.get(layer)!.push(id);
-        }
-        const lane_max_layer = Math.max(0, ...lane_layer_groups.keys());
-        // 레인 내 최대 phase 높이 (Y 기준선)
         const lane_h = Math.max(...lane_phases.map((p) => phase_effective_height(p, workflow)));
-        for (let layer = 0; layer <= lane_max_layer; layer++) {
-          const ids = lane_layer_groups.get(layer) || [];
+        // 컬럼 그룹핑
+        const col_groups = new Map<number, string[]>();
+        for (const p of lane_phases) {
+          const col = global_col.get(p.phase_id) ?? 0;
+          if (!col_groups.has(col)) col_groups.set(col, []);
+          col_groups.get(col)!.push(p.phase_id);
+        }
+        for (const [col, ids] of col_groups) {
           const total_h = ids.reduce((sum, id) => sum + phase_effective_height(phase_map.get(id)!, workflow), 0) + (ids.length - 1) * GAP_Y;
           const offset_y = (lane_h - total_h) / 2;
           let cum_y = 0;
           ids.forEach((id) => {
-            positions.set(id, { x: PADDING + layer * (NODE_W + GAP_X), y: lane_y + offset_y + cum_y, width: NODE_W, height: NODE_H });
+            positions.set(id, { x: PADDING + col * (NODE_W + GAP_X), y: lane_y + offset_y + cum_y, width: NODE_W, height: NODE_H });
             cum_y += phase_effective_height(phase_map.get(id)!, workflow) + GAP_Y;
           });
         }
