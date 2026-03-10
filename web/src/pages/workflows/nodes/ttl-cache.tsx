@@ -5,18 +5,24 @@ function TtlCacheEditPanel({ node, update, t }: EditPanelProps) {
   const op = String(node.operation || "get");
   return (
     <>
-      <BuilderRowPair>
+      {["set", "get", "invalidate", "has"].includes(op) ? (
+        <BuilderRowPair>
+          <BuilderField label={t("workflows.operation")}>
+            <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
+              {["set", "get", "invalidate", "has", "keys", "stats", "clear"].map((o) => <option key={o} value={o}>{o}</option>)}
+            </select>
+          </BuilderField>
+          <BuilderField label={t("workflows.field_key")}>
+            <input className="input input--sm" value={String(node.key || "")} onChange={(e) => update({ key: e.target.value })} placeholder="cache-key" />
+          </BuilderField>
+        </BuilderRowPair>
+      ) : (
         <BuilderField label={t("workflows.operation")}>
           <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
             {["set", "get", "invalidate", "has", "keys", "stats", "clear"].map((o) => <option key={o} value={o}>{o}</option>)}
           </select>
         </BuilderField>
-        {["set", "get", "invalidate", "has"].includes(op) && (
-          <BuilderField label={t("workflows.field_key")}>
-            <input className="input input--sm" value={String(node.key || "")} onChange={(e) => update({ key: e.target.value })} placeholder="cache-key" />
-          </BuilderField>
-        )}
-      </BuilderRowPair>
+      )}
       {op === "set" && (
         <>
           <BuilderField label={t("workflows.field_value")}>
