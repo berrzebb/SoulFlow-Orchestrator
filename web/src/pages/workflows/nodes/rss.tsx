@@ -56,6 +56,6 @@ export const rss_descriptor: FrontendNodeDescriptor = {
     { name: "action", type: "string", description: "node.rss.input.action" },
     { name: "url", type: "string", description: "node.rss.input.url" },
   ],
-  create_default: () => ({ action: "fetch_parse", url: "", input: "", feed_title: "", link: "" }),
+  create_default: () => ({ action: "fetch_parse", url: "", input: "", feed_title: "", link: "", items: "" }),
   EditPanel: RssEditPanel,
 };

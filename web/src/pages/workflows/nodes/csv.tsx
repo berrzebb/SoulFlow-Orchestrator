@@ -60,6 +60,6 @@ export const csv_descriptor: FrontendNodeDescriptor = {
     { name: "action", type: "string", description: "node.csv.input.action" },
     { name: "data",   type: "string", description: "node.csv.input.data" },
   ],
-  create_default: () => ({ action: "parse", data: "", delimiter: ",", has_header: true }),
+  create_default: () => ({ action: "parse", data: "", delimiter: ",", has_header: true, columns: "", filter_col: "", filter_val: "" }),
   EditPanel: CsvEditPanel,
 };

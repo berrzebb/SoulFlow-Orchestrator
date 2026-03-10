@@ -45,6 +45,6 @@ export const duration_descriptor: FrontendNodeDescriptor = {
     { name: "action", type: "string", description: "node.duration.input.action" },
     { name: "duration", type: "string", description: "node.duration.input.duration" },
   ],
-  create_default: () => ({ action: "parse", duration: "" }),
+  create_default: () => ({ action: "parse", duration: "", duration2: "", ms: 0 }),
   EditPanel: DurationEditPanel,
 };

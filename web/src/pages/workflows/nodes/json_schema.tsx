@@ -47,6 +47,6 @@ export const json_schema_descriptor: FrontendNodeDescriptor = {
     { name: "schema", type: "string", description: "node.json_schema.input.schema" },
     { name: "data", type: "string", description: "node.json_schema.input.data" },
   ],
-  create_default: () => ({ action: "validate", schema: "", data: "" }),
+  create_default: () => ({ action: "validate", schema: "", data: "", schema2: "", target_draft: "draft-07" }),
   EditPanel: JsonSchemaEditPanel,
 };

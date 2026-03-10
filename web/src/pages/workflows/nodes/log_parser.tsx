@@ -50,8 +50,8 @@ export const log_parser_descriptor: FrontendNodeDescriptor = {
   toolbar_label: "node.log_parser.label",
   category: "advanced",
   output_schema: [
-    { name: "result", type: "string", description: "node.log_parser.output.result" },
-    { name: "success", type: "boolean", description: "node.log_parser.output.success" },
+    { name: "records", type: "array",  description: "node.log_parser.output.records" },
+    { name: "count",   type: "number", description: "node.log_parser.output.count" },
   ],
   input_schema: [
     { name: "action", type: "string", description: "node.log_parser.input.action" },

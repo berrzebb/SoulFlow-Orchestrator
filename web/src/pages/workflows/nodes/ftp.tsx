@@ -31,6 +31,11 @@ function FtpEditPanel({ node, update, t }: EditPanelProps) {
       <BuilderField label={t("workflows.remote_path")} required>
         <input className="input input--sm" required value={String(node.remote_path || "/")} onChange={(e) => update({ remote_path: e.target.value })} placeholder="/" aria-required="true" />
       </BuilderField>
+      {(action === "upload" || action === "download") && (
+        <BuilderField label={t("workflows.field_local_path")}>
+          <input className="input input--sm" value={String(node.local_path || "")} onChange={(e) => update({ local_path: e.target.value })} placeholder="/local/path/to/file" />
+        </BuilderField>
+      )}
     </>
   );
 }
@@ -51,6 +56,6 @@ export const ftp_descriptor: FrontendNodeDescriptor = {
     { name: "host",        type: "string", description: "node.ftp.input.host" },
     { name: "remote_path", type: "string", description: "node.ftp.input.remote_path" },
   ],
-  create_default: () => ({ action: "list", host: "", port: 21, username: "anonymous", password: "", remote_path: "/" }),
+  create_default: () => ({ action: "list", host: "", port: 21, username: "anonymous", password: "", remote_path: "/", local_path: "" }),
   EditPanel: FtpEditPanel,
 };

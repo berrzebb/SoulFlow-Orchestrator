@@ -2,7 +2,7 @@ import { BuilderField, BuilderRowPair } from "../builder-field";
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 
 const ACTIONS = ["extract_text", "extract_links", "extract_tables", "sanitize", "to_markdown"];
-const SELECTOR_ACTIONS = ["extract_text", "extract_links"];
+const SELECTOR_ACTIONS = ["extract_text", "extract_links", "extract_tables"];
 
 function HtmlEditPanel({ node, update, t }: EditPanelProps) {
   const action = String(node.action || "extract_text");
@@ -29,6 +29,11 @@ function HtmlEditPanel({ node, update, t }: EditPanelProps) {
       <BuilderField label={t("workflows.html_input")} required>
         <textarea className="input" required rows={5} value={String(node.html || "")} onChange={(e) => update({ html: e.target.value })} placeholder="<html>...</html>" aria-required="true" />
       </BuilderField>
+      {action === "sanitize" && (
+        <BuilderField label={t("workflows.html_allowed_tags")}>
+          <input className="input input--sm" value={String(node.allowed_tags || "")} onChange={(e) => update({ allowed_tags: e.target.value })} placeholder="p,a,br,strong (empty = safe defaults)" />
+        </BuilderField>
+      )}
     </>
   );
 }
@@ -48,6 +53,6 @@ export const html_descriptor: FrontendNodeDescriptor = {
     { name: "action", type: "string", description: "node.html.input.action" },
     { name: "html", type: "string", description: "node.html.input.html" },
   ],
-  create_default: () => ({ action: "extract_text", html: "", selector: "" }),
+  create_default: () => ({ action: "extract_text", html: "", selector: "", allowed_tags: "" }),
   EditPanel: HtmlEditPanel,
 };

@@ -77,6 +77,6 @@ export const image_descriptor: FrontendNodeDescriptor = {
     { name: "operation",  type: "string", description: "node.image.input.operation" },
     { name: "input_path", type: "string", description: "node.image.input.input_path" },
   ],
-  create_default: () => ({ operation: "info", input_path: "", output_path: "", width: 800, height: 600, format: "png", quality: 85, angle: 90 }),
+  create_default: () => ({ operation: "info", input_path: "", output_path: "", width: 800, height: 600, format: "png", quality: 85, angle: 90, gravity: "center" }),
   EditPanel: ImageEditPanel,
 };

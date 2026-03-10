@@ -91,6 +91,6 @@ export const markdown_descriptor: FrontendNodeDescriptor = {
     { name: "operation", type: "string", description: "node.markdown.input.operation" },
     { name: "data",      type: "string", description: "node.markdown.input.data" },
   ],
-  create_default: () => ({ operation: "table", data: "", text: "", columns: "", align: "left", ordered: false, label: "", url: "", color: "", language: "", code: "", summary: "" }),
+  create_default: () => ({ operation: "table", data: "", text: "", columns: "", align: "left", ordered: false, label: "", alt: "", url: "", color: "", language: "", code: "", summary: "" }),
   EditPanel: MarkdownEditPanel,
 };

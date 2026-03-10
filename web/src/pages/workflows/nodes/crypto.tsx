@@ -81,6 +81,6 @@ export const crypto_descriptor: FrontendNodeDescriptor = {
     { name: "input", type: "string", description: "node.crypto.input.input" },
     { name: "key", type: "string", description: "node.crypto.input.key" },
   ],
-  create_default: () => ({ action: "encrypt", input: "", key: "", key_type: "aes", key_size: 2048 }),
+  create_default: () => ({ action: "encrypt", input: "", key: "", key_type: "aes", key_size: 2048, iv: "", auth_tag: "", signature: "" }),
   EditPanel: CryptoEditPanel,
 };

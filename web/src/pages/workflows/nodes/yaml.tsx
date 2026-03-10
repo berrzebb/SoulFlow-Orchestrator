@@ -26,7 +26,7 @@ function YamlEditPanel({ node, update, t }: EditPanelProps) {
         </BuilderField>
       )}
       <BuilderField label={t("workflows.field_input")} required>
-        <textarea className="input" required rows={4} value={String(node.data || "")} onChange={(e) => update({ data: e.target.value })} placeholder="key: value" aria-required="true" />
+        <textarea className="input" required rows={4} value={String(node.data || "")} onChange={(e) => update({ data: e.target.value })} placeholder={action === "generate" ? '{"key": "value"}' : "key: value"} aria-required="true" />
       </BuilderField>
       {action === "merge" && (
         <BuilderField label={t("workflows.field_input_2")} required>
@@ -57,6 +57,6 @@ export const yaml_descriptor: FrontendNodeDescriptor = {
     { name: "action", type: "string", description: "node.yaml.input.action" },
     { name: "data", type: "string", description: "node.yaml.input.data" },
   ],
-  create_default: () => ({ action: "parse", data: "", indent: 2 }),
+  create_default: () => ({ action: "parse", data: "", data2: "", path: "", indent: 2 }),
   EditPanel: YamlEditPanel,
 };

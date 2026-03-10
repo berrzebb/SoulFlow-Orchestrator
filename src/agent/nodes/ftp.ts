@@ -33,6 +33,7 @@ export const ftp_handler: NodeHandler = {
         username: resolve_templates(n.username || "anonymous", tpl),
         password: resolve_templates(n.password || "", tpl),
         remote_path: resolve_templates(n.remote_path || "/", tpl),
+        local_path: n.local_path ? resolve_templates(n.local_path, tpl) : undefined,
       });
       const parsed = result.startsWith("{") ? JSON.parse(result) : {};
       return { output: { result: parsed, success: !result.startsWith("Error:") } };

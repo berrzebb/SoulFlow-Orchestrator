@@ -72,6 +72,6 @@ export const sql_builder_descriptor: FrontendNodeDescriptor = {
     { name: "action", type: "string", description: "node.sql_builder.input.action" },
     { name: "table", type: "string", description: "node.sql_builder.input.table" },
   ],
-  create_default: () => ({ action: "select", table: "", dialect: "sqlite", columns: "", where: "", order_by: "", values: "" }),
+  create_default: () => ({ action: "select", table: "", dialect: "sqlite", columns: "", where: "", order_by: "", values: "", sql: "", limit: undefined }),
   EditPanel: SqlBuilderEditPanel,
 };

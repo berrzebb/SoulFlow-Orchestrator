@@ -44,6 +44,6 @@ export const pdf_descriptor: FrontendNodeDescriptor = {
     { name: "action", type: "string", description: "node.pdf.input.action" },
     { name: "path", type: "string", description: "node.pdf.input.path" },
   ],
-  create_default: () => ({ action: "extract_text", path: "" }),
+  create_default: () => ({ action: "extract_text", path: "", pages: "", max_chars: undefined }),
   EditPanel: PdfEditPanel,
 };

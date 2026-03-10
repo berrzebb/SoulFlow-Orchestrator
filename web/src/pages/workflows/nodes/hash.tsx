@@ -59,6 +59,6 @@ export const hash_descriptor: FrontendNodeDescriptor = {
     { name: "input", type: "string", description: "node.hash.input.input" },
     { name: "algorithm", type: "string", description: "node.hash.input.algorithm" },
   ],
-  create_default: () => ({ action: "hash", input: "", algorithm: "sha256", encoding: "hex" }),
+  create_default: () => ({ action: "hash", input: "", algorithm: "sha256", encoding: "hex", key: "", expected: "" }),
   EditPanel: HashEditPanel,
 };

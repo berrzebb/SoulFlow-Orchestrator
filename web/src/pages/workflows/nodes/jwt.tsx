@@ -75,6 +75,6 @@ export const jwt_descriptor: FrontendNodeDescriptor = {
     { name: "token", type: "string", description: "node.jwt.input.token" },
     { name: "secret", type: "string", description: "node.jwt.input.secret" },
   ],
-  create_default: () => ({ action: "create", payload: "", secret: "", token: "", algorithm: "HS256" }),
+  create_default: () => ({ action: "create", payload: "", secret: "", token: "", algorithm: "HS256", expires_in: "" }),
   EditPanel: JwtEditPanel,
 };

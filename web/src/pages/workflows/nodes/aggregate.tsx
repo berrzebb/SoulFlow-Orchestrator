@@ -49,6 +49,6 @@ export const aggregate_descriptor: FrontendNodeDescriptor = {
     { name: "array_field", type: "string", description: "node.aggregate.input.array_field" },
     { name: "operation",   type: "string", description: "node.aggregate.input.operation" },
   ],
-  create_default: () => ({ operation: "collect", array_field: "" }),
+  create_default: () => ({ operation: "collect", array_field: "", separator: "\n" }),
   EditPanel: AggregateEditPanel,
 };
