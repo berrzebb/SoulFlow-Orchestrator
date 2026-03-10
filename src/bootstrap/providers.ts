@@ -42,8 +42,14 @@ export async function create_provider_bundle(deps: ProviderBundleDeps): Promise<
   // vault에서 API 키 읽기
   const openrouter_config = provider_store.get("openrouter");
   const openrouter_key = await provider_store.get_token("openrouter");
-  const orchestrator_llm_config = provider_store.get("orchestrator_llm");
-  const orchestrator_llm_key = await provider_store.get_token("orchestrator_llm");
+  // orchestrator_llm 인스턴스 없으면 ollama/openai_compatible 첫 번째를 fallback으로 사용
+  const ORCH_LLM_TYPES = new Set(["ollama", "openai_compatible", "container_cli"]);
+  const orchestrator_llm_config =
+    provider_store.get("orchestrator_llm") ??
+    provider_store.list().find((p) => ORCH_LLM_TYPES.has(p.provider_type));
+  const orchestrator_llm_key =
+    (await provider_store.get_token("orchestrator_llm")) ??
+    (orchestrator_llm_config ? await provider_store.get_token(orchestrator_llm_config.instance_id) : null);
 
   // CLI provider별 command/args/timeout/permission 설정 조립
   const cli_permission_config: CliPermissionConfig = {
