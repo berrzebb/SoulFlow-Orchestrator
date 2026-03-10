@@ -60,6 +60,28 @@ describe("matrix_handler", () => {
     expect(result.preview).toBeDefined();
   });
 
+  it("create_default: returns default config (L20)", () => {
+    const defaults = matrix_handler.create_default?.();
+    expect(defaults).toBeDefined();
+    expect((defaults as any).action).toBe("multiply");
+  });
+
+  it("execute: a/b as strings → success path → L35 JSON.parse", async () => {
+    // 문자열 형태로 전달 → resolve_templates 정상 동작 → MatrixTool 반환값 JSON.parse 성공
+    const node = { node_id: "n1", node_type: "matrix", action: "multiply", a: "[[1,0],[0,1]]", b: "[[1,0],[0,1]]" } as any;
+    const ctx = createMockContext();
+    const result = await matrix_handler.execute(node, ctx);
+    expect(result.output).toBeDefined();
+    expect((result.output as any).result).toBeDefined();
+  });
+
+  it("test: a 없음 + action≠identity → 'matrix A is required' 경고 (L44-45)", () => {
+    const node = { node_id: "n1", node_type: "matrix", action: "multiply" } as any;
+    const result = matrix_handler.test(node);
+    expect(result.warnings).toContain("matrix A is required");
+    expect(result.warnings).toContain("matrix B is required for this operation");
+  });
+
   it("execute: should calculate determinant", async () => {
     const node = createMockNode({
       operation: "determinant",

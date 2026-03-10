@@ -79,4 +79,23 @@ describe("code_diagram_handler", () => {
     const result = await code_diagram_handler.execute(node, ctx);
     expect(result.output).toBeDefined();
   });
+
+  it("create_default: returns default action (L22)", () => {
+    const defaults = code_diagram_handler.create_default?.();
+    expect(defaults).toBeDefined();
+    expect((defaults as any).action).toBe("class_diagram");
+  });
+
+  it("execute: actors 배열 전달 → resolve_templates TypeError → catch → L44 빈 결과", async () => {
+    // actors가 배열이면 resolve_templates에서 .replace 없어서 throw → catch 분기(L44)
+    const node = {
+      node_id: "n1", node_type: "code_diagram",
+      action: "sequence_diagram",
+      actors: ["A", "B"] as any,
+    } as OrcheNodeDefinition;
+    const ctx = createMockContext();
+    const result = await code_diagram_handler.execute(node, ctx);
+    expect((result.output as any).diagram).toBe("");
+    expect((result.output as any).result).toBeNull();
+  });
 });

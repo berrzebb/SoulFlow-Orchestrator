@@ -102,4 +102,13 @@ describe("healthcheck_handler", () => {
     const result = await healthcheck_handler.execute(node, ctx);
     expect(result.output).toBeDefined();
   });
+
+  it("execute: endpoints 배열 전달 → resolve_templates TypeError → catch → L41 healthy=false", async () => {
+    // endpoints가 배열이면 resolve_templates 호출 시 .replace 없어서 throw → catch(L41)
+    const node = { node_id: "n1", node_type: "healthcheck", action: "http", endpoints: ["url1", "url2"] as any } as OrcheNodeDefinition;
+    const ctx = createMockContext();
+    const result = await healthcheck_handler.execute(node, ctx);
+    expect((result.output as any).healthy).toBe(false);
+    expect((result.output as any).result).toBeNull();
+  });
 });

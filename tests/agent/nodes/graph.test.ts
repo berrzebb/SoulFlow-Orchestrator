@@ -106,4 +106,25 @@ describe("graph_handler", () => {
     const result = await graph_handler.execute(node, ctx);
     expect(result.output).toBeDefined();
   });
+
+  it("create_default: returns default action/edges (L22)", () => {
+    const defaults = graph_handler.create_default?.();
+    expect(defaults).toBeDefined();
+    expect((defaults as any).action).toBe("bfs");
+  });
+
+  it("execute: action/edges as strings → success path → L36 JSON.parse", async () => {
+    // 문자열 형태로 전달 → resolve_templates 정상 동작 → GraphTool 반환값 JSON.parse 성공
+    const node = { node_id: "n1", node_type: "graph", action: "bfs", edges: "[]", start: "A" } as any;
+    const ctx = createMockContext();
+    const result = await graph_handler.execute(node, ctx);
+    expect(result.output).toBeDefined();
+    expect((result.output as any).result).toBeDefined();
+  });
+
+  it("test: edges 없음 → 'edges is required' 경고 (L46)", () => {
+    const node = { node_id: "n1", node_type: "graph", action: "bfs" } as any;
+    const result = graph_handler.test(node);
+    expect(result.warnings).toContain("edges is required");
+  });
 });
