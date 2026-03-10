@@ -742,3 +742,36 @@ describe("Encoding Node Handler", () => {
     });
   });
 });
+
+// ══════════════════════════════════════════
+// base_convert / msgpack / protobuf 분기 (L57-89)
+// ══════════════════════════════════════════
+
+describe("encoding_handler — base_convert/msgpack/protobuf 분기", () => {
+  const ctx: OrcheNodeExecutorContext = { memory: {}, workspace: "/tmp", abort_signal: undefined };
+
+  it("operation=base_convert → BaseConvertTool 위임 (L57-62)", async () => {
+    const node = { node_id: "n1", node_type: "encoding", operation: "base_convert", input: "255", base_from: "dec", base_to: "hex" } as any;
+    const r = await encoding_handler.execute(node, ctx);
+    expect(r.output).toBeDefined();
+    expect(typeof r.output.result).toBe("string");
+  });
+
+  it("operation=msgpack_encode → MsgpackTool 위임 (L64-70)", async () => {
+    const node = { node_id: "n1", node_type: "encoding", operation: "msgpack_encode", input: '{"key":"value"}' } as any;
+    const r = await encoding_handler.execute(node, ctx);
+    expect(r.output).toBeDefined();
+  });
+
+  it("operation=msgpack_decode → MsgpackTool 위임 (L72-78)", async () => {
+    const node = { node_id: "n1", node_type: "encoding", operation: "msgpack_decode", input: "81a3666f6fa3626172" } as any;
+    const r = await encoding_handler.execute(node, ctx);
+    expect(r.output).toBeDefined();
+  });
+
+  it("operation=protobuf_define → ProtobufTool 위임 (L83-89)", async () => {
+    const node = { node_id: "n1", node_type: "encoding", operation: "protobuf_define", input: "", schema: "message Test { string name = 1; }" } as any;
+    const r = await encoding_handler.execute(node, ctx);
+    expect(r.output).toBeDefined();
+  });
+});

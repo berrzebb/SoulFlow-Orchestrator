@@ -169,3 +169,40 @@ describe("web_scrape_handler — create_default", () => {
     expect(d.max_chars).toBe(50000);
   });
 });
+
+// ══════════════════════════════════════════
+// robots_txt / sitemap action 분기 (L45-62)
+// ══════════════════════════════════════════
+
+describe("web_scrape_handler — robots_txt/sitemap fetch mock", () => {
+  afterEach(() => { vi.restoreAllMocks(); });
+
+  it("action=robots_txt → fetch(origin/robots.txt) → RobotsTxtTool.parse (L45-52)", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      status: 200,
+      text: async () => "User-agent: *\nDisallow: /private/",
+    }));
+    const r = await web_scrape_handler.execute(
+      make_node({ url: "https://example.com/page", action: "robots_txt" }),
+      make_ctx(),
+    );
+    expect(r.output).toBeDefined();
+    expect((r.output as any).status).toBe(200);
+    vi.unstubAllGlobals();
+  });
+
+  it("action=sitemap → fetch(origin/sitemap.xml) → SitemapTool.parse (L55-62)", async () => {
+    const xml = `<?xml version="1.0"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>https://example.com/</loc></url></urlset>`;
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      status: 200,
+      text: async () => xml,
+    }));
+    const r = await web_scrape_handler.execute(
+      make_node({ url: "https://example.com/page", action: "sitemap" }),
+      make_ctx(),
+    );
+    expect(r.output).toBeDefined();
+    expect((r.output as any).status).toBe(200);
+    vi.unstubAllGlobals();
+  });
+});

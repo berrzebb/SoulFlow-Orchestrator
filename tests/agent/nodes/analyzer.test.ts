@@ -97,4 +97,23 @@ describe("analyzer_handler", () => {
     const result = await analyzer_handler.execute(node, ctx);
     expect(result.output.category).toBe("unknown");
   });
+
+  it("execute: mode=sentiment → SentimentTool 위임 (L39-48)", async () => {
+    const node = createMockNode({ mode: "sentiment", input_field: "I love this product!", sentiment_action: "analyze" } as any);
+    const ctx = createMockContext();
+    const result = await analyzer_handler.execute(node, ctx);
+    expect(result.output).toBeDefined();
+    expect(result.output).toHaveProperty("analysis");
+    expect(result.output).toHaveProperty("category");
+    expect(result.output).toHaveProperty("confidence");
+  });
+
+  it("runner_execute: mode=sentiment → execute() 위임 (L72)", async () => {
+    const node = createMockNode({ mode: "sentiment", input_field: "neutral text" } as any);
+    const ctx = createMockContext();
+    const runner = { services: { invoke_llm: null } };
+    const result = await analyzer_handler.runner_execute!(node, ctx, runner as any);
+    expect(result.output).toBeDefined();
+    expect(result.output).toHaveProperty("category");
+  });
 });
