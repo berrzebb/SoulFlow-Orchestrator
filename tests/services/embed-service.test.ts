@@ -279,6 +279,55 @@ describe("create_multimodal_embed_service", () => {
   });
 });
 
+// ── L54: res.text() throw → .catch(() => "") 폴백 ─────────────────────────
+
+describe("create_embed_service — res.text() throw (L54 catch fallback)", () => {
+  it("API 오류 + res.text() throw → .catch(() => '') 폴백 → 에러 메시지에 빈 문자열", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+      text: async () => { throw new Error("text error"); }, // L54: .catch(() => "") 호출됨
+    } as unknown as Response);
+
+    const embed = create_embed_service({ get_api_key: async () => "key" });
+    await expect(embed(["test"], {})).rejects.toThrow("Embedding API error (500)");
+  });
+});
+
+// ── L139: multimodal opts.dimensions → body.dimensions 추가 ──────────────
+
+describe("create_multimodal_embed_service — dimensions 옵션 (L139)", () => {
+  it("dimensions 있음 → body.dimensions 포함 (L139)", async () => {
+    let captured_body: Record<string, unknown> = {};
+    vi.mocked(fetch).mockImplementationOnce(async (_, init) => {
+      captured_body = JSON.parse((init as RequestInit).body as string);
+      return {
+        ok: true,
+        json: async () => ({ data: [{ embedding: [0.1, 0.2], index: 0 }] }),
+      } as unknown as Response;
+    });
+
+    const embed = create_multimodal_embed_service({ get_api_key: async () => "key" });
+    await embed(["text test"], { dimensions: 512 }); // L139: opts.dimensions = 512
+    expect(captured_body.dimensions).toBe(512);
+  });
+});
+
+// ── L152: multimodal res.text() throw → .catch(() => "") 폴백 ────────────
+
+describe("create_multimodal_embed_service — res.text() throw (L152 catch fallback)", () => {
+  it("API 오류 + res.text() throw → .catch(() => '') 폴백", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({
+      ok: false,
+      status: 503,
+      text: async () => { throw new Error("text error"); }, // L152: .catch(() => "") 호출됨
+    } as unknown as Response);
+
+    const embed = create_multimodal_embed_service({ get_api_key: async () => "key" });
+    await expect(embed(["test"], {})).rejects.toThrow("Multimodal embedding API error (503)");
+  });
+});
+
 describe("create_multimodal_embed_service_from_provider", () => {
   it("ollama → skip_auth=true", async () => {
     vi.mocked(fetch).mockResolvedValueOnce(make_mock_response([[0.5]]) as unknown as Response);
