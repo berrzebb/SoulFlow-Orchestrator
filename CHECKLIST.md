@@ -1,7 +1,7 @@
 # 워크플로우 노드/도구 종합 체크리스트
 
 > 이 문서는 이터레이션마다 읽고 업데이트합니다.
-> 마지막 업데이트: 2026-03-10 (이터레이션 10 — 최종)
+> 마지막 업데이트: 2026-03-11 (이터레이션 11 — i18n 완전 현지화)
 
 ## 프로젝트 루트
 `d:/claude-tools/.claude/mcp-servers/slack/next/`
@@ -639,4 +639,44 @@
 - **미통합 도구 13개 모두 YAGNI/내부 유틸리티로 명시적 확정**
 - **174개 도구 → 131개 노드 커버리지 100% 검토 완료**
 
-**Phase 10 최종 검증 완료 ✅ — 작업 종료**
+**Phase 10 최종 검증 완료 ✅**
+
+---
+
+## Phase 11: i18n 완전 현지화 (이터레이션 11)
+
+### 발견된 문제
+| 항목 | 설명 |
+|------|------|
+| placeholder 하드코딩 | BuilderField/textarea/input의 `placeholder=""` 속성에 영문 텍스트 하드코딩 |
+| 액션 드롭다운 원문 노출 | `<option>{a}</option>` 패턴으로 액션 명칭이 항상 영문으로 표시됨 |
+| JSON 문법 오류 | `en.json`/`ko.json`에서 `node.state_machine.machine_placeholder` 뒤 쉼표 누락 |
+
+### 수정된 파일 — placeholder i18n
+| 파일 | 수정 내용 |
+|------|---------|
+| `web/nodes/decision.tsx` | value_placeholder, rationale_placeholder → `t()` |
+| `web/nodes/promise.tsx` | value_placeholder, rationale_placeholder → `t()` |
+| `web/nodes/assert.tsx` | msg_placeholder → `t()` |
+| `web/nodes/email.tsx` | subject_placeholder, body_placeholder → `t()` |
+| `web/nodes/hash.tsx` | key_placeholder, expected_placeholder → `t()` |
+| `web/nodes/task.tsx` | title_placeholder → `t()` |
+| `web/nodes/wait.tsx` | approval_placeholder → `t()` |
+| `web/nodes/markdown.tsx` | summary_placeholder → `t()` |
+
+### 수정된 파일 — 액션 드롭다운 i18n
+- 50개 이상의 `web/nodes/*.tsx` 파일에서 `{a}</option>` → `{t(\`node.action.\${a}\`)}</option>` 패턴 적용
+- **예외**: md5/sha256/gzip/brotli 등 기술 명칭 배열(ALGORITHMS 등)은 번역 제외
+- **인라인 배열 파일** 별도 수정: `network.tsx`(2곳), `math.tsx`(2곳), `table.tsx`(1곳)
+
+### i18n 키 추가 (`en.json` / `ko.json`)
+| 범주 | 추가된 키 | 수량 |
+|------|---------|------|
+| node.xxx.yyy_placeholder | placeholder 텍스트 | 13개 |
+| node.action.* | 액션 명칭 현지화 | ~230개 |
+| **합계** | | **~243개** |
+
+### 커밋
+17. `feat: i18n — 노드 액션 드롭다운 및 placeholder 완전 현지화 (이터레이션 10)` — `76cf516`
+
+**Phase 11 완료 ✅ — 모든 드롭다운 및 placeholder 현지화 완료**
