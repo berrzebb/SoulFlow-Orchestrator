@@ -164,4 +164,31 @@ describe("MarkdownTool — 미커버 분기", () => {
     expect(String(r)).toContain("Error");
     expect(String(r)).toContain("array");
   });
+
+  it("task_list: checklist와 동일 처리 (L38)", async () => {
+    const r = String(await exec({ operation: "task_list", data: '["할일1","할일2"]' }));
+    expect(r).toContain("[ ]");
+  });
+
+  it("unknown operation → Error (L46)", async () => {
+    const r = String(await exec({ operation: "paragraph" }));
+    expect(r).toContain("Error");
+    expect(r).toContain("unsupported");
+  });
+
+  it("list: non-JSON 문자열 → split by newline (L92)", async () => {
+    const r = String(await exec({ operation: "list", data: "항목1\n항목2\n항목3" }));
+    expect(r).toContain("- 항목1");
+    expect(r).toContain("- 항목2");
+  });
+
+  it("checklist: non-JSON 문자열 → split by newline (L107)", async () => {
+    const r = String(await exec({ operation: "checklist", data: "할일A\n할일B" }));
+    expect(r).toContain("[ ] 할일A");
+  });
+
+  it("html_to_md: blockquote 변환 (L151)", async () => {
+    const r = String(await exec({ operation: "html_to_md", text: "<blockquote>인용문\n두 번째 줄</blockquote>" }));
+    expect(r).toContain("> ");
+  });
 });

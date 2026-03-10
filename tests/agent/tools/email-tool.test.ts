@@ -211,6 +211,65 @@ describe("EmailTool — HTML 이메일", () => {
   });
 });
 
+// ══════════════════════════════════════════
+// 미커버 분기
+// ══════════════════════════════════════════
+
+describe("EmailTool — AUTH LOGIN (L106/L110/L111)", () => {
+  it("user+pass 있을 때 AUTH LOGIN 흐름 — case 2/3 커버", async () => {
+    // 220(init) → case 0 → 250(EHLO) → case 1 → AUTH LOGIN → 334(user) → case 2 →
+    // 334(pass) → case 3 → 235(auth OK) → case 4 → MAIL FROM 등
+    set_smtp_responses(
+      "250 smtp.example.com Hello",  // EHLO response → AUTH LOGIN
+      "334 Username:",               // AUTH LOGIN response → case 2: send base64(user)
+      "334 Password:",               // username response → case 3: send base64(pass)
+      "235 Auth OK",                 // password response → case 4: send MAIL FROM
+      "250 OK",                      // MAIL FROM response → case 5: send RCPT TO
+      "354 Start",                   // RCPT TO → L116/117: send DATA → case 6
+      "250 OK",                      // DATA response → case 7: QUIT, resolve
+    );
+    const r = JSON.parse(await make_tool().execute({
+      action: "send",
+      to: "user@example.com",
+      from: "sender@example.com",
+      subject: "Auth Test",
+      body: "Hello",
+      smtp_host: "smtp.example.com",
+      smtp_port: 25,
+      smtp_user: "testuser",
+      smtp_pass: "testpass",
+    }));
+    expect(r.ok).toBe(true);
+  });
+});
+
+describe("EmailTool — signal abort (L74)", () => {
+  it("AbortSignal 전달 → signal.addEventListener 호출 (L74)", async () => {
+    const controller = new AbortController();
+    set_smtp_responses(
+      "250 smtp.example.com Hello",
+      "250 OK",
+      "250 OK",
+      "354 Start",
+      "250 OK",
+    );
+    // abort 전에 성공하면 ok:true
+    const r = JSON.parse(await make_tool().execute(
+      {
+        action: "send",
+        to: "user@example.com",
+        from: "sender@example.com",
+        subject: "Signal Test",
+        body: "Hello",
+        smtp_host: "smtp.example.com",
+        smtp_port: 25,
+      },
+      { signal: controller.signal } as unknown as Parameters<typeof make_tool extends { execute: infer E } ? E : never>[1],
+    ));
+    expect(r.ok).toBe(true);
+  });
+});
+
 describe("EmailTool — SMTP 오류 응답", () => {
   it("550 오류 → Error 반환", async () => {
     set_smtp_responses(
