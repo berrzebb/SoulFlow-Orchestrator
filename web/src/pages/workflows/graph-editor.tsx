@@ -16,8 +16,8 @@ export type { NodePos, Edge, EdgeType } from "./graph-layout";
 import type { PhaseDef, NodeGroup, WorkflowDef, OrcheNodeDef, TriggerType, TriggerNodeDef, EndNodeDef } from "./workflow-types";
 import { get_frontend_node } from "./node-registry";
 
-import { compute_positions, compute_aux_positions, compute_edges, compute_aux_edges, PADDING } from "./graph-layout";
-import type { NodePos, Edge } from "./graph-layout";
+import { compute_positions, compute_aux_positions, compute_edges, compute_aux_edges, compute_layout_dir, PADDING } from "./graph-layout";
+import type { NodePos, Edge, LayoutDir } from "./graph-layout";
 import { EdgePath, PhaseNode, AuxNode, AddHandle, GroupFrame, is_orche_type, MODE_ICON, orche_icon } from "./graph-nodes";
 
 // ── Main Graph Editor Component ──
@@ -102,13 +102,14 @@ export function GraphEditor({
 
   /** 노드 수동 위치 오프셋 (자동 레이아웃 대비 delta). */
   const [nodeOffsets, setNodeOffsets] = useState<Record<string, { dx: number; dy: number }>>({});
+  const layoutDir: LayoutDir = compute_layout_dir(workflow.phases);
   const nodeDrag = useRef<{ id: string; startSvg: { x: number; y: number }; startOffset: { dx: number; dy: number }; moved: boolean; isTouch?: boolean } | null>(null);
   const DRAG_THRESHOLD = 5;
   const TOUCH_DRAG_THRESHOLD = 12;
 
-  const autoPositions = compute_positions(workflow.phases, workflow);
+  const autoPositions = compute_positions(workflow.phases, workflow, layoutDir);
   /** 보조 노드 + 위치 계산. */
-  const auxData = compute_aux_positions(workflow, autoPositions);
+  const auxData = compute_aux_positions(workflow, autoPositions, layoutDir);
   /** 자동 레이아웃 + 수동 오프셋 합산 (Phase + 보조 노드 모두 포함). */
   const positions = (() => {
     const merged = new Map<string, NodePos>();
@@ -1174,6 +1175,16 @@ export function GraphEditor({
 
       {/* 좌하단: 줌 컨트롤 + 미니맵 */}
       <div className="graph-editor__zoom-overlay">
+        <button
+          className="btn btn--sm btn--icon"
+          onClick={() => { setNodeOffsets({}); zoomReset(); }}
+          title={`오토 어레인지 (${layoutDir})`}
+          aria-label="오토 어레인지"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>
+          </svg>
+        </button>
         <button className="btn btn--sm btn--icon" onClick={zoomReset} title={t("workflows.zoom_fit")} aria-label={t("workflows.zoom_fit")}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg>
         </button>

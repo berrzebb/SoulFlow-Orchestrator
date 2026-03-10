@@ -31,6 +31,18 @@ export function compute_orche_node_height(_field_count: number): number {
   return ORCHE_MIN_H;
 }
 
+export type LayoutDir = "LR" | "TD";
+
+/** 워크플로우 구조에 따라 수평/수직 배치 방향 결정.
+ *  - LR: 체인 깊이 ≤ 3 (가로로 넓지 않음)
+ *  - TD: 체인 깊이 > 3 (세로로 쌓아 가로 스크롤 방지)
+ */
+export function compute_layout_dir(phases: PhaseDef[]): LayoutDir {
+  const layers = compute_layers(phases);
+  const max_layer = layers.size ? Math.max(...layers.values()) : 0;
+  return max_layer > 3 ? "TD" : "LR";
+}
+
 /** Topological layer assignment based on depends_on + implicit sequential order. */
 function compute_layers(phases: PhaseDef[]): Map<string, number> {
   const layers = new Map<string, number>();
@@ -79,8 +91,12 @@ function phase_effective_height(phase: PhaseDef, workflow?: WorkflowDef): number
   return NODE_H + SUB_OFFSET_Y + rows * SUB_D + (rows - 1) * SUB_GAP;
 }
 
-/** Node position calculation — left-to-right horizontal flow. */
-export function compute_positions(phases: PhaseDef[], workflow?: WorkflowDef): Map<string, NodePos> {
+/** Node position calculation.
+ *  dir=LR: 레이어가 열(X축), 같은 레이어 phase는 행(Y축)으로 쌓임.
+ *  dir=TD: 레이어가 행(Y축), 같은 레이어 phase는 열(X축)으로 나열.
+ */
+export function compute_positions(phases: PhaseDef[], workflow?: WorkflowDef, dir?: LayoutDir): Map<string, NodePos> {
+  const resolved_dir = dir ?? compute_layout_dir(phases);
   const layers = compute_layers(phases);
   const positions = new Map<string, NodePos>();
   const phase_map = new Map(phases.map((p) => [p.phase_id, p]));
@@ -90,30 +106,44 @@ export function compute_positions(phases: PhaseDef[], workflow?: WorkflowDef): M
     if (!layer_groups.has(layer)) layer_groups.set(layer, []);
     layer_groups.get(layer)!.push(id);
   }
-
-  const layer_heights = new Map<number, number>();
-  for (const [layer, ids] of layer_groups) {
-    const total = ids.reduce((sum, id) => sum + phase_effective_height(phase_map.get(id)!, workflow), 0) + (ids.length - 1) * GAP_Y;
-    layer_heights.set(layer, total);
-  }
-  const max_h = Math.max(1, ...layer_heights.values());
   const max_layer = Math.max(0, ...layer_groups.keys());
 
-  for (let layer = 0; layer <= max_layer; layer++) {
-    const ids = layer_groups.get(layer) || [];
-    const total_h = layer_heights.get(layer) || 0;
-    const offset_y = (max_h - total_h) / 2;
+  if (resolved_dir === "LR") {
+    const layer_heights = new Map<number, number>();
+    for (const [layer, ids] of layer_groups) {
+      const total = ids.reduce((sum, id) => sum + phase_effective_height(phase_map.get(id)!, workflow), 0) + (ids.length - 1) * GAP_Y;
+      layer_heights.set(layer, total);
+    }
+    const max_h = Math.max(1, ...layer_heights.values());
 
-    let cum_y = 0;
-    ids.forEach((id) => {
-      positions.set(id, {
-        x: PADDING + layer * (NODE_W + GAP_X),
-        y: PADDING + offset_y + cum_y,
-        width: NODE_W,
-        height: NODE_H,
+    for (let layer = 0; layer <= max_layer; layer++) {
+      const ids = layer_groups.get(layer) || [];
+      const total_h = layer_heights.get(layer) || 0;
+      const offset_y = (max_h - total_h) / 2;
+      let cum_y = 0;
+      ids.forEach((id) => {
+        positions.set(id, { x: PADDING + layer * (NODE_W + GAP_X), y: PADDING + offset_y + cum_y, width: NODE_W, height: NODE_H });
+        cum_y += phase_effective_height(phase_map.get(id)!, workflow) + GAP_Y;
       });
-      cum_y += phase_effective_height(phase_map.get(id)!, workflow) + GAP_Y;
-    });
+    }
+  } else {
+    // TD: 레이어가 Y축, 같은 레이어 phase들은 X축으로 나열
+    const layer_widths = new Map<number, number>();
+    for (const [layer, ids] of layer_groups) {
+      layer_widths.set(layer, ids.length * NODE_W + (ids.length - 1) * GAP_X);
+    }
+    const max_w = Math.max(1, ...layer_widths.values());
+    let cum_y = 0;
+    for (let layer = 0; layer <= max_layer; layer++) {
+      const ids = layer_groups.get(layer) || [];
+      const row_w = layer_widths.get(layer) || NODE_W;
+      const offset_x = (max_w - row_w) / 2;
+      ids.forEach((id, i) => {
+        positions.set(id, { x: PADDING + offset_x + i * (NODE_W + GAP_X), y: PADDING + cum_y, width: NODE_W, height: NODE_H });
+      });
+      const max_ph = Math.max(...ids.map((id) => phase_effective_height(phase_map.get(id)!, workflow)));
+      cum_y += max_ph + GAP_Y * 2;
+    }
   }
 
   return positions;
@@ -123,7 +153,9 @@ export function compute_positions(phases: PhaseDef[], workflow?: WorkflowDef): M
 export function compute_aux_positions(
   workflow: WorkflowDef,
   phase_positions: Map<string, NodePos>,
+  dir?: LayoutDir,
 ): { nodes: GraphNode[]; positions: Map<string, NodePos> } {
+  const resolved_dir = dir ?? compute_layout_dir(workflow.phases);
   const nodes: GraphNode[] = [];
   const positions = new Map<string, NodePos>();
   const tool_nodes = workflow.tool_nodes || [];
@@ -165,33 +197,47 @@ export function compute_aux_positions(
       ? [{ id: "__cron__", trigger_type: "cron" as const, schedule: workflow.trigger.schedule, timezone: workflow.trigger.timezone }]
       : [];
   const trigger_out = TRIGGER_OUTPUT;
-  // 트리거 3개 이상이면 간격을 더 넓게
   const trigger_gap = effective_triggers.length >= 3 ? GAP_Y + 16 : GAP_Y;
   const trigger_w = 170, trigger_h = compute_orche_node_height(trigger_out.length);
-  // 트리거: 타겟 페이즈 수직 범위 중앙에 정렬, 타겟 페이즈 순서로 정렬해 교차 최소화
   const first_phase = workflow.phases[0];
   const first_anchor = first_phase ? phase_positions.get(first_phase.phase_id) : null;
-  const trigger_x = first_anchor ? first_anchor.x - trigger_w - GAP_X : PADDING;
-  const phase_ys = [...phase_positions.values()];
-  const phases_min_y = phase_ys.length ? Math.min(...phase_ys.map((p) => p.y)) : PADDING;
-  const phases_max_y = phase_ys.length ? Math.max(...phase_ys.map((p) => p.y + p.height)) : PADDING + NODE_H;
-  const phases_center_y = (phases_min_y + phases_max_y) / 2;
-  const total_trigger_h = effective_triggers.length * trigger_h + Math.max(0, effective_triggers.length - 1) * trigger_gap;
-  const trigger_start_y = phases_center_y - total_trigger_h / 2;
   const phase_order = new Map(workflow.phases.map((p, i) => [p.phase_id, i]));
   const sorted_triggers = [...effective_triggers].sort((a, b) => {
     const pa = workflow.phases.find((p) => p.depends_on?.includes(a.id));
     const pb = workflow.phases.find((p) => p.depends_on?.includes(b.id));
     return (phase_order.get(pa?.phase_id ?? "") ?? 999) - (phase_order.get(pb?.phase_id ?? "") ?? 999);
   });
-  sorted_triggers.forEach((tn, ti) => {
-    const label = tn.trigger_type === "cron" ? (tn.schedule || "cron") : tn.trigger_type;
-    const trigger_detail = tn.trigger_type === "cron" ? tn.schedule
-      : tn.trigger_type === "webhook" ? tn.webhook_path
-      : undefined;
-    nodes.push({ id: tn.id, type: "trigger", label, sub_label: tn.trigger_type, output_fields: trigger_out, trigger_detail });
-    positions.set(tn.id, { x: trigger_x, y: trigger_start_y + ti * (trigger_h + trigger_gap), width: trigger_w, height: trigger_h });
-  });
+
+  if (resolved_dir === "LR") {
+    const trigger_x = first_anchor ? first_anchor.x - trigger_w - GAP_X : PADDING;
+    const phase_ys = [...phase_positions.values()];
+    const phases_min_y = phase_ys.length ? Math.min(...phase_ys.map((p) => p.y)) : PADDING;
+    const phases_max_y = phase_ys.length ? Math.max(...phase_ys.map((p) => p.y + p.height)) : PADDING + NODE_H;
+    const phases_center_y = (phases_min_y + phases_max_y) / 2;
+    const total_trigger_h = effective_triggers.length * trigger_h + Math.max(0, effective_triggers.length - 1) * trigger_gap;
+    const trigger_start_y = phases_center_y - total_trigger_h / 2;
+    sorted_triggers.forEach((tn, ti) => {
+      const label = tn.trigger_type === "cron" ? (tn.schedule || "cron") : tn.trigger_type;
+      const trigger_detail = tn.trigger_type === "cron" ? tn.schedule : tn.trigger_type === "webhook" ? tn.webhook_path : undefined;
+      nodes.push({ id: tn.id, type: "trigger", label, sub_label: tn.trigger_type, output_fields: trigger_out, trigger_detail });
+      positions.set(tn.id, { x: trigger_x, y: trigger_start_y + ti * (trigger_h + trigger_gap), width: trigger_w, height: trigger_h });
+    });
+  } else {
+    // TD: 트리거를 첫 번째 phase 위에 수평 나열
+    const trigger_y = first_anchor ? first_anchor.y - trigger_h - GAP_Y * 2 : PADDING;
+    const phase_xs = [...phase_positions.values()];
+    const phases_min_x = phase_xs.length ? Math.min(...phase_xs.map((p) => p.x)) : PADDING;
+    const phases_max_x = phase_xs.length ? Math.max(...phase_xs.map((p) => p.x + p.width)) : PADDING + NODE_W;
+    const phases_center_x = (phases_min_x + phases_max_x) / 2;
+    const total_trigger_w = effective_triggers.length * trigger_w + Math.max(0, effective_triggers.length - 1) * trigger_gap;
+    const trigger_start_x = phases_center_x - total_trigger_w / 2;
+    sorted_triggers.forEach((tn, ti) => {
+      const label = tn.trigger_type === "cron" ? (tn.schedule || "cron") : tn.trigger_type;
+      const trigger_detail = tn.trigger_type === "cron" ? tn.schedule : tn.trigger_type === "webhook" ? tn.webhook_path : undefined;
+      nodes.push({ id: tn.id, type: "trigger", label, sub_label: tn.trigger_type, output_fields: trigger_out, trigger_detail });
+      positions.set(tn.id, { x: trigger_start_x + ti * (trigger_w + trigger_gap), y: trigger_y, width: trigger_w, height: trigger_h });
+    });
+  }
 
   // Orchestration nodes — 충돌 감지용 all_positions: phase + 이미 배치된 trigger 포함
   const orche_nodes = workflow.orche_nodes || [];
