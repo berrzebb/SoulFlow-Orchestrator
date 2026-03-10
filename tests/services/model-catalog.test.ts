@@ -348,6 +348,76 @@ describe("model-catalog — fetch mock (네트워크)", () => {
     expect(vi.mocked(fetch).mock.calls.length).toBe(call_count_after_first);
   });
 
+  // L117: fetch_openrouter_models — api_key → Authorization 헤더 추가
+  it("fetch_openrouter_models: api_key 있음 → Authorization 헤더 포함 (L117)", async () => {
+    invalidate_model_cache();
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: [{ id: "openai/gpt-4", name: "GPT-4", context_length: 128000, pricing: { prompt: "0.01", completion: "0.03" } }] }),
+    } as unknown as Response);
+    const models = await fetch_openrouter_models("sk-or-fake-key");
+    expect(models.length).toBeGreaterThan(0);
+    // fetch가 호출되었는지 확인
+    const call_headers = (vi.mocked(fetch).mock.calls[0]?.[1] as RequestInit | undefined)?.headers;
+    expect((call_headers as Record<string, string>)?.Authorization).toContain("Bearer");
+  });
+
+  // L152: fetch_openai_models 캐시 히트
+  it("fetch_openai_models: 두 번째 호출 → 캐시 반환 (L152)", async () => {
+    invalidate_model_cache();
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: [{ id: "gpt-4", object: "model" }] }),
+    } as unknown as Response);
+    await fetch_openai_models("https://api.openai.com");
+    const prev_calls = vi.mocked(fetch).mock.calls.length;
+    // 두 번째 호출 → 캐시 히트 (L152)
+    await fetch_openai_models("https://api.openai.com");
+    expect(vi.mocked(fetch).mock.calls.length).toBe(prev_calls); // fetch 재호출 없음
+  });
+
+  // L217: fetch_anthropic_models 캐시 히트
+  it("fetch_anthropic_models: 두 번째 호출 → 캐시 반환 (L217)", async () => {
+    invalidate_model_cache();
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: [{ id: "claude-3", display_name: "Claude 3" }] }),
+    } as unknown as Response);
+    await fetch_anthropic_models("sk-ant-fake");
+    const prev_calls = vi.mocked(fetch).mock.calls.length;
+    // 두 번째 호출 → 캐시 히트 (L217)
+    await fetch_anthropic_models("sk-ant-fake");
+    expect(vi.mocked(fetch).mock.calls.length).toBe(prev_calls); // fetch 재호출 없음
+  });
+
+  // L253: fetch_gemini_models 캐시 히트
+  it("fetch_gemini_models: 두 번째 호출 → 캐시 반환 (L253)", async () => {
+    invalidate_model_cache();
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({ models: [{ name: "models/gemini-pro", displayName: "Gemini Pro", supportedGenerationMethods: ["generateContent"] }] }),
+    } as unknown as Response);
+    await fetch_gemini_models("fake-gemini-key");
+    const prev_calls = vi.mocked(fetch).mock.calls.length;
+    // 두 번째 호출 → 캐시 히트 (L253)
+    await fetch_gemini_models("fake-gemini-key");
+    expect(vi.mocked(fetch).mock.calls.length).toBe(prev_calls); // fetch 재호출 없음
+  });
+
+  // L298: fetch_ollama_models 캐시 히트
+  it("fetch_ollama_models: 두 번째 호출 → 캐시 반환 (L298)", async () => {
+    invalidate_model_cache();
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({ models: [{ name: "llama2" }] }),
+    } as unknown as Response);
+    await fetch_ollama_models("http://localhost:11434");
+    const prev_calls = vi.mocked(fetch).mock.calls.length;
+    // 두 번째 호출 → 캐시 히트 (L298)
+    await fetch_ollama_models("http://localhost:11434");
+    expect(vi.mocked(fetch).mock.calls.length).toBe(prev_calls); // fetch 재호출 없음
+  });
+
   // L335: invalidate_model_cache(provider) — cache.delete 실행 경로
   it("invalidate_model_cache: 일치하는 캐시 키 존재 시 cache.delete 호출 (L335)", async () => {
     // anthropic 캐시 채우기 (api_key 있어야 to_cache 호출됨)
