@@ -310,9 +310,29 @@ export class OrchestratorLlmRuntime {
 
   // ─── 모델 관리 (public) ─────────────────────────────
 
-  /** 설치된 모델 목록 조회 (GET /api/tags). */
+  /** 설치된 모델 목록 조회. OpenAI-compatible /v1/models 우선, 실패 시 Ollama /api/tags. */
   async list_models(): Promise<ModelInfo[]> {
     const base = this.api_base.replace(/\/v1\/?$/, "");
+    // OpenAI-compatible /v1/models (vLLM 등)
+    try {
+      const res = await fetch(`${base}/v1/models`, { signal: AbortSignal.timeout(5_000) });
+      if (res.ok) {
+        const data = (await res.json()) as Record<string, unknown>;
+        const items = Array.isArray(data.data) ? data.data : [];
+        if (items.length > 0) {
+          return items.map((m) => {
+            const rec = (m && typeof m === "object") ? m as Record<string, unknown> : {};
+            return {
+              name: String(rec.id || ""),
+              size: 0,
+              modified_at: "",
+              digest: String(rec.id || ""),
+            };
+          });
+        }
+      }
+    } catch { /* fall through to Ollama */ }
+    // Ollama /api/tags fallback
     try {
       const res = await fetch(`${base}/api/tags`, { signal: AbortSignal.timeout(5_000) });
       if (!res.ok) return [];
