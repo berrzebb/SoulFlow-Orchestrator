@@ -43,7 +43,7 @@ export class TaskHandler implements CommandHandler {
   async handle(ctx: CommandContext): Promise<boolean> {
     const { provider, message, command } = ctx;
     const mention = format_mention(provider, message.sender_id);
-    const action = resolve_action(command?.args || []);
+    const action = resolve_action(command?.args_lower || []);
 
     switch (action.type) {
       case "guide": {
@@ -165,7 +165,7 @@ type TaskAction =
 
 function resolve_action(args: string[]): TaskAction {
   if (args.length === 0) return { type: "guide" };
-  const sub = args[0]?.toLowerCase() || "";
+  const sub = args[0] || "";
   if (sub === "list" || sub === "목록") return { type: "list" };
   if (sub === "status" || sub === "상태") return { type: "status", task_id: args[1] || null };
   if (sub === "cancel" || sub === "취소" || sub === "중지" || sub === "stop") return { type: "cancel", task_id: args[1] || null };

@@ -46,7 +46,7 @@ export class WorkflowHandler implements CommandHandler {
   async handle(ctx: CommandContext): Promise<boolean> {
     const mention = format_mention(ctx.provider, ctx.message.sender_id);
     const args = ctx.command?.args || [];
-    const action = (args[0] || "").toLowerCase();
+    const action = ctx.command?.args_lower?.[0] || "";
 
     if (!action) {
       const guide = format_subcommand_guide("workflow");

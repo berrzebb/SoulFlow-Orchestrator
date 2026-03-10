@@ -22,7 +22,7 @@ export class ModelHandler implements CommandHandler {
   async handle(ctx: CommandContext): Promise<boolean> {
     const mention = format_mention(ctx.provider, ctx.message.sender_id);
     const args = ctx.command?.args || [];
-    const action = (args[0] || "").toLowerCase();
+    const action = ctx.command?.args_lower?.[0] || "";
 
     if (action === "set" || action === "\uC124\uC815") {
       const model = args[1] || "";

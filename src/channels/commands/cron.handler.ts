@@ -27,7 +27,9 @@ const RESUME_ARG_ALIASES = ["resume", "재개", "시작", "다시"] as const;
 const STOP_ARG_ALIASES = ["stop", "중지", "꺼"] as const;
 const NUKE_ARG_ALIASES = ["nuke", "전체삭제", "전체중지", "kill", "killall"] as const;
 
-const RE_CRON_PREFIX = "^(?:cron|크론)(?:\\s*작업)?\\s*";
+const RE_CRON_PREFIX    = "^(?:cron|크론)(?:\\s*작업)?\\s*";
+const RE_CRON_ADD_QUERY    = /^(?:cron|크론)\s*(?:add|추가|등록)\s+(.+)$/i;
+const RE_CRON_REMOVE_QUERY = /(?:cron|크론)\s*(?:remove|delete|삭제|제거)\s+([A-Za-z0-9_-]{4,64})\b/i;
 const RE_CRON_STATUS = new RegExp(`${RE_CRON_PREFIX}(?:status|상태|확인|조회)`);
 const RE_CRON_LIST   = new RegExp(`${RE_CRON_PREFIX}(?:jobs|list|목록|리스트)`);
 const RE_CRON_ADD    = new RegExp(`${RE_CRON_PREFIX}(?:add|추가|등록)\\b`);
@@ -103,7 +105,7 @@ function parse_add_tokens(message: InboundMessage, command: ParsedSlashCommand |
   if (slash_name_in(cmd, ROOT_ALIASES) && args.length > 0 && slash_token_in(args[0], ADD_ARG_ALIASES)) return args.slice(1);
   if (slash_name_in(cmd, ADD_COMMAND_ALIASES)) return args;
   const text = normalize_common_command_text(String(message.content || ""));
-  const m = text.match(/^(?:cron|크론)\s*(?:add|추가|등록)\s+(.+)$/i);
+  const m = text.match(RE_CRON_ADD_QUERY);
   if (!m) return [];
   return String(m[1] || "").split(/\s+/).filter(Boolean);
 }
@@ -114,7 +116,7 @@ function parse_remove_job_id(message: InboundMessage, command: ParsedSlashComman
   if (slash_name_in(cmd, ROOT_ALIASES) && args.length >= 2 && slash_token_in(args[0], REMOVE_ARG_ALIASES)) return args[1];
   if (slash_name_in(cmd, REMOVE_COMMAND_ALIASES)) return args[0] || "";
   const text = normalize_common_command_text(String(message.content || ""));
-  const m = text.match(/(?:cron|크론)\s*(?:remove|delete|삭제|제거)\s+([A-Za-z0-9_-]{4,64})\b/i);
+  const m = text.match(RE_CRON_REMOVE_QUERY);
   return m ? m[1] : "";
 }
 

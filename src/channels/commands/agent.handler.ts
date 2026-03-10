@@ -46,7 +46,7 @@ export class AgentHandler implements CommandHandler {
   async handle(ctx: CommandContext): Promise<boolean> {
     const mention = format_mention(ctx.provider, ctx.message.sender_id);
     const args = ctx.command?.args || [];
-    const action = (args[0] || "").toLowerCase();
+    const action = ctx.command?.args_lower?.[0] || "";
 
     if (action === "running" || action === "실행중") {
       await ctx.send_reply(`${mention}${this.format_running()}`);

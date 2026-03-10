@@ -28,7 +28,7 @@ export class McpHandler implements CommandHandler {
   async handle(ctx: CommandContext): Promise<boolean> {
     const mention = format_mention(ctx.provider, ctx.message.sender_id);
     const args = ctx.command?.args || [];
-    const action = (args[0] || "").toLowerCase();
+    const action = ctx.command?.args_lower?.[0] || "";
 
     if (action === "reconnect" || action === "\uC7AC\uC5F0\uACB0") {
       const name = args[1] || "";
