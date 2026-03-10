@@ -73,8 +73,8 @@ export async function execute_dispatch(
       available_skills: skill_names.map(name => {
         const meta = deps.runtime.get_context_builder().skills_loader.get_skill_metadata(name);
         return meta
-          ? { name, summary: meta.summary, triggers: meta.triggers }
-          : { name, summary: "", triggers: [] };
+          ? { name, summary: meta.summary, triggers: meta.triggers, aliases: meta.aliases }
+          : { name, summary: "", triggers: [], aliases: [] };
       }),
     },
     active_tasks_in_chat,

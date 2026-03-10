@@ -3,7 +3,7 @@
 import type { Logger } from "../logger.js";
 import type { ClassificationResult } from "./types.js";
 
-export type SkillEntry = { name: string; summary: string; triggers: string[] };
+export type SkillEntry = { name: string; summary: string; triggers: string[]; aliases?: string[] };
 
 export type ClassifierContext = {
   active_tasks?: import("../contracts.js").TaskState[];

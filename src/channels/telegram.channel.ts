@@ -135,6 +135,8 @@ export class TelegramChannel extends BaseChannel {
   private readonly api_base: string;
   private readonly settings: Record<string, unknown>;
   private last_update_id = 0;
+  /** 연속 read 실패 횟수 — 로그 빈도 조절용. */
+  private consecutive_read_errors = 0;
 
   constructor(options?: TelegramChannelOptions) {
     super("telegram", options?.instance_id);
@@ -282,54 +284,70 @@ export class TelegramChannel extends BaseChannel {
   async read(chat_id: string, limit = 20): Promise<InboundMessage[]> {
     if (!this.bot_token || !this.running) return [];
     const n = Math.max(1, Math.min(100, Number(limit || 20)));
-    try {
-      const offset_qs = this.last_update_id > 0 ? `&offset=${this.last_update_id + 1}` : "";
-      const allowed = encodeURIComponent(JSON.stringify(["message", "message_reaction"]));
-      const url = `${this.api_base}/bot${this.bot_token}/getUpdates?limit=${n}&timeout=0&allowed_updates=${allowed}${offset_qs}`;
-      const response = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
-      const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
-      if (!response.ok || data.ok !== true) {
-        const desc = as_string(data.description || `http_${response.status}`);
-        this.last_error = desc;
-        if (/conflict.*terminated.*other.*getUpdates/i.test(desc)) {
-          this.log.error("telegram conflict: another bot instance is polling — disabling reads to prevent duplicate processing", { description: desc });
-          this.running = false;
+    const MAX_RETRIES = 2;
+    const RETRY_DELAY_MS = 1_000;
+
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      if (attempt > 0) {
+        await new Promise<void>((r) => setTimeout(r, RETRY_DELAY_MS * attempt));
+      }
+      try {
+        const offset_qs = this.last_update_id > 0 ? `&offset=${this.last_update_id + 1}` : "";
+        const allowed = encodeURIComponent(JSON.stringify(["message", "message_reaction"]));
+        const url = `${this.api_base}/bot${this.bot_token}/getUpdates?limit=${n}&timeout=0&allowed_updates=${allowed}${offset_qs}`;
+        const response = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+        const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+        if (!response.ok || data.ok !== true) {
+          const desc = as_string(data.description || `http_${response.status}`);
+          this.last_error = desc;
+          if (/conflict.*terminated.*other.*getUpdates/i.test(desc)) {
+            this.log.error("telegram conflict: another bot instance is polling — disabling reads to prevent duplicate processing", { description: desc });
+            this.running = false;
+          }
+          return [];
+        }
+        this.consecutive_read_errors = 0;
+        const results = Array.isArray(data.result) ? data.result : [];
+        const rows: InboundMessage[] = [];
+        for (const item of results) {
+          if (!item || typeof item !== "object") continue;
+          const update = item as Record<string, unknown>;
+          const update_id = Number(update.update_id || 0);
+          if (Number.isFinite(update_id) && update_id > this.last_update_id) {
+            this.last_update_id = update_id;
+          }
+          const msg = (update.message && typeof update.message === "object")
+            ? (update.message as Record<string, unknown>)
+            : null;
+          if (msg) {
+            const msg_chat = (msg.chat && typeof msg.chat === "object") ? (msg.chat as Record<string, unknown>) : {};
+            if (as_string(msg_chat.id) === as_string(chat_id)) {
+              rows.push(to_inbound_message(this, msg, chat_id, update_id));
+            }
+            continue;
+          }
+          const rxn = (update.message_reaction && typeof update.message_reaction === "object")
+            ? (update.message_reaction as Record<string, unknown>)
+            : null;
+          if (rxn) {
+            const inbound = to_reaction_message(rxn, chat_id, update_id);
+            if (inbound) rows.push(inbound);
+          }
+        }
+        return rows;
+      } catch (error) {
+        if (attempt < MAX_RETRIES) continue;
+        // 모든 재시도 소진 후 기록
+        this.last_error = error_message(error);
+        this.consecutive_read_errors++;
+        // 첫 실패 또는 20번마다 로그 (장애 지속 중 폭발 방지)
+        if (this.consecutive_read_errors === 1 || this.consecutive_read_errors % 20 === 0) {
+          this.log.warn("read failed", { chat_id, error: this.last_error, consecutive: this.consecutive_read_errors });
         }
         return [];
       }
-      const results = Array.isArray(data.result) ? data.result : [];
-      const rows: InboundMessage[] = [];
-      for (const item of results) {
-        if (!item || typeof item !== "object") continue;
-        const update = item as Record<string, unknown>;
-        const update_id = Number(update.update_id || 0);
-        if (Number.isFinite(update_id) && update_id > this.last_update_id) {
-          this.last_update_id = update_id;
-        }
-        const msg = (update.message && typeof update.message === "object")
-          ? (update.message as Record<string, unknown>)
-          : null;
-        if (msg) {
-          const msg_chat = (msg.chat && typeof msg.chat === "object") ? (msg.chat as Record<string, unknown>) : {};
-          if (as_string(msg_chat.id) === as_string(chat_id)) {
-            rows.push(to_inbound_message(this, msg, chat_id, update_id));
-          }
-          continue;
-        }
-        const rxn = (update.message_reaction && typeof update.message_reaction === "object")
-          ? (update.message_reaction as Record<string, unknown>)
-          : null;
-        if (rxn) {
-          const inbound = to_reaction_message(rxn, chat_id, update_id);
-          if (inbound) rows.push(inbound);
-        }
-      }
-      return rows;
-    } catch (error) {
-      this.last_error = error_message(error);
-      this.log.warn("read failed", { chat_id, error: this.last_error });
-      return [];
     }
+    return [];
   }
 
   /** Telegram Bot API 9.3 sendMessageDraft: 스트리밍 드래프트 메시지 생성/갱신. */

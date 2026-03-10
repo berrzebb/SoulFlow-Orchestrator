@@ -89,7 +89,10 @@ export function safe_stringify(value: unknown): string {
 
 /** unknown 에러를 메시지 문자열로 변환. */
 export function error_message(e: unknown): string {
-  return e instanceof Error ? e.message : String(e);
+  if (!(e instanceof Error)) return String(e);
+  // Node.js fetch 등 래퍼 에러는 .cause에 실제 원인이 있음
+  if (e.cause instanceof Error) return `${e.message}: ${e.cause.message}`;
+  return e.message;
 }
 
 /** 공백 정규화 + trim. lowercase 옵션 지원 (dedupe key 등). */

@@ -124,6 +124,26 @@ export class SkillIndex {
       }
     }
 
+    // Alias/Trigger/Intent 직접 포함 보너스 — FTS5 unicode61이 한국어 단어 경계를 못 잡는 문제 보완.
+    // 스킬 작성자가 명시한 키워드가 task 텍스트에 그대로 포함되면 최우선 선택.
+    {
+      const lower_task = task.toLowerCase();
+      const keyword_rows = this.db.prepare(
+        `SELECT name, aliases, triggers FROM skill_docs WHERE aliases != '' OR triggers != ''`
+      ).all() as Array<{ name: string; aliases: string; triggers: string }>;
+
+      for (const row of keyword_rows) {
+        let bonus = 0;
+        // alias 직접 포함: +10 (가장 명시적인 대응 키워드)
+        const aliases = row.aliases.split(/\s+/).filter((a) => a.length >= 2);
+        if (aliases.some((a) => lower_task.includes(a.toLowerCase()))) bonus += 10;
+        // trigger 직접 포함: +8
+        const triggers = row.triggers.split(/\s+/).filter((t) => t.length >= 2);
+        if (triggers.some((t) => lower_task.includes(t.toLowerCase()))) bonus += 8;
+        if (bonus > 0) scored.set(row.name, (scored.get(row.name) ?? 0) + bonus);
+      }
+    }
+
     // Intent 보너스 (+3/match)
     if (intents.length > 0) {
       const rows = this.db.prepare(
