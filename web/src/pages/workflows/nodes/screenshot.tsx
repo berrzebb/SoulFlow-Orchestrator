@@ -7,6 +7,9 @@ function ScreenshotEditPanel({ node, update, t }: EditPanelProps) {
       <BuilderField label={t("workflows.scrape_url")}>
         <input autoFocus className="input" value={String(node.url || "")} onChange={(e) => update({ url: e.target.value })} placeholder="https://example.com" />
       </BuilderField>
+      <BuilderField label={t("workflows.output_path")}>
+        <input className="input input--sm" value={String(node.output_path || "")} onChange={(e) => update({ output_path: e.target.value || undefined })} placeholder="screenshots/output.png" />
+      </BuilderField>
       <BuilderRowPair>
         <BuilderField label={t("workflows.field_width")}>
           <input className="input input--sm" type="number" min={320} max={3840} value={String(node.width ?? 1280)} onChange={(e) => update({ width: Number(e.target.value) || 1280 })} />
@@ -24,9 +27,9 @@ function ScreenshotEditPanel({ node, update, t }: EditPanelProps) {
         </BuilderField>
       </BuilderRowPair>
       <div className="builder-row">
-        <label className="label">
+        <label className="label-inline">
           <input type="checkbox" checked={Boolean(node.full_page)} onChange={(e) => update({ full_page: e.target.checked })} />
-          {" "}{t("workflows.full_page")}
+          {t("workflows.full_page")}
         </label>
       </div>
     </>

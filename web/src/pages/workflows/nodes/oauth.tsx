@@ -65,7 +65,10 @@ function OauthEditPanel({ node, update, t, options }: EditPanelProps) {
       </BuilderRowPair>
       <JsonField label={t("workflows.http_headers")} value={node.headers} onUpdate={(v) => update({ headers: v })} rows={2} small placeholder='{"Accept": "application/json"}' />
       <BuilderField label={t("workflows.http_body")}>
-        <textarea className="input" rows={3} value={typeof node.body === "string" ? node.body : JSON.stringify(node.body || "", null, 2)} onChange={(e) => update({ body: e.target.value })} />
+        <textarea className="input" rows={3} value={typeof node.body === "string" ? node.body : (node.body != null ? JSON.stringify(node.body, null, 2) : "")} onChange={(e) => update({ body: e.target.value })} />
+      </BuilderField>
+      <BuilderField label={t("workflows.timeout_ms")} hint={t("workflows.timeout_ms_hint")}>
+        <input className="input input--sm" type="number" min={1000} value={String(node.timeout_ms ?? 10000)} onChange={(e) => update({ timeout_ms: Number(e.target.value) || 10000 })} />
       </BuilderField>
     </>
   );
@@ -88,6 +91,6 @@ export const oauth_descriptor: FrontendNodeDescriptor = {
     { name: "headers", type: "object", description: "node.oauth.input.headers" },
     { name: "body",    type: "object", description: "node.oauth.input.body" },
   ],
-  create_default: () => ({ service_id: "", url: "", method: "GET" }),
+  create_default: () => ({ service_id: "", url: "", method: "GET", timeout_ms: 10000 }),
   EditPanel: OauthEditPanel,
 };
