@@ -88,4 +88,32 @@ describe("changelog_handler", () => {
     const result = await changelog_handler.execute(node, ctx);
     expect(result.output).toBeDefined();
   });
+
+  it("execute: license_list → LicenseTool 위임 (L29-51)", async () => {
+    const node = createMockNode({ action: "license_list" } as any);
+    const ctx = createMockContext();
+    const result = await changelog_handler.execute(node, ctx);
+    expect(result.output).toBeDefined();
+    expect(result.output).toHaveProperty("result");
+  });
+
+  it("execute: license_info MIT → LicenseTool 위임", async () => {
+    const node = createMockNode({ action: "license_info", license_id: "MIT" } as any);
+    const ctx = createMockContext();
+    const result = await changelog_handler.execute(node, ctx);
+    expect(result.output).toBeDefined();
+  });
+
+  it("execute: license_generate → LicenseTool 위임 (JSON 파싱 or raw 반환)", async () => {
+    const node = createMockNode({ action: "license_generate", license_id: "MIT", license_author: "Test", license_year: "2024" } as any);
+    const ctx = createMockContext();
+    const result = await changelog_handler.execute(node, ctx);
+    expect(result.output).toBeDefined();
+  });
+
+  it("test: license_list → commits 경고 없음", () => {
+    const node = createMockNode({ action: "license_list", commits: undefined } as any);
+    const result = changelog_handler.test(node);
+    expect(result.warnings).not.toContain("commits data is required");
+  });
 });

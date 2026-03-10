@@ -98,4 +98,33 @@ describe("network_handler", () => {
     const result = await network_handler.execute(node, ctx);
     expect(result.output).toBeDefined();
   });
+
+  it("execute: ip operation → IpTool 위임 (L36-47)", async () => {
+    const node = createMockNode({ operation: "ip", host: "8.8.8.8" } as any);
+    const ctx = createMockContext();
+    const result = await network_handler.execute(node, ctx);
+    expect(result.output).toBeDefined();
+    expect(typeof (result.output as any).success).toBe("boolean");
+  });
+
+  it("execute: whois operation → build_net_cmd L96", async () => {
+    const node = createMockNode({ operation: "whois", host: "example.com" } as any);
+    const ctx = createMockContext();
+    const result = await network_handler.execute(node, ctx);
+    expect(result.output).toBeDefined();
+  });
+
+  it("execute: http_head operation → build_net_cmd L98", async () => {
+    const node = createMockNode({ operation: "http_head", host: "example.com" } as any);
+    const ctx = createMockContext();
+    const result = await network_handler.execute(node, ctx);
+    expect(result.output).toBeDefined();
+  });
+
+  it("execute: netstat operation → build_net_cmd L99 (host 불필요)", async () => {
+    const node = createMockNode({ operation: "netstat", host: "" } as any);
+    const ctx = createMockContext();
+    const result = await network_handler.execute(node, ctx);
+    expect(result.output).toBeDefined();
+  });
 });
