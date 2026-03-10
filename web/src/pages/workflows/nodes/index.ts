@@ -129,6 +129,11 @@ import { tokenizer_descriptor } from "./tokenizer";
 import { websocket_descriptor } from "./websocket";
 import { xml_descriptor } from "./xml";
 import { yaml_descriptor } from "./yaml";
+import { geo_descriptor } from "./geo";
+import { country_descriptor } from "./country";
+import { jsonl_descriptor } from "./jsonl";
+import { ical_descriptor } from "./ical";
+import { json_patch_descriptor } from "./json-patch";
 import { trigger_cron_descriptor, trigger_webhook_descriptor, trigger_manual_descriptor, trigger_channel_message_descriptor, trigger_kanban_event_descriptor, trigger_filesystem_watch_descriptor } from "./triggers";
 
 const ALL_DESCRIPTORS = [
@@ -260,6 +265,11 @@ const ALL_DESCRIPTORS = [
   websocket_descriptor,
   xml_descriptor,
   yaml_descriptor,
+  geo_descriptor,
+  country_descriptor,
+  jsonl_descriptor,
+  ical_descriptor,
+  json_patch_descriptor,
   trigger_cron_descriptor,
   trigger_webhook_descriptor,
   trigger_manual_descriptor,

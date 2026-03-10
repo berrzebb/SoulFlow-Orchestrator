@@ -127,6 +127,11 @@ import { circuit_breaker_handler } from "./circuit-breaker.js";
 import { kanban_trigger_handler } from "./kanban-trigger.js";
 import { filesystem_watch_handler } from "./filesystem-watch.js";
 import { document_pdf_handler, document_docx_handler, document_xlsx_handler, document_pptx_handler } from "./document.js";
+import { geo_handler } from "./geo.js";
+import { country_handler } from "./country.js";
+import { jsonl_handler } from "./jsonl.js";
+import { ical_handler } from "./ical.js";
+import { json_patch_handler } from "./json-patch.js";
 
 const ALL_HANDLERS = [
   http_handler,
@@ -258,6 +263,11 @@ const ALL_HANDLERS = [
   document_docx_handler,
   document_xlsx_handler,
   document_pptx_handler,
+  geo_handler,
+  country_handler,
+  jsonl_handler,
+  ical_handler,
+  json_patch_handler,
 ];
 
 let registered = false;

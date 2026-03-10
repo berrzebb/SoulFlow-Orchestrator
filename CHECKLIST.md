@@ -429,6 +429,7 @@
 7. `fix: Phase 2 타입/i18n 정비` — workflow-node.types.ts 타입 정의 보완, i18n 중복 키 제거, validator create_default 수정
 8. `feat: Phase 3 — url/random/semver/color 신규 노드 추가` — 4개 도구 대응 노드 구현, i18n 완성, math/encoding/regex 추가 통합
 9. `refactor: document 노드 핸들러 4파일 → make_document_handler 팩토리 통합` — DRY 리팩토링
+10. `feat: Phase 5 — geo/country/jsonl/ical/json_patch 신규 노드 추가` — 5개 도구 대응 신규 노드, i18n 완성, yaml INI/network IP 통합 완성, CHECKLIST 최종 업데이트
 
 ---
 
@@ -456,17 +457,20 @@
 | currency | ✅ math.currency |
 | user-agent | ✅ http.user_agent 필드 |
 | whois | ✅ network.whois |
+| geo | ✅ 신규 geo 노드 (distance/bearing/midpoint/bbox/geohash/dms) |
+| country | ✅ 신규 country 노드 (lookup/search/by_dial_code/by_currency/by_continent/list) |
+| jsonl | ✅ 신규 jsonl 노드 (parse/generate/filter/count/head/tail/map/unique) |
+| ical | ✅ 신규 ical 노드 (generate/parse/add_event/validate) |
+| json-patch | ✅ 신규 json_patch 노드 (apply/diff/validate/test — RFC 6902) |
 
 ### 미통합 도구 (의도적 제외)
 | 도구 | 이유 |
 |------|------|
 | bloom-filter | set-ops와 도메인 다름, 독립 노드로 가치 낮음 |
 | cors | HTTP 요청과 CORS 헤더 생성은 다른 도메인 |
-| country | 독립 노드로 가치 있지만 우선순위 낮음 |
 | dotenv/env | system-info에 통합 가능하나 사용 빈도 낮음 |
 | feature-flag | gate 노드와 의존성 깊음 (store 필요) |
 | file-request | http와 목적 중복, multipart upload는 별도 고려 |
-| geo | 독립 노드 후보지만 현재 충분히 커버됨 |
 | pagination | aggregate와 목적 다름, 독립 노드 후보 |
 | policy-tool | DecisionService store 의존성 — 직접 노드로 적합하지 않음 |
 | tree | file 노드에 통합 가능하나 우선순위 낮음 |

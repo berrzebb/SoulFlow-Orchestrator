@@ -794,7 +794,7 @@ export interface WebTableNodeDefinition extends NodeBase {
 
 export interface NetworkNodeDefinition extends NodeBase {
   node_type: "network";
-  /** ping / dns / whois / port_check / http_head / netstat. */
+  /** ping / dns / whois / port_check / http_head / netstat / ip. */
   operation: string;
   /** 대상 호스트 (템플릿 지원). */
   host?: string;
@@ -806,6 +806,16 @@ export interface NetworkNodeDefinition extends NodeBase {
   dns_record_type?: string;
   /** dns lookup 전용: IP family (4 또는 6). */
   dns_family?: number;
+  /** ip 전용: parse/validate/cidr_contains/subnet/is_private/is_v6/range/to_int/from_int. */
+  ip_action?: string;
+  /** ip 전용: IP 주소. */
+  ip?: string;
+  /** ip 전용: CIDR 표기 (cidr_contains/subnet). */
+  cidr?: string;
+  /** ip range 전용: 시작 IP. */
+  ip_start?: string;
+  /** ip range 전용: 끝 IP. */
+  ip_end?: string;
 }
 
 // ── Web Form Node (Workflow) ─────────────────────────
@@ -1316,12 +1326,16 @@ export interface XmlNodeDefinition extends NodeBase {
 export interface YamlNodeDefinition extends NodeBase {
   node_type: "yaml";
   action?: string;
-  /** yaml (기본) | toml. */
+  /** yaml (기본) | toml | ini. */
   format?: string;
   data?: string;
   data2?: string;
   path?: string;
   indent?: number;
+  /** ini format query 전용: 섹션 이름. */
+  ini_section?: string;
+  /** ini format query 전용: 키 이름. */
+  ini_key?: string;
 }
 
 // ── FTP Node ────────────────────────────────────────
@@ -1723,6 +1737,61 @@ export interface ColorNodeDefinition extends NodeBase {
 }
 
 
+export interface GeoNodeDefinition extends NodeBase {
+  node_type: "geo";
+  /** distance / bearing / midpoint / bbox / geohash_encode / geohash_decode / dms_to_decimal. */
+  action?: string;
+  lat1?: number;
+  lon1?: number;
+  lat2?: number;
+  lon2?: number;
+  radius_km?: number;
+  precision?: number;
+  geohash?: string;
+  dms?: string;
+}
+
+export interface CountryNodeDefinition extends NodeBase {
+  node_type: "country";
+  /** lookup / search / by_dial_code / by_currency / by_continent / list. */
+  action?: string;
+  code?: string;
+  query?: string;
+  dial_code?: string;
+  currency?: string;
+  continent?: string;
+}
+
+export interface JsonlNodeDefinition extends NodeBase {
+  node_type: "jsonl";
+  /** parse / generate / filter / count / head / tail / map / unique. */
+  action?: string;
+  input?: string;
+  data?: string;
+  field?: string;
+  value?: string;
+  count?: number;
+}
+
+export interface IcalNodeDefinition extends NodeBase {
+  node_type: "ical";
+  /** generate / parse / add_event / validate. */
+  action?: string;
+  events?: string;
+  event?: string;
+  input?: string;
+  calendar_name?: string;
+}
+
+export interface JsonPatchNodeDefinition extends NodeBase {
+  node_type: "json_patch";
+  /** apply / diff / validate / test. */
+  action?: string;
+  document?: string;
+  patch?: string;
+  target?: string;
+}
+
 // ── Union Types ─────────────────────────────────────
 
 export type OrcheNodeType = "http" | "code" | "if" | "merge" | "set" | "split"
@@ -1757,6 +1826,11 @@ export type OrcheNodeType = "http" | "code" | "if" | "merge" | "set" | "split"
   | "random"
   | "semver"
   | "color"
+  | "geo"
+  | "country"
+  | "jsonl"
+  | "ical"
+  | "json_patch"
   | "end";
 
 export type OrcheNodeDefinition =
@@ -1887,6 +1961,11 @@ export type OrcheNodeDefinition =
   | RandomNodeDefinition
   | SemverNodeDefinition
   | ColorNodeDefinition
+  | GeoNodeDefinition
+  | CountryNodeDefinition
+  | JsonlNodeDefinition
+  | IcalNodeDefinition
+  | JsonPatchNodeDefinition
   | EndNodeDefinition;
 
 export type WorkflowNodeDefinition = PhaseNodeDefinition | OrcheNodeDefinition | TriggerNodeDefinition;
