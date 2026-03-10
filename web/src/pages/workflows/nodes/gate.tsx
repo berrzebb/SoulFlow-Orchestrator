@@ -5,7 +5,7 @@ function GateEditPanel({ node, update, t }: EditPanelProps) {
   const sources = Array.isArray(node.depends_on) ? (node.depends_on as string[]) : [];
   return (
     <>
-      <BuilderField label={t("workflows.gate_quorum")} hint={`${t("workflows.gate_quorum_hint")}${sources.length ? ` (${sources.length} sources)` : ""}`}>
+      <BuilderField label={t("workflows.gate_quorum")} hint={t("workflows.gate_quorum_hint")}>
         <input autoFocus className="input input--sm" type="number" min={1} value={String(node.quorum ?? 1)} onChange={(e) => update({ quorum: Number(e.target.value) })} aria-label={t("workflows.gate_quorum")} />
       </BuilderField>
       <BuilderField label={t("workflows.gate_on_timeout")}>

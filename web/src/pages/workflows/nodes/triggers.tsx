@@ -204,10 +204,10 @@ export const trigger_kanban_event_descriptor: FrontendNodeDescriptor = {
 
 // ── Filesystem Watch ──────────────────────────────────────────────────────────
 
-const FS_WATCH_EVENTS: Array<{ value: "add" | "change" | "unlink"; label: string }> = [
-  { value: "add",    label: "Add" },
-  { value: "change", label: "Change" },
-  { value: "unlink", label: "Delete" },
+const FS_WATCH_EVENTS: Array<{ value: "add" | "change" | "unlink"; i18n: string }> = [
+  { value: "add",    i18n: "workflows.fs_watch_event_add" },
+  { value: "change", i18n: "workflows.fs_watch_event_change" },
+  { value: "unlink", i18n: "workflows.fs_watch_event_delete" },
 ];
 
 function FilesystemWatchTriggerEditPanel({ node, update, t }: EditPanelProps) {
@@ -224,7 +224,7 @@ function FilesystemWatchTriggerEditPanel({ node, update, t }: EditPanelProps) {
       </BuilderField>
       <BuilderField label={t("workflows.fs_watch_events")}>
         <div style={{ display: "flex", gap: "4px" }}>
-          {FS_WATCH_EVENTS.map(({ value, label }) => (
+          {FS_WATCH_EVENTS.map(({ value, i18n }) => (
             <button key={value} type="button" onClick={() => toggle_event(value)}
               style={{
                 cursor: "pointer", padding: "2px 10px", borderRadius: "4px",
@@ -234,7 +234,7 @@ function FilesystemWatchTriggerEditPanel({ node, update, t }: EditPanelProps) {
                 fontSize: "12px",
               }}
             >
-              {label}
+              {t(i18n)}
             </button>
           ))}
         </div>
