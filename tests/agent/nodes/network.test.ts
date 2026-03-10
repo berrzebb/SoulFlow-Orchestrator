@@ -67,6 +67,24 @@ describe("network_handler", () => {
     expect(result.preview).toBeDefined();
   });
 
+  it("test: operation 없음 → 'operation is required' 경고 (L66)", () => {
+    const node = createMockNode({ operation: undefined as any });
+    const result = network_handler.test(node);
+    expect(result.warnings).toContain("operation is required");
+  });
+
+  it("test: ping + host 없음 → 'host is required' 경고 (L67)", () => {
+    const node = createMockNode({ operation: "ping", host: undefined as any });
+    const result = network_handler.test(node);
+    expect(result.warnings).toContain("host is required");
+  });
+
+  it("test: port_check + port 없음 → 'port is required' 경고 (L68)", () => {
+    const node = createMockNode({ operation: "port_check", host: "example.com", port: undefined as any });
+    const result = network_handler.test(node);
+    expect(result.warnings).toContain("port is required");
+  });
+
   it("execute: should handle port_check operation", async () => {
     const node = createMockNode({ operation: "port_check", port: 443 });
     const ctx = createMockContext();
