@@ -114,3 +114,29 @@ describe("EncodingTool — 기타", () => {
     expect(String(result)).toContain("Error");
   });
 });
+
+describe("EncodingTool — 미커버 분기", () => {
+  it("decode: unsupported format → L63 에러", async () => {
+    const result = await tool.execute({ operation: "decode", input: "test", format: "invalid_format" });
+    expect(String(result)).toContain("Error");
+    expect(String(result)).toContain("unsupported");
+  });
+
+  it("decode: 잘못된 url encoding → L66 catch", async () => {
+    const result = await tool.execute({ operation: "decode", input: "invalid%gg%zz", format: "url" });
+    expect(String(result)).toContain("Error");
+    expect(String(result)).toContain("failed to decode");
+  });
+
+  it("hash: empty input → L71 에러", async () => {
+    const result = await tool.execute({ operation: "hash", input: "", format: "sha256" });
+    expect(String(result)).toContain("Error");
+    expect(String(result)).toContain("required");
+  });
+
+  it("hash: unsupported format → L73 에러", async () => {
+    const result = await tool.execute({ operation: "hash", input: "hello", format: "sha1" });
+    expect(String(result)).toContain("Error");
+    expect(String(result)).toContain("unsupported");
+  });
+});

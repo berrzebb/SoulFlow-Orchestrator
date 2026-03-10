@@ -147,3 +147,41 @@ describe("BloomFilterTool — serialize", () => {
     expect(Number(r.byte_length)).toBe(32); // 256 / 8 = 32
   });
 });
+
+describe("BloomFilterTool — 미커버 분기", () => {
+  it("unknown action → L92 error 반환", async () => {
+    const r = await exec({ action: "unknown_action" }) as Record<string, unknown>;
+    expect(String(r.error)).toContain("unknown action");
+  });
+
+  it("add: filter 없음 → L97 Buffer.alloc (빈 필터에 추가)", async () => {
+    const r = await exec({
+      action: "add",
+      filter: "",
+      size: 128,
+      items: JSON.stringify(["test"]),
+    }) as Record<string, unknown>;
+    // 빈 필터에 아이템 추가 성공
+    expect(Number(r.added)).toBeGreaterThanOrEqual(1);
+  });
+
+  it("add: items 잘못된 JSON → L119 catch → return []", async () => {
+    const r = await exec({
+      action: "add",
+      filter: "",
+      size: 128,
+      items: "{invalid json}",
+    }) as Record<string, unknown>;
+    // get_items catch → [] → 추가된 아이템 없음
+    expect(Number(r.added)).toBe(0);
+  });
+
+  it("add: items/item 모두 없음 → L122 return []", async () => {
+    const r = await exec({
+      action: "add",
+      filter: "",
+      size: 128,
+    }) as Record<string, unknown>;
+    expect(Number(r.added)).toBe(0);
+  });
+});

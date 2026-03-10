@@ -153,3 +153,34 @@ describe("PasswordTool — unknown action + strong score (L104, L125)", () => {
     expect(r.score).toBe("strong");
   });
 });
+
+describe("PasswordTool — check_policy 미커버 분기", () => {
+  it("소문자 없음 → L48 missing lowercase 에러", async () => {
+    const r = await tool.execute({
+      action: "check_policy",
+      password: "UPPERCASE1",
+      require_lower: true,
+    });
+    const parsed = JSON.parse(r);
+    expect(parsed.valid).toBe(false);
+    expect(parsed.errors.some((e: string) => e.includes("lowercase"))).toBe(true);
+  });
+
+  it("반복 문자 → L50 repeated characters 에러", async () => {
+    const r = await tool.execute({
+      action: "check_policy",
+      password: "aaabbbCCC1",
+    });
+    const parsed = JSON.parse(r);
+    expect(parsed.errors.some((e: string) => e.includes("repeated"))).toBe(true);
+  });
+
+  it("순차 패턴 → L51 sequential pattern 에러", async () => {
+    const r = await tool.execute({
+      action: "check_policy",
+      password: "123abcABC!",
+    });
+    const parsed = JSON.parse(r);
+    expect(parsed.errors.some((e: string) => e.includes("sequential"))).toBe(true);
+  });
+});
