@@ -21,12 +21,37 @@ export const package_manager_handler: NodeHandler = {
     { name: "manager",      type: "string", description: "npm / pip / cargo" },
     { name: "package_name", type: "string", description: "Package name" },
   ],
-  create_default: () => ({ operation: "list", manager: "npm", package_name: "", flags: "" }),
+  create_default: () => ({ operation: "list", manager: "npm", package_name: "", flags: "", dep_input: "", dep_input2: "", dep_graph: "" }),
 
   async execute(node: OrcheNodeDefinition, ctx: OrcheNodeExecutorContext): Promise<OrcheNodeExecuteResult> {
     const n = node as PackageManagerNodeDefinition;
     const tpl = { memory: ctx.memory };
     const op = resolve_templates(n.operation || "list", tpl);
+
+    // 의존성 분석은 DependencyTool로 위임
+    const DEP_OPS = ["parse_deps", "circular_deps", "dep_stats", "dep_compare"];
+    if (DEP_OPS.includes(op)) {
+      try {
+        const { DependencyTool } = await import("../tools/dependency.js");
+        const tool = new DependencyTool();
+        const action_map: Record<string, string> = {
+          parse_deps: "parse_package_json",
+          circular_deps: "circular",
+          dep_stats: "stats",
+          dep_compare: "compare",
+        };
+        const result = await tool.execute({
+          action: action_map[op] || "parse_package_json",
+          input: resolve_templates(n.dep_input || "", tpl),
+          input2: resolve_templates(n.dep_input2 || "", tpl) || undefined,
+          graph: resolve_templates(n.dep_graph || "", tpl) || undefined,
+        });
+        return { output: { output: result, success: true } };
+      } catch (err) {
+        return { output: { output: error_message(err), success: false } };
+      }
+    }
+
     const mgr = resolve_templates(n.manager || "npm", tpl);
     const pkg = resolve_templates(n.package_name || "", tpl).trim();
     const flags = resolve_templates(n.flags || "", tpl).trim();

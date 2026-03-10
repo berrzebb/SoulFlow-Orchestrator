@@ -21,13 +21,61 @@ export const data_format_handler: NodeHandler = {
     { name: "from",      type: "string", description: "Source format" },
     { name: "to",        type: "string", description: "Target format" },
   ],
-  create_default: () => ({ operation: "convert", input: "", from: "json", to: "csv", path: "", keys: "" }),
+  create_default: () => ({ operation: "convert", input: "", from: "json", to: "csv", path: "", keys: "", input2: "", delimiter: ",", mime_extension: "", mime_filename: "" }),
 
   async execute(node: OrcheNodeDefinition, ctx: OrcheNodeExecutorContext): Promise<OrcheNodeExecuteResult> {
     const n = node as DataFormatNodeDefinition;
     const tpl = { memory: ctx.memory };
     const input = resolve_templates(n.input || "", tpl);
     const op = resolve_templates(n.operation || "convert", tpl);
+
+    // MIME 연산은 MimeTool로 위임
+    const MIME_OPS = ["mime_lookup", "mime_detect", "mime_parse", "mime_reverse"];
+    if (MIME_OPS.includes(op)) {
+      try {
+        const { MimeTool } = await import("../tools/mime.js");
+        const tool = new MimeTool();
+        const action_map: Record<string, string> = {
+          mime_lookup: "lookup", mime_detect: "detect", mime_parse: "parse", mime_reverse: "reverse_lookup",
+        };
+        const result = await tool.execute({
+          action: action_map[op] || "lookup",
+          extension: resolve_templates(n.mime_extension || "", tpl) || undefined,
+          filename: resolve_templates(n.mime_filename || input || "", tpl) || undefined,
+          mime: input || undefined,
+        });
+        return { output: { result, success: true } };
+      } catch (err) {
+        return { output: { result: error_message(err), success: false } };
+      }
+    }
+
+    // HTTP 헤더 연산은 HttpHeaderTool로 위임
+    const HEADER_OPS = ["header_parse", "header_content_type", "header_cache_control", "header_authorization", "header_content_disposition"];
+    if (HEADER_OPS.includes(op)) {
+      try {
+        const { HttpHeaderTool } = await import("../tools/http-header.js");
+        const tool = new HttpHeaderTool();
+        const action_map: Record<string, string> = {
+          header_parse: "parse",
+          header_content_type: "content_type",
+          header_cache_control: "cache_control",
+          header_authorization: "authorization",
+          header_content_disposition: "content_disposition",
+        };
+        const result = await tool.execute({
+          action: action_map[op] || "parse",
+          header: input || undefined,
+          type: resolve_templates(n.header_type || "", tpl) || undefined,
+          token: resolve_templates(n.header_token || "", tpl) || undefined,
+          filename: resolve_templates(n.header_filename || "", tpl) || undefined,
+          directives: resolve_templates(n.header_directives || "", tpl) || undefined,
+        });
+        return { output: { result, success: true } };
+      } catch (err) {
+        return { output: { result: error_message(err), success: false } };
+      }
+    }
 
     try {
       const { DataFormatTool } = await import("../tools/data-format.js");

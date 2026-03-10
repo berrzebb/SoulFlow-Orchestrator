@@ -6,7 +6,7 @@ import type { OrcheNodeExecutorContext, OrcheNodeExecuteResult, OrcheNodeTestRes
 import { resolve_templates } from "../orche-node-executor.js";
 import { error_message } from "../../utils/common.js";
 
-interface GeoNodeDefinition extends OrcheNodeDefinition {
+type GeoNodeDefinition = OrcheNodeDefinition & {
   action?: string;
   lat1?: number;
   lon1?: number;

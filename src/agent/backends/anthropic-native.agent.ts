@@ -15,7 +15,7 @@ import {
   fire, accum_usage, emit_usage,
   type UsageAccumulator,
 } from "./tool-loop-helpers.js";
-import { now_iso, error_message, swallow } from "../../utils/common.js";
+import { now_iso, error_message, swallow, make_abort_signal } from "../../utils/common.js";
 
 export type AnthropicNativeConfig = {
   api_base?: string;
@@ -241,13 +241,9 @@ export class AnthropicNativeAgent implements AgentBackend {
 
     const api_base = (this.config.api_base ?? "https://api.anthropic.com").replace(/\/+$/, "");
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), this.config.request_timeout_ms ?? 120_000);
-    const relay = () => controller.abort();
-    options.abort_signal?.addEventListener("abort", relay, { once: true });
+    const signal = make_abort_signal(this.config.request_timeout_ms ?? 120_000, options.abort_signal);
 
-    try {
-      const res = await fetch(`${api_base}/v1/messages`, {
+    const res = await fetch(`${api_base}/v1/messages`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -256,7 +252,7 @@ export class AnthropicNativeAgent implements AgentBackend {
           "anthropic-beta": "prompt-caching-2024-07-31",
         },
         body: JSON.stringify(body),
-        signal: controller.signal,
+        signal,
       });
       if (!res.ok) throw new Error(`Anthropic API ${res.status}: ${await res.text()}`);
       if (!res.body) throw new Error("Response body missing");
@@ -337,10 +333,6 @@ export class AnthropicNativeAgent implements AgentBackend {
         });
 
       return { text_blocks, tool_blocks, stop_reason, api_usage };
-    } finally {
-      clearTimeout(timeout);
-      options.abort_signal?.removeEventListener("abort", relay);
-    }
   }
 
   /** 단순 텍스트 응답 전용 정적 헬퍼 (비스트리밍). system 캐싱 포함. */

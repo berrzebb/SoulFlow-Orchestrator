@@ -6,7 +6,7 @@ import type { OrcheNodeExecutorContext, OrcheNodeExecuteResult, OrcheNodeTestRes
 import { resolve_templates } from "../orche-node-executor.js";
 import { error_message } from "../../utils/common.js";
 
-interface UrlNodeDefinition extends OrcheNodeDefinition {
+type UrlNodeDefinition = OrcheNodeDefinition & {
   action?: string;
   url?: string;
   base?: string;

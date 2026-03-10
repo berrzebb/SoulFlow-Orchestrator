@@ -19,17 +19,41 @@ export const stats_handler: NodeHandler = {
     { name: "operation", type: "string", description: "summary/percentile/histogram/correlation/normalize/outliers" },
     { name: "data",      type: "string", description: "Numeric data" },
   ],
-  create_default: () => ({ operation: "summary", data: "", data2: "", percentile: 50, bins: 10, threshold: 2 }),
+  create_default: () => ({ operation: "summary", data: "", data2: "", percentile: 50, bins: 10, threshold: 2, window: 3, alpha: 0.3, periods: 5, lag: 1 }),
 
   async execute(node: OrcheNodeDefinition, ctx: OrcheNodeExecutorContext): Promise<OrcheNodeExecuteResult> {
     const n = node as StatsNodeDefinition;
+    const tpl = { memory: ctx.memory };
+    const op = n.operation || "summary";
+    const data = resolve_templates(n.data || "", tpl);
+
+    // 시계열 연산은 TimeseriesTool로 위임
+    const TIMESERIES_OPS = ["moving_average", "ema", "linear_forecast", "anomaly", "diff", "cumsum", "normalize", "autocorrelation"];
+    if (TIMESERIES_OPS.includes(op)) {
+      try {
+        const { TimeseriesTool } = await import("../tools/timeseries.js");
+        const tool = new TimeseriesTool();
+        const result = await tool.execute({
+          action: op,
+          data,
+          window: n.window ?? 3,
+          alpha: n.alpha ?? 0.3,
+          periods: n.periods ?? 5,
+          threshold: n.threshold ?? 2,
+          lag: n.lag ?? 1,
+        });
+        return { output: { result, success: !result.startsWith("{\"error\"") } };
+      } catch (err) {
+        return { output: { result: error_message(err), success: false } };
+      }
+    }
+
     try {
       const { StatsTool } = await import("../tools/stats.js");
       const tool = new StatsTool();
-      const tpl = { memory: ctx.memory };
       const result = await tool.execute({
-        operation: n.operation || "summary",
-        data: resolve_templates(n.data || "", tpl),
+        operation: op,
+        data,
         data2: resolve_templates(n.data2 || "", tpl),
         percentile: n.percentile ?? 50,
         bins: n.bins ?? 10,

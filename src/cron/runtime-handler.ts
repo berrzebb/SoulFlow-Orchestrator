@@ -1,4 +1,4 @@
-import { error_message, now_iso} from "../utils/common.js";
+import { error_message, now_iso, make_abort_signal } from "../utils/common.js";
 import type { AgentRuntimeLike } from "../agent/runtime.types.js";
 import type { AgentBackendRegistry } from "../agent/agent-registry.js";
 import type { AgentHooks } from "../agent/agent.types.js";
@@ -199,8 +199,7 @@ export function create_cron_job_handler(deps: CronRuntimeHandlerDeps): CronOnJob
 
       const per_turn_ms = deps.config.per_turn_timeout_ms ?? DEFAULT_PER_TURN_TIMEOUT_MS;
       const job_timeout_ms = deps.config.agent_loop_max_turns * per_turn_ms;
-      const cron_abort = new AbortController();
-      const cron_timeout = setTimeout(() => cron_abort.abort(), job_timeout_ms);
+      const cron_abort = make_abort_signal(job_timeout_ms);
 
       // 인바운드 텍스트 sealing: 크론 메시지도 민감 정보 보호 적용
       const raw_task = String(job.payload.message || job.name || "scheduled task");
@@ -217,61 +216,57 @@ export function create_cron_job_handler(deps: CronRuntimeHandlerDeps): CronOnJob
       }
 
       const caps = backend?.capabilities;
-      try {
-        const result = await deps.agent_backends.run(backend_id, {
-          task: sealed_task,
-          task_id,
-          system_prompt,
-          tools: tool_definitions as ToolSchema[],
-          tool_executors,
-          hooks,
-          max_turns: Math.max(1, deps.config.agent_loop_max_turns),
-          max_tokens: 8192,
-          temperature: 0.3,
-          effort: "high",
-          ...(caps?.thinking ? { enable_thinking: true, max_thinking_tokens: 10000 } : {}),
-          abort_signal: cron_abort.signal,
-          tool_context: { channel: target.provider, chat_id: target.chat_id, sender_id: `cron:${job.id}` },
-        });
+      const result = await deps.agent_backends.run(backend_id, {
+        task: sealed_task,
+        task_id,
+        system_prompt,
+        tools: tool_definitions as ToolSchema[],
+        tool_executors,
+        hooks,
+        max_turns: Math.max(1, deps.config.agent_loop_max_turns),
+        max_tokens: 8192,
+        temperature: 0.3,
+        effort: "high",
+        ...(caps?.thinking ? { enable_thinking: true, max_thinking_tokens: 10000 } : {}),
+        abort_signal: cron_abort,
+        tool_context: { channel: target.provider, chat_id: target.chat_id, sender_id: `cron:${job.id}` },
+      });
 
-        // finish_reason 분기: cancelled → 조용히 종료, 비정상 종료 → 경고 추가
-        if (result.finish_reason === "cancelled") {
-          await append_event("done", `cron task cancelled: ${job.name}`, { provider_id, backend_id, finish_reason: "cancelled" });
-          return "cancelled";
-        }
-
-        // usage 추출
-        const usage = result.usage as Record<string, unknown> | undefined;
-        const usage_payload = usage ? {
-          prompt_tokens: Number(usage.prompt_tokens || usage.input_tokens || 0),
-          completion_tokens: Number(usage.completion_tokens || usage.output_tokens || 0),
-        } : undefined;
-
-        const raw_content = String(result.content || "").trim();
-        const warn = FINISH_REASON_WARNINGS[result.finish_reason];
-        const sanitized = sanitize_provider_output(raw_content).trim();
-        const final_content = warn ? (sanitized ? `${sanitized}\n\n⚠️ ${warn}` : `⚠️ ${warn}`) : sanitized;
-
-        if (final_content) {
-          await publish_notice(
-            agent_alias,
-            final_content,
-            { kind: "cron_result", job_id: job.id, provider_id, backend_id, ...usage_payload ? { usage: usage_payload } : {} },
-          );
-          await append_event("done", `cron task completed: ${job.name}`, { provider_id, backend_id, finish_reason: result.finish_reason, ...usage_payload ? { usage: usage_payload } : {} }, final_content);
-          return final_content;
-        }
-        const fallback_done = `✅ cron 작업 완료\n- id: ${job.id}\n- name: ${job.name}\n- 결과 본문 없음(도구 실행만 완료)`;
-        await publish_notice(
-          "cron",
-          fallback_done,
-          { kind: "cron_result", job_id: job.id, provider_id, backend_id, empty: true, ...usage_payload ? { usage: usage_payload } : {} },
-        );
-        await append_event("done", `cron task completed: ${job.name}`, { provider_id, backend_id, empty: true, ...usage_payload ? { usage: usage_payload } : {} }, fallback_done);
-        return fallback_done;
-      } finally {
-        clearTimeout(cron_timeout);
+      // finish_reason 분기: cancelled → 조용히 종료, 비정상 종료 → 경고 추가
+      if (result.finish_reason === "cancelled") {
+        await append_event("done", `cron task cancelled: ${job.name}`, { provider_id, backend_id, finish_reason: "cancelled" });
+        return "cancelled";
       }
+
+      // usage 추출
+      const usage = result.usage as Record<string, unknown> | undefined;
+      const usage_payload = usage ? {
+        prompt_tokens: Number(usage.prompt_tokens || usage.input_tokens || 0),
+        completion_tokens: Number(usage.completion_tokens || usage.output_tokens || 0),
+      } : undefined;
+
+      const raw_content = String(result.content || "").trim();
+      const warn = FINISH_REASON_WARNINGS[result.finish_reason];
+      const sanitized = sanitize_provider_output(raw_content).trim();
+      const final_content = warn ? (sanitized ? `${sanitized}\n\n⚠️ ${warn}` : `⚠️ ${warn}`) : sanitized;
+
+      if (final_content) {
+        await publish_notice(
+          agent_alias,
+          final_content,
+          { kind: "cron_result", job_id: job.id, provider_id, backend_id, ...usage_payload ? { usage: usage_payload } : {} },
+        );
+        await append_event("done", `cron task completed: ${job.name}`, { provider_id, backend_id, finish_reason: result.finish_reason, ...usage_payload ? { usage: usage_payload } : {} }, final_content);
+        return final_content;
+      }
+      const fallback_done = `✅ cron 작업 완료\n- id: ${job.id}\n- name: ${job.name}\n- 결과 본문 없음(도구 실행만 완료)`;
+      await publish_notice(
+        "cron",
+        fallback_done,
+        { kind: "cron_result", job_id: job.id, provider_id, backend_id, empty: true, ...usage_payload ? { usage: usage_payload } : {} },
+      );
+      await append_event("done", `cron task completed: ${job.name}`, { provider_id, backend_id, empty: true, ...usage_payload ? { usage: usage_payload } : {} }, fallback_done);
+      return fallback_done;
     } catch (error) {
       const reason = error_message(error);
       await publish_notice(

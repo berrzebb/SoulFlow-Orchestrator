@@ -1,13 +1,17 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 import { BuilderField } from "../builder-field";
 
+const STATS_OPS = ["summary", "percentile", "histogram", "correlation", "normalize", "outliers"];
+const TIMESERIES_OPS = ["moving_average", "ema", "linear_forecast", "anomaly", "diff", "cumsum", "autocorrelation"];
+
 function StatsEditPanel({ node, update, t }: EditPanelProps) {
   const op = String(node.operation || "summary");
   return (
     <>
       <BuilderField label={t("workflows.operation")} required>
         <select autoFocus className="input input--sm" value={op} onChange={(e) => update({ operation: e.target.value })}>
-          {["summary", "percentile", "histogram", "correlation", "normalize", "outliers"].map((o) => <option key={o} value={o}>{o}</option>)}
+          <optgroup label="Statistics">{STATS_OPS.map((o) => <option key={o} value={o}>{o}</option>)}</optgroup>
+          <optgroup label="Time Series">{TIMESERIES_OPS.map((o) => <option key={o} value={o}>{o}</option>)}</optgroup>
         </select>
       </BuilderField>
       <BuilderField label={t("workflows.input_data")}>
@@ -28,9 +32,29 @@ function StatsEditPanel({ node, update, t }: EditPanelProps) {
           <input className="input input--sm" type="number" min={2} max={100} value={String(node.bins ?? 10)} onChange={(e) => update({ bins: Number(e.target.value) })} />
         </BuilderField>
       )}
-      {op === "outliers" && (
+      {(op === "outliers" || op === "anomaly") && (
         <BuilderField label={t("workflows.stats_threshold_zscore")}>
           <input className="input input--sm" type="number" min={1} max={10} step={0.5} value={String(node.threshold ?? 2)} onChange={(e) => update({ threshold: Number(e.target.value) || 2 })} />
+        </BuilderField>
+      )}
+      {op === "moving_average" && (
+        <BuilderField label={t("workflows.stats_window")} hint={t("workflows.stats_window_hint")}>
+          <input className="input input--sm" type="number" min={2} max={100} value={String(node.window ?? 3)} onChange={(e) => update({ window: Number(e.target.value) || 3 })} />
+        </BuilderField>
+      )}
+      {op === "ema" && (
+        <BuilderField label={t("workflows.stats_alpha")} hint={t("workflows.stats_alpha_hint")}>
+          <input className="input input--sm" type="number" min={0.01} max={1} step={0.01} value={String(node.alpha ?? 0.3)} onChange={(e) => update({ alpha: Number(e.target.value) || 0.3 })} />
+        </BuilderField>
+      )}
+      {op === "linear_forecast" && (
+        <BuilderField label={t("workflows.stats_periods")} hint={t("workflows.stats_periods_hint")}>
+          <input className="input input--sm" type="number" min={1} max={100} value={String(node.periods ?? 5)} onChange={(e) => update({ periods: Number(e.target.value) || 5 })} />
+        </BuilderField>
+      )}
+      {op === "autocorrelation" && (
+        <BuilderField label={t("workflows.stats_lag")} hint={t("workflows.stats_lag_hint")}>
+          <input className="input input--sm" type="number" min={1} max={50} value={String(node.lag ?? 1)} onChange={(e) => update({ lag: Number(e.target.value) || 1 })} />
         </BuilderField>
       )}
     </>
@@ -52,6 +76,6 @@ export const stats_descriptor: FrontendNodeDescriptor = {
     { name: "operation", type: "string", description: "node.stats.input.operation" },
     { name: "data",      type: "string", description: "node.stats.input.data" },
   ],
-  create_default: () => ({ operation: "summary", data: "", data2: "", percentile: 50, bins: 10, threshold: 2 }),
+  create_default: () => ({ operation: "summary", data: "", data2: "", percentile: 50, bins: 10, threshold: 2, window: 3, alpha: 0.3, periods: 5, lag: 1 }),
   EditPanel: StatsEditPanel,
 };

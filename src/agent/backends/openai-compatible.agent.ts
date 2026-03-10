@@ -8,7 +8,7 @@ import type {
   AgentRunOptions, AgentRunResult, BackendCapabilities,
 } from "../agent.types.js";
 import { agent_options_to_chat } from "./convert.js";
-import { now_iso, error_message, swallow } from "../../utils/common.js";
+import { now_iso, error_message, swallow, make_abort_signal } from "../../utils/common.js";
 import {
   build_executor_map, execute_single_tool, map_finish_reason,
   fire, accum_usage, emit_usage,
@@ -209,35 +209,26 @@ export class OpenAiCompatibleAgent implements AgentBackend {
     if (max_tokens !== null && max_tokens !== undefined) body.max_tokens = max_tokens;
     if (temperature !== null && temperature !== undefined) body.temperature = temperature;
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), this.config.request_timeout_ms ?? 120_000);
-    const relay = () => controller.abort();
-    options?.abort_signal?.addEventListener("abort", relay, { once: true });
+    const signal = make_abort_signal(this.config.request_timeout_ms ?? 120_000, options?.abort_signal);
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      ...this.config.extra_headers,
+    };
+    if (this.config.api_key) headers["Authorization"] = `Bearer ${this.config.api_key}`;
 
-    try {
-      const headers: Record<string, string> = {
-        "Content-Type": "application/json",
-        ...this.config.extra_headers,
-      };
-      if (this.config.api_key) headers["Authorization"] = `Bearer ${this.config.api_key}`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+      signal,
+    });
+    if (!res.ok) throw new Error(`OpenAI API ${res.status}: ${await res.text()}`);
 
-      const res = await fetch(url, {
-        method: "POST",
-        headers,
-        body: JSON.stringify(body),
-        signal: controller.signal,
-      });
-      if (!res.ok) throw new Error(`OpenAI API ${res.status}: ${await res.text()}`);
-
-      if (!use_stream) {
-        return await res.json() as Record<string, unknown>;
-      }
-
-      return await this._parse_sse_stream(res, options.on_stream!);
-    } finally {
-      clearTimeout(timeout);
-      options?.abort_signal?.removeEventListener("abort", relay);
+    if (!use_stream) {
+      return await res.json() as Record<string, unknown>;
     }
+
+    return await this._parse_sse_stream(res, options.on_stream!);
   }
 
   /** SSE 스트림을 읽어 텍스트·도구 호출을 누적 후 parse_openai_response 호환 객체 반환. */

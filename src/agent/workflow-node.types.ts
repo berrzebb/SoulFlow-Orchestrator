@@ -852,6 +852,9 @@ export interface PackageManagerNodeDefinition extends NodeBase {
   package_name?: string;
   /** 추가 플래그. */
   flags?: string;
+  dep_input?: string;
+  dep_input2?: string;
+  dep_graph?: string;
 }
 
 // ── DataFormat Node ─────────────────────────────────
@@ -867,6 +870,12 @@ export interface DataFormatNodeDefinition extends NodeBase {
   keys?: string;
   input2?: string;
   delimiter?: string;
+  mime_extension?: string;
+  mime_filename?: string;
+  header_type?: string;
+  header_token?: string;
+  header_filename?: string;
+  header_directives?: string;
 }
 
 // ── Encoding Node ───────────────────────────────────
@@ -1027,6 +1036,10 @@ export interface StatsNodeDefinition extends NodeBase {
   percentile?: number;
   bins?: number;
   threshold?: number;
+  window?: number;
+  alpha?: number;
+  periods?: number;
+  lag?: number;
 }
 
 // ── Text Node ───────────────────────────────────────
@@ -1348,6 +1361,7 @@ export interface FtpNodeDefinition extends NodeBase {
   username?: string;
   password?: string;
   remote_path?: string;
+  local_path?: string;
 }
 
 // ── SSH Node ────────────────────────────────────────
@@ -1570,6 +1584,11 @@ export interface ChangelogNodeDefinition extends NodeBase {
   commits?: string;
   version?: string;
   commit_message?: string;
+  license_id?: string;
+  license_id2?: string;
+  license_author?: string;
+  license_year?: string;
+  license_text?: string;
 }
 
 // ── Matrix Node ─────────────────────────────────────

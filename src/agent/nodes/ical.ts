@@ -6,7 +6,7 @@ import type { OrcheNodeExecutorContext, OrcheNodeExecuteResult, OrcheNodeTestRes
 import { resolve_templates } from "../orche-node-executor.js";
 import { error_message } from "../../utils/common.js";
 
-interface IcalNodeDefinition extends OrcheNodeDefinition {
+type IcalNodeDefinition = OrcheNodeDefinition & {
   action?: string;
   events?: string;
   event?: string;

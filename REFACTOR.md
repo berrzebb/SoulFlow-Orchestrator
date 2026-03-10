@@ -2,7 +2,7 @@
 
 > 5대 원칙(YAGNI, DRY, SOLID, KISS, LoD) 기반 리팩토링 추적 문서.
 > 이터레이션마다 이 파일을 먼저 읽고, 처리 후 상태를 업데이트합니다.
-> 마지막 업데이트: 2026-03-10 (이터레이션 3)
+> 마지막 업데이트: 2026-03-10 (이터레이션 5)
 
 ---
 
@@ -145,12 +145,30 @@
 
 ---
 
+## 이터레이션 5 신규 발견
+
+### ✅ I5-A: `timed_fetch` / `check_http` AbortController 잔존 [DRY, perf]
+- **위치**: `agent/tools/http-utils.ts` L88, `agent/tools/healthcheck.ts` L69
+- **문제**: I4-C에서 10곳 정리했으나 이 2곳이 누락됨
+- **해결**: `AbortSignal.timeout()` 교체 + `timed_fetch` async 제거 (`7c94b2b`)
+
+### ✅ I5-B: `node.country.output.*` i18n 키 불일치 [정확성]
+- **위치**: `en.json` L2976-2978, `ko.json` L2976-2978
+- **문제**: `.country`/`.countries` 스테일 키 → 컴포넌트는 `.code/.dial/.currency/.results` 참조
+- **해결**: 양 파일 교체 완료 (이전 커밋에 포함)
+
+### ✅ I5-C: 신규 노드(country/geo/ical/json-patch/jsonl) 등록 상태 검증
+- **결론**: 백엔드 `nodes/index.ts`, 프론트엔드 `web/.../nodes/index.ts` 모두 정상 등록 확인
+
+---
+
 ## 최종 요약
 
 **이터레이션 3 완료**: 6개 항목 (P1-A~F)
 **이터레이션 4 완료**: 3개 항목 (I4-A~C)
-**총 완료**: 20개 항목
+**이터레이션 5 완료**: 3개 항목 (I5-A~C)
+**총 완료**: 23개 항목
 **SKIP (YAGNI/의도적 설계)**: 18개 항목
 **신규 헬퍼/유틸**: `runner_deps`, `finalize_phase`, `html-strip.ts`, `string-match.ts`, `make_document_handler`, `make_abort_signal`
 **보안 개선**: `validate_url`에 `.local` mDNS 도메인 차단 추가
-**코드 제거**: ~127줄 (4 document 핸들러 파일 통합)
+**코드 제거**: ~127줄 (4 document 핸들러 파일 통합) + 9줄 (AbortController 잔존 제거)
