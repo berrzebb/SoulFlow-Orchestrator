@@ -14,8 +14,9 @@ export default defineConfig({
     testTimeout: 60_000,
     hookTimeout: 60_000,
     // forks: child_process 기반 — Windows segfault 방지, 메모리 격리 안정적
+    // CI: maxWorkers=2 (7GB runner × 2 fork ≈ 3-4GB, OOM 방지). 병렬화는 shard로 처리.
     pool: "forks",
-    maxWorkers: process.env.CI ? 4 : 2,
+    maxWorkers: process.env.CI ? 2 : 1,
     coverage: {
       provider: "v8",
       include: ["src/**/*.ts"],

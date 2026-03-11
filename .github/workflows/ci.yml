@@ -38,8 +38,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
-        total: [4]
+        shard: [1, 2, 3, 4, 5, 6]
+        total: [6]
 
     steps:
       - uses: actions/checkout@v4
@@ -60,8 +60,8 @@ jobs:
             --outputFile=.vitest-reports/shard-${{ matrix.shard }}.blob \
             --shard=${{ matrix.shard }}/${{ matrix.total }}
         env:
-          NODE_OPTIONS: --max-old-space-size=4096
-        timeout-minutes: 25
+          NODE_OPTIONS: --max-old-space-size=3072
+        timeout-minutes: 20
 
       - name: Upload blob report
         if: always()
