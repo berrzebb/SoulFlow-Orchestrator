@@ -14,7 +14,7 @@ export default defineConfig({
     testTimeout: 60_000,
     hookTimeout: 60_000,
     pool: "threads",
-    maxWorkers: 2,
+    maxWorkers: process.env.CI ? 4 : 2,
     coverage: {
       provider: "v8",
       include: ["src/**/*.ts"],

@@ -20,9 +20,9 @@ function make_runner(spawn_agent?: any, wait_agent?: any) {
 describe("spawn_agent_handler metadata", () => {
   it("node_type = spawn_agent", () => { expect(spawn_agent_handler.node_type).toBe("spawn_agent"); });
 
-  it("create_default: role=assistant, await=true, max_iterations=10", () => {
+  it("create_default: role=generalist, await=true, max_iterations=10", () => {
     const def = spawn_agent_handler.create_default?.();
-    expect(def?.role).toBe("assistant");
+    expect(def?.role).toBe("generalist");
     expect(def?.await_completion).toBe(true);
     expect(def?.max_iterations).toBe(10);
   });

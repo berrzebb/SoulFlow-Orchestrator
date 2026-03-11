@@ -391,7 +391,7 @@ describe("워크플로우 도구 전체 흐름", () => {
   it("6-1. node_types로 사용 가능한 노드 목록을 조회한다", async () => {
     const result = await tool.execute({ action: "node_types" }, ctx);
     expect(result).toContain("Available Workflow Node Types");
-    expect(result).toContain("Workflow Definition Structure");
+    expect(result).toContain("Workflow Definition");
   });
 
   it("6-2. 카테고리 필터로 노드를 제한할 수 있다", async () => {

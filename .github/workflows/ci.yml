@@ -10,8 +10,9 @@ permissions:
   contents: read
 
 jobs:
-  test:
-    name: Test & Coverage
+  # ── 정적 분석 ─────────────────────────────────────────────────────────────
+  static:
+    name: Typecheck & Lint
     runs-on: ubuntu-latest
 
     steps:
@@ -30,22 +31,84 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      - name: Test with coverage
+  # ── 테스트 (Matrix Sharding) ──────────────────────────────────────────────
+  test:
+    name: Test (shard ${{ matrix.shard }}/${{ matrix.total }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+        total: [4]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Run tests (shard ${{ matrix.shard }}/${{ matrix.total }})
         run: |
-          set -o pipefail
-          npm run test:coverage 2>&1 | tee test-output.txt
+          npx vitest run \
+            --reporter=blob \
+            --coverage \
+            --coverage.reporter=json \
+            --outputFile=.vitest-reports/shard-${{ matrix.shard }}.blob \
+            --shard=${{ matrix.shard }}/${{ matrix.total }}
         env:
           NODE_OPTIONS: --max-old-space-size=4096
-        timeout-minutes: 60
-      - name: Upload coverage artifact
+        timeout-minutes: 25
+
+      - name: Upload blob report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: coverage-report
-          path: |
-            coverage/
-            test-output.txt
-          retention-days: 14
+          name: vitest-blob-${{ matrix.shard }}
+          path: .vitest-reports/
+          retention-days: 1
+
+  # ── Coverage 병합 + 배지 ──────────────────────────────────────────────────
+  coverage:
+    name: Merge Reports & Coverage
+    needs: test
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Download all blob reports
+        uses: actions/download-artifact@v4
+        with:
+          pattern: vitest-blob-*
+          path: .vitest-reports/
+          merge-multiple: true
+
+      - name: Merge reports & generate coverage
+        run: |
+          npx vitest run \
+            --mergeReports=.vitest-reports \
+            --coverage \
+            --coverage.reporter=text \
+            --coverage.reporter=json-summary \
+            --coverage.reporter=html \
+            --coverage.reportsDirectory=coverage
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
+        timeout-minutes: 15
 
       - name: Coverage summary
         if: always()
@@ -54,6 +117,7 @@ jobs:
             node -e "
               const s = require('./coverage/coverage-summary.json').total;
               const fmt = (v) => v.pct.toFixed(1) + '%';
+              console.log('## Coverage');
               console.log('| Metric | Coverage |');
               console.log('|--------|----------|');
               console.log('| Lines | ' + fmt(s.lines) + ' |');
@@ -62,32 +126,24 @@ jobs:
               console.log('| Branches | ' + fmt(s.branches) + ' |');
             " >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "⚠️ Coverage report not generated (tests may have failed)" >> "$GITHUB_STEP_SUMMARY"
+            echo "⚠️ Coverage report not generated" >> "$GITHUB_STEP_SUMMARY"
           fi
 
-  coverage-badge:
-    name: Update Coverage Badge
-    needs: test
-    if: always() && github.ref == 'refs/heads/main' && github.event_name == 'push'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/download-artifact@v4
+      - name: Upload merged coverage
+        if: always()
+        uses: actions/upload-artifact@v4
         with:
           name: coverage-report
-          path: .artifact/
+          path: coverage/
+          retention-days: 14
 
       - name: Generate badge JSONs
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: |
           mkdir -p .badges
 
-          # Coverage badge
-          if [ -f .artifact/coverage/coverage-summary.json ]; then
-            PCT=$(node -e "console.log(require('./.artifact/coverage/coverage-summary.json').total.lines.pct)")
+          if [ -f coverage/coverage-summary.json ]; then
+            PCT=$(node -e "console.log(require('./coverage/coverage-summary.json').total.lines.pct)")
             if (( $(echo "$PCT >= 80" | bc -l) )); then COLOR="brightgreen"
             elif (( $(echo "$PCT >= 60" | bc -l) )); then COLOR="green"
             elif (( $(echo "$PCT >= 40" | bc -l) )); then COLOR="yellow"
@@ -97,20 +153,12 @@ jobs:
             echo "{\"schemaVersion\":1,\"label\":\"coverage\",\"message\":\"N/A\",\"color\":\"lightgrey\"}" > .badges/coverage.json
           fi
 
-          # Lines of code badge (src only, exclude generated/locales)
           LOC=$(find src -name '*.ts' -not -path '*/locales/*' -not -name '*.d.ts' | xargs wc -l | tail -1 | awk '{print $1}')
-          if [ "$LOC" -ge 1000 ]; then
-            LOC_LABEL=$(echo "scale=1; $LOC / 1000" | bc)"k"
-          else
-            LOC_LABEL="$LOC"
-          fi
+          if [ "$LOC" -ge 1000 ]; then LOC_LABEL=$(echo "scale=1; $LOC / 1000" | bc)"k"; else LOC_LABEL="$LOC"; fi
           echo "{\"schemaVersion\":1,\"label\":\"lines of code\",\"message\":\"${LOC_LABEL}\",\"color\":\"blue\"}" > .badges/loc.json
 
-          # Test count badge
-          TEST_COUNT=$(grep -oP '\d+ passed' .artifact/test-output.txt 2>/dev/null | tail -1 | grep -oP '\d+' || echo "?")
-          echo "{\"schemaVersion\":1,\"label\":\"tests\",\"message\":\"${TEST_COUNT} passed\",\"color\":\"brightgreen\"}" > .badges/tests.json
-
       - name: Deploy badge to gh-pages
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
@@ -120,4 +168,3 @@ jobs:
           publish_branch: gh-pages
           user_name: github-actions[bot]
           user_email: github-actions[bot]@users.noreply.github.com
-
