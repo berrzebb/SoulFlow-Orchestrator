@@ -1,6 +1,6 @@
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import { with_sqlite } from "../utils/sqlite-helper.js";
+import { with_sqlite, with_sqlite_strict } from "../utils/sqlite-helper.js";
 import type { DecisionIndexData, DecisionRecord } from "./types.js";
 import { now_iso } from "../utils/common.js";
 
@@ -41,7 +41,7 @@ export class DecisionStore {
 
   private async ensure_initialized(): Promise<void> {
     await this.ensure_dirs();
-    with_sqlite(this.sqlite_path,(db) => {
+    with_sqlite_strict(this.sqlite_path,(db) => {
       db.exec(`
         CREATE TABLE IF NOT EXISTS decisions (
           id TEXT PRIMARY KEY,

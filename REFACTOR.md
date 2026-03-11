@@ -247,6 +247,74 @@
 
 ---
 
+---
+
+## Copilot 코드리뷰 — 개선 작업 (2026-03-11)
+
+> 출처: `copilot/review-codebase-report` 브랜치 `docs/review/`
+> 칸반: http://localhost:8087/web/#/kanban?board=909370a1-a4a5-41d8-b5cd-d1f231d6366b
+> 현재 등급: 8.0/10 (B+) → 목표: 9.0/10 (A)
+
+### Phase 1 — 긴급 (1-2일) `SOK-38`
+
+| 카드 | 이슈 | 상태 |
+|------|------|------|
+| SOK-42 | [C1] 벡터 DB 연결 누수 — `search_chunks_vec()` SQLite 미해제 | ⬜ |
+| SOK-43 | [C2] Promise 경쟁 상태 — Codex AppServer 중복 resolve | ⬜ |
+| SOK-44 | [C3] Worker 오류 무시 — Rechunking 실패 로깅 없음 | ⬜ |
+| SOK-45 | [C4] SQLite 초기화 실패 미감지 — `with_sqlite()` null 무검증 | ⬜ |
+| SOK-46 | [S3] Telegram HTML 이스케이핑 누락 | ⬜ |
+| SOK-47 | [S5] Shell 핸들러 디렉토리 검증 부재 | ⬜ |
+
+**실행 순서**: C4 → C1 → C2 → C3 → S3 → S5
+
+### Phase 2 — 단기 (3-5일) `SOK-39`
+
+| 카드 | 이슈 | 상태 |
+|------|------|------|
+| SOK-48 | [M4/S1] Slack 타임스탬프 범위 검증 | ⬜ |
+| SOK-49 | [M6] OAuth ServiceLike 수명주기 미구현 | ⬜ |
+| SOK-50 | [M7] 컨텍스트 동기화 500ms+ → 5초 TTL 캐시 | ⬜ |
+| SOK-51 | [P1] 참조 동기화 디바운싱 | ⬜ |
+| SOK-52 | [P2] 도구 임베딩 워밍업 | ⬜ |
+| SOK-53 | [R8] with_sqlite_strict() 전파 | ⬜ |
+| SOK-54 | [S2] 파일 경로 검증 중앙화 | ⬜ |
+| SOK-55 | [S4] 설정 경로 검증 강화 | ⬜ |
+
+**실행 순서**: R8 → M7+P1(공통 캐시) → P2 → M4/S1+S2+S4 → M6
+
+### Phase 3 — 중기 (1-2주) `SOK-40`
+
+| 카드 | 이슈 | 상태 |
+|------|------|------|
+| SOK-56 | [M1] `Record<string,unknown>` 1,213개 → 채널별 타입 | ⬜ |
+| SOK-57 | [M3] JSON 파싱 실패 묵살 → 로깅 추가 | ⬜ |
+| SOK-58 | [O1] 빈 catch 블록 467개 분류 및 로깅 | ⬜ |
+| SOK-59 | [O2] Worker 실패 모니터링 + 헬스체크 | ⬜ |
+| SOK-60 | [O3] SQLite 에러 로깅 강화 | ⬜ |
+| SOK-61 | [R1] 채널 HTTP 유틸 추출 (~150줄) | ⬜ |
+
+**실행 순서**: O1(전체) → O2+O3 → M3 → R1 → M1(점진적)
+
+### Phase 4 — 장기 (2-4주) `SOK-41`
+
+| 카드 | 이슈 | 상태 |
+|------|------|------|
+| SOK-62 | [L1] 쓰기 큐 에러 → DLQ | ⬜ |
+| SOK-63 | [L2] Cron 조기 검증 | ⬜ |
+| SOK-64 | [L3] 메모리 통합 중복 제거 | ⬜ |
+| SOK-65 | [L4] SQLite DESC 인덱스 호환 | ⬜ |
+| SOK-66 | [L5] DLQ 4,000자 절단 → 참조 ID | ⬜ |
+| SOK-67 | [L6] `Math.random()` → `crypto.randomUUID()` | ⬜ |
+| SOK-68 | [O4] 분류기 메트릭 추적 | ⬜ |
+| SOK-69 | [O5] 모듈별 로그 레벨 오버라이드 | ⬜ |
+| SOK-70 | [R2] `as_node<T>()` 캐스팅 헬퍼 (290회) | ⬜ |
+| SOK-71 | [R4] DashboardService 분할 (724줄) | ⬜ |
+
+> 상태: ⬜ Request | 🔵 Todo | 🟡 In Progress | 🔶 Review | ✅ Done
+
+---
+
 ## 최종 요약
 
 **이터레이션 3 완료**: 6개 항목 (P1-A~F)

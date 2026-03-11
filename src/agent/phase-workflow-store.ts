@@ -3,7 +3,7 @@
 import { mkdir, rename, rmdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { now_iso } from "../utils/common.js";
-import { with_sqlite } from "../utils/sqlite-helper.js";
+import { with_sqlite, with_sqlite_strict } from "../utils/sqlite-helper.js";
 import type { PhaseLoopState, PhaseMessage } from "./phase-loop.types.js";
 
 export interface PhaseWorkflowStoreLike {
@@ -31,7 +31,7 @@ export class PhaseWorkflowStore implements PhaseWorkflowStoreLike {
   private async ensure_initialized(): Promise<void> {
     await mkdir(this.dir, { recursive: true });
     await this.recover_if_dir(this.sqlite_path);
-    with_sqlite(this.sqlite_path, (db) => {
+    with_sqlite_strict(this.sqlite_path, (db) => {
       db.exec(`
         CREATE TABLE IF NOT EXISTS phase_workflows (
           workflow_id  TEXT PRIMARY KEY,

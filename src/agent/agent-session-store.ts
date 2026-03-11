@@ -1,6 +1,6 @@
 /** Agent 세션 영속화 스토어. 오케스트레이터가 각 백엔드의 세션을 관리. */
 
-import { with_sqlite } from "../utils/sqlite-helper.js";
+import { with_sqlite, with_sqlite_strict } from "../utils/sqlite-helper.js";
 import { now_iso } from "../utils/common.js";
 import type { AgentSession, AgentBackendId } from "./agent.types.js";
 
@@ -88,7 +88,7 @@ export class AgentSessionStore {
   }
 
   private _ensure_schema(): void {
-    with_sqlite(this.db_path, (db) => {
+    with_sqlite_strict(this.db_path, (db) => {
       db.exec(INIT_SQL);
       return true;
     });

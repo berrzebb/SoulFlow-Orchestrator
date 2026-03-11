@@ -10,7 +10,7 @@ export type SqliteRunOptions = {
   pragmas?: string[];
 };
 
-/** DB를 열고 콜백 실행 후 닫는다. 에러 시 null. */
+/** DB를 열고 콜백 실행 후 닫는다. 에러 시 stderr 로깅 후 null. */
 export function with_sqlite<T>(
   db_path: string,
   run: (db: DatabaseSync) => T,
@@ -23,7 +23,9 @@ export function with_sqlite<T>(
       for (const p of options.pragmas) db.pragma(p);
     }
     return run(db);
-  } catch {
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    process.stderr.write(`[sqlite] error at ${db_path}: ${msg}\n`);
     return null;
   } finally {
     try { db?.close(); } catch { /* no-op */ }

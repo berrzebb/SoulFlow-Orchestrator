@@ -5,7 +5,7 @@
 
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import { with_sqlite } from "../utils/sqlite-helper.js";
+import { with_sqlite, with_sqlite_strict } from "../utils/sqlite-helper.js";
 import type { SecretVaultLike } from "../security/secret-vault.js";
 import { CONFIG_FIELDS, to_vault_name, type ConfigFieldMeta, type ConfigSection } from "./config-meta.js";
 
@@ -38,7 +38,7 @@ export class ConfigStore {
   }
 
   private _ensure_initialized(): void {
-    with_sqlite(this.db_path, (db) => {
+    with_sqlite_strict(this.db_path, (db) => {
       db.exec(INIT_SQL);
       return true;
     }, { pragmas: PRAGMAS });

@@ -6,7 +6,7 @@
 
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import { with_sqlite } from "../utils/sqlite-helper.js";
+import { with_sqlite, with_sqlite_strict } from "../utils/sqlite-helper.js";
 import type { SecretVaultLike } from "../security/secret-vault.js";
 
 const INIT_SQL = `
@@ -72,7 +72,7 @@ export class ChannelInstanceStore {
   }
 
   private _ensure_initialized(): void {
-    with_sqlite(this.db_path, (db) => { db.exec(INIT_SQL); return true; }, { pragmas: PRAGMAS });
+    with_sqlite_strict(this.db_path, (db) => { db.exec(INIT_SQL); return true; }, { pragmas: PRAGMAS });
   }
 
   // ── 조회 ──

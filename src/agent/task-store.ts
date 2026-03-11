@@ -1,7 +1,7 @@
 import { now_iso } from "../utils/common.js";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import { with_sqlite } from "../utils/sqlite-helper.js";
+import { with_sqlite, with_sqlite_strict } from "../utils/sqlite-helper.js";
 import type { TaskState } from "../contracts.js";
 
 export interface TaskStoreLike {
@@ -24,7 +24,7 @@ export class TaskStore implements TaskStoreLike {
 
   private async ensure_initialized(): Promise<void> {
     await mkdir(this.tasks_dir, { recursive: true });
-    with_sqlite(this.sqlite_path,(db) => {
+    with_sqlite_strict(this.sqlite_path,(db) => {
       db.exec(`
         CREATE TABLE IF NOT EXISTS tasks (
           task_id TEXT PRIMARY KEY,

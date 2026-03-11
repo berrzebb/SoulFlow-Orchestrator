@@ -1,7 +1,7 @@
 import { now_iso } from "../utils/common.js";
 import { mkdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
-import { with_sqlite } from "../utils/sqlite-helper.js";
+import { with_sqlite, with_sqlite_strict } from "../utils/sqlite-helper.js";
 import type { ChannelProvider } from "./types.js";
 
 type DlqRow = {
@@ -62,7 +62,7 @@ export class SqliteDispatchDlqStore implements DispatchDlqStoreLike {
 
   private async ensure_initialized(): Promise<void> {
     await mkdir(dirname(this.sqlite_path), { recursive: true });
-    with_sqlite(this.sqlite_path,(db) => {
+    with_sqlite_strict(this.sqlite_path,(db) => {
       db.exec(`
         PRAGMA journal_mode=WAL;
         CREATE TABLE IF NOT EXISTS outbound_dlq (

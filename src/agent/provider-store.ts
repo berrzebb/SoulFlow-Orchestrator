@@ -6,7 +6,7 @@
 
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import { with_sqlite } from "../utils/sqlite-helper.js";
+import { with_sqlite, with_sqlite_strict } from "../utils/sqlite-helper.js";
 import type { SecretVaultLike } from "../security/secret-vault.js";
 import type { AgentProviderConfig, CreateAgentProviderInput, ProviderConnection, CreateProviderConnectionInput, ModelPurpose } from "./agent.types.js";
 import type { ExecutionMode } from "../orchestration/types.js";
@@ -119,7 +119,7 @@ export class AgentProviderStore {
   }
 
   private _ensure_initialized(): void {
-    with_sqlite(this.db_path, (db) => {
+    with_sqlite_strict(this.db_path, (db) => {
       db.exec(INIT_SQL);
       // 마이그레이션: model_purpose 컬럼 추가 (기존 테이블 대응)
       const has_purpose = db.prepare(

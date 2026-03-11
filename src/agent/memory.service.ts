@@ -5,7 +5,7 @@ import { Worker } from "node:worker_threads";
 import type { RechunkJob } from "./memory-rechunk-worker.js";
 import Database from "better-sqlite3";
 import * as sqliteVec from "sqlite-vec";
-import { with_sqlite } from "../utils/sqlite-helper.js";
+import { with_sqlite, with_sqlite_strict } from "../utils/sqlite-helper.js";
 import type {
   ConsolidationMessage,
   ConsolidationSession,
@@ -80,7 +80,7 @@ export class MemoryStore implements MemoryStoreLike {
 
   private async ensure_initialized(): Promise<void> {
     await mkdir(this.memory_dir, { recursive: true });
-    with_sqlite(this.sqlite_path,(db) => {
+    with_sqlite_strict(this.sqlite_path,(db) => {
       db.exec(`
         PRAGMA journal_mode=WAL;
         CREATE TABLE IF NOT EXISTS memory_documents (
