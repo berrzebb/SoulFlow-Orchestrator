@@ -12,6 +12,7 @@ node_modules/
 # Build outputs
 dist/
 coverage/
+vitest-reports/
 /**workspace**/**
 /standalone/**
 *.tsbuildinfo
