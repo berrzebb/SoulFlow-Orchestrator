@@ -2395,6 +2395,7 @@
   "workflows.keys": "Keys",
   "workflows.llm_backend": "Backend",
   "workflows.llm_model": "Model",
+  "workflows.llm_model_specialty_hint": "💻 Claude → Coding · 📋 OpenAI → Planning · 🎨 Gemini → Frontend",
   "workflows.llm_prompt": "Prompt Template",
   "workflows.llm_schema": "Output Schema",
   "workflows.llm_system": "System Prompt",

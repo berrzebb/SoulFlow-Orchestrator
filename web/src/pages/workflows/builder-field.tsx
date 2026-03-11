@@ -37,6 +37,18 @@ export function BuilderRowPair({ children, className }: {
 }
 
 /** LLM backend + model 선택기 — useProviderModels 훅 내장, 로딩/fallback 처리 포함. */
+/** 프로바이더 타입 → 특기 레이블 맵. */
+const PROVIDER_SPECIALTY_LABELS: Record<string, string> = {
+  anthropic: "💻 코딩",
+  openai:    "📋 계획",
+  gemini:    "🎨 프론트엔드",
+};
+
+function backend_specialty_hint(provider_type?: string): string {
+  if (!provider_type) return "";
+  return PROVIDER_SPECIALTY_LABELS[provider_type] ?? "";
+}
+
 export function BackendModelPicker({ backend, onBackendChange, model, onModelChange, options, required, autoFocus, backendLabel, modelLabel }: {
   backend: string;
   onBackendChange: (v: string) => void;
@@ -49,17 +61,25 @@ export function BackendModelPicker({ backend, onBackendChange, model, onModelCha
   modelLabel: string;
 }) {
   const { models, loading } = useProviderModels(backend, options);
+
+  // 선택된 백엔드의 특기 힌트
+  const selected_backend = (options?.backends || []).find((b) => b.value === backend);
+  const specialty_hint = backend_specialty_hint(selected_backend?.provider_type);
+
   return (
     <BuilderRowPair>
-      <BuilderField label={backendLabel} required={required}>
+      <BuilderField label={backendLabel} required={required} hint={specialty_hint || undefined}>
         <select autoFocus={autoFocus} className="input input--sm" required={required} value={backend}
           onChange={(e) => onBackendChange(e.target.value)} aria-required={required || undefined}>
           <option value="">-</option>
-          {(options?.backends || []).map((b) => (
-            <option key={b.value} value={b.value}>
-              {b.available === false ? "\u26AA " : "\uD83D\uDFE2 "}{b.label}{b.provider_type ? ` (${b.provider_type})` : ""}
-            </option>
-          ))}
+          {(options?.backends || []).map((b) => {
+            const hint = backend_specialty_hint(b.provider_type);
+            return (
+              <option key={b.value} value={b.value}>
+                {b.available === false ? "⚫ " : "🟢 "}{b.label}{hint ? ` · ${hint}` : ""}
+              </option>
+            );
+          })}
         </select>
       </BuilderField>
       <BuilderField label={modelLabel} required={required}>

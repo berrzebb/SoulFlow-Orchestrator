@@ -20,7 +20,28 @@ export interface ModelInfo {
   pricing_output?: number;
   /** 낮을수록 비용 효율 좋음. (input + output) / 2M tokens 기준. */
   cost_score?: number;
+  /** 모델/프로바이더가 특히 잘하는 작업 분야. */
+  specialties?: ModelSpecialty[];
 }
+
+/** 모델이 특히 강한 작업 분야. */
+export type ModelSpecialty = "planning" | "coding" | "frontend" | "reasoning" | "vision" | "general";
+
+/**
+ * 프로바이더 타입별 특기 맵핑.
+ * 에이전트 생성 / 워크플로우에서 모델 선택 기준으로 활용.
+ *
+ * - Codex(openai) → 계획·구조화 작업에 강함
+ * - Claude(anthropic) → 코딩·코드 생성·리뷰에 강함
+ * - Gemini(gemini) → 프론트엔드·UI·시각 작업에 강함
+ */
+export const PROVIDER_SPECIALTIES: Record<string, ModelSpecialty[]> = {
+  anthropic:  ["coding", "reasoning"],
+  openai:     ["planning", "reasoning"],
+  gemini:     ["frontend", "vision"],
+  openrouter: ["general"],
+  ollama:     ["general"],
+};
 
 interface CacheEntry {
   models: ModelInfo[];
@@ -183,33 +204,33 @@ export async function fetch_openai_models(api_base: string, api_key?: string): P
 
 /** API 키 없이도 사용할 수 있는 잘 알려진 모델 정적 카탈로그. */
 const STATIC_ANTHROPIC_MODELS: ModelInfo[] = [
-  { id: "claude-opus-4-6", name: "Claude Opus 4.6", provider: "anthropic", purpose: "chat" as const, context_length: 200000, pricing_input: 5, pricing_output: 25 },
-  { id: "claude-sonnet-4-6", name: "Claude Sonnet 4.6", provider: "anthropic", purpose: "chat" as const, context_length: 200000, pricing_input: 3, pricing_output: 15 },
-  { id: "claude-haiku-4-5-20251001", name: "Claude Haiku 4.5", provider: "anthropic", purpose: "chat" as const, context_length: 200000, pricing_input: 1, pricing_output: 5 },
-  { id: "claude-sonnet-4-5", name: "Claude Sonnet 4.5", provider: "anthropic", purpose: "chat" as const, context_length: 200000, pricing_input: 3, pricing_output: 15 },
-  { id: "claude-opus-4-5", name: "Claude Opus 4.5", provider: "anthropic", purpose: "chat" as const, context_length: 200000, pricing_input: 5, pricing_output: 25 },
+  { id: "claude-opus-4-6",          name: "Claude Opus 4.6",   provider: "anthropic", purpose: "chat" as const, context_length: 200000, pricing_input: 5,   pricing_output: 25, specialties: ["coding", "reasoning"] as ModelSpecialty[] },
+  { id: "claude-sonnet-4-6",        name: "Claude Sonnet 4.6", provider: "anthropic", purpose: "chat" as const, context_length: 200000, pricing_input: 3,   pricing_output: 15, specialties: ["coding", "reasoning"] as ModelSpecialty[] },
+  { id: "claude-haiku-4-5-20251001",name: "Claude Haiku 4.5",  provider: "anthropic", purpose: "chat" as const, context_length: 200000, pricing_input: 1,   pricing_output: 5,  specialties: ["coding"] as ModelSpecialty[] },
+  { id: "claude-sonnet-4-5",        name: "Claude Sonnet 4.5", provider: "anthropic", purpose: "chat" as const, context_length: 200000, pricing_input: 3,   pricing_output: 15, specialties: ["coding", "reasoning"] as ModelSpecialty[] },
+  { id: "claude-opus-4-5",          name: "Claude Opus 4.5",   provider: "anthropic", purpose: "chat" as const, context_length: 200000, pricing_input: 5,   pricing_output: 25, specialties: ["coding", "reasoning"] as ModelSpecialty[] },
 ].map((m) => ({ ...m, cost_score: compute_cost_score(m.pricing_input, m.pricing_output) }));
 
 const STATIC_GEMINI_MODELS: ModelInfo[] = [
-  { id: "gemini-2.5-pro", name: "Gemini 2.5 Pro", provider: "gemini", purpose: "chat", context_length: 1048576 },
-  { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash", provider: "gemini", purpose: "chat", context_length: 1048576 },
-  { id: "gemini-2.5-flash-lite", name: "Gemini 2.5 Flash Lite", provider: "gemini", purpose: "chat", context_length: 1048576 },
-  { id: "gemini-2.0-flash", name: "Gemini 2.0 Flash", provider: "gemini", purpose: "chat", context_length: 1048576 },
-  { id: "gemini-embedding-001", name: "Gemini Embedding 001", provider: "gemini", purpose: "embedding" },
+  { id: "gemini-2.5-pro",       name: "Gemini 2.5 Pro",       provider: "gemini", purpose: "chat" as const,      context_length: 1048576, specialties: ["frontend", "vision", "reasoning"] as ModelSpecialty[] },
+  { id: "gemini-2.5-flash",     name: "Gemini 2.5 Flash",     provider: "gemini", purpose: "chat" as const,      context_length: 1048576, specialties: ["frontend", "vision"] as ModelSpecialty[] },
+  { id: "gemini-2.5-flash-lite",name: "Gemini 2.5 Flash Lite",provider: "gemini", purpose: "chat" as const,      context_length: 1048576, specialties: ["frontend"] as ModelSpecialty[] },
+  { id: "gemini-2.0-flash",     name: "Gemini 2.0 Flash",     provider: "gemini", purpose: "chat" as const,      context_length: 1048576, specialties: ["frontend", "vision"] as ModelSpecialty[] },
+  { id: "gemini-embedding-001", name: "Gemini Embedding 001", provider: "gemini", purpose: "embedding" as const },
 ];
 
 const STATIC_OPENAI_MODELS: ModelInfo[] = [
-  { id: "gpt-5.4", name: "GPT-5.4", provider: "openai", purpose: "chat" as const, context_length: 272000, pricing_input: 2.5, pricing_output: 15 },
-  { id: "gpt-5", name: "GPT-5", provider: "openai", purpose: "chat" as const, pricing_input: 1.25, pricing_output: 10 },
-  { id: "gpt-5-mini", name: "GPT-5 Mini", provider: "openai", purpose: "chat" as const, pricing_input: 0.25, pricing_output: 2 },
-  { id: "gpt-5-nano", name: "GPT-5 Nano", provider: "openai", purpose: "chat" as const, pricing_input: 0.05, pricing_output: 0.4 },
-  { id: "o3", name: "o3", provider: "openai", purpose: "chat" as const, context_length: 200000, pricing_input: 2, pricing_output: 8 },
-  { id: "o4-mini", name: "o4-mini", provider: "openai", purpose: "chat" as const, context_length: 200000, pricing_input: 1.1, pricing_output: 4.4 },
-  { id: "gpt-4.1", name: "GPT-4.1", provider: "openai", purpose: "chat" as const, context_length: 1047576, pricing_input: 2, pricing_output: 8 },
-  { id: "gpt-4.1-mini", name: "GPT-4.1 Mini", provider: "openai", purpose: "chat" as const, context_length: 1047576, pricing_input: 0.4, pricing_output: 1.6 },
-  { id: "gpt-4.1-nano", name: "GPT-4.1 Nano", provider: "openai", purpose: "chat" as const, context_length: 1047576, pricing_input: 0.1, pricing_output: 0.4 },
-  { id: "text-embedding-3-large", name: "Text Embedding 3 Large", provider: "openai", purpose: "embedding" as const, pricing_input: 0.13 },
-  { id: "text-embedding-3-small", name: "Text Embedding 3 Small", provider: "openai", purpose: "embedding" as const, pricing_input: 0.02 },
+  { id: "gpt-5.4",                   name: "GPT-5.4",                   provider: "openai", purpose: "chat" as const,      context_length: 272000,  pricing_input: 2.5,  pricing_output: 15,  specialties: ["planning", "reasoning"] as ModelSpecialty[] },
+  { id: "gpt-5",                     name: "GPT-5",                     provider: "openai", purpose: "chat" as const,                               pricing_input: 1.25, pricing_output: 10,  specialties: ["planning", "reasoning"] as ModelSpecialty[] },
+  { id: "gpt-5-mini",                name: "GPT-5 Mini",                provider: "openai", purpose: "chat" as const,                               pricing_input: 0.25, pricing_output: 2,   specialties: ["planning"] as ModelSpecialty[] },
+  { id: "gpt-5-nano",                name: "GPT-5 Nano",                provider: "openai", purpose: "chat" as const,                               pricing_input: 0.05, pricing_output: 0.4, specialties: ["planning"] as ModelSpecialty[] },
+  { id: "o3",                        name: "o3",                        provider: "openai", purpose: "chat" as const,      context_length: 200000,  pricing_input: 2,    pricing_output: 8,   specialties: ["planning", "reasoning"] as ModelSpecialty[] },
+  { id: "o4-mini",                   name: "o4-mini",                   provider: "openai", purpose: "chat" as const,      context_length: 200000,  pricing_input: 1.1,  pricing_output: 4.4, specialties: ["planning", "reasoning"] as ModelSpecialty[] },
+  { id: "gpt-4.1",                   name: "GPT-4.1",                   provider: "openai", purpose: "chat" as const,      context_length: 1047576, pricing_input: 2,    pricing_output: 8,   specialties: ["planning"] as ModelSpecialty[] },
+  { id: "gpt-4.1-mini",              name: "GPT-4.1 Mini",              provider: "openai", purpose: "chat" as const,      context_length: 1047576, pricing_input: 0.4,  pricing_output: 1.6, specialties: ["planning"] as ModelSpecialty[] },
+  { id: "gpt-4.1-nano",              name: "GPT-4.1 Nano",              provider: "openai", purpose: "chat" as const,      context_length: 1047576, pricing_input: 0.1,  pricing_output: 0.4, specialties: ["planning"] as ModelSpecialty[] },
+  { id: "text-embedding-3-large",    name: "Text Embedding 3 Large",    provider: "openai", purpose: "embedding" as const,                 pricing_input: 0.13 },
+  { id: "text-embedding-3-small",    name: "Text Embedding 3 Small",    provider: "openai", purpose: "embedding" as const,                 pricing_input: 0.02 },
 ].map((m) => ({ ...m, cost_score: compute_cost_score(m.pricing_input, m.pricing_output) }));
 
 /** Anthropic: /v1/models API. API 키 없으면 정적 카탈로그 반환. */

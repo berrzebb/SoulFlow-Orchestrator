@@ -31,7 +31,7 @@ function SpawnAgentEditPanel({ node, update, t, options }: EditPanelProps) {
         <BuilderField label={t("workflows.spawn_role")}>
           <input className="input input--sm" value={String(node.role || "")} onChange={(e) => update({ role: e.target.value })} placeholder="assistant" />
         </BuilderField>
-        <BuilderField label={t("workflows.llm_model")}>
+        <BuilderField label={t("workflows.llm_model")} hint={t("workflows.llm_model_specialty_hint")}>
           {models.length > 0 ? (
             <select className="input input--sm" value={String(node.model || "")} onChange={(e) => update({ model: e.target.value })}>
               <option value="">auto</option>
