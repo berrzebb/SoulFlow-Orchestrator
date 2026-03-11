@@ -99,6 +99,10 @@ jobs:
           NO_JUST_BASH: "1"
         timeout-minutes: 25
 
+      - name: List .vitest-reports (debug)
+        if: always()
+        run: find .vitest-reports -type f 2>/dev/null || echo "(.vitest-reports empty or missing)"
+
       - name: Upload blob report
         if: always()
         uses: actions/upload-artifact@v4
@@ -139,9 +143,13 @@ jobs:
       - name: Prepare reports dir (artifact 없을 시 디렉토리 보장)
         run: mkdir -p .vitest-reports
 
+      - name: List downloaded reports (debug)
+        if: always()
+        run: find .vitest-reports -type f 2>/dev/null || echo "(.vitest-reports empty)"
+
       - name: Merge reports & generate coverage
         run: |
-          if [ -z "$(ls .vitest-reports/*.blob 2>/dev/null)" ]; then
+          if [ -z "$(find .vitest-reports -name '*.blob' 2>/dev/null | head -1)" ]; then
             echo "⚠️ No blob reports found — skipping merge" >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
