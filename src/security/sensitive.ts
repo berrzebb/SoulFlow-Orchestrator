@@ -39,6 +39,22 @@ const DIRECT_PATTERNS: Array<{ name: string; re: RegExp }> = [
     re: /\bxox[baprs]-[A-Za-z0-9-]{10,}\b/g,
   },
   {
+    name: "slack_app_token",
+    re: /\bxapp-[A-Za-z0-9-]{10,}\b/g,
+  },
+  {
+    name: "groq_key",
+    re: /\bgsk_[A-Za-z0-9_-]{10,}\b/g,
+  },
+  {
+    name: "perplexity_key",
+    re: /\bpplx-[A-Za-z0-9_-]{10,}\b/g,
+  },
+  {
+    name: "npm_token",
+    re: /\bnpm_[A-Za-z0-9]{10,}\b/g,
+  },
+  {
     name: "aws_access_key",
     re: /\b(A3T[A-Z0-9]|AKIA|ASIA)[A-Z0-9]{12,}\b/g,
   },

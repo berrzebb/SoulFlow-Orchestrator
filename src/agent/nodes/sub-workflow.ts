@@ -5,6 +5,7 @@ import type { SubWorkflowNodeDefinition, OrcheNodeDefinition } from "../workflow
 import type { OrcheNodeExecutorContext, OrcheNodeExecuteResult, OrcheNodeTestResult } from "../orche-node-executor.js";
 import { resolve_deep } from "../orche-node-executor.js";
 import { error_message } from "../../utils/common.js";
+import { with_timeout } from "../../utils/timeouts.js";
 
 export const sub_workflow_handler: NodeHandler = {
   node_type: "sub_workflow",
@@ -66,12 +67,10 @@ export const sub_workflow_handler: NodeHandler = {
 
     try {
       const timeout = n.timeout_ms ?? 300_000;
-      const result = await Promise.race([
+      const result = await with_timeout(
         runner.run_sub_workflow(n.workflow_name, input),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error(`sub_workflow '${n.workflow_name}' timed out after ${timeout}ms`)), timeout),
-        ),
-      ]);
+        timeout,
+      );
       return { output: { result: result.result, phases: result.phases } };
     } catch (err) {
       runner.logger.warn("sub_workflow_error", { workflow_name: n.workflow_name, error: error_message(err) });

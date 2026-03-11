@@ -20,3 +20,57 @@ export const AGENT_PER_TURN_TIMEOUT_MS = 600_000;
 
 // ── 프로세스 수명주기 ──
 export const SHUTDOWN_TIMEOUT_MS = 30_000;
+
+/**
+ * Promise에 타임아웃을 적용. 완료/실패 시 타이머를 반드시 정리한다.
+ * Promise.race 직접 사용 시 타이머 누수가 발생하므로 이 함수를 사용할 것.
+ */
+export function with_timeout<T>(promise: Promise<T>, timeout_ms: number): Promise<T> {
+  if (timeout_ms <= 0) return promise;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const timeout_promise = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`timeout after ${timeout_ms}ms`)), timeout_ms);
+  });
+  return Promise.race([promise, timeout_promise]).finally(() => {
+    if (timer !== null) clearTimeout(timer);
+  });
+}
+
+/**
+ * 최대 concurrency 개수만큼 동시에 태스크를 실행.
+ * errorMode: "continue" → 에러 무시하고 계속, "stop" → 첫 에러 시 중단.
+ */
+export async function run_tasks_with_concurrency<T>(params: {
+  tasks: Array<() => Promise<T>>;
+  limit: number;
+  error_mode?: "continue" | "stop";
+  on_error?: (error: unknown, index: number) => void;
+}): Promise<{ results: T[]; first_error: unknown; has_error: boolean }> {
+  const { tasks, on_error } = params;
+  const error_mode = params.error_mode ?? "continue";
+  if (tasks.length === 0) return { results: [], first_error: undefined, has_error: false };
+
+  const limit = Math.max(1, Math.min(params.limit, tasks.length));
+  const results: T[] = Array.from({ length: tasks.length });
+  let next = 0;
+  let first_error: unknown = undefined;
+  let has_error = false;
+
+  const workers = Array.from({ length: limit }, async () => {
+    while (true) {
+      if (error_mode === "stop" && has_error) return;
+      const index = next++;
+      if (index >= tasks.length) return;
+      try {
+        results[index] = await tasks[index]();
+      } catch (error) {
+        if (!has_error) { first_error = error; has_error = true; }
+        on_error?.(error, index);
+        if (error_mode === "stop") return;
+      }
+    }
+  });
+
+  await Promise.allSettled(workers);
+  return { results, first_error, has_error };
+}

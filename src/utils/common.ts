@@ -92,11 +92,19 @@ export function ensure_json_object(v: unknown): Record<string, unknown> | null {
   return v as Record<string, unknown>;
 }
 
-/** unknown 값을 안전하게 문자열로 변환. JSON 직렬화 실패 시 String() 폴백. */
+/** bigint 등 JSON 비직렬화 타입을 처리하는 replacer. */
+function json_replacer(_key: string, val: unknown): unknown {
+  if (typeof val === "bigint") return val.toString();
+  if (typeof val === "function") return "[Function]";
+  if (val instanceof Error) return { name: val.name, message: val.message };
+  return val;
+}
+
+/** unknown 값을 안전하게 문자열로 변환. bigint/Error/Function 처리 + JSON 실패 시 String() 폴백. */
 export function safe_stringify(value: unknown): string {
   if (value === null || value === undefined) return "";
   if (typeof value === "string") return value;
-  try { return JSON.stringify(value, null, 2); }
+  try { return JSON.stringify(value, json_replacer, 2); }
   catch { return String(value); }
 }
 
