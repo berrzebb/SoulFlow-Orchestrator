@@ -143,6 +143,7 @@ export function parse_json_or_raw(raw: unknown): Record<string, unknown> {
     const parsed = JSON.parse(raw);
     return parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : { raw };
   } catch {
+    process.stderr.write(`[parse_json_or_raw] tool argument JSON parse failed: ${raw.slice(0, 200)}\n`);
     return { raw };
   }
 }

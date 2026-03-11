@@ -5,6 +5,7 @@ import { validate_file_path } from "../utils/path-validation.js";
 import type { InboundMessage, MediaItem, OutboundMessage } from "../bus/types.js";
 import { now_iso, error_message, short_id} from "../utils/common.js";
 import { BaseChannel } from "./base.js";
+import { channel_fetch, parse_json_response } from "./http-utils.js";
 
 type DiscordChannelOptions = {
   instance_id?: string;
@@ -55,8 +56,6 @@ function to_inbound_message(channel: DiscordChannel, raw: Record<string, unknown
   };
 }
 
-const FETCH_TIMEOUT_MS = 30_000;
-
 export class DiscordChannel extends BaseChannel {
   private readonly bot_token: string;
   private readonly default_channel: string;
@@ -105,26 +104,19 @@ export class DiscordChannel extends BaseChannel {
           form.set(`files[${i}]`, new Blob([bytes]), media.name || basename(filePath));
           i += 1;
         }
-        response = await fetch(`${this.api_base}/channels/${chat_id}/messages`, {
+        response = await channel_fetch(`${this.api_base}/channels/${chat_id}/messages`, {
           method: "POST",
-          headers: {
-            Authorization: `Bot ${this.bot_token}`,
-          },
+          headers: { Authorization: `Bot ${this.bot_token}` },
           body: form,
-          signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
         });
       } else {
-        response = await fetch(`${this.api_base}/channels/${chat_id}/messages`, {
+        response = await channel_fetch(`${this.api_base}/channels/${chat_id}/messages`, {
           method: "POST",
-          headers: {
-            Authorization: `Bot ${this.bot_token}`,
-            "Content-Type": "application/json",
-          },
+          headers: { Authorization: `Bot ${this.bot_token}`, "Content-Type": "application/json" },
           body: JSON.stringify(payload),
-          signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
         });
       }
-      const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+      const data = await parse_json_response(response);
       if (!response.ok) return { ok: false, error: String(data.message || `http_${response.status}`) };
       return { ok: true, message_id: String(data.id || "") };
     } catch (error) {
@@ -140,11 +132,8 @@ export class DiscordChannel extends BaseChannel {
     if (!this.bot_token) return [];
     const n = Math.max(1, Math.min(100, Number(limit || 20)));
     try {
-      const response = await fetch(`${this.api_base}/channels/${chat_id}/messages?limit=${n}`, {
-        headers: {
-          Authorization: `Bot ${this.bot_token}`,
-        },
-        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      const response = await channel_fetch(`${this.api_base}/channels/${chat_id}/messages?limit=${n}`, {
+        headers: { Authorization: `Bot ${this.bot_token}` },
       });
       if (!response.ok) return [];
       const rows = (await response.json().catch(() => [])) as unknown;
@@ -163,16 +152,12 @@ export class DiscordChannel extends BaseChannel {
     if (!this.bot_token) return { ok: false, error: "discord_bot_token_missing" };
     if (!chat_id || !message_id) return { ok: false, error: "chat_id_and_message_id_required" };
     try {
-      const response = await fetch(`${this.api_base}/channels/${chat_id}/messages/${message_id}`, {
+      const response = await channel_fetch(`${this.api_base}/channels/${chat_id}/messages/${message_id}`, {
         method: "PATCH",
-        headers: {
-          Authorization: `Bot ${this.bot_token}`,
-          "Content-Type": "application/json",
-        },
+        headers: { Authorization: `Bot ${this.bot_token}`, "Content-Type": "application/json" },
         body: JSON.stringify({ content: String(content || "") }),
-        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
       });
-      const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+      const data = await parse_json_response(response);
       if (!response.ok) return { ok: false, error: String(data.message || `http_${response.status}`) };
       return { ok: true };
     } catch (error) {
@@ -195,12 +180,12 @@ export class DiscordChannel extends BaseChannel {
     if (!chat_id || !message_id || !reaction) return { ok: false, error: "chat_id_message_id_reaction_required" };
     try {
       const emoji = encodeURIComponent(reaction.replace(/:/g, ""));
-      const response = await fetch(
+      const response = await channel_fetch(
         `${this.api_base}/channels/${chat_id}/messages/${message_id}/reactions/${emoji}/@me`,
-        { method, headers: { Authorization: `Bot ${this.bot_token}` }, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) },
+        { method, headers: { Authorization: `Bot ${this.bot_token}` } },
       );
       if (!response.ok && response.status !== 204) {
-        const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+        const data = await parse_json_response(response);
         return { ok: false, error: String(data.message || `http_${response.status}`) };
       }
       return { ok: true };
@@ -212,12 +197,9 @@ export class DiscordChannel extends BaseChannel {
   protected async set_typing_remote(chat_id: string, typing: boolean, _anchor_message_id?: string): Promise<void> {
     if (!typing) return;
     if (!this.bot_token) return;
-    await fetch(`${this.api_base}/channels/${chat_id}/typing`, {
+    await channel_fetch(`${this.api_base}/channels/${chat_id}/typing`, {
       method: "POST",
-      headers: {
-        Authorization: `Bot ${this.bot_token}`,
-      },
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      headers: { Authorization: `Bot ${this.bot_token}` },
     }).catch(() => {/* typing 실패는 무시 */});
   }
 }

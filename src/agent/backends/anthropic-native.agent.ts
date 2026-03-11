@@ -328,7 +328,9 @@ export class AnthropicNativeAgent implements AgentBackend {
         .map(([index, meta]) => {
           const raw = tool_input_bufs.get(index) ?? "{}";
           let input: Record<string, unknown> = {};
-          try { input = JSON.parse(raw) as Record<string, unknown>; } catch { /* keep {} */ }
+          try { input = JSON.parse(raw) as Record<string, unknown>; } catch (e) {
+            process.stderr.write(`[anthropic-native] tool input JSON parse failed: tool=${meta.name} raw=${raw.slice(0, 200)} err=${error_message(e)}\n`);
+          }
           return { type: "tool_use" as const, id: meta.id, name: meta.name, input };
         });
 

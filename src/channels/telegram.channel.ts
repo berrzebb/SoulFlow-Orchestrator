@@ -5,6 +5,7 @@ import { validate_file_path } from "../utils/path-validation.js";
 import type { InboundMessage, MediaItem, OutboundMessage } from "../bus/types.js";
 import { now_iso, error_message, short_id} from "../utils/common.js";
 import { BaseChannel } from "./base.js";
+import { channel_fetch, parse_json_response } from "./http-utils.js";
 import type { CommandDescriptor } from "./commands/registry.js";
 
 type TelegramChannelOptions = {
@@ -129,7 +130,6 @@ function to_reaction_message(
   };
 }
 
-const FETCH_TIMEOUT_MS = 30_000;
 
 export class TelegramChannel extends BaseChannel {
   private readonly bot_token: string;
@@ -194,12 +194,8 @@ export class TelegramChannel extends BaseChannel {
           if (idx === 0 && safe_text) form.set("caption", safe_text.slice(0, 900));
           if (idx === 0 && parse_mode && safe_text) form.set("parse_mode", parse_mode);
           if (idx === 0 && message.reply_to) form.set("reply_to_message_id", as_string(message.reply_to));
-          const response = await fetch(url, {
-            method: "POST",
-            body: form,
-            signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-          });
-          const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+          const response = await channel_fetch(url, { method: "POST", body: form });
+          const data = await parse_json_response(response);
           if (!response.ok || data.ok !== true) {
             return { ok: false, error: as_string(data.description || `http_${response.status}`) };
           }
@@ -226,13 +222,12 @@ export class TelegramChannel extends BaseChannel {
             parse_mode,
           };
           if (message.reply_to) payload.reply_to_message_id = message.reply_to;
-          const response = await fetch(url, {
+          const response = await channel_fetch(url, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload),
-            signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
           });
-          const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+          const data = await parse_json_response(response);
           if (!response.ok || data.ok !== true) {
             return { ok: false, error: as_string(data.description || `http_${response.status}`) };
           }
@@ -258,13 +253,12 @@ export class TelegramChannel extends BaseChannel {
               text: chunks.length > 1 ? `[${idx + 1}/${chunks.length}]\n${chunks[idx]}` : chunks[idx],
             };
             if (idx === 0 && message.reply_to) payload.reply_to_message_id = message.reply_to;
-            const response = await fetch(url, {
+            const response = await channel_fetch(url, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify(payload),
-              signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
             });
-            const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+            const data = await parse_json_response(response);
             if (!response.ok || data.ok !== true) {
               return { ok: false, error: as_string(data.description || `http_${response.status}`) };
             }
@@ -308,8 +302,8 @@ export class TelegramChannel extends BaseChannel {
         const offset_qs = this.last_update_id > 0 ? `&offset=${this.last_update_id + 1}` : "";
         const allowed = encodeURIComponent(JSON.stringify(["message", "message_reaction"]));
         const url = `${this.api_base}/bot${this.bot_token}/getUpdates?limit=${n}&timeout=0&allowed_updates=${allowed}${offset_qs}`;
-        const response = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
-        const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+        const response = await channel_fetch(url);
+        const data = await parse_json_response(response);
         if (!response.ok || data.ok !== true) {
           const desc = as_string(data.description || `http_${response.status}`);
           this.last_error = desc;
@@ -371,13 +365,12 @@ export class TelegramChannel extends BaseChannel {
     if (draft_message_id) payload.message_id = Number(draft_message_id);
     else if (reply_to_message_id) payload.reply_to_message_id = Number(reply_to_message_id);
     try {
-      const response = await fetch(url, {
+      const response = await channel_fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
-        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
       });
-      const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+      const data = await parse_json_response(response);
       if (!response.ok || data.ok !== true) {
         return { ok: false, error: as_string(data.description || `http_${response.status}`) };
       }
@@ -410,13 +403,12 @@ export class TelegramChannel extends BaseChannel {
       const payload: Record<string, unknown> = { chat_id, message_id: Number(message_id), text: String(content || "") };
       const resolved = this.resolve_parse_mode(parse_mode);
       if (resolved) payload.parse_mode = resolved;
-      const response = await fetch(url, {
+      const response = await channel_fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
-        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
       });
-      const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+      const data = await parse_json_response(response);
       if (!response.ok || data.ok !== true) {
         return { ok: false, error: as_string(data.description || `http_${response.status}`) };
       }
@@ -431,7 +423,7 @@ export class TelegramChannel extends BaseChannel {
     if (!chat_id || !message_id || !reaction) return { ok: false, error: "chat_id_message_id_reaction_required" };
     try {
       const url = `${this.api_base}/bot${this.bot_token}/setMessageReaction`;
-      const response = await fetch(url, {
+      const response = await channel_fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -439,9 +431,8 @@ export class TelegramChannel extends BaseChannel {
           message_id: Number(message_id),
           reaction: [{ type: "emoji", emoji: reaction }],
         }),
-        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
       });
-      const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+      const data = await parse_json_response(response);
       if (!response.ok || data.ok !== true) {
         return { ok: false, error: as_string(data.description || `http_${response.status}`) };
       }
@@ -455,13 +446,12 @@ export class TelegramChannel extends BaseChannel {
     if (!this.bot_token) return { ok: false, error: "telegram_bot_token_missing" };
     try {
       const url = `${this.api_base}/bot${this.bot_token}/setMessageReaction`;
-      const response = await fetch(url, {
+      const response = await channel_fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ chat_id, message_id: Number(message_id), reaction: [] }),
-        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
       });
-      const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+      const data = await parse_json_response(response);
       if (!response.ok || data.ok !== true) {
         return { ok: false, error: as_string(data.description || `http_${response.status}`) };
       }
@@ -479,13 +469,12 @@ export class TelegramChannel extends BaseChannel {
     }));
     try {
       const url = `${this.api_base}/bot${this.bot_token}/setMyCommands`;
-      const response = await fetch(url, {
+      const response = await channel_fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ commands }),
-        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
       });
-      const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+      const data = await parse_json_response(response);
       if (!response.ok || data.ok !== true) {
         this.last_error = as_string(data.description || `setMyCommands_http_${response.status}`);
       }
@@ -499,14 +488,10 @@ export class TelegramChannel extends BaseChannel {
     if (!typing) return;
     if (!this.bot_token) return;
     const url = `${this.api_base}/bot${this.bot_token}/sendChatAction`;
-    await fetch(url, {
+    await channel_fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        chat_id,
-        action: "typing",
-      }),
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      body: JSON.stringify({ chat_id, action: "typing" }),
     }).catch(() => {/* typing 실패는 무시 */});
   }
 
@@ -526,12 +511,8 @@ export class TelegramChannel extends BaseChannel {
       new Blob([String(text || "")], { type: "text/plain;charset=utf-8" }),
       filename,
     );
-    const response = await fetch(url, {
-      method: "POST",
-      body: form,
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-    });
-    const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+    const response = await channel_fetch(url, { method: "POST", body: form });
+    const data = await parse_json_response(response);
     if (!response.ok || data.ok !== true) {
       return { ok: false, error: as_string(data.description || `http_${response.status}`) };
     }

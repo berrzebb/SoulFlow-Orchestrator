@@ -1,5 +1,6 @@
 import { SkillsLoader } from "./skills.js";
 import { MemoryStore, type MemoryStoreLike } from "./memory.js";
+import { error_message } from "../utils/common.js";
 import { existsSync, readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { extname, isAbsolute, join, resolve } from "node:path";
@@ -282,7 +283,8 @@ export class ContextBuilder {
         `### ${r.doc_path}${r.heading ? ` — ${r.heading}` : ""}\n${r.content}`,
       );
       return `# Reference Documents\nsource: workspace/references/\nRelevance-ranked excerpts from project reference documents.\n\n${sections.join("\n\n---\n\n")}`;
-    } catch {
+    } catch (e) {
+      process.stderr.write(`[context] reference context build failed: ${error_message(e)}\n`);
       return "";
     }
   }
@@ -302,7 +304,8 @@ export class ContextBuilder {
         `### ${r.doc_path}${r.heading ? ` — ${r.heading}` : ""}\n${r.content}`,
       );
       return `# Skill Reference Docs\nsource: skills/references/\nRelevance-ranked excerpts from skill reference files.\n\n${sections.join("\n\n---\n\n")}`;
-    } catch {
+    } catch (e) {
+      process.stderr.write(`[context] skill reference context build failed: ${error_message(e)}\n`);
       return "";
     }
   }
@@ -381,7 +384,8 @@ export class ContextBuilder {
       lines.push("사용법: `oauth_fetch(service_id=\"<id>\", url=\"...\", method=\"GET\")`");
       lines.push("또는 http_request의 headers에 `{{secret:oauth.<id>.access_token}}` 플레이스홀더 사용.");
       return lines.join("\n");
-    } catch {
+    } catch (e) {
+      process.stderr.write(`[context] oauth section build failed: ${error_message(e)}\n`);
       return "";
     }
   }
