@@ -36,7 +36,7 @@ export class TaskStore implements TaskStoreLike {
           trigger_message_id TEXT NOT NULL DEFAULT ''
         );
         CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
-        CREATE INDEX IF NOT EXISTS idx_tasks_updated_at ON tasks(updated_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_tasks_updated_at ON tasks(updated_at);
         CREATE INDEX IF NOT EXISTS idx_tasks_chat_status ON tasks(provider, chat_id, status);
         CREATE INDEX IF NOT EXISTS idx_tasks_trigger_msg ON tasks(provider, trigger_message_id);
         CREATE VIRTUAL TABLE IF NOT EXISTS tasks_fts USING fts5(

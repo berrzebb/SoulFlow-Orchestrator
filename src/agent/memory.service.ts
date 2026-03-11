@@ -92,7 +92,7 @@ export class MemoryStore implements MemoryStoreLike {
           updated_at TEXT NOT NULL
         );
         CREATE INDEX IF NOT EXISTS idx_memory_documents_kind_day
-          ON memory_documents(kind, day, updated_at DESC);
+          ON memory_documents(kind, day, updated_at);
         CREATE VIRTUAL TABLE IF NOT EXISTS memory_documents_fts USING fts5(
           content,
           kind UNINDEXED,

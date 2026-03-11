@@ -266,7 +266,7 @@ export class DispatchService implements ServiceLike {
         thread_id: String(message.thread_id || ""),
         retry_count,
         error: String(error || "unknown_error"),
-        content: String(message.content || "").slice(0, 4000),
+        content: (() => { const c = String(message.content || ""); return c.length > 10_000 ? `${c.slice(0, 10_000)}\n[truncated ${c.length - 10_000} chars]` : c; })(),
         metadata: (message.metadata as Record<string, unknown>) || {},
       });
       this.logger.warn("dlq_written", { provider, chat_id: message.chat_id, message_id: message.id, retry_count, error });

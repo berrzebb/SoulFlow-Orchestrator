@@ -42,7 +42,7 @@ export class PhaseWorkflowStore implements PhaseWorkflowStoreLike {
           payload_json TEXT NOT NULL
         );
         CREATE INDEX IF NOT EXISTS idx_pw_status ON phase_workflows(status);
-        CREATE INDEX IF NOT EXISTS idx_pw_updated ON phase_workflows(updated_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_pw_updated ON phase_workflows(updated_at);
 
         CREATE TABLE IF NOT EXISTS phase_agent_messages (
           id           INTEGER PRIMARY KEY AUTOINCREMENT,

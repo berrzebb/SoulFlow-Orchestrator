@@ -203,17 +203,39 @@ function _compute_next_run(schedule: CronSchedule, now: number, on_warn?: (msg: 
     const parsed = _parse_cron(schedule.expr);
     if (!parsed) return null;
     const tz = String(schedule.tz || "").trim();
-    const start = new Date(now);
-    start.setSeconds(0, 0);
-    for (let i = 0; i < 60 * 24 * 366; i += 1) {
-      const candidate_ms = start.getTime() + i * 60_000;
-      if (candidate_ms <= now) continue;
+    const end_ms = now + 366 * 24 * 60 * 60_000;
+    let candidate_ms = Math.floor(now / 60_000) * 60_000 + 60_000; // 다음 분 경계
+    while (candidate_ms <= end_ms) {
       const parts = tz ? _get_tz_parts(candidate_ms, tz) : _get_local_parts(candidate_ms);
       if (!parts) {
         on_warn?.(`timezone parsing failed for tz=${tz}, aborting next-run computation`);
         return null;
       }
+      // 월 불일치 — 다음 달 1일 00:00으로 점프
+      if (!parsed.month.has(parts.month)) {
+        const d = new Date(candidate_ms);
+        d.setMonth(d.getMonth() + 1, 1);
+        d.setHours(0, 0, 0, 0);
+        candidate_ms = d.getTime();
+        continue;
+      }
+      // 요일 또는 일 불일치 — 다음 날 00:00으로 점프
+      if (!parsed.day.has(parts.day) || !parsed.weekday.has(parts.weekday)) {
+        const d = new Date(candidate_ms);
+        d.setDate(d.getDate() + 1);
+        d.setHours(0, 0, 0, 0);
+        candidate_ms = d.getTime();
+        continue;
+      }
+      // 시 불일치 — 다음 시간 :00분으로 점프
+      if (!parsed.hour.has(parts.hour)) {
+        const d = new Date(candidate_ms);
+        d.setHours(d.getHours() + 1, 0, 0, 0);
+        candidate_ms = d.getTime();
+        continue;
+      }
       if (_match_parsed_cron(parsed, parts)) return candidate_ms;
+      candidate_ms += 60_000;
     }
   }
 
