@@ -22,6 +22,7 @@ import { get_shared_secret_vault } from "../security/secret-vault-factory.js";
 import { parse_tool_calls_from_text } from "./tool-call-parser.js";
 import { chunk_markdown } from "./memory-chunker.js";
 import { rrf_merge, apply_temporal_decay, mmr_rerank } from "./memory-scoring.js";
+import { build_fts_query_expanded } from "./memory-query-expansion.js";
 
 const SAVE_MEMORY_TOOL = [
   {
@@ -332,12 +333,7 @@ export class MemoryStore implements MemoryStoreLike {
   }
 
   private build_fts_query(query: string): string {
-    const terms = String(query || "")
-      .split(/\s+/)
-      .map((v) => v.trim())
-      .filter(Boolean);
-    if (terms.length === 0) return "";
-    return terms.map((v) => `"${v.replace(/"/g, "\"\"")}"`).join(" ");
+    return build_fts_query_expanded(query);
   }
 
   async get_paths(): Promise<{ workspace: string; memoryDir: string; sqlitePath: string }> {
