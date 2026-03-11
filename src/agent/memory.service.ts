@@ -54,6 +54,8 @@ export type EmbedFn = (texts: string[], opts: { model?: string; dimensions?: num
 const VEC_DIMENSIONS = 256;
 /** 임베딩 입력 최대 문자 수 (초과 시 truncate). */
 const MAX_EMBED_CHARS = 2000;
+/** 배치 임베딩 1회 최대 청크 수. API 요청 크기 제한 대응. */
+const EMBED_BATCH_SIZE = 50;
 
 export class MemoryStore implements MemoryStoreLike {
   private readonly root: string;
@@ -555,7 +557,7 @@ export class MemoryStore implements MemoryStoreLike {
     }
   }
 
-  /** 임베딩이 없는 청크를 배치 임베딩. */
+  /** 임베딩이 없는 청크를 배치 임베딩. 대량 처리 시 EMBED_BATCH_SIZE 단위로 분할. */
   private async ensure_chunk_embeddings_fresh(): Promise<void> {
     if (!this.embed_fn) return;
 
@@ -568,23 +570,26 @@ export class MemoryStore implements MemoryStoreLike {
 
     if (stale.length === 0) return;
 
-    const texts = stale.map(r => r.content.slice(0, MAX_EMBED_CHARS));
-    const { embeddings } = await this.embed_fn(texts, { dimensions: VEC_DIMENSIONS });
-    if (!embeddings || embeddings.length !== stale.length) return;
-
     let db: Database.Database | null = null;
     try {
       db = new Database(this.sqlite_path);
       db.pragma("journal_mode=WAL");
       sqliteVec.load(db);
-
       const ins_vec = db.prepare("INSERT OR REPLACE INTO memory_chunks_vec (rowid, embedding) VALUES (?, ?)");
-      const tx = db.transaction(() => {
-        for (let i = 0; i < stale.length; i++) {
-          ins_vec.run(BigInt(stale[i].rowid), normalize_vec(embeddings[i]));
-        }
-      });
-      tx();
+
+      for (let offset = 0; offset < stale.length; offset += EMBED_BATCH_SIZE) {
+        const batch = stale.slice(offset, offset + EMBED_BATCH_SIZE);
+        const texts = batch.map(r => r.content.slice(0, MAX_EMBED_CHARS));
+        const { embeddings } = await this.embed_fn(texts, { dimensions: VEC_DIMENSIONS });
+        if (!embeddings || embeddings.length !== batch.length) continue;
+
+        const tx = db.transaction(() => {
+          for (let i = 0; i < batch.length; i++) {
+            ins_vec.run(BigInt(batch[i].rowid), normalize_vec(embeddings[i]));
+          }
+        });
+        tx();
+      }
     } finally {
       try { db?.close(); } catch { /* no-op */ }
     }
