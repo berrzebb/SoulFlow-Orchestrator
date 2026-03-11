@@ -24,7 +24,7 @@ export default defineConfig({
         "src/**/types.ts",
         "src/i18n/locales/**",
       ],
-      reporter: ["text", "html", "json-summary"],
+      reporter: ["text", "html", "json-summary", "json"],
       reportsDirectory: "coverage",
       reportOnFailure: true,
     },
