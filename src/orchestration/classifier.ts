@@ -2,6 +2,7 @@
 
 import type { Logger } from "../logger.js";
 import type { ClassificationResult } from "./types.js";
+import { DEFAULT_CLASSIFIER_LOCALE } from "./classifier-locale.js";
 
 export type SkillEntry = { name: string; summary: string; triggers: string[]; aliases?: string[] };
 
@@ -47,50 +48,25 @@ function exceeds_similarity(tokens: Set<string>, ref_sets: Set<string>[], thresh
 const IDENTITY_THRESHOLD = 0.4;
 const INQUIRY_THRESHOLD  = 0.3;
 
-const IDENTITY_TOKEN_SETS = [
-  "너 누구야", "너 누구니", "너 누구세요",
-  "당신 누구세요", "당신은 누구세요",
-  "넌 누구야", "넌 뭐야", "너 뭐야",
-  "자기소개 해줘", "자기 소개 해줘", "자기소개해줘",
-  "누구", "넌 누구", "너 누구",
-  "who are you", "what are you", "introduce yourself",
-].map(tokenize);
+const IDENTITY_TOKEN_SETS = DEFAULT_CLASSIFIER_LOCALE.identity_phrases.map(tokenize);
 
-const INQUIRY_TOKEN_SETS = [
-  "작업 어떻게 됐어", "작업 됐어", "작업 끝났어", "작업 완료됐어",
-  "태스크 상태 어때", "태스크 진행 어떻게", "백그라운드 작업 어때",
-  "진행 중인 작업", "작업 진행상황",
-  "다 됐어", "결과 나왔어", "완료됐어", "끝났어",
-  "작업 취소", "작업 중단", "취소해줘", "그만해",
-  "what's the status", "how's the task", "task done", "task finished",
-  "is it done", "task progress", "background task status",
-  "cancel task", "stop task", "cancel it", "stop it",
-].map(tokenize);
+const INQUIRY_TOKEN_SETS = DEFAULT_CLASSIFIER_LOCALE.inquiry_phrases.map(tokenize);
 
 /**
  * 단일 토큰 다단계 연결어 집합.
  * 주의: "하고", "그리고"는 한국어 일반 조사로 오매칭 위험 (예: "파이썬 하고 자바 차이")
  * → 이들은 AGENT_CONNECTOR_PHRASES("하고 나서" 등)에만 포함.
  */
-const AGENT_CONNECTOR_TOKENS = new Set([
-  "하고서", "그다음", "후에",
-  "then",
-]);
+const AGENT_CONNECTOR_TOKENS = new Set(DEFAULT_CLASSIFIER_LOCALE.connector_tokens);
 
 /** 다단계 연결 구문 (두 단어 이상) — 토큰 분리 불가하여 구문 매칭 유지. */
-const AGENT_CONNECTOR_PHRASES = ["하고 나서", "그 다음에", "그리고 나서", "한 다음", "그 후", "and then", "after that"];
+const AGENT_CONNECTOR_PHRASES = DEFAULT_CLASSIFIER_LOCALE.connector_phrases;
 
 /** 명시적 비동기 실행 신호 — 구문 의미가 중요하여 구문 매칭 유지. */
-const TASK_SIGNAL_PHRASES = [
-  "백그라운드", "비동기", "나중에 알려", "background", "async", "schedule", "notify when done", "run in background",
-];
+const TASK_SIGNAL_PHRASES = DEFAULT_CLASSIFIER_LOCALE.task_signal_phrases;
 
 /** 도구 조합 쌍 — 두 토큰이 모두 있으면 다단계 작업으로 판단. */
-const AGENT_TOOL_PAIRS: [string, string][] = [
-  ["파일", "보내"], ["읽", "요약"], ["검색", "정리"],
-  ["분석", "보고"], ["가져", "저장"],
-  ["file", "send"], ["read", "summar"], ["search", "send"], ["fetch", "save"],
-];
+const AGENT_TOOL_PAIRS: [string, string][] = DEFAULT_CLASSIFIER_LOCALE.tool_pairs;
 
 // ── 유사도 판별 함수 ──────────────────────────────────────────────────────────
 
@@ -109,7 +85,7 @@ function is_inquiry_question(tokens: Set<string>): boolean {
  * inquiry 가능성이 높음 (예: "됐어?", "끝났어?").
  * 6토큰 이하 조건: 짧은 확인 질문에만 적용하여 오탐 방지.
  */
-const RE_TASK_MENTION = /태스크|task.{0,10}id|작업.{0,6}시작|started.{0,10}task|background.task|백그라운드.{0,4}작업/i;
+const RE_TASK_MENTION = new RegExp(DEFAULT_CLASSIFIER_LOCALE.task_mention_patterns.join("|"), "i");
 
 function is_followup_inquiry(tokens: Set<string>, history: Array<{ role: string; content: string }> | undefined): boolean {
   if (!history?.length || tokens.size > 6) return false;

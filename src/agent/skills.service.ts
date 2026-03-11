@@ -148,6 +148,53 @@ export class SkillsLoader {
     }
   }
 
+  /** frontmatter → SkillMetadata 변환. _scan_source / _scan_flat_md 공통. */
+  private _build_skill_metadata(opts: {
+    meta: Record<string, unknown>;
+    body: string;
+    name: string;
+    path: string;
+    source: SkillSource;
+    force_type?: SkillType;
+    include_autoload?: boolean;
+    alias_extras?: unknown;
+    role_fallback?: string;
+  }): SkillMetadata {
+    const { meta, body, name, path, source, force_type, include_autoload, alias_extras, role_fallback } = opts;
+    const summary = String(meta.summary || meta.description || this._extract_summary(body));
+    const always = Boolean(
+      meta.always === true
+      || (include_autoload && meta.autoload === true)
+      || String(meta.load || "").toLowerCase() === "always",
+    );
+    const requirements = Array.isArray(meta.requires) ? meta.requires.map((v) => String(v)) : [];
+    const aliases = this.parse_meta_string_list(meta.aliases ?? meta.alias ?? alias_extras);
+    const triggers = this.parse_meta_string_list(meta.triggers ?? meta.trigger);
+    const tools = this.parse_meta_string_list(meta.tools ?? meta.tool);
+    const model = typeof meta.model === "string" ? meta.model.trim() || null : null;
+
+    const type: SkillType = force_type ?? (String(meta.type || "").toLowerCase() === "role" ? "role" : "tool");
+    const role = type === "role" ? String(meta.role || role_fallback || "").trim() || null : null;
+    const soul = typeof meta.soul === "string" ? meta.soul.trim() || null : null;
+    const heart = typeof meta.heart === "string" ? meta.heart.trim() || null : null;
+    const shared_protocols = this.parse_meta_string_list(meta.shared_protocols);
+    const preferred_providers = this.parse_meta_string_list(meta.preferred_providers);
+    const oauth = this.parse_meta_string_list(meta.oauth);
+    if (oauth.length > 0 && !tools.includes("oauth_fetch")) tools.push("oauth_fetch");
+    const intents = this.parse_meta_string_list(meta.intents);
+    const file_patterns = this.parse_meta_string_list(meta.file_patterns ?? meta.file_pattern);
+    const code_patterns = this.parse_meta_string_list(meta.code_patterns ?? meta.code_pattern);
+    const checks = this.parse_meta_string_list(meta.checks ?? meta.check);
+    const project_docs = Boolean(meta.project_docs === true || String(meta.project_docs || "").toLowerCase() === "true");
+
+    return {
+      name, path, source, type, always, summary, aliases, triggers, tools,
+      requirements, model, frontmatter: meta, role, soul, heart,
+      shared_protocols, preferred_providers, oauth, intents,
+      file_patterns, code_patterns, checks, project_docs,
+    };
+  }
+
   private _scan_source(root: string, source: SkillSource, target: Map<string, SkillMetadata>): void {
     for (const skillPath of walk_skill_files(root)) {
       const raw = readFileSync(skillPath, "utf-8");
@@ -155,53 +202,12 @@ export class SkillsLoader {
       const body = this._strip_formatter(raw);
       const rel = relative(root, skillPath).split(sep).join("/");
       const name = String(meta.name || meta.id || rel.replace(/\/SKILL\.md$/i, "").replace(/\//g, "."));
-      const summary = String(meta.summary || meta.description || this._extract_summary(body));
-      const always = Boolean(meta.always === true || meta.autoload === true || String(meta.load || "").toLowerCase() === "always");
-      const requirements = Array.isArray(meta.requires) ? meta.requires.map((v) => String(v)) : [];
-      const aliases = this.parse_meta_string_list(meta.aliases ?? meta.alias ?? meta.names);
-      const triggers = this.parse_meta_string_list(meta.triggers ?? meta.trigger);
-      const tools = this.parse_meta_string_list(meta.tools ?? meta.tool);
-      const model = typeof meta.model === "string" ? meta.model.trim() || null : null;
 
-      const type: SkillType = String(meta.type || "").toLowerCase() === "role" ? "role" : "tool";
-      const role = type === "role" ? String(meta.role || "").trim() || null : null;
-      const soul = typeof meta.soul === "string" ? meta.soul.trim() || null : null;
-      const heart = typeof meta.heart === "string" ? meta.heart.trim() || null : null;
-      const shared_protocols = this.parse_meta_string_list(meta.shared_protocols);
-      const preferred_providers = this.parse_meta_string_list(meta.preferred_providers);
-      const oauth = this.parse_meta_string_list(meta.oauth);
-      if (oauth.length > 0 && !tools.includes("oauth_fetch")) tools.push("oauth_fetch");
-      const intents = this.parse_meta_string_list(meta.intents);
-      const file_patterns = this.parse_meta_string_list(meta.file_patterns ?? meta.file_pattern);
-      const code_patterns = this.parse_meta_string_list(meta.code_patterns ?? meta.code_pattern);
-      const checks = this.parse_meta_string_list(meta.checks ?? meta.check);
-      const project_docs = Boolean(meta.project_docs === true || String(meta.project_docs || "").toLowerCase() === "true");
-
-      const skillMeta: SkillMetadata = {
-        name,
-        path: skillPath,
-        source,
-        type,
-        always,
-        summary,
-        aliases,
-        triggers,
-        tools,
-        requirements,
-        model,
-        frontmatter: meta,
-        role,
-        soul,
-        heart,
-        shared_protocols,
-        preferred_providers,
-        oauth,
-        intents,
-        file_patterns,
-        code_patterns,
-        checks,
-        project_docs,
-      };
+      const skillMeta = this._build_skill_metadata({
+        meta, body, name, path: skillPath, source,
+        include_autoload: true,
+        alias_extras: meta.names,
+      });
       target.set(name, skillMeta);
       this.raw_by_name.set(name, raw);
     }
@@ -227,52 +233,13 @@ export class SkillsLoader {
       const body = this._strip_formatter(raw);
       const name = String(meta.name || filename.replace(/\.md$/i, ""));
       if (target.has(name)) continue;
-      const summary = String(meta.summary || meta.description || this._extract_summary(body));
-      const always = Boolean(meta.always === true || String(meta.load || "").toLowerCase() === "always");
-      const requirements = Array.isArray(meta.requires) ? meta.requires.map((v) => String(v)) : [];
-      const aliases = this.parse_meta_string_list(meta.aliases ?? meta.alias);
-      const triggers = this.parse_meta_string_list(meta.triggers ?? meta.trigger);
-      const tools = this.parse_meta_string_list(meta.tools ?? meta.tool);
-      const model = typeof meta.model === "string" ? meta.model.trim() || null : null;
-      const type: SkillType = force_type ?? (String(meta.type || "").toLowerCase() === "role" ? "role" : "tool");
-      const role = type === "role" ? String(meta.role || name).trim() || null : null;
-      const soul = typeof meta.soul === "string" ? meta.soul.trim() || null : null;
-      const heart = typeof meta.heart === "string" ? meta.heart.trim() || null : null;
-      const shared_protocols = this.parse_meta_string_list(meta.shared_protocols);
-      const preferred_providers = this.parse_meta_string_list(meta.preferred_providers);
-      const oauth = this.parse_meta_string_list(meta.oauth);
-      if (oauth.length > 0 && !tools.includes("oauth_fetch")) tools.push("oauth_fetch");
-      const intents = this.parse_meta_string_list(meta.intents);
-      const file_patterns = this.parse_meta_string_list(meta.file_patterns ?? meta.file_pattern);
-      const code_patterns = this.parse_meta_string_list(meta.code_patterns ?? meta.code_pattern);
-      const checks = this.parse_meta_string_list(meta.checks ?? meta.check);
-      const project_docs = Boolean(meta.project_docs === true || String(meta.project_docs || "").toLowerCase() === "true");
 
-      target.set(name, {
-        name,
-        path: filePath,
-        source,
-        type,
-        always,
-        summary,
-        aliases,
-        triggers,
-        tools,
-        requirements,
-        model,
-        frontmatter: meta,
-        role,
-        soul,
-        heart,
-        shared_protocols,
-        preferred_providers,
-        oauth,
-        intents,
-        file_patterns,
-        code_patterns,
-        checks,
-        project_docs,
+      const skillMeta = this._build_skill_metadata({
+        meta, body, name, path: filePath, source,
+        force_type,
+        role_fallback: name,
       });
+      target.set(name, skillMeta);
       this.raw_by_name.set(name, raw);
     }
   }
