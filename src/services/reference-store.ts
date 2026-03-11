@@ -10,12 +10,12 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join, extname } from "node:path";
-import Database from "better-sqlite3";
 import * as sqliteVec from "sqlite-vec";
 import type { EmbedFn } from "../agent/memory.service.js";
 import type { ImageEmbedFn } from "./embed.service.js";
 import { extract_doc_text, BINARY_DOC_EXTENSIONS } from "../utils/doc-extractor.js";
 import { now_iso } from "../utils/common.js";
+import { with_sqlite, with_sqlite_strict, with_sqlite_async, type DatabaseSync } from "../utils/sqlite-helper.js";
 
 const VEC_DIMENSIONS = 256;
 const MAX_EMBED_CHARS = 1500;
@@ -115,16 +115,11 @@ export class ReferenceStore implements ReferenceStoreLike {
   private ensure_init(): void {
     if (this.initialized) return;
     this.initialized = true;
-    const db = new Database(this.db_path);
-    try {
-      db.pragma("journal_mode=WAL");
-      db.pragma("foreign_keys=ON");
+    with_sqlite_strict(this.db_path, (db) => {
       db.exec(INIT_SQL);
       sqliteVec.load(db);
       db.exec(`CREATE VIRTUAL TABLE IF NOT EXISTS ref_chunks_vec USING vec0(embedding float[${VEC_DIMENSIONS}])`);
-    } finally {
-      db.close();
-    }
+    }, { pragmas: ["journal_mode=WAL", "foreign_keys=ON"] });
   }
 
   async sync(opts?: { force?: boolean }): Promise<{ added: number; updated: number; removed: number }> {
@@ -142,9 +137,8 @@ export class ReferenceStore implements ReferenceStoreLike {
     const fs_files = this.scan_files(this.refs_dir);
     const fs_paths = new Set(fs_files.map((f) => f.rel_path));
 
-    const db = new Database(this.db_path);
-    let added = 0, updated = 0, removed = 0;
-    try {
+    return await with_sqlite_async(this.db_path, async (db) => {
+      let added = 0, updated = 0, removed = 0;
       sqliteVec.load(db);
 
       // DB에 있는 문서 목록
@@ -231,20 +225,17 @@ export class ReferenceStore implements ReferenceStoreLike {
       if (this.image_embed_fn && to_image_embed.length > 0) {
         await this.embed_image_chunks(db, to_image_embed);
       }
-    } finally {
-      db.close();
-    }
 
-    return { added, updated, removed };
+      return { added, updated, removed };
+    }) ?? { added: 0, updated: 0, removed: 0 };
   }
 
   async search(query: string, opts?: { limit?: number; doc_filter?: string }): Promise<ReferenceSearchResult[]> {
     this.ensure_init();
     const limit = opts?.limit ?? MAX_SEARCH_RESULTS;
-    const results = new Map<string, ReferenceSearchResult>();
 
-    const db = new Database(this.db_path, { readonly: true });
-    try {
+    const results = await with_sqlite_async(this.db_path, async (db) => {
+      const found = new Map<string, ReferenceSearchResult>();
       sqliteVec.load(db);
 
       // FTS5 키워드 검색
@@ -269,7 +260,7 @@ export class ReferenceStore implements ReferenceStoreLike {
           params.push(limit * 2);
 
           const rows = db.prepare(sql).all(...params) as Array<ReferenceSearchResult>;
-          for (const r of rows) results.set(r.chunk_id, { ...r, score: Math.abs(r.score) });
+          for (const r of rows) found.set(r.chunk_id, { ...r, score: Math.abs(r.score) });
         } catch { /* FTS 실패 시 벡터만 사용 */ }
       }
 
@@ -297,10 +288,10 @@ export class ReferenceStore implements ReferenceStoreLike {
 
               for (const vr of vec_rows) {
                 const chunk_id = rowid_to_chunk.get(vr.rowid);
-                if (!chunk_id || results.has(chunk_id)) continue;
+                if (!chunk_id || found.has(chunk_id)) continue;
                 const chunk = db.prepare("SELECT chunk_id, doc_path, heading, content FROM ref_chunks WHERE chunk_id = ?").get(chunk_id) as ReferenceChunk | undefined;
                 if (chunk) {
-                  results.set(chunk_id, { ...chunk, score: 1 / (1 + vr.distance) });
+                  found.set(chunk_id, { ...chunk, score: 1 / (1 + vr.distance) });
                 }
               }
             }
@@ -326,43 +317,38 @@ export class ReferenceStore implements ReferenceStoreLike {
               const chunk = db.prepare(
                 "SELECT chunk_id, doc_path, heading, content FROM ref_chunks WHERE rowid = ?",
               ).get(vr.rowid) as ReferenceChunk | undefined;
-              if (chunk && !results.has(chunk.chunk_id)) {
-                results.set(chunk.chunk_id, { ...chunk, score: 1 / (1 + vr.distance) });
+              if (chunk && !found.has(chunk.chunk_id)) {
+                found.set(chunk.chunk_id, { ...chunk, score: 1 / (1 + vr.distance) });
               }
             }
           }
         } catch { /* 이미지 검색 실패 시 무시 */ }
       }
-    } finally {
-      db.close();
-    }
+
+      return found;
+    }, { readonly: true });
 
     // 점수순 정렬 + limit
-    return [...results.values()]
+    return [...(results ?? new Map()).values()]
       .sort((a, b) => b.score - a.score)
       .slice(0, limit);
   }
 
   list_documents(): { path: string; chunks: number; size: number; updated_at: string }[] {
     this.ensure_init();
-    const db = new Database(this.db_path, { readonly: true });
-    try {
-      return db.prepare("SELECT path, chunk_count as chunks, file_size as size, updated_at FROM ref_documents ORDER BY updated_at DESC").all() as Array<{ path: string; chunks: number; size: number; updated_at: string }>;
-    } finally {
-      db.close();
-    }
+    return with_sqlite(this.db_path, (db) =>
+      db.prepare("SELECT path, chunk_count as chunks, file_size as size, updated_at FROM ref_documents ORDER BY updated_at DESC").all() as Array<{ path: string; chunks: number; size: number; updated_at: string }>,
+      { readonly: true },
+    ) ?? [];
   }
 
   get_stats(): { total_docs: number; total_chunks: number; last_sync: string | null } {
     this.ensure_init();
-    const db = new Database(this.db_path, { readonly: true });
-    try {
+    return with_sqlite(this.db_path, (db) => {
       const docs = (db.prepare("SELECT COUNT(*) as c FROM ref_documents").get() as { c: number } | undefined)?.c ?? 0;
       const chunks = (db.prepare("SELECT COUNT(*) as c FROM ref_chunks").get() as { c: number } | undefined)?.c ?? 0;
       return { total_docs: docs, total_chunks: chunks, last_sync: this.last_sync ? new Date(this.last_sync).toISOString() : null };
-    } finally {
-      db.close();
-    }
+    }, { readonly: true }) ?? { total_docs: 0, total_chunks: 0, last_sync: null };
   }
 
   // ── Private ──
@@ -489,7 +475,7 @@ export class ReferenceStore implements ReferenceStoreLike {
     return chunks;
   }
 
-  private remove_document(db: Database.Database, path: string): void {
+  private remove_document(db: DatabaseSync, path: string): void {
     // 벡터 삭제: ref_chunk_docs의 rowid 기준
     const rows = db.prepare("SELECT rowid FROM ref_chunk_docs WHERE chunk_id IN (SELECT chunk_id FROM ref_chunks WHERE doc_path = ?)").all(path) as { rowid: number }[];
     if (rows.length > 0) {
@@ -507,7 +493,7 @@ export class ReferenceStore implements ReferenceStoreLike {
    * 이미지 청크 벡터 임베딩. ref_chunk_docs rowid 없이 ref_media rowid 기준으로 저장.
    * 이미지는 FTS에 없으므로 ref_chunks_vec에 직접 rowid 지정 불가 → image_vec 별도 테이블 사용.
    */
-  private async embed_image_chunks(db: Database.Database, items: { chunk_id: string; data_url: string }[]): Promise<void> {
+  private async embed_image_chunks(db: DatabaseSync, items: { chunk_id: string; data_url: string }[]): Promise<void> {
     if (!this.image_embed_fn || items.length === 0) return;
     const BATCH_SIZE = 16; // 이미지는 페이로드가 크므로 배치 작게
 
@@ -542,7 +528,7 @@ export class ReferenceStore implements ReferenceStoreLike {
     }
   }
 
-  private async embed_chunks(db: Database.Database, items: { chunk_id: string; text: string }[]): Promise<void> {
+  private async embed_chunks(db: DatabaseSync, items: { chunk_id: string; text: string }[]): Promise<void> {
     if (!this.embed_fn || items.length === 0) return;
 
     const BATCH_SIZE = 96;

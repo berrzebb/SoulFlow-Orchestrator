@@ -9,11 +9,11 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
 import { join, extname, basename } from "node:path";
-import Database from "better-sqlite3";
 import * as sqliteVec from "sqlite-vec";
 import type { EmbedFn } from "../agent/memory.service.js";
 import type { ReferenceStoreLike, ReferenceSearchResult } from "./reference-store.js";
 import { now_iso } from "../utils/common.js";
+import { with_sqlite, with_sqlite_strict, with_sqlite_async, type DatabaseSync } from "../utils/sqlite-helper.js";
 
 const VEC_DIMENSIONS = 256;
 const MAX_EMBED_CHARS = 1500;
@@ -73,16 +73,11 @@ export class SkillRefStore implements ReferenceStoreLike {
   private ensure_init(): void {
     if (this.initialized) return;
     this.initialized = true;
-    const db = new Database(this.db_path);
-    try {
-      db.pragma("journal_mode=WAL");
-      db.pragma("foreign_keys=ON");
+    with_sqlite_strict(this.db_path, (db) => {
       db.exec(INIT_SQL);
       sqliteVec.load(db);
       db.exec(`CREATE VIRTUAL TABLE IF NOT EXISTS skill_ref_chunks_vec USING vec0(embedding float[${VEC_DIMENSIONS}])`);
-    } finally {
-      db.close();
-    }
+    }, { pragmas: ["journal_mode=WAL", "foreign_keys=ON"] });
   }
 
   async sync(): Promise<{ added: number; updated: number; removed: number }> {
@@ -94,9 +89,8 @@ export class SkillRefStore implements ReferenceStoreLike {
     const fs_files = this.scan_skill_refs();
     const fs_paths = new Set(fs_files.map((f) => f.rel_path));
 
-    const db = new Database(this.db_path);
-    let added = 0, updated = 0, removed = 0;
-    try {
+    return await with_sqlite_async(this.db_path, async (db) => {
+      let added = 0, updated = 0, removed = 0;
       sqliteVec.load(db);
 
       const db_docs = db.prepare("SELECT path, content_hash FROM skill_ref_documents").all() as { path: string; content_hash: string }[];
@@ -146,21 +140,18 @@ export class SkillRefStore implements ReferenceStoreLike {
       if (this.embed_fn && to_embed.length > 0) {
         await this.embed_chunks(db, to_embed);
       }
-    } finally {
-      db.close();
-    }
 
-    return { added, updated, removed };
+      return { added, updated, removed };
+    }) ?? { added: 0, updated: 0, removed: 0 };
   }
 
   async search(query: string, opts?: { limit?: number; doc_filter?: string }): Promise<ReferenceSearchResult[]> {
     this.ensure_init();
     const limit = opts?.limit ?? 5;
-    const results = new Map<string, ReferenceSearchResult>();
     const skill_filter = opts?.doc_filter;
 
-    const db = new Database(this.db_path, { readonly: true });
-    try {
+    const results = await with_sqlite_async(this.db_path, async (db) => {
+      const found = new Map<string, ReferenceSearchResult>();
       sqliteVec.load(db);
 
       // FTS5
@@ -181,7 +172,7 @@ export class SkillRefStore implements ReferenceStoreLike {
 
           const rows = db.prepare(sql).all(...params) as Array<{ chunk_id: string; doc_path: string; skill_name: string; heading: string; content: string; score: number }>;
           for (const r of rows) {
-            results.set(r.chunk_id, { chunk_id: r.chunk_id, doc_path: r.doc_path, heading: r.heading, content: r.content, score: Math.abs(r.score) });
+            found.set(r.chunk_id, { chunk_id: r.chunk_id, doc_path: r.doc_path, heading: r.heading, content: r.content, score: Math.abs(r.score) });
           }
         } catch { /* FTS 실패 시 벡터만 사용 */ }
       }
@@ -204,47 +195,42 @@ export class SkillRefStore implements ReferenceStoreLike {
 
               for (const vr of vec_rows) {
                 const chunk_id = rowid_to_chunk.get(vr.rowid);
-                if (!chunk_id || results.has(chunk_id)) continue;
+                if (!chunk_id || found.has(chunk_id)) continue;
                 const chunk = db.prepare("SELECT chunk_id, doc_path, heading, content FROM skill_ref_chunks WHERE chunk_id = ?").get(chunk_id) as { chunk_id: string; doc_path: string; heading: string; content: string } | undefined;
                 if (chunk) {
                   if (skill_filter) {
                     const skill = db.prepare("SELECT skill_name FROM skill_ref_chunks WHERE chunk_id = ?").get(chunk_id) as { skill_name: string } | undefined;
                     if (skill && !skill_filter.split("|").includes(skill.skill_name)) continue;
                   }
-                  results.set(chunk_id, { ...chunk, score: 1 / (1 + vr.distance) });
+                  found.set(chunk_id, { ...chunk, score: 1 / (1 + vr.distance) });
                 }
               }
             }
           }
         } catch { /* 벡터 실패 시 FTS만 사용 */ }
       }
-    } finally {
-      db.close();
-    }
 
-    return [...results.values()].sort((a, b) => b.score - a.score).slice(0, limit);
+      return found;
+    }, { readonly: true });
+
+    return [...(results ?? new Map()).values()].sort((a, b) => b.score - a.score).slice(0, limit);
   }
 
   list_documents(): { path: string; chunks: number; size: number; updated_at: string }[] {
     this.ensure_init();
-    const db = new Database(this.db_path, { readonly: true });
-    try {
-      return db.prepare("SELECT path, chunk_count as chunks, 0 as size, updated_at FROM skill_ref_documents ORDER BY path").all() as Array<{ path: string; chunks: number; size: number; updated_at: string }>;
-    } finally {
-      db.close();
-    }
+    return with_sqlite(this.db_path, (db) =>
+      db.prepare("SELECT path, chunk_count as chunks, 0 as size, updated_at FROM skill_ref_documents ORDER BY path").all() as Array<{ path: string; chunks: number; size: number; updated_at: string }>,
+      { readonly: true },
+    ) ?? [];
   }
 
   get_stats(): { total_docs: number; total_chunks: number; last_sync: string | null } {
     this.ensure_init();
-    const db = new Database(this.db_path, { readonly: true });
-    try {
+    return with_sqlite(this.db_path, (db) => {
       const docs = (db.prepare("SELECT COUNT(*) as c FROM skill_ref_documents").get() as { c: number } | undefined)?.c ?? 0;
       const chunks = (db.prepare("SELECT COUNT(*) as c FROM skill_ref_chunks").get() as { c: number } | undefined)?.c ?? 0;
       return { total_docs: docs, total_chunks: chunks, last_sync: this.last_sync ? new Date(this.last_sync).toISOString() : null };
-    } finally {
-      db.close();
-    }
+    }, { readonly: true }) ?? { total_docs: 0, total_chunks: 0, last_sync: null };
   }
 
   // ── Private ──
@@ -328,7 +314,7 @@ export class SkillRefStore implements ReferenceStoreLike {
     return chunks;
   }
 
-  private remove_document(db: Database.Database, path: string): void {
+  private remove_document(db: DatabaseSync, path: string): void {
     const rows = db.prepare("SELECT rowid FROM skill_ref_chunk_docs WHERE chunk_id IN (SELECT chunk_id FROM skill_ref_chunks WHERE doc_path = ?)").all(path) as { rowid: number }[];
     if (rows.length > 0) {
       const placeholders = rows.map(() => "?").join(",");
@@ -341,7 +327,7 @@ export class SkillRefStore implements ReferenceStoreLike {
     db.prepare("DELETE FROM skill_ref_documents WHERE path = ?").run(path);
   }
 
-  private async embed_chunks(db: Database.Database, items: { chunk_id: string; text: string }[]): Promise<void> {
+  private async embed_chunks(db: DatabaseSync, items: { chunk_id: string; text: string }[]): Promise<void> {
     if (!this.embed_fn || items.length === 0) return;
     const BATCH_SIZE = 96;
     const del_vec = db.prepare("DELETE FROM skill_ref_chunks_vec WHERE rowid = ?");

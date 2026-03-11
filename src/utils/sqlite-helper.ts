@@ -9,6 +9,8 @@ export type { DatabaseSync };
 export type SqliteRunOptions = {
   /** 연결 후 실행할 PRAGMA 목록 (예: ["foreign_keys=ON"]) */
   pragmas?: string[];
+  /** 읽기 전용 모드로 열기 */
+  readonly?: boolean;
 };
 
 /** DB를 열고 콜백 실행 후 닫는다. 에러 시 stderr 로깅 후 null. */
@@ -19,7 +21,7 @@ export function with_sqlite<T>(
 ): T | null {
   let db: DatabaseSync | null = null;
   try {
-    db = new Database(db_path);
+    db = new Database(db_path, options?.readonly ? { readonly: true } : undefined);
     if (options?.pragmas) {
       for (const p of options.pragmas) db.pragma(p);
     }
@@ -43,11 +45,35 @@ export function with_sqlite_strict<T>(
 ): T {
   let db: DatabaseSync | null = null;
   try {
-    db = new Database(db_path);
+    db = new Database(db_path, options?.readonly ? { readonly: true } : undefined);
     if (options?.pragmas) {
       for (const p of options.pragmas) db.pragma(p);
     }
     return run(db);
+  } finally {
+    try { db?.close(); } catch { /* no-op */ }
+  }
+}
+
+/** DB를 열고 async 콜백 실행 후 닫는다. await 경계를 넘는 비동기 처리(임베딩 등)에 사용. 에러 시 stderr 로깅 후 null. */
+export async function with_sqlite_async<T>(
+  db_path: string,
+  run: (db: DatabaseSync) => Promise<T>,
+  options?: SqliteRunOptions,
+): Promise<T | null> {
+  let db: DatabaseSync | null = null;
+  try {
+    db = new Database(db_path, options?.readonly ? { readonly: true } : undefined);
+    if (options?.pragmas) {
+      for (const p of options.pragmas) db.pragma(p);
+    }
+    return await run(db);
+  } catch (err) {
+    const msg = error_message(err);
+    if (process.env.NODE_ENV !== "test") {
+      process.stderr.write(`[sqlite] error at ${db_path}: ${msg}\n`);
+    }
+    return null;
   } finally {
     try { db?.close(); } catch { /* no-op */ }
   }
