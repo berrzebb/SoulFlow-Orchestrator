@@ -140,6 +140,8 @@ export interface AgentTransport {
   list_sessions(): string[];
   remove_session(session_key: string): Promise<void>;
   shutdown(): Promise<void>;
+  /** 실행 중 stdin에 직접 쓰기 (Steer Mode). stdin_mode="keep" 어댑터만 지원. */
+  write_stdin?(session_key: string, text: string): boolean;
 }
 
 // ── Failover ──

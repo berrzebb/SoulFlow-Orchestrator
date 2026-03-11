@@ -61,6 +61,18 @@ const ChannelSchema = z.object({
   queueCapPerLane: z.number().min(0).default(20),
   /** 한도 초과 시 정책. old: 오래된 항목 제거, new: 새 항목 거부. */
   queueDropPolicy: z.enum(["old", "new"]).default("old"),
+  /** 인바운드 디바운싱: 같은 채팅의 빠른 연속 메시지를 배치로 묶어 처리. */
+  inboundDebounce: z.object({
+    enabled: z.boolean().default(false),
+    /** 첫 메시지 도착 후 플러시까지 대기 시간 (ms). */
+    windowMs: z.number().min(50).max(5_000).default(400),
+    /** 이 수에 도달하면 windowMs 경과 전 즉시 플러시. */
+    maxMessages: z.number().min(2).max(20).default(5),
+  }),
+  /** 유휴 인바운드 레인 정리 주기 (ms). 0 = 비활성. 메모리 누수 방지. */
+  sessionLanePruneIntervalMs: z.number().min(0).default(300_000),
+  /** 장기 실행 중인 run을 자동 중단할 TTL (ms). 0 = 비활성. */
+  staleRunTimeoutMs: z.number().min(0).default(7_200_000),
   sessionHistoryMaxAgeMs: z.number().min(0),
   approvalReactionEnabled: z.boolean(),
   controlReactionEnabled: z.boolean(),
@@ -116,6 +128,8 @@ const DashboardSchema = z.object({
   portFallback: z.boolean(),
   /** 외부 공개 URL (예: https://dashboard.example.com). OAuth redirect_uri 기준으로 사용됨. */
   publicUrl: z.string().optional(),
+  /** /hooks/* 엔드포인트 인증 토큰. 설정 시 Authorization: Bearer <token> 필수. */
+  webhookSecret: z.string().optional(),
 });
 
 const CliSchema = z.object({
@@ -217,6 +231,9 @@ export function get_config_defaults(): AppConfig {
       seenTtlMs: 86_400_000,
       seenMaxSize: 50_000,
       inboundConcurrency: 4,
+      inboundDebounce: { enabled: false, windowMs: 400, maxMessages: 5 },
+      sessionLanePruneIntervalMs: 300_000,
+      staleRunTimeoutMs: 7_200_000,
       sessionHistoryMaxAgeMs: 1_800_000,
       approvalReactionEnabled: true,
       controlReactionEnabled: true,

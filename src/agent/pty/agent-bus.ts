@@ -54,6 +54,15 @@ export class AgentBus {
     this.lanes.followup(session_key, content);
   }
 
+  /**
+   * Steer Mode: 실행 중인 에이전트 stdin에 직접 쓰기.
+   * stdin_mode="keep" 어댑터(Codex CLI 등)에서만 동작.
+   * 연결 없음 또는 transport 미지원 시 false 반환.
+   */
+  steer(session_key: string, content: string): boolean {
+    return this.transport.write_stdin?.(session_key, content) ?? false;
+  }
+
   get lane_queue(): LaneQueue {
     return this.lanes;
   }

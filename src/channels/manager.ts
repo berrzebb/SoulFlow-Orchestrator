@@ -35,6 +35,7 @@ import { extract_media_items } from "./media-extractor.js";
 import { prune_ttl_map, sleep, error_message, now_iso, normalize_text } from "../utils/common.js";
 import { t } from "../i18n/index.js";
 import { LaneQueue } from "../agent/pty/lane-queue.js";
+import { InboundDebouncer } from "./inbound-debouncer.js";
 import { ChannelBlockRenderer } from "./channel-block-renderer.js";
 
 /** Native streaming을 지원하는 채널 인터페이스 (Slack / Telegram). */
@@ -184,7 +185,12 @@ export class ChannelManager implements ServiceLike {
   private readonly tone_overrides = new Map<string, Partial<PersonaStyleSnapshot>>();
   private readonly inbound_inflight = new Set<Promise<void>>();
   private readonly inbound_lanes: LaneQueue;
+  private readonly inbound_debouncer: InboundDebouncer<InboundMessage>;
+  /** run_key → 시작 시각(ms). staleRunTimeoutMs 초과 감지용. */
+  private readonly run_start_times = new Map<string, number>();
   private prune_timer: NodeJS.Timeout | null = null;
+  private lane_prune_timer: NodeJS.Timeout | null = null;
+  private stale_run_timer: NodeJS.Timeout | null = null;
 
   constructor(deps: ChannelManagerDeps) {
     this.bus = deps.bus;
@@ -218,6 +224,21 @@ export class ChannelManager implements ServiceLike {
       lane_max_pending: deps.config.queueCapPerLane,
       lane_drop: deps.config.queueDropPolicy,
     });
+    this.inbound_debouncer = new InboundDebouncer({
+      window_ms: deps.config.inboundDebounce.windowMs,
+      max_messages: deps.config.inboundDebounce.maxMessages,
+    });
+    this.inbound_debouncer.set_handler((chat_key, items) => {
+      const combined = InboundDebouncer.merge(items);
+      const task = this.inbound_lanes.execute(chat_key, () => this.handle_inbound_message(combined))
+        .catch((e) => {
+          if (error_message(e) !== "queue_cap_exceeded") {
+            this.logger.error("inbound debounced handler failed", { error: error_message(e) });
+          }
+        })
+        .finally(() => this.inbound_inflight.delete(task));
+      this.inbound_inflight.add(task);
+    });
   }
 
   /** 워크플로우 HITL 브리지를 지연 주입 (순환 의존성 회피). */
@@ -233,6 +254,16 @@ export class ChannelManager implements ServiceLike {
     this.poll_task = this.run_poll_loop();
     this.consumer_task = this.run_inbound_consumer();
     this.prune_timer = setInterval(() => this.prune_seen(), 60_000);
+    if (this.config.sessionLanePruneIntervalMs > 0) {
+      this.lane_prune_timer = setInterval(
+        () => { const pruned = this.inbound_lanes.prune_idle(); if (pruned > 0) this.logger.debug("lane_pruned", { pruned }); },
+        this.config.sessionLanePruneIntervalMs,
+      );
+    }
+    if (this.config.staleRunTimeoutMs > 0) {
+      // 1분마다 검사. 실제 TTL은 staleRunTimeoutMs.
+      this.stale_run_timer = setInterval(() => this.prune_stale_runs(), 60_000);
+    }
     this._recover_orphaned_messages().catch((e) =>
       this.logger.warn("orphan recovery failed", { error: error_message(e) }),
     );
@@ -257,6 +288,9 @@ export class ChannelManager implements ServiceLike {
     this.abort_ctl.abort();
     this.cancel_active_runs();
     if (this.prune_timer) { clearInterval(this.prune_timer); this.prune_timer = null; }
+    if (this.lane_prune_timer) { clearInterval(this.lane_prune_timer); this.lane_prune_timer = null; }
+    if (this.stale_run_timer) { clearInterval(this.stale_run_timer); this.stale_run_timer = null; }
+    this.inbound_debouncer.clear();
     this.primed_targets.clear();
     this.render_profile_ts.clear();
     this.seen.clear();
@@ -532,6 +566,7 @@ export class ChannelManager implements ServiceLike {
   private async run_inbound_consumer(): Promise<void> {
     const signal = this.abort_ctl.signal;
     const reliable = is_reliable_inbound_bus(this.bus);
+    const debounce = this.config.inboundDebounce.enabled;
     while (this.running && !signal.aborted) {
       if (reliable) {
         const lease = await reliable.consume_inbound_lease({ timeout_ms: 2000 });
@@ -539,6 +574,12 @@ export class ChannelManager implements ServiceLike {
         const msg = lease.value;
         if (this.try_hitl_send_input(msg)) { await lease.ack(); continue; }
         const chat_key = `${msg.instance_id || resolve_provider(msg) || "unknown"}:${msg.chat_id}`;
+        // 디바운싱 활성 시: 즉시 ack + 디바운서에 위임 (debouncer handler가 lane 실행)
+        if (debounce) {
+          await lease.ack();
+          this.inbound_debouncer.push(chat_key, msg);
+          continue;
+        }
         const task = this.inbound_lanes.execute(chat_key, () => this.handle_inbound_message(msg))
           .then(() => lease.ack())
           .catch((e) => {
@@ -556,6 +597,10 @@ export class ChannelManager implements ServiceLike {
         if (!msg || !this.running || signal.aborted) continue;
         if (this.try_hitl_send_input(msg)) continue;
         const chat_key = `${msg.instance_id || resolve_provider(msg) || "unknown"}:${msg.chat_id}`;
+        if (debounce) {
+          this.inbound_debouncer.push(chat_key, msg);
+          continue;
+        }
         const task = this.inbound_lanes.execute(chat_key, () => this.handle_inbound_message(msg))
           .catch((e) => {
             if (error_message(e) !== "queue_cap_exceeded") {
@@ -603,6 +648,7 @@ export class ChannelManager implements ServiceLike {
     const abort = new AbortController();
     const active_run: ActiveRun = { abort, provider, chat_id: message.chat_id, alias, done };
     this.active_runs.register(run_key, active_run);
+    if (this.config.staleRunTimeoutMs > 0) this.run_start_times.set(run_key, Date.now());
 
     const run_id = this.tracker?.start({ provider, chat_id: message.chat_id, alias, sender_id: message.sender_id });
 
@@ -743,6 +789,7 @@ export class ChannelManager implements ServiceLike {
       this.on_activity_end?.();
       resolve_done();
       this.active_runs.unregister(run_key, abort);
+      this.run_start_times.delete(run_key);
     }
   }
 
@@ -1128,6 +1175,22 @@ export class ChannelManager implements ServiceLike {
     return key ? this.seen.has(key) : false;
   }
 
+  /** staleRunTimeoutMs 초과 run 자동 중단. run_start_times 맵으로 경과 시간 추적. */
+  private prune_stale_runs(): void {
+    if (this.config.staleRunTimeoutMs <= 0 || this.run_start_times.size === 0) return;
+    const now = Date.now();
+    let aborted = 0;
+    for (const [run_key, started_at] of this.run_start_times) {
+      if (now - started_at <= this.config.staleRunTimeoutMs) continue;
+      const run = this.active_runs.get(run_key);
+      if (!run || run.abort.signal.aborted) { this.run_start_times.delete(run_key); continue; }
+      this.logger.warn("stale_run_aborted", { run_key, elapsed_ms: now - started_at });
+      run.abort.abort();
+      aborted++;
+    }
+    if (aborted > 0) this.logger.info("prune_stale_runs", { aborted });
+  }
+
   private prune_seen(): void {
     prune_ttl_map(this.seen, (ts) => ts, this.config.seenTtlMs, this.config.seenMaxSize);
     prune_ttl_map(this.control_reaction_seen, (ts) => ts, this.config.reactionActionTtlMs, this.config.seenMaxSize);
@@ -1135,7 +1198,6 @@ export class ChannelManager implements ServiceLike {
     prune_ttl_map(this.primed_targets, (ts) => ts, this.config.seenTtlMs, this.config.seenMaxSize);
     this.prune_render_profiles();
     this.approval.prune_seen(this.config.seenTtlMs, this.config.seenMaxSize);
-    this.inbound_lanes.prune_idle();
   }
 
   /** render_profiles를 병렬 타임스탬프 맵 기준으로 TTL 프루닝. */

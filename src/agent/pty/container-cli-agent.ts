@@ -112,8 +112,11 @@ export class ContainerCliAgent implements AgentBackend {
     let tool_calls_count = 0;
 
     // send_input 콜백 등록
+    // stdin_mode="keep" 어댑터(Codex CLI)는 실행 중 stdin 주입(Steer Mode) 우선 시도.
+    // 연결 없거나 "close" 모드(Claude Code)면 followup 큐로 폴백.
     if (options.register_send_input) {
       options.register_send_input((text) => {
+        if (this.adapter.stdin_mode === "keep" && this.bus.steer(session_key, text)) return;
         this.bus.queue_followup(session_key, text);
       });
     }

@@ -57,6 +57,14 @@ export class PtyTransport implements AgentTransport {
     return { dispose: () => { this.output_handlers.delete(handler); } };
   }
 
+  /** Steer Mode: 실행 중인 PTY stdin에 직접 쓰기. 연결이 없으면 false 반환. */
+  write_stdin(session_key: string, text: string): boolean {
+    const conn = this.connections.get(session_key);
+    if (!conn) return false;
+    conn.pty.write(text);
+    return true;
+  }
+
   list_sessions(): string[] {
     return [...this.connections.keys()];
   }
