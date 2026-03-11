@@ -93,7 +93,6 @@ jobs:
             --reporter=default \
             --coverage \
             --coverage.reporter=json \
-            --outputFile=.vitest-reports/shard-${{ matrix.shard }}.blob \
             --shard=${{ matrix.shard }}/${{ matrix.total }}
         env:
           NODE_OPTIONS: --max-old-space-size=2048
