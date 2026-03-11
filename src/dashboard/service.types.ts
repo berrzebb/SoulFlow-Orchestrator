@@ -288,6 +288,23 @@ export interface DashboardCliAuthOps {
   check_all(): Promise<Array<{ cli: string; authenticated: boolean; account?: string; error?: string }>>;
 }
 
+export interface DashboardPromptOps {
+  run(input: {
+    provider_id?: string;
+    model?: string;
+    prompt: string;
+    system?: string;
+    temperature?: number;
+    max_tokens?: number;
+  }): Promise<Record<string, unknown>>;
+}
+
+export interface DashboardUsageOps {
+  list_spans(filter?: import("../gateway/usage-store.js").ListSpansFilter): Promise<import("../gateway/usage-store.js").LlmSpan[]>;
+  get_daily_summary(days?: number): Promise<import("../gateway/usage-store.js").DailySummary[]>;
+  get_provider_summary(days?: number): Promise<import("../gateway/usage-store.js").ProviderSummary[]>;
+}
+
 export type DashboardOptions = {
   host: string;
   port: number;
@@ -325,6 +342,8 @@ export type DashboardOptions = {
   kanban_store?: import("../services/kanban-store.js").KanbanStoreLike | null;
   kanban_rule_executor?: import("../services/kanban-rule-executor.js").KanbanRuleExecutor | (() => import("../services/kanban-rule-executor.js").KanbanRuleExecutor | null) | null;
   reference_store?: import("../services/reference-store.js").ReferenceStoreLike | null;
+  prompt_ops?: DashboardPromptOps | null;
+  usage_ops?: DashboardUsageOps | null;
   default_alias?: string;
   workspace?: string;
   /** /hooks/* 엔드포인트 Bearer 토큰. 미설정 시 인증 없이 허용. */
