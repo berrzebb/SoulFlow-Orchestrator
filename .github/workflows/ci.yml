@@ -87,6 +87,7 @@ jobs:
         run: |
           npx vitest run \
             --reporter=blob \
+            --coverage \
             --shard=${{ matrix.shard }}/${{ matrix.total }}
         env:
           NODE_OPTIONS: --max-old-space-size=2048
@@ -165,7 +166,7 @@ jobs:
           if [ -f ./coverage/coverage-summary.json ]; then
             node -e "
               const s = require('./coverage/coverage-summary.json').total;
-              const fmt = (v) => v.pct.toFixed(1) + '%';
+              const fmt = (v) => typeof v.pct === 'number' ? v.pct.toFixed(1) + '%' : String(v.pct ?? 'N/A');
               console.log('## Coverage');
               console.log('| Metric | Coverage |');
               console.log('|--------|----------|');

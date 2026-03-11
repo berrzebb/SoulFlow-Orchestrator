@@ -414,6 +414,7 @@ describe("TaskStore — CRUD 전체", () => {
   beforeEach(async () => {
     tasks_dir = await mkdtemp(join(tmpdir(), "task-store-"));
     store = new TaskStore(tasks_dir);
+    await (store as any).initialized;
   });
 
   afterEach(async () => {
