@@ -145,8 +145,10 @@ export function create_dashboard_bundle(deps: DashboardBundleDeps): DashboardBun
     agent_definition_ops: create_agent_definition_ops({
       store: agent_definition_store,
       generate_fn: async (prompt) => {
-        // 기존 ProviderRegistry.run_headless()로 JSON 구조 생성
+        // model_purpose=chat인 활성 프로바이더 우선 선택 (임베딩 모델 제외)
+        const chat_provider = provider_store.list().find((p) => p.enabled && p.model_purpose === "chat");
         const result = await providers.run_headless({
+          provider_id: chat_provider?.instance_id,
           messages: [
             {
               role: "user" as const,
