@@ -3,7 +3,7 @@
 import type { NodeHandler } from "../node-registry.js";
 import type { DatabaseNodeDefinition, OrcheNodeDefinition } from "../workflow-node.types.js";
 import type { OrcheNodeExecutorContext, OrcheNodeExecuteResult, OrcheNodeTestResult } from "../orche-node-executor.js";
-import { resolve_templates } from "../orche-node-executor.js";
+import { resolve_templates, node_error } from "../orche-node-executor.js";
 import { error_message } from "../../utils/common.js";
 
 export const database_handler: NodeHandler = {
@@ -28,7 +28,7 @@ export const database_handler: NodeHandler = {
     const datasource = resolve_templates(n.datasource || "", tpl);
     const sql = resolve_templates(n.sql || "", tpl);
 
-    if (!datasource) return { output: { result: "", success: false, error: "datasource is required" } };
+    if (!datasource) return node_error("datasource is required");
 
     try {
       const { DatabaseTool } = await import("../tools/database.js");
@@ -42,7 +42,7 @@ export const database_handler: NodeHandler = {
       });
       return { output: { result, success: !result.startsWith("Error:") } };
     } catch (err) {
-      return { output: { result: error_message(err), success: false } };
+      return node_error(error_message(err));
     }
   },
 

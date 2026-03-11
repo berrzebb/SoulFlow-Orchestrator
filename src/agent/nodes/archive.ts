@@ -3,7 +3,7 @@
 import type { NodeHandler } from "../node-registry.js";
 import type { ArchiveNodeDefinition, OrcheNodeDefinition } from "../workflow-node.types.js";
 import type { OrcheNodeExecutorContext, OrcheNodeExecuteResult, OrcheNodeTestResult } from "../orche-node-executor.js";
-import { resolve_templates } from "../orche-node-executor.js";
+import { resolve_templates, node_error } from "../orche-node-executor.js";
 import { run_shell_command } from "../tools/shell-runtime.js";
 import { error_message } from "../../utils/common.js";
 
@@ -32,10 +32,10 @@ export const archive_handler: NodeHandler = {
     const files = resolve_templates(n.files || "", tpl).trim();
     const output_dir = resolve_templates(n.output_dir || ".", tpl);
 
-    if (!archive) return { output: { output: "", success: false, error: "archive_path is required" } };
+    if (!archive) return node_error("archive_path is required");
 
     const command = build_archive_command(op, format, archive, files, output_dir);
-    if (!command) return { output: { output: "", success: false, error: `unsupported: ${op}/${format}` } };
+    if (!command) return node_error(`unsupported: ${op}/${format}`);
 
     try {
       const { stdout, stderr } = await run_shell_command(command, {
@@ -47,7 +47,7 @@ export const archive_handler: NodeHandler = {
       const out = [stdout || "", stderr || ""].join("\n").trim();
       return { output: { output: out || `${op} completed`, success: true } };
     } catch (err) {
-      return { output: { output: error_message(err), success: false } };
+      return node_error(error_message(err));
     }
   },
 

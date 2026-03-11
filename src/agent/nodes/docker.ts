@@ -3,7 +3,7 @@
 import type { NodeHandler } from "../node-registry.js";
 import type { DockerNodeDefinition, OrcheNodeDefinition } from "../workflow-node.types.js";
 import type { OrcheNodeExecutorContext, OrcheNodeExecuteResult, OrcheNodeTestResult } from "../orche-node-executor.js";
-import { resolve_templates } from "../orche-node-executor.js";
+import { resolve_templates, node_error } from "../orche-node-executor.js";
 import { run_shell_command } from "../tools/shell-runtime.js";
 import { error_message } from "../../utils/common.js";
 
@@ -36,8 +36,8 @@ export const docker_handler: NodeHandler = {
     const tail = n.tail || 50;
 
     const cmd = build_docker_cmd(op, container, image, command, args, tail);
-    if (!cmd) return { output: { output: "", success: false, error: `unsupported: ${op}` } };
-    for (const p of BLOCKED) if (p.test(cmd)) return { output: { output: "", success: false, error: "blocked by safety policy" } };
+    if (!cmd) return node_error(`unsupported: ${op}`);
+    for (const p of BLOCKED) if (p.test(cmd)) return node_error("blocked by safety policy");
 
     try {
       const { stdout, stderr } = await run_shell_command(cmd, {
@@ -49,7 +49,7 @@ export const docker_handler: NodeHandler = {
       const out = [stdout || "", stderr || ""].join("\n").trim();
       return { output: { output: out || "(no output)", success: true } };
     } catch (err) {
-      return { output: { output: error_message(err), success: false } };
+      return node_error(error_message(err));
     }
   },
 

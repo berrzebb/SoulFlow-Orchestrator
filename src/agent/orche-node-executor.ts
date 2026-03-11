@@ -27,6 +27,13 @@ export interface OrcheNodeTestResult {
   warnings: string[];
 }
 
+// ── Node Error Builder ──────────────────────────────
+
+/** 노드 핸들러 공통 에러 응답 빌더. 일관된 `{ error, success: false }` 형태를 보장. */
+export function node_error(error: string, extra?: Record<string, unknown>): OrcheNodeExecuteResult {
+  return { output: { error, success: false, ...extra } };
+}
+
 // ── Template Resolver (공유 유틸) ───────────────────
 
 const TEMPLATE_RE = /\{\{([\w.[\]]+)\}\}/g;
