@@ -3,7 +3,7 @@ import type { Logger } from "../logger.js";
 import { create_logger } from "../logger.js";
 import { now_iso, error_message, short_id} from "../utils/common.js";
 import type { CommandDescriptor } from "./commands/registry.js";
-import type { AgentMention, ChannelCommand, ChannelHealth, ChannelTypingState, ChatChannel, FileRequestResult } from "./types.js";
+import type { AgentMention, ChannelCommand, ChannelHealth, ChannelTypingState, ChatChannel, FileRequestResult, SendPollRequest, SendPollResult } from "./types.js";
 import { parse_slash_command } from "./slash-command.js";
 
 export abstract class BaseChannel implements ChatChannel {
@@ -36,6 +36,10 @@ export abstract class BaseChannel implements ChatChannel {
 
   async remove_reaction(_chat_id: string, _message_id: string, _reaction: string): Promise<{ ok: boolean; error?: string }> {
     return { ok: false, error: "reactions_not_supported" };
+  }
+
+  async send_poll(_poll: SendPollRequest): Promise<SendPollResult> {
+    return { ok: false, error: "poll_not_supported" };
   }
 
   is_running(): boolean {

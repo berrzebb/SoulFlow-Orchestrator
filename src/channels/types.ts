@@ -54,6 +54,32 @@ export type FileRequestResult = {
   error?: string;
 };
 
+/** 투표/설문 옵션. */
+export type PollOption = {
+  text: string;
+};
+
+/** 투표/설문 요청. */
+export type SendPollRequest = {
+  chat_id: string;
+  question: string;
+  options: PollOption[];
+  /** 복수 선택 허용 여부. 기본 false. */
+  allows_multiple_answers?: boolean;
+  /** 익명 투표 여부. 기본 true. */
+  is_anonymous?: boolean;
+  /** 투표 자동 종료 시간 (초). */
+  open_period?: number;
+  /** Telegram forum topic ID. */
+  message_thread_id?: number;
+};
+
+export type SendPollResult = {
+  ok: boolean;
+  message_id?: string;
+  error?: string;
+};
+
 export type ChannelHealth = {
   provider: string;
   instance_id: string;
@@ -86,6 +112,8 @@ export interface ChatChannel {
   ): Promise<{ ok: boolean; message_id?: string; error?: string }>;
   add_reaction(chat_id: string, message_id: string, reaction: string): Promise<{ ok: boolean; error?: string }>;
   remove_reaction(chat_id: string, message_id: string, reaction: string): Promise<{ ok: boolean; error?: string }>;
+  /** 투표/설문 전송. 미지원 채널은 { ok: false, error: "poll_not_supported" } 반환. */
+  send_poll(poll: SendPollRequest): Promise<SendPollResult>;
   set_typing(chat_id: string, typing: boolean, anchor_message_id?: string): Promise<void>;
   get_typing_state(chat_id: string): ChannelTypingState;
   parse_command(content: string): ChannelCommand | null;
@@ -115,5 +143,6 @@ export interface ChannelRegistryLike {
   ): Promise<InboundMessage | null>;
   set_typing(id: string, chat_id: string, typing: boolean, anchor_message_id?: string): Promise<void>;
   get_typing_state(id: string, chat_id: string): ChannelTypingState | null;
+  send_poll(id: string, poll: SendPollRequest): Promise<SendPollResult>;
   get_health(): ChannelHealth[];
 }

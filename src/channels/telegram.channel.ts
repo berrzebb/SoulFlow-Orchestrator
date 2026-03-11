@@ -484,6 +484,42 @@ export class TelegramChannel extends BaseChannel {
     }
   }
 
+  async send_poll(poll: import("./types.js").SendPollRequest): Promise<import("./types.js").SendPollResult> {
+    if (!this.bot_token) return { ok: false, error: "telegram_bot_token_missing" };
+    const chat_id = String(poll.chat_id || this.default_chat_id || "");
+    if (!chat_id) return { ok: false, error: "chat_id_required" };
+    if (!poll.options || poll.options.length < 2) return { ok: false, error: "at_least_2_options_required" };
+    try {
+      const payload: Record<string, unknown> = {
+        chat_id,
+        question: String(poll.question || "").slice(0, 300),
+        options: JSON.stringify(poll.options.map((o) => String(o.text || "").slice(0, 100))),
+        is_anonymous: poll.is_anonymous !== false,
+        allows_multiple_answers: poll.allows_multiple_answers === true,
+      };
+      if (poll.open_period && poll.open_period > 0) {
+        payload.open_period = Math.min(600, Math.max(5, poll.open_period));
+      }
+      if (poll.message_thread_id) {
+        payload.message_thread_id = poll.message_thread_id;
+      }
+      const url = `${this.api_base}/bot${this.bot_token}/sendPoll`;
+      const response = await channel_fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await parse_json_response(response);
+      if (!response.ok || data.ok !== true) {
+        return { ok: false, error: as_string(data.description || `http_${response.status}`) };
+      }
+      const result = (data.result && typeof data.result === "object") ? (data.result as Record<string, unknown>) : {};
+      return { ok: true, message_id: String(result.message_id || "") };
+    } catch (error) {
+      return { ok: false, error: error_message(error) };
+    }
+  }
+
   protected async set_typing_remote(chat_id: string, typing: boolean, _anchor_message_id?: string): Promise<void> {
     if (!typing) return;
     if (!this.bot_token) return;

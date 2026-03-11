@@ -129,6 +129,12 @@ export class ChannelRegistry implements ChannelRegistryLike {
     return channel.get_typing_state(chat_id);
   }
 
+  async send_poll(id: string, poll: import("./types.js").SendPollRequest): Promise<import("./types.js").SendPollResult> {
+    const channel = this.get_channel(id);
+    if (!channel) return { ok: false, error: "channel_not_found" };
+    return channel.send_poll(poll);
+  }
+
   get_health(): ChannelHealth[] {
     return [...this.channels.values()].map((channel) => channel.get_health());
   }
