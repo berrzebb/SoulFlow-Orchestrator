@@ -7,6 +7,7 @@ import { FileRequestTool } from "./file-request.js";
 import { MessageTool } from "./message.js";
 import { SendFileTool } from "./send-file.js";
 import { SpawnTool, type SpawnRequest } from "./spawn.js";
+import { PollTool } from "./poll.js";
 import { ToolRegistry } from "./registry.js";
 import { ExecTool } from "./shell.js";
 import { WebBrowserTool, WebExtractTool, WebFetchTool, WebMonitorTool, WebPdfTool, WebSearchTool, WebSnapshotTool } from "./web.js";
@@ -235,6 +236,7 @@ export {
   SpawnTool,
   ChainTool,
   CronTool,
+  PollTool,
   MemoryTool,
   DecisionTool,
   SecretTool,
@@ -406,6 +408,7 @@ export type ToolRegistryFactoryOptions = {
   dynamic_store?: DynamicToolStoreLike;
   cron?: CronScheduler | null;
   bus?: MessageBusLike | null;
+  channels?: import("../../channels/types.js").ChannelRegistryLike | null;
   spawn_callback?: ((request: SpawnRequest) => Promise<{ subagent_id: string; status: string; message?: string }>) | null;
   task_query_callback?: TaskQueryCallback | null;
   event_recorder?: ((event: AppendWorkflowEventInput) => Promise<AppendWorkflowEventResult>) | null;
@@ -611,6 +614,9 @@ export function create_default_tool_registry(args?: ToolRegistryFactoryOptions):
   }
   if (args?.cron) {
     registry.register(new CronTool(args.cron));
+  }
+  if (args?.channels) {
+    registry.register(new PollTool(args.channels));
   }
 
   const dynamic_store_path = args?.dynamic_store_path;

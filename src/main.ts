@@ -16,7 +16,7 @@ import { create_runtime_support } from "./bootstrap/runtime-support.js";
 import { create_runtime_data } from "./bootstrap/runtime-data.js";
 import { create_channel_wiring } from "./bootstrap/channel-wiring.js";
 import { register_shutdown_handlers } from "./bootstrap/lifecycle.js";
-import { AgentDomain } from "./agent/index.js";
+import { AgentDomain, PollTool } from "./agent/index.js";
 import type { MessageBusRuntime } from "./bus/index.js";
 import { ChannelManager, type ChannelRegistryLike } from "./channels/index.js";
 import { CronService } from "./cron/index.js";
@@ -103,6 +103,8 @@ export async function createRuntime(): Promise<RuntimeApp> {
     workspace, data_dir, app_config, shared_vault,
     bus, broadcaster, agent, agent_runtime, sessions, logger,
   });
+  // channels 생성 후 PollTool 지연 등록 (AgentDomain이 channels보다 먼저 생성되므로)
+  agent.tools.register(new PollTool(channels));
   const dashboard: { current: DashboardService | null } = { current: null };
 
   const { orchestration, cron, create_task_fn, oauth_fetch_service } = await create_orchestration_bundle({
