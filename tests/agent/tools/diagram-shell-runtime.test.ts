@@ -1,7 +1,7 @@
 /**
  * DiagramRenderTool + shell-runtime run_shell_command 커버리지.
  */
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, vi, afterEach, beforeAll, afterAll } from "vitest";
 
 afterEach(() => { vi.clearAllMocks(); vi.restoreAllMocks(); });
 
@@ -190,6 +190,10 @@ const OPTS: ShellRunOptions = {
   timeout_ms: 5000,
   max_buffer_bytes: 1024 * 1024,
 };
+
+// just-bash npx 자동 설치를 막아 시스템 셸 폴백 경로를 강제 테스트
+beforeAll(() => { process.env.NO_JUST_BASH = "1"; });
+afterAll(() => { delete process.env.NO_JUST_BASH; });
 
 describe("run_shell_command — 시스템 셸 폴백 (just-bash 없음)", () => {
   it("echo 명령 실행 → stdout 반환", async () => {

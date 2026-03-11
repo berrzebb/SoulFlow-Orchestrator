@@ -71,7 +71,8 @@ describe("PhaseWorkflowStore — row_to_state JSON parse 실패 (L90)", () => {
     const ws = await mkdtemp(join(tmpdir(), "pwf-cov3-"));
     try {
       const store = new PhaseWorkflowStore(ws);
-      // row_to_state는 private이므로 직접 접근
+      // ensure_initialized()는 비동기로 시작 — rm 전에 완료 대기 (unhandled rejection 방지)
+      await (store as any).initialized.catch(() => {});
       const result = (store as any).row_to_state({ payload_json: "invalid{json" });
       expect(result).toBeNull();
     } finally {
@@ -83,6 +84,7 @@ describe("PhaseWorkflowStore — row_to_state JSON parse 실패 (L90)", () => {
     const ws = await mkdtemp(join(tmpdir(), "pwf-cov4-"));
     try {
       const store = new PhaseWorkflowStore(ws);
+      await (store as any).initialized.catch(() => {});
       const result = (store as any).row_to_state(null);
       expect(result).toBeNull();
     } finally {

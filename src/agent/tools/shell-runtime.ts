@@ -42,6 +42,8 @@ function can_run_runner(candidate: JustBashRunner): boolean {
 }
 
 function find_just_bash_runner(): JustBashRunner | null {
+  // NO_JUST_BASH=1 설정 시 시스템 셸 폴백 강제 (테스트·CI 환경용)
+  if (process.env.NO_JUST_BASH) return null;
   const now = Date.now();
   if (cached_just_bash_runner && now - cached_just_bash_runner.checked_at < JUST_BASH_CACHE_TTL_MS) {
     return cached_just_bash_runner.runner;

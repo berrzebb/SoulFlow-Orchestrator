@@ -31,6 +31,12 @@ export default defineConfig({
             "tests/agent/memory-store-daily-layout.test.ts",
           ]
         : []),
+      // CI에서 실제 claude/codex CLI 바이너리 없음 — PTY 스폰 불가
+      ...(process.env.SKIP_PTY_TESTS
+        ? [
+            "tests/agent/pty/container-pool.test.ts",
+          ]
+        : []),
     ],
     testTimeout: 60_000,
     hookTimeout: 60_000,

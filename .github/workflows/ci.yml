@@ -67,6 +67,8 @@ jobs:
           NODE_OPTIONS: --max-old-space-size=2048
           SKIP_VEC_TESTS: "1"
           SKIP_RECHUNK_TESTS: "1"
+          SKIP_PTY_TESTS: "1"
+          NO_JUST_BASH: "1"
         timeout-minutes: 25
 
       - name: Upload blob report
