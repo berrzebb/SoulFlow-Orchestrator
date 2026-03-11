@@ -116,7 +116,9 @@ jobs:
   coverage:
     name: Merge Reports & Coverage
     needs: test
-    if: always() && github.event_name == 'push'
+    if: |
+      github.event_name == 'push' &&
+      (needs.test.result == 'success' || needs.test.result == 'failure')
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -143,6 +145,10 @@ jobs:
 
       - name: Merge reports & generate coverage
         run: |
+          if [ -z "$(ls .vitest-reports/*.blob 2>/dev/null)" ]; then
+            echo "⚠️ No blob reports found — skipping merge" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
           npx vitest run \
             --mergeReports=.vitest-reports \
             --coverage \
