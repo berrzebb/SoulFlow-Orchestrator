@@ -46,9 +46,9 @@ export default defineConfig({
     maxWorkers: process.env.CI ? 2 : 1,
     // CI shard 모드: blob 리포터를 숨김 디렉토리가 아닌 vitest-reports/에 출력
     // (.vitest-reports는 @actions/glob이 숨김 디렉토리로 간주해 업로드 스킵)
-    reporters: process.env.VITEST_BLOB
-      ? [["blob", { outputFile: "./vitest-reports/blob.json" }]]
-      : undefined,
+    ...(process.env.VITEST_BLOB
+      ? { reporters: [["blob", { outputFile: "./vitest-reports/blob.json" }]] as const }
+      : {}),
     coverage: {
       provider: "v8",
       include: ["src/**/*.ts"],
