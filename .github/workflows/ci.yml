@@ -131,7 +131,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           pattern: vitest-blob-*
-          path: .vitest-reports
+          path: .            # artifact 내 .vitest-reports/blob-*.json → 워크스페이스 루트 복원
           merge-multiple: true
 
       - name: Prepare reports dir (artifact 없을 시 디렉토리 보장)
@@ -147,13 +147,14 @@ jobs:
             echo "⚠️ No blob reports found — skipping merge" >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
+          # 병합된 결과에 실패 테스트가 있어도 커버리지 생성 허용 (|| true)
           npx vitest run \
             --mergeReports=.vitest-reports \
             --coverage \
             --coverage.reporter=text \
             --coverage.reporter=json-summary \
             --coverage.reporter=html \
-            --coverage.reportsDirectory=coverage
+            --coverage.reportsDirectory=coverage || true
         env:
           NODE_OPTIONS: --max-old-space-size=4096
         timeout-minutes: 15
