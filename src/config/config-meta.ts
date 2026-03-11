@@ -198,6 +198,7 @@ export const CONFIG_FIELDS: ConfigFieldMeta[] = [
   { path: "ops.healthLogEnabled", label: "Health Log Enabled", section: "ops", type: "boolean", env_key: "", default_value: false, sensitive: false, restart_required: false, description: "Emit periodic health log entries" },
   { path: "ops.healthLogOnChange", label: "Health Log On Change", section: "ops", type: "boolean", env_key: "", default_value: true, sensitive: false, restart_required: false, description: "Only log health when state changes" },
   { path: "ops.bridgePumpEnabled", label: "Bridge Pump Enabled", section: "ops", type: "boolean", env_key: "", default_value: false, sensitive: false, restart_required: false, description: "Enable background inbound message polling bridge" },
+  { path: "ops.sessionMaxEntries", label: "Session Max Entries", section: "ops", type: "number", env_key: "OPS_SESSION_MAX_ENTRIES", default_value: 0, sensitive: false, restart_required: false, description: "Max session store entries. Oldest sessions are pruned when exceeded (0 = disabled)." },
 ];
 
 /** 섹션별 필드 그룹핑 */

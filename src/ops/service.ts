@@ -10,18 +10,20 @@ export class OpsRuntimeService implements ServiceLike {
   private readonly health_log_enabled: boolean;
   private readonly health_log_on_change: boolean;
   private readonly bridge_pump_enabled: boolean;
+  private readonly session_max_entries: number;
   private last_health_signature = "";
   private readonly status_state: OpsRuntimeStatus = {
     running: false,
     startup_logged: false,
   };
 
-  constructor(deps: OpsRuntimeDeps, ops_config?: { healthLogEnabled?: boolean; healthLogOnChange?: boolean; bridgePumpEnabled?: boolean }) {
+  constructor(deps: OpsRuntimeDeps, ops_config?: { healthLogEnabled?: boolean; healthLogOnChange?: boolean; bridgePumpEnabled?: boolean; sessionMaxEntries?: number }) {
     this.deps = deps;
     this.logger = deps.logger ?? null;
     this.health_log_enabled = ops_config?.healthLogEnabled ?? false;
     this.health_log_on_change = ops_config?.healthLogOnChange ?? true;
     this.bridge_pump_enabled = ops_config?.bridgePumpEnabled ?? false;
+    this.session_max_entries = ops_config?.sessionMaxEntries ?? 0;
   }
 
   async start(): Promise<void> {
@@ -139,6 +141,14 @@ export class OpsRuntimeService implements ServiceLike {
         if (removed > 0) this.logger?.info(`session prune removed=${removed}`);
       } catch (error) {
         this.logger?.error(`session prune failed: ${error_message(error)}`);
+      }
+    }
+    if (this.session_max_entries > 0 && this.deps.session_store?.prune_excess) {
+      try {
+        const removed = await this.deps.session_store.prune_excess(this.session_max_entries);
+        if (removed > 0) this.logger?.info(`session excess prune removed=${removed} max=${this.session_max_entries}`);
+      } catch (error) {
+        this.logger?.error(`session excess prune failed: ${error_message(error)}`);
       }
     }
     if (this.deps.dlq?.prune_older_than) {

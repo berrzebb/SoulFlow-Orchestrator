@@ -192,6 +192,8 @@ const OpsSchema = z.object({
   healthLogEnabled: z.boolean(),
   healthLogOnChange: z.boolean(),
   bridgePumpEnabled: z.boolean(),
+  /** 세션 스토어 최대 항목 수. 초과 시 가장 오래된 세션부터 삭제. 0 = 비활성. */
+  sessionMaxEntries: z.number().min(0).default(0),
 });
 
 export const AppConfigSchema = z.object({
@@ -340,6 +342,7 @@ export function get_config_defaults(): AppConfig {
       healthLogEnabled: false,
       healthLogOnChange: true,
       bridgePumpEnabled: false,
+      sessionMaxEntries: 0,
     },
   });
 }

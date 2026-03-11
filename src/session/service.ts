@@ -14,6 +14,8 @@ export interface SessionStoreLike {
   append_message(key: string, message: SessionMessage): Promise<void>;
   save(session: Session): Promise<void>;
   prune_expired?(max_age_ms: number): Promise<number>;
+  /** 총 항목 수 상한. max_entries 초과 시 가장 오래된 세션부터 삭제. 0 = 비활성. */
+  prune_excess?(max_entries: number): Promise<number>;
   delete?(key: string): Promise<boolean>;
   list_by_prefix?(prefix: string, limit?: number): Promise<SessionListEntry[]>;
 }
@@ -358,6 +360,28 @@ export class SessionStore implements SessionStoreLike {
     }
     for (const [key, lane] of this.write_lanes) {
       if (lane.is_idle) this.write_lanes.delete(key);
+    }
+    return count;
+  }
+
+  async prune_excess(max_entries: number): Promise<number> {
+    if (max_entries <= 0) return 0;
+    await this.initialized;
+    const deleted = this.with_sqlite((db) => {
+      const r = db.prepare(
+        "DELETE FROM sessions WHERE key NOT IN (SELECT key FROM sessions ORDER BY updated_at DESC LIMIT ?)",
+      ).run(max_entries);
+      return Number(r.changes || 0);
+    });
+    const count = deleted ?? 0;
+    if (count > 0) {
+      // 캐시에서도 삭제된 항목 제거
+      const remaining = new Set(
+        (this.with_sqlite((db) => db.prepare("SELECT key FROM sessions").all() as Array<{ key: string }>) ?? []).map((r) => r.key),
+      );
+      for (const key of this.cache.keys()) {
+        if (!remaining.has(key)) this.cache.delete(key);
+      }
     }
     return count;
   }
