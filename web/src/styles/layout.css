@@ -2504,8 +2504,11 @@ a:focus-visible > .stat-card {
 /* ===== Agent Card (stat-card 기반 확장) ===== */
 
 .agent-card--builtin {
-  border-color: color-mix(in srgb, var(--accent) 20%, var(--line));
+  border-left: 3px solid var(--accent);
   background: color-mix(in srgb, var(--accent) 3%, var(--panel));
+}
+.agent-card--builtin .agent-card__icon {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
 .agent-card__top {
@@ -2554,6 +2557,8 @@ a:focus-visible > .stat-card {
   flex-direction: column;
   gap: var(--sp-2);
 }
+
+.agent-card__badges { display: flex; gap: var(--sp-1); flex-wrap: wrap; }
 
 .agent-card__actions {
   display: flex;

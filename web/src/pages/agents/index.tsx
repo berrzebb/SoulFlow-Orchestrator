@@ -93,7 +93,7 @@ export default function AgentsPage() {
           {builtins.length > 0 && (
             <section className="provider-section">
               <h2 className="provider-section__title">{t("agents.builtin_section")} ({builtins.length})</h2>
-              <div className="stat-grid stat-grid--wide">
+              <div className="stat-grid stat-grid--wide fade-in">
                 {builtins.map((def) => (
                   <AgentCard
                     key={def.id}
@@ -112,7 +112,7 @@ export default function AgentsPage() {
           {customs.length > 0 && (
             <section className="provider-section">
               <h2 className="provider-section__title">{t("agents.custom_section")} ({customs.length})</h2>
-              <div className="stat-grid stat-grid--wide">
+              <div className="stat-grid stat-grid--wide fade-in">
                 {customs.map((def) => (
                   <AgentCard
                     key={def.id}

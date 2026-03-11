@@ -19,7 +19,7 @@ export function AgentCard({ definition, onFork, onEdit, onDelete, onUse }: Agent
         <div className="agent-card__icon" aria-hidden="true">{icon || "🤖"}</div>
         <div className="agent-card__header">
           <span className="stat-card__value stat-card__value--md">{name}</span>
-          <div className="stat-card__tags">
+          <div className="agent-card__badges">
             {is_builtin && (
               <span className="badge badge--info" title={t("agents.builtin_tooltip")}>
                 {t("agents.builtin")}
@@ -37,7 +37,7 @@ export function AgentCard({ definition, onFork, onEdit, onDelete, onUse }: Agent
 
       <div className="agent-card__footer">
         {use_count > 0 && (
-          <span className="stat-card__label">{t("agents.used_count", { count: String(use_count) })}</span>
+          <span className="stat-card__extra">{t("agents.used_count", { count: String(use_count) })}</span>
         )}
         <div className="agent-card__actions">
           <button
