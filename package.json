@@ -6,6 +6,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "vitest run --exclude 'tests/e2e/**'",
+    "test:changed": "vitest run --changed HEAD",
     "test:coverage": "vitest run --coverage --exclude 'tests/e2e/**'",
     "test:e2e": "vitest run tests/e2e/",
     "lint": "eslint src/",

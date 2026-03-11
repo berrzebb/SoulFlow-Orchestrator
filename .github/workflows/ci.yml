@@ -31,10 +31,42 @@ jobs:
       - name: Lint
         run: npm run lint
 
-  # ── 테스트 (Matrix Sharding) ──────────────────────────────────────────────
+  # ── PR 증분 테스트 (변경 파일 관련 테스트만) ──────────────────────────────
+  test-pr:
+    name: Test Changed (PR)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # --changed diff에 전체 히스토리 필요
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Run changed tests
+        run: |
+          npx vitest run \
+            --changed origin/${{ github.base_ref }} \
+            --reporter=default
+        env:
+          NODE_OPTIONS: --max-old-space-size=2048
+          SKIP_VEC_TESTS: "1"
+          SKIP_RECHUNK_TESTS: "1"
+          SKIP_PTY_TESTS: "1"
+          NO_JUST_BASH: "1"
+        timeout-minutes: 15
+
+  # ── 전체 테스트 (Matrix Sharding) — main push 전용 ────────────────────────
   test:
     name: Test (shard ${{ matrix.shard }}/${{ matrix.total }})
     runs-on: ubuntu-latest
+    if: github.event_name == 'push'
     strategy:
       fail-fast: false
       matrix:
@@ -80,11 +112,11 @@ jobs:
           retention-days: 1
           if-no-files-found: ignore
 
-  # ── Coverage 병합 + 배지 ──────────────────────────────────────────────────
+  # ── Coverage 병합 + 배지 — main push 전용 ────────────────────────────────
   coverage:
     name: Merge Reports & Coverage
     needs: test
-    if: always()
+    if: always() && github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
       contents: write
