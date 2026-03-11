@@ -73,6 +73,19 @@ export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, Math.max(0, ms)));
 }
 
+/** 두 객체를 재귀적으로 병합. b가 a를 덮어씀. 배열은 교체(병합 안 함). */
+export function deep_merge(a: Record<string, unknown>, b: Record<string, unknown>): Record<string, unknown> {
+  const result = { ...a };
+  for (const [key, val] of Object.entries(b)) {
+    if (val && typeof val === "object" && !Array.isArray(val) && result[key] && typeof result[key] === "object" && !Array.isArray(result[key])) {
+      result[key] = deep_merge(result[key] as Record<string, unknown>, val as Record<string, unknown>);
+    } else {
+      result[key] = val;
+    }
+  }
+  return result;
+}
+
 /** unknown 값을 Record<string, unknown>으로 안전 변환. 배열·null·프리미티브 → null. */
 export function ensure_json_object(v: unknown): Record<string, unknown> | null {
   if (!v || typeof v !== "object" || Array.isArray(v)) return null;
@@ -128,6 +141,24 @@ export function swallow(p: void | Promise<unknown>): void {
 export function make_abort_signal(timeout_ms: number, external?: AbortSignal): AbortSignal {
   const timeout = AbortSignal.timeout(timeout_ms);
   return external ? AbortSignal.any([external, timeout]) : timeout;
+}
+
+/** value를 [min, max] 범위로 클램핑. */
+export function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+/** 바이트 수를 사람이 읽기 쉬운 단위로 변환. */
+export function format_bytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1_048_576) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1_073_741_824) return `${(bytes / 1_048_576).toFixed(1)} MB`;
+  return `${(bytes / 1_073_741_824).toFixed(1)} GB`;
+}
+
+/** 타임스탬프 기반 단조증가 런 ID 생성. `prefix_ms_rand` 형식. */
+export function make_run_id(prefix: string): string {
+  return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
 

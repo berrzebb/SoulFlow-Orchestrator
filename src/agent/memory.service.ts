@@ -788,12 +788,4 @@ function chunk_age_days(kind: string, day: string): number | null {
   return Math.max(0, Math.floor((Date.now() - d.getTime()) / (1000 * 60 * 60 * 24)));
 }
 
-/** 간단한 content hash (FNV-1a 32bit). crypto 의존 없이 빠른 변경 감지. */
-function _simple_hash(text: string): string {
-  let h = 0x811c9dc5;
-  for (let i = 0; i < text.length; i++) {
-    h ^= text.charCodeAt(i);
-    h = Math.imul(h, 0x01000193);
-  }
-  return (h >>> 0).toString(16).padStart(8, "0");
-}
+

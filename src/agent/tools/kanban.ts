@@ -3,6 +3,7 @@
 import { Tool } from "./base.js";
 import type { JsonSchema, ToolExecutionContext } from "./types.js";
 import type { KanbanStoreLike, RelationType, ScopeType, Priority, KanbanRule } from "../../services/kanban-store.js";
+import { error_message } from "../../utils/common.js";
 import type { KanbanRuleExecutor } from "../../services/kanban-rule-executor.js";
 
 const ACTIONS = [
@@ -139,7 +140,7 @@ export class KanbanTool extends Tool {
         default: return `Error: unknown action "${action}". Use one of: ${ACTIONS.join(", ")}`;
       }
     } catch (e) {
-      return `Error: ${e instanceof Error ? e.message : String(e)}`;
+      return `Error: ${error_message(e)}`;
     }
   }
 

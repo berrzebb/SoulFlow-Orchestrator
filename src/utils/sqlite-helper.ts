@@ -1,6 +1,7 @@
 /** 공유 SQLite 유틸리티 — open-per-call 패턴. */
 
 import Database from "better-sqlite3";
+import { error_message } from "./common.js";
 
 type DatabaseSync = Database.Database;
 export type { DatabaseSync };
@@ -24,7 +25,7 @@ export function with_sqlite<T>(
     }
     return run(db);
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
+    const msg = error_message(err);
     if (process.env.NODE_ENV !== "test") {
       process.stderr.write(`[sqlite] error at ${db_path}: ${msg}\n`);
     }

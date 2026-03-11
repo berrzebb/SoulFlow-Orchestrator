@@ -2,6 +2,7 @@
 
 import { parentPort } from "node:worker_threads";
 import Database from "better-sqlite3";
+import { error_message } from "../utils/common.js";
 import * as sqliteVec from "sqlite-vec";
 import { chunk_markdown } from "./memory-chunker.js";
 import type { EmbedWorkerConfig } from "./memory.types.js";
@@ -63,7 +64,7 @@ parentPort!.on("message", async (job: RechunkJob) => {
       await embed_new_chunks(sqlite_path, upserted_chunk_ids, embed);
     }
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
+    const msg = error_message(err);
     process.stderr.write(`[rechunk-worker] job failed for ${doc_key}: ${msg}\n`);
   } finally {
     try { db?.close(); } catch { /* no-op */ }

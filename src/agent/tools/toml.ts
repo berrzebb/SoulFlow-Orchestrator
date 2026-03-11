@@ -1,5 +1,6 @@
 /** TOML 도구 — TOML 파싱/생성/검증/쿼리. */
 
+import { deep_merge } from "../../utils/common.js";
 import { Tool } from "./base.js";
 import type { JsonSchema } from "./types.js";
 
@@ -63,7 +64,7 @@ export class TomlTool extends Tool {
         try {
           const a = this.parse_toml(input);
           const b = this.parse_toml(String(params.second || ""));
-          const merged = this.deep_merge(a, b);
+          const merged = deep_merge(a, b);
           return JSON.stringify({ result: merged });
         } catch (e) {
           return JSON.stringify({ error: (e as Error).message });
@@ -180,15 +181,4 @@ export class TomlTool extends Tool {
     return current;
   }
 
-  private deep_merge(a: Record<string, unknown>, b: Record<string, unknown>): Record<string, unknown> {
-    const result = { ...a };
-    for (const [key, value] of Object.entries(b)) {
-      if (typeof value === "object" && value !== null && !Array.isArray(value) && typeof result[key] === "object" && result[key] !== null) {
-        result[key] = this.deep_merge(result[key] as Record<string, unknown>, value as Record<string, unknown>);
-      } else {
-        result[key] = value;
-      }
-    }
-    return result;
-  }
 }

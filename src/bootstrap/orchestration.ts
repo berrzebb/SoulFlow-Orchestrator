@@ -1,7 +1,7 @@
 /** Orchestration bundle: OrchestrationService, CronService, oauth_fetch, create_task. */
 
 import { join } from "node:path";
-import { error_message, now_iso } from "../utils/common.js";
+import { error_message, now_iso, make_run_id } from "../utils/common.js";
 import type { AppConfig } from "../config/schema.js";
 import type { ProviderCapabilities } from "../providers/executor.js";
 import type { MessageBusRuntime } from "../bus/types.js";
@@ -161,7 +161,7 @@ export async function create_orchestration_bundle(deps: OrchestrationBundleDeps)
   // create_task: lazy thunk — 클로저 내부에서 orchestration을 참조하지만, 호출 시점에만 resolve됨
   const create_task_fn = create_task_service(() => ({
     execute: async (opts) => {
-      const run_id = `task_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      const run_id = make_run_id("task");
       const result = await orchestration.execute({
         message: {
           id: run_id,
@@ -258,7 +258,7 @@ export async function create_orchestration_bundle(deps: OrchestrationBundleDeps)
         const template = load_workflow_template(workspace, slug);
         if (!template) return { ok: false, error: `template not found: ${slug}` };
         const substituted = substitute_variables(template, { ...template.variables, channel });
-        const run_id = `wf-cron_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+        const run_id = make_run_id("wf-cron");
         const result = await orchestration.execute({
           message: { id: run_id, provider: channel, channel, sender_id: "cron", chat_id, content: substituted.objective || substituted.title, at: now_iso() },
           alias: app_config.channel.defaultAlias,

@@ -4,6 +4,7 @@ import { readFile, writeFile, stat } from "node:fs/promises";
 import { resolve, extname, basename } from "node:path";
 import { Tool } from "./base.js";
 import type { JsonSchema } from "./types.js";
+import { format_bytes } from "../../utils/common.js";
 
 const EXT_MIME: Record<string, string> = {
   ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".gif": "image/gif",
@@ -26,12 +27,6 @@ function media_category(mime: string): string {
   return "unknown";
 }
 
-function format_size(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
-  if (bytes < 1073741824) return `${(bytes / 1048576).toFixed(1)} MB`;
-  return `${(bytes / 1073741824).toFixed(1)} GB`;
-}
 
 export class MediaTool extends Tool {
   readonly name = "media";
@@ -75,7 +70,7 @@ export class MediaTool extends Tool {
         return JSON.stringify({
           name: basename(abs), ext: extname(abs), mime,
           category: media_category(mime),
-          size_bytes: info.size, size_human: format_size(info.size),
+          size_bytes: info.size, size_human: format_bytes(info.size),
           created: info.birthtime.toISOString(), modified: info.mtime.toISOString(),
         });
       }

@@ -1,7 +1,7 @@
 /** create_task 서비스 팩토리. 워크플로우 노드에서 하위 태스크 생성 지원. */
 
 import { create_logger } from "../logger.js";
-import { error_message } from "../utils/common.js";
+import { error_message, make_run_id } from "../utils/common.js";
 
 const log = create_logger("create-task");
 
@@ -28,7 +28,7 @@ export function create_task_service(get_deps: () => CreateTaskDeps) {
     initial_memory?: Record<string, unknown>;
   }): Promise<{ task_id: string; status: string; result?: unknown; error?: string }> => {
     const deps = get_deps();
-    const task_id = `task_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const task_id = make_run_id("task");
 
     log.info("create_task", { task_id, title: opts.title });
 

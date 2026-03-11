@@ -12,6 +12,7 @@ import { join } from "node:path";
 import { randomBytes } from "node:crypto";
 import { createInterface } from "node:readline";
 import type { Logger } from "../../logger.js";
+import { error_message } from "../../utils/common.js";
 import type { McpClientManager } from "../../mcp/client-manager.js";
 import type { McpToolEntry } from "../../mcp/types.js";
 
@@ -170,7 +171,7 @@ export class ToolBridgeServer {
         const result = await this.mcp.call_tool(name, args);
         return { jsonrpc: "2.0", id, result: { content: result.content, isError: result.is_error } };
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
+        const msg = error_message(err);
         return { jsonrpc: "2.0", id, error: { code: -32000, message: msg } };
       }
     }

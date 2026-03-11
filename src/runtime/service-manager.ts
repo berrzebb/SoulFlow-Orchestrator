@@ -1,5 +1,6 @@
 import type { ServiceLike } from "./service.types.js";
 import type { Logger } from "../logger.js";
+import { error_message } from "../utils/common.js";
 
 type ServiceEntry = {
   service: ServiceLike;
@@ -27,7 +28,7 @@ export class ServiceManager {
         await entry.service.start();
         this.log.info(`service started: ${entry.service.name}`);
       } catch (error) {
-        const msg = error instanceof Error ? error.message : String(error);
+        const msg = error_message(error);
         if (entry.required) {
           this.log.error(`required service failed to start: ${entry.service.name}`, { error: msg });
           throw error;
@@ -46,7 +47,7 @@ export class ServiceManager {
         this.log.info(`service stopped: ${entry.service.name}`);
       } catch (error) {
         this.log.warn(`service stop error: ${entry.service.name}`, {
-          error: error instanceof Error ? error.message : String(error),
+          error: error_message(error),
         });
       }
     }

@@ -2,6 +2,7 @@
 
 import { Tool } from "./base.js";
 import type { JsonSchema } from "./types.js";
+import { error_message } from "../../utils/common.js";
 
 const MAX_CODE_LENGTH = 10_000;
 
@@ -45,7 +46,7 @@ export class EvalTool extends Tool {
       const result = fn(...values);
       return this.format_result(result);
     } catch (e) {
-      return `Error: ${e instanceof Error ? e.message : String(e)}`;
+      return `Error: ${error_message(e)}`;
     }
   }
 

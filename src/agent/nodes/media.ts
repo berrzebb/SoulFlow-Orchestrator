@@ -6,7 +6,7 @@ import type { NodeHandler } from "../node-registry.js";
 import type { MediaNodeDefinition, OrcheNodeDefinition } from "../workflow-node.types.js";
 import type { OrcheNodeExecutorContext, OrcheNodeExecuteResult, OrcheNodeTestResult } from "../orche-node-executor.js";
 import { resolve_templates } from "../orche-node-executor.js";
-import { error_message } from "../../utils/common.js";
+import { error_message, format_bytes } from "../../utils/common.js";
 
 /** 확장자 → MIME 매핑 (자주 사용되는 미디어 타입). */
 const EXT_MIME: Record<string, string> = {
@@ -94,7 +94,7 @@ export const media_handler: NodeHandler = {
             mime,
             category: media_category(mime),
             size_bytes: info.size,
-            size_human: format_size(info.size),
+            size_human: format_bytes(info.size),
             created: info.birthtime.toISOString(),
             modified: info.mtime.toISOString(),
           };
@@ -138,9 +138,3 @@ export const media_handler: NodeHandler = {
   },
 };
 
-function format_size(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
-}

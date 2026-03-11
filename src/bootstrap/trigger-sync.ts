@@ -1,6 +1,6 @@
 /** Trigger sync: 워크플로우 trigger_nodes → 런타임 서비스 동기화 (cron/webhook/channel_message/kanban). */
 
-import { error_message, now_iso } from "../utils/common.js";
+import { error_message, now_iso, make_run_id } from "../utils/common.js";
 import type { AppConfig } from "../config/schema.js";
 import type { MessageBusRuntime } from "../bus/types.js";
 import type { OrchestrationService } from "../orchestration/service.js";
@@ -41,7 +41,7 @@ export async function run_trigger_sync(deps: TriggerSyncDeps): Promise<void> {
         const template = load_workflow_template(workspace, slug);
         if (!template) return { ok: false, error: `template not found: ${slug}` };
         const substituted = substitute_variables(template, { ...template.variables, channel });
-        const run_id = `wf-trigger_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+        const run_id = make_run_id("wf-trigger");
         const content = trigger_data
           ? `${substituted.objective || substituted.title}\n\n[trigger data]\n${JSON.stringify(trigger_data, null, 2)}`
           : substituted.objective || substituted.title;

@@ -2,6 +2,7 @@
 
 import { Tool } from "./base.js";
 import type { JsonSchema } from "./types.js";
+import { error_message } from "../../utils/common.js";
 
 const MAX_ROWS = 50_000;
 
@@ -84,7 +85,7 @@ export class TableTool extends Tool {
       const fn = new Function("row", `"use strict"; return (${condition});`);
       return JSON.stringify(data.filter((row) => fn(row)));
     } catch (e) {
-      return `Error: invalid condition — ${e instanceof Error ? e.message : String(e)}`;
+      return `Error: invalid condition — ${error_message(e)}`;
     }
   }
 

@@ -1,5 +1,6 @@
 /** YAML 도구 — YAML 파싱/생성/머지/검증. 순수 JS 경량 구현. */
 
+import { deep_merge } from "../../utils/common.js";
 import { Tool } from "./base.js";
 import type { JsonSchema } from "./types.js";
 
@@ -59,7 +60,7 @@ export class YamlTool extends Tool {
       if (typeof a !== "object" || typeof b !== "object" || Array.isArray(a) || Array.isArray(b)) {
         return "Error: both inputs must be YAML objects for merge";
       }
-      const merged = this.deep_merge(a as Record<string, unknown>, b as Record<string, unknown>);
+      const merged = deep_merge(a as Record<string, unknown>, b as Record<string, unknown>);
       return this.to_yaml(merged, 0, 2);
     } catch (err) {
       return `Error: ${(err as Error).message}`;
@@ -251,15 +252,4 @@ export class YamlTool extends Tool {
     return `${pad}${String(val)}`;
   }
 
-  private deep_merge(a: Record<string, unknown>, b: Record<string, unknown>): Record<string, unknown> {
-    const result = { ...a };
-    for (const [key, val] of Object.entries(b)) {
-      if (val && typeof val === "object" && !Array.isArray(val) && result[key] && typeof result[key] === "object" && !Array.isArray(result[key])) {
-        result[key] = this.deep_merge(result[key] as Record<string, unknown>, val as Record<string, unknown>);
-      } else {
-        result[key] = val;
-      }
-    }
-    return result;
-  }
 }
