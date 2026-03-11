@@ -7,6 +7,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import type { Logger } from "../logger.js";
 import { error_message } from "../utils/common.js";
+import { MCP_STARTUP_TIMEOUT_MS } from "../utils/timeouts.js";
 import type { ServiceLike } from "../runtime/service.types.js";
 import type {
   McpServerConfig,
@@ -15,7 +16,7 @@ import type {
   McpServerStatus,
 } from "./types.js";
 
-const DEFAULT_STARTUP_TIMEOUT_MS = 15_000;
+const DEFAULT_STARTUP_TIMEOUT_MS = MCP_STARTUP_TIMEOUT_MS;
 const CLIENT_NAME = "soulflow-orchestrator";
 const CLIENT_VERSION = "0.1.0";
 

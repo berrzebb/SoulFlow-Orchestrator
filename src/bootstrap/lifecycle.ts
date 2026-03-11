@@ -1,11 +1,9 @@
 /** Graceful shutdown lifecycle. */
 
 import { error_message } from "../utils/common.js";
+import { SHUTDOWN_TIMEOUT_MS } from "../utils/timeouts.js";
 import type { RuntimeApp } from "../main.js";
 import type { Logger } from "../logger.js";
-
-/** 에이전트 LLM 응답 대기 시간을 고려해 넉넉히 설정. */
-const SHUTDOWN_TIMEOUT_MS = 30_000;
 
 export function register_shutdown_handlers(
   app: RuntimeApp,

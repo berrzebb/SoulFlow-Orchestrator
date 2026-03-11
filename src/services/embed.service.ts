@@ -1,11 +1,12 @@
 /** OpenAI 호환 embedding 서비스 (OpenRouter, Ollama, vLLM 등). */
 
 import { create_logger } from "../logger.js";
+import { HTTP_FETCH_TIMEOUT_MS } from "../utils/timeouts.js";
 
 const log = create_logger("embed-service");
 
 const DEFAULT_MODEL = "openai/text-embedding-3-small";
-const DEFAULT_TIMEOUT_MS = 30_000;
+const DEFAULT_TIMEOUT_MS = HTTP_FETCH_TIMEOUT_MS;
 const MAX_BATCH_SIZE = 96;
 
 export interface EmbedServiceDeps {

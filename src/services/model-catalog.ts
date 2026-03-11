@@ -1,10 +1,11 @@
 /** 프로바이더별 모델 카탈로그 동적 조회 서비스. */
 
 import { create_logger } from "../logger.js";
+import { HTTP_FETCH_SHORT_TIMEOUT_MS } from "../utils/timeouts.js";
 
 const log = create_logger("model-catalog");
 
-const TIMEOUT_MS = 15_000;
+const TIMEOUT_MS = HTTP_FETCH_SHORT_TIMEOUT_MS;
 const CACHE_TTL_MS = 5 * 60_000;
 
 export interface ModelInfo {

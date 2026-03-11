@@ -11,6 +11,7 @@ import type {
   BackendCapabilities,
 } from "../agent.types.js";
 import { now_iso, error_message, short_id, swallow } from "../../utils/common.js";
+import { AGENT_PER_TURN_TIMEOUT_MS } from "../../utils/timeouts.js";
 import { sandbox_to_codex_policy, effort_to_codex } from "./convert.js";
 import { fire } from "./tool-loop-helpers.js";
 import { sandbox_from_preset, type LlmUsage } from "../../providers/types.js";
@@ -174,7 +175,7 @@ export class CodexAppServerAgent implements AgentBackend {
       command,
       args: ["app-server", "--listen", "stdio://"],
       cwd: this.config.cwd,
-      request_timeout_ms: this.config.request_timeout_ms || 600_000,
+      request_timeout_ms: this.config.request_timeout_ms || AGENT_PER_TURN_TIMEOUT_MS,
     });
 
     let stderr_buf = "";
@@ -256,7 +257,7 @@ export class CodexAppServerAgent implements AgentBackend {
     }
 
     return new Promise((resolve, reject) => {
-      const timeout_ms = this.config.request_timeout_ms || 600_000;
+      const timeout_ms = this.config.request_timeout_ms || AGENT_PER_TURN_TIMEOUT_MS;
       const timeout = setTimeout(() => {
         cleanup();
         const phase = turn_id ? "turn_execution" : "turn_start";

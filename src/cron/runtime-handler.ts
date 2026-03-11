@@ -14,13 +14,13 @@ import { redact_sensitive_text } from "../security/sensitive.js";
 import type { SecretVaultService } from "../security/secret-vault.js";
 import type { CronJob, CronOnJob } from "./types.js";
 import type { MessageProvider } from "../bus/types.js";
+import { AGENT_PER_TURN_TIMEOUT_MS } from "../utils/timeouts.js";
 
 type CronTarget = { provider: MessageProvider; chat_id: string };
 
 const CRON_BLOCKED_TOOL_NAMES = new Set(["spawn", "cron"]);
 
-/** 턴당 최대 허용 시간 (ms). 기본값 600s. */
-const DEFAULT_PER_TURN_TIMEOUT_MS = 600_000;
+const DEFAULT_PER_TURN_TIMEOUT_MS = AGENT_PER_TURN_TIMEOUT_MS;
 
 export type CronConfig = {
   agent_loop_max_turns: number;

@@ -1,11 +1,12 @@
 import { error_message, make_abort_signal } from "../utils/common.js";
+import { LLM_REQUEST_TIMEOUT_MS } from "../utils/timeouts.js";
 import { BaseLlmProvider } from "./base.js";
 import { create_logger } from "../logger.js";
 import { LlmResponse, parse_openai_response, sanitize_messages_for_api, type ChatOptions } from "./types.js";
 
 const log = create_logger("provider:openrouter");
 
-const DEFAULT_TIMEOUT_MS = 120_000;
+const DEFAULT_TIMEOUT_MS = LLM_REQUEST_TIMEOUT_MS;
 
 export class OpenRouterProvider extends BaseLlmProvider {
   private readonly http_referer: string;

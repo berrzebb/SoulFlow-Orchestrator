@@ -1,6 +1,8 @@
 /** 채널 HTTP 공통 유틸 — fetch timeout·JSON 파싱 중복 제거. */
 
-export const CHANNEL_FETCH_TIMEOUT_MS = 30_000;
+import { HTTP_FETCH_TIMEOUT_MS } from "../utils/timeouts.js";
+
+export const CHANNEL_FETCH_TIMEOUT_MS = HTTP_FETCH_TIMEOUT_MS;
 
 /**
  * fetch + AbortSignal.timeout 자동 주입 래퍼.

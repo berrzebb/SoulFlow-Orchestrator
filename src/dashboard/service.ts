@@ -15,7 +15,8 @@ export type {
   DashboardOptions, RecentMessage, ChatMediaItem, ChatSessionMessage, ChatSession,
 } from "./service.types.js";
 import { MAX_CHAT_SESSIONS, MAX_MESSAGES_PER_SESSION } from "./service.types.js";
-import type { DashboardOptions, ChatSession, ChatSessionMessage } from "./service.types.js";
+import type { DashboardOptions, ChatSession, ChatSessionMessage, ChatMediaItem } from "./service.types.js";
+import type { SessionStoreLike } from "../session/index.js";
 import { set_no_cache } from "./route-context.js";
 import { SystemMetricsCollector } from "./system-metrics.js";
 import type { RouteContext, RouteHandler } from "./route-context.js";

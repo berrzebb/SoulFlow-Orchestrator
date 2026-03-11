@@ -8,6 +8,7 @@ import type { SecretVaultService } from "../security/secret-vault.js";
 import { CircuitBreaker, type CircuitBreakerOptions } from "./circuit-breaker.js";
 import { ProviderHealthScorer, type HealthScorerOptions } from "./health-scorer.js";
 import { sleep } from "../utils/common.js";
+import { LLM_CLI_TIMEOUT_MS } from "../utils/timeouts.js";
 
 /** 일시적 오류 재시도 설정. */
 const MAX_TRANSIENT_RETRIES = 2;
@@ -87,7 +88,7 @@ export class ProviderRegistry {
           default_model: "chatgpt-cli-headless",
           command: cli.chatgpt?.command || "codex",
           args: cli.chatgpt?.args || "exec --json --sandbox workspace-write --skip-git-repo-check -",
-          timeout_ms: cli.chatgpt?.timeout_ms || 180000,
+          timeout_ms: cli.chatgpt?.timeout_ms || LLM_CLI_TIMEOUT_MS,
           permission_config: cli.chatgpt?.permission_config,
         }),
       );
@@ -98,7 +99,7 @@ export class ProviderRegistry {
           default_model: "claude-cli-headless",
           command: cli.claude_code?.command || "claude",
           args: cli.claude_code?.args || "-p --verbose --output-format stream-json --include-partial-messages --permission-mode dontAsk -",
-          timeout_ms: cli.claude_code?.timeout_ms || 180000,
+          timeout_ms: cli.claude_code?.timeout_ms || LLM_CLI_TIMEOUT_MS,
           permission_config: cli.claude_code?.permission_config,
         }),
       );
@@ -122,7 +123,7 @@ export class ProviderRegistry {
       default_model: "gemini-cli-headless",
       command: cli.gemini?.command || "gemini",
       args: cli.gemini?.args || "--output-format stream-json",
-      timeout_ms: cli.gemini?.timeout_ms || 180000,
+      timeout_ms: cli.gemini?.timeout_ms || LLM_CLI_TIMEOUT_MS,
       permission_config: cli.gemini?.permission_config,
     }));
 

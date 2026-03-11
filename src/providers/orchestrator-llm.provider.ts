@@ -1,4 +1,5 @@
 import { error_message, make_abort_signal } from "../utils/common.js";
+import { LLM_PER_CALL_TIMEOUT_MS } from "../utils/timeouts.js";
 import { BaseLlmProvider } from "./base.js";
 import { create_logger } from "../logger.js";
 import { LlmResponse, parse_openai_response, sanitize_messages_for_api, type ChatOptions } from "./types.js";
@@ -6,7 +7,7 @@ import { parse_tool_calls_from_text } from "../agent/tool-call-parser.js";
 
 const log = create_logger("provider:orchestrator-llm");
 
-const DEFAULT_PER_CALL_TIMEOUT_MS = 90_000;
+const DEFAULT_PER_CALL_TIMEOUT_MS = LLM_PER_CALL_TIMEOUT_MS;
 
 export class OrchestratorLlmProvider extends BaseLlmProvider {
   private readonly per_call_timeout_ms: number;
