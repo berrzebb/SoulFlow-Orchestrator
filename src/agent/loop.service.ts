@@ -9,6 +9,7 @@ import { ConsecutiveToolCallGuard, type ToolCallGuard } from "./tool-call-guard.
 const TERMINAL_TASK_STATUSES = new Set(["waiting_approval", "waiting_user_input", "failed", "cancelled", "completed"]);
 const MAX_TASK_TURNS = 500;
 const MAX_RESUME_COUNT = 3;
+const MAX_MAILBOX_SIZE = 1000;
 
 export type CascadeCancelFn = (parent_id: string) => void;
 
@@ -103,12 +104,13 @@ export class AgentLoopStore {
     return state;
   }
 
-  /** 실행 중인 루프에 외부 메시지 주입. 다음 턴에서 소비된다. */
+  /** 실행 중인 루프에 외부 메시지 주입. 다음 턴에서 소비된다. 상한 초과 시 가장 오래된 메시지를 폐기. */
   inject_message(loop_id: string, message: string): boolean {
     const loop_state = this.loops.get(loop_id);
     if (!loop_state || loop_state.status !== "running") return false;
     const queue = this.loop_mailbox.get(loop_id) || [];
     queue.push(message);
+    while (queue.length > MAX_MAILBOX_SIZE) queue.shift();
     this.loop_mailbox.set(loop_id, queue);
     return true;
   }
