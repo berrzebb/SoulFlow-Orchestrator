@@ -14,12 +14,12 @@ export function AgentCard({ definition, onFork, onEdit, onDelete, onUse }: Agent
   const { id, name, description, icon, role_skill, soul, is_builtin, use_count } = definition;
 
   return (
-    <div className={`agent-card${is_builtin ? " agent-card--builtin" : ""}`} data-testid={`agent-card-${id}`}>
+    <div className={`stat-card${is_builtin ? " agent-card--builtin" : ""}`} data-testid={`agent-card-${id}`}>
       <div className="agent-card__top">
         <div className="agent-card__icon" aria-hidden="true">{icon || "🤖"}</div>
         <div className="agent-card__header">
-          <span className="agent-card__name">{name}</span>
-          <div className="agent-card__badges">
+          <span className="stat-card__value stat-card__value--md">{name}</span>
+          <div className="stat-card__tags">
             {is_builtin && (
               <span className="badge badge--info" title={t("agents.builtin_tooltip")}>
                 {t("agents.builtin")}
@@ -33,13 +33,11 @@ export function AgentCard({ definition, onFork, onEdit, onDelete, onUse }: Agent
       </div>
 
       {soul && <p className="agent-card__soul">{soul}</p>}
-      {description && <p className="agent-card__desc">{description}</p>}
+      {description && <p className="stat-card__extra">{description}</p>}
 
       <div className="agent-card__footer">
         {use_count > 0 && (
-          <span className="agent-card__use-count">
-            {t("agents.used_count", { count: String(use_count) })}
-          </span>
+          <span className="stat-card__label">{t("agents.used_count", { count: String(use_count) })}</span>
         )}
         <div className="agent-card__actions">
           <button

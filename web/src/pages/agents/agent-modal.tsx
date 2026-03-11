@@ -155,11 +155,11 @@ export function AgentModal({ mode, onClose, onSaved }: AgentModalProps) {
       wide
     >
       {/* AI 생성 탭 */}
-      <div className="modal-tabs" role="tablist">
-        <button role="tab" aria-selected={tab === "manual"} className={`modal-tab${tab === "manual" ? " modal-tab--active" : ""}`} onClick={() => setTab("manual")}>
+      <div className="provider-tabs" role="tablist">
+        <button role="tab" aria-selected={tab === "manual"} className={`provider-tab${tab === "manual" ? " provider-tab--active" : ""}`} onClick={() => setTab("manual")}>
           {t("agents.tab_manual")}
         </button>
-        <button role="tab" aria-selected={tab === "ai"} className={`modal-tab${tab === "ai" ? " modal-tab--active" : ""}`} onClick={() => setTab("ai")}>
+        <button role="tab" aria-selected={tab === "ai"} className={`provider-tab${tab === "ai" ? " provider-tab--active" : ""}`} onClick={() => setTab("ai")}>
           ✨ {t("agents.tab_ai")}
         </button>
       </div>

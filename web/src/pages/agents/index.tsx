@@ -91,9 +91,9 @@ export default function AgentsPage() {
         <>
           {/* 빌트인 에이전트 */}
           {builtins.length > 0 && (
-            <section className="agent-section">
-              <h2 className="agent-section__title">{t("agents.builtin_section")} ({builtins.length})</h2>
-              <div className="agent-grid">
+            <section className="provider-section">
+              <h2 className="provider-section__title">{t("agents.builtin_section")} ({builtins.length})</h2>
+              <div className="stat-grid stat-grid--wide">
                 {builtins.map((def) => (
                   <AgentCard
                     key={def.id}
@@ -110,9 +110,9 @@ export default function AgentsPage() {
 
           {/* 나의 에이전트 */}
           {customs.length > 0 && (
-            <section className="agent-section">
-              <h2 className="agent-section__title">{t("agents.custom_section")} ({customs.length})</h2>
-              <div className="agent-grid">
+            <section className="provider-section">
+              <h2 className="provider-section__title">{t("agents.custom_section")} ({customs.length})</h2>
+              <div className="stat-grid stat-grid--wide">
                 {customs.map((def) => (
                   <AgentCard
                     key={def.id}
