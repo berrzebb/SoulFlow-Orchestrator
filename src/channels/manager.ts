@@ -495,6 +495,13 @@ export class ChannelManager implements ServiceLike {
       const sender = String(message.sender_id || "").toLowerCase();
       if (!sender || sender.startsWith("subagent:") || sender === "approval-bot") return;
 
+      // auto-reply: 다른 에이전트가 소유한 스레드에는 응답하지 않음
+      const auto_tid = String(message.thread_id || "").trim();
+      if (auto_tid && this.thread_ownership) {
+        const owner = this.thread_ownership.owner_of(provider, message.chat_id, auto_tid);
+        if (owner && owner.toLowerCase() !== this.config.defaultAlias.toLowerCase()) return;
+      }
+
       await this.invoke_and_reply(provider, message, this.config.defaultAlias);
     } finally {
       await this.registry.set_typing(channel_id, message.chat_id, false, anchor_ts);
@@ -641,12 +648,7 @@ export class ChannelManager implements ServiceLike {
   private async handle_mentions(provider: ChannelProvider, message: InboundMessage, aliases: string[]): Promise<void> {
     for (const alias of aliases) {
       if (message.sender_id.toLowerCase() === alias.toLowerCase()) continue;
-      // 스레드 소유권 검사: 다른 에이전트가 소유한 스레드면 건너뜀
-      const tid = String(message.thread_id || "").trim();
-      if (tid && this.thread_ownership) {
-        const owner = this.thread_ownership.owner_of(provider, message.chat_id, tid);
-        if (owner && owner.toLowerCase() !== alias.toLowerCase()) continue;
-      }
+      // 명시적 @멘션 → 소유권 바이패스 (멘션된 에이전트는 항상 응답 허용)
       const cooldown_key = `${provider}:${message.chat_id}:${alias}`;
       const now = Date.now();
       if (now - (this.mention_cooldowns.get(cooldown_key) || 0) < 5_000) continue;
