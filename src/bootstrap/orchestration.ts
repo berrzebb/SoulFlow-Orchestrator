@@ -205,6 +205,7 @@ export async function create_orchestration_bundle(deps: OrchestrationBundleDeps)
       streaming_enabled: app_config.channel.streaming.enabled,
       streaming_interval_ms: app_config.channel.streaming.intervalMs,
       streaming_min_chars: app_config.channel.streaming.minChars,
+      streaming_max_chars: app_config.channel.streaming.coalesceMaxChars,
       max_tool_result_chars: app_config.orchestration.maxToolResultChars,
       orchestrator_max_tokens: app_config.orchestration.orchestratorMaxTokens,
     },

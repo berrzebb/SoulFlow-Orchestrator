@@ -65,6 +65,7 @@ type OrchestratorConfig = {
   streaming_enabled: boolean;
   streaming_interval_ms: number;
   streaming_min_chars: number;
+  streaming_max_chars: number;
   max_tool_result_chars: number;
   orchestrator_max_tokens: number;
 };
@@ -134,7 +135,7 @@ export class OrchestrationService {
   private readonly guard: ConfirmationGuard | null;
   private readonly deps: OrchestrationServiceDeps;
   private readonly session_cd: CDObserver;
-  private readonly streaming_cfg: { enabled: boolean; interval_ms: number; min_chars: number };
+  private readonly streaming_cfg: { enabled: boolean; interval_ms: number; min_chars: number; max_chars?: number };
   private readonly hooks_deps: AgentHooksBuilderDeps;
   private readonly tool_deps: ToolCallHandlerDeps;
   private readonly hitl_store: HitlPendingStore;
@@ -163,6 +164,7 @@ export class OrchestrationService {
       enabled: this.config.streaming_enabled,
       interval_ms: this.config.streaming_interval_ms,
       min_chars: this.config.streaming_min_chars,
+      max_chars: this.config.streaming_max_chars,
     };
     this.hooks_deps = {
       session_cd: this.session_cd,

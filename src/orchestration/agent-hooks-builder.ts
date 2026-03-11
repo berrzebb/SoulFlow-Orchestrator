@@ -19,7 +19,7 @@ export type AgentHooksBuilderDeps = {
   process_tracker: { link_subagent(run_id: string, subagent_id: string): void } | null;
   runtime: Pick<AgentRuntimeLike, "register_approval_with_callback">;
   log_event: (input: AppendWorkflowEventInput) => void;
-  streaming_config: { enabled: boolean; interval_ms: number; min_chars: number };
+  streaming_config: { enabled: boolean; interval_ms: number; min_chars: number; max_chars?: number };
 };
 
 type AgentHooksOptions = {
@@ -252,7 +252,7 @@ export function build_agent_hooks(
 // ── 스트리밍 헬퍼 ──
 
 export function create_stream_handler(
-  config: { enabled: boolean; interval_ms: number; min_chars: number },
+  config: { enabled: boolean; interval_ms: number; min_chars: number; max_chars?: number },
   buffer: StreamBuffer,
   on_stream?: (chunk: string) => void,
 ): ((chunk: string) => Promise<void>) | undefined {
@@ -264,7 +264,7 @@ export function create_stream_handler(
 
     buffer.append(sanitized);
 
-    if (buffer.should_flush(config.interval_ms, config.min_chars)) {
+    if (buffer.should_flush(config.interval_ms, config.min_chars, config.max_chars)) {
       const content = buffer.flush();
       if (content) {
         try { on_stream(content); } catch { /* stream callback failure must not break provider loop */ }

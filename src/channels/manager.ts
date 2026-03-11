@@ -213,7 +213,11 @@ export class ChannelManager implements ServiceLike {
     this.renderer = deps.renderer ?? null;
     this.active_runs = deps.active_run_controller ?? new ActiveRunController();
     this.render_store = deps.render_profile_store ?? new InMemoryRenderProfileStore();
-    this.inbound_lanes = new LaneQueue({ global_concurrency: deps.config.inboundConcurrency });
+    this.inbound_lanes = new LaneQueue({
+      global_concurrency: deps.config.inboundConcurrency,
+      lane_max_pending: deps.config.queueCapPerLane,
+      lane_drop: deps.config.queueDropPolicy,
+    });
   }
 
   /** 워크플로우 HITL 브리지를 지연 주입 (순환 의존성 회피). */
@@ -537,7 +541,14 @@ export class ChannelManager implements ServiceLike {
         const chat_key = `${msg.instance_id || resolve_provider(msg) || "unknown"}:${msg.chat_id}`;
         const task = this.inbound_lanes.execute(chat_key, () => this.handle_inbound_message(msg))
           .then(() => lease.ack())
-          .catch((e) => { this.logger.error("inbound handler failed", { error: error_message(e) }); return lease.retry(); })
+          .catch((e) => {
+            if (error_message(e) === "queue_cap_exceeded") {
+              this.logger.debug("inbound_cap_dropped", { chat_key });
+              return lease.ack();
+            }
+            this.logger.error("inbound handler failed", { error: error_message(e) });
+            return lease.retry();
+          })
           .finally(() => this.inbound_inflight.delete(task));
         this.inbound_inflight.add(task);
       } else {
@@ -546,7 +557,11 @@ export class ChannelManager implements ServiceLike {
         if (this.try_hitl_send_input(msg)) continue;
         const chat_key = `${msg.instance_id || resolve_provider(msg) || "unknown"}:${msg.chat_id}`;
         const task = this.inbound_lanes.execute(chat_key, () => this.handle_inbound_message(msg))
-          .catch((e) => this.logger.error("inbound handler failed", { error: error_message(e) }))
+          .catch((e) => {
+            if (error_message(e) !== "queue_cap_exceeded") {
+              this.logger.error("inbound handler failed", { error: error_message(e) });
+            }
+          })
           .finally(() => this.inbound_inflight.delete(task));
         this.inbound_inflight.add(task);
       }

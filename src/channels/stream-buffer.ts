@@ -21,9 +21,10 @@ export class StreamBuffer {
     }
   }
 
-  /** 플러시 조건 충족 여부 판단. */
-  should_flush(interval_ms: number, min_chars: number): boolean {
+  /** 플러시 조건 충족 여부 판단. max_chars > 0이면 임계값 초과 시 interval_ms 무시하고 즉시 플러시. */
+  should_flush(interval_ms: number, min_chars: number, max_chars = 0): boolean {
     if (!this.buffer.trim()) return false;
+    if (max_chars > 0 && this.buffer.length >= max_chars) return true;
     if (this.buffer.length < min_chars) return false;
     const elapsed = Date.now() - this.last_flush_at;
     return elapsed >= interval_ms;

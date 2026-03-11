@@ -2,9 +2,20 @@
 
 import { Semaphore } from "./semaphore.js";
 
+export type LaneOptions = {
+  /** 세션별 대기 한도. 0 = 무제한. */
+  max_pending?: number;
+  /** 한도 초과 시 정책. old: 오래된 항목 제거, new: 새 항목 거부. */
+  drop?: "old" | "new";
+};
+
 export type LaneQueueOptions = {
   /** 전체 세션에 걸친 최대 동시 API 호출 수. 0 또는 미설정 = 제한 없음. */
   global_concurrency?: number;
+  /** 세션별 대기 한도 (lane_opts.max_pending 위임). */
+  lane_max_pending?: number;
+  /** 세션별 드롭 정책 (lane_opts.drop 위임). */
+  lane_drop?: "old" | "new";
 };
 
 type QueuedItem<T> = {
@@ -13,13 +24,29 @@ type QueuedItem<T> = {
   reject: (error: unknown) => void;
 };
 
-/** FIFO 직렬 큐. 동시 실행 방지. */
+/** FIFO 직렬 큐. 동시 실행 방지. 선택적 대기 한도 + 드롭 정책 지원. */
 export class Lane {
   private queue: QueuedItem<unknown>[] = [];
   private running = false;
+  private readonly max_pending: number;
+  private readonly drop: "old" | "new";
+
+  constructor(opts?: LaneOptions) {
+    this.max_pending = opts?.max_pending ?? 0;
+    this.drop = opts?.drop ?? "old";
+  }
 
   async enqueue<T>(task: () => Promise<T>): Promise<T> {
     return new Promise<T>((resolve, reject) => {
+      if (this.max_pending > 0 && this.queue.length >= this.max_pending) {
+        if (this.drop === "new") {
+          reject(new Error("queue_cap_exceeded"));
+          return;
+        }
+        // drop === "old": 가장 오래된 대기 항목 제거 후 새 항목 추가
+        const oldest = this.queue.shift()!;
+        oldest.reject(new Error("queue_cap_exceeded"));
+      }
       this.queue.push({ task, resolve: resolve as (v: unknown) => void, reject });
       if (!this.running) void this.drain();
     });
@@ -56,16 +83,18 @@ export class LaneQueue {
   private readonly pending_followups = new Map<string, string[]>();
   private readonly collected = new Map<string, string[]>();
   private readonly global_semaphore: Semaphore | null;
+  private readonly lane_opts: LaneOptions;
 
   constructor(options?: LaneQueueOptions) {
     const concurrency = options?.global_concurrency ?? 0;
     this.global_semaphore = concurrency > 0 ? new Semaphore(concurrency) : null;
+    this.lane_opts = { max_pending: options?.lane_max_pending, drop: options?.lane_drop };
   }
 
   private resolve_lane(session_key: string): Lane {
     let lane = this.session_lanes.get(session_key);
     if (!lane) {
-      lane = new Lane();
+      lane = new Lane(this.lane_opts);
       this.session_lanes.set(session_key, lane);
     }
     return lane;

@@ -40,6 +40,8 @@ export type StreamingConfig = {
   enabled: boolean;
   interval_ms: number;
   min_chars: number;
+  /** 버퍼가 이 글자수 이상이면 interval_ms 전이라도 즉시 플러시. 0 = 비활성. */
+  max_chars?: number;
 };
 
 /** web 채널은 Slack/Telegram API rate limit이 없으므로 훨씬 빠른 flush 주기 사용. */

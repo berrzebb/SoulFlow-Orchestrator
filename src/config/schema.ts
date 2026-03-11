@@ -12,6 +12,11 @@ const ChannelStreamingSchema = z.object({
   mode: z.enum(["live", "status"]).default("live"),
   intervalMs: z.number().min(500),
   minChars: z.number().min(16),
+  /**
+   * 강제 플러시 임계값. 버퍼에 이 글자수 이상 쌓이면 intervalMs 경과 전이라도 즉시 플러시.
+   * 0이면 비활성 (intervalMs/minChars 조건만 적용). 기본 300.
+   */
+  coalesceMaxChars: z.number().min(0).default(300),
   /** status 모드에서 스트리밍 후 최종 답변 별도 전송을 억제. true면 스트리밍 결과가 곧 최종 답변. */
   suppressFinalAfterStream: z.boolean(),
   /** 도구 사용 표시: count(상단 카운트), inline(스트림 주입), separate(별도 메시지). */
@@ -52,6 +57,10 @@ const ChannelSchema = z.object({
   seenTtlMs: z.number().min(60_000),
   seenMaxSize: z.number().min(2_000),
   inboundConcurrency: z.number().min(1),
+  /** 세션별 인바운드 대기 한도. 0 = 무제한. 초과 시 queueDropPolicy 적용. */
+  queueCapPerLane: z.number().min(0).default(20),
+  /** 한도 초과 시 정책. old: 오래된 항목 제거, new: 새 항목 거부. */
+  queueDropPolicy: z.enum(["old", "new"]).default("old"),
   sessionHistoryMaxAgeMs: z.number().min(0),
   approvalReactionEnabled: z.boolean(),
   controlReactionEnabled: z.boolean(),
