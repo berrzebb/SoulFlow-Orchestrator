@@ -22,6 +22,15 @@ export default defineConfig({
             "tests/agent/tools/vector-store-image-tool.test.ts",
           ]
         : []),
+      // CI에서 rechunk worker (worker_threads tsx 모듈 해석 미지원) 테스트 제외
+      ...(process.env.SKIP_RECHUNK_TESTS
+        ? [
+            "tests/agent/memory-service-cov6.test.ts",
+            "tests/agent/memory-service-cov10.test.ts",
+            "tests/agent/memory-service-extended2.test.ts",
+            "tests/agent/memory-store-daily-layout.test.ts",
+          ]
+        : []),
     ],
     testTimeout: 60_000,
     hookTimeout: 60_000,

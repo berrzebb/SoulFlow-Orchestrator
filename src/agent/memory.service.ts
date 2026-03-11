@@ -242,9 +242,9 @@ export class MemoryStore implements MemoryStoreLike {
       const __dir = dirname(fileURLToPath(import.meta.url));
       const is_tsx = import.meta.url.endsWith(".ts");
       const worker_file = resolve(__dir, is_tsx ? "memory-rechunk-worker.ts" : "memory-rechunk-worker.js");
-      // tsx/esm: worker_threads에서 .js→.ts 모듈 해석 지원
+      // tsx 환경에서 worker_threads tsx 이중 로드 충돌 문제로 --import tsx 사용
       this.rechunk_worker = new Worker(worker_file, {
-        execArgv: is_tsx ? ["--import", "tsx/esm"] : [],
+        execArgv: is_tsx ? ["--import", "tsx"] : [],
       });
       // 프로세스 종료 시 워커를 강제 대기하지 않음
       this.rechunk_worker.unref();
