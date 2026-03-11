@@ -321,6 +321,7 @@ export type DashboardOptions = {
   cli_auth_ops?: DashboardCliAuthOps | null;
   model_ops?: DashboardModelOps | null;
   workflow_ops?: DashboardWorkflowOps | null;
+  agent_definition_ops?: import("./ops/agent-definition.js").DashboardAgentDefinitionOps | null;
   kanban_store?: import("../services/kanban-store.js").KanbanStoreLike | null;
   kanban_rule_executor?: import("../services/kanban-rule-executor.js").KanbanRuleExecutor | (() => import("../services/kanban-rule-executor.js").KanbanRuleExecutor | null) | null;
   reference_store?: import("../services/reference-store.js").ReferenceStoreLike | null;

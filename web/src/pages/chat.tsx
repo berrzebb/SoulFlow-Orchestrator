@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useRef, useEffect, useReducer } from "react";
+import { useLocation } from "react-router-dom";
 import { api } from "../api/client";
 import { Badge } from "../components/badge";
 import { DeleteConfirmModal } from "../components/modal";
@@ -15,7 +16,9 @@ import { EmptyState } from "./chat/empty-state";
 import { ChatSessionTabs } from "./chat/chat-session-tabs";
 import { ChatBottomBar } from "./chat/chat-status-bar";
 import { SessionBrowser } from "./chat/session-browser";
+import { AgentContextBar, compose_agent_prompt } from "./chat/agent-context-bar";
 import type { ChatSessionSummary, ChatSession, ChatMessage, ChatMediaItem } from "./chat/types";
+import type { AgentDefinition } from "../../../src/agent/agent-definition.types";
 
 type MirrorSessionEntry = { key: string; provider: string; chat_id: string; alias: string; thread?: string; updated_at: string; message_count: number };
 type MirrorSession = { key: string; provider: string; chat_id: string; alias: string; messages: ChatMessage[] };
@@ -24,6 +27,7 @@ export default function ChatPage() {
   const t = useT();
   const qc = useQueryClient();
   const { toast } = useToast();
+  const location = useLocation();
   const [activeId, setActiveId] = useState<string | null>(null);
   const [mirrorKey, setMirrorKey] = useState<string | null>(null);
   const [input, setInput] = useState("");
@@ -38,6 +42,10 @@ export default function ChatPage() {
   const [pending_media, setPendingMedia] = useState<ChatMediaItem[]>([]);
   /** React 배칭으로 sending state가 즉시 반영되지 않으므로 ref로 동기 중복 방지 */
   const stream_inflight = useRef(false);
+  /** 에이전트 갤러리에서 "Use"로 진입 시 설정되는 에이전트 정의, 또는 인채팅 선택 */
+  const [activeDefinition, setActiveDefinition] = useState<AgentDefinition | null>(null);
+  /** 에이전트 시스템 프롬프트 오버라이드 — soul+heart 기본값, 사용자 편집 가능 */
+  const [systemPromptOverride, setSystemPromptOverride] = useState("");
   const [selectedProvider, setSelectedProvider] = useState("");
   const [selectedModel, setSelectedModel] = useState("");
   const messagesRef = useRef<HTMLDivElement>(null);
@@ -56,6 +64,12 @@ export default function ChatPage() {
     queryFn: () => api.get("/api/chat/sessions"),
     refetchInterval: 15_000,
     staleTime: 5_000,
+  });
+
+  const { data: agentDefinitions = [] } = useQuery<AgentDefinition[]>({
+    queryKey: ["agent-definitions"],
+    queryFn: () => api.get("/api/agent-definitions"),
+    staleTime: 60_000,
   });
 
   const { data: activeSession, isLoading: activeSessionLoading } = useQuery<ChatSession>({
@@ -130,6 +144,22 @@ export default function ChatPage() {
     void qc.invalidateQueries({ queryKey: ["chat-sessions"] });
   }, t("chat.session_created"), t("chat.create_failed"));
 
+  // 에이전트 갤러리 "Use" 버튼으로 진입 시 — 자동 세션 생성 + provider/model/prompt 적용
+  useEffect(() => {
+    const def = (location.state as { agent_definition?: AgentDefinition } | null)?.agent_definition;
+    if (!def) return;
+    setActiveDefinition(def);
+    setSystemPromptOverride(compose_agent_prompt(def));
+    if (def.preferred_providers[0]) setSelectedProvider(def.preferred_providers[0]);
+    if (def.model) setSelectedModel(def.model);
+    void (async () => {
+      const res = await api.post<{ id: string }>("/api/chat/sessions");
+      await api.patch(`/api/chat/sessions/${encodeURIComponent(res.id)}`, { name: `${def.icon} ${def.name}` });
+      setActiveId(res.id);
+      void qc.invalidateQueries({ queryKey: ["chat-sessions"] });
+    })();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const delete_session = (id: string) => run_delete(async () => {
     await api.del(`/api/chat/sessions/${encodeURIComponent(id)}`);
     if (activeId === id) setActiveId(null);
@@ -168,6 +198,7 @@ export default function ChatPage() {
     if (pending_media.length > 0) body.media = pending_media;
     if (selectedProvider) body.provider_instance_id = selectedProvider;
     if (selectedModel) body.model = selectedModel;
+    if (systemPromptOverride.trim()) body.system_prompt = systemPromptOverride.trim();
     if (trimmed) setInputHistory((prev) => [...prev, trimmed]);
     setInput("");
     setPendingMedia([]);
@@ -284,6 +315,9 @@ export default function ChatPage() {
           onRename={(id, name) => void rename_session(id, name)}
         />
         {is_mirror && <Badge status={t("chat.mirror_badge")} variant="info" />}
+        {activeDefinition && !is_mirror && (
+          <Badge status={`${activeDefinition.icon} ${activeDefinition.name}`} variant="ok" />
+        )}
         {pending_approvals.length > 0 && (
           <Badge status={`🔐 ${pending_approvals.length}`} variant="warn" />
         )}
@@ -321,6 +355,18 @@ export default function ChatPage() {
             pending_approvals={is_mirror ? [] : pending_approvals}
             onResolveApproval={(id, text) => void resolve_approval(id, text)}
           />
+          {!is_mirror && (
+            <AgentContextBar
+              definitions={agentDefinitions}
+              activeDefinition={activeDefinition}
+              systemPrompt={systemPromptOverride}
+              onDefinitionChange={(def) => {
+                setActiveDefinition(def);
+                if (!def) setSystemPromptOverride("");
+              }}
+              onSystemPromptChange={setSystemPromptOverride}
+            />
+          )}
           <ChatPromptBar
             input={input}
             setInput={setInput}

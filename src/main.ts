@@ -70,7 +70,7 @@ export async function createRuntime(): Promise<RuntimeApp> {
 
   const {
     data_dir, sessions_dir, bus, decisions, events,
-    provider_store, oauth_store, oauth_flow,
+    provider_store, agent_definition_store, oauth_store, oauth_flow,
     embed_service, embed_worker_config, image_embed_service, vector_store_service, webhook_store, query_db_service,
   } = await create_runtime_data({ workspace, app_config, shared_vault, logger });
 
@@ -154,7 +154,7 @@ export async function createRuntime(): Promise<RuntimeApp> {
     orchestrator_llm_runtime, orchestration, process_tracker, cron,
     sessions, dlq_store, dispatch, oauth_store, oauth_flow,
     kanban_store, kanban_automation, reference_store, webhook_store,
-    workflow_ops_result,
+    agent_definition_store, workflow_ops_result,
   });
   dashboard.current = dashboard_instance;
 

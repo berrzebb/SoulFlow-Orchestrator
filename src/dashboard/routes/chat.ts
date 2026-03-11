@@ -8,6 +8,7 @@ type ParsedBody = {
   media: ChatMediaItem[];
   model: string | undefined;
   provider_instance_id: string | undefined;
+  system_prompt: string | undefined;
 };
 
 function parse_chat_body(body: Record<string, unknown> | null): ParsedBody {
@@ -20,7 +21,8 @@ function parse_chat_body(body: Record<string, unknown> | null): ParsedBody {
   const model = typeof body?.model === "string" ? body.model.trim() || undefined : undefined;
   const provider_instance_id = typeof body?.provider_instance_id === "string"
     ? body.provider_instance_id.trim() || undefined : undefined;
-  return { text, media, model, provider_instance_id };
+  const system_prompt = typeof body?.system_prompt === "string" ? body.system_prompt.trim() || undefined : undefined;
+  return { text, media, model, provider_instance_id, system_prompt };
 }
 
 function append_user_message(session: ChatSession, parsed: ParsedBody): void {
@@ -45,6 +47,7 @@ function build_publish_payload(session: ChatSession, parsed: ParsedBody) {
     metadata: {
       ...(parsed.provider_instance_id ? { preferred_provider_id: parsed.provider_instance_id } : {}),
       ...(parsed.model ? { preferred_model: parsed.model } : {}),
+      ...(parsed.system_prompt ? { system_prompt_override: parsed.system_prompt } : {}),
     },
   };
 }

@@ -12,6 +12,7 @@ import type { MessageBusRuntime } from "../bus/types.js";
 import { DecisionService } from "../decision/index.js";
 import { WorkflowEventService } from "../events/index.js";
 import { AgentProviderStore } from "../agent/provider-store.js";
+import { AgentDefinitionStore } from "../agent/agent-definition.store.js";
 import { OAuthIntegrationStore } from "../oauth/integration-store.js";
 import { OAuthFlowService } from "../oauth/flow-service.js";
 import { create_embed_service_from_provider, create_multimodal_embed_service_from_provider } from "../services/embed.service.js";
@@ -34,6 +35,7 @@ export interface RuntimeDataResult {
   decisions: DecisionService;
   events: WorkflowEventService;
   provider_store: AgentProviderStore;
+  agent_definition_store: AgentDefinitionStore;
   oauth_store: OAuthIntegrationStore;
   oauth_flow: OAuthFlowService;
   embed_service: EmbedServiceFn | undefined;
@@ -69,6 +71,10 @@ export async function create_runtime_data(deps: RuntimeDataDeps): Promise<Runtim
   const provider_store = new AgentProviderStore(
     join(data_dir, "agent-providers", "providers.db"),
     shared_vault,
+  );
+
+  const agent_definition_store = new AgentDefinitionStore(
+    join(data_dir, "agent-definitions", "definitions.db"),
   );
 
   const oauth_store = new OAuthIntegrationStore(
@@ -124,7 +130,7 @@ export async function create_runtime_data(deps: RuntimeDataDeps): Promise<Runtim
 
   return {
     data_dir, sessions_dir, bus, decisions, events,
-    provider_store, oauth_store, oauth_flow,
+    provider_store, agent_definition_store, oauth_store, oauth_flow,
     embed_service, embed_worker_config, image_embed_service, vector_store_service, webhook_store, query_db_service,
   };
 }

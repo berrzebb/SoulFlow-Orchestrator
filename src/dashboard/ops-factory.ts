@@ -15,4 +15,5 @@ export {
   create_cli_auth_ops,
   create_model_ops,
   create_workflow_ops,
+  create_agent_definition_ops,
 } from "./ops/index.js";

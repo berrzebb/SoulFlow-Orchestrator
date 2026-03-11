@@ -54,7 +54,7 @@
 .chat-messages {
   flex: 1;
   overflow-y: auto;
-  padding: var(--sp-4) var(--sp-4) 160px;
+  padding: var(--sp-4) var(--sp-4) 210px;
 }
 .chat-messages__inner {
   max-width: 720px;
@@ -1134,4 +1134,44 @@
 .chat-session-search__empty { padding: var(--sp-3); text-align: center; color: var(--muted); font-size: var(--fs-sm); }
 /* chat-tabs는 position: relative 필요 (검색 팝업 기준점) */
 .chat-tabs { position: relative; }
+
+/* ===== Agent Context Bar ===== */
+/* 프롬프트 바 바로 위 — 에이전트 선택 + 시스템 프롬프트 오버라이드 */
+.agent-context-bar {
+  position: absolute;
+  bottom: calc(max(var(--sp-4), env(safe-area-inset-bottom)) + 88px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(700px, calc(100% - var(--sp-8)));
+  padding: 0 var(--sp-4);
+  z-index: 10;
+}
+.agent-context-bar__row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.agent-context-bar__icon {
+  font-size: var(--fs-sm);
+  flex-shrink: 0;
+}
+.agent-context-bar__select {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--fs-xs);
+}
+.agent-context-bar__prompt-toggle,
+.agent-context-bar__clear {
+  flex-shrink: 0;
+}
+.agent-context-bar__prompt {
+  margin-top: var(--sp-2);
+  width: 100%;
+  font-size: var(--fs-xs);
+  resize: vertical;
+  box-sizing: border-box;
+}
+@media (max-width: 768px) {
+  .agent-context-bar { bottom: calc(var(--sp-2) + 82px); padding: 0 var(--sp-2); }
+}
 

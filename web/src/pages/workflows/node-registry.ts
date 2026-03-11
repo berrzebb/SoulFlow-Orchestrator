@@ -57,6 +57,8 @@ export interface NodeOptions {
   workflow_nodes?: { id: string; label: string; type: string }[];
   /** 칸반 보드 목록 — 트리거/노드에서 보드 선택용. */
   kanban_boards?: { board_id: string; name: string }[];
+  /** 에이전트 정의 목록 — spawn_agent/ai_agent 노드에서 선택용. */
+  agent_definitions?: { id: string; name: string; icon: string; role_skill: string | null; soul: string; heart: string; model: string | null; preferred_providers: string[] }[];
 }
 
 export interface EditPanelProps {

@@ -20,6 +20,7 @@ const WorkflowDetailPage = lazyRetry(() => import("./pages/workflows/detail"));
 const WorkflowBuilderPage = lazyRetry(() => import("./pages/workflows/builder"));
 const KanbanPage = lazyRetry(() => import("./pages/kanban"));
 const WbsPage = lazyRetry(() => import("./pages/wbs"));
+const AgentsGalleryPage = lazyRetry(() => import("./pages/agents/index"));
 
 function PageFallback() {
   return (
@@ -50,6 +51,7 @@ export const router = createHashRouter([
       { path: "workflows/new", element: lazify(<WorkflowBuilderPage />) },
       { path: "workflows/edit/:name", element: lazify(<WorkflowBuilderPage />) },
       { path: "workflows/:id", element: lazify(<WorkflowDetailPage />) },
+      { path: "agents", element: lazify(<AgentsGalleryPage />) },
       { path: "kanban", element: lazify(<KanbanPage />) },
       { path: "wbs", element: lazify(<WbsPage />) },
     ],

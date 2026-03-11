@@ -13,3 +13,4 @@ export { create_tool_ops } from "./tool.js";
 export { create_cli_auth_ops } from "./cli-auth.js";
 export { create_model_ops } from "./model.js";
 export { create_workflow_ops } from "./workflow.js";
+export { create_agent_definition_ops, type DashboardAgentDefinitionOps, type AgentGenerateFn } from "./agent-definition.js";

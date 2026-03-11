@@ -150,8 +150,9 @@ export async function execute_dispatch(
   const { tools: tool_definitions, categories } = await select_tools_for_request(
     all_tool_definitions, task_with_media, mode, skill_tool_names, classifier_cats, category_map, classifier_cats, deps.tool_index,
   );
-  const system_base = await deps.build_system_prompt(skill_names, req.provider, req.message.chat_id, new Set(categories), req.alias);
-  deps.logger.info("dispatch", { mode, executor, skills: skill_names, tool_count: tool_definitions.length });
+  const system_base = req.system_prompt_override
+    ?? await deps.build_system_prompt(skill_names, req.provider, req.message.chat_id, new Set(categories), req.alias);
+  deps.logger.info("dispatch", { mode, executor, skills: skill_names, tool_count: tool_definitions.length, system_override: !!req.system_prompt_override });
 
   // Confirmation Guard: 중요 작업 실행 전 사용자 확인
   if (deps.guard?.needs_confirmation(mode, categories, req.provider, req.message.chat_id)) {

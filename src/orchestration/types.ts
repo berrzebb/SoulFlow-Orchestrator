@@ -39,6 +39,8 @@ export type OrchestrationRequest = {
   preferred_provider_id?: string;
   /** 사용자 지정 모델 ID (웹 채팅에서 전달). */
   preferred_model?: string;
+  /** 에이전트 컨텍스트 시스템 프롬프트 오버라이드 (웹 채팅 에이전트 선택 시). build_system_prompt 결과를 대체. */
+  system_prompt_override?: string;
 };
 
 /** 결과에 포함되는 토큰/비용 요약. */

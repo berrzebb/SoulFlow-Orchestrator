@@ -7,6 +7,7 @@ import type { create_agent_runtime } from "../agent/runtime.service.js";
 import type { create_agent_inspector } from "../agent/inspector.service.js";
 import type { AgentBackendRegistry } from "../agent/agent-registry.js";
 import type { AgentProviderStore } from "../agent/provider-store.js";
+import type { AgentDefinitionStore } from "../agent/agent-definition.store.js";
 import type { MessageBusRuntime } from "../bus/types.js";
 import type { ChannelManager } from "../channels/manager.js";
 import type { ChannelInstanceStore, ChannelRegistryLike } from "../channels/index.js";
@@ -35,6 +36,7 @@ import {
   create_template_ops, create_channel_ops, create_agent_provider_ops,
   create_bootstrap_ops, create_memory_ops, create_workspace_ops, create_oauth_ops,
   create_config_ops, create_skill_ops, create_tool_ops, create_cli_auth_ops, create_model_ops,
+  create_agent_definition_ops,
 } from "../dashboard/ops-factory.js";
 
 export interface DashboardBundleDeps {
@@ -71,6 +73,7 @@ export interface DashboardBundleDeps {
   kanban_automation: KanbanAutomationRuntime;
   reference_store: ReferenceStore;
   webhook_store: WebhookStore;
+  agent_definition_store: AgentDefinitionStore;
   workflow_ops_result: DashboardWorkflowOps | null;
 }
 
@@ -88,7 +91,7 @@ export function create_dashboard_bundle(deps: DashboardBundleDeps): DashboardBun
     orchestrator_llm_runtime, orchestration, process_tracker, cron,
     sessions, dlq_store, dispatch, oauth_store, oauth_flow,
     kanban_store, kanban_automation, reference_store, webhook_store,
-    workflow_ops_result,
+    agent_definition_store, workflow_ops_result,
   } = deps;
 
   const agent_provider_ops = create_agent_provider_ops({
@@ -139,6 +142,7 @@ export function create_dashboard_bundle(deps: DashboardBundleDeps): DashboardBun
     oauth_ops: create_oauth_ops({ oauth_store, oauth_flow, dashboard_port: app_config.dashboard.port, public_url: app_config.dashboard.publicUrl }),
     cli_auth_ops: create_cli_auth_ops({ cli_auth }),
     model_ops: orchestrator_llm_runtime ? create_model_ops(orchestrator_llm_runtime) : null,
+    agent_definition_ops: create_agent_definition_ops({ store: agent_definition_store }),
     workflow_ops: workflow_ops_result,
     kanban_store,
     kanban_rule_executor: () => kanban_automation.get_rule_executor(),

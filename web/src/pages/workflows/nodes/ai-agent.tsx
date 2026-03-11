@@ -1,10 +1,41 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
 import { BuilderField, BackendModelPicker, BuilderRowPair, TemperatureField, JsonField, NodeMultiSelect } from "../builder-field";
 
+type AgentDefOption = NonNullable<NonNullable<EditPanelProps["options"]>["agent_definitions"]>[number];
+
+/** soul + heart → 시스템 프롬프트로 합성 */
+function compose_system_prompt(def: AgentDefOption): string {
+  return [def.soul, def.heart].filter(Boolean).join("\n\n");
+}
+
 function AiAgentEditPanel({ node, update, t, options }: EditPanelProps) {
   const temp = node.temperature as number | undefined;
+  const definitions = options?.agent_definitions || [];
+
+  function apply_definition(id: string) {
+    const def = definitions.find((d) => d.id === id);
+    if (!def) { update({ definition_id: "" }); return; }
+    const system_prompt = compose_system_prompt(def);
+    update({
+      definition_id: id,
+      ...(system_prompt ? { system_prompt } : {}),
+      ...(def.model ? { model: def.model } : {}),
+      ...(def.preferred_providers[0] ? { backend: def.preferred_providers[0] } : {}),
+    });
+  }
+
   return (
     <>
+      {definitions.length > 0 && (
+        <BuilderField label={t("workflows.agent_definition")} hint={t("workflows.agent_definition_hint")}>
+          <select className="input input--sm" value={String(node.definition_id || "")} onChange={(e) => apply_definition(e.target.value)}>
+            <option value="">— {t("workflows.agent_definition_none")} —</option>
+            {definitions.map((d) => (
+              <option key={d.id} value={d.id}>{d.icon} {d.name}</option>
+            ))}
+          </select>
+        </BuilderField>
+      )}
       <BackendModelPicker
         backend={String(node.backend || "")}
         onBackendChange={(v) => update({ backend: v })}

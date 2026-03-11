@@ -3,8 +3,27 @@ import { BuilderField, BuilderRowPair } from "../builder-field";
 
 function SpawnAgentEditPanel({ node, update, t, options }: EditPanelProps) {
   const models = options?.models || [];
+  const definitions = options?.agent_definitions || [];
+
+  function apply_definition(id: string) {
+    const def = definitions.find((d) => d.id === id);
+    if (!def) return;
+    const role = def.role_skill ? def.role_skill.replace("role:", "") : "";
+    update({ definition_id: id, role, ...(def.model ? { model: def.model } : {}) });
+  }
+
   return (
     <>
+      {definitions.length > 0 && (
+        <BuilderField label={t("workflows.agent_definition")} hint={t("workflows.agent_definition_hint")}>
+          <select className="input input--sm" value={String(node.definition_id || "")} onChange={(e) => apply_definition(e.target.value)}>
+            <option value="">— {t("workflows.agent_definition_none")} —</option>
+            {definitions.map((d) => (
+              <option key={d.id} value={d.id}>{d.icon} {d.name}{d.role_skill ? ` (${d.role_skill.replace("role:", "")})` : ""}</option>
+            ))}
+          </select>
+        </BuilderField>
+      )}
       <BuilderField label={t("workflows.spawn_task")}>
         <textarea autoFocus className="input code-textarea" rows={3} value={String(node.task || "")} onChange={(e) => update({ task: e.target.value })} spellCheck={false} placeholder={t("node.spawn_agent.task_placeholder")} />
       </BuilderField>

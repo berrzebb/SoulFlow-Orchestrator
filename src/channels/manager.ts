@@ -629,6 +629,7 @@ export class ChannelManager implements ServiceLike {
       const msg_meta = (message.metadata || {}) as Record<string, unknown>;
       const preferred_provider_id = typeof msg_meta.preferred_provider_id === "string" ? msg_meta.preferred_provider_id : undefined;
       const preferred_model = typeof msg_meta.preferred_model === "string" ? msg_meta.preferred_model : undefined;
+      const system_prompt_override = typeof msg_meta.system_prompt_override === "string" ? msg_meta.system_prompt_override : undefined;
 
       const result = await this.orchestration.execute({
         message, alias, provider, media_inputs,
@@ -637,6 +638,7 @@ export class ChannelManager implements ServiceLike {
         run_id,
         preferred_provider_id,
         preferred_model,
+        system_prompt_override,
         on_stream: is_status_mode
           ? (chunk) => { stream_state.accumulated += chunk; }
           : (chunk) => {

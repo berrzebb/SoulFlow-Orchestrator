@@ -268,6 +268,11 @@ export default function WorkflowBuilderPage() {
     queryFn: () => api.get("/api/kanban/boards"),
     staleTime: 60_000,
   });
+  const { data: agentDefinitionsData } = useQuery<{ id: string; name: string; icon: string; role_skill: string | null; soul: string; heart: string; model: string | null; preferred_providers: string[] }[]>({
+    queryKey: ["agent-definitions"],
+    queryFn: () => api.get("/api/agent-definitions"),
+    staleTime: 60_000,
+  });
 
   const availableTools: string[] = toolsData?.names || [];
   const availableSkills: string[] = (skillsData || []).map((s) => s.name);
@@ -287,6 +292,7 @@ export default function WorkflowBuilderPage() {
     tool_definitions: (toolsData?.definitions || []) as Array<Record<string, unknown>>,
     available_skills: availableSkills,
     kanban_boards: kanbanBoardsData || [],
+    agent_definitions: agentDefinitionsData || [],
     workflow_nodes: [
       ...workflow.phases.map((p) => ({ id: p.phase_id, label: p.title || p.phase_id, type: "phase" })),
       ...(workflow.orche_nodes || []).map((n) => ({ id: n.node_id, label: n.title || n.node_id, type: n.node_type })),
