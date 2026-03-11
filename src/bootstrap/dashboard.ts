@@ -176,6 +176,7 @@ Description: ${prompt}`,
     reference_store,
     default_alias: app_config.channel.defaultAlias,
     workspace,
+    webhookSecret: app_config.dashboard.webhookSecret,
   });
 
   broadcaster.attach(dash.sse);

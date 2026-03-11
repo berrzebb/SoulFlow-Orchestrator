@@ -51,6 +51,7 @@ import { handle_workflow, handle_workflow_node } from "./routes/workflows.js";
 import { handle_kanban } from "./routes/kanban.js";
 import { handle_references } from "./routes/references.js";
 import { handle_agent_definition } from "./routes/agent-definition.js";
+import { dispatch_webhook } from "./routes/webhook.js";
 
 const RE_MEDIA_TOKEN = /^\/media\/([a-z0-9]{16,})$/i;
 
@@ -283,40 +284,25 @@ export class DashboardService implements ServiceLike {
     res.end("not_found");
   }
 
-  /** SessionStore 키 생성 (session-recorder.ts의 session_key 형식과 일치). */
-  /** Webhook 스토어 등록. main.ts에서 WebhookStore를 바인딩. */
+  /** Webhook 스토어 + /hooks/wake, /hooks/agent 엔드포인트 등록. */
   private _webhook_store?: WebhookStore;
 
   set_webhook_store(store: WebhookStore): void {
     this._webhook_store = store;
-    // /hooks/* 경로를 fallback 라우트로 등록
+    const bus = this.options.bus;
+    const webhook_secret = this.options.webhookSecret;
     this.fallback_routes.unshift(async (ctx) => {
       if (!ctx.url.pathname.startsWith("/hooks/")) return false;
-      const hook_path = ctx.url.pathname.slice(6); // "/hooks/foo" → "/foo"
-      if (ctx.req.method === "GET" || ctx.req.method === "POST" || ctx.req.method === "PUT" || ctx.req.method === "DELETE") {
-        const headers: Record<string, string> = {};
-        for (const [k, v] of Object.entries(ctx.req.headers)) {
-          if (typeof v === "string") headers[k] = v;
-        }
-        const query: Record<string, string> = {};
-        ctx.url.searchParams.forEach((v, k) => { query[k] = v; });
-
-        let body: unknown = null;
-        if (ctx.req.method !== "GET") {
-          body = await ctx.read_body(ctx.req);
-        }
-
-        store.push(hook_path, {
-          method: ctx.req.method,
-          headers,
-          body,
-          query,
-          received_at: now_iso(),
-        });
-        ctx.json(ctx.res, 200, { ok: true, path: hook_path });
-        return true;
-      }
-      return false;
+      return dispatch_webhook(
+        {
+          webhook_store: store,
+          webhook_secret,
+          publish_inbound: (msg) => bus ? bus.publish_inbound(msg) : Promise.resolve(),
+          json: ctx.json,
+          read_body: ctx.read_body,
+        },
+        ctx.req, ctx.res, ctx.url,
+      );
     });
   }
 

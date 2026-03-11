@@ -327,6 +327,8 @@ export type DashboardOptions = {
   reference_store?: import("../services/reference-store.js").ReferenceStoreLike | null;
   default_alias?: string;
   workspace?: string;
+  /** /hooks/* 엔드포인트 Bearer 토큰. 미설정 시 인증 없이 허용. */
+  webhookSecret?: string;
   logger?: Logger | null;
 };
 
