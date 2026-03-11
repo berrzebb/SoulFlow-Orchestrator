@@ -142,7 +142,32 @@ export function create_dashboard_bundle(deps: DashboardBundleDeps): DashboardBun
     oauth_ops: create_oauth_ops({ oauth_store, oauth_flow, dashboard_port: app_config.dashboard.port, public_url: app_config.dashboard.publicUrl }),
     cli_auth_ops: create_cli_auth_ops({ cli_auth }),
     model_ops: orchestrator_llm_runtime ? create_model_ops(orchestrator_llm_runtime) : null,
-    agent_definition_ops: create_agent_definition_ops({ store: agent_definition_store }),
+    agent_definition_ops: create_agent_definition_ops({
+      store: agent_definition_store,
+      generate_fn: async (prompt) => {
+        // 기존 ProviderRegistry.run_headless()로 JSON 구조 생성
+        const result = await providers.run_headless({
+          messages: [
+            {
+              role: "user" as const,
+              content: `You are an AI agent designer. Given a description, output a JSON object with these exact fields:
+{"name":"string","description":"string (one-line Use when... summary)","icon":"single emoji","role_skill":"string|null (e.g. role:pm, role:implementer, or null if custom)","soul":"string (persona/character)","heart":"string (behavior/manner)","tools":["string array"],"shared_protocols":["string array from: clarification-protocol,phase-gates,error-escalation,session-metrics,difficulty-guide"],"skills":[],"use_when":"string","not_use_for":"string","extra_instructions":"","preferred_providers":[],"model":null}
+
+Output ONLY the JSON object, no markdown, no explanation.
+
+Description: ${prompt}`,
+            },
+          ],
+        });
+        if (!result?.content) return null;
+        try {
+          const text = result.content.trim().replace(/^```json?\n?/, "").replace(/\n?```$/, "");
+          return JSON.parse(text) as import("../agent/agent-definition.types.js").GeneratedAgentFields;
+        } catch {
+          return null;
+        }
+      },
+    }),
     workflow_ops: workflow_ops_result,
     kanban_store,
     kanban_rule_executor: () => kanban_automation.get_rule_executor(),
