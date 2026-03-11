@@ -13,10 +13,11 @@ export const kanban_trigger_handler: NodeHandler = {
   output_schema: [
     { name: "card_id",    type: "string",  description: "Triggered card ID (e.g. SO-25)" },
     { name: "board_id",   type: "string",  description: "Board ID" },
-    { name: "action",     type: "string",  description: "Activity action (created, moved, etc.)" },
+    { name: "action",     type: "string",  description: "Activity action (created, moved, poll, etc.)" },
     { name: "actor",      type: "string",  description: "Who triggered the event" },
-    { name: "detail",     type: "object",  description: "Activity detail payload" },
+    { name: "detail",     type: "object",  description: "Activity detail payload (poll 모드: 카드 전체 데이터)" },
     { name: "created_at", type: "string",  description: "Event timestamp" },
+    { name: "cards",      type: "array",   description: "Poll 모드 전용: 컬럼 내 전체 카드 목록" },
   ],
   input_schema: [],
   create_default: () => ({
@@ -24,6 +25,8 @@ export const kanban_trigger_handler: NodeHandler = {
     kanban_board_id: "",
     kanban_actions: ["created"],
     kanban_column_id: "",
+    kanban_mode: "event",
+    kanban_poll_interval_s: 60,
   }),
 
   async execute(): Promise<OrcheNodeExecuteResult> {
@@ -65,11 +68,13 @@ export const kanban_trigger_handler: NodeHandler = {
 
   test(node: OrcheNodeDefinition): OrcheNodeTestResult {
     const n = node as unknown as TriggerNodeDefinition;
+    const mode = n.kanban_mode ?? "event";
     const warnings: string[] = [];
     if (!n.kanban_board_id?.trim()) warnings.push("kanban_board_id is required");
-    if (!n.kanban_actions?.length) warnings.push("at least one kanban_actions filter recommended");
+    if (mode === "event" && !n.kanban_actions?.length) warnings.push("at least one kanban_actions filter recommended");
+    if (mode === "poll" && !n.kanban_column_id?.trim()) warnings.push("kanban_column_id is required for poll mode");
     return {
-      preview: { board_id: n.kanban_board_id, actions: n.kanban_actions, column_id: n.kanban_column_id },
+      preview: { mode, board_id: n.kanban_board_id, actions: n.kanban_actions, column_id: n.kanban_column_id, poll_interval_s: n.kanban_poll_interval_s },
       warnings,
     };
   },

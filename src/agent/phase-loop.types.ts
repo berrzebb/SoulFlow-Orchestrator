@@ -247,6 +247,8 @@ export interface TriggerNodeRecord {
   kanban_board_id?: string;
   kanban_actions?: string[];
   kanban_column_id?: string;
+  kanban_mode?: "event" | "poll";
+  kanban_poll_interval_s?: number;
   watch_path?: string;
   watch_events?: Array<"add" | "change" | "unlink">;
   watch_pattern?: string;

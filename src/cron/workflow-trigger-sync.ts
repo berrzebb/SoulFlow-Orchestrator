@@ -188,7 +188,11 @@ function subscribe_kanban_triggers(
   _kanban_unsubs.length = 0;
 
   if (!kanban_store) return 0;
-  const kb_entries = entries.filter((e) => e.trigger.trigger_type === "kanban_event" && e.trigger.kanban_board_id);
+  const kb_entries = entries.filter((e) =>
+    e.trigger.trigger_type === "kanban_event" &&
+    e.trigger.kanban_board_id &&
+    (e.trigger.kanban_mode ?? "event") === "event",
+  );
   if (!kb_entries.length) return 0;
 
   for (const entry of kb_entries) {
@@ -218,6 +222,78 @@ function subscribe_kanban_triggers(
 
   log.info("kanban_event triggers subscribed", { count: kb_entries.length });
   return kb_entries.length;
+}
+
+// ── Kanban Poll ──
+
+const DEFAULT_KANBAN_POLL_INTERVAL_S = 60;
+
+/** 폴링 방식: 주기적으로 컬럼을 스캔해 카드가 있으면 워크플로우 실행. */
+function start_kanban_poll_triggers(
+  entries: TriggerEntry[],
+  kanban_store: KanbanStoreLike | null,
+  execute: WorkflowExecuteFn,
+  default_channel: string,
+  default_chat_id: string,
+  abort: AbortSignal,
+): number {
+  if (!kanban_store) return 0;
+  const poll_entries = entries.filter((e) =>
+    e.trigger.trigger_type === "kanban_event" &&
+    e.trigger.kanban_board_id &&
+    e.trigger.kanban_column_id &&
+    e.trigger.kanban_mode === "poll",
+  );
+  if (!poll_entries.length) return 0;
+
+  // 동시 실행 방지: 현재 처리 중인 card_id 추적
+  const _in_flight = new Set<string>();
+
+  for (const entry of poll_entries) {
+    const board_id = entry.trigger.kanban_board_id!;
+    const column_id = entry.trigger.kanban_column_id!;
+    const interval_ms = (entry.trigger.kanban_poll_interval_s ?? DEFAULT_KANBAN_POLL_INTERVAL_S) * 1000;
+    const channel = entry.trigger.channel_type || default_channel;
+    const chat_id = entry.trigger.chat_id || default_chat_id;
+
+    const poll = async () => {
+      if (abort.aborted) return;
+      try {
+        const cards = await kanban_store.list_cards(board_id, column_id);
+        if (!cards.length) return;
+
+        for (const card of cards) {
+          if (_in_flight.has(card.card_id)) continue;
+          _in_flight.add(card.card_id);
+
+          const trigger_data = {
+            card_id: card.card_id,
+            board_id: card.board_id,
+            action: "poll",
+            actor: "system",
+            detail: card,
+            created_at: new Date().toISOString(),
+            cards,
+          };
+
+          log.info("kanban_poll trigger fired", { slug: entry.slug, board_id, column_id, card_id: card.card_id });
+          void execute(entry.slug, channel, chat_id, { kanban_event: trigger_data })
+            .catch((e) => log.warn("kanban_poll trigger failed", { slug: entry.slug, error: String(e) }))
+            .finally(() => _in_flight.delete(card.card_id));
+        }
+      } catch (e) {
+        log.warn("kanban_poll error", { slug: entry.slug, board_id, column_id, error: String(e) });
+      }
+    };
+
+    // 즉시 첫 스캔 후 주기 실행
+    void poll();
+    const timer = setInterval(() => { if (!abort.aborted) void poll(); }, interval_ms);
+    abort.addEventListener("abort", () => clearInterval(timer), { once: true });
+  }
+
+  log.info("kanban_poll triggers started", { count: poll_entries.length });
+  return poll_entries.length;
 }
 
 // ── Filesystem Watch ──
@@ -360,6 +436,9 @@ export async function sync_all_workflow_triggers(
   const kanban_registered = subscribe_kanban_triggers(
     all_triggers, deps.kanban_store, deps.execute,
     deps.default_channel, deps.default_chat_id,
+  ) + start_kanban_poll_triggers(
+    all_triggers, deps.kanban_store, deps.execute,
+    deps.default_channel, deps.default_chat_id, _abort.signal,
   );
 
   const fs_registered = start_filesystem_watch_triggers(

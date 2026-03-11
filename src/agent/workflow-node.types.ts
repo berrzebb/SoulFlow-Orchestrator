@@ -135,6 +135,10 @@ export interface TriggerNodeDefinition extends NodeBase {
   kanban_board_id?: string;
   kanban_actions?: string[];
   kanban_column_id?: string;
+  /** "event": 실시간 이벤트 구독 (기본) | "poll": 주기적 컬럼 스캔 */
+  kanban_mode?: "event" | "poll";
+  /** poll 모드 전용: 스캔 간격(초), 기본 60 */
+  kanban_poll_interval_s?: number;
   /** filesystem_watch */
   watch_path?: string;
   watch_events?: Array<"add" | "change" | "unlink">;
