@@ -51,7 +51,7 @@ describe("database_handler — DatabaseTool throw (L45)", () => {
       CTX,
     );
     expect(result.output.success).toBe(false);
-    expect(String(result.output.result)).toContain("database forced error");
+    expect(String((result.output as any).error)).toContain("database forced error");
   });
 });
 

@@ -11,6 +11,7 @@ import { tmpdir } from "node:os";
 
 vi.mock("@src/utils/sqlite-helper.js", () => ({
   with_sqlite: vi.fn().mockReturnValue(true),
+  with_sqlite_strict: vi.fn().mockReturnValue(true),
 }));
 
 import * as sqlite_helper from "@src/utils/sqlite-helper.js";

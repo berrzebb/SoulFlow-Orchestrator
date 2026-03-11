@@ -586,7 +586,7 @@ describe("Docker Node Handler", () => {
       const result = await docker_handler.execute(node, ctx);
 
       expect(result.output.success).toBe(false);
-      expect(result.output.output).toContain("Docker not available");
+      expect((result.output as any).error).toContain("Docker not available");
     });
 
     it("should handle stderr output", async () => {

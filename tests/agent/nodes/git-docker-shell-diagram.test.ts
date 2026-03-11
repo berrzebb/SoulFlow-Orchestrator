@@ -207,7 +207,7 @@ describe("docker_handler — execute", () => {
     mock_shell.mockRejectedValue(new Error("docker daemon not running"));
     const r = await docker_handler.execute({ operation: "ps" }, make_ctx());
     expect(r.output.success).toBe(false);
-    expect(String(r.output.output)).toContain("docker daemon");
+    expect(String((r.output as any).error)).toContain("docker daemon");
   });
 
   it("빈 출력 → (no output)", async () => {
@@ -326,7 +326,7 @@ describe("shell_handler — execute", () => {
 
   it("working_dir 있음 → cwd로 사용", async () => {
     shell_ok("ok");
-    const custom = join(tmpdir(), "custom-dir");
+    const custom = join(WORKSPACE, "custom-dir");
     await shell_handler.execute({ command: "ls", working_dir: custom }, make_ctx());
     expect(mock_shell.mock.calls[0][1].cwd).toBe(custom);
   });

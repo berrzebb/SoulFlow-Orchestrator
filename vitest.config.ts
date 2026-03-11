@@ -10,7 +10,19 @@ export default defineConfig({
   },
   test: {
     include: ["tests/**/*.test.ts"],
-    exclude: ["tests/e2e/**", "**/node_modules/**"],
+    exclude: [
+      "tests/e2e/**",
+      "**/node_modules/**",
+      // CI에서 sqlite-vec 네이티브 확장 없는 환경은 vec DB 테스트 제외
+      ...(process.env.SKIP_VEC_TESTS
+        ? [
+            "tests/services/vector-store-service.test.ts",
+            "tests/agent/nodes/vector-store.test.ts",
+            "tests/agent/nodes/vector-store-image-extended.test.ts",
+            "tests/agent/tools/vector-store-image-tool.test.ts",
+          ]
+        : []),
+    ],
     testTimeout: 60_000,
     hookTimeout: 60_000,
     // forks: child_process 기반 — Windows segfault 방지, 메모리 격리 안정적

@@ -38,8 +38,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6]
-        total: [6]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+        total: [8]
 
     steps:
       - uses: actions/checkout@v4
@@ -51,17 +51,22 @@ jobs:
 
       - run: npm ci
 
+      - name: Prepare report dir
+        run: mkdir -p .vitest-reports
+
       - name: Run tests (shard ${{ matrix.shard }}/${{ matrix.total }})
         run: |
           npx vitest run \
             --reporter=blob \
+            --reporter=default \
             --coverage \
             --coverage.reporter=json \
             --outputFile=.vitest-reports/shard-${{ matrix.shard }}.blob \
             --shard=${{ matrix.shard }}/${{ matrix.total }}
         env:
-          NODE_OPTIONS: --max-old-space-size=3072
-        timeout-minutes: 20
+          NODE_OPTIONS: --max-old-space-size=2048
+          SKIP_VEC_TESTS: "1"
+        timeout-minutes: 25
 
       - name: Upload blob report
         if: always()
@@ -70,6 +75,7 @@ jobs:
           name: vitest-blob-${{ matrix.shard }}
           path: .vitest-reports/
           retention-days: 1
+          if-no-files-found: ignore
 
   # ── Coverage 병합 + 배지 ──────────────────────────────────────────────────
   coverage:

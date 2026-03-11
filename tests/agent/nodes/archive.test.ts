@@ -227,7 +227,7 @@ describe("Archive Node Handler", () => {
       const result = await archive_handler.execute(node, ctx);
 
       expect(result.output.success).toBe(false);
-      expect(result.output.output).toContain("File not found");
+      expect((result.output as any).error).toContain("File not found");
     });
 
     it("should handle unsupported format", async () => {
