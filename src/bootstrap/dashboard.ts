@@ -148,7 +148,7 @@ export function create_dashboard_bundle(deps: DashboardBundleDeps): DashboardBun
         // model_purpose=chat인 활성 프로바이더 우선 선택 (임베딩 모델 제외)
         const chat_provider = provider_store.list().find((p) => p.enabled && p.model_purpose === "chat");
         const result = await providers.run_headless({
-          provider_id: chat_provider?.instance_id,
+          provider_id: chat_provider?.provider_type as import("../providers/types.js").ProviderId | undefined,
           messages: [
             {
               role: "user" as const,
