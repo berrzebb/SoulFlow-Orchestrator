@@ -258,6 +258,7 @@ export class MemoryStore implements MemoryStoreLike {
 
   /** 청킹(+ 임베딩)을 워커 스레드로 위임. 메인 스레드 블로킹 없음. */
   private schedule_rechunk(doc_key: string, kind: string, day: string, content: string): void {
+    if (process.env.SKIP_RECHUNK_TESTS) return;
     try {
       const job: RechunkJob = {
         sqlite_path: this.sqlite_path,

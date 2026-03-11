@@ -108,7 +108,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: vitest-blob-${{ matrix.shard }}
-          path: .vitest-reports/
+          path: .vitest-reports/blob-*.json
           retention-days: 1
           if-no-files-found: ignore
 
@@ -137,7 +137,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           pattern: vitest-blob-*
-          path: .vitest-reports/
+          path: .vitest-reports
           merge-multiple: true
 
       - name: Prepare reports dir (artifact 없을 시 디렉토리 보장)
@@ -149,7 +149,7 @@ jobs:
 
       - name: Merge reports & generate coverage
         run: |
-          if [ -z "$(find .vitest-reports -name '*.blob' 2>/dev/null | head -1)" ]; then
+          if [ -z "$(find .vitest-reports -name 'blob-*.json' 2>/dev/null | head -1)" ]; then
             echo "⚠️ No blob reports found — skipping merge" >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
