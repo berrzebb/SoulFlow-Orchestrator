@@ -2,7 +2,7 @@
 
 import { Tool } from "./base.js";
 import { run_shell_command } from "./shell-runtime.js";
-import { error_message } from "../../utils/common.js";
+import { error_message, now_iso } from "../../utils/common.js";
 import type { JsonSchema } from "./types.js";
 
 interface CronEntry {
@@ -108,10 +108,10 @@ export class CronShellTool extends Tool {
       entry.last_result = (stdout || "").trim().slice(0, 500);
       entry.last_error = (stderr || "").trim().slice(0, 200) || undefined;
       entry.run_count++;
-      entry.last_run = new Date().toISOString();
+      entry.last_run = now_iso();
     } catch (err) {
       entry.last_error = error_message(err).slice(0, 500);
-      entry.last_run = new Date().toISOString();
+      entry.last_run = now_iso();
       entry.run_count++;
     }
   }

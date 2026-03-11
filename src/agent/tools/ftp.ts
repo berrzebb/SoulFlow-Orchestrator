@@ -2,6 +2,7 @@
 
 import { Tool } from "./base.js";
 import type { JsonSchema } from "./types.js";
+import { error_message } from "../../utils/common.js";
 
 export class FtpTool extends Tool {
   readonly name = "ftp";
@@ -117,7 +118,7 @@ export class FtpTool extends Tool {
           } catch (err) {
             clearTimeout(timeout);
             conn.destroy();
-            resolve(`Error: ${(err as Error).message}`);
+            resolve(`Error: ${error_message(err)}`);
           }
         });
 
@@ -127,7 +128,7 @@ export class FtpTool extends Tool {
         });
       });
     } catch (err) {
-      return `Error: ${(err as Error).message}`;
+      return `Error: ${error_message(err)}`;
     }
   }
 }

@@ -220,7 +220,7 @@ export class SecretVaultService implements SecretVaultLike {
       log.info("master key migrated from legacy file");
     } catch (err) {
       const code = (err as { code?: string } | null)?.code || "";
-      const msg = (err as Error).message || "";
+      const msg = error_message(err);
       if (code !== "ENOENT" && msg !== "invalid_key_length") throw err;
       key = randomBytes(32);
       log.info("master key generated");

@@ -917,7 +917,7 @@ export class KanbanStore implements KanbanStoreLike {
         GROUP BY c.card_id
       `).all(board_id) as Array<{ card_id: string; title: string; blocked_by_ids: string }>;
 
-      const today = new Date().toISOString().slice(0, 10);
+      const today = now_iso().slice(0, 10);
       const overdue = db.prepare(`
         SELECT card_id, title, due_date, column_id FROM kanban_cards
         WHERE board_id = ? AND due_date IS NOT NULL AND due_date < ? AND column_id != 'done'

@@ -2,6 +2,7 @@
 
 import { Tool } from "./base.js";
 import type { JsonSchema } from "./types.js";
+import { error_message } from "../../utils/common.js";
 
 export class HealthcheckTool extends Tool {
   readonly name = "healthcheck";
@@ -70,7 +71,7 @@ export class HealthcheckTool extends Tool {
       const latency = Date.now() - start;
       return { healthy: res.status === expected, status: res.status, latency_ms: latency, url };
     } catch (e) {
-      return { healthy: false, error: String(e instanceof Error ? e.message : e), latency_ms: Date.now() - start, url };
+      return { healthy: false, error: error_message(e), latency_ms: Date.now() - start, url };
     }
   }
 
@@ -100,7 +101,7 @@ export class HealthcheckTool extends Tool {
       const addresses = await dns.resolve4(host);
       return { healthy: true, host, addresses, latency_ms: Date.now() - start };
     } catch (e) {
-      return { healthy: false, host, error: String(e instanceof Error ? e.message : e), latency_ms: Date.now() - start };
+      return { healthy: false, host, error: error_message(e), latency_ms: Date.now() - start };
     }
   }
 }

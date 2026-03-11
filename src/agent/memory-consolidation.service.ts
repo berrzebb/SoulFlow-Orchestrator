@@ -3,6 +3,7 @@ import type { Logger } from "../logger.js";
 import type { ServiceLike } from "../runtime/service.types.js";
 import type { SessionStoreLike } from "../session/service.js";
 import { promote_sessions_to_daily, type SessionPromotionConfig } from "./session-memory-promoter.js";
+import { error_message } from "../utils/common.js";
 
 export type MemoryConsolidationConfig = {
   enabled: boolean;
@@ -58,7 +59,7 @@ export class MemoryConsolidationService implements ServiceLike {
     if (this.config.enabled && this.config.trigger === "cron") {
       this.cron_timer = setInterval(() => {
         this.run_consolidation().catch((e) =>
-          this.logger.warn("cron consolidation failed", { error: String(e) }),
+          this.logger.warn("cron consolidation failed", { error: error_message(e) }),
         );
       }, this.config.interval_ms);
       if (this.cron_timer.unref) this.cron_timer.unref();
@@ -113,7 +114,7 @@ export class MemoryConsolidationService implements ServiceLike {
     this.idle_timer = setTimeout(() => {
       this.idle_timer = null;
       this.run_consolidation().catch((e) =>
-        this.logger.warn("idle consolidation failed", { error: String(e) }),
+        this.logger.warn("idle consolidation failed", { error: error_message(e) }),
       );
     }, this.config.idle_after_ms);
     if (this.idle_timer.unref) this.idle_timer.unref();
@@ -152,8 +153,8 @@ export class MemoryConsolidationService implements ServiceLike {
 
       return { ok: result.ok, summary: result.summary };
     } catch (e) {
-      this.logger.error("consolidation failed", { error: String(e) });
-      return { ok: false, summary: String(e) };
+      this.logger.error("consolidation failed", { error: error_message(e) });
+      return { ok: false, summary: error_message(e) };
     } finally {
       this.consolidating = false;
     }

@@ -5,6 +5,7 @@ import type { NodeHandler } from "../node-registry.js";
 import type { AssertNodeDefinition, OrcheNodeDefinition } from "../workflow-node.types.js";
 import type { OrcheNodeExecutorContext, OrcheNodeExecuteResult, OrcheNodeTestResult } from "../orche-node-executor.js";
 import { resolve_templates } from "../orche-node-executor.js";
+import { error_message } from "../../utils/common.js";
 
 export const assert_handler: NodeHandler = {
   node_type: "assert",
@@ -41,7 +42,7 @@ export const assert_handler: NodeHandler = {
           errors.push(msg);
         }
       } catch (err) {
-        errors.push(`Expression error: ${assertion.condition} — ${String(err)}`);
+        errors.push(`Expression error: ${assertion.condition} — ${error_message(err)}`);
       }
     }
 

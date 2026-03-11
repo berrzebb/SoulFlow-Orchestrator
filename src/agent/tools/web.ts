@@ -1,4 +1,5 @@
 import { sanitize_untrusted_text } from "../../security/content-sanitizer.js";
+import { now_iso } from "../../utils/common.js";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve, isAbsolute, dirname } from "node:path";
 import { Tool } from "./base.js";
@@ -555,7 +556,7 @@ export class WebMonitorTool extends Tool {
         current_text = current_text.slice(0, max_chars);
       }
 
-      const now = new Date().toISOString();
+      const now = now_iso();
       let previous: { snapshot: string; captured_at: string } | null = null;
       try {
         const raw = readFileSync(store_path, "utf-8");

@@ -8,6 +8,7 @@ import { execFile } from "node:child_process";
 import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { error_message } from "../utils/common.js";
 
 const exec_file = promisify(execFile);
 
@@ -56,7 +57,7 @@ export async function create_worktree(opts: {
     await exec_file("git", ["worktree", "add", worktree_path, "-b", branch], { cwd: root });
   } catch (err) {
     // 브랜치가 이미 존재하면 기존 브랜치 사용
-    const msg = String(err);
+    const msg = error_message(err);
     if (msg.includes("already exists")) {
       try {
         await exec_file("git", ["worktree", "add", worktree_path, branch], { cwd: root });
@@ -152,7 +153,7 @@ export async function merge_worktrees(
         try { await exec_file("git", ["merge", "--abort"], { cwd: root }); } catch { /* noop */ }
         results.push({ agent_id: handle.agent_id, files_changed: diff.files_changed, merged: false, conflict: true, error: `conflict: ${[...conflicting_files].join(", ")}` });
       } else {
-        results.push({ agent_id: handle.agent_id, files_changed: diff.files_changed, merged: false, conflict: false, error: String(err) });
+        results.push({ agent_id: handle.agent_id, files_changed: diff.files_changed, merged: false, conflict: false, error: error_message(err) });
       }
     }
   }

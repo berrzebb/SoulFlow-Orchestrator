@@ -2,6 +2,7 @@
 
 import { Tool } from "./base.js";
 import type { JsonSchema } from "./types.js";
+import { error_message } from "../../utils/common.js";
 
 const MAX_INPUT_SIZE = 1024 * 512;
 const MAX_MATCHES = 1000;
@@ -43,7 +44,7 @@ export class RegexTool extends Tool {
     try {
       re = new RegExp(pattern, flags);
     } catch (err) {
-      return `Error: invalid regex — ${(err as Error).message}`;
+      return `Error: invalid regex — ${error_message(err)}`;
     }
 
     switch (op) {

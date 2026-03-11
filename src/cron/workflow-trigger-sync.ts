@@ -20,6 +20,7 @@ import type { MessageBusLike, MessageBusTap } from "../bus/index.js";
 import type { WebhookStore } from "../services/webhook-store.service.js";
 import type { KanbanStoreLike, KanbanEvent } from "../services/kanban-store.js";
 import { create_logger } from "../logger.js";
+import { error_message, now_iso } from "../utils/common.js";
 
 const log = create_logger("workflow-trigger-sync");
 
@@ -132,7 +133,7 @@ function start_webhook_polling(
         const result = await execute(entry.slug, channel, chat_id, { webhook: data });
         if (!result.ok) log.warn("webhook trigger failed", { slug: entry.slug, error: result.error });
       } catch (e) {
-        log.warn("webhook poll error", { slug: entry.slug, path, error: String(e) });
+        log.warn("webhook poll error", { slug: entry.slug, path, error: error_message(e) });
       }
     }
   };
@@ -163,7 +164,7 @@ function subscribe_channel_message_triggers(
       if (want_chat && msg.chat_id !== want_chat) continue;
       log.info("channel_message trigger fired", { slug: entry.slug, channel: msg.channel, chat_id: msg.chat_id });
       void execute(entry.slug, msg.channel || msg.provider, msg.chat_id, { message: msg }).catch((e) => {
-        log.warn("channel_message trigger failed", { slug: entry.slug, error: String(e) });
+        log.warn("channel_message trigger failed", { slug: entry.slug, error: error_message(e) });
       });
     }
   });
@@ -212,7 +213,7 @@ function subscribe_kanban_triggers(
       const channel = entry.trigger.channel_type || default_channel;
       const chat_id = entry.trigger.chat_id || default_chat_id;
       void execute(entry.slug, channel, chat_id, { kanban_event: event }).catch((e) => {
-        log.warn("kanban_event trigger failed", { slug: entry.slug, error: String(e) });
+        log.warn("kanban_event trigger failed", { slug: entry.slug, error: error_message(e) });
       });
     };
 
@@ -272,17 +273,17 @@ function start_kanban_poll_triggers(
             action: "poll",
             actor: "system",
             detail: card,
-            created_at: new Date().toISOString(),
+            created_at: now_iso(),
             cards,
           };
 
           log.info("kanban_poll trigger fired", { slug: entry.slug, board_id, column_id, card_id: card.card_id });
           void execute(entry.slug, channel, chat_id, { kanban_event: trigger_data })
-            .catch((e) => log.warn("kanban_poll trigger failed", { slug: entry.slug, error: String(e) }))
+            .catch((e) => log.warn("kanban_poll trigger failed", { slug: entry.slug, error: error_message(e) }))
             .finally(() => _in_flight.delete(card.card_id));
         }
       } catch (e) {
-        log.warn("kanban_poll error", { slug: entry.slug, board_id, column_id, error: String(e) });
+        log.warn("kanban_poll error", { slug: entry.slug, board_id, column_id, error: error_message(e) });
       }
     };
 
@@ -350,12 +351,12 @@ function start_filesystem_watch_triggers(
         const payload = {
           files,
           batch_id: randomUUID(),
-          triggered_at: new Date().toISOString(),
+          triggered_at: now_iso(),
           watch_path: rel_path,
         };
         log.info("filesystem_watch trigger fired", { slug: entry.slug, count: files.length, watch_path: rel_path });
         void execute(entry.slug, channel, chat_id, { filesystem_event: payload }).catch((e) => {
-          log.warn("filesystem_watch trigger failed", { slug: entry.slug, error: String(e) });
+          log.warn("filesystem_watch trigger failed", { slug: entry.slug, error: error_message(e) });
         });
       });
     };
@@ -380,7 +381,7 @@ function start_filesystem_watch_triggers(
         timer = setTimeout(flush, batch_ms);
       });
     } catch (err) {
-      log.warn("filesystem_watch setup failed", { slug: entry.slug, watch_path: abs_path, error: String(err) });
+      log.warn("filesystem_watch setup failed", { slug: entry.slug, watch_path: abs_path, error: error_message(err) });
       continue;
     }
 

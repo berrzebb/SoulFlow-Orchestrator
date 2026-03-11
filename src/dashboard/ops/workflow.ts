@@ -12,7 +12,7 @@ import {
 } from "../../orchestration/workflow-loader.js";
 import { run_phase_loop } from "../../agent/phase-loop-runner.js";
 import { build_node_catalog } from "../../agent/tools/workflow-catalog.js";
-import { short_id } from "../../utils/common.js";
+import { short_id, error_message, now_iso } from "../../utils/common.js";
 import type { Logger } from "../../logger.js";
 
 /** provider_type → ProviderId 매핑 (suggest 기능 공용). */
@@ -232,9 +232,9 @@ export function create_workflow_ops(deps: {
         bus.publish_outbound({
           id: `wf-ask-${short_id(8)}`, provider: target_channel, channel: target_channel,
           sender_id: "system", chat_id: target_chat_id, content: formatted,
-          at: new Date().toISOString(),
+          at: now_iso(),
           metadata: { workflow_id, type: "workflow_ask_user" },
-        }).catch((e) => logger.error("workflow_ask_user_send_failed", { workflow_id, error: String(e) }));
+        }).catch((e) => logger.error("workflow_ask_user_send_failed", { workflow_id, error: error_message(e) }));
       }
 
       return new Promise<string>((resolve) => {
@@ -253,12 +253,12 @@ export function create_workflow_ops(deps: {
         await bus.publish_outbound({
           id: msg_id, provider: channel, channel,
           sender_id: "system", chat_id, content: req.content,
-          at: new Date().toISOString(),
+          at: now_iso(),
           metadata: { workflow_id, type: "workflow_notification", ...(req.structured ? { structured: req.structured } : {}) },
         });
         return { ok: true, message_id: msg_id };
       } catch (e) {
-        logger.error("workflow_send_message_failed", { workflow_id, error: String(e) });
+        logger.error("workflow_send_message_failed", { workflow_id, error: error_message(e) });
         return { ok: false };
       }
     };
@@ -277,7 +277,7 @@ export function create_workflow_ops(deps: {
           return {
             response: "approve", approved: true,
             responded_by: { channel: "system", chat_id: "auto-approve" },
-            responded_at: new Date().toISOString(), timed_out: false,
+            responded_at: now_iso(), timed_out: false,
           };
         }
       }
@@ -286,16 +286,16 @@ export function create_workflow_ops(deps: {
         bus.publish_outbound({
           id: `wf-ask-${short_id(8)}`, provider: channel, channel,
           sender_id: "system", chat_id, content: req.content,
-          at: new Date().toISOString(),
+          at: now_iso(),
           metadata: { workflow_id, type: "workflow_ask_channel", ...(req.structured ? { structured: req.structured } : {}) },
-        }).catch((e) => logger.error("workflow_ask_channel_send_failed", { workflow_id, error: String(e) }));
+        }).catch((e) => logger.error("workflow_ask_channel_send_failed", { workflow_id, error: error_message(e) }));
       }
 
       return new Promise<ChannelResponse>((resolve) => {
         const timer = setTimeout(() => {
           pending_responses.delete(workflow_id);
           resolve({
-            response: "", responded_at: new Date().toISOString(), timed_out: true,
+            response: "", responded_at: now_iso(), timed_out: true,
           });
         }, timeout_ms);
 
@@ -305,7 +305,7 @@ export function create_workflow_ops(deps: {
             resolve({
               response: content,
               responded_by: { channel, chat_id: chat_id },
-              responded_at: new Date().toISOString(),
+              responded_at: now_iso(),
               timed_out: false,
             });
           },
@@ -389,7 +389,7 @@ export function create_workflow_ops(deps: {
         workspace,
         field_mappings,
       }, runner_deps).catch((err) => {
-        logger.error("workflow_create_run_error", { workflow_id, error: String(err) });
+        logger.error("workflow_create_run_error", { workflow_id, error: error_message(err) });
       });
 
       return { ok: true, workflow_id };
@@ -416,7 +416,7 @@ export function create_workflow_ops(deps: {
       const agent = phase.agents.find((a) => a.agent_id === agent_id);
       if (!agent) return { ok: false, error: "agent_not_found" };
 
-      const msg = { role: "user" as const, content, at: new Date().toISOString() };
+      const msg = { role: "user" as const, content, at: now_iso() };
       await store.insert_message(workflow_id, phase_id, agent_id, msg);
 
       const entry = pending_responses.get(workflow_id);
@@ -459,10 +459,10 @@ export function create_workflow_ops(deps: {
             kind: "cron", expr: schedule,
             tz: timezone, at_ms: null, every_ms: null,
           }, `workflow_trigger:${slug}`, false, null, null, false),
-        ).catch((e) => logger.warn("workflow_cron_register_failed", { slug, error: String(e) }));
+        ).catch((e) => logger.warn("workflow_cron_register_failed", { slug, error: error_message(e) }));
       }
       // 전체 트리거 재동기화 (webhook/channel_message/kanban 포함)
-      void deps.on_template_changed?.().catch((e) => logger.warn("trigger_resync_failed", { error: String(e) }));
+      void deps.on_template_changed?.().catch((e) => logger.warn("trigger_resync_failed", { error: error_message(e) }));
       return slug;
     },
 
@@ -473,9 +473,9 @@ export function create_workflow_ops(deps: {
         cron.list_jobs(true).then((jobs) => {
           const existing = jobs.find((j) => j.name === cron_name);
           if (existing) return cron.remove_job(existing.id);
-        }).catch((e) => logger.warn("workflow_cron_unregister_failed", { name, error: String(e) }));
+        }).catch((e) => logger.warn("workflow_cron_unregister_failed", { name, error: error_message(e) }));
       }
-      if (removed) void deps.on_template_changed?.().catch((e) => logger.warn("trigger_resync_failed", { error: String(e) }));
+      if (removed) void deps.on_template_changed?.().catch((e) => logger.warn("trigger_resync_failed", { error: error_message(e) }));
       return removed;
     },
 
@@ -535,7 +535,7 @@ export function create_workflow_ops(deps: {
         initial_memory: state.memory,
         resume_state: state,
       }, runner_deps).catch((err) => {
-        logger.error("workflow_resume_run_error", { workflow_id, error: String(err) });
+        logger.error("workflow_resume_run_error", { workflow_id, error: error_message(err) });
       });
 
       return { ok: true };
@@ -570,7 +570,7 @@ export function create_workflow_ops(deps: {
           initial_memory: state.memory,
           resume_state: state,
         }, runner_deps).catch((err) => {
-          logger.error("workflow_orphan_resume_error", { workflow_id, error: String(err) });
+          logger.error("workflow_orphan_resume_error", { workflow_id, error: error_message(err) });
         });
       }
     },
@@ -587,7 +587,7 @@ export function create_workflow_ops(deps: {
           const result = await execute_orche_node(node, { memory: { ...input_memory }, workspace });
           return { ok: true, output: result.output, duration_ms: Date.now() - start };
         } catch (err) {
-          return { ok: false, error: String(err), duration_ms: Date.now() - start };
+          return { ok: false, error: error_message(err), duration_ms: Date.now() - start };
         }
       }
 
@@ -637,7 +637,7 @@ export function create_workflow_ops(deps: {
           }
           return { ok: true, output, duration_ms: Date.now() - start };
         } catch (err) {
-          return { ok: false, error: String(err), duration_ms: Date.now() - start };
+          return { ok: false, error: error_message(err), duration_ms: Date.now() - start };
         }
       }
 
@@ -1078,7 +1078,7 @@ export function create_workflow_ops(deps: {
         }
         return { ok: true, workflow: wf };
       } catch (err) {
-        return { ok: false, error: String(err) };
+        return { ok: false, error: error_message(err) };
       }
     },
 

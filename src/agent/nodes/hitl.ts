@@ -29,7 +29,7 @@ export const hitl_handler: NodeHandler = {
 
   async execute(): Promise<OrcheNodeExecuteResult> {
     return {
-      output: { response: "", responded_by: null, responded_at: new Date().toISOString(), timed_out: false },
+      output: { response: "", responded_by: null, responded_at: now_iso(), timed_out: false },
     };
   },
 

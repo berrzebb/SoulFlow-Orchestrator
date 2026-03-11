@@ -3,6 +3,7 @@
 import { createConnection, type Socket } from "node:net";
 import { Tool } from "./base.js";
 import type { JsonSchema } from "./types.js";
+import { error_message } from "../../utils/common.js";
 
 export class RedisTool extends Tool {
   readonly name = "redis";
@@ -66,7 +67,7 @@ export class RedisTool extends Tool {
       const result = password ? results.slice(1) : results;
       return JSON.stringify({ success: true, action, result: result.length === 1 ? result[0] : result });
     } catch (err) {
-      return JSON.stringify({ success: false, error: (err as Error).message });
+      return JSON.stringify({ success: false, error: error_message(err) });
     }
   }
 

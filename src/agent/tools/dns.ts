@@ -3,6 +3,7 @@
 import { promises as dns } from "node:dns";
 import { Tool } from "./base.js";
 import type { JsonSchema } from "./types.js";
+import { error_message } from "../../utils/common.js";
 
 export class DnsTool extends Tool {
   readonly name = "dns";
@@ -64,7 +65,7 @@ export class DnsTool extends Tool {
           return `Error: unsupported action "${action}"`;
       }
     } catch (err) {
-      return `Error: ${(err as Error).message}`;
+      return `Error: ${error_message(err)}`;
     }
   }
 }

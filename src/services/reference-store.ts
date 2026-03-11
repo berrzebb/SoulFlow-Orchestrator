@@ -15,6 +15,7 @@ import * as sqliteVec from "sqlite-vec";
 import type { EmbedFn } from "../agent/memory.service.js";
 import type { ImageEmbedFn } from "./embed.service.js";
 import { extract_doc_text, BINARY_DOC_EXTENSIONS } from "../utils/doc-extractor.js";
+import { now_iso } from "../utils/common.js";
 
 const VEC_DIMENSIONS = 256;
 const MAX_EMBED_CHARS = 1500;
@@ -181,7 +182,7 @@ export class ReferenceStore implements ReferenceStoreLike {
         if (!is_new) this.remove_document(db, file.rel_path);
 
         const file_size = statSync(file.abs_path).size;
-        const ts = new Date().toISOString();
+        const ts = now_iso();
 
         if (is_image) {
           // 이미지: 단일 청크 (FTS 없음, 경로 + alt_text만 저장)

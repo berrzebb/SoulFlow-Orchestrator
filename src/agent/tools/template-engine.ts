@@ -2,6 +2,7 @@
 
 import { Tool } from "./base.js";
 import type { JsonSchema } from "./types.js";
+import { error_message } from "../../utils/common.js";
 
 const MAX_TEMPLATE_SIZE = 1024 * 128;
 const MAX_ITERATIONS = 1000;
@@ -42,7 +43,7 @@ export class TemplateTool extends Tool {
     try {
       return this.render(template, data, partials);
     } catch (err) {
-      return `Error: ${(err as Error).message}`;
+      return `Error: ${error_message(err)}`;
     }
   }
 

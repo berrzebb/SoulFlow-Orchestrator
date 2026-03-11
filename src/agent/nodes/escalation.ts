@@ -33,7 +33,7 @@ export const escalation_handler: NodeHandler = {
 
   async execute(): Promise<OrcheNodeExecuteResult> {
     return {
-      output: { escalated: false, escalated_to: null, escalated_at: new Date().toISOString(), reason: "" },
+      output: { escalated: false, escalated_to: null, escalated_at: now_iso(), reason: "" },
     };
   },
 

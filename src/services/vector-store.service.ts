@@ -5,6 +5,7 @@ import { mkdirSync } from "node:fs";
 import Database from "better-sqlite3";
 import * as sqliteVec from "sqlite-vec";
 import { create_logger } from "../logger.js";
+import { error_message } from "../utils/common.js";
 
 const log = create_logger("vector-store");
 
@@ -19,7 +20,7 @@ function with_vec_db<T>(db_path: string, run: (db: VecDb) => T): T | null {
     sqliteVec.load(db);
     return run(db);
   } catch (err) {
-    log.warn("vec_db_error", { db_path, error: String(err) });
+    log.warn("vec_db_error", { db_path, error: error_message(err) });
     return null;
   } finally {
     try { db?.close(); } catch { /* no-op */ }

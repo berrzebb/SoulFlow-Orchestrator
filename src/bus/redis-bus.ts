@@ -1,6 +1,7 @@
 import { Redis } from "ioredis";
 import { hostname } from "node:os";
 import { create_logger } from "../logger.js";
+import { error_message, now_iso } from "../utils/common.js";
 import type {
   BusMetrics,
   ConsumeMessageOptions,
@@ -108,7 +109,7 @@ export class RedisMessageBus implements MessageBusRuntime, ReliableMessageBus {
         await this.client.xgroup("CREATE", key, group, "0", "MKSTREAM");
         log.info(`consumer group created: ${key} / ${group}`);
       } catch (err) {
-        if (String(err).includes("BUSYGROUP")) {
+        if (error_message(err).includes("BUSYGROUP")) {
           // 이미 존재 — 정상
         } else {
           throw err;
@@ -146,7 +147,7 @@ export class RedisMessageBus implements MessageBusRuntime, ReliableMessageBus {
       "payload", data,
       "kind", stream,
       "version", "1",
-      "published_at", new Date().toISOString(),
+      "published_at", now_iso(),
     );
     return id ?? "";
   }
@@ -166,7 +167,7 @@ export class RedisMessageBus implements MessageBusRuntime, ReliableMessageBus {
   async publish_progress(event: ProgressEvent): Promise<void> {
     if (this._closed) return;
     await this.xadd("progress", event).catch((err) => {
-      log.warn("progress publish failed (best-effort)", { error: String(err) });
+      log.warn("progress publish failed (best-effort)", { error: error_message(err) });
     });
   }
 

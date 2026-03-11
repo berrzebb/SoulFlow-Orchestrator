@@ -2,6 +2,7 @@
 
 import { create_logger } from "../logger.js";
 import { HTTP_FETCH_SHORT_TIMEOUT_MS } from "../utils/timeouts.js";
+import { error_message } from "../utils/common.js";
 
 const log = create_logger("model-catalog");
 
@@ -162,7 +163,7 @@ export async function fetch_openrouter_models(api_key?: string): Promise<ModelIn
     log.info("openrouter models fetched", { count: models.length });
     return models;
   } catch (e) {
-    log.warn("openrouter models fetch error", { error: String(e) });
+    log.warn("openrouter models fetch error", { error: error_message(e) });
     return [];
   }
 }
@@ -197,7 +198,7 @@ export async function fetch_openai_models(api_base: string, api_key?: string): P
     log.info("openai models fetched", { api_base, count: models.length });
     return models;
   } catch (e) {
-    log.warn("openai models fetch error", { api_base, error: String(e) });
+    log.warn("openai models fetch error", { api_base, error: error_message(e) });
     return [];
   }
 }
@@ -264,7 +265,7 @@ export async function fetch_anthropic_models(api_key?: string): Promise<ModelInf
     log.info("anthropic models fetched", { count: models.length });
     return models;
   } catch (e) {
-    log.warn("anthropic models fetch error", { error: String(e) });
+    log.warn("anthropic models fetch error", { error: error_message(e) });
     return [];
   }
 }
@@ -308,7 +309,7 @@ export async function fetch_gemini_models(api_key?: string): Promise<ModelInfo[]
     log.info("gemini models fetched", { count: models.length });
     return models;
   } catch (e) {
-    log.warn("gemini models fetch error", { error: String(e) });
+    log.warn("gemini models fetch error", { error: error_message(e) });
     return [];
   }
 }

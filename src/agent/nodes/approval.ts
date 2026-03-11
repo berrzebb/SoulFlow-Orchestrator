@@ -32,7 +32,7 @@ export const approval_handler: NodeHandler = {
 
   async execute(): Promise<OrcheNodeExecuteResult> {
     return {
-      output: { approved: false, comment: "", approved_by: null, approved_at: new Date().toISOString(), votes: [] },
+      output: { approved: false, comment: "", approved_by: null, approved_at: now_iso(), votes: [] },
     };
   },
 

@@ -2,6 +2,7 @@
 
 import { Tool } from "./base.js";
 import type { JsonSchema } from "./types.js";
+import { error_message } from "../../utils/common.js";
 
 export class XmlTool extends Tool {
   readonly name = "xml";
@@ -37,7 +38,7 @@ export class XmlTool extends Tool {
       const result = this.xml_to_json(xml.trim());
       return JSON.stringify(result);
     } catch (err) {
-      return `Error: ${(err as Error).message}`;
+      return `Error: ${error_message(err)}`;
     }
   }
 
@@ -46,7 +47,7 @@ export class XmlTool extends Tool {
       const obj = JSON.parse(json_str);
       return this.json_to_xml(obj, 0);
     } catch (err) {
-      return `Error: ${(err as Error).message}`;
+      return `Error: ${error_message(err)}`;
     }
   }
 
@@ -68,7 +69,7 @@ export class XmlTool extends Tool {
       }
       return JSON.stringify({ result: current, path });
     } catch (err) {
-      return `Error: ${(err as Error).message}`;
+      return `Error: ${error_message(err)}`;
     }
   }
 
@@ -77,7 +78,7 @@ export class XmlTool extends Tool {
       this.xml_to_json(xml.trim());
       return JSON.stringify({ valid: true });
     } catch (err) {
-      return JSON.stringify({ valid: false, error: (err as Error).message });
+      return JSON.stringify({ valid: false, error: error_message(err) });
     }
   }
 

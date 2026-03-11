@@ -2,7 +2,7 @@
 
 import { createServer, type Server, type IncomingMessage, type ServerResponse } from "node:http";
 import { Tool } from "./base.js";
-import { error_message } from "../../utils/common.js";
+import { error_message, now_iso } from "../../utils/common.js";
 import type { JsonSchema } from "./types.js";
 
 type WebhookEntry = {
@@ -57,7 +57,7 @@ export class WebhookTool extends Tool {
 
     const method = String(p.method || "POST").toUpperCase();
     const id = `wh_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
-    this.hooks.set(id, { id, path, method, created_at: new Date().toISOString(), requests: [] });
+    this.hooks.set(id, { id, path, method, created_at: now_iso(), requests: [] });
 
     if (!this.server) {
       try { await this.start_server(); } catch (err) { return `Error: ${error_message(err)}`; }
@@ -121,7 +121,7 @@ export class WebhookTool extends Tool {
       for (const hook of this.hooks.values()) {
         if (url.startsWith(hook.path) && (hook.method === "ANY" || hook.method === method)) {
           hook.requests.push({
-            timestamp: new Date().toISOString(),
+            timestamp: now_iso(),
             method,
             headers: Object.fromEntries(Object.entries(req.headers).map(([k, v]) => [k, String(v)])),
             body: body.slice(0, 10_000),

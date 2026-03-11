@@ -8,6 +8,8 @@ export interface Logger {
   child(name: string): Logger;
 }
 
+import { now_iso } from "./utils/common.js";
+
 type LogLevel = "debug" | "info" | "warn" | "error";
 
 const LEVEL_ORDER: Record<LogLevel, number> = { debug: 0, info: 1, warn: 2, error: 3 };
@@ -41,9 +43,9 @@ class ConsoleLogger implements Logger {
     if (LEVEL_ORDER[level] < this.min_level) return;
     let line: string;
     try {
-      line = JSON.stringify({ ts: new Date().toISOString(), level, name: this.name, msg, ...ctx });
+      line = JSON.stringify({ ts: now_iso(), level, name: this.name, msg, ...ctx });
     } catch {
-      line = JSON.stringify({ ts: new Date().toISOString(), level, name: this.name, msg, _ctx_error: true });
+      line = JSON.stringify({ ts: now_iso(), level, name: this.name, msg, _ctx_error: true });
     }
     if (level === "error") {
        

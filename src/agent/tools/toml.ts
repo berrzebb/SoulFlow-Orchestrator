@@ -1,6 +1,6 @@
 /** TOML 도구 — TOML 파싱/생성/검증/쿼리. */
 
-import { deep_merge } from "../../utils/common.js";
+import { deep_merge, error_message } from "../../utils/common.js";
 import { Tool } from "./base.js";
 import type { JsonSchema } from "./types.js";
 
@@ -30,7 +30,7 @@ export class TomlTool extends Tool {
           const result = this.parse_toml(input);
           return JSON.stringify({ result });
         } catch (e) {
-          return JSON.stringify({ error: (e as Error).message });
+          return JSON.stringify({ error: error_message(e) });
         }
       }
       case "generate": {
@@ -46,7 +46,7 @@ export class TomlTool extends Tool {
           this.parse_toml(input);
           return JSON.stringify({ valid: true });
         } catch (e) {
-          return JSON.stringify({ valid: false, error: (e as Error).message });
+          return JSON.stringify({ valid: false, error: error_message(e) });
         }
       }
       case "query": {
@@ -57,7 +57,7 @@ export class TomlTool extends Tool {
           const result = this.resolve_path(obj, path);
           return JSON.stringify({ path, value: result, found: result !== undefined });
         } catch (e) {
-          return JSON.stringify({ error: (e as Error).message });
+          return JSON.stringify({ error: error_message(e) });
         }
       }
       case "merge": {
@@ -67,7 +67,7 @@ export class TomlTool extends Tool {
           const merged = deep_merge(a, b);
           return JSON.stringify({ result: merged });
         } catch (e) {
-          return JSON.stringify({ error: (e as Error).message });
+          return JSON.stringify({ error: error_message(e) });
         }
       }
       default:

@@ -2,6 +2,7 @@
 
 import { Tool } from "./base.js";
 import type { JsonSchema } from "./types.js";
+import { error_message } from "../../utils/common.js";
 
 type FeedItem = { title: string; link: string; description?: string; pubDate?: string; guid?: string; author?: string };
 
@@ -43,7 +44,7 @@ export class RssTool extends Tool {
           const text = await resp.text();
           return JSON.stringify(this.parse_feed(text));
         } catch (e) {
-          return JSON.stringify({ error: (e as Error).message });
+          return JSON.stringify({ error: error_message(e) });
         }
       }
       case "generate": {

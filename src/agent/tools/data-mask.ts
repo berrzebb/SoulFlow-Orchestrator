@@ -2,6 +2,7 @@
 
 import { Tool } from "./base.js";
 import type { JsonSchema } from "./types.js";
+import { error_message } from "../../utils/common.js";
 
 const PATTERNS: Record<string, RegExp> = {
   email: /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g,
@@ -94,7 +95,7 @@ export class DataMaskTool extends Tool {
           const masked = text.replace(re, replacement);
           return JSON.stringify({ masked, count: matches.length });
         } catch (e) {
-          return JSON.stringify({ error: `invalid pattern: ${(e as Error).message}` });
+          return JSON.stringify({ error: `invalid pattern: ${error_message(e)}` });
         }
       }
       default:

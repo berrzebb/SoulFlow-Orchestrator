@@ -13,6 +13,7 @@ import Database from "better-sqlite3";
 import * as sqliteVec from "sqlite-vec";
 import type { EmbedFn } from "../agent/memory.service.js";
 import type { ReferenceStoreLike, ReferenceSearchResult } from "./reference-store.js";
+import { now_iso } from "../utils/common.js";
 
 const VEC_DIMENSIONS = 256;
 const MAX_EMBED_CHARS = 1500;
@@ -120,7 +121,7 @@ export class SkillRefStore implements ReferenceStoreLike {
         if (!is_new) this.remove_document(db, file.rel_path);
 
         const chunks = this.chunk_markdown(content, file.rel_path, file.skill_name);
-        const ts = new Date().toISOString();
+        const ts = now_iso();
 
         db.prepare("INSERT OR REPLACE INTO skill_ref_documents (path, skill_name, content_hash, chunk_count, updated_at) VALUES (?, ?, ?, ?, ?)").run(file.rel_path, file.skill_name, hash, chunks.length, ts);
 

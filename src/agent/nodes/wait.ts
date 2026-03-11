@@ -3,7 +3,7 @@
 import type { NodeHandler } from "../node-registry.js";
 import type { WaitNodeDefinition, OrcheNodeDefinition } from "../workflow-node.types.js";
 import type { OrcheNodeExecuteResult, OrcheNodeTestResult } from "../orche-node-executor.js";
-import { sleep } from "../../utils/common.js";
+import { sleep, now_iso } from "../../utils/common.js";
 
 const MAX_DELAY_MS = 5 * 60 * 1_000; // 5분
 
@@ -26,10 +26,10 @@ export const wait_handler: NodeHandler = {
     if (n.wait_type === "timer") {
       const ms = Math.min(Math.max(0, n.delay_ms ?? 5000), MAX_DELAY_MS);
       await sleep(ms);
-      return { output: { resumed_at: new Date().toISOString(), payload: null } };
+      return { output: { resumed_at: now_iso(), payload: null } };
     }
     // webhook/approval은 phase-loop-runner에서 외부 신호로 resume
-    return { output: { resumed_at: new Date().toISOString(), payload: null } };
+    return { output: { resumed_at: now_iso(), payload: null } };
   },
 
   test(node: OrcheNodeDefinition): OrcheNodeTestResult {

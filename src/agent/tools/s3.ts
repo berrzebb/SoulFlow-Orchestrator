@@ -4,6 +4,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { createHmac, createHash } from "node:crypto";
 import { Tool } from "./base.js";
 import type { JsonSchema } from "./types.js";
+import { error_message } from "../../utils/common.js";
 
 export class S3Tool extends Tool {
   readonly name = "s3";
@@ -93,7 +94,7 @@ export class S3Tool extends Tool {
           return `Error: unsupported action "${action}"`;
       }
     } catch (err) {
-      return `Error: ${(err as Error).message}`;
+      return `Error: ${error_message(err)}`;
     }
   }
 

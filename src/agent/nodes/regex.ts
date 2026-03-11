@@ -4,6 +4,7 @@ import type { NodeHandler } from "../node-registry.js";
 import type { RegexNodeDefinition, OrcheNodeDefinition } from "../workflow-node.types.js";
 import type { OrcheNodeExecutorContext, OrcheNodeExecuteResult, OrcheNodeTestResult } from "../orche-node-executor.js";
 import { resolve_templates } from "../orche-node-executor.js";
+import { error_message } from "../../utils/common.js";
 
 export const regex_handler: NodeHandler = {
   node_type: "regex",
@@ -89,7 +90,7 @@ export const regex_handler: NodeHandler = {
           return { output: { result: `Unsupported: ${op}`, success: false } };
       }
     } catch (err) {
-      return { output: { result: (err as Error).message, success: false } };
+      return { output: { result: error_message(err), success: false } };
     }
   },
 

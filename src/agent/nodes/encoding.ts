@@ -5,6 +5,7 @@ import type { EncodingNodeDefinition, OrcheNodeDefinition } from "../workflow-no
 import type { OrcheNodeExecutorContext, OrcheNodeExecuteResult, OrcheNodeTestResult } from "../orche-node-executor.js";
 import { resolve_templates } from "../orche-node-executor.js";
 import { createHash, randomUUID } from "node:crypto";
+import { error_message } from "../../utils/common.js";
 
 export const encoding_handler: NodeHandler = {
   node_type: "encoding",
@@ -93,7 +94,7 @@ export const encoding_handler: NodeHandler = {
       }
       return { output: { result, success: !String(result).startsWith("Error:") && !String(result).startsWith("Unsupported:") } };
     } catch (err) {
-      return { output: { result: (err as Error).message, success: false } };
+      return { output: { result: error_message(err), success: false } };
     }
   },
 

@@ -1,6 +1,7 @@
 /** Kanban Trigger Watcher — waiting 상태 워크플로우를 kanban 이벤트로 자동 resume. */
 
 import { create_logger } from "../logger.js";
+import { error_message } from "../utils/common.js";
 import type { KanbanStoreLike, KanbanEvent } from "./kanban-store.js";
 
 const log = create_logger("kanban-trigger-watcher");
@@ -107,7 +108,7 @@ export async function setup_kanban_trigger_watcher(opts: {
   // 주기적 스캔 (새로 waiting 상태가 된 워크플로우 감지)
   const interval = setInterval(() => {
     void scan_and_subscribe().catch((err) => {
-      log.warn("kanban_trigger_scan_error", { error: String(err) });
+      log.warn("kanban_trigger_scan_error", { error: error_message(err) });
     });
   }, 30_000);
 
@@ -120,7 +121,7 @@ export async function setup_kanban_trigger_watcher(opts: {
         if (!meta?.board_id) return;
         subscribe_for_workflow(workflow_id, meta);
       }).catch((err) => {
-        log.warn("kanban_trigger_notify_error", { workflow_id, error: String(err) });
+        log.warn("kanban_trigger_notify_error", { workflow_id, error: error_message(err) });
       });
     },
     dispose() {

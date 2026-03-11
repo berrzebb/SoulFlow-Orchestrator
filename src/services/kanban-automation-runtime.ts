@@ -1,6 +1,7 @@
 /** Kanban 자동화 facade — trigger watcher + rule executor를 단일 stable 객체로 통합. */
 
 import { create_logger } from "../logger.js";
+import { error_message } from "../utils/common.js";
 import type { KanbanStoreLike } from "./kanban-store.js";
 import type { KanbanTriggerWatcher } from "./kanban-trigger-watcher.js";
 import type { KanbanRuleExecutor, RuleExecutionBridge } from "./kanban-rule-executor.js";
@@ -43,7 +44,7 @@ export class KanbanAutomationRuntime implements KanbanAutomationRuntimeLike {
       const { setup_kanban_trigger_watcher } = await import("./kanban-trigger-watcher.js");
       this.watcher = await setup_kanban_trigger_watcher(deps);
     } catch (err) {
-      log.warn("kanban_trigger_watcher_init_error", { error: String(err) });
+      log.warn("kanban_trigger_watcher_init_error", { error: error_message(err) });
     }
   }
 
@@ -52,7 +53,7 @@ export class KanbanAutomationRuntime implements KanbanAutomationRuntimeLike {
       const { setup_kanban_rule_listeners } = await import("./kanban-rule-executor.js");
       this.executor = await setup_kanban_rule_listeners(store, bridge);
     } catch (err) {
-      log.warn("kanban_rule_executor_init_error", { error: String(err) });
+      log.warn("kanban_rule_executor_init_error", { error: error_message(err) });
     }
   }
 

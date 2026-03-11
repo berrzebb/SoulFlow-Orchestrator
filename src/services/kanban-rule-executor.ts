@@ -1,6 +1,7 @@
 /** Kanban Rule Runtime Executor — activity 이벤트에 rule을 매칭하여 자동 action 실행. */
 
 import { create_logger } from "../logger.js";
+import { error_message } from "../utils/common.js";
 import type { KanbanStoreLike, KanbanEvent, KanbanRule, ActivityAction } from "./kanban-store.js";
 
 const log = create_logger("kanban-rule-executor");
@@ -134,7 +135,7 @@ export function register_kanban_rule_executor(store: KanbanStoreLike, bridge?: R
     if (board_listeners.has(board_id)) return;
     const listener = (event: KanbanEvent) => {
       void evaluate_rules(store, event).catch((err) => {
-        log.warn("rule_evaluate_error", { board_id, error: String(err) });
+        log.warn("rule_evaluate_error", { board_id, error: error_message(err) });
       });
     };
     board_listeners.set(board_id, listener);
@@ -161,7 +162,7 @@ export function register_kanban_rule_executor(store: KanbanStoreLike, bridge?: R
       try {
         await execute_action(kanban, rule, activity.card_id, board_id, bridge);
       } catch (err) {
-        log.warn("rule_action_error", { rule_id: rule.rule_id, card_id: activity.card_id, error: String(err) });
+        log.warn("rule_action_error", { rule_id: rule.rule_id, card_id: activity.card_id, error: error_message(err) });
       }
     }
   }

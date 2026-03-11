@@ -2,6 +2,7 @@
 
 import { Tool } from "./base.js";
 import type { JsonSchema } from "./types.js";
+import { now_iso } from "../../utils/common.js";
 
 interface TzInfo { id: string; offset: number; abbr: string; name: string; }
 
@@ -71,7 +72,7 @@ export class TimezoneTool extends Tool {
 
     switch (action) {
       case "convert": {
-        const dt = String(params.datetime || new Date().toISOString());
+        const dt = String(params.datetime || now_iso());
         const from_tz = this.find_tz(String(params.from || "UTC"));
         const to_tz = this.find_tz(String(params.to || "UTC"));
         if (!from_tz) return JSON.stringify({ error: `unknown timezone: ${params.from}` });

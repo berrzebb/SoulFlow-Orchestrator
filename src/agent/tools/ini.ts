@@ -2,6 +2,7 @@
 
 import { Tool } from "./base.js";
 import type { JsonSchema } from "./types.js";
+import { error_message } from "../../utils/common.js";
 
 export class IniTool extends Tool {
   readonly name = "ini";
@@ -41,7 +42,7 @@ export class IniTool extends Tool {
           this.parse_ini(input);
           return JSON.stringify({ valid: true });
         } catch (e) {
-          return JSON.stringify({ valid: false, error: (e as Error).message });
+          return JSON.stringify({ valid: false, error: error_message(e) });
         }
       }
       case "query": {

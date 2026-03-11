@@ -31,7 +31,7 @@ export const form_handler: NodeHandler = {
 
   async execute(): Promise<OrcheNodeExecuteResult> {
     return {
-      output: { fields: {}, submitted_by: null, submitted_at: new Date().toISOString(), timed_out: false },
+      output: { fields: {}, submitted_by: null, submitted_at: now_iso(), timed_out: false },
     };
   },
 

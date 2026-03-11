@@ -11,6 +11,7 @@ import { build_node_catalog } from "./workflow-catalog.js";
 import { select_nodes_for_request } from "../../orchestration/node-selector.js";
 import { get_all_handlers } from "../node-registry.js";
 import { register_all_nodes } from "../nodes/index.js";
+import { error_message } from "../../utils/common.js";
 
 export class WorkflowTool extends Tool {
   readonly name = "workflow";
@@ -134,7 +135,7 @@ export class WorkflowTool extends Tool {
       const slug = this.ops.save_template(name, def);
       return JSON.stringify({ ok: true, slug, action: "created" });
     } catch (e) {
-      return `Error: ${String(e)}`;
+      return `Error: ${error_message(e)}`;
     }
   }
 
@@ -158,7 +159,7 @@ export class WorkflowTool extends Tool {
       const slug = this.ops.save_template(name, def);
       return JSON.stringify({ ok: true, slug, action: "updated" });
     } catch (e) {
-      return `Error: ${String(e)}`;
+      return `Error: ${error_message(e)}`;
     }
   }
 

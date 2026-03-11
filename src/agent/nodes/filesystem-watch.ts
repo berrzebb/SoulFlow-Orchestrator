@@ -3,7 +3,7 @@
 import type { NodeHandler, RunnerContext } from "../node-registry.js";
 import type { TriggerNodeDefinition, OrcheNodeDefinition } from "../workflow-node.types.js";
 import type { OrcheNodeExecutorContext, OrcheNodeExecuteResult, OrcheNodeTestResult } from "../orche-node-executor.js";
-import { error_message } from "../../utils/common.js";
+import { error_message, now_iso } from "../../utils/common.js";
 
 export const filesystem_watch_handler: NodeHandler = {
   node_type: "filesystem_watch",
@@ -26,7 +26,7 @@ export const filesystem_watch_handler: NodeHandler = {
   }),
 
   async execute(): Promise<OrcheNodeExecuteResult> {
-    return { output: { files: [], batch_id: "", triggered_at: new Date().toISOString(), watch_path: "" } };
+    return { output: { files: [], batch_id: "", triggered_at: now_iso(), watch_path: "" } };
   },
 
   async runner_execute(node: OrcheNodeDefinition, _ctx: OrcheNodeExecutorContext, runner: RunnerContext): Promise<OrcheNodeExecuteResult> {
@@ -36,7 +36,7 @@ export const filesystem_watch_handler: NodeHandler = {
     const n = node as unknown as TriggerNodeDefinition;
     const watch_path = n.watch_path?.trim();
     if (!watch_path) {
-      return { output: { files: [], batch_id: "", triggered_at: new Date().toISOString(), watch_path: "", error: "watch_path is required" } };
+      return { output: { files: [], batch_id: "", triggered_at: now_iso(), watch_path: "", error: "watch_path is required" } };
     }
 
     // resume 시 이미 주입된 이벤트가 있으면 즉시 반환
@@ -54,12 +54,12 @@ export const filesystem_watch_handler: NodeHandler = {
         batch_ms: n.watch_batch_ms ?? 500,
       });
       if (!event) {
-        return { output: { files: [], batch_id: "", triggered_at: new Date().toISOString(), watch_path, waiting: true } };
+        return { output: { files: [], batch_id: "", triggered_at: now_iso(), watch_path, waiting: true } };
       }
       return { output: event };
     } catch (err) {
       runner.logger.warn("filesystem_watch_error", { node_id: n.node_id, error: error_message(err) });
-      return { output: { files: [], batch_id: "", triggered_at: new Date().toISOString(), watch_path, error: error_message(err) } };
+      return { output: { files: [], batch_id: "", triggered_at: now_iso(), watch_path, error: error_message(err) } };
     }
   },
 

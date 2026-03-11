@@ -4,6 +4,7 @@ import { createSocket } from "node:dgram";
 import { createConnection, type Socket } from "node:net";
 import { Tool } from "./base.js";
 import type { JsonSchema } from "./types.js";
+import { now_iso } from "../../utils/common.js";
 
 export class SyslogTool extends Tool {
   readonly name = "syslog";
@@ -83,7 +84,7 @@ export class SyslogTool extends Tool {
     const hostname = String(params.hostname || "localhost");
     const app_name = String(params.app_name || "soulflow");
     const msg = String(params.message || "");
-    const timestamp = new Date().toISOString();
+    const timestamp = now_iso();
     return `<${priority}>1 ${timestamp} ${hostname} ${app_name} - - - ${msg}`;
   }
 

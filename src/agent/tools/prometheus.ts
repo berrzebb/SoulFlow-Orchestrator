@@ -2,6 +2,7 @@
 
 import { Tool } from "./base.js";
 import type { JsonSchema } from "./types.js";
+import { error_message } from "../../utils/common.js";
 
 type Metric = { name: string; type?: string; help?: string; value: number; labels?: Record<string, string>; timestamp?: number };
 
@@ -53,7 +54,7 @@ export class PrometheusTool extends Tool {
           const resp = await fetch(url, { method: "POST", body, headers: { "Content-Type": "text/plain" } });
           return JSON.stringify({ success: resp.ok, status: resp.status, url });
         } catch (e) {
-          return JSON.stringify({ success: false, error: (e as Error).message });
+          return JSON.stringify({ success: false, error: error_message(e) });
         }
       }
       case "query_format": {

@@ -4,6 +4,7 @@ import type { RouteHandler } from "../route-context.js";
 import type { DashboardWorkflowOps } from "../service.js";
 import { set_no_cache } from "../route-context.js";
 import { renderMermaid, renderMermaidAscii } from "@vercel/beautiful-mermaid";
+import { error_message } from "../../utils/common.js";
 
 export const handle_workflow: RouteHandler = async (ctx) => {
   const { req, res, url, json, read_body, options } = ctx;
@@ -207,7 +208,7 @@ export const handle_workflow: RouteHandler = async (ctx) => {
       });
       send_event(result.ok ? "done" : "error", result);
     } catch (err) {
-      send_event("error", { ok: false, error: String(err) });
+      send_event("error", { ok: false, error: error_message(err) });
     }
 
     if (!res.destroyed) res.end();
@@ -236,7 +237,7 @@ export const handle_workflow: RouteHandler = async (ctx) => {
         : await renderMermaid(source);
       json(res, 200, { ok: true, output, format });
     } catch (err) {
-      json(res, 422, { ok: false, error: String(err) });
+      json(res, 422, { ok: false, error: error_message(err) });
     }
     return true;
   }

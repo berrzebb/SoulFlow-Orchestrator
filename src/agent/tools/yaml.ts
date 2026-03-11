@@ -1,6 +1,6 @@
 /** YAML 도구 — YAML 파싱/생성/머지/검증. 순수 JS 경량 구현. */
 
-import { deep_merge } from "../../utils/common.js";
+import { deep_merge, error_message } from "../../utils/common.js";
 import { Tool } from "./base.js";
 import type { JsonSchema } from "./types.js";
 
@@ -40,7 +40,7 @@ export class YamlTool extends Tool {
       const result = this.yaml_parse(yaml);
       return JSON.stringify(result);
     } catch (err) {
-      return `Error: ${(err as Error).message}`;
+      return `Error: ${error_message(err)}`;
     }
   }
 
@@ -49,7 +49,7 @@ export class YamlTool extends Tool {
       const obj = JSON.parse(json_str);
       return this.to_yaml(obj, 0, indent);
     } catch (err) {
-      return `Error: ${(err as Error).message}`;
+      return `Error: ${error_message(err)}`;
     }
   }
 
@@ -63,7 +63,7 @@ export class YamlTool extends Tool {
       const merged = deep_merge(a as Record<string, unknown>, b as Record<string, unknown>);
       return this.to_yaml(merged, 0, 2);
     } catch (err) {
-      return `Error: ${(err as Error).message}`;
+      return `Error: ${error_message(err)}`;
     }
   }
 
@@ -72,7 +72,7 @@ export class YamlTool extends Tool {
       this.yaml_parse(yaml);
       return JSON.stringify({ valid: true });
     } catch (err) {
-      return JSON.stringify({ valid: false, error: (err as Error).message });
+      return JSON.stringify({ valid: false, error: error_message(err) });
     }
   }
 
@@ -90,7 +90,7 @@ export class YamlTool extends Tool {
       }
       return JSON.stringify({ result: current, path });
     } catch (err) {
-      return `Error: ${(err as Error).message}`;
+      return `Error: ${error_message(err)}`;
     }
   }
 

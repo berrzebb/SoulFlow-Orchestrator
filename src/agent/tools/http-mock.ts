@@ -2,6 +2,7 @@
 
 import { Tool } from "./base.js";
 import type { JsonSchema } from "./types.js";
+import { now_iso } from "../../utils/common.js";
 
 type MockRoute = { method: string; path: string; status: number; body: string; headers: Record<string, string> };
 type RecordedRequest = { method: string; path: string; body?: string; timestamp: string };
@@ -72,7 +73,7 @@ export class HttpMockTool extends Tool {
         const method = String(params.method || "GET").toUpperCase();
         const path = String(params.path || "/");
         const body = params.request_body ? String(params.request_body) : undefined;
-        recorded_requests.push({ method, path, body, timestamp: new Date().toISOString() });
+        recorded_requests.push({ method, path, body, timestamp: now_iso() });
         return JSON.stringify({ recorded: true, total: recorded_requests.length });
       }
       case "replay":

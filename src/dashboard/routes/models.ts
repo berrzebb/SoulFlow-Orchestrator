@@ -2,6 +2,7 @@
 
 import type { RouteContext } from "../route-context.js";
 import { set_no_cache } from "../route-context.js";
+import { error_message } from "../../utils/common.js";
 
 export async function handle_models(ctx: RouteContext): Promise<boolean> {
   const { req, url, res, options, json, read_body } = ctx;
@@ -79,7 +80,7 @@ export async function handle_models(ctx: RouteContext): Promise<boolean> {
     } catch (err) {
       error_occurred = true;
       if (!res.destroyed) {
-        res.write(`data: ${JSON.stringify({ status: "error", error: String(err) })}\n\n`);
+        res.write(`data: ${JSON.stringify({ status: "error", error: error_message(err) })}\n\n`);
       }
     }
 

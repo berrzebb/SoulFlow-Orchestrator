@@ -9,6 +9,7 @@ import { Document, Packer, Paragraph, HeadingLevel, AlignmentType } from "docx";
 import ExcelJS from "exceljs";
 import { Tool } from "./base.js";
 import type { JsonSchema } from "./types.js";
+import { error_message } from "../../utils/common.js";
 
 const require = createRequire(import.meta.url);
 const PptxGenJS = require("pptxgenjs");
@@ -123,7 +124,7 @@ export class DocumentTool extends Tool {
         success: true,
       });
     } catch (err) {
-      return `Error: ${String(err)}`;
+      return `Error: ${error_message(err)}`;
     }
   }
 
@@ -179,7 +180,7 @@ export class DocumentTool extends Tool {
         success: true,
       });
     } catch (err) {
-      return `Error: ${String(err)}`;
+      return `Error: ${error_message(err)}`;
     }
   }
 
@@ -239,7 +240,7 @@ export class DocumentTool extends Tool {
         success: true,
       });
     } catch (err) {
-      return `Error: ${String(err)}`;
+      return `Error: ${error_message(err)}`;
     }
   }
 
@@ -313,7 +314,7 @@ export class DocumentTool extends Tool {
         success: true,
       });
     } catch (err) {
-      return `Error: ${String(err)}`;
+      return `Error: ${error_message(err)}`;
     }
   }
 

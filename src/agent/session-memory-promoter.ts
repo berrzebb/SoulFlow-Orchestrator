@@ -11,6 +11,7 @@
 import type { SessionStoreLike } from "../session/service.js";
 import type { MemoryStoreLike } from "./memory.types.js";
 import type { Logger } from "../logger.js";
+import { error_message } from "../utils/common.js";
 
 export type SessionPromotionConfig = {
   /** 세션 히스토리 최대 수명 (ms). 절반 이상 지난 메시지를 승격 대상으로 삼음. */
@@ -95,7 +96,7 @@ export async function promote_sessions_to_daily(
       promoted++;
       logger.debug("session promoted to daily", { key: entry.key, messages: to_promote.length });
     } catch (e) {
-      logger.debug("session promotion skipped", { key: entry.key, error: String(e) });
+      logger.debug("session promotion skipped", { key: entry.key, error: error_message(e) });
       skipped++;
     }
   }
