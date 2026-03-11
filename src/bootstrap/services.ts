@@ -1,6 +1,7 @@
 /** Services bundle: late-inject commands + service registration + progress relay + post-boot tasks. */
 
 import { error_message } from "../utils/common.js";
+import { resilient_loop } from "../utils/resilient-loop.js";
 import type { AgentDomain } from "../agent/index.js";
 import type { AgentBackend } from "../agent/agent.types.js";
 import type { AgentSessionStore } from "../agent/agent-session-store.js";
@@ -107,18 +108,25 @@ export function register_services(deps: ServiceRegistrationDeps): void {
   if (app_config.memory.consolidation.enabled) services.register(memory_consolidation, { required: false });
 }
 
-/** progress relay: bus → broadcaster SSE 릴레이 시작. */
+/** progress relay: bus → broadcaster SSE 릴레이 시작. 크래시 시 지수 백오프 재시작. */
 export function start_progress_relay(
   bus: MessageBusRuntime,
   broadcaster: MutableBroadcaster,
   logger: ReturnType<typeof create_logger>,
 ): void {
-  (async function progress_relay() {
-    while (!bus.is_closed()) {
-      const event = await bus.consume_progress({ timeout_ms: 5000 });
-      if (event) broadcaster.broadcast_progress_event(event);
-    }
-  })().catch((e) => logger.error("[progress_relay] unhandled:", e));
+  resilient_loop(
+    async () => {
+      while (!bus.is_closed()) {
+        const event = await bus.consume_progress({ timeout_ms: 5000 });
+        if (event) broadcaster.broadcast_progress_event(event);
+      }
+    },
+    {
+      name: "progress_relay",
+      should_run: () => !bus.is_closed(),
+      on_error: (e) => logger.error("[progress_relay] crashed, restarting:", { error: error_message(e) }),
+    },
+  );
 }
 
 export interface PostBootDeps {
