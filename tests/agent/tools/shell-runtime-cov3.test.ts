@@ -40,6 +40,7 @@ const { mock_state, exec_fn, spawn_fn } = vi.hoisted(() => {
 
 vi.mock("node:child_process", () => ({
   execFile: exec_fn,
+  exec: exec_fn,   // NO_JUST_BASH 환경에서 exec 폴백 경로도 커버
   spawnSync: spawn_fn,
 }));
 

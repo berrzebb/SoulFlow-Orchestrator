@@ -43,8 +43,12 @@ const { mock_state, exec_fn, spawn_fn } = vi.hoisted(() => {
 
 vi.mock("node:child_process", () => ({
   execFile: exec_fn,
+  exec: exec_fn,   // NO_JUST_BASH 환경에서 exec 폴백 경로도 커버
   spawnSync: spawn_fn,
 }));
+
+// CI에서 NO_JUST_BASH=1이 설정돼 있을 수 있음 — just-bash mock 경로 테스트 전에 해제
+delete process.env.NO_JUST_BASH;
 
 // ── 헬퍼 ──────────────────────────────────────────────────
 
