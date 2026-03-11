@@ -4,13 +4,17 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { with_sqlite } from "../utils/sqlite-helper.js";
 import type {
   CronJob,
+  CronJobOverrides,
   CronOnJob,
   CronPayload,
+  CronRetryPolicy,
   CronSchedule,
+  CronScheduleKind,
   CronServiceOptions,
   CronServiceStatus,
   CronStore,
 } from "./types.js";
+import { DEFAULT_RETRY_ONESHOT, DEFAULT_RETRY_RECURRING } from "./types.js";
 import type { CronScheduler } from "./contracts.js";
 import type { ServiceLike } from "../runtime/service.types.js";
 import type { Logger } from "../logger.js";
@@ -25,20 +29,25 @@ type CronDbRow = {
   schedule_every_ms: number | null;
   schedule_expr: string | null;
   schedule_tz: string | null;
+  schedule_stagger_ms: number | null;
   payload_kind: string;
   payload_message: string;
   payload_deliver: number;
   payload_channel: string | null;
   payload_to: string | null;
+  payload_overrides: string | null;
   state_next_run_at_ms: number | null;
   state_last_run_at_ms: number | null;
   state_last_status: string | null;
   state_last_error: string | null;
   state_running: number;
   state_running_started_at_ms: number | null;
+  state_retry_attempt: number | null;
   created_at_ms: number;
   updated_at_ms: number;
   delete_after_run: number;
+  retry_max_retries: number | null;
+  retry_backoff_ms: string | null;
 };
 
 const _tz_formatter_cache = new Map<string, Intl.DateTimeFormat>();
@@ -184,7 +193,33 @@ function _match_parsed_cron(parsed: ParsedCronExpr, parts: CronDateParts): boole
   );
 }
 
-function _compute_next_run(schedule: CronSchedule, now: number, on_warn?: (msg: string) => void): number | null {
+/** job ID 기반 결정적 stagger 오프셋. 동일 job은 항상 동일 오프셋. */
+function _deterministic_stagger(job_id: string, max_ms: number): number {
+  let hash = 0;
+  for (let i = 0; i < job_id.length; i += 1) {
+    hash = ((hash << 5) - hash + job_id.charCodeAt(i)) | 0;
+  }
+  return Math.abs(hash) % max_ms;
+}
+
+/** 재시도 정책에서 현재 attempt에 해당하는 백오프 지연 (ms). */
+function _get_retry_delay(policy: CronRetryPolicy, attempt: number): number {
+  const idx = Math.min(attempt - 1, policy.backoff_ms.length - 1);
+  return policy.backoff_ms[Math.max(0, idx)] || 30_000;
+}
+
+/** 스케줄 종류에 따른 기본 재시도 정책. */
+function _default_retry_policy(kind: CronScheduleKind): CronRetryPolicy {
+  return kind === "at" ? DEFAULT_RETRY_ONESHOT : DEFAULT_RETRY_RECURRING;
+}
+
+/** 재시도 가능 여부 판단. max_retries=-1이면 무제한. */
+function _should_retry(policy: CronRetryPolicy, attempt: number): boolean {
+  if (policy.max_retries < 0) return true;
+  return attempt <= policy.max_retries;
+}
+
+function _compute_next_run(schedule: CronSchedule, now: number, on_warn?: (msg: string) => void, stagger_id?: string): number | null {
   if (schedule.kind === "at") {
     const at = Number(schedule.at_ms || 0);
     if (!Number.isFinite(at) || at <= 0) return null;
@@ -234,7 +269,12 @@ function _compute_next_run(schedule: CronSchedule, now: number, on_warn?: (msg: 
         candidate_ms = d.getTime();
         continue;
       }
-      if (_match_parsed_cron(parsed, parts)) return candidate_ms;
+      if (_match_parsed_cron(parsed, parts)) {
+        const stagger = (schedule.stagger_ms && schedule.stagger_ms > 0 && stagger_id)
+          ? _deterministic_stagger(stagger_id, schedule.stagger_ms)
+          : 0;
+        return candidate_ms + stagger;
+      }
       candidate_ms += 60_000;
     }
   }
@@ -276,7 +316,14 @@ function _validate_schedule_for_add(schedule: CronSchedule): void {
   }
 }
 
+function _parse_json_or_null<T>(raw: string | null): T | null {
+  if (!raw) return null;
+  try { return JSON.parse(raw) as T; } catch { return null; }
+}
+
 function _row_to_job(row: CronDbRow): CronJob {
+  const retry_backoff = _parse_json_or_null<number[]>(row.retry_backoff_ms);
+  const has_retry = row.retry_max_retries !== null && row.retry_max_retries !== undefined;
   return {
     id: String(row.id || ""),
     name: String(row.name || ""),
@@ -287,6 +334,7 @@ function _row_to_job(row: CronDbRow): CronJob {
       every_ms: row.schedule_every_ms ?? null,
       expr: row.schedule_expr ?? null,
       tz: row.schedule_tz ?? null,
+      stagger_ms: row.schedule_stagger_ms ?? null,
     },
     payload: {
       kind: String(row.payload_kind || "agent_turn") as CronPayload["kind"],
@@ -294,6 +342,7 @@ function _row_to_job(row: CronDbRow): CronJob {
       deliver: Number(row.payload_deliver || 0) === 1,
       channel: row.payload_channel ?? null,
       to: row.payload_to ?? null,
+      overrides: _parse_json_or_null<CronJobOverrides>(row.payload_overrides),
     },
     state: {
       next_run_at_ms: row.state_next_run_at_ms ?? null,
@@ -302,10 +351,14 @@ function _row_to_job(row: CronDbRow): CronJob {
       last_error: row.state_last_error ?? null,
       running: Number(row.state_running || 0) === 1,
       running_started_at_ms: row.state_running_started_at_ms ?? null,
+      retry_attempt: Number(row.state_retry_attempt || 0),
     },
     created_at_ms: Number(row.created_at_ms || 0),
     updated_at_ms: Number(row.updated_at_ms || 0),
     delete_after_run: Number(row.delete_after_run || 0) === 1,
+    retry: has_retry
+      ? { max_retries: Number(row.retry_max_retries), backoff_ms: retry_backoff || [30_000, 60_000, 300_000] }
+      : null,
   };
 }
 
@@ -420,6 +473,17 @@ export class CronService implements CronScheduler, ServiceLike {
           );
         END;
       `);
+      // v2 마이그레이션: retry, stagger, overrides 컬럼 추가
+      const v2_columns = [
+        "schedule_stagger_ms INTEGER",
+        "payload_overrides TEXT",
+        "state_retry_attempt INTEGER DEFAULT 0",
+        "retry_max_retries INTEGER",
+        "retry_backoff_ms TEXT",
+      ];
+      for (const col of v2_columns) {
+        try { db.exec(`ALTER TABLE cron_jobs ADD COLUMN ${col}`); } catch { /* 이미 존재 */ }
+      }
       return true;
     });
   }
@@ -432,10 +496,13 @@ export class CronService implements CronScheduler, ServiceLike {
         const stmt = db.prepare(`
           INSERT INTO cron_jobs (
             id, name, enabled, schedule_kind, schedule_at_ms, schedule_every_ms, schedule_expr, schedule_tz,
-            payload_kind, payload_message, payload_deliver, payload_channel, payload_to,
+            schedule_stagger_ms,
+            payload_kind, payload_message, payload_deliver, payload_channel, payload_to, payload_overrides,
             state_next_run_at_ms, state_last_run_at_ms, state_last_status, state_last_error, state_running,
-            state_running_started_at_ms, created_at_ms, updated_at_ms, delete_after_run
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            state_running_started_at_ms, state_retry_attempt,
+            created_at_ms, updated_at_ms, delete_after_run,
+            retry_max_retries, retry_backoff_ms
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `);
         for (const job of store.jobs) {
           stmt.run(
@@ -447,20 +514,25 @@ export class CronService implements CronScheduler, ServiceLike {
             job.schedule.every_ms ?? null,
             job.schedule.expr ?? null,
             job.schedule.tz ?? null,
+            job.schedule.stagger_ms ?? null,
             job.payload.kind,
             job.payload.message,
             job.payload.deliver ? 1 : 0,
             job.payload.channel ?? null,
             job.payload.to ?? null,
+            job.payload.overrides ? JSON.stringify(job.payload.overrides) : null,
             job.state.next_run_at_ms ?? null,
             job.state.last_run_at_ms ?? null,
             job.state.last_status ?? null,
             job.state.last_error ?? null,
             job.state.running ? 1 : 0,
             job.state.running_started_at_ms ?? null,
+            job.state.retry_attempt ?? 0,
             job.created_at_ms,
             job.updated_at_ms,
             job.delete_after_run ? 1 : 0,
+            job.retry?.max_retries ?? null,
+            job.retry?.backoff_ms ? JSON.stringify(job.retry.backoff_ms) : null,
           );
         }
         db.exec("COMMIT");
@@ -482,9 +554,12 @@ export class CronService implements CronScheduler, ServiceLike {
     const rows = with_sqlite(this.sqlite_path,(db) => db.prepare(`
       SELECT
         id, name, enabled, schedule_kind, schedule_at_ms, schedule_every_ms, schedule_expr, schedule_tz,
-        payload_kind, payload_message, payload_deliver, payload_channel, payload_to,
+        schedule_stagger_ms,
+        payload_kind, payload_message, payload_deliver, payload_channel, payload_to, payload_overrides,
         state_next_run_at_ms, state_last_run_at_ms, state_last_status, state_last_error, state_running,
-        state_running_started_at_ms, created_at_ms, updated_at_ms, delete_after_run
+        state_running_started_at_ms, state_retry_attempt,
+        created_at_ms, updated_at_ms, delete_after_run,
+        retry_max_retries, retry_backoff_ms
       FROM cron_jobs
       ORDER BY created_at_ms ASC
     `).all() as CronDbRow[]) || [];
@@ -509,7 +584,7 @@ export class CronService implements CronScheduler, ServiceLike {
         job.state.running = false;
         job.state.running_started_at_ms = null;
       }
-      if (job.enabled) job.state.next_run_at_ms = _compute_next_run(job.schedule, now, (m) => this.logger?.warn(m));
+      if (job.enabled) job.state.next_run_at_ms = _compute_next_run(job.schedule, now, (m) => this.logger?.warn(m), job.id);
     }
   }
 
@@ -591,18 +666,22 @@ export class CronService implements CronScheduler, ServiceLike {
     job.state.running = true;
     job.state.running_started_at_ms = start_ms;
     job.updated_at_ms = start_ms;
-    this.logger?.info("cron_job_start", { job_id: job.id, name: job.name, schedule: job.schedule.kind });
+    const attempt = (job.state.retry_attempt || 0);
+    this.logger?.info("cron_job_start", { job_id: job.id, name: job.name, schedule: job.schedule.kind, retry_attempt: attempt });
     try {
       await this._save_store();
+      let exec_error: string | null = null;
       try {
         if (this.on_job) await this.on_job(job);
         job.state.last_status = "ok";
         job.state.last_error = null;
+        job.state.retry_attempt = 0;
         this.logger?.info("cron_job_finish", { job_id: job.id, name: job.name, status: "ok" });
       } catch (error) {
+        exec_error = error_message(error);
         job.state.last_status = "error";
-        job.state.last_error = error_message(error);
-        this.logger?.warn("cron_job_finish", { job_id: job.id, name: job.name, status: "error", error: error_message(error) });
+        job.state.last_error = exec_error;
+        this.logger?.warn("cron_job_finish", { job_id: job.id, name: job.name, status: "error", error: exec_error });
       }
 
       job.state.last_run_at_ms = start_ms;
@@ -610,17 +689,47 @@ export class CronService implements CronScheduler, ServiceLike {
       job.state.running_started_at_ms = null;
       job.updated_at_ms = now_ms();
 
+      if (exec_error) {
+        this._schedule_retry_or_advance(job, store);
+      } else if (job.delete_after_run) {
+        store.jobs = store.jobs.filter((j) => j.id !== job.id);
+      } else if (job.schedule.kind === "at") {
+        job.enabled = false;
+        job.state.next_run_at_ms = null;
+      } else {
+        job.state.next_run_at_ms = _compute_next_run(job.schedule, now_ms(), (m) => this.logger?.warn(m), job.id);
+      }
+      this._notify("executed", job.id);
+    } finally {
+      await this._release_job_lock(lock_path);
+    }
+  }
+
+  /** 실패 시 재시도 스케줄링. 재시도 횟수 초과 시 정상 스케줄로 진행. */
+  private _schedule_retry_or_advance(job: CronJob, store: CronStore): void {
+    const policy = job.retry || _default_retry_policy(job.schedule.kind);
+    const next_attempt = (job.state.retry_attempt || 0) + 1;
+
+    if (_should_retry(policy, next_attempt)) {
+      const delay = _get_retry_delay(policy, next_attempt);
+      job.state.retry_attempt = next_attempt;
+      job.state.next_run_at_ms = now_ms() + delay;
+      this.logger?.info("cron_job_retry_scheduled", {
+        job_id: job.id, attempt: next_attempt, delay_ms: delay,
+        max_retries: policy.max_retries,
+      });
+    } else {
+      // 재시도 횟수 초과 → 정상 흐름으로 복귀
+      job.state.retry_attempt = 0;
+      this.logger?.warn("cron_job_retry_exhausted", { job_id: job.id, attempts: next_attempt - 1 });
       if (job.delete_after_run) {
         store.jobs = store.jobs.filter((j) => j.id !== job.id);
       } else if (job.schedule.kind === "at") {
         job.enabled = false;
         job.state.next_run_at_ms = null;
       } else {
-        job.state.next_run_at_ms = _compute_next_run(job.schedule, now_ms(), (m) => this.logger?.warn(m));
+        job.state.next_run_at_ms = _compute_next_run(job.schedule, now_ms(), (m) => this.logger?.warn(m), job.id);
       }
-      this._notify("executed", job.id);
-    } finally {
-      await this._release_job_lock(lock_path);
     }
   }
 
@@ -735,6 +844,7 @@ export class CronService implements CronScheduler, ServiceLike {
     channel: string | null = null,
     to: string | null = null,
     delete_after_run?: boolean,
+    options?: { retry?: CronRetryPolicy; overrides?: CronJobOverrides },
   ): Promise<CronJob> {
     const store = await this._load_store();
     _validate_schedule_for_add(schedule);
@@ -742,8 +852,9 @@ export class CronService implements CronScheduler, ServiceLike {
     const should_delete_after_run = typeof delete_after_run === "boolean"
       ? delete_after_run
       : schedule.kind === "at";
+    const id = short_id(8);
     const job: CronJob = {
-      id: short_id(8),
+      id,
       name,
       enabled: true,
       schedule,
@@ -753,18 +864,21 @@ export class CronService implements CronScheduler, ServiceLike {
         deliver,
         channel,
         to,
+        overrides: options?.overrides ?? null,
       },
       state: {
-        next_run_at_ms: _compute_next_run(schedule, now, (m) => this.logger?.warn(m)),
+        next_run_at_ms: _compute_next_run(schedule, now, (m) => this.logger?.warn(m), id),
         last_run_at_ms: null,
         last_status: null,
         last_error: null,
         running: false,
         running_started_at_ms: null,
+        retry_attempt: 0,
       },
       created_at_ms: now,
       updated_at_ms: now,
       delete_after_run: should_delete_after_run,
+      retry: options?.retry ?? null,
     };
     store.jobs.push(job);
     await this._save_and_rearm();
@@ -792,7 +906,10 @@ export class CronService implements CronScheduler, ServiceLike {
       if (job.id !== job_id) continue;
       job.enabled = enabled;
       job.updated_at_ms = now_ms();
-      if (enabled) job.state.next_run_at_ms = _compute_next_run(job.schedule, now_ms(), (m) => this.logger?.warn(m));
+      if (enabled) {
+        job.state.next_run_at_ms = _compute_next_run(job.schedule, now_ms(), (m) => this.logger?.warn(m), job.id);
+        job.state.retry_attempt = 0;
+      }
       else job.state.next_run_at_ms = null;
       await this._save_and_rearm();
       this._notify(enabled ? "enabled" : "disabled", job_id);

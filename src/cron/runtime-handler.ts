@@ -216,6 +216,7 @@ export function create_cron_job_handler(deps: CronRuntimeHandlerDeps): CronOnJob
       }
 
       const caps = backend?.capabilities;
+      const ov = job.payload.overrides;
       const result = await deps.agent_backends.run(backend_id, {
         task: sealed_task,
         task_id,
@@ -224,10 +225,13 @@ export function create_cron_job_handler(deps: CronRuntimeHandlerDeps): CronOnJob
         tool_executors,
         hooks,
         max_turns: Math.max(1, deps.config.agent_loop_max_turns),
-        max_tokens: 8192,
-        temperature: 0.3,
+        max_tokens: ov?.max_tokens ?? 8192,
+        temperature: ov?.temperature ?? 0.3,
         effort: "high",
-        ...(caps?.thinking ? { enable_thinking: true, max_thinking_tokens: 10000 } : {}),
+        ...(ov?.model ? { model: ov.model } : {}),
+        ...(ov?.thinking_budget
+          ? { enable_thinking: true, max_thinking_tokens: ov.thinking_budget }
+          : caps?.thinking ? { enable_thinking: true, max_thinking_tokens: 10000 } : {}),
         abort_signal: cron_abort,
         tool_context: { channel: target.provider, chat_id: target.chat_id, sender_id: `cron:${job.id}` },
       });

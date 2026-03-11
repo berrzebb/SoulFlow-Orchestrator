@@ -1,4 +1,4 @@
-import type { CronJob, CronSchedule, CronServiceStatus } from "./types.js";
+import type { CronJob, CronJobOverrides, CronRetryPolicy, CronSchedule, CronServiceStatus } from "./types.js";
 
 export interface CronScheduler {
   add_job(
@@ -9,6 +9,7 @@ export interface CronScheduler {
     channel?: string | null,
     to?: string | null,
     delete_after_run?: boolean,
+    options?: { retry?: CronRetryPolicy; overrides?: CronJobOverrides },
   ): Promise<CronJob>;
   remove_job(job_id: string): Promise<boolean>;
   enable_job(job_id: string, enabled?: boolean): Promise<CronJob | null>;
