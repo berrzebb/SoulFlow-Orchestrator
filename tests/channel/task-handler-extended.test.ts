@@ -256,6 +256,19 @@ describe("TaskHandler — /task recent", () => {
   });
 });
 
+// ── /task recent — 빈 목록 (L117-118) ────────────────────────────────────
+
+describe("TaskHandler — /task recent 빈 목록 (L117-118)", () => {
+  it("최근 완료 프로세스 없음 → L117-118 empty 메시지 반환", async () => {
+    const handler = new TaskHandler(make_access({
+      list_recent_processes: vi.fn().mockReturnValue([]),  // empty → L116: length===0 → L117 send
+    }));
+    const ctx = make_ctx(["recent"]);
+    await handler.handle(ctx);
+    expect(ctx.replies[0]).toContain("최근 완료 프로세스가 없습니다");
+  });
+});
+
 // ══════════════════════════════════════════
 // /task cancel <id> — process 취소
 // ══════════════════════════════════════════
