@@ -10,6 +10,7 @@ import { StreamBuffer } from "../channels/stream-buffer.js";
 import { sanitize_stream_chunk } from "../channels/output-sanitizer.js";
 import { create_cd_observer, type CDObserver } from "../agent/cd-scoring.js";
 import { create_policy_pre_hook } from "../agent/tools/index.js";
+import { hook_runner_to_pre_tool_hook, hook_runner_to_post_tool_hook, type HookRunner } from "../hooks/index.js";
 import { format_tool_result_brief } from "./prompts.js";
 import { safe_stringify, now_iso } from "../utils/common.js";
 
@@ -34,13 +35,15 @@ type AgentHooksOptions = {
   on_agent_event?: OrchestrationRequest["on_agent_event"];
   /** 실행 중 사용된 도구 이름을 누적할 외부 배열. hook이 push하면 호출자가 읽음. */
   tools_accumulator?: string[];
+  /** 사용자 정의 훅 실행기. HOOK.md / settings에서 로드. */
+  hook_runner?: HookRunner | null;
 };
 
 export function build_agent_hooks(
   deps: AgentHooksBuilderDeps,
   opts: AgentHooksOptions,
 ): { hooks: AgentHooks; cd: CDObserver } {
-  const { buffer, on_stream, runtime_policy, channel_context, on_tool_block, backend_id, on_progress, run_id, on_agent_event, tools_accumulator } = opts;
+  const { buffer, on_stream, runtime_policy, channel_context, on_tool_block, backend_id, on_progress, run_id, on_agent_event, tools_accumulator, hook_runner } = opts;
   const cd = create_cd_observer();
   const hooks: AgentHooks = {};
   let progress_step = 0;
@@ -220,11 +223,28 @@ export function build_agent_hooks(
     }
   }
 
-  if (runtime_policy) {
-    hooks.pre_tool_use = create_policy_pre_hook(runtime_policy);
+  {
+    // pre_tool_use: policy hook + 사용자 정의 hook_runner 합성
+    const policy_hook = runtime_policy ? create_policy_pre_hook(runtime_policy) : null;
+    const user_pre_hook = hook_runner ? hook_runner_to_pre_tool_hook(hook_runner) : null;
+    if (policy_hook || user_pre_hook) {
+      hooks.pre_tool_use = async (tool_name, params, context) => {
+        if (policy_hook) {
+          const decision = await policy_hook(tool_name, params, context);
+          if (decision.permission === "deny") return decision;
+        }
+        if (user_pre_hook) {
+          return user_pre_hook(tool_name, params, context);
+        }
+        return { permission: "allow" };
+      };
+    }
   }
 
-  hooks.post_tool_use = (tool_name, params, result, _context, is_error) => {
+  {
+    // post_tool_use: 기존 로직 + 사용자 정의 hook_runner 합성
+    const user_post_hook = hook_runner ? hook_runner_to_post_tool_hook(hook_runner) : null;
+    hooks.post_tool_use = (tool_name, params, result, _context, is_error) => {
     // on_event보다 나중에 호출되지만, headless 백엔드는 on_event가 없어 여기서도 push
     tools_accumulator?.push(tool_name);
     deps.session_cd.observe({
@@ -244,7 +264,11 @@ export function build_agent_hooks(
         if (sid) deps.process_tracker?.link_subagent(run_id, sid);
       } catch { /* noop */ }
     }
+    if (user_post_hook) {
+      Promise.resolve(user_post_hook(tool_name, params, result, _context, is_error)).catch(() => {});
+    }
   };
+  }
 
   return { hooks, cd };
 }

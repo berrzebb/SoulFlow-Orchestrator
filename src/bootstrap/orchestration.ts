@@ -33,6 +33,7 @@ import { create_cron_job_handler, CronService } from "../cron/index.js";
 import { create_task_service } from "../services/create-task.service.js";
 import { create_logger } from "../logger.js";
 import { create_cd_observer } from "../agent/cd-scoring.js";
+import { HookRunner, load_hooks_from_file } from "../hooks/index.js";
 
 export interface OrchestrationBundleDeps {
   workspace: string;
@@ -190,6 +191,10 @@ export async function create_orchestration_bundle(deps: OrchestrationBundleDeps)
     },
   }));
 
+  // HOOK.md 기반 사용자 정의 훅 로드
+  const hooks_config = load_hooks_from_file(workspace);
+  const hook_runner = new HookRunner(workspace, hooks_config);
+
   const orchestration = new OrchestrationService({
     providers,
     agent_runtime,
@@ -233,6 +238,7 @@ export async function create_orchestration_bundle(deps: OrchestrationBundleDeps)
     session_cd: create_cd_observer(),
     tool_index,
     create_task: create_task_fn,
+    hook_runner,
   });
 
   const cron = new CronService(join(data_dir, "cron"), create_cron_job_handler({

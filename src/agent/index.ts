@@ -13,8 +13,10 @@ import {
   ToolSelfTestService,
   ToolRegistry,
   ToolInstallerService,
+  PollTool,
   create_default_tool_registry,
 } from "./tools/index.js";
+export { PollTool };
 import type { WorkflowEventService } from "../events/index.js";
 import type { AgentBackendRegistry } from "./agent-registry.js";
 import { seal_inbound_sensitive_text } from "../security/inbound-seal.js";

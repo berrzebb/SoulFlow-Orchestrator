@@ -114,6 +114,8 @@ export type OrchestrationServiceDeps = {
   session_cd: import("../agent/cd-scoring.js").CDObserver;
   /** 도구 인덱스. 미지정 시 키워드 인덱스 미사용. */
   tool_index?: import("./tool-index.js").ToolIndex | null;
+  /** 사용자 정의 훅 실행기 (HOOK.md / settings). */
+  hook_runner?: import("../hooks/runner.js").HookRunner | null;
 };
 
 
@@ -140,6 +142,7 @@ export class OrchestrationService {
   private readonly tool_deps: ToolCallHandlerDeps;
   private readonly hitl_store: HitlPendingStore;
   private readonly tool_index: import("./tool-index.js").ToolIndex | null;
+  private readonly hook_runner: import("../hooks/runner.js").HookRunner | null;
   private _renderer: PersonaMessageRendererLike | null;
 
   constructor(deps: OrchestrationServiceDeps) {
@@ -158,6 +161,7 @@ export class OrchestrationService {
     this.hitl_store = deps.hitl_pending_store;
     this.session_cd = deps.session_cd;
     this.tool_index = deps.tool_index ?? null;
+    this.hook_runner = deps.hook_runner ?? null;
     this.deps = deps;
 
     this.streaming_cfg = {
@@ -223,6 +227,7 @@ export class OrchestrationService {
       on_tool_block: args.req.on_tool_block, backend_id, on_progress: args.req.on_progress,
       run_id: args.req.run_id, on_agent_event: args.req.on_agent_event,
       tools_accumulator,
+      hook_runner: this.hook_runner,
     }).hooks;
   }
 
