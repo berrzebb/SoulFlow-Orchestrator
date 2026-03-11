@@ -1,5 +1,6 @@
 /** Shell 노드 핸들러 — 워크플로우에서 쉘 명령 실행. */
 
+import { resolve as path_resolve } from "node:path";
 import type { NodeHandler } from "../node-registry.js";
 import type { ShellNodeDefinition, OrcheNodeDefinition } from "../workflow-node.types.js";
 import type { OrcheNodeExecutorContext, OrcheNodeExecuteResult, OrcheNodeTestResult } from "../orche-node-executor.js";
@@ -40,7 +41,16 @@ export const shell_handler: NodeHandler = {
       if (pat.test(command)) return { output: { stdout: "", stderr: "", exit_code: 1, error: "blocked by safety policy" } };
     }
 
-    const cwd = resolve_templates(n.working_dir || "", tpl) || ctx.workspace;
+    const raw_dir = resolve_templates(n.working_dir || "", tpl);
+    const cwd = raw_dir || ctx.workspace || "";
+    // working_dir 경로 순회 검증 — 워크스페이스 루트 외부 접근 차단
+    if (raw_dir && ctx.workspace) {
+      const norm = path_resolve(cwd);
+      const ws = path_resolve(ctx.workspace);
+      if (norm !== ws && !norm.startsWith(`${ws}/`) && !norm.startsWith(`${ws}\\`)) {
+        return { output: { stdout: "", stderr: "", exit_code: 1, error: "working_dir path traversal blocked" } };
+      }
+    }
     const timeout_ms = Math.min(120_000, Math.max(1000, n.timeout_ms || 30_000));
 
     try {

@@ -166,7 +166,12 @@ export class TelegramChannel extends BaseChannel {
       const meta = (message.metadata && typeof message.metadata === "object")
         ? (message.metadata as Record<string, unknown>)
         : {};
-      const parse_mode = this.resolve_parse_mode(meta.render_parse_mode || meta.parse_mode);
+      // render_parse_mode: rendering.ts 파이프라인 경유 → escape 완료
+      // parse_mode: 직접 설정 경로 → 사용자 입력 포함 가능하므로 escape 필요
+      const from_renderer = this.resolve_parse_mode(meta.render_parse_mode);
+      const from_direct = this.resolve_parse_mode(meta.parse_mode);
+      const parse_mode = from_renderer || from_direct;
+      const safe_text = (!from_renderer && from_direct === "HTML") ? this.escape_telegram_html(text) : text;
       const chunk_size = Math.max(500, Number(this.settings.text_chunk_size || 3500));
       const file_fallback_threshold = Math.max(8_000, Number(this.settings.text_file_fallback_threshold || 14_000));
       let first_message_id = "";
@@ -183,8 +188,8 @@ export class TelegramChannel extends BaseChannel {
           const form = new FormData();
           form.set("chat_id", chat_id);
           form.set(isPhoto ? "photo" : "document", new Blob([bytes]), media.name || basename(filePath));
-          if (idx === 0 && text) form.set("caption", as_string(text).slice(0, 900));
-          if (idx === 0 && parse_mode && text) form.set("parse_mode", parse_mode);
+          if (idx === 0 && safe_text) form.set("caption", safe_text.slice(0, 900));
+          if (idx === 0 && parse_mode && safe_text) form.set("parse_mode", parse_mode);
           if (idx === 0 && message.reply_to) form.set("reply_to_message_id", as_string(message.reply_to));
           const response = await fetch(url, {
             method: "POST",
@@ -200,10 +205,10 @@ export class TelegramChannel extends BaseChannel {
         }
       } else if (text) {
         if (parse_mode) {
-          if (text.length > chunk_size || text.length >= file_fallback_threshold) {
+          if (safe_text.length > chunk_size || safe_text.length >= file_fallback_threshold) {
             const doc = await this.send_text_document(
               chat_id,
-              text,
+              safe_text,
               `long-message-${Date.now()}.txt`,
               as_string(message.reply_to || ""),
             );
@@ -214,7 +219,7 @@ export class TelegramChannel extends BaseChannel {
           const url = `${this.api_base}/bot${this.bot_token}/sendMessage`;
           const payload: Record<string, unknown> = {
             chat_id,
-            text,
+            text: safe_text,
             parse_mode,
           };
           if (message.reply_to) payload.reply_to_message_id = message.reply_to;
@@ -279,6 +284,11 @@ export class TelegramChannel extends BaseChannel {
     const mode = String(value || "").trim().toUpperCase();
     if (mode === "HTML") return "HTML";
     return null;
+  }
+
+  /** HTML 특수문자 이스케이프 — parse_mode=HTML 직접 설정 경로에서 사용자 입력 보호. */
+  private escape_telegram_html(text: string): string {
+    return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   }
 
   async read(chat_id: string, limit = 20): Promise<InboundMessage[]> {
