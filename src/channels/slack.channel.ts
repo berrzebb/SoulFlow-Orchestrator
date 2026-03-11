@@ -1,5 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { basename } from "node:path";
+import { tmpdir } from "node:os";
+import { validate_file_path } from "../utils/path-validation.js";
 import { WebClient } from "@slack/web-api";
 import type { InboundMessage, MediaItem, OutboundMessage } from "../bus/types.js";
 import { now_iso, error_message, short_id} from "../utils/common.js";
@@ -56,9 +58,11 @@ function to_inbound_message(channel: SlackChannel, raw: Record<string, unknown>,
   };
 }
 
-/** Slack ts 포맷 검증: "Unix.microseconds" 형식만 유효. Sentinel 값(9223372036854775807 등) 차단. */
+/** Slack ts 포맷 검증: "Unix.microseconds" 형식 + 현실적 범위(2001~2033년)만 유효. Sentinel 값 차단. */
 function is_valid_slack_ts(ts: string): boolean {
-  return /^\d+\.\d+$/.test(ts);
+  if (!/^\d+\.\d+$/.test(ts)) return false;
+  const sec = Number(ts.split(".")[0]);
+  return sec > 1_000_000_000 && sec < 2_000_000_000;
 }
 
 /** 스레드 reply 캐시 키 → { reply_count, latest_reply, messages }. 변경 없는 스레드 재호출 방지. */
@@ -151,6 +155,7 @@ export class SlackChannel extends BaseChannel {
       if (Array.isArray(message.media) && message.media.length > 0) {
         for (const media of message.media) {
           if (!media?.url) continue;
+          if (!validate_file_path(String(media.url), [tmpdir(), process.cwd()])) continue;
           const bytes = await readFile(String(media.url));
           const filename = media.name || basename(String(media.url));
           const upload = await this.upload_binary(channel, bytes, filename, thread_ts || root_message_ts || undefined);

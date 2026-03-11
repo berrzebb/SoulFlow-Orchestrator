@@ -50,6 +50,9 @@ export class ContextBuilder {
   private _skill_ref_store: ReferenceStoreLike | null = null;
   private _daily_injection_days = 1;
   private _daily_injection_max_chars = 4_000;
+  private _last_ref_sync_at = 0;
+  private _last_skill_sync_at = 0;
+  static readonly SYNC_TTL_MS = 5_000;
 
   constructor(workspace: string, args?: { memory_store?: MemoryStoreLike; promises_dir?: string; app_root?: string }) {
     this.workspace = workspace;
@@ -267,8 +270,12 @@ export class ContextBuilder {
   private async _build_reference_context(user_message: string): Promise<string> {
     if (!this._reference_store) return "";
     try {
-      // sync 후 검색 (debounce 내장)
-      await this._reference_store.sync();
+      // 5초 TTL 캐시 — 모든 프롬프트 생성 시 매번 sync 방지
+      const now = Date.now();
+      if (now - this._last_ref_sync_at >= ContextBuilder.SYNC_TTL_MS) {
+        await this._reference_store.sync();
+        this._last_ref_sync_at = now;
+      }
       const results = await this._reference_store.search(user_message, { limit: 5 });
       if (results.length === 0) return "";
       const sections = results.map((r) =>
@@ -283,7 +290,11 @@ export class ContextBuilder {
   private async _build_skill_reference_context(user_message: string, skill_names: string[]): Promise<string> {
     if (!this._skill_ref_store) return "";
     try {
-      await this._skill_ref_store.sync();
+      const now = Date.now();
+      if (now - this._last_skill_sync_at >= ContextBuilder.SYNC_TTL_MS) {
+        await this._skill_ref_store.sync();
+        this._last_skill_sync_at = now;
+      }
       const filter = skill_names.length > 0 ? skill_names.join("|") : undefined;
       const results = await this._skill_ref_store.search(user_message, { limit: 4, doc_filter: filter });
       if (results.length === 0) return "";

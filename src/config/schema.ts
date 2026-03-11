@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { resolve, isAbsolute } from "node:path";
 
 const ChannelStreamingSchema = z.object({
   enabled: z.boolean(),
@@ -171,8 +172,8 @@ const OpsSchema = z.object({
 export const AppConfigSchema = z.object({
   agentLoopMaxTurns: z.number().min(1),
   taskLoopMaxTurns: z.number().min(1),
-  dataDir: z.string(),
-  workspaceDir: z.string(),
+  dataDir: z.string().transform((p) => isAbsolute(p) ? p : resolve(p)),
+  workspaceDir: z.string().transform((p) => isAbsolute(p) ? p : resolve(p)),
   channel: ChannelSchema,
   orchestration: OrchestrationSchema,
   orchestratorLlm: OrchestratorLlmSchema,

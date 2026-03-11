@@ -1,5 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { basename, extname } from "node:path";
+import { tmpdir } from "node:os";
+import { validate_file_path } from "../utils/path-validation.js";
 import type { InboundMessage, MediaItem, OutboundMessage } from "../bus/types.js";
 import { now_iso, error_message, short_id} from "../utils/common.js";
 import { BaseChannel } from "./base.js";
@@ -180,6 +182,7 @@ export class TelegramChannel extends BaseChannel {
           const media = message.media[idx];
           const filePath = String(media?.url || "");
           if (!filePath) continue;
+          if (!validate_file_path(filePath, [tmpdir(), process.cwd()])) continue;
           const bytes = await readFile(filePath);
           const extension = extname(filePath).toLowerCase();
           const isPhoto = [".jpg", ".jpeg", ".png", ".webp", ".gif"].includes(extension);

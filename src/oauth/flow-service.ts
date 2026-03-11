@@ -6,6 +6,7 @@
 import { error_message } from "../utils/common.js";
 import { randomUUID } from "node:crypto";
 import { create_logger } from "../logger.js";
+import type { ServiceLike } from "../runtime/service.types.js";
 import type { OAuthIntegrationStore, OAuthIntegrationConfig } from "./integration-store.js";
 import { get_preset, register_preset, unregister_preset, type OAuthServicePreset } from "./presets.js";
 
@@ -21,7 +22,8 @@ const CLEANUP_INTERVAL_MS = 60 * 1000; // 1분
 const REFRESH_CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5분
 const REFRESH_MARGIN_MS = 5 * 60 * 1000; // 만료 5분 전 선제 갱신
 
-export class OAuthFlowService {
+export class OAuthFlowService implements ServiceLike {
+  readonly name = "oauth-flow";
   private readonly store: OAuthIntegrationStore;
   private readonly pending_flows = new Map<string, PendingFlow>();
   private readonly cleanup_timer: ReturnType<typeof setInterval>;
@@ -213,6 +215,10 @@ export class OAuthFlowService {
     unregister_preset(service_type);
     return this.store.remove_preset(service_type);
   }
+
+  async start(): Promise<void> { /* 타이머는 생성자에서 이미 시작됨 */ }
+  async stop(): Promise<void> { this.close(); }
+  health_check(): { ok: boolean } { return { ok: true }; }
 
   close(): void {
     clearInterval(this.cleanup_timer);

@@ -1,5 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { basename } from "node:path";
+import { tmpdir } from "node:os";
+import { validate_file_path } from "../utils/path-validation.js";
 import type { InboundMessage, MediaItem, OutboundMessage } from "../bus/types.js";
 import { now_iso, error_message, short_id} from "../utils/common.js";
 import { BaseChannel } from "./base.js";
@@ -98,6 +100,7 @@ export class DiscordChannel extends BaseChannel {
         for (const media of message.media) {
           if (!media?.url) continue;
           const filePath = String(media.url);
+          if (!validate_file_path(filePath, [tmpdir(), process.cwd()])) continue;
           const bytes = await readFile(filePath);
           form.set(`files[${i}]`, new Blob([bytes]), media.name || basename(filePath));
           i += 1;
