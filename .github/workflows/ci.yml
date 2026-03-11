@@ -108,7 +108,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: vitest-blob-${{ matrix.shard }}
-          path: .vitest-reports/blob-*.json
+          path: .vitest-reports
           retention-days: 1
           if-no-files-found: ignore
 
