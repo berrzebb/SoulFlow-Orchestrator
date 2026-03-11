@@ -62,8 +62,9 @@ parentPort!.on("message", async (job: RechunkJob) => {
     if (embed && upserted_chunk_ids.size > 0) {
       await embed_new_chunks(sqlite_path, upserted_chunk_ids, embed);
     }
-  } catch {
-    /* fire-and-forget: 청킹/임베딩 실패는 검색 인덱스 지연으로만 영향 */
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    process.stderr.write(`[rechunk-worker] job failed for ${doc_key}: ${msg}\n`);
   } finally {
     try { db?.close(); } catch { /* no-op */ }
   }

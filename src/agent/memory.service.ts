@@ -247,7 +247,10 @@ export class MemoryStore implements MemoryStoreLike {
       });
       // 프로세스 종료 시 워커를 강제 대기하지 않음
       this.rechunk_worker.unref();
-      this.rechunk_worker.on("error", () => { this.rechunk_worker = null; });
+      this.rechunk_worker.on("error", (err) => {
+        process.stderr.write(`[rechunk-worker] error: ${err.message}\n`);
+        this.rechunk_worker = null;
+      });
     }
     return this.rechunk_worker;
   }
