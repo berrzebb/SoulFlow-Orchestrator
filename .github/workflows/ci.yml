@@ -131,7 +131,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           pattern: vitest-blob-*
-          path: .            # artifact 내 .vitest-reports/blob-*.json → 워크스페이스 루트 복원
+          path: .vitest-reports   # artifact 내 blob-*.json → .vitest-reports/blob-*.json
           merge-multiple: true
 
       - name: Prepare reports dir (artifact 없을 시 디렉토리 보장)

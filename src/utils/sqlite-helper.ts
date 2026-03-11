@@ -25,7 +25,9 @@ export function with_sqlite<T>(
     return run(db);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    process.stderr.write(`[sqlite] error at ${db_path}: ${msg}\n`);
+    if (process.env.NODE_ENV !== "test") {
+      process.stderr.write(`[sqlite] error at ${db_path}: ${msg}\n`);
+    }
     return null;
   } finally {
     try { db?.close(); } catch { /* no-op */ }
