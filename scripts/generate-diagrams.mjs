@@ -40,6 +40,7 @@ const diagrams = [
       CLI_X["codex_cli"]
       CLI_G["gemini_cli"]
       OAI["openai_compatible"]
+      OLL["ollama"]
       CTR["container_cli"]
     end
 
@@ -185,7 +186,7 @@ const diagrams = [
 
   subgraph Task["task mode\n다단계 노드 실행"]
     T_PLAN["Build plan nodes"]
-    T_NODE["Execute node\n(DAG 124종)"]
+    T_NODE["Execute node\n(DAG 141종)"]
     T_GATE{"Phase Gate"}
     T_NEXT["Next node"]
     T_DONE["Task complete"]
