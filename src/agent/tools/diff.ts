@@ -10,20 +10,21 @@ const MAX_SIZE = 1024 * 512;
 export class DiffTool extends Tool {
   readonly name = "diff";
   readonly category = "memory" as const;
-  readonly description = "Compare texts or files and produce unified diffs, or apply patches.";
+  readonly description = "Compare texts or files and produce unified diffs, apply patches, or render formatted diffs for display.";
   readonly parameters: JsonSchema = {
     type: "object",
     properties: {
       operation: {
         type: "string",
-        enum: ["compare", "patch", "stats"],
-        description: "compare: produce diff, patch: apply diff, stats: summary",
+        enum: ["compare", "patch", "stats", "render"],
+        description: "compare: produce diff, patch: apply diff, stats: summary, render: formatted diff for display",
       },
       old_text: { type: "string", description: "Original text (or file path with @file:)" },
       new_text: { type: "string", description: "Modified text (or file path with @file:)" },
       diff_text: { type: "string", description: "Unified diff text (for patch operation)" },
       target: { type: "string", description: "File path to apply patch to (for patch)" },
       context_lines: { type: "integer", minimum: 0, maximum: 20, description: "Context lines in diff (default 3)" },
+      format: { type: "string", enum: ["markdown", "slack", "html", "plain"], description: "Output format for render operation (default markdown)" },
     },
     required: ["operation"],
     additionalProperties: false,
@@ -37,6 +38,7 @@ export class DiffTool extends Tool {
         case "compare": return await this.compare(params);
         case "patch": return await this.apply_patch(params);
         case "stats": return await this.stats(params);
+        case "render": return await this.render(params);
         default: return `Error: unsupported operation "${op}"`;
       }
     } catch (err) {
@@ -247,5 +249,62 @@ export class DiffTool extends Tool {
       changed: added + removed,
       similarity: old_lines.length > 0 ? `${Math.round((common / old_lines.length) * 100)}%` : "N/A",
     }, null, 2);
+  }
+
+  /** 비교 결과를 provider별 시각 포맷으로 렌더링. */
+  private async render(params: Record<string, unknown>): Promise<string> {
+    const format = String(params.format || "markdown").toLowerCase();
+    let diff_text = String(params.diff_text || "").trim();
+
+    // diff_text가 없으면 old_text/new_text에서 생성
+    if (!diff_text) {
+      const old_text = await this.resolve_text(params.old_text);
+      const new_text = await this.resolve_text(params.new_text);
+      if (old_text === new_text) return "(no differences)";
+      diff_text = await this.compare(params);
+    }
+
+    const lines = diff_text.split("\n");
+    let added = 0, removed = 0;
+    for (const line of lines) {
+      if (line.startsWith("+") && !line.startsWith("+++")) added++;
+      else if (line.startsWith("-") && !line.startsWith("---")) removed++;
+    }
+
+    switch (format) {
+      case "slack": return this.render_slack(lines, added, removed);
+      case "html": return this.render_html(lines, added, removed);
+      case "plain": return this.render_plain(lines, added, removed);
+      default: return this.render_markdown(lines, added, removed);
+    }
+  }
+
+  private render_markdown(lines: string[], added: number, removed: number): string {
+    const header = `**Diff** — \`+${added}\` / \`-${removed}\`\n`;
+    const body = "```diff\n" + lines.join("\n") + "\n```";
+    return header + body;
+  }
+
+  private render_slack(lines: string[], added: number, removed: number): string {
+    const header = `*Diff* — \`+${added}\` / \`-${removed}\`\n`;
+    const body = "```\n" + lines.join("\n") + "\n```";
+    return header + body;
+  }
+
+  private render_html(lines: string[], added: number, removed: number): string {
+    const header = `<b>Diff</b> — <code>+${added}</code> / <code>-${removed}</code>\n`;
+    const formatted = lines.map((line) => {
+      const escaped = line.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      if (line.startsWith("+") && !line.startsWith("+++")) return `<span style="color:green">${escaped}</span>`;
+      if (line.startsWith("-") && !line.startsWith("---")) return `<span style="color:red">${escaped}</span>`;
+      if (line.startsWith("@@")) return `<span style="color:cyan">${escaped}</span>`;
+      return escaped;
+    });
+    return header + "<pre>" + formatted.join("\n") + "</pre>";
+  }
+
+  private render_plain(lines: string[], added: number, removed: number): string {
+    const header = `Diff — +${added} / -${removed}\n${"─".repeat(40)}\n`;
+    return header + lines.join("\n");
   }
 }

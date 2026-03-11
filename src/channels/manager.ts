@@ -37,6 +37,7 @@ import { t } from "../i18n/index.js";
 import { LaneQueue } from "../agent/pty/lane-queue.js";
 import { InboundDebouncer } from "./inbound-debouncer.js";
 import { ChannelBlockRenderer } from "./channel-block-renderer.js";
+import type { ThreadOwnership } from "./thread-ownership.js";
 
 /** Native streaming을 지원하는 채널 인터페이스 (Slack / Telegram). */
 type NativeStreamChannel = {
@@ -132,6 +133,8 @@ export type ChannelManagerDeps = {
   active_run_controller?: import("./active-run-controller.js").ActiveRunControllerLike;
   /** 채널별 렌더 프로필 관리. 미지정 시 내부 생성. */
   render_profile_store?: import("./commands/render.handler.js").RenderProfileStore;
+  /** 스레드 소유권 관리. 미지정 시 소유권 검사 비활성. */
+  thread_ownership?: ThreadOwnership | null;
 };
 
 // ActiveRun 타입은 active-run-controller.ts에서 import
@@ -167,6 +170,7 @@ export class ChannelManager implements ServiceLike {
   private readonly on_activity_start: (() => void) | null;
   private readonly on_activity_end: (() => void) | null;
   private readonly renderer: PersonaMessageRendererLike | null;
+  private readonly thread_ownership: ThreadOwnership | null;
 
   private _bot_ids_cache: Record<string, string> | null = null;
   private _bot_ids_cache_at = 0;
@@ -217,6 +221,7 @@ export class ChannelManager implements ServiceLike {
     this.on_activity_start = deps.on_activity_start ?? null;
     this.on_activity_end = deps.on_activity_end ?? null;
     this.renderer = deps.renderer ?? null;
+    this.thread_ownership = deps.thread_ownership ?? null;
     this.active_runs = deps.active_run_controller ?? new ActiveRunController();
     this.render_store = deps.render_profile_store ?? new InMemoryRenderProfileStore();
     this.inbound_lanes = new LaneQueue({
@@ -291,6 +296,7 @@ export class ChannelManager implements ServiceLike {
     if (this.lane_prune_timer) { clearInterval(this.lane_prune_timer); this.lane_prune_timer = null; }
     if (this.stale_run_timer) { clearInterval(this.stale_run_timer); this.stale_run_timer = null; }
     this.inbound_debouncer.clear();
+    this.thread_ownership?.dispose();
     this.primed_targets.clear();
     this.render_profile_ts.clear();
     this.seen.clear();
@@ -635,6 +641,12 @@ export class ChannelManager implements ServiceLike {
   private async handle_mentions(provider: ChannelProvider, message: InboundMessage, aliases: string[]): Promise<void> {
     for (const alias of aliases) {
       if (message.sender_id.toLowerCase() === alias.toLowerCase()) continue;
+      // 스레드 소유권 검사: 다른 에이전트가 소유한 스레드면 건너뜀
+      const tid = String(message.thread_id || "").trim();
+      if (tid && this.thread_ownership) {
+        const owner = this.thread_ownership.owner_of(provider, message.chat_id, tid);
+        if (owner && owner.toLowerCase() !== alias.toLowerCase()) continue;
+      }
       const cooldown_key = `${provider}:${message.chat_id}:${alias}`;
       const now = Date.now();
       if (now - (this.mention_cooldowns.get(cooldown_key) || 0) < 5_000) continue;
@@ -644,6 +656,11 @@ export class ChannelManager implements ServiceLike {
   }
 
   private async invoke_and_reply(provider: ChannelProvider, message: InboundMessage, alias: string, resumed_task_id?: string): Promise<void> {
+    // 스레드 소유권 획득 (conflict 시 무시 — handle_mentions에서 이미 필터링)
+    const tid = String(message.thread_id || "").trim();
+    if (tid && this.thread_ownership) {
+      this.thread_ownership.claim(provider, message.chat_id, tid, alias);
+    }
     const invoke_ck = render_key(provider, message.chat_id);
     const run_key = `${message.instance_id || provider}:${message.chat_id}:${alias}`.toLowerCase();
     const prev = this.active_runs.get(run_key);

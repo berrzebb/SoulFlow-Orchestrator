@@ -20,6 +20,7 @@ export { SqliteDispatchDlqStore, type DispatchDlqStoreLike, type DispatchDlqReco
 export type { ChannelManagerStatus } from "./manager.js";
 export { ChannelInstanceStore, type ChannelInstanceConfig, type CreateChannelInstanceInput } from "./instance-store.js";
 export { create_channel_instance, register_channel_factory, list_registered_providers } from "./channel-factory.js";
+export { ThreadOwnership, type ThreadClaim, type ClaimResult, type ThreadOwnershipOptions } from "./thread-ownership.js";
 
 /**
  * instance_id 기반 채널 레지스트리.

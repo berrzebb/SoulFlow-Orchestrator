@@ -167,6 +167,7 @@ import { PaginationTool } from "./pagination.js";
 import { CrontabTool } from "./crontab.js";
 import { SvgTool } from "./svg.js";
 import { DocumentTool } from "./document.js";
+import { LlmTaskTool, type LlmTaskCallback } from "./llm-task.js";
 
 const DANGEROUS_COMMANDS = ["rm -rf", "drop table", "format c:", "mkfs", "dd if="];
 
@@ -377,6 +378,7 @@ export {
   CrontabTool,
   SvgTool,
   DocumentTool,
+  LlmTaskTool,
 };
 export { Tool } from "./base.js";
 export type {
@@ -391,6 +393,7 @@ export type {
   PreToolHook,
   PostToolHook,
 } from "./types.js";
+export type { LlmTaskCallback, LlmTaskRequest, LlmTaskResult } from "./llm-task.js";
 export type { DynamicToolManifestEntry } from "./dynamic.js";
 export type { InstallShellToolInput } from "./installer.js";
 export type { DynamicToolStoreLike } from "./store.js";
@@ -409,6 +412,7 @@ export type ToolRegistryFactoryOptions = {
   cron?: CronScheduler | null;
   bus?: MessageBusLike | null;
   channels?: import("../../channels/types.js").ChannelRegistryLike | null;
+  llm_callback?: LlmTaskCallback | null;
   spawn_callback?: ((request: SpawnRequest) => Promise<{ subagent_id: string; status: string; message?: string }>) | null;
   task_query_callback?: TaskQueryCallback | null;
   event_recorder?: ((event: AppendWorkflowEventInput) => Promise<AppendWorkflowEventResult>) | null;
@@ -617,6 +621,9 @@ export function create_default_tool_registry(args?: ToolRegistryFactoryOptions):
   }
   if (args?.channels) {
     registry.register(new PollTool(args.channels));
+  }
+  if (args?.llm_callback) {
+    registry.register(new LlmTaskTool(args.llm_callback));
   }
 
   const dynamic_store_path = args?.dynamic_store_path;
