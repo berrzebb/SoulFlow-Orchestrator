@@ -42,7 +42,7 @@ Config → RuntimeData → Providers → AgentCore → Channels → Orchestratio
 
 ### 1.2 타입 안전성 ⭐⭐⭐⭐⭐
 
-**ESLint `@typescript-eslint/no-explicit-any: "error"` 규칙**이 적용되어 있으며, **소스 코드 전체에서 `as any` 사용 0건**입니다.
+**ESLint `@typescript-eslint/no-explicit-any: "error"` 규칙**이 프로덕션 소스 코드(`src/`)에 적용되어 있으며, **소스 코드에서 `as any` 사용 0건**입니다. (테스트 코드에서는 목(mock) 객체 생성을 위해 `as any` 사용이 허용됨)
 
 ```typescript
 // src/contracts.ts — 리터럴 유니온 타입으로 상태 정의
