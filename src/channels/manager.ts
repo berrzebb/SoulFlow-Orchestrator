@@ -501,7 +501,10 @@ export class ChannelManager implements ServiceLike {
 
   private async run_poll_loop(): Promise<void> {
     const signal = this.abort_ctl.signal;
+    let current_poll_ms = this.config.pollIntervalMs;
+    const poll_max_ms = this.config.pollMaxIntervalMs;
     while (this.running && !signal.aborted) {
+      let had_new_messages = false;
       for (const { provider, instance_id } of this.registry.list_channels()) {
         if (!this.running || signal.aborted) return;
         const target = this.resolve_target(provider, instance_id);
@@ -550,6 +553,7 @@ export class ChannelManager implements ServiceLike {
             if (is_reaction_message(msg)) continue;
             if (this.is_duplicate(msg)) continue;
             this.mark_seen(msg);
+            had_new_messages = true;
             this.bus.publish_inbound(msg).catch((e) =>
               this.logger.debug("publish_inbound failed", { error: error_message(e) }),
             );
@@ -558,7 +562,13 @@ export class ChannelManager implements ServiceLike {
           this.logger.error("poll failed", { instance_id, error: error_message(e) });
         }
       }
-      await abortable_sleep(this.config.pollIntervalMs, this.abort_ctl.signal);
+      // 어댑티브 백오프: 메시지 없으면 1.5× 증가, 있으면 기본 간격으로 복귀.
+      if (poll_max_ms > 0) {
+        current_poll_ms = had_new_messages
+          ? this.config.pollIntervalMs
+          : Math.min(Math.round(current_poll_ms * 1.5), poll_max_ms);
+      }
+      await abortable_sleep(current_poll_ms, this.abort_ctl.signal);
     }
   }
 

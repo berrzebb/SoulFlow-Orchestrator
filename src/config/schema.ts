@@ -51,6 +51,8 @@ const ChannelSchema = z.object({
   autoReply: z.boolean(),
   defaultAlias: z.string().min(1),
   pollIntervalMs: z.number().min(500),
+  /** 유휴 시 최대 폴링 간격 (ms). 메시지 없을 때 1.5× 지수 백오프 상한. 0 = 비활성 (고정 간격). */
+  pollMaxIntervalMs: z.number().min(0).default(0),
   readLimit: z.number().min(1).max(100),
   readAckEnabled: z.boolean(),
   readAckReaction: z.string().min(1),
@@ -225,6 +227,7 @@ export function get_config_defaults(): AppConfig {
       autoReply: true,
       defaultAlias: "assistant",
       pollIntervalMs: 2000,
+      pollMaxIntervalMs: 0,
       readLimit: 30,
       readAckEnabled: true,
       readAckReaction: "eyes",
