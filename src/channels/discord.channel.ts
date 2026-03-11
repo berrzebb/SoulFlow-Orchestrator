@@ -188,9 +188,10 @@ export class DiscordChannel extends BaseChannel {
       if (!response.ok) return [];
       const rows = (await response.json().catch(() => [])) as unknown;
       if (!Array.isArray(rows)) return [];
-      return rows
+      const messages = rows
         .map((r) => (r && typeof r === "object" ? to_inbound_message(this, r as Record<string, unknown>, chat_id) : null))
         .filter((r): r is InboundMessage => Boolean(r));
+      return this.filter_seen(messages);
     } catch (error) {
       this.last_error = error_message(error);
       this.log.warn("read failed", { chat_id, error: this.last_error });

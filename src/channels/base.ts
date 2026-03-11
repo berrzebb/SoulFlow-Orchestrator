@@ -14,10 +14,32 @@ export abstract class BaseChannel implements ChatChannel {
   protected last_error = "";
   protected readonly typing_state = new Map<string, ChannelTypingState>();
 
+  /** 인바운드 메시지 ID 중복 제거 TTL 캐시. */
+  private readonly _seen_ids = new Map<string, number>();
+  private static readonly SEEN_TTL_MS = 300_000;
+  private static readonly SEEN_MAX_ENTRIES = 2_000;
+
   protected constructor(provider: string, instance_id?: string) {
     this.provider = provider;
     this.instance_id = instance_id || provider;
     this.log = create_logger(`channel:${provider}`);
+  }
+
+  /** 이미 처리한 메시지 ID를 필터링. 재시작/webhook 재전달 중복 방지. */
+  protected filter_seen(messages: InboundMessage[]): InboundMessage[] {
+    const now = Date.now();
+    if (this._seen_ids.size > BaseChannel.SEEN_MAX_ENTRIES) {
+      for (const [k, ts] of this._seen_ids) {
+        if (now - ts > BaseChannel.SEEN_TTL_MS) this._seen_ids.delete(k);
+      }
+    }
+    const result: InboundMessage[] = [];
+    for (const msg of messages) {
+      if (this._seen_ids.has(msg.id)) continue;
+      this._seen_ids.set(msg.id, now);
+      result.push(msg);
+    }
+    return result;
   }
 
   abstract start(): Promise<void>;

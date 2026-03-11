@@ -116,7 +116,7 @@ export class SlackChannel extends BaseChannel {
       await this.set_typing(channel, true);
       const text = String(message.content || "");
       const thread_ts = String(message.reply_to || "").trim() || undefined;
-      const chunk_size = Math.max(500, Number(this.settings.text_chunk_size || 3200));
+      const chunk_size = Math.max(500, Number(this.settings.text_chunk_size || 4000));
       const file_fallback_threshold = Math.max(8_000, Number(this.settings.text_file_fallback_threshold || 14_000));
       let root_message_ts = "";
 
@@ -232,9 +232,10 @@ export class SlackChannel extends BaseChannel {
       const rows = [...merged.values()]
         .sort((a, b) => Number(String(a.ts || "0")) - Number(String(b.ts || "0")));
 
-      return rows
+      const inbound = rows
         .map((m) => to_inbound_message(this, m, chat_id))
         .filter((m): m is InboundMessage => Boolean(m));
+      return this.filter_seen(inbound);
     } catch (error) {
       this.last_error = error_message(error);
       this.log.warn("read failed", { chat_id, error: this.last_error });
@@ -356,6 +357,17 @@ export class SlackChannel extends BaseChannel {
       const result = await this.client.apiCall("chat.appendStream", { channel, ts: stream_id, message_text: new_text }) as unknown as Record<string, unknown>;
       if (!result.ok) return { ok: false, error: String(result.error || "append_stream_failed") };
       this.stream_positions.set(stream_id, accumulated_text.length);
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: error_message(error) };
+    }
+  }
+
+  /** Slack replace 모드: chat.update로 메시지 전체를 교체. OpenClaw "replace" 모드 호환. */
+  async replace_native_stream(channel: string, stream_id: string, full_text: string): Promise<{ ok: boolean; error?: string }> {
+    try {
+      await this.client.chat.update({ channel, ts: stream_id, text: String(full_text || "") });
+      this.stream_positions.set(stream_id, full_text.length);
       return { ok: true };
     } catch (error) {
       return { ok: false, error: error_message(error) };

@@ -97,6 +97,29 @@ function to_inbound_message(
   };
 }
 
+/**
+ * 같은 media_group_id를 가진 메시지들의 미디어를 첫 번째 메시지로 병합.
+ * Telegram은 멀티 포토/비디오를 별도 update로 보내지만, 사용자에게는 하나의 메시지.
+ */
+function coalesce_media_groups(rows: InboundMessage[]): InboundMessage[] {
+  const groups = new Map<string, number>();
+  for (let i = 0; i < rows.length; i++) {
+    const tg = rows[i].metadata?.telegram as Record<string, unknown> | undefined;
+    const gid = as_string(tg?.media_group_id || "");
+    if (!gid) continue;
+    if (!groups.has(gid)) {
+      groups.set(gid, i);
+    } else {
+      const first_idx = groups.get(gid)!;
+      const first = rows[first_idx];
+      if (rows[i].media) first.media = [...(first.media || []), ...rows[i].media!];
+      if (!first.content && rows[i].content) first.content = rows[i].content;
+      rows[i] = null as unknown as InboundMessage; // 병합됨 — 필터링 대상
+    }
+  }
+  return groups.size > 0 ? rows.filter(Boolean) : rows;
+}
+
 /** Telegram message_reaction 업데이트를 InboundMessage로 변환. */
 function to_reaction_message(
   raw: Record<string, unknown>,
@@ -341,7 +364,7 @@ export class TelegramChannel extends BaseChannel {
             if (inbound) rows.push(inbound);
           }
         }
-        return rows;
+        return this.filter_seen(coalesce_media_groups(rows));
       } catch (error) {
         if (attempt < MAX_RETRIES) continue;
         // 모든 재시도 소진 후 기록

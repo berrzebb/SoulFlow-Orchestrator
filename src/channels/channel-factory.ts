@@ -6,6 +6,7 @@
 
 import type { ChatChannel } from "./types.js";
 import type { ChannelInstanceConfig } from "./instance-store.js";
+import type { DiscordChannelSettings } from "./settings.types.js";
 import { SlackChannel } from "./slack.channel.js";
 import { DiscordChannel } from "./discord.channel.js";
 import { TelegramChannel } from "./telegram.channel.js";
@@ -46,12 +47,13 @@ register_channel_factory("slack", (config, token) => {
 });
 
 register_channel_factory("discord", (config, token) => {
-  const settings = config.settings as Record<string, unknown>;
+  const settings = config.settings as DiscordChannelSettings;
   return new DiscordChannel({
     instance_id: config.instance_id,
     bot_token: token,
     default_channel: String(settings.default_channel || ""),
     api_base: String(settings.api_base || "https://discord.com/api/v10"),
+    settings,
   });
 });
 
