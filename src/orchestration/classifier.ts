@@ -199,7 +199,13 @@ export function classify_execution_mode(
   logger: Logger,
 ): Promise<ClassificationResult> {
   const result = fast_classify(task, ctx);
-  logger.info("classify_result", { mode: result.mode, source: "heuristic" });
+  logger.info("classify_result", {
+    mode: result.mode,
+    source: "heuristic",
+    task_preview: String(task || "").slice(0, 80),
+    token_count: tokenize(task).size,
+    active_tasks: ctx.active_tasks?.length ?? 0,
+  });
   return Promise.resolve(result);
 }
 

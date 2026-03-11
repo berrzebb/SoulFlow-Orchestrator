@@ -56,11 +56,26 @@ class ConsoleLogger implements Logger {
 }
 
 let _log_level: LogLevel = "info";
+/** 모듈명 → 레벨 오버라이드 맵. LOG_LEVEL_<MODULE>=debug 환경변수로 자동 설정. */
+const _module_overrides: Map<string, LogLevel> = new Map();
 
 export function init_log_level(level: string | undefined): void {
   _log_level = parse_log_level(level);
+  // LOG_LEVEL_<MODULE> 환경변수로 모듈별 오버라이드 자동 적용
+  for (const [key, val] of Object.entries(process.env)) {
+    if (key.startsWith("LOG_LEVEL_") && val) {
+      const module_name = key.slice("LOG_LEVEL_".length).toLowerCase().replace(/_/g, "-");
+      _module_overrides.set(module_name, parse_log_level(val));
+    }
+  }
+}
+
+/** 특정 모듈의 로그 레벨을 런타임에 동적 오버라이드. */
+export function set_module_log_level(module_name: string, level: "debug" | "info" | "warn" | "error"): void {
+  _module_overrides.set(module_name, level);
 }
 
 export function create_logger(name: string, level_override?: "debug" | "info" | "warn" | "error"): Logger {
-  return new ConsoleLogger(name, level_override ?? _log_level);
+  const effective = level_override ?? _module_overrides.get(name) ?? _log_level;
+  return new ConsoleLogger(name, effective);
 }
