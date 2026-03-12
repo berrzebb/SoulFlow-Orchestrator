@@ -1,8 +1,8 @@
 /** Prometheus 도구 — Prometheus 메트릭 포맷/파싱/push. */
 
 import { Tool } from "./base.js";
-import type { JsonSchema } from "./types.js";
-import { error_message } from "../../utils/common.js";
+import type { JsonSchema, ToolExecutionContext } from "./types.js";
+import { error_message, make_abort_signal } from "../../utils/common.js";
 
 type Metric = { name: string; type?: string; help?: string; value: number; labels?: Record<string, string>; timestamp?: number };
 
@@ -28,7 +28,7 @@ export class PrometheusTool extends Tool {
     additionalProperties: false,
   };
 
-  protected async run(params: Record<string, unknown>): Promise<string> {
+  protected async run(params: Record<string, unknown>, context?: ToolExecutionContext): Promise<string> {
     const action = String(params.action || "format");
 
     switch (action) {
@@ -51,7 +51,7 @@ export class PrometheusTool extends Tool {
         const body = this.format_exposition(metrics);
         try {
           const url = `${gateway.replace(/\/+$/, "")}/metrics/job/${encodeURIComponent(job)}`;
-          const resp = await fetch(url, { method: "POST", body, headers: { "Content-Type": "text/plain" } });
+          const resp = await fetch(url, { method: "POST", body, headers: { "Content-Type": "text/plain" }, signal: make_abort_signal(15_000, context?.signal) });
           return JSON.stringify({ success: resp.ok, status: resp.status, url });
         } catch (e) {
           return JSON.stringify({ success: false, error: error_message(e) });

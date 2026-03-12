@@ -1,7 +1,8 @@
 /** Retriever 도구 — 벡터 스토어/메모리/HTTP 소스에서 관련 결과 검색. */
 
 import { Tool } from "./base.js";
-import type { JsonSchema } from "./types.js";
+import type { JsonSchema, ToolExecutionContext } from "./types.js";
+import { make_abort_signal } from "../../utils/common.js";
 
 export class RetrieverTool extends Tool {
   readonly name = "retriever";
@@ -23,26 +24,27 @@ export class RetrieverTool extends Tool {
     additionalProperties: false,
   };
 
-  protected async run(params: Record<string, unknown>): Promise<string> {
+  protected async run(params: Record<string, unknown>, context?: ToolExecutionContext): Promise<string> {
     const action = String(params.action || "memory");
     const query = String(params.query || "");
     const top_k = Math.max(1, Math.min(100, Number(params.top_k) || 5));
 
     switch (action) {
-      case "http": return this.retrieve_http(query, top_k, params);
+      case "http": return this.retrieve_http(query, top_k, params, context);
       case "memory": return this.retrieve_memory(query, top_k, params);
       case "vector": return this.retrieve_vector(query, top_k, params);
       default: return `Error: unsupported action "${action}"`;
     }
   }
 
-  private async retrieve_http(query: string, top_k: number, params: Record<string, unknown>): Promise<string> {
+  private async retrieve_http(query: string, top_k: number, params: Record<string, unknown>, context?: ToolExecutionContext): Promise<string> {
     const url = String(params.url || "");
     if (!url) return "Error: url is required for http action";
 
     const sep = url.includes("?") ? "&" : "?";
     const resp = await fetch(`${url}${sep}q=${encodeURIComponent(query)}&top_k=${top_k}`, {
       headers: { "Accept": "application/json" },
+      signal: make_abort_signal(30_000, context?.signal),
     });
     if (!resp.ok) return `Error: HTTP ${resp.status} ${resp.statusText}`;
     const body = await resp.json() as unknown;

@@ -1,8 +1,8 @@
 /** RSS 도구 — RSS/Atom 피드 파싱/생성. */
 
 import { Tool } from "./base.js";
-import type { JsonSchema } from "./types.js";
-import { error_message } from "../../utils/common.js";
+import type { JsonSchema, ToolExecutionContext } from "./types.js";
+import { error_message, make_abort_signal } from "../../utils/common.js";
 
 type FeedItem = { title: string; link: string; description?: string; pubDate?: string; guid?: string; author?: string };
 
@@ -27,7 +27,7 @@ export class RssTool extends Tool {
     additionalProperties: false,
   };
 
-  protected async run(params: Record<string, unknown>): Promise<string> {
+  protected async run(params: Record<string, unknown>, context?: ToolExecutionContext): Promise<string> {
     const action = String(params.action || "parse");
 
     switch (action) {
@@ -39,7 +39,7 @@ export class RssTool extends Tool {
         const url = String(params.url || "");
         if (!url) return "Error: url is required";
         try {
-          const resp = await fetch(url, { headers: { "Accept": "application/rss+xml, application/atom+xml, application/xml, text/xml" } });
+          const resp = await fetch(url, { headers: { "Accept": "application/rss+xml, application/atom+xml, application/xml, text/xml" }, signal: make_abort_signal(15_000, context?.signal) });
           if (!resp.ok) return JSON.stringify({ error: `HTTP ${resp.status}` });
           const text = await resp.text();
           return JSON.stringify(this.parse_feed(text));

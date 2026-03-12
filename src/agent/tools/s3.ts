@@ -3,8 +3,8 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { createHmac, createHash } from "node:crypto";
 import { Tool } from "./base.js";
-import type { JsonSchema } from "./types.js";
-import { error_message } from "../../utils/common.js";
+import type { JsonSchema, ToolExecutionContext } from "./types.js";
+import { error_message, make_abort_signal } from "../../utils/common.js";
 
 export class S3Tool extends Tool {
   readonly name = "s3";
@@ -31,7 +31,7 @@ export class S3Tool extends Tool {
     additionalProperties: false,
   };
 
-  protected async run(params: Record<string, unknown>): Promise<string> {
+  protected async run(params: Record<string, unknown>, context?: ToolExecutionContext): Promise<string> {
     const action = String(params.action || "list");
     const bucket = String(params.bucket || "");
     const key = String(params.key || "");
@@ -43,18 +43,19 @@ export class S3Tool extends Tool {
     if (!bucket) return "Error: bucket is required";
     if (!access_key || !secret_key) return "Error: access_key and secret_key required (or set AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY)";
 
+    const signal = make_abort_signal(60_000, context?.signal);
     try {
       switch (action) {
         case "list": {
           const prefix = String(params.prefix || "");
           const max = Math.min(Number(params.max_keys) || 100, 1000);
           const url = `${endpoint}/${bucket}?list-type=2&prefix=${encodeURIComponent(prefix)}&max-keys=${max}`;
-          const resp = await this.s3_fetch("GET", url, region, access_key, secret_key);
+          const resp = await this.s3_fetch("GET", url, region, access_key, secret_key, undefined, signal);
           return resp;
         }
         case "get": {
           const url = `${endpoint}/${bucket}/${key}`;
-          const resp = await this.s3_fetch("GET", url, region, access_key, secret_key);
+          const resp = await this.s3_fetch("GET", url, region, access_key, secret_key, undefined, signal);
           if (params.local_path) {
             await writeFile(String(params.local_path), resp);
             return JSON.stringify({ success: true, path: params.local_path, size: resp.length });
@@ -69,17 +70,17 @@ export class S3Tool extends Tool {
             body_buf = Buffer.from(String(params.body || ""));
           }
           const url = `${endpoint}/${bucket}/${key}`;
-          await this.s3_fetch("PUT", url, region, access_key, secret_key, body_buf);
+          await this.s3_fetch("PUT", url, region, access_key, secret_key, body_buf, signal);
           return JSON.stringify({ success: true, key, size: body_buf.length });
         }
         case "delete": {
           const url = `${endpoint}/${bucket}/${key}`;
-          await this.s3_fetch("DELETE", url, region, access_key, secret_key);
+          await this.s3_fetch("DELETE", url, region, access_key, secret_key, undefined, signal);
           return JSON.stringify({ success: true, deleted: key });
         }
         case "head": {
           const url = `${endpoint}/${bucket}/${key}`;
-          const resp = await this.s3_fetch("HEAD", url, region, access_key, secret_key);
+          const resp = await this.s3_fetch("HEAD", url, region, access_key, secret_key, undefined, signal);
           return resp;
         }
         case "presign": {
@@ -98,7 +99,7 @@ export class S3Tool extends Tool {
     }
   }
 
-  private async s3_fetch(method: string, url: string, region: string, access_key: string, secret_key: string, body?: Buffer): Promise<string> {
+  private async s3_fetch(method: string, url: string, region: string, access_key: string, secret_key: string, body?: Buffer, signal?: AbortSignal): Promise<string> {
     const parsed = new URL(url);
     const now = new Date();
     const date_stamp = now.toISOString().replace(/[-:]/g, "").split(".")[0]! + "Z";
@@ -131,6 +132,7 @@ export class S3Tool extends Tool {
       method,
       headers: { ...headers, Authorization: auth, ...(body ? { "Content-Length": String(body.length) } : {}) },
       body: body ? new Uint8Array(body) : undefined,
+      signal,
     });
 
     if (method === "HEAD") {
