@@ -21,13 +21,13 @@ function AutoApproveToggle({ enabled, onToggle, pending_count }: {
     <button
       className={`btn btn--sm${enabled ? " btn--ok" : " btn--ghost"}`}
       onClick={onToggle}
-      title={t("workflows.auto_approve_hint") || "Pending approvals will be automatically approved"}
+      title={t("workflows.auto_approve_hint")}
     >
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
         {enabled && <polyline points="9 12 11 14 15 10"/>}
       </svg>
-      {enabled ? (t("workflows.auto_approve_on") || "자동 승인 ON") : (t("workflows.auto_approve_off") || "자동 승인")}
+      {enabled ? t("workflows.auto_approve_on") : t("workflows.auto_approve_off")}
       {pending_count > 0 && <Badge status={String(pending_count)} variant="warn" />}
     </button>
   );
