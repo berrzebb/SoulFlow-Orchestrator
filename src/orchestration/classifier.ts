@@ -101,15 +101,21 @@ function is_followup_inquiry(tokens: Set<string>, history: Array<{ role: string;
 const RE_ASSISTANT_INFO_REQUEST = /알려주세요|알려줘|알아야|어디(?:서|를|에|인지)?|언제|무엇을|무엇인지|어떤|보내주세요|말해주세요|주소|위치|구체적|자세히|더\s*알|입력해|알\s*수\s*있|tell\s*me|let\s*me\s*know|what\s*is|where\s*is|which\s*one/i;
 
 /**
+ * 사용자가 이전 맥락(위치/조건)을 참조하는 짧은 후속 메시지 패턴.
+ * 예: "내가 있는 곳 기준으로", "거기 기준", "그 기준으로 다시"
+ */
+const RE_USER_CONTEXT_REFERENCE = /내가\s*있는\s*곳|여기\s*기준|위치\s*기준|거기\s*기준|그\s*기준|현재\s*위치|내\s*위치|주변으로|근처로|기준으로|거기서|거기|여기서|여기|그\s*주변|그\s*근처/i;
+
+/**
  * 짧은 후속 메시지일 때 대화 히스토리에서 도구 카테고리 힌트를 추출.
  *
- * 동작:
- * 1. 현재 메시지가 12토큰 이하(짧은 추가 정보 제공)이고
- * 2. 마지막 어시스턴트 메시지가 추가 정보를 요청하는 패턴이면
- * 3. 이전 사용자 메시지들의 의도를 분석하여 tool categories 반환.
+ * 트리거 조건 (둘 중 하나):
+ * A. 마지막 어시스턴트가 추가 정보를 요청한 후 사용자가 짧게 답하는 경우
+ *    예: "위치를 알려주세요" → "야탐 아미고 타워 주변"
+ * B. 사용자가 이미 제공한 맥락(위치/조건)을 참조하며 짧게 후속 요청하는 경우
+ *    예: AI가 일반 추천 후 → "내가 있는 곳 기준으로", "거기 기준으로 다시"
  *
- * 예: "주변에서 먹을 만한 점심은?" → agent asks "위치를 알려주세요" → "야탐 아미고 타워 주변"
- * → extract_intents("주변에서 먹을 만한 점심은?") = ["search_web"] → categories = ["web"]
+ * 두 경우 모두 이전 사용자 의도(예: 맛집 검색)의 tool categories를 현재 요청에 주입.
  */
 function extract_history_tool_hints(
   tokens: Set<string>,
@@ -118,7 +124,10 @@ function extract_history_tool_hints(
   if (!history?.length || tokens.size > 12) return undefined;
 
   const last_assistant = [...history].reverse().find(h => h.role === "assistant");
-  if (!last_assistant || !RE_ASSISTANT_INFO_REQUEST.test(last_assistant.content)) return undefined;
+  const is_info_followup = last_assistant && RE_ASSISTANT_INFO_REQUEST.test(last_assistant.content);
+  const is_context_reference = RE_USER_CONTEXT_REFERENCE.test([...tokens].join(" "));
+
+  if (!is_info_followup && !is_context_reference) return undefined;
 
   const categories = new Set<string>();
   for (const msg of history) {
@@ -254,7 +263,8 @@ export function fast_classify(task: string, ctx: ClassifierContext): Classificat
   const mode = classify_execution_complexity(lower, tokens, ctx);
 
   // 짧은 후속 메시지(≤12 토큰)에서 대화 히스토리의 의도를 carry-forward.
-  // 어시스턴트가 추가 정보를 요청한 뒤 사용자가 짧게 답한 경우,
+  // (A) 어시스턴트가 추가 정보 요청 후 짧은 답변, 또는
+  // (B) 사용자가 이전 제공 맥락을 참조("내가 있는 곳 기준으로" 등)하는 경우
   // 이전 사용자 의도(예: 맛집 검색)의 tool categories를 현재 요청에 주입.
   const history_tools = extract_history_tool_hints(tokens, ctx.recent_history);
   return history_tools ? { mode, tools: history_tools } : { mode };

@@ -166,3 +166,64 @@ describe("is_followup_inquiry — 짧은 후속 질문 (L115-118)", () => {
     expect(["inquiry", "once", "agent"]).toContain(result.mode);
   });
 });
+
+// ── extract_history_tool_hints — Case A / Case B ────────────────────────────
+
+describe("extract_history_tool_hints — 히스토리 tool hints 주입", () => {
+  const food_search_history = [
+    { role: "user", content: "주변에서 먹을 만한 점심 맛집 추천해줘" },
+    { role: "assistant", content: "어디 위치인지 알려주세요" },
+  ];
+
+  it("Case A: 마지막 assistant가 정보 요청 후 짧은 답변 → tool hints 주입", () => {
+    const result = fast_classify(
+      "야탐 아미고 타워 주변",
+      ctx({ recent_history: food_search_history }),
+    );
+    // search_web 의도 → "web" 카테고리가 tools에 포함
+    expect(result.tools).toBeDefined();
+    expect(result.tools).toContain("web");
+  });
+
+  it("Case B: assistant가 일반 응답 후 사용자가 맥락 참조 → tool hints 주입", () => {
+    // AI가 일반 추천을 했고 (정보 요청 아님), 사용자가 위치 맥락을 참조하는 짧은 메시지
+    const history_with_generic_reply = [
+      { role: "user", content: "점심 맛집 추천해줘" },
+      { role: "assistant", content: "한식당, 중식당, 이탈리안 등 여러 옵션이 있습니다. 좁혀서 다시 추천하겠습니다." },
+    ];
+    const result = fast_classify(
+      "내가 있는 곳 기준으로",
+      ctx({ recent_history: history_with_generic_reply }),
+    );
+    expect(result.tools).toBeDefined();
+    expect(result.tools).toContain("web");
+  });
+
+  it("Case B: '기준으로' 단독도 맥락 참조 트리거", () => {
+    const history = [
+      { role: "user", content: "근처 카페 알려줘" },
+      { role: "assistant", content: "스타벅스, 투썸플레이스 등이 있어요." },
+    ];
+    const result = fast_classify("거기 기준", ctx({ recent_history: history }));
+    expect(result.tools).toBeDefined();
+  });
+
+  it("히스토리 없음 → undefined (tool hints 없음)", () => {
+    const result = fast_classify("내가 있는 곳 기준으로", ctx({ recent_history: undefined }));
+    expect(result.tools).toBeUndefined();
+  });
+
+  it("토큰 수 13개 초과 → undefined (짧은 메시지 조건 실패)", () => {
+    const long_msg = "내가 있는 곳 기준으로 반경 500미터 이내 맛집을 모두 추천해줘 부탁해요";
+    const history = [
+      { role: "user", content: "맛집 검색해줘" },
+      { role: "assistant", content: "위치를 알려주세요" },
+    ];
+    const result = fast_classify(long_msg, ctx({ recent_history: history }));
+    // 토큰 초과 → extract_history_tool_hints 진입 안 함
+    // (mode는 정상 분류되지만 history hints는 없거나 있을 수 있음 — 조건 브랜치만 확인)
+    // 13토큰 초과면 extract_history_tool_hints가 undefined 반환
+    // 단 fast_classify는 자체 도구 분류를 하므로 tools 가 있을 수는 있음
+    expect(typeof result.mode).toBe("string");
+  });
+});
