@@ -229,9 +229,9 @@
   opacity: 1;
 }
 @media (hover: none) {
+  /* 터치 환경에서 CSS hover 툴팁 비활성화 — 항상 반투명 표시되는 버그 방지 */
   .sidebar--collapsed .sidebar__icon[data-tooltip]::after {
-    opacity: 0.9;
-    pointer-events: auto;
+    display: none;
   }
 }
 
