@@ -8,7 +8,7 @@ import { SectionHeader } from "../components/section-header";
 import { ToggleSwitch } from "../components/toggle-switch";
 import { useToast } from "../components/toast";
 import { useT } from "../i18n";
-import { useAuthUser, useAdminUsers, type AdminUserRecord } from "../hooks/use-auth";
+import { useAuthUser, useAdminUsers, useAdminTeams, useTeamMembers, type AdminUserRecord } from "../hooks/use-auth";
 
 interface FieldInfo {
   path: string;
@@ -107,7 +107,10 @@ export default function SettingsPage() {
       </div>
 
       {auth_user?.role === "superadmin" && !search && (
-        <UsersPanel />
+        <>
+          <TeamsPanel />
+          <UsersPanel />
+        </>
       )}
       {filtered_sections.map((s) => (
         <SectionPanel key={s.id} section={s} />
@@ -355,24 +358,134 @@ function EditInline({
   );
 }
 
+// ── Teams Panel (superadmin 전용) ─────────────────────────────────────────
+
+function TeamsPanel() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const { data: teams = [], isLoading } = useAdminTeams();
+  const [form, setForm] = useState({ open: false, id: "", name: "" });
+  const [expanded, setExpanded] = useState<string | null>(null);
+
+  const create = useMutation({
+    mutationFn: () => api.post("/api/admin/teams", { id: form.id.trim(), name: form.name.trim() }),
+    onSuccess: () => {
+      toast("팀 생성 완료", "ok");
+      setForm({ open: false, id: "", name: "" });
+      void qc.invalidateQueries({ queryKey: ["admin-teams"] });
+    },
+    onError: (e: unknown) => {
+      const msg = (e as { body?: { error?: string } })?.body?.error;
+      toast(msg === "id_must_be_lowercase_alphanumeric_hyphen" ? "ID는 소문자·숫자·하이픈만 허용" : "생성 실패", "err");
+    },
+  });
+
+  return (
+    <section className="panel mb-3">
+      <div className="li-flex" style={{ justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+        <h2 style={{ margin: 0 }}>팀 관리</h2>
+        <button className="btn btn--sm btn--primary" onClick={() => setForm((f) => ({ ...f, open: !f.open }))}>
+          {form.open ? "취소" : "+ 팀 추가"}
+        </button>
+      </div>
+
+      {form.open && (
+        <div className="panel panel--inset mb-2">
+          <div className="li-flex" style={{ gap: "8px", flexWrap: "wrap" }}>
+            <input
+              className="form-input" style={{ flex: "1 1 120px" }}
+              placeholder="ID (소문자·숫자·-)" value={form.id}
+              onChange={(e) => setForm((f) => ({ ...f, id: e.target.value }))}
+            />
+            <input
+              className="form-input" style={{ flex: "1 1 160px" }}
+              placeholder="팀 이름" value={form.name}
+              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+            />
+            <button
+              className="btn btn--sm btn--ok"
+              disabled={!form.id || !form.name || create.isPending}
+              onClick={() => create.mutate()}
+            >
+              {create.isPending ? "생성 중..." : "생성"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {isLoading ? (
+        <div className="skeleton skeleton--row" />
+      ) : (
+        <div className="users-list">
+          {teams.map((t) => (
+            <div key={t.id}>
+              <div className="users-list__item li-flex">
+                <div className="users-list__info">
+                  <span className="users-list__name">{t.name}</span>
+                  <span className="text-xs text-muted">ID: {t.id}</span>
+                  <Badge status={`${t.member_count ?? 0}명`} variant="info" />
+                </div>
+                <button
+                  className="btn btn--xs"
+                  onClick={() => setExpanded((prev) => prev === t.id ? null : t.id)}
+                >
+                  {expanded === t.id ? "접기" : "멤버"}
+                </button>
+              </div>
+              {expanded === t.id && <TeamMembersList team_id={t.id} />}
+            </div>
+          ))}
+          {teams.length === 0 && (
+            <p className="text-xs text-muted" style={{ padding: "8px 0" }}>팀이 없습니다.</p>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function TeamMembersList({ team_id }: { team_id: string }) {
+  const { data: members = [], isLoading } = useTeamMembers(team_id);
+  if (isLoading) return <div className="skeleton skeleton--row" style={{ margin: "4px 0" }} />;
+  if (members.length === 0) return <p className="text-xs text-muted" style={{ padding: "4px 16px" }}>멤버 없음</p>;
+  return (
+    <div style={{ padding: "4px 16px 8px" }}>
+      {members.map((m) => (
+        <div key={m.id} className="li-flex" style={{ gap: "8px", padding: "3px 0", fontSize: "12px" }}>
+          <span style={{ fontWeight: 500 }}>{m.username}</span>
+          <Badge status={m.system_role} variant={m.system_role === "superadmin" ? "warn" : "info"} />
+          <span className="text-muted" style={{ fontFamily: "monospace", fontSize: "11px" }}>{m.wdir}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ── Users Panel (superadmin 전용) ──────────────────────────────────────────
 
 function UsersPanel() {
   const qc = useQueryClient();
   const { toast } = useToast();
   const { data: users = [], isLoading } = useAdminUsers();
-  const [form, setForm] = useState<{ open: boolean; username: string; password: string; role: "user" | "superadmin" }>({
-    open: false, username: "", password: "", role: "user",
+  const { data: teams = [] } = useAdminTeams();
+  const [form, setForm] = useState<{ open: boolean; username: string; password: string; role: "user" | "superadmin"; team_id: string }>({
+    open: false, username: "", password: "", role: "user", team_id: "",
   });
   const [pw_target, setPwTarget] = useState<AdminUserRecord | null>(null);
   const [new_pw, setNewPw] = useState("");
+  const [tm_target, setTmTarget] = useState<AdminUserRecord | null>(null);
+  const [new_team, setNewTeam] = useState("");
 
   const create = useMutation({
-    mutationFn: () => api.post("/api/admin/users", { username: form.username.trim(), password: form.password, role: form.role }),
+    mutationFn: () => api.post("/api/admin/users", {
+      username: form.username.trim(), password: form.password, role: form.role,
+      team_id: form.team_id || null,
+    }),
     onSuccess: () => {
       toast("사용자 생성 완료", "ok");
-      setForm({ open: false, username: "", password: "", role: "user" });
+      setForm({ open: false, username: "", password: "", role: "user", team_id: "" });
       void qc.invalidateQueries({ queryKey: ["admin-users"] });
+      void qc.invalidateQueries({ queryKey: ["admin-teams"] });
     },
     onError: (e: unknown) => {
       const msg = (e as { body?: { error?: string } })?.body?.error;
@@ -382,7 +495,11 @@ function UsersPanel() {
 
   const del = useMutation({
     mutationFn: (id: string) => api.del(`/api/admin/users/${id}`),
-    onSuccess: () => { toast("사용자 삭제 완료", "ok"); void qc.invalidateQueries({ queryKey: ["admin-users"] }); },
+    onSuccess: () => {
+      toast("사용자 삭제 완료", "ok");
+      void qc.invalidateQueries({ queryKey: ["admin-users"] });
+      void qc.invalidateQueries({ queryKey: ["admin-teams"] });
+    },
     onError: () => toast("삭제 실패", "err"),
   });
 
@@ -391,6 +508,19 @@ function UsersPanel() {
     onSuccess: () => { toast("비밀번호 변경 완료", "ok"); setPwTarget(null); setNewPw(""); },
     onError: () => toast("비밀번호 변경 실패", "err"),
   });
+
+  const change_team = useMutation({
+    mutationFn: (id: string) => api.patch(`/api/admin/users/${id}/team`, { team_id: new_team }),
+    onSuccess: () => {
+      toast("팀 변경 완료", "ok");
+      setTmTarget(null); setNewTeam("");
+      void qc.invalidateQueries({ queryKey: ["admin-users"] });
+      void qc.invalidateQueries({ queryKey: ["admin-teams"] });
+    },
+    onError: () => toast("팀 변경 실패", "err"),
+  });
+
+  const team_name = (id: string | null) => teams.find((t) => t.id === id)?.name ?? id ?? "—";
 
   return (
     <section className="panel mb-3">
@@ -405,22 +535,31 @@ function UsersPanel() {
         <div className="panel panel--inset mb-2">
           <div className="li-flex" style={{ gap: "8px", flexWrap: "wrap" }}>
             <input
-              className="form-input" style={{ flex: "1 1 140px" }}
+              className="form-input" style={{ flex: "1 1 120px" }}
               placeholder="아이디" value={form.username}
               onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))}
             />
             <input
-              className="form-input" style={{ flex: "1 1 140px" }}
+              className="form-input" style={{ flex: "1 1 120px" }}
               type="password" placeholder="비밀번호 (6자 이상)" value={form.password}
               onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
             />
             <select
-              className="form-input" style={{ flex: "0 0 120px" }}
+              className="form-input" style={{ flex: "0 0 110px" }}
               value={form.role} onChange={(e) => setForm((f) => ({ ...f, role: e.target.value as "user" | "superadmin" }))}
             >
               <option value="user">user</option>
               <option value="superadmin">superadmin</option>
             </select>
+            {teams.length > 0 && (
+              <select
+                className="form-input" style={{ flex: "0 0 130px" }}
+                value={form.team_id} onChange={(e) => setForm((f) => ({ ...f, team_id: e.target.value }))}
+              >
+                <option value="">팀 없음</option>
+                {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+              </select>
+            )}
             <button
               className="btn btn--sm btn--ok"
               disabled={!form.username || form.password.length < 6 || create.isPending}
@@ -445,10 +584,29 @@ function UsersPanel() {
               className="btn btn--sm btn--ok"
               disabled={new_pw.length < 6 || change_pw.isPending}
               onClick={() => change_pw.mutate(pw_target.id)}
-            >
-              변경
-            </button>
+            >변경</button>
             <button className="btn btn--sm" onClick={() => { setPwTarget(null); setNewPw(""); }}>취소</button>
+          </div>
+        </div>
+      )}
+
+      {tm_target && (
+        <div className="panel panel--inset mb-2">
+          <div className="li-flex" style={{ gap: "8px", alignItems: "center" }}>
+            <span className="text-xs text-muted">{tm_target.username} 팀 변경</span>
+            <select
+              className="form-input" style={{ flex: "1" }}
+              value={new_team} onChange={(e) => setNewTeam(e.target.value)}
+            >
+              <option value="">팀 선택...</option>
+              {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+            <button
+              className="btn btn--sm btn--ok"
+              disabled={!new_team || change_team.isPending}
+              onClick={() => change_team.mutate(tm_target.id)}
+            >변경</button>
+            <button className="btn btn--sm" onClick={() => { setTmTarget(null); setNewTeam(""); }}>취소</button>
           </div>
         </div>
       )}
@@ -462,11 +620,19 @@ function UsersPanel() {
               <div className="users-list__info">
                 <span className="users-list__name">{u.username}</span>
                 <Badge status={u.system_role} variant={u.system_role === "superadmin" ? "warn" : "info"} />
+                {u.default_team_id && (
+                  <Badge status={team_name(u.default_team_id)} variant="info" />
+                )}
                 {u.last_login_at && (
                   <span className="text-xs text-muted">최근 로그인: {new Date(u.last_login_at).toLocaleDateString()}</span>
                 )}
               </div>
               <div className="li-flex" style={{ gap: "6px" }}>
+                {teams.length > 0 && (
+                  <button className="btn btn--xs" onClick={() => { setTmTarget(u); setNewTeam(u.default_team_id ?? ""); }}>
+                    팀
+                  </button>
+                )}
                 <button className="btn btn--xs" onClick={() => { setPwTarget(u); setNewPw(""); }}>
                   비밀번호
                 </button>

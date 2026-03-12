@@ -31,6 +31,8 @@ The skill format and metadata structure follow OpenClaw's conventions to maintai
 | `cron` | Cron job management via builtin cron tool |
 | `file-delivery` | File delivery and export via send_file tool |
 | `memory` | Long-term memory management via builtin memory tool |
+| `gateway-direct-execution` | Request planning, direct tool/model execution, ResultEnvelope, requested channel affinity |
+| `role-protocol-architecture` | Role skill baseline normalization via resolvers/compilers using `src/skills/roles` as source of truth |
 
 ## Roles (`roles/`)
 

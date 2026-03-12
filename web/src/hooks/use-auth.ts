@@ -10,6 +10,8 @@ export interface AuthUser {
   sub: string;
   username: string;
   role: "superadmin" | "user";
+  tid: string;
+  wdir: string;
   exp: number;
 }
 
@@ -17,9 +19,26 @@ export interface AdminUserRecord {
   id: string;
   username: string;
   system_role: "superadmin" | "user";
+  default_team_id: string | null;
   created_at: string;
   last_login_at: string | null;
   disabled_at: string | null;
+}
+
+export interface TeamRecord {
+  id: string;
+  name: string;
+  created_at: string;
+  member_count?: number;
+}
+
+export interface TeamMember {
+  id: string;
+  username: string;
+  system_role: "superadmin" | "user";
+  wdir: string;
+  created_at: string;
+  last_login_at: string | null;
 }
 
 export function useAuthStatus() {
@@ -72,6 +91,29 @@ export function useAdminUsers() {
       const res = await api.get<{ users: AdminUserRecord[] }>("/api/admin/users");
       return res.users;
     },
+    staleTime: 30_000,
+  });
+}
+
+export function useAdminTeams() {
+  return useQuery<TeamRecord[]>({
+    queryKey: ["admin-teams"],
+    queryFn: async () => {
+      const res = await api.get<{ teams: TeamRecord[] }>("/api/admin/teams");
+      return res.teams;
+    },
+    staleTime: 30_000,
+  });
+}
+
+export function useTeamMembers(team_id: string | null) {
+  return useQuery<TeamMember[]>({
+    queryKey: ["team-members", team_id],
+    queryFn: async () => {
+      const res = await api.get<{ members: TeamMember[] }>(`/api/admin/teams/${team_id}/members`);
+      return res.members;
+    },
+    enabled: !!team_id,
     staleTime: 30_000,
   });
 }
