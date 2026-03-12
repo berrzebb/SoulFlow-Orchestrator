@@ -132,4 +132,42 @@ describe("InMemoryMessageBus", () => {
     const bus = new InMemoryMessageBus();
     expect(bus.kind).toBe("memory");
   });
+
+  // ── close 상세 분기 (cov2) ──
+
+  it("close 후 publish_outbound → early return, 큐 비어있음", async () => {
+    const bus = new InMemoryMessageBus();
+    await bus.close();
+    await bus.publish_outbound(make_outbound("ignored", "hello"));
+    expect(bus.get_size("outbound")).toBe(0);
+  });
+
+  it("outbound 소비 대기 중 close → waiter(null) → null 반환", async () => {
+    const bus = new InMemoryMessageBus();
+    const promise = bus.consume_outbound({ timeout_ms: 10_000 });
+    await bus.close();
+    const result = await promise;
+    expect(result).toBeNull();
+  });
+
+  it("progress 소비 대기 중 close → waiter(null) → null 반환", async () => {
+    const bus = new InMemoryMessageBus();
+    const promise = bus.consume_progress({ timeout_ms: 10_000 });
+    await bus.close();
+    const result = await promise;
+    expect(result).toBeNull();
+  });
+
+  it("publish 후 타이머 발화 → on_done 이미 done → early return", async () => {
+    vi.useFakeTimers();
+    const bus = new InMemoryMessageBus();
+    const promise = bus.consume_outbound({ timeout_ms: 1000 });
+    await bus.publish_outbound(make_outbound("timer-test", "hello"));
+    await vi.advanceTimersByTimeAsync(1500);
+    const result = await promise;
+    expect(result).not.toBeNull();
+    expect(result?.content).toBe("hello");
+    await bus.close();
+    vi.useRealTimers();
+  });
 });

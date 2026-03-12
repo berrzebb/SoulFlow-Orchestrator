@@ -307,23 +307,62 @@ describe("WorkflowEventService — row_to_event catch (L206)", () => {
 // L182: schema initialization failed — logger.error 호출
 // ══════════════════════════════════════════════════════════════
 
-describe("WorkflowEventService — schema init failed → logger.error (L182)", () => {
-  it("DB 경로가 디렉토리 → with_sqlite 실패 → !initialized → logger.error (L182)", async () => {
+describe("WorkflowEventService — schema init failed → append rejects", () => {
+  it("DB 경로가 디렉토리 → with_sqlite_strict throw → initialized reject → append reject", async () => {
     const tmp = await mkdtemp(join(tmpdir(), "evt-init-fail-"));
     try {
       const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } as any;
-      // events_dir_override를 tmp 경로로 직접 지정
-      // events.db 위치에 미리 디렉토리 생성 → better-sqlite3 열기 실패
       const events_dir = join(tmp, "events");
       await mkdir(events_dir, { recursive: true });
-      // events.db 자리에 디렉토리 생성 → DB 열기 불가
       await mkdir(join(events_dir, "events.db"), { recursive: true });
       const svc2 = new WorkflowEventService(tmp, events_dir, logger);
-      // ensure_initialized 완료 대기 (내부적으로 Promise)
-      await svc2.append({ phase: "assign", summary: "test" }).catch(() => {});
-      expect(logger.error).toHaveBeenCalledWith("schema initialization failed");
+      await expect(
+        svc2.append({ phase: "assign", summary: "test" }),
+      ).rejects.toThrow();
     } finally {
       await rm(tmp, { recursive: true, force: true }).catch(() => {});
     }
+  });
+});
+
+// ══════════════════════════════════════════════════════════════
+// cov2: enqueue_write rejection, sync_task_state empty task_id
+// ══════════════════════════════════════════════════════════════
+
+describe("WorkflowEventService — enqueue_write rejection handler", () => {
+  it("job throw → rejection handler 실행 → write_queue 갱신됨", async () => {
+    const svc2 = new WorkflowEventService("/tmp/test-evt-cov2-" + Date.now());
+    let rejection_count = 0;
+    await (svc2 as any).enqueue_write(async () => {
+      throw new Error("forced job failure");
+    }).catch(() => { rejection_count++; });
+    expect(rejection_count).toBe(1);
+    await expect((svc2 as any).write_queue).resolves.toBeUndefined();
+  });
+});
+
+describe("WorkflowEventService — sync_task_state_from_event 빈 task_id", () => {
+  it("task_id='' → early return, task_store.get 미호출", async () => {
+    const svc2 = new WorkflowEventService("/tmp/test-evt-cov2-sync-" + Date.now());
+    const task_store_mock = { get: vi.fn(), set: vi.fn() };
+    svc2.bind_task_store(task_store_mock as any);
+    await (svc2 as any).sync_task_state_from_event({
+      event_id: "e1", run_id: "r1", task_id: "", agent_id: "a1",
+      phase: "assign", summary: "s", payload: {}, chat_id: "c",
+      source: "system", at: new Date().toISOString(),
+    });
+    expect(task_store_mock.get).not.toHaveBeenCalled();
+  });
+
+  it("task_id 공백만 → early return", async () => {
+    const svc2 = new WorkflowEventService("/tmp/test-evt-cov2-sync2-" + Date.now());
+    const task_store_mock = { get: vi.fn(), set: vi.fn() };
+    svc2.bind_task_store(task_store_mock as any);
+    await (svc2 as any).sync_task_state_from_event({
+      event_id: "e2", run_id: "r1", task_id: "   ", agent_id: "a1",
+      phase: "assign", summary: "s", payload: {}, chat_id: "c",
+      source: "system", at: new Date().toISOString(),
+    });
+    expect(task_store_mock.get).not.toHaveBeenCalled();
   });
 });

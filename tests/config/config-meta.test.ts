@@ -10,6 +10,7 @@ import {
   get_sensitive_fields,
   to_vault_name,
 } from "../../src/config/config-meta.js";
+import { get_config_defaults } from "../../src/config/schema.js";
 
 describe("config-meta", () => {
   it("CONFIG_FIELDS: 최소 1개 이상 필드 존재", () => {
@@ -57,4 +58,36 @@ describe("config-meta", () => {
     expect(to_vault_name("channels.slack.botToken")).toBe("config.channels.slack.botToken");
     expect(to_vault_name("api.key")).toBe("config.api.key");
   });
+});
+
+// ══════════════════════════════════════════
+// default_value — schema 기본값과 일치 (C-18)
+// ══════════════════════════════════════════
+
+describe("config-meta default_value — schema 기본값과 일치 (C-18)", () => {
+  function get_nested(obj: Record<string, unknown>, path: string): unknown {
+    return path.split(".").reduce<unknown>((cur, key) => {
+      if (cur !== null && typeof cur === "object") return (cur as Record<string, unknown>)[key];
+      return undefined;
+    }, obj);
+  }
+
+  const defaults = get_config_defaults() as unknown as Record<string, unknown>;
+
+  const paths = [
+    "memory.consolidation.enabled",
+    "memory.consolidation.idleAfterMs",
+    "memory.consolidation.archiveUsed",
+    "memory.consolidation.windowDays",
+    "memory.longtermInjectionMaxChars",
+    "memory.dailyInjectionDays",
+    "memory.dailyInjectionMaxChars",
+  ];
+
+  for (const p of paths) {
+    it(`${p} 기본값 일치`, () => {
+      const field = CONFIG_FIELDS.find((f) => f.path === p);
+      expect(field?.default_value).toBe(get_nested(defaults, p));
+    });
+  }
 });
