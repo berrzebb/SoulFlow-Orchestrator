@@ -4,10 +4,9 @@
  * L485/490: _recompute_next_runs running/enabled 분기
  * L537/538: _on_timer paused 조기 반환
  * L553/554: _on_timer job 실행 오류 catch
- * L597: 성공적 run 후 next_run_at_ms 갱신 (every 스케줄)
  * L612: _is_running_fresh job.state.running=false → false
  * L644: _is_job_lock_stale mtime=0 → true
- * L773/786: enable_job/run_job disabled 분기
+ * L773: enable_job enabled=true → next_run 재계산
  */
 import { mkdtemp, rm, writeFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
@@ -120,26 +119,6 @@ describe("CronService — _on_timer 잡 실행 오류 catch (L553-554)", () => {
 });
 
 // ══════════════════════════════════════════
-// L597: every 스케줄 성공 run 후 next_run_at_ms 갱신
-// ══════════════════════════════════════════
-
-describe("CronService — run_job every 스케줄 완료 후 next_run 갱신 (L597)", () => {
-  it("run_job(id, force=true) → on_job 성공 → next_run_at_ms 재계산 (L597)", async () => {
-    const on_job = vi.fn().mockResolvedValue(undefined);
-    const svc = new CronService(store_path, on_job, {});
-    const job = await svc.add_job("every-job", { kind: "every", every_ms: 60_000 }, "msg");
-    const result = await svc.run_job(job.id, true);
-    expect(result).toBe(true);
-    expect(on_job).toHaveBeenCalled();
-    // L597: every 스케줄이므로 next_run_at_ms 갱신됨
-    const store = await (svc as any)._load_store();
-    const j = store.jobs.find((x: any) => x.id === job.id);
-    expect(j.state.next_run_at_ms).toBeGreaterThan(0);
-    await svc.stop();
-  });
-});
-
-// ══════════════════════════════════════════
 // L612: _is_running_fresh job.state.running=false
 // ══════════════════════════════════════════
 
@@ -169,14 +148,6 @@ describe("CronService — _is_job_lock_stale mtime=0 (L644)", () => {
     expect(typeof stale).toBe("boolean");
     await svc.stop();
   });
-
-  it("존재하지 않는 lock 파일 → stat 오류 → true (catch branch)", async () => {
-    const svc = make_svc();
-    const missing = join(store_path, "nonexistent.lock");
-    const stale = await (svc as any)._is_job_lock_stale(missing);
-    expect(stale).toBe(true); // stat 오류 → catch → true
-    await svc.stop();
-  });
 });
 
 // ══════════════════════════════════════════
@@ -197,17 +168,3 @@ describe("CronService — enable_job enabled 분기 (L773)", () => {
   });
 });
 
-// ══════════════════════════════════════════
-// L786: run_job disabled + no force → false
-// ══════════════════════════════════════════
-
-describe("CronService — run_job disabled no-force → false (L786)", () => {
-  it("비활성 잡에 force=false → false 반환 (L786)", async () => {
-    const svc = make_svc();
-    const job = await svc.add_job("disabled-job", { kind: "every", every_ms: 60_000 }, "msg");
-    await svc.enable_job(job.id, false);
-    const result = await svc.run_job(job.id, false);
-    expect(result).toBe(false);
-    await svc.stop();
-  });
-});

@@ -80,7 +80,6 @@ describe("CronService — L634: running_started_at_ms=0 → _is_running_fresh fa
     };
     const result = (svc as any)._is_running_fresh(job);
     expect(result).toBe(false);
-    await svc.stop();
   });
 
   it("running=true + started=null → !isFinite(0) false, started=0 → L634", async () => {
@@ -94,7 +93,6 @@ describe("CronService — L634: running_started_at_ms=0 → _is_running_fresh fa
     // Number(null || 0) = 0 → started=0 → started <= 0 → return false
     const result = (svc as any)._is_running_fresh(job);
     expect(result).toBe(false);
-    await svc.stop();
   });
 });
 
@@ -117,12 +115,4 @@ describe("CronService — L808: run_job — id 불일치 → continue", () => {
     await svc.stop();
   });
 
-  it("존재하지 않는 job_id → 모든 잡 continue → false 반환", async () => {
-    const svc = new CronService(store_path, null, {});
-    await svc.add_job("j1", { kind: "every", every_ms: 60_000 }, "msg");
-
-    const result = await svc.run_job("non-existent-id", true);
-    expect(result).toBe(false);
-    await svc.stop();
-  });
 });
