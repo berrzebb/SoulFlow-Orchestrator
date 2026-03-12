@@ -290,7 +290,7 @@ export class OrchestrationService {
       log_event: (input: AppendWorkflowEventInput) => this.log_event(input),
       convert_agent_result: (result: AgentRunResult, mode: ExecutionMode, stream: StreamBuffer, req: OrchestrationRequest) => this._convert_agent_result(result, mode, stream, req),
       build_persona_followup: (heart: string) => this.build_persona_followup(heart),
-      build_compaction_flush: () => this.build_compaction_flush(),
+      build_compaction_flush: (req?: OrchestrationRequest) => this.build_compaction_flush(req),
     } as const;
   }
 
@@ -391,13 +391,18 @@ export class OrchestrationService {
   }
 
   /** 컨텍스트 압축 전 메모리 자동 저장 설정 생성. 200K 컨텍스트 기준. */
-  private build_compaction_flush(): CompactionFlushConfig | undefined {
+  private build_compaction_flush(req?: import("./types.js").OrchestrationRequest): CompactionFlushConfig | undefined {
     const mem = this.runtime.get_context_builder()?.memory_store;
     if (!mem) return undefined;
     return {
       context_window: 200_000,
       flush: async () => {
-        try { await mem.append_daily(`[auto-flush] Session nearing compaction — durable memories preserved.\n`); } catch { /* best-effort */ }
+        if (!req) return;
+        // scope 지정 라인으로 기록 — session-recorder의 - [scope] 형식 사용
+        const now = new Date().toISOString();
+        const scope = `${req.provider}:${req.message.chat_id}:-`;
+        const line = `- [${now}] [${scope}] SYSTEM: context compaction checkpoint\n`;
+        try { await mem.append_daily(line); } catch { /* best-effort */ }
       },
     };
   }

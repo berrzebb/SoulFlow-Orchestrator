@@ -85,6 +85,6 @@ export type RunnerDeps = {
   convert_agent_result: (result: AgentRunResult, mode: ExecutionMode, stream: StreamBuffer, req: OrchestrationRequest) => OrchestrationResult;
   /** concierge 페르소나 어투를 followup 지시에 포함. */
   build_persona_followup: (concierge_heart: string) => string;
-  /** 컨텍스트 압축 전 메모리 자동 저장 설정. */
-  build_compaction_flush: () => CompactionFlushConfig | undefined;
+  /** 컨텍스트 압축 전 메모리 자동 저장 설정. req가 있으면 scoped 엔트리를 기록. */
+  build_compaction_flush: (req?: OrchestrationRequest) => CompactionFlushConfig | undefined;
 };

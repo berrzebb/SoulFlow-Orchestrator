@@ -160,7 +160,7 @@ export async function run_task_loop(
             },
             log_ctx: args.req.run_id ? { run_id: args.req.run_id, agent_id: String(args.executor), provider: args.req.provider, chat_id: args.req.message.chat_id } : undefined,
           }),
-          compaction_flush: deps.build_compaction_flush(),
+          compaction_flush: deps.build_compaction_flush(args.req),
         });
 
         flush_remaining(stream, args.req.on_stream);

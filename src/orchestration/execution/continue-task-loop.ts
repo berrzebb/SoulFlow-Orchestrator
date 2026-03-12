@@ -123,7 +123,7 @@ export async function continue_task_loop(
             on_tool_event: (e) => deps.session_cd.observe(e),
             log_ctx: req.run_id ? { run_id: req.run_id, agent_id: String(executor), provider: req.provider, chat_id: req.message.chat_id } : undefined,
           }),
-          compaction_flush: deps.build_compaction_flush(),
+          compaction_flush: deps.build_compaction_flush(req),
         });
 
         flush_remaining(stream, req.on_stream);
