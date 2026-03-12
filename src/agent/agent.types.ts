@@ -92,6 +92,7 @@ export type AgentFinishReason =
 export type AgentEvent =
   | { type: "init";             source: AgentEventSource; at: string; session_id?: string }
   | { type: "content_delta";    source: AgentEventSource; at: string; text: string }
+  | { type: "thinking";         source: AgentEventSource; at: string; thinking_text: string; tokens?: number }
   | { type: "tool_use";         source: AgentEventSource; at: string;
       tool_name: string; tool_id: string; params: Record<string, unknown> }
   | { type: "tool_result";      source: AgentEventSource; at: string;

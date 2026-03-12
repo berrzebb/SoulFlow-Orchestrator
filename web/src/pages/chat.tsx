@@ -55,7 +55,7 @@ export default function ChatPage() {
   const web_stream = useDashboardStore((s) => s.web_stream);
   const set_web_stream = useDashboardStore((s) => s.set_web_stream);
   const mirror_event = useDashboardStore((s) => s.mirror_event);
-  const { stream: ndjson_stream, start: start_stream, cancel: cancel_stream } = useNdjsonStream();
+  const { stream: ndjson_stream, tool_calls: ndjson_tool_calls, start: start_stream, cancel: cancel_stream } = useNdjsonStream();
 
   const is_mirror = !!mirrorKey;
 
@@ -352,6 +352,7 @@ export default function ChatPage() {
             sending={is_busy}
             last_is_user={last_is_user}
             is_streaming={is_streaming}
+            tool_calls={is_streaming && ndjson_stream?.chat_id === activeId ? ndjson_tool_calls : []}
             pending_approvals={is_mirror ? [] : pending_approvals}
             onResolveApproval={(id, text) => void resolve_approval(id, text)}
           />

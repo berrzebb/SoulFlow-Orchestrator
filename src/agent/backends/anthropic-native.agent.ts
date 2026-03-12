@@ -63,7 +63,7 @@ type AnthropicApiUsage = {
 type SseEvent =
   | { type: "message_start"; message: { usage?: AnthropicApiUsage } }
   | { type: "content_block_start"; index: number; content_block: { type: string; id?: string; name?: string } }
-  | { type: "content_block_delta"; index: number; delta: { type: string; text?: string; partial_json?: string } }
+  | { type: "content_block_delta"; index: number; delta: { type: string; text?: string; partial_json?: string; thinking?: string } }
   | { type: "content_block_stop"; index: number }
   | { type: "message_delta"; delta: { stop_reason?: string }; usage?: { output_tokens: number } };
 
@@ -261,6 +261,7 @@ export class AnthropicNativeAgent implements AgentBackend {
       const text_bufs = new Map<number, string>(); // index → 누적 텍스트
       const tool_input_bufs = new Map<number, string>(); // index → 누적 JSON
       const tool_meta = new Map<number, { id: string; name: string }>();
+      const thinking_bufs = new Map<number, string>(); // index → 누적 thinking 텍스트
       let stop_reason = "end_turn";
 
       const reader = res.body.getReader();
@@ -289,6 +290,8 @@ export class AnthropicNativeAgent implements AgentBackend {
               const cb = ev.content_block;
               if (cb.type === "text") {
                 text_bufs.set(ev.index, "");
+              } else if (cb.type === "thinking") {
+                thinking_bufs.set(ev.index, "");
               } else if (cb.type === "tool_use" && cb.id && cb.name) {
                 tool_meta.set(ev.index, { id: cb.id, name: cb.name });
                 tool_input_bufs.set(ev.index, "");
@@ -301,14 +304,22 @@ export class AnthropicNativeAgent implements AgentBackend {
                 text_bufs.set(ev.index, (text_bufs.get(ev.index) ?? "") + d.text);
                 fire(emit, { type: "content_delta", source, at: now_iso(), text: d.text });
                 if (options.hooks?.on_stream) swallow(options.hooks.on_stream(d.text));
+              } else if (d.type === "thinking_delta" && d.thinking) {
+                thinking_bufs.set(ev.index, (thinking_bufs.get(ev.index) ?? "") + d.thinking);
               } else if (d.type === "input_json_delta" && d.partial_json !== undefined) {
                 tool_input_bufs.set(ev.index, (tool_input_bufs.get(ev.index) ?? "") + d.partial_json);
               }
               break;
             }
-            case "content_block_stop":
-              // tool_use 블록 완성 시에만 처리 (text는 bufs에 이미 누적됨)
+            case "content_block_stop": {
+              // thinking 블록 완성 시 이벤트 발행
+              const thinking_text = thinking_bufs.get(ev.index);
+              if (thinking_text !== undefined) {
+                fire(emit, { type: "thinking", source, at: now_iso(), thinking_text });
+                thinking_bufs.delete(ev.index);
+              }
               break;
+            }
             case "message_delta":
               if (ev.delta.stop_reason) stop_reason = ev.delta.stop_reason;
               if (ev.usage) api_usage.output_tokens = (api_usage.output_tokens ?? 0) + ev.usage.output_tokens;

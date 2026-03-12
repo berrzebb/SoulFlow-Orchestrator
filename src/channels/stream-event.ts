@@ -20,6 +20,8 @@ export function agent_event_to_stream(event: AgentEvent): StreamEvent | null {
   switch (event.type) {
     case "content_delta":
       return { type: "delta", content: event.text };
+    case "thinking":
+      return { type: "thinking", tokens: event.tokens ?? 0, preview: event.thinking_text.slice(0, 200) };
     case "tool_use":
       return { type: "tool_start", name: event.tool_name, id: event.tool_id, params: event.params };
     case "tool_result":

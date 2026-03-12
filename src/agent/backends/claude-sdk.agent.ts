@@ -430,6 +430,8 @@ export class ClaudeSdkAgent implements AgentBackend {
                 tool_id: String(block.id || short_id(8)),
                 params: (block.input as Record<string, unknown>) ?? {},
               });
+            } else if (block.type === "thinking" && block.thinking) {
+              fire(emit, { type: "thinking", source, at: now_iso(), thinking_text: String(block.thinking) });
             } else if (block.type === "text" && block.text) {
               const text = String(block.text);
               turn_text += text;

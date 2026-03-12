@@ -752,8 +752,8 @@ export class ChannelManager implements ServiceLike {
               this.on_agent_event?.(event);
               const stream_ev = agent_event_to_stream(event);
               if (stream_ev) {
-                // web 채널: StreamEvent를 세션별 NDJSON 스트림으로 라우팅
-                if (provider === "web") this.on_web_rich_event?.(message.chat_id, stream_ev);
+                // web 채널: delta는 on_web_stream이 broadcast_web_stream으로 이미 처리 → 중복 제외
+                if (provider === "web" && stream_ev.type !== "delta") this.on_web_rich_event?.(message.chat_id, stream_ev);
                 // 채널: 이벤트 누적 (실제 전송은 턴 종료 후 _send_block_summary에서 일괄)
                 block_renderer?.push(stream_ev);
               }

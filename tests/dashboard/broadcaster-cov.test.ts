@@ -44,6 +44,14 @@ describe("agent_event_to_web_stream", () => {
     expect(r?.type).toBe("delta");
   });
 
+  it("thinking → thinking (tokens + preview)", () => {
+    const ev = base_event("thinking", { thinking_text: "analyzing the problem carefully", tokens: 512 });
+    const r = agent_event_to_web_stream(ev);
+    expect(r?.type).toBe("thinking");
+    expect((r as any).tokens).toBe(512);
+    expect((r as any).preview).toContain("analyzing");
+  });
+
   it("기타 이벤트(init 등) → null", () => {
     const ev = base_event("init");
     expect(agent_event_to_web_stream(ev)).toBeNull();

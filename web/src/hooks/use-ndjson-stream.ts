@@ -5,13 +5,28 @@ import { useState, useRef, useCallback, useEffect } from "react";
 type NdjsonLine =
   | { type: "start" }
   | { type: "delta"; content: string }
+  | { type: "thinking"; tokens: number; preview: string }
+  | { type: "tool_start"; id: string; name: string; params?: Record<string, unknown> }
+  | { type: "tool_result"; id: string; name: string; result: string; is_error?: boolean }
+  | { type: "usage"; input: number; output: number; cost_usd?: number | null }
   | { type: "done" }
   | { type: "error"; error: string };
+
+export type ToolCallEntry = {
+  id: string;
+  name: string;
+  params?: Record<string, unknown>;
+  done: boolean;
+  result?: string;
+  is_error?: boolean;
+};
 
 export type NdjsonStream = { chat_id: string; content: string; done: boolean };
 
 export function useNdjsonStream() {
   const [stream, setStream] = useState<NdjsonStream | null>(null);
+  const [tool_calls, setToolCalls] = useState<ToolCallEntry[]>([]);
+  const tool_map_ref = useRef<Map<string, ToolCallEntry>>(new Map());
   const buffer_ref = useRef<string[]>([]);
   const abort_ref = useRef<AbortController | null>(null);
 
@@ -34,7 +49,9 @@ export function useNdjsonStream() {
     const controller = new AbortController();
     abort_ref.current = controller;
     buffer_ref.current = [];
+    tool_map_ref.current.clear();
     setStream({ chat_id, content: "", done: false });
+    setToolCalls([]);
 
     try {
       const response = await fetch(
@@ -67,6 +84,17 @@ export function useNdjsonStream() {
                 const appended = [...buffered, msg.content].join("");
                 setStream((prev) => prev ? { ...prev, content: prev.content + appended } : null);
               }
+            } else if (msg.type === "tool_start") {
+              const entry: ToolCallEntry = { id: msg.id, name: msg.name, params: msg.params, done: false };
+              tool_map_ref.current.set(msg.id, entry);
+              setToolCalls([...tool_map_ref.current.values()]);
+            } else if (msg.type === "tool_result") {
+              const prev_entry = tool_map_ref.current.get(msg.id);
+              const updated: ToolCallEntry = prev_entry
+                ? { ...prev_entry, done: true, result: msg.result, is_error: msg.is_error }
+                : { id: msg.id, name: msg.name, done: true, result: msg.result, is_error: msg.is_error };
+              tool_map_ref.current.set(msg.id, updated);
+              setToolCalls([...tool_map_ref.current.values()]);
             } else if (msg.type === "done") {
               flush();
               setStream((prev) => prev ? { ...prev, done: true } : null);
@@ -91,5 +119,5 @@ export function useNdjsonStream() {
     setStream(null);
   }, []);
 
-  return { stream, start, cancel };
+  return { stream, tool_calls, start, cancel };
 }
