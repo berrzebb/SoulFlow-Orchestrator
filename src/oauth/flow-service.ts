@@ -33,7 +33,7 @@ export class OAuthFlowService implements ServiceLike {
     this.store = store;
     this.cleanup_timer = setInterval(() => this._prune_expired(), CLEANUP_INTERVAL_MS);
     this.cleanup_timer.unref();
-    this.refresh_timer = setInterval(() => void this._refresh_expiring_tokens(), REFRESH_CHECK_INTERVAL_MS);
+    this.refresh_timer = setInterval(() => void this._refresh_expiring_tokens().catch((e) => log.warn("token_refresh_check_error", { error: error_message(e) })), REFRESH_CHECK_INTERVAL_MS);
     this.refresh_timer.unref();
   }
 
