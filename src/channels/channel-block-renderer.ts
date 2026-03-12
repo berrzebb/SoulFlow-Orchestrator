@@ -1,6 +1,6 @@
 /** 에이전트 이벤트를 블록 단위로 누적하고 채널용 텍스트로 렌더링. */
 
-import type { AgentEvent } from "../agent/agent.types.js";
+import type { StreamEvent } from "./stream-event.js";
 import type { RenderMode } from "./rendering.js";
 
 const fmt_num = (n: number) => n.toLocaleString("en-US");
@@ -65,49 +65,45 @@ export class ChannelBlockRenderer {
   private readonly system: SystemBlock[] = [];
 
   /**
-   * 이벤트를 받아 상태를 갱신한다.
+   * StreamEvent를 받아 상태를 갱신한다.
    * 블록이 완성된 경우 true를 반환 → 호출자가 편집 스케줄링 판단.
    */
-  push(event: AgentEvent): boolean {
+  push(event: StreamEvent): boolean {
     switch (event.type) {
-      case "tool_use":
-        this.pending_tools.set(event.tool_id, { name: event.tool_name, params: event.params });
+      case "thinking":
+        this.thinking.push({ tokens: event.tokens, preview: event.preview });
+        return true;
+
+      case "tool_start":
+        this.pending_tools.set(event.id, { name: event.name, params: event.params ?? {} });
         return false; // tool_result가 와야 블록 완성
 
       case "tool_result": {
-        const pending = this.pending_tools.get(event.tool_id);
-        this.pending_tools.delete(event.tool_id);
+        const pending = this.pending_tools.get(event.id);
+        this.pending_tools.delete(event.id);
         this.completed_tools.push({
-          tool_id: event.tool_id,
-          name: pending?.name ?? event.tool_name,
+          tool_id: event.id,
+          name: pending?.name ?? event.name,
           params: pending?.params ?? {},
           result: event.result,
           is_error: event.is_error ?? false,
         });
-        return true; // use + result 합쳐서 블록 완성
-
+        return true; // start + result 합쳐서 블록 완성
       }
+
       case "usage":
-        this.system.push({ kind: "usage", input: event.tokens.input, output: event.tokens.output, cost_usd: event.cost_usd });
+        this.system.push({ kind: "usage", input: event.input, output: event.output, cost_usd: event.cost_usd });
         return true;
 
       case "rate_limit":
-        if (event.status !== "allowed") {
-          this.system.push({ kind: "rate_limit", status: event.status });
-          return true;
-        }
-        return false;
+        this.system.push({ kind: "rate_limit", status: event.status });
+        return true;
 
-      case "compact_boundary":
+      case "compact":
         this.system.push({ kind: "compact", pre_tokens: event.pre_tokens });
         return true;
     }
     return false;
-  }
-
-  /** thinking 블록 추가 (백엔드가 지원할 때만 호출). */
-  push_thinking(tokens: number, content: string): void {
-    this.thinking.push({ tokens, preview: content.slice(0, 120) });
   }
 
   has_content(): boolean {

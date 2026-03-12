@@ -37,6 +37,7 @@ import { t } from "../i18n/index.js";
 import { LaneQueue } from "../agent/pty/lane-queue.js";
 import { InboundDebouncer } from "./inbound-debouncer.js";
 import { ChannelBlockRenderer } from "./channel-block-renderer.js";
+import { agent_event_to_stream } from "./stream-event.js";
 import type { ThreadOwnership } from "./thread-ownership.js";
 
 /** Native streaming을 지원하는 채널 인터페이스 (Slack / Telegram). */
@@ -118,8 +119,8 @@ export type ChannelManagerDeps = {
   on_agent_event?: ((event: import("../agent/agent.types.js").AgentEvent) => void) | null;
   /** 웹 채팅 스트리밍 텍스트 릴레이 콜백 (chat_id, content, done). */
   on_web_stream?: ((chat_id: string, content: string, done: boolean) => void) | null;
-  /** 웹 채널 실행 중 에이전트 이벤트(도구, usage)를 세션별 NDJSON 스트림으로 라우팅. */
-  on_web_rich_event?: ((chat_id: string, event: import("../agent/agent.types.js").AgentEvent) => void) | null;
+  /** 웹 채널 실행 중 StreamEvent를 세션별 NDJSON 스트림으로 라우팅. */
+  on_web_rich_event?: ((chat_id: string, event: import("./stream-event.js").StreamEvent) => void) | null;
   /** 워크플로우 HITL: 채널 응답을 워크플로우 pending_response로 라우팅. */
   workflow_hitl?: WorkflowHitlBridge | null;
   /** 실행 전 확인 가드. */
@@ -162,7 +163,7 @@ export class ChannelManager implements ServiceLike {
   private readonly logger: Logger;
   private readonly on_agent_event: ((event: import("../agent/agent.types.js").AgentEvent) => void) | null;
   private readonly on_web_stream: ((chat_id: string, content: string, done: boolean) => void) | null;
-  private readonly on_web_rich_event: ((chat_id: string, event: import("../agent/agent.types.js").AgentEvent) => void) | null;
+  private readonly on_web_rich_event: ((chat_id: string, event: import("./stream-event.js").StreamEvent) => void) | null;
   private readonly session_store: import("../session/service.js").SessionStoreLike | null;
   private readonly bot_identity: BotIdentitySource;
   private workflow_hitl: WorkflowHitlBridge | null;
@@ -749,10 +750,13 @@ export class ChannelManager implements ServiceLike {
         on_agent_event: (this.on_agent_event || this.on_web_rich_event || block_renderer)
           ? (event) => {
               this.on_agent_event?.(event);
-              // web 채널: rich 이벤트를 세션별 NDJSON 스트림으로 추가 라우팅
-              if (provider === "web") this.on_web_rich_event?.(message.chat_id, event);
-              // 채널: 이벤트 누적 (실제 전송은 턴 종료 후 _send_block_summary에서 일괄)
-              block_renderer?.push(event);
+              const stream_ev = agent_event_to_stream(event);
+              if (stream_ev) {
+                // web 채널: StreamEvent를 세션별 NDJSON 스트림으로 라우팅
+                if (provider === "web") this.on_web_rich_event?.(message.chat_id, stream_ev);
+                // 채널: 이벤트 누적 (실제 전송은 턴 종료 후 _send_block_summary에서 일괄)
+                block_renderer?.push(stream_ev);
+              }
             }
           : undefined,
         on_tool_block: provider !== "web"

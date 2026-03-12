@@ -38,8 +38,14 @@ describe("agent_event_to_web_stream", () => {
     expect((r as any).input).toBe(10);
   });
 
-  it("기타 이벤트 → null", () => {
-    const ev = base_event("content_delta", { content: "hello" });
+  it("content_delta → delta", () => {
+    const ev = base_event("content_delta", { text: "hello" });
+    const r = agent_event_to_web_stream(ev);
+    expect(r?.type).toBe("delta");
+  });
+
+  it("기타 이벤트(init 등) → null", () => {
+    const ev = base_event("init");
     expect(agent_event_to_web_stream(ev)).toBeNull();
   });
 });

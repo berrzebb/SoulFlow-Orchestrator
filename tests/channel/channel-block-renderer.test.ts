@@ -1,85 +1,54 @@
 /**
  * ChannelBlockRenderer — 전체 커버리지.
- * - push: tool_use/tool_result, usage, rate_limit, compact_boundary, 미지원 이벤트
- * - push_thinking
+ * - push: tool_start/tool_result, usage, rate_limit, compact, thinking, 미지원 이벤트
  * - has_content
  * - render: markdown/html/plain 포맷, thinking/tool/usage/rate_limit/compact
  */
 import { describe, it, expect } from "vitest";
 import { ChannelBlockRenderer } from "@src/channels/channel-block-renderer.js";
+import type { StreamEvent } from "@src/channels/stream-event.js";
 
 function make_renderer(): ChannelBlockRenderer {
   return new ChannelBlockRenderer();
 }
 
 // ══════════════════════════════════════════
-// push: tool_use → pending (false 반환)
+// push: tool_start → pending (false 반환)
 // ══════════════════════════════════════════
 
-describe("ChannelBlockRenderer — push tool_use", () => {
-  it("tool_use → false 반환 (아직 result 없음)", () => {
+describe("ChannelBlockRenderer — push tool_start", () => {
+  it("tool_start → false 반환 (아직 result 없음)", () => {
     const r = make_renderer();
-    const result = r.push({
-      type: "tool_use",
-      tool_id: "t1",
-      tool_name: "bash",
-      params: { command: "ls" },
-      source: { backend: "claude", task_id: "task1" },
-      at: "2026-01-01T00:00:00Z",
-    } as any);
+    const result = r.push({ type: "tool_start", id: "t1", name: "bash", params: { command: "ls" } });
     expect(result).toBe(false);
     expect(r.has_content()).toBe(false);
   });
 });
 
 // ══════════════════════════════════════════
-// push: tool_use + tool_result → 블록 완성
+// push: tool_start + tool_result → 블록 완성
 // ══════════════════════════════════════════
 
 describe("ChannelBlockRenderer — push tool_result", () => {
-  it("tool_use 후 tool_result → true 반환 + has_content=true", () => {
+  it("tool_start 후 tool_result → true 반환 + has_content=true", () => {
     const r = make_renderer();
-    r.push({ type: "tool_use", tool_id: "t1", tool_name: "bash", params: { command: "ls" }, source: { backend: "claude", task_id: "t1" }, at: "" } as any);
-    const result = r.push({
-      type: "tool_result",
-      tool_id: "t1",
-      tool_name: "bash",
-      result: "file1.txt\nfile2.txt",
-      is_error: false,
-      source: { backend: "claude", task_id: "t1" },
-      at: "",
-    } as any);
+    r.push({ type: "tool_start", id: "t1", name: "bash", params: { command: "ls" } });
+    const result = r.push({ type: "tool_result", id: "t1", name: "bash", result: "file1.txt\nfile2.txt", is_error: false });
     expect(result).toBe(true);
     expect(r.has_content()).toBe(true);
   });
 
-  it("pending tool_use 없어도 tool_result → 블록 추가 (이름 폴백)", () => {
+  it("pending tool_start 없어도 tool_result → 블록 추가 (이름 폴백)", () => {
     const r = make_renderer();
-    const result = r.push({
-      type: "tool_result",
-      tool_id: "unknown-t",
-      tool_name: "read",
-      result: "content here",
-      is_error: false,
-      source: { backend: "claude", task_id: "t1" },
-      at: "",
-    } as any);
+    const result = r.push({ type: "tool_result", id: "unknown-t", name: "read", result: "content here", is_error: false });
     expect(result).toBe(true);
     expect(r.has_content()).toBe(true);
   });
 
   it("is_error=true → 에러 블록", () => {
     const r = make_renderer();
-    r.push({ type: "tool_use", tool_id: "t2", tool_name: "exec", params: {}, source: { backend: "claude", task_id: "t1" }, at: "" } as any);
-    r.push({
-      type: "tool_result",
-      tool_id: "t2",
-      tool_name: "exec",
-      result: "Error: command failed",
-      is_error: true,
-      source: { backend: "claude", task_id: "t1" },
-      at: "",
-    } as any);
+    r.push({ type: "tool_start", id: "t2", name: "exec", params: {} });
+    r.push({ type: "tool_result", id: "t2", name: "exec", result: "Error: command failed", is_error: true });
     const text = r.render("plain");
     expect(text).toContain("FAIL");
   });
@@ -92,25 +61,13 @@ describe("ChannelBlockRenderer — push tool_result", () => {
 describe("ChannelBlockRenderer — push usage", () => {
   it("usage 이벤트 → true 반환", () => {
     const r = make_renderer();
-    const result = r.push({
-      type: "usage",
-      tokens: { input: 100, output: 50 },
-      cost_usd: 0.0025,
-      source: { backend: "claude", task_id: "t1" },
-      at: "",
-    } as any);
+    const result = r.push({ type: "usage", input: 100, output: 50, cost_usd: 0.0025 });
     expect(result).toBe(true);
   });
 
-  it("usage cost_usd=null → 비용 미표시", () => {
+  it("usage cost_usd=undefined → 비용 미표시", () => {
     const r = make_renderer();
-    r.push({
-      type: "usage",
-      tokens: { input: 200, output: 100 },
-      cost_usd: undefined,
-      source: { backend: "claude", task_id: "t1" },
-      at: "",
-    } as any);
+    r.push({ type: "usage", input: 200, output: 100 });
     const text = r.render("plain");
     expect(text).toContain("in: 200");
     expect(text).not.toContain("$");
@@ -122,26 +79,9 @@ describe("ChannelBlockRenderer — push usage", () => {
 // ══════════════════════════════════════════
 
 describe("ChannelBlockRenderer — push rate_limit", () => {
-  it("status=allowed → false 반환 (블록 미생성)", () => {
+  it("status=allowed_warning → true 반환 + 경고 블록", () => {
     const r = make_renderer();
-    const result = r.push({
-      type: "rate_limit",
-      status: "allowed",
-      source: { backend: "claude", task_id: "t1" },
-      at: "",
-    } as any);
-    expect(result).toBe(false);
-    expect(r.has_content()).toBe(false);
-  });
-
-  it("status=warning → true 반환 + 경고 블록", () => {
-    const r = make_renderer();
-    const result = r.push({
-      type: "rate_limit",
-      status: "warning",
-      source: { backend: "claude", task_id: "t1" },
-      at: "",
-    } as any);
+    const result = r.push({ type: "rate_limit", status: "allowed_warning" });
     expect(result).toBe(true);
     const text = r.render("markdown");
     expect(text).toContain("속도 제한 경고");
@@ -149,30 +89,27 @@ describe("ChannelBlockRenderer — push rate_limit", () => {
 
   it("status=rejected → rate_rejected 포맷", () => {
     const r = make_renderer();
-    r.push({
-      type: "rate_limit",
-      status: "rejected",
-      source: { backend: "claude", task_id: "t1" },
-      at: "",
-    } as any);
+    r.push({ type: "rate_limit", status: "rejected" });
     const text = r.render("markdown");
     expect(text).toContain("속도 제한 초과");
+  });
+
+  it("미지원 타입 → false 반환 (블록 미생성)", () => {
+    const r = make_renderer();
+    const result = r.push({ type: "delta", content: "hello" } as StreamEvent);
+    expect(result).toBe(false);
+    expect(r.has_content()).toBe(false);
   });
 });
 
 // ══════════════════════════════════════════
-// push: compact_boundary
+// push: compact
 // ══════════════════════════════════════════
 
-describe("ChannelBlockRenderer — push compact_boundary", () => {
-  it("compact_boundary → true 반환 + compact 블록", () => {
+describe("ChannelBlockRenderer — push compact", () => {
+  it("compact → true 반환 + compact 블록", () => {
     const r = make_renderer();
-    const result = r.push({
-      type: "compact_boundary",
-      pre_tokens: 15000,
-      source: { backend: "claude", task_id: "t1" },
-      at: "",
-    } as any);
+    const result = r.push({ type: "compact", pre_tokens: 15000 });
     expect(result).toBe(true);
     const text = r.render("plain");
     expect(text).toContain("Context compacted");
@@ -185,43 +122,37 @@ describe("ChannelBlockRenderer — push compact_boundary", () => {
 // ══════════════════════════════════════════
 
 describe("ChannelBlockRenderer — push 미지원 이벤트", () => {
-  it("content_delta 등 → false 반환", () => {
+  it("delta 등 → false 반환", () => {
     const r = make_renderer();
-    const result = r.push({
-      type: "content_delta",
-      text: "hello",
-      source: { backend: "claude", task_id: "t1" },
-      at: "",
-    } as any);
+    const result = r.push({ type: "delta", content: "hello" } as StreamEvent);
     expect(result).toBe(false);
     expect(r.has_content()).toBe(false);
   });
 });
 
 // ══════════════════════════════════════════
-// push_thinking
+// push: thinking
 // ══════════════════════════════════════════
 
-describe("ChannelBlockRenderer — push_thinking", () => {
+describe("ChannelBlockRenderer — push thinking", () => {
   it("thinking 추가 → has_content=true", () => {
     const r = make_renderer();
-    r.push_thinking(500, "thinking content here...");
+    r.push({ type: "thinking", tokens: 500, preview: "thinking content here..." });
     expect(r.has_content()).toBe(true);
   });
 
   it("thinking 렌더링 → 토큰 수 포함", () => {
     const r = make_renderer();
-    r.push_thinking(1234, "analyzing the problem");
+    r.push({ type: "thinking", tokens: 1234, preview: "analyzing the problem" });
     const text = r.render("plain");
     expect(text).toContain("Thinking");
     expect(text).toContain("1,234");
   });
 
-  it("긴 content → 120자로 잘림 (preview)", () => {
+  it("preview 전달 → has_content=true", () => {
     const r = make_renderer();
     const long = "x".repeat(200);
-    r.push_thinking(100, long);
-    // preview는 120자 이하 → 내부적으로 slice(0, 120)
+    r.push({ type: "thinking", tokens: 100, preview: long });
     expect(r.has_content()).toBe(true);
   });
 });
@@ -236,9 +167,9 @@ describe("ChannelBlockRenderer — has_content", () => {
     expect(r.has_content()).toBe(false);
   });
 
-  it("tool_use만 (미완성) → false", () => {
+  it("tool_start만 (미완성) → false", () => {
     const r = make_renderer();
-    r.push({ type: "tool_use", tool_id: "t1", tool_name: "bash", params: {}, source: { backend: "claude", task_id: "t" }, at: "" } as any);
+    r.push({ type: "tool_start", id: "t1", name: "bash", params: {} });
     expect(r.has_content()).toBe(false);
   });
 });
@@ -249,10 +180,10 @@ describe("ChannelBlockRenderer — has_content", () => {
 
 describe("ChannelBlockRenderer — render 모드", () => {
   function fill_renderer(r: ChannelBlockRenderer) {
-    r.push_thinking(300, "thinking");
-    r.push({ type: "tool_use", tool_id: "t1", tool_name: "bash", params: { command: "ls" }, source: { backend: "claude", task_id: "t1" }, at: "" } as any);
-    r.push({ type: "tool_result", tool_id: "t1", tool_name: "bash", result: "output", is_error: false, source: { backend: "claude", task_id: "t1" }, at: "" } as any);
-    r.push({ type: "usage", tokens: { input: 100, output: 50 }, cost_usd: 0.001, source: { backend: "claude", task_id: "t1" }, at: "" } as any);
+    r.push({ type: "thinking", tokens: 300, preview: "thinking" });
+    r.push({ type: "tool_start", id: "t1", name: "bash", params: { command: "ls" } });
+    r.push({ type: "tool_result", id: "t1", name: "bash", result: "output", is_error: false });
+    r.push({ type: "usage", input: 100, output: 50, cost_usd: 0.001 });
   }
 
   it("render('markdown') → markdown 포맷 사용", () => {
@@ -283,7 +214,7 @@ describe("ChannelBlockRenderer — render 모드", () => {
 
   it("render() 기본 모드 = plain", () => {
     const r = make_renderer();
-    r.push({ type: "usage", tokens: { input: 10, output: 5 }, source: { backend: "claude", task_id: "t1" }, at: "" } as any);
+    r.push({ type: "usage", input: 10, output: 5 });
     const text = r.render();
     expect(text).toContain("[Usage]");
   });
@@ -295,18 +226,17 @@ describe("ChannelBlockRenderer — render 모드", () => {
 
   it("tool result 100자 넘으면 잘림", () => {
     const r = make_renderer();
-    r.push({ type: "tool_use", tool_id: "t1", tool_name: "read", params: {}, source: { backend: "claude", task_id: "t1" }, at: "" } as any);
-    r.push({ type: "tool_result", tool_id: "t1", tool_name: "read", result: "x".repeat(200), is_error: false, source: { backend: "claude", task_id: "t1" }, at: "" } as any);
+    r.push({ type: "tool_start", id: "t1", name: "read", params: {} });
+    r.push({ type: "tool_result", id: "t1", name: "read", result: "x".repeat(200), is_error: false });
     const text = r.render("plain");
-    // preview는 100자로 잘림
     expect(text).toBeDefined();
   });
 
   it("여러 system 블록 → 줄바꿈으로 합침", () => {
     const r = make_renderer();
-    r.push({ type: "usage", tokens: { input: 50, output: 25 }, source: { backend: "claude", task_id: "t1" }, at: "" } as any);
-    r.push({ type: "compact_boundary", pre_tokens: 5000, source: { backend: "claude", task_id: "t1" }, at: "" } as any);
-    r.push({ type: "rate_limit", status: "warning", source: { backend: "claude", task_id: "t1" }, at: "" } as any);
+    r.push({ type: "usage", input: 50, output: 25 });
+    r.push({ type: "compact", pre_tokens: 5000 });
+    r.push({ type: "rate_limit", status: "allowed_warning" });
     const text = r.render("plain");
     expect(text).toContain("[Usage]");
     expect(text).toContain("Context compacted");
@@ -315,16 +245,16 @@ describe("ChannelBlockRenderer — render 모드", () => {
 });
 
 // ══════════════════════════════════════════
-// 복합 시나리오: tool_use 먼저 pending에 있는 상태에서 tool_result
+// 복합 시나리오: tool_start 먼저 pending에 있는 상태에서 tool_result
 // ══════════════════════════════════════════
 
 describe("ChannelBlockRenderer — 복합 시나리오", () => {
   it("여러 tool 처리 (순서 보장)", () => {
     const r = make_renderer();
-    r.push({ type: "tool_use", tool_id: "a", tool_name: "read", params: {}, source: { backend: "claude", task_id: "t1" }, at: "" } as any);
-    r.push({ type: "tool_use", tool_id: "b", tool_name: "write", params: {}, source: { backend: "claude", task_id: "t1" }, at: "" } as any);
-    r.push({ type: "tool_result", tool_id: "a", tool_name: "read", result: "content", is_error: false, source: { backend: "claude", task_id: "t1" }, at: "" } as any);
-    r.push({ type: "tool_result", tool_id: "b", tool_name: "write", result: "ok", is_error: false, source: { backend: "claude", task_id: "t1" }, at: "" } as any);
+    r.push({ type: "tool_start", id: "a", name: "read", params: {} });
+    r.push({ type: "tool_start", id: "b", name: "write", params: {} });
+    r.push({ type: "tool_result", id: "a", name: "read", result: "content", is_error: false });
+    r.push({ type: "tool_result", id: "b", name: "write", result: "ok", is_error: false });
     const text = r.render("plain");
     expect(text).toContain("read");
     expect(text).toContain("write");
