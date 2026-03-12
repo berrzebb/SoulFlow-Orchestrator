@@ -89,7 +89,13 @@ export class DashboardService implements ServiceLike {
   async start(): Promise<void> {
     if (this.server) return;
     this.server = createServer((req, res) => {
-      void this.handle(req, res);
+      void this.handle(req, res).catch((err) => {
+        this.logger?.error("handle_request_error", { url: req.url, error: error_message(err) });
+        if (!res.headersSent) {
+          res.writeHead(500);
+          res.end("internal_server_error");
+        }
+      });
     });
     try {
       await this.listen_on_port(this.options.port);
