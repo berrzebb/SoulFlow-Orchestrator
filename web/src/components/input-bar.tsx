@@ -1,4 +1,5 @@
 import { useRef, useEffect, ReactNode } from "react";
+import { useT } from "../i18n";
 
 /**
  * 범용 입력 바 — 텍스트 입력 + 버튼(s) 기본 패턴.
@@ -93,6 +94,7 @@ export function InputBar({
   hint,
   autoHeightMax = 160,
 }: InputBarProps) {
+  const t = useT();
   const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
 
   // Textarea 높이 자동 조절
@@ -178,8 +180,8 @@ export function InputBar({
               </button>
             ))}
             {onCancel && (
-              <button className="btn btn--sm" onClick={onCancel} disabled={isDisabled} aria-label="Cancel">
-                Cancel
+              <button className="btn btn--sm" onClick={onCancel} disabled={isDisabled}>
+                {t("common.cancel")}
               </button>
             )}
           </div>
