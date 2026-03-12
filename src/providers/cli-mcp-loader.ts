@@ -9,7 +9,7 @@ export type McpLoaderConfig = {
   server_names?: string;
 };
 
-export type McpServerConfig = {
+export type CliMcpServerEntry = {
   command?: string;
   args?: string[];
   env?: Record<string, string>;
@@ -95,7 +95,7 @@ function coerce_mcp_server_config(
   raw: unknown,
   base_dirs: string[],
   default_timeout_sec: number,
-): McpServerConfig | null {
+): CliMcpServerEntry | null {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
   const rec = raw as Record<string, unknown>;
   if (rec.enabled === false || rec.disabled === true) return null;
@@ -104,7 +104,7 @@ function coerce_mcp_server_config(
   const url_raw = typeof rec.url === "string" ? String(rec.url).trim() : "";
   if (!command_raw && !url_raw) return null;
 
-  const out: McpServerConfig = {};
+  const out: CliMcpServerEntry = {};
   if (command_raw) out.command = resolve_path_token_if_exists(command_raw, base_dirs);
   if (url_raw) out.url = url_raw;
 
@@ -141,9 +141,9 @@ function extract_mcp_servers_from_object(
   root: Record<string, unknown>,
   base_dirs: string[],
   default_timeout_sec: number,
-): Record<string, McpServerConfig> {
+): Record<string, CliMcpServerEntry> {
   const picked = pick_mcp_server_object(root);
-  const out: Record<string, McpServerConfig> = {};
+  const out: Record<string, CliMcpServerEntry> = {};
   for (const [name_raw, spec] of Object.entries(picked)) {
     const name = normalize_mcp_server_name(name_raw);
     if (!name) continue;
@@ -155,10 +155,10 @@ function extract_mcp_servers_from_object(
 }
 
 function merge_mcp_servers(
-  base: Record<string, McpServerConfig>,
-  incoming: Record<string, McpServerConfig>,
-): Record<string, McpServerConfig> {
-  const out: Record<string, McpServerConfig> = { ...base };
+  base: Record<string, CliMcpServerEntry>,
+  incoming: Record<string, CliMcpServerEntry>,
+): Record<string, CliMcpServerEntry> {
+  const out: Record<string, CliMcpServerEntry> = { ...base };
   for (const [k, v] of Object.entries(incoming)) out[k] = v;
   return out;
 }
@@ -195,9 +195,9 @@ export function runtime_mcp_allowlist(mcp_servers: unknown): Set<string> | null 
   return out;
 }
 
-export function load_mcp_servers_for_codex(cwd: string, allowlist?: Set<string> | null, config?: McpLoaderConfig): Record<string, McpServerConfig> {
+export function load_mcp_servers_for_codex(cwd: string, allowlist?: Set<string> | null, config?: McpLoaderConfig): Record<string, CliMcpServerEntry> {
   const default_timeout_sec = Math.max(0, config?.startup_timeout_sec || 0);
-  let merged: Record<string, McpServerConfig> = {};
+  let merged: Record<string, CliMcpServerEntry> = {};
   const base_dirs = [cwd];
 
   const settings_path = find_file_upward(cwd, join(".claude", "settings.json"));
@@ -251,7 +251,7 @@ export function load_mcp_servers_for_codex(cwd: string, allowlist?: Set<string> 
     ? allowlist
     : (cfg_allow.size > 0 ? cfg_allow : null);
   if (allow) {
-    const filtered: Record<string, McpServerConfig> = {};
+    const filtered: Record<string, CliMcpServerEntry> = {};
     for (const [name, spec] of Object.entries(merged)) {
       if (!allow.has(name)) continue;
       filtered[name] = spec;
@@ -281,7 +281,7 @@ function toml_inline_table(table: Record<string, string>): string {
   return `{ ${entries.join(", ")} }`;
 }
 
-export function build_codex_mcp_overrides(servers: Record<string, McpServerConfig>): string[] {
+export function build_codex_mcp_overrides(servers: Record<string, CliMcpServerEntry>): string[] {
   const out: string[] = [];
   for (const [name, spec] of Object.entries(servers)) {
     if (spec.command) out.push(`mcp_servers.${name}.command=${toml_string(spec.command)}`);
