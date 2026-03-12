@@ -23,14 +23,13 @@ function make_memory() {
   } as any;
 }
 
-// promotion_horizon 기준: now - session_max_age_ms * 0.5
-// 기본 session_max_age_ms = 1_800_000 (30분) → horizon = now - 15분
-// 15분 전 메시지 타임스탬프가 필요
+// promotion_horizon 기준: now - session_max_age_ms * 0.95
+// 기본 session_max_age_ms = 1_800_000 (30분) → horizon = now - 28.5분
+// horizon 이전 (오래된) 메시지만 승격 대상
 const NOW = Date.now();
-const HORIZON = NOW - 900_000; // 15분 전
 
-function old_ts(ms_ago = 1_800_000) {
-  // promotion_horizon 이전 (오래된) 타임스탬프
+function old_ts(ms_ago = 2_000_000) {
+  // promotion_horizon(28.5분) 이전 타임스탬프 — 승격 대상
   return new Date(NOW - ms_ago).toISOString();
 }
 
@@ -149,7 +148,7 @@ describe("promote_sessions_to_daily — 정상 승격 (L86-96)", () => {
       metadata: {},
       messages: [
         { role: "user", content: "안녕하세요", timestamp: old_ts() },
-        { role: "assistant", content: "반갑습니다", timestamp: old_ts(1_700_000) },
+        { role: "assistant", content: "반갑습니다", timestamp: old_ts(1_900_000) },
       ],
     };
     const sessions = {
@@ -176,7 +175,7 @@ describe("promote_sessions_to_daily — 정상 승격 (L86-96)", () => {
       metadata: {},
       messages: [
         { role: "user", content: long_content, timestamp: old_ts() },
-        { role: "assistant", content: "OK", timestamp: old_ts(1_700_000) },
+        { role: "assistant", content: "OK", timestamp: old_ts(1_900_000) },
       ],
     };
     const sessions = {
@@ -223,7 +222,7 @@ describe("promote_sessions_to_daily — 정상 승격 (L86-96)", () => {
       messages: [
         { role: "user", content: "", timestamp: old_ts() },            // 빈 content
         { role: "user", content: "질문", timestamp: old_ts() },        // 실제 내용
-        { role: "assistant", content: "답변", timestamp: old_ts(1_700_000) },
+        { role: "assistant", content: "답변", timestamp: old_ts(1_900_000) },
       ],
     };
     const sessions = {
@@ -286,7 +285,7 @@ describe("promote_sessions_to_daily — 내부 에러 (L97-99)", () => {
       last_consolidated: 0,
       messages: [
         { role: "user", content: "질문", timestamp: old_ts() },
-        { role: "assistant", content: "답변", timestamp: old_ts(1_700_000) },
+        { role: "assistant", content: "답변", timestamp: old_ts(1_900_000) },
       ],
     };
     const sessions = {
@@ -316,7 +315,7 @@ describe("promote_sessions_to_daily — 복수 세션", () => {
         metadata: {},
         messages: [
           { role: "user", content: "질문", timestamp: old_ts() },
-          { role: "assistant", content: "답변", timestamp: old_ts(1_700_000) },
+          { role: "assistant", content: "답변", timestamp: old_ts(1_900_000) },
         ],
       },
       {

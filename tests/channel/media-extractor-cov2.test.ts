@@ -120,17 +120,18 @@ describe("extract_media_items — 파일 타입", () => {
 // detect_media_type — null 반환 (미인식 확장자)
 // ══════════════════════════════════════════
 
-describe("extract_media_items — 미인식 확장자", () => {
-  it("ts 확장자 → detect_media_type=null → 미디어 제외, 원본 텍스트 유지", () => {
+describe("extract_media_items — catch-all 확장자 → file", () => {
+  it("ts 확장자 → catch-all regex로 file 타입 추출", () => {
     const text = "![code](script.ts)";
-    const { content, media } = extract_media_items(text, WS);
-    expect(media).toHaveLength(0);
-    expect(content).toContain("script.ts");
+    const { media } = extract_media_items(text, WS);
+    expect(media).toHaveLength(1);
+    expect(media[0].type).toBe("file");
   });
 
-  it("exe 확장자 → 미디어 제외", () => {
+  it("exe 확장자 → file 타입 추출", () => {
     const { media } = extract_media_items("![bin](app.exe)", WS);
-    expect(media).toHaveLength(0);
+    expect(media).toHaveLength(1);
+    expect(media[0].type).toBe("file");
   });
 });
 
@@ -157,11 +158,11 @@ describe("extract_media_items — HTML 태그", () => {
     expect(content).not.toContain("<video");
   });
 
-  it("HTML 태그 — 미인식 확장자 → 원본 유지", () => {
+  it("HTML 태그 — catch-all 확장자 → file 타입 추출", () => {
     const text = `<img src="file.ts">`;
-    const { content, media } = extract_media_items(text, WS);
-    expect(media).toHaveLength(0);
-    expect(content).toContain("<img");
+    const { media } = extract_media_items(text, WS);
+    expect(media).toHaveLength(1);
+    expect(media[0].type).toBe("file");
   });
 });
 
@@ -184,11 +185,11 @@ describe("extract_media_items — 링크 추출", () => {
     expect(media[0].type).toBe("video");
   });
 
-  it("[label](unknown.xyz) — 미인식 확장자 → 링크 유지", () => {
+  it("[label](page.html) — catch-all 확장자 → file 타입 추출", () => {
     const text = "[link](page.html)";
-    const { content, media } = extract_media_items(text, WS);
-    expect(media).toHaveLength(0);
-    expect(content).toContain("[link]");
+    const { media } = extract_media_items(text, WS);
+    expect(media).toHaveLength(1);
+    expect(media[0].type).toBe("file");
   });
 });
 

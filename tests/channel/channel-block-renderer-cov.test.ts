@@ -9,7 +9,7 @@ import { ChannelBlockRenderer } from "@src/channels/channel-block-renderer.js";
 import type { AgentEvent } from "@src/agent/agent.types.js";
 
 function compact_event(pre_tokens: number): AgentEvent {
-  return { type: "compact_boundary", at: new Date().toISOString(), source: { backend: "claude_cli" }, pre_tokens } as any;
+  return { type: "compact", at: new Date().toISOString(), source: { backend: "claude_cli" }, pre_tokens } as any;
 }
 
 function rate_limit_event(status: string): AgentEvent {
