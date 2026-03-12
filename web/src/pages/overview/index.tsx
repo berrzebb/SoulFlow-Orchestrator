@@ -38,7 +38,7 @@ export default function OverviewPage() {
   const total_jobs = s.cron?.jobs?.length ?? 0;
   const next_job = s.cron?.jobs
     ?.filter((j) => j.enabled && j.state?.next_run_at_ms)
-    .sort((a, b) => (a.state!.next_run_at_ms ?? 0) - (b.state!.next_run_at_ms ?? 0))[0];
+    .sort((a, b) => (a.state?.next_run_at_ms ?? 0) - (b.state?.next_run_at_ms ?? 0))[0];
   const providers = s.agent_providers ?? [];
   const available_providers = providers.filter((p) => p.enabled && p.available);
   const enabled_channels = s.channels?.enabled ?? [];

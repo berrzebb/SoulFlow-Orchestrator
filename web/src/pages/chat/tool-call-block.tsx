@@ -35,7 +35,7 @@ export function ThinkingBlockList({ blocks }: { blocks: ThinkingEntry[] }) {
   return (
     <div className="thinking-block-list">
       {blocks.map((b, i) => (
-        <ThinkingBlock key={i} entry={b} />
+        <ThinkingBlock key={`${i}-${b.tokens}-${b.preview.slice(0, 16)}`} entry={b} />
       ))}
     </div>
   );
