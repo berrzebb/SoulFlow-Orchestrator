@@ -101,6 +101,9 @@ export function ReferencesTab() {
       }
     };
     xhr.onerror = () => { toast(t("references.upload_failed"), "err"); setUploadProgress(null); };
+    xhr.ontimeout = () => { toast(t("references.upload_failed"), "err"); setUploadProgress(null); };
+    xhr.onabort = () => setUploadProgress(null);
+    xhr.timeout = 120_000;
     xhr.send(JSON.stringify(body));
   };
 
