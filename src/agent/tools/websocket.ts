@@ -1,6 +1,5 @@
 /** WebSocket 도구 — WebSocket 클라이언트 (connect/send/listen/close). */
 
-// @ts-expect-error ws has no type declarations in this project
 import { WebSocket } from "ws";
 import { Tool } from "./base.js";
 import type { JsonSchema } from "./types.js";
