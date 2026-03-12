@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useT } from "../../i18n";
+import { time_ago } from "../../utils/format";
 import type { ChatSessionSummary } from "./types";
 
 type MirrorEntry = { key: string; provider: string; chat_id: string; alias: string; message_count: number; updated_at?: string };
@@ -17,14 +18,6 @@ interface SessionBrowserProps {
   onNew: () => void;
   onRename: (id: string, name: string) => void;
   onDelete: (id: string) => void;
-}
-
-function time_ago(iso: string): string {
-  const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
-  if (diff < 60) return `${diff}s ago`;
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-  return `${Math.floor(diff / 86400)}d ago`;
 }
 
 export function SessionBrowser({
