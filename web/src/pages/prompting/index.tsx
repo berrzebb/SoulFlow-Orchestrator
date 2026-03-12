@@ -30,6 +30,12 @@ const TABS: { id: Tab; label: string; icon: string }[] = [
 
 export default function PromptingPage() {
   const [tab, setTab] = useState<Tab>("text");
+  const [agent_initial_id, setAgentInitialId] = useState<string | undefined>(undefined);
+
+  const go_to_agent = (id?: string) => {
+    setAgentInitialId(id ?? "__new__");
+    setTab("agent");
+  };
 
   return (
     <div className="ps-page">
@@ -52,8 +58,8 @@ export default function PromptingPage() {
         {tab === "text"    && <TextPanel />}
         {tab === "image"   && <ImagePanel />}
         {tab === "video"   && <VideoPanel />}
-        {tab === "agent"   && <AgentPanel />}
-        {tab === "gallery" && <GalleryPanel />}
+        {tab === "agent"   && <AgentPanel initial_id={agent_initial_id} />}
+        {tab === "gallery" && <GalleryPanel onGoToAgent={go_to_agent} />}
         {tab === "compare" && <ComparePanel />}
       </div>
     </div>

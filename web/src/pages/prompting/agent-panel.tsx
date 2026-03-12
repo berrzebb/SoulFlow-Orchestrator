@@ -13,7 +13,12 @@ import type { AgentDefinition } from "../../../../src/agent/agent-definition.typ
 
 type ChatMsg = { role: "user" | "assistant"; content: string };
 
-export function AgentPanel() {
+interface AgentPanelProps {
+  /** Gallery에서 넘어올 때 선택할 에이전트 ID. "__new__"이면 새 에이전트 폼. */
+  initial_id?: string;
+}
+
+export function AgentPanel({ initial_id }: AgentPanelProps) {
   const t = useT();
   const qc = useQueryClient();
   const chat_end_ref = useRef<HTMLDivElement>(null);
@@ -24,7 +29,7 @@ export function AgentPanel() {
     staleTime: 10_000,
   });
 
-  const [selected_id, setSelectedId] = useState<string>("__new__");
+  const [selected_id, setSelectedId] = useState<string>(initial_id ?? "__new__");
   const [model, setModel] = useState<StudioModelValue>({ provider_id: "", model: "" });
   const [soul, setSoul] = useState("");
   const [heart, setHeart] = useState("");
@@ -38,6 +43,11 @@ export function AgentPanel() {
   const [running, setRunning] = useState(false);
   const [last_result, setLastResult] = useState<RunResultValue | null>(null);
   const [saving, setSaving] = useState(false);
+
+  // Gallery에서 탭 전환 시 initial_id 반영
+  useEffect(() => {
+    if (initial_id !== undefined) setSelectedId(initial_id);
+  }, [initial_id]);
 
   useEffect(() => {
     if (selected_id === "__new__") {

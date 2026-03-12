@@ -13,17 +13,19 @@ import { EmptyState } from "../../components/empty-state";
 import { SkeletonGrid } from "../../components/skeleton-grid";
 import { DeleteConfirmModal } from "../../components/modal";
 import { AgentCard } from "./agent-card";
-import { AgentModal, type AgentModalMode } from "./agent-modal";
 import type { AgentDefinition } from "../../../../src/agent/agent-definition.types";
 
-export function GalleryPanel() {
+interface GalleryPanelProps {
+  onGoToAgent: (id?: string) => void;
+}
+
+export function GalleryPanel({ onGoToAgent }: GalleryPanelProps) {
   const t = useT();
   const { toast } = useToast();
   const qc = useQueryClient();
   const navigate = useNavigate();
 
   const [search, setSearch] = useState("");
-  const [modal, setModal] = useState<AgentModalMode | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<AgentDefinition | null>(null);
 
   const { data, isLoading } = useQuery<AgentDefinition[]>({
@@ -81,7 +83,7 @@ export function GalleryPanel() {
           onChange={setSearch}
           placeholder={t("agents.search_placeholder")}
         />
-        <button className="btn btn--sm btn--accent" onClick={() => setModal({ kind: "add" })}>
+        <button className="btn btn--sm btn--accent" onClick={() => onGoToAgent()}>
           + {t("agents.add")}
         </button>
       </div>
@@ -101,7 +103,7 @@ export function GalleryPanel() {
                     key={def.id}
                     definition={def}
                     onFork={handle_fork}
-                    onEdit={() => setModal({ kind: "edit", definition: def })}
+                    onEdit={(d) => onGoToAgent(d.id)}
                     onDelete={() => setDeleteTarget(def)}
                     onUse={handle_use}
                   />
@@ -119,7 +121,7 @@ export function GalleryPanel() {
                     key={def.id}
                     definition={def}
                     onFork={handle_fork}
-                    onEdit={() => setModal({ kind: "edit", definition: def })}
+                    onEdit={(d) => onGoToAgent(d.id)}
                     onDelete={() => setDeleteTarget(def)}
                     onUse={handle_use}
                   />
@@ -132,14 +134,6 @@ export function GalleryPanel() {
             <EmptyState title={t("agents.no_search_results", { query: search })} />
           )}
         </>
-      )}
-
-      {modal && (
-        <AgentModal
-          mode={modal}
-          onClose={() => setModal(null)}
-          onSaved={() => { setModal(null); refresh(); }}
-        />
       )}
 
       <DeleteConfirmModal
