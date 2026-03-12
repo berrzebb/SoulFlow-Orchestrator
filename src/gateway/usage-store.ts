@@ -141,7 +141,7 @@ export class UsageStore {
           return true;
         });
       }),
-    );
+    ).catch(() => { /* 기록 실패는 주 흐름에 영향 없음 */ });
   }
 
   /** 최근 span 목록 조회. */
