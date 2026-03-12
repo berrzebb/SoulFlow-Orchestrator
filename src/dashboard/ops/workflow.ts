@@ -647,6 +647,7 @@ export function create_workflow_ops(deps: {
 
     async suggest(instruction, options) {
       if (!deps.providers) return { ok: false, error: "providers_not_configured" };
+      const providers = deps.providers;
 
       // provider_id가 "auto"이거나 미지정 시 tool-loop 지원 프로바이더 자동 선택.
       // orchestrator_llm(Ollama 등)은 multi-turn tool-call 루프를 신뢰할 수 없으므로 제외.
@@ -664,10 +665,10 @@ export function create_workflow_ops(deps: {
         const deduped = configured_order.filter((id) => {
           if (seen.has(id)) return false;
           seen.add(id);
-          return deps.providers!.list_providers().includes(id);
+          return providers.list_providers().includes(id);
         });
         const fallback: import("../../providers/types.js").ProviderId[] = ["claude_code", "chatgpt", "gemini", "openrouter", "orchestrator_llm"];
-        suggest_provider_id = deduped[0] ?? fallback.find((id) => deps.providers!.list_providers().includes(id));
+        suggest_provider_id = deduped[0] ?? fallback.find((id) => providers.list_providers().includes(id));
       } else if (VALID_PROVIDER_IDS.has(requested)) {
         // 이미 유효한 ProviderId
         suggest_provider_id = requested as import("../../providers/types.js").ProviderId;
@@ -676,7 +677,7 @@ export function create_workflow_ops(deps: {
         const summary = summaries.find((p) => p.backend === requested);
         const mapped = summary ? PROVIDER_TYPE_TO_ID[summary.provider_type] : undefined;
         const fallback: import("../../providers/types.js").ProviderId[] = ["claude_code", "chatgpt", "gemini", "openrouter", "orchestrator_llm"];
-        suggest_provider_id = mapped ?? fallback.find((id) => deps.providers!.list_providers().includes(id));
+        suggest_provider_id = mapped ?? fallback.find((id) => providers.list_providers().includes(id));
       }
 
       if (!suggest_provider_id) return { ok: false, error: "no_suitable_provider_for_suggest" };

@@ -53,7 +53,7 @@ export class ActiveRunController implements ActiveRunControllerLike {
       if (run) {
         run.abort.abort();
         const entry = this.tracker?.find_active_by_key(run.provider, run.chat_id, run.alias);
-        if (entry) this.tracker!.end(entry.run_id, "cancelled", "stopped_by_request");
+        if (entry) this.tracker?.end(entry.run_id, "cancelled", "stopped_by_request");
       }
       this.runs.delete(k);
     }

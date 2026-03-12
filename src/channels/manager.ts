@@ -721,8 +721,8 @@ export class ChannelManager implements ServiceLike {
       });
 
       if (run_id) {
-        this.tracker!.set_tool_count(run_id, result.tool_calls_count);
-        this.tracker!.end(run_id, result.error ? "failed" : "completed", result.error);
+        this.tracker?.set_tool_count(run_id, result.tool_calls_count);
+        this.tracker?.end(run_id, result.error ? "failed" : "completed", result.error);
       }
 
       // builtin: 분류기가 커맨드 핸들러로 라우팅 → synthetic slash command로 위임
@@ -743,7 +743,7 @@ export class ChannelManager implements ServiceLike {
       await renderer.flush(result.stream_full_content ?? "");
       await this.deliver_result(provider, message, alias, result, renderer.stream_message_id, renderer.tool_count, is_status_mode);
     } catch (e) {
-      if (run_id) this.tracker!.end(run_id, "failed", error_message(e));
+      if (run_id) this.tracker?.end(run_id, "failed", error_message(e));
       this.logger.error("invoke failed", { alias, error: error_message(e) });
       await renderer.flush_on_error();
       await this.send_error_reply(provider, message, alias, error_message(e), run_id);
