@@ -3,6 +3,7 @@
 import type { RouteContext } from "../route-context.js";
 import type { KanbanStoreLike, ScopeType, KanbanColumnDef, Priority, RelationType, KanbanRule, FilterCriteria, KanbanEvent } from "../../services/kanban-store.js";
 import type { KanbanRuleExecutor } from "../../services/kanban-rule-executor.js";
+import { error_message } from "../../utils/common.js";
 
 function get_store(ctx: RouteContext): KanbanStoreLike | null {
   return (ctx.options as Record<string, unknown>).kanban_store as KanbanStoreLike | null ?? null;
@@ -62,7 +63,7 @@ export async function handle_kanban(ctx: RouteContext): Promise<boolean> {
       });
       json(res, 201, board);
     } catch (e) {
-      json(res, 409, { error: e instanceof Error ? e.message : "create_failed" });
+      json(res, 409, { error: error_message(e) });
     }
     return true;
   }
@@ -139,7 +140,7 @@ export async function handle_kanban(ctx: RouteContext): Promise<boolean> {
       });
       json(res, 201, card);
     } catch (e) {
-      json(res, 400, { error: e instanceof Error ? e.message : "create_failed" });
+      json(res, 400, { error: error_message(e) });
     }
     return true;
   }
@@ -351,7 +352,7 @@ export async function handle_kanban(ctx: RouteContext): Promise<boolean> {
       get_rule_executor(ctx)?.watch(board_id);
       json(res, 201, rule);
     } catch (e) {
-      json(res, 400, { error: e instanceof Error ? e.message : "create_failed" });
+      json(res, 400, { error: error_message(e) });
     }
     return true;
   }
@@ -412,7 +413,7 @@ export async function handle_kanban(ctx: RouteContext): Promise<boolean> {
       });
       json(res, 201, template);
     } catch (e) {
-      json(res, 409, { error: e instanceof Error ? e.message : "create_failed" });
+      json(res, 409, { error: error_message(e) });
     }
     return true;
   }
@@ -508,7 +509,7 @@ export async function handle_kanban(ctx: RouteContext): Promise<boolean> {
       });
       json(res, 201, filter);
     } catch (e) {
-      json(res, 409, { error: e instanceof Error ? e.message : "create_failed" });
+      json(res, 409, { error: error_message(e) });
     }
     return true;
   }

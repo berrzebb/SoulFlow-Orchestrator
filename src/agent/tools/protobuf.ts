@@ -2,6 +2,7 @@
 
 import { Tool } from "./base.js";
 import type { JsonSchema } from "./types.js";
+import { error_message } from "../../utils/common.js";
 
 interface FieldDef { number: number; name: string; type: "int32" | "int64" | "uint32" | "uint64" | "sint32" | "sint64" | "bool" | "string" | "bytes" | "float" | "double"; }
 interface MessageDef { name: string; fields: FieldDef[]; }
@@ -45,7 +46,7 @@ export class ProtobufTool extends Tool {
           const hex = Buffer.from(bytes).toString("hex");
           return JSON.stringify({ hex, byte_length: bytes.length });
         } catch (e) {
-          return JSON.stringify({ error: `encode failed: ${e instanceof Error ? e.message : e}` });
+          return JSON.stringify({ error: `encode failed: ${error_message(e)}` });
         }
       }
       case "decode": {
@@ -57,7 +58,7 @@ export class ProtobufTool extends Tool {
           const result = this.decode_message(msg, bytes);
           return JSON.stringify({ data: result });
         } catch (e) {
-          return JSON.stringify({ error: `decode failed: ${e instanceof Error ? e.message : e}` });
+          return JSON.stringify({ error: `decode failed: ${error_message(e)}` });
         }
       }
       case "to_proto": {

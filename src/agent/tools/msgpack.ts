@@ -2,6 +2,7 @@
 
 import { Tool } from "./base.js";
 import type { JsonSchema } from "./types.js";
+import { error_message } from "../../utils/common.js";
 
 export class MsgpackTool extends Tool {
   readonly name = "msgpack";
@@ -36,7 +37,7 @@ export class MsgpackTool extends Tool {
           const [value] = this.decode(bytes, 0);
           return JSON.stringify({ data: value });
         } catch (e) {
-          return JSON.stringify({ error: `decode failed: ${e instanceof Error ? e.message : e}` });
+          return JSON.stringify({ error: `decode failed: ${error_message(e)}` });
         }
       }
       case "info": {
