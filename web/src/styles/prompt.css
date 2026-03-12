@@ -65,7 +65,7 @@
 /* ── 좌우 분할 ── */
 .ps-split {
   display: grid;
-  grid-template-columns: 380px 1fr;
+  grid-template-columns: clamp(280px, 35%, 380px) 1fr;
   flex: 1;
   overflow: hidden;
 }
@@ -1064,6 +1064,13 @@
 
 /* studio-model-picker (기존 호환) */
 .studio-model-picker { display: flex; flex-direction: column; gap: 8px; }
+
+/* ── 태블릿: 좌 패널 최소 너비 확보 ── */
+@media (max-width: 900px) and (min-width: 641px) {
+  .ps-split {
+    grid-template-columns: minmax(260px, 40%) 1fr;
+  }
+}
 
 /* ── 모바일 ── */
 @media (max-width: 640px) {
