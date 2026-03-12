@@ -233,7 +233,7 @@ export function VideoPanel() {
               {videos.map((v) => (
                 <div key={v.id} className="ps-video-item">
                   {/* 헤더 행 */}
-                  <div className="ps-video-item__head" onClick={() => toggle_expand(v.id)}>
+                  <div className="ps-video-item__head" role="button" tabIndex={0} onClick={() => toggle_expand(v.id)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle_expand(v.id); } }}>
                     <div className={`ps-video-item__dot ps-video-item__dot--${v.status}`} />
                     <div className="ps-video-item__text">
                       <div className="ps-video-item__prompt">{v.prompt}</div>

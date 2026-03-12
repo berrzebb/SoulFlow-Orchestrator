@@ -34,7 +34,7 @@ function DiagramFullscreenModal({ svg, title, onClose }: { svg: string; title: s
   };
 
   return (
-    <div className="diagram-fullscreen-overlay" onClick={onClose}>
+    <div className="diagram-fullscreen-overlay" role="presentation" onClick={onClose}>
       <div className="diagram-fullscreen-modal" onClick={(e) => e.stopPropagation()}>
         <div className="diagram-fullscreen-toolbar">
           <span className="diagram-fullscreen-title">{title}</span>
