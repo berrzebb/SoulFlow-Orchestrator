@@ -70,6 +70,8 @@ export async function setup_kanban_trigger_watcher(opts: {
         actor: act.actor,
         detail: act.detail,
         created_at: act.created_at,
+      }).catch((err) => {
+        log.error("inject_and_resume_failed", { workflow_id, error: error_message(err) });
       });
     };
 
