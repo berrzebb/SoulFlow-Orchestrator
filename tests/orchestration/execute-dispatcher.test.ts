@@ -670,6 +670,7 @@ describe("Phase 4.5: Execute Dispatcher 분리", () => {
 describe("execute_dispatch — cov2 미커버 분기", () => {
   let gatewaySpy: any;
   beforeEach(() => { gatewaySpy = vi.spyOn(gatewayModule, "resolve_gateway"); });
+  afterEach(() => { vi.restoreAllMocks(); });
 
   function make_deps_cov2(overrides: Partial<ExecuteDispatcherDeps> = {}): ExecuteDispatcherDeps {
     return {
@@ -780,6 +781,7 @@ describe("execute_dispatch — cov2 미커버 분기", () => {
 describe("execute_dispatch — matched_skills map + filter (L130-131)", () => {
   let gatewaySpy: any;
   beforeEach(() => { gatewaySpy = vi.spyOn(gatewayModule, "resolve_gateway"); });
+  afterEach(() => { vi.restoreAllMocks(); });
 
   function make_deps_cov3(overrides: Partial<ExecuteDispatcherDeps> = {}): ExecuteDispatcherDeps {
     return {
@@ -874,16 +876,41 @@ describe("execute-dispatcher L85: session_lookup 람다 — inquiry 경로에서
     };
 
     const preflight: ReadyPreflight = {
-      ...mockPreflight,
+      kind: "ready",
       task_with_media: "is it done",
+      media: [],
       skill_names: [],
+      secret_guard: { ok: true, missing_keys: [], invalid_ciphertexts: [] },
+      runtime_policy: { max_turns: 5, tools_blocklist: [], tools_allowlist: [] },
+      all_tool_definitions: [],
+      request_scope: "scope-1",
+      request_task_id: "task-1",
+      run_id: "run-1",
+      evt_base: {
+        run_id: "run-1", task_id: "task-1", agent_id: "test",
+        provider: "slack", channel: "slack", chat_id: "chat1", source: "inbound",
+      },
+      context_block: "",
+      tool_ctx: {
+        task_id: "task-1", signal: undefined as any,
+        channel: "slack", chat_id: "chat1", sender_id: "user1",
+      },
+      skill_tool_names: [],
+      skill_provider_prefs: [],
+      category_map: {},
+      tool_categories: [],
       active_tasks_in_chat: [activeTask],
-    } as any;
+    } as ReadyPreflight;
 
     const req: OrchestrationRequest = {
-      ...mockRequest,
-      alias: "test",
-      message: { ...mockRequest.message, content: "is it done" },
+      message: {
+        id: "msg-1", provider: "slack", channel: "general",
+        sender_id: "user1", chat_id: "chat1", content: "is it done",
+        at: new Date().toISOString(), thread_id: undefined,
+        metadata: { message_id: "msg-1" },
+      },
+      provider: "slack", alias: "test", run_id: "run-1",
+      media_inputs: [], session_history: [], signal: undefined as any,
     };
 
     const result = await execute_dispatch(deps, req, preflight);
