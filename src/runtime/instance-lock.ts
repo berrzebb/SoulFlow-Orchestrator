@@ -134,7 +134,7 @@ async function try_acquire_lock(lock_path: string, key: string): Promise<{ ok: b
   const fd = await open(lock_path, "wx").catch(() => null);
   if (!fd) return { ok: false, holder_pid };
   try {
-    const payload: LockPayload = { pid: process.pid, started_at: now_iso(), cwd: process.cwd(), key, hostname: PROCESS_HOSTNAME };
+    const payload: LockPayload = { pid: process.pid, started_at: now_iso(), cwd: process.cwd(), key, hostname: PROCESS_HOSTNAME, start_jiffies: get_pid_start_jiffies(process.pid) ?? undefined };
     await fd.writeFile(`${JSON.stringify(payload)}\n`, "utf-8");
   } finally {
     await fd.close();

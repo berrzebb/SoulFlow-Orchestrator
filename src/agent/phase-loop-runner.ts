@@ -607,7 +607,7 @@ async function run_phase_agents(
   }
 
   const promises = phase_def.agents.map(async (agent_def, idx) => {
-    const agent_state = phase_state.agents[idx];
+    const agent_state = phase_state.agents.find((a) => a.agent_id === agent_def.agent_id) ?? phase_state.agents[idx];
 
     // resume 시 이미 완료된 에이전트는 재실행하지 않고 저장된 결과를 그대로 사용.
     // running 상태인 에이전트는 서버 크래시 등으로 중단된 것이므로 재실행.
