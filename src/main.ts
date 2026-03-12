@@ -35,6 +35,9 @@ import { McpClientManager } from "./mcp/index.js";
 import { AgentBackendRegistry } from "./agent/agent-registry.js";
 import { CliAuthService } from "./agent/cli-auth.service.js";
 import { UsageStore } from "./gateway/usage-store.js";
+import { existsSync } from "node:fs";
+import { AdminStore } from "./auth/admin-store.js";
+import { AuthService } from "./auth/auth-service.js";
 import { randomUUID } from "node:crypto";
 
 export interface RuntimeApp {
@@ -121,6 +124,10 @@ export async function createRuntime(): Promise<RuntimeApp> {
 
   const usage_store = new UsageStore(workspace);
 
+  // ADMIN_DB_PATH env 또는 workspace/admin/admin.db 자동 감지 → null이면 인증 비활성
+  const admin_db_path = process.env.ADMIN_DB_PATH ?? join(workspace, "admin", "admin.db");
+  const auth_svc = existsSync(admin_db_path) ? new AuthService(new AdminStore(admin_db_path)) : null;
+
   const { command_router, channel_manager } = create_channel_wiring({
     workspace, app_config, agent, agent_runtime, agent_backend_registry,
     bus, broadcaster, channels, instance_store,
@@ -161,6 +168,7 @@ export async function createRuntime(): Promise<RuntimeApp> {
     sessions, dlq_store, dispatch, oauth_store, oauth_flow,
     kanban_store, kanban_automation, reference_store, webhook_store,
     agent_definition_store, workflow_ops_result, usage_store,
+    auth_svc,
   });
   dashboard.current = dashboard_instance;
 

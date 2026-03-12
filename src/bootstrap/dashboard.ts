@@ -39,6 +39,7 @@ import {
   create_agent_definition_ops,
 } from "../dashboard/ops-factory.js";
 import { UsageStore } from "../gateway/usage-store.js";
+import type { AuthService } from "../auth/auth-service.js";
 
 export interface DashboardBundleDeps {
   workspace: string;
@@ -77,6 +78,7 @@ export interface DashboardBundleDeps {
   agent_definition_store: AgentDefinitionStore;
   workflow_ops_result: DashboardWorkflowOps | null;
   usage_store?: UsageStore | null;
+  auth_svc?: AuthService | null;
 }
 
 export interface DashboardBundleResult {
@@ -94,6 +96,7 @@ export function create_dashboard_bundle(deps: DashboardBundleDeps): DashboardBun
     sessions, dlq_store, dispatch, oauth_store, oauth_flow,
     kanban_store, kanban_automation, reference_store, webhook_store,
     agent_definition_store, workflow_ops_result, usage_store: provided_usage_store,
+    auth_svc,
   } = deps;
 
   const agent_provider_ops = create_agent_provider_ops({
@@ -190,6 +193,7 @@ Description: ${prompt}`,
       },
     }),
     workflow_ops: workflow_ops_result,
+    auth_svc: auth_svc ?? null,
     kanban_store,
     kanban_rule_executor: () => kanban_automation.get_rule_executor(),
     reference_store,
