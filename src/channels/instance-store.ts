@@ -108,7 +108,7 @@ export class ChannelInstanceStore {
   // ── 쓰기 ──
 
   upsert(input: CreateChannelInstanceInput): void {
-    with_sqlite(this.db_path, (db) => {
+    with_sqlite_strict(this.db_path, (db) => {
       db.prepare(`
         INSERT INTO channel_instances (instance_id, provider, label, enabled, settings_json, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))
@@ -136,7 +136,7 @@ export class ChannelInstanceStore {
     const enabled = patch.enabled ?? existing.enabled;
     const settings = patch.settings ? { ...existing.settings, ...patch.settings } : existing.settings;
 
-    with_sqlite(this.db_path, (db) => {
+    with_sqlite_strict(this.db_path, (db) => {
       db.prepare(`
         UPDATE channel_instances SET label = ?, enabled = ?, settings_json = ?, updated_at = datetime('now')
         WHERE instance_id = ?
@@ -147,11 +147,10 @@ export class ChannelInstanceStore {
   }
 
   remove(instance_id: string): boolean {
-    const result = with_sqlite(this.db_path, (db) => {
+    return with_sqlite_strict(this.db_path, (db) => {
       const r = db.prepare("DELETE FROM channel_instances WHERE instance_id = ?").run(instance_id);
       return r.changes > 0;
     }, { pragmas: PRAGMAS });
-    return result ?? false;
   }
 
   // ── 토큰 (vault 위임) ──

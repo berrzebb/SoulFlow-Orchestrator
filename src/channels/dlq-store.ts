@@ -91,7 +91,7 @@ export class SqliteDispatchDlqStore implements DispatchDlqStoreLike {
   async append(record: DispatchDlqRecord): Promise<void> {
     await this.initialized;
     const job = this.write_queue.then(async () => {
-      const ok = with_sqlite(this.sqlite_path,(db) => {
+      with_sqlite_strict(this.sqlite_path,(db) => {
         db.prepare(`
           INSERT INTO outbound_dlq (
             at, provider, chat_id, message_id, sender_id, reply_to, thread_id,
@@ -112,7 +112,6 @@ export class SqliteDispatchDlqStore implements DispatchDlqStoreLike {
         );
         return true;
       });
-      if (!ok) throw new Error("dlq_write_failed");
     });
     this.write_queue = job.then(() => undefined, () => undefined);
     await job;
@@ -121,10 +120,10 @@ export class SqliteDispatchDlqStore implements DispatchDlqStoreLike {
   async prune_older_than(max_age_ms: number): Promise<number> {
     await this.initialized;
     const cutoff = new Date(Date.now() - Math.max(0, max_age_ms)).toISOString();
-    const deleted = with_sqlite(this.sqlite_path, (db) => {
+    const deleted = with_sqlite_strict(this.sqlite_path, (db) => {
       const result = db.prepare(`DELETE FROM outbound_dlq WHERE at < ?`).run(cutoff);
       return result.changes;
-    }) || 0;
+    });
     return deleted;
   }
 
@@ -132,10 +131,10 @@ export class SqliteDispatchDlqStore implements DispatchDlqStoreLike {
     if (ids.length === 0) return 0;
     await this.initialized;
     const placeholders = ids.map(() => "?").join(",");
-    const deleted = with_sqlite(this.sqlite_path, (db) => {
+    const deleted = with_sqlite_strict(this.sqlite_path, (db) => {
       const result = db.prepare(`DELETE FROM outbound_dlq WHERE id IN (${placeholders})`).run(...ids);
       return result.changes;
-    }) || 0;
+    });
     return deleted;
   }
 
