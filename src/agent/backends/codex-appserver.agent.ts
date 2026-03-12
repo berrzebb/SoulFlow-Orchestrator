@@ -583,7 +583,9 @@ export class CodexAppServerAgent implements AgentBackend {
               if (post_tool) swallow(post_tool(tool_name, args, err_msg, tool_ctx, true));
             }
           };
-          void run_tool();
+          void run_tool().catch((err) => {
+            rpc.respond(req.id, { success: false, contentItems: [{ type: "inputText", text: error_message(err) }] });
+          });
           return;
         }
 
