@@ -321,6 +321,24 @@ describe("run_phase_loop — phase 워크플로우 실행", () => {
 
       expect(result.error).toContain("phase_cancelled");
     });
+
+    it("aborted 상태 → error_result + logger.warn", async () => {
+      const deps = createMockPhaseWorkflowDeps() as PhaseWorkflowDeps;
+      const logWarnSpy = vi.fn();
+      deps.logger.warn = logWarnSpy;
+
+      const { run_phase_loop: phaseLoopExec } = await import("@src/agent/phase-loop-runner.js");
+      (phaseLoopExec as any).mockResolvedValue({
+        status: "aborted",
+        error: "user_cancelled",
+        phases: [],
+        memory: {},
+      });
+
+      const result = await run_phase_loop(deps, mockRequest, "test task", "test-template");
+      expect(result.error).toBeDefined();
+      expect(logWarnSpy).toHaveBeenCalledWith("phase_loop_terminal", expect.objectContaining({ status: "aborted" }));
+    });
   });
 
   describe("프로세스 추적", () => {
@@ -470,6 +488,94 @@ describe("run_phase_loop — phase 워크플로우 실행", () => {
         expect(result.ok).toBe(false);
       }
     });
+
+    it("invoke_tool 콜백 — ctx 있음 → workflow_id를 task_id로 변환", async () => {
+      const deps = createMockPhaseWorkflowDeps() as PhaseWorkflowDeps;
+      const execute_tool = vi.fn().mockResolvedValue({ result: "done" });
+      deps.runtime = { execute_tool } as never;
+      const { first } = await capture_exec_args(deps);
+
+      if (first?.invoke_tool) {
+        const result = await first.invoke_tool("bash", { cmd: "echo hi" }, { channel: "slack", chat_id: "C1", sender_id: "U1", workflow_id: "wf-1" });
+        expect(execute_tool).toHaveBeenCalledWith("bash", { cmd: "echo hi" }, {
+          channel: "slack", chat_id: "C1", sender_id: "U1", task_id: "wf-1",
+        });
+        expect(result).toEqual({ result: "done" });
+      }
+    });
+
+    it("invoke_tool 콜백 — ctx=undefined → task_id 없이 호출", async () => {
+      const deps = createMockPhaseWorkflowDeps() as PhaseWorkflowDeps;
+      const execute_tool = vi.fn().mockResolvedValue({ result: "done" });
+      deps.runtime = { execute_tool } as never;
+      const { first } = await capture_exec_args(deps);
+
+      if (first?.invoke_tool) {
+        await first.invoke_tool("read", { path: "/tmp/foo" }, undefined);
+        expect(execute_tool).toHaveBeenCalledWith("read", { path: "/tmp/foo" }, undefined);
+      }
+    });
+
+    it("on_event 콜백 — get_sse_broadcaster null → 오류 없음", async () => {
+      const deps = createMockPhaseWorkflowDeps() as PhaseWorkflowDeps;
+      deps.get_sse_broadcaster = (() => null) as never;
+      const { second } = await capture_exec_args(deps);
+
+      if (second?.on_event) {
+        expect(() => second.on_event({ type: "phase_started" } as never)).not.toThrow();
+      }
+    });
+
+    it("load_template 콜백 → load_workflow_template 위임", async () => {
+      const deps = createMockPhaseWorkflowDeps() as PhaseWorkflowDeps;
+      const { second } = await capture_exec_args(deps);
+
+      if (second?.load_template) {
+        const { load_workflow_template } = await import("@src/orchestration/workflow-loader.js");
+        second.load_template("my-workflow");
+        expect(load_workflow_template).toHaveBeenCalledWith("/workspace", "my-workflow");
+      }
+    });
+
+    it("send_message 콜백 — 다른 채널 target → 해당 채널로 publish", async () => {
+      const deps = createMockPhaseWorkflowDeps() as PhaseWorkflowDeps;
+      const { first } = await capture_exec_args(deps);
+
+      if (first?.send_message) {
+        const result = await first.send_message({ target: "custom", channel: "telegram", chat_id: "T1", content: "커스텀" });
+        expect(deps.bus?.publish_outbound).toHaveBeenCalledWith(expect.objectContaining({
+          provider: "telegram", chat_id: "T1",
+        }));
+        expect(result.ok).toBe(true);
+      }
+    });
+
+    it("ask_channel 콜백 — timeout → timed_out=true", async () => {
+      const deps = createMockPhaseWorkflowDeps() as PhaseWorkflowDeps;
+      const { first } = await capture_exec_args(deps);
+
+      if (first?.ask_channel) {
+        const response = await first.ask_channel({ target: "origin", content: "질문" }, 10);
+        expect(response.timed_out).toBe(true);
+        expect(response.response).toBe("");
+      }
+    });
+
+    it("ask_channel 콜백 — resolve → timed_out=false", async () => {
+      const deps = createMockPhaseWorkflowDeps() as PhaseWorkflowDeps;
+      let captured_resolve: ((content: string) => void) | null = null;
+      (deps.hitl_store as any).set = vi.fn((_id: string, entry: any) => { captured_resolve = entry.resolve; });
+      const { first } = await capture_exec_args(deps);
+
+      if (first?.ask_channel) {
+        const response_promise = first.ask_channel({ target: "origin", content: "질문" }, 5000);
+        expect(captured_resolve).not.toBeNull();
+        captured_resolve!("답변");
+        const response = await response_promise;
+        expect(response.timed_out).toBe(false);
+        expect(response.response).toBe("답변");
+      }
+    });
   });
 
   describe("format_phase_summary — 메모리 폴백", () => {
@@ -553,6 +659,113 @@ describe("run_phase_loop — phase 워크플로우 실행", () => {
       const result = await run_phase_loop(deps, mockRequest, "completely new task", undefined);
 
       expect(result.error).toContain("no_matching_workflow_template");
+    });
+
+    it("critic=null → format_workflow_preview에서 critic_note 없음", async () => {
+      const deps = createMockPhaseWorkflowDeps() as PhaseWorkflowDeps;
+      (deps.providers.run_orchestrator as any).mockResolvedValue({
+        content: JSON.stringify({
+          title: "No Critic Workflow",
+          objective: "test",
+          phases: [{
+            phase_id: "p1", title: "실행",
+            agents: [{ agent_id: "a1", role: "coder", label: "코더", backend: "openrouter", system_prompt: "코드 작성." }],
+            critic: null,
+          }],
+        }),
+      });
+
+      const result = await run_phase_loop(deps, mockRequest, "completely new task", undefined);
+      expect(result.reply).toContain("1 agents)");
+      expect(result.reply).not.toContain("+ critic");
+    });
+
+    it("title 없는 JSON → no_matching_workflow_template", async () => {
+      const deps = createMockPhaseWorkflowDeps() as PhaseWorkflowDeps;
+      (deps.providers.run_orchestrator as any).mockResolvedValue({
+        content: '{"phases": [{"phase_id": "p1"}]}',
+      });
+
+      const result = await run_phase_loop(deps, mockRequest, "completely new task", undefined);
+      expect(result.error).toContain("no_matching_workflow_template");
+    });
+
+    it("phases가 배열 아님 → no_matching_workflow_template", async () => {
+      const deps = createMockPhaseWorkflowDeps() as PhaseWorkflowDeps;
+      (deps.providers.run_orchestrator as any).mockResolvedValue({
+        content: '{"title": "테스트", "phases": {"key": "val"}}',
+      });
+
+      const result = await run_phase_loop(deps, mockRequest, "completely new task", undefined);
+      expect(result.error).toContain("no_matching_workflow_template");
+    });
+  });
+
+  describe("에러 경로", () => {
+    it("store.upsert reject → workflow_upsert_failed 로깅", async () => {
+      const { load_workflow_templates, load_workflow_template } = await import("@src/orchestration/workflow-loader.js");
+      vi.mocked(load_workflow_template).mockReturnValue(null);
+      vi.mocked(load_workflow_templates).mockReturnValue([]);
+
+      const deps = createMockPhaseWorkflowDeps() as PhaseWorkflowDeps;
+      (deps.phase_workflow_store as any).upsert = vi.fn().mockRejectedValue(new Error("db write failure"));
+
+      const result = await run_phase_loop(deps, mockRequest, "completely new unmatched task");
+      expect(result.mode).toBe("phase");
+      await new Promise((r) => setTimeout(r, 20));
+      expect(deps.logger.error).toHaveBeenCalledWith(
+        "workflow_upsert_failed",
+        expect.objectContaining({ error: "db write failure" }),
+      );
+    });
+
+    it("ask_channel publish_outbound reject → workflow_ask_channel_send_failed 로깅", async () => {
+      const { run_phase_loop: phaseLoopExec } = await import("@src/agent/phase-loop-runner.js");
+      let captured_first: any;
+      (phaseLoopExec as any).mockImplementationOnce(async (first: any) => {
+        captured_first = first;
+        return { status: "completed", phases: [], memory: {} };
+      });
+
+      const { load_workflow_template: lwt, load_workflow_templates: lwts } = await import("@src/orchestration/workflow-loader.js");
+      vi.mocked(lwt).mockReturnValue(mockTemplate as never);
+      vi.mocked(lwts).mockReturnValue([mockTemplate] as never);
+
+      const deps = createMockPhaseWorkflowDeps() as PhaseWorkflowDeps;
+      (deps.bus as any).publish_outbound = vi.fn().mockRejectedValue(new Error("network error"));
+
+      await run_phase_loop(deps, mockRequest, "test task", "test-template");
+
+      const ask_promise = captured_first.ask_channel({ target: "origin", content: "질문" }, 30);
+      await new Promise((r) => setTimeout(r, 20));
+      expect(deps.logger.error).toHaveBeenCalledWith(
+        "workflow_ask_channel_send_failed",
+        expect.objectContaining({ error: "network error" }),
+      );
+
+      const set_call = (deps.hitl_store as any).set.mock.calls[0];
+      if (set_call) set_call[1].resolve("답변");
+      await ask_promise;
+    });
+  });
+
+  describe("format_phase_summary — agent.error", () => {
+    it("agent.error 있을 때 → error 텍스트 표시", async () => {
+      const deps = createMockPhaseWorkflowDeps() as PhaseWorkflowDeps;
+      const { run_phase_loop: phaseLoopExec } = await import("@src/agent/phase-loop-runner.js");
+      (phaseLoopExec as any).mockResolvedValue({
+        status: "completed",
+        phases: [{
+          phase_id: "p1", title: "실패 단계", status: "failed",
+          agents: [
+            { agent_id: "a1", label: "Analyst", status: "failed", error: "분석 실패했습니다", result: null },
+          ],
+        }],
+        memory: {},
+      });
+
+      const result = await run_phase_loop(deps, mockRequest, "task", "test-template");
+      expect(result.reply).toContain("분석 실패했습니다");
     });
   });
 });

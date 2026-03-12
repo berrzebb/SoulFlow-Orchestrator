@@ -1,80 +1,151 @@
 /**
- * Phase 4.2 추출 검증: run_phase_loop / phase workflow helpers
- *
- * 목표: 추출된 phase workflow 함수들이 정의되고 호출 가능한지 검증.
- *       PhaseWorkflowDeps 타입이 올바르게 정의되었는지 확인.
- *       OrchestrationService가 위임하는지 확인.
- *
- * 범위: 함수 존재성, export, 타입 시그니처 검증.
- *       세부 실행 로직은 기존 orchestration 통합 테스트에서 검증.
+ * phase-workflow — 통합 테스트 (no mock).
+ * - re-export 검증
+ * - 의존성 검증 (workspace, subagents, store)
+ * - 템플릿 미매칭 + LLM 동적 생성 분기
  */
-
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
+import { run_phase_loop } from "@src/orchestration/execution/phase-workflow.js";
+import { run_phase_loop as run_phase_loop_reexport } from "@src/orchestration/execution/index.js";
 import type { PhaseWorkflowDeps } from "@src/orchestration/execution/phase-workflow.js";
-import { run_phase_loop } from "@src/orchestration/execution/index.js";
-import { OrchestrationService } from "@src/orchestration/service.js";
+import type { OrchestrationRequest } from "@src/orchestration/types.js";
 
-/* ── 테스트 ────────────────────────────────────────── */
+function make_req(overrides?: Partial<OrchestrationRequest>): OrchestrationRequest {
+  return {
+    provider: "slack",
+    message: {
+      id: "m1", provider: "slack", channel: "slack",
+      sender_id: "U1", chat_id: "C1",
+      content: "test task", at: new Date().toISOString(), metadata: {},
+    },
+    mode: "once",
+    ...overrides,
+  } as OrchestrationRequest;
+}
 
-describe("Phase 4.2: 추출된 Phase Workflow 함수 검증", () => {
-  describe("phase workflow 함수 export", () => {
-    it("run_phase_loop 함수 export 확인", () => {
-      expect(run_phase_loop).toBeDefined();
-      expect(typeof run_phase_loop).toBe("function");
-      expect(run_phase_loop.length).toBeGreaterThan(0); // 5개 파라미터
-    });
+function make_deps(overrides?: Partial<PhaseWorkflowDeps>): PhaseWorkflowDeps {
+  return {
+    providers: {} as never,
+    runtime: { execute_tool: vi.fn() } as never,
+    logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } as never,
+    process_tracker: null,
+    workspace: "/tmp/workspace",
+    subagents: { list: vi.fn(), get: vi.fn() } as never,
+    phase_workflow_store: { upsert: vi.fn().mockResolvedValue(undefined) } as never,
+    bus: null,
+    hitl_store: { set: vi.fn(), get: vi.fn(), delete: vi.fn() } as never,
+    get_sse_broadcaster: undefined,
+    render_hitl: (body: string, type: string) => `[${type}] ${body}`,
+    decision_service: null,
+    promise_service: null,
+    ...overrides,
+  };
+}
+
+// ── re-export 검증 ──────────────────────────────────────────────────
+
+describe("phase-workflow — re-export 검증", () => {
+  it("execution/index.js에서 run_phase_loop re-export", () => {
+    expect(run_phase_loop_reexport).toBe(run_phase_loop);
+  });
+});
+
+// ── 의존성 검증 ─────────────────────────────────────────────────────
+
+describe("run_phase_loop — 의존성 검증", () => {
+  it("workspace 빈 문자열 → Error: workspace is required", async () => {
+    const deps = make_deps({ workspace: "" });
+    await expect(run_phase_loop(deps, make_req(), "task")).rejects.toThrow("workspace is required");
   });
 
-  describe("Phase Workflow 타입 계약 (Contract)", () => {
-    it("PhaseWorkflowDeps 타입 정의됨", () => {
-      const deps: Partial<PhaseWorkflowDeps> = {
-        providers: {} as never,
-        runtime: {} as never,
-        logger: {} as never,
-        process_tracker: null,
-        workspace: "/workspace",
-        subagents: null,
-        phase_workflow_store: null,
-        bus: null,
-        hitl_store: {} as never,
-        get_sse_broadcaster: undefined,
-        render_hitl: () => "",
-        decision_service: null,
-        promise_service: null,
-      };
-      expect(deps).toBeDefined();
-    });
+  it("subagents=null → phase_loop_deps_not_configured", async () => {
+    const deps = make_deps({ subagents: null });
+    const result = await run_phase_loop(deps, make_req(), "task");
+    expect(result.mode).toBe("phase");
+    expect(result.error).toContain("phase_loop_deps_not_configured");
   });
 
-  describe("의존성 계약 필수 속성", () => {
-    it("PhaseWorkflowDeps는 핵심 의존성 포함", () => {
-      const required_props: (keyof PhaseWorkflowDeps)[] = [
-        "providers",
-        "runtime",
-        "logger",
-        "workspace",
-        "hitl_store",
-        "render_hitl",
-      ];
-      // 타입이 올바르게 정의되어 있으면 이 배열이 유효함
-      expect(required_props.length).toBe(6);
+  it("phase_workflow_store=null → phase_loop_deps_not_configured", async () => {
+    const deps = make_deps({ phase_workflow_store: null });
+    const result = await run_phase_loop(deps, make_req(), "task");
+    expect(result.mode).toBe("phase");
+    expect(result.error).toContain("phase_loop_deps_not_configured");
+  });
+});
+
+// ── 템플릿 미매칭 + LLM 동적 생성 분기 ─────────────────────────────
+
+describe("run_phase_loop — 템플릿 미매칭 + LLM 동적 생성 분기", () => {
+  it("매칭 없고 LLM content=null → no_matching_workflow_template", async () => {
+    const deps = make_deps({
+      workspace: "/nonexistent-workspace-xyz",
+      providers: {
+        run_orchestrator: vi.fn().mockResolvedValue({ content: null }),
+        get_secret_vault: vi.fn().mockReturnValue({ mask_known_secrets: vi.fn().mockResolvedValue("") }),
+      } as never,
     });
+    const result = await run_phase_loop(deps, make_req(), "completely unique task xyz 123");
+    expect(result.error).toContain("no_matching_workflow_template");
   });
 
-  describe("OrchestrationService 내부 위임", () => {
-    it("OrchestrationService가 src/orchestration/execution/phase-workflow.ts import", () => {
-      // OrchestrationService 파일 내용에서 _run_phase_loop 임포트 확인
-      // (이는 정적 분석이며, 동적 테스트는 phase-loop 통합 테스트에서 이미 수행됨)
-      expect(OrchestrationService).toBeDefined();
+  it("LLM이 null 반환 → no_matching_workflow_template", async () => {
+    const deps = make_deps({
+      workspace: "/nonexistent-workspace-xyz",
+      providers: {
+        run_orchestrator: vi.fn().mockResolvedValue(null),
+        get_secret_vault: vi.fn().mockReturnValue({ mask_known_secrets: vi.fn().mockResolvedValue("") }),
+      } as never,
     });
+    const result = await run_phase_loop(deps, make_req(), "another unique task abc 456");
+    expect(result.error).toContain("no_matching_workflow_template");
   });
 
-  describe("Phase Workflow 함수 타입 시그니처", () => {
-    it("run_phase_loop(deps, req, task_with_media, workflow_hint?, node_categories?) → OrchestrationResult", () => {
-      // 함수 존재 확인으로 인터페이스 검증
-      expect(run_phase_loop.length).toBeGreaterThan(0);
-      // 5개 파라미터: deps, req, task_with_media, workflow_hint, node_categories
-      expect(run_phase_loop.length).toBe(5);
+  it("JSON 없는 응답 → no_matching_workflow_template", async () => {
+    const deps = make_deps({
+      workspace: "/nonexistent-workspace-xyz",
+      providers: {
+        run_orchestrator: vi.fn().mockResolvedValue({ content: "Sorry, I cannot help." }),
+        get_secret_vault: vi.fn().mockReturnValue({ mask_known_secrets: vi.fn().mockResolvedValue("") }),
+      } as never,
     });
+    const result = await run_phase_loop(deps, make_req(), "unique unmatched task 789");
+    expect(result.error).toContain("no_matching_workflow_template");
+  });
+
+  it("잘못된 JSON (phases=null) → no_matching_workflow_template", async () => {
+    const deps = make_deps({
+      workspace: "/nonexistent-workspace-xyz",
+      providers: {
+        run_orchestrator: vi.fn().mockResolvedValue({ content: '{"title":"Test","phases":null}' }),
+        get_secret_vault: vi.fn().mockReturnValue({ mask_known_secrets: vi.fn().mockResolvedValue("") }),
+      } as never,
+    });
+    const result = await run_phase_loop(deps, make_req(), "malformed json task xyz123");
+    expect(result.error).toContain("no_matching_workflow_template");
+  });
+
+  it("유효한 workflow JSON → preview 반환", async () => {
+    const workflow_json = JSON.stringify({
+      title: "테스트 워크플로우",
+      objective: "테스트 목표",
+      phases: [{
+        phase_id: "p1", title: "Phase 1",
+        agents: [{ agent_id: "a1", role: "analyst", label: "Analyst", backend: "openrouter", system_prompt: "Analyze the task." }],
+        critic: { backend: "openrouter", system_prompt: "Review", gate: true },
+      }],
+    });
+    const deps = make_deps({
+      workspace: "/nonexistent-workspace-xyz",
+      providers: {
+        run_orchestrator: vi.fn().mockResolvedValue({ content: workflow_json }),
+        get_orchestrator_provider_id: vi.fn().mockReturnValue("openrouter"),
+        get_secret_vault: vi.fn().mockReturnValue({ mask_known_secrets: vi.fn().mockResolvedValue("") }),
+      } as never,
+      phase_workflow_store: { upsert: vi.fn().mockResolvedValue(undefined) } as never,
+    });
+    const result = await run_phase_loop(deps, make_req(), "unique task for dynamic workflow");
+    expect(result.mode).toBe("phase");
+    expect(result.reply).toContain("다음 워크플로우를 생성했습니다");
+    expect(result.reply).toContain("Phase 1");
   });
 });

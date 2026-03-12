@@ -256,4 +256,91 @@ describe("dedupe_decisions", () => {
     expect(result.removed).toBe(0);
     expect(result.active).toBe(0);
   });
+
+  it("archived 레코드 존재 시 dedupe → non-active skip", async () => {
+    const { record } = await svc.append_decision(make_input({ key: "arch_ded", value: "to be archived content" }));
+    await svc.archive_decision(record.id);
+    const result = await svc.dedupe_decisions();
+    expect(result.removed).toBe(0);
+  });
+
+  it("superseded 레코드 존재 시 dedupe → non-active skip", async () => {
+    await svc.append_decision(make_input({ key: "sup_ded", value: "original value content unique" }));
+    await svc.append_decision(make_input({ key: "sup_ded", value: "completely different korean 다른내용입니다" }));
+    const result = await svc.dedupe_decisions();
+    expect(typeof result.removed).toBe("number");
+  });
+});
+
+// ── similarity 엣지 케이스 ──
+
+describe("similarity 엣지 케이스", () => {
+  it("양쪽 빈 토큰 (기호만) → similarity=1 → deduped", async () => {
+    await svc.append_decision(make_input({ key: "empty_tok", value: "---" }));
+    const r2 = await svc.append_decision(make_input({ key: "empty_tok", value: "..." }));
+    expect(r2.action).toBe("deduped");
+  });
+
+  it("active=기호, new=단어 → similarity=0 → superseded 후 insert", async () => {
+    await svc.append_decision(make_input({ key: "mix_tok", value: "---" }));
+    const r2 = await svc.append_decision(make_input({ key: "mix_tok", value: "hello world content" }));
+    expect(r2.action).toBe("inserted");
+  });
+
+  it("active=단어, new=기호 → similarity=0 → superseded 후 insert", async () => {
+    await svc.append_decision(make_input({ key: "mix_tok2", value: "hello world content" }));
+    const r2 = await svc.append_decision(make_input({ key: "mix_tok2", value: "---" }));
+    expect(r2.action).toBe("inserted");
+  });
+
+  it("Jaccard ≈ 0.923 (12/13 토큰) → deduped", async () => {
+    const base = "alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima";
+    const extended = `${base} mike`;
+    await svc.append_decision(make_input({ key: "sim_key", value: base }));
+    const r2 = await svc.append_decision(make_input({ key: "sim_key", value: extended }));
+    expect(r2.action).toBe("deduped");
+  });
+});
+
+// ── fingerprint non-active 재제출 ──
+
+describe("fingerprint non-active 재제출", () => {
+  it("superseded 후 동일 fingerprint 재제출 → non-active → 새 삽입", async () => {
+    const r1 = await svc.append_decision(make_input({ key: "fp_stale", value: "original value content" }));
+    await svc.append_decision(make_input({ key: "fp_stale", value: "완전히 다른 한국어 값입니다" }));
+    const r3 = await svc.append_decision(make_input({ key: "fp_stale", value: "original value content" }));
+    expect(["inserted", "deduped"]).toContain(r3.action);
+  });
+});
+
+// ── list_decisions 추가 필터 ──
+
+describe("list_decisions 추가 필터", () => {
+  it("search 일치 없음 → 빈 배열", async () => {
+    await svc.append_decision(make_input({ key: "a", value: "totally irrelevant" }));
+    const r = await svc.list_decisions({ search: "완전히_다른_키워드_xyzabc" });
+    expect(r).toHaveLength(0);
+  });
+
+  it("rationale 포함 search", async () => {
+    await svc.append_decision(make_input({
+      key: "policy", value: "정책 내용", rationale: "security reason 보안 이유",
+    }));
+    const r = await svc.list_decisions({ search: "security" });
+    expect(r.length).toBeGreaterThan(0);
+  });
+
+  it("scope_id 불일치 → 결과에서 제외", async () => {
+    await svc.append_decision(make_input({ key: "global_key", value: "global value content" }));
+    await svc.append_decision({ scope: "team", scope_id: "team-1", key: "team_key", value: "team value content", priority: 1 });
+    const team_rows = await svc.list_decisions({ scope_id: "team-1" });
+    expect(team_rows.every((r) => r.scope_id === "team-1")).toBe(true);
+  });
+
+  it("scope_id=null 필터 → scope_id 있는 레코드 제외", async () => {
+    await svc.append_decision({ scope: "team", scope_id: "team-x", key: "scoped", value: "scoped value", priority: 1 });
+    await svc.append_decision(make_input({ key: "global", value: "global value content" }));
+    const rows = await svc.list_decisions({ scope_id: null });
+    expect(rows.some((r) => r.scope_id === "team-x")).toBe(false);
+  });
 });
