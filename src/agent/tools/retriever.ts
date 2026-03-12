@@ -3,6 +3,7 @@
 import { Tool } from "./base.js";
 import type { JsonSchema, ToolExecutionContext } from "./types.js";
 import { make_abort_signal } from "../../utils/common.js";
+import { HTTP_FETCH_TIMEOUT_MS } from "../../utils/timeouts.js";
 
 export class RetrieverTool extends Tool {
   readonly name = "retriever";
@@ -44,7 +45,7 @@ export class RetrieverTool extends Tool {
     const sep = url.includes("?") ? "&" : "?";
     const resp = await fetch(`${url}${sep}q=${encodeURIComponent(query)}&top_k=${top_k}`, {
       headers: { "Accept": "application/json" },
-      signal: make_abort_signal(30_000, context?.signal),
+      signal: make_abort_signal(HTTP_FETCH_TIMEOUT_MS, context?.signal),
     });
     if (!resp.ok) return `Error: HTTP ${resp.status} ${resp.statusText}`;
     const body = await resp.json() as unknown;

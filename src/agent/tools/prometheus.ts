@@ -3,6 +3,7 @@
 import { Tool } from "./base.js";
 import type { JsonSchema, ToolExecutionContext } from "./types.js";
 import { error_message, make_abort_signal } from "../../utils/common.js";
+import { HTTP_FETCH_SHORT_TIMEOUT_MS } from "../../utils/timeouts.js";
 
 type Metric = { name: string; type?: string; help?: string; value: number; labels?: Record<string, string>; timestamp?: number };
 
@@ -51,7 +52,7 @@ export class PrometheusTool extends Tool {
         const body = this.format_exposition(metrics);
         try {
           const url = `${gateway.replace(/\/+$/, "")}/metrics/job/${encodeURIComponent(job)}`;
-          const resp = await fetch(url, { method: "POST", body, headers: { "Content-Type": "text/plain" }, signal: make_abort_signal(15_000, context?.signal) });
+          const resp = await fetch(url, { method: "POST", body, headers: { "Content-Type": "text/plain" }, signal: make_abort_signal(HTTP_FETCH_SHORT_TIMEOUT_MS, context?.signal) });
           return JSON.stringify({ success: resp.ok, status: resp.status, url });
         } catch (e) {
           return JSON.stringify({ success: false, error: error_message(e) });

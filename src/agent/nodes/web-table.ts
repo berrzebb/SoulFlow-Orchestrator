@@ -5,6 +5,7 @@ import type { WebTableNodeDefinition, OrcheNodeDefinition } from "../workflow-no
 import type { OrcheNodeExecutorContext, OrcheNodeExecuteResult, OrcheNodeTestResult } from "../orche-node-executor.js";
 import { resolve_templates } from "../orche-node-executor.js";
 import { error_message, make_abort_signal } from "../../utils/common.js";
+import { HTTP_FETCH_TIMEOUT_MS } from "../../utils/timeouts.js";
 
 export const web_table_handler: NodeHandler = {
   node_type: "web_table",
@@ -32,7 +33,7 @@ export const web_table_handler: NodeHandler = {
     if (!url) return { output: { headers: [], rows: [], total: 0, error: "url is empty" } };
 
     try {
-      const signal = make_abort_signal(30_000, ctx.abort_signal);
+      const signal = make_abort_signal(HTTP_FETCH_TIMEOUT_MS, ctx.abort_signal);
       const res = await fetch(url, {
         headers: { "User-Agent": "Mozilla/5.0 (compatible; SoulFlowBot/1.0)" },
         signal,

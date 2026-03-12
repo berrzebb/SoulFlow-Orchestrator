@@ -3,6 +3,7 @@
 import { Tool } from "./base.js";
 import type { JsonSchema, ToolExecutionContext } from "./types.js";
 import { error_message, make_abort_signal } from "../../utils/common.js";
+import { HTTP_FETCH_SHORT_TIMEOUT_MS } from "../../utils/timeouts.js";
 
 type FeedItem = { title: string; link: string; description?: string; pubDate?: string; guid?: string; author?: string };
 
@@ -39,7 +40,7 @@ export class RssTool extends Tool {
         const url = String(params.url || "");
         if (!url) return "Error: url is required";
         try {
-          const resp = await fetch(url, { headers: { "Accept": "application/rss+xml, application/atom+xml, application/xml, text/xml" }, signal: make_abort_signal(15_000, context?.signal) });
+          const resp = await fetch(url, { headers: { "Accept": "application/rss+xml, application/atom+xml, application/xml, text/xml" }, signal: make_abort_signal(HTTP_FETCH_SHORT_TIMEOUT_MS, context?.signal) });
           if (!resp.ok) return JSON.stringify({ error: `HTTP ${resp.status}` });
           const text = await resp.text();
           return JSON.stringify(this.parse_feed(text));

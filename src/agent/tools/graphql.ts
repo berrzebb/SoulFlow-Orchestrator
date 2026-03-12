@@ -2,6 +2,7 @@
 
 import { Tool } from "./base.js";
 import { error_message, make_abort_signal } from "../../utils/common.js";
+import { HTTP_FETCH_TIMEOUT_MS } from "../../utils/timeouts.js";
 import type { JsonSchema, ToolExecutionContext } from "./types.js";
 
 export class GraphqlTool extends Tool {
@@ -63,7 +64,7 @@ export class GraphqlTool extends Tool {
         method: "POST",
         headers: { "Content-Type": "application/json", ...custom_headers },
         body: JSON.stringify(body),
-        signal: make_abort_signal(30_000, context?.signal),
+        signal: make_abort_signal(HTTP_FETCH_TIMEOUT_MS, context?.signal),
       });
 
       const text = await res.text();

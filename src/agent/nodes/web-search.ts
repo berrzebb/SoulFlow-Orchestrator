@@ -5,6 +5,7 @@ import type { WebSearchNodeDefinition, OrcheNodeDefinition } from "../workflow-n
 import type { OrcheNodeExecutorContext, OrcheNodeExecuteResult, OrcheNodeTestResult } from "../orche-node-executor.js";
 import { resolve_templates } from "../orche-node-executor.js";
 import { error_message, make_abort_signal } from "../../utils/common.js";
+import { HTTP_FETCH_SHORT_TIMEOUT_MS } from "../../utils/timeouts.js";
 
 export const web_search_handler: NodeHandler = {
   node_type: "web_search",
@@ -33,7 +34,7 @@ export const web_search_handler: NodeHandler = {
 
     try {
       const url = `https://www.google.com/search?q=${encodeURIComponent(query)}&num=${max_results}`;
-      const signal = make_abort_signal(15_000, ctx.abort_signal);
+      const signal = make_abort_signal(HTTP_FETCH_SHORT_TIMEOUT_MS, ctx.abort_signal);
       const res = await fetch(url, {
         headers: { "User-Agent": "Mozilla/5.0 (compatible; SoulFlowBot/1.0)" },
         signal,

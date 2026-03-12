@@ -8,6 +8,7 @@ import type { OrcheNodeExecutorContext, OrcheNodeExecuteResult, OrcheNodeTestRes
 import { resolve_templates } from "../orche-node-executor.js";
 import { validate_url } from "../tools/http-utils.js";
 import { error_message, make_abort_signal } from "../../utils/common.js";
+import { HTTP_FETCH_TIMEOUT_MS } from "../../utils/timeouts.js";
 
 export const retriever_handler: NodeHandler = {
   node_type: "retriever",
@@ -47,7 +48,7 @@ export const retriever_handler: NodeHandler = {
           method,
           headers: { "Content-Type": "application/json" },
           body: method === "POST" ? JSON.stringify({ query, top_k }) : undefined,
-          signal: make_abort_signal(30_000, ctx.abort_signal),
+          signal: make_abort_signal(HTTP_FETCH_TIMEOUT_MS, ctx.abort_signal),
         });
         const body = await resp.json() as unknown;
         const results = Array.isArray(body) ? body.slice(0, top_k) : [body];
