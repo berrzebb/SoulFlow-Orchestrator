@@ -29,7 +29,7 @@ import {
 import { ConfirmationGuard } from "./confirmation-guard.js";
 import { FINISH_REASON_WARNINGS } from "../agent/finish-reason-warnings.js";
 import { detect_escalation } from "./classifier.js";
-import { append_no_tool_notice } from "./execution/helpers.js";
+import { append_no_tool_notice, error_result, suppress_result, reply_result, extract_usage } from "./execution/helpers.js";
 import {
   type ToolCallHandlerDeps,
 } from "./tool-call-handler.js";
@@ -478,7 +478,7 @@ export class OrchestrationService {
     }
     const provider_err = extract_provider_error(content);
     if (provider_err) return error_result(mode, stream, provider_err, result.tool_calls_count);
-    const usage = _extract_usage(result.usage);
+    const usage = extract_usage(result.usage);
     const reply = normalize_agent_reply(content, req.alias, req.message.sender_id);
     if (!reply) {
       this.logger.warn("native_backend_empty_after_normalize", { mode, tool_calls: result.tool_calls_count });
@@ -527,34 +527,7 @@ export class OrchestrationService {
   }
 }
 
-function error_result(mode: ExecutionMode, stream: StreamBuffer | null, error: string, tool_calls_count = 0): OrchestrationResult {
-  return { reply: null, error, mode, tool_calls_count, streamed: stream?.has_streamed() ?? false, stream_full_content: stream?.get_full_content() };
-}
-
-function suppress_result(mode: ExecutionMode, stream: StreamBuffer, tool_calls_count = 0): OrchestrationResult {
-  return { reply: null, suppress_reply: true, mode, tool_calls_count, streamed: stream.has_streamed(), stream_full_content: stream.get_full_content() };
-}
-
-function reply_result(mode: ExecutionMode, stream: StreamBuffer, reply: string | null, tool_calls_count = 0, parsed_output?: unknown, usage?: import("./types.js").ResultUsage): OrchestrationResult {
-  return { reply, mode, tool_calls_count, streamed: stream.has_streamed(), stream_full_content: stream.get_full_content(), parsed_output, usage };
-}
-
 export type { HitlType } from "./execution/helpers.js";
 export { format_hitl_prompt, detect_hitl_type, append_no_tool_notice } from "./execution/helpers.js";
-
-function _extract_usage(raw: Record<string, unknown> | undefined): import("./types.js").ResultUsage | undefined {
-  if (!raw) return undefined;
-  const prompt = Number(raw.prompt_tokens || 0);
-  const completion = Number(raw.completion_tokens || 0);
-  const total = Number(raw.total_tokens || 0);
-  const cost = Number(raw.total_cost_usd || 0);
-  if (!prompt && !completion && !total && !cost) return undefined;
-  return {
-    ...(prompt ? { prompt_tokens: prompt } : {}),
-    ...(completion ? { completion_tokens: completion } : {}),
-    ...(total ? { total_tokens: total } : {}),
-    ...(cost ? { total_cost_usd: cost } : {}),
-  };
-}
 
 export { resolve_reply_to } from "../channels/types.js";
