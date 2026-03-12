@@ -286,7 +286,7 @@ export class SecretVaultService implements SecretVaultLike {
       SELECT name, ciphertext, updated_at
       FROM secrets
       ORDER BY name ASC
-    `).all() as SecretRow[]) || [];
+    `).all() as SecretRow[]);
     const out: Record<string, SecretEntry> = {};
     for (const row of rows) {
       const name = normalize_secret_name(row.name);
@@ -305,7 +305,7 @@ export class SecretVaultService implements SecretVaultLike {
       SELECT name
       FROM secrets
       ORDER BY name ASC
-    `).all() as Array<{ name: string }>) || [];
+    `).all() as Array<{ name: string }>);
     return rows
       .map((row) => normalize_secret_name(row.name))
       .filter(Boolean);
