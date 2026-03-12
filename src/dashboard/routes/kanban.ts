@@ -144,8 +144,18 @@ export async function handle_kanban(ctx: RouteContext): Promise<boolean> {
     return true;
   }
 
-  // PUT /api/kanban/cards/:id
+  // GET /api/kanban/cards/:id
   const card_match = path.match(/^\/api\/kanban\/cards\/([^/]+)$/);
+  if (card_match && method === "GET") {
+    const store = store_or_503(ctx);
+    if (!store) return true;
+    const card_id = decodeURIComponent(card_match[1]);
+    const card = await store.get_card(card_id);
+    json(res, card ? 200 : 404, card ?? { error: "not_found" });
+    return true;
+  }
+
+  // PUT /api/kanban/cards/:id
   if (card_match && method === "PUT") {
     const store = store_or_503(ctx);
     if (!store) return true;

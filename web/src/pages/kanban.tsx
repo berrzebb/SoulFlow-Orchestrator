@@ -512,12 +512,7 @@ function CardDetailPanel({ card_id, board_id, columns, onClose, onUpdate, onMove
 
   const { data: card } = useQuery<Card>({
     queryKey: ["kanban-card", card_id],
-    queryFn: async () => {
-      const boards_data = await api.get<Board>(`/api/kanban/boards/${encodeURIComponent(board_id)}`);
-      const found = boards_data.cards?.find(c => c.card_id === card_id);
-      if (!found) throw new Error("Card not found");
-      return found;
-    },
+    queryFn: () => api.get<Card>(`/api/kanban/cards/${encodeURIComponent(card_id)}`),
     enabled: !!card_id,
     refetchInterval: 15_000,
   });
