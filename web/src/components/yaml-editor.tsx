@@ -39,26 +39,19 @@ const dashboardTheme = EditorView.theme({
   },
 });
 
-/** YAML syntax highlighting — 대시보드 색상 팔레트 기반. */
-/** CSS 변수에서 실제 색상 값을 읽어오는 헬퍼. */
-function css_var(name: string, fallback: string): string {
-  return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
-}
-
-function create_highlight() {
-  return HighlightStyle.define([
-    { tag: tags.keyword, color: css_var("--accent", "#4a9eff") },
-    { tag: tags.atom, color: css_var("--syn-atom", "#e5c07b") },
-    { tag: tags.number, color: css_var("--syn-number", "#d19a66") },
-    { tag: tags.string, color: css_var("--syn-string", "#98c379") },
-    { tag: tags.bool, color: css_var("--syn-number", "#d19a66") },
-    { tag: tags.null, color: css_var("--muted", "#91a4b7"), fontStyle: "italic" },
-    { tag: tags.comment, color: css_var("--muted", "#91a4b7"), fontStyle: "italic" },
-    { tag: tags.meta, color: css_var("--syn-meta", "#c678dd") },
-    { tag: tags.propertyName, color: css_var("--syn-property", "#61afef") },
-    { tag: tags.punctuation, color: css_var("--muted", "#91a4b7") },
-  ]);
-}
+/** YAML syntax highlighting — CSS 변수 직접 참조로 테마 전환 시 자동 반영. */
+const dashboardHighlight = syntaxHighlighting(HighlightStyle.define([
+  { tag: tags.keyword, color: "var(--accent)" },
+  { tag: tags.atom, color: "var(--syn-atom, #e5c07b)" },
+  { tag: tags.number, color: "var(--syn-number, #d19a66)" },
+  { tag: tags.string, color: "var(--syn-string, #98c379)" },
+  { tag: tags.bool, color: "var(--syn-number, #d19a66)" },
+  { tag: tags.null, color: "var(--muted)", fontStyle: "italic" },
+  { tag: tags.comment, color: "var(--muted)", fontStyle: "italic" },
+  { tag: tags.meta, color: "var(--syn-meta, #c678dd)" },
+  { tag: tags.propertyName, color: "var(--syn-property, #61afef)" },
+  { tag: tags.punctuation, color: "var(--muted)" },
+]));
 
 interface YamlEditorProps {
   value: string;
@@ -92,7 +85,7 @@ export function YamlEditor({ value, onChange, className }: YamlEditorProps) {
         foldGutter(),
         yaml(),
         dashboardTheme,
-        syntaxHighlighting(create_highlight()),
+        dashboardHighlight,
         keymap.of([...defaultKeymap, ...historyKeymap, ...foldKeymap]),
         updateListener,
       ],
