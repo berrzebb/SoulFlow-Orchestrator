@@ -2,6 +2,7 @@
 
 import { Tool } from "./base.js";
 import { error_message, make_abort_signal } from "../../utils/common.js";
+import { HTTP_FETCH_LONG_TIMEOUT_MS } from "../../utils/timeouts.js";
 import type { JsonSchema, ToolExecutionContext } from "./types.js";
 
 export class EmbeddingTool extends Tool {
@@ -87,7 +88,7 @@ export class EmbeddingTool extends Tool {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${api_key}` },
         body: JSON.stringify(body),
-        signal: make_abort_signal(60_000, ctx?.signal),
+        signal: make_abort_signal(HTTP_FETCH_LONG_TIMEOUT_MS, ctx?.signal),
       });
       if (!res.ok) return `Error: API ${res.status} — ${(await res.text()).slice(0, 500)}`;
       return await res.json() as { model: string; data: Array<{ embedding: number[] }> };

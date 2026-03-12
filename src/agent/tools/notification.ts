@@ -2,6 +2,7 @@
 
 import { Tool } from "./base.js";
 import { error_message, make_abort_signal, now_iso } from "../../utils/common.js";
+import { HTTP_FETCH_QUICK_TIMEOUT_MS } from "../../utils/timeouts.js";
 import type { JsonSchema, ToolExecutionContext } from "./types.js";
 
 type NotifyCallback = (payload: { level: string; title: string; body: string; metadata?: Record<string, unknown> }) => Promise<void>;
@@ -61,7 +62,7 @@ export class NotificationTool extends Tool {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ level, title, body, timestamp: now_iso() }),
-          signal: make_abort_signal(10_000, context?.signal),
+          signal: make_abort_signal(HTTP_FETCH_QUICK_TIMEOUT_MS, context?.signal),
         });
         results.push(`webhook: ${res.status} ${res.statusText}`);
       } catch (err) {

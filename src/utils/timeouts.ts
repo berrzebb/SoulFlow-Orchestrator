@@ -4,8 +4,10 @@
  */
 
 // ── 외부 HTTP 요청 (채널 API, 미디어 다운로드, 모델 카탈로그, 임베딩) ──
-export const HTTP_FETCH_TIMEOUT_MS = 30_000;
-export const HTTP_FETCH_SHORT_TIMEOUT_MS = 15_000;
+export const HTTP_FETCH_QUICK_TIMEOUT_MS = 10_000;   // 헬스체크, 웹훅, OAuth 연결 확인
+export const HTTP_FETCH_SHORT_TIMEOUT_MS = 15_000;   // RSS, Prometheus push 등 단순 요청
+export const HTTP_FETCH_TIMEOUT_MS = 30_000;          // 일반 HTTP 요청 기본값
+export const HTTP_FETCH_LONG_TIMEOUT_MS = 60_000;    // S3 업로드/다운로드, 임베딩 배치
 
 // ── MCP 서버 스타트업 ──
 export const MCP_STARTUP_TIMEOUT_MS = 15_000;

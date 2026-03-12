@@ -5,6 +5,7 @@ import type { WebFormNodeDefinition, OrcheNodeDefinition } from "../workflow-nod
 import type { OrcheNodeExecutorContext, OrcheNodeExecuteResult, OrcheNodeTestResult } from "../orche-node-executor.js";
 import { resolve_templates, resolve_deep } from "../orche-node-executor.js";
 import { error_message, make_abort_signal } from "../../utils/common.js";
+import { HTTP_FETCH_LONG_TIMEOUT_MS } from "../../utils/timeouts.js";
 
 export const web_form_handler: NodeHandler = {
   node_type: "web_form",
@@ -33,7 +34,7 @@ export const web_form_handler: NodeHandler = {
     if (entries.length === 0) return { output: { fields_filled: [], submitted: false, error: "fields is empty" } };
 
     try {
-      const signal = make_abort_signal(60_000, ctx.abort_signal);
+      const signal = make_abort_signal(HTTP_FETCH_LONG_TIMEOUT_MS, ctx.abort_signal);
       const res = await fetch(url, { signal, headers: { "User-Agent": "Mozilla/5.0 (compatible; SoulFlowBot/1.0)" } });
       const html = await res.text();
       const filled = entries.map(([sel, val]) => ({ selector: sel, value: String(val || ""), ok: true }));

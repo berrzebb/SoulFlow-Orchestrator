@@ -5,6 +5,7 @@ import { createHmac, createHash } from "node:crypto";
 import { Tool } from "./base.js";
 import type { JsonSchema, ToolExecutionContext } from "./types.js";
 import { error_message, make_abort_signal } from "../../utils/common.js";
+import { HTTP_FETCH_LONG_TIMEOUT_MS } from "../../utils/timeouts.js";
 
 export class S3Tool extends Tool {
   readonly name = "s3";
@@ -43,7 +44,7 @@ export class S3Tool extends Tool {
     if (!bucket) return "Error: bucket is required";
     if (!access_key || !secret_key) return "Error: access_key and secret_key required (or set AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY)";
 
-    const signal = make_abort_signal(60_000, context?.signal);
+    const signal = make_abort_signal(HTTP_FETCH_LONG_TIMEOUT_MS, context?.signal);
     try {
       switch (action) {
         case "list": {

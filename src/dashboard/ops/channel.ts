@@ -1,6 +1,7 @@
 /** Dashboard channel ops. */
 
 import { error_message } from "../../utils/common.js";
+import { HTTP_FETCH_QUICK_TIMEOUT_MS } from "../../utils/timeouts.js";
 import { create_logger } from "../../logger.js";
 import { create_channel_instance, type ChannelRegistryLike } from "../../channels/index.js";
 import type { DashboardChannelOps, ChannelStatusInfo } from "../service.js";
@@ -158,7 +159,7 @@ export function create_channel_ops(deps: {
       const api_base = String((config.settings as Record<string, unknown>).api_base || "");
       const { url, headers } = builder(token, api_base || undefined);
       try {
-        const resp = await fetch(url, { headers, signal: AbortSignal.timeout(10_000) });
+        const resp = await fetch(url, { headers, signal: AbortSignal.timeout(HTTP_FETCH_QUICK_TIMEOUT_MS) });
         const body = await resp.json().catch(() => null) as Record<string, unknown> | null;
         if (!resp.ok) {
           log.warn("channel test_connection failed", { instance_id, provider: config.provider, status: resp.status });

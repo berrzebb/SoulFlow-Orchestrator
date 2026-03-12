@@ -4,6 +4,7 @@
  */
 
 import { error_message } from "../utils/common.js";
+import { HTTP_FETCH_QUICK_TIMEOUT_MS, HTTP_FETCH_SHORT_TIMEOUT_MS } from "../utils/timeouts.js";
 import { randomUUID } from "node:crypto";
 import { create_logger } from "../logger.js";
 import type { ServiceLike } from "../runtime/service.types.js";
@@ -162,7 +163,7 @@ export class OAuthFlowService implements ServiceLike {
     try {
       const res = await fetch(test_url, {
         headers: { Authorization: `Bearer ${access_token}`, Accept: "application/json" },
-        signal: AbortSignal.timeout(10_000),
+        signal: AbortSignal.timeout(HTTP_FETCH_QUICK_TIMEOUT_MS),
       });
 
       if (res.ok) {
@@ -275,7 +276,7 @@ export class OAuthFlowService implements ServiceLike {
       if (client_secret) body.set("client_secret", client_secret);
     }
 
-    const res = await fetch(integration.token_url, { method: "POST", headers, body: body.toString(), signal: AbortSignal.timeout(15_000) });
+    const res = await fetch(integration.token_url, { method: "POST", headers, body: body.toString(), signal: AbortSignal.timeout(HTTP_FETCH_SHORT_TIMEOUT_MS) });
     const data = await res.json() as Record<string, unknown>;
 
     if (!res.ok || data.error) {
