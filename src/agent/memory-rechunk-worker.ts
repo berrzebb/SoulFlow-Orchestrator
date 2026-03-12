@@ -27,6 +27,7 @@ parentPort!.on("message", async (job: RechunkJob) => {
     const new_ids = new Set(new_chunks.map((c) => c.chunk_id));
 
     db = new Database(sqlite_path);
+    sqliteVec.load(db);
 
     const existing = db
       .prepare("SELECT chunk_id, content_hash FROM memory_chunks WHERE doc_key = ?")
@@ -36,6 +37,18 @@ parentPort!.on("message", async (job: RechunkJob) => {
     const to_delete = existing.filter((r) => !new_ids.has(r.chunk_id)).map((r) => r.chunk_id);
 
     if (to_delete.length > 0) {
+      // 벡터 삭제: memory_chunks_vec는 CASCADE 없음 → rowid 수집 후 먼저 삭제
+      const placeholders = to_delete.map(() => "?").join(",");
+      const del_rowids = db
+        .prepare(`SELECT rowid FROM memory_chunks WHERE chunk_id IN (${placeholders})`)
+        .all(...to_delete) as { rowid: number }[];
+      if (del_rowids.length > 0) {
+        try {
+          const vec_ph = del_rowids.map(() => "?").join(",");
+          db.prepare(`DELETE FROM memory_chunks_vec WHERE rowid IN (${vec_ph})`)
+            .run(...del_rowids.map((r) => r.rowid));
+        } catch { /* vec table may not exist */ }
+      }
       const del_stmt = db.prepare("DELETE FROM memory_chunks WHERE chunk_id = ?");
       for (const id of to_delete) del_stmt.run(id);
     }

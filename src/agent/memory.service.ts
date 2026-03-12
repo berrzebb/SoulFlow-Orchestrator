@@ -20,7 +20,6 @@ import { redact_sensitive_text } from "../security/sensitive.js";
 import { sanitize_untrusted_text } from "../security/content-sanitizer.js";
 import { get_shared_secret_vault } from "../security/secret-vault-factory.js";
 import { parse_tool_calls_from_text } from "./tool-call-parser.js";
-import { chunk_markdown } from "./memory-chunker.js";
 import { rrf_merge, apply_temporal_decay, mmr_rerank } from "./memory-scoring.js";
 import { build_fts_query_expanded } from "./memory-query-expansion.js";
 
@@ -284,42 +283,6 @@ export class MemoryStore implements MemoryStoreLike {
     }
   }
 
-  /** 문서의 청크 인덱스를 갱신. 변경된 청크만 upsert, 삭제된 청크 제거. */
-  private rechunk_document(doc_key: string, kind: string, day: string, content: string): void {
-    const new_chunks = chunk_markdown(content, doc_key);
-    const new_ids = new Set(new_chunks.map(c => c.chunk_id));
-
-    with_sqlite(this.sqlite_path, (db) => {
-      // 기존 청크 중 새 목록에 없는 것 삭제
-      const existing = db.prepare(
-        "SELECT chunk_id, content_hash FROM memory_chunks WHERE doc_key = ?",
-      ).all(doc_key) as { chunk_id: string; content_hash: string }[];
-
-      const existing_map = new Map(existing.map(r => [r.chunk_id, r.content_hash]));
-      const to_delete = existing.filter(r => !new_ids.has(r.chunk_id)).map(r => r.chunk_id);
-
-      if (to_delete.length > 0) {
-        const del_chunk = db.prepare("DELETE FROM memory_chunks WHERE chunk_id = ?");
-        for (const id of to_delete) del_chunk.run(id);
-      }
-
-      // 새 청크 중 변경된 것만 upsert
-      const upsert = db.prepare(`
-        INSERT INTO memory_chunks (chunk_id, doc_key, kind, day, heading, start_line, end_line, content, content_hash)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(chunk_id) DO UPDATE SET
-          content = excluded.content,
-          content_hash = excluded.content_hash
-      `);
-
-      for (const c of new_chunks) {
-        if (existing_map.get(c.chunk_id) === c.content_hash) continue; // 불변
-        upsert.run(c.chunk_id, doc_key, kind, day, c.heading, c.start_line, c.end_line, c.content, c.content_hash);
-      }
-
-      return true;
-    });
-  }
 
   private sqlite_read_document(kind: "longterm" | "daily", day: string): MemoryDocRow | null {
     const doc_key = kind === "longterm" ? this.longterm_doc_key() : this.daily_doc_key(day);
