@@ -16,6 +16,7 @@ import {
   type UsageAccumulator,
 } from "./tool-loop-helpers.js";
 import { now_iso, error_message, swallow, make_abort_signal } from "../../utils/common.js";
+import { LLM_REQUEST_TIMEOUT_MS } from "../../utils/timeouts.js";
 
 export type AnthropicNativeConfig = {
   api_base?: string;
@@ -377,7 +378,7 @@ export class AnthropicNativeAgent implements AgentBackend {
         messages: params.messages,
         ...(system ? { system } : {}),
       }),
-      signal: params.signal ?? AbortSignal.timeout(120_000),
+      signal: params.signal ?? AbortSignal.timeout(LLM_REQUEST_TIMEOUT_MS),
     });
     if (!res.ok) throw new Error(`Anthropic API ${res.status}: ${await res.text()}`);
     const data = await res.json() as { content: { type: string; text: string }[] };

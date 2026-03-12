@@ -1,4 +1,5 @@
 import { error_message, sleep } from "../utils/common.js";
+import { HTTP_FETCH_QUICK_TIMEOUT_MS, HTTP_FETCH_TIMEOUT_MS } from "../utils/timeouts.js";
 import { execFile, type ChildProcess, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import { create_logger } from "../logger.js";
@@ -315,7 +316,7 @@ export class OrchestratorLlmRuntime {
     const base = this.api_base.replace(/\/v1\/?$/, "");
     // OpenAI-compatible /v1/models (vLLM 등)
     try {
-      const res = await fetch(`${base}/v1/models`, { signal: AbortSignal.timeout(5_000) });
+      const res = await fetch(`${base}/v1/models`, { signal: AbortSignal.timeout(HTTP_FETCH_QUICK_TIMEOUT_MS) });
       if (res.ok) {
         const data = (await res.json()) as Record<string, unknown>;
         const items = Array.isArray(data.data) ? data.data : [];
@@ -334,7 +335,7 @@ export class OrchestratorLlmRuntime {
     } catch { /* fall through to Ollama */ }
     // Ollama /api/tags fallback
     try {
-      const res = await fetch(`${base}/api/tags`, { signal: AbortSignal.timeout(5_000) });
+      const res = await fetch(`${base}/api/tags`, { signal: AbortSignal.timeout(HTTP_FETCH_QUICK_TIMEOUT_MS) });
       if (!res.ok) return [];
       const data = (await res.json()) as Record<string, unknown>;
       const models = Array.isArray(data.models) ? data.models : [];
@@ -445,7 +446,7 @@ export class OrchestratorLlmRuntime {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name }),
-        signal: AbortSignal.timeout(30_000),
+        signal: AbortSignal.timeout(HTTP_FETCH_TIMEOUT_MS),
       });
       return res.ok;
     } catch {

@@ -3,6 +3,7 @@
 import { parentPort } from "node:worker_threads";
 import Database from "better-sqlite3";
 import { error_message } from "../utils/common.js";
+import { HTTP_FETCH_TIMEOUT_MS } from "../utils/timeouts.js";
 import * as sqliteVec from "sqlite-vec";
 import { chunk_markdown } from "./memory-chunker.js";
 import type { EmbedWorkerConfig } from "./memory.types.js";
@@ -134,7 +135,7 @@ async function fetch_embeddings(texts: string[], cfg: EmbedWorkerConfig): Promis
       method: "POST",
       headers,
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(30_000),
+      signal: AbortSignal.timeout(HTTP_FETCH_TIMEOUT_MS),
     });
     if (!res.ok) return null;
 
