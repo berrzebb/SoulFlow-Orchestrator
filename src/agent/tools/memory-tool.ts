@@ -47,7 +47,7 @@ export class MemoryTool extends Tool {
     if (action === "append_longterm") {
       const content = String(params.content || "").trim();
       if (!content) return "Error: content is required for append_longterm";
-      await this.store.append_longterm(content);
+      await this.store.append_longterm(content + "\n");
       return "장기 메모리에 추가 완료.";
     }
 
@@ -67,7 +67,7 @@ export class MemoryTool extends Tool {
       const content = String(params.content || "").trim();
       if (!content) return "Error: content is required for append_daily";
       const day = String(params.day || "").trim() || undefined;
-      await this.store.append_daily(content, day);
+      await this.store.append_daily(content + "\n", day);
       return "일별 메모리에 추가 완료.";
     }
 
