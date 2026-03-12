@@ -465,7 +465,7 @@ export class KanbanStore implements KanbanStoreLike {
 
   private async ensure_initialized(runtime_dir: string): Promise<void> {
     await mkdir(runtime_dir, { recursive: true });
-    with_sqlite(this.sqlite_path, (db) => {
+    with_sqlite_strict(this.sqlite_path, (db) => {
       db.exec(`
         PRAGMA journal_mode=WAL;
         PRAGMA foreign_keys=ON;
@@ -644,11 +644,11 @@ export class KanbanStore implements KanbanStoreLike {
 
   async delete_board(board_id: string): Promise<boolean> {
     await this.initialized;
-    const changes = this.db((db) => {
+    const changes = this.write_db((db) => {
       const r = db.prepare("DELETE FROM kanban_boards WHERE board_id = ?").run(board_id);
       return Number(r.changes || 0);
     });
-    return (changes ?? 0) > 0;
+    return changes > 0;
   }
 
   /* ═══ Card ═══ */
@@ -805,7 +805,7 @@ export class KanbanStore implements KanbanStoreLike {
 
   async delete_card(card_id: string): Promise<boolean> {
     await this.initialized;
-    const info = this.db((db) => {
+    const info = this.write_db((db) => {
       const card = db.prepare("SELECT board_id, title FROM kanban_cards WHERE card_id = ?").get(card_id) as { board_id: string; title: string } | undefined;
       if (!card) return null;
       db.prepare("DELETE FROM kanban_cards WHERE card_id = ?").run(card_id);
@@ -864,7 +864,7 @@ export class KanbanStore implements KanbanStoreLike {
 
   async remove_relation(relation_id: string): Promise<boolean> {
     await this.initialized;
-    const info = this.db((db) => {
+    const info = this.write_db((db) => {
       const rel = db.prepare("SELECT * FROM kanban_relations WHERE relation_id = ?").get(relation_id) as RelationRow | undefined;
       if (!rel) return null;
       db.prepare("DELETE FROM kanban_relations WHERE relation_id = ?").run(relation_id);
@@ -1046,11 +1046,11 @@ export class KanbanStore implements KanbanStoreLike {
 
   async remove_rule(rule_id: string): Promise<boolean> {
     await this.initialized;
-    const changes = this.db((db) => {
+    const changes = this.write_db((db) => {
       const r = db.prepare("DELETE FROM kanban_rules WHERE rule_id = ?").run(rule_id);
       return Number(r.changes || 0);
     });
-    return (changes ?? 0) > 0;
+    return changes > 0;
   }
 
   async get_rules_by_trigger(board_id: string, trigger: KanbanRule["trigger"]): Promise<KanbanRule[]> {
@@ -1093,11 +1093,11 @@ export class KanbanStore implements KanbanStoreLike {
 
   async delete_template(template_id: string): Promise<boolean> {
     await this.initialized;
-    const changes = this.db((db) => {
+    const changes = this.write_db((db) => {
       const r = db.prepare("DELETE FROM kanban_templates WHERE template_id = ?").run(template_id);
       return Number(r.changes || 0);
     });
-    return (changes ?? 0) > 0;
+    return changes > 0;
   }
 
   /* ═══ Metrics ═══ */
@@ -1266,11 +1266,11 @@ export class KanbanStore implements KanbanStoreLike {
 
   async delete_filter(filter_id: string): Promise<boolean> {
     await this.initialized;
-    const changes = this.db((db) => {
+    const changes = this.write_db((db) => {
       const r = db.prepare("DELETE FROM kanban_filters WHERE filter_id = ?").run(filter_id);
       return Number(r.changes || 0);
     });
-    return (changes ?? 0) > 0;
+    return changes > 0;
   }
 
   /* ═══ Event Stream ═══ */

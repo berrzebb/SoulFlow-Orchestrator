@@ -412,7 +412,7 @@ export class CronService implements CronScheduler, ServiceLike {
 
   private async ensure_initialized(): Promise<void> {
     await mkdir(this.store_path, { recursive: true });
-    with_sqlite(this.sqlite_path,(db) => {
+    with_sqlite_strict(this.sqlite_path,(db) => {
       db.exec(`
         CREATE TABLE IF NOT EXISTS cron_jobs (
           id TEXT PRIMARY KEY,
