@@ -7,7 +7,7 @@ interface ScheduleLike {
 
 export function fmt_time(ms: number | string | undefined): string {
   if (!ms) return "-";
-  return new Date(typeof ms === "number" ? ms : ms).toLocaleString("sv-SE", { timeZone: "Asia/Seoul", hour12: false }).replace(" ", " ");
+  return new Date(typeof ms === "number" ? ms : ms).toLocaleString("sv-SE", { hour12: false }).replace(" ", " ");
 }
 
 export function fmt_schedule(s: ScheduleLike | undefined): string {

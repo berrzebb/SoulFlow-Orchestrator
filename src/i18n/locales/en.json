@@ -1431,6 +1431,8 @@
   "prompting.ai_generate_ph": "e.g. A senior engineer who excels at code review",
   "prompting.builtin": "(builtin)",
   "prompting.chat_placeholder": "Type a message… (Enter to send)",
+  "prompting.compare_failed": "Compare failed",
+  "prompting.compare_title": "Compare Models",
   "prompting.delete": "Delete",
   "prompting.download": "Download",
   "prompting.drag_drop": "or drag & drop image here",

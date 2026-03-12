@@ -1431,6 +1431,8 @@
   "prompting.ai_generate_ph": "예: 코드 리뷰를 잘하는 시니어 엔지니어 에이전트",
   "prompting.builtin": "(기본 제공)",
   "prompting.chat_placeholder": "메시지 입력… (Enter로 전송)",
+  "prompting.compare_failed": "비교 실행 실패",
+  "prompting.compare_title": "모델 비교",
   "prompting.delete": "삭제",
   "prompting.download": "다운로드",
   "prompting.drag_drop": "또는 이미지를 여기에 드래그 & 드롭",

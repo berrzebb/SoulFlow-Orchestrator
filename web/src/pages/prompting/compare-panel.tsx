@@ -4,6 +4,8 @@
  */
 import { useState } from "react";
 import { api } from "../../api/client";
+import { useToast } from "../../components/toast";
+import { useT } from "../../i18n";
 import { StudioModelPicker, type StudioModelValue } from "../../components/studio-model-picker";
 import { RunResult, type RunResultValue } from "./run-result";
 
@@ -12,6 +14,8 @@ const EMPTY_TARGET = (): StudioModelValue => ({ provider_id: "", model: "" });
 type CompareResult = (RunResultValue & { ok: boolean; error?: string }) | null;
 
 export function ComparePanel() {
+  const t = useT();
+  const { toast } = useToast();
   const [targets, setTargets] = useState<StudioModelValue[]>([EMPTY_TARGET(), EMPTY_TARGET()]);
   const [system, setSystem] = useState("");
   const [prompt, setPrompt] = useState("");
@@ -41,13 +45,14 @@ export function ComparePanel() {
       });
       setResults(res);
     } catch {
+      toast(t("prompting.compare_failed"), "err");
       setResults(active.map(() => null));
     } finally {
       setRunning(false);
     }
   };
 
-  const temp_label = temperature <= 0.3 ? "정확" : temperature <= 0.7 ? "균형" : "창의";
+  const temp_label = temperature <= 0.3 ? t("prompting.temp_precise") : temperature <= 0.7 ? t("prompting.temp_balance") : t("prompting.temp_creative");
   const active_count = targets.filter((t) => t.provider_id).length;
 
   return (
@@ -60,7 +65,7 @@ export function ComparePanel() {
               <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>
             </svg>
           </div>
-          <span className="ps-pane-head__title">Compare Models</span>
+          <span className="ps-pane-head__title">{t("prompting.compare_title")}</span>
         </div>
 
         <div className="ps-pane-sec">
