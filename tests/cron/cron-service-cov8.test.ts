@@ -70,20 +70,22 @@ describe("CronService — L169/L173/L211/L512: invalid tz → _get_tz_parts catc
 // ── L634: _is_running_fresh — running_started_at_ms=0 → false ───────────────
 
 describe("CronService — L634: running_started_at_ms=0 → _is_running_fresh false", () => {
-  it("running=true + started=0 → !isFinite(started) 또는 started<=0 → false", async () => {
-    const svc = new CronService(store_path, null, {});
+  // _is_running_fresh는 순수 동기 메서드 — CronService 인스턴스 생성 시
+  // lazy SQLite init이 afterEach의 temp dir 삭제와 충돌하므로 prototype에서 직접 호출
+  const call_is_running_fresh = (job: unknown) =>
+    (CronService.prototype as any)._is_running_fresh.call({}, job);
+
+  it("running=true + started=0 → !isFinite(started) 또는 started<=0 → false", () => {
     const job = {
       state: {
         running: true,
         running_started_at_ms: 0, // started=0 → L634: started <= 0 → return false
       },
     };
-    const result = (svc as any)._is_running_fresh(job);
-    expect(result).toBe(false);
+    expect(call_is_running_fresh(job)).toBe(false);
   });
 
-  it("running=true + started=null → !isFinite(0) false, started=0 → L634", async () => {
-    const svc = new CronService(store_path, null, {});
+  it("running=true + started=null → !isFinite(0) false, started=0 → L634", () => {
     const job = {
       state: {
         running: true,
@@ -91,8 +93,7 @@ describe("CronService — L634: running_started_at_ms=0 → _is_running_fresh fa
       },
     };
     // Number(null || 0) = 0 → started=0 → started <= 0 → return false
-    const result = (svc as any)._is_running_fresh(job);
-    expect(result).toBe(false);
+    expect(call_is_running_fresh(job)).toBe(false);
   });
 });
 

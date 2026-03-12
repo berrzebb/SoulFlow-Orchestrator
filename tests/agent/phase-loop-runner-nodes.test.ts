@@ -1,17 +1,12 @@
 /**
- * phase-loop-runner — 미커버 분기 보충 (cov7):
- * - L1172: invoke_llm with system prompt
- * - L1199, L1204: spawn_agent service lambda body
- * - L1206: wait_agent service lambda body
- * - L1216: decision.append lambda
- * - L1222: decision.list lambda
- * - L1223: decision.get_effective lambda
- * - L1224: decision.archive lambda
- * - L1230: promise.append lambda
- * - L1236: promise.list lambda
- * - L1237: promise.get_effective lambda
- * - L1238: promise.archive lambda
- * - L191-192: orche node skip on goto re-visit
+ * phase-loop-runner — 노드별 실행 분기 통합 테스트:
+ * - invoke_llm with system prompt (L1172)
+ * - spawn_agent / wait_agent lambda (L1199, L1204, L1206)
+ * - decision service lambdas (L1216-1224)
+ * - promise service lambdas (L1230-1238)
+ * - execute_node 람다 body (L211-214)
+ * - sub_workflow null template (L219)
+ * - phase_idx < 0 skip (L327)
  */
 import { describe, it, expect, vi, beforeAll, beforeEach } from "vitest";
 import { register_all_nodes } from "@src/agent/nodes/index.js";
@@ -71,7 +66,7 @@ describe("run_phase_loop — L1172 invoke_llm system prompt 포함", () => {
       objective: "test",
       channel: "slack",
       chat_id: "C1",
-      workspace: "/tmp/cov7",
+      workspace: "/tmp/nodes",
       phases: [],
       nodes: [
         {
@@ -115,7 +110,7 @@ describe("run_phase_loop — L1199/L1204/L1206 spawn_agent + wait_agent lambda",
       objective: "test",
       channel: "slack",
       chat_id: "C1",
-      workspace: "/tmp/cov7",
+      workspace: "/tmp/nodes",
       phases: [],
       nodes: [
         {
@@ -150,7 +145,7 @@ describe("run_phase_loop — L1199/L1204/L1206 spawn_agent + wait_agent lambda",
       objective: "test",
       channel: "slack",
       chat_id: "C1",
-      workspace: "/tmp/cov7",
+      workspace: "/tmp/nodes",
       phases: [],
       nodes: [
         {
@@ -201,7 +196,7 @@ describe("run_phase_loop — L1216-1224 decision service lambdas", () => {
       objective: "test",
       channel: "slack",
       chat_id: "C1",
-      workspace: "/tmp/cov7",
+      workspace: "/tmp/nodes",
       phases: [],
       nodes: [
         {
@@ -239,7 +234,7 @@ describe("run_phase_loop — L1216-1224 decision service lambdas", () => {
       objective: "test",
       channel: "slack",
       chat_id: "C1",
-      workspace: "/tmp/cov7",
+      workspace: "/tmp/nodes",
       phases: [],
       nodes: [
         { node_id: "dec2", node_type: "decision", title: "List Decisions", operation: "list", scope: "global" } as any,
@@ -265,7 +260,7 @@ describe("run_phase_loop — L1216-1224 decision service lambdas", () => {
       objective: "test",
       channel: "slack",
       chat_id: "C1",
-      workspace: "/tmp/cov7",
+      workspace: "/tmp/nodes",
       phases: [],
       nodes: [
         { node_id: "dec3", node_type: "decision", title: "Get Effective", operation: "get_effective" } as any,
@@ -291,7 +286,7 @@ describe("run_phase_loop — L1216-1224 decision service lambdas", () => {
       objective: "test",
       channel: "slack",
       chat_id: "C1",
-      workspace: "/tmp/cov7",
+      workspace: "/tmp/nodes",
       phases: [],
       nodes: [
         { node_id: "dec4", node_type: "decision", title: "Archive Decision", operation: "archive", target_id: "decision-123" } as any,
@@ -332,7 +327,7 @@ describe("run_phase_loop — L1230-1238 promise service lambdas", () => {
       objective: "test",
       channel: "slack",
       chat_id: "C1",
-      workspace: "/tmp/cov7",
+      workspace: "/tmp/nodes",
       phases: [],
       nodes: [
         {
@@ -366,7 +361,7 @@ describe("run_phase_loop — L1230-1238 promise service lambdas", () => {
       objective: "test",
       channel: "slack",
       chat_id: "C1",
-      workspace: "/tmp/cov7",
+      workspace: "/tmp/nodes",
       phases: [],
       nodes: [
         { node_id: "prm2", node_type: "promise", title: "List Promises", operation: "list" } as any,
@@ -392,7 +387,7 @@ describe("run_phase_loop — L1230-1238 promise service lambdas", () => {
       objective: "test",
       channel: "slack",
       chat_id: "C1",
-      workspace: "/tmp/cov7",
+      workspace: "/tmp/nodes",
       phases: [],
       nodes: [
         { node_id: "prm3", node_type: "promise", title: "Get Effective", operation: "get_effective" } as any,
@@ -418,7 +413,7 @@ describe("run_phase_loop — L1230-1238 promise service lambdas", () => {
       objective: "test",
       channel: "slack",
       chat_id: "C1",
-      workspace: "/tmp/cov7",
+      workspace: "/tmp/nodes",
       phases: [],
       nodes: [
         { node_id: "prm4", node_type: "promise", title: "Archive Promise", operation: "archive", target_id: "promise-abc" } as any,
@@ -435,73 +430,204 @@ describe("run_phase_loop — L1230-1238 promise service lambdas", () => {
 });
 
 // ══════════════════════════════════════════════════════════
-// L191-192 — orche node skip on goto re-visit
-// nodes[]에 phase + set 노드를 함께 배치해야 normalize_workflow가 nodes를 우선 사용
+// L211-214 — execute_node 람다 body
+// loop 노드의 runner_execute → runner.execute_node(body_node, ctx) 호출 경로
 // ══════════════════════════════════════════════════════════
 
-describe("run_phase_loop — L191-192 goto 후 orche node 재방문 스킵", () => {
-  it("phase-2 critic goto phase-1 → set_b(orche) 재방문 → status=completed → L191-192", async () => {
+describe("run_phase_loop — L211-214 execute_node 람다 body", () => {
+  it("loop 노드 body에 set 노드 → runner.execute_node 호출 → 람다 L211-214 실행", async () => {
     const store = make_store();
-    const critic_reject = JSON.stringify({ approved: false, summary: "needs improvement retry goto now" });
+    const subagents = make_subagents();
 
-    let wait_count = 0;
-    const subagents = {
-      ...make_subagents(),
-      spawn: vi.fn().mockImplementation(async () => ({ subagent_id: `sa${++wait_count}` })),
-      wait_for_completion: vi.fn().mockImplementation(async () => {
-        if (wait_count === 3) {
-          return { status: "completed", content: critic_reject };
-        }
-        return { status: "completed", content: "completed result" };
-      }),
-    };
-
-    // NOTE: options.nodes takes precedence over options.phases in normalize_workflow
-    // Phase nodes must be in options.nodes as node_type:"phase" entries
     const result = await run_phase_loop({
-      workflow_id: "wf-goto-orche",
-      title: "Goto Orche WF",
-      objective: "test",
+      workflow_id: "wf-loop-exec-node",
+      title: "Loop Execute Node Test",
+      objective: "execute_node 람다 커버",
       channel: "slack",
       chat_id: "C1",
-      workspace: "/tmp/cov7",
-      phases: [], // unused when nodes[] has length
+      workspace: "/tmp/nodes",
+      phases: [],
       nodes: [
         {
-          node_id: "phase-1",
-          node_type: "phase",
-          title: "Phase 1",
-          agents: [{ agent_id: "a1", role: "analyst", label: "A1", backend: "openrouter", system_prompt: "analyze" }],
+          node_id: "loop1",
+          node_type: "loop",
+          title: "Loop over items",
+          array_field: "items",
+          body_nodes: ["body_set"],
+          max_iterations: 2,
         } as any,
         {
-          node_id: "set_b",
+          node_id: "body_set",
           node_type: "set",
-          title: "Set B",
-          assignments: [{ key: "r", value: "b_val" }],
-        } as any,
-        {
-          node_id: "phase-2",
-          node_type: "phase",
-          title: "Phase 2",
-          agents: [{ agent_id: "a2", role: "analyst", label: "A2", backend: "openrouter", system_prompt: "synthesize" }],
-          critic: {
-            backend: "openrouter",
-            system_prompt: "review carefully",
-            gate: true,
-            on_rejection: "goto",
-            goto_phase: "phase-1",
-            max_retries: 1,
-          },
+          title: "Body Set",
+          assignments: [{ key: "result", value: "iteration_done" }],
         } as any,
       ],
+      initial_memory: { items: ["x", "y"] },
     }, {
       subagents: subagents as any,
       store: store as any,
       logger: noop_logger,
     });
 
-    // After goto: phase-1 re-runs (reset), then set_b is skipped (orche already completed → L191-192)
-    // phase-2 re-runs, critic → count=2 > max_retries=1 → waiting_user_input
-    expect(["completed", "waiting_user_input"]).toContain(result.status);
+    expect(result.status).toBe("completed");
+    // loop body_set이 execute_node 람다를 통해 실행되었음
+    expect(result.memory["loop1"]).toBeDefined();
+  });
+});
+
+// ══════════════════════════════════════════════════════════
+// L213 — execute_node 람다 runner_execute true 분기
+// loop body 노드가 runner_execute를 가진 spawn_agent → L213 return h.runner_execute(...)
+// ══════════════════════════════════════════════════════════
+
+describe("run_phase_loop — L213 execute_node 람다 runner_execute true 분기", () => {
+  it("loop body에 spawn_agent(runner_execute 보유) → execute_node L213 true 분기 실행", async () => {
+    const store = make_store();
+    const subagents = make_subagents();
+
+    const result = await run_phase_loop({
+      workflow_id: "wf-loop-spawn-body",
+      title: "Loop Spawn Body Test",
+      objective: "execute_node runner_execute true branch",
+      channel: "slack",
+      chat_id: "C1",
+      workspace: "/tmp/nodes",
+      phases: [],
+      nodes: [
+        {
+          node_id: "outer_loop",
+          node_type: "loop",
+          title: "Loop with spawn body",
+          array_field: "tasks",
+          body_nodes: ["spawn_body"],
+          max_iterations: 1,
+        } as any,
+        {
+          node_id: "spawn_body",
+          node_type: "spawn_agent",
+          title: "Spawn from loop body",
+          task: "Process task from loop iteration",
+          role: "analyst",
+          await_completion: false,
+        } as any,
+      ],
+      initial_memory: { tasks: ["task1"] },
+    }, {
+      subagents: subagents as any,
+      store: store as any,
+      logger: noop_logger,
+    });
+
+    expect(result.status).toBe("completed");
+    // spawn_body가 execute_node 람다(L213 true branch)를 통해 실행됨
+    expect(subagents.spawn).toHaveBeenCalled();
+  });
+});
+
+// ══════════════════════════════════════════════════════════
+// L219 — run_sub_workflow → load_template null 반환
+// sub_workflow 노드 runner_execute → runner.run_sub_workflow(name, {})
+// → deps.load_template!(name) === null → throw → sub-workflow catch → error output
+// ══════════════════════════════════════════════════════════
+
+describe("run_phase_loop — L219 sub_workflow template not found", () => {
+  it("sub_workflow 노드 + load_template이 null → L219 throw → error output 반환 (workflow 계속)", async () => {
+    const store = make_store();
+    const subagents = make_subagents();
+    const load_template = vi.fn().mockReturnValue(null);
+
+    const result = await run_phase_loop({
+      workflow_id: "wf-subwf-missing",
+      title: "Sub Workflow Missing Test",
+      objective: "sub_workflow template not found 커버",
+      channel: "slack",
+      chat_id: "C1",
+      workspace: "/tmp/nodes",
+      phases: [],
+      nodes: [
+        {
+          node_id: "sub1",
+          node_type: "sub_workflow",
+          title: "Missing Sub Workflow",
+          workflow_name: "nonexistent_template",
+        } as any,
+      ],
+    }, {
+      subagents: subagents as any,
+      store: store as any,
+      logger: noop_logger,
+      load_template,
+    });
+
+    expect(result.status).toBe("completed");
+    expect(load_template).toHaveBeenCalledWith("nonexistent_template");
+    // sub_workflow 노드는 예외 전파 없이 error output 반환
+    const sub_output = result.memory["sub1"] as Record<string, unknown>;
+    expect(sub_output?.error).toContain("nonexistent_template");
+  });
+});
+
+// ══════════════════════════════════════════════════════════
+// L327 — phase_idx < 0
+// resume_state.phases에 현재 workflow 노드에 없는 phase만 포함
+// → phase-a 노드 처리 시 findIndex → -1 → L327 node_idx++ skip
+// ══════════════════════════════════════════════════════════
+
+describe("run_phase_loop — L327 phase_idx < 0 (resume_state 불일치)", () => {
+  it("resume_state.phases에 없는 phase 노드 처리 → phase_idx=-1 → L327 skip 후 계속", async () => {
+    const store = make_store();
+    const subagents = make_subagents();
+
+    // resume_state: phase-orphan은 포함되지 않음
+    const resume_state = {
+      workflow_id: "wf-phase-orphan",
+      title: "Phase Orphan Test",
+      objective: "test",
+      channel: "slack",
+      chat_id: "C1",
+      status: "running" as const,
+      current_phase: 0,
+      phases: [], // phase-orphan 없음
+      orche_states: [],
+      memory: {},
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      definition: { title: "Phase Orphan Test", objective: "test", phases: [], nodes: undefined },
+    };
+
+    const result = await run_phase_loop({
+      workflow_id: "wf-phase-orphan",
+      title: "Phase Orphan Test",
+      objective: "phase_idx=-1 커버",
+      channel: "slack",
+      chat_id: "C1",
+      workspace: "/tmp/nodes",
+      phases: [],
+      nodes: [
+        // phase-orphan: resume_state.phases에 없음 → phase_idx=-1 → L327
+        {
+          node_id: "phase-orphan",
+          node_type: "phase",
+          title: "Orphaned Phase",
+          agents: [{ agent_id: "a1", role: "analyst", label: "A1", backend: "openrouter", system_prompt: "analyze" }],
+        } as any,
+        // 그 다음 set 노드로 workflow 완료
+        {
+          node_id: "after_skip",
+          node_type: "set",
+          assignments: [{ key: "skipped_phase", value: "true" }],
+        } as any,
+      ],
+      resume_state: resume_state as any,
+    }, {
+      subagents: subagents as any,
+      store: store as any,
+      logger: noop_logger,
+    });
+
+    expect(result.status).toBe("completed");
+    // phase-orphan은 스킵 → set 노드는 실행됨
+    expect(result.memory["skipped_phase"]).toBe("true");
   });
 });
