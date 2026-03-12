@@ -83,7 +83,7 @@ export class WorkflowEventService {
 
   private async ensure_initialized(): Promise<void> {
     await this.ensure_dirs();
-    const initialized = this.write_sqlite((db) => {
+    this.write_sqlite((db) => {
       db.exec(`
         CREATE TABLE IF NOT EXISTS workflow_events (
           event_id TEXT PRIMARY KEY,

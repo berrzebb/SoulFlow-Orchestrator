@@ -282,7 +282,7 @@ export class DispatchService implements ServiceLike {
   }
 
   private compute_delay(attempt: number, retry_after_ms?: number | null): number {
-    if (retry_after_ms != null && retry_after_ms > 0) {
+    if (retry_after_ms !== null && retry_after_ms !== undefined && retry_after_ms > 0) {
       return Math.min(retry_after_ms, this.retry_config.retryMaxMs);
     }
     const base = this.retry_config.retryBaseMs * Math.pow(2, attempt - 1);

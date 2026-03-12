@@ -212,7 +212,7 @@ const _TOP_OF_HOUR_STAGGER_MS = 5 * 60_000;
 
 /** stagger 상한 (ms). 명시적 설정 > 시 정각 자동 감지 > 0. */
 function _resolve_stagger_max_ms(schedule: CronSchedule): number {
-  if (schedule.stagger_ms != null && schedule.stagger_ms > 0) return schedule.stagger_ms;
+  if (schedule.stagger_ms !== null && schedule.stagger_ms !== undefined && schedule.stagger_ms > 0) return schedule.stagger_ms;
   if (schedule.kind === "cron" && schedule.expr && _is_top_of_hour_cron(schedule.expr)) {
     return _TOP_OF_HOUR_STAGGER_MS;
   }

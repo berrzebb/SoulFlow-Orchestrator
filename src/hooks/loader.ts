@@ -81,7 +81,7 @@ function parse_hooks_yaml(yaml: string): HooksConfig {
     if (!in_hooks) continue;
 
     // 이벤트 이름 (2-space indent)
-    const event_match = trimmed.match(/^  (\w+):\s*$/);
+    const event_match = trimmed.match(/^ {2}(\w+):\s*$/);
     if (event_match && HOOK_EVENT_NAMES.has(event_match[1])) {
       flush_def();
       current_event = event_match[1] as HookEventName;
@@ -89,17 +89,17 @@ function parse_hooks_yaml(yaml: string): HooksConfig {
     }
 
     // 새 정의 시작 (4-space indent, list item)
-    if (trimmed.match(/^    - /)) {
+    if (trimmed.match(/^ {4}- /)) {
       flush_def();
       current_def = {};
-      const name_match = trimmed.match(/^    - name:\s*"?([^"]*)"?\s*$/);
+      const name_match = trimmed.match(/^ {4}- name:\s*"?([^"]*)"?\s*$/);
       if (name_match) current_def.name = name_match[1].trim();
       if (current_event) current_def.event = current_event;
       continue;
     }
 
     // 정의 속성 (6-space indent)
-    if (current_def && trimmed.match(/^      \w/)) {
+    if (current_def && trimmed.match(/^ {6}\w/)) {
       const kv = trimmed.match(/^\s+(\w+):\s*(.+)$/);
       if (!kv) continue;
       const [, key, raw_val] = kv;
@@ -140,7 +140,7 @@ function parse_hooks_yaml(yaml: string): HooksConfig {
     }
 
     // headers 항목 (8-space indent)
-    if (in_headers && trimmed.match(/^        /)) {
+    if (in_headers && trimmed.match(/^ {8}/)) {
       const hdr = trimmed.match(/^\s+(\S+):\s*(.+)$/);
       if (hdr) current_headers[hdr[1]] = hdr[2].replace(/^"(.*)"$/, "$1").trim();
       continue;
