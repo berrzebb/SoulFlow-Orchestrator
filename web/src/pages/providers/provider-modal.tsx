@@ -285,7 +285,7 @@ export function ProviderModal({ mode, connections, onClose, onSaved }: ProviderM
           {MODE_OPTIONS.map((m) => (
             <label key={m} className="checkbox-label">
               <input type="checkbox" checked={selectedModes.has(m)} onChange={() => toggle_mode(m)} />
-              {m}
+              {t(`providers.mode_${m}`)}
             </label>
           ))}
         </div>
