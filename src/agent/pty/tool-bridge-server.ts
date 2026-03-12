@@ -98,14 +98,16 @@ export class ToolBridgeServer {
   /** 허용된 도구 목록 반환. */
   list_tools(): McpToolEntry[] {
     const all = this.mcp.list_all_tools();
-    if (!this.allowed) return all;
-    return all.filter((t) => this.allowed!.has(t.name));
+    const allowed = this.allowed;
+    if (!allowed) return all;
+    return all.filter((t) => allowed.has(t.name));
   }
 
   /** 종료 + 소켓 파일 정리. */
   async stop(): Promise<void> {
     if (this.server) {
-      await new Promise<void>((resolve) => this.server!.close(() => resolve()));
+      const server = this.server;
+      await new Promise<void>((resolve) => server.close(() => resolve()));
       this.server = null;
     }
     if (this.socket_dir) {

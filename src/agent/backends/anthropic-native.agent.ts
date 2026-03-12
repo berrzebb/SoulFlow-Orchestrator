@@ -118,8 +118,9 @@ export class AnthropicNativeAgent implements AgentBackend {
       ...options.tool_context,
     };
 
-    const tools = options.tools?.length
-      ? options.tools.map((t, i) => to_anthropic_tool(t, i === options.tools!.length - 1))
+    const tools_list = options.tools;
+    const tools = tools_list?.length
+      ? tools_list.map((t, i) => to_anthropic_tool(t, i === tools_list.length - 1))
       : undefined;
     const system: AnthropicSystemBlock[] | undefined = options.system_prompt
       ? [{ type: "text", text: options.system_prompt, cache_control: { type: "ephemeral" } }]

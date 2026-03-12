@@ -63,8 +63,9 @@ export class MetricTool extends Tool {
           m = { type: "histogram", values: [], buckets, labels };
           metrics.set(key, m);
         }
-        m.values.push(value);
-        const bucket_counts = m.buckets.map((b) => ({ le: b, count: m!.values.filter((v) => v <= b).length }));
+        const histogram = m;
+        histogram.values.push(value);
+        const bucket_counts = histogram.buckets.map((b) => ({ le: b, count: histogram.values.filter((v) => v <= b).length }));
         bucket_counts.push({ le: Infinity, count: m.values.length });
         const sum = m.values.reduce((s, v) => s + v, 0);
         return JSON.stringify({ name, type: "histogram", count: m.values.length, sum: Math.round(sum * 1e6) / 1e6, buckets: bucket_counts });
