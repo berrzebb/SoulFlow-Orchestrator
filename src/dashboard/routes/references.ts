@@ -2,7 +2,7 @@
 
 import { existsSync } from "node:fs";
 import { writeFile, unlink, mkdir } from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve as path_resolve, sep } from "node:path";
 import type { RouteContext } from "../route-context.js";
 
 export async function handle_references(ctx: RouteContext): Promise<boolean> {
@@ -70,6 +70,12 @@ export async function handle_references(ctx: RouteContext): Promise<boolean> {
     const filename = decodeURIComponent(del_match[1]);
     const refs_dir = join(options.workspace || "workspace", "references");
     const filepath = join(refs_dir, filename);
+
+    // path traversal 차단: resolve() 정규화 후 base dir 포함 여부 확인
+    const base = path_resolve(refs_dir) + sep;
+    const target = path_resolve(filepath);
+    if (!target.startsWith(base)) { json(res, 400, { error: "invalid filename" }); return true; }
+
     if (!existsSync(filepath)) { json(res, 404, { error: "file not found" }); return true; }
 
     await unlink(filepath);

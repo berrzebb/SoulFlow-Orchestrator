@@ -1,6 +1,7 @@
 /**
- * OAuthFetchTool — OAuth 인증된 외부 API 호출 + 연동 조회 + 토큰 접근.
- * action 기반: fetch(기본), list, get_token.
+ * OAuthFetchTool — OAuth 인증된 외부 API 호출 + 연동 조회.
+ * action 기반: fetch(기본), list.
+ * 토큰은 자동 주입만 수행하며, raw token은 외부에 노출하지 않는다.
  */
 
 import { Tool } from "./base.js";
@@ -24,15 +25,14 @@ export class OAuthFetchTool extends Tool {
     "OAuth 인증된 외부 API 호출 및 연동 관리.\n" +
     "Actions:\n" +
     "- fetch (default): service_id + url로 인증된 HTTP 요청. 토큰 자동 주입/갱신.\n" +
-    "- list: 워크스페이스에 등록된 OAuth 연동 목록 조회.\n" +
-    "- get_token: service_id의 유효한 access_token을 반환. 만료 시 자동 갱신.";
+    "- list: 워크스페이스에 등록된 OAuth 연동 목록 조회.";
 
   readonly parameters: JsonSchema = {
     type: "object",
     properties: {
       action: {
         type: "string",
-        enum: ["fetch", "list", "get_token"],
+        enum: ["fetch", "list"],
         description: "수행할 작업 (기본: fetch)",
       },
       service_id: { type: "string", description: "OAuth 연동 ID (e.g., 'github')" },
@@ -62,9 +62,8 @@ export class OAuthFetchTool extends Tool {
 
     switch (action) {
       case "list": return this._list();
-      case "get_token": return await this._get_token(params);
       case "fetch": return await this._fetch(params);
-      default: return `Error: unsupported action "${action}". Use: fetch, list, get_token`;
+      default: return `Error: unsupported action "${action}". Use: fetch, list`;
     }
   }
 
@@ -81,24 +80,6 @@ export class OAuthFetchTool extends Tool {
       expired: i.expires_at ? new Date(i.expires_at) < new Date() : false,
     }));
     return JSON.stringify(summary);
-  }
-
-  /** 유효한 access_token을 반환. 만료 시 자동 갱신. */
-  private async _get_token(params: Record<string, unknown>): Promise<string> {
-    const service_id = String(params.service_id || "").trim();
-    if (!service_id) return "Error: service_id is required";
-
-    const integration = this.store.get(service_id);
-    if (!integration) return `Error: OAuth integration "${service_id}" not found`;
-    if (!integration.enabled) return `Error: OAuth integration "${service_id}" is disabled`;
-
-    const { token, error } = await this.flow.get_valid_access_token(service_id);
-    if (!token) {
-      return `Error: no valid access token for "${service_id}" — ${error || "token not configured"}`;
-    }
-
-    log.info("get_token", { service_id });
-    return JSON.stringify({ service_id, service_type: integration.service_type, access_token: token });
   }
 
   /** OAuth 인증된 HTTP 요청. */
@@ -118,6 +99,19 @@ export class OAuthFetchTool extends Tool {
     if (!integration.enabled) {
       log.warn("oauth_fetch_error", { service_id, error: "integration_disabled" });
       return `Error: OAuth integration "${service_id}" is disabled`;
+    }
+
+    // host allowlist 검증 — integration.settings.allowed_hosts 설정 시 강제
+    const allowed_hosts = Array.isArray(integration.settings.allowed_hosts)
+      ? (integration.settings.allowed_hosts as unknown[]).map(String).filter(Boolean)
+      : [];
+    if (allowed_hosts.length > 0) {
+      if (!allowed_hosts.includes(url_or_error.hostname)) {
+        log.warn("oauth_fetch_blocked", { service_id, host: url_or_error.hostname, allowed: allowed_hosts });
+        return `Error: host "${url_or_error.hostname}" is not in allowed_hosts for "${service_id}"`;
+      }
+    } else {
+      log.warn("oauth_fetch_no_allowlist", { service_id, host: url_or_error.hostname });
     }
 
     const { token, error } = await this.flow.get_valid_access_token(service_id);
