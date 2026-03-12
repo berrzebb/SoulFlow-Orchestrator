@@ -233,16 +233,22 @@ export class DecisionStore {
     return this.enqueue_write(async () => {
       const index = await this.load_index();
       const append_buffer: DecisionRecord[] = [];
-      const result = await fn({
-        index,
-        append: (record) => append_buffer.push(record),
-        key_ref,
-        rebuild_maps: () => this.rebuild_maps(index),
-      });
-      index.updated_at = now_iso();
-      await this.upsert_records(append_buffer);
-      this.cache = null;
-      return result;
+      try {
+        const result = await fn({
+          index,
+          append: (record) => append_buffer.push(record),
+          key_ref,
+          rebuild_maps: () => this.rebuild_maps(index),
+        });
+        index.updated_at = now_iso();
+        await this.upsert_records(append_buffer);
+        this.cache = null;
+        return result;
+      } catch (error) {
+        // fn 또는 upsert_records 실패 시 in-memory 캐시를 무효화하여 DB와 불일치 방지
+        this.cache = null;
+        throw error;
+      }
     });
   }
 
