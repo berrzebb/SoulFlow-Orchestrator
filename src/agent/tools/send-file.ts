@@ -63,6 +63,7 @@ export class SendFileTool extends Tool {
       chat_id,
       content: caption || filename,
       at: now_iso(),
+      reply_to: context.reply_to || undefined,
       media: [media_item],
       metadata: { kind: "file_delivery" },
     };

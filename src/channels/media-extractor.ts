@@ -33,6 +33,6 @@ function detect_media_type(url: string): MediaItem["type"] | null {
   if (/\.(png|jpg|jpeg|gif|webp|svg)(\?.*)?$/.test(lower)) return "image";
   if (/\.(mp4|mov|webm|mkv|avi)(\?.*)?$/.test(lower)) return "video";
   if (/\.(mp3|wav|ogg|m4a)(\?.*)?$/.test(lower)) return "audio";
-  if (/\.(pdf|txt|md|csv|json|zip|tar|gz)(\?.*)?$/.test(lower)) return "file";
+  if (/\.[a-z0-9]{1,10}(\?.*)?$/i.test(lower)) return "file";
   return null;
 }
