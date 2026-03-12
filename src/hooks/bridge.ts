@@ -26,10 +26,13 @@ export function hook_runner_to_pre_tool_hook(
       metadata: context ? { task_id: context.task_id, channel: context.channel } : undefined,
     });
 
+    // deny는 updated_input보다 우선 — 먼저 전체를 순회하여 차단 여부 확인
     for (const r of results) {
       if (r.output.decision === "deny") {
         return { permission: "deny", reason: r.output.reason || `blocked by hook: ${r.hook_name}` };
       }
+    }
+    for (const r of results) {
       if (r.output.updated_input) {
         return { permission: "allow", updated_params: r.output.updated_input };
       }
