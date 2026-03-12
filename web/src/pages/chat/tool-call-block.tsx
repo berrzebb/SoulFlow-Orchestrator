@@ -1,7 +1,7 @@
-/** 스트리밍 중 도구 호출 시각화 — 진행 중 / 완료 / 오류 상태 표시. */
+/** 스트리밍 중 도구 호출 및 thinking 시각화 — 진행 중 / 완료 / 오류 상태 표시. */
 
 import { useState } from "react";
-import type { ToolCallEntry } from "../../hooks/use-ndjson-stream";
+import type { ToolCallEntry, ThinkingEntry } from "../../hooks/use-ndjson-stream";
 
 const ICONS: [RegExp, string][] = [
   [/^web_search|^search_web/, "🔍"],
@@ -28,6 +28,42 @@ function tool_icon(name: string): string {
     if (re.test(name)) return icon;
   }
   return "🔧";
+}
+
+export function ThinkingBlockList({ blocks }: { blocks: ThinkingEntry[] }) {
+  if (blocks.length === 0) return null;
+  return (
+    <div className="thinking-block-list">
+      {blocks.map((b, i) => (
+        <ThinkingBlock key={i} entry={b} />
+      ))}
+    </div>
+  );
+}
+
+function ThinkingBlock({ entry }: { entry: ThinkingEntry }) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <div className="thinking-block">
+      <button
+        className="thinking-block__header"
+        onClick={() => setExpanded((e) => !e)}
+        aria-expanded={expanded}
+        aria-label={`Thinking: ${entry.tokens.toLocaleString()} tokens`}
+      >
+        <span className="thinking-block__icon" aria-hidden="true">💭</span>
+        <span className="thinking-block__label">
+          Thinking <span className="thinking-block__tokens">({entry.tokens.toLocaleString()} tokens)</span>
+        </span>
+        <span className="thinking-block__expand-icon" aria-hidden="true">{expanded ? "▲" : "▼"}</span>
+      </button>
+      {expanded && (
+        <div className="thinking-block__detail">
+          <pre className="thinking-block__pre">{entry.preview || "(no preview)"}</pre>
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function ToolCallList({ calls }: { calls: ToolCallEntry[] }) {

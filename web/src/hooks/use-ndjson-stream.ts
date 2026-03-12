@@ -9,6 +9,8 @@ type NdjsonLine =
   | { type: "tool_start"; id: string; name: string; params?: Record<string, unknown> }
   | { type: "tool_result"; id: string; name: string; result: string; is_error?: boolean }
   | { type: "usage"; input: number; output: number; cost_usd?: number | null }
+  | { type: "rate_limit"; status: string }
+  | { type: "compact"; pre_tokens: number }
   | { type: "done" }
   | { type: "error"; error: string };
 
@@ -21,11 +23,17 @@ export type ToolCallEntry = {
   is_error?: boolean;
 };
 
+export type ThinkingEntry = {
+  tokens: number;
+  preview: string;
+};
+
 export type NdjsonStream = { chat_id: string; content: string; done: boolean };
 
 export function useNdjsonStream() {
   const [stream, setStream] = useState<NdjsonStream | null>(null);
   const [tool_calls, setToolCalls] = useState<ToolCallEntry[]>([]);
+  const [thinking_blocks, setThinkingBlocks] = useState<ThinkingEntry[]>([]);
   const tool_map_ref = useRef<Map<string, ToolCallEntry>>(new Map());
   const buffer_ref = useRef<string[]>([]);
   const abort_ref = useRef<AbortController | null>(null);
@@ -52,6 +60,7 @@ export function useNdjsonStream() {
     tool_map_ref.current.clear();
     setStream({ chat_id, content: "", done: false });
     setToolCalls([]);
+    setThinkingBlocks([]);
 
     try {
       const response = await fetch(
@@ -84,6 +93,8 @@ export function useNdjsonStream() {
                 const appended = [...buffered, msg.content].join("");
                 setStream((prev) => prev ? { ...prev, content: prev.content + appended } : null);
               }
+            } else if (msg.type === "thinking") {
+              setThinkingBlocks((prev) => [...prev, { tokens: msg.tokens, preview: msg.preview }]);
             } else if (msg.type === "tool_start") {
               const entry: ToolCallEntry = { id: msg.id, name: msg.name, params: msg.params, done: false };
               tool_map_ref.current.set(msg.id, entry);
@@ -119,5 +130,5 @@ export function useNdjsonStream() {
     setStream(null);
   }, []);
 
-  return { stream, tool_calls, start, cancel };
+  return { stream, tool_calls, thinking_blocks, start, cancel };
 }

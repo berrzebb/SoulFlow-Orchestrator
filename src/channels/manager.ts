@@ -815,6 +815,8 @@ export class ChannelManager implements ServiceLike {
     } catch (e) {
       if (run_id) this.tracker!.end(run_id, "failed", error_message(e));
       this.logger.error("invoke failed", { alias, error: error_message(e) });
+      // web NDJSON: 예외 발생 시에도 스트림 종료 (deliver_result가 실행되지 않으므로 여기서 처리)
+      if (provider === "web") this.on_web_stream?.(message.chat_id, stream_state.accumulated, true);
       await this.send_error_reply(provider, message, alias, error_message(e), run_id);
     } finally {
       clearInterval(typing_ticker);
@@ -829,9 +831,14 @@ export class ChannelManager implements ServiceLike {
     provider: ChannelProvider, message: InboundMessage, alias: string,
     result: OrchestrationResult, stream_message_id?: string, tool_count = 0, is_status_mode = false,
   ): Promise<void> {
-    if (result.suppress_reply) return;
+    // web NDJSON: 남은 텍스트 flush + done 신호 — suppress/error/streamed/default 모든 경로에서 호출
+    const close_web = () => {
+      if (provider === "web") this.on_web_stream?.(message.chat_id, result.stream_full_content ?? "", true);
+    };
+    if (result.suppress_reply) { close_web(); return; }
     if (!result.reply) {
       if (result.error) await this.send_error_reply(provider, message, alias, result.error, result.run_id);
+      close_web();
       return;
     }
 
@@ -865,7 +872,7 @@ export class ChannelManager implements ServiceLike {
       try {
         await this.registry.edit_message(provider, message.chat_id, stream_message_id, this.render_msg({ kind: "status_completed" }, render_key(provider, message.chat_id)));
       } catch { /* 상태 메시지 마무리 실패는 무시 */ }
-      if (provider === "web") this.on_web_stream?.(message.chat_id, "", true);
+      close_web();
       await this.send_chunked(provider, message, alias, mention, rendered.content, max_len, build_meta(), rendered.media);
       void this.recorder.record_assistant(provider, message, alias, rendered.markdown, record_meta).catch((e) => this.logger.warn("record_assistant_failed", { error: error_message(e) }));
       return;
@@ -885,10 +892,11 @@ export class ChannelManager implements ServiceLike {
         await this.send_outbound(provider, message, alias, "첨부 파일을 확인해주세요.", { kind: "agent_media", agent_alias: alias }, rendered.media);
       }
       void this.recorder.record_assistant(provider, message, alias, rendered.markdown, record_meta).catch((e) => this.logger.warn("record_assistant_failed", { error: error_message(e) }));
+      close_web();
       return;
     }
 
-    if (provider === "web") this.on_web_stream?.(message.chat_id, "", true);
+    close_web();
     await this.send_chunked(provider, message, alias, mention, rendered.content, max_len, build_meta(), rendered.media);
     void this.recorder.record_assistant(provider, message, alias, rendered.markdown, record_meta).catch((e) => this.logger.warn("record_assistant_failed", { error: error_message(e) }));
   }
