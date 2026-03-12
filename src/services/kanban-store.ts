@@ -646,7 +646,7 @@ export class KanbanStore implements KanbanStoreLike {
     await this.initialized;
     const changes = this.write_db((db) => {
       const r = db.prepare("DELETE FROM kanban_boards WHERE board_id = ?").run(board_id);
-      return Number(r.changes || 0);
+      return r.changes;
     });
     return changes > 0;
   }
@@ -1048,7 +1048,7 @@ export class KanbanStore implements KanbanStoreLike {
     await this.initialized;
     const changes = this.write_db((db) => {
       const r = db.prepare("DELETE FROM kanban_rules WHERE rule_id = ?").run(rule_id);
-      return Number(r.changes || 0);
+      return r.changes;
     });
     return changes > 0;
   }
@@ -1095,7 +1095,7 @@ export class KanbanStore implements KanbanStoreLike {
     await this.initialized;
     const changes = this.write_db((db) => {
       const r = db.prepare("DELETE FROM kanban_templates WHERE template_id = ?").run(template_id);
-      return Number(r.changes || 0);
+      return r.changes;
     });
     return changes > 0;
   }
@@ -1268,7 +1268,7 @@ export class KanbanStore implements KanbanStoreLike {
     await this.initialized;
     const changes = this.write_db((db) => {
       const r = db.prepare("DELETE FROM kanban_filters WHERE filter_id = ?").run(filter_id);
-      return Number(r.changes || 0);
+      return r.changes;
     });
     return changes > 0;
   }

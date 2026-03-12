@@ -327,7 +327,7 @@ export class SessionStore implements SessionStoreLike {
     this.cache.delete(key);
     return this.write_sqlite((db) => {
       const r = db.prepare("DELETE FROM sessions WHERE key = ?").run(key);
-      return Number(r.changes || 0) > 0;
+      return r.changes > 0;
     });
   }
 
@@ -348,7 +348,7 @@ export class SessionStore implements SessionStoreLike {
     const cutoff = new Date(Date.now() - Math.max(max_age_ms, 60_000)).toISOString();
     const count = this.write_sqlite((db) => {
       const r = db.prepare("DELETE FROM sessions WHERE updated_at < ?").run(cutoff);
-      return Number(r.changes || 0);
+      return r.changes;
     });
     if (count > 0) {
       for (const [key, session] of this.cache) {
@@ -368,7 +368,7 @@ export class SessionStore implements SessionStoreLike {
       const r = db.prepare(
         "DELETE FROM sessions WHERE key NOT IN (SELECT key FROM sessions ORDER BY updated_at DESC LIMIT ?)",
       ).run(max_entries);
-      return Number(r.changes || 0);
+      return r.changes;
     });
     if (count > 0) {
       // 캐시에서도 삭제된 항목 제거

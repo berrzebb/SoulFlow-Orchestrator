@@ -137,7 +137,7 @@ export class SqliteDynamicToolStore implements DynamicToolStoreLike {
         entry.requires_approval === true ? 1 : 0,
         now,
       );
-      return Number(result.changes || 0) > 0;
+      return result.changes > 0;
     });
   }
 
@@ -146,7 +146,7 @@ export class SqliteDynamicToolStore implements DynamicToolStoreLike {
     if (!name) return false;
     return with_sqlite_strict(this.sqlite_path,(db) => {
       const result = db.prepare("DELETE FROM dynamic_tools WHERE name = ?").run(name);
-      return Number(result.changes || 0) > 0;
+      return result.changes > 0;
     });
   }
 
