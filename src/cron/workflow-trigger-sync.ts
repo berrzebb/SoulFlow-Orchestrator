@@ -147,27 +147,37 @@ function start_webhook_polling(
 
 // ── Channel Message Subscription ──
 
+// on_publish은 observer 제거 API가 없으므로, 단일 observer를 최초 1회만 등록하고
+// entries는 가변 변수로 교체 — 재동기화 시 중복 observer 누적 방지.
+let _channel_msg_entries: TriggerEntry[] = [];
+let _channel_msg_observer_registered = false;
+
 function subscribe_channel_message_triggers(
   entries: TriggerEntry[],
   bus: MessageBusLike & MessageBusTap,
   execute: WorkflowExecuteFn,
 ): number {
   const msg_entries = entries.filter((e) => e.trigger.trigger_type === "channel_message");
-  if (!msg_entries.length) return 0;
 
-  bus.on_publish((dir, msg) => {
-    if (dir !== "inbound") return;
-    for (const entry of msg_entries) {
-      const want_channel = entry.trigger.channel_type;
-      const want_chat = entry.trigger.chat_id;
-      if (want_channel && msg.channel !== want_channel) continue;
-      if (want_chat && msg.chat_id !== want_chat) continue;
-      log.info("channel_message trigger fired", { slug: entry.slug, channel: msg.channel, chat_id: msg.chat_id });
-      void execute(entry.slug, msg.channel || msg.provider, msg.chat_id, { message: msg }).catch((e) => {
-        log.warn("channel_message trigger failed", { slug: entry.slug, error: error_message(e) });
-      });
-    }
-  });
+  // entries 교체 (재동기화 시 기존 observer가 새 목록을 참조)
+  _channel_msg_entries = msg_entries;
+
+  if (!_channel_msg_observer_registered) {
+    _channel_msg_observer_registered = true;
+    bus.on_publish((dir, msg) => {
+      if (dir !== "inbound") return;
+      for (const entry of _channel_msg_entries) {
+        const want_channel = entry.trigger.channel_type;
+        const want_chat = entry.trigger.chat_id;
+        if (want_channel && msg.channel !== want_channel) continue;
+        if (want_chat && msg.chat_id !== want_chat) continue;
+        log.info("channel_message trigger fired", { slug: entry.slug, channel: msg.channel, chat_id: msg.chat_id });
+        void execute(entry.slug, msg.channel || msg.provider, msg.chat_id, { message: msg }).catch((e) => {
+          log.warn("channel_message trigger failed", { slug: entry.slug, error: error_message(e) });
+        });
+      }
+    });
+  }
 
   log.info("channel_message triggers subscribed", { count: msg_entries.length });
   return msg_entries.length;
