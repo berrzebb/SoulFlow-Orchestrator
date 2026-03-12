@@ -94,6 +94,7 @@ export async function run_agent_loop(
     temperature: 0.3,
     abort_signal: args.req.signal,
     on_stream: create_stream_handler(streaming_cfg_for(deps.streaming_cfg, args.req.provider), stream, args.req.on_stream),
+    on_stream_event: args.req.on_stream_event,
     check_should_continue: async ({ state: s }) => {
       if (s.currentTurn >= (deps.config.agent_loop_max_turns ?? 10)) return false;
       return AGENT_TOOL_NUDGE;

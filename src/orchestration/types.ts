@@ -24,6 +24,8 @@ export type OrchestrationRequest = {
   on_progress?: (event: ProgressEvent) => void;
   /** AgentEvent를 대시보드 SSE로 릴레이. native backend + legacy 양쪽에서 호출. */
   on_agent_event?: (event: import("../agent/agent.types.js").AgentEvent) => void;
+  /** 헤드리스 LLM 프로바이더에서 직접 발행되는 StreamEvent 수신. on_agent_event의 headless 경로 대응. */
+  on_stream_event?: (event: import("../channels/stream-event.js").StreamEvent) => void;
   signal?: AbortSignal;
   /** TaskResumeService가 재개한 Task ID. 이 값이 있으면 새 orchestration 대신 기존 Task을 이어서 실행. */
   resumed_task_id?: string;

@@ -49,6 +49,7 @@ export type AgentLoopRunOptions = {
   on_turn?: (ctx: AgentLoopTurnContext) => Promise<void> | void;
   on_tool_calls?: AgentToolCallHandler;
   on_stream?: (chunk: string) => Promise<void> | void;
+  on_stream_event?: (event: import("../channels/stream-event.js").StreamEvent) => Promise<void> | void;
   abort_signal?: AbortSignal;
   model?: string;
   max_tokens?: number;

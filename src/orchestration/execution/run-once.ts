@@ -91,6 +91,7 @@ export async function run_once(deps: RunnerDeps, args: RunExecutionArgs): Promis
       runtime_policy: args.runtime_policy,
       abort_signal: args.req.signal,
       on_stream: create_stream_handler(streaming_cfg_for(deps.streaming_cfg, args.req.provider), stream, args.req.on_stream),
+      on_stream_event: args.req.on_stream_event,
     });
 
     const err = extract_provider_error(String(response.content || ""));
@@ -123,6 +124,7 @@ export async function run_once(deps: RunnerDeps, args: RunExecutionArgs): Promis
         temperature: 0.2,
         abort_signal: args.req.signal,
         on_stream: create_stream_handler(streaming_cfg_for(deps.streaming_cfg, args.req.provider), stream, args.req.on_stream),
+        on_stream_event: args.req.on_stream_event,
       });
       flush_remaining(stream, args.req.on_stream);
       const followup_text = sanitize_provider_output(String(followup.content || "")).trim();

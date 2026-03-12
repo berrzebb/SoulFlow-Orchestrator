@@ -757,6 +757,13 @@ export class ChannelManager implements ServiceLike {
               }
             }
           : undefined,
+        // 헤드리스 LLM 프로바이더가 직접 발행하는 StreamEvent (on_agent_event의 headless 경로 대응)
+        on_stream_event: (this.on_web_rich_event || block_renderer)
+          ? (event) => {
+              if (provider === "web" && event.type !== "delta") this.on_web_rich_event?.(message.chat_id, event);
+              if (block_renderer && event.type !== "delta") block_renderer.push(event);
+            }
+          : undefined,
         on_tool_block: provider !== "web"
           // 비web 채널: 도구 진행 상태를 status 메시지로 표시 (live/status 모드 공통)
           ? (tool_name: string) => {

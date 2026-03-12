@@ -272,6 +272,7 @@ export class AgentLoopStore {
         max_tokens: options.max_tokens,
         temperature: options.temperature,
         on_stream: options.on_stream,
+        on_stream_event: options.on_stream_event,
         abort_signal: options.abort_signal,
       });
 

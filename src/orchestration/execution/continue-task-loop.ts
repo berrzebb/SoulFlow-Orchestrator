@@ -117,6 +117,7 @@ export async function continue_task_loop(
           temperature: 0.3,
           abort_signal: req.signal,
           on_stream: create_stream_handler(streaming_cfg_for(deps.streaming_cfg, req.provider), stream, req.on_stream),
+          on_stream_event: req.on_stream_event,
           check_should_continue: async () => false,
           on_tool_calls: create_tool_call_handler(deps.tool_deps, tool_ctx, state, {
             buffer: stream, on_stream: req.on_stream, on_tool_block: req.on_tool_block,

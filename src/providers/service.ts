@@ -257,6 +257,7 @@ export class ProviderRegistry {
     max_tokens?: number;
     temperature?: number;
     on_stream?: (chunk: string) => void | Promise<void>;
+    on_stream_event?: ChatOptions["on_stream_event"];
     abort_signal?: AbortSignal;
   }): Promise<LlmResponse> {
     const id = args.provider_id || this.active_provider_id;
@@ -276,6 +277,7 @@ export class ProviderRegistry {
       max_tokens: args.max_tokens,
       temperature: args.temperature,
       on_stream: args.on_stream,
+      on_stream_event: args.on_stream_event,
       abort_signal: args.abort_signal,
     };
 
@@ -350,6 +352,7 @@ export class ProviderRegistry {
     max_tokens?: number;
     temperature?: number;
     on_stream?: (chunk: string) => void | Promise<void>;
+    on_stream_event?: ChatOptions["on_stream_event"];
     abort_signal?: AbortSignal;
   }): Promise<LlmResponse> {
     const { context_builder, history_days, current_message, skill_names, media, channel, chat_id, ...headless_args } = args;
