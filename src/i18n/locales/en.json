@@ -1681,6 +1681,7 @@
   "skills.model": "Model",
   "skills.no_content": "No SKILL.md content",
   "skills.no_references": "No reference files",
+  "skills.no_skills": "No skills",
   "skills.path": "Path",
   "skills.protocols": "Protocols",
   "skills.references": "Reference Files",

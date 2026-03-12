@@ -174,6 +174,7 @@ export function SkillsTab() {
   const { data: skills = [] } = useQuery<SkillInfo[]>({
     queryKey: ["ws-skills"],
     queryFn: () => api.get("/api/skills"),
+    staleTime: 30_000,
   });
 
   const { data: tools_data } = useQuery<{ names: string[]; native_tools?: string[] }>({
@@ -304,7 +305,7 @@ export function SkillsTab() {
                   ))}
                 </>
               )}
-              {skills.length === 0 && <EmptyState icon="🛠️" title="No skills" />}
+              {skills.length === 0 && <EmptyState icon="🛠️" title={t("skills.no_skills")} />}
             </div>
           </div>
         }

@@ -1681,6 +1681,7 @@
   "skills.model": "모델",
   "skills.no_content": "SKILL.md 내용 없음",
   "skills.no_references": "참조 파일 없음",
+  "skills.no_skills": "등록된 스킬 없음",
   "skills.path": "경로",
   "skills.protocols": "프로토콜",
   "skills.references": "참조 파일",
