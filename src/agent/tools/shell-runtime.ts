@@ -93,6 +93,27 @@ function parse_just_bash_output(stdout: string): { stdout: string; stderr: strin
 }
 
 /**
+ * shell 없이 argv 배열로 프로세스를 실행한다.
+ * 문자열 보간을 거치지 않으므로 shell injection이 원천 차단된다.
+ * archive, ssh 등 신뢰할 수 없는 인자를 받는 도구에 사용한다.
+ */
+export async function run_command_argv(
+  cmd: string,
+  args: string[],
+  options: ShellRunOptions,
+): Promise<{ stdout: string; stderr: string }> {
+  const result = await exec_file_async(cmd, args, {
+    cwd: options.cwd,
+    timeout: options.timeout_ms,
+    maxBuffer: options.max_buffer_bytes,
+    signal: options.signal,
+    windowsHide: true,
+    shell: false,
+  });
+  return { stdout: String(result.stdout || ""), stderr: String(result.stderr || "") };
+}
+
+/**
  * exec 도구의 셸 실행.
  * - just-bash 사용 가능 → 샌드박스 실행 (토큰 절약, 파일 탐색용)
  * - just-bash 미설치 → 시스템 기본 셸 폴백

@@ -173,10 +173,24 @@ export class DashboardService implements ServiceLike {
     res.end(JSON.stringify(data));
   }
 
-  private _read_json_body(req: IncomingMessage): Promise<Record<string, unknown> | null> {
+  private _read_json_body(req: IncomingMessage, res: ServerResponse, max_bytes = 1_048_576): Promise<Record<string, unknown> | null> {
     return new Promise((resolve) => {
       const chunks: Buffer[] = [];
-      req.on("data", (chunk: Buffer) => chunks.push(chunk));
+      let total = 0;
+      req.on("data", (chunk: Buffer) => {
+        total += chunk.length;
+        if (total > max_bytes) {
+          req.destroy();
+          if (!res.headersSent) {
+            res.statusCode = 413;
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            res.end(JSON.stringify({ error: "payload_too_large" }));
+          }
+          resolve(null);
+          return;
+        }
+        chunks.push(chunk);
+      });
       req.on("end", () => {
         try {
           resolve(JSON.parse(Buffer.concat(chunks).toString("utf-8")) as Record<string, unknown>);
@@ -243,7 +257,7 @@ export class DashboardService implements ServiceLike {
       req, res, url,
       options: this.options,
       json: (r, s, d) => this._json(r, s, d),
-      read_body: (r) => this._read_json_body(r),
+      read_body: (r) => this._read_json_body(r, res),
       add_sse_client: (r) => this._sse.add_client(r),
       build_state: () => build_dashboard_state(this.options, this._sse.recent_messages),
       build_merged_tasks: () => build_merged_tasks(this.options),
