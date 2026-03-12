@@ -274,7 +274,7 @@ export class AgentDefinitionStore {
 
   /** 사용 횟수 증가. */
   increment_use_count(id: string): void {
-    with_sqlite(this.db_path, (db) => {
+    with_sqlite_strict(this.db_path, (db) => {
       db.prepare("UPDATE agent_definitions SET use_count = use_count + 1 WHERE id = ?").run(id);
       return true;
     }, { pragmas: PRAGMAS });

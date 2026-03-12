@@ -63,11 +63,10 @@ export class AgentSessionStore {
   }
 
   prune_expired(): number {
-    const result = with_sqlite(this.db_path, (db) => {
+    return with_sqlite_strict(this.db_path, (db) => {
       const info = db.prepare("DELETE FROM agent_sessions WHERE expires_at <= ?").run(now_iso());
       return info.changes;
     });
-    return result ?? 0;
   }
 
   private _to_session(row: SessionRow): AgentSession {
