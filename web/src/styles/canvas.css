@@ -1,0 +1,268 @@
+/* ===== Canvas (A2UI) ===== */
+
+/* ── Dock ── */
+.canvas-dock {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-4);
+  border-top: 1px solid var(--line);
+  background: var(--panel);
+  max-height: 340px;
+  overflow-y: auto;
+}
+
+/* ── Card ── */
+.canvas-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--panel);
+}
+.canvas-card__header {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+  border-bottom: 1px solid var(--line);
+  min-height: 36px;
+}
+.canvas-card__toggle {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 10px;
+  padding: 0 var(--sp-1);
+  line-height: 1;
+}
+.canvas-card__toggle:hover { color: var(--text); }
+.canvas-card__title {
+  flex: 1;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.canvas-card__close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  padding: 0 var(--sp-1);
+  line-height: 1;
+}
+.canvas-card__close:hover { color: var(--text); }
+
+.canvas-card__body {
+  padding: var(--sp-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+/* ── Text ── */
+.canvas-text {
+  margin: 0;
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+  color: var(--text);
+}
+.canvas-text--info    { color: #22d3ee; }
+.canvas-text--warn    { color: #f59e0b; }
+.canvas-text--error   { color: #ef4444; }
+.canvas-text--heading { font-weight: 700; }
+.canvas-text--h1 { font-size: var(--fs-lg, 1.25rem); }
+.canvas-text--h2 { font-size: var(--fs-md); }
+.canvas-text--h3 { font-size: var(--fs-sm); }
+
+/* ── Metric ── */
+.canvas-metric {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--accent) 4%, var(--panel));
+  min-width: 100px;
+}
+.canvas-metric__value {
+  font-size: 1.6rem;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--text);
+}
+.canvas-metric__unit {
+  font-size: var(--fs-sm);
+  font-weight: 400;
+  color: var(--text-muted);
+}
+.canvas-metric__label {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+.canvas-metric__trend {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+}
+.canvas-metric__trend--up   { color: #10b981; }
+.canvas-metric__trend--down { color: #ef4444; }
+
+/* ── Chart ── */
+.canvas-chart { display: flex; flex-direction: column; gap: var(--sp-2); }
+.canvas-chart__title {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text);
+}
+.canvas-chart__svg {
+  width: 100%;
+  max-width: 360px;
+  height: auto;
+  display: block;
+  color: var(--text);
+}
+.canvas-chart__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+.canvas-chart__legend-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+.canvas-chart__legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+/* ── Table ── */
+.canvas-table-wrap { overflow-x: auto; }
+.canvas-table__title {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: var(--sp-2);
+}
+.canvas-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-xs);
+  color: var(--text);
+}
+.canvas-table th {
+  text-align: left;
+  font-weight: 600;
+  padding: var(--sp-1) var(--sp-2);
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+.canvas-table td {
+  padding: var(--sp-1) var(--sp-2);
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 50%, transparent);
+}
+.canvas-table tr:last-child td { border-bottom: none; }
+
+/* ── Image ── */
+.canvas-image { margin: 0; }
+.canvas-image__img {
+  max-width: 100%;
+  border-radius: var(--radius-md);
+  display: block;
+}
+.canvas-image__caption {
+  margin-top: var(--sp-1);
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  text-align: center;
+}
+
+/* ── Form ── */
+.canvas-form { display: flex; flex-direction: column; gap: var(--sp-2); }
+.canvas-form__title {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text);
+}
+.canvas-form__field { display: flex; flex-direction: column; gap: 4px; }
+.canvas-form__label {
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  color: var(--text);
+}
+.canvas-form__required { color: #ef4444; }
+.canvas-form__input {
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: var(--sp-1) var(--sp-2);
+  font-size: var(--fs-sm);
+  font-family: inherit;
+  width: 100%;
+}
+.canvas-form__input:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+.canvas-form__checkbox { width: auto; cursor: pointer; }
+.canvas-form__submit {
+  align-self: flex-start;
+  padding: var(--sp-1) var(--sp-4);
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.canvas-form__submit:hover:not(:disabled) { opacity: 0.85; }
+.canvas-form__submit:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* ── Button ── */
+.canvas-button {
+  display: inline-block;
+  padding: var(--sp-2) var(--sp-4);
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.canvas-button:hover:not(:disabled) { opacity: 0.85; }
+.canvas-button:disabled { opacity: 0.5; cursor: default; }
+.canvas-button--primary   { background: var(--accent); color: #fff; }
+.canvas-button--secondary { background: color-mix(in srgb, var(--text) 10%, transparent); color: var(--text); }
+.canvas-button--danger    { background: #ef4444; color: #fff; }
+
+/* ── Divider ── */
+.canvas-divider {
+  border: none;
+  border-top: 1px solid var(--line);
+  margin: 0;
+}
+
+/* ── Mobile ── */
+@media (max-width: 640px) {
+  .canvas-dock { padding: var(--sp-2); max-height: 280px; }
+  .canvas-metric__value { font-size: 1.25rem; }
+}

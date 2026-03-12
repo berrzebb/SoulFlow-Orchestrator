@@ -9,6 +9,9 @@ import "./styles/global.css";
 import "./styles/layout.css";
 import "./styles/workflow.css";
 import "./styles/chat.css";
+import "./styles/prompt.css";
+import "./styles/canvas.css";
+import "./styles/tool-call.css";
 
 const queryClient = new QueryClient({
   defaultOptions: {
