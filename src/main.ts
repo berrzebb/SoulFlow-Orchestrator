@@ -34,6 +34,7 @@ import { type SessionStoreLike } from "./session/index.js";
 import { McpClientManager } from "./mcp/index.js";
 import { AgentBackendRegistry } from "./agent/agent-registry.js";
 import { CliAuthService } from "./agent/cli-auth.service.js";
+import { UsageStore } from "./gateway/usage-store.js";
 import { randomUUID } from "node:crypto";
 
 export interface RuntimeApp {
@@ -118,6 +119,8 @@ export async function createRuntime(): Promise<RuntimeApp> {
     resolve_instance_to_type, primary_provider, default_chat_id, logger,
   });
 
+  const usage_store = new UsageStore(workspace);
+
   const { command_router, channel_manager } = create_channel_wiring({
     workspace, app_config, agent, agent_runtime, agent_backend_registry,
     bus, broadcaster, channels, instance_store,
@@ -126,6 +129,7 @@ export async function createRuntime(): Promise<RuntimeApp> {
     process_tracker, confirmation_guard, orchestration,
     providers, mcp, cron, decisions, sessions,
     persona_renderer, tone_pref_store, memory_consolidation, logger,
+    usage_store,
   });
 
   const { orchestrator_llm_runtime, services, heartbeat, ops } = create_runtime_support({
@@ -156,7 +160,7 @@ export async function createRuntime(): Promise<RuntimeApp> {
     orchestrator_llm_runtime, orchestration, process_tracker, cron,
     sessions, dlq_store, dispatch, oauth_store, oauth_flow,
     kanban_store, kanban_automation, reference_store, webhook_store,
-    agent_definition_store, workflow_ops_result,
+    agent_definition_store, workflow_ops_result, usage_store,
   });
   dashboard.current = dashboard_instance;
 

@@ -1,6 +1,7 @@
 import { slash_name_in } from "../slash-command.js";
 import { format_subcommand_guide } from "./registry.js";
 import { format_mention, type CommandContext, type CommandHandler } from "./types.js";
+import type { ModelDailySummary } from "../../gateway/usage-store.js";
 
 const ALIASES = ["stats", "통계", "점수", "cd"] as const;
 
@@ -15,6 +16,7 @@ export interface StatsAccess {
   get_active_task_count(): number;
   get_active_loop_count(): number;
   get_provider_health?(): Array<{ provider: string; score: number; success_count: number; failure_count: number; avg_latency_ms: number }>;
+  get_today_by_model?(): Promise<ModelDailySummary[]>;
 }
 
 const CD_ICON: Record<string, string> = {
@@ -43,6 +45,15 @@ export class StatsHandler implements CommandHandler {
     if (action === "reset" || action === "초기화") {
       this.access.reset_cd();
       await ctx.send_reply(`${mention}CD 점수가 초기화되었습니다.`);
+      return true;
+    }
+    if (action === "usage" || action === "today" || action === "사용량") {
+      if (!this.access.get_today_by_model) {
+        await ctx.send_reply(`${mention}사용량 통계가 연결되지 않았습니다.`);
+        return true;
+      }
+      const rows = await this.access.get_today_by_model();
+      await ctx.send_reply(`${mention}${format_today_usage(rows)}`);
       return true;
     }
 
@@ -85,7 +96,7 @@ export class StatsHandler implements CommandHandler {
       }
     }
 
-    lines.push("", "상세: /stats cd · 초기화: /stats reset");
+    lines.push("", "상세: /stats cd · 사용량: /stats usage · 초기화: /stats reset");
     return lines.join("\n");
   }
 
@@ -104,4 +115,55 @@ export class StatsHandler implements CommandHandler {
       ...lines,
     ].join("\n");
   }
+}
+
+function fmt_tokens(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+  return String(n);
+}
+
+function fmt_cost(usd: number): string {
+  return usd >= 0.01 ? `$${usd.toFixed(2)}` : `$${usd.toFixed(4)}`;
+}
+
+function bar(fraction: number, width = 10): string {
+  const filled = Math.round(Math.max(0, Math.min(1, fraction)) * width);
+  return "█".repeat(filled) + "░".repeat(width - filled);
+}
+
+/** 당일 프로바이더·모델별 사용량을 텍스트 바 차트로 포맷. */
+function format_today_usage(rows: ModelDailySummary[]): string {
+  if (!rows.length) {
+    return `📊 오늘의 사용량\n\n데이터가 없습니다.`;
+  }
+
+  const today = rows[0]?.date ?? new Date().toISOString().slice(0, 10);
+  const max_tokens = Math.max(...rows.map((r) => r.total_tokens), 1);
+  const total_calls = rows.reduce((s, r) => s + r.calls, 0);
+  const total_tokens = rows.reduce((s, r) => s + r.total_tokens, 0);
+  const total_cost = rows.reduce((s, r) => s + r.cost_usd, 0);
+
+  // provider별로 그루핑
+  const by_provider = new Map<string, ModelDailySummary[]>();
+  for (const row of rows) {
+    const group = by_provider.get(row.provider_id) ?? [];
+    group.push(row);
+    by_provider.set(row.provider_id, group);
+  }
+
+  const lines: string[] = [`📊 오늘의 사용량 (${today})`, ""];
+
+  for (const [provider_id, models] of by_provider) {
+    lines.push(`━━ ${provider_id} ━━━━━━━━━━`);
+    for (const r of models) {
+      const b = bar(r.total_tokens / max_tokens);
+      const model_short = r.model.length > 22 ? r.model.slice(0, 21) + "…" : r.model;
+      lines.push(`  ${model_short.padEnd(23)} ${b}  ${String(r.calls).padStart(3)}회 · ${fmt_tokens(r.total_tokens).padStart(7)} tok · ${fmt_cost(r.cost_usd)}`);
+    }
+    lines.push("");
+  }
+
+  lines.push(`💰 총 ${total_calls}회 · ${fmt_tokens(total_tokens)} 토큰 · ${fmt_cost(total_cost)}`);
+  return lines.join("\n");
 }

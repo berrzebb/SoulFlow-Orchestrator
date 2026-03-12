@@ -76,6 +76,7 @@ export interface DashboardBundleDeps {
   webhook_store: WebhookStore;
   agent_definition_store: AgentDefinitionStore;
   workflow_ops_result: DashboardWorkflowOps | null;
+  usage_store?: UsageStore | null;
 }
 
 export interface DashboardBundleResult {
@@ -92,7 +93,7 @@ export function create_dashboard_bundle(deps: DashboardBundleDeps): DashboardBun
     orchestrator_llm_runtime, orchestration, process_tracker, cron,
     sessions, dlq_store, dispatch, oauth_store, oauth_flow,
     kanban_store, kanban_automation, reference_store, webhook_store,
-    agent_definition_store, workflow_ops_result,
+    agent_definition_store, workflow_ops_result, usage_store: provided_usage_store,
   } = deps;
 
   const agent_provider_ops = create_agent_provider_ops({
@@ -104,7 +105,7 @@ export function create_dashboard_bundle(deps: DashboardBundleDeps): DashboardBun
     return { dashboard: null, agent_provider_ops };
   }
 
-  const usage_store = new UsageStore(workspace);
+  const usage_store = provided_usage_store ?? new UsageStore(workspace);
 
   const dash = new DashboardService({
     host: app_config.dashboard.host,

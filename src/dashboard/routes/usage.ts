@@ -39,6 +39,12 @@ export async function handle_usage(ctx: RouteContext): Promise<boolean> {
     return true;
   }
 
+  // GET /api/usage/today/model
+  if (url.pathname === "/api/usage/today/model" && ctx.req.method === "GET") {
+    json(res, 200, await usage.get_today_by_model());
+    return true;
+  }
+
   // GET /api/usage/pricing
   if (url.pathname === "/api/usage/pricing" && ctx.req.method === "GET") {
     json(res, 200, get_all_pricing());

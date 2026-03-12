@@ -303,6 +303,7 @@ export interface DashboardUsageOps {
   list_spans(filter?: import("../gateway/usage-store.js").ListSpansFilter): Promise<import("../gateway/usage-store.js").LlmSpan[]>;
   get_daily_summary(days?: number): Promise<import("../gateway/usage-store.js").DailySummary[]>;
   get_provider_summary(days?: number): Promise<import("../gateway/usage-store.js").ProviderSummary[]>;
+  get_today_by_model(): Promise<import("../gateway/usage-store.js").ModelDailySummary[]>;
 }
 
 export type DashboardOptions = {

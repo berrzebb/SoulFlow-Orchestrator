@@ -46,6 +46,17 @@ export type ProviderSummary = {
   error_calls: number;
 };
 
+export type ModelDailySummary = {
+  date: string;
+  provider_id: string;
+  model: string;
+  calls: number;
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  cost_usd: number;
+};
+
 export type ListSpansFilter = {
   provider_id?: string;
   chat_id?: string;
@@ -199,6 +210,41 @@ export class UsageStore {
       total_tokens: Number(r.total_tokens),
       cost_usd: Number(r.cost_usd),
       avg_latency_ms: Math.round(Number(r.avg_latency_ms)),
+    }));
+  }
+
+  /** 당일 프로바이더·모델별 집계. */
+  async get_today_by_model(): Promise<ModelDailySummary[]> {
+    await this.initialized;
+    const today = new Date().toISOString().slice(0, 10);
+    type Row = {
+      date: string; provider_id: string; model: string; calls: number;
+      input_tokens: number; output_tokens: number; total_tokens: number; cost_usd: number;
+    };
+    const rows = (this.with_sqlite((db) => db.prepare(`
+      SELECT
+        substr(at, 1, 10) AS date,
+        provider_id,
+        model,
+        COUNT(*)            AS calls,
+        SUM(input_tokens)   AS input_tokens,
+        SUM(output_tokens)  AS output_tokens,
+        SUM(total_tokens)   AS total_tokens,
+        SUM(cost_usd)       AS cost_usd
+      FROM llm_spans
+      WHERE substr(at, 1, 10) = ?
+      GROUP BY provider_id, model
+      ORDER BY provider_id, total_tokens DESC
+    `).all(today)) ?? []) as Row[];
+    return rows.map((r) => ({
+      date: r.date,
+      provider_id: r.provider_id,
+      model: r.model,
+      calls: Number(r.calls),
+      input_tokens: Number(r.input_tokens),
+      output_tokens: Number(r.output_tokens),
+      total_tokens: Number(r.total_tokens),
+      cost_usd: Number(r.cost_usd),
     }));
   }
 

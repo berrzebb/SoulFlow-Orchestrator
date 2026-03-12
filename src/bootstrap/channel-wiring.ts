@@ -26,6 +26,7 @@ import type { ConfirmationGuard } from "../orchestration/confirmation-guard.js";
 import type { ProviderRegistry } from "../providers/index.js";
 import type { SessionStoreLike } from "../session/index.js";
 import type { MutableBroadcaster } from "../dashboard/broadcaster.js";
+import type { UsageStore } from "../gateway/usage-store.js";
 import { create_logger } from "../logger.js";
 import { ChannelManager } from "../channels/index.js";
 import { create_command_router } from "../channels/create-command-router.js";
@@ -59,6 +60,7 @@ export interface ChannelWiringDeps {
   tone_pref_store: TonePreferenceStore;
   memory_consolidation: MemoryConsolidationService;
   logger: ReturnType<typeof create_logger>;
+  usage_store?: UsageStore | null;
 }
 
 export interface ChannelWiringResult {
@@ -74,7 +76,7 @@ export function create_channel_wiring(deps: ChannelWiringDeps): ChannelWiringRes
     active_run_controller, render_profile_store,
     process_tracker, confirmation_guard, orchestration,
     providers, mcp, cron, decisions, sessions,
-    persona_renderer, tone_pref_store, memory_consolidation, logger,
+    persona_renderer, tone_pref_store, memory_consolidation, logger, usage_store,
   } = deps;
 
   const command_router = create_command_router({
@@ -85,6 +87,7 @@ export function create_channel_wiring(deps: ChannelWiringDeps): ChannelWiringRes
     default_alias: app_config.channel.defaultAlias,
     confirmation_guard,
     tone_store: tone_pref_store,
+    usage_ops: usage_store,
   });
 
   const task_resume = new TaskResumeService({

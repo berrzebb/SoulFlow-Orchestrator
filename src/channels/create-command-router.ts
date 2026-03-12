@@ -56,6 +56,7 @@ export type CommandRouterDeps = {
   logger?: Logger | null;
   confirmation_guard?: ConfirmationGuard | null;
   tone_store?: TonePreferenceStore | null;
+  usage_ops?: import("../gateway/usage-store.js").UsageStore | null;
 };
 
 export function create_command_router(deps: CommandRouterDeps): CommandRouter {
@@ -142,6 +143,7 @@ export function create_command_router(deps: CommandRouterDeps): CommandRouter {
           return { provider: r.provider, score: r.score, success_count: m.success_count, failure_count: m.failure_count, avg_latency_ms: total > 0 ? m.total_latency_ms / total : 0 };
         });
       },
+      get_today_by_model: deps.usage_ops ? () => deps.usage_ops!.get_today_by_model() : undefined,
     }),
     new VerifyHandler({
       get_last_output: (provider, chat_id) =>
