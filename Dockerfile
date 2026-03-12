@@ -54,6 +54,9 @@ COPY --from=build /build/dist/ dist/
 # 빌트인 스킬 (.md, .sh, .py)
 COPY src/skills/ src/skills/
 
+# 운영 스크립트 (마이그레이션 등)
+COPY scripts/ scripts/
+
 ENV WORKSPACE=/data
 ENV NODE_ENV=production
 
