@@ -1,6 +1,6 @@
 import { error_message, make_abort_signal } from "../utils/common.js";
 import { LLM_PER_CALL_TIMEOUT_MS } from "../utils/timeouts.js";
-import { BaseLlmProvider } from "./base.js";
+import { BaseLlmProvider, parse_openai_sse_stream } from "./base.js";
 import { create_logger } from "../logger.js";
 import { LlmResponse, parse_openai_response, sanitize_messages_for_api, type ChatOptions } from "./types.js";
 import { parse_tool_calls_from_text } from "../agent/tool-call-parser.js";
@@ -43,6 +43,9 @@ export class OrchestratorLlmProvider extends BaseLlmProvider {
       const headers: Record<string, string> = { "Content-Type": "application/json" };
       if (this.api_key) headers.Authorization = `Bearer ${this.api_key}`;
 
+      const should_stream = typeof options.on_stream === "function" || typeof options.on_stream_event === "function";
+      if (should_stream) body.stream = true;
+
       const signal = make_abort_signal(this.per_call_timeout_ms, options.abort_signal);
 
       const response = await fetch(`${this.api_base}/chat/completions`, {
@@ -51,8 +54,9 @@ export class OrchestratorLlmProvider extends BaseLlmProvider {
         body: JSON.stringify(body),
         signal,
       });
-      const raw = await response.json().catch(() => ({})) as Record<string, unknown>;
+
       if (!response.ok) {
+        const raw = await response.json().catch(() => ({})) as Record<string, unknown>;
         log.warn("api error", { status: response.status, model: body.model });
         return new LlmResponse({
           content: `Error calling orchestrator_llm: ${JSON.stringify(raw)}`,
@@ -60,6 +64,11 @@ export class OrchestratorLlmProvider extends BaseLlmProvider {
         });
       }
 
+      if (should_stream && response.body) {
+        return parse_openai_sse_stream(response.body, { on_stream: options.on_stream, on_stream_event: options.on_stream_event });
+      }
+
+      const raw = await response.json().catch(() => ({})) as Record<string, unknown>;
       const parsed = parse_openai_response(raw);
 
       // 소형 LLM은 tool_calls를 구조화된 필드 대신 콘텐츠에 텍스트로 출력하는 경우가 있음

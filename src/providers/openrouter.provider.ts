@@ -1,6 +1,6 @@
 import { error_message, make_abort_signal } from "../utils/common.js";
 import { LLM_REQUEST_TIMEOUT_MS } from "../utils/timeouts.js";
-import { BaseLlmProvider } from "./base.js";
+import { BaseLlmProvider, parse_openai_sse_stream } from "./base.js";
 import { create_logger } from "../logger.js";
 import { LlmResponse, parse_openai_response, sanitize_messages_for_api, type ChatOptions } from "./types.js";
 
@@ -51,6 +51,9 @@ export class OpenRouterProvider extends BaseLlmProvider {
       if (this.http_referer) headers["HTTP-Referer"] = this.http_referer;
       if (this.app_title) headers["X-Title"] = this.app_title;
 
+      const should_stream = typeof options.on_stream === "function" || typeof options.on_stream_event === "function";
+      if (should_stream) body.stream = true;
+
       const signal = make_abort_signal(DEFAULT_TIMEOUT_MS, options.abort_signal);
 
       const response = await fetch(`${this.api_base}/chat/completions`, {
@@ -59,8 +62,9 @@ export class OpenRouterProvider extends BaseLlmProvider {
         body: JSON.stringify(body),
         signal,
       });
-      const raw = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+
       if (!response.ok) {
+        const raw = (await response.json().catch(() => ({}))) as Record<string, unknown>;
         log.warn("api error", { status: response.status, model: body.model });
         return new LlmResponse({
           content: `Error calling OpenRouter: ${JSON.stringify(raw)}`,
@@ -68,6 +72,11 @@ export class OpenRouterProvider extends BaseLlmProvider {
         });
       }
 
+      if (should_stream && response.body) {
+        return parse_openai_sse_stream(response.body, { on_stream: options.on_stream, on_stream_event: options.on_stream_event });
+      }
+
+      const raw = (await response.json().catch(() => ({}))) as Record<string, unknown>;
       const parsed = parse_openai_response(raw);
       return new LlmResponse(parsed);
     } catch (error) {

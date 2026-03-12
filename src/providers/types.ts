@@ -124,6 +124,12 @@ export type ChatOptions = {
   temperature?: number;
   effort?: import("../agent/agent.types.js").EffortLevel;
   on_stream?: (chunk: string) => void | Promise<void>;
+  /**
+   * 통합 스트리밍 이벤트 콜백 — on_stream의 상위 호환.
+   * delta(텍스트), tool_start, usage 등 모든 StreamEvent를 수신.
+   * 프로바이더 구현체는 이 콜백이 있으면 가능한 한 rich event를 emit해야 함.
+   */
+  on_stream_event?: (event: import("../channels/stream-event.js").StreamEvent) => void | Promise<void>;
   abort_signal?: AbortSignal;
 };
 

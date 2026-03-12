@@ -8,7 +8,7 @@ type NdjsonLine =
   | { type: "thinking"; tokens: number; preview: string }
   | { type: "tool_start"; id: string; name: string; params?: Record<string, unknown> }
   | { type: "tool_result"; id: string; name: string; result: string; is_error?: boolean }
-  | { type: "usage"; input: number; output: number; cost_usd?: number | null }
+  | { type: "usage"; input: number; output: number; cache_read?: number; cache_creation?: number; cost_usd?: number | null }
   | { type: "rate_limit"; status: string }
   | { type: "compact"; pre_tokens: number }
   | { type: "done" }
@@ -30,10 +30,21 @@ export type ThinkingEntry = {
 
 export type NdjsonStream = { chat_id: string; content: string; done: boolean };
 
+export type UsageEntry = {
+  input: number;
+  output: number;
+  cache_read?: number;
+  cache_creation?: number;
+  cost_usd?: number | null;
+};
+
 export function useNdjsonStream() {
   const [stream, setStream] = useState<NdjsonStream | null>(null);
   const [tool_calls, setToolCalls] = useState<ToolCallEntry[]>([]);
   const [thinking_blocks, setThinkingBlocks] = useState<ThinkingEntry[]>([]);
+  const [rate_limit_status, setRateLimitStatus] = useState<string | null>(null);
+  const [usage, setUsage] = useState<UsageEntry | null>(null);
+  const [compacted, setCompacted] = useState(false);
   const tool_map_ref = useRef<Map<string, ToolCallEntry>>(new Map());
   const buffer_ref = useRef<string[]>([]);
   const abort_ref = useRef<AbortController | null>(null);
@@ -61,6 +72,9 @@ export function useNdjsonStream() {
     setStream({ chat_id, content: "", done: false });
     setToolCalls([]);
     setThinkingBlocks([]);
+    setRateLimitStatus(null);
+    setUsage(null);
+    setCompacted(false);
 
     try {
       const response = await fetch(
@@ -106,6 +120,12 @@ export function useNdjsonStream() {
                 : { id: msg.id, name: msg.name, done: true, result: msg.result, is_error: msg.is_error };
               tool_map_ref.current.set(msg.id, updated);
               setToolCalls([...tool_map_ref.current.values()]);
+            } else if (msg.type === "rate_limit") {
+              setRateLimitStatus(msg.status);
+            } else if (msg.type === "usage") {
+              setUsage({ input: msg.input, output: msg.output, cache_read: msg.cache_read, cache_creation: msg.cache_creation, cost_usd: msg.cost_usd });
+            } else if (msg.type === "compact") {
+              setCompacted(true);
             } else if (msg.type === "done") {
               flush();
               setStream((prev) => prev ? { ...prev, done: true } : null);
@@ -130,5 +150,5 @@ export function useNdjsonStream() {
     setStream(null);
   }, []);
 
-  return { stream, tool_calls, thinking_blocks, start, cancel };
+  return { stream, tool_calls, thinking_blocks, rate_limit_status, usage, compacted, start, cancel };
 }

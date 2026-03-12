@@ -752,8 +752,8 @@ export class ChannelManager implements ServiceLike {
               if (stream_ev) {
                 // web 채널: delta는 on_web_stream이 broadcast_web_stream으로 이미 처리 → 중복 제외
                 if (provider === "web" && stream_ev.type !== "delta") this.on_web_rich_event?.(message.chat_id, stream_ev);
-                // 채널: 이벤트 누적 (실제 전송은 턴 종료 후 _send_block_summary에서 일괄)
-                block_renderer?.push(stream_ev);
+                // 채널: delta 제외한 이벤트만 누적 (delta는 on_stream 경로에서 처리, 실제 전송은 턴 종료 후 _send_block_summary에서 일괄)
+                if (block_renderer && stream_ev.type !== "delta") block_renderer.push(stream_ev);
               }
             }
           : undefined,
@@ -815,6 +815,20 @@ export class ChannelManager implements ServiceLike {
     } catch (e) {
       if (run_id) this.tracker!.end(run_id, "failed", error_message(e));
       this.logger.error("invoke failed", { alias, error: error_message(e) });
+      // 진행 중인 스트림 체인 완료 대기 — 비-web 채널에서 스트림 편집과 에러 응답 경쟁 방지
+      await stream_state.chain.catch(() => {});
+      // Slack 네이티브 스트리밍 중단 — 예외 시 미종료 방지
+      if (stream_state.finalize_native_stream) {
+        await stream_state.finalize_native_stream().catch((err) =>
+          this.logger.debug("native_stream_stop_failed", { error: error_message(err) }),
+        );
+      }
+      // 누적된 도구 블록 요약 전송 — 예외 시 상태 메시지 동결 방지
+      if (block_renderer) {
+        await this._send_block_summary(provider, message, alias, block_renderer).catch((err) =>
+          this.logger.debug("block_summary_failed", { error: error_message(err) }),
+        );
+      }
       // web NDJSON: 예외 발생 시에도 스트림 종료 (deliver_result가 실행되지 않으므로 여기서 처리)
       if (provider === "web") this.on_web_stream?.(message.chat_id, stream_state.accumulated, true);
       await this.send_error_reply(provider, message, alias, error_message(e), run_id);

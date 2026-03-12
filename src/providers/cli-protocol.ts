@@ -1,5 +1,6 @@
 import { dedupe_tool_calls, parse_tool_calls_from_text, parse_tool_calls_from_unknown } from "../agent/tool-call-parser.js";
 import type { ChatMessage, ToolCallRequest } from "./types.js";
+import type { StreamEvent } from "../channels/stream-event.js";
 
 export const OUTPUT_BLOCK_START = "<<ORCH_FINAL>>";
 export const OUTPUT_BLOCK_END = "<<ORCH_FINAL_END>>";
@@ -184,6 +185,8 @@ function collect_text_deep(value: unknown, depth = 0): string {
   const rec = value as Record<string, unknown>;
   const direct = as_string(rec.text) || as_string(rec.value);
   if (direct) return direct;
+  // string delta (OpenAI Responses API: { delta: "text" })
+  if (typeof rec.delta === "string" && rec.delta) return rec.delta;
   if (rec.delta && typeof rec.delta === "object") {
     const d = rec.delta as Record<string, unknown>;
     const delta_text = as_string(d.text) || as_string(d.value);
@@ -218,6 +221,26 @@ export function extract_json_event_text(
   state: { last_full_text: string; metadata?: Record<string, unknown> },
 ): { delta?: string; final?: string } {
   const type = as_string(event.type).toLowerCase();
+
+  // OpenAI Chat Completions 스트리밍: { object: "chat.completion.chunk", choices: [{ delta: { content: "..." } }] }
+  // type 필드 없음 — choices[].delta.content 구조로 식별 (OpenAI 호환 모든 프로바이더 공통)
+  if (!type && Array.isArray(event.choices)) {
+    const first = (event.choices[0] as Record<string, unknown>) || {};
+    const finish_reason = as_string(first.finish_reason);
+    const delta = (first.delta as Record<string, unknown>) || {};
+    const content = as_string(delta.content);
+    if (event.model) { state.metadata = state.metadata || {}; state.metadata.model = String(event.model); }
+    if (event.id) { state.metadata = state.metadata || {}; state.metadata.session_id = String(event.id); }
+    if (content) {
+      state.last_full_text += content;
+      return { delta: content };
+    }
+    if (finish_reason === "stop" || finish_reason === "tool_calls") {
+      return state.last_full_text ? { final: state.last_full_text } : {};
+    }
+    return {};
+  }
+
   if (!type) return {};
 
   // init/system 이벤트에서 session_id, model 등 메타데이터 캡처
@@ -358,3 +381,157 @@ export function parse_tool_calls_from_output(raw: string): ToolCallRequest[] {
 export const __cli_provider_test__ = {
   parse_tool_calls_from_output,
 };
+
+// ── 통합 NDJSON → StreamEvent 변환 ──
+
+/** 모든 프로바이더의 NDJSON 파싱 공유 상태. */
+export type NdjsonConverterState = {
+  /** Gemini 등 누적 텍스트 방식 프로바이더용 — 마지막 완전한 텍스트 스냅샷. */
+  last_full_text: string;
+  metadata?: Record<string, unknown>;
+  /** OpenAI Chat Completions tool call streaming: index → 진행 중인 도구 호출. */
+  pending_tool_calls?: Map<number, { id: string; name: string; args_buf: string }>;
+};
+
+/**
+ * 임의 프로바이더 NDJSON 라인 → StreamEvent[].
+ * OpenAI(Chat Completions / Responses API), Gemini, Codex, 범용 delta 형식 처리.
+ * 새 프로바이더 추가 시 이 함수에만 케이스를 추가하면 처리부 변경 불필요.
+ */
+export function ndjson_to_stream_events(
+  event: Record<string, unknown>,
+  state: NdjsonConverterState,
+): StreamEvent[] {
+  const type = as_string(event.type).toLowerCase();
+
+  // === OpenAI Chat Completions: { choices: [{ delta: {...} }] } (type 필드 없음) ===
+  if (!type && Array.isArray(event.choices)) {
+    return _openai_chat_chunk_to_events(event, state);
+  }
+  if (!type) return [];
+
+  // 메타데이터 캡처 (init/session)
+  if (type === "init" || type === "system" || type === "session.created") {
+    state.metadata = state.metadata || {};
+    if (event.session_id) state.metadata.session_id = String(event.session_id);
+    if (event.model) state.metadata.model = String(event.model);
+    if (event.thread_id) state.metadata.thread_id = String(event.thread_id);
+    return [];
+  }
+
+  // === OpenAI Responses API: response.output_text.delta → { delta: "text" } ===
+  if (type === "response.output_text.delta") {
+    const delta = as_string(event.delta);
+    if (delta) { state.last_full_text += delta; return [{ type: "delta", content: delta }]; }
+    return [];
+  }
+
+  // === OpenAI Responses API: response.completed → usage ===
+  if (type === "response.completed") {
+    const resp = (event.response as Record<string, unknown>) || {};
+    const u = (resp.usage as Record<string, unknown>) || {};
+    const input = Number(u.input_tokens || 0), output = Number(u.output_tokens || 0);
+    return (input || output) ? [{ type: "usage", input, output }] : [];
+  }
+
+  // === Gemini CLI: message(role=assistant) ===
+  if (type === "message" && as_string(event.role).toLowerCase() === "assistant") {
+    const full = strip_protocol_markers(collect_text_deep(event));
+    if (!full) return [];
+    const delta = state.last_full_text && full.startsWith(state.last_full_text) ? full.slice(state.last_full_text.length) : full;
+    state.last_full_text = full;
+    return delta ? [{ type: "delta", content: delta }] : [];
+  }
+
+  // === Gemini CLI: result ===
+  if (type === "result") {
+    const response = as_string(event.response);
+    if (!response) return [];
+    const full = strip_protocol_markers(response);
+    if (!full) return [];
+    const delta = state.last_full_text && full.startsWith(state.last_full_text) ? full.slice(state.last_full_text.length) : full;
+    state.last_full_text = full;
+    return delta ? [{ type: "delta", content: delta }] : [];
+  }
+
+  // === Codex / OpenAI Responses API: item.completed ===
+  if (type === "item.completed" && event.item && typeof event.item === "object") {
+    const item = event.item as Record<string, unknown>;
+    const item_type = as_string(item.type).toLowerCase();
+    if (item_type === "agent_message" || item_type === "assistant_message" || item_type === "message") {
+      const full = strip_protocol_markers(collect_text_deep(item));
+      if (!full) return [];
+      const delta = state.last_full_text && full.startsWith(state.last_full_text) ? full.slice(state.last_full_text.length) : full;
+      state.last_full_text = full;
+      return delta ? [{ type: "delta", content: delta }] : [];
+    }
+    return [];
+  }
+
+  // === 범용: type에 "delta" 포함 ===
+  if (type.includes("delta")) {
+    const str_delta = as_string(event.delta);
+    if (str_delta) { state.last_full_text += str_delta; return [{ type: "delta", content: str_delta }]; }
+    const text = collect_text_deep(event);
+    return (text && text.trim()) ? [{ type: "delta", content: text }] : [];
+  }
+
+  // === 범용: message.completed / assistant 완료 이벤트 ===
+  if (type.includes("message.completed") || type === "assistant") {
+    const full = strip_protocol_markers(collect_text_deep(event));
+    if (!full) return [];
+    const delta = state.last_full_text && full.startsWith(state.last_full_text) ? full.slice(state.last_full_text.length) : full;
+    state.last_full_text = full;
+    return delta ? [{ type: "delta", content: delta }] : [];
+  }
+
+  return [];
+}
+
+/** OpenAI Chat Completions 청크 → StreamEvent[]. tool call streaming 누적 포함. */
+function _openai_chat_chunk_to_events(
+  event: Record<string, unknown>,
+  state: NdjsonConverterState,
+): StreamEvent[] {
+  const events: StreamEvent[] = [];
+  if (event.model) { state.metadata = state.metadata || {}; state.metadata.model = String(event.model); }
+  if (event.id) { state.metadata = state.metadata || {}; state.metadata.session_id = String(event.id); }
+
+  const choices = Array.isArray(event.choices) ? event.choices : [];
+  const first = (choices[0] as Record<string, unknown>) || {};
+  const finish_reason = as_string(first.finish_reason);
+  const delta = (first.delta as Record<string, unknown>) || {};
+
+  const content = as_string(delta.content);
+  if (content) { state.last_full_text += content; events.push({ type: "delta", content }); }
+
+  // tool call 인자 누적 — finish_reason=tool_calls에서 완성
+  if (Array.isArray(delta.tool_calls)) {
+    state.pending_tool_calls = state.pending_tool_calls || new Map();
+    for (const tc of delta.tool_calls as Record<string, unknown>[]) {
+      const idx = Number(tc.index ?? 0);
+      const fn = (tc.function as Record<string, unknown>) || {};
+      const pending = state.pending_tool_calls.get(idx) ?? { id: as_string(tc.id) || `call_${idx}`, name: "", args_buf: "" };
+      if (as_string(tc.id)) pending.id = as_string(tc.id);
+      if (as_string(fn.name)) pending.name = as_string(fn.name);
+      pending.args_buf += as_string(fn.arguments);
+      state.pending_tool_calls.set(idx, pending);
+    }
+  }
+  if (finish_reason === "tool_calls" && state.pending_tool_calls?.size) {
+    for (const [, tc] of state.pending_tool_calls) {
+      let params: Record<string, unknown> = {};
+      try { params = JSON.parse(tc.args_buf) as Record<string, unknown>; } catch { /* 불완전 args */ }
+      events.push({ type: "tool_start", id: tc.id, name: tc.name, params });
+    }
+    state.pending_tool_calls.clear();
+  }
+
+  // 최종 청크 usage
+  if (event.usage && typeof event.usage === "object") {
+    const u = event.usage as Record<string, unknown>;
+    const input = Number(u.prompt_tokens || 0), output = Number(u.completion_tokens || 0);
+    if (input || output) events.push({ type: "usage", input, output });
+  }
+  return events;
+}

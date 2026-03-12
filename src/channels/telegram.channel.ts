@@ -424,6 +424,15 @@ export class TelegramChannel extends BaseChannel {
     return { ok: res.ok, error: res.error };
   }
 
+  /**
+   * Telegram Bot API 9.3 native streaming: 드래프트 확정.
+   * editMessageText로 draft→permanent 전환 — deliver_result가 최종 내용으로 재편집.
+   * 에러 발생 시에도 frozen draft 방지.
+   */
+  async stop_native_stream(chat_id: string, stream_id: string): Promise<{ ok: boolean; error?: string }> {
+    return this.edit_message(chat_id, stream_id, "…");
+  }
+
   async edit_message(chat_id: string, message_id: string, content: string, parse_mode?: string): Promise<{ ok: boolean; error?: string }> {
     if (!this.bot_token) return { ok: false, error: "telegram_bot_token_missing" };
     if (!chat_id || !message_id) return { ok: false, error: "chat_id_and_message_id_required" };

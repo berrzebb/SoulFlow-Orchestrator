@@ -37,13 +37,18 @@ type AgentHooksOptions = {
   tools_accumulator?: string[];
   /** 사용자 정의 훅 실행기. HOOK.md / settings에서 로드. */
   hook_runner?: HookRunner | null;
+  /**
+   * true이면 rate_limit/error 등 critical 이벤트를 텍스트 스트림에 주입하지 않음.
+   * web 채널처럼 on_agent_event(NDJSON rich event)로 이미 전달되는 경우에 사용.
+   */
+  skip_critical_text_inject?: boolean;
 };
 
 export function build_agent_hooks(
   deps: AgentHooksBuilderDeps,
   opts: AgentHooksOptions,
 ): { hooks: AgentHooks; cd: CDObserver } {
-  const { buffer, on_stream, runtime_policy, channel_context, on_tool_block, backend_id, on_progress, run_id, on_agent_event, tools_accumulator, hook_runner } = opts;
+  const { buffer, on_stream, runtime_policy, channel_context, on_tool_block, backend_id, on_progress, run_id, on_agent_event, tools_accumulator, hook_runner, skip_critical_text_inject } = opts;
   const cd = create_cd_observer();
   const hooks: AgentHooks = {};
   let progress_step = 0;
@@ -113,26 +118,28 @@ export function build_agent_hooks(
     if (!on_stream) return;
 
     // count 모드(on_tool_block 설정)일 때: 도구/메타데이터는 스트림에 주입하지 않음.
-    // 에러·인증·레이트리밋만 사용자에게 표시.
+    // skip_critical_text_inject=true(web 채널)이면 on_agent_event 경로에서 이미 전달되므로 텍스트 주입 생략.
     if (on_tool_block) {
-      let critical_inject: string | null = null;
-      if (event.type === "error") {
-        critical_inject = `\n❌ ${event.error}`;
-      }
-      if (event.type === "auth_request" && event.messages.length > 0) {
-        critical_inject = `\n🔐 Authentication required:\n${event.messages.join("\n")}`;
-      }
-      if (event.type === "rate_limit" && (event.status === "rejected" || event.status === "allowed_warning")) {
-        const reset = event.resets_at ? ` (resets ${new Date(event.resets_at * 1000).toISOString().slice(11, 19)})` : "";
-        critical_inject = event.status === "rejected"
-          ? `\n⚠️ Rate limit exceeded${reset}`
-          : `\n⚠️ Rate limit warning (${Math.round((event.utilization ?? 0) * 100)}%)${reset}`;
-      }
-      if (critical_inject) {
-        buffer.append(critical_inject);
-        const flushed = buffer.flush();
-        if (flushed) {
-          try { on_stream(flushed); } catch { /* stream failure 무시 */ }
+      if (!skip_critical_text_inject) {
+        let critical_inject: string | null = null;
+        if (event.type === "error") {
+          critical_inject = `\n❌ ${event.error}`;
+        }
+        if (event.type === "auth_request" && event.messages.length > 0) {
+          critical_inject = `\n🔐 Authentication required:\n${event.messages.join("\n")}`;
+        }
+        if (event.type === "rate_limit" && (event.status === "rejected" || event.status === "allowed_warning")) {
+          const reset = event.resets_at ? ` (resets ${new Date(event.resets_at * 1000).toISOString().slice(11, 19)})` : "";
+          critical_inject = event.status === "rejected"
+            ? `\n⚠️ Rate limit exceeded${reset}`
+            : `\n⚠️ Rate limit warning (${Math.round((event.utilization ?? 0) * 100)}%)${reset}`;
+        }
+        if (critical_inject) {
+          buffer.append(critical_inject);
+          const flushed = buffer.flush();
+          if (flushed) {
+            try { on_stream(flushed); } catch { /* stream failure 무시 */ }
+          }
         }
       }
       return;

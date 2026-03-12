@@ -9,10 +9,11 @@ import {
   DEFAULT_CAPTURE_MAX_CHARS,
   DEFAULT_STREAM_STATE_MAX_CHARS,
   extract_final_from_json_output,
-  extract_json_event_text,
   extract_protocol_output,
   extract_protocol_partial,
   messages_to_prompt,
+  ndjson_to_stream_events,
+  type NdjsonConverterState,
   parse_json_line,
   parse_tool_calls_from_output,
   strip_protocol_scaffold,
@@ -287,10 +288,12 @@ export class CliHeadlessProvider extends BaseLlmProvider {
     let json_line_buffer = "";
     let final_from_json = "";
     let saw_json_event = false;
-    const json_state: { last_full_text: string; metadata?: Record<string, unknown> } = { last_full_text: "" };
+    const json_state: NdjsonConverterState = { last_full_text: "" };
     let last_emitted_chunk_key = "";
     let last_emitted_chunk_at = 0;
-    const emit_stream = async (raw: string): Promise<void> => {
+    const has_stream_cb = typeof options.on_stream === "function" || typeof options.on_stream_event === "function";
+
+    const emit_delta = async (raw: string): Promise<void> => {
       const clean = strip_protocol_scaffold(raw);
       if (!clean) return;
       const key = normalize_text(clean, true);
@@ -299,9 +302,14 @@ export class CliHeadlessProvider extends BaseLlmProvider {
       if (key === last_emitted_chunk_key && now - last_emitted_chunk_at < 30_000) return;
       last_emitted_chunk_key = key;
       last_emitted_chunk_at = now;
-      await options.on_stream?.(clean);
+      if (options.on_stream_event) {
+        try { await options.on_stream_event({ type: "delta", content: clean }); } catch { /* 무시 */ }
+      }
+      if (options.on_stream) {
+        await options.on_stream(clean);
+      }
     };
-    const on_chunk = options.on_stream
+    const on_chunk = has_stream_cb
       ? async (chunk: string) => {
           const incoming = String(chunk || "");
           if (!incoming) return;
@@ -317,12 +325,15 @@ export class CliHeadlessProvider extends BaseLlmProvider {
               const parsed = parse_json_line(line);
               if (!parsed) continue;
               saw_json_event = true;
-              const extracted = extract_json_event_text(parsed, json_state);
-              if (extracted.final && extracted.final.trim()) {
-                final_from_json = strip_protocol_scaffold(extracted.final);
-              }
-              if (extracted.delta && extracted.delta.trim()) {
-                await emit_stream(extracted.delta);
+              const events = ndjson_to_stream_events(parsed, json_state);
+              for (const ev of events) {
+                if (ev.type === "delta" && ev.content.trim()) {
+                  // final_from_json 추적 (툴 호출 파싱용)
+                  final_from_json = strip_protocol_scaffold(json_state.last_full_text) || final_from_json;
+                  await emit_delta(ev.content);
+                } else if (options.on_stream_event) {
+                  try { await options.on_stream_event(ev); } catch { /* 무시 */ }
+                }
               }
             }
             return;
@@ -334,7 +345,7 @@ export class CliHeadlessProvider extends BaseLlmProvider {
           if (partial.length <= streamed_partial.length) return;
           const delta = partial.slice(streamed_partial.length);
           streamed_partial = partial;
-          await emit_stream(delta);
+          await emit_delta(delta);
         }
       : undefined;
 

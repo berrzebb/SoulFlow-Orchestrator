@@ -229,6 +229,8 @@ export class OrchestrationService {
       run_id: args.req.run_id, on_agent_event: args.req.on_agent_event,
       tools_accumulator,
       hook_runner: this.hook_runner,
+      // web 채널: rate_limit 등은 on_agent_event → NDJSON rich event로 이미 전달 — 텍스트 스트림 중복 주입 방지
+      skip_critical_text_inject: args.req.provider === "web",
     }).hooks;
   }
 
