@@ -352,6 +352,7 @@
   "chat.avatar": "AI",
   "chat.copy_session_id": "세션 ID 복사",
   "chat.create_failed": "세션 생성 실패",
+  "chat.file_read_failed": "파일 읽기 실패",
   "chat.custom_response": "커스텀...",
   "chat.custom_response_hint": "응답 텍스트를 입력하세요 (Enter로 전송)",
   "chat.delete_failed": "세션 삭제 실패",

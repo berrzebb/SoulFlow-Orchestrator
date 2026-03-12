@@ -352,6 +352,7 @@
   "chat.avatar": "AI",
   "chat.copy_session_id": "Copy Session ID",
   "chat.create_failed": "Failed to create session",
+  "chat.file_read_failed": "Failed to read file",
   "chat.custom_response": "Custom...",
   "chat.custom_response_hint": "Enter response text (Enter to send)",
   "chat.delete_failed": "Failed to delete session",

@@ -182,6 +182,7 @@ export default function ChatPage() {
         const type = file.type.startsWith("image/") ? "image" : "file";
         setPendingMedia((prev) => [...prev, { type, url, mime: file.type, name: file.name }]);
       };
+      reader.onerror = () => toast(t("chat.file_read_failed"), "err");
       reader.readAsDataURL(file);
     }
     e.target.value = "";
