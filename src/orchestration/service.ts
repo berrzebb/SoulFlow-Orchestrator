@@ -29,6 +29,7 @@ import {
 import { ConfirmationGuard } from "./confirmation-guard.js";
 import { FINISH_REASON_WARNINGS } from "../agent/finish-reason-warnings.js";
 import { detect_escalation } from "./classifier.js";
+import { append_no_tool_notice } from "./execution/helpers.js";
 import {
   type ToolCallHandlerDeps,
 } from "./tool-call-handler.js";
@@ -539,12 +540,7 @@ function reply_result(mode: ExecutionMode, stream: StreamBuffer, reply: string |
 }
 
 export type { HitlType } from "./execution/helpers.js";
-export { format_hitl_prompt, detect_hitl_type } from "./execution/helpers.js";
-
-/** agent 모드에서 도구를 한 번도 사용하지 않은 경우 응답 끝에 완료 안내를 추가. */
-function append_no_tool_notice(reply: string): string {
-  return `${reply}\n\n_(작업이 완료되었습니다. 추가 요청이 있으면 말씀해주세요.)_`;
-}
+export { format_hitl_prompt, detect_hitl_type, append_no_tool_notice } from "./execution/helpers.js";
 
 function _extract_usage(raw: Record<string, unknown> | undefined): import("./types.js").ResultUsage | undefined {
   if (!raw) return undefined;
