@@ -52,5 +52,5 @@ export function resilient_loop(
         await sleep(delay);
       }
     }
-  })();
+  })().catch(() => {});
 }
