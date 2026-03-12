@@ -51,6 +51,7 @@ export class ContextBuilder {
   private _skill_ref_store: ReferenceStoreLike | null = null;
   private _daily_injection_days = 1;
   private _daily_injection_max_chars = 4_000;
+  private _longterm_injection_max_chars = 20_000;
   private _last_ref_sync_at = 0;
   private _last_skill_sync_at = 0;
   static readonly SYNC_TTL_MS = 5_000;
@@ -94,6 +95,10 @@ export class ContextBuilder {
   set_daily_injection(days: number, max_chars?: number): void {
     this._daily_injection_days = Math.max(0, Math.min(30, days));
     if (max_chars !== undefined) this._daily_injection_max_chars = Math.max(0, max_chars);
+  }
+
+  set_longterm_injection(max_chars: number): void {
+    this._longterm_injection_max_chars = Math.max(0, max_chars);
   }
 
   set_oauth_summary_provider(provider: OAuthSummaryProvider): void {
@@ -313,7 +318,9 @@ export class ContextBuilder {
   private async _build_memory_context(
     session_context?: { channel?: string | null; chat_id?: string | null },
   ): Promise<string> {
-    const longterm = (await this.memory_store.read_longterm()).trim();
+    const longterm_raw = (await this.memory_store.read_longterm()).trim();
+    const max_lt = this._longterm_injection_max_chars;
+    const longterm = max_lt > 0 && longterm_raw.length > max_lt ? longterm_raw.slice(-max_lt) : longterm_raw;
     const daily_section = await this._build_recent_daily_section(session_context);
     if (!longterm && !daily_section) return "";
     return [
@@ -327,6 +334,33 @@ export class ContextBuilder {
   private async _build_recent_daily_section(
     session_context?: { channel?: string | null; chat_id?: string | null },
   ): Promise<string> {
+    // 세 가지 daily 기록 형식을 모두 scope로 필터링.
+    // - turn-recorder:    ### provider:chat_id:alias HH:MM
+    // - session-promoter: ## Session DATE — provider:chat_id:alias
+    // - session-recorder: - [timestamp] [provider:chat_id:thread] ROLE(sender): text
+    function filter_lines_by_scope(lines: string[], scope: string): string[] {
+      const result: string[] = [];
+      let block_matches = false; // 헤더 이전 내용 무조건 포함 방지
+      for (const l of lines) {
+        if (l.startsWith("### ")) {
+          block_matches = l.slice(4).trim().startsWith(scope);
+          if (block_matches) result.push(l);
+        } else if (l.startsWith("## Session ")) {
+          const key = l.slice("## Session ".length).split(" — ")[1]?.trim() ?? "";
+          block_matches = key.startsWith(scope);
+          if (block_matches) result.push(l);
+        } else if (l.startsWith("- [")) {
+          // scope 지정 라인: [provider:chat_id:...] 패턴으로 필터
+          if (l.includes(`[${scope}`)) result.push(l);
+        } else if (l.startsWith("- ")) {
+          // scope 정보 없는 일반 목록 항목 — 모든 세션에 포함
+          result.push(l);
+        } else {
+          if (block_matches) result.push(l);
+        }
+      }
+      return result;
+    }
     if (this._daily_injection_days <= 0) return "";
     const all_days = await this.memory_store.list_daily();
     if (all_days.length === 0) return "";
@@ -348,9 +382,7 @@ export class ContextBuilder {
       if (!raw) continue;
 
       const lines = raw.split("\n");
-      const filtered = scope_prefix
-        ? lines.filter((l) => l.includes(`[${scope_prefix}`) || !l.startsWith("- ["))
-        : lines;
+      const filtered = scope_prefix ? filter_lines_by_scope(lines, scope_prefix) : lines;
       if (filtered.length === 0) continue;
       const text = filtered.join("\n");
 

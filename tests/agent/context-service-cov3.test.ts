@@ -91,21 +91,101 @@ describe("ContextBuilder — L354: scope_prefix 필터로 전체 라인 제거",
     try {
       const builder = new ContextBuilder(ws);
       builder.set_daily_injection(3);
-      // 오직 다른 채널 스코프 항목만 작성 (slack:C999:)
-      // scope_prefix = "slack:C001:" → filter: include("[slack:C001:") || !startsWith("- [")
-      // "- [slack:C999: 다른 채널]" → startsWith("- [") + !include("[slack:C001:") → 제거됨
       await builder.memory_store.write_daily(
         "- [slack:C999: 완전히 다른 채널 항목 one]\n- [slack:C999: 완전히 다른 채널 항목 two]"
       );
-      // 이 scope로 요청 → filtered = [] → L354 continue 실행
       const prompt = await builder.build_system_prompt(
         [],
         undefined,
         { channel: "slack", chat_id: "C001" },
       );
-      // chunks = [] → 섹션 없음
       expect(typeof prompt).toBe("string");
       expect(prompt).not.toContain("C999");
+    } finally {
+      await rm(ws, { recursive: true, force: true });
+    }
+  });
+});
+
+// ── filter_lines_by_scope: ## Session 형식 + block_matches 초기값 버그 ────────
+
+describe("ContextBuilder — filter_lines_by_scope: ## Session scope 필터링", () => {
+  it("## Session 형식이 올바른 채널만 포함, 다른 채널은 제외", async () => {
+    const ws = await make_ws();
+    try {
+      const builder = new ContextBuilder(ws);
+      builder.set_daily_injection(1);
+      // telegram 채널 Session 항목 + slack 채널 Session 항목
+      const daily = [
+        "## Session 2026-03-12 — telegram:6931693790:alice",
+        "[03:10] **User:** 식당 추천해줘",
+        "[03:11] **Bot:** 아미고 타워 근처 식당입니다",
+        "",
+        "## Session 2026-03-12 — slack:C001:bot",
+        "[03:20] **User:** 슬랙 메시지",
+        "[03:21] **Bot:** 슬랙 응답",
+      ].join("\n");
+      await builder.memory_store.write_daily(daily);
+      // telegram scope → telegram Session만 포함
+      const prompt = await builder.build_system_prompt(
+        [], undefined, { channel: "telegram", chat_id: "6931693790" },
+      );
+      expect(prompt).toContain("식당 추천해줘");
+      expect(prompt).not.toContain("슬랙 메시지");
+    } finally {
+      await rm(ws, { recursive: true, force: true });
+    }
+  });
+
+  it("block_matches 초기값 false — 헤더 이전 내용이 포함되지 않음", async () => {
+    const ws = await make_ws();
+    try {
+      const builder = new ContextBuilder(ws);
+      builder.set_daily_injection(1);
+      // 헤더 없이 raw 텍스트로 시작하는 daily
+      const daily = [
+        "raw line before any header — should be excluded",
+        "### telegram:6931693790:alice 03:10",
+        "**User:** 식당 찾아줘",
+        "**Bot:** 네 알겠습니다",
+      ].join("\n");
+      await builder.memory_store.write_daily(daily);
+      const prompt = await builder.build_system_prompt(
+        [], undefined, { channel: "telegram", chat_id: "6931693790" },
+      );
+      expect(prompt).toContain("식당 찾아줘");
+      expect(prompt).not.toContain("raw line before any header");
+    } finally {
+      await rm(ws, { recursive: true, force: true });
+    }
+  });
+
+  it("### turn-recorder와 ## Session이 혼재할 때 각각 올바르게 scope 필터링", async () => {
+    const ws = await make_ws();
+    try {
+      const builder = new ContextBuilder(ws);
+      builder.set_daily_injection(1);
+      const daily = [
+        "### telegram:6931693790:alice 03:10",
+        "**User:** 텔레그램 메시지",
+        "**Bot:** 텔레그램 응답",
+        "",
+        "## Session 2026-03-12 — slack:C001:bot",
+        "[03:15] **User:** 슬랙 세션 메시지",
+        "[03:15] **Bot:** 슬랙 세션 응답",
+        "",
+        "### telegram:6931693790:alice 03:20",
+        "**User:** 두번째 텔레그램",
+        "**Bot:** 두번째 텔레그램 응답",
+      ].join("\n");
+      await builder.memory_store.write_daily(daily);
+      // telegram scope
+      const prompt = await builder.build_system_prompt(
+        [], undefined, { channel: "telegram", chat_id: "6931693790" },
+      );
+      expect(prompt).toContain("텔레그램 메시지");
+      expect(prompt).toContain("두번째 텔레그램");
+      expect(prompt).not.toContain("슬랙 세션 메시지");
     } finally {
       await rm(ws, { recursive: true, force: true });
     }

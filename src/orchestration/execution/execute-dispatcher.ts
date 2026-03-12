@@ -175,10 +175,15 @@ export async function execute_dispatch(
       // 도구 카테고리가 지정되지 않은 once 요청 → 도구 없이 먼저 시도.
       // LLM이 도구가 필요하면 "NEED AGENT LOOP"를 출력 → 에스컬레이션 후 전체 도구 제공.
       const once_tools = classifier_cats?.length ? tool_definitions : [];
-      // follow-up 감지(classifier_cats 존재) 시 최근 세션 히스토리를 메시지 turn으로 주입.
-      // 메모리 섹션만으론 LLM이 짧은 참조 메시지("기준으로", "거기서" 등)의 맥락을 놓침.
-      const recent_session_turns = classifier_cats?.length
-        ? req.session_history.slice(-4)
+      // follow-up 감지(classifier_cats 존재) 또는 짧은 메시지(≤10 토큰) 시 히스토리 주입.
+      // 메모리 섹션만으론 LLM이 짧은 참조 메시지("기준으로", "그거 다시" 등)의 맥락을 놓침.
+      // session_history의 마지막은 record_user()가 방금 저장한 현재 요청 메시지.
+      // context_block에 이미 포함되어 있으므로 제외하지 않으면 연속 user 메시지 중복이 발생.
+      const history_for_turns = req.session_history.slice(0, -1);
+      const msg_tokens = (req.message.content ?? "").trim().split(/\s+/).filter(Boolean).length;
+      const is_short = msg_tokens <= 10;
+      const recent_session_turns = history_for_turns.length > 0 && (classifier_cats?.length || is_short)
+        ? history_for_turns.slice(-4)
         : undefined;
       const once_result = await deps.run_once({
         req, executor, task_with_media, context_block, skill_names, system_base,

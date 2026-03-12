@@ -173,6 +173,7 @@ export async function create_agent_core(deps: AgentCoreDeps): Promise<AgentCoreR
     agent.context.memory_store.set_embed_worker_config?.(embed_worker_config);
   }
   agent.context.set_daily_injection(app_config.memory.dailyInjectionDays, app_config.memory.dailyInjectionMaxChars);
+  agent.context.set_longterm_injection(app_config.memory.longtermInjectionMaxChars);
 
   const reference_store = new ReferenceStore(workspace);
   if (embed_service) reference_store.set_embed(embed_service);

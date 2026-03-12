@@ -649,8 +649,8 @@ export class MemoryStore implements MemoryStoreLike {
       "",
     ].join("\n");
     const body = chunks.join("\n\n");
-    const block = body ? `${header}${body}\n` : `${header}- no daily content in window\n`;
-    await this.append_longterm(block);
+    // daily 내용이 없으면 append하지 않음 — 빈 consolidation 메타데이터가 longterm을 오염시키는 것을 방지
+    if (body) await this.append_longterm(`${header}${body}\n`);
 
     const compressed_prompt = [
       "# COMPRESSED MEMORY PROMPT",
@@ -682,7 +682,7 @@ export class MemoryStore implements MemoryStoreLike {
 
     return {
       ok: true,
-      longterm_appended_chars: block.length,
+      longterm_appended_chars: body ? header.length + body.length + 1 : 0,
       daily_entries_used: used,
       archived_files: archived,
       summary: body ? `consolidated ${used.length} daily entries` : "no daily entries consolidated",

@@ -373,7 +373,9 @@ export class OrchestrationService {
 
     // resumed_task 조기 반환 (semantic 보존)
     if (preflight.kind === "resume") {
-      return this.continue_task_loop(req, preflight.resumed_task, preflight.task_with_media, preflight.media);
+      const resume_result = await this.continue_task_loop(req, preflight.resumed_task, preflight.task_with_media, preflight.media);
+      record_turn_to_daily(req, resume_result, this.runtime.get_context_builder()?.memory_store);
+      return resume_result;
     }
 
     // secret 검증 실패 → 조기 차단

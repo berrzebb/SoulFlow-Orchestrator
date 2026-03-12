@@ -185,6 +185,8 @@ const MemorySchema = z.object({
   dailyInjectionDays: z.number().int().min(0).max(30),
   /** 자동 주입 시 최대 글자 수 상한. 초과 시 최근 엔트리부터 우선 포함. */
   dailyInjectionMaxChars: z.number().int().min(0),
+  /** longterm memory 주입 최대 글자 수. 초과 시 최신 내용 우선(tail). 0이면 무제한. */
+  longtermInjectionMaxChars: z.number().int().min(0),
 });
 
 const OpsSchema = z.object({
@@ -333,6 +335,7 @@ export function get_config_defaults(): AppConfig {
       },
       dailyInjectionDays: 1,
       dailyInjectionMaxChars: 4_000,
+      longtermInjectionMaxChars: 20_000,
     },
     logging: {
       level: "info",
