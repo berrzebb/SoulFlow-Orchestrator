@@ -1,10 +1,12 @@
 import { error_message, sleep } from "../utils/common.js";
-import { HTTP_FETCH_QUICK_TIMEOUT_MS, HTTP_FETCH_TIMEOUT_MS } from "../utils/timeouts.js";
+import { HTTP_FETCH_QUICK_TIMEOUT_MS, HTTP_FETCH_TIMEOUT_MS, LLM_REQUEST_TIMEOUT_MS } from "../utils/timeouts.js";
 import { execFile, type ChildProcess, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import { create_logger } from "../logger.js";
 
 const log = create_logger("orchestrator-llm-runtime");
+/** API 상태·VRAM 조회용 빠른 probe 타임아웃 (응답 없으면 빠르게 포기). */
+const LLM_PROBE_TIMEOUT_MS = 3_000;
 
 const exec_file_async = promisify(execFile);
 
@@ -458,7 +460,7 @@ export class OrchestratorLlmRuntime {
   async list_running(): Promise<RunningModelInfo[]> {
     const base = this.api_base.replace(/\/v1\/?$/, "");
     try {
-      const res = await fetch(`${base}/api/ps`, { signal: AbortSignal.timeout(3_000) });
+      const res = await fetch(`${base}/api/ps`, { signal: AbortSignal.timeout(LLM_PROBE_TIMEOUT_MS) });
       if (!res.ok) return [];
       const data = (await res.json()) as Record<string, unknown>;
       const models = Array.isArray(data.models) ? data.models : [];
@@ -503,7 +505,7 @@ export class OrchestratorLlmRuntime {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ model: this.model, prompt: "ping", stream: false, options: { num_predict: 1 } }),
-        signal: AbortSignal.timeout(120_000),
+        signal: AbortSignal.timeout(LLM_REQUEST_TIMEOUT_MS),
       });
     } catch { /* warm-up 실패는 무시 — 실제 요청 시 로드됨 */ }
   }
@@ -512,7 +514,7 @@ export class OrchestratorLlmRuntime {
 
   private async is_api_ready(): Promise<boolean> {
     try {
-      const response = await fetch(`${this.api_base}/models`, { signal: AbortSignal.timeout(3_000) });
+      const response = await fetch(`${this.api_base}/models`, { signal: AbortSignal.timeout(LLM_PROBE_TIMEOUT_MS) });
       return response.ok;
     } catch {
       return false;
@@ -521,7 +523,7 @@ export class OrchestratorLlmRuntime {
 
   private async is_model_loaded(model: string): Promise<boolean> {
     try {
-      const response = await fetch(`${this.api_base}/models`, { signal: AbortSignal.timeout(3_000) });
+      const response = await fetch(`${this.api_base}/models`, { signal: AbortSignal.timeout(LLM_PROBE_TIMEOUT_MS) });
       if (!response.ok) return false;
       const data = (await response.json()) as Record<string, unknown>;
       const rows = Array.isArray(data.data) ? data.data : [];
@@ -540,7 +542,7 @@ export class OrchestratorLlmRuntime {
   private async get_gpu_percent(): Promise<number | undefined> {
     const base = this.api_base.replace(/\/v1\/?$/, "");
     try {
-      const res = await fetch(`${base}/api/ps`, { signal: AbortSignal.timeout(3_000) });
+      const res = await fetch(`${base}/api/ps`, { signal: AbortSignal.timeout(LLM_PROBE_TIMEOUT_MS) });
       if (!res.ok) return undefined;
       const data = (await res.json()) as Record<string, unknown>;
       const models = Array.isArray(data.models) ? data.models : [];
