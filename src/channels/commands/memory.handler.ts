@@ -7,7 +7,7 @@ import { strip_memory_uri } from "../../agent/tools/memory-format.js";
 import { format_subcommand_guide, format_subcommand_usage } from "./registry.js";
 import { format_mention, type CommandContext, type CommandHandler } from "./types.js";
 
-export interface MemoryStoreLike {
+export interface MemoryCommandStore {
   search(query: string, opts: { limit: number }): Promise<Array<{ file: string; line: number; text: string }>>;
   read_daily(day: string): Promise<string | null>;
   read_longterm(): Promise<string | null>;
@@ -15,7 +15,7 @@ export interface MemoryStoreLike {
 }
 
 export interface MemoryAccess {
-  get_memory_store(): MemoryStoreLike | null;
+  get_memory_store(): MemoryCommandStore | null;
 }
 
 function kst_today_key(now = Date.now()): string {

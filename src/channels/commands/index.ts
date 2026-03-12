@@ -5,7 +5,7 @@ export { HelpHandler } from "./help.handler.js";
 export { StopHandler } from "./stop.handler.js";
 export { RenderHandler, InMemoryRenderProfileStore, type RenderProfileStore } from "./render.handler.js";
 export { SecretHandler } from "./secret.handler.js";
-export { MemoryHandler, type MemoryAccess, type MemoryStoreLike } from "./memory.handler.js";
+export { MemoryHandler, type MemoryAccess, type MemoryCommandStore } from "./memory.handler.js";
 export { DecisionHandler, type DecisionAccess, type DecisionServiceLike } from "./decision.handler.js";
 export { CronHandler } from "./cron.handler.js";
 export { ReloadHandler, type ReloadTarget } from "./reload.handler.js";
