@@ -538,76 +538,8 @@ function reply_result(mode: ExecutionMode, stream: StreamBuffer, reply: string |
   return { reply, mode, tool_calls_count, streamed: stream.has_streamed(), stream_full_content: stream.get_full_content(), parsed_output, usage };
 }
 
-/** HITL 프롬프트 유형. */
-export type HitlType = "choice" | "confirmation" | "question" | "escalation" | "error";
-
-/** HITL 대기 상태를 채널 사용자에게 명확히 알리는 프롬프트. */
-export function format_hitl_prompt(agent_prompt: string, task_id: string, type: HitlType = "choice"): string {
-  const cleaned = (agent_prompt || "")
-    .replace(/__request_user_choice__/g, "")
-    .replace(/\[ASK_USER\]/g, "")
-    .replace(/^ask_user_sent:\S+$/gm, "")
-    .replace(/^question:\s.+$/gm, "")
-    .trim();
-  const body = cleaned || "추가 정보가 필요합니다.";
-  const guide = HITL_GUIDE[type];
-  return [
-    guide.header,
-    "",
-    body,
-    "",
-    guide.instruction,
-    "",
-    "_이 메시지에 답장하면 작업이 자동으로 재개됩니다._",
-  ].join("\n");
-}
-
-const HITL_GUIDE: Record<HitlType, { header: string; instruction: string }> = {
-  choice: {
-    header: "💬 **선택 요청**",
-    instruction: "위 선택지 중 하나를 골라 답장해주세요.",
-  },
-  confirmation: {
-    header: "💬 **확인 요청**",
-    instruction: "`예` 또는 `아니오`로 답장해주세요.",
-  },
-  question: {
-    header: "💬 **질문**",
-    instruction: "질문에 대한 답변을 답장해주세요.",
-  },
-  escalation: {
-    header: "⚠️ **판단 필요**",
-    instruction: [
-      "다음 중 하나를 답장해주세요:",
-      "• 구체적인 지시사항을 입력하면 해당 내용으로 재시도합니다",
-      "• `계속` — 현재 결과를 수용하고 다음 단계로 진행",
-      "• `취소` — 워크플로우를 중단합니다",
-    ].join("\n"),
-  },
-  error: {
-    header: "❌ **작업 실패**",
-    instruction: [
-      "다음 중 하나를 답장해주세요:",
-      "• 추가 정보나 수정 지시를 입력하면 해당 내용을 포함하여 재시도합니다",
-      "• `재시도` — 동일 조건으로 다시 실행합니다",
-      "• `취소` — 작업을 종료합니다",
-    ].join("\n"),
-  },
-};
-
-/** 에이전트 출력에서 HITL 유형을 추론. */
-export function detect_hitl_type(prompt: string): HitlType {
-  if (!prompt) return "question";
-  // 확인 요청: yes/no, 예/아니오 패턴
-  if (/진행할까요|계속할까요|실행할까요|괜찮을까요|할까요\?|맞나요\?|맞습니까\?/.test(prompt)
-    || /\b(yes\s*\/\s*no|y\s*\/\s*n)\b/i.test(prompt)) {
-    return "confirmation";
-  }
-  // 번호 목록 (1. / 1) / ① 등) 또는 불릿 목록 (- / • / * )이 2개 이상이면 선택지
-  const numbered = prompt.match(/(?:^|\n)\s*(?:\d+[.)]\s|[①-⑳]\s|[-•*]\s)/g);
-  if (numbered && numbered.length >= 2) return "choice";
-  return "question";
-}
+export type { HitlType } from "./execution/helpers.js";
+export { format_hitl_prompt, detect_hitl_type } from "./execution/helpers.js";
 
 /** agent 모드에서 도구를 한 번도 사용하지 않은 경우 응답 끝에 완료 안내를 추가. */
 function append_no_tool_notice(reply: string): string {
