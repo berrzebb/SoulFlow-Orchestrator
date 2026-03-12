@@ -197,14 +197,14 @@ describe("sync_all_workflow_triggers — channel_message 트리거", () => {
     expect(result.channel_message.registered).toBe(1);
   });
 
-  it("channel_message 없음 → on_publish 미호출", async () => {
+  it("channel_message 없음 → registered=0", async () => {
     const bus = make_bus();
     const deps = make_deps({ bus });
     const templates: TemplateWithSlug[] = [];
 
-    await sync_all_workflow_triggers(templates, deps);
+    const result = await sync_all_workflow_triggers(templates, deps);
 
-    expect(vi.mocked(bus.on_publish)).not.toHaveBeenCalled();
+    expect(result.channel_message.registered).toBe(0);
   });
 });
 
