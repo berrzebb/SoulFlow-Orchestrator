@@ -94,17 +94,15 @@ function is_followup_inquiry(tokens: Set<string>, history: Array<{ role: string;
   return !!last_assistant && RE_TASK_MENTION.test(last_assistant.content);
 }
 
-/**
- * 어시스턴트가 추가 정보를 요청했음을 나타내는 패턴.
- * "위치를 알려주세요", "어디인지 말해줘", "어떤 것을 원하시나요?" 등.
- */
-const RE_ASSISTANT_INFO_REQUEST = /알려주세요|알려줘|알아야|어디(?:서|를|에|인지)?|언제|무엇을|무엇인지|어떤|보내주세요|말해주세요|주소|위치|구체적|자세히|더\s*알|입력해|알\s*수\s*있|tell\s*me|let\s*me\s*know|what\s*is|where\s*is|which\s*one/i;
+/** 어시스턴트가 추가 정보를 요청했음을 나타내는 패턴 (locale 기반). */
+const RE_ASSISTANT_INFO_REQUEST = new RegExp(
+  DEFAULT_CLASSIFIER_LOCALE.assistant_info_request_patterns.join("|"), "i",
+);
 
-/**
- * 사용자가 이전 맥락(위치/조건)을 참조하는 짧은 후속 메시지 패턴.
- * 예: "내가 있는 곳 기준으로", "거기 기준", "그 기준으로 다시"
- */
-const RE_USER_CONTEXT_REFERENCE = /내가\s*있는\s*곳|여기\s*기준|위치\s*기준|거기\s*기준|그\s*기준|현재\s*위치|내\s*위치|주변으로|근처로|기준으로|거기서|거기|여기서|여기|그\s*주변|그\s*근처/i;
+/** 사용자가 이전 맥락(위치/조건)을 참조하는 짧은 후속 메시지 패턴 (locale 기반). */
+const RE_USER_CONTEXT_REFERENCE = new RegExp(
+  DEFAULT_CLASSIFIER_LOCALE.user_context_reference_patterns.join("|"), "i",
+);
 
 /**
  * 짧은 후속 메시지일 때 대화 히스토리에서 도구 카테고리 힌트를 추출.
