@@ -484,6 +484,8 @@ export class ChannelManager implements ServiceLike {
     } finally {
       // current-turn override는 이번 턴 응답까지만 적용 — 다음 턴에 누수 방지
       if (tone) this.tone_overrides.delete(ck);
+      // 모든 경로(조기 반환/invoke_and_reply)에서 busy_count 감소 보장
+      this.on_activity_end?.();
     }
   }
 
@@ -747,7 +749,6 @@ export class ChannelManager implements ServiceLike {
       await this.send_error_reply(provider, message, alias, error_message(e), run_id);
     } finally {
       clearInterval(typing_ticker);
-      this.on_activity_end?.();
       resolve_done();
       this.active_runs.unregister(run_key, abort);
       this.run_start_times.delete(run_key);
