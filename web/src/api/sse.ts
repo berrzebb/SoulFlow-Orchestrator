@@ -17,7 +17,9 @@ export function create_sse(path: string, handlers: Record<string, SseHandler>): 
 
     for (const [event, handler] of Object.entries(handlers)) {
       es.addEventListener(event, (e) => {
-        try { handler(JSON.parse((e as MessageEvent).data)); } catch { /* skip */ }
+        try { handler(JSON.parse((e as MessageEvent).data)); } catch (err) {
+          console.warn("[sse] JSON parse error on event", event, err);
+        }
       });
     }
 
