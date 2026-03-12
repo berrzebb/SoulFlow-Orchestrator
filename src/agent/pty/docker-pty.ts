@@ -105,10 +105,21 @@ export class DockerPty implements Pty {
       };
 
       const container_id = await this.docker.create(create_opts);
+      // kill()이 create 대기 중 먼저 호출된 경우 생성된 컨테이너를 즉시 정리
+      if (this.exited) {
+        swallow(this.docker.rm(container_id));
+        return;
+      }
       // pid를 실제 container ID로 갱신
       (this as { pid: string }).pid = container_id;
 
       await this.docker.start(container_id);
+      // start 대기 중 kill()이 호출된 경우 컨테이너 정리
+      if (this.exited) {
+        swallow(this.docker.stop(container_id, 0));
+        swallow(this.docker.rm(container_id));
+        return;
+      }
       const { stdin, stdout } = await this.docker.attach(container_id);
 
       this.stdin = stdin;
