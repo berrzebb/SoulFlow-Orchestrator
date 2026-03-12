@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { ToolCallEntry, ThinkingEntry } from "../../hooks/use-ndjson-stream";
+import { useT } from "../../i18n";
 
 const ICONS: [RegExp, string][] = [
   [/^web_search|^search_web/, "🔍"],
@@ -42,6 +43,7 @@ export function ThinkingBlockList({ blocks }: { blocks: ThinkingEntry[] }) {
 }
 
 function ThinkingBlock({ entry }: { entry: ThinkingEntry }) {
+  const t = useT();
   const [expanded, setExpanded] = useState(false);
   return (
     <div className="thinking-block">
@@ -49,17 +51,17 @@ function ThinkingBlock({ entry }: { entry: ThinkingEntry }) {
         className="thinking-block__header"
         onClick={() => setExpanded((e) => !e)}
         aria-expanded={expanded}
-        aria-label={`Thinking: ${entry.tokens.toLocaleString()} tokens`}
+        aria-label={`${t("chat.thinking_label")}: ${entry.tokens.toLocaleString()} ${t("chat.tokens")}`}
       >
         <span className="thinking-block__icon" aria-hidden="true">💭</span>
         <span className="thinking-block__label">
-          Thinking <span className="thinking-block__tokens">({entry.tokens.toLocaleString()} tokens)</span>
+          {t("chat.thinking_label")} <span className="thinking-block__tokens">({entry.tokens.toLocaleString()} {t("chat.tokens")})</span>
         </span>
         <span className="thinking-block__expand-icon" aria-hidden="true">{expanded ? "▲" : "▼"}</span>
       </button>
       {expanded && (
         <div className="thinking-block__detail">
-          <pre className="thinking-block__pre">{entry.preview || "(no preview)"}</pre>
+          <pre className="thinking-block__pre">{entry.preview || t("chat.no_preview")}</pre>
         </div>
       )}
     </div>
@@ -78,6 +80,7 @@ export function ToolCallList({ calls }: { calls: ToolCallEntry[] }) {
 }
 
 function ToolCallBlock({ entry }: { entry: ToolCallEntry }) {
+  const t = useT();
   const [expanded, setExpanded] = useState(false);
   const status_cls = entry.done ? (entry.is_error ? "error" : "done") : "pending";
 
@@ -108,16 +111,16 @@ function ToolCallBlock({ entry }: { entry: ToolCallEntry }) {
         <div className="tool-call__detail">
           {entry.params && Object.keys(entry.params).length > 0 && (
             <section className="tool-call__section">
-              <div className="tool-call__section-label">Params</div>
+              <div className="tool-call__section-label">{t("chat.tool_params")}</div>
               <pre className="tool-call__pre">{JSON.stringify(entry.params, null, 2)}</pre>
             </section>
           )}
           {entry.result && (
             <section className="tool-call__section">
-              <div className="tool-call__section-label">{entry.is_error ? "Error" : "Result"}</div>
+              <div className="tool-call__section-label">{entry.is_error ? t("chat.tool_error") : t("chat.tool_result")}</div>
               <pre className={`tool-call__pre${entry.is_error ? " tool-call__pre--error" : ""}`}>
                 {entry.result.length > 1200
-                  ? `${entry.result.slice(0, 1200)}\n… (${entry.result.length - 1200} chars truncated)`
+                  ? `${entry.result.slice(0, 1200)}\n… (${t("chat.truncated", { count: entry.result.length - 1200 })})`
                   : entry.result}
               </pre>
             </section>
