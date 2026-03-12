@@ -12,6 +12,7 @@ import {
 } from "../../orchestration/workflow-loader.js";
 import { run_phase_loop } from "../../agent/phase-loop-runner.js";
 import { build_node_catalog } from "../../agent/tools/workflow-catalog.js";
+import { test_orche_node } from "../../agent/orche-node-executor.js";
 import { short_id, error_message, now_iso } from "../../utils/common.js";
 import type { Logger } from "../../logger.js";
 
@@ -1086,8 +1087,6 @@ export function create_workflow_ops(deps: {
       const node = node_raw as unknown as import("../../agent/workflow-node.types.js").WorkflowNodeDefinition;
 
       if (node.node_type !== "phase") {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const { test_orche_node } = require("../../agent/orche-node-executor.js") as typeof import("../../agent/orche-node-executor.js");
         if (!workspace) throw new Error("workspace is required for test_single_node");
         const result = test_orche_node(node as import("../../agent/workflow-node.types.js").OrcheNodeDefinition, { memory: { ...input_memory }, workspace });
         return { ok: true, preview: result.preview, warnings: result.warnings };

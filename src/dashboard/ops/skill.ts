@@ -2,6 +2,7 @@
 
 import { readFileSync, writeFileSync, existsSync, readdirSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
+import AdmZip from "adm-zip";
 import { error_message } from "../../utils/common.js";
 import { sanitize_filename, sanitize_rel_path, is_inside } from "./shared.js";
 import type { DashboardSkillOps } from "../service.js";
@@ -59,8 +60,6 @@ export function create_skill_ops(deps: {
     },
     upload_skill: (name: string, zip_buffer: Buffer) => {
       try {
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const AdmZip = require("adm-zip") as typeof import("adm-zip");
         const zip = new AdmZip(zip_buffer);
         const skill_dir = join(workspace, "skills", name);
         const entries = zip.getEntries();
