@@ -466,3 +466,45 @@ describe("build_agent_hooks — inline tool_result log_event 호출", () => {
     expect(call.summary).toContain("read_file");
   });
 });
+
+// ── from agent-hooks-builder-cov3 ──
+
+describe("build_agent_hooks — cd_event 로깅 (L67) ask_user", () => {
+  it("ask_user tool_use → cd_event 발생 → logger.info('cd_event') 호출됨", () => {
+    const deps = make_deps();
+    const { hooks } = build_agent_hooks(deps, make_opts());
+
+    hooks.on_event!({
+      type: "tool_use",
+      source: { backend: "claude_sdk" },
+      at: new Date().toISOString(),
+      tool_name: "ask_user",
+      tool_id: "t1",
+      input: { question: "사용자에게 질문?" },
+    });
+
+    expect(deps.logger.info).toHaveBeenCalledWith(
+      "cd_event",
+      expect.objectContaining({ indicator: "clarify" }),
+    );
+  });
+});
+
+describe("build_agent_hooks — auto-approve + channel_context (L204-205)", () => {
+  it("approval=auto-approve + channel_context → on_approval 훅 등록 + 'accept' 반환", async () => {
+    const deps = make_deps();
+    const channel_context = { channel: "slack", chat_id: "C123" };
+    const { hooks } = build_agent_hooks(
+      deps,
+      make_opts({ channel_context }),
+    );
+
+    expect(hooks.on_approval).toBeDefined();
+    const result = await hooks.on_approval!({ type: "tool", tool_name: "exec", detail: "run ls" });
+    expect(result).toBe("accept");
+    expect(deps.logger.info).toHaveBeenCalledWith(
+      "approval_auto_accepted",
+      expect.objectContaining({ tool: "exec" }),
+    );
+  });
+});

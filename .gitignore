@@ -42,3 +42,5 @@ Thumbs.db
 .vscode/
 *.swp
 .claude/ralph-loop.local.md
+
+docs/**/design/**

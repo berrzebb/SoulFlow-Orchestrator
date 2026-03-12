@@ -664,3 +664,232 @@ describe("Phase 4.5: Execute Dispatcher 분리", () => {
     });
   });
 });
+
+// ── from execute-dispatcher-cov2 ──
+
+describe("execute_dispatch — cov2 미커버 분기", () => {
+  let gatewaySpy: any;
+  beforeEach(() => { gatewaySpy = vi.spyOn(gatewayModule, "resolve_gateway"); });
+
+  function make_deps_cov2(overrides: Partial<ExecuteDispatcherDeps> = {}): ExecuteDispatcherDeps {
+    return {
+      providers: { run_orchestrator: vi.fn(async () => ({ content: "mock" })) } as any,
+      runtime: {
+        list_active_tasks: vi.fn(() => []),
+        find_session_by_task: vi.fn(() => null),
+        get_context_builder: vi.fn(() => ({
+          skills_loader: {
+            get_skill_metadata: vi.fn((name: string) => name === "coder" ? {
+              name: "coder", summary: "writes code",
+              type: "task", source: "local", shared_protocols: [],
+              checks: ["Did you write tests?", "Did you run linting?"],
+              tools: [], triggers: [],
+            } : null),
+            get_role_skill: vi.fn(() => null),
+          },
+        })),
+      } as any,
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } as any,
+      config: { executor_provider: "chatgpt", provider_caps: {} },
+      process_tracker: null,
+      guard: null,
+      tool_index: null,
+      log_event: vi.fn(),
+      build_identity_reply: vi.fn(() => "I am Claude"),
+      build_system_prompt: vi.fn(async () => "system"),
+      generate_guard_summary: vi.fn(async () => "summary"),
+      run_once: vi.fn(async () => ({ reply: "completed", mode: "once" as const, tool_calls_count: 3, streamed: false, tools_used: ["bash", "write_file"] })),
+      run_agent_loop: vi.fn(async () => ({ reply: "agent done", mode: "agent" as const, tool_calls_count: 2, streamed: false })),
+      run_task_loop: vi.fn(async () => ({ reply: "task done", mode: "task" as const, tool_calls_count: 0, streamed: false })),
+      run_phase_loop: vi.fn(async () => ({ reply: "phase done", mode: "phase" as const, tool_calls_count: 0, streamed: false })),
+      caps: vi.fn(() => ({ chatgpt_available: true, claude_available: true })),
+      ...overrides,
+    };
+  }
+
+  const cov2Preflight: ReadyPreflight = {
+    ...mockPreflight,
+    task_with_media: "implement feature X",
+    skill_names: ["coder"],
+  } as any;
+
+  it("check.has_checks — validator alias + bash 도구 사용 → completion check 추가", async () => {
+    const deps = make_deps_cov2();
+    gatewaySpy.mockResolvedValue({ action: "execute", mode: "once", executor: "chatgpt" } as GatewayDecision);
+    (deps.run_once as any).mockResolvedValue({
+      reply: "I implemented feature X",
+      mode: "once" as const,
+      tool_calls_count: 3,
+      streamed: false,
+      tools_used: ["bash"],
+    });
+
+    const reviewer_request = { ...mockRequest, alias: "reviewer" };
+    const result = await execute_dispatch(deps, reviewer_request, cov2Preflight);
+    expect(result.reply).toContain("I implemented feature X");
+    expect(result.reply).toContain("완료 체크리스트");
+  });
+
+  it("agent 모드 + chatgpt executor + 결과 없음 → finalize(first)", async () => {
+    const deps = make_deps_cov2();
+    gatewaySpy.mockResolvedValue({ action: "execute", mode: "agent", executor: "chatgpt" } as GatewayDecision);
+    (deps.run_agent_loop as any).mockResolvedValue({
+      reply: "", mode: "agent" as const, tool_calls_count: 0, streamed: false, error: "agent_no_output",
+    });
+
+    const result = await execute_dispatch(deps, mockRequest, cov2Preflight);
+    expect(result.mode).toBe("agent");
+    expect(result.error).toBe("agent_no_output");
+  });
+
+  it("claude_code fallback → second 성공", async () => {
+    const deps = make_deps_cov2();
+    gatewaySpy.mockResolvedValue({ action: "execute", mode: "agent", executor: "claude_code" } as GatewayDecision);
+
+    let call_count = 0;
+    (deps.run_agent_loop as any).mockImplementation(async () => {
+      call_count++;
+      if (call_count === 1) return { reply: "", mode: "agent" as const, tool_calls_count: 0, streamed: false };
+      return { reply: "fallback result", mode: "agent" as const, tool_calls_count: 1, streamed: false };
+    });
+
+    const result = await execute_dispatch(deps, mockRequest, cov2Preflight);
+    expect(result.reply).toContain("fallback result");
+    expect(call_count).toBe(2);
+  });
+
+  it("claude_code fallback → 양쪽 모두 실패", async () => {
+    const deps = make_deps_cov2();
+    gatewaySpy.mockResolvedValue({ action: "execute", mode: "agent", executor: "claude_code" } as GatewayDecision);
+
+    let call_count = 0;
+    (deps.run_agent_loop as any).mockImplementation(async () => {
+      call_count++;
+      return { reply: "", mode: "agent" as const, tool_calls_count: 0, streamed: false, error: call_count === 1 ? "primary_failed" : "fallback_failed" };
+    });
+
+    const result = await execute_dispatch(deps, mockRequest, cov2Preflight);
+    expect(result.mode).toBe("agent");
+    expect(call_count).toBe(2);
+    expect(result.error).toBeTruthy();
+  });
+});
+
+// ── from execute-dispatcher-cov3 ──
+
+describe("execute_dispatch — matched_skills map + filter (L130-131)", () => {
+  let gatewaySpy: any;
+  beforeEach(() => { gatewaySpy = vi.spyOn(gatewayModule, "resolve_gateway"); });
+
+  function make_deps_cov3(overrides: Partial<ExecuteDispatcherDeps> = {}): ExecuteDispatcherDeps {
+    return {
+      providers: { run_orchestrator: vi.fn(async () => ({ content: "mock" })) } as any,
+      runtime: {
+        list_active_tasks: vi.fn(() => []),
+        find_session_by_task: vi.fn(() => null),
+        get_context_builder: vi.fn(() => ({
+          skills_loader: { get_skill_metadata: vi.fn(() => null), get_role_skill: vi.fn(() => null) },
+        })),
+        get_skill_metadata: vi.fn((name: string) =>
+          name === "coder"
+            ? { name: "coder", checks: ["Did you write tests?"], tools: [], triggers: [], shared_protocols: [], type: "task", source: "local", summary: "writes code" }
+            : null,
+        ),
+      } as any,
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } as any,
+      config: { executor_provider: "chatgpt" },
+      process_tracker: null,
+      guard: null,
+      tool_index: null,
+      log_event: vi.fn(),
+      build_identity_reply: vi.fn(() => "I am Claude"),
+      build_system_prompt: vi.fn(async () => "system"),
+      generate_guard_summary: vi.fn(async () => "summary"),
+      run_once: vi.fn(async () => ({
+        reply: "validation complete", mode: "once" as const, tool_calls_count: 2, streamed: false,
+        tools_used: ["bash"], matched_skills: ["coder", "unknown_skill"],
+      })),
+      run_agent_loop: vi.fn(async () => ({ reply: "done", mode: "agent" as const, tool_calls_count: 0, streamed: false })),
+      run_task_loop: vi.fn(async () => ({ reply: "done", mode: "task" as const, tool_calls_count: 0, streamed: false })),
+      run_phase_loop: vi.fn(async () => ({ reply: "done", mode: "phase" as const, tool_calls_count: 0, streamed: false })),
+      caps: vi.fn(() => ({ chatgpt_available: true, claude_available: true })),
+      ...overrides,
+    };
+  }
+
+  it("validator alias + matched_skills=['coder','unknown'] → get_skill_metadata 2회 호출 + null 필터", async () => {
+    const deps = make_deps_cov3();
+    gatewaySpy.mockResolvedValue({ action: "execute", mode: "once", executor: "chatgpt" } as GatewayDecision);
+    const validatorRequest = { ...mockRequest, alias: "validator" };
+    const coderPreflight = { ...mockPreflight, skill_names: ["coder"] } as any;
+
+    const result = await execute_dispatch(deps, validatorRequest, coderPreflight);
+
+    expect(deps.runtime.get_skill_metadata).toHaveBeenCalledWith("coder");
+    expect(deps.runtime.get_skill_metadata).toHaveBeenCalledWith("unknown_skill");
+    expect(result.reply).toContain("validation complete");
+  });
+});
+
+// ── from execute-dispatcher-cov4 ──
+
+describe("execute-dispatcher L85: session_lookup 람다 — inquiry 경로에서 실행", () => {
+  it("inquiry 분류 + active_tasks 있을 때 session_lookup 람다 바디(L85) 실행 확인", async () => {
+    const findSessionSpy = vi.fn().mockReturnValue(null);
+
+    const cov4Runtime: Partial<AgentRuntimeLike> = {
+      list_active_tasks: () => [],
+      find_session_by_task: findSessionSpy,
+      get_context_builder: () => ({
+        skills_loader: { get_skill_metadata: () => null, get_role_skill: () => null },
+      } as any),
+    };
+
+    const cov4Logger: Partial<Logger> = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() };
+
+    const deps: ExecuteDispatcherDeps = {
+      providers: {} as ProviderRegistry,
+      runtime: cov4Runtime as AgentRuntimeLike,
+      logger: cov4Logger as Logger,
+      config: { executor_provider: "chatgpt", provider_caps: { chatgpt_available: true, claude_available: false, openrouter_available: false } },
+      process_tracker: null,
+      guard: null,
+      tool_index: null,
+      log_event: vi.fn(),
+      build_identity_reply: () => "I am SoulFlow",
+      build_system_prompt: vi.fn().mockResolvedValue("system prompt"),
+      generate_guard_summary: vi.fn().mockResolvedValue("summary"),
+      run_once: vi.fn().mockResolvedValue({ reply: "done", mode: "once", tool_calls_count: 0, streamed: false }),
+      run_agent_loop: vi.fn().mockResolvedValue({ reply: "done", mode: "agent", tool_calls_count: 0, streamed: false }),
+      run_task_loop: vi.fn().mockResolvedValue({ reply: "done", mode: "task", tool_calls_count: 0, streamed: false }),
+      run_phase_loop: vi.fn().mockResolvedValue({ reply: "done", mode: "phase", tool_calls_count: 0, streamed: false }),
+      caps: () => ({ chatgpt_available: true, claude_available: false, openrouter_available: false }),
+    };
+
+    const activeTask = {
+      taskId: "task-inquiry-1", title: "Background Task", objective: "Do something in background",
+      channel: "slack", chatId: "chat1", status: "in_progress" as const,
+      memory: {}, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+      currentTurn: 1, maxTurns: 10,
+    };
+
+    const preflight: ReadyPreflight = {
+      ...mockPreflight,
+      task_with_media: "is it done",
+      skill_names: [],
+      active_tasks_in_chat: [activeTask],
+    } as any;
+
+    const req: OrchestrationRequest = {
+      ...mockRequest,
+      alias: "test",
+      message: { ...mockRequest.message, content: "is it done" },
+    };
+
+    const result = await execute_dispatch(deps, req, preflight);
+
+    expect(result.mode).toBe("once");
+    expect(result.reply).toContain("task-inquiry-1");
+    expect(findSessionSpy).toHaveBeenCalledWith("task-inquiry-1");
+  });
+});

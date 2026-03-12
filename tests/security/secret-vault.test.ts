@@ -6,10 +6,11 @@
  * resolve_placeholders_with_report: 이름이 빈 placeholder, sv1 미포함 조기 반환,
  * inspect_secret_references: 직접 sv1 토큰 유효 형식 → invalid 아님.
  */
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import Database from "better-sqlite3";
 import { SecretVaultService } from "@src/security/secret-vault.js";
 
 let workspace: string;
@@ -199,5 +200,286 @@ describe("SecretVaultService — encrypt_text AAD 경로", () => {
     expect(plain).toBe("secret");
     // 다른 aad → 실패
     await expect(vault.decrypt_text(cipher, "context:B")).rejects.toThrow();
+  });
+});
+
+// ── from secret-vault-coverage.test.ts ──
+
+function b64url_encode(buf: Buffer): string {
+  return buf.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+describe("SecretVaultService — legacy DB migration (secrets.db → keyring.db)", () => {
+  let cov_dir: string;
+  let cov_vault: SecretVaultService;
+
+  beforeEach(async () => {
+    cov_dir = await mkdtemp(join(tmpdir(), "sv-cov-"));
+  });
+
+  afterEach(async () => {
+    await rm(cov_dir, { recursive: true, force: true }).catch(() => {});
+  });
+
+  it("secrets.db의 master_key 테이블에서 키를 읽어 keyring.db로 이전", async () => {
+    const security_dir = join(cov_dir, "runtime", "security");
+    await mkdir(security_dir, { recursive: true });
+
+    const raw_key = Buffer.alloc(32, 0xab);
+    const key_b64url = b64url_encode(raw_key);
+
+    const store_path = join(security_dir, "secrets.db");
+    const db = new Database(store_path);
+    db.exec(`
+      CREATE TABLE master_key (
+        id INTEGER PRIMARY KEY,
+        key_b64url TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+      CREATE TABLE secrets (
+        name TEXT PRIMARY KEY,
+        ciphertext TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+    `);
+    db.prepare("INSERT INTO master_key(id, key_b64url, created_at) VALUES (1, ?, datetime('now'))").run(key_b64url);
+    db.close();
+
+    cov_vault = new SecretVaultService(cov_dir);
+    const key = await cov_vault.get_or_create_key();
+
+    expect(key.length).toBe(32);
+    expect(key.toString("hex")).toBe(raw_key.toString("hex"));
+
+    const store_db = new Database(store_path);
+    const table_check = store_db.prepare(
+      "SELECT 1 FROM sqlite_master WHERE type='table' AND name='master_key'"
+    ).get();
+    store_db.close();
+    expect(table_check).toBeUndefined();
+  });
+});
+
+describe("SecretVaultService — legacy file migration (master.key)", () => {
+  let cov_dir: string;
+  let cov_vault: SecretVaultService;
+
+  beforeEach(async () => {
+    cov_dir = await mkdtemp(join(tmpdir(), "sv-cov-"));
+  });
+
+  afterEach(async () => {
+    await rm(cov_dir, { recursive: true, force: true }).catch(() => {});
+  });
+
+  it("master.key 파일에서 키를 읽어 keyring.db로 이전 후 파일 삭제", async () => {
+    const security_dir = join(cov_dir, "runtime", "security");
+    await mkdir(security_dir, { recursive: true });
+
+    const raw_key = Buffer.alloc(32, 0xcc);
+    const key_b64url = b64url_encode(raw_key);
+
+    await writeFile(join(security_dir, "master.key"), key_b64url, "utf-8");
+
+    cov_vault = new SecretVaultService(cov_dir);
+    const key = await cov_vault.get_or_create_key();
+
+    expect(key.length).toBe(32);
+    expect(key.toString("hex")).toBe(raw_key.toString("hex"));
+  });
+
+  it("master.key 파일의 키 길이가 32바이트가 아니면 새 키 생성 (catch → randomBytes)", async () => {
+    const security_dir = join(cov_dir, "runtime", "security");
+    await mkdir(security_dir, { recursive: true });
+
+    const bad_key = Buffer.alloc(16, 0x01);
+    const key_b64url = b64url_encode(bad_key);
+    await writeFile(join(security_dir, "master.key"), key_b64url, "utf-8");
+
+    cov_vault = new SecretVaultService(cov_dir);
+    const key = await cov_vault.get_or_create_key();
+    expect(key.length).toBe(32);
+  });
+});
+
+describe("SecretVaultService — concurrent get_or_create_key (key_lock 경로)", () => {
+  let cov_dir: string;
+  let cov_vault: SecretVaultService;
+
+  beforeEach(async () => {
+    cov_dir = await mkdtemp(join(tmpdir(), "sv-cov-"));
+  });
+
+  afterEach(async () => {
+    await rm(cov_dir, { recursive: true, force: true }).catch(() => {});
+  });
+
+  it("동시에 두 번 호출해도 같은 키 반환 (race 없음)", async () => {
+    cov_vault = new SecretVaultService(cov_dir);
+    const [k1, k2] = await Promise.all([cov_vault.get_or_create_key(), cov_vault.get_or_create_key()]);
+    expect(k1.length).toBe(32);
+    expect(k1.toString("hex")).toBe(k2.toString("hex"));
+  });
+
+  it("첫 호출 완료 후 두 번째 호출 → key_cache 경로 (빠른 반환)", async () => {
+    cov_vault = new SecretVaultService(cov_dir);
+    const k1 = await cov_vault.get_or_create_key();
+    const k2 = await cov_vault.get_or_create_key();
+    expect(k1.toString("hex")).toBe(k2.toString("hex"));
+  });
+});
+
+describe("SecretVaultService — resolve_placeholders_with_report cache 재사용", () => {
+  let cov_dir: string;
+  let cov_vault: SecretVaultService;
+
+  beforeEach(async () => {
+    cov_dir = await mkdtemp(join(tmpdir(), "sv-cov-"));
+    cov_vault = new SecretVaultService(cov_dir);
+    await cov_vault.ensure_ready();
+  });
+
+  afterEach(async () => {
+    await rm(cov_dir, { recursive: true, force: true }).catch(() => {});
+  });
+
+  it("같은 이름 2회 참조 → cache 히트 분기 통과, 두 곳 모두 복호화됨", async () => {
+    await cov_vault.put_secret("dup_key", "dup-value-xyz");
+    const report = await cov_vault.resolve_placeholders_with_report(
+      "a={{secret:dup_key}} b={{secret:dup_key}}"
+    );
+    expect(report.text).toContain("dup-value-xyz");
+    expect(report.text.split("dup-value-xyz").length - 1).toBe(2);
+    expect(report.missing_keys).toHaveLength(0);
+    expect(report.invalid_ciphertexts).toHaveLength(0);
+  });
+
+  it("잘못된 ciphertext 직접 DB 삽입 → invalid_ciphertexts에 포함", async () => {
+    const security_dir = join(cov_dir, "runtime", "security");
+    await mkdir(security_dir, { recursive: true });
+    await cov_vault.ensure_ready();
+
+    const store_path = cov_vault.get_paths().store_path;
+    const bad_cipher = "sv1.AAAAAAAAAAAAAAAA.AAAAAAAAAAAAAAAAAAAAAA.AAAA";
+    const db = new Database(store_path);
+    db.prepare("INSERT OR REPLACE INTO secrets(name, ciphertext, updated_at) VALUES (?, ?, datetime('now'))").run(
+      "bad_secret",
+      bad_cipher
+    );
+    db.close();
+
+    const report = await cov_vault.resolve_placeholders_with_report("x={{secret:bad_secret}}");
+    expect(report.invalid_ciphertexts.length).toBeGreaterThan(0);
+  });
+});
+
+describe("SecretVaultService — reveal_secret decrypt 실패", () => {
+  let cov_dir: string;
+  let cov_vault: SecretVaultService;
+
+  beforeEach(async () => {
+    cov_dir = await mkdtemp(join(tmpdir(), "sv-cov-"));
+    cov_vault = new SecretVaultService(cov_dir);
+    await cov_vault.ensure_ready();
+  });
+
+  afterEach(async () => {
+    await rm(cov_dir, { recursive: true, force: true }).catch(() => {});
+  });
+
+  it("DB에 잘못된 ciphertext 삽입 → reveal_secret이 null 반환", async () => {
+    const store_path = cov_vault.get_paths().store_path;
+    const db = new Database(store_path);
+    db.prepare("INSERT OR REPLACE INTO secrets(name, ciphertext, updated_at) VALUES (?, ?, datetime('now'))").run(
+      "bad_reveal",
+      "sv1.AAAAAAAAAAAAAAAA.AAAAAAAAAAAAAAAAAAAAAA.AAAA"
+    );
+    db.close();
+
+    const result = await cov_vault.reveal_secret("bad_reveal");
+    expect(result).toBeNull();
+  });
+});
+
+describe("SecretVaultService — prune_expired 오래된 시크릿 삭제", () => {
+  let cov_dir: string;
+  let cov_vault: SecretVaultService;
+
+  beforeEach(async () => {
+    cov_dir = await mkdtemp(join(tmpdir(), "sv-cov-"));
+    cov_vault = new SecretVaultService(cov_dir);
+    await cov_vault.ensure_ready();
+  });
+
+  afterEach(async () => {
+    await rm(cov_dir, { recursive: true, force: true }).catch(() => {});
+  });
+
+  it("오래된 updated_at으로 삽입된 inbound.* → prune 후 삭제됨", async () => {
+    const store_path = cov_vault.get_paths().store_path;
+    const old_date = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+
+    const db = new Database(store_path);
+    db.prepare("INSERT OR REPLACE INTO secrets(name, ciphertext, updated_at) VALUES (?, ?, ?)").run(
+      "inbound.old_secret",
+      "sv1.placeholder.placeholder.placeholder",
+      old_date
+    );
+    db.close();
+
+    const deleted = await cov_vault.prune_expired(10_000);
+    expect(deleted).toBeGreaterThan(0);
+
+    const names = await cov_vault.list_names();
+    expect(names).not.toContain("inbound.old_secret");
+  });
+
+  it("삭제 후 mask_cache 무효화 → 다음 mask_known_secrets 재생성", async () => {
+    const store_path = cov_vault.get_paths().store_path;
+    await cov_vault.put_secret("inbound.fresh", "fresh-value");
+    await cov_vault.mask_known_secrets("test text");
+
+    const old_date = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const db = new Database(store_path);
+    db.prepare("INSERT OR REPLACE INTO secrets(name, ciphertext, updated_at) VALUES (?, ?, ?)").run(
+      "inbound.expired_one",
+      "sv1.placeholder.placeholder.placeholder",
+      old_date
+    );
+    db.close();
+
+    await cov_vault.prune_expired(10_000);
+    const result = await cov_vault.mask_known_secrets("fresh-value should be masked");
+    expect(result).toContain("[REDACTED:SECRET]");
+  });
+});
+
+describe("SecretVaultService — resolve_inline_secrets_with_report sv1 direct token", () => {
+  let cov_dir: string;
+  let cov_vault: SecretVaultService;
+
+  beforeEach(async () => {
+    cov_dir = await mkdtemp(join(tmpdir(), "sv-cov-"));
+    cov_vault = new SecretVaultService(cov_dir);
+    await cov_vault.ensure_ready();
+  });
+
+  afterEach(async () => {
+    await rm(cov_dir, { recursive: true, force: true }).catch(() => {});
+  });
+
+  it("텍스트 안에 sv1 토큰 직접 포함 → 복호화됨", async () => {
+    const plain = "direct-inline-secret";
+    const token = await cov_vault.encrypt_text(plain);
+    const report = await cov_vault.resolve_inline_secrets_with_report(`prefix ${token} suffix`);
+    expect(report.text).toContain(plain);
+    expect(report.invalid_ciphertexts).toHaveLength(0);
+  });
+
+  it("텍스트 안에 복호화 불가 sv1 토큰 → invalid_ciphertexts에 포함", async () => {
+    const plain = "secret-with-aad";
+    const token = await cov_vault.encrypt_text(plain, "specific-aad");
+    const report = await cov_vault.resolve_inline_secrets_with_report(`data: ${token}`);
+    expect(report.invalid_ciphertexts).toContain(token);
   });
 });

@@ -231,3 +231,104 @@ describe("seal_inbound_sensitive_text", () => {
     });
   });
 });
+
+// ── from inbound-seal-cov2.test.ts ──
+
+const CTX = { provider: "slack", chat_id: "C001" };
+
+describe("seal_inbound_sensitive_text — ASSIGNMENT_RE card/account skip", () => {
+  it("card=값 패턴 → ASSIGNMENT_RE에서 card kind → 원본 반환 (skip)", async () => {
+    const vault = make_vault();
+    const result = await seal_inbound_sensitive_text(
+      "card=sometext_value",
+      { ...CTX, vault },
+    );
+    expect(typeof result.text).toBe("string");
+    expect(result.text).toContain("card=sometext_value");
+  });
+
+  it("account=abc_text → ASSIGNMENT_RE에서 account kind → skip", async () => {
+    const vault = make_vault();
+    const result = await seal_inbound_sensitive_text(
+      "account=notanumber",
+      { ...CTX, vault },
+    );
+    expect(result.text).toContain("account=notanumber");
+  });
+});
+
+describe("seal_inbound_sensitive_text — ACCOUNT_LINE_RE", () => {
+  it("계좌번호 패턴 → ACCOUNT_LINE_RE 매칭 → 봉인", async () => {
+    const vault = make_vault();
+    const result = await seal_inbound_sensitive_text(
+      "account: 12345678901",
+      { ...CTX, vault },
+    );
+    expect(result.text).not.toContain("12345678901");
+    expect(vault.put_secret).toHaveBeenCalled();
+  });
+
+  it("iban 패턴 → 봉인", async () => {
+    const vault = make_vault();
+    const result = await seal_inbound_sensitive_text(
+      "iban 1234567890123456",
+      { ...CTX, vault },
+    );
+    expect(typeof result.text).toBe("string");
+  });
+});
+
+describe("seal_inbound_sensitive_text — CARD_NUMBER_RE luhn", () => {
+  it("luhn 유효 카드번호 → 봉인됨", async () => {
+    const vault = make_vault();
+    const result = await seal_inbound_sensitive_text(
+      "카드번호: 4532015112830366",
+      { ...CTX, vault },
+    );
+    expect(result.text).not.toContain("4532015112830366");
+    expect(vault.put_secret).toHaveBeenCalled();
+  });
+
+  it("luhn 무효 숫자열 → 봉인 안 됨 (원본 유지)", async () => {
+    const vault = make_vault();
+    const result = await seal_inbound_sensitive_text(
+      "some number: 1234567890123456",
+      { ...CTX, vault },
+    );
+    expect(result.text).toContain("1234567890123456");
+  });
+});
+
+// ── from inbound-seal-cov3.test.ts ──
+
+describe("seal_inbound_sensitive_text — L158: 짧은 quoted 값 봉인 건너뜀", () => {
+  it("password=\"ab\" → 내부 값 2자 < 4 → L158: 봉인하지 않고 그대로 반환", async () => {
+    const vault = make_vault();
+    const result = await seal_inbound_sensitive_text(
+      'password = "ab"',
+      { ...CTX, vault },
+    );
+    expect(vault.put_secret).not.toHaveBeenCalled();
+    expect(result.hits).toHaveLength(0);
+  });
+
+  it("token='x' → 내부 값 1자 < 4 → L158: 봉인하지 않고 원본 유지", async () => {
+    const vault = make_vault();
+    const result = await seal_inbound_sensitive_text(
+      "token = 'x'",
+      { ...CTX, vault },
+    );
+    expect(vault.put_secret).not.toHaveBeenCalled();
+    expect(result.hits).toHaveLength(0);
+  });
+
+  it("password=longvalue → 긴 값 → L158 건너뜀 → 정상 봉인", async () => {
+    const vault = make_vault();
+    const result = await seal_inbound_sensitive_text(
+      "password=supersecretvalue",
+      { ...CTX, vault },
+    );
+    expect(vault.put_secret).toHaveBeenCalled();
+    expect(result.hits.length).toBeGreaterThan(0);
+  });
+});
