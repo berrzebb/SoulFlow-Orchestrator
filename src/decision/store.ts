@@ -141,7 +141,7 @@ export class DecisionStore {
 
   private async upsert_records(records: DecisionRecord[]): Promise<void> {
     if (records.length === 0) return;
-    with_sqlite(this.sqlite_path,(db) => {
+    with_sqlite_strict(this.sqlite_path,(db) => {
       db.exec("BEGIN IMMEDIATE");
       try {
         const stmt = db.prepare(`

@@ -1,7 +1,7 @@
 import { mkdir, open, stat, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
-import { with_sqlite } from "../utils/sqlite-helper.js";
+import { with_sqlite, with_sqlite_strict } from "../utils/sqlite-helper.js";
 import type {
   CronJob,
   CronJobOverrides,
@@ -507,7 +507,7 @@ export class CronService implements CronScheduler, ServiceLike {
   }
 
   private async persist_store_to_sqlite(store: CronStore): Promise<void> {
-    with_sqlite(this.sqlite_path,(db) => {
+    with_sqlite_strict(this.sqlite_path,(db) => {
       db.exec("BEGIN IMMEDIATE");
       try {
         db.prepare("DELETE FROM cron_jobs").run();
