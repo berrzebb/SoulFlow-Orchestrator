@@ -271,7 +271,7 @@ export class DispatchService implements ServiceLike {
         reply_to: String(message.reply_to || ""),
         thread_id: String(message.thread_id || ""),
         retry_count,
-        error: String(error || "unknown_error"),
+        error: error || "unknown_error",
         content: (() => { const c = String(message.content || ""); return c.length > 10_000 ? `${c.slice(0, 10_000)}\n[truncated ${c.length - 10_000} chars]` : c; })(),
         metadata: (message.metadata as Record<string, unknown>) || {},
       });

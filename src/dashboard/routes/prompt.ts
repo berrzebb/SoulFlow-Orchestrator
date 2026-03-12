@@ -1,4 +1,5 @@
 import type { RouteContext } from "../route-context.js";
+import { error_message } from "../../utils/common.js";
 
 export async function handle_prompt(ctx: RouteContext): Promise<boolean> {
   const { url, req, res, options, json, read_body } = ctx;
@@ -25,7 +26,7 @@ export async function handle_prompt(ctx: RouteContext): Promise<boolean> {
       });
       json(res, 200, result);
     } catch (err) {
-      json(res, 500, { error: String(err) });
+      json(res, 500, { error: error_message(err) });
     }
     return true;
   }
@@ -54,7 +55,7 @@ export async function handle_prompt(ctx: RouteContext): Promise<boolean> {
     json(res, 200, results.map((r, i) =>
       r.status === "fulfilled"
         ? { ...r.value, ...targets[i], ok: true }
-        : { ...targets[i], ok: false, error: String(r.reason) },
+        : { ...targets[i], ok: false, error: error_message(r.reason) },
     ));
     return true;
   }
