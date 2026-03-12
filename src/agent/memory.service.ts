@@ -214,7 +214,7 @@ export class MemoryStore implements MemoryStoreLike {
 
   private sqlite_upsert_document(kind: "longterm" | "daily", day: string, path: string, content: string): void {
     const doc_key = kind === "longterm" ? this.longterm_doc_key() : this.daily_doc_key(day);
-    with_sqlite(this.sqlite_path,(db) => {
+    with_sqlite_strict(this.sqlite_path,(db) => {
       db.prepare(`
         INSERT INTO memory_documents (doc_key, kind, day, path, content, updated_at)
         VALUES (?, ?, ?, ?, ?, ?)
@@ -233,7 +233,7 @@ export class MemoryStore implements MemoryStoreLike {
   /** SQL-level atomic append — TOCTOU 방지. */
   private sqlite_append_document(kind: "longterm" | "daily", day: string, path: string, content: string): void {
     const doc_key = kind === "longterm" ? this.longterm_doc_key() : this.daily_doc_key(day);
-    with_sqlite(this.sqlite_path,(db) => {
+    with_sqlite_strict(this.sqlite_path,(db) => {
       db.prepare(`
         INSERT INTO memory_documents (doc_key, kind, day, path, content, updated_at)
         VALUES (?, ?, ?, ?, ?, ?)
@@ -300,7 +300,7 @@ export class MemoryStore implements MemoryStoreLike {
   }
 
   private sqlite_delete_daily(day: string): boolean {
-    const removed = with_sqlite(this.sqlite_path,(db) => {
+    const removed = with_sqlite_strict(this.sqlite_path,(db) => {
       const result = db.prepare("DELETE FROM memory_documents WHERE doc_key = ?").run(this.daily_doc_key(day));
       return Number(result.changes || 0);
     }) || 0;

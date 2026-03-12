@@ -175,7 +175,7 @@ export class AgentProviderStore {
   // ── 쓰기 ──
 
   upsert(input: CreateAgentProviderInput): void {
-    with_sqlite(this.db_path, (db) => {
+    with_sqlite_strict(this.db_path, (db) => {
       db.prepare(`
         INSERT INTO agent_providers (instance_id, provider_type, label, enabled, priority, model_purpose, supported_modes, settings_json, connection_id, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
@@ -219,7 +219,7 @@ export class AgentProviderStore {
     const settings = patch.settings ? { ...existing.settings, ...patch.settings } : existing.settings;
     const connection_id = patch.connection_id !== undefined ? (patch.connection_id || null) : (existing.connection_id || null);
 
-    with_sqlite(this.db_path, (db) => {
+    with_sqlite_strict(this.db_path, (db) => {
       db.prepare(`
         UPDATE agent_providers
         SET label = ?, enabled = ?, priority = ?, model_purpose = ?, supported_modes = ?, settings_json = ?, connection_id = ?, updated_at = datetime('now')
@@ -231,7 +231,7 @@ export class AgentProviderStore {
   }
 
   remove(instance_id: string): boolean {
-    const result = with_sqlite(this.db_path, (db) => {
+    const result = with_sqlite_strict(this.db_path, (db) => {
       const r = db.prepare("DELETE FROM agent_providers WHERE instance_id = ?").run(instance_id);
       return r.changes > 0;
     }, { pragmas: PRAGMAS });
@@ -310,7 +310,7 @@ export class AgentProviderStore {
   }
 
   upsert_connection(input: CreateProviderConnectionInput): void {
-    with_sqlite(this.db_path, (db) => {
+    with_sqlite_strict(this.db_path, (db) => {
       db.prepare(`
         INSERT INTO provider_connections (connection_id, provider_type, label, enabled, api_base, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))
@@ -340,7 +340,7 @@ export class AgentProviderStore {
     const label = patch.label ?? existing.label;
     const enabled = patch.enabled ?? existing.enabled;
     const api_base = patch.api_base !== undefined ? (patch.api_base || null) : (existing.api_base || null);
-    with_sqlite(this.db_path, (db) => {
+    with_sqlite_strict(this.db_path, (db) => {
       db.prepare(`
         UPDATE provider_connections
         SET label = ?, enabled = ?, api_base = ?, updated_at = datetime('now')
@@ -352,12 +352,9 @@ export class AgentProviderStore {
   }
 
   remove_connection(connection_id: string): boolean {
-    // connection 삭제 시 참조하는 provider들의 connection_id를 null로 초기화
-    with_sqlite(this.db_path, (db) => {
+    // connection 삭제 시 참조하는 provider들의 connection_id 초기화와 삭제를 단일 트랜잭션으로 처리
+    const result = with_sqlite_strict(this.db_path, (db) => {
       db.prepare("UPDATE agent_providers SET connection_id = NULL WHERE connection_id = ?").run(connection_id);
-      return true;
-    }, { pragmas: PRAGMAS });
-    const result = with_sqlite(this.db_path, (db) => {
       const r = db.prepare("DELETE FROM provider_connections WHERE connection_id = ?").run(connection_id);
       return r.changes > 0;
     }, { pragmas: PRAGMAS });
