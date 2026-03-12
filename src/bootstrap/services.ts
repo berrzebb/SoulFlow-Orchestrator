@@ -169,7 +169,9 @@ export function run_post_boot(deps: PostBootDeps): PostBootResult {
     }
     for (const backend of agent_backends) {
       if ("check_auth" in backend && typeof (backend as { check_auth: () => Promise<boolean> }).check_auth === "function") {
-        void (backend as { check_auth: () => Promise<boolean> }).check_auth();
+        void (backend as { check_auth: () => Promise<boolean> }).check_auth().catch((e: unknown) => {
+          logger.warn(`check_auth failed: ${error_message(e)}`);
+        });
       }
     }
   }).catch((err) => {
