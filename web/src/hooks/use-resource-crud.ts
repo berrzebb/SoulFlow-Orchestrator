@@ -79,9 +79,13 @@ export function useResourceCRUD<T extends object>({
     },
   });
 
+  const q = search.toLowerCase();
   const filtered = search
     ? data.filter((item) =>
-        JSON.stringify(item).toLowerCase().includes(search.toLowerCase())
+        Object.values(item).some((v) =>
+          (typeof v === "string" && v.toLowerCase().includes(q)) ||
+          (typeof v === "number" && String(v).includes(q))
+        )
       )
     : data;
 
