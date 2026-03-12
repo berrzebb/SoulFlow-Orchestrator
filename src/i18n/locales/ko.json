@@ -3694,6 +3694,7 @@
   "node.action.min": "최솟값",
   "node.action.max": "최댓값",
 
+  "node.action.compress": "압축",
   "node.action.decompress": "압축 해제",
   "node.action.compress_string": "문자열 압축",
   "node.action.decompress_string": "문자열 압축 해제",
