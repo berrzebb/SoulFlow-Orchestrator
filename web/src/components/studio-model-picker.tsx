@@ -6,6 +6,7 @@ import { useState, useRef } from "react";
 import { useClickOutside } from "../hooks/use-click-outside";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../api/client";
+import { useT } from "../i18n";
 
 interface ProviderInfo {
   instance_id: string;
@@ -59,13 +60,12 @@ function ProviderDropdown({
   providers,
   value,
   onChange,
-  placeholder = "— Provider —",
 }: {
   providers: ProviderInfo[];
   value: string;
   onChange: (id: string) => void;
-  placeholder?: string;
 }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const wrap_ref = useRef<HTMLDivElement>(null);
   const sel = providers.find((p) => p.instance_id === value);
@@ -80,12 +80,13 @@ function ProviderDropdown({
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="listbox"
         aria-expanded={open}
+        aria-label={t("providers.select_provider")}
       >
         <span className="ps-prov-trigger__icon">
           {sel ? prov_icon(sel.provider_type) : "○"}
         </span>
         <span className="ps-prov-trigger__label">
-          {sel ? sel.label : placeholder}
+          {sel ? sel.label : t("providers.select_provider")}
         </span>
         <svg
           className={`ps-prov-trigger__chevron${open ? " ps-prov-trigger__chevron--open" : ""}`}
@@ -97,9 +98,9 @@ function ProviderDropdown({
       </button>
 
       {open && (
-        <div className="ps-prov-dropdown" role="listbox">
+        <div className="ps-prov-dropdown" role="listbox" aria-label={t("providers.select_provider")}>
           {providers.length === 0 && (
-            <div className="ps-prov-dropdown__empty">No providers</div>
+            <div className="ps-prov-dropdown__empty">{t("providers.no_providers")}</div>
           )}
           {providers.map((p) => {
             const is_active = p.instance_id === value;
@@ -125,6 +126,7 @@ function ProviderDropdown({
 }
 
 export function StudioModelPicker({ value, onChange, purpose, hideModel, compact, onCompare }: Props) {
+  const t = useT();
   const { data: providers = [] } = useQuery<ProviderInfo[]>({
     queryKey: ["studio-providers"],
     queryFn: () => api.get("/api/agents/providers"),
@@ -150,7 +152,7 @@ export function StudioModelPicker({ value, onChange, purpose, hideModel, compact
       <div className="studio-model-picker">
         <select className={cls} value={value.provider_id}
           onChange={(e) => onChange({ provider_id: e.target.value, model: "" })} aria-label="Provider">
-          <option value="">— Provider —</option>
+          <option value="">{t("providers.select_provider")}</option>
           {available.map((p) => (
             <option key={p.instance_id} value={p.instance_id}>
               {p.circuit_state === "open" ? "⚫ " : "🟢 "}{p.label}
@@ -159,16 +161,16 @@ export function StudioModelPicker({ value, onChange, purpose, hideModel, compact
         </select>
         {!hideModel && (
           loadingModels
-            ? <input className={cls} disabled placeholder="loading…" />
+            ? <input className={cls} disabled placeholder={t("common.loading")} />
             : models.length > 0
               ? <select className={cls} value={value.model}
                   onChange={(e) => onChange({ ...value, model: e.target.value })} aria-label="Model">
-                  <option value="">auto</option>
+                  <option value="">{t("providers.model_auto")}</option>
                   {models.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
                 </select>
               : <input className={cls} value={value.model}
                   onChange={(e) => onChange({ ...value, model: e.target.value })}
-                  placeholder="model (optional)" aria-label="Model" />
+                  placeholder={t("providers.model_input_placeholder")} aria-label="Model" />
         )}
       </div>
     );
@@ -186,7 +188,7 @@ export function StudioModelPicker({ value, onChange, purpose, hideModel, compact
       {!hideModel && (
         loadingModels
           ? <select className="ps-model-bar__select" disabled aria-label="Model">
-              <option>loading…</option>
+              <option>{t("common.loading")}</option>
             </select>
           : models.length > 0
             ? <select
@@ -195,21 +197,21 @@ export function StudioModelPicker({ value, onChange, purpose, hideModel, compact
                 onChange={(e) => onChange({ ...value, model: e.target.value })}
                 aria-label="Model"
               >
-                <option value="">auto</option>
+                <option value="">{t("providers.model_auto")}</option>
                 {models.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
               </select>
             : <input
                 className="ps-model-bar__select"
                 value={value.model}
                 onChange={(e) => onChange({ ...value, model: e.target.value })}
-                placeholder="model (optional)"
+                placeholder={t("providers.model_input_placeholder")}
                 aria-label="Model"
               />
       )}
 
       {onCompare && (
         <button className="ps-model-bar__compare" type="button" onClick={onCompare}>
-          Compare
+          {t("prompting.compare_title")}
         </button>
       )}
     </div>
