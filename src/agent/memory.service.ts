@@ -302,8 +302,8 @@ export class MemoryStore implements MemoryStoreLike {
   private sqlite_delete_daily(day: string): boolean {
     const removed = with_sqlite_strict(this.sqlite_path,(db) => {
       const result = db.prepare("DELETE FROM memory_documents WHERE doc_key = ?").run(this.daily_doc_key(day));
-      return Number(result.changes || 0);
-    }) || 0;
+      return result.changes;
+    });
     return removed > 0;
   }
 
