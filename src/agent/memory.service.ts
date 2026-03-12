@@ -555,10 +555,14 @@ export class MemoryStore implements MemoryStoreLike {
         } else if (is_day_key(day)) { filter = "AND c.day = ?"; bind_extra.push(day); }
 
         const chunk_rows = db.prepare(
-          `SELECT chunk_id FROM memory_chunks c WHERE c.rowid IN (${placeholders}) ${filter}`,
-        ).all(...rowids, ...bind_extra) as { chunk_id: string }[];
+          `SELECT c.rowid, c.chunk_id FROM memory_chunks c WHERE c.rowid IN (${placeholders}) ${filter}`,
+        ).all(...rowids, ...bind_extra) as { rowid: number; chunk_id: string }[];
 
-        return chunk_rows.map(r => r.chunk_id);
+        // WHERE IN은 rowid 순서를 보장하지 않음 — KNN distance 순서 복원
+        const rowid_to_chunk = new Map(chunk_rows.map(r => [Number(r.rowid), r.chunk_id]));
+        return rowids
+          .map(rid => rowid_to_chunk.get(Number(rid)))
+          .filter((id): id is string => id !== undefined);
       } finally {
         try { db?.close(); } catch { /* no-op */ }
       }
