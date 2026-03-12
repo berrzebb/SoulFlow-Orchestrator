@@ -40,7 +40,7 @@ export function ApprovalBanner({ approval, onResolve }: {
           </span>
         )}
         <span className="chat-approval__time text-muted text-xs">
-          {new Date(approval.created_at).toLocaleTimeString("sv-SE")}
+          {new Date(approval.created_at).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false })}
         </span>
       </div>
 
