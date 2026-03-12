@@ -137,3 +137,33 @@ describe("CD 옵저버", () => {
     expect(cd.get_score().events).toHaveLength(2);
   });
 });
+
+// ══════════════════════════════════════════
+// redo (L80) — error 이벤트 + rollback
+// ══════════════════════════════════════════
+
+describe("create_cd_observer — redo (L80)", () => {
+  it("error 이벤트 + 'rollback' 포함 → redo cd_event 반환 (L80)", () => {
+    const cd = create_cd_observer();
+    const result = cd.observe({
+      type: "error",
+      source: { backend: "claude_sdk" as const },
+      at: new Date().toISOString(),
+      error: "rollback: transaction failed, retrying...",
+    });
+    expect(result).not.toBeNull();
+    expect(result!.indicator).toBe("redo");
+    expect(cd.get_score().total).toBeGreaterThan(0);
+  });
+
+  it("error 이벤트에 'rollback' 없으면 null 반환", () => {
+    const cd = create_cd_observer();
+    const result = cd.observe({
+      type: "error",
+      source: { backend: "claude_sdk" as const },
+      at: new Date().toISOString(),
+      error: "timeout occurred",
+    });
+    expect(result).toBeNull();
+  });
+});

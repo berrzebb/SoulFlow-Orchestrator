@@ -421,3 +421,22 @@ describe("types — is_known_provider / resolve_provider", () => {
     expect(resolve_provider({})).toBeNull();
   });
 });
+
+// ══════════════════════════════════════════
+// parse_agent_mentions — seen 중복 → continue (혼합 포맷)
+// ══════════════════════════════════════════
+
+describe("BaseChannel.parse_agent_mentions — seen 중복 → continue (혼합 포맷)", () => {
+  it("같은 alias가 <@alice>와 @alice 둘 다 등장 → 중복 제거", () => {
+    const ch = new TestChannel();
+    const mentions = ch.parse_agent_mentions("<@alice> hello @alice");
+    expect(mentions).toHaveLength(1);
+    expect(mentions[0].alias).toBe("alice");
+  });
+
+  it("두 개의 다른 plain @mentions → 각각 추가됨", () => {
+    const ch = new TestChannel();
+    const mentions = ch.parse_agent_mentions("@alice and @bob");
+    expect(mentions).toHaveLength(2);
+  });
+});

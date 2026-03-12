@@ -3,6 +3,10 @@ import { shell_handler } from "../../../src/agent/nodes/shell.js";
 import type { ShellNodeDefinition, OrcheNodeDefinition } from "../../../src/agent/nodes/workflow-node.types.js";
 import type { OrcheNodeExecutorContext } from "../../../src/agent/nodes/orche-node-executor.js";
 
+function make_ctx(workspace: string): OrcheNodeExecutorContext {
+  return { memory: {}, workspace };
+}
+
 describe("shell_handler", () => {
   const createMockNode = (overrides?: Partial<ShellNodeDefinition>): OrcheNodeDefinition => ({
     node_id: "test-node",
@@ -94,5 +98,34 @@ describe("shell_handler", () => {
     const ctx = createMockContext();
     const result = await shell_handler.execute(node, ctx);
     expect(result.output).toBeDefined();
+  });
+});
+
+// ── L51: working_dir 경로 순회 차단 ──────────────────────────────────────────
+
+describe("shell_handler — L51: working_dir path traversal 차단", () => {
+  it("working_dir이 workspace 외부 경로 → error 반환 (L51)", async () => {
+    const node = {
+      node_id: "n1",
+      node_type: "shell",
+      command: "echo hello",
+      working_dir: "/tmp/evil_path",  // /workspace/proj 외부
+    } as any;
+    const ctx = make_ctx("/workspace/proj");
+    const result = await shell_handler.execute(node, ctx);
+    expect(result.output.error).toBe("working_dir path traversal blocked");
+    expect(result.output.exit_code).toBe(1);
+  });
+
+  it("working_dir이 workspace의 상위 디렉토리 → error 반환", async () => {
+    const node = {
+      node_id: "n2",
+      node_type: "shell",
+      command: "echo hello",
+      working_dir: "/workspace",  // /workspace/proj 의 상위
+    } as any;
+    const ctx = make_ctx("/workspace/proj");
+    const result = await shell_handler.execute(node, ctx);
+    expect(result.output.error).toBe("working_dir path traversal blocked");
   });
 });

@@ -1,8 +1,7 @@
 /**
  * SqliteDispatchDlqStore — 커버리지:
  * L54: 빈 sqlite_path → throw
- * L115: with_sqlite null 반환 → "dlq_write_failed" throw
- * L117: job 거부 시 write_queue rejection handler 호출
+ * with_sqlite_strict throw → append rejects
  */
 import { describe, it, expect, vi, beforeAll, afterAll } from "vitest";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -15,7 +14,7 @@ vi.mock("@src/utils/sqlite-helper.js", () => ({
 }));
 
 import * as sqlite_helper from "@src/utils/sqlite-helper.js";
-const mock_with_sqlite = sqlite_helper.with_sqlite as ReturnType<typeof vi.fn>;
+const mock_with_sqlite_strict = sqlite_helper.with_sqlite_strict as ReturnType<typeof vi.fn>;
 
 import { SqliteDispatchDlqStore } from "@src/channels/dlq-store.js";
 
@@ -25,7 +24,7 @@ describe("SqliteDispatchDlqStore — L54: 빈 경로 → throw", () => {
   });
 });
 
-describe("SqliteDispatchDlqStore — L115/L117: append 실패 처리", () => {
+describe("SqliteDispatchDlqStore — append 실패 처리", () => {
   let tmp_dir: string;
 
   beforeAll(async () => {
@@ -36,12 +35,11 @@ describe("SqliteDispatchDlqStore — L115/L117: append 실패 처리", () => {
     await rm(tmp_dir, { recursive: true, force: true }).catch(() => {});
   });
 
-  it("with_sqlite가 null 반환 → L115 throw 'dlq_write_failed' → append rejects", async () => {
-    // 첫 번째 호출: ensure_initialized (return 값 무시) — true 반환
-    // 두 번째 호출: append 내 write → null 반환 → L115 throw
-    mock_with_sqlite
-      .mockReturnValueOnce(undefined) // ensure_initialized
-      .mockReturnValueOnce(null); // append → ok = null → L115
+  it("with_sqlite_strict throw → append rejects", async () => {
+    // ensure_initialized는 성공, append 내부 with_sqlite_strict가 throw
+    mock_with_sqlite_strict
+      .mockReturnValueOnce(undefined)                          // ensure_initialized
+      .mockImplementationOnce(() => { throw new Error("db_write_error"); }); // append
 
     const store = new SqliteDispatchDlqStore(join(tmp_dir, "dlq.db"));
     await expect(
@@ -58,6 +56,6 @@ describe("SqliteDispatchDlqStore — L115/L117: append 실패 처리", () => {
         content: "hello",
         metadata: {},
       }),
-    ).rejects.toThrow("dlq_write_failed");
+    ).rejects.toThrow("db_write_error");
   });
 });

@@ -91,3 +91,45 @@ describe("Tool base class", () => {
     expect(parsed.verbose).toBe(false);
   });
 });
+
+// ── 미커버 분기 보충용 헬퍼 ──
+
+function make_tool(params: JsonSchema | undefined): Tool {
+  return new class extends Tool {
+    readonly name = "test_tool";
+    readonly description = "test";
+    readonly category = "util" as const;
+    readonly parameters = params as JsonSchema;
+    protected async run(_params: Record<string, unknown>): Promise<string> {
+      return "ok";
+    }
+  }();
+}
+
+describe("Tool.validate_params — schema.type !== 'object'", () => {
+  it("parameters.type='array' → validate_params 즉시 에러 반환", () => {
+    const tool = make_tool({ type: "array", items: { type: "string" } } as unknown as JsonSchema);
+    const errors = tool.validate_params({ anything: true });
+    expect(errors).toContain("parameters schema must be object");
+  });
+});
+
+describe("Tool.coerce_params — properties 없음 → params 그대로 반환", () => {
+  it("parameters에 properties 키 없음 → coerce 스킵", async () => {
+    const tool = make_tool({ type: "object" } as JsonSchema);
+    const result = await tool.execute({ some_key: "value" });
+    expect(result).toBe("ok");
+  });
+});
+
+describe("Tool.validate_params — 스키마에 없는 object 키 → continue", () => {
+  it("params에 schema.properties에 없는 key → continue (에러 없음)", () => {
+    const tool = make_tool({
+      type: "object",
+      properties: { name: { type: "string" } },
+      required: ["name"],
+    } as JsonSchema);
+    const errors = tool.validate_params({ name: "Alice", extra_key: "ignored" });
+    expect(errors).toHaveLength(0);
+  });
+});
