@@ -340,11 +340,11 @@ export class SecretVaultService implements SecretVaultLike {
     await this.ensure_ready();
     const removed = with_sqlite_strict(this.store_path, (db) => {
       const r = db.prepare("DELETE FROM secrets WHERE name = ?").run(name);
-      return Number(r.changes || 0) > 0;
+      return r.changes > 0;
     });
     this.invalidate_mask_cache();
-    log.info("secret_remove", { name, removed: Boolean(removed) });
-    return Boolean(removed);
+    log.info("secret_remove", { name, removed });
+    return removed;
   }
 
   async get_secret_cipher(nameRaw: string): Promise<string | null> {
@@ -493,10 +493,10 @@ export class SecretVaultService implements SecretVaultLike {
     const cutoff = new Date(Date.now() - Math.max(max_age_ms, 60_000)).toISOString();
     const deleted = with_sqlite_strict(this.store_path, (db) => {
       const r = db.prepare("DELETE FROM secrets WHERE updated_at < ? AND name LIKE 'inbound.%'").run(cutoff);
-      return Number(r.changes || 0);
+      return r.changes;
     });
     if (deleted) this.invalidate_mask_cache();
-    return deleted ?? 0;
+    return deleted;
   }
 
   /* ── 마스킹 (plaintext 캐시 사용) ── */
