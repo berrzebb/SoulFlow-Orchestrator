@@ -1,6 +1,6 @@
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import { with_sqlite, type DatabaseSync } from "../utils/sqlite-helper.js";
+import { with_sqlite, with_sqlite_strict, type DatabaseSync } from "../utils/sqlite-helper.js";
 import type { SessionHistoryEntry, SessionMessage } from "./types.js";
 import type { Logger } from "../logger.js";
 import { now_iso } from "../utils/common.js";
@@ -104,9 +104,13 @@ export class SessionStore implements SessionStoreLike {
     return with_sqlite(this.sqlite_path, run, { pragmas: ["foreign_keys=ON"] });
   }
 
+  private write_sqlite<T>(run: (db: DatabaseSync) => T): T {
+    return with_sqlite_strict(this.sqlite_path, run, { pragmas: ["foreign_keys=ON"] });
+  }
+
   private async ensure_initialized(): Promise<void> {
     await mkdir(this.sessions_dir, { recursive: true });
-    this.with_sqlite((db) => {
+    this.write_sqlite((db) => {
       db.exec(`
         CREATE TABLE IF NOT EXISTS sessions (
           key TEXT PRIMARY KEY,
@@ -228,7 +232,7 @@ export class SessionStore implements SessionStoreLike {
     await this.initialized;
     await this.resolve_write_lane(key).enqueue(async () => {
       const now = now_iso();
-      this.with_sqlite((db) => {
+      this.write_sqlite((db) => {
         // 세션 헤더가 없으면 생성
         db.prepare(`
           INSERT INTO sessions (key, created_at, updated_at, metadata_json, last_consolidated)
@@ -268,7 +272,7 @@ export class SessionStore implements SessionStoreLike {
   async save(session: Session): Promise<void> {
     await this.initialized;
     await this.resolve_write_lane(session.key).enqueue(async () => {
-      const saved = this.with_sqlite((db) => {
+      this.write_sqlite((db) => {
         db.exec("BEGIN IMMEDIATE");
         try {
           db.prepare(`
@@ -313,11 +317,6 @@ export class SessionStore implements SessionStoreLike {
         }
         return true;
       });
-      if (!saved) {
-        this.logger?.error(`save failed for key=${session.key}`);
-        this.cache.delete(session.key);
-        return;
-      }
       this.evict_if_full();
       this.cache.set(session.key, session);
     });
@@ -326,11 +325,10 @@ export class SessionStore implements SessionStoreLike {
   async delete(key: string): Promise<boolean> {
     await this.initialized;
     this.cache.delete(key);
-    const deleted = this.with_sqlite((db) => {
+    return this.write_sqlite((db) => {
       const r = db.prepare("DELETE FROM sessions WHERE key = ?").run(key);
       return Number(r.changes || 0) > 0;
     });
-    return deleted ?? false;
   }
 
   async list_by_prefix(prefix: string, limit = 100): Promise<SessionListEntry[]> {
@@ -348,11 +346,10 @@ export class SessionStore implements SessionStoreLike {
   async prune_expired(max_age_ms: number): Promise<number> {
     await this.initialized;
     const cutoff = new Date(Date.now() - Math.max(max_age_ms, 60_000)).toISOString();
-    const deleted = this.with_sqlite((db) => {
+    const count = this.write_sqlite((db) => {
       const r = db.prepare("DELETE FROM sessions WHERE updated_at < ?").run(cutoff);
       return Number(r.changes || 0);
     });
-    const count = deleted ?? 0;
     if (count > 0) {
       for (const [key, session] of this.cache) {
         if (session.updated_at < cutoff) this.cache.delete(key);
@@ -367,13 +364,12 @@ export class SessionStore implements SessionStoreLike {
   async prune_excess(max_entries: number): Promise<number> {
     if (max_entries <= 0) return 0;
     await this.initialized;
-    const deleted = this.with_sqlite((db) => {
+    const count = this.write_sqlite((db) => {
       const r = db.prepare(
         "DELETE FROM sessions WHERE key NOT IN (SELECT key FROM sessions ORDER BY updated_at DESC LIMIT ?)",
       ).run(max_entries);
       return Number(r.changes || 0);
     });
-    const count = deleted ?? 0;
     if (count > 0) {
       // 캐시에서도 삭제된 항목 제거
       const remaining = new Set(

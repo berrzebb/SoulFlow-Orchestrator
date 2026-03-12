@@ -5,7 +5,7 @@
 
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import { with_sqlite, type DatabaseSync } from "../utils/sqlite-helper.js";
+import { with_sqlite, with_sqlite_strict, type DatabaseSync } from "../utils/sqlite-helper.js";
 import { short_id, now_iso } from "../utils/common.js";
 
 export type LlmSpan = {
@@ -70,9 +70,13 @@ export class UsageStore {
     return with_sqlite(this.sqlite_path, run);
   }
 
+  private write_sqlite<T>(run: (db: DatabaseSync) => T): T {
+    return with_sqlite_strict(this.sqlite_path, run);
+  }
+
   private async _init(usage_dir: string): Promise<void> {
     await mkdir(usage_dir, { recursive: true });
-    this.with_sqlite((db) => {
+    this.write_sqlite((db) => {
       db.exec(`
         CREATE TABLE IF NOT EXISTS llm_spans (
           span_id      TEXT PRIMARY KEY,
@@ -111,7 +115,7 @@ export class UsageStore {
       this.enqueue_write(() => {
         const span_id = input.span_id || short_id();
         const at = input.at || now_iso();
-        this.with_sqlite((db) => {
+        this.write_sqlite((db) => {
           db.prepare(`
             INSERT OR IGNORE INTO llm_spans
               (span_id, provider_id, model, input_tokens, output_tokens,

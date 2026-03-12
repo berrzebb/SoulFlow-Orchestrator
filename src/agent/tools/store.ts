@@ -111,7 +111,7 @@ export class SqliteDynamicToolStore implements DynamicToolStoreLike {
   upsert_tool(entry: DynamicToolManifestEntry): boolean {
     const name = String(entry.name || "").trim();
     if (!name) return false;
-    const changed = with_sqlite(this.sqlite_path,(db) => {
+    return with_sqlite_strict(this.sqlite_path,(db) => {
       const now = Date.now();
       const result = db.prepare(`
         INSERT INTO dynamic_tools (
@@ -139,17 +139,15 @@ export class SqliteDynamicToolStore implements DynamicToolStoreLike {
       );
       return Number(result.changes || 0) > 0;
     });
-    return Boolean(changed);
   }
 
   remove_tool(name_raw: string): boolean {
     const name = String(name_raw || "").trim();
     if (!name) return false;
-    const removed = with_sqlite(this.sqlite_path,(db) => {
+    return with_sqlite_strict(this.sqlite_path,(db) => {
       const result = db.prepare("DELETE FROM dynamic_tools WHERE name = ?").run(name);
       return Number(result.changes || 0) > 0;
     });
-    return Boolean(removed);
   }
 
   signature(): string {

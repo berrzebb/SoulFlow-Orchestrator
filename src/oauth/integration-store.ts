@@ -5,7 +5,7 @@
 
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import { with_sqlite } from "../utils/sqlite-helper.js";
+import { with_sqlite, with_sqlite_strict } from "../utils/sqlite-helper.js";
 import type { SecretVaultLike } from "../security/secret-vault.js";
 import type { OAuthServicePreset } from "./presets.js";
 
@@ -111,7 +111,7 @@ export class OAuthIntegrationStore {
   }
 
   private _ensure_initialized(): void {
-    with_sqlite(this.db_path, (db) => { db.exec(INIT_SQL); return true; }, { pragmas: PRAGMAS });
+    with_sqlite_strict(this.db_path, (db) => { db.exec(INIT_SQL); return true; }, { pragmas: PRAGMAS });
   }
 
   // ── 조회 ──
@@ -133,7 +133,7 @@ export class OAuthIntegrationStore {
   // ── 쓰기 ──
 
   upsert(input: CreateOAuthIntegrationInput): void {
-    with_sqlite(this.db_path, (db) => {
+    with_sqlite_strict(this.db_path, (db) => {
       db.prepare(`
         INSERT INTO oauth_integrations (instance_id, service_type, label, enabled, scopes, auth_url, token_url, redirect_uri, settings_json, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
@@ -169,7 +169,7 @@ export class OAuthIntegrationStore {
     const enabled = patch.enabled ?? existing.enabled;
     const scopes = patch.scopes ?? existing.scopes;
 
-    with_sqlite(this.db_path, (db) => {
+    with_sqlite_strict(this.db_path, (db) => {
       db.prepare(`
         UPDATE oauth_integrations SET label = ?, enabled = ?, scopes = ?, updated_at = datetime('now')
         WHERE instance_id = ?
@@ -180,17 +180,16 @@ export class OAuthIntegrationStore {
   }
 
   remove(instance_id: string): boolean {
-    const result = with_sqlite(this.db_path, (db) => {
+    return with_sqlite_strict(this.db_path, (db) => {
       const r = db.prepare("DELETE FROM oauth_integrations WHERE instance_id = ?").run(instance_id);
       return r.changes > 0;
     }, { pragmas: PRAGMAS });
-    return result ?? false;
   }
 
   // ── 토큰 만료 ──
 
   set_expires_at(instance_id: string, expires_at: string | null): void {
-    with_sqlite(this.db_path, (db) => {
+    with_sqlite_strict(this.db_path, (db) => {
       db.prepare("UPDATE oauth_integrations SET expires_at = ?, updated_at = datetime('now') WHERE instance_id = ?")
         .run(expires_at, instance_id);
       return true;
@@ -270,7 +269,7 @@ export class OAuthIntegrationStore {
   // ── 커스텀 프리셋 (런타임 동적 등록용) ──
 
   save_preset(preset: OAuthServicePreset): void {
-    with_sqlite(this.db_path, (db) => {
+    with_sqlite_strict(this.db_path, (db) => {
       db.prepare(`
         INSERT INTO oauth_custom_presets
           (service_type, label, auth_url, token_url, scopes_available_json, default_scopes_json,
@@ -311,10 +310,9 @@ export class OAuthIntegrationStore {
   }
 
   remove_preset(service_type: string): boolean {
-    const result = with_sqlite(this.db_path, (db) => {
+    return with_sqlite_strict(this.db_path, (db) => {
       const r = db.prepare("DELETE FROM oauth_custom_presets WHERE service_type = ?").run(service_type);
       return r.changes > 0;
     }, { pragmas: PRAGMAS });
-    return result ?? false;
   }
 }

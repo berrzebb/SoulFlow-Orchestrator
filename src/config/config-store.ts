@@ -65,7 +65,7 @@ export class ConfigStore {
 
   /** 오버라이드 저장 */
   set_override(path: string, value: unknown): void {
-    with_sqlite(this.db_path, (db) => {
+    with_sqlite_strict(this.db_path, (db) => {
       db.prepare(
         "INSERT INTO config_overrides (path, value_json, updated_at) VALUES (?, ?, datetime('now')) ON CONFLICT(path) DO UPDATE SET value_json = excluded.value_json, updated_at = excluded.updated_at",
       ).run(path, JSON.stringify(value));
@@ -75,7 +75,7 @@ export class ConfigStore {
 
   /** 오버라이드 삭제 (env 기본값 복원) */
   remove_override(path: string): void {
-    with_sqlite(this.db_path, (db) => {
+    with_sqlite_strict(this.db_path, (db) => {
       db.prepare("DELETE FROM config_overrides WHERE path = ?").run(path);
       return true;
     }, { pragmas: PRAGMAS });
