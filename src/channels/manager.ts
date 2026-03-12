@@ -1,6 +1,5 @@
 import type { InboundMessage, MediaItem, MessageBusLike, ReliableMessageBus } from "../bus/types.js";
-import { resolve_provider, resolve_reply_to, type ChannelRegistryLike } from "./types.js";
-type ChannelProvider = string;
+import { resolve_provider, resolve_reply_to, type ChannelProvider, type ChannelRegistryLike } from "./types.js";
 import type { ProviderRegistry } from "../providers/service.js";
 import type { ServiceLike } from "../runtime/service.types.js";
 import type { AppConfig } from "../config/schema.js";
