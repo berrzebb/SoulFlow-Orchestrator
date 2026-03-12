@@ -12,7 +12,7 @@ import type { DispatchService } from "./dispatch.service.js";
 import type { Logger } from "../logger.js";
 import { ChannelBlockRenderer } from "./channel-block-renderer.js";
 import { resolve_reply_to } from "./types.js";
-import { now_iso } from "../utils/common.js";
+import { now_iso, error_message } from "../utils/common.js";
 
 // ─── 인터페이스 ────────────────────────────────────────────────────────────
 
@@ -148,7 +148,7 @@ export class NativeChannelRenderer implements ChannelRendererLike {
     if (this._tool_count > 0) return;       // 도구 실행 중: 억제 (완료 후 새 메시지 전송)
     this._chain = this._chain
       .then(() => this._send_or_edit_stream(this._accumulated))
-      .catch((e) => this.deps.logger.debug("stream_update_failed", { error: String(e) }));
+      .catch((e) => this.deps.logger.debug("stream_update_failed", { error: error_message(e) }));
   }
 
   on_stream_event(event: StreamEvent): void {
@@ -170,19 +170,19 @@ export class NativeChannelRenderer implements ChannelRendererLike {
         ? this._update_status_message(progress_text)
         : this._send_status_message(progress_text),
       )
-      .catch((e) => this.deps.logger.debug("status_update_failed", { error: String(e) }));
+      .catch((e) => this.deps.logger.debug("status_update_failed", { error: error_message(e) }));
   }
 
   async flush(_final_content?: string): Promise<void> {
     await this._chain;
     if (this._finalize_native_stream) {
       await this._finalize_native_stream().catch((e) =>
-        this.deps.logger.debug("native_stream_stop_failed", { error: String(e) }),
+        this.deps.logger.debug("native_stream_stop_failed", { error: error_message(e) }),
       );
     }
     if (this.block_renderer.has_content()) {
       await this._send_block_summary().catch((e) =>
-        this.deps.logger.debug("block_summary_failed", { error: String(e) }),
+        this.deps.logger.debug("block_summary_failed", { error: error_message(e) }),
       );
     }
   }
@@ -247,7 +247,7 @@ export class NativeChannelRenderer implements ChannelRendererLike {
       try {
         await registry.edit_message(provider, message.chat_id, this._message_id, text);
       } catch (e) {
-        logger.debug("stream_edit_failed", { error: String(e) });
+        logger.debug("stream_edit_failed", { error: error_message(e) });
       }
     } else {
       const profile = this.deps.get_render_profile();
@@ -285,7 +285,7 @@ export class NativeChannelRenderer implements ChannelRendererLike {
       await registry.edit_message(provider, message.chat_id, this._message_id, status_text);
       this._last_update = now;
     } catch (e) {
-      logger.debug("status_edit_failed", { error: String(e) });
+      logger.debug("status_edit_failed", { error: error_message(e) });
     }
   }
 
