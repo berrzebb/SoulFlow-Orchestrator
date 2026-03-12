@@ -94,3 +94,49 @@ describe("validator — test() schema 경고 (L49)", () => {
     expect(result.warnings.some((w: string) => w.includes("schema"))).toBe(true);
   });
 });
+
+describe("validator_handler — L37: email non-validate action", () => {
+  it("operation=email, email_action=parse → 직접 결과 노출 분기 (L37)", async () => {
+    const node = {
+      node_id: "n1",
+      node_type: "validator",
+      operation: "email",
+      email_action: "parse",
+      input: "user@example.com",
+    } as any;
+    const result = await validator_handler.execute(node, createMockContext());
+    expect(result.output).toBeDefined();
+    expect("valid" in result.output).toBe(true);
+    expect("error_count" in result.output).toBe(true);
+  });
+
+  it("operation=email, email_action=normalize → L37 분기", async () => {
+    const node = {
+      node_id: "n2",
+      node_type: "validator",
+      operation: "email",
+      email_action: "normalize",
+      input: "User@EXAMPLE.COM",
+    } as any;
+    const result = await validator_handler.execute(node, createMockContext());
+    expect(result.output).toBeDefined();
+    expect("valid" in result.output).toBe(true);
+  });
+});
+
+describe("validator_handler — L37: email validate with errors", () => {
+  it("유효하지 않은 이메일 → validate → errors 배열 → map 콜백 실행 (L37)", async () => {
+    const node = {
+      node_id: "n1",
+      node_type: "validator",
+      operation: "email",
+      email_action: "validate",
+      input: "not-a-valid-email@@@@",
+    } as any;
+    const result = await validator_handler.execute(node, createMockContext());
+    expect(result.output).toBeDefined();
+    expect("valid" in result.output).toBe(true);
+    expect("error_count" in result.output).toBe(true);
+    expect(Array.isArray(result.output.errors)).toBe(true);
+  });
+});

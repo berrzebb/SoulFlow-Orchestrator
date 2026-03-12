@@ -309,3 +309,187 @@ describe("AgentBackendRegistry — run (추가 케이스)", () => {
     expect(session_store.save).toHaveBeenCalledWith(mock_session, expect.objectContaining({ task_id: undefined }));
   });
 });
+
+// ══════════════════════════════════════════
+// L173: circuit breaker open → backend 제외 (from cov3)
+// ══════════════════════════════════════════
+
+describe("AgentBackendRegistry — L173: 서킷 브레이커 open → backend 제외", () => {
+  it("backend 5회 실패 후 서킷 open → resolve_for_mode = null (L173 continue)", async () => {
+    const registry = new AgentBackendRegistry({ provider_registry: stub_registry });
+    const failing_cb: AgentBackend = {
+      id: "cb-b1",
+      native_tool_loop: false,
+      supports_resume: false,
+      capabilities: { supported_modes: ["once", "agent"] },
+      is_available: () => true,
+      run: async () => { throw new Error("provider fail"); },
+    };
+    registry.register(
+      failing_cb,
+      { priority: 1, enabled: true, supported_modes: ["once"], provider_type: "test" },
+    );
+
+    for (let i = 0; i < 5; i++) {
+      try {
+        await registry.run("cb-b1", { task: "t", task_id: `i${i}` } as any);
+      } catch { /* expected */ }
+    }
+
+    const result = registry.resolve_for_mode("once");
+    expect(result).toBeNull();
+  });
+});
+
+// ══════════════════════════════════════════
+// L296: fallback error → record_failure (from cov3)
+// ══════════════════════════════════════════
+
+describe("AgentBackendRegistry — L296: fallback error 결과 → record_failure", () => {
+  it("primary 실패 → fallback이 finish_reason=error 반환 → L296 record_failure 실행", async () => {
+    const registry = new AgentBackendRegistry({ provider_registry: stub_registry });
+    const failing_backend: AgentBackend = {
+      id: "prim-b1",
+      native_tool_loop: false,
+      supports_resume: false,
+      capabilities: { supported_modes: ["once", "agent"] },
+      is_available: () => true,
+      run: async () => { throw new Error("primary fail"); },
+    };
+    registry.register(
+      failing_backend,
+      { priority: 1, enabled: true, supported_modes: ["once"], provider_type: "p1" },
+    );
+    registry.register(
+      make_backend("fall-b2", { result: { finish_reason: "error" } }),
+      { priority: 2, enabled: true, supported_modes: ["once"], provider_type: "p2" },
+    );
+
+    const result = await registry.run("prim-b1", { task: "t", task_id: "r1" } as any);
+    expect(result.finish_reason).toBe("error");
+  });
+});
+
+// ══════════════════════════════════════════
+// L318: fallback 후보 2개+ → sort 비교자 실행 (from cov3)
+// ══════════════════════════════════════════
+
+describe("AgentBackendRegistry — L318: fallback 후보 2개+ → sort 비교자 실행", () => {
+  it("fallback 후보 3개 (다른 priority) → sort 비교자 L318 실행 → 가장 낮은 priority 반환", async () => {
+    const registry = new AgentBackendRegistry({ provider_registry: stub_registry });
+    const failing_backend: AgentBackend = {
+      id: "sort-b1",
+      native_tool_loop: false,
+      supports_resume: false,
+      capabilities: { supported_modes: ["once", "agent"] },
+      is_available: () => true,
+      run: async () => { throw new Error("prim fail"); },
+    };
+    registry.register(
+      failing_backend,
+      { priority: 5, enabled: true, supported_modes: ["once"], provider_type: "p1" },
+    );
+    registry.register(
+      make_backend("sort-b2"),
+      { priority: 3, enabled: true, supported_modes: ["once"], provider_type: "p2" },
+    );
+    registry.register(
+      make_backend("sort-b3"),
+      { priority: 1, enabled: true, supported_modes: ["once"], provider_type: "p3" },
+    );
+
+    const result = await registry.run("sort-b1", { task: "t", task_id: "s1" } as any);
+    expect(result.content).toBe("result:sort-b3");
+  });
+});
+
+// ══════════════════════════════════════════
+// L329: 레거시 LEGACY_FALLBACK_MAP (from cov3)
+// ══════════════════════════════════════════
+
+describe("AgentBackendRegistry — L329: 레거시 fallback (LEGACY_FALLBACK_MAP)", () => {
+  it("provider_configs 없고 claude_sdk 실패 → LEGACY_FALLBACK_MAP → claude_cli 반환 (L329)", async () => {
+    const registry = new AgentBackendRegistry({ provider_registry: stub_registry });
+    const failing_backend: AgentBackend = {
+      id: "claude_sdk",
+      native_tool_loop: false,
+      supports_resume: false,
+      capabilities: { supported_modes: ["once", "agent"] },
+      is_available: () => true,
+      run: async () => { throw new Error("sdk fail"); },
+    };
+    registry.register(failing_backend);
+    registry.register(make_backend("claude_cli"));
+
+    const result = await registry.run("claude_sdk", { task: "t", task_id: "leg1" } as any);
+    expect(result.content).toBe("result:claude_cli");
+  });
+});
+
+// ══════════════════════════════════════════
+// L365: _diff_capabilities primary undefined (from cov3)
+// ══════════════════════════════════════════
+
+describe("AgentBackendRegistry — L365: _diff_capabilities primary undefined", () => {
+  it("primary 백엔드가 capabilities=undefined → _diff_capabilities !primary → L365 return []", async () => {
+    const registry = new AgentBackendRegistry({ provider_registry: stub_registry });
+    const failing_backend: AgentBackend = {
+      id: "diff-b1",
+      native_tool_loop: false,
+      supports_resume: false,
+      capabilities: undefined as any,
+      is_available: () => true,
+      run: async () => { throw new Error("fail"); },
+    };
+    registry.register(
+      failing_backend,
+      { priority: 1, enabled: true, supported_modes: ["once"], provider_type: "p1" },
+    );
+    registry.register(
+      make_backend("diff-b2"),
+      { priority: 2, enabled: true, supported_modes: ["once"], provider_type: "p2" },
+    );
+
+    const result = await registry.run("diff-b1", { task: "t", task_id: "d1" } as any);
+    expect(result).toBeDefined();
+  });
+});
+
+// ══════════════════════════════════════════
+// L369: _diff_capabilities map 실행 (from cov3)
+// ══════════════════════════════════════════
+
+describe("AgentBackendRegistry — L369: _diff_capabilities map 실행", () => {
+  it("primary.approval=true, fallback.approval=false → filter+map 실행 (L369)", async () => {
+    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() };
+    const registry_with_log = new AgentBackendRegistry({
+      provider_registry: stub_registry,
+      logger: logger as any,
+    });
+
+    const failing_backend: AgentBackend = {
+      id: "cap-b1",
+      native_tool_loop: false,
+      supports_resume: false,
+      capabilities: {
+        approval: true, structured_output: true, thinking: false,
+        budget_tracking: false, tool_filtering: false, tool_result_events: false,
+        send_input: false, tool_executors: false,
+      } as any,
+      is_available: () => true,
+      run: async () => { throw new Error("fail"); },
+    };
+    registry_with_log.register(
+      failing_backend,
+      { priority: 1, enabled: true, supported_modes: ["once"], provider_type: "c1" },
+    );
+    registry_with_log.register(
+      make_backend("cap-b2"),
+      { priority: 2, enabled: true, supported_modes: ["once"], provider_type: "c2" },
+    );
+
+    const result = await registry_with_log.run("cap-b1", { task: "t", task_id: "c1" } as any);
+    expect(result).toBeDefined();
+    expect(result.content).toBe("result:cap-b2");
+  });
+});

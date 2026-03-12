@@ -32,7 +32,13 @@ class MockWS {
     (this._handlers[event] || []).forEach(f => f(...args));
   }
 
-  send(msg: string, cb?: (err?: Error) => void) { cb?.(); }
+  send(msg: string, cb?: (err?: Error) => void) {
+    if ((this as any)._send_error) {
+      cb?.(new Error("send failed"));
+    } else {
+      cb?.();
+    }
+  }
   close() { this.readyState = MockWS.CLOSED; this.emit("close"); }
 }
 
@@ -203,5 +209,115 @@ describe("WebSocketTool — unknown action", () => {
     const tool = make_tool();
     const r = await tool.execute({ action: "unknown_action" });
     expect(String(r)).toContain("Error");
+  });
+});
+
+// ══════════════════════════════════════════
+// MAX_CONNECTIONS 한도
+// ══════════════════════════════════════════
+
+describe("WebSocketTool — MAX_CONNECTIONS 한도 (10)", () => {
+  it("10개 초과 연결 시도 → Error", async () => {
+    const tool = new WebSocketTool();
+    ws_instances.length = 0;
+
+    const ids: string[] = [];
+    for (let i = 0; i < 10; i++) {
+      const id = `overflow_conn_${i}`;
+      ids.push(id);
+      await tool.execute({ action: "connect", url: "ws://localhost:8080", id });
+    }
+
+    const r = await tool.execute({ action: "connect", url: "ws://localhost:8080", id: "extra_conn" });
+    expect(String(r)).toContain("Error");
+    expect(String(r)).toContain("10");
+
+    for (const id of ids) {
+      await tool.execute({ action: "close", id });
+    }
+  });
+});
+
+// ══════════════════════════════════════════
+// send — readyState !== OPEN
+// ══════════════════════════════════════════
+
+describe("WebSocketTool — send readyState !== OPEN", () => {
+  it("닫힌 연결에 send → Error: connection not open", async () => {
+    const tool = new WebSocketTool();
+    ws_instances.length = 0;
+
+    await tool.execute({ action: "connect", url: "ws://localhost:8080", id: "not_open_conn" });
+
+    const ws = ws_instances[ws_instances.length - 1];
+    ws.readyState = MockWS.CLOSED;
+
+    const r = await tool.execute({ action: "send", id: "not_open_conn", message: "hello" });
+    expect(String(r)).toContain("Error");
+    expect(String(r)).toContain("not open");
+  });
+});
+
+// ══════════════════════════════════════════
+// send — 콜백 에러
+// ══════════════════════════════════════════
+
+describe("WebSocketTool — send 콜백 에러", () => {
+  it("ws.send가 에러 반환 → Error 메시지", async () => {
+    const tool = new WebSocketTool();
+    ws_instances.length = 0;
+
+    await tool.execute({ action: "connect", url: "ws://localhost:8080", id: "send_err_conn" });
+
+    const ws = ws_instances[ws_instances.length - 1];
+    (ws as any)._send_error = true;
+
+    const r = await tool.execute({ action: "send", id: "send_err_conn", message: "hello" });
+    expect(String(r)).toContain("Error");
+    expect(String(r)).toContain("send failed");
+  });
+});
+
+// ══════════════════════════════════════════
+// receive — 지연 메시지 (check loop)
+// ══════════════════════════════════════════
+
+describe("WebSocketTool — receive 지연 메시지", () => {
+  it("메시지 없다가 100ms 후 도착 → check loop에서 감지", async () => {
+    const tool = new WebSocketTool();
+    ws_instances.length = 0;
+
+    await tool.execute({ action: "connect", url: "ws://localhost:8080", id: "delayed_conn" });
+    const ws = ws_instances[ws_instances.length - 1];
+
+    setTimeout(() => {
+      ws.emit("message", Buffer.from("delayed message"));
+    }, 150);
+
+    const r = JSON.parse(await tool.execute({ action: "receive", id: "delayed_conn", timeout_ms: 500 }));
+    expect(r.messages).toContain("delayed message");
+    expect(r.count).toBe(1);
+  });
+});
+
+// ══════════════════════════════════════════
+// receive — ws 닫힘 중 대기
+// ══════════════════════════════════════════
+
+describe("WebSocketTool — receive ws 닫힘 감지", () => {
+  it("receive 대기 중 ws 닫힘 → closed=true 반환", async () => {
+    const tool = new WebSocketTool();
+    ws_instances.length = 0;
+
+    await tool.execute({ action: "connect", url: "ws://localhost:8080", id: "close_during_recv" });
+    const ws = ws_instances[ws_instances.length - 1];
+
+    setTimeout(() => {
+      ws.readyState = MockWS.CLOSED;
+    }, 100);
+
+    const r = JSON.parse(await tool.execute({ action: "receive", id: "close_during_recv", timeout_ms: 500 }));
+    expect(r.closed).toBe(true);
+    expect(r.messages).toEqual([]);
   });
 });

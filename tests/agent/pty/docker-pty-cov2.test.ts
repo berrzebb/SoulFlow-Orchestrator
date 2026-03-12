@@ -8,6 +8,7 @@
  * - wire_stdout: close/error 이벤트
  * - build_volumes: bridge 포함/미포함
  * - create_docker_pty_factory: 팩토리 생성
+ * - onExit dispose → exit_listeners에서 제거
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { EventEmitter } from "node:events";
@@ -350,5 +351,40 @@ describe("create_docker_pty_factory", () => {
     const pty = factory("claude", [], make_spawn_options());
     expect(pty).toBeInstanceOf(DockerPty);
     await wait_init(); // 초기화 완료 대기
+  });
+});
+
+// ══════════════════════════════════════════════════════════
+// onExit dispose → exit_listeners에서 제거
+// ══════════════════════════════════════════════════════════
+
+describe("DockerPty — onExit dispose → exit_listeners에서 제거", () => {
+  it("onExit 반환 Disposable의 dispose() 호출 → cb 더 이상 호출 안 됨", async () => {
+    const { docker, stdout } = make_docker();
+    const pty = new DockerPty(docker, "claude", [], { name: "test", cwd: "/workspace", env: {} }, {
+      docker, image: "node:22-slim",
+    });
+    await wait_init();
+
+    const exit_cb = vi.fn();
+    const { dispose } = pty.onExit(exit_cb);
+    dispose();
+
+    stdout.emit("close");
+    expect(exit_cb).not.toHaveBeenCalled();
+  });
+
+  it("dispose() 전에는 exit_cb가 정상 호출됨 (비교 확인)", async () => {
+    const { docker, stdout } = make_docker();
+    const pty = new DockerPty(docker, "claude", [], { name: "test2", cwd: "/workspace", env: {} }, {
+      docker, image: "node:22-slim",
+    });
+    await wait_init();
+
+    const exit_cb = vi.fn();
+    pty.onExit(exit_cb);
+
+    stdout.emit("close");
+    expect(exit_cb).toHaveBeenCalledWith({ exitCode: 0 });
   });
 });

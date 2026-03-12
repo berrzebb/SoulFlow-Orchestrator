@@ -270,3 +270,54 @@ describe("DataFormatTool — pick_omit 엣지 케이스", () => {
     expect(result.b).toBe(2);
   });
 });
+
+// ── yaml_serialize top-level null (L280) ──
+
+describe("DataFormatTool — L280: yaml_serialize(null) → 'null\\n'", () => {
+  it("JSON null → YAML: top-level null 직렬화 → L280 실행", async () => {
+    const r = await run("convert", "null", { from: "json", to: "yaml" });
+    expect(r.trim()).toBe("null");
+  });
+});
+
+// ── yaml_serialize top-level boolean/number (L281) ──
+
+describe("DataFormatTool — L281: yaml_serialize(boolean/number) → primitive 직렬화", () => {
+  it("JSON true → YAML: top-level boolean → L281", async () => {
+    const r = await run("convert", "true", { from: "json", to: "yaml" });
+    expect(r.trim()).toBe("true");
+  });
+
+  it("JSON false → YAML → L281", async () => {
+    const r = await run("convert", "false", { from: "json", to: "yaml" });
+    expect(r.trim()).toBe("false");
+  });
+
+  it("JSON 42 → YAML: top-level number → L281", async () => {
+    const r = await run("convert", "42", { from: "json", to: "yaml" });
+    expect(r.trim()).toBe("42");
+  });
+
+  it("JSON 3.14 → YAML → L281", async () => {
+    const r = await run("convert", "3.14", { from: "json", to: "yaml" });
+    expect(r.trim()).toBe("3.14");
+  });
+});
+
+// ── yaml_parse_block 들여쓰기 break (L233/L234) ──
+
+describe("DataFormatTool — L233/L234: yaml_parse_block 들여쓰기 break 경로", () => {
+  it("중첩 객체에서 들여쓰기 감소 → L233 break → 파싱 종료", async () => {
+    const yaml = "outer:\n  inner: value\ntop_level: again";
+    const r = JSON.parse(await run("convert", yaml, { from: "yaml", to: "json" }));
+    expect(r.outer).toBeDefined();
+    expect(r.top_level).toBeDefined();
+  });
+
+  it("깊이 중첩 후 들여쓰기 증가 (i > start) → L234 break", async () => {
+    const yaml = "a:\n  b: 1\n  c: 2\nd: 3";
+    const r = JSON.parse(await run("convert", yaml, { from: "yaml", to: "json" }));
+    expect(r.a?.b).toBe(1);
+    expect(r.d).toBe(3);
+  });
+});

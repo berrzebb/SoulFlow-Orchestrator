@@ -212,4 +212,24 @@ describe("CliDockerOps", () => {
       expect(call_args[1]).toBe("tcp://proxy:2375");
     });
   });
+
+  describe("list — parse_label_string edge cases", () => {
+    it("Labels='' 컨테이너 → parse_label_string('') → labels: {}", async () => {
+      const lines = JSON.stringify({ ID: "id1", Names: "agent-1", State: "running", Labels: "" });
+      stub_exec(lines);
+
+      const result = await ops.list({});
+      expect(result).toHaveLength(1);
+      expect(result[0]!.labels).toEqual({});
+    });
+
+    it("Labels 필드 없음 → ?? '' → parse_label_string('') → labels: {}", async () => {
+      const lines = JSON.stringify({ ID: "id2", Names: "agent-2", State: "exited" });
+      stub_exec(lines);
+
+      const result = await ops.list({});
+      expect(result).toHaveLength(1);
+      expect(result[0]!.labels).toEqual({});
+    });
+  });
 });

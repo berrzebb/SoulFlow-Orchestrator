@@ -253,3 +253,81 @@ describe("RedisTool — 메타데이터", () => {
   it("category = external", () => expect(tool.category).toBe("external"));
   it("to_schema type = function", () => expect(tool.to_schema().type).toBe("function"));
 });
+
+// ══════════════════════════════════════════
+// timeout 콜백
+// ══════════════════════════════════════════
+
+describe("RedisTool — timeout 콜백", () => {
+  it("응답 없음 + fake timer → timeout error → success=false", async () => {
+    vi.useFakeTimers();
+    mock_state.response_data = "";
+    mock_state.connect_error = false;
+    const p = tool.execute({ action: "ping", timeout_ms: 1 }).then(r => JSON.parse(String(r)));
+    await vi.advanceTimersByTimeAsync(10);
+    const r = await p;
+    vi.useRealTimers();
+    expect(r.success).toBe(false);
+    expect(String(r.error)).toContain("timeout");
+  });
+});
+
+// ══════════════════════════════════════════
+// unknown action
+// ══════════════════════════════════════════
+
+describe("RedisTool — unknown action", () => {
+  it("unknown action → Error 반환", async () => {
+    mock_state.response_data = "";
+    mock_state.connect_error = false;
+    const r = String(await tool.execute({ action: "zadd" }));
+    expect(r).toContain("unsupported action");
+  });
+});
+
+// ══════════════════════════════════════════
+// parse_resp 직접 테스트
+// ══════════════════════════════════════════
+
+describe("RedisTool — parse_resp 직접 테스트", () => {
+  const pr = (data: string) => (tool as unknown as { parse_resp(d: string): unknown }).parse_resp(data);
+
+  it("빈 문자열 → null", () => {
+    expect(pr("")).toBeNull();
+  });
+
+  it("CRLF 없음 → null", () => {
+    expect(pr("+PONG")).toBeNull();
+  });
+
+  it("$ 타입: rest 너무 짧음 → null", () => {
+    expect(pr("$5\r\nhe")).toBeNull();
+  });
+
+  it("* 타입: 하위 요소 파싱 실패 → null", () => {
+    expect(pr("*1\r\n+OK")).toBeNull();
+  });
+
+  it("unknown type → default { value, rest } 반환", () => {
+    const r = pr("?hello\r\nrest") as { value: string; rest: string };
+    expect(r.value).toBe("hello");
+    expect(r.rest).toBe("rest");
+  });
+});
+
+// ══════════════════════════════════════════
+// 불완전 응답
+// ══════════════════════════════════════════
+
+describe("RedisTool — 불완전 응답", () => {
+  it("불완전한 응답 + fake timer → timeout", async () => {
+    vi.useFakeTimers();
+    mock_state.response_data = "+PONG";  // CRLF 없음
+    mock_state.connect_error = false;
+    const p = tool.execute({ action: "ping", timeout_ms: 1 }).then(r => JSON.parse(String(r)));
+    await vi.advanceTimersByTimeAsync(10);
+    const r = await p;
+    vi.useRealTimers();
+    expect(r.success).toBe(false);
+  });
+});

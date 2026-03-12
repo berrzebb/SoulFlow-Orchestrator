@@ -1,6 +1,8 @@
 /**
- * shell-runtime — L35 (can_run_runner false) 커버리지.
- * spawn_status=1 → command_exists false → L35 return false 경로.
+ * shell-runtime — 미커버 분기 커버리지.
+ * - L35: can_run_runner false (command_exists 실패) → 폴백 실행
+ * - L64: as_record null (stdout 'null') → 폴백
+ * - L78: parse_just_bash_output null (stdout Array) → 폴백
  */
 import { describe, it, expect, vi } from "vitest";
 import { tmpdir } from "node:os";
@@ -53,5 +55,27 @@ describe("shell-runtime — L35: can_run_runner → false (command_exists 실패
     const { run_shell_command } = await import("@src/agent/tools/shell-runtime.js");
     const result = await run_shell_command("echo test", OPTS);
     expect(typeof result.stdout).toBe("string");
+  });
+});
+
+// ══════════════════════════════════════════════════════════
+// L64/L78: as_record null 경로
+// ══════════════════════════════════════════════════════════
+
+describe("shell-runtime — L64/L78: as_record null 경로", () => {
+  it("just-bash stdout = 'null' → as_record(null) → L64 return null → L78 return null → raw fallback", async () => {
+    // spawn_status를 0으로 변경하여 just-bash 있음으로 설정
+    mock_state.spawn_status = 0;
+    mock_state.exec_stdout = "null";
+    const { run_shell_command } = await import("@src/agent/tools/shell-runtime.js");
+    const result = await run_shell_command("echo test", OPTS);
+    expect(result.stdout).toBe("null");
+  });
+
+  it("just-bash stdout = '[1,2]' → as_record(array) → L64 Array.isArray → return null", async () => {
+    mock_state.exec_stdout = '[1,2]';
+    const { run_shell_command } = await import("@src/agent/tools/shell-runtime.js");
+    const result = await run_shell_command("echo test", OPTS);
+    expect(result.stdout).toBe('[1,2]');
   });
 });

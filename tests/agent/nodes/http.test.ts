@@ -11,7 +11,7 @@
  *       - Validation: test() 함수의 URL 필드 검증
  */
 
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { http_handler } from "@src/agent/nodes/http.js";
 import type { HttpNodeDefinition, OrcheNodeDefinition } from "@src/agent/workflow-node.types.js";
 import type { OrcheNodeExecutorContext } from "@src/agent/node-registry.js";
@@ -753,5 +753,64 @@ describe("HTTP Node Handler", () => {
         expect(err.message).toContain("private/loopback host blocked");
       }
     });
+  });
+});
+
+/* ── Stubbed-fetch tests for uncovered branches ── */
+
+function make_stub_node(overrides: Record<string, unknown>): OrcheNodeDefinition {
+  return {
+    node_id: "n1",
+    node_type: "http",
+    url: "https://example.com/api",
+    method: "GET",
+    ...overrides,
+  } as unknown as OrcheNodeDefinition;
+}
+
+function stub_fetch(body = "{}"): void {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+    ok: true,
+    status: 200,
+    headers: { get: vi.fn().mockReturnValue("application/json") },
+    text: vi.fn().mockResolvedValue(body),
+  }));
+}
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+describe("http_handler — L44: user_agent → User-Agent 헤더", () => {
+  it("user_agent + 헤더 있음 → .some() 콜백 실행 → user-agent 아닌 헤더 → L44/L45 실행", async () => {
+    stub_fetch();
+    const node = make_stub_node({
+      user_agent: "TestBot/1.0",
+      headers: { "X-Custom": "value" },
+    });
+    const result = await http_handler.execute(node, createMockContext());
+    expect(result.output.status).toBe(200);
+    const mock = vi.mocked(fetch);
+    const call_options = mock.mock.calls[0]?.[1] as RequestInit | undefined;
+    expect((call_options?.headers as Record<string, string>)?.["User-Agent"]).toBe("TestBot/1.0");
+  });
+});
+
+describe("http_handler — L55: 객체 body → JSON.stringify", () => {
+  it("body 객체 + headers에 content-type 아닌 헤더 → .some() 콜백 실행 → Content-Type 추가 (L55)", async () => {
+    stub_fetch('{"ok":true}');
+    const node = make_stub_node({
+      method: "POST",
+      body: { key: "value", num: 42 },
+      headers: { "X-Custom": "header" },
+    });
+    const result = await http_handler.execute(node, createMockContext());
+    expect(result.output.status).toBe(200);
+    const mock = vi.mocked(fetch);
+    const call_options = mock.mock.calls[0]?.[1] as RequestInit | undefined;
+    expect(typeof call_options?.body).toBe("string");
+    expect(call_options?.body).toContain("\"key\"");
+    const headers = call_options?.headers as Record<string, string>;
+    expect(headers?.["Content-Type"]).toBe("application/json");
   });
 });

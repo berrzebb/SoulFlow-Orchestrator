@@ -184,3 +184,45 @@ describe("DiffTool — stats 확장", () => {
     expect(typeof r.similarity).toBe("string");
   });
 });
+
+// ══════════════════════════════════════════
+// L164: lcs_indices_greedy — else b_map.set (첫 번째 고유 라인)
+// ══════════════════════════════════════════
+
+describe("DiffTool — L164: lcs_indices_greedy else 분기 (5001+ 라인)", () => {
+  it("5001개 라인 텍스트 비교 → greedy 경로 → L164 else b_map.set 실행", async () => {
+    const lines_a = Array.from({ length: 5001 }, (_, i) => `line_${i}`);
+    const lines_b = Array.from({ length: 5001 }, (_, i) =>
+      i === 2500 ? `line_modified_${i}` : `line_${i}`,
+    );
+
+    const old_text = lines_a.join("\n");
+    const new_text = lines_b.join("\n");
+
+    const r = await tool.execute({ operation: "compare", old_text, new_text });
+
+    expect(r).toContain("---");
+    expect(r).toContain("+++");
+    expect(r).toContain("line_modified_2500");
+  }, 30000);
+});
+
+// ══════════════════════════════════════════
+// L164: lcs_indices_greedy — if (arr) arr.push(idx) (중복 라인)
+// ══════════════════════════════════════════
+
+describe("DiffTool — L164: arr.push(idx) (중복 라인, greedy 경로)", () => {
+  it("b 배열에 중복 라인 포함 → greedy에서 arr.push(idx) (L164 if 분기) 실행", async () => {
+    const lines_a = Array.from({ length: 5001 }, (_, i) => `aline_${i}`);
+    const lines_b: string[] = ["dup", "dup", ...Array.from({ length: 4999 }, (_, i) => `bline_${i}`)];
+
+    const r = await tool.execute({
+      operation: "compare",
+      old_text: lines_a.join("\n"),
+      new_text: lines_b.join("\n"),
+    });
+
+    expect(r).toContain("---");
+    expect(r).toContain("+++");
+  }, 30000);
+});

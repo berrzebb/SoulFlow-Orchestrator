@@ -11,6 +11,8 @@
  * - register_send_input 콜백
  * - relay_output_event: assistant_message, tool_use, tool_result
  * - check_auth, stop(+tool_bridge), build_tool_definitions
+ * - wait_for_followup 반환 시 current_prompt 업데이트
+ * - auth_error + profile_tracker 순환 → 재시도 성공
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ContainerCliAgent } from "@src/agent/pty/container-cli-agent.js";
@@ -18,8 +20,9 @@ import { FailoverError } from "@src/agent/pty/types.js";
 
 // ─── mock AgentBus ─────────────────────────────────────────────────────────
 
-function make_bus() {
+function make_bus(wait_for_followup_responses: (string[] | null)[] = []) {
   const output_handlers = new Set<(key: string, msg: any) => void>();
+  let call_index = 0;
   return {
     send_and_wait: vi.fn(),
     on_output: vi.fn((handler: (key: string, msg: any) => void) => {
@@ -32,7 +35,11 @@ function make_bus() {
     lane_queue: {
       drain_followups: vi.fn().mockReturnValue([]),
       drain_collected: vi.fn().mockReturnValue(null),
-      wait_for_followup: vi.fn().mockResolvedValue(null),
+      wait_for_followup: vi.fn().mockImplementation(() => {
+        const resp = wait_for_followup_responses[call_index] ?? null;
+        call_index++;
+        return Promise.resolve(resp);
+      }),
     },
     emit_output: (key: string, msg: any) => {
       for (const h of output_handlers) h(key, msg);
@@ -556,5 +563,70 @@ describe("ContainerCliAgent — release_session", () => {
     const { agent, bus } = make_agent();
     await agent.release_session("task-xyz");
     expect(bus.remove_session).toHaveBeenCalledWith("task-xyz");
+  });
+});
+
+// ══════════════════════════════════════════════════════════
+// wait_for_followup 반환 → current_prompt 업데이트
+// ══════════════════════════════════════════════════════════
+
+describe("ContainerCliAgent — wait_for_followup 반환", () => {
+  it("wait_for_input_ms > 0 + wait_for_followup=[prompt] → prompt 업데이트 후 재시도", async () => {
+    const bus = make_bus([["follow up input"]]);
+
+    bus.send_and_wait
+      .mockResolvedValueOnce({ type: "complete", result: "", usage: { input: 5, output: 0 } })
+      .mockResolvedValueOnce({ type: "complete", result: "final answer", usage: { input: 10, output: 5 } });
+
+    const { agent } = make_agent({ bus });
+
+    const result = await agent.run({
+      task: "initial task",
+      task_id: "t-followup",
+      wait_for_input_ms: 100,
+    });
+
+    expect(result.finish_reason).toBe("stop");
+    expect(bus.lane_queue.wait_for_followup).toHaveBeenCalled();
+  });
+});
+
+// ══════════════════════════════════════════════════════════
+// auth_error + profile_tracker 순환 → 재시도 성공
+// ══════════════════════════════════════════════════════════
+
+describe("ContainerCliAgent — auth_error + profile 순환", () => {
+  it("auth_error → has_available=true → mark_failure=1 → 프로파일 전환 후 재시도 성공", async () => {
+    const profile_key_map = new Map([
+      [0, { CLAUDE_AUTH_PROFILE: "profile_0" }],
+      [1, { CLAUDE_AUTH_PROFILE: "profile_1" }],
+    ]);
+    const bus = make_bus();
+
+    bus.send_and_wait
+      .mockResolvedValueOnce({ type: "error", code: "auth", message: "auth fail" })
+      .mockResolvedValueOnce({ type: "complete", result: "ok", usage: { input: 5, output: 5 } });
+
+    const { agent } = make_agent({ bus, profile_key_map });
+
+    const result = await agent.run({ task: "task", task_id: "t-auth-rotate" });
+
+    expect(result.finish_reason).toBe("stop");
+    expect(result.content).toBe("ok");
+    expect(bus.send_and_wait).toHaveBeenCalledTimes(2);
+    expect(bus.remove_session).toHaveBeenCalled();
+  });
+
+  it("auth_error → profile rotation → mark_failure=null (프로파일 없음) → fallback=false → error 반환", async () => {
+    const profile_key_map = new Map([
+      [0, { CLAUDE_AUTH_PROFILE: "only_profile" }],
+    ]);
+    const bus = make_bus();
+    bus.send_and_wait.mockResolvedValueOnce({ type: "error", code: "auth", message: "auth fail" });
+
+    const { agent } = make_agent({ bus, profile_key_map, fallback_configured: false });
+    const result = await agent.run({ task: "task", task_id: "t-auth-no-rotate" });
+
+    expect(result.finish_reason).toBe("error");
   });
 });

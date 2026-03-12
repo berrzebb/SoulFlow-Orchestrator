@@ -226,6 +226,20 @@ describe("CronTool — add (deliver, channel, to, delete_after_run)", () => {
     expect(call[6]).toBe(true);
   });
 
+  it("delete_after_run='false' (string) → false", async () => {
+    const cron = make_cron();
+    await make_tool(cron).execute({ action: "add", message: "hello", every_seconds: 60, delete_after_run: "false" });
+    const call = vi.mocked(cron.add_job).mock.calls[0]!;
+    expect(call[6]).toBe(false);
+  });
+
+  it("deliver='true' (string) → true", async () => {
+    const cron = make_cron();
+    await make_tool(cron).execute({ action: "add", message: "hello", every_seconds: 60, deliver: "true" });
+    const call = vi.mocked(cron.add_job).mock.calls[0]!;
+    expect(call[3]).toBe(true);
+  });
+
   it("at schedule + delete_after_run 미지정 → 기본값 true (kind=at)", async () => {
     const cron = make_cron();
     await make_tool(cron).execute({ action: "add", message: "hello", at: "2099-01-01T00:00:00Z" });

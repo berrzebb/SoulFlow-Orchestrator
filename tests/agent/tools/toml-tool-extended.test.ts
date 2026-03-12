@@ -12,6 +12,17 @@ async function exec(params: Record<string, unknown>): Promise<unknown> {
   try { return JSON.parse(String(result)); } catch { return result; }
 }
 
+function make_throwing_tool() {
+  const t = new TomlTool();
+  (t as any).parse_toml = () => { throw new Error("forced parse error"); };
+  return t;
+}
+
+async function run_throwing(t: TomlTool, params: Record<string, unknown>): Promise<unknown> {
+  const raw = await (t as any).run(params);
+  try { return JSON.parse(raw); } catch { return raw; }
+}
+
 // ══════════════════════════════════════════
 // parse — 추가 타입
 // ══════════════════════════════════════════
@@ -176,5 +187,43 @@ describe("TomlTool — unsupported action", () => {
     const r = await tool.execute({ action: "bogus" });
     expect(String(r)).toContain("Error");
     expect(String(r)).toContain("bogus");
+  });
+});
+
+// ══════════════════════════════════════════
+// parse_toml throws → catch 분기 (L32/L48/L59/L69)
+// ══════════════════════════════════════════
+
+describe("TomlTool — parse catch (L32)", () => {
+  it("parse_toml throws → catch → { error } 반환 (L32)", async () => {
+    const t = make_throwing_tool();
+    const result = await run_throwing(t, { action: "parse", input: "anything" }) as any;
+    expect(result.error).toBeDefined();
+    expect(result.error).toContain("forced parse error");
+  });
+});
+
+describe("TomlTool — validate catch (L48)", () => {
+  it("parse_toml throws → catch → { valid: false, error } 반환 (L48)", async () => {
+    const t = make_throwing_tool();
+    const result = await run_throwing(t, { action: "validate", input: "anything" }) as any;
+    expect(result.valid).toBe(false);
+    expect(typeof result.error).toBe("string");
+  });
+});
+
+describe("TomlTool — query catch (L59)", () => {
+  it("parse_toml throws → catch → { error } 반환 (L59)", async () => {
+    const t = make_throwing_tool();
+    const result = await run_throwing(t, { action: "query", input: "anything", path: "key" }) as any;
+    expect(result.error).toBeDefined();
+  });
+});
+
+describe("TomlTool — merge catch (L69)", () => {
+  it("parse_toml throws → catch → { error } 반환 (L69)", async () => {
+    const t = make_throwing_tool();
+    const result = await run_throwing(t, { action: "merge", input: "key = 1", second: "other = 2" }) as any;
+    expect(result.error).toBeDefined();
   });
 });

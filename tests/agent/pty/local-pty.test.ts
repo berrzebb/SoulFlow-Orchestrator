@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { resolve } from "node:path";
 import { LocalPty, local_pty_factory } from "@src/agent/pty/local-pty.ts";
 
@@ -140,5 +140,89 @@ describe("LocalPty", () => {
       pty.onExit((e) => resolve(e.exitCode));
     });
     expect(code).toBe(0);
+  });
+});
+
+/* ── Exited-state guard path tests ── */
+
+function make_pty(script: string): LocalPty {
+  return new LocalPty("node", ["-e", script], {
+    name: "test",
+    cwd: process.cwd(),
+    env: {},
+  });
+}
+
+async function wait_exit(pty: LocalPty): Promise<number> {
+  return new Promise((resolve) => {
+    pty.onExit((e) => resolve(e.exitCode));
+  });
+}
+
+describe("LocalPty — write() after exit is no-op", () => {
+  it("프로세스 종료 후 write 호출해도 에러 없음", async () => {
+    const pty = make_pty("process.exit(0)");
+    await wait_exit(pty);
+    expect(() => pty.write("data\n")).not.toThrow();
+  });
+});
+
+describe("LocalPty — end() after exit is no-op", () => {
+  it("프로세스 종료 후 end() 호출해도 에러 없음", async () => {
+    const pty = make_pty("process.exit(0)");
+    await wait_exit(pty);
+    expect(() => pty.end()).not.toThrow();
+  });
+
+  it("프로세스 종료 후 end(data) 호출해도 에러 없음", async () => {
+    const pty = make_pty("process.exit(0)");
+    await wait_exit(pty);
+    expect(() => pty.end("final data\n")).not.toThrow();
+  });
+});
+
+describe("LocalPty — end(data) 살아있는 프로세스", () => {
+  it("data 있는 end() → stdin.write + stdin.end 호출", async () => {
+    const pty = make_pty(`
+      const rl = require("readline").createInterface({ input: process.stdin });
+      rl.on("line", (l) => process.stdout.write("got:" + l + "\\n"));
+      rl.on("close", () => process.exit(0));
+    `);
+    const chunks: string[] = [];
+    pty.onData((d) => chunks.push(d));
+    await new Promise((r) => setTimeout(r, 100));
+    pty.end("end-data\n");
+    await wait_exit(pty);
+    expect(chunks.join("")).toContain("got:end-data");
+  });
+});
+
+describe("LocalPty — kill() after exit is no-op", () => {
+  it("프로세스 종료 후 kill() 호출해도 에러 없음", async () => {
+    const pty = make_pty("process.exit(0)");
+    await wait_exit(pty);
+    expect(() => pty.kill()).not.toThrow();
+  });
+});
+
+describe("LocalPty — onData dispose", () => {
+  it("dispose 후 데이터 수신 안 됨", async () => {
+    const pty = make_pty('setTimeout(() => { process.stdout.write("hello"); process.exit(0); }, 50)');
+    const chunks: string[] = [];
+    const d = pty.onData((c) => chunks.push(c));
+    d.dispose();
+    await wait_exit(pty);
+    expect(chunks).toHaveLength(0);
+  });
+});
+
+describe("LocalPty — onExit dispose", () => {
+  it("dispose 후 exit 콜백 호출 안 됨", async () => {
+    const pty = make_pty("process.exit(0)");
+    const calls: number[] = [];
+    const d = pty.onExit((e) => calls.push(e.exitCode));
+    d.dispose();
+    await wait_exit(pty);
+    expect(calls).toHaveLength(0);
   });
 });

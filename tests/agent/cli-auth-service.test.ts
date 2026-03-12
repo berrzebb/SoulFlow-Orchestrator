@@ -262,3 +262,132 @@ describe("CliAuthService — get_cached / check_all", () => {
     expect(results).toHaveLength(3);
   });
 });
+
+// ══════════════════════════════════════════════════════════
+// check_gemini — 추가 분기 (from cov2)
+// ══════════════════════════════════════════════════════════
+
+describe("check_gemini — readdirSync 실패 (L144)", () => {
+  it("readdirSync throw → cannot read ~/.gemini/", async () => {
+    vi.mocked(execFile).mockImplementation((_cmd, _args, _opts, callback: any) => {
+      callback(null, JSON.stringify({ loggedIn: true }), "");
+      return {} as any;
+    });
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readdirSync).mockImplementation(() => { throw new Error("permission denied"); });
+
+    const svc = make_service();
+    const status = await svc.check("gemini");
+
+    expect(status.authenticated).toBe(false);
+    expect(status.error).toContain("cannot read");
+  });
+});
+
+describe("check_gemini — config 파일만 (L154-155)", () => {
+  beforeEach(() => {
+    vi.mocked(execFile).mockImplementation((_cmd, _args, _opts, callback: any) => {
+      callback(null, JSON.stringify({ loggedIn: true }), "");
+      return {} as any;
+    });
+  });
+
+  it("config 포함 파일 → config detected", async () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readdirSync).mockReturnValue(["config.yaml", "settings.json"] as any);
+
+    const svc = make_service();
+    const status = await svc.check("gemini");
+
+    expect(status.authenticated).toBe(true);
+    expect(status.account).toBe("config detected");
+  });
+
+  it(".json 확장자 파일 → config detected", async () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readdirSync).mockReturnValue(["preferences.json"] as any);
+
+    const svc = make_service();
+    const status = await svc.check("gemini");
+
+    expect(status.authenticated).toBe(true);
+    expect(status.account).toBe("config detected");
+  });
+});
+
+describe("check_gemini — 인증 파일 없음 (L158)", () => {
+  beforeEach(() => {
+    vi.mocked(execFile).mockImplementation((_cmd, _args, _opts, callback: any) => {
+      callback(null, JSON.stringify({ loggedIn: true }), "");
+      return {} as any;
+    });
+  });
+
+  it("빈 디렉토리 → no auth files", async () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readdirSync).mockReturnValue([] as any);
+
+    const svc = make_service();
+    const status = await svc.check("gemini");
+
+    expect(status.authenticated).toBe(false);
+    expect(status.error).toContain("no auth files");
+  });
+
+  it("이름에 auth/credential/token/oauth/config/json 없는 파일들 → no auth files", async () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.mocked(readdirSync).mockReturnValue(["readme.txt", "notes.md"] as any);
+
+    const svc = make_service();
+    const status = await svc.check("gemini");
+
+    expect(status.authenticated).toBe(false);
+    expect(status.error).toContain("no auth files");
+  });
+});
+
+// ══════════════════════════════════════════════════════════
+// check_claude — extract_account 분기 (L174-177) (from cov2)
+// ══════════════════════════════════════════════════════════
+
+describe("check_claude — extract_account 분기 (L174-177)", () => {
+  it("이메일 없음 + 짧은 텍스트 첫 줄 → 첫 줄 반환 (L174-175)", async () => {
+    vi.mocked(execFile).mockImplementation((_cmd, _args, _opts, callback: any) => {
+      callback(null, "Logged in as: testuser", "");
+      return {} as any;
+    });
+
+    const svc = make_service();
+    const status = await svc.check("claude");
+
+    expect(status.authenticated).toBe(true);
+    expect(status.account).toBe("Logged in as: testuser");
+  });
+
+  it("이메일 없음 + 빈 출력 → account undefined (L177 null 반환)", async () => {
+    vi.mocked(execFile).mockImplementation((_cmd, _args, _opts, callback: any) => {
+      callback(null, "", "");
+      return {} as any;
+    });
+
+    const svc = make_service();
+    const status = await svc.check("claude");
+
+    expect(status.authenticated).toBe(true);
+    expect(status.account).toBeUndefined();
+  });
+
+  it("이메일 없음 + 100자 이상 첫 줄 → account undefined (L177 null 반환)", async () => {
+    const long_line = "x".repeat(101);
+    vi.mocked(execFile).mockImplementation((_cmd, _args, _opts, callback: any) => {
+      callback(null, long_line, "");
+      return {} as any;
+    });
+
+    const svc = make_service();
+    const status = await svc.check("claude");
+
+    expect(status.authenticated).toBe(true);
+    expect(status.account).toBeUndefined();
+  });
+});

@@ -196,13 +196,60 @@ describe("DispatchService — web provider 필터링", () => {
     const deps = make_deps();
     const service = make_service(deps);
 
-    // 그룹핑 disabled, 내부 do_send_with_retry → resolve_provider → "web" → skip
-    // 직접 grouping flush 유도: grouping.push 후 flush
-    // grouping disabled이므로 push 즉시 flush됨
     const msg = make_message({ provider: "web" as any, channel: "web" as any });
     await service.send("web" as any, msg);
     await new Promise((r) => setTimeout(r, 20));
-    // web provider는 do_send_with_retry에서 skip → registry.send 미호출
     expect(deps.registry.send).not.toHaveBeenCalled();
+  });
+});
+
+// ── L195-197: 레이트 리미터 2회 연속 실패 — from cov3 ───────────────
+
+describe("DispatchService — L195-197: double rate limit exceeded", () => {
+  it("try_consume 2회 모두 false → L195-197 rate_limit_exceeded 반환", async () => {
+    const deps = make_deps();
+    const service = make_service(deps);
+
+    (service as any).rate_limiter = {
+      try_consume: vi.fn().mockReturnValue(false),
+      wait_time_ms: vi.fn().mockReturnValue(0),
+    };
+
+    const result = await (service as any).send_with_retry("slack", make_message(), false);
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe("rate_limit_exceeded");
+    expect(deps.logger.warn).toHaveBeenCalledWith(
+      "rate limit still exceeded after wait",
+      expect.objectContaining({ provider: "slack" }),
+    );
+  });
+});
+
+// ── L249: schedule_retry → 타이머 발화 → bus.publish_outbound throw — from cov3 ──
+
+describe("DispatchService — L249: retry timer publish_outbound throw → catch 로그", () => {
+  it("schedule_retry 후 bus.publish_outbound 실패 → L249 logger.debug('retry publish failed')", async () => {
+    vi.useFakeTimers();
+
+    const deps = make_deps();
+    deps.bus.consume_outbound = vi.fn(async () => null);
+    deps.registry.send = vi.fn(async () => ({ ok: false, error: "server_error" }));
+    deps.bus.publish_outbound = vi.fn().mockRejectedValue(new Error("bus publish failed"));
+    const service = make_service(deps);
+
+    (service as any).running = true;
+
+    const msg = make_message();
+    await (service as any).send_with_retry("slack", msg, true);
+
+    await vi.runAllTimersAsync();
+
+    expect(deps.logger.debug).toHaveBeenCalledWith(
+      "retry publish failed",
+      expect.objectContaining({ error: expect.stringContaining("bus publish failed") }),
+    );
+
+    vi.useRealTimers();
   });
 });

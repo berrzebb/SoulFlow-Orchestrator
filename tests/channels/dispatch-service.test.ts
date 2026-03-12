@@ -148,3 +148,31 @@ describe("DispatchService — consume_loop_leased non-retryable error (L160-162)
     expect(dlq_mock.append).toHaveBeenCalled();
   });
 });
+
+// ── L86: loop_task 완료 중 추가된 타이머 정리 — from cov2 ─────────────────────
+
+describe("DispatchService — L86: stop() 두 번째 pending_retries 정리", () => {
+  it("loop_task 완료 시 pending_retries에 타이머 추가 → L86 clearTimeout 실행", async () => {
+    const svc = make_service();
+    (svc as any).running = true;
+
+    (svc as any).loop_task = Promise.resolve().then(() => {
+      const t = setTimeout(() => {}, 99_999);
+      (svc as any).pending_retries.add(t);
+    });
+
+    await svc.stop();
+
+    expect((svc as any).pending_retries.size).toBe(0);
+  });
+
+  it("loop_task=null이어도 stop() 정상 완료 → L86 빈 set 루프 (예외 없음)", async () => {
+    const svc = make_service();
+    (svc as any).running = true;
+    (svc as any).loop_task = null;
+
+    await svc.stop();
+
+    expect((svc as any).pending_retries.size).toBe(0);
+  });
+});
