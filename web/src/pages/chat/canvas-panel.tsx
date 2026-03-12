@@ -1,6 +1,7 @@
 /** Canvas 패널 — 에이전트가 생성한 인터랙티브 UI 컴포넌트 렌더러. */
 
 import { useState } from "react";
+import { useT } from "../../i18n";
 import type {
   CanvasSpec,
   CanvasComponent,
@@ -32,15 +33,16 @@ export function CanvasPanel({ specs, onAction, onDismiss }: CanvasPanelProps) {
 }
 
 function CanvasCard({ spec, onAction, onDismiss }: { spec: CanvasSpec; onAction: CanvasPanelProps["onAction"]; onDismiss: CanvasPanelProps["onDismiss"] }) {
+  const t = useT();
   const [collapsed, setCollapsed] = useState(false);
   return (
     <div className="canvas-card">
       <div className="canvas-card__header">
-        <button className="canvas-card__toggle" onClick={() => setCollapsed((c) => !c)} aria-label={collapsed ? "Expand" : "Collapse"}>
+        <button className="canvas-card__toggle" onClick={() => setCollapsed((c) => !c)} aria-label={collapsed ? t("common.expand") : t("common.collapse")}>
           {collapsed ? "▶" : "▼"}
         </button>
         {spec.title && <span className="canvas-card__title">{spec.title}</span>}
-        <button className="canvas-card__close" onClick={() => onDismiss(spec.canvas_id)} aria-label="Dismiss canvas">✕</button>
+        <button className="canvas-card__close" onClick={() => onDismiss(spec.canvas_id)} aria-label={t("common.dismiss")}>✕</button>
       </div>
       {!collapsed && (
         <div className="canvas-card__body">
@@ -297,6 +299,7 @@ function CanvasImage({ component }: { component: CanvasImageComponent }) {
 // ── Form ──────────────────────────────────────────────────────────────────────
 
 function CanvasForm({ component, onAction }: { component: CanvasFormComponent; onAction: CanvasPanelProps["onAction"] }) {
+  const t = useT();
   const [values, setValues] = useState<Record<string, string>>(() => {
     const init: Record<string, string> = {};
     for (const f of component.fields) {
@@ -319,7 +322,7 @@ function CanvasForm({ component, onAction }: { component: CanvasFormComponent; o
         <FormField key={f.id} field={f} value={values[f.id] ?? ""} onChange={(v) => setValues((p) => ({ ...p, [f.id]: v }))} />
       ))}
       <button type="submit" className="canvas-form__submit" disabled={submitted}>
-        {submitted ? "Submitted ✓" : (component.submit_label || "Submit")}
+        {submitted ? t("common.submitted") : (component.submit_label || t("common.submit"))}
       </button>
     </form>
   );
@@ -334,7 +337,7 @@ function FormField({ field, value, onChange }: { field: CanvasFormField; value: 
       </label>
       {field.type === "select" ? (
         <select id={`cf-${field.id}`} className="canvas-form__input" value={value} onChange={(e) => onChange(e.target.value)} required={field.required}>
-          <option value="">— select —</option>
+          <option value="">{t("common.select")}</option>
           {(field.options || []).map((opt) => <option key={opt} value={opt}>{opt}</option>)}
         </select>
       ) : field.type === "checkbox" ? (
