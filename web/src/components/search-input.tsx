@@ -1,4 +1,5 @@
 import { useRef, useEffect, forwardRef, type KeyboardEvent } from "react";
+import { useT } from "../i18n";
 
 /**
  * 검색 입력 필드 — 아이콘, 검색어, 클리어 버튼 포함.
@@ -61,6 +62,7 @@ export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(functi
   },
   ref,
 ) {
+  const t = useT();
   const internalRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -122,7 +124,7 @@ export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(functi
           className="search-input__clear"
           onClick={handleClear}
           disabled={disabled}
-          aria-label="Clear search"
+          aria-label={t("common.clear_search")}
           type="button"
         >
           ✕

@@ -1,5 +1,6 @@
 import { useState, useRef, useMemo } from "react";
 import { useClickOutside } from "../hooks/use-click-outside";
+import { useT } from "../i18n";
 
 export interface ComboboxOption {
   value: string;
@@ -18,6 +19,7 @@ interface ComboboxProps {
 }
 
 export function Combobox({ options, value, onChange, placeholder, loading, loadingText, className }: ComboboxProps) {
+  const t = useT();
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [focusIdx, setFocusIdx] = useState(-1);
@@ -87,11 +89,11 @@ export function Combobox({ options, value, onChange, placeholder, loading, loadi
         >&times;</button>
       )}
       {open && (
-        <ul ref={listRef} className="combobox__list" role="listbox" aria-live="polite" aria-label={`검색 결과 ${filtered.length}개`}>
-          {loading && <li className="combobox__item combobox__item--hint">{loadingText || "Loading..."}</li>}
+        <ul ref={listRef} className="combobox__list" role="listbox" aria-live="polite">
+          {loading && <li className="combobox__item combobox__item--hint">{loadingText || t("common.loading")}</li>}
           {!loading && filtered.length === 0 && (
             <li className="combobox__item combobox__item--hint" role="status">
-              {query ? "No matches" : "No options"}
+              {query ? t("common.no_matches") : t("common.no_options")}
             </li>
           )}
           {filtered.map((o, i) => (

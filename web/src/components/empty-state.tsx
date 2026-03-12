@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { useT } from "../i18n";
 
 export type EmptyStateType = "empty" | "loading" | "error" | "no-results";
 
@@ -24,6 +25,7 @@ export function EmptyState({
   actions?: ReactNode;
   className?: string;
 }) {
+  const t = useT();
   const icons: Record<EmptyStateType, string> = {
     empty: "📭",
     loading: "⏳",
@@ -32,7 +34,7 @@ export function EmptyState({
   };
 
   const defaultIcon = icon || icons[type];
-  const ariaLabel = type === "loading" ? "로딩 중" : `${type} 상태`;
+  const ariaLabel = type === "loading" ? t("common.loading") : `${type}`;
 
   return (
     <div className={`empty-state${className ? ` ${className}` : ""}`} role="status" aria-label={ariaLabel}>
