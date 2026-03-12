@@ -152,6 +152,12 @@ function start_webhook_polling(
 let _channel_msg_entries: TriggerEntry[] = [];
 let _channel_msg_observer_registered = false;
 
+/** 테스트용 — 모듈 레벨 channel_message 싱글턴 상태 초기화. */
+export function _reset_channel_msg_state(): void {
+  _channel_msg_entries = [];
+  _channel_msg_observer_registered = false;
+}
+
 function subscribe_channel_message_triggers(
   entries: TriggerEntry[],
   bus: MessageBusLike & MessageBusTap,
@@ -368,6 +374,8 @@ function start_filesystem_watch_triggers(
         void execute(entry.slug, channel, chat_id, { filesystem_event: payload }).catch((e) => {
           log.warn("filesystem_watch trigger failed", { slug: entry.slug, error: error_message(e) });
         });
+      }).catch((e) => {
+        log.warn("filesystem_watch flush error", { slug: entry.slug, error: error_message(e) });
       });
     };
 

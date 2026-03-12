@@ -109,6 +109,8 @@ export class DispatchService implements ServiceLike {
       if (!result.ok) {
         this.logger.debug("grouped send failed", { provider, error: result.error });
       }
+    }).catch((err) => {
+      this.logger.debug("grouped send error", { provider, error: error_message(err) });
     });
   }
 
@@ -180,6 +182,8 @@ export class DispatchService implements ServiceLike {
       if (!result.ok) {
         this.logger.debug("dispatch failed", { provider, error: result.error });
       }
+    }).catch((err) => {
+      this.logger.debug("dispatch error", { provider, error: error_message(err) });
     });
   }
 
