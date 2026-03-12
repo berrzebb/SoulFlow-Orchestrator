@@ -1117,6 +1117,14 @@ a:focus-visible > .stat-card {
   flex-shrink: 0;
   padding: 0;
 }
+/* 터치 타겟 최소 36px 보장 (시각적 크기 유지) */
+@media (hover: none) {
+  .toggle-switch::before {
+    content: "";
+    position: absolute;
+    inset: -7px -4px;
+  }
+}
 .toggle-switch--on { background: var(--ok); }
 .toggle-switch__thumb {
   position: absolute;

@@ -411,7 +411,9 @@
   font-size: 14px;
   line-height: 1;
   color: var(--muted);
-  padding: 0 2px;
+  padding: 4px 6px;
+  min-width: 24px;
+  min-height: 24px;
   border-radius: 2px;
   opacity: 0;
   transition: opacity 0.1s, background 0.1s;
@@ -839,8 +841,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  min-width: 36px;
+  min-height: 36px;
   border-radius: var(--radius-sm);
   border: none;
   background: none;
@@ -856,8 +858,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  min-width: 36px;
+  min-height: 36px;
   border: none;
   border-radius: var(--radius-sm);
   background: transparent;
