@@ -162,6 +162,7 @@ export class OAuthFlowService implements ServiceLike {
     try {
       const res = await fetch(test_url, {
         headers: { Authorization: `Bearer ${access_token}`, Accept: "application/json" },
+        signal: AbortSignal.timeout(10_000),
       });
 
       if (res.ok) {
@@ -274,7 +275,7 @@ export class OAuthFlowService implements ServiceLike {
       if (client_secret) body.set("client_secret", client_secret);
     }
 
-    const res = await fetch(integration.token_url, { method: "POST", headers, body: body.toString() });
+    const res = await fetch(integration.token_url, { method: "POST", headers, body: body.toString(), signal: AbortSignal.timeout(15_000) });
     const data = await res.json() as Record<string, unknown>;
 
     if (!res.ok || data.error) {

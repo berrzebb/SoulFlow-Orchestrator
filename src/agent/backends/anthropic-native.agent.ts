@@ -356,6 +356,7 @@ export class AnthropicNativeAgent implements AgentBackend {
     messages: { role: "user" | "assistant"; content: string }[];
     max_tokens?: number;
     api_base?: string;
+    signal?: AbortSignal;
   }): Promise<string> {
     const base = (params.api_base ?? "https://api.anthropic.com").replace(/\/+$/, "");
     const system: AnthropicSystemBlock[] | undefined = params.system
@@ -375,6 +376,7 @@ export class AnthropicNativeAgent implements AgentBackend {
         messages: params.messages,
         ...(system ? { system } : {}),
       }),
+      signal: params.signal ?? AbortSignal.timeout(120_000),
     });
     if (!res.ok) throw new Error(`Anthropic API ${res.status}: ${await res.text()}`);
     const data = await res.json() as { content: { type: string; text: string }[] };
