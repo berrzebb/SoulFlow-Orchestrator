@@ -121,7 +121,9 @@ export class ToolBridgeServer {
     const rl = createInterface({ input: socket, crlfDelay: Infinity });
 
     rl.on("line", (line) => {
-      void this.process_line(line, socket);
+      void this.process_line(line, socket).catch((err) => {
+        this.logger.debug("process_line_error", { error: error_message(err) });
+      });
     });
 
     socket.on("error", (err) => {

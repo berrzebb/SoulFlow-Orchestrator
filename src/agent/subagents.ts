@@ -641,7 +641,7 @@ export class SubagentRegistry {
       subagent_label: label,
     };
     try {
-      void Promise.resolve(options.hooks.on_event(build(source)));
+      void Promise.resolve(options.hooks.on_event(build(source))).catch(() => {});
     } catch { /* noop */ }
   }
 

@@ -325,7 +325,7 @@ export class ContainerCliAgent implements AgentBackend {
   }
 
   stop(): void {
-    void this.bus.shutdown();
+    swallow(this.bus.shutdown());
     if (this.tool_bridge) swallow(this.tool_bridge.stop());
   }
 
