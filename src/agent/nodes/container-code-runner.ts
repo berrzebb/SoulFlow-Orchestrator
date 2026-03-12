@@ -9,6 +9,7 @@ import { writeFile, unlink, rmdir, mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { CodeLanguage } from "../workflow-node.types.js";
+import { error_message } from "../../utils/common.js";
 
 const exec_file_async = promisify(execFile);
 
@@ -199,6 +200,6 @@ async function exec_container(
     if (err.killed || err.code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER") {
       return { stdout: String(err.stdout || ""), stderr: String(err.stderr || "timeout or buffer exceeded"), exit_code: 124 };
     }
-    return { stdout: String(err.stdout || ""), stderr: String(err.stderr || String(e)), exit_code: err.status || 1 };
+    return { stdout: String(err.stdout || ""), stderr: String(err.stderr || error_message(e)), exit_code: err.status || 1 };
   }
 }
