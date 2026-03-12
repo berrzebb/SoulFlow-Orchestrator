@@ -3,6 +3,7 @@
 import type { Logger } from "../logger.js";
 import type { ClassificationResult } from "./types.js";
 import { DEFAULT_CLASSIFIER_LOCALE } from "./classifier-locale.js";
+import { extract_intents, intents_to_categories } from "./intent-patterns.js";
 
 export type SkillEntry = { name: string; summary: string; triggers: string[]; aliases?: string[] };
 
@@ -94,6 +95,43 @@ function is_followup_inquiry(tokens: Set<string>, history: Array<{ role: string;
 }
 
 /**
+ * 어시스턴트가 추가 정보를 요청했음을 나타내는 패턴.
+ * "위치를 알려주세요", "어디인지 말해줘", "어떤 것을 원하시나요?" 등.
+ */
+const RE_ASSISTANT_INFO_REQUEST = /알려주세요|알려줘|알아야|어디(?:서|를|에|인지)?|언제|무엇을|무엇인지|어떤|보내주세요|말해주세요|주소|위치|구체적|자세히|더\s*알|입력해|알\s*수\s*있|tell\s*me|let\s*me\s*know|what\s*is|where\s*is|which\s*one/i;
+
+/**
+ * 짧은 후속 메시지일 때 대화 히스토리에서 도구 카테고리 힌트를 추출.
+ *
+ * 동작:
+ * 1. 현재 메시지가 12토큰 이하(짧은 추가 정보 제공)이고
+ * 2. 마지막 어시스턴트 메시지가 추가 정보를 요청하는 패턴이면
+ * 3. 이전 사용자 메시지들의 의도를 분석하여 tool categories 반환.
+ *
+ * 예: "주변에서 먹을 만한 점심은?" → agent asks "위치를 알려주세요" → "야탐 아미고 타워 주변"
+ * → extract_intents("주변에서 먹을 만한 점심은?") = ["search_web"] → categories = ["web"]
+ */
+function extract_history_tool_hints(
+  tokens: Set<string>,
+  history: Array<{ role: string; content: string }> | undefined,
+): string[] | undefined {
+  if (!history?.length || tokens.size > 12) return undefined;
+
+  const last_assistant = [...history].reverse().find(h => h.role === "assistant");
+  if (!last_assistant || !RE_ASSISTANT_INFO_REQUEST.test(last_assistant.content)) return undefined;
+
+  const categories = new Set<string>();
+  for (const msg of history) {
+    if (msg.role !== "user") continue;
+    const intents = extract_intents(msg.content);
+    for (const cat of intents_to_categories(intents)) {
+      categories.add(cat);
+    }
+  }
+  return categories.size ? [...categories] : undefined;
+}
+
+/**
  * 스킬 트리거/별칭 토큰화 결과 캐시 — 매 메시지마다 동일 문구를 재토큰화하지 않음.
  * 스킬 트리거는 런타임 중 변경되지 않으므로 영구 캐시 안전.
  */
@@ -166,7 +204,7 @@ function classify_execution_complexity(lower: string, tokens: Set<string>, ctx: 
  * 1. builtin  — /커맨드
  * 2. identity — 봇 정체성 질문
  * 3. inquiry  — 활성 태스크 상태 조회
- * 4. once/agent/task — 복잡도 휴리스틱
+ * 4. once/agent/task — 복잡도 휴리스틱 + 히스토리 기반 tool hints
  */
 export function classify_execution_mode(
   task: string,
@@ -181,6 +219,7 @@ export function classify_execution_mode(
     task_preview: String(task || "").slice(0, 80),
     token_count: tokenize(task).size,
     active_tasks: ctx.active_tasks?.length ?? 0,
+    tool_hints: "tools" in result ? result.tools : undefined,
   });
   return Promise.resolve(result);
 }
@@ -211,8 +250,14 @@ export function fast_classify(task: string, ctx: ClassifierContext): Classificat
     return { mode: "inquiry" };
   }
 
-  // 4. once / agent / task
-  return { mode: classify_execution_complexity(lower, tokens, ctx) };
+  // 4. once / agent / task + 히스토리 기반 tool hints
+  const mode = classify_execution_complexity(lower, tokens, ctx);
+
+  // 짧은 후속 메시지(≤12 토큰)에서 대화 히스토리의 의도를 carry-forward.
+  // 어시스턴트가 추가 정보를 요청한 뒤 사용자가 짧게 답한 경우,
+  // 이전 사용자 의도(예: 맛집 검색)의 tool categories를 현재 요청에 주입.
+  const history_tools = extract_history_tool_hints(tokens, ctx.recent_history);
+  return history_tools ? { mode, tools: history_tools } : { mode };
 }
 
 // ── 이하 호환성 유지 (에스컬레이션 판별) ────────────────────────────────────

@@ -146,6 +146,7 @@ describe("promote_sessions_to_daily — 정상 승격 (L86-96)", () => {
     const session = {
       key: "prov:ch1:bot",
       last_consolidated: 0,
+      metadata: {},
       messages: [
         { role: "user", content: "안녕하세요", timestamp: old_ts() },
         { role: "assistant", content: "반갑습니다", timestamp: old_ts(1_700_000) },
@@ -172,6 +173,7 @@ describe("promote_sessions_to_daily — 정상 승격 (L86-96)", () => {
     const session = {
       key: "provider:channel:alias",
       last_consolidated: 0,
+      metadata: {},
       messages: [
         { role: "user", content: long_content, timestamp: old_ts() },
         { role: "assistant", content: "OK", timestamp: old_ts(1_700_000) },
@@ -217,6 +219,7 @@ describe("promote_sessions_to_daily — 정상 승격 (L86-96)", () => {
     const session = {
       key: "prov:ch1:bot",
       last_consolidated: 0,
+      metadata: {},
       messages: [
         { role: "user", content: "", timestamp: old_ts() },            // 빈 content
         { role: "user", content: "질문", timestamp: old_ts() },        // 실제 내용
@@ -310,6 +313,7 @@ describe("promote_sessions_to_daily — 복수 세션", () => {
       {
         key: "prov:ch1:bot",
         last_consolidated: 0,
+        metadata: {},
         messages: [
           { role: "user", content: "질문", timestamp: old_ts() },
           { role: "assistant", content: "답변", timestamp: old_ts(1_700_000) },
@@ -318,6 +322,7 @@ describe("promote_sessions_to_daily — 복수 세션", () => {
       {
         key: "prov:ch2:bot",
         last_consolidated: 0,
+        metadata: {},
         messages: [{ role: "user", content: "하나만", timestamp: old_ts() }],
       },
     ];

@@ -56,6 +56,7 @@ import {
   type ExecuteDispatcherDeps,
 } from "./execution/execute-dispatcher.js";
 import { streaming_cfg_for } from "./execution/runner-deps.js";
+import { record_turn_to_daily } from "./turn-memory-recorder.js";
 
 type OrchestratorConfig = {
   executor_provider: ExecutorProvider;
@@ -381,7 +382,10 @@ export class OrchestrationService {
     }
 
     // Phase 4.5: Execute Dispatcher — gateway 라우팅 → short-circuit → mode 분기 → finalize
-    return execute_dispatch(this._dispatch_deps(), req, preflight);
+    const result = await execute_dispatch(this._dispatch_deps(), req, preflight);
+    // 오케스트레이터 레벨 daily 기록 — 에이전트가 memory 도구를 호출하지 않아도 보장
+    record_turn_to_daily(req, result, this.runtime.get_context_builder()?.memory_store);
+    return result;
   }
 
   /** 컨텍스트 압축 전 메모리 자동 저장 설정 생성. 200K 컨텍스트 기준. */
@@ -525,7 +529,7 @@ function reply_result(mode: ExecutionMode, stream: StreamBuffer, reply: string |
   return { reply, mode, tool_calls_count, streamed: stream.has_streamed(), stream_full_content: stream.get_full_content(), parsed_output, usage };
 }
 
-/** agent 모드에서 도구를 한 번도 사용하지 않은 경우 응답 끝에 완료 안내를 추가. */
+/** HITL 프롬프트 유형. */
 export type HitlType = "choice" | "confirmation" | "question" | "escalation" | "error";
 
 /** HITL 대기 상태를 채널 사용자에게 명확히 알리는 프롬프트. */
@@ -596,6 +600,7 @@ export function detect_hitl_type(prompt: string): HitlType {
   return "question";
 }
 
+/** agent 모드에서 도구를 한 번도 사용하지 않은 경우 응답 끝에 완료 안내를 추가. */
 function append_no_tool_notice(reply: string): string {
   return `${reply}\n\n_(작업이 완료되었습니다. 추가 요청이 있으면 말씀해주세요.)_`;
 }

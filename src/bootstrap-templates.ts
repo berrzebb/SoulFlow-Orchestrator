@@ -208,7 +208,7 @@ BOOTSTRAP: `# Bootstrap — 초기 설정 가이드
 
 확인되면:
 1. SOUL.md, HEART.md, USER.md 최종 업데이트 확인
-2. memory 도구 write_longterm으로 핵심 설정 저장
+2. memory 도구 append_longterm으로 핵심 설정 저장
 3. 이 BOOTSTRAP.md 파일을 삭제
 4. 설정된 페르소나로 인사
 

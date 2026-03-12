@@ -148,7 +148,7 @@ export async function execute_dispatch(
 
   const classifier_cats = decision.action === "execute" ? decision.tool_categories : undefined;
   const { tools: tool_definitions, categories } = await select_tools_for_request(
-    all_tool_definitions, task_with_media, mode, skill_tool_names, classifier_cats, category_map, classifier_cats, deps.tool_index,
+    all_tool_definitions, task_with_media, mode, skill_tool_names, classifier_cats, category_map, undefined, deps.tool_index,
   );
   const system_base = req.system_prompt_override
     ?? await deps.build_system_prompt(skill_names, req.provider, req.message.chat_id, new Set(categories), req.alias);

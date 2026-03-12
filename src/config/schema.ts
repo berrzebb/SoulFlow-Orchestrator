@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { resolve, isAbsolute } from "node:path";
 
 const ChannelStreamingSchema = z.object({
   enabled: z.boolean(),
@@ -199,8 +198,8 @@ const OpsSchema = z.object({
 export const AppConfigSchema = z.object({
   agentLoopMaxTurns: z.number().min(1),
   taskLoopMaxTurns: z.number().min(1),
-  dataDir: z.string().transform((p) => isAbsolute(p) ? p : resolve(p)),
-  workspaceDir: z.string().transform((p) => isAbsolute(p) ? p : resolve(p)),
+  dataDir: z.string(),
+  workspaceDir: z.string(),
   channel: ChannelSchema,
   orchestration: OrchestrationSchema,
   orchestratorLlm: OrchestratorLlmSchema,
@@ -325,7 +324,7 @@ export function get_config_defaults(): AppConfig {
     },
     memory: {
       consolidation: {
-        enabled: false,
+        enabled: true,
         trigger: "idle" as const,
         idleAfterMs: 300_000,
         intervalMs: 86_400_000,

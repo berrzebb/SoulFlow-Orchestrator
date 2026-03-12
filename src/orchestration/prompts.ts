@@ -82,7 +82,7 @@ export function build_bootstrap_overlay(persona_name: string, bootstrap_content:
     "아래 BOOTSTRAP.md의 지시에 따라 사용자와 대화하며 설정을 진행하세요.",
     "설정이 완료되면:",
     "1. write_file로 SOUL.md, USER.md를 업데이트",
-    "2. memory write_longterm으로 핵심 설정 저장",
+    "2. memory append_longterm으로 핵심 설정 저장",
     "3. write_file로 templates/BOOTSTRAP.md를 빈 내용으로 덮어쓰기 (삭제)",
     "4. 새 페르소나로 인사",
     "",

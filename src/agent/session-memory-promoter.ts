@@ -3,9 +3,12 @@
  * LLM 미사용 — 결정론적 추출, 0 추가 비용.
  *
  * 동작:
- * 1. 모든 세션을 순회하며 last_consolidated 이후 & 만료 절반 경과 메시지를 수집
+ * 1. 모든 세션을 순회하며 last_promoted_ts 이후 & 만료 절반 경과 메시지를 수집
  * 2. daily 메모리에 대화 발췌를 append
- * 3. session.last_consolidated를 갱신하여 중복 승격 방지
+ * 3. session.metadata.last_promoted_ts를 갱신하여 중복 승격 방지
+ *
+ * Note: session.last_consolidated는 MSG INDEX (consolidate_with_provider 전용).
+ * 승격 상태는 metadata.last_promoted_ts (UNIX ms)로 별도 관리.
  */
 
 import type { SessionStoreLike } from "../session/service.js";
@@ -63,8 +66,12 @@ export async function promote_sessions_to_daily(
 
   const cfg = { ...DEFAULT_CONFIG, ...config };
   const now = Date.now();
-  /** 이 시각보다 오래된 메시지는 곧 만료 → 승격 대상. */
-  const promotion_horizon = now - cfg.session_max_age_ms * 0.5;
+  /**
+   * promotion_horizon: 세션 만료 95% 지점 이전 메시지만 승격.
+   * turn-memory-recorder가 즉시 daily에 기록하므로 promoter는 last-resort 역할.
+   * 높은 값으로 설정해야 recorder가 처리한 구간과 겹치지 않음.
+   */
+  const promotion_horizon = now - cfg.session_max_age_ms * 0.95;
 
   const entries = await sessions.list_by_prefix("", 500).catch(() => []);
   let promoted = 0;
@@ -74,10 +81,12 @@ export async function promote_sessions_to_daily(
     try {
       const session = await sessions.get_or_create(entry.key);
 
-      // last_consolidated 이후 & promotion_horizon 이전 메시지
+      // last_promoted_ts는 metadata에 UNIX ms로 저장 (last_consolidated와 분리)
+      const last_promoted_ts = Number(session.metadata.last_promoted_ts || 0);
+
       const pending = session.messages.filter((msg) => {
         const ts = msg.timestamp ? Date.parse(String(msg.timestamp)) : 0;
-        return ts > session.last_consolidated && ts < promotion_horizon;
+        return ts > last_promoted_ts && ts < promotion_horizon;
       });
 
       if (pending.length < 2) { skipped++; continue; } // user+assistant 최소 1쌍
@@ -86,10 +95,10 @@ export async function promote_sessions_to_daily(
       const formatted = format_promotion(session.key, to_promote, cfg.max_content_chars);
       await memory.append_daily(`\n${formatted}\n`);
 
-      // 승격 완료 표시 — 마지막 메시지 타임스탬프로 갱신
+      // 승격 완료 표시 — 마지막 메시지 타임스탬프를 metadata에 기록
       const last_ts = to_promote.at(-1)?.timestamp;
       if (last_ts) {
-        session.last_consolidated = Date.parse(String(last_ts));
+        session.metadata = { ...session.metadata, last_promoted_ts: Date.parse(String(last_ts)) };
         await sessions.save(session);
       }
 
