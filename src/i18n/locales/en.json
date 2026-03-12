@@ -224,6 +224,8 @@
   "cfg.memory.dailyInjectionDays.desc": "Number of recent daily memory days to inject into the system prompt (0 = disabled)",
   "cfg.memory.dailyInjectionMaxChars": "Daily Injection Max Chars",
   "cfg.memory.dailyInjectionMaxChars.desc": "Character limit for daily memory injected into system prompt",
+  "cfg.memory.longtermInjectionMaxChars": "Longterm Injection Max Chars",
+  "cfg.memory.longtermInjectionMaxChars.desc": "Character limit for longterm memory injected into system prompt (0 = unlimited, tail-first)",
   "cfg.mcp.enabled": "Enabled",
   "cfg.mcp.enabled.desc": "Enable MCP server integration for CLI providers",
   "cfg.mcp.serverNames": "Server Names",

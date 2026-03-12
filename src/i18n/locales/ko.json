@@ -224,6 +224,8 @@
   "cfg.memory.dailyInjectionDays.desc": "시스템 프롬프트에 주입할 최근 일일 메모리 일수 (0 = 비활성화)",
   "cfg.memory.dailyInjectionMaxChars": "일일 메모리 최대 글자 수",
   "cfg.memory.dailyInjectionMaxChars.desc": "시스템 프롬프트에 주입하는 일일 메모리의 글자 제한",
+  "cfg.memory.longtermInjectionMaxChars": "장기 메모리 최대 글자 수",
+  "cfg.memory.longtermInjectionMaxChars.desc": "시스템 프롬프트에 주입하는 장기 메모리의 글자 제한 (0 = 무제한, 최신 내용 우선)",
   "cfg.mcp.enabled": "활성화",
   "cfg.mcp.enabled.desc": "CLI 프로바이더를 위한 MCP 서버 통합을 활성화합니다",
   "cfg.mcp.serverNames": "서버 이름",
