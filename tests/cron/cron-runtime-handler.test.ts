@@ -621,3 +621,127 @@ describe("cron runtime handler", () => {
     expect(cron_result).toBeTruthy();
   });
 });
+
+// ══════════════════════════════════════════
+// L203: setTimeout 콜백 — cron_abort.abort()
+// ══════════════════════════════════════════
+
+describe("cron runtime-handler — L203 setTimeout abort", () => {
+  it("timeout 만료 → setTimeout 콜백 → abort → run이 cancelled 반환 (L203)", async () => {
+    vi.useFakeTimers();
+
+    // per_turn_timeout_ms=10, max_turns=5 → job_timeout=50ms
+    const config = { ...base_config, per_turn_timeout_ms: 10 };
+
+    // run이 abort_signal을 감지하면 cancelled로 resolve
+    const backends = {
+      resolve_backend_id: () => "codex_cli" as const,
+      get_backend: () => ({
+        id: "codex_cli" as const,
+        native_tool_loop: true,
+        supports_resume: false,
+        capabilities: {
+          approval: false, structured_output: false, thinking: false,
+          budget_tracking: false, tool_filtering: false,
+          tool_result_events: false, send_input: false, tool_executors: true,
+        },
+      }),
+      run: (_id: string, args: { abort_signal?: AbortSignal;[k: string]: unknown }) =>
+        new Promise<{
+          content: string | null; session: null; tool_calls_count: number;
+          usage: {}; finish_reason: string; metadata: {};
+        }>((resolve) => {
+          const on_abort = () => resolve({
+            content: null, session: null, tool_calls_count: 0,
+            usage: {}, finish_reason: "cancelled", metadata: {},
+          });
+          if (args.abort_signal?.aborted) { on_abort(); return; }
+          args.abort_signal?.addEventListener("abort", on_abort);
+        }),
+    } as never;
+
+    const sent: OutboundMessage[] = [];
+    const handler = create_cron_job_handler({
+      config,
+      bus: { publish_outbound: async (m: OutboundMessage) => { sent.push(m); } } as never,
+      events: { append: async () => undefined } as never,
+      agent_runtime: make_agent_runtime() as never,
+      agent_backends: backends,
+      secret_vault: base_vault,
+    });
+
+    const promise = handler(make_job());
+    // job_timeout_ms = 5 * 10 = 50ms → setTimeout fires → abort
+    await vi.advanceTimersByTimeAsync(50);
+    const result = await promise;
+
+    vi.useRealTimers();
+    expect(result).toBe("cancelled");
+  });
+});
+
+// ══════════════════════════════════════════
+// L216: seal_inbound_sensitive_text throw → catch → redact
+// ══════════════════════════════════════════
+
+describe("cron runtime-handler — L216 seal throw → redact fallback", () => {
+  it("vault.put_secret throw → seal 실패 → L216 catch → redact 사용 후 정상 완료", async () => {
+    // put_secret이 throw하는 vault
+    const throwing_vault = {
+      ...base_vault,
+      put_secret: async () => { throw new Error("vault unavailable"); },
+    } as never;
+
+    // 메시지에 private key 패턴 포함 → seal_value 호출 → put_secret 호출 → throw
+    const pkey_message = [
+      "-----BEGIN RSA PRIVATE KEY-----",
+      "MIIEowIBAAKCAQEA0Z3VS5JJcds3xHn/ygWep4PAtQeADu0S/rHSzXlKEFtFLFHj",
+      "-----END RSA PRIVATE KEY-----",
+    ].join("\n");
+
+    const sent: OutboundMessage[] = [];
+    const backends = {
+      resolve_backend_id: () => "codex_cli" as const,
+      get_backend: () => ({
+        id: "codex_cli" as const,
+        native_tool_loop: true,
+        supports_resume: false,
+        capabilities: {
+          approval: false, structured_output: false, thinking: false,
+          budget_tracking: false, tool_filtering: false,
+          tool_result_events: false, send_input: false, tool_executors: true,
+        },
+      }),
+      run: async () => ({
+        content: "done",
+        session: null,
+        tool_calls_count: 0,
+        usage: {},
+        finish_reason: "stop",
+        metadata: {},
+      }),
+    } as never;
+
+    const handler = create_cron_job_handler({
+      config: base_config,
+      bus: { publish_outbound: async (m: OutboundMessage) => { sent.push(m); } } as never,
+      events: { append: async () => undefined } as never,
+      agent_runtime: make_agent_runtime() as never,
+      agent_backends: backends,
+      secret_vault: throwing_vault,
+    });
+
+    const result = await handler(make_job({
+      payload: {
+        kind: "agent_turn",
+        message: pkey_message,
+        deliver: false,
+        channel: "telegram",
+        to: "chat-1",
+      },
+    }));
+
+    // seal 실패 후 redact로 폴백하여 정상 완료됨
+    expect(result).toBeTruthy();
+  });
+});
