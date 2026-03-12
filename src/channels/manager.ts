@@ -732,12 +732,10 @@ export class ChannelManager implements ServiceLike {
         on_stream: is_status_mode
           ? (chunk) => { stream_state.accumulated += chunk; }
           : (chunk) => {
-              if (stream_state.accumulated && !stream_state.accumulated.endsWith("\n") && !chunk.startsWith("\n")) {
-                stream_state.accumulated += "\n";
-              }
               stream_state.accumulated += chunk;
-              // 도구 사용 시작 후엔 출력 억제 — 완료 후 새 메시지로 전송
-              if (stream_state.tool_count > 0) return;
+              // 비web 채널: 도구 실행 중 텍스트 스트림 억제 (완료 후 새 메시지로 전송)
+              // web 채널: NDJSON rich event로 tool_start/tool_result 별도 전달 → 억제 불필요
+              if (provider !== "web" && stream_state.tool_count > 0) return;
               stream_state.chain = stream_state.chain
                 .then(() => this.send_or_edit_stream(provider, message, alias, stream_state.accumulated, stream_state))
                 .catch((e) => this.logger.debug("stream_update_failed", { error: error_message(e) }));
@@ -773,9 +771,9 @@ export class ChannelManager implements ServiceLike {
                 )
                 .catch((e) => this.logger.debug("status_update_failed", { error: error_message(e) }));
             }
-          : this.config.streaming.toolDisplay === "inline"
-            ? undefined   // inline: on_tool_block 미등록 → on_stream으로 폴스루
-            : (_tool_name: string) => { stream_state.tool_count++; },
+          // web 채널: tool_start/tool_result를 on_agent_event → NDJSON rich event로 전달
+          // on_tool_block은 카운터만 관리 (inline 폴스루 방지)
+          : (_tool_name: string) => { stream_state.tool_count++; },
         signal: abort.signal,
         register_send_input: (cb) => { active_run.send_input = cb; },
       });
