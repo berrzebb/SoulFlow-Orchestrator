@@ -2037,8 +2037,6 @@ a:focus-visible > .stat-card {
 }
 
 /* Secrets: 湲곕낯? ?뚯씠釉붾쭔 ?쒖떆, 移대뱶 ?④? */
-.secret-card-list { display: none; }
-
 /* ===== Mobile UX Enhancements ===== */
 
 /* Tab bar: ?ㅽ겕濡ㅻ컮 ?④? + ?섏씠???뚰듃 */
@@ -2285,7 +2283,6 @@ a:focus-visible > .stat-card {
   .li-flex .btn + .btn { margin-left: var(--sp-1); }
 
   /* secrets: ?뚯씠釉???移대뱶 由ъ뒪???꾪솚 */
-  .secret-table-view { display: none; }
   .secret-card-list {
     display: grid;
     gap: var(--sp-2);

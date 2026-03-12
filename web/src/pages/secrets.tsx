@@ -4,15 +4,27 @@ import { EmptyState } from "../components/empty-state";
 import { useToast } from "../components/toast";
 import { SearchInput } from "../components/search-input";
 import { SectionHeader } from "../components/section-header";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useT } from "../i18n";
 import { Modal, DeleteConfirmModal } from "../components/modal";
 import { FormGroup } from "../components/form-group";
 import { DataTable } from "../components/data-table";
 import { useAsyncAction } from "../hooks/use-async-action";
 
+function useIsMobile(breakpoint = 768): boolean {
+  const [mobile, setMobile] = useState(() => typeof window !== "undefined" && window.innerWidth <= breakpoint);
+  useEffect(() => {
+    const mq = window.matchMedia(`(max-width: ${breakpoint}px)`);
+    const handler = (e: MediaQueryListEvent) => setMobile(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, [breakpoint]);
+  return mobile;
+}
+
 export default function SecretsPage() {
   const t = useT();
+  const is_mobile = useIsMobile();
   const qc = useQueryClient();
   const { toast } = useToast();
   const run_action = useAsyncAction();
@@ -76,27 +88,7 @@ export default function SecretsPage() {
       ) : !filtered.length ? (
         <EmptyState type="no-results" title={t("secrets.no_match")} />
       ) : (
-        <>
-          <DataTable className="secret-table-view">
-              <thead><tr><th>{t("common.name")}</th><th>{t("secrets.usage")}</th><th>{t("common.actions")}</th></tr></thead>
-              <tbody>
-                {filtered.map((name) => (
-                  <tr key={name}>
-                    <td><b>{name}</b></td>
-                    <td className="text-xs text-muted break-all">
-                      <code>{`{{secret:${name}}}`}</code>
-                      <button className="btn btn--xs ml-1" onClick={() => copy_usage(name)} title={t("secrets.copy_usage")}>
-                        {t("common.copy")}
-                      </button>
-                    </td>
-                    <td>
-                      <button className="btn btn--xs" onClick={() => { setNewName(name); setNewValue(""); setAdding(true); }}>{t("secrets.update")}</button>{" "}
-                      <button className="btn btn--xs btn--danger" onClick={() => setDeleteTarget(name)}>{t("common.delete")}</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </DataTable>
+        is_mobile ? (
           <div className="secret-card-list">
             {filtered.map((name) => (
               <div key={name} className="secret-card">
@@ -110,7 +102,28 @@ export default function SecretsPage() {
               </div>
             ))}
           </div>
-        </>
+        ) : (
+          <DataTable>
+            <thead><tr><th>{t("common.name")}</th><th>{t("secrets.usage")}</th><th>{t("common.actions")}</th></tr></thead>
+            <tbody>
+              {filtered.map((name) => (
+                <tr key={name}>
+                  <td><b>{name}</b></td>
+                  <td className="text-xs text-muted break-all">
+                    <code>{`{{secret:${name}}}`}</code>
+                    <button className="btn btn--xs ml-1" onClick={() => copy_usage(name)} title={t("secrets.copy_usage")}>
+                      {t("common.copy")}
+                    </button>
+                  </td>
+                  <td>
+                    <button className="btn btn--xs" onClick={() => { setNewName(name); setNewValue(""); setAdding(true); }}>{t("secrets.update")}</button>{" "}
+                    <button className="btn btn--xs btn--danger" onClick={() => setDeleteTarget(name)}>{t("common.delete")}</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </DataTable>
+        )
       )}
 
       <DeleteConfirmModal
