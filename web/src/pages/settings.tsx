@@ -8,6 +8,7 @@ import { SectionHeader } from "../components/section-header";
 import { ToggleSwitch } from "../components/toggle-switch";
 import { useToast } from "../components/toast";
 import { useT } from "../i18n";
+import { useAuthUser, useAdminUsers, type AdminUserRecord } from "../hooks/use-auth";
 
 interface FieldInfo {
   path: string;
@@ -46,6 +47,7 @@ export default function SettingsPage() {
   const [search, setSearch] = useState("");
 
   const t = useT();
+  const { data: auth_user } = useAuthUser();
 
   if (isLoading || !data) return (
     <div className="page">
@@ -104,6 +106,9 @@ export default function SettingsPage() {
         ))}
       </div>
 
+      {auth_user?.role === "superadmin" && !search && (
+        <UsersPanel />
+      )}
       {filtered_sections.map((s) => (
         <SectionPanel key={s.id} section={s} />
       ))}
@@ -347,6 +352,137 @@ function EditInline({
         ✕
       </button>
     </div>
+  );
+}
+
+// ── Users Panel (superadmin 전용) ──────────────────────────────────────────
+
+function UsersPanel() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const { data: users = [], isLoading } = useAdminUsers();
+  const [form, setForm] = useState<{ open: boolean; username: string; password: string; role: "user" | "superadmin" }>({
+    open: false, username: "", password: "", role: "user",
+  });
+  const [pw_target, setPwTarget] = useState<AdminUserRecord | null>(null);
+  const [new_pw, setNewPw] = useState("");
+
+  const create = useMutation({
+    mutationFn: () => api.post("/api/admin/users", { username: form.username.trim(), password: form.password, role: form.role }),
+    onSuccess: () => {
+      toast("사용자 생성 완료", "ok");
+      setForm({ open: false, username: "", password: "", role: "user" });
+      void qc.invalidateQueries({ queryKey: ["admin-users"] });
+    },
+    onError: (e: unknown) => {
+      const msg = (e as { body?: { error?: string } })?.body?.error;
+      toast(msg === "username_taken" ? "이미 존재하는 아이디입니다." : "생성 실패", "err");
+    },
+  });
+
+  const del = useMutation({
+    mutationFn: (id: string) => api.del(`/api/admin/users/${id}`),
+    onSuccess: () => { toast("사용자 삭제 완료", "ok"); void qc.invalidateQueries({ queryKey: ["admin-users"] }); },
+    onError: () => toast("삭제 실패", "err"),
+  });
+
+  const change_pw = useMutation({
+    mutationFn: (id: string) => api.patch(`/api/admin/users/${id}/password`, { password: new_pw }),
+    onSuccess: () => { toast("비밀번호 변경 완료", "ok"); setPwTarget(null); setNewPw(""); },
+    onError: () => toast("비밀번호 변경 실패", "err"),
+  });
+
+  return (
+    <section className="panel mb-3">
+      <div className="li-flex" style={{ justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+        <h2 style={{ margin: 0 }}>사용자 관리</h2>
+        <button className="btn btn--sm btn--primary" onClick={() => setForm((f) => ({ ...f, open: !f.open }))}>
+          {form.open ? "취소" : "+ 추가"}
+        </button>
+      </div>
+
+      {form.open && (
+        <div className="panel panel--inset mb-2">
+          <div className="li-flex" style={{ gap: "8px", flexWrap: "wrap" }}>
+            <input
+              className="form-input" style={{ flex: "1 1 140px" }}
+              placeholder="아이디" value={form.username}
+              onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))}
+            />
+            <input
+              className="form-input" style={{ flex: "1 1 140px" }}
+              type="password" placeholder="비밀번호 (6자 이상)" value={form.password}
+              onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+            />
+            <select
+              className="form-input" style={{ flex: "0 0 120px" }}
+              value={form.role} onChange={(e) => setForm((f) => ({ ...f, role: e.target.value as "user" | "superadmin" }))}
+            >
+              <option value="user">user</option>
+              <option value="superadmin">superadmin</option>
+            </select>
+            <button
+              className="btn btn--sm btn--ok"
+              disabled={!form.username || form.password.length < 6 || create.isPending}
+              onClick={() => create.mutate()}
+            >
+              {create.isPending ? "생성 중..." : "생성"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {pw_target && (
+        <div className="panel panel--inset mb-2">
+          <div className="li-flex" style={{ gap: "8px", alignItems: "center" }}>
+            <span className="text-xs text-muted">{pw_target.username} 비밀번호 변경</span>
+            <input
+              className="form-input" style={{ flex: "1" }}
+              type="password" placeholder="새 비밀번호 (6자 이상)" value={new_pw}
+              onChange={(e) => setNewPw(e.target.value)}
+            />
+            <button
+              className="btn btn--sm btn--ok"
+              disabled={new_pw.length < 6 || change_pw.isPending}
+              onClick={() => change_pw.mutate(pw_target.id)}
+            >
+              변경
+            </button>
+            <button className="btn btn--sm" onClick={() => { setPwTarget(null); setNewPw(""); }}>취소</button>
+          </div>
+        </div>
+      )}
+
+      {isLoading ? (
+        <div className="skeleton skeleton--row" />
+      ) : (
+        <div className="users-list">
+          {users.map((u) => (
+            <div key={u.id} className="users-list__item li-flex">
+              <div className="users-list__info">
+                <span className="users-list__name">{u.username}</span>
+                <Badge status={u.system_role} variant={u.system_role === "superadmin" ? "warn" : "info"} />
+                {u.last_login_at && (
+                  <span className="text-xs text-muted">최근 로그인: {new Date(u.last_login_at).toLocaleDateString()}</span>
+                )}
+              </div>
+              <div className="li-flex" style={{ gap: "6px" }}>
+                <button className="btn btn--xs" onClick={() => { setPwTarget(u); setNewPw(""); }}>
+                  비밀번호
+                </button>
+                <button
+                  className="btn btn--xs btn--danger"
+                  disabled={del.isPending}
+                  onClick={() => { if (confirm(`'${u.username}' 삭제?`)) del.mutate(u.id); }}
+                >
+                  삭제
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 

@@ -21,6 +21,7 @@ const WorkflowBuilderPage = lazyRetry(() => import("./pages/workflows/builder"))
 const KanbanPage = lazyRetry(() => import("./pages/kanban"));
 const WbsPage = lazyRetry(() => import("./pages/wbs"));
 const PromptingPage = lazyRetry(() => import("./pages/prompting/index"));
+const LoginPage = lazyRetry(() => import("./pages/login"));
 
 function PageFallback() {
   return (
@@ -35,6 +36,8 @@ function lazify(element: React.ReactNode) {
 }
 
 export const router = createHashRouter([
+  /* 로그인 페이지: 사이드바/헤더 없이 독립 렌더링 */
+  { path: "login", element: lazify(<LoginPage />) },
   {
     element: <RootLayout />,
     children: [

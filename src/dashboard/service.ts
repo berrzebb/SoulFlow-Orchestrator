@@ -55,6 +55,7 @@ import { handle_prompt } from "./routes/prompt.js";
 import { handle_usage } from "./routes/usage.js";
 import { dispatch_webhook } from "./routes/webhook.js";
 import { handle_auth } from "./routes/auth.js";
+import { handle_admin } from "./routes/admin.js";
 import { extract_token } from "../auth/auth-middleware.js";
 
 const RE_MEDIA_TOKEN = /^\/media\/([a-z0-9]{16,})$/i;
@@ -211,6 +212,7 @@ export class DashboardService implements ServiceLike {
   private _init_routes(): void {
     // auth 라우트는 인증 검사 전에 처리해야 하므로 가장 먼저 등록
     this.route_map.set("/api/auth", handle_auth);
+    this.route_map.set("/api/admin", handle_admin);
     this.route_map.set("/api/bootstrap", handle_bootstrap);
     this.route_map.set("/api/state", handle_state);
     this.route_map.set("/api/events", handle_state);

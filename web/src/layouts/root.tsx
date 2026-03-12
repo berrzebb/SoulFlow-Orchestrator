@@ -6,6 +6,7 @@ import { create_sse } from "../api/sse";
 import { useDashboardStore } from "../store";
 import { useI18n } from "../i18n";
 import { api } from "../api/client";
+import { useAuthStatus, useAuthUser, useLogout } from "../hooks/use-auth";
 
 export function RootLayout() {
   const set_connection = useDashboardStore((s) => s.set_connection);
@@ -26,9 +27,29 @@ export function RootLayout() {
 
   const toggle_locale = () => set_locale(locale === "en" ? "ko" : "en");
 
+  const { data: auth_status } = useAuthStatus();
+  const { data: auth_user, isLoading: auth_loading } = useAuthUser();
+  const logout = useLogout();
+
+  // auth 활성화 시 미인증 → /login 리다이렉트
+  useEffect(() => {
+    if (!auth_status?.enabled) return;
+    if (auth_loading) return;
+    if (location.pathname === "/login") return;
+    if (auth_user === null) navigate("/login", { replace: true });
+  }, [auth_status, auth_user, auth_loading, location.pathname, navigate]);
+
+  // 로그인 페이지에서 이미 인증된 상태면 홈으로
+  useEffect(() => {
+    if (location.pathname !== "/login") return;
+    if (!auth_status?.enabled) { navigate("/", { replace: true }); return; }
+    if (auth_user) navigate("/", { replace: true });
+  }, [auth_status, auth_user, location.pathname, navigate]);
+
   // 첫 실행 시 프로바이더 미설정이면 셋업 위저드로 리다이렉트
   useEffect(() => {
     if (location.pathname === "/setup") return;
+    if (location.pathname === "/login") return;
     api.get<{ needed: boolean }>("/api/bootstrap/status")
       .then((res) => { if (res.needed) navigate("/setup"); })
       .catch(() => {});
@@ -103,6 +124,21 @@ export function RootLayout() {
             >
               {locale === "en" ? "한국어" : "English"}
             </button>
+            {auth_status?.enabled && auth_user && (
+              <>
+                <span className="topbar__username" title={auth_user.role}>
+                  {auth_user.username}
+                </span>
+                <button
+                  className="btn btn--xs topbar__logout-btn"
+                  onClick={() => logout.mutate()}
+                  disabled={logout.isPending}
+                  aria-label="로그아웃"
+                >
+                  로그아웃
+                </button>
+              </>
+            )}
             <span className={`topbar__conn topbar__conn--${connection}`}>
               {t(`conn.${connection}`)}
             </span>

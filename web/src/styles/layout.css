@@ -69,6 +69,84 @@
   min-width: 72px;
   text-align: center;
 }
+.topbar__username {
+  font-size: var(--fs-xs);
+  color: var(--fg-muted);
+  padding: 0 4px;
+}
+.topbar__logout-btn {
+  font-size: var(--fs-xs);
+  padding: 4px 10px;
+  min-height: 32px;
+  color: var(--err);
+  border-color: color-mix(in srgb, var(--err) 30%, transparent);
+}
+.topbar__logout-btn:hover {
+  background: color-mix(in srgb, var(--err) 10%, transparent);
+}
+
+/* 로그인 페이지 */
+.login-page {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  background: var(--bg);
+}
+.login-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--sp-6) var(--sp-5);
+  width: 100%;
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+.login-card__title {
+  font-size: var(--fs-xl);
+  font-weight: 700;
+  margin: 0 0 var(--sp-1);
+  text-align: center;
+}
+.login-card__subtitle {
+  font-size: var(--fs-sm);
+  color: var(--fg-muted);
+  margin: 0;
+  text-align: center;
+}
+.login-card__error {
+  background: color-mix(in srgb, var(--err) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--err) 30%, transparent);
+  color: var(--err);
+  border-radius: var(--radius);
+  padding: var(--sp-2) var(--sp-3);
+  font-size: var(--fs-sm);
+}
+.btn--full { width: 100%; }
+
+/* Users 목록 */
+.users-list { display: flex; flex-direction: column; gap: var(--sp-2); }
+.users-list__item {
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--surface-2, var(--surface));
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  justify-content: space-between;
+  align-items: center;
+}
+.users-list__info { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
+.users-list__name { font-weight: 500; font-size: var(--fs-sm); }
+
+/* 내부 패널 (폼 인셋) */
+.panel--inset {
+  background: var(--surface-2, color-mix(in srgb, var(--surface) 80%, var(--bg)));
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--sp-3);
+}
+
 .topbar__conn--reconnecting {
   background: color-mix(in srgb, var(--warn) 15%, transparent);
   color: var(--warn);

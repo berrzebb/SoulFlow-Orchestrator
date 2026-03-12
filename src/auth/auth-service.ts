@@ -125,6 +125,24 @@ export class AuthService {
     return this.login(username, password);
   }
 
+  // ── 사용자 관리 (AdminStore 위임) ──
+
+  list_users() { return this.store.list_users(); }
+
+  get_user_by_username(username: string) { return this.store.get_user_by_username(username); }
+
+  create_user(input: { username: string; password: string; system_role: "superadmin" | "user" }) {
+    const hash = this.hash_password(input.password);
+    return this.store.create_user({ username: input.username, password_hash: hash, system_role: input.system_role });
+  }
+
+  delete_user(id: string): boolean { return this.store.delete_user(id); }
+
+  update_password(id: string, password: string): boolean {
+    const hash = this.hash_password(password);
+    return this.store.update_user(id, { password_hash: hash });
+  }
+
   // ── 로그인 헬퍼 ──
 
   /**
