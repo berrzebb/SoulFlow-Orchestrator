@@ -349,6 +349,8 @@ export type DashboardOptions = {
   workspace?: string;
   /** /hooks/* 엔드포인트 Bearer 토큰. 미설정 시 인증 없이 허용. */
   webhookSecret?: string;
+  /** 인증 서비스. 설정 시 /api/* 전체에 JWT 인증 강제 (opt-in). */
+  auth_svc?: import("../auth/auth-service.js").AuthService | null;
   logger?: Logger | null;
 };
 

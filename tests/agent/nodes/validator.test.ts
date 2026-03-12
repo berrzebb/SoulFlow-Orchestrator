@@ -3,20 +3,21 @@ import { validator_handler } from "../../../src/agent/nodes/validator.js";
 import type { ValidatorNodeDefinition, OrcheNodeDefinition } from "../../../src/agent/nodes/workflow-node.types.js";
 import type { OrcheNodeExecutorContext } from "../../../src/agent/nodes/orche-node-executor.js";
 
-describe("validator_handler", () => {
-  const createMockNode = (overrides?: Partial<ValidatorNodeDefinition>): OrcheNodeDefinition => ({
-    node_id: "test-node",
-    node_type: "validator",
-    rules: [{ field: "email", pattern: "^[^@]+@[^@]+\\.[^@]+$" }],
-    data: '{"email":"test@example.com"}',
-    ...overrides,
-  } as OrcheNodeDefinition);
+const createMockNode = (overrides?: Partial<ValidatorNodeDefinition>): OrcheNodeDefinition => ({
+  node_id: "test-node",
+  node_type: "validator",
+  rules: [{ field: "email", pattern: "^[^@]+@[^@]+\\.[^@]+$" }],
+  data: '{"email":"test@example.com"}',
+  ...overrides,
+} as OrcheNodeDefinition);
 
-  const createMockContext = (memory: Record<string, unknown> = {}): OrcheNodeExecutorContext => ({
-    memory,
-    workspace: "/tmp",
-    abort_signal: undefined,
-  });
+const createMockContext = (memory: Record<string, unknown> = {}): OrcheNodeExecutorContext => ({
+  memory,
+  workspace: "/tmp",
+  abort_signal: undefined,
+});
+
+describe("validator_handler", () => {
 
   it("metadata: node_type should be validator", () => {
     expect(validator_handler.node_type).toBe("validator");

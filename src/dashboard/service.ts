@@ -54,6 +54,8 @@ import { handle_agent_definition } from "./routes/agent-definition.js";
 import { handle_prompt } from "./routes/prompt.js";
 import { handle_usage } from "./routes/usage.js";
 import { dispatch_webhook } from "./routes/webhook.js";
+import { handle_auth } from "./routes/auth.js";
+import { extract_token } from "../auth/auth-middleware.js";
 
 const RE_MEDIA_TOKEN = /^\/media\/([a-z0-9]{16,})$/i;
 
@@ -207,6 +209,8 @@ export class DashboardService implements ServiceLike {
   private readonly fallback_routes: RouteHandler[] = [];
 
   private _init_routes(): void {
+    // auth 라우트는 인증 검사 전에 처리해야 하므로 가장 먼저 등록
+    this.route_map.set("/api/auth", handle_auth);
     this.route_map.set("/api/bootstrap", handle_bootstrap);
     this.route_map.set("/api/state", handle_state);
     this.route_map.set("/api/events", handle_state);
@@ -288,6 +292,23 @@ export class DashboardService implements ServiceLike {
     // 미디어 토큰
     const media_match = RE_MEDIA_TOKEN.exec(url.pathname);
     if (media_match && req.method === "GET") { await this._media.serve(media_match[1], res); return; }
+
+    // JWT 인증 미들웨어 (auth_svc 설정 시에만 적용)
+    if (this.options.auth_svc && url.pathname.startsWith("/api/")) {
+      const is_public = url.pathname === "/api/auth/status"
+        || url.pathname === "/api/auth/setup"
+        || url.pathname === "/api/auth/login";
+      if (!is_public) {
+        const token = extract_token(req);
+        const payload = token ? this.options.auth_svc.verify_token(token) : null;
+        if (!payload) {
+          this._json(res, 401, { error: "unauthorized" });
+          return;
+        }
+        // 검증된 페이로드를 요청 객체에 첨부 (라우트 핸들러에서 접근 가능)
+        (req as Record<string, unknown>)["_auth_user"] = payload;
+      }
+    }
 
     // API 라우트 디스패치: exact match 먼저, 그 다음 prefix 매칭
     const ctx = this._build_route_context(req, res, url);

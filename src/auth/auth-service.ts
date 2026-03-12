@@ -36,6 +36,10 @@ export class AuthService {
     this.store = store;
   }
 
+  is_initialized(): boolean {
+    return this.store.is_initialized();
+  }
+
   // ── JWT 시크릿 (lazy init) ──
 
   private _get_jwt_secret(): string {
@@ -106,6 +110,19 @@ export class AuthService {
     } catch {
       return null;
     }
+  }
+
+  // ── 초기 셋업 ──
+
+  /**
+   * 최초 superadmin 계정 생성 + 즉시 로그인.
+   * 이미 초기화된 경우 null 반환.
+   */
+  async setup_superadmin(username: string, password: string): Promise<{ token: string; payload: JwtPayload } | null> {
+    if (this.store.is_initialized()) return null;
+    const hash = this.hash_password(password);
+    this.store.create_user({ username, password_hash: hash, system_role: "superadmin" });
+    return this.login(username, password);
   }
 
   // ── 로그인 헬퍼 ──

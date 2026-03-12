@@ -5,6 +5,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   sync_all_workflow_triggers,
+  _reset_channel_msg_state,
   type WorkflowTriggerSyncDeps,
   type WorkflowExecuteFn,
 } from "../../src/cron/workflow-trigger-sync.js";
@@ -14,6 +15,8 @@ import type { CronJob } from "../../src/cron/types.js";
 import type { MessageBusLike, MessageBusTap } from "../../src/bus/index.js";
 import type { WebhookStore } from "../../src/services/webhook-store.service.js";
 import type { KanbanStoreLike } from "../../src/services/kanban-store.js";
+
+afterEach(() => { _reset_channel_msg_state(); });
 
 // ── mock 헬퍼 ────────────────────────────────────────────────────
 
