@@ -306,7 +306,7 @@ export class DashboardService implements ServiceLike {
           return;
         }
         // 검증된 페이로드를 요청 객체에 첨부 (라우트 핸들러에서 접근 가능)
-        (req as Record<string, unknown>)["_auth_user"] = payload;
+        (req as unknown as Record<string, unknown>)["_auth_user"] = payload;
       }
     }
 
