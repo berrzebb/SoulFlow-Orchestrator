@@ -1,8 +1,8 @@
 /**
  * Prompting Studio 모델 선택기.
- * provider pill + model dropdown 인라인 배치 (AI Studio 스타일).
+ * provider pill(커스텀 드롭다운) + model dropdown 인라인 배치 (AI Studio 스타일).
  */
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../api/client";
 
@@ -53,6 +53,83 @@ function prov_icon(type: string): string {
   return "○";
 }
 
+/** Provider 커스텀 드롭다운 (네이티브 select 대체) */
+function ProviderDropdown({
+  providers,
+  value,
+  onChange,
+  placeholder = "— Provider —",
+}: {
+  providers: ProviderInfo[];
+  value: string;
+  onChange: (id: string) => void;
+  placeholder?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const wrap_ref = useRef<HTMLDivElement>(null);
+  const sel = providers.find((p) => p.instance_id === value);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (!wrap_ref.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  return (
+    <div className="ps-prov-wrap" ref={wrap_ref}>
+      <button
+        type="button"
+        className={`ps-model-bar__pill ps-prov-trigger${open ? " ps-prov-trigger--open" : ""}`}
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+      >
+        <span className="ps-prov-trigger__icon">
+          {sel ? prov_icon(sel.provider_type) : "○"}
+        </span>
+        <span className="ps-prov-trigger__label">
+          {sel ? sel.label : placeholder}
+        </span>
+        <svg
+          className={`ps-prov-trigger__chevron${open ? " ps-prov-trigger__chevron--open" : ""}`}
+          width="10" height="10" viewBox="0 0 24 24"
+          fill="none" stroke="currentColor" strokeWidth="2.5"
+        >
+          <polyline points="6 9 12 15 18 9"/>
+        </svg>
+      </button>
+
+      {open && (
+        <div className="ps-prov-dropdown" role="listbox">
+          {providers.length === 0 && (
+            <div className="ps-prov-dropdown__empty">No providers</div>
+          )}
+          {providers.map((p) => {
+            const is_active = p.instance_id === value;
+            const is_err = p.circuit_state === "open";
+            return (
+              <div
+                key={p.instance_id}
+                className={`ps-prov-dropdown__item${is_active ? " ps-prov-dropdown__item--sel" : ""}`}
+                role="option"
+                aria-selected={is_active}
+                onClick={() => { onChange(p.instance_id); setOpen(false); }}
+              >
+                <span className="ps-prov-dropdown__icon">{prov_icon(p.provider_type)}</span>
+                <span className="ps-prov-dropdown__label">{p.label}</span>
+                <span className={`ps-prov-dropdown__dot${is_err ? " ps-prov-dropdown__dot--err" : " ps-prov-dropdown__dot--ok"}`} />
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function StudioModelPicker({ value, onChange, purpose, hideModel, compact, onCompare }: Props) {
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [loadingModels, setLoadingModels] = useState(false);
@@ -64,8 +141,6 @@ export function StudioModelPicker({ value, onChange, purpose, hideModel, compact
   });
 
   const available = providers.filter((p) => p.available !== false);
-  const sel_prov = available.find((p) => p.instance_id === value.provider_id);
-  const icon = sel_prov ? prov_icon(sel_prov.provider_type) : "○";
 
   useEffect(() => {
     if (!value.provider_id) { setModels([]); return; }
@@ -112,32 +187,15 @@ export function StudioModelPicker({ value, onChange, purpose, hideModel, compact
     );
   }
 
-  /* 풀 모드 — ps-model-bar: [provider pill] [model select ▼] [Compare] */
+  /* 풀 모드 — [커스텀 provider pill] [model select ▼] [Compare] */
   return (
     <div className="ps-model-bar">
-      {/* Provider pill: 아이콘 + provider select */}
-      <div className="ps-model-bar__pill" style={{ overflow: "hidden", gap: 0, paddingRight: 0 }}>
-        <span style={{ paddingLeft: 10, fontSize: 14, flexShrink: 0, pointerEvents: "none" }}>{icon}</span>
-        <select
-          style={{
-            border: "none", background: "transparent", fontSize: 12, fontWeight: 600,
-            color: "inherit", cursor: "pointer", padding: "0 24px 0 6px", height: "100%",
-            appearance: "none",
-            backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%2391a4b7' stroke-width='2.5'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E\")",
-            backgroundRepeat: "no-repeat", backgroundPosition: "right 6px center",
-          }}
-          value={value.provider_id}
-          onChange={(e) => onChange({ provider_id: e.target.value, model: "" })}
-          aria-label="Provider"
-        >
-          {!value.provider_id && <option value="">— Provider —</option>}
-          {available.map((p) => (
-            <option key={p.instance_id} value={p.instance_id}>{p.label}</option>
-          ))}
-        </select>
-      </div>
+      <ProviderDropdown
+        providers={available}
+        value={value.provider_id}
+        onChange={(id) => onChange({ provider_id: id, model: "" })}
+      />
 
-      {/* 선택된 provider icon — pill 앞 장식 */}
       {!hideModel && (
         loadingModels
           ? <select className="ps-model-bar__select" disabled aria-label="Model">
