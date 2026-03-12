@@ -159,3 +159,65 @@ describe("OutboundGroupingBuffer — thread_id 구분", () => {
     expect(on_flush).toHaveBeenCalledTimes(2);
   });
 });
+
+// ══════════════════════════════════════════
+// flush() — entry 없음 → early return (from cov2)
+// ══════════════════════════════════════════
+
+describe("OutboundGroupingBuffer — L66: flush 시 entry 없음 → early return", () => {
+  it("push 후 flush_all → 타이머 발화 → flush(key) but entry 없음 → L66", () => {
+    const on_flush = vi.fn();
+    const buf = new OutboundGroupingBuffer({ enabled: true, windowMs: 500, maxMessages: 10 }, on_flush);
+
+    buf.push("slack", make_msg("C1", "hello"));
+    buf.flush_all();
+    expect(on_flush).toHaveBeenCalledTimes(1);
+
+    vi.runAllTimers();
+    expect(on_flush).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ══════════════════════════════════════════
+// flush() — messages 빈 배열 → early return (from cov2)
+// ══════════════════════════════════════════
+
+describe("OutboundGroupingBuffer — L70: messages 빈 배열 → early return", () => {
+  it("groups에 빈 messages 직접 주입 → flush → L70 early return", () => {
+    const on_flush = vi.fn();
+    const buf = new OutboundGroupingBuffer({ enabled: true, windowMs: 500, maxMessages: 10 }, on_flush);
+
+    const groups = (buf as unknown as { groups: Map<string, { messages: OutboundMessage[]; timer: ReturnType<typeof setTimeout> }> }).groups;
+    groups.set("slack:C1", { messages: [], timer: setTimeout(() => {}, 100_000) });
+
+    buf.flush_all();
+    expect(on_flush).not.toHaveBeenCalled();
+  });
+});
+
+// ══════════════════════════════════════════
+// flush() — 존재하지 않는 key 직접 호출 (from cov3)
+// ══════════════════════════════════════════
+
+describe("OutboundGroupingBuffer — L66: flush 없는 key → early return", () => {
+  it("존재하지 않는 key로 flush() 직접 호출 → entry undefined → L66 early return", () => {
+    const on_flush = vi.fn();
+    const buf = new OutboundGroupingBuffer({ enabled: true, windowMs: 500, maxMessages: 10 }, on_flush);
+
+    (buf as any).flush("nonexistent:key");
+
+    expect(on_flush).not.toHaveBeenCalled();
+  });
+
+  it("push 후 flush_all → 이미 제거된 key로 flush() 재호출 → L66 early return", () => {
+    const on_flush = vi.fn();
+    const buf = new OutboundGroupingBuffer({ enabled: true, windowMs: 500, maxMessages: 10 }, on_flush);
+
+    buf.push("slack", make_msg("C1", "hello"));
+    buf.flush_all();
+    expect(on_flush).toHaveBeenCalledTimes(1);
+
+    (buf as any).flush("slack:C1");
+    expect(on_flush).toHaveBeenCalledTimes(1);
+  });
+});

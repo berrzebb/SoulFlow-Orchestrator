@@ -1,9 +1,9 @@
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import { resolve } from "node:path";
 import { AgentBus } from "@src/agent/pty/agent-bus.ts";
 import { ContainerPool } from "@src/agent/pty/container-pool.ts";
 import { MockCliAdapter } from "@helpers/mock-cli-adapter.ts";
-import type { PtyFactory } from "@src/agent/pty/types.ts";
+import type { PtyFactory, AgentTransport, AgentOutputMessage } from "@src/agent/pty/types.ts";
 import { LocalPty } from "@src/agent/pty/local-pty.ts";
 import { create_noop_logger } from "@helpers/harness.ts";
 
@@ -112,4 +112,69 @@ describe("AgentBus", () => {
       expect(result.message).toContain("auth");
     }
   }, 15_000);
+});
+
+// ── mock transport 기반 ask() 테스트 ──────────────────────────────
+
+function make_mock_transport(sessions: string[] = ["agent-1"]): AgentTransport & { emit: (key: string, msg: AgentOutputMessage) => void } {
+  const handlers: Array<(key: string, msg: AgentOutputMessage) => void> = [];
+  return {
+    send: vi.fn(),
+    on_output(handler) {
+      handlers.push(handler);
+      return { dispose: () => { handlers.splice(handlers.indexOf(handler), 1); } };
+    },
+    list_sessions: () => sessions,
+    shutdown: vi.fn().mockResolvedValue(undefined),
+    emit: (key: string, msg: AgentOutputMessage) => handlers.forEach((h) => h(key, msg)),
+  } as unknown as AgentTransport & { emit: (key: string, msg: AgentOutputMessage) => void };
+}
+
+describe("AgentBus — ask() complete 수신 → resolve", () => {
+  it("ask() → on_output complete 메시지 수신 → resolve(msg.result)", async () => {
+    const transport = make_mock_transport(["agent-1"]);
+    const ask_bus = new AgentBus({
+      pool: {} as any,
+      adapter: {} as any,
+      logger: create_noop_logger(),
+      transport,
+    });
+
+    const ask_promise = ask_bus.ask({
+      from: "requester",
+      to: "agent-1",
+      content: "ping",
+    });
+
+    transport.emit("agent-1", { type: "complete", result: "pong response", usage: { input_tokens: 1, output_tokens: 1 } });
+
+    const result = await ask_promise;
+    expect(result).toBe("pong response");
+  });
+});
+
+describe("AgentBus — on_output 불일치 메시지 → early return", () => {
+  it("다른 key 메시지 emit → early return, 매칭 메시지 후 resolve", async () => {
+    const transport = make_mock_transport(["agent-1"]);
+    const ask_bus = new AgentBus({
+      pool: {} as any,
+      adapter: {} as any,
+      logger: create_noop_logger(),
+      transport,
+    });
+
+    const ask_promise = ask_bus.ask({ from: "req", to: "agent-1", content: "ping" });
+
+    // 다른 key → early return (key !== opts.to)
+    transport.emit("other-agent", { type: "complete", result: "ignored", usage: { input_tokens: 0, output_tokens: 0 } });
+
+    // 올바른 key지만 non-complete type → early return (msg.type !== "complete")
+    transport.emit("agent-1", { type: "stream", content: "partial", usage: { input_tokens: 0, output_tokens: 0 } } as any);
+
+    // 최종 complete 메시지 → resolve
+    transport.emit("agent-1", { type: "complete", result: "pong", usage: { input_tokens: 1, output_tokens: 1 } });
+
+    const result = await ask_promise;
+    expect(result).toBe("pong");
+  });
 });

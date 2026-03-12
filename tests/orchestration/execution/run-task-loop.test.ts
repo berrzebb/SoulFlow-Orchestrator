@@ -628,4 +628,45 @@ describe("run_task_loop — task 모드 실행", () => {
       );
     });
   });
+
+  describe("try_native_task_execute — L40: backend 있지만 native_tool_loop 없음 → null", () => {
+    it("resolve_for_mode가 native_tool_loop=false 백엔드 반환 → L40 return null", async () => {
+      const deps = createMockRunnerDeps() as RunnerDeps;
+      deps.agent_backends = {
+        resolve_for_mode: vi.fn(() => ({
+          id: "nb",
+          native_tool_loop: false,
+          capabilities: {},
+        })),
+        resolve_backend: vi.fn(() => null),
+        run: vi.fn(),
+      } as any;
+
+      const stream = new StreamBuffer();
+      const result = await try_native_task_execute(
+        deps, mockArgs, stream, mockArgs.tool_ctx,
+        "task-1", "objective", "prompt",
+      );
+
+      expect(result).toBeNull();
+      expect(deps.agent_backends!.run).not.toHaveBeenCalled();
+    });
+
+    it("resolve_for_mode=null, resolve_backend도 native_tool_loop 없음 → L40 return null", async () => {
+      const deps = createMockRunnerDeps() as RunnerDeps;
+      deps.agent_backends = {
+        resolve_for_mode: vi.fn(() => null),
+        resolve_backend: vi.fn(() => ({ id: "fallback", native_tool_loop: undefined, capabilities: {} })),
+        run: vi.fn(),
+      } as any;
+
+      const stream = new StreamBuffer();
+      const result = await try_native_task_execute(
+        deps, mockArgs, stream, mockArgs.tool_ctx,
+        "task-1", "objective", "prompt",
+      );
+
+      expect(result).toBeNull();
+    });
+  });
 });

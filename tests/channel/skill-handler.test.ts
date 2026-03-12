@@ -135,4 +135,24 @@ describe("SkillHandler", () => {
 
     expect(ctx.replies[0]).toContain("등록된 스킬이 없습니다");
   });
+
+  it("알 수 없는 action='foobar' → 스킬 목록(간략) 반환 (L70-71)", async () => {
+    const handler = new SkillHandler(make_access());
+    const ctx = make_ctx(["foobar"]);
+    const result = await handler.handle(ctx);
+
+    expect(result).toBe(true);
+    expect(ctx.replies[0]).toContain("memory");
+    expect(ctx.replies[0]).not.toContain("builtin_skills");
+  });
+
+  it("스킬 없고 unknown action → '등록된 스킬이 없습니다' 반환", async () => {
+    const handler = new SkillHandler(make_access({
+      list_skills: vi.fn().mockReturnValue([]),
+    }));
+    const ctx = make_ctx(["status"]);
+    await handler.handle(ctx);
+
+    expect(ctx.replies[0]).toContain("등록된 스킬이 없습니다");
+  });
 });

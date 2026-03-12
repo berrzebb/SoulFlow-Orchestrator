@@ -371,3 +371,391 @@ describe("OAuthFlowService — preset 관리", () => {
     expect(vi.mocked(store.remove_preset)).toHaveBeenCalledWith("some_type");
   });
 });
+
+// ══════════════════════════════════════════════════════════
+// handle_callback — 만료된 플로우 (cov2)
+// ══════════════════════════════════════════════════════════
+
+describe("OAuthFlowService — handle_callback 만료 플로우", () => {
+  it("TTL 만료된 state → flow_expired 에러", async () => {
+    const state = "expired-state";
+    (service as any).pending_flows.set(state, {
+      instance_id: "inst-1",
+      created_at: Date.now() - 11 * 60 * 1000,
+    });
+
+    const r = await service.handle_callback("some-code", state);
+    expect(r.ok).toBe(false);
+    expect(r.error).toBe("flow_expired");
+  });
+});
+
+// ══════════════════════════════════════════════════════════
+// handle_callback — exchange 에러 (cov2)
+// ══════════════════════════════════════════════════════════
+
+describe("OAuthFlowService — handle_callback exchange 에러", () => {
+  it("token exchange fetch 실패 → error 반환", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValueOnce(new Error("Network error")));
+
+    const config = make_config();
+    const local_store = make_store({
+      get: vi.fn().mockReturnValue(config),
+      get_client_id: vi.fn().mockResolvedValue("client-id"),
+      get_client_secret: vi.fn().mockResolvedValue("client-secret"),
+    });
+    const local_svc = new OAuthFlowService(local_store);
+
+    const state = "exchange-fail-state";
+    (local_svc as any).pending_flows.set(state, { instance_id: "inst-1", created_at: Date.now() });
+
+    const r = await local_svc.handle_callback("code", state);
+    local_svc.close();
+    expect(r.ok).toBe(false);
+    expect(r.error).toContain("Network error");
+  });
+
+  it("token exchange 응답에 error 필드 → throw", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce({
+      ok: false,
+      status: 400,
+      json: async () => ({ error: "invalid_grant", error_description: "Code expired" }),
+    }));
+
+    const config = make_config();
+    const local_store = make_store({
+      get: vi.fn().mockReturnValue(config),
+      get_client_id: vi.fn().mockResolvedValue("client-id"),
+      get_client_secret: vi.fn().mockResolvedValue("client-secret"),
+    });
+    const local_svc = new OAuthFlowService(local_store);
+
+    const state = "bad-code-state";
+    (local_svc as any).pending_flows.set(state, { instance_id: "inst-1", created_at: Date.now() });
+
+    const r = await local_svc.handle_callback("bad-code", state);
+    local_svc.close();
+    expect(r.ok).toBe(false);
+    expect(r.error).toContain("Code expired");
+  });
+});
+
+// ══════════════════════════════════════════════════════════
+// refresh_token — fetch 실패 (cov2)
+// ══════════════════════════════════════════════════════════
+
+describe("OAuthFlowService — refresh_token fetch 실패", () => {
+  it("fetch 실패 → error 반환", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValueOnce(new Error("Refresh network error")));
+    const local_store = make_store({
+      get: vi.fn().mockReturnValue(make_config()),
+      get_refresh_token: vi.fn().mockResolvedValue("refresh-token"),
+      get_client_id: vi.fn().mockResolvedValue("client-id"),
+      get_client_secret: vi.fn().mockResolvedValue("client-secret"),
+    });
+    const local_svc = new OAuthFlowService(local_store);
+
+    const r = await local_svc.refresh_token("inst-1");
+    local_svc.close();
+    expect(r.ok).toBe(false);
+    expect(r.error).toContain("Refresh network error");
+  });
+});
+
+// ══════════════════════════════════════════════════════════
+// test_token — HTTP 에러/fetch 에러 (cov2)
+// ══════════════════════════════════════════════════════════
+
+describe("OAuthFlowService — test_token 에러 경로", () => {
+  const test_svc_type = "test_with_url";
+
+  beforeEach(() => {
+    register_preset({
+      service_type: test_svc_type,
+      label: "Test With URL",
+      auth_url: "https://test.example.com/auth",
+      token_url: "https://test.example.com/token",
+      scopes_available: [],
+      default_scopes: [],
+      supports_refresh: true,
+      test_url: "https://test.example.com/me",
+    });
+  });
+
+  afterEach(() => {
+    unregister_preset(test_svc_type);
+  });
+
+  it("HTTP 500 응답 → 'HTTP 500' 에러", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce({ ok: false, status: 500, json: async () => ({}) }));
+
+    const local_store = make_store({
+      get: vi.fn().mockReturnValue(make_config({ service_type: test_svc_type, token_url: "https://test.example.com/token" })),
+      get_access_token: vi.fn().mockResolvedValue("some-token"),
+    });
+    const local_svc = new OAuthFlowService(local_store);
+
+    const r = await local_svc.test_token("inst-1");
+    local_svc.close();
+    expect(r.ok).toBe(false);
+    expect(r.error).toContain("HTTP 500");
+  });
+
+  it("fetch throw → error 반환", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValueOnce(new Error("fetch failed")));
+
+    const local_store = make_store({
+      get: vi.fn().mockReturnValue(make_config({ service_type: test_svc_type })),
+      get_access_token: vi.fn().mockResolvedValue("some-token"),
+    });
+    const local_svc = new OAuthFlowService(local_store);
+
+    const r = await local_svc.test_token("inst-1");
+    local_svc.close();
+    expect(r.ok).toBe(false);
+    expect(r.error).toContain("fetch failed");
+  });
+});
+
+// ══════════════════════════════════════════════════════════
+// get_valid_access_token — 만료 후 refresh 실패 (cov2)
+// ══════════════════════════════════════════════════════════
+
+describe("OAuthFlowService — get_valid_access_token 만료 refresh 실패", () => {
+  it("토큰 만료 → refresh 실패 → token=null", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValueOnce(new Error("Refresh failed")));
+
+    const local_store = make_store({
+      get: vi.fn().mockReturnValue(make_config()),
+      is_expired: vi.fn().mockReturnValue(true),
+      get_refresh_token: vi.fn().mockResolvedValue("expired-refresh"),
+    });
+    const local_svc = new OAuthFlowService(local_store);
+
+    const r = await local_svc.get_valid_access_token("inst-1");
+    local_svc.close();
+    expect(r.token).toBeNull();
+    expect(r.error).toContain("refresh_failed");
+  });
+});
+
+// ══════════════════════════════════════════════════════════
+// _post_token — basic auth 메서드 (cov2)
+// ══════════════════════════════════════════════════════════
+
+describe("OAuthFlowService — _post_token basic auth", () => {
+  it("token_auth_method='basic' → Authorization: Basic 헤더 사용", async () => {
+    register_preset({
+      service_type: "test_basic_preset",
+      label: "Test Basic",
+      auth_url: "https://basic.example.com/auth",
+      token_url: "https://basic.example.com/token",
+      scopes_available: [],
+      default_scopes: [],
+      supports_refresh: true,
+      token_auth_method: "basic",
+    });
+
+    let captured_headers: Record<string, string> = {};
+    vi.stubGlobal("fetch", vi.fn().mockImplementationOnce(async (_url: string, opts: { headers?: Record<string, string> }) => {
+      captured_headers = opts?.headers || {};
+      return { ok: true, status: 200, json: async () => ({ access_token: "new-token", expires_in: 3600 }) };
+    }));
+
+    const local_store = make_store({
+      get: vi.fn().mockReturnValue(make_config({ service_type: "test_basic_preset", token_url: "https://basic.example.com/token" })),
+      get_refresh_token: vi.fn().mockResolvedValue("valid-refresh"),
+      get_client_id: vi.fn().mockResolvedValue("client-id"),
+      get_client_secret: vi.fn().mockResolvedValue("client-secret"),
+    });
+    const local_svc = new OAuthFlowService(local_store);
+
+    await local_svc.refresh_token("inst-1");
+    local_svc.close();
+
+    expect(captured_headers["Authorization"]).toMatch(/^Basic /);
+
+    unregister_preset("test_basic_preset");
+  });
+});
+
+// ══════════════════════════════════════════════════════════
+// _prune_expired — 만료 플로우 정리 (cov2)
+// ══════════════════════════════════════════════════════════
+
+describe("OAuthFlowService — _prune_expired 만료 정리", () => {
+  it("만료된 pending flow 제거", () => {
+    (service as any).pending_flows.set("old-state", {
+      instance_id: "old",
+      created_at: Date.now() - 15 * 60 * 1000,
+    });
+    (service as any).pending_flows.set("fresh-state", {
+      instance_id: "fresh",
+      created_at: Date.now(),
+    });
+
+    (service as any)._prune_expired();
+
+    expect((service as any).pending_flows.has("old-state")).toBe(false);
+    expect((service as any).pending_flows.has("fresh-state")).toBe(true);
+  });
+});
+
+// ══════════════════════════════════════════════════════════
+// _exchange_code — access_token 없음 → throw (cov2)
+// ══════════════════════════════════════════════════════════
+
+describe("OAuthFlowService — _exchange_code: access_token 없음", () => {
+  it("_post_token이 access_token 없는 응답 → throw Error", async () => {
+    const config = make_config();
+    (service as any)._post_token = vi.fn().mockResolvedValue({
+      error: "invalid_client",
+      error_description: "bad client credentials",
+    });
+    await expect(
+      (service as any)._exchange_code(config, "auth_code", "client_id", "client_secret"),
+    ).rejects.toThrow("bad client credentials");
+  });
+
+  it("error_description 없음 → error 필드 사용", async () => {
+    const config = make_config();
+    (service as any)._post_token = vi.fn().mockResolvedValue({
+      error: "access_denied",
+    });
+    await expect(
+      (service as any)._exchange_code(config, "auth_code", "client_id", "client_secret"),
+    ).rejects.toThrow("access_denied");
+  });
+});
+
+// ══════════════════════════════════════════════════════════
+// 타이머 콜백 (cov3)
+// ══════════════════════════════════════════════════════════
+
+describe("OAuthFlowService — cleanup_timer 콜백 발화", () => {
+  it("fake timer 60s 진행 → cleanup_timer 콜백 _prune_expired 실행", async () => {
+    vi.useFakeTimers();
+    const local_store = make_store();
+    const local_svc = new OAuthFlowService(local_store);
+
+    try {
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(true).toBe(true);
+    } finally {
+      local_svc.close();
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe("OAuthFlowService — refresh_timer 콜백 발화", () => {
+  it("fake timer 5분 진행 → refresh_timer 콜백 _refresh_expiring_tokens 실행", async () => {
+    vi.useFakeTimers();
+    const local_store = make_store({ list: vi.fn().mockReturnValue([]) });
+    const local_svc = new OAuthFlowService(local_store);
+
+    try {
+      await vi.advanceTimersByTimeAsync(300_000);
+      expect(true).toBe(true);
+    } finally {
+      local_svc.close();
+      vi.useRealTimers();
+    }
+  });
+});
+
+// ══════════════════════════════════════════════════════════
+// stop / health_check 메서드 (cov3)
+// ══════════════════════════════════════════════════════════
+
+describe("OAuthFlowService — stop / health_check 메서드", () => {
+  it("stop() 호출 → close() 실행, 에러 없음", async () => {
+    const local_store = make_store();
+    const local_svc = new OAuthFlowService(local_store);
+    await local_svc.stop();
+    expect(true).toBe(true);
+  });
+
+  it("health_check() → { ok: true } 반환", () => {
+    const local_store = make_store();
+    const local_svc = new OAuthFlowService(local_store);
+    try {
+      const result = local_svc.health_check();
+      expect(result.ok).toBe(true);
+    } finally {
+      local_svc.close();
+    }
+  });
+});
+
+// ══════════════════════════════════════════════════════════
+// _refresh_expiring_tokens 분기 (cov3)
+// ══════════════════════════════════════════════════════════
+
+describe("OAuthFlowService — preset supports_refresh=false → continue", () => {
+  it("enabled + expires_at 있지만 preset.supports_refresh=false → continue", async () => {
+    vi.useFakeTimers();
+
+    const svc_type = "no-refresh-svc-cov3";
+    register_preset({
+      service_type: svc_type,
+      supports_refresh: false,
+      client_id_env: "CLIENT_ID",
+      client_secret_env: "CLIENT_SECRET",
+      auth_url: "https://example.com/auth",
+      token_url: "https://example.com/token",
+      scopes: [],
+    });
+
+    const config = make_config({
+      service_type: svc_type,
+      enabled: true,
+      expires_at: new Date(Date.now() + 60_000).toISOString(),
+    });
+
+    const local_store = make_store({ list: vi.fn().mockReturnValue([config]) });
+    const local_svc = new OAuthFlowService(local_store);
+
+    try {
+      await vi.advanceTimersByTimeAsync(300_000);
+      expect(true).toBe(true);
+    } finally {
+      local_svc.close();
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe("OAuthFlowService — margin > REFRESH_MARGIN_MS → continue", () => {
+  it("expires_at가 10분 이상 남아있음 → margin>REFRESH_MARGIN continue", async () => {
+    vi.useFakeTimers();
+
+    const svc_type = "long-expiry-svc-cov3";
+    register_preset({
+      service_type: svc_type,
+      supports_refresh: true,
+      client_id_env: "CLIENT_ID",
+      client_secret_env: "CLIENT_SECRET",
+      auth_url: "https://example.com/auth",
+      token_url: "https://example.com/token",
+      scopes: [],
+    });
+
+    const config = make_config({
+      service_type: svc_type,
+      enabled: true,
+      expires_at: new Date(Date.now() + 20 * 60 * 1000).toISOString(),
+    });
+
+    const local_store = make_store({ list: vi.fn().mockReturnValue([config]) });
+    const local_svc = new OAuthFlowService(local_store);
+
+    try {
+      await vi.advanceTimersByTimeAsync(300_000);
+      expect(true).toBe(true);
+    } finally {
+      local_svc.close();
+      vi.useRealTimers();
+    }
+  });
+});

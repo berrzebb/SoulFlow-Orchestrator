@@ -350,3 +350,145 @@ describe("OpsRuntimeService — secret_prune_tick (cron callback)", () => {
     expect(deps.logger!.error).toHaveBeenCalledWith(expect.stringContaining("secret prune failed"));
   });
 });
+
+// ══════════════════════════════════════════════════════════
+// running=false early return 분기 (cov2)
+// ══════════════════════════════════════════════════════════
+
+describe("OpsRuntimeService — running=false early returns", () => {
+  it("stop 후 watchdog_tick → running=false → early return", async () => {
+    const deps = make_deps({
+      services: { health_check: vi.fn().mockResolvedValue([]) } as any,
+    });
+    const svc = new OpsRuntimeService(deps);
+    await svc.start();
+    await svc.stop();
+
+    const [, watchdog_tick] = get_cron_callbacks(deps);
+    await watchdog_tick();
+
+    expect(deps.services!.health_check).not.toHaveBeenCalled();
+  });
+
+  it("stop 후 bridge_pump_tick → running=false → early return", async () => {
+    const deps = make_deps();
+    const svc = new OpsRuntimeService(deps, { bridgePumpEnabled: true });
+    await svc.start();
+    await svc.stop();
+
+    const [, , bridge_pump_tick] = get_cron_callbacks(deps);
+    await bridge_pump_tick();
+
+    expect(deps.bus.consume_inbound).not.toHaveBeenCalled();
+  });
+
+  it("stop 후 decision_dedupe_tick → running=false → early return", async () => {
+    const deps = make_deps();
+    const svc = new OpsRuntimeService(deps);
+    await svc.start();
+    await svc.stop();
+
+    const [, , , decision_tick] = get_cron_callbacks(deps);
+    await decision_tick();
+
+    expect(deps.decisions.dedupe_decisions).not.toHaveBeenCalled();
+  });
+});
+
+// ══════════════════════════════════════════════════════════
+// 에러 핸들러 분기 (cov2)
+// ══════════════════════════════════════════════════════════
+
+describe("OpsRuntimeService — promises.dedupe throw", () => {
+  it("promises.dedupe_promises throw → error 로그", async () => {
+    const deps = make_deps({
+      promises: {
+        dedupe_promises: vi.fn().mockRejectedValue(new Error("promise db error")),
+      } as any,
+    });
+    const svc = new OpsRuntimeService(deps);
+    await svc.start();
+
+    const [, , , decision_tick] = get_cron_callbacks(deps);
+    await decision_tick();
+
+    expect(deps.logger!.error).toHaveBeenCalledWith(
+      expect.stringContaining("promise dedupe failed"),
+    );
+  });
+});
+
+describe("OpsRuntimeService — session_store.prune_expired throw", () => {
+  it("session_store.prune_expired throw → error 로그", async () => {
+    const deps = make_deps({
+      secret_vault: { prune_expired: vi.fn().mockResolvedValue(0) } as any,
+      session_store: {
+        prune_expired: vi.fn().mockRejectedValue(new Error("session prune error")),
+      } as any,
+    });
+    const svc = new OpsRuntimeService(deps);
+    await svc.start();
+
+    const callbacks = get_cron_callbacks(deps);
+    const secret_prune_tick = callbacks[4];
+    await secret_prune_tick();
+
+    expect(deps.logger!.error).toHaveBeenCalledWith(
+      expect.stringContaining("session prune failed"),
+    );
+  });
+});
+
+describe("OpsRuntimeService — dlq.prune_older_than throw", () => {
+  it("dlq.prune_older_than throw → error 로그", async () => {
+    const deps = make_deps({
+      secret_vault: { prune_expired: vi.fn().mockResolvedValue(0) } as any,
+      dlq: {
+        prune_older_than: vi.fn().mockRejectedValue(new Error("dlq prune error")),
+      } as any,
+    });
+    const svc = new OpsRuntimeService(deps);
+    await svc.start();
+
+    const callbacks = get_cron_callbacks(deps);
+    const secret_prune_tick = callbacks[4];
+    await secret_prune_tick();
+
+    expect(deps.logger!.error).toHaveBeenCalledWith(
+      expect.stringContaining("dlq prune failed"),
+    );
+  });
+});
+
+// ══════════════════════════════════════════════════════════
+// startup_changelog 멱등성 가드 (cov3)
+// ══════════════════════════════════════════════════════════
+
+describe("OpsRuntimeService — startup_changelog 멱등성 가드", () => {
+  it("start() 후 startup_changelog 재호출 → early return → logger.info 한 번만 호출", async () => {
+    const deps = make_deps();
+    const svc = new OpsRuntimeService(deps);
+    await svc.start();
+
+    const first_info_count = (deps.logger!.info as ReturnType<typeof vi.fn>).mock.calls.length;
+
+    await (svc as any).startup_changelog();
+
+    const second_info_count = (deps.logger!.info as ReturnType<typeof vi.fn>).mock.calls.length;
+    expect(second_info_count).toBe(first_info_count);
+    expect((svc as any).status_state.startup_logged).toBe(true);
+
+    await svc.stop();
+  });
+
+  it("startup_logged=true 직접 설정 후 startup_changelog → early return", async () => {
+    const deps = make_deps();
+    const svc = new OpsRuntimeService(deps);
+
+    (svc as any).status_state.startup_logged = true;
+
+    await (svc as any).startup_changelog();
+
+    expect(deps.logger!.info).not.toHaveBeenCalled();
+  });
+});

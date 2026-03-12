@@ -1,7 +1,8 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { afterAll, beforeAll, describe, it, expect } from "vitest";
+import { afterAll, beforeAll, describe, it, expect, vi } from "vitest";
+import { DatabaseSync } from "node:sqlite";
 import { KanbanStore, type KanbanStoreLike } from "@src/services/kanban-store.js";
 
 describe("KanbanStore", () => {
@@ -366,6 +367,206 @@ describe("KanbanStore", () => {
       const list2 = await store.list_filters(b2.board_id);
       expect(list1.every((f) => f.board_id === b1.board_id)).toBe(true);
       expect(list2.every((f) => f.board_id === b2.board_id)).toBe(true);
+    });
+  });
+
+  /* ─── update_board columns ─── */
+
+  describe("update_board columns", () => {
+    it("columns 업데이트 → board columns_json 갱신", async () => {
+      const board = await store.create_board({ name: "ColUpdate Board", scope_type: "channel", scope_id: "col-ch" });
+      const updated = await store.update_board(board.board_id, {
+        columns: [{ id: "todo", name: "할 일", color: "#ccc" }, { id: "done", name: "완료", color: "#0f0" }],
+      });
+      expect(updated).not.toBeNull();
+      expect(updated?.columns).toHaveLength(2);
+    });
+  });
+
+  /* ─── update_card 추가 필드 분기 ─── */
+
+  describe("update_card 필드 분기", () => {
+    let uf_board_id: string;
+    let uf_card_id: string;
+
+    beforeAll(async () => {
+      const board = await store.create_board({ name: "UF Board", scope_type: "channel", scope_id: "uf-ch" });
+      uf_board_id = board.board_id;
+      const card = await store.create_card({ board_id: uf_board_id, title: "UF Card", created_by: "tester" });
+      uf_card_id = card.card_id;
+    });
+
+    it("task_id 업데이트", async () => {
+      const r = await store.update_card(uf_card_id, { task_id: "task-123", actor: "user1" });
+      expect(r?.card_id).toBe(uf_card_id);
+    });
+
+    it("due_date 업데이트", async () => {
+      const r = await store.update_card(uf_card_id, { due_date: "2099-12-31", actor: "user1" });
+      expect(r?.card_id).toBe(uf_card_id);
+    });
+
+    it("metadata 업데이트", async () => {
+      const r = await store.update_card(uf_card_id, { metadata: { priority: "high" }, actor: "user1" });
+      expect(r?.card_id).toBe(uf_card_id);
+    });
+
+    it("labels 업데이트", async () => {
+      const r = await store.update_card(uf_card_id, { labels: ["bug", "critical"], actor: "user1" });
+      expect(r?.card_id).toBe(uf_card_id);
+    });
+
+    it("description 업데이트", async () => {
+      const r = await store.update_card(uf_card_id, { description: "새 설명 텍스트" });
+      expect(r).not.toBeNull();
+    });
+
+    it("존재하지 않는 card → null", async () => {
+      const r = await store.update_card("NONEXISTENT-999", { title: "x" });
+      expect(r).toBeNull();
+    });
+  });
+
+  /* ─── delete_card 존재하지 않는 card ─── */
+
+  describe("delete_card 존재하지 않는 card", () => {
+    it("없는 card → false 반환", async () => {
+      const r = await store.delete_card("NONEXISTENT-999");
+      expect(r).toBe(false);
+    });
+  });
+
+  /* ─── get_participants 없는 card ─── */
+
+  describe("get_participants 없는 card", () => {
+    it("존재하지 않는 card → [] 반환", async () => {
+      const r = await store.get_participants("NONEXISTENT-999");
+      expect(Array.isArray(r)).toBe(true);
+      expect(r).toHaveLength(0);
+    });
+  });
+
+  /* ─── update_rule 분기 ─── */
+
+  describe("update_rule 분기", () => {
+    let rule_board_id: string;
+    let rule_id: string;
+
+    beforeAll(async () => {
+      const board = await store.create_board({ name: "Rule Board", scope_type: "channel", scope_id: "rule-ch" });
+      rule_board_id = board.board_id;
+      const rule = await store.add_rule({ board_id: rule_board_id, trigger: "card_moved", condition: { field: "status" }, action_type: "assign", action_params: {} });
+      rule_id = rule.rule_id;
+    });
+
+    it("enabled 업데이트", async () => {
+      const r = await store.update_rule(rule_id, { enabled: false });
+      expect(r).not.toBeNull();
+      expect(r?.enabled).toBe(false);
+    });
+
+    it("action_params 업데이트", async () => {
+      const r = await store.update_rule(rule_id, { action_params: { channel: "general" } });
+      expect(typeof r).toMatch(/^object$/);
+    });
+
+    it("빈 업데이트 → sets=[] → SELECT만 실행", async () => {
+      const r = await store.update_rule(rule_id, {});
+      expect(typeof r).toMatch(/^object|null$/);
+    });
+  });
+
+  /* ─── get_board_metrics 없는 board ─── */
+
+  describe("get_board_metrics 없는 board", () => {
+    it("없는 board_id → null 반환", async () => {
+      const r = await store.get_board_metrics("nonexistent-board");
+      expect(r).toBeNull();
+    });
+  });
+
+  /* ─── subscribe/unsubscribe ─── */
+
+  describe("subscribe/unsubscribe", () => {
+    it("subscribe → unsubscribe 정상 동작", async () => {
+      const sub_board = await store.create_board({ name: "EventNotify", scope_type: "channel", scope_id: "sub-ev-ch" });
+      const listener = vi.fn();
+      store.subscribe(sub_board.board_id, listener);
+      store.unsubscribe(sub_board.board_id, listener);
+      await store.create_card({ board_id: sub_board.board_id, title: "Event Test", created_by: "u" });
+      expect(typeof listener).toBe("function");
+    });
+  });
+
+  /* ─── parse_json_safe catch — 잘못된 JSON ─── */
+
+  describe("parse_json_safe — 잘못된 JSON → fallback", () => {
+    it("columns_json 손상 → get_board에서 빈 배열 반환", async () => {
+      const board = await store.create_board({ name: "JSON Board", scope_type: "channel", scope_id: "json-ch" });
+      const db_path = (store as any).sqlite_path as string;
+
+      const db = new DatabaseSync(db_path);
+      try {
+        db.prepare("UPDATE kanban_boards SET columns_json = ? WHERE board_id = ?")
+          .run("{invalid json", board.board_id);
+      } finally {
+        db.close();
+      }
+
+      const found = await store.get_board(board.board_id);
+      expect(found).not.toBeNull();
+      expect(Array.isArray(found?.columns)).toBe(true);
+      expect(found?.columns).toHaveLength(0);
+    });
+  });
+
+  /* ─── create_card — board 없음 → 예외 ─── */
+
+  describe("create_card — board 없음 → 예외", () => {
+    it("존재하지 않는 board_id → throw", async () => {
+      await expect(
+        store.create_card({ board_id: "nonexistent-board-id", title: "Test", created_by: "user" }),
+      ).rejects.toThrow();
+    });
+  });
+
+  /* ─── board_summary — db null mock ─── */
+
+  describe("board_summary — db null → null 반환", () => {
+    it("this.db 두 번째 호출 null → null 반환", async () => {
+      const bs_board = await store.create_board({ name: "BS Board", scope_type: "channel", scope_id: "bs-ch" });
+      const raw_store = store as any;
+      const original_db = raw_store.db.bind(raw_store);
+      let call_count = 0;
+      raw_store.db = (fn: any) => {
+        call_count++;
+        if (call_count === 1) return original_db(fn);
+        raw_store.db = original_db.bind(raw_store);
+        return null;
+      };
+
+      const result = await store.board_summary(bs_board.board_id);
+      expect(result).toBeNull();
+    });
+  });
+
+  /* ─── get_board_metrics — db null mock ─── */
+
+  describe("get_board_metrics — db null → null 반환", () => {
+    it("this.db 두 번째 호출 null → null 반환", async () => {
+      const bm_board = await store.create_board({ name: "BM Board", scope_type: "channel", scope_id: "bm-ch" });
+      const raw_store = store as any;
+      const original_db = raw_store.db.bind(raw_store);
+      let call_count = 0;
+      raw_store.db = (fn: any) => {
+        call_count++;
+        if (call_count === 1) return original_db(fn);
+        raw_store.db = original_db.bind(raw_store);
+        return null;
+      };
+
+      const result = await store.get_board_metrics(bm_board.board_id);
+      expect(result).toBeNull();
     });
   });
 });

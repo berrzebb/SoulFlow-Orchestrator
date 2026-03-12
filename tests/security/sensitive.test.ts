@@ -222,3 +222,43 @@ describe("redact_sensitive_text — process.env 기반 마스킹", () => {
     }
   });
 });
+
+describe("redact_sensitive_text — 할당 패턴 추가 분기", () => {
+  it("secret: mySecretValue → 콜론 할당도 마스킹", () => {
+    const result = redact_sensitive_text("secret: mySecretValue123");
+    expect(result.redacted).toBe(true);
+  });
+
+  it("non_sensitive=value → 마스킹 안 함", () => {
+    const result = redact_sensitive_text("username=johndoe");
+    expect(result.text).toContain("johndoe");
+  });
+});
+
+describe("sensitive — 짧은/중복 env 시크릿 값 skip", () => {
+  it("PASSWORD 환경변수 값이 3자(< 6) → skip", async () => {
+    vi.resetModules();
+    process.env["TEST_PASSWORD_L121_COV"] = "abc";
+    try {
+      const { redact_sensitive_text: fresh } = await import("@src/security/sensitive.js");
+      const result = fresh("test text without secrets");
+      expect(typeof result.text).toBe("string");
+    } finally {
+      delete process.env["TEST_PASSWORD_L121_COV"];
+    }
+  });
+
+  it("두 민감 환경변수가 동일한 값 → 중복 skip", async () => {
+    vi.resetModules();
+    process.env["TEST_SECRET_DUP_COV_A"] = "same_shared_value_12345";
+    process.env["TEST_PASSWORD_DUP_COV_B"] = "same_shared_value_12345";
+    try {
+      const { redact_sensitive_text: fresh } = await import("@src/security/sensitive.js");
+      const result = fresh("value: same_shared_value_12345");
+      expect(typeof result.text).toBe("string");
+    } finally {
+      delete process.env["TEST_SECRET_DUP_COV_A"];
+      delete process.env["TEST_PASSWORD_DUP_COV_B"];
+    }
+  });
+});

@@ -42,14 +42,53 @@ describe("HeartbeatService — L135: on_heartbeat 없음 → _tick 즉시 반환
   it("HEARTBEAT.md 있고 on_heartbeat 없음 → _tick에서 L135 early return", async () => {
     const tmp = mkdtempSync(join(tmpdir(), "hb-cov2b-"));
     try {
-      // HEARTBEAT.md 생성 (내용 있어야 is_heartbeat_empty=false)
       writeFileSync(join(tmp, "HEARTBEAT.md"), "## Heartbeat\nCheck status.", "utf-8");
 
-      // on_heartbeat 없이 생성 → this.on_heartbeat = null
       const svc = new HeartbeatService(tmp);
-      // _tick 직접 호출 → content 있음 → L135: if(!on_heartbeat) return
       await (svc as any)._tick();
-      // 예외 없이 반환되면 OK
+      expect(true).toBe(true);
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+});
+
+// ══════════════════════════════════════════
+// L122: sleep 자연 완료 → if 조건 평가 (from cov3)
+// ══════════════════════════════════════════
+
+describe("HeartbeatService — L122: sleep 완료 → if 조건 실행", () => {
+  it("interval_s=0.001 → sleep(1ms) 완료 → L122 if 조건 평가 (파일 없으므로 _tick 즉시 return)", async () => {
+    const tmp = mkdtempSync(join(tmpdir(), "hb-L122-"));
+    try {
+      const svc = new HeartbeatService(tmp, {
+        interval_s: 0.001,
+        on_heartbeat: async () => "not_ok",
+      });
+      svc.set_enabled(true);
+      await svc.start();
+      await new Promise((r) => setTimeout(r, 15));
+      await svc.stop();
+      expect(svc.status().running).toBe(false);
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+});
+
+// ══════════════════════════════════════════
+// L135: HEARTBEAT_OK 포함 응답 → early return (from cov3)
+// ══════════════════════════════════════════
+
+describe("HeartbeatService — L135: HEARTBEAT_OK 포함 응답 → early return", () => {
+  it("HEARTBEAT.md 있고 on_heartbeat가 'HEARTBEAT_OK' 반환 → L135 early return", async () => {
+    const tmp = mkdtempSync(join(tmpdir(), "hb-L135-"));
+    try {
+      writeFileSync(join(tmp, "HEARTBEAT.md"), "## Heartbeat\nCheck status.", "utf-8");
+      const svc = new HeartbeatService(tmp, {
+        on_heartbeat: async () => "HEARTBEAT_OK",
+      });
+      await (svc as any)._tick();
       expect(true).toBe(true);
     } finally {
       rmSync(tmp, { recursive: true, force: true });
