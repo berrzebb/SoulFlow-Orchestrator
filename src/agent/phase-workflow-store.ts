@@ -93,7 +93,7 @@ export class PhaseWorkflowStore implements PhaseWorkflowStoreLike {
 
   async upsert(state: PhaseLoopState): Promise<void> {
     await this.initialized;
-    with_sqlite(this.sqlite_path, (db) => {
+    with_sqlite_strict(this.sqlite_path, (db) => {
       // 런타임 상태 저장 시 기존 DB의 설정 필드(auto_approve, auto_resume)를 항상 보존.
       // 설정 변경은 patch_settings()로만 가능하며, upsert는 런타임 상태만 책임진다.
       const existing = db.prepare("SELECT payload_json FROM phase_workflows WHERE workflow_id = ? LIMIT 1")
@@ -129,7 +129,7 @@ export class PhaseWorkflowStore implements PhaseWorkflowStoreLike {
 
   async patch_settings(workflow_id: string, settings: { auto_approve?: boolean; auto_resume?: boolean }): Promise<void> {
     await this.initialized;
-    with_sqlite(this.sqlite_path, (db) => {
+    with_sqlite_strict(this.sqlite_path, (db) => {
       const row = db.prepare("SELECT payload_json FROM phase_workflows WHERE workflow_id = ? LIMIT 1")
         .get(workflow_id) as { payload_json: string } | undefined;
       if (!row) return true;
@@ -170,7 +170,7 @@ export class PhaseWorkflowStore implements PhaseWorkflowStoreLike {
 
   async remove(workflow_id: string): Promise<boolean> {
     await this.initialized;
-    const changes = with_sqlite(this.sqlite_path, (db) => {
+    const changes = with_sqlite_strict(this.sqlite_path, (db) => {
       db.prepare("DELETE FROM phase_agent_messages WHERE workflow_id = ?").run(workflow_id);
       return db.prepare("DELETE FROM phase_workflows WHERE workflow_id = ?").run(workflow_id).changes;
     });
@@ -179,7 +179,7 @@ export class PhaseWorkflowStore implements PhaseWorkflowStoreLike {
 
   async insert_message(workflow_id: string, phase_id: string, agent_id: string, msg: PhaseMessage): Promise<void> {
     await this.initialized;
-    with_sqlite(this.sqlite_path, (db) => {
+    with_sqlite_strict(this.sqlite_path, (db) => {
       db.prepare(`
         INSERT INTO phase_agent_messages (workflow_id, phase_id, agent_id, role, content, at)
         VALUES (?, ?, ?, ?, ?, ?)

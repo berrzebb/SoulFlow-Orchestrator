@@ -97,7 +97,7 @@ export class TaskStore implements TaskStoreLike {
     const provider = String(normalized.channel || normalized.memory.channel || "").trim();
     const chat_id = String(normalized.chatId || normalized.memory.chat_id || "").trim();
     const trigger_message_id = String(normalized.memory.__trigger_message_id || "").trim();
-    with_sqlite(this.sqlite_path,(db) => {
+    with_sqlite_strict(this.sqlite_path,(db) => {
       db.prepare(`
         INSERT INTO tasks (task_id, status, updated_at, payload_json, provider, chat_id, trigger_message_id)
         VALUES (?, ?, ?, ?, ?, ?, ?)

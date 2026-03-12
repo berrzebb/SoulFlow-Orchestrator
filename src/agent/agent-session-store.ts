@@ -42,7 +42,7 @@ export class AgentSessionStore {
     const expires_at = new Date(Date.now() + this.ttl_ms).toISOString();
     const metadata_json = JSON.stringify(opts?.metadata || {});
 
-    with_sqlite(this.db_path, (db) => {
+    with_sqlite_strict(this.db_path, (db) => {
       db.prepare(`
         INSERT INTO agent_sessions (session_id, backend, task_id, created_at, updated_at, expires_at, metadata_json)
         VALUES (?, ?, ?, ?, ?, ?, ?)

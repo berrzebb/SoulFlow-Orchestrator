@@ -103,7 +103,7 @@ export class AgentDefinitionStore {
 
   /** 빌트인 정의가 없으면 시드. 이름 충돌 시 is_builtin=true인 기존 레코드 갱신. */
   private _seed_builtins(): void {
-    with_sqlite(this.db_path, (db) => {
+    with_sqlite_strict(this.db_path, (db) => {
       const stmt = db.prepare(`
         INSERT INTO agent_definitions
           (id, name, description, icon, role_skill, soul, heart,
