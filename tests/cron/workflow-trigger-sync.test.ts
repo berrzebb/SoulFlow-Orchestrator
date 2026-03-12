@@ -62,9 +62,9 @@ function make_bus(): MessageBusLike & MessageBusTap {
   } as unknown as MessageBusLike & MessageBusTap;
 }
 
-function make_webhook_store(): WebhookStore {
+function make_webhook_store(data: unknown = null): WebhookStore {
   return {
-    get: vi.fn().mockResolvedValue(null),
+    get: vi.fn().mockResolvedValue(data),
     set: vi.fn(),
     delete: vi.fn(),
     list: vi.fn().mockResolvedValue([]),
@@ -363,5 +363,241 @@ describe("sync_all_workflow_triggers — 빈 템플릿", () => {
     expect(result.webhook.registered).toBe(0);
     expect(result.channel_message.registered).toBe(0);
     expect(result.kanban_event.registered).toBe(0);
+  });
+});
+
+// ══════════════════════════════════════════
+// extract_triggers — edge case (from cov2)
+// ══════════════════════════════════════════
+
+describe("extract_triggers — trigger 없는 템플릿", () => {
+  it("trigger_nodes 없고 trigger.type이 cron이 아닌 경우 → cron 미등록", async () => {
+    const cron = make_cron();
+    const deps = make_deps({ cron });
+    const template: TemplateWithSlug = {
+      slug: "manual-only",
+      trigger_nodes: [],
+      trigger: { type: "manual" },
+    } as unknown as TemplateWithSlug;
+
+    const result = await sync_all_workflow_triggers([template], deps);
+    expect(vi.mocked(cron.add_job)).not.toHaveBeenCalled();
+    expect(result.cron.added).toBe(0);
+  });
+
+  it("trigger_nodes 없고 trigger 자체 없는 경우 → 등록 없음", async () => {
+    const cron = make_cron();
+    const deps = make_deps({ cron });
+    const template: TemplateWithSlug = {
+      slug: "no-trigger",
+    } as unknown as TemplateWithSlug;
+
+    const result = await sync_all_workflow_triggers([template], deps);
+    expect(result.cron.added).toBe(0);
+    expect(result.webhook.registered).toBe(0);
+  });
+});
+
+// ══════════════════════════════════════════
+// webhook polling — data 존재 시 execute 호출 (from cov2)
+// ══════════════════════════════════════════
+
+describe("sync_all_workflow_triggers — webhook polling 실행 경로", () => {
+  it("webhook_path 없는 webhook trigger → 폴링 미등록 (registered=0)", async () => {
+    const deps = make_deps();
+    const template: TemplateWithSlug = {
+      slug: "webhook-no-path",
+      trigger_nodes: [{ id: "t1", trigger_type: "webhook" }],
+    } as unknown as TemplateWithSlug;
+
+    const result = await sync_all_workflow_triggers([template], deps);
+    expect(result.webhook.registered).toBe(0);
+  });
+});
+
+// ══════════════════════════════════════════
+// channel_message — 필터 없음 케이스 (from cov2)
+// ══════════════════════════════════════════
+
+describe("sync_all_workflow_triggers — channel_message 필터 없음", () => {
+  it("want_channel 없음 → 모든 채널에서 execute 호출", async () => {
+    let captured_cb: ((dir: string, msg: any) => void) | undefined;
+    const bus = make_bus();
+    vi.mocked(bus.on_publish).mockImplementation((cb: any) => { captured_cb = cb; });
+    const execute = make_execute();
+    const deps = make_deps({ bus, execute });
+
+    await sync_all_workflow_triggers([{
+      slug: "any-channel",
+      trigger_nodes: [{ id: "t1", trigger_type: "channel_message" }],
+    } as unknown as TemplateWithSlug], deps);
+
+    captured_cb!("inbound", { channel: "telegram", chat_id: "T001", provider: "telegram" });
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(vi.mocked(execute)).toHaveBeenCalledWith("any-channel", "telegram", "T001", expect.any(Object));
+  });
+
+  it("want_chat 없음 → 모든 chat_id에서 execute 호출", async () => {
+    let captured_cb: ((dir: string, msg: any) => void) | undefined;
+    const bus = make_bus();
+    vi.mocked(bus.on_publish).mockImplementation((cb: any) => { captured_cb = cb; });
+    const execute = make_execute();
+    const deps = make_deps({ bus, execute });
+
+    await sync_all_workflow_triggers([{
+      slug: "any-chat",
+      trigger_nodes: [{ id: "t1", trigger_type: "channel_message", channel_type: "slack" }],
+    } as unknown as TemplateWithSlug], deps);
+
+    captured_cb!("inbound", { channel: "slack", chat_id: "ANY-CHAT", provider: "slack" });
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(vi.mocked(execute)).toHaveBeenCalled();
+  });
+
+  it("channel_message execute 실패 → 에러 격리 (예외 미전파)", async () => {
+    let captured_cb: ((dir: string, msg: any) => void) | undefined;
+    const bus = make_bus();
+    vi.mocked(bus.on_publish).mockImplementation((cb: any) => { captured_cb = cb; });
+    const execute: WorkflowExecuteFn = vi.fn().mockRejectedValue(new Error("execute failed"));
+    const deps = make_deps({ bus, execute });
+
+    await sync_all_workflow_triggers([{
+      slug: "fail-handler",
+      trigger_nodes: [{ id: "t1", trigger_type: "channel_message" }],
+    } as unknown as TemplateWithSlug], deps);
+
+    expect(() => {
+      captured_cb!("inbound", { channel: "slack", chat_id: "C001", provider: "slack" });
+    }).not.toThrow();
+
+    await new Promise((r) => setTimeout(r, 10));
+    expect(vi.mocked(execute)).toHaveBeenCalled();
+  });
+
+  it("chat_id 불일치 → execute 미호출", async () => {
+    let captured_cb: ((dir: string, msg: any) => void) | undefined;
+    const bus = make_bus();
+    vi.mocked(bus.on_publish).mockImplementation((cb: any) => { captured_cb = cb; });
+    const execute = make_execute();
+    const deps = make_deps({ bus, execute });
+
+    await sync_all_workflow_triggers([{
+      slug: "specific-chat",
+      trigger_nodes: [{ id: "t1", trigger_type: "channel_message", channel_type: "slack", chat_id: "C999" }],
+    } as unknown as TemplateWithSlug], deps);
+
+    captured_cb!("inbound", { channel: "slack", chat_id: "C001", provider: "slack" });
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(vi.mocked(execute)).not.toHaveBeenCalled();
+  });
+});
+
+// ══════════════════════════════════════════
+// kanban — column_id 필터 (from cov2)
+// ══════════════════════════════════════════
+
+describe("sync_all_workflow_triggers — kanban column_id 필터", () => {
+  it("column_id 일치 → execute 호출", async () => {
+    let captured_listener: ((event: any) => void) | undefined;
+    const kanban_store: Partial<KanbanStoreLike> = {
+      subscribe: vi.fn((_, listener) => { captured_listener = listener; }),
+      unsubscribe: vi.fn(),
+    };
+    const execute = make_execute();
+    const deps = make_deps({ kanban_store: kanban_store as KanbanStoreLike, execute });
+
+    await sync_all_workflow_triggers([{
+      slug: "col-handler",
+      trigger_nodes: [{
+        id: "t1",
+        trigger_type: "kanban_event",
+        kanban_board_id: "board-1",
+        kanban_column_id: "col-A",
+      }],
+    } as unknown as TemplateWithSlug], deps);
+
+    captured_listener!({
+      board_id: "board-1",
+      data: { action: "moved", card_id: "card-1", detail: { column_id: "col-A" } },
+    });
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(vi.mocked(execute)).toHaveBeenCalled();
+  });
+
+  it("column_id 불일치 → execute 미호출", async () => {
+    let captured_listener: ((event: any) => void) | undefined;
+    const kanban_store: Partial<KanbanStoreLike> = {
+      subscribe: vi.fn((_, listener) => { captured_listener = listener; }),
+      unsubscribe: vi.fn(),
+    };
+    const execute = make_execute();
+    const deps = make_deps({ kanban_store: kanban_store as KanbanStoreLike, execute });
+
+    await sync_all_workflow_triggers([{
+      slug: "col-handler",
+      trigger_nodes: [{
+        id: "t1",
+        trigger_type: "kanban_event",
+        kanban_board_id: "board-1",
+        kanban_column_id: "col-B",
+      }],
+    } as unknown as TemplateWithSlug], deps);
+
+    captured_listener!({
+      board_id: "board-1",
+      data: { action: "moved", card_id: "card-1", detail: { column_id: "col-A" } },
+    });
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(vi.mocked(execute)).not.toHaveBeenCalled();
+  });
+
+  it("kanban execute 실패 → 에러 격리", async () => {
+    let captured_listener: ((event: any) => void) | undefined;
+    const kanban_store: Partial<KanbanStoreLike> = {
+      subscribe: vi.fn((_, listener) => { captured_listener = listener; }),
+      unsubscribe: vi.fn(),
+    };
+    const execute: WorkflowExecuteFn = vi.fn().mockRejectedValue(new Error("kanban exec failed"));
+    const deps = make_deps({ kanban_store: kanban_store as KanbanStoreLike, execute });
+
+    await sync_all_workflow_triggers([{
+      slug: "kb-fail",
+      trigger_nodes: [{ id: "t1", trigger_type: "kanban_event", kanban_board_id: "board-1" }],
+    } as unknown as TemplateWithSlug], deps);
+
+    expect(() => {
+      captured_listener!({ board_id: "board-1", data: { action: "moved", card_id: "c1", detail: {} } });
+    }).not.toThrow();
+    await new Promise((r) => setTimeout(r, 10));
+    expect(vi.mocked(execute)).toHaveBeenCalled();
+  });
+});
+
+// ══════════════════════════════════════════
+// 이전 kanban 구독 해제 — 재호출 시 (from cov2)
+// ══════════════════════════════════════════
+
+describe("sync_all_workflow_triggers — 재호출 시 이전 kanban 구독 해제", () => {
+  it("두 번 sync → 이전 unsubscribe 호출됨", async () => {
+    const unsubscribe = vi.fn();
+    const kanban_store: Partial<KanbanStoreLike> = {
+      subscribe: vi.fn(),
+      unsubscribe,
+    };
+    const deps = make_deps({ kanban_store: kanban_store as KanbanStoreLike });
+    const template: TemplateWithSlug = {
+      slug: "kb-handler",
+      trigger_nodes: [{ id: "t1", trigger_type: "kanban_event", kanban_board_id: "board-1" }],
+    } as unknown as TemplateWithSlug;
+
+    await sync_all_workflow_triggers([template], deps);
+    await sync_all_workflow_triggers([template], deps);
+
+    expect(unsubscribe).toHaveBeenCalled();
   });
 });
