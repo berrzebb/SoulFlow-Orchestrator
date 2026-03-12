@@ -13,12 +13,18 @@ const PRAGMAS = ["journal_mode=WAL"];
 const INIT_SQL = `
   PRAGMA journal_mode=WAL;
 
+  CREATE TABLE IF NOT EXISTS teams (
+    id         TEXT PRIMARY KEY,
+    name       TEXT NOT NULL UNIQUE,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
   CREATE TABLE IF NOT EXISTS users (
     id              TEXT PRIMARY KEY,
     username        TEXT NOT NULL UNIQUE,
     password_hash   TEXT NOT NULL,
     system_role     TEXT NOT NULL DEFAULT 'user',
-    default_team_id TEXT,
+    default_team_id TEXT REFERENCES teams(id),
     created_at      TEXT NOT NULL DEFAULT (datetime('now')),
     last_login_at   TEXT,
     disabled_at     TEXT
@@ -52,6 +58,12 @@ export interface UserRecord {
   disabled_at: string | null;
 }
 
+export interface TeamRecord {
+  id: string;
+  name: string;
+  created_at: string;
+}
+
 export interface SharedProviderRecord {
   id: string;
   name: string;
@@ -63,6 +75,8 @@ export interface SharedProviderRecord {
   created_at: string;
 }
 
+interface TeamRow { id: string; name: string; created_at: string; }
+
 interface UserRow {
   id: string; username: string; password_hash: string; system_role: string;
   default_team_id: string | null; created_at: string;
@@ -72,6 +86,10 @@ interface UserRow {
 interface SharedProviderRow {
   id: string; name: string; type: string; model: string;
   config_json: string; api_key_ref: string; enabled: number; created_at: string;
+}
+
+function row_to_team(r: TeamRow): TeamRecord {
+  return { id: r.id, name: r.name, created_at: r.created_at };
 }
 
 function row_to_user(r: UserRow): UserRecord {
@@ -183,6 +201,29 @@ export class AdminStore {
       const r = db.prepare("DELETE FROM users WHERE id = ?").run(id);
       return r.changes > 0;
     }, { pragmas: PRAGMAS });
+  }
+
+  // ── 팀 ──
+
+  list_teams(): TeamRecord[] {
+    return with_sqlite(this.db_path, (db) => {
+      return (db.prepare("SELECT * FROM teams ORDER BY created_at").all() as TeamRow[]).map(row_to_team);
+    }, { pragmas: PRAGMAS }) ?? [];
+  }
+
+  get_team(id: string): TeamRecord | null {
+    return with_sqlite(this.db_path, (db) => {
+      const row = db.prepare("SELECT * FROM teams WHERE id = ?").get(id) as TeamRow | undefined;
+      return row ? row_to_team(row) : null;
+    }, { pragmas: PRAGMAS }) ?? null;
+  }
+
+  ensure_team(id: string, name: string): TeamRecord {
+    with_sqlite_strict(this.db_path, (db) => {
+      db.prepare("INSERT INTO teams (id, name) VALUES (?, ?) ON CONFLICT(id) DO NOTHING").run(id, name);
+      return true;
+    }, { pragmas: PRAGMAS });
+    return this.get_team(id)!;
   }
 
   // ── 공유 프로바이더 ──

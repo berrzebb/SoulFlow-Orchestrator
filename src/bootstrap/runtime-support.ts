@@ -20,6 +20,8 @@ import { ServiceManager } from "../runtime/service-manager.js";
 
 export interface RuntimeSupportDeps {
   workspace: string;
+  /** 개인 콘텐츠 루트 (HEARTBEAT.md 등 사용자별 파일 위치). */
+  user_dir: string;
   app_config: AppConfig;
   provider_store: AgentProviderStore;
   agent: AgentDomain;
@@ -45,7 +47,7 @@ export interface RuntimeSupportResult {
 
 export function create_runtime_support(deps: RuntimeSupportDeps): RuntimeSupportResult {
   const {
-    workspace, app_config, provider_store,
+    workspace, user_dir, app_config, provider_store,
     agent, agent_runtime, bus, channel_manager,
     cron, decisions, providers, sessions, dlq_store,
     primary_provider, default_chat_id, logger,
@@ -67,7 +69,7 @@ export function create_runtime_support(deps: RuntimeSupportDeps): RuntimeSupport
 
   const services = new ServiceManager(logger.child("services"));
 
-  const heartbeat = new HeartbeatService(workspace, {
+  const heartbeat = new HeartbeatService(user_dir, {
     on_heartbeat: async (prompt) => {
       const result = await agent_runtime.spawn_and_wait({ task: prompt, max_turns: 5, timeout_ms: 60_000 });
       return String(result || "");

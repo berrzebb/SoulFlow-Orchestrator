@@ -23,6 +23,8 @@ import { create_query_db_service } from "../services/query-db.service.js";
 
 export interface RuntimeDataDeps {
   workspace: string;
+  /** 사용자 콘텐츠 루트 (WORKSPACE_USER_DIR). 미설정 시 workspace와 동일. */
+  user_dir: string;
   app_config: AppConfig;
   shared_vault: SecretVaultService;
   logger: ReturnType<typeof create_logger>;
@@ -47,9 +49,9 @@ export interface RuntimeDataResult {
 }
 
 export async function create_runtime_data(deps: RuntimeDataDeps): Promise<RuntimeDataResult> {
-  const { workspace, app_config, shared_vault } = deps;
+  const { workspace, user_dir, app_config, shared_vault } = deps;
 
-  const data_dir = resolve_from_workspace(workspace, app_config.dataDir, join(workspace, "runtime"));
+  const data_dir = resolve_from_workspace(user_dir, app_config.dataDir, join(user_dir, "runtime"));
   const decisions_dir = join(data_dir, "decisions");
   const events_dir = join(data_dir, "events");
   const sessions_dir = join(data_dir, "sessions");

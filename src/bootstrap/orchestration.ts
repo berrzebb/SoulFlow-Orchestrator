@@ -37,6 +37,7 @@ import { HookRunner, load_hooks_from_file } from "../hooks/index.js";
 
 export interface OrchestrationBundleDeps {
   workspace: string;
+  user_dir: string;
   data_dir: string;
   app_config: AppConfig;
   providers: ProviderRegistry;
@@ -108,7 +109,7 @@ export function make_wait_kanban_event(store: KanbanStoreLike) {
 
 export async function create_orchestration_bundle(deps: OrchestrationBundleDeps): Promise<OrchestrationBundleResult> {
   const {
-    workspace, data_dir, app_config,
+    workspace, user_dir, data_dir, app_config,
     providers, agent, agent_runtime, agent_backend_registry, provider_caps,
     bus, events, decisions, process_tracker, mcp,
     phase_workflow_store, broadcaster, confirmation_guard,
@@ -220,6 +221,7 @@ export async function create_orchestration_bundle(deps: OrchestrationBundleDeps)
     get_mcp_configs: () => mcp.get_server_configs(),
     events,
     workspace,
+    user_dir,
     subagents: agent.subagents,
     phase_workflow_store,
     get_sse_broadcaster: () => broadcaster,
@@ -261,7 +263,7 @@ export async function create_orchestration_bundle(deps: OrchestrationBundleDeps)
     on_workflow_trigger: async (slug, channel, chat_id) => {
       try {
         const { load_workflow_template, substitute_variables } = await import("../orchestration/workflow-loader.js");
-        const template = load_workflow_template(workspace, slug);
+        const template = load_workflow_template(user_dir, slug);
         if (!template) return { ok: false, error: `template not found: ${slug}` };
         const substituted = substitute_variables(template, { ...template.variables, channel });
         const run_id = make_run_id("wf-cron");

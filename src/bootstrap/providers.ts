@@ -29,6 +29,8 @@ export interface ProviderBundle {
 
 export interface ProviderBundleDeps {
   workspace: string;
+  /** 개인 콘텐츠 루트. user_dir/.agents/{.claude,.codex,.gemini} = CLI 인증 경로. */
+  user_dir: string;
   data_dir: string;
   app_config: AppConfig;
   shared_vault: SecretVaultService;
@@ -37,7 +39,7 @@ export interface ProviderBundleDeps {
 }
 
 export async function create_provider_bundle(deps: ProviderBundleDeps): Promise<ProviderBundle> {
-  const { workspace, data_dir, app_config, shared_vault, provider_store, logger } = deps;
+  const { workspace, user_dir, data_dir, app_config, shared_vault, provider_store, logger } = deps;
 
   // vault에서 API 키 읽기
   const openrouter_config = provider_store.get("openrouter");
@@ -113,13 +115,16 @@ export async function create_provider_bundle(deps: ProviderBundleDeps): Promise<
   });
 
   // CLI 인증 서비스: container_cli 백엔드의 OAuth 상태 관리
-  const cli_auth = new CliAuthService({ logger: logger.child("cli-auth") });
+  const cli_auth = new CliAuthService({
+    logger: logger.child("cli-auth"),
+    agents_home: join(user_dir, ".agents"),
+  });
 
   // MCP 클라이언트: CLI 백엔드의 ToolBridge에서 오케스트레이터 도구 중계에 사용
   const mcp = new McpClientManager({ logger: logger.child("mcp") });
 
   // 팩토리 기반 백엔드 생성
-  const factory_deps = { provider_registry: providers, workspace, cli_auth_service: cli_auth, mcp };
+  const factory_deps = { provider_registry: providers, workspace, agents_home: join(user_dir, ".agents"), cli_auth_service: cli_auth, mcp };
   const agent_backends: AgentBackend[] = [];
   for (const config of provider_store.list()) {
     if (!config.enabled) continue;

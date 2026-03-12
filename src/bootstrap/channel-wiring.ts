@@ -34,6 +34,8 @@ import { TaskResumeService } from "../channels/task-resume.service.js";
 
 export interface ChannelWiringDeps {
   workspace: string;
+  /** 개인 콘텐츠 루트 (미디어 파일 경로 기준). */
+  user_dir: string;
   app_config: AppConfig;
   agent: AgentDomain;
   agent_runtime: ReturnType<typeof create_agent_runtime>;
@@ -70,7 +72,7 @@ export interface ChannelWiringResult {
 
 export function create_channel_wiring(deps: ChannelWiringDeps): ChannelWiringResult {
   const {
-    workspace, app_config, agent, agent_runtime, agent_backend_registry,
+    workspace, user_dir, app_config, agent, agent_runtime, agent_backend_registry,
     bus, broadcaster, channels, instance_store,
     dispatch, session_recorder, media_collector, approval,
     active_run_controller, render_profile_store,
@@ -121,7 +123,7 @@ export function create_channel_wiring(deps: ChannelWiringDeps): ChannelWiringRes
     process_tracker,
     providers,
     config: app_config.channel,
-    workspace_dir: workspace,
+    workspace_dir: user_dir,
     logger: app_config.channel.debug ? create_logger("channels", "debug") : logger.child("channels"),
     bot_identity,
     on_agent_event: (event) => broadcaster.broadcast_agent_event(event),

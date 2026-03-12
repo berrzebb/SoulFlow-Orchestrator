@@ -79,12 +79,17 @@ const admin_db = new Database(admin_db_path);
 admin_db.pragma("journal_mode = WAL");
 
 admin_db.exec(`
+  CREATE TABLE IF NOT EXISTS teams (
+    id         TEXT PRIMARY KEY,
+    name       TEXT NOT NULL UNIQUE,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+  );
   CREATE TABLE IF NOT EXISTS users (
     id           TEXT PRIMARY KEY,
     username     TEXT NOT NULL UNIQUE,
     password_hash TEXT NOT NULL,
     system_role  TEXT NOT NULL DEFAULT 'user',
-    default_team_id TEXT,
+    default_team_id TEXT REFERENCES teams(id),
     last_login_at TEXT,
     disabled_at  TEXT,
     created_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
@@ -116,17 +121,31 @@ if (is_initialized) {
   const jwt_secret = randomBytes(48).toString("base64url");
   admin_db.prepare(`INSERT OR REPLACE INTO settings (key, value) VALUES ('jwt_secret', ?)`).run(jwt_secret);
 
+  // default 팀 생성
+  const default_team_id = "default";
+  admin_db.prepare(`INSERT INTO teams (id, name) VALUES (?, ?) ON CONFLICT(id) DO NOTHING`)
+    .run(default_team_id, "Default");
+
   const admin_user_id = randomUUID();
   const password_hash = hash_password(admin_password);
+  const user_workspace_dir = `tenants/${default_team_id}/users/${admin_user_id}`;
 
   admin_db.prepare(`
-    INSERT INTO users (id, username, password_hash, system_role)
-    VALUES (?, ?, ?, 'superadmin')
-  `).run(admin_user_id, admin_user, password_hash);
+    INSERT INTO users (id, username, password_hash, system_role, default_team_id)
+    VALUES (?, ?, ?, 'superadmin', ?)
+  `).run(admin_user_id, admin_user, password_hash, default_team_id);
+
+  // 사용자 workspace 디렉토리 생성
+  const user_workspace_path = join(workspace_root, user_workspace_dir);
+  for (const sub of ["workflows", "skills", "templates", "runtime"]) {
+    mkdirSync(join(user_workspace_path, sub), { recursive: true });
+  }
 
   console.log(`\nsuperadmin 생성 완료`);
-  console.log(`  user_id : ${admin_user_id}`);
-  console.log(`  username: ${admin_user}`);
+  console.log(`  user_id       : ${admin_user_id}`);
+  console.log(`  username      : ${admin_user}`);
+  console.log(`  team_id       : ${default_team_id}`);
+  console.log(`  workspace_dir : ${user_workspace_dir}`);
 }
 
 admin_db.close();

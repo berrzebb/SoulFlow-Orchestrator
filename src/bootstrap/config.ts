@@ -13,11 +13,12 @@ export interface ConfigBundle {
   app_config: AppConfig;
 }
 
-export async function create_config_bundle(workspace: string): Promise<ConfigBundle> {
-  set_default_vault_workspace(workspace);
+export async function create_config_bundle(workspace: string, user_dir?: string): Promise<ConfigBundle> {
+  const runtime_root = user_dir ?? workspace;
+  set_default_vault_workspace(runtime_root);
 
-  const bootstrap_data_dir = join(workspace, "runtime");
-  const shared_vault = get_shared_secret_vault(workspace);
+  const bootstrap_data_dir = join(runtime_root, "runtime");
+  const shared_vault = get_shared_secret_vault(runtime_root);
   const config_store = new ConfigStore(join(bootstrap_data_dir, "config", "config.db"), shared_vault);
   const app_config = await load_config_merged(config_store);
 

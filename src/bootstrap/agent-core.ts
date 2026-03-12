@@ -38,6 +38,8 @@ export type EmbedServiceFn = (
 
 export interface AgentCoreDeps {
   workspace: string;
+  /** 사용자 콘텐츠 루트 (workflows, skills, templates). WORKSPACE_USER_DIR 미설정 시 workspace와 동일. */
+  user_dir: string;
   data_dir: string;
   sessions_dir: string;
   app_root: string;
@@ -85,16 +87,16 @@ function build_hitl_fallback_body(task: TaskState): string {
 
 export async function create_agent_core(deps: AgentCoreDeps): Promise<AgentCoreResult> {
   const {
-    workspace, data_dir, sessions_dir, app_root, app_config,
+    workspace, user_dir, data_dir, sessions_dir, app_root, app_config,
     providers, bus, events, agent_backend_registry, provider_caps,
     embed_service, embed_worker_config, image_embed_service, oauth_store, broadcaster, logger,
   } = deps;
 
-  const tone_pref_store = new TonePreferenceStore(join(workspace, "runtime", "tone-preferences.json"));
+  const tone_pref_store = new TonePreferenceStore(join(data_dir, "tone-preferences.json"));
   const persona_renderer = new PersonaMessageRenderer({
     get_persona_name: () => {
       try {
-        for (const p of [join(workspace, "templates", "SOUL.md"), join(workspace, "SOUL.md")]) {
+        for (const p of [join(user_dir, "templates", "SOUL.md"), join(user_dir, "SOUL.md")]) {
           if (existsSync(p)) { const r = readFileSync(p, "utf-8").trim(); if (r) return extract_persona_name(r); }
         }
       } catch { /* no soul */ }
@@ -102,7 +104,7 @@ export async function create_agent_core(deps: AgentCoreDeps): Promise<AgentCoreR
     },
     get_heart: () => {
       try {
-        for (const p of [join(workspace, "templates", "HEART.md"), join(workspace, "HEART.md")]) {
+        for (const p of [join(user_dir, "templates", "HEART.md"), join(user_dir, "HEART.md")]) {
           if (existsSync(p)) { const r = readFileSync(p, "utf-8").trim(); if (r) return r; }
         }
       } catch { /* no heart */ }
@@ -111,7 +113,7 @@ export async function create_agent_core(deps: AgentCoreDeps): Promise<AgentCoreR
     get_tone_preference: (chat_key) => tone_pref_store.get(chat_key),
   });
 
-  const agent = new AgentDomain(workspace, {
+  const agent = new AgentDomain(user_dir, {
     providers, bus, data_dir, events, agent_backends: agent_backend_registry,
     secret_vault: providers.get_secret_vault(), logger: logger.child("agent"),
     provider_caps, app_root,
@@ -157,8 +159,8 @@ export async function create_agent_core(deps: AgentCoreDeps): Promise<AgentCoreR
     return results;
   });
 
-  const phase_workflow_store = new PhaseWorkflowStore(join(workspace, "runtime", "workflows"));
-  const kanban_store = new KanbanStore(join(workspace, "runtime"));
+  const phase_workflow_store = new PhaseWorkflowStore(join(data_dir, "workflows"));
+  const kanban_store = new KanbanStore(data_dir);
   const kanban_tool = new KanbanTool(kanban_store);
   const kanban_automation = new KanbanAutomationRuntime();
   const agent_inspector = create_agent_inspector(agent);
@@ -175,15 +177,15 @@ export async function create_agent_core(deps: AgentCoreDeps): Promise<AgentCoreR
   agent.context.set_daily_injection(app_config.memory.dailyInjectionDays, app_config.memory.dailyInjectionMaxChars);
   agent.context.set_longterm_injection(app_config.memory.longtermInjectionMaxChars);
 
-  const reference_store = new ReferenceStore(workspace);
+  const reference_store = new ReferenceStore(user_dir);
   if (embed_service) reference_store.set_embed(embed_service);
   if (image_embed_service) reference_store.set_image_embed(image_embed_service);
   agent.context.set_reference_store(reference_store);
 
-  // 스킬 레퍼런스 RAG: src/skills, workspace/skills 하위 references/*.md 인덱싱
+  // 스킬 레퍼런스 RAG: src/skills, user_dir/skills 하위 references/*.md 인덱싱
   const skill_ref_store = new SkillRefStore(
-    [join(app_root, "src", "skills"), join(workspace, "skills")],
-    join(workspace, "runtime", "references"),
+    [join(app_root, "src", "skills"), join(user_dir, "skills")],
+    join(data_dir, "references"),
   );
   if (embed_service) skill_ref_store.set_embed(embed_service);
   agent.context.set_skill_ref_store(skill_ref_store);

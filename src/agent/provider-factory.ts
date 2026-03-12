@@ -25,6 +25,8 @@ import type { CliAdapter, PtyFactory } from "./pty/types.js";
 export type AgentProviderFactoryDeps = {
   provider_registry: ProviderRegistry;
   workspace: string;
+  /** CLI 인증 홈 디렉토리 (user_dir/.agents). 미설정 시 process.env.HOME 사용. */
+  agents_home?: string;
   cli_auth_service?: CliAuthService;
   mcp?: McpClientManager;
 };
@@ -71,6 +73,7 @@ function create_cli_backend(
   const s = config.settings;
   const logger = create_logger(`pty:${config.instance_id}`);
   const default_env: Record<string, string> = {};
+  if (deps.agents_home) default_env.HOME = deps.agents_home;
   if (typeof s.env === "object" && s.env !== null) {
     for (const [k, v] of Object.entries(s.env as Record<string, unknown>)) {
       if (typeof v === "string") default_env[k] = v;

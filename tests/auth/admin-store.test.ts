@@ -57,6 +57,7 @@ describe("AdminStore — users CRUD", () => {
 
   it("default_team_id 지정 저장", () => {
     const s = make_store();
+    s.ensure_team("team-1", "Team 1");
     const u = s.create_user({ username: "bob", password_hash: "h", system_role: "user", default_team_id: "team-1" });
     expect(s.get_user_by_id(u.id)?.default_team_id).toBe("team-1");
   });

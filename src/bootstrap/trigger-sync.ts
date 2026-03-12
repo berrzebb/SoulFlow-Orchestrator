@@ -12,6 +12,7 @@ import { sync_all_workflow_triggers } from "../cron/workflow-trigger-sync.js";
 
 export interface TriggerSyncDeps {
   workspace: string;
+  user_dir: string;
   app_config: AppConfig;
   bus: MessageBusRuntime;
   orchestration: OrchestrationService;
@@ -25,7 +26,7 @@ export interface TriggerSyncDeps {
 
 export async function run_trigger_sync(deps: TriggerSyncDeps): Promise<void> {
   const {
-    workspace, app_config, bus, orchestration, cron,
+    workspace, user_dir, app_config, bus, orchestration, cron,
     webhook_store, kanban_store,
     primary_provider, default_chat_id, logger,
   } = deps;
@@ -38,7 +39,7 @@ export async function run_trigger_sync(deps: TriggerSyncDeps): Promise<void> {
     execute: async (slug: string, channel: string, chat_id: string, trigger_data?: Record<string, unknown>) => {
       try {
         const { load_workflow_template, substitute_variables } = await import("../orchestration/workflow-loader.js");
-        const template = load_workflow_template(workspace, slug);
+        const template = load_workflow_template(user_dir, slug);
         if (!template) return { ok: false, error: `template not found: ${slug}` };
         const substituted = substitute_variables(template, { ...template.variables, channel });
         const run_id = make_run_id("wf-trigger");
@@ -64,7 +65,7 @@ export async function run_trigger_sync(deps: TriggerSyncDeps): Promise<void> {
 
   try {
     const { load_workflow_templates } = await import("../orchestration/workflow-loader.js");
-    const templates = load_workflow_templates(workspace);
+    const templates = load_workflow_templates(user_dir);
     const sync_result = await sync_all_workflow_triggers(templates, trigger_sync_deps);
     const total = sync_result.cron.added + sync_result.webhook.registered + sync_result.channel_message.registered + sync_result.kanban_event.registered;
     if (total > 0) logger.info(`workflow triggers synced: cron=${sync_result.cron.added} webhook=${sync_result.webhook.registered} channel=${sync_result.channel_message.registered} kanban=${sync_result.kanban_event.registered}`);

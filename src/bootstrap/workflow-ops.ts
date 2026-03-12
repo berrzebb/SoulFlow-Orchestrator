@@ -26,6 +26,7 @@ import { make_wait_kanban_event } from "./orchestration.js";
 
 export interface WorkflowOpsBundleDeps {
   workspace: string;
+  user_dir: string;
   agent: AgentDomain;
   agent_runtime: ReturnType<typeof create_agent_runtime>;
   bus: MessageBusRuntime;
@@ -62,7 +63,7 @@ export interface WorkflowOpsBundleResult {
 
 export async function create_workflow_ops_bundle(deps: WorkflowOpsBundleDeps): Promise<WorkflowOpsBundleResult> {
   const {
-    workspace, agent, bus, providers, provider_store, decisions,
+    workspace, user_dir, agent, bus, providers, provider_store, decisions,
     phase_workflow_store, kanban_store, kanban_tool, kanban_automation,
     hitl_pending_store, persona_renderer, broadcaster, channel_manager,
     embed_service, vector_store_service, webhook_store, query_db_service,
@@ -71,7 +72,7 @@ export async function create_workflow_ops_bundle(deps: WorkflowOpsBundleDeps): P
 
   const workflow_ops = create_workflow_ops({
     hitl_pending_store, renderer: persona_renderer,
-    store: phase_workflow_store, subagents: agent.subagents, workspace, logger, bus,
+    store: phase_workflow_store, subagents: agent.subagents, workspace: user_dir, logger, bus,
     skills_loader: agent.context.skills_loader, tool_index, cron, on_template_changed,
     kanban_store,
     on_workflow_event: (e) => broadcaster.broadcast_workflow_event(e),

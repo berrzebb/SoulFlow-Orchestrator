@@ -25,7 +25,7 @@ function parse_yaml(text: string): unknown {
 /** 템플릿 + 파일명 slug + 별칭. */
 export type TemplateWithSlug = WorkflowDefinition & { slug: string; aliases?: string[] };
 
-/** workspace/workflows/ 디렉토리에서 모든 .yaml/.yml 파일을 로드. */
+/** user_dir/workflows/ 디렉토리에서 모든 .yaml/.yml 파일을 로드. */
 export function load_workflow_templates(workspace: string): TemplateWithSlug[] {
   const dir = join(workspace, "workflows");
   if (!existsSync(dir)) return [];
@@ -140,6 +140,32 @@ export function delete_workflow_template(workspace: string, name: string): boole
     if (existsSync(path)) { unlinkSync(path); return true; }
   }
   return false;
+}
+
+/**
+ * 다중 레이어에서 워크플로우를 병합 로드.
+ * dirs 순서: [global, team, personal] — 뒤쪽이 앞쪽을 slug 기준으로 override.
+ */
+export function load_workflow_templates_layered(dirs: string[]): TemplateWithSlug[] {
+  const by_slug = new Map<string, TemplateWithSlug>();
+  for (const dir of dirs) {
+    for (const tpl of load_workflow_templates(dir)) {
+      by_slug.set(tpl.slug, tpl); // 뒤에 오는 레이어(personal)가 우선
+    }
+  }
+  return [...by_slug.values()];
+}
+
+/**
+ * 다중 레이어에서 단일 템플릿 로드.
+ * 높은 우선순위(personal) 레이어부터 검색.
+ */
+export function load_workflow_template_layered(dirs: string[], name: string): WorkflowDefinition | null {
+  for (const dir of [...dirs].reverse()) {
+    const result = load_workflow_template(dir, name);
+    if (result) return result;
+  }
+  return null;
 }
 
 /** YAML 텍스트를 파싱하여 WorkflowDefinition으로 변환. */

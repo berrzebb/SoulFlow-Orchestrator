@@ -88,6 +88,8 @@ export type OrchestrationServiceDeps = {
   events?: WorkflowEventService | null;
   /** Phase Loop에서 사용할 workspace 경로. */
   workspace?: string;
+  /** 워크플로우/스킬 템플릿 로드에 사용할 사용자 콘텐츠 경로. 미설정 시 workspace 사용. */
+  user_dir?: string;
   /** Phase Loop에서 사용할 SubagentRegistry. */
   subagents?: import("../agent/subagents.js").SubagentRegistry | null;
   /** Phase Loop 영속화 스토어. */
@@ -316,6 +318,7 @@ export class OrchestrationService {
       logger: this.logger,
       process_tracker: this.process_tracker,
       workspace: this.deps.workspace || "",
+      user_dir: this.deps.user_dir ?? this.deps.workspace ?? "",
       subagents: this.deps.subagents || null,
       phase_workflow_store: this.deps.phase_workflow_store || null,
       bus: this.deps.bus ?? null,

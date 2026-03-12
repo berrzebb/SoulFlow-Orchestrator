@@ -5,9 +5,13 @@ import type { DashboardWorkflowOps } from "../service.js";
 import { set_no_cache } from "../route-context.js";
 import { renderMermaid, renderMermaidAscii } from "@vercel/beautiful-mermaid";
 import { error_message } from "../../utils/common.js";
+import {
+  load_workflow_templates_layered, load_workflow_template_layered,
+  save_workflow_template, delete_workflow_template,
+} from "../../orchestration/workflow-loader.js";
 
 export const handle_workflow: RouteHandler = async (ctx) => {
-  const { req, res, url, json, read_body, options } = ctx;
+  const { req, res, url, json, read_body, options, workspace_layers, personal_dir } = ctx;
   const ops: DashboardWorkflowOps | null = options.workflow_ops ?? null;
   if (!ops) { json(res, 501, { error: "workflow_ops_not_configured" }); return true; }
 
@@ -104,16 +108,16 @@ export const handle_workflow: RouteHandler = async (ctx) => {
     return true;
   }
 
-  // ── Templates ──
+  // ── Templates (3-tier workspace_layers 기반) ──
 
   // GET /api/workflow/templates
   if (path === "/api/workflow/templates" && method === "GET") {
-    const templates = ops.list_templates();
+    const templates = load_workflow_templates_layered(workspace_layers);
     json(res, 200, templates);
     return true;
   }
 
-  // POST /api/workflow/templates — YAML 텍스트 import
+  // POST /api/workflow/templates — YAML 텍스트 import (개인 workspace에 저장)
   if (path === "/api/workflow/templates" && method === "POST") {
     const body = await read_body(req);
     if (!body?.yaml || typeof body.yaml !== "string") { json(res, 400, { error: "yaml_required" }); return true; }
@@ -127,26 +131,26 @@ export const handle_workflow: RouteHandler = async (ctx) => {
   if (tpl_match) {
     const name = decodeURIComponent(tpl_match[1]);
 
-    // GET — 단일 조회
+    // GET — 높은 우선순위(personal)부터 검색
     if (method === "GET") {
-      const tpl = ops.get_template(name);
+      const tpl = load_workflow_template_layered(workspace_layers, name);
       if (!tpl) { json(res, 404, { error: "template_not_found" }); return true; }
       json(res, 200, tpl);
       return true;
     }
 
-    // PUT — 생성/수정
+    // PUT — 항상 개인 workspace에 저장
     if (method === "PUT") {
       const body = await read_body(req);
       if (!body) { json(res, 400, { error: "invalid_body" }); return true; }
-      const slug = ops.save_template(name, body as unknown as import("../../agent/phase-loop.types.js").WorkflowDefinition);
+      const slug = save_workflow_template(personal_dir, name, body as unknown as import("../../agent/phase-loop.types.js").WorkflowDefinition);
       json(res, 200, { ok: true, name: slug });
       return true;
     }
 
-    // DELETE — 삭제
+    // DELETE — 개인 workspace에서만 삭제 (공유 워크플로우 보호)
     if (method === "DELETE") {
-      const ok = ops.delete_template(name);
+      const ok = delete_workflow_template(personal_dir, name);
       json(res, ok ? 200 : 404, { ok });
       return true;
     }

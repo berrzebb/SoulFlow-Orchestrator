@@ -20,14 +20,18 @@ export interface CliAuthStatus {
 
 export interface CliAuthServiceOptions {
   logger: Logger;
+  /** CLI 인증 파일 홈 디렉토리. user_dir/.agents 에 .claude/.codex/.gemini 존재. */
+  agents_home?: string;
 }
 
 export class CliAuthService {
   private readonly logger: Logger;
+  private readonly agents_home: string;
   private readonly status_cache = new Map<CliType, CliAuthStatus>();
 
   constructor(opts: CliAuthServiceOptions) {
     this.logger = opts.logger;
+    this.agents_home = opts.agents_home || process.env.HOME || "/root";
   }
 
   /** CLI 인증 상태 확인. CLI별 전용 로직 분기. */
@@ -63,7 +67,8 @@ export class CliAuthService {
   /** `claude auth status` → JSON 출력 파싱. */
   private check_claude(): Promise<CliAuthStatus> {
     return new Promise<CliAuthStatus>((resolve) => {
-      execFile("claude", ["auth", "status"], { timeout: 10_000 }, (error, stdout, stderr) => {
+      const env = { ...process.env, HOME: this.agents_home };
+      execFile("claude", ["auth", "status"], { timeout: 10_000, env }, (error, stdout, stderr) => {
         const output = (stdout || stderr || "").trim();
 
         // JSON 파싱 시도: {"loggedIn":true,"authMethod":"oauth","apiProvider":"..."}
@@ -95,8 +100,7 @@ export class CliAuthService {
 
   /** Codex는 auth status 명령이 없음. ~/.codex/ 디렉토리 내 인증 파일 존재 확인. */
   private check_codex(): CliAuthStatus {
-    const home = process.env.HOME || "/root";
-    const codex_dir = join(home, ".codex");
+    const codex_dir = join(this.agents_home, ".codex");
 
     if (!existsSync(codex_dir)) {
       return { cli: "codex", authenticated: false, error: "~/.codex/ not found" };
@@ -132,8 +136,7 @@ export class CliAuthService {
       return { cli: "gemini", authenticated: true, account: "GEMINI_API_KEY" };
     }
 
-    const home = process.env.HOME || "/root";
-    const gemini_dir = join(home, ".gemini");
+    const gemini_dir = join(this.agents_home, ".gemini");
 
     if (!existsSync(gemini_dir)) {
       return { cli: "gemini", authenticated: false, error: "~/.gemini/ not found" };

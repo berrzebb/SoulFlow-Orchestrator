@@ -8,7 +8,6 @@ import type { MutableBroadcaster } from "../dashboard/broadcaster.js";
 import type { AgentDomain } from "../agent/index.js";
 import type { create_agent_runtime } from "../agent/runtime.service.js";
 import type { SessionStore } from "../session/index.js";
-import { resolve_from_workspace } from "./runtime-paths.js";
 import {
   ChannelInstanceStore,
   SqliteDispatchDlqStore,
@@ -31,6 +30,8 @@ import { create_logger } from "../logger.js";
 
 export interface ChannelBundleDeps {
   workspace: string;
+  /** 개인 콘텐츠 루트 (미디어 다운로드, 채널 workspace_dir). */
+  user_dir: string;
   data_dir: string;
   app_config: AppConfig;
   shared_vault: SecretVaultService;
@@ -61,12 +62,12 @@ export interface ChannelBundleResult {
 
 export async function create_channel_bundle(deps: ChannelBundleDeps): Promise<ChannelBundleResult> {
   const {
-    workspace, data_dir, app_config, shared_vault,
+    workspace, user_dir, data_dir, app_config, shared_vault,
     bus, broadcaster, agent, agent_runtime, sessions, logger,
   } = deps;
 
   const instance_store = new ChannelInstanceStore(join(data_dir, "channels", "instances.db"), shared_vault);
-  const channels = await create_channels_from_store(instance_store, workspace);
+  const channels = await create_channels_from_store(instance_store, user_dir);
 
   // 기본 채널 타겟 해석
   const primary_channel = instance_store.list().find((c) => c.enabled);
@@ -80,7 +81,7 @@ export async function create_channel_bundle(deps: ChannelBundleDeps): Promise<Ch
     : "";
 
   const dlq_store = app_config.channel.dispatch.dlqEnabled
-    ? new SqliteDispatchDlqStore(resolve_from_workspace(workspace, app_config.channel.dispatch.dlqPath, join(data_dir, "dlq", "dlq.db")))
+    ? new SqliteDispatchDlqStore(join(data_dir, "dlq", "dlq.db"))
     : null;
   const dispatch = new DispatchService({
     bus,
@@ -106,7 +107,7 @@ export async function create_channel_bundle(deps: ChannelBundleDeps): Promise<Ch
   const telegram_token = await instance_store.get_token("telegram") || "";
   const telegram_settings = (instance_store.get("telegram")?.settings as Record<string, unknown>) || {};
   const media_collector = new MediaCollector({
-    workspace_dir: workspace,
+    workspace_dir: user_dir,
     tokens: {
       slack_bot_token: slack_token,
       telegram_bot_token: telegram_token,

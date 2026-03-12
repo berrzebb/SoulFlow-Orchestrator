@@ -15,6 +15,7 @@ export type PhaseWorkflowDeps = {
   logger: Logger;
   process_tracker: ProcessTrackerLike | null;
   workspace: string;
+  user_dir?: string;
   subagents: import("../../agent/subagents.js").SubagentRegistry | null;
   phase_workflow_store: import("../../agent/phase-workflow-store.js").PhaseWorkflowStoreLike | null;
   bus: import("../../bus/types.js").MessageBusLike | null;
@@ -45,6 +46,7 @@ export async function run_phase_loop(
 
   if (!deps.workspace) throw new Error("workspace is required for run_phase_loop");
   const workspace = deps.workspace;
+  const user_dir = deps.user_dir ?? workspace;
   const store = deps.phase_workflow_store;
   const subagents = deps.subagents;
   if (!subagents || !store) {
@@ -55,10 +57,10 @@ export async function run_phase_loop(
 
   let template: import("../../agent/phase-loop.types.js").WorkflowDefinition | null = null;
   if (hint_id) {
-    template = load_workflow_template(workspace, hint_id);
+    template = load_workflow_template(user_dir, hint_id);
   }
   if (!template) {
-    const templates = load_workflow_templates(workspace);
+    const templates = load_workflow_templates(user_dir);
     const lower = task_with_media.toLowerCase();
     template = templates.find((t) =>
       lower.includes(t.title.toLowerCase()) ||
@@ -123,7 +125,7 @@ export async function run_phase_loop(
     subagents,
     store,
     logger: deps.logger,
-    load_template: (name) => load_workflow_template(workspace, name),
+    load_template: (name) => load_workflow_template(user_dir, name),
     providers: deps.providers,
     decision_service: deps.decision_service,
     promise_service: deps.promise_service,

@@ -4,12 +4,19 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import type { DashboardOptions, ChatSession, RecentMessage } from "./service.js";
 import type { SystemMetricsCollector } from "./system-metrics.js";
 import type { SessionStoreLike } from "../session/index.js";
+import type { JwtPayload } from "../auth/auth-service.js";
 
 export type RouteContext = {
   req: IncomingMessage;
   res: ServerResponse;
   url: URL;
   options: DashboardOptions;
+  /** 인증된 사용자의 JWT 페이로드. 인증 비활성 또는 미인증 시 null. */
+  auth_user: JwtPayload | null;
+  /** [global, team, personal] 워크스페이스 레이어 경로 (낮은 → 높은 우선순위). */
+  workspace_layers: string[];
+  /** 저장/삭제용 개인 workspace 경로 (최상위 레이어). */
+  personal_dir: string;
   json: (res: ServerResponse, status: number, data: unknown) => void;
   read_body: (req: IncomingMessage) => Promise<Record<string, unknown> | null>;
   add_sse_client: (res: ServerResponse) => void;

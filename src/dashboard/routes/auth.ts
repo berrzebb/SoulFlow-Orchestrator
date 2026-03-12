@@ -9,7 +9,7 @@
  */
 
 import type { RouteContext } from "../route-context.js";
-import { extract_token, make_auth_cookie, clear_auth_cookie } from "../../auth/auth-middleware.js";
+import { make_auth_cookie, clear_auth_cookie } from "../../auth/auth-middleware.js";
 
 export async function handle_auth(ctx: RouteContext): Promise<boolean> {
   const { req, res, url, options, json, read_body } = ctx;
@@ -91,14 +91,10 @@ export async function handle_auth(ctx: RouteContext): Promise<boolean> {
 
   if (url.pathname === "/api/auth/me" && req.method === "GET") {
     if (!auth_svc) { json(res, 503, { error: "auth_not_configured" }); return true; }
-
-    const token = extract_token(req);
-    if (!token) { json(res, 401, { error: "not_authenticated" }); return true; }
-
-    const payload = auth_svc.verify_token(token);
-    if (!payload) { json(res, 401, { error: "token_invalid_or_expired" }); return true; }
-
-    json(res, 200, { sub: payload.sub, username: payload.usr, role: payload.role, exp: payload.exp });
+    // auth_svc 활성 시 미들웨어가 DB 검증까지 완료 → auth_user 보장
+    const p = ctx.auth_user;
+    if (!p) { json(res, 401, { error: "not_authenticated" }); return true; }
+    json(res, 200, { sub: p.sub, username: p.usr, role: p.role, tid: p.tid, wdir: p.wdir, exp: p.exp });
     return true;
   }
 
