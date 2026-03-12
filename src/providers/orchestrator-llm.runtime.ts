@@ -37,7 +37,7 @@ export type OrchestratorLlmStatus = {
   gpu_percent?: number;
 };
 
-export type ModelInfo = {
+export type OllamaModelInfo = {
   name: string;
   size: number;
   modified_at: string;
@@ -311,7 +311,7 @@ export class OrchestratorLlmRuntime {
   // ─── 모델 관리 (public) ─────────────────────────────
 
   /** 설치된 모델 목록 조회. OpenAI-compatible /v1/models 우선, 실패 시 Ollama /api/tags. */
-  async list_models(): Promise<ModelInfo[]> {
+  async list_models(): Promise<OllamaModelInfo[]> {
     const base = this.api_base.replace(/\/v1\/?$/, "");
     // OpenAI-compatible /v1/models (vLLM 등)
     try {
