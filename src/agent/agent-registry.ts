@@ -354,8 +354,8 @@ export class AgentBackendRegistry {
 
 /** CircuitBreaker 상태를 문자열로 변환. 슬롯을 소비하지 않는 읽기 전용 조회. */
 function _circuit_state(breaker: CircuitBreaker): "closed" | "open" | "half_open" {
-  if (breaker.can_acquire()) return breaker.state === "half_open" ? "half_open" : "closed";
-  return "open";
+  breaker.can_acquire(); // open→half_open 타임아웃 전환 트리거
+  return breaker.state;
 }
 
 function _diff_capabilities(

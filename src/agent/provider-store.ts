@@ -231,11 +231,10 @@ export class AgentProviderStore {
   }
 
   remove(instance_id: string): boolean {
-    const result = with_sqlite_strict(this.db_path, (db) => {
+    return with_sqlite_strict(this.db_path, (db) => {
       const r = db.prepare("DELETE FROM agent_providers WHERE instance_id = ?").run(instance_id);
       return r.changes > 0;
     }, { pragmas: PRAGMAS });
-    return result ?? false;
   }
 
   // ── 토큰 (vault 위임) ──
@@ -353,12 +352,11 @@ export class AgentProviderStore {
 
   remove_connection(connection_id: string): boolean {
     // connection 삭제 시 참조하는 provider들의 connection_id 초기화와 삭제를 단일 트랜잭션으로 처리
-    const result = with_sqlite_strict(this.db_path, (db) => {
+    return with_sqlite_strict(this.db_path, (db) => {
       db.prepare("UPDATE agent_providers SET connection_id = NULL WHERE connection_id = ?").run(connection_id);
       const r = db.prepare("DELETE FROM provider_connections WHERE connection_id = ?").run(connection_id);
       return r.changes > 0;
     }, { pragmas: PRAGMAS });
-    return result ?? false;
   }
 
   /** 해당 connection을 참조하는 프로바이더 수. */

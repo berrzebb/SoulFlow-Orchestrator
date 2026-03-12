@@ -174,7 +174,7 @@ export class PhaseWorkflowStore implements PhaseWorkflowStoreLike {
       db.prepare("DELETE FROM phase_agent_messages WHERE workflow_id = ?").run(workflow_id);
       return db.prepare("DELETE FROM phase_workflows WHERE workflow_id = ?").run(workflow_id).changes;
     });
-    return (changes ?? 0) > 0;
+    return changes > 0;
   }
 
   async insert_message(workflow_id: string, phase_id: string, agent_id: string, msg: PhaseMessage): Promise<void> {
