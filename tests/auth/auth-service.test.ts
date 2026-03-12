@@ -128,3 +128,49 @@ describe("AuthService — login", () => {
     expect(store.get_user_by_id(user.id)?.last_login_at).not.toBeNull();
   });
 });
+
+describe("AuthService — 전역 프로바이더 위임", () => {
+  it("create_shared_provider → list_shared_providers에서 조회 가능", () => {
+    const { svc } = make_svc();
+    svc.create_shared_provider({ name: "gpt-4", type: "openai", model: "gpt-4", config: {}, api_key_ref: "key", enabled: true });
+    const list = svc.list_shared_providers();
+    expect(list).toHaveLength(1);
+    expect(list[0].name).toBe("gpt-4");
+  });
+
+  it("list_shared_providers enabled_only → 활성화된 것만", () => {
+    const { svc } = make_svc();
+    svc.create_shared_provider({ name: "p1", type: "t", model: "", config: {}, api_key_ref: "", enabled: true });
+    svc.create_shared_provider({ name: "p2", type: "t", model: "", config: {}, api_key_ref: "", enabled: false });
+    expect(svc.list_shared_providers(false)).toHaveLength(2);
+    expect(svc.list_shared_providers(true)).toHaveLength(1);
+  });
+
+  it("get_shared_provider → id로 단건 조회", () => {
+    const { svc } = make_svc();
+    const p = svc.create_shared_provider({ name: "claude", type: "anthropic", model: "s", config: {}, api_key_ref: "", enabled: true });
+    expect(svc.get_shared_provider(p.id)?.name).toBe("claude");
+  });
+
+  it("get_shared_provider → 없는 id null", () => {
+    const { svc } = make_svc();
+    expect(svc.get_shared_provider("bad-id")).toBeNull();
+  });
+
+  it("update_shared_provider → 필드 수정", () => {
+    const { svc } = make_svc();
+    const p = svc.create_shared_provider({ name: "old", type: "t", model: "m1", config: {}, api_key_ref: "", enabled: true });
+    svc.update_shared_provider(p.id, { name: "new", enabled: false });
+    const updated = svc.get_shared_provider(p.id);
+    expect(updated?.name).toBe("new");
+    expect(updated?.enabled).toBe(false);
+    expect(updated?.model).toBe("m1");
+  });
+
+  it("delete_shared_provider → 삭제 후 조회 불가", () => {
+    const { svc } = make_svc();
+    const p = svc.create_shared_provider({ name: "del", type: "t", model: "", config: {}, api_key_ref: "", enabled: true });
+    expect(svc.delete_shared_provider(p.id)).toBe(true);
+    expect(svc.get_shared_provider(p.id)).toBeNull();
+  });
+});

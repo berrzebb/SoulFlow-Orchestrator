@@ -14,9 +14,11 @@ const JWT_ALG_HEADER = Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" }))
 const JWT_EXPIRY_SEC = 7 * 24 * 60 * 60; // 7일
 
 export interface JwtPayload {
-  sub: string;   // user.id
-  usr: string;   // user.username
+  sub: string;    // user.id
+  usr: string;    // user.username
   role: "superadmin" | "user";
+  tid: string;    // team_id (default_team_id or "default")
+  wdir: string;   // 사용자 workspace 상대 경로: tenants/<tid>/users/<sub>
   iat: number;
   exp: number;
 }
@@ -120,8 +122,9 @@ export class AuthService {
    */
   async setup_superadmin(username: string, password: string): Promise<{ token: string; payload: JwtPayload } | null> {
     if (this.store.is_initialized()) return null;
+    this.store.ensure_team("default", "Default");
     const hash = this.hash_password(password);
-    this.store.create_user({ username, password_hash: hash, system_role: "superadmin" });
+    this.store.create_user({ username, password_hash: hash, system_role: "superadmin", default_team_id: "default" });
     return this.login(username, password);
   }
 
@@ -129,12 +132,22 @@ export class AuthService {
 
   list_users() { return this.store.list_users(); }
 
+  get_user_by_id(id: string) { return this.store.get_user_by_id(id); }
+
   get_user_by_username(username: string) { return this.store.get_user_by_username(username); }
 
-  create_user(input: { username: string; password: string; system_role: "superadmin" | "user" }) {
+  create_user(input: { username: string; password: string; system_role: "superadmin" | "user"; default_team_id?: string | null }) {
     const hash = this.hash_password(input.password);
-    return this.store.create_user({ username: input.username, password_hash: hash, system_role: input.system_role });
+    return this.store.create_user({ username: input.username, password_hash: hash, system_role: input.system_role, default_team_id: input.default_team_id });
   }
+
+  assign_team(user_id: string, team_id: string): boolean {
+    return this.store.update_user(user_id, { default_team_id: team_id });
+  }
+
+  list_teams() { return this.store.list_teams(); }
+
+  ensure_team(id: string, name: string) { return this.store.ensure_team(id, name); }
 
   delete_user(id: string): boolean { return this.store.delete_user(id); }
 
@@ -142,6 +155,22 @@ export class AuthService {
     const hash = this.hash_password(password);
     return this.store.update_user(id, { password_hash: hash });
   }
+
+  // ── 전역 프로바이더 (AdminStore 위임) ──
+
+  list_shared_providers(enabled_only = false) { return this.store.list_shared_providers(enabled_only); }
+
+  get_shared_provider(id: string) { return this.store.get_shared_provider(id); }
+
+  create_shared_provider(input: Parameters<typeof this.store.create_shared_provider>[0]) {
+    return this.store.create_shared_provider(input);
+  }
+
+  update_shared_provider(id: string, patch: Parameters<typeof this.store.update_shared_provider>[1]) {
+    return this.store.update_shared_provider(id, patch);
+  }
+
+  delete_shared_provider(id: string): boolean { return this.store.delete_shared_provider(id); }
 
   // ── 로그인 헬퍼 ──
 
@@ -156,7 +185,11 @@ export class AuthService {
 
     this.store.update_user(user.id, { last_login_at: new Date().toISOString() });
 
-    const payload: Omit<JwtPayload, "iat" | "exp"> = { sub: user.id, usr: user.username, role: user.system_role };
+    const tid = user.default_team_id || "default";
+    const wdir = `tenants/${tid}/users/${user.id}`;
+    const payload: Omit<JwtPayload, "iat" | "exp"> = {
+      sub: user.id, usr: user.username, role: user.system_role, tid, wdir,
+    };
     const token = this.sign_token(payload);
     const verified = this.verify_token(token)!;
     return { token, payload: verified };

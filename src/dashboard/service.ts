@@ -56,6 +56,7 @@ import { handle_usage } from "./routes/usage.js";
 import { dispatch_webhook } from "./routes/webhook.js";
 import { handle_auth } from "./routes/auth.js";
 import { handle_admin } from "./routes/admin.js";
+import { handle_team_providers } from "./routes/team-providers.js";
 import { extract_token } from "../auth/auth-middleware.js";
 
 const RE_MEDIA_TOKEN = /^\/media\/([a-z0-9]{16,})$/i;
@@ -213,6 +214,7 @@ export class DashboardService implements ServiceLike {
     // auth 라우트는 인증 검사 전에 처리해야 하므로 가장 먼저 등록
     this.route_map.set("/api/auth", handle_auth);
     this.route_map.set("/api/admin", handle_admin);
+    this.route_map.set("/api/teams", handle_team_providers);
     this.route_map.set("/api/bootstrap", handle_bootstrap);
     this.route_map.set("/api/state", handle_state);
     this.route_map.set("/api/events", handle_state);
@@ -259,9 +261,16 @@ export class DashboardService implements ServiceLike {
   }
 
   private _build_route_context(req: IncomingMessage, res: ServerResponse, url: URL): RouteContext {
+    const auth_user = ((req as unknown as Record<string, unknown>)["_auth_user"] as import("../auth/auth-service.js").JwtPayload | undefined) ?? null;
+    const resolver = this.options.workspace_resolver;
+    const workspace_layers = resolver ? resolver.layers_for_jwt(auth_user) : [this.options.workspace ?? ""];
+    const personal_dir = resolver ? resolver.personal_dir(auth_user) : (this.options.workspace ?? "");
     return {
       req, res, url,
       options: this.options,
+      auth_user,
+      workspace_layers,
+      personal_dir,
       json: (r, s, d) => this._json(r, s, d),
       read_body: (r) => this._read_json_body(r, res),
       add_sse_client: (r) => this._sse.add_client(r),
@@ -304,6 +313,19 @@ export class DashboardService implements ServiceLike {
         const token = extract_token(req);
         const payload = token ? this.options.auth_svc.verify_token(token) : null;
         if (!payload) {
+          this._json(res, 401, { error: "unauthorized" });
+          return;
+        }
+        // 1단계: wdir 구조 무결성 — DB 불필요, O(1)
+        const expected_wdir = `tenants/${payload.tid}/users/${payload.sub}`;
+        if (payload.wdir !== expected_wdir) {
+          this._json(res, 401, { error: "invalid_token" });
+          return;
+        }
+        // 2단계: DB 신선도 — 삭제된 사용자·팀 변경 반영
+        const db_user = this.options.auth_svc.get_user_by_id(payload.sub);
+        const db_tid = db_user?.default_team_id ?? "default";
+        if (!db_user || db_user.disabled_at || db_tid !== payload.tid) {
           this._json(res, 401, { error: "unauthorized" });
           return;
         }
