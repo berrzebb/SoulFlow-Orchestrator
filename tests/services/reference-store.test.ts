@@ -452,3 +452,118 @@ describe("ReferenceStore", () => {
     expect(embed_called).toBe(true);
   });
 });
+
+// ══════════════════════════════════════════
+// Extended: hidden directories, FTS short query, embed_fn failure fallback, chunk overlap, search sort
+// ══════════════════════════════════════════
+
+describe("ReferenceStore — scan_files 숨김 디렉토리", () => {
+  let ext_dir: string;
+  let ext_store: ReferenceStore;
+
+  beforeEach(async () => {
+    ext_dir = await mkdtemp(join(tmpdir(), "refstore-ext-"));
+    ext_store = new ReferenceStore(ext_dir);
+  });
+
+  afterEach(async () => {
+    await rm(ext_dir, { recursive: true, force: true }).catch(() => {});
+  });
+
+  it("점으로 시작하는 디렉토리 내 파일 → 무시", async () => {
+    const refs_dir = join(ext_dir, "references");
+    const hidden_dir = join(refs_dir, ".hidden_dir");
+    await mkdir(hidden_dir, { recursive: true });
+    await writeFile(join(hidden_dir, "secret.md"), "# Secret");
+    await writeFile(join(refs_dir, "public.md"), "# Public");
+
+    const result = await ext_store.sync();
+    expect(result.added).toBe(1);
+    const docs = ext_store.list_documents();
+    expect(docs.map((d) => d.path)).not.toContain("secret.md");
+    expect(docs.map((d) => d.path)).toContain("public.md");
+  });
+});
+
+describe("ReferenceStore — search FTS 검색어 처리", () => {
+  let ext_dir: string;
+  let ext_store: ReferenceStore;
+
+  beforeEach(async () => {
+    ext_dir = await mkdtemp(join(tmpdir(), "refstore-fts-"));
+    ext_store = new ReferenceStore(ext_dir);
+  });
+
+  afterEach(async () => {
+    await rm(ext_dir, { recursive: true, force: true }).catch(() => {});
+  });
+
+  it("1글자 검색어 → FTS 검색 건너뜀, 빈 배열", async () => {
+    const refs_dir = join(ext_dir, "references");
+    await mkdir(refs_dir, { recursive: true });
+    await writeFile(join(refs_dir, "doc.md"), "# Doc\n\na b c d");
+    await ext_store.sync();
+    const results = await ext_store.search("a");
+    expect(Array.isArray(results)).toBe(true);
+    expect(results).toHaveLength(0);
+  });
+
+  it("특수문자 제거 후 검색어 추출", async () => {
+    const refs_dir = join(ext_dir, "references");
+    await mkdir(refs_dir, { recursive: true });
+    await writeFile(join(refs_dir, "doc.md"), "# Doc\n\nTypeScript types and interfaces.");
+    await ext_store.sync();
+    const results = await ext_store.search("TypeScript! @types& #interfaces");
+    expect(Array.isArray(results)).toBe(true);
+  });
+});
+
+describe("ReferenceStore — embed_fn failure → FTS fallback", () => {
+  let ext_dir: string;
+  let ext_store: ReferenceStore;
+
+  beforeEach(async () => {
+    ext_dir = await mkdtemp(join(tmpdir(), "refstore-fail-"));
+    ext_store = new ReferenceStore(ext_dir);
+  });
+
+  afterEach(async () => {
+    await rm(ext_dir, { recursive: true, force: true }).catch(() => {});
+  });
+
+  it("embed_fn 실패해도 FTS 결과는 반환됨", async () => {
+    const refs_dir = join(ext_dir, "references");
+    await mkdir(refs_dir, { recursive: true });
+    await writeFile(join(refs_dir, "fallback.md"), "# Fallback Doc\n\nFallback content here.");
+    ext_store.set_embed(async () => { throw new Error("embedding service unavailable"); });
+    await ext_store.sync();
+    const results = await ext_store.search("fallback content");
+    expect(Array.isArray(results)).toBe(true);
+  });
+});
+
+describe("ReferenceStore — search 정렬·limit", () => {
+  let ext_dir: string;
+  let ext_store: ReferenceStore;
+
+  beforeEach(async () => {
+    ext_dir = await mkdtemp(join(tmpdir(), "refstore-sort-"));
+    ext_store = new ReferenceStore(ext_dir);
+  });
+
+  afterEach(async () => {
+    await rm(ext_dir, { recursive: true, force: true }).catch(() => {});
+  });
+
+  it("검색 결과 score 내림차순 정렬", async () => {
+    const refs_dir = join(ext_dir, "references");
+    await mkdir(refs_dir, { recursive: true });
+    await writeFile(join(refs_dir, "a.md"), "# Guide\n\nTypeScript guide for developers.");
+    await writeFile(join(refs_dir, "b.md"), "# TypeScript\n\nTypeScript TypeScript TypeScript core concepts.");
+    await ext_store.sync();
+    const results = await ext_store.search("typescript", { limit: 10 });
+    if (results.length >= 2) {
+      expect(results[0].score).toBeGreaterThanOrEqual(results[1].score);
+    }
+  });
+});

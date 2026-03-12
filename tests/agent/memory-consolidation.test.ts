@@ -419,3 +419,265 @@ describe("ContextBuilder daily memory injection", () => {
     expect(prompt).toContain("B".repeat(100));
   });
 });
+
+// ── from memory-consolidation-extended.test.ts ──
+
+import type { MemoryConsolidationConfig } from "@src/agent/memory-consolidation.service.ts";
+
+const noop_logger_ext = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} } as any;
+
+function make_ext_config(overrides: Partial<MemoryConsolidationConfig> = {}): MemoryConsolidationConfig {
+  return {
+    enabled: true,
+    trigger: "idle",
+    idle_after_ms: 1000,
+    interval_ms: 60_000,
+    window_days: 7,
+    archive_used: false,
+    ...overrides,
+  };
+}
+
+function make_ext_store(days: string[] = [], content_map: Record<string, string> = {}) {
+  return {
+    list_daily: vi.fn().mockResolvedValue(days),
+    read_daily: vi.fn().mockImplementation(async (day: string) => content_map[day] ?? ""),
+    append_longterm: vi.fn().mockResolvedValue(undefined),
+  };
+}
+
+function make_ext_store_with_consolidate(
+  result = {
+    ok: true,
+    summary: "ok",
+    daily_entries_used: ["2024-01-01"],
+    archived_files: [] as string[],
+    longterm_appended_chars: 100,
+    compressed_prompt: "",
+  },
+) {
+  return {
+    list_daily: vi.fn().mockResolvedValue([]),
+    read_daily: vi.fn().mockResolvedValue(""),
+    append_longterm: vi.fn().mockResolvedValue(undefined),
+    consolidate: vi.fn().mockResolvedValue(result),
+  };
+}
+
+describe("MemoryConsolidationService — health_check", () => {
+  beforeEach(() => { vi.useFakeTimers(); });
+  afterEach(() => { vi.useRealTimers(); });
+
+  it("시작 전 ok: false", () => {
+    const svc = new MemoryConsolidationService({ memory_store: make_ext_store() as any, config: make_ext_config(), logger: noop_logger_ext });
+    expect(svc.health_check().ok).toBe(false);
+    expect(svc.health_check().details?.busy_count).toBe(0);
+    expect(svc.health_check().details?.consolidating).toBe(false);
+  });
+
+  it("start 후 ok: true", async () => {
+    const svc = new MemoryConsolidationService({ memory_store: make_ext_store() as any, config: make_ext_config(), logger: noop_logger_ext });
+    await svc.start();
+    expect(svc.health_check().ok).toBe(true);
+    await svc.stop();
+  });
+});
+
+describe("MemoryConsolidationService — run_consolidation running=false", () => {
+  beforeEach(() => { vi.useFakeTimers(); });
+  afterEach(() => { vi.useRealTimers(); });
+
+  it("start() 안 했을 때 → ok: false (not running)", async () => {
+    const svc = new MemoryConsolidationService({ memory_store: make_ext_store() as any, config: make_ext_config(), logger: noop_logger_ext });
+    const r = await svc.run_consolidation();
+    expect(r.ok).toBe(false);
+    expect(r.summary).toContain("not running");
+  });
+});
+
+describe("MemoryConsolidationService — touch() 조건", () => {
+  beforeEach(() => { vi.useFakeTimers(); });
+  afterEach(() => { vi.useRealTimers(); });
+
+  it("enabled=false → touch() 무시됨", async () => {
+    const store_ext = make_ext_store([]);
+    const svc = new MemoryConsolidationService({
+      memory_store: store_ext as any,
+      config: make_ext_config({ enabled: false }),
+      logger: noop_logger_ext,
+    });
+    await svc.start();
+    svc.touch();
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(store_ext.list_daily).not.toHaveBeenCalled();
+    await svc.stop();
+  });
+
+  it("trigger=cron → touch() idle timer 시작 안 함", async () => {
+    const store_ext = make_ext_store([]);
+    const svc = new MemoryConsolidationService({
+      memory_store: store_ext as any,
+      config: make_ext_config({ trigger: "cron" }),
+      logger: noop_logger_ext,
+    });
+    await svc.start();
+    svc.touch();
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(store_ext.list_daily).not.toHaveBeenCalled();
+    await svc.stop();
+  });
+
+  it("busy_count > 0 → touch() idle timer 시작 안 함", async () => {
+    const store_ext = make_ext_store([]);
+    const svc = new MemoryConsolidationService({
+      memory_store: store_ext as any,
+      config: make_ext_config({ idle_after_ms: 100 }),
+      logger: noop_logger_ext,
+    });
+    await svc.start();
+    svc.touch_start();
+    svc.touch();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(store_ext.list_daily).not.toHaveBeenCalled();
+    await svc.stop();
+  });
+});
+
+describe("MemoryConsolidationService — store.consolidate() 구현체", () => {
+  beforeEach(() => { vi.useFakeTimers(); });
+  afterEach(() => { vi.useRealTimers(); });
+
+  it("store.consolidate() 호출됨", async () => {
+    const store_ext = make_ext_store_with_consolidate();
+    const svc = new MemoryConsolidationService({ memory_store: store_ext as any, config: make_ext_config(), logger: noop_logger_ext });
+    await svc.start();
+    const r = await svc.run_consolidation();
+    expect(r.ok).toBe(true);
+    expect(store_ext.consolidate).toHaveBeenCalledOnce();
+    await svc.stop();
+  });
+
+  it("options가 store.consolidate()에 전달됨", async () => {
+    const store_ext = make_ext_store_with_consolidate();
+    const svc = new MemoryConsolidationService({ memory_store: store_ext as any, config: make_ext_config(), logger: noop_logger_ext });
+    await svc.start();
+    await svc.run_consolidation({ memory_window: 14, archive: true, session: "s1" });
+    expect(store_ext.consolidate).toHaveBeenCalledWith(
+      expect.objectContaining({ memory_window: 14, archive: true, session: "s1" }),
+    );
+    await svc.stop();
+  });
+
+  it("store.consolidate() 예외 → ok: false, error in summary", async () => {
+    const store_ext = {
+      ...make_ext_store(),
+      consolidate: vi.fn().mockRejectedValue(new Error("DB connection failed")),
+    };
+    const svc = new MemoryConsolidationService({ memory_store: store_ext as any, config: make_ext_config(), logger: noop_logger_ext });
+    await svc.start();
+    const r = await svc.run_consolidation();
+    expect(r.ok).toBe(false);
+    expect(r.summary).toContain("DB connection failed");
+    await svc.stop();
+  });
+});
+
+describe("MemoryConsolidationService — store_consolidate fallback", () => {
+  beforeEach(() => { vi.useFakeTimers(); });
+  afterEach(() => { vi.useRealTimers(); });
+
+  it("window 밖 오래된 entries → 스킵", async () => {
+    const store_ext = make_ext_store(["2000-01-01"], { "2000-01-01": "very old content" });
+    const svc = new MemoryConsolidationService({ memory_store: store_ext as any, config: make_ext_config({ window_days: 7 }), logger: noop_logger_ext });
+    await svc.start();
+    const r = await svc.run_consolidation();
+    expect(r.ok).toBe(true);
+    expect(store_ext.append_longterm).not.toHaveBeenCalled();
+    await svc.stop();
+  });
+
+  it("잘못된 날짜 형식 → 무시", async () => {
+    const store_ext = make_ext_store(["not-a-date"], { "not-a-date": "content" });
+    const svc = new MemoryConsolidationService({ memory_store: store_ext as any, config: make_ext_config(), logger: noop_logger_ext });
+    await svc.start();
+    const r = await svc.run_consolidation();
+    expect(r.ok).toBe(true);
+    expect(store_ext.append_longterm).not.toHaveBeenCalled();
+    await svc.stop();
+  });
+
+  it("content 공백만 → 스킵", async () => {
+    const day_str = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    const store_ext = make_ext_store([day_str], { [day_str]: "   " });
+    const svc = new MemoryConsolidationService({ memory_store: store_ext as any, config: make_ext_config(), logger: noop_logger_ext });
+    await svc.start();
+    const r = await svc.run_consolidation();
+    expect(r.ok).toBe(true);
+    expect(store_ext.append_longterm).not.toHaveBeenCalled();
+    await svc.stop();
+  });
+
+  it("window 내 유효 content → append_longterm 호출 + summary 포함", async () => {
+    const day_str = new Date(Date.now() - 2 * 86400000).toISOString().slice(0, 10);
+    const store_ext = make_ext_store([day_str], { [day_str]: "valid memory content" });
+    const svc = new MemoryConsolidationService({ memory_store: store_ext as any, config: make_ext_config({ window_days: 7 }), logger: noop_logger_ext });
+    await svc.start();
+    const r = await svc.run_consolidation();
+    expect(r.ok).toBe(true);
+    expect(store_ext.append_longterm).toHaveBeenCalledOnce();
+    expect(r.summary).toContain("consolidated 1");
+    await svc.stop();
+  });
+});
+
+describe("MemoryConsolidationService — touch_start idle_timer 정리 (L86-87)", () => {
+  beforeEach(() => { vi.useFakeTimers(); });
+  afterEach(() => { vi.useRealTimers(); });
+
+  it("touch() 후 touch_start() → idle_timer 즉시 취소", async () => {
+    const store_ext = make_ext_store_with_consolidate();
+    const svc = new MemoryConsolidationService({
+      memory_store: store_ext as any,
+      config: make_ext_config({ idle_after_ms: 5000 }),
+      logger: noop_logger_ext,
+    });
+    await svc.start();
+    svc.touch();
+    svc.touch_start();
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(store_ext.consolidate).not.toHaveBeenCalled();
+    await svc.stop();
+  });
+});
+
+describe("MemoryConsolidationService — stop 정리", () => {
+  beforeEach(() => { vi.useFakeTimers(); });
+  afterEach(() => { vi.useRealTimers(); });
+
+  it("idle_timer 정리: stop 후 timer 발동 안 함", async () => {
+    const store_ext = make_ext_store([]);
+    const svc = new MemoryConsolidationService({
+      memory_store: store_ext as any,
+      config: make_ext_config({ idle_after_ms: 5000 }),
+      logger: noop_logger_ext,
+    });
+    await svc.start();
+    svc.touch();
+    await svc.stop();
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(store_ext.list_daily).not.toHaveBeenCalled();
+  });
+
+  it("cron_timer 정리: stop 후 interval 발동 안 함", async () => {
+    const store_ext = make_ext_store([]);
+    const svc = new MemoryConsolidationService({
+      memory_store: store_ext as any,
+      config: make_ext_config({ trigger: "cron", interval_ms: 1000 }),
+      logger: noop_logger_ext,
+    });
+    await svc.start();
+    await svc.stop();
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(store_ext.list_daily).not.toHaveBeenCalled();
+  });
+});

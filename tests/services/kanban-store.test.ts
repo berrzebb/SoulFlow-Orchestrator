@@ -569,4 +569,127 @@ describe("KanbanStore", () => {
       expect(result).toBeNull();
     });
   });
+
+  /* ─── Activities ─── */
+
+  describe("log_activity / list_activities", () => {
+    let act_board_id: string;
+    let act_card_id: string;
+
+    beforeAll(async () => {
+      const board = await store.create_board({ name: "Activity Board", scope_type: "channel", scope_id: "act-ch" });
+      act_board_id = board.board_id;
+      const card = await store.create_card({ board_id: act_board_id, title: "Activity Card", created_by: "tester" });
+      act_card_id = card.card_id;
+    });
+
+    it("log_activity → KanbanActivity 반환", async () => {
+      const activity = await store.log_activity(act_card_id, act_board_id, "agent", "created");
+      expect(activity.card_id).toBe(act_card_id);
+      expect(activity.actor).toBe("agent");
+      expect(activity.activity_id).toBeDefined();
+    });
+
+    it("log_activity with detail", async () => {
+      const activity = await store.log_activity(act_card_id, act_board_id, "agent", "moved", { from: "todo", to: "in-progress" });
+      expect(activity.detail).toMatchObject({ from: "todo", to: "in-progress" });
+    });
+
+    it("list_activities by card_id", async () => {
+      const activities = await store.list_activities({ card_id: act_card_id });
+      expect(activities.length).toBeGreaterThan(0);
+      expect(activities.every(a => a.card_id === act_card_id)).toBe(true);
+    });
+
+    it("list_activities with limit", async () => {
+      const activities = await store.list_activities({ board_id: act_board_id, limit: 1 });
+      expect(activities.length).toBeLessThanOrEqual(1);
+    });
+  });
+
+  /* ─── Templates ─── */
+
+  describe("create_template / list_templates / get_template / delete_template", () => {
+    let template_id: string;
+
+    it("create_template → KanbanTemplate 반환", async () => {
+      const tmpl = await store.create_template({
+        name: "Bug Tracker",
+        description: "Track bugs",
+        columns: [
+          { id: "open", name: "Open", position: 0 },
+          { id: "resolved", name: "Resolved", position: 1 },
+        ],
+        cards: [{ title: "Sample Bug", column_id: "open", priority: "high" }],
+      });
+      template_id = tmpl.template_id;
+      expect(tmpl.name).toBe("Bug Tracker");
+    });
+
+    it("list_templates → 목록 포함", async () => {
+      const tmpls = await store.list_templates();
+      expect(tmpls.some(t => t.template_id === template_id)).toBe(true);
+    });
+
+    it("get_template by id → 반환", async () => {
+      const tmpl = await store.get_template(template_id);
+      expect(tmpl).not.toBeNull();
+      expect(tmpl!.name).toBe("Bug Tracker");
+    });
+
+    it("get_template by name → 반환", async () => {
+      const tmpl = await store.get_template("Bug Tracker");
+      expect(tmpl).not.toBeNull();
+    });
+
+    it("get_template 없는 id → null", async () => {
+      expect(await store.get_template("nonexistent-template")).toBeNull();
+    });
+
+    it("delete_template → true", async () => {
+      expect(await store.delete_template(template_id)).toBe(true);
+    });
+
+    it("delete_template 없는 id → false", async () => {
+      expect(await store.delete_template("nonexistent")).toBe(false);
+    });
+  });
+
+  /* ─── get_subtask_counts ─── */
+
+  describe("get_subtask_counts", () => {
+    it("서브태스크 없으면 빈 Map 반환", async () => {
+      const sb = await store.create_board({ name: "Sub Count Board", scope_type: "channel", scope_id: "sc-ch" });
+      const counts = await store.get_subtask_counts(sb.board_id);
+      expect(counts).toBeInstanceOf(Map);
+    });
+
+    it("서브태스크 있으면 parent_id 기준 집계", async () => {
+      const sb = await store.create_board({ name: "Sub Count Board2", scope_type: "channel", scope_id: "sc2-ch" });
+      const parent = await store.create_card({ board_id: sb.board_id, title: "Parent Task", created_by: "agent" });
+      await store.create_card({ board_id: sb.board_id, title: "Sub1", parent_id: parent.card_id, created_by: "agent" });
+      await store.create_card({ board_id: sb.board_id, title: "Sub2", parent_id: parent.card_id, created_by: "agent" });
+      const counts = await store.get_subtask_counts(sb.board_id);
+      expect(counts.has(parent.card_id)).toBe(true);
+      expect(counts.get(parent.card_id)!.total).toBe(2);
+    });
+  });
+
+  /* ─── get_card_by_readable_id ─── */
+
+  describe("get_card_by_readable_id", () => {
+    it("없는 readable_id → null", async () => {
+      expect(await store.get_card_by_readable_id("NONE-9999")).toBeNull();
+    });
+  });
+
+  /* ─── list_boards scope_id 필터 ─── */
+
+  describe("list_boards scope_id filter", () => {
+    it("scope_id 필터링", async () => {
+      await store.create_board({ name: "Filtered", scope_type: "session", scope_id: "unique-scope-xyz" });
+      const found = await store.list_boards("session", "unique-scope-xyz");
+      expect(found.some(b => b.scope_id === "unique-scope-xyz")).toBe(true);
+    });
+  });
 });

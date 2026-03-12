@@ -759,3 +759,176 @@ describe("OAuthFlowService — margin > REFRESH_MARGIN_MS → continue", () => {
     }
   });
 });
+
+// ══════════════════════════════════════════════════════════
+// generate_auth_url — extra_auth_params + scope_separator (ext)
+// ══════════════════════════════════════════════════════════
+
+describe("OAuthFlowService — generate_auth_url 미커버 경로", () => {
+  afterEach(() => {
+    unregister_preset("test-svc-flow");
+  });
+
+  it("extra_auth_params 있는 프리셋 → URL에 추가 파라미터 포함", () => {
+    register_preset({
+      service_type: "test-svc-flow",
+      label: "Test",
+      auth_url: "https://example.com/auth",
+      token_url: "https://example.com/token",
+      scopes_available: ["read"],
+      default_scopes: ["read"],
+      supports_refresh: true,
+      extra_auth_params: { access_type: "offline", prompt: "consent" },
+    });
+    const config = make_config({ service_type: "test-svc-flow" });
+    const url = service.generate_auth_url(config);
+    expect(url).toContain("access_type=offline");
+    expect(url).toContain("prompt=consent");
+  });
+
+  it("scope_separator=',' → 쉼표로 스코프 구분", () => {
+    register_preset({
+      service_type: "test-svc-flow",
+      label: "Test",
+      auth_url: "https://example.com/auth",
+      token_url: "https://example.com/token",
+      scopes_available: ["read", "write"],
+      default_scopes: ["read"],
+      supports_refresh: true,
+      scope_separator: ",",
+    });
+    const config = make_config({ service_type: "test-svc-flow", scopes: ["read", "write"] });
+    const url = service.generate_auth_url(config);
+    expect(url).toContain("scope=read%2Cwrite"); // URL-encoded comma
+  });
+});
+
+// ══════════════════════════════════════════════════════════
+// Basic Auth via handle_callback (ext)
+// ══════════════════════════════════════════════════════════
+
+describe("OAuthFlowService — Basic Auth 토큰 교환 via callback", () => {
+  it("token_auth_method=basic → handle_callback에서 Authorization 헤더 사용", async () => {
+    register_preset({
+      service_type: "test-svc-basic",
+      label: "Basic Auth Svc",
+      auth_url: "https://example.com/auth",
+      token_url: "https://example.com/token",
+      scopes_available: [],
+      default_scopes: [],
+      supports_refresh: true,
+      token_auth_method: "basic",
+    });
+
+    const integration = make_config({ service_type: "test-svc-basic", instance_id: "inst-basic" });
+
+    const mock_fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ access_token: "tok-basic", expires_in: 3600 }),
+    });
+    vi.stubGlobal("fetch", mock_fetch);
+
+    store = make_store({
+      get: vi.fn().mockReturnValue(integration),
+      get_client_id: vi.fn().mockResolvedValue("my-client-id"),
+      get_client_secret: vi.fn().mockResolvedValue("my-secret"),
+    });
+    service.close();
+    service = new OAuthFlowService(store);
+
+    service.generate_auth_url(integration);
+
+    const pending = (service as any).pending_flows as Map<string, { instance_id: string; created_at: number }>;
+    const [[state]] = [...pending.entries()];
+
+    store = make_store({
+      get: vi.fn().mockReturnValue(integration),
+      get_client_id: vi.fn().mockResolvedValue("my-client-id"),
+      get_client_secret: vi.fn().mockResolvedValue("my-secret"),
+      set_tokens: vi.fn(),
+    });
+    service.close();
+    service = new OAuthFlowService(store);
+    (service as any).pending_flows.set(state, { instance_id: "inst-basic", created_at: Date.now() });
+
+    const result = await service.handle_callback("auth-code", state);
+    expect(mock_fetch).toHaveBeenCalled();
+
+    const call_init = mock_fetch.mock.calls[0][1] as RequestInit;
+    const headers = call_init.headers as Record<string, string>;
+    expect(headers.Authorization).toMatch(/^Basic /);
+    expect(result.ok).toBe(true);
+    unregister_preset("test-svc-basic");
+  });
+});
+
+// ══════════════════════════════════════════════════════════
+// _refresh_expiring_tokens — 만료 임박 (ext)
+// ══════════════════════════════════════════════════════════
+
+describe("OAuthFlowService — _refresh_expiring_tokens", () => {
+  afterEach(() => {
+    unregister_preset("test-svc-flow");
+  });
+
+  it("만료 임박 토큰 있으면 refresh_token 호출됨", async () => {
+    const expiring_at = new Date(Date.now() + 60_000).toISOString();
+    const config = make_config({
+      instance_id: "inst-expire",
+      service_type: "test-svc-flow",
+      enabled: true,
+      expires_at: expiring_at,
+    });
+
+    register_preset({
+      service_type: "test-svc-flow",
+      label: "Test",
+      auth_url: "https://example.com/auth",
+      token_url: "https://example.com/token",
+      scopes_available: [],
+      default_scopes: [],
+      supports_refresh: true,
+    });
+
+    const refresh_spy = vi.fn().mockResolvedValue({ ok: true });
+
+    store = make_store({ list: vi.fn().mockReturnValue([config]) });
+    service.close();
+    service = new OAuthFlowService(store);
+    service.refresh_token = refresh_spy;
+
+    await (service as any)._refresh_expiring_tokens();
+    expect(refresh_spy).toHaveBeenCalledWith("inst-expire");
+  });
+
+  it("만료 시간 없는 통합 → 스킵됨", async () => {
+    const config = make_config({ instance_id: "no-expire", enabled: true, expires_at: null });
+    store = make_store({ list: vi.fn().mockReturnValue([config]) });
+    service.close();
+    service = new OAuthFlowService(store);
+    const refresh_spy = vi.fn();
+    service.refresh_token = refresh_spy;
+
+    await (service as any)._refresh_expiring_tokens();
+    expect(refresh_spy).not.toHaveBeenCalled();
+  });
+
+  it("refresh 실패 시 warn만 기록됨 (에러 전파 없음)", async () => {
+    const expiring = new Date(Date.now() + 60_000).toISOString();
+    const config = make_config({ instance_id: "fail-refresh", service_type: "test-svc-flow", enabled: true, expires_at: expiring });
+
+    register_preset({
+      service_type: "test-svc-flow",
+      label: "T", auth_url: "", token_url: "",
+      scopes_available: [], default_scopes: [],
+      supports_refresh: true,
+    });
+
+    store = make_store({ list: vi.fn().mockReturnValue([config]) });
+    service.close();
+    service = new OAuthFlowService(store);
+    service.refresh_token = vi.fn().mockResolvedValue({ ok: false, error: "network" });
+
+    await expect((service as any)._refresh_expiring_tokens()).resolves.toBeUndefined();
+  });
+});

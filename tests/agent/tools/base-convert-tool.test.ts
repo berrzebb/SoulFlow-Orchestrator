@@ -11,6 +11,10 @@ async function exec(params: Record<string, unknown>): Promise<unknown> {
   try { return JSON.parse(String(result)); } catch { return result; }
 }
 
+async function exec_raw(params: Record<string, unknown>): Promise<string> {
+  return tool.execute(params);
+}
+
 describe("BaseConvertTool — convert", () => {
   it("dec → hex", async () => {
     const r = await exec({ action: "convert", value: "255", from: "dec", to: "hex" }) as Record<string, unknown>;
@@ -88,5 +92,161 @@ describe("BaseConvertTool — int_to_roman / roman_to_int", () => {
   it("int_to_roman: 0 → Error", async () => {
     const raw = await tool.execute({ action: "int_to_roman", value: "0" });
     expect(String(raw)).toContain("Error");
+  });
+});
+
+// ══════════════════════════════════════════
+// convert — 추가 base 변환 (base32, base62, base36 roundtrip, 에러)
+// ══════════════════════════════════════════
+
+describe("BaseConvertTool — convert (추가 base)", () => {
+  it("oct → hex 변환", async () => {
+    const r = JSON.parse(await exec_raw({ action: "convert", value: "17", from: "oct", to: "hex" }));
+    expect(r.result).toBe("f");
+  });
+
+  it("dec → base36 변환", async () => {
+    const r = JSON.parse(await exec_raw({ action: "convert", value: "255", from: "dec", to: "base36" }));
+    expect(r.result).toBe("73");
+  });
+
+  it("dec → base32 변환", async () => {
+    const r = JSON.parse(await exec_raw({ action: "convert", value: "10", from: "dec", to: "base32" }));
+    expect(r.result).toBeDefined();
+    expect(typeof r.result).toBe("string");
+  });
+
+  it("base32 → dec 변환", async () => {
+    const r = JSON.parse(await exec_raw({ action: "convert", value: "K", from: "base32", to: "dec" }));
+    expect(r.decimal).toBe(10);
+  });
+
+  it("dec → base62 변환", async () => {
+    const r = JSON.parse(await exec_raw({ action: "convert", value: "62", from: "dec", to: "base62" }));
+    expect(r.result).toBe("10");
+  });
+
+  it("base62 → dec 변환", async () => {
+    const r = JSON.parse(await exec_raw({ action: "convert", value: "10", from: "base62", to: "dec" }));
+    expect(r.decimal).toBe(62);
+  });
+
+  it("0 변환 → 0 반환", async () => {
+    const r = JSON.parse(await exec_raw({ action: "convert", value: "0", from: "dec", to: "hex" }));
+    expect(r.result).toBe("0");
+  });
+
+  it("알 수 없는 from base → 에러 반환", async () => {
+    const r = await exec_raw({ action: "convert", value: "123", from: "base999", to: "hex" });
+    expect(r).toContain("Error");
+  });
+
+  it("잘못된 base32 문자 → 에러 반환", async () => {
+    const r = await exec_raw({ action: "convert", value: "!!!", from: "base32", to: "dec" });
+    expect(r).toContain("Error");
+  });
+
+  it("잘못된 base62 문자 → 에러 반환", async () => {
+    const r = await exec_raw({ action: "convert", value: "!@#", from: "base62", to: "dec" });
+    expect(r).toContain("Error");
+  });
+
+  it("알 수 없는 to base → toString 폴백", async () => {
+    const r = JSON.parse(await exec_raw({ action: "convert", value: "10", from: "dec", to: "base999" }));
+    expect(r.result).toBeDefined();
+  });
+
+  it("base36 → dec 변환 (to_decimal case)", async () => {
+    const r = JSON.parse(await exec_raw({ action: "convert", value: "73", from: "base36", to: "dec" }));
+    expect(r.decimal).toBe(255);
+    expect(r.result).toBe("255");
+  });
+});
+
+// ══════════════════════════════════════════
+// bytes_parse
+// ══════════════════════════════════════════
+
+describe("BaseConvertTool — bytes_parse", () => {
+  it("1.5 GB → 바이트 변환", async () => {
+    const r = JSON.parse(await exec_raw({ action: "bytes_parse", value: "1.5 GB" }));
+    expect(r.bytes).toBe(Math.round(1.5 * 1024 ** 3));
+  });
+
+  it("1024 MB → 바이트 변환", async () => {
+    const r = JSON.parse(await exec_raw({ action: "bytes_parse", value: "1024 MB" }));
+    expect(r.bytes).toBe(1024 * 1024 * 1024);
+  });
+
+  it("1 TB → 바이트 변환", async () => {
+    const r = JSON.parse(await exec_raw({ action: "bytes_parse", value: "1 TB" }));
+    expect(r.bytes).toBe(1024 ** 4);
+  });
+
+  it("1 KB → 바이트 변환", async () => {
+    const r = JSON.parse(await exec_raw({ action: "bytes_parse", value: "1 KB" }));
+    expect(r.bytes).toBe(1024);
+  });
+
+  it("GiB 단위 파싱", async () => {
+    const r = JSON.parse(await exec_raw({ action: "bytes_parse", value: "2 GiB" }));
+    expect(r.bytes).toBe(2 * 1024 ** 3);
+  });
+
+  it("잘못된 형식 → 에러 반환", async () => {
+    const r = await exec_raw({ action: "bytes_parse", value: "not a size" });
+    expect(r).toContain("Error");
+  });
+
+  it("B 단위 → 그대로 1 바이트", async () => {
+    const r = JSON.parse(await exec_raw({ action: "bytes_parse", value: "1 B" }));
+    expect(r.bytes).toBe(1);
+  });
+});
+
+// ══════════════════════════════════════════
+// int_to_roman/roman_to_int — 추가 케이스
+// ══════════════════════════════════════════
+
+describe("BaseConvertTool — roman 추가 케이스", () => {
+  it("1 → I", async () => {
+    const r = JSON.parse(await exec_raw({ action: "int_to_roman", value: "1" }));
+    expect(r.roman).toBe("I");
+  });
+
+  it("3999 → MMMCMXCIX", async () => {
+    const r = JSON.parse(await exec_raw({ action: "int_to_roman", value: "3999" }));
+    expect(r.roman).toBe("MMMCMXCIX");
+  });
+
+  it("4000 → 에러 반환", async () => {
+    const r = await exec_raw({ action: "int_to_roman", value: "4000" });
+    expect(r).toContain("Error");
+  });
+
+  it("소수 → 에러 반환", async () => {
+    const r = await exec_raw({ action: "int_to_roman", value: "3.5" });
+    expect(r).toContain("Error");
+  });
+
+  it("MMXXIV → 2024", async () => {
+    const r = JSON.parse(await exec_raw({ action: "roman_to_int", value: "MMXXIV" }));
+    expect(r.integer).toBe(2024);
+  });
+
+  it("IX → 9 (빼기 규칙)", async () => {
+    const r = JSON.parse(await exec_raw({ action: "roman_to_int", value: "IX" }));
+    expect(r.integer).toBe(9);
+  });
+});
+
+// ══════════════════════════════════════════
+// 에러 케이스
+// ══════════════════════════════════════════
+
+describe("BaseConvertTool — unsupported action", () => {
+  it("unsupported action → 에러 반환", async () => {
+    const r = await exec_raw({ action: "multiply" });
+    expect(r).toContain("Error");
   });
 });

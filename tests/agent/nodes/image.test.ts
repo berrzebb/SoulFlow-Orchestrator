@@ -73,3 +73,62 @@ describe("image_handler", () => {
     expect(result.output).toBeDefined();
   });
 });
+
+// ── from vector-store-image-extended.test.ts (image parts) ──
+
+function make_img_ctx(memory: Record<string, unknown> = {}): OrcheNodeExecutorContext {
+  return { memory, workspace: "/tmp", abort_signal: undefined };
+}
+
+function make_image_node(overrides?: Partial<OrcheNodeDefinition>): OrcheNodeDefinition {
+  return {
+    node_id: "img1",
+    node_type: "image",
+    operation: "info",
+    input_path: "/tmp/test.png",
+    output_path: "",
+    width: 800,
+    height: 600,
+    format: "png",
+    quality: 85,
+    ...overrides,
+  } as OrcheNodeDefinition;
+}
+
+describe("image_handler — execute() 확장", () => {
+  it("파일 없음 → success=false (Error 포함)", async () => {
+    const ctx = make_img_ctx({ text: "test" });
+    const result = await image_handler.execute(
+      make_image_node({ input_path: "/nonexistent/file.png" } as OrcheNodeDefinition),
+      ctx,
+    );
+    expect(result.output.success).toBe(false);
+  });
+
+  it("input_path 템플릿 resolve", async () => {
+    const ctx = make_img_ctx({ img: "test.png" });
+    const result = await image_handler.execute(
+      make_image_node({ input_path: "/nonexistent/{{memory.img}}" } as OrcheNodeDefinition),
+      ctx,
+    );
+    expect(result.output.success).toBe(false);
+  });
+});
+
+describe("image_handler — test() 확장", () => {
+  it("input_path 없음 → 경고", () => {
+    const r = image_handler.test!(make_image_node({ input_path: "" } as OrcheNodeDefinition), make_img_ctx());
+    expect(r.warnings?.some((w) => w.includes("input_path"))).toBe(true);
+  });
+
+  it("input_path 있음 → 경고 없음", () => {
+    const r = image_handler.test!(make_image_node(), make_img_ctx());
+    expect(r.warnings ?? []).toHaveLength(0);
+  });
+
+  it("preview: operation/format 포함", () => {
+    const r = image_handler.test!(make_image_node(), make_img_ctx());
+    expect(r.preview).toHaveProperty("operation");
+    expect(r.preview).toHaveProperty("format");
+  });
+});

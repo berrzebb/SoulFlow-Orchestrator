@@ -213,6 +213,28 @@ describe("rendering — markdown_to_plain 추가 경로", () => {
     expect(r.content).not.toContain("**");
     expect(r.content).not.toContain("*");
   });
+
+  it("코드 블록 → 내용만 추출", () => {
+    const r = render_agent_output("```python\nprint('hello')\n```", plain_profile);
+    expect(r.content).toContain("print('hello')");
+    expect(r.content).not.toContain("```");
+  });
+
+  it("링크 URL #으로 치환 → 레이블만 표시", () => {
+    const r = render_agent_output("[visit here](#)", plain_profile);
+    expect(typeof r.content).toBe("string");
+  });
+
+  it("링크 URL 있음 → 레이블 (URL) 형식", () => {
+    const r = render_agent_output("[Google](https://google.com)", plain_profile);
+    expect(r.content).toContain("Google");
+    expect(r.content).toContain("https://google.com");
+  });
+
+  it("strikethrough → 텍스트 포함", () => {
+    const r = render_agent_output("~~deleted~~", plain_profile);
+    expect(r.content).toContain("deleted");
+  });
 });
 
 describe("rendering — inline token 복원 (HTML)", () => {

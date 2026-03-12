@@ -167,3 +167,19 @@ describe("create_cd_observer — redo (L80)", () => {
     expect(result).toBeNull();
   });
 });
+
+// ── from misc-extended.test.ts (node-registry test) ──
+
+describe("node-registry", () => {
+  it("register_node 중복 → Error throw", async () => {
+    const { register_node, get_node_handler } = await import("../../src/agent/node-registry.js");
+    const handler = { node_type: "test-ext-unique-xyz", icon: "T", color: "#000", shape: "rect" as const,
+      output_schema: [], input_schema: [],
+      async execute() { return { output: {} }; },
+      test() { return { preview: {}, warnings: [] }; },
+    };
+    register_node(handler);
+    expect(get_node_handler("test-ext-unique-xyz")).toBe(handler);
+    expect(() => register_node(handler)).toThrow("duplicate node handler");
+  });
+});

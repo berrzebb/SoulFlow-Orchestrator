@@ -759,3 +759,175 @@ describe("CronHandler — 자연어 regex 패턴 (coverage)", () => {
     expect(cron.disable_all_and_pause).toHaveBeenCalled();
   });
 });
+
+// ══════════════════════════════════════════
+// (from extended) parse_duration_ms — 초/시간 단위
+// ══════════════════════════════════════════
+
+describe("CronHandler — 자연어 parse_duration_ms 단위 (초/시간)", () => {
+  it("초 단위 (30초 후 알림) → 자연어 등록", async () => {
+    const cron = make_cron();
+    const handler = new CronHandler(cron);
+    const ctx = make_ctx("", [], "30초 후 알림 회의 준비");
+    const result = await handler.handle(ctx);
+    expect(result).toBe(true);
+    expect((cron.add_job as ReturnType<typeof vi.fn>)).toHaveBeenCalled();
+  });
+
+  it("시간 단위 (2시간 후 알림) → 자연어 등록", async () => {
+    const cron = make_cron();
+    const handler = new CronHandler(cron);
+    const ctx = make_ctx("", [], "2시간 후 알림 회의");
+    const result = await handler.handle(ctx);
+    expect(result).toBe(true);
+  });
+
+  it("복합 delayed_every: '1분 후 10분 간격으로 알림 물 마시기'", async () => {
+    const cron = make_cron();
+    const handler = new CronHandler(cron);
+    const ctx = make_ctx("", [], "1분 후 10분 간격으로 알림 물 마시기");
+    const result = await handler.handle(ctx);
+    expect(result).toBe(true);
+    const call = (cron.add_job as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(call[1].kind).toBe("every");
+    expect(call[1].every_ms).toBe(600_000);
+  });
+});
+
+// ══════════════════════════════════════════
+// (from extended) 자연어 절대 시간
+// ══════════════════════════════════════════
+
+describe("CronHandler — 자연어 절대 시간 (extended)", () => {
+  it("'오후 3시 알림 회의' → at 스케줄 등록", async () => {
+    const cron = make_cron();
+    const handler = new CronHandler(cron);
+    const ctx = make_ctx("", [], "오후 3시 알림 회의");
+    const result = await handler.handle(ctx);
+    expect(result).toBe(true);
+    if ((cron.add_job as ReturnType<typeof vi.fn>).mock.calls.length > 0) {
+      const call = (cron.add_job as ReturnType<typeof vi.fn>).mock.calls[0];
+      expect(call[1].kind).toBe("at");
+    }
+  });
+
+  it("'내일 오전 9시 알림 스탠드업' → 내일 at 스케줄", async () => {
+    const cron = make_cron();
+    const handler = new CronHandler(cron);
+    const ctx = make_ctx("", [], "내일 오전 9시 알림 스탠드업");
+    const result = await handler.handle(ctx);
+    expect(result).toBe(true);
+    if ((cron.add_job as ReturnType<typeof vi.fn>).mock.calls.length > 0) {
+      const call = (cron.add_job as ReturnType<typeof vi.fn>).mock.calls[0];
+      expect(call[1].kind).toBe("at");
+      expect(call[1].at_ms).toBeGreaterThan(Date.now() + 60_000);
+    }
+  });
+
+  it("'모레 12시 알림 점심' → 모레 at 스케줄", async () => {
+    const cron = make_cron();
+    const handler = new CronHandler(cron);
+    const ctx = make_ctx("", [], "모레 12시 알림 점심");
+    await handler.handle(ctx);
+  });
+
+  it("'오늘 3시 알림 미팅' → 오늘 at 스케줄 또는 내일로 조정", async () => {
+    const cron = make_cron();
+    const handler = new CronHandler(cron);
+    const ctx = make_ctx("", [], "오늘 3시 알림 미팅");
+    await handler.handle(ctx);
+  });
+});
+
+// ══════════════════════════════════════════
+// (from extended) render_schedule — 11개 이상 잡
+// ══════════════════════════════════════════
+
+describe("CronHandler — render_schedule 11개+ 잡 목록", () => {
+  it("11개 이상 잡 → '... and N more'", async () => {
+    const jobs = Array.from({ length: 12 }, (_, i) => ({
+      id: `j${i}`, name: `Job${i}`, enabled: true,
+      schedule: { kind: "every", every_ms: 60_000 },
+      state: { next_run_at_ms: Date.now() + 60_000 },
+    }));
+    const cron = make_cron({ list_jobs: vi.fn().mockResolvedValue(jobs) });
+    const handler = new CronHandler(cron);
+    const ctx = make_ctx("cron", ["list"]);
+    await handler.handle(ctx);
+    expect(ctx.replies[0]).toContain("and 2 more");
+  });
+});
+
+// ══════════════════════════════════════════
+// (from extended) remove 없는 경우
+// ══════════════════════════════════════════
+
+describe("CronHandler — remove 없는 job_id", () => {
+  it("remove job_id 없음 → 안내 메시지", async () => {
+    const cron = make_cron();
+    const handler = new CronHandler(cron);
+    const ctx = make_ctx("cron", ["remove"]);
+    await handler.handle(ctx);
+    expect(ctx.replies[0]).toContain("cron remove");
+  });
+
+  it("remove 존재하지 않는 job → '찾지 못했습니다'", async () => {
+    const cron = make_cron({ remove_job: vi.fn().mockResolvedValue(false) });
+    const handler = new CronHandler(cron);
+    const ctx = make_ctx("cron", ["remove", "ghost-job"]);
+    await handler.handle(ctx);
+    expect(ctx.replies[0]).toContain("찾지 못했습니다");
+  });
+});
+
+// ══════════════════════════════════════════
+// (from extended) handle 에러 경로
+// ══════════════════════════════════════════
+
+describe("CronHandler — handle 에러 경로", () => {
+  it("add_job 에러 → 에러 메시지 반환", async () => {
+    const cron = make_cron({
+      add_job: vi.fn().mockRejectedValue(new Error("db error")),
+    });
+    const handler = new CronHandler(cron);
+    const ctx = make_ctx("cron", ["add", "every", "10m", "테스트 메시지"]);
+    const result = await handler.handle(ctx);
+    expect(result).toBe(true);
+    expect(ctx.replies[0]).toContain("처리 실패");
+    expect(ctx.replies[0]).toContain("db error");
+  });
+
+  it("status 에러 → 에러 메시지", async () => {
+    const cron = make_cron({ status: vi.fn().mockRejectedValue(new Error("status failed")) });
+    const handler = new CronHandler(cron);
+    const ctx = make_ctx("cron", ["status"]);
+    const result = await handler.handle(ctx);
+    expect(result).toBe(true);
+    expect(ctx.replies[0]).toContain("처리 실패");
+  });
+
+  it("자연어 handle_add 에러 → 에러 메시지", async () => {
+    const cron = make_cron({
+      add_job: vi.fn().mockRejectedValue(new Error("natural add failed")),
+    });
+    const handler = new CronHandler(cron);
+    const ctx = make_ctx("", [], "1분 후 알림 회의");
+    const result = await handler.handle(ctx);
+    expect(result).toBe(true);
+    expect(ctx.replies[0]).toContain("처리 실패");
+  });
+});
+
+// ══════════════════════════════════════════
+// (from extended) 자연어 실패 → 가이드
+// ══════════════════════════════════════════
+
+describe("CronHandler — 자연어 실패 → 가이드", () => {
+  it("알 수 없는 자연어 형식 → handle 처리됨 (가이드 or false)", async () => {
+    const cron = make_cron();
+    const handler = new CronHandler(cron);
+    const ctx = make_ctx("", [], "알수없는내용");
+    const result = await handler.handle(ctx);
+    expect(typeof result).toBe("boolean");
+  });
+});

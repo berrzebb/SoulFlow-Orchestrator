@@ -378,3 +378,100 @@ describe("SkillsLoader — refresh", () => {
     expect(meta!.summary).toBe("newly added");
   });
 });
+
+// ══════════════════════════════════════════
+// Extended: _extract_summary, filter_unavailable, _parse_metadata, suggest, _get_missing_requirements
+// ══════════════════════════════════════════
+
+describe("SkillsLoader — _extract_summary (extended)", () => {
+  it("_extract_summary 직접 호출 — 빈 줄만 있으면 'No summary.'", () => {
+    const summary = (loader as any)._extract_summary("   \n  \n\n");
+    expect(summary).toBe("No summary.");
+  });
+
+  it("_extract_summary 직접 호출 — 첫 비헤딩 라인 반환", () => {
+    const summary = (loader as any)._extract_summary("# heading\nactual content\n");
+    expect(summary).toBe("actual content");
+  });
+});
+
+describe("SkillsLoader — list_skills filter_unavailable", () => {
+  it("filter_unavailable=true → 조건 미충족 스킬 제외", () => {
+    // First create the env-skill and heading-only if not already present
+    const skills_root = join(workspace, "skills");
+    if (!require("node:fs").existsSync(join(skills_root, "env-skill"))) {
+      mkdirSync(join(skills_root, "env-skill"), { recursive: true });
+      writeFileSync(join(skills_root, "env-skill", "SKILL.md"), "---\nname: env-skill\nsummary: Needs env var\nrequires:\n- env:TOTALLY_MISSING_ENV_VAR_12345\n---\nBody.\n");
+    }
+    if (!require("node:fs").existsSync(join(skills_root, "heading-only"))) {
+      mkdirSync(join(skills_root, "heading-only"), { recursive: true });
+      writeFileSync(join(skills_root, "heading-only", "SKILL.md"), "---\nname: heading-only\n---\n# Just a heading\n## Another heading\n");
+    }
+    loader.refresh();
+    const all = loader.list_skills(false);
+    const filtered = loader.list_skills(true);
+    const all_names = all.map((s) => s.name);
+    const filtered_names = filtered.map((s) => s.name);
+    if (all_names.includes("env-skill")) {
+      expect(filtered_names).not.toContain("env-skill");
+    }
+    expect(filtered_names).toContain("heading-only");
+  });
+});
+
+describe("SkillsLoader — _parse_metadata extended", () => {
+  it("kv 미매칭 라인 → skip", () => {
+    const raw = "---\nname: foo\n!invalid-line\nstatus: ok\n---\nbody";
+    const meta = (loader as any)._parse_metadata(raw);
+    expect(meta.name).toBe("foo");
+    expect(meta.status).toBe("ok");
+  });
+
+  it("quoted string value → 따옴표 제거", () => {
+    const raw = "---\nname: \"quoted-name\"\n---\nbody";
+    const meta = (loader as any)._parse_metadata(raw);
+    expect(meta.name).toBe("quoted-name");
+  });
+
+  it("single-quoted string value → 따옴표 제거", () => {
+    const raw = "---\nname: 'single-quoted'\n---\nbody";
+    const meta = (loader as any)._parse_metadata(raw);
+    expect(meta.name).toBe("single-quoted");
+  });
+});
+
+describe("SkillsLoader — suggest_skills_for_text extended", () => {
+  it("limit 20 상한 적용", () => {
+    const suggestions = loader.suggest_skills_for_text("skill", 100);
+    expect(suggestions.length).toBeLessThanOrEqual(20);
+  });
+
+  it("limit 0 → max(1, 0)=1 상한", () => {
+    const suggestions = loader.suggest_skills_for_text("skill", 0);
+    expect(suggestions.length).toBeLessThanOrEqual(1);
+  });
+});
+
+describe("SkillsLoader — _get_missing_requirements file case", () => {
+  it("file 요구사항 — 워크스페이스 상대 경로로 존재 시 → missing 없음", () => {
+    writeFileSync(join(workspace, "existing_req.txt"), "content");
+    const missing = (loader as any)._get_missing_requirements({
+      requires: ["file:existing_req.txt"],
+    });
+    expect(missing).toBe("");
+  });
+
+  it("non-env/file prefix → skip (missing 없음)", () => {
+    const missing = (loader as any)._get_missing_requirements({
+      requires: ["custom:some_value"],
+    });
+    expect(missing).toBe("");
+  });
+});
+
+describe("SkillsLoader — _resolve_skill_name 빈 이름", () => {
+  it("빈 이름 → null", () => {
+    const meta = loader.get_skill_metadata("   ");
+    expect(meta).toBeNull();
+  });
+});

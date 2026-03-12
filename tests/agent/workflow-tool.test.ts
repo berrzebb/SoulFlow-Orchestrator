@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { WorkflowTool } from "../../src/agent/tools/workflow.js";
-import type { DashboardWorkflowOps } from "../../src/dashboard/service.js";
+import type { DashboardWorkflowOps, DashboardAgentProviderOps } from "../../src/dashboard/service.js";
 import type { WorkflowDefinition } from "../../src/agent/phase-loop.types.js";
 
 const SAMPLE_DEF: WorkflowDefinition = {
@@ -266,5 +266,134 @@ describe("WorkflowTool", () => {
     const run = get_run(new WorkflowTool(make_mock_ops()));
     const result = await run({ action: "invalid_action" });
     expect(result).toContain("unsupported action");
+  });
+});
+
+// ══════════════════════════════════════════
+// Extended: handle_models, node_types categories, save/export/run errors
+// ══════════════════════════════════════════
+
+function make_provider_ops(overrides: Partial<DashboardAgentProviderOps> = {}): DashboardAgentProviderOps {
+  return {
+    list: vi.fn(async () => []),
+    get: vi.fn(async () => null),
+    create: vi.fn(async () => ({ ok: true, instance_id: "p1" })),
+    update: vi.fn(async () => ({ ok: true })),
+    delete: vi.fn(async () => true),
+    get_connection: vi.fn(async () => null),
+    list_models: vi.fn(async () => []),
+    test_connection: vi.fn(async () => ({ ok: true })),
+    ...overrides,
+  };
+}
+
+describe("WorkflowTool — handle_models", () => {
+  it("provider_ops 없음 → error 반환", async () => {
+    const run = get_run(new WorkflowTool(make_mock_ops()));
+    const result = await run({ action: "models" });
+    const parsed = JSON.parse(result);
+    expect(parsed.error).toContain("unavailable");
+    expect(parsed.backends).toEqual([]);
+  });
+
+  it("provider_ops 있음 + 빈 목록 → backends=[]", async () => {
+    const provider_ops = make_provider_ops({ list: vi.fn(async () => []) });
+    const run = get_run(new WorkflowTool(make_mock_ops(), provider_ops));
+    const result = await run({ action: "models" });
+    const parsed = JSON.parse(result);
+    expect(Array.isArray(parsed.backends)).toBe(true);
+    expect(parsed.backends.length).toBe(0);
+  });
+
+  it("enabled 프로바이더 → backends에 포함", async () => {
+    const provider_ops = make_provider_ops({
+      list: vi.fn(async () => [
+        { instance_id: "p1", label: "Provider1", provider_type: "openai", enabled: true, available: true, settings: {}, connection_id: null },
+        { instance_id: "p2", label: "Provider2", provider_type: "claude", enabled: false, available: false, settings: {}, connection_id: null },
+      ]),
+      list_models: vi.fn(async () => [{ id: "gpt-4o", name: "GPT-4o", purpose: "chat" }]),
+    });
+    const run = get_run(new WorkflowTool(make_mock_ops(), provider_ops));
+    const result = await run({ action: "models" });
+    const parsed = JSON.parse(result);
+    expect(parsed.backends.length).toBe(1);
+    expect(parsed.backends[0].backend).toBe("p1");
+  });
+
+  it("list_models 실패 → 모델 목록 빈 배열 (에러 무시)", async () => {
+    const provider_ops = make_provider_ops({
+      list: vi.fn(async () => [
+        { instance_id: "p4", label: "P4", provider_type: "openai", enabled: true, available: true, settings: {}, connection_id: null },
+      ]),
+      list_models: vi.fn(async () => { throw new Error("API error"); }),
+    });
+    const run = get_run(new WorkflowTool(make_mock_ops(), provider_ops));
+    const result = await run({ action: "models" });
+    const parsed = JSON.parse(result);
+    expect(parsed.backends[0].models).toEqual([]);
+  });
+});
+
+describe("WorkflowTool — node_types with categories", () => {
+  it("node_categories 지정 → 카탈로그 반환", async () => {
+    const run = get_run(new WorkflowTool(make_mock_ops()));
+    const result = await run({ action: "node_types", node_categories: ["flow", "data"] });
+    expect(typeof result).toBe("string");
+    expect(result.length).toBeGreaterThan(0);
+  });
+});
+
+describe("WorkflowTool — save 에러 경로", () => {
+  it("create: save_template 예외 → Error 반환", async () => {
+    const ops = make_mock_ops({ save_template: vi.fn(() => { throw new Error("disk full"); }) });
+    const run = get_run(new WorkflowTool(ops));
+    const result = await run({ action: "create", name: "test", definition: SAMPLE_DEF });
+    expect(result).toContain("Error");
+    expect(result).toContain("disk full");
+  });
+
+  it("update: save_template 예외 → Error 반환", async () => {
+    const ops = make_mock_ops({
+      get_template: vi.fn(() => SAMPLE_DEF),
+      save_template: vi.fn(() => { throw new Error("write error"); }),
+    });
+    const run = get_run(new WorkflowTool(ops));
+    const result = await run({ action: "update", name: "test", definition: SAMPLE_DEF });
+    expect(result).toContain("Error");
+    expect(result).toContain("write error");
+  });
+});
+
+describe("WorkflowTool — export 에러 경로", () => {
+  it("export: 템플릿 없음 → Error 반환", async () => {
+    const ops = make_mock_ops({ export_template: vi.fn(() => null) });
+    const run = get_run(new WorkflowTool(ops));
+    const result = await run({ action: "export", name: "nonexistent" });
+    expect(result).toContain("Error");
+    expect(result).toContain("not found");
+  });
+
+  it("export: name 없음 → Error 반환", async () => {
+    const run = get_run(new WorkflowTool(make_mock_ops()));
+    const result = await run({ action: "export" });
+    expect(result).toContain("Error");
+    expect(result).toContain("name is required");
+  });
+});
+
+describe("WorkflowTool — run inline 에러 경로", () => {
+  it("run: name 없음 + definition 없음 → Error 반환", async () => {
+    const run = get_run(new WorkflowTool(make_mock_ops()));
+    const result = await run({ action: "run" });
+    expect(result).toContain("Error");
+    expect(result).toContain("name or definition is required");
+  });
+
+  it("run: variables 있으면 create에 전달", async () => {
+    const ops = make_mock_ops({ get_template: vi.fn(() => SAMPLE_DEF) });
+    const run = get_run(new WorkflowTool(ops));
+    const vars = { env: "prod" };
+    await run({ action: "run", name: "test", variables: vars });
+    expect(ops.create).toHaveBeenCalledWith(expect.objectContaining({ variables: vars }));
   });
 });

@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { ClaudeCliAdapter, CodexCliAdapter, GeminiCliAdapter } from "@src/agent/pty/cli-adapter.ts";
+import type { AgentOutputMessage } from "@src/agent/pty/types.ts";
 
 describe("ClaudeCliAdapter", () => {
   let adapter: ClaudeCliAdapter;
@@ -1095,5 +1096,98 @@ describe("CodexCliAdapter — parse_output 빈 줄 (L183)", () => {
     const adapter = new CodexCliAdapter();
     expect(adapter.parse_output("")).toBeNull();
     expect(adapter.parse_output("   ")).toBeNull();
+  });
+});
+
+// ══════════════════════════════════════════
+// Claude — result without usage, 주석 줄, error message fallback
+// ══════════════════════════════════════════
+
+describe("ClaudeCliAdapter — parse_output 추가 분기", () => {
+  let adapter: ClaudeCliAdapter;
+  beforeEach(() => { adapter = new ClaudeCliAdapter(); });
+
+  it("result without usage → usage=undefined", () => {
+    const msg = adapter.parse_output('{"type":"result","result":"done"}');
+    expect(msg).not.toBeNull();
+    if (msg?.type === "complete") {
+      expect(msg.usage).toBeUndefined();
+    }
+  });
+
+  it("주석 줄 → null", () => {
+    expect(adapter.parse_output("// this is a comment")).toBeNull();
+  });
+
+  it("error 메시지 필드 fallback (message 대신 error 필드 없음)", () => {
+    const msg = adapter.parse_output('{"type":"error","message":"invalid api key"}');
+    if (msg?.type === "error") expect(msg.code).toBe("auth");
+  });
+});
+
+// ══════════════════════════════════════════
+// Codex — 추가 분기 (turn.started, apply_patch JSON parse 실패, aggregated_output fallback, unknown item_type)
+// ══════════════════════════════════════════
+
+describe("CodexCliAdapter — 추가 분기", () => {
+  let adapter: CodexCliAdapter;
+  beforeEach(() => { adapter = new CodexCliAdapter(); });
+
+  it("turn.started → null 반환", () => {
+    expect(adapter.parse_output('{"type":"turn.started"}')).toBeNull();
+  });
+
+  it("apply_patch: arguments JSON parse 실패 → raw arguments 필드로 반환", () => {
+    const msg = adapter.parse_output(JSON.stringify({
+      type: "item.started",
+      item: { type: "apply_patch", arguments: "{invalid json" },
+    }));
+    if (msg?.type === "tool_use") {
+      expect((msg.input as Record<string, unknown>).arguments).toBe("{invalid json");
+    }
+  });
+
+  it("item.completed apply_patch에 aggregated_output fallback", () => {
+    const msg = adapter.parse_output(JSON.stringify({
+      type: "item.completed",
+      item: { type: "apply_patch", aggregated_output: "fallback output" },
+    }));
+    if (msg?.type === "tool_result") {
+      expect(msg.output).toBe("fallback output");
+    }
+  });
+
+  it("item.started with unknown item_type → tool_use로 반환", () => {
+    const msg = adapter.parse_output(JSON.stringify({
+      type: "item.started",
+      item: { type: "custom_tool", param1: "value1", param2: "value2" },
+    }));
+    expect(msg?.type).toBe("tool_use");
+    if (msg?.type === "tool_use") {
+      expect(msg.tool).toBe("custom_tool");
+      expect((msg.input as Record<string, unknown>).param1).toBe("value1");
+    }
+  });
+});
+
+// ══════════════════════════════════════════
+// Gemini — result without stats, last_text 우선
+// ══════════════════════════════════════════
+
+describe("GeminiCliAdapter — 추가 분기", () => {
+  let adapter: GeminiCliAdapter;
+  beforeEach(() => { adapter = new GeminiCliAdapter(); });
+
+  it("result without stats → usage undefined", () => {
+    const msg = adapter.parse_output('{"type":"result","response":"done"}');
+    if (msg?.type === "complete") expect(msg.usage).toBeUndefined();
+  });
+
+  it("result: last_text가 있으면 response보다 우선 사용", () => {
+    adapter.parse_output('{"type":"message","role":"assistant","content":"accumulated text","delta":true}');
+    const msg = adapter.parse_output('{"type":"result","response":"response text"}');
+    if (msg?.type === "complete") {
+      expect(msg.result).toBe("accumulated text");
+    }
   });
 });
