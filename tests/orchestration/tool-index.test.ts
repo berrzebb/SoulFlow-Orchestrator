@@ -463,4 +463,121 @@ describe("ToolIndex — FTS5 + 벡터 하이브리드 도구 인덱싱", () => {
       await expect(index.warm_up()).resolves.toBeUndefined();
     });
   });
+
+  // ── cov2: query_cache eviction + build_fts_query ──
+
+  describe("query_cache eviction", () => {
+    it("17개 이상의 query_cache 항목 → 첫 번째 항목 삭제 (QUERY_CACHE_MAX=16)", async () => {
+      index.build(mockTools, mockCategories, testDbPath);
+      index.set_embed(mockEmbedFn);
+
+      for (let i = 0; i < 17; i++) {
+        await (index as any)._get_or_embed_query(`unique_query_${i}_text`);
+      }
+
+      const cache = (index as any).query_cache as Map<string, Float32Array>;
+      expect(cache.size).toBeLessThanOrEqual(16);
+    });
+  });
+
+  describe("build_fts_query", () => {
+    it("영어 키워드 → OR 조합 FTS 쿼리 반환", () => {
+      const result = (index as any).build_fts_query("read file contents search");
+      expect(typeof result).toBe("string");
+      expect(result).toContain("OR");
+    });
+
+    it("한국어 키워드 → 영어 태그로 확장", () => {
+      const result = (index as any).build_fts_query("파일 검색하기");
+      expect(result).toBeTruthy();
+      expect(result).toContain("OR");
+    });
+
+    it("수학 키워드 → math 관련 태그 확장", () => {
+      const result = (index as any).build_fts_query("수학 계산");
+      expect(result).toContain("math");
+    });
+
+    it("camelCase 식별자 → 분리 후 FTS 쿼리", () => {
+      const result = (index as any).build_fts_query("readFileContents");
+      expect(result).toBeTruthy();
+    });
+
+    it("snake_case 식별자 → _ 분리 후 FTS 쿼리", () => {
+      const result = (index as any).build_fts_query("read_file_contents");
+      expect(result).toContain("read");
+      expect(result).toContain("file");
+      expect(result).toContain("contents");
+    });
+
+    it("빈 문자열 → null 반환", () => {
+      const result = (index as any).build_fts_query("");
+      expect(result).toBeNull();
+    });
+
+    it("stop word만 있는 경우 → null 반환", () => {
+      const result = (index as any).build_fts_query("a i");
+      expect(result).toBeNull();
+    });
+  });
+
+  // ── cov3: hash cache early return + KO_KEYWORD_MAP + category max break ──
+
+  describe("build — hash 캐시", () => {
+    it("동일 스키마 두 번 build → hash 일치 → early return", async () => {
+      const tools = mockTools.slice(0, 2);
+      const cats = { read_file: "file", write_file: "file" };
+
+      index.build(tools, cats, testDbPath);
+      index.build(tools, cats, testDbPath);
+
+      const result = await index.select("read file contents");
+      expect(result.has("read_file")).toBe(true);
+    });
+  });
+
+  describe("build — KO_KEYWORD_MAP 한국어 태그 매핑", () => {
+    it("description에 '파일' 포함 → en_tags 추가됨", async () => {
+      const tools = [
+        createMockToolSchema("my_custom_tool", "파일 시스템 도구 - 파일 읽기 쓰기 관리"),
+        createMockToolSchema("other_tool", "Some other utility"),
+      ];
+      index.build(tools, { my_custom_tool: "file", other_tool: "util" }, testDbPath);
+
+      const result = await index.select("파일 관리");
+      expect(result.has("my_custom_tool")).toBe(true);
+    });
+
+    it("'검색' 키워드 도구 → search 태그 매핑", async () => {
+      const tools = [
+        createMockToolSchema("search_helper", "검색 도구 — 데이터 검색 및 필터링"),
+      ];
+      index.build(tools, { search_helper: "search" }, testDbPath);
+
+      const result = await index.select("검색해줘");
+      expect(result.has("search_helper")).toBe(true);
+    });
+  });
+
+  describe("select — category 폴백 루프 max 도달 break", () => {
+    it("max_tools=2 + category에 4개 도구 → inner/outer break 실행", async () => {
+      const tools = [
+        createMockToolSchema("custom_a", "custom tool alpha"),
+        createMockToolSchema("custom_b", "custom tool beta"),
+        createMockToolSchema("custom_c", "custom tool gamma"),
+        createMockToolSchema("custom_d", "custom tool delta"),
+      ];
+      const cats = { custom_a: "custom", custom_b: "custom", custom_c: "custom", custom_d: "custom" };
+
+      index.build(tools, cats, testDbPath);
+
+      const result = await index.select("xyz123 unique query", {
+        max_tools: 2,
+        mode: "agent",
+        classifier_categories: ["custom"],
+      });
+
+      expect(result.size).toBeLessThanOrEqual(2);
+    });
+  });
 });
