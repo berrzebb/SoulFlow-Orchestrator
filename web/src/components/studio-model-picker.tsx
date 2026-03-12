@@ -2,7 +2,7 @@
  * Prompting Studio 모델 선택기.
  * provider pill(커스텀 드롭다운) + model dropdown 인라인 배치 (AI Studio 스타일).
  */
-import { useState, useEffect, useRef } from "react";
+import { useState, useRef } from "react";
 import { useClickOutside } from "../hooks/use-click-outside";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../api/client";
@@ -125,30 +125,23 @@ function ProviderDropdown({
 }
 
 export function StudioModelPicker({ value, onChange, purpose, hideModel, compact, onCompare }: Props) {
-  const [models, setModels] = useState<ModelInfo[]>([]);
-  const [loadingModels, setLoadingModels] = useState(false);
-
   const { data: providers = [] } = useQuery<ProviderInfo[]>({
     queryKey: ["studio-providers"],
     queryFn: () => api.get("/api/agents/providers"),
     staleTime: 30_000,
   });
 
-  const available = providers.filter((p) => p.available !== false);
+  const { data: all_models = [], isLoading: loadingModels } = useQuery<ModelInfo[]>({
+    queryKey: ["studio-models", value.provider_id],
+    queryFn: () => api.get<ModelInfo[]>(`/api/agents/providers/${encodeURIComponent(value.provider_id)}/models`),
+    enabled: !!value.provider_id,
+    staleTime: 30_000,
+  });
 
-  useEffect(() => {
-    if (!value.provider_id) { setModels([]); return; }
-    setLoadingModels(true);
-    api.get<ModelInfo[]>(`/api/agents/providers/${encodeURIComponent(value.provider_id)}/models`)
-      .then((list) => {
-        const filtered = purpose
-          ? list.filter((m) => m.purpose === purpose)
-          : list.filter((m) => m.purpose !== "embedding");
-        setModels(filtered);
-      })
-      .catch(() => setModels([]))
-      .finally(() => setLoadingModels(false));
-  }, [value.provider_id, purpose]);
+  const available = providers.filter((p) => p.available !== false);
+  const models = purpose
+    ? all_models.filter((m) => m.purpose === purpose)
+    : all_models.filter((m) => m.purpose !== "embedding");
 
   /* compact 모드 — 기존 호환 */
   if (compact) {
