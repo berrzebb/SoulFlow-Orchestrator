@@ -40,6 +40,8 @@ import {
 } from "../dashboard/ops-factory.js";
 import { UsageStore } from "../gateway/usage-store.js";
 import type { AuthService } from "../auth/auth-service.js";
+import { WorkspaceResolver } from "../workspace/resolver.js";
+import type { WorkspaceRegistry } from "../workspace/registry.js";
 
 export interface DashboardBundleDeps {
   workspace: string;
@@ -76,9 +78,11 @@ export interface DashboardBundleDeps {
   reference_store: ReferenceStore;
   webhook_store: WebhookStore;
   agent_definition_store: AgentDefinitionStore;
+  user_dir: string;
   workflow_ops_result: DashboardWorkflowOps | null;
   usage_store?: UsageStore | null;
   auth_svc?: AuthService | null;
+  workspace_registry?: WorkspaceRegistry | null;
 }
 
 export interface DashboardBundleResult {
@@ -96,7 +100,7 @@ export function create_dashboard_bundle(deps: DashboardBundleDeps): DashboardBun
     sessions, dlq_store, dispatch, oauth_store, oauth_flow,
     kanban_store, kanban_automation, reference_store, webhook_store,
     agent_definition_store, workflow_ops_result, usage_store: provided_usage_store,
-    auth_svc,
+    user_dir, auth_svc, workspace_registry,
   } = deps;
 
   const agent_provider_ops = create_agent_provider_ops({
@@ -108,7 +112,7 @@ export function create_dashboard_bundle(deps: DashboardBundleDeps): DashboardBun
     return { dashboard: null, agent_provider_ops };
   }
 
-  const usage_store = provided_usage_store ?? new UsageStore(workspace);
+  const usage_store = provided_usage_store ?? new UsageStore(user_dir);
 
   const dash = new DashboardService({
     host: app_config.dashboard.host,
@@ -137,7 +141,7 @@ export function create_dashboard_bundle(deps: DashboardBundleDeps): DashboardBun
     dispatch,
     secrets: providers.get_secret_vault(),
     config_ops: create_config_ops({ app_config, config_store }),
-    skill_ops: create_skill_ops({ skills_loader: agent.context.skills_loader, workspace }),
+    skill_ops: create_skill_ops({ skills_loader: agent.context.skills_loader, workspace: user_dir }),
     tool_ops: create_tool_ops({ tool_names: () => agent.tools.tool_names(), get_definitions: () => agent.tools.get_definitions(), mcp }),
     template_ops: create_template_ops(workspace),
     channel_ops: create_channel_ops({ channels, instance_store, app_config, workspace_dir: workspace }),
@@ -145,7 +149,7 @@ export function create_dashboard_bundle(deps: DashboardBundleDeps): DashboardBun
     bootstrap_ops: create_bootstrap_ops({ provider_store, config_store, provider_registry: providers, agent_backends: agent_backend_registry, workspace }),
     session_store: sessions,
     memory_ops: create_memory_ops(agent.context.memory_store),
-    workspace_ops: create_workspace_ops(workspace),
+    workspace_ops: create_workspace_ops(user_dir),
     oauth_ops: create_oauth_ops({ oauth_store, oauth_flow, dashboard_port: app_config.dashboard.port, public_url: app_config.dashboard.publicUrl }),
     cli_auth_ops: create_cli_auth_ops({ cli_auth }),
     model_ops: orchestrator_llm_runtime ? create_model_ops(orchestrator_llm_runtime) : null,
@@ -194,6 +198,8 @@ Description: ${prompt}`,
     }),
     workflow_ops: workflow_ops_result,
     auth_svc: auth_svc ?? null,
+    workspace_resolver: auth_svc ? new WorkspaceResolver(workspace) : null,
+    workspace_registry: workspace_registry ?? null,
     kanban_store,
     kanban_rule_executor: () => kanban_automation.get_rule_executor(),
     reference_store,

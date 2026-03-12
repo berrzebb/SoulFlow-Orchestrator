@@ -38,6 +38,7 @@ import { UsageStore } from "./gateway/usage-store.js";
 import { existsSync } from "node:fs";
 import { AdminStore } from "./auth/admin-store.js";
 import { AuthService } from "./auth/auth-service.js";
+import { WorkspaceRegistry } from "./workspace/registry.js";
 import { randomUUID } from "node:crypto";
 
 export interface RuntimeApp {
@@ -65,24 +66,28 @@ export async function createRuntime(): Promise<RuntimeApp> {
   const workspace = resolve_workspace();
   const app_root = resolve_app_root();
 
-  // 기본 워크플로우 템플릿 시드 (WORKSPACE/workflows/ 가 비어있으면 default-workflows/ 에서 복사)
-  seed_default_workflows(workspace, app_root);
+  // admin.db에서 superadmin wdir 자동 감지 → user_dir 결정
+  const user_dir = resolve_user_dir(workspace);
 
-  const { shared_vault, config_store, app_config } = await create_config_bundle(workspace);
+  // 기본 워크플로우 템플릿 시드 (user_dir/workflows/ 가 비어있으면 default-workflows/ 에서 복사)
+  seed_default_workflows(user_dir, app_root);
+
+  const { shared_vault, config_store, app_config } = await create_config_bundle(workspace, user_dir);
 
   const logger = create_logger("runtime");
+  logger.info(`user_dir=${user_dir}`);
 
   const {
     data_dir, sessions_dir, bus, decisions, events,
     provider_store, agent_definition_store, oauth_store, oauth_flow,
     embed_service, embed_worker_config, image_embed_service, vector_store_service, webhook_store, query_db_service,
-  } = await create_runtime_data({ workspace, app_config, shared_vault, logger });
+  } = await create_runtime_data({ workspace, user_dir, app_config, shared_vault, logger });
 
   const {
     providers, cli_auth, mcp, agent_backend_registry, agent_backends,
     agent_session_store, provider_caps, resolve_instance_to_type,
   } = await create_provider_bundle({
-    workspace, data_dir, app_config, shared_vault, provider_store, logger,
+    workspace, user_dir, data_dir, app_config, shared_vault, provider_store, logger,
   });
 
   const broadcaster = new MutableBroadcaster();
@@ -93,7 +98,7 @@ export async function createRuntime(): Promise<RuntimeApp> {
     phase_workflow_store, kanban_store, kanban_tool, kanban_automation,
     tool_index, reference_store, sessions, memory_consolidation,
   } = await create_agent_core({
-    workspace, data_dir, sessions_dir, app_root, app_config,
+    workspace, user_dir, data_dir, sessions_dir, app_root, app_config,
     providers, bus, events, agent_backend_registry, provider_caps,
     embed_service, embed_worker_config, image_embed_service, oauth_store, oauth_flow, broadcaster, logger,
   });
@@ -104,7 +109,7 @@ export async function createRuntime(): Promise<RuntimeApp> {
     active_run_controller, render_profile_store,
     process_tracker, confirmation_guard, hitl_pending_store,
   } = await create_channel_bundle({
-    workspace, data_dir, app_config, shared_vault,
+    workspace, user_dir, data_dir, app_config, shared_vault,
     bus, broadcaster, agent, agent_runtime, sessions, logger,
   });
   // channels 생성 후 PollTool 지연 등록 (AgentDomain이 channels보다 먼저 생성되므로)
@@ -112,7 +117,7 @@ export async function createRuntime(): Promise<RuntimeApp> {
   const dashboard: { current: DashboardService | null } = { current: null };
 
   const { orchestration, cron, create_task_fn, oauth_fetch_service } = await create_orchestration_bundle({
-    workspace, data_dir, app_config,
+    workspace, user_dir, data_dir, app_config,
     providers, agent, agent_runtime, agent_backend_registry, provider_caps,
     bus, events, decisions, process_tracker, mcp,
     phase_workflow_store, broadcaster, confirmation_guard,
@@ -122,14 +127,17 @@ export async function createRuntime(): Promise<RuntimeApp> {
     resolve_instance_to_type, primary_provider, default_chat_id, logger,
   });
 
-  const usage_store = new UsageStore(workspace);
+  const usage_store = new UsageStore(user_dir);
 
   // ADMIN_DB_PATH env 또는 workspace/admin/admin.db 자동 감지 → null이면 인증 비활성
   const admin_db_path = process.env.ADMIN_DB_PATH ?? join(workspace, "admin", "admin.db");
   const auth_svc = existsSync(admin_db_path) ? new AuthService(new AdminStore(admin_db_path)) : null;
 
+  // 멀티테넌트: JWT 인증 후 개인 워크스페이스 디렉토리 보장
+  const workspace_registry = auth_svc ? new WorkspaceRegistry(workspace) : null;
+
   const { command_router, channel_manager } = create_channel_wiring({
-    workspace, app_config, agent, agent_runtime, agent_backend_registry,
+    workspace, user_dir, app_config, agent, agent_runtime, agent_backend_registry,
     bus, broadcaster, channels, instance_store,
     dispatch, session_recorder, media_collector, approval,
     active_run_controller, render_profile_store,
@@ -140,16 +148,16 @@ export async function createRuntime(): Promise<RuntimeApp> {
   });
 
   const { orchestrator_llm_runtime, services, heartbeat, ops } = create_runtime_support({
-    workspace, app_config, provider_store,
+    workspace, user_dir, app_config, provider_store,
     agent, agent_runtime, bus, channel_manager,
     cron, decisions, providers, sessions, dlq_store,
     primary_provider, default_chat_id, logger,
   });
 
   // WorkflowOps는 대시보드 + WorkflowTool 양쪽에서 사용
-  const trigger_sync_args = { workspace, app_config, bus, orchestration, cron, webhook_store, kanban_store, primary_provider, default_chat_id, logger };
+  const trigger_sync_args = { workspace, user_dir, app_config, bus, orchestration, cron, webhook_store, kanban_store, primary_provider, default_chat_id, logger };
   const { workflow_ops: workflow_ops_result } = await create_workflow_ops_bundle({
-    workspace, agent, agent_runtime: agent_runtime, bus, providers, provider_store, decisions,
+    workspace, user_dir, agent, agent_runtime: agent_runtime, bus, providers, provider_store, decisions,
     phase_workflow_store, kanban_store, kanban_tool, kanban_automation,
     hitl_pending_store, persona_renderer, broadcaster, channel_manager,
     embed_service, vector_store_service, webhook_store, query_db_service,
@@ -160,7 +168,7 @@ export async function createRuntime(): Promise<RuntimeApp> {
   await register_late_commands({ command_router, workflow_ops_result, orchestrator_llm_runtime });
 
   const { dashboard: dashboard_instance, agent_provider_ops: agent_provider_ops_result } = create_dashboard_bundle({
-    workspace, app_config, config_store,
+    workspace, user_dir, app_config, config_store,
     agent, agent_runtime, agent_inspector, agent_backend_registry, provider_store, providers,
     bus, broadcaster, channel_manager, channels, instance_store,
     cli_auth, decisions, events, heartbeat, mcp, ops,
@@ -168,7 +176,7 @@ export async function createRuntime(): Promise<RuntimeApp> {
     sessions, dlq_store, dispatch, oauth_store, oauth_flow,
     kanban_store, kanban_automation, reference_store, webhook_store,
     agent_definition_store, workflow_ops_result, usage_store,
-    auth_svc,
+    auth_svc, workspace_registry,
   });
   dashboard.current = dashboard_instance;
 
@@ -238,6 +246,18 @@ function resolve_workspace(): string {
   if (process.env.WORKSPACE) return resolve(process.env.WORKSPACE);
   const src_dir = fileURLToPath(new URL(".", import.meta.url));
   return join(resolve(src_dir, ".."), "workspace");
+}
+
+/** 사용자 콘텐츠 경로. WORKSPACE_USER_DIR env > admin.db superadmin > workspace 순서로 결정. */
+function resolve_user_dir(workspace: string): string {
+  if (process.env.WORKSPACE_USER_DIR) return resolve(process.env.WORKSPACE_USER_DIR);
+  const admin_db = process.env.ADMIN_DB_PATH ?? join(workspace, "admin", "admin.db");
+  if (existsSync(admin_db)) {
+    const superadmin = new AdminStore(admin_db).list_users()
+      .find((u) => u.system_role === "superadmin" && u.default_team_id);
+    if (superadmin) return join(workspace, "tenants", superadmin.default_team_id!, "users", superadmin.id);
+  }
+  return workspace;
 }
 
 function resolve_app_root(): string {
