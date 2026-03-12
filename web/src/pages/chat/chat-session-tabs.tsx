@@ -1,6 +1,7 @@
 /** 채팅 세션 탭바 — 세션 목록 탭 + 컨텍스트 메뉴 + 인라인 리네임 */
 
 import { useState, useRef, useEffect } from "react";
+import { useClickOutside } from "../../hooks/use-click-outside";
 import { createPortal } from "react-dom";
 import { useT } from "../../i18n";
 import type { ChatSessionSummary } from "./types";

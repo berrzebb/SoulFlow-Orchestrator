@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect, useMemo } from "react";
+import { useState, useRef, useMemo } from "react";
+import { useClickOutside } from "../hooks/use-click-outside";
 
 export interface ComboboxOption {
   value: string;
@@ -32,14 +33,7 @@ export function Combobox({ options, value, onChange, placeholder, loading, loadi
   }, [options, query]);
 
 
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [open]);
+  useClickOutside(ref, () => setOpen(false), open);
 
   useEffect(() => {
     if (focusIdx < 0 || !listRef.current) return;

@@ -3,6 +3,7 @@
  * provider pill(커스텀 드롭다운) + model dropdown 인라인 배치 (AI Studio 스타일).
  */
 import { useState, useEffect, useRef } from "react";
+import { useClickOutside } from "../hooks/use-click-outside";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../api/client";
 
@@ -69,14 +70,7 @@ function ProviderDropdown({
   const wrap_ref = useRef<HTMLDivElement>(null);
   const sel = providers.find((p) => p.instance_id === value);
 
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: MouseEvent) => {
-      if (!wrap_ref.current?.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [open]);
+  useClickOutside(wrap_ref, () => setOpen(false), open);
 
   return (
     <div className="ps-prov-wrap" ref={wrap_ref}>

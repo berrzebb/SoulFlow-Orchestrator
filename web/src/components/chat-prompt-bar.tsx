@@ -7,6 +7,7 @@
  */
 
 import { useRef, useEffect, useState } from "react";
+import { useClickOutside } from "../hooks/use-click-outside";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../api/client";
 import { useT } from "../i18n";
@@ -89,17 +90,7 @@ export function ChatPromptBar(props: ChatPromptBarProps) {
     prev_busy.current = is_busy;
   }, [is_busy]);
 
-  // 팝업 외부 클릭 시 닫기
-  useEffect(() => {
-    if (!open_picker) return;
-    const handler = (e: MouseEvent) => {
-      if (popup_ref.current && !popup_ref.current.contains(e.target as Node)) {
-        setOpenPicker(null);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [open_picker]);
+  useClickOutside(popup_ref, () => setOpenPicker(null), !!open_picker);
 
   const { data: instances = [], isLoading: loading_instances } = useQuery({
     queryKey: ["provider-instances-chat"],

@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { useClickOutside } from "../hooks/use-click-outside";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { api } from "../api/client";
@@ -101,18 +102,12 @@ export default function KanbanPage() {
   const set_view = (v: ViewMode) => setParams((p) => { p.set("view", v); return p; }, { replace: true });
   const set_board = (id: string) => { setParams((p) => { p.set("board", id); return p; }, { replace: true }); setSelectedCard(null); };
 
-  /* outside click / Escape → close board selector */
+  useClickOutside(selectorRef, () => setShowBoardSelector(false), showBoardSelector);
   useEffect(() => {
     if (!showBoardSelector) return;
-    const handleClick = (e: MouseEvent) => {
-      if (selectorRef.current && !selectorRef.current.contains(e.target as Node)) setShowBoardSelector(false);
-    };
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setShowBoardSelector(false);
-    };
-    document.addEventListener("mousedown", handleClick);
+    const handleKey = (e: KeyboardEvent) => { if (e.key === "Escape") setShowBoardSelector(false); };
     document.addEventListener("keydown", handleKey);
-    return () => { document.removeEventListener("mousedown", handleClick); document.removeEventListener("keydown", handleKey); };
+    return () => document.removeEventListener("keydown", handleKey);
   }, [showBoardSelector]);
 
   /* ─── Queries ─── */
