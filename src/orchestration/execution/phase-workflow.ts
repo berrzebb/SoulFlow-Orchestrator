@@ -228,7 +228,7 @@ function format_workflow_preview(def: import("../../agent/phase-loop.types.js").
     const critic_note = p.critic ? " + critic" : "";
     lines.push(`**Phase ${i + 1}: ${p.title}** (${p.agents.length} agents${critic_note})`);
     for (const a of p.agents) {
-      lines.push(`  - ${a.label}: ${(a.system_prompt || a.preset_id || "").slice(0, 80)}`);
+      lines.push(`  - ${a.label}: ${a.system_prompt.slice(0, 80)}`);
     }
   }
   lines.push(`\n대시보드에서 워크플로우를 승인하거나 수정하세요.`);
