@@ -1,6 +1,6 @@
 /**
  * Prompting — Agent 탭.
- * 에이전트 설계(soul·heart·tools) + 테스트 채팅을 한 화면에 통합.
+ * 에이전트 설계(전체 필드) + 테스트 채팅을 한 화면에 통합.
  */
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -9,13 +9,72 @@ import { useT } from "../../i18n";
 import { StudioModelPicker, type StudioModelValue } from "../../components/studio-model-picker";
 import { ChatPromptBar } from "../../components/chat-prompt-bar";
 import { RunResult, type RunResultValue } from "./run-result";
-import type { AgentDefinition } from "../../../../src/agent/agent-definition.types";
+import type { AgentDefinition, GeneratedAgentFields } from "../../../../src/agent/agent-definition.types";
 
 type ChatMsg = { role: "user" | "assistant"; content: string };
+
+const SHARED_PROTOCOLS = [
+  "clarification-protocol",
+  "phase-gates",
+  "error-escalation",
+  "session-metrics",
+  "difficulty-guide",
+] as const;
+
+const ROLE_SKILLS = [
+  "",
+  "role:concierge",
+  "role:pm",
+  "role:pl",
+  "role:implementer",
+  "role:reviewer",
+  "role:debugger",
+  "role:validator",
+  "role:generalist",
+];
 
 interface AgentPanelProps {
   /** Gallery에서 넘어올 때 선택할 에이전트 ID. "__new__"이면 새 에이전트 폼. */
   initial_id?: string;
+}
+
+interface FormState {
+  name: string;
+  description: string;
+  icon: string;
+  role_skill: string;
+  soul: string;
+  heart: string;
+  tools: string;
+  shared_protocols: string[];
+  skills: string;
+  use_when: string;
+  not_use_for: string;
+  extra_instructions: string;
+}
+
+const EMPTY_FORM: FormState = {
+  name: "", description: "", icon: "🤖", role_skill: "",
+  soul: "", heart: "", tools: "",
+  shared_protocols: ["clarification-protocol", "phase-gates"],
+  skills: "", use_when: "", not_use_for: "", extra_instructions: "",
+};
+
+function form_from_def(def: AgentDefinition): FormState {
+  return {
+    name: def.name,
+    description: def.description,
+    icon: def.icon,
+    role_skill: def.role_skill ?? "",
+    soul: def.soul,
+    heart: def.heart,
+    tools: def.tools.join(", "),
+    shared_protocols: def.shared_protocols,
+    skills: def.skills.join(", "),
+    use_when: def.use_when,
+    not_use_for: def.not_use_for,
+    extra_instructions: def.extra_instructions,
+  };
 }
 
 export function AgentPanel({ initial_id }: AgentPanelProps) {
@@ -31,9 +90,7 @@ export function AgentPanel({ initial_id }: AgentPanelProps) {
 
   const [selected_id, setSelectedId] = useState<string>(initial_id ?? "__new__");
   const [model, setModel] = useState<StudioModelValue>({ provider_id: "", model: "" });
-  const [soul, setSoul] = useState("");
-  const [heart, setHeart] = useState("");
-  const [extra, setExtra] = useState("");
+  const [form, setForm] = useState<FormState>(EMPTY_FORM);
 
   const [ai_prompt, setAiPrompt] = useState("");
   const [generating, setGenerating] = useState(false);
@@ -44,6 +101,14 @@ export function AgentPanel({ initial_id }: AgentPanelProps) {
   const [last_result, setLastResult] = useState<RunResultValue | null>(null);
   const [saving, setSaving] = useState(false);
 
+  const set = <K extends keyof FormState>(key: K, value: FormState[K]) =>
+    setForm((f) => ({ ...f, [key]: value }));
+
+  const toggle_protocol = (protocol: string) =>
+    set("shared_protocols", form.shared_protocols.includes(protocol)
+      ? form.shared_protocols.filter((p) => p !== protocol)
+      : [...form.shared_protocols, protocol]);
+
   // Gallery에서 탭 전환 시 initial_id 반영
   useEffect(() => {
     if (initial_id !== undefined) setSelectedId(initial_id);
@@ -51,30 +116,43 @@ export function AgentPanel({ initial_id }: AgentPanelProps) {
 
   useEffect(() => {
     if (selected_id === "__new__") {
-      setModel({ provider_id: "", model: "" }); setSoul(""); setHeart(""); setExtra("");
+      setModel({ provider_id: "", model: "" });
+      setForm(EMPTY_FORM);
       return;
     }
     const def = definitions.find((d) => d.id === selected_id);
     if (!def) return;
-    const prov = def.preferred_providers[0] ?? "";
-    setModel({ provider_id: prov, model: def.model ?? "" });
-    setSoul(def.soul); setHeart(def.heart); setExtra(def.extra_instructions);
+    setModel({ provider_id: def.preferred_providers[0] ?? "", model: def.model ?? "" });
+    setForm(form_from_def(def));
   }, [selected_id, definitions]);
 
   useEffect(() => {
     chat_end_ref.current?.scrollIntoView({ behavior: "smooth" });
   }, [chat, running]);
 
-  const build_system = () => [soul, heart, extra].filter(Boolean).join("\n\n---\n\n");
+  const build_system = () =>
+    [form.soul, form.heart, form.extra_instructions].filter(Boolean).join("\n\n---\n\n");
 
   const handle_generate = async () => {
     if (!ai_prompt.trim()) return;
     setGenerating(true);
     try {
-      const data = await api.post<Partial<AgentDefinition>>("/api/agent-definitions/generate", { prompt: ai_prompt });
-      if (data.soul) setSoul(data.soul);
-      if (data.heart) setHeart(data.heart);
-      if (data.extra_instructions) setExtra(data.extra_instructions);
+      const data = await api.post<GeneratedAgentFields>("/api/agent-definitions/generate", { prompt: ai_prompt });
+      setForm((f) => ({
+        ...f,
+        name: data.name || f.name,
+        description: data.description || f.description,
+        icon: data.icon || f.icon,
+        role_skill: data.role_skill || f.role_skill,
+        soul: data.soul || f.soul,
+        heart: data.heart || f.heart,
+        tools: data.tools?.join(", ") || f.tools,
+        shared_protocols: data.shared_protocols?.length ? data.shared_protocols : f.shared_protocols,
+        skills: data.skills?.join(", ") || f.skills,
+        use_when: data.use_when || f.use_when,
+        not_use_for: data.not_use_for || f.not_use_for,
+        extra_instructions: data.extra_instructions || f.extra_instructions,
+      }));
       if (data.preferred_providers?.[0]) setModel((m) => ({ ...m, provider_id: data.preferred_providers![0]! }));
       if (data.model) setModel((m) => ({ ...m, model: data.model ?? "" }));
     } finally {
@@ -106,16 +184,28 @@ export function AgentPanel({ initial_id }: AgentPanelProps) {
   };
 
   const handle_save = async () => {
-    if (!soul.trim()) return;
+    if (!form.name.trim()) return;
     setSaving(true);
     try {
       const payload = {
-        soul, heart, extra_instructions: extra,
+        name: form.name.trim(),
+        description: form.description.trim(),
+        icon: form.icon.trim() || "🤖",
+        role_skill: form.role_skill || null,
+        soul: form.soul.trim(),
+        heart: form.heart.trim(),
+        tools: form.tools.split(",").map((s) => s.trim()).filter(Boolean),
+        shared_protocols: form.shared_protocols,
+        skills: form.skills.split(",").map((s) => s.trim()).filter(Boolean),
+        use_when: form.use_when.trim(),
+        not_use_for: form.not_use_for.trim(),
+        extra_instructions: form.extra_instructions.trim(),
         preferred_providers: model.provider_id ? [model.provider_id] : [],
         model: model.model || null,
+        is_builtin: false,
       };
       if (selected_id === "__new__") {
-        await api.post("/api/agent-definitions", { name: soul.slice(0, 40), description: "", icon: "🤖", role_skill: null, tools: [], shared_protocols: [], skills: [], use_when: "", not_use_for: "", is_builtin: false, ...payload });
+        await api.post("/api/agent-definitions", payload);
       } else {
         await api.put(`/api/agent-definitions/${selected_id}`, payload);
       }
@@ -147,6 +237,50 @@ export function AgentPanel({ initial_id }: AgentPanelProps) {
             <option value="__new__">{t("prompting.agent_new")}</option>
             {definitions.map((d) => (
               <option key={d.id} value={d.id}>{d.icon} {d.name}{d.is_builtin ? ` ${t("prompting.builtin")}` : ""}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* 기본 정보: 아이콘 + 이름 + 설명 */}
+        <div className="ps-pane-sec">
+          <span className="ps-pane-sec__label">{t("agents.section_basic")}</span>
+          <div style={{ display: "flex", gap: 8 }}>
+            <input
+              className="input input--center"
+              style={{ width: 48, flexShrink: 0 }}
+              value={form.icon}
+              onChange={(e) => set("icon", e.target.value)}
+              maxLength={4}
+              placeholder="🤖"
+            />
+            <input
+              className="input"
+              style={{ flex: 1 }}
+              value={form.name}
+              onChange={(e) => set("name", e.target.value)}
+              placeholder={t("agents.name_placeholder")}
+            />
+          </div>
+          <input
+            className="input"
+            style={{ marginTop: 6 }}
+            value={form.description}
+            onChange={(e) => set("description", e.target.value)}
+            placeholder={t("agents.description_placeholder")}
+          />
+        </div>
+
+        {/* 역할 */}
+        <div className="ps-pane-sec">
+          <span className="ps-pane-sec__label">{t("agents.section_role")}</span>
+          <select
+            className="ps-select-sm"
+            style={{ height: 32, fontSize: 13, width: "100%" }}
+            value={form.role_skill}
+            onChange={(e) => set("role_skill", e.target.value)}
+          >
+            {ROLE_SKILLS.map((r) => (
+              <option key={r} value={r}>{r || t("agents.role_custom")}</option>
             ))}
           </select>
         </div>
@@ -190,8 +324,8 @@ export function AgentPanel({ initial_id }: AgentPanelProps) {
           <textarea
             className="ps-prompt-area"
             style={{ minHeight: 72 }}
-            value={soul}
-            onChange={(e) => setSoul(e.target.value)}
+            value={form.soul}
+            onChange={(e) => set("soul", e.target.value)}
             placeholder={t("prompting.soul_ph")}
           />
         </div>
@@ -204,9 +338,62 @@ export function AgentPanel({ initial_id }: AgentPanelProps) {
           <textarea
             className="ps-prompt-area"
             style={{ minHeight: 60 }}
-            value={heart}
-            onChange={(e) => setHeart(e.target.value)}
+            value={form.heart}
+            onChange={(e) => set("heart", e.target.value)}
             placeholder={t("prompting.heart_ph")}
+          />
+        </div>
+
+        {/* 공통 규칙 (Shared Protocols) */}
+        <div className="ps-pane-sec">
+          <span className="ps-pane-sec__label">{t("agents.section_protocols")}</span>
+          <div className="checkbox-grid">
+            {SHARED_PROTOCOLS.map((protocol) => (
+              <label key={protocol} className="checkbox-item">
+                <input
+                  type="checkbox"
+                  checked={form.shared_protocols.includes(protocol)}
+                  onChange={() => toggle_protocol(protocol)}
+                />
+                <span>{protocol}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        {/* 도구 + 스킬 */}
+        <div className="ps-pane-sec">
+          <span className="ps-pane-sec__label">{t("agents.section_tools")}</span>
+          <input
+            className="input"
+            value={form.tools}
+            onChange={(e) => set("tools", e.target.value)}
+            placeholder={t("agents.tools_hint")}
+          />
+          <input
+            className="input"
+            style={{ marginTop: 6 }}
+            value={form.skills}
+            onChange={(e) => set("skills", e.target.value)}
+            placeholder={t("agents.skills_hint")}
+          />
+        </div>
+
+        {/* 경계 (Boundary) */}
+        <div className="ps-pane-sec">
+          <span className="ps-pane-sec__label">{t("agents.section_boundary")}</span>
+          <input
+            className="input"
+            value={form.use_when}
+            onChange={(e) => set("use_when", e.target.value)}
+            placeholder={t("agents.use_when_placeholder")}
+          />
+          <input
+            className="input"
+            style={{ marginTop: 6 }}
+            value={form.not_use_for}
+            onChange={(e) => set("not_use_for", e.target.value)}
+            placeholder={t("agents.not_use_for_placeholder")}
           />
         </div>
 
@@ -216,8 +403,8 @@ export function AgentPanel({ initial_id }: AgentPanelProps) {
           <textarea
             className="ps-prompt-area"
             style={{ minHeight: 52 }}
-            value={extra}
-            onChange={(e) => setExtra(e.target.value)}
+            value={form.extra_instructions}
+            onChange={(e) => set("extra_instructions", e.target.value)}
             placeholder={t("prompting.extra_ph")}
           />
         </div>
@@ -227,7 +414,7 @@ export function AgentPanel({ initial_id }: AgentPanelProps) {
           <button
             className={`ps-run-btn-main${saving ? " ps-run-btn-main--running" : ""}`}
             style={{ flex: 1, height: 36, borderRadius: 8, fontSize: 13 }}
-            disabled={saving || !soul.trim()}
+            disabled={saving || !form.name.trim()}
             onClick={() => void handle_save()}
           >
             {saving ? t("prompting.saving") : selected_id === "__new__" ? t("prompting.save") : t("prompting.update")}
