@@ -1,14 +1,19 @@
 /**
- * SubagentRegistry — 미커버 private 메서드 분기 커버리지.
- * - _build_subagent_prompt: 기본 soul/heart 주입 (L829)
- * - _announce_result: bus + channel + chat_id 모두 있음 → publish (L768-781)
- * - _announce_handoff: bus + channel/chat_id 있음 → publish (L795-808)
- * - _run_direct_executor: headless fallback path (executor_backend=null, L945-980)
- * - _run_direct_executor: executor_backend 있음 → error/cancelled 처리 (L910-942)
- * - _flush_stream_buffer: bus 있음 → publish (streaming flush)
+ * SubagentRegistry — private 메서드 단위 테스트 통합.
+ *
+ * _build_subagent_prompt: 기본 soul/heart 주입, 커스텀 soul, contextual_system, channel 기본값
+ * _announce_result: bus null / channel 없음 / 성공(✅) / 에러(❌)
+ * _announce_handoff: bus+channel / bus null / channel 없음
+ * _run_direct_executor: headless fallback / backend error·cancelled·stop
+ * _flush_stream_buffer: 빈 buffer / non-empty buffer
+ * _assistant_tool_call_message: tool_calls 포함 / content=null
+ * _fire: hooks 없음 / 있음 / throw catch
+ * _parse_controller_plan: alias/instruction 필터 / 비배열 handoffs / null row
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { SubagentRegistry } from "@src/agent/subagents.js";
+
+// ── 공유 헬퍼 ────────────────────────────────────────────
 
 function make_bus() {
   return {
@@ -37,7 +42,7 @@ function make_registry(overrides: Record<string, unknown> = {}) {
 beforeEach(() => vi.clearAllMocks());
 
 // ══════════════════════════════════════════════════════════
-// _build_subagent_prompt: 기본 soul/heart
+// _build_subagent_prompt: soul/heart/contextual 조합
 // ══════════════════════════════════════════════════════════
 
 describe("SubagentRegistry — _build_subagent_prompt (private)", () => {
@@ -70,6 +75,16 @@ describe("SubagentRegistry — _build_subagent_prompt (private)", () => {
       true, // has_contextual_system=true
     );
     expect(prompt).not.toContain("Calm, pragmatic");
+  });
+
+  it("origin_channel / origin_chat_id 없으면 기본값", () => {
+    const reg = make_registry();
+    const prompt = (reg as any)._build_subagent_prompt(
+      { task: "태스크" },
+      "sa1",
+    );
+    expect(prompt).toContain("system");
+    expect(prompt).toContain("direct");
   });
 });
 
@@ -154,6 +169,77 @@ describe("SubagentRegistry — _announce_handoff (private)", () => {
       origin_channel: "slack", origin_chat_id: "C001",
     });
     // no error
+  });
+
+  it("origin_channel 없음 → 미발행", async () => {
+    const bus = make_bus();
+    const reg = make_registry({ bus });
+    await (reg as any)._announce_handoff({
+      subagent_id: "sa1",
+      alias: "worker",
+      instruction: "작업",
+    });
+    expect(bus.publish_outbound).not.toHaveBeenCalled();
+  });
+});
+
+// ══════════════════════════════════════════════════════════
+// _flush_stream_buffer: 빈 buffer / non-empty buffer
+// ══════════════════════════════════════════════════════════
+
+describe("SubagentRegistry — _flush_stream_buffer (private)", () => {
+  it("빈 buffer → _announce_progress 미호출", async () => {
+    const bus = make_bus();
+    const reg = make_registry({ bus });
+    await (reg as any)._flush_stream_buffer({
+      subagent_id: "sa1",
+      label: "라벨",
+      origin_channel: "slack",
+      origin_chat_id: "C123",
+      stream_buffer_ref: () => "",
+      clear_stream_buffer: vi.fn(),
+    });
+    expect(bus.publish_outbound).not.toHaveBeenCalled();
+  });
+
+  it("non-empty buffer + bus → publish_outbound 호출 후 clear", async () => {
+    const bus = make_bus();
+    const reg = make_registry({ bus });
+    let buf = "스트리밍 내용";
+    const clear = vi.fn(() => { buf = ""; });
+    await (reg as any)._flush_stream_buffer({
+      subagent_id: "sa1",
+      label: "라벨",
+      origin_channel: "slack",
+      origin_chat_id: "C123",
+      stream_buffer_ref: () => buf,
+      clear_stream_buffer: clear,
+    });
+    expect(clear).toHaveBeenCalled();
+    expect(bus.publish_outbound).toHaveBeenCalled();
+  });
+});
+
+// ══════════════════════════════════════════════════════════
+// _assistant_tool_call_message
+// ══════════════════════════════════════════════════════════
+
+describe("SubagentRegistry — _assistant_tool_call_message (private)", () => {
+  it("tool_calls가 있는 ChatMessage 반환", () => {
+    const reg = make_registry();
+    const tc = [{ id: "tc1", name: "echo", arguments: { text: "hello" } }];
+    const msg = (reg as any)._assistant_tool_call_message("assistant 응답", tc) as any;
+    expect(msg.role).toBe("assistant");
+    expect(msg.content).toBe("assistant 응답");
+    expect(msg.tool_calls).toHaveLength(1);
+    expect(msg.tool_calls[0].id).toBe("tc1");
+    expect(JSON.parse(msg.tool_calls[0].function.arguments)).toEqual({ text: "hello" });
+  });
+
+  it("content=null → 빈 문자열로 변환", () => {
+    const reg = make_registry();
+    const msg = (reg as any)._assistant_tool_call_message(null, []) as any;
+    expect(msg.content).toBe("");
   });
 });
 
@@ -320,5 +406,81 @@ describe("SubagentRegistry — _run_direct_executor backend path", () => {
     });
     expect(result.content).toBe("final answer");
     expect(result.finish_reason).toBe("stop");
+  });
+});
+
+// ══════════════════════════════════════════════════════════
+// _fire: hooks.on_event 있음 / 없음 / throw
+// ══════════════════════════════════════════════════════════
+
+describe("SubagentRegistry — _fire (private)", () => {
+  it("hooks.on_event 없으면 즉시 반환", () => {
+    const reg = make_registry();
+    const opts = { task: "태스크" };
+    // hooks 없음 → 에러 없이 처리
+    (reg as any)._fire(opts, "sa1", "라벨", (s: any) => ({ type: "init", source: s, at: "now" }));
+    expect(true).toBe(true);
+  });
+
+  it("hooks.on_event 있으면 호출됨", () => {
+    const reg = make_registry();
+    const on_event = vi.fn();
+    const opts = { task: "태스크", hooks: { on_event } };
+    (reg as any)._fire(opts, "sa1", "라벨", (s: any) => ({ type: "init", source: s, at: "now" }));
+    expect(on_event).toHaveBeenCalled();
+  });
+
+  it("hooks.on_event throw → catch로 삼킴 (에러 전파 없음)", () => {
+    const reg = make_registry();
+    const on_event = vi.fn(() => { throw new Error("hook error"); });
+    const opts = { task: "태스크", hooks: { on_event } };
+    expect(() => {
+      (reg as any)._fire(opts, "sa1", "라벨", (s: any) => ({ type: "init", source: s, at: "now" }));
+    }).not.toThrow();
+  });
+});
+
+// ══════════════════════════════════════════════════════════
+// _parse_controller_plan: edge cases
+// ══════════════════════════════════════════════════════════
+
+describe("SubagentRegistry — _parse_controller_plan edge cases", () => {
+  it("handoffs에 alias/instruction 없는 항목 → null 필터됨", () => {
+    const reg = make_registry();
+    const raw = JSON.stringify({
+      done: false,
+      executor_prompt: "작업",
+      handoffs: [
+        { alias: "worker", instruction: "수행" },
+        { alias: "", instruction: "수행2" }, // alias 없음 → 필터
+        { alias: "worker2" }, // instruction 없음 → 필터
+      ],
+    });
+    const plan = (reg as any)._parse_controller_plan(raw);
+    expect(plan.handoffs).toHaveLength(1);
+    expect(plan.handoffs[0].alias).toBe("worker");
+  });
+
+  it("handoffs가 배열이 아니면 빈 배열", () => {
+    const reg = make_registry();
+    const raw = JSON.stringify({
+      done: true,
+      final_answer: "완료",
+      handoffs: null,
+    });
+    const plan = (reg as any)._parse_controller_plan(raw);
+    expect(plan.handoffs).toEqual([]);
+    expect(plan.done).toBe(true);
+  });
+
+  it("handoff row가 null/비객체 → 필터됨", () => {
+    const reg = make_registry();
+    const raw = JSON.stringify({
+      done: false,
+      executor_prompt: "p",
+      handoffs: [null, "string", 42],
+    });
+    const plan = (reg as any)._parse_controller_plan(raw);
+    expect(plan.handoffs).toHaveLength(0);
   });
 });
