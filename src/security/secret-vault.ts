@@ -404,7 +404,6 @@ export class SecretVaultService implements SecretVaultLike {
       if (cached !== undefined) return cached;
       const row = store[name];
       if (!row?.ciphertext) {
-        cache.set(name, "");
         missing.add(name);
         return `{{secret:${name}}}`;
       }
