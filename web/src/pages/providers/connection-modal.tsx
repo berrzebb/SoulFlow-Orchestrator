@@ -23,6 +23,7 @@ export function ConnectionModal({ mode, onClose, onSaved }: ConnectionModalProps
   const { data: types = [] } = useQuery<string[]>({
     queryKey: ["agent-provider-types"],
     queryFn: () => api.get("/api/agents/providers/types"),
+    staleTime: 60_000,
   });
 
   const [providerType, setProviderType] = useState(initial?.provider_type || "claude_sdk");
