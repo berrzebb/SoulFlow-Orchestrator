@@ -1,5 +1,23 @@
-import { useState, useEffect, useRef, type ReactNode } from "react";
+import { useState, useEffect, useRef, type ReactNode, type RefObject } from "react";
 import { useT } from "../i18n";
+
+/** 모달 열릴 때 첫 포커스 가능 요소로 포커스 이동 + 모바일 스크롤 보정. */
+function useModalFocus(open: boolean, modalRef: RefObject<HTMLElement | null>) {
+  useEffect(() => {
+    if (!open) return;
+    const el = modalRef.current?.querySelector<HTMLElement>(
+      'input:not([disabled]), button:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    );
+    if (el) {
+      el.focus();
+      if (/mobile|android|iphone/i.test(navigator.userAgent)) {
+        setTimeout(() => el.scrollIntoView({ block: "center", behavior: "smooth" }), 100);
+      }
+    } else {
+      modalRef.current?.focus();
+    }
+  }, [open, modalRef]);
+}
 
 /** body 스크롤 락 + Esc 키 바인딩 + 포커스 복구 */
 export function useModalEffects(open: boolean, onClose: () => void) {
@@ -36,23 +54,7 @@ export function Modal({ open, title, children, onClose, onConfirm, confirmLabel,
   const t = useT();
   const modalRef = useRef<HTMLDivElement>(null);
   useModalEffects(open, onClose);
-  useEffect(() => {
-    if (!open) return;
-    // 첫 입력 가능한 요소로 포커스 이동
-    const focusableElements = modalRef.current?.querySelectorAll(
-      'input:not([disabled]), button:not([disabled]), [tabindex]:not([tabindex="-1"])'
-    );
-    if (focusableElements?.length) {
-      const firstElement = focusableElements[0] as HTMLElement;
-      firstElement.focus();
-      // 모바일: 포커스된 입력 필드가 키보드 뒤에 숨기지 않도록 자동 스크롤
-      if (/mobile|android|iphone/i.test(navigator.userAgent)) {
-        setTimeout(() => firstElement.scrollIntoView({ block: "center", behavior: "smooth" }), 100);
-      }
-    } else {
-      modalRef.current?.focus();
-    }
-  }, [open]);
+  useModalFocus(open, modalRef);
   if (!open) return null;
   return (
     <div className="modal-overlay" onClick={danger ? undefined : onClose}>
@@ -130,23 +132,7 @@ export function FormModal({ open, title, children, onClose, onSubmit, submitLabe
   const t = useT();
   const modalRef = useRef<HTMLDivElement>(null);
   useModalEffects(open, onClose);
-  useEffect(() => {
-    if (!open) return;
-    // 첫 입력 가능한 요소로 포커스 이동
-    const focusableElements = modalRef.current?.querySelectorAll(
-      'input:not([disabled]), button:not([disabled]), [tabindex]:not([tabindex="-1"])'
-    );
-    if (focusableElements?.length) {
-      const firstElement = focusableElements[0] as HTMLElement;
-      firstElement.focus();
-      // 모바일: 포커스된 입력 필드가 키보드 뒤에 숨기지 않도록 자동 스크롤
-      if (/mobile|android|iphone/i.test(navigator.userAgent)) {
-        setTimeout(() => firstElement.scrollIntoView({ block: "center", behavior: "smooth" }), 100);
-      }
-    } else {
-      modalRef.current?.focus();
-    }
-  }, [open]);
+  useModalFocus(open, modalRef);
   if (!open) return null;
   return (
     <div className="modal-overlay" onClick={saving ? undefined : onClose}>
