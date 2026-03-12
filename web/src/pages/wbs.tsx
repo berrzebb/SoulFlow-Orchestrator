@@ -6,6 +6,7 @@ import { useSearchParams, Link } from "react-router-dom";
 import { api } from "../api/client";
 import { useT } from "../i18n";
 import { time_ago } from "../utils/format";
+import { useAsyncAction } from "../hooks/use-async-action";
 import "../styles/wbs.css";
 
 /* ─── 타입 ─── */
@@ -178,6 +179,7 @@ function WbsDetailPanel({ card, board_id, columns, on_close, on_update }: {
   on_update: () => void;
 }) {
   const t = useT();
+  const run_action = useAsyncAction();
   const [comment, set_comment] = useState("");
   const card_id = card.card_id;
 
@@ -187,16 +189,21 @@ function WbsDetailPanel({ card, board_id, columns, on_close, on_update }: {
     enabled: !!card_id,
   });
 
-  const move_to = async (col_id: string) => {
-    await api.put(`/api/kanban/cards/${encodeURIComponent(card_id)}`, { column_id: col_id });
-    on_update();
-  };
+  const move_to = (col_id: string) =>
+    run_action(
+      () => api.put(`/api/kanban/cards/${encodeURIComponent(card_id)}`, { column_id: col_id }).then(on_update),
+      undefined,
+      t("common.save_failed"),
+    );
 
-  const post_comment = async () => {
-    if (!comment.trim()) return;
-    await api.post(`/api/kanban/cards/${encodeURIComponent(card_id)}/comments`, { text: comment, author: "user:dashboard" });
-    set_comment("");
-    on_update();
+  const post_comment = () => {
+    if (!comment.trim()) return Promise.resolve();
+    return run_action(
+      () => api.post(`/api/kanban/cards/${encodeURIComponent(card_id)}/comments`, { text: comment, author: "user:dashboard" })
+        .then(() => { set_comment(""); on_update(); }),
+      undefined,
+      t("common.save_failed"),
+    );
   };
 
   return (
