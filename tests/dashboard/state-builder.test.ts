@@ -125,40 +125,41 @@ describe("build_merged_tasks", () => {
   });
 });
 
-describe("build_dashboard_state", () => {
-  function make_full_options() {
-    return {
-      agent: {
-        list_runtime_tasks: vi.fn(() => []),
-        list_stored_tasks: vi.fn(async () => []),
-        list_subagents: vi.fn(() => []),
-        list_approval_requests: vi.fn(() => []),
-        list_active_loops: vi.fn(() => []),
-      },
-      bus: { get_sizes: vi.fn(() => ({ inbound: 0, outbound: 0 })) },
-      channels: {
-        get_status: vi.fn(() => ({ enabled_channels: [], mention_loop_running: false })),
-        get_channel_health: vi.fn(() => []),
-        get_active_run_count: vi.fn(() => 0),
-      },
-      ops: { status: vi.fn(() => ({})) },
-      heartbeat: { status: vi.fn(() => ({})) },
-      process_tracker: {
-        list_active: vi.fn(() => []),
-        list_recent: vi.fn(() => []),
-      },
-      cron: {
-        status: vi.fn(async () => ({ running: true })),
-        list_jobs: vi.fn(async () => []),
-      },
-      decisions: { get_effective_decisions: vi.fn(async () => []) },
-      promises: { get_effective_promises: vi.fn(async () => []) },
-      events: { list: vi.fn(async () => []) },
-      stats_ops: { get_cd_score: vi.fn(() => 42) },
-      agent_provider_ops: { list: vi.fn(async () => []) },
-    } as any;
-  }
+function make_full_options(overrides: Record<string, unknown> = {}) {
+  return {
+    agent: {
+      list_runtime_tasks: vi.fn(() => []),
+      list_stored_tasks: vi.fn(async () => []),
+      list_subagents: vi.fn(() => []),
+      list_approval_requests: vi.fn(() => []),
+      list_active_loops: vi.fn(() => []),
+    },
+    bus: { get_sizes: vi.fn(() => ({ inbound: 0, outbound: 0 })) },
+    channels: {
+      get_status: vi.fn(() => ({ enabled_channels: [], mention_loop_running: false })),
+      get_channel_health: vi.fn(() => []),
+      get_active_run_count: vi.fn(() => 0),
+    },
+    ops: { status: vi.fn(() => ({})) },
+    heartbeat: { status: vi.fn(() => ({})) },
+    process_tracker: {
+      list_active: vi.fn(() => []),
+      list_recent: vi.fn(() => []),
+    },
+    cron: {
+      status: vi.fn(async () => ({ running: true })),
+      list_jobs: vi.fn(async () => []),
+    },
+    decisions: { get_effective_decisions: vi.fn(async () => []) },
+    promises: { get_effective_promises: vi.fn(async () => []) },
+    events: { list: vi.fn(async () => []) },
+    stats_ops: { get_cd_score: vi.fn(() => 42) },
+    agent_provider_ops: { list: vi.fn(async () => []) },
+    ...overrides,
+  } as any;
+}
 
+describe("build_dashboard_state", () => {
   it("모든 최상위 키를 포함한다", async () => {
     const state = await build_dashboard_state(make_full_options(), []);
     const expected_keys = ["now", "queue", "channels", "heartbeat", "ops", "agents", "tasks",
@@ -191,5 +192,175 @@ describe("build_dashboard_state", () => {
     expect(state.cron).toBeNull();
     expect(state.cd_score).toBeNull();
     expect(state.agent_providers).toEqual([]);
+  });
+});
+
+// ══════════════════════════════════════════
+// cov2: build_merged_tasks — memory fields
+// ══════════════════════════════════════════
+
+describe("build_merged_tasks — memory fields", () => {
+  it("memory.workflow.at → updatedAt", async () => {
+    const opts = {
+      agent: {
+        list_runtime_tasks: vi.fn(() => [{
+          taskId: "t1", title: "T1", status: "completed",
+          currentTurn: 1, maxTurns: 10, channel: "", chatId: "", objective: "",
+          memory: { workflow: { at: "2026-01-01T12:00:00Z" } },
+        }]),
+        list_stored_tasks: vi.fn(async () => []),
+      },
+    } as any;
+    const tasks = await build_merged_tasks(opts);
+    expect(tasks[0].updatedAt).toBe("2026-01-01T12:00:00Z");
+  });
+
+  it("memory.__updated_at_seoul → updatedAt", async () => {
+    const opts = {
+      agent: {
+        list_runtime_tasks: vi.fn(() => [{
+          taskId: "t2", title: "T2", status: "running",
+          currentTurn: 1, maxTurns: 10, channel: "", chatId: "", objective: "",
+          memory: { __updated_at_seoul: "2026-02-01T00:00:00Z" },
+        }]),
+        list_stored_tasks: vi.fn(async () => []),
+      },
+    } as any;
+    const tasks = await build_merged_tasks(opts);
+    expect(tasks[0].updatedAt).toBe("2026-02-01T00:00:00Z");
+  });
+
+  it("memory.channel + memory.chat_id → 태스크 필드", async () => {
+    const opts = {
+      agent: {
+        list_runtime_tasks: vi.fn(() => [{
+          taskId: "adhoc:x:y", title: "T3", status: "running",
+          currentTurn: 1, maxTurns: 10, channel: "", chatId: "", objective: "test",
+          memory: { channel: "slack", chat_id: "C123" },
+        }]),
+        list_stored_tasks: vi.fn(async () => []),
+      },
+    } as any;
+    const tasks = await build_merged_tasks(opts);
+    expect(tasks[0].channel).toBe("slack");
+    expect(tasks[0].chat_id).toBe("C123");
+  });
+});
+
+// ══════════════════════════════════════════
+// cov2: subagents, processes, decisions, cron
+// ══════════════════════════════════════════
+
+describe("build_dashboard_state — subagents with data", () => {
+  it("last_result 200자 자름", async () => {
+    const opts = make_full_options({
+      agent: {
+        list_runtime_tasks: vi.fn(() => []),
+        list_stored_tasks: vi.fn(async () => []),
+        list_subagents: vi.fn(() => [{
+          id: "sa1", label: "Bot1", role: "worker", model: "claude",
+          status: "completed", session_id: "s1",
+          created_at: "2026-01-01", updated_at: "2026-01-02",
+          last_error: null, last_result: "x".repeat(300),
+        }]),
+        list_approval_requests: vi.fn(() => []),
+        list_active_loops: vi.fn(() => []),
+      },
+    });
+    const state = await build_dashboard_state(opts, []);
+    expect((state.agents as any[])[0].last_result.length).toBe(200);
+  });
+
+  it("last_result 없으면 undefined, label 없으면 id 사용", async () => {
+    const opts = make_full_options({
+      agent: {
+        list_runtime_tasks: vi.fn(() => []),
+        list_stored_tasks: vi.fn(async () => []),
+        list_subagents: vi.fn(() => [{
+          id: "sa2", label: null, role: "worker", model: null,
+          status: "idle", session_id: null,
+          created_at: null, updated_at: null,
+          last_error: null, last_result: null,
+        }]),
+        list_approval_requests: vi.fn(() => []),
+        list_active_loops: vi.fn(() => []),
+      },
+    });
+    const state = await build_dashboard_state(opts, []);
+    const a = (state.agents as any[])[0];
+    expect(a.last_result).toBeUndefined();
+    expect(a.label).toBe("sa2");
+  });
+});
+
+describe("build_dashboard_state — decisions/promises/events", () => {
+  it("decisions, promises, workflow_events 매핑", async () => {
+    const opts = make_full_options({
+      decisions: { get_effective_decisions: vi.fn(async () => [{ id: "d1", canonical_key: "k1", value: "v1", priority: 1 }]) },
+      promises: { get_effective_promises: vi.fn(async () => [{ id: "p1", canonical_key: "pk1", value: "pv", priority: 2, scope: "global", source: "user" }]) },
+      events: { list: vi.fn(async () => [{ event_id: "ev1", task_id: "t1", run_id: "r1", agent_id: "a1", phase: "done", summary: "ok", at: "2026-01-01" }]) },
+    });
+    const state = await build_dashboard_state(opts, []);
+    expect((state.decisions as any[])[0]).toMatchObject({ id: "d1" });
+    expect((state.promises as any[])[0]).toMatchObject({ id: "p1" });
+    expect((state.workflow_events as any[])[0]).toMatchObject({ event_id: "ev1" });
+  });
+});
+
+describe("build_dashboard_state — approvals/loops/cron", () => {
+  it("list_approval_requests → approvals", async () => {
+    const opts = make_full_options({
+      agent: {
+        list_runtime_tasks: vi.fn(() => []),
+        list_stored_tasks: vi.fn(async () => []),
+        list_subagents: vi.fn(() => []),
+        list_approval_requests: vi.fn(() => [{ request_id: "req1", tool_name: "Bash", status: "pending", created_at: "2026-01-01", context: {} }]),
+        list_active_loops: vi.fn(() => []),
+      },
+    });
+    const state = await build_dashboard_state(opts, []);
+    expect((state.approvals as any[])[0].request_id).toBe("req1");
+  });
+
+  it("list_active_loops → active_loops", async () => {
+    const opts = make_full_options({
+      agent: {
+        list_runtime_tasks: vi.fn(() => []),
+        list_stored_tasks: vi.fn(async () => []),
+        list_subagents: vi.fn(() => []),
+        list_approval_requests: vi.fn(() => []),
+        list_active_loops: vi.fn(() => [{ loopId: "loop1", agentId: "ag1", objective: "do", currentTurn: 5, maxTurns: 20, status: "running" }]),
+      },
+    });
+    const state = await build_dashboard_state(opts, []);
+    expect((state.active_loops as any[])[0].loopId).toBe("loop1");
+  });
+
+  it("cron jobs → 필드 매핑", async () => {
+    const opts = make_full_options({
+      cron: {
+        status: vi.fn(async () => ({ enabled: true, paused: false, jobs: 1 })),
+        list_jobs: vi.fn(async () => [{ id: "j1", name: "daily", enabled: true, schedule: { kind: "every", every_ms: 86400000 }, state: { next_run_at_ms: 9999, last_status: "ok" }, delete_after_run: false, payload: { kind: "agent_turn", message: "run" } }]),
+      },
+    });
+    const state = await build_dashboard_state(opts, []);
+    expect((state.cron as any).jobs[0].name).toBe("daily");
+  });
+});
+
+describe("build_dashboard_state — recent_messages sender lookup", () => {
+  it("subagent sender → agents.last_message", async () => {
+    const opts = make_full_options({
+      agent: {
+        list_runtime_tasks: vi.fn(() => []),
+        list_stored_tasks: vi.fn(async () => []),
+        list_subagents: vi.fn(() => [{ id: "sa-xyz", label: "Bot", role: "worker", model: null, status: "completed", session_id: null, created_at: null, updated_at: null, last_error: null, last_result: null }]),
+        list_approval_requests: vi.fn(() => []),
+        list_active_loops: vi.fn(() => []),
+      },
+    });
+    const msgs = [{ sender_id: "subagent:sa-xyz", content: "Hello" }] as any[];
+    const state = await build_dashboard_state(opts, msgs);
+    expect((state.agents as any[])[0].last_message).toBe("Hello");
   });
 });

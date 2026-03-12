@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { SseManager } from "@src/dashboard/sse-manager.ts";
 import { make_mock_response } from "@helpers/mock-response.ts";
 
@@ -287,5 +287,128 @@ describe("SseManager", () => {
       const data_str = payload.split("data: ")[1].split("\n\n")[0];
       expect(() => JSON.parse(data_str)).not.toThrow();
     });
+  });
+});
+
+// ══════════════════════════════════════════
+// rich_listeners + offset 추적 (cov2)
+// ══════════════════════════════════════════
+
+describe("SseManager — add_rich_stream_listener", () => {
+  let sse: SseManager;
+  beforeEach(() => { sse = new SseManager(); });
+
+  it("리스너 등록 → broadcast_web_stream delta 수신", () => {
+    const events: any[] = [];
+    sse.add_rich_stream_listener("chat1", (ev) => events.push(ev));
+    sse.broadcast_web_stream("chat1", "hello", false);
+    expect(events).toHaveLength(1);
+    expect(events[0]).toEqual({ type: "delta", content: "hello" });
+  });
+
+  it("done=true → done 이벤트 발행 후 리스너 제거", () => {
+    const events: any[] = [];
+    sse.add_rich_stream_listener("chat1", (ev) => events.push(ev));
+    sse.broadcast_web_stream("chat1", "text", false);
+    sse.broadcast_web_stream("chat1", "text more", true);
+    expect(events.some((e) => e.type === "done")).toBe(true);
+    sse.broadcast_web_stream("chat1", "after done", false);
+    const count_before = events.length;
+    expect(events.length).toBe(count_before);
+  });
+
+  it("dispose → 이후 broadcast에서 수신 안 됨", () => {
+    const events: any[] = [];
+    const dispose = sse.add_rich_stream_listener("chat1", (ev) => events.push(ev));
+    dispose();
+    sse.broadcast_web_stream("chat1", "after dispose", false);
+    expect(events).toHaveLength(0);
+  });
+
+  it("같은 chat_id에 여러 리스너 → 모두 수신", () => {
+    const ev1: any[] = [];
+    const ev2: any[] = [];
+    sse.add_rich_stream_listener("chat1", (e) => ev1.push(e));
+    sse.add_rich_stream_listener("chat1", (e) => ev2.push(e));
+    sse.broadcast_web_stream("chat1", "data", false);
+    expect(ev1).toHaveLength(1);
+    expect(ev2).toHaveLength(1);
+  });
+
+  it("마지막 리스너 dispose → chat_id 엔트리 삭제", () => {
+    const d = sse.add_rich_stream_listener("chat1", vi.fn());
+    d();
+    sse.broadcast_web_stream("chat1", "no listener", false);
+  });
+});
+
+describe("SseManager — broadcast_web_stream offset 추적", () => {
+  let sse: SseManager;
+  beforeEach(() => { sse = new SseManager(); });
+
+  it("누적 content → offset으로 delta만 발행", () => {
+    const deltas: string[] = [];
+    sse.add_rich_stream_listener("chat1", (ev) => {
+      if (ev.type === "delta") deltas.push(ev.content);
+    });
+    sse.broadcast_web_stream("chat1", "hello", false);
+    sse.broadcast_web_stream("chat1", "hello world", false);
+    sse.broadcast_web_stream("chat1", "hello world!", true);
+    expect(deltas).toEqual(["hello", " world", "!"]);
+  });
+
+  it("동일 content 재전송 → delta 없음", () => {
+    const deltas: string[] = [];
+    sse.add_rich_stream_listener("chat1", (ev) => {
+      if (ev.type === "delta") deltas.push(ev.content);
+    });
+    sse.broadcast_web_stream("chat1", "same", false);
+    sse.broadcast_web_stream("chat1", "same", false);
+    expect(deltas).toHaveLength(1);
+  });
+});
+
+describe("SseManager — broadcast_web_rich_event", () => {
+  let sse: SseManager;
+  beforeEach(() => { sse = new SseManager(); });
+
+  it("리스너 있으면 이벤트 전달", () => {
+    const events: any[] = [];
+    sse.add_rich_stream_listener("chat1", (ev) => events.push(ev));
+    sse.broadcast_web_rich_event("chat1", { type: "tool_use", tool_name: "bash" } as any);
+    expect(events).toHaveLength(1);
+    expect(events[0].type).toBe("tool_use");
+  });
+
+  it("리스너 없으면 no-op", () => {
+    expect(() => sse.broadcast_web_rich_event("nonexistent", { type: "tool_use" } as any)).not.toThrow();
+  });
+});
+
+describe("SseManager — broadcast_web_message", () => {
+  let sse: SseManager;
+  beforeEach(() => { sse = new SseManager(); });
+
+  it("클라이언트 있을 때 web_message 이벤트 전송", () => {
+    const res = make_mock_response();
+    sse.add_client(res as any);
+    res.write.mockClear();
+    sse.broadcast_web_message("chat1");
+    const payload = res.write.mock.calls[0][0] as string;
+    expect(payload).toContain("event: web_message");
+    expect(payload).toContain('"chat_id":"chat1"');
+  });
+
+  it("클라이언트 없으면 no-op", () => {
+    expect(() => sse.broadcast_web_message("chat1")).not.toThrow();
+  });
+
+  it("SSE 클라이언트 없어도 rich_listener는 delta 수신", () => {
+    const events: any[] = [];
+    sse.add_rich_stream_listener("chat2", (ev) => events.push(ev));
+    expect(sse.client_count).toBe(0);
+    sse.broadcast_web_stream("chat2", "content", false);
+    expect(events).toHaveLength(1);
+    expect(events[0]).toEqual({ type: "delta", content: "content" });
   });
 });
