@@ -34,6 +34,12 @@ export type RunExecutionArgs = {
   request_scope: string;
   /** 사용자 지정 모델 ID. 미설정 시 프로바이더 기본값 사용. */
   preferred_model?: string;
+  /**
+   * follow-up 감지 시 전달되는 최근 대화 히스토리.
+   * run_once에서 메시지 turn으로 주입하여 맥락 손실 방지.
+   * 최대 4개 메시지(2턴) — 토큰 과다 누적 방지.
+   */
+  recent_session_turns?: Array<{ role: string; content: string }>;
 };
 
 export type StreamingConfig = {

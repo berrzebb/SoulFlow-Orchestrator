@@ -25,8 +25,14 @@ export async function run_once(deps: RunnerDeps, args: RunExecutionArgs): Promis
   const stream = new StreamBuffer();
   emit_execution_info(stream, args.req.on_stream, "once", args.executor, deps.logger);
   const { system_base } = args;
+  // follow-up 감지 시 최근 세션 히스토리를 turn으로 주입 — 메모리 섹션만으론 LLM이 짧은 참조 메시지의 맥락을 연결 못함.
+  const history_turns: ChatMessage[] = (args.recent_session_turns ?? []).map((h) => ({
+    role: h.role as "user" | "assistant",
+    content: h.content,
+  }));
   const messages: ChatMessage[] = [
     { role: "system", content: `${system_base}\n\n${deps.build_overlay("once")}` },
+    ...history_turns,
     { role: "user", content: args.context_block },
   ];
 
@@ -40,8 +46,12 @@ export async function run_once(deps: RunnerDeps, args: RunExecutionArgs): Promis
         const caps = backend.capabilities;
         // once 모드는 매 요청 fresh thread — resume하면 세션 무한 누적으로 토큰 폭증
         const once_task_id = `once:${args.req.provider}:${args.req.message.chat_id}:${Date.now()}`;
+        // native_tool_loop는 단일 task 문자열로 동작 — 히스토리 있으면 앞에 인라인.
+        const history_prefix = history_turns.length
+          ? history_turns.map((h) => `[${h.role.toUpperCase()}] ${h.content}`).join("\n\n") + "\n\n"
+          : "";
         const result = await deps.agent_backends.run(backend.id, {
-          task: args.context_block,
+          task: `${history_prefix}${args.context_block}`,
           task_id: once_task_id,
           system_prompt: String(messages[0].content || ""),
           tools: args.tool_definitions as ToolSchema[],
