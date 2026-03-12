@@ -1,6 +1,6 @@
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import { with_sqlite, type DatabaseSync } from "../utils/sqlite-helper.js";
+import { with_sqlite, with_sqlite_strict, type DatabaseSync } from "../utils/sqlite-helper.js";
 import { normalize_text, short_id, now_iso } from "../utils/common.js";
 import type { TaskState } from "../contracts.js";
 import type { TaskStoreLike } from "../agent/task-store.js";
@@ -73,13 +73,17 @@ export class WorkflowEventService {
     return with_sqlite(this.sqlite_path, run, { pragmas: ["foreign_keys=ON"] });
   }
 
+  private write_sqlite<T>(run: (db: DatabaseSync) => T): T {
+    return with_sqlite_strict(this.sqlite_path, run, { pragmas: ["foreign_keys=ON"] });
+  }
+
   private async ensure_dirs(): Promise<void> {
     await mkdir(this.events_dir, { recursive: true });
   }
 
   private async ensure_initialized(): Promise<void> {
     await this.ensure_dirs();
-    const initialized = this.with_sqlite((db) => {
+    const initialized = this.write_sqlite((db) => {
       db.exec(`
         CREATE TABLE IF NOT EXISTS workflow_events (
           event_id TEXT PRIMARY KEY,
@@ -178,9 +182,6 @@ export class WorkflowEventService {
       `);
       return true;
     });
-    if (!initialized) {
-      this.logger?.error("schema initialization failed");
-    }
   }
 
   private row_to_event(row: DbEventRow): WorkflowEvent | null {
@@ -223,7 +224,7 @@ export class WorkflowEventService {
       "---",
       "",
     ].join("\n");
-    const ok = this.with_sqlite((db) => {
+    const ok = this.write_sqlite((db) => {
       const existing = db.prepare(`
         SELECT content
         FROM workflow_task_details
@@ -293,7 +294,7 @@ export class WorkflowEventService {
       const detail_file = await this.append_task_detail(event, String(input.detail || ""));
       if (detail_file) event.detail_file = detail_file;
 
-      this.with_sqlite((db) => {
+      this.write_sqlite((db) => {
         db.prepare(`
           INSERT OR IGNORE INTO workflow_events (
             event_id, run_id, task_id, agent_id, phase, summary, payload_json,
