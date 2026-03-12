@@ -342,3 +342,227 @@ describe("CodeDiagramTool — sequence_diagram: message type 분기", () => {
     expect(String(r.diagram)).toContain("->>-");
   });
 });
+
+// ══════════════════════════════════════════
+// L107: direction !== "TB"
+// ══════════════════════════════════════════
+
+describe("CodeDiagramTool — L107: direction !== 'TB'", () => {
+  it("class_diagram direction=LR → L107: lines[0] 재할당 분기 실행", async () => {
+    const result = await tool.execute({
+      action: "class_diagram",
+      source: "class Foo { name: string; }",
+      direction: "LR",
+    });
+    const parsed = JSON.parse(result);
+    expect(parsed.format).toBe("mermaid");
+    expect(parsed.diagram).toContain("classDiagram");
+  });
+});
+
+// ══════════════════════════════════════════
+// L126: private method + show_private=false → continue
+// ══════════════════════════════════════════
+
+describe("CodeDiagramTool — L126: private method skip", () => {
+  it("class with private method + show_private=false → L126: continue (메서드 제외)", async () => {
+    const result = await tool.execute({
+      action: "class_diagram",
+      source: "class Foo {\n  private bar() {}\n  public baz() {}\n}",
+      show_private: false,
+    });
+    const parsed = JSON.parse(result);
+    expect(parsed.diagram).not.toContain("-bar");
+    expect(parsed.diagram).toContain("+baz");
+  });
+});
+
+// ══════════════════════════════════════════
+// L235: gen_sequence_from_code → this/console 필터
+// ══════════════════════════════════════════
+
+describe("CodeDiagramTool — L235: sequence filter (this/console)", () => {
+  it("source에 this.helper() 호출 → L235: obj=this → continue (필터)", async () => {
+    const source = `class Client {
+  run() {
+    this.helper();
+    service.process();
+  }
+}`;
+    const result = await tool.execute({
+      action: "sequence_diagram",
+      source,
+    });
+    expect(typeof result).toBe("string");
+  });
+});
+
+// ══════════════════════════════════════════
+// L237: seen.has(key) → 중복 skip
+// ══════════════════════════════════════════
+
+describe("CodeDiagramTool — L237: sequence duplicate call skip", () => {
+  it("source에 동일 메서드 두 번 호출 → 두 번째에서 L237: seen.has(key) → continue", async () => {
+    const source = `class Client {
+  run() {
+    service.doWork();
+    service.doWork();
+  }
+}`;
+    const result = await tool.execute({
+      action: "sequence_diagram",
+      source,
+    });
+    const parsed = JSON.parse(result);
+    expect(typeof parsed.diagram).toBe("string");
+  });
+});
+
+// ══════════════════════════════════════════
+// L724-725: TypeScript type 정의 파싱
+// ══════════════════════════════════════════
+
+describe("CodeDiagramTool — L724-725: TypeScript type 정의 파싱", () => {
+  it("type Config = { ... } → L724: extract_block, L725: classes.push", async () => {
+    const result = await tool.execute({
+      action: "class_diagram",
+      source: "type Config = { name: string; value: number; }",
+    });
+    const parsed = JSON.parse(result);
+    expect(parsed.diagram).toContain("Config");
+    expect(parsed.class_count).toBeGreaterThan(0);
+  });
+});
+
+// ══════════════════════════════════════════
+// L775: parse_methods keyword filter
+// ══════════════════════════════════════════
+
+describe("CodeDiagramTool — L775: parse_methods 키워드 필터", () => {
+  it("class body에 if(...) 패턴 → L775: m[4]=if → continue (메서드 제외)", async () => {
+    const source = `class Processor {
+  process() { return true; }
+  if (x > 0) { }
+}`;
+    const result = await tool.execute({
+      action: "class_diagram",
+      source,
+    });
+    const parsed = JSON.parse(result);
+    expect(parsed.diagram).not.toContain("+if(");
+    expect(parsed.diagram).toContain("process");
+  });
+});
+
+// ══════════════════════════════════════════
+// L797: parse_imports default + named import
+// ══════════════════════════════════════════
+
+describe("CodeDiagramTool — L797: parse_imports default+named import", () => {
+  it("'import Foo, { bar, baz } from module' → L797: m[3] non-null → push named", async () => {
+    const sources = JSON.stringify([{
+      path: "src/app.ts",
+      code: 'import React, { useState, useEffect } from "react"',
+    }]);
+    const result = await tool.execute({
+      action: "dependency_graph",
+      sources,
+    });
+    const parsed = JSON.parse(result);
+    expect(parsed.format).toBe("mermaid");
+  });
+});
+
+// ══════════════════════════════════════════
+// L817: extract_block unclosed brace
+// ══════════════════════════════════════════
+
+describe("CodeDiagramTool — L817: extract_block unclosed brace", () => {
+  it("닫는 } 없는 class 정의 → L817: source.slice(start) 반환", async () => {
+    const result = await tool.execute({
+      action: "class_diagram",
+      source: "class Unclosed { name: string",
+    });
+    expect(typeof result).toBe("string");
+  });
+});
+
+// ══════════════════════════════════════════
+// L846: extract_condition fallback
+// ══════════════════════════════════════════
+
+describe("CodeDiagramTool — L846: extract_condition fallback", () => {
+  it("switch 문에 괄호 없음 → extract_condition 정규식 불일치 → L846: stmt.slice(0,40)", async () => {
+    const source = "switch x\nreturn 1;";
+    const result = await tool.execute({
+      action: "flowchart",
+      source,
+    });
+    const parsed = JSON.parse(result);
+    expect(parsed.format).toBe("mermaid");
+    expect(parsed.diagram).toContain("Switch");
+  });
+});
+
+// ══════════════════════════════════════════
+// L855-856-858: extract_switch_cases 8+ cases + default
+// ══════════════════════════════════════════
+
+describe("CodeDiagramTool — L855-856-858: extract_switch_cases", () => {
+  it("9개 case labels + default: → L855(push) + L856(break at 8) + L858(default push)", async () => {
+    const source = [
+      "switch (x)",
+      "case 1: break",
+      "case 2: break",
+      "case 3: break",
+      "case 4: break",
+      "case 5: break",
+      "case 6: break",
+      "case 7: break",
+      "case 8: break",
+      "case 9: break",
+      "default: break",
+    ].join("\n");
+    const result = await tool.execute({
+      action: "flowchart",
+      source,
+    });
+    const parsed = JSON.parse(result);
+    expect(parsed.format).toBe("mermaid");
+    expect(parsed.diagram).toContain("Switch");
+  });
+});
+
+// ══════════════════════════════════════════
+// L916: resolve_folder "." continue
+// ══════════════════════════════════════════
+
+describe("CodeDiagramTool — L916: resolve_folder '.' continue", () => {
+  it("'./helper' import → resolve_folder: import_parts=['.'] → L916: part='.', continue", async () => {
+    const sources = JSON.stringify([{
+      path: "src/app.ts",
+      code: 'import { helper } from "./utils"',
+    }]);
+    const result = await tool.execute({
+      action: "component_diagram",
+      sources,
+    });
+    const parsed = JSON.parse(result);
+    expect(parsed.format).toBe("mermaid");
+  });
+});
+
+// ══════════════════════════════════════════
+// L931: er_type boolean → "bool"
+// ══════════════════════════════════════════
+
+describe("CodeDiagramTool — L931: er_type boolean", () => {
+  it("entity field type=boolean → L931: er_type → 'bool'", async () => {
+    const result = await tool.execute({
+      action: "er_diagram",
+      source: "type User = {\n  id: number;\n  name: string;\n  active: boolean;\n}",
+    });
+    const parsed = JSON.parse(result);
+    expect(parsed.diagram).toContain("bool active");
+  });
+});
