@@ -331,6 +331,8 @@ export class DashboardService implements ServiceLike {
         }
         // 검증된 페이로드를 요청 객체에 첨부 (라우트 핸들러에서 접근 가능)
         (req as unknown as Record<string, unknown>)["_auth_user"] = payload;
+        // workspace_middleware: 개인 워크스페이스 디렉토리 보장 (lazy init)
+        this.options.workspace_registry?.get_or_create({ team_id: payload.tid, user_id: payload.sub });
       }
     }
 

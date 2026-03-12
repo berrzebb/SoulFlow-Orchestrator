@@ -351,6 +351,10 @@ export type DashboardOptions = {
   webhookSecret?: string;
   /** 인증 서비스. 설정 시 /api/* 전체에 JWT 인증 강제 (opt-in). */
   auth_svc?: import("../auth/auth-service.js").AuthService | null;
+  /** 3-tier workspace 레이어 해석기. 인증 사용 시 필수. */
+  workspace_resolver?: import("../workspace/resolver.js").WorkspaceResolver | null;
+  /** 멀티유저 워크스페이스 경로 레지스트리. JWT 인증 후 자동 디렉토리 보장. */
+  workspace_registry?: import("../workspace/registry.js").WorkspaceRegistry | null;
   logger?: Logger | null;
 };
 
