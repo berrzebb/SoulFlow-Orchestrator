@@ -101,6 +101,7 @@ function YamlSideDiagramTab({ workflow, type }: { workflow: WorkflowDef; type: "
         ? <pre className="yaml-diagram-tab__source">{source}</pre>
         : <>
             {error && <div className="yaml-diagram-tab__error">{error}</div>}
+            {!error && !svg && <div className="yaml-diagram-tab__loading"><span className="spinner" /></div>}
             {svg && <div className="yaml-diagram-tab__svg" dangerouslySetInnerHTML={{ __html: svg }} />}
           </>
       }
