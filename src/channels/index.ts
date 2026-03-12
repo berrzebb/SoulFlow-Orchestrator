@@ -144,6 +144,7 @@ export class ChannelRegistry implements ChannelRegistryLike {
 /** instance store 기반으로 채널 레지스트리 구성. */
 export async function create_channels_from_store(
   store: ChannelInstanceStore,
+  workspace_dir?: string,
 ): Promise<ChannelRegistry> {
   const registry = new ChannelRegistry();
   const instances = store.list();
@@ -151,7 +152,7 @@ export async function create_channels_from_store(
   for (const config of instances) {
     if (!config.enabled) continue;
     const token = await store.get_token(config.instance_id) || "";
-    const channel = create_channel_instance(config, token);
+    const channel = create_channel_instance(config, token, workspace_dir);
     if (channel) registry.register(channel);
   }
 

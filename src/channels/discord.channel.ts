@@ -13,6 +13,7 @@ type DiscordChannelOptions = {
   bot_token?: string;
   default_channel?: string;
   api_base?: string;
+  workspace_dir?: string;
   settings?: DiscordChannelSettings;
 };
 
@@ -62,6 +63,7 @@ export class DiscordChannel extends BaseChannel {
   private readonly bot_token: string;
   private readonly default_channel: string;
   private readonly api_base: string;
+  private readonly workspace_dir: string;
   private readonly settings: DiscordChannelSettings;
 
   constructor(options?: DiscordChannelOptions) {
@@ -69,6 +71,7 @@ export class DiscordChannel extends BaseChannel {
     this.bot_token = options?.bot_token || "";
     this.default_channel = options?.default_channel || "";
     this.api_base = options?.api_base || "https://discord.com/api/v10";
+    this.workspace_dir = options?.workspace_dir || "";
     this.settings = options?.settings || {};
   }
 
@@ -107,7 +110,7 @@ export class DiscordChannel extends BaseChannel {
         for (const media of message.media) {
           if (!media?.url) continue;
           const filePath = String(media.url);
-          if (!validate_file_path(filePath, [tmpdir(), process.cwd()])) continue;
+          if (!validate_file_path(filePath, [tmpdir(), process.cwd(), ...(this.workspace_dir ? [this.workspace_dir] : [])])) continue;
           const bytes = await readFile(filePath);
           form.set(`files[${i}]`, new Blob([bytes]), media.name || basename(filePath));
           i += 1;

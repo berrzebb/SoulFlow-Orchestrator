@@ -66,7 +66,7 @@ export async function create_channel_bundle(deps: ChannelBundleDeps): Promise<Ch
   } = deps;
 
   const instance_store = new ChannelInstanceStore(join(data_dir, "channels", "instances.db"), shared_vault);
-  const channels = await create_channels_from_store(instance_store);
+  const channels = await create_channels_from_store(instance_store, workspace);
 
   // 기본 채널 타겟 해석
   const primary_channel = instance_store.list().find((c) => c.enabled);

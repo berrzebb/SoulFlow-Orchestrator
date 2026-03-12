@@ -13,6 +13,7 @@ type TelegramChannelOptions = {
   bot_token?: string;
   default_chat_id?: string;
   api_base?: string;
+  workspace_dir?: string;
   settings?: Record<string, unknown>;
 };
 
@@ -158,6 +159,7 @@ export class TelegramChannel extends BaseChannel {
   private readonly bot_token: string;
   private readonly default_chat_id: string;
   private readonly api_base: string;
+  private readonly workspace_dir: string;
   private readonly settings: Record<string, unknown>;
   private last_update_id = 0;
   /** 연속 read 실패 횟수 — 로그 빈도 조절용. */
@@ -167,8 +169,9 @@ export class TelegramChannel extends BaseChannel {
     super("telegram", options?.instance_id);
     this.bot_token = options?.bot_token || "";
     this.default_chat_id = options?.default_chat_id || "";
-    this.settings = options?.settings || {};
     this.api_base = options?.api_base || "https://api.telegram.org";
+    this.workspace_dir = options?.workspace_dir || "";
+    this.settings = options?.settings || {};
   }
 
   async start(): Promise<void> {
@@ -205,7 +208,7 @@ export class TelegramChannel extends BaseChannel {
           const media = message.media[idx];
           const filePath = String(media?.url || "");
           if (!filePath) continue;
-          if (!validate_file_path(filePath, [tmpdir(), process.cwd()])) continue;
+          if (!validate_file_path(filePath, [tmpdir(), process.cwd(), ...(this.workspace_dir ? [this.workspace_dir] : [])])) continue;
           const bytes = await readFile(filePath);
           const extension = extname(filePath).toLowerCase();
           const isPhoto = [".jpg", ".jpeg", ".png", ".webp", ".gif"].includes(extension);
@@ -384,7 +387,10 @@ export class TelegramChannel extends BaseChannel {
   async send_draft(chat_id: string, text: string, reply_to_message_id?: string, draft_message_id?: string): Promise<{ ok: boolean; draft_id?: string; error?: string }> {
     if (!this.bot_token) return { ok: false, error: "telegram_bot_token_missing" };
     const url = `${this.api_base}/bot${this.bot_token}/sendMessageDraft`;
-    const payload: Record<string, unknown> = { chat_id, text: String(text || "").slice(0, 4000) };
+    const raw = String(text || "");
+    // 4096자 한도 — 최신 내용 우선(뒷부분 보존)
+    const display = raw.length > 4000 ? "…\n" + raw.slice(-(4000 - 2)) : raw;
+    const payload: Record<string, unknown> = { chat_id, text: display };
     if (draft_message_id) payload.message_id = Number(draft_message_id);
     else if (reply_to_message_id) payload.reply_to_message_id = Number(reply_to_message_id);
     try {

@@ -48,7 +48,7 @@ export class MediaTokenStore {
   register(abs_path: string): string | null {
     if (!this.is_within_workspace(abs_path)) return null;
     this.prune();
-    const token = short_id() + short_id(8);
+    const token = (short_id() + short_id(8)).replace(/-/g, "");
     const ext = extname(abs_path).toLowerCase();
     const name = abs_path.split(/[\\/]/).pop() || "file";
     this.tokens.set(token, { abs_path, name, mime: get_mime_type(ext), created_at: now_ms() });

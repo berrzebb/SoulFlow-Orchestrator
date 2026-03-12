@@ -136,7 +136,7 @@ export function create_dashboard_bundle(deps: DashboardBundleDeps): DashboardBun
     skill_ops: create_skill_ops({ skills_loader: agent.context.skills_loader, workspace }),
     tool_ops: create_tool_ops({ tool_names: () => agent.tools.tool_names(), get_definitions: () => agent.tools.get_definitions(), mcp }),
     template_ops: create_template_ops(workspace),
-    channel_ops: create_channel_ops({ channels, instance_store, app_config }),
+    channel_ops: create_channel_ops({ channels, instance_store, app_config, workspace_dir: workspace }),
     agent_provider_ops,
     bootstrap_ops: create_bootstrap_ops({ provider_store, config_store, provider_registry: providers, agent_backends: agent_backend_registry, workspace }),
     session_store: sessions,

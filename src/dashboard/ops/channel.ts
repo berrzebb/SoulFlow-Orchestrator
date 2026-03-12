@@ -17,8 +17,9 @@ export function create_channel_ops(deps: {
   channels: ChannelRegistryLike;
   instance_store: ChannelInstanceStore;
   app_config: AppConfig;
+  workspace_dir?: string;
 }): DashboardChannelOps {
-  const { channels, instance_store } = deps;
+  const { channels, instance_store, workspace_dir } = deps;
   const log = create_logger("channel-ops");
 
   function build_status(
@@ -82,7 +83,7 @@ export function create_channel_ops(deps: {
       const saved = instance_store.get(input.instance_id);
       if (saved?.enabled) {
         const token = await instance_store.get_token(saved.instance_id) || "";
-        const ch = create_channel_instance(saved, token);
+        const ch = create_channel_instance(saved, token, workspace_dir);
         if (ch) {
           channels.register(ch);
           try {
@@ -119,7 +120,7 @@ export function create_channel_ops(deps: {
       const updated = instance_store.get(instance_id);
       if (updated?.enabled) {
         const token = await instance_store.get_token(instance_id) || "";
-        const ch = create_channel_instance(updated, token);
+        const ch = create_channel_instance(updated, token, workspace_dir);
         if (ch) {
           channels.register(ch);
           try {

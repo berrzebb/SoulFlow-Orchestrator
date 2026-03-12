@@ -11,7 +11,7 @@ import { SlackChannel } from "./slack.channel.js";
 import { DiscordChannel } from "./discord.channel.js";
 import { TelegramChannel } from "./telegram.channel.js";
 
-export type ChannelFactoryFn = (config: ChannelInstanceConfig, token: string) => ChatChannel;
+export type ChannelFactoryFn = (config: ChannelInstanceConfig, token: string, workspace_dir?: string) => ChatChannel;
 
 const FACTORIES = new Map<string, ChannelFactoryFn>();
 
@@ -28,42 +28,45 @@ export function list_registered_providers(): string[] {
 }
 
 /** ChannelInstanceConfig + 토큰으로 ChatChannel 인스턴스 생성. */
-export function create_channel_instance(config: ChannelInstanceConfig, token: string): ChatChannel | null {
+export function create_channel_instance(config: ChannelInstanceConfig, token: string, workspace_dir?: string): ChatChannel | null {
   const factory = FACTORIES.get(config.provider.toLowerCase());
   if (!factory) return null;
-  return factory(config, token);
+  return factory(config, token, workspace_dir);
 }
 
 // ── 빌트인 팩토리 등록 ──
 
-register_channel_factory("slack", (config, token) => {
+register_channel_factory("slack", (config, token, workspace_dir) => {
   const settings = config.settings as Record<string, unknown>;
   return new SlackChannel({
     instance_id: config.instance_id,
     bot_token: token,
     default_channel: String(settings.default_channel || ""),
+    workspace_dir,
     settings,
   });
 });
 
-register_channel_factory("discord", (config, token) => {
+register_channel_factory("discord", (config, token, workspace_dir) => {
   const settings = config.settings as DiscordChannelSettings;
   return new DiscordChannel({
     instance_id: config.instance_id,
     bot_token: token,
     default_channel: String(settings.default_channel || ""),
     api_base: String(settings.api_base || "https://discord.com/api/v10"),
+    workspace_dir,
     settings,
   });
 });
 
-register_channel_factory("telegram", (config, token) => {
+register_channel_factory("telegram", (config, token, workspace_dir) => {
   const settings = config.settings as Record<string, unknown>;
   return new TelegramChannel({
     instance_id: config.instance_id,
     bot_token: token,
     default_chat_id: String(settings.default_chat_id || ""),
     api_base: String(settings.api_base || "https://api.telegram.org"),
+    workspace_dir,
     settings,
   });
 });

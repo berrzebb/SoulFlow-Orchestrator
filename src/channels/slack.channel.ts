@@ -11,6 +11,7 @@ type SlackChannelOptions = {
   instance_id?: string;
   bot_token?: string;
   default_channel?: string;
+  workspace_dir?: string;
   settings?: Record<string, unknown>;
 };
 
@@ -76,6 +77,7 @@ type ThreadCacheEntry = {
 export class SlackChannel extends BaseChannel {
   private readonly client: WebClient;
   private readonly default_channel: string;
+  private readonly workspace_dir: string;
   private readonly settings: Record<string, unknown>;
   private readonly thread_cache = new Map<string, ThreadCacheEntry>();
   private static readonly THREAD_CACHE_TTL_MS = 300_000;
@@ -88,6 +90,7 @@ export class SlackChannel extends BaseChannel {
     const token = options?.bot_token || "";
     this.client = new WebClient(token);
     this.default_channel = options?.default_channel || "";
+    this.workspace_dir = options?.workspace_dir || "";
     this.settings = options?.settings || {};
   }
 
@@ -155,7 +158,7 @@ export class SlackChannel extends BaseChannel {
       if (Array.isArray(message.media) && message.media.length > 0) {
         for (const media of message.media) {
           if (!media?.url) continue;
-          if (!validate_file_path(String(media.url), [tmpdir(), process.cwd()])) continue;
+          if (!validate_file_path(String(media.url), [tmpdir(), process.cwd(), ...(this.workspace_dir ? [this.workspace_dir] : [])])) continue;
           const bytes = await readFile(String(media.url));
           const filename = media.name || basename(String(media.url));
           const upload = await this.upload_binary(channel, bytes, filename, thread_ts || root_message_ts || undefined);
