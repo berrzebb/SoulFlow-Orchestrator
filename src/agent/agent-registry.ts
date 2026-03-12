@@ -164,13 +164,13 @@ export class AgentBackendRegistry {
     })[0] ?? null;
   }
 
-  /** 가용 백엔드 필터링 (mode, availability, circuit breaker). */
+  /** 가용 백엔드 필터링 (mode, availability, circuit breaker). 슬롯 소비 없이 can_acquire 사용. */
   private _get_available_for_mode(mode: ExecutionMode): AgentBackend[] {
     const result: AgentBackend[] = [];
     for (const [id, backend] of this.backends) {
       if (!backend.is_available()) continue;
       const breaker = this.breakers.get(id);
-      if (breaker && !breaker.try_acquire()) continue;
+      if (breaker && !breaker.can_acquire()) continue;
 
       const config = this.provider_configs.get(id);
       if (config) {

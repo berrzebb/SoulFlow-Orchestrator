@@ -1,5 +1,5 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
-import { BuilderField, BuilderRowPair } from "../builder-field";
+import { BuilderField } from "../builder-field";
 
 const OPERATIONS = ["detect_type", "extract_metadata", "to_base64", "from_base64"] as const;
 

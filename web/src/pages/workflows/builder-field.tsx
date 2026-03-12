@@ -6,16 +6,17 @@ import type { NodeOptions } from "./node-registry";
 import { handleContainerDrop, handleContainerDragOver } from "./inspector-dnd";
 
 /** 워크플로우 빌더 폼 필드 — label + input + hint/error 표준화. */
-export function BuilderField({ label, required, optional, hint, error, children }: {
+export function BuilderField({ label, required, optional, hint, error, children, className }: {
   label: string;
   required?: boolean;
   optional?: boolean;
   hint?: ReactNode;
   error?: string;
   children: ReactNode;
+  className?: string;
 }) {
   return (
-    <div className="builder-row" onDrop={handleContainerDrop} onDragOver={handleContainerDragOver}>
+    <div className={`builder-row${className ? ` ${className}` : ""}`} onDrop={handleContainerDrop} onDragOver={handleContainerDragOver}>
       <label className="label">
         {label}
         {required && <span className="label__required">*</span>}
@@ -36,13 +37,29 @@ export function BuilderRowPair({ children, className }: {
   return <div className={`builder-row-pair${className ? ` ${className}` : ""}`}>{children}</div>;
 }
 
-/** LLM backend + model 선택기 — useProviderModels 훅 내장, 로딩/fallback 처리 포함. */
-/** 프로바이더 타입 → 특기 레이블 맵. */
+/** LLM backend + model 선택기 — ps-model-bar 스타일 pill + dropdown. */
+const PROVIDER_INITIAL: Record<string, string> = {
+  openai:     "⬡",
+  anthropic:  "◈",
+  google:     "✦",
+  cohere:     "◉",
+  mistral:    "▲",
+  openrouter: "⊕",
+};
+
 const PROVIDER_SPECIALTY_LABELS: Record<string, string> = {
   anthropic: "💻 코딩",
   openai:    "📋 계획",
   gemini:    "🎨 프론트엔드",
 };
+
+function prov_icon(type: string): string {
+  const t = type.toLowerCase();
+  for (const [k, v] of Object.entries(PROVIDER_INITIAL)) {
+    if (t.includes(k)) return v;
+  }
+  return "○";
+}
 
 function backend_specialty_hint(provider_type?: string): string {
   if (!provider_type) return "";
@@ -62,43 +79,70 @@ export function BackendModelPicker({ backend, onBackendChange, model, onModelCha
 }) {
   const { models, loading } = useProviderModels(backend, options);
 
-  // 선택된 백엔드의 특기 힌트
   const selected_backend = (options?.backends || []).find((b) => b.value === backend);
   const specialty_hint = backend_specialty_hint(selected_backend?.provider_type);
+  const icon = selected_backend ? prov_icon(selected_backend.provider_type ?? "") : "○";
+  const is_down = selected_backend?.available === false;
 
   return (
-    <BuilderRowPair>
-      <BuilderField label={backendLabel} required={required} hint={specialty_hint || undefined}>
-        <select autoFocus={autoFocus} className="input input--sm" required={required} value={backend}
-          onChange={(e) => onBackendChange(e.target.value)} aria-required={required || undefined}>
-          <option value="">-</option>
-          {(options?.backends || []).map((b) => {
-            const hint = backend_specialty_hint(b.provider_type);
-            return (
+    <div className="builder-row" onDrop={handleContainerDrop} onDragOver={handleContainerDragOver}>
+      <label className="label">
+        {backendLabel} / {modelLabel}
+        {required && <span className="label__required">*</span>}
+      </label>
+      <div className="wf-model-bar">
+        {/* Provider pill */}
+        <div className={`wf-model-bar__pill${is_down ? " wf-model-bar__pill--down" : ""}`}>
+          <span className="wf-model-bar__icon">{icon}</span>
+          <select
+            autoFocus={autoFocus}
+            className="wf-model-bar__backend"
+            required={required}
+            value={backend}
+            onChange={(e) => onBackendChange(e.target.value)}
+            aria-required={required || undefined}
+          >
+            {!backend && <option value="">— Backend —</option>}
+            {(options?.backends || []).map((b) => (
               <option key={b.value} value={b.value}>
-                {b.available === false ? "⚫ " : "🟢 "}{b.label}{hint ? ` · ${hint}` : ""}
+                {b.available === false ? "⚫ " : ""}{b.label}
               </option>
-            );
-          })}
-        </select>
-      </BuilderField>
-      <BuilderField label={modelLabel} required={required}>
+            ))}
+          </select>
+        </div>
+
+        {/* Model select */}
         {loading ? (
-          <input className="input input--sm" disabled aria-busy="true" placeholder="loading..." />
+          <select className="wf-model-bar__model" disabled aria-busy="true">
+            <option>loading…</option>
+          </select>
         ) : models.length > 0 ? (
-          <select className="input input--sm" value={model || ""} onChange={(e) => onModelChange(e.target.value || undefined)}>
+          <select
+            className="wf-model-bar__model"
+            value={model || ""}
+            onChange={(e) => onModelChange(e.target.value || undefined)}
+          >
             <option value="">auto</option>
-            {models.filter((m) => m.purpose !== "embedding").map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+            {models.filter((m) => m.purpose !== "embedding").map((m) => (
+              <option key={m.id} value={m.id}>{m.name}</option>
+            ))}
           </select>
         ) : (
-          <input className="input input--sm" value={model || ""} onChange={(e) => onModelChange(e.target.value || undefined)} placeholder="auto" />
+          <input
+            className="wf-model-bar__model"
+            value={model || ""}
+            onChange={(e) => onModelChange(e.target.value || undefined)}
+            placeholder="auto"
+            aria-label={modelLabel}
+          />
         )}
-      </BuilderField>
-    </BuilderRowPair>
+      </div>
+      {specialty_hint && <span className="builder-hint">{specialty_hint}</span>}
+    </div>
   );
 }
 
-/** JSON textarea — raw text + 파싱 에러 표시 통합. label/rows/placeholder/emptyValue 설정 가능. */
+/** JSON textarea — raw text + 파싱 에러 표시 통합. */
 export function JsonField({ label, value, onUpdate, rows = 3, placeholder, small, hint, autoFocus, emptyValue = undefined }: {
   label: string;
   value: unknown;
@@ -126,7 +170,7 @@ export function JsonField({ label, value, onUpdate, rows = 3, placeholder, small
   );
 }
 
-/** 워크플로우 노드 다중 선택 — 분기 노드의 대상 노드 선택용. 노드 목록이 없으면 텍스트 입력 fallback. */
+/** 워크플로우 노드 다중 선택 — 분기 노드의 대상 노드 선택용. */
 export function NodeMultiSelect({ value, onChange, nodes, placeholder }: {
   value: string[];
   onChange: (ids: string[]) => void;
@@ -168,23 +212,37 @@ export function NodeMultiSelect({ value, onChange, nodes, placeholder }: {
   );
 }
 
-/** LLM temperature 슬라이더 — label 내부 상태 표시(precise/balanced/creative) 포함. */
+/** LLM temperature — inline row (label ↔ slider + value). */
 export function TemperatureField({ value, onChange }: {
   value: number | undefined;
   onChange: (v: number) => void;
 }) {
   const t = useT();
-  const temp = value;
+  const temp = value ?? 0.7;
+  const hint = temp <= 0.3
+    ? t("workflows.temp_precise")
+    : temp <= 0.7
+      ? t("workflows.temp_balanced")
+      : t("workflows.temp_creative");
+
   return (
     <div className="builder-row">
-      <label className="label">
-        {t("workflows.llm_temperature")}
-        <span className="builder-hint--inline">
-          {temp == null ? "" : ` (${temp <= 0.3 ? t("workflows.temp_precise") : temp <= 0.7 ? t("workflows.temp_balanced") : t("workflows.temp_creative")})`}
+      <div className="wf-setting-row">
+        <span className="wf-setting-row__label">
+          {t("workflows.llm_temperature")}
+          <span className="wf-setting-row__hint"> ({hint})</span>
         </span>
-      </label>
-      <input className="input input--sm" type="range" min={0} max={2} step={0.1} value={String(temp ?? 0.7)} onChange={(e) => onChange(Number(e.target.value))} />
-      <span className="builder-hint">{temp ?? 0.7}</span>
+        <div className="wf-setting-row__right">
+          <input
+            type="range"
+            min={0} max={2} step={0.1}
+            value={String(temp)}
+            onChange={(e) => onChange(Number(e.target.value))}
+            style={{ width: 88 }}
+          />
+          <span className="wf-setting-row__value">{temp}</span>
+        </div>
+      </div>
     </div>
   );
 }

@@ -202,6 +202,23 @@ function _deterministic_stagger(job_id: string, max_ms: number): number {
   return Math.abs(hash) % max_ms;
 }
 
+/** 매 시 정각 실행 cron 감지. minute=0, hour에 "*" 포함. */
+function _is_top_of_hour_cron(expr: string): boolean {
+  const fields = expr.trim().split(/\s+/);
+  return fields.length === 5 && fields[0] === "0" && (fields[1] || "").includes("*");
+}
+
+const _TOP_OF_HOUR_STAGGER_MS = 5 * 60_000;
+
+/** stagger 상한 (ms). 명시적 설정 > 시 정각 자동 감지 > 0. */
+function _resolve_stagger_max_ms(schedule: CronSchedule): number {
+  if (schedule.stagger_ms != null && schedule.stagger_ms > 0) return schedule.stagger_ms;
+  if (schedule.kind === "cron" && schedule.expr && _is_top_of_hour_cron(schedule.expr)) {
+    return _TOP_OF_HOUR_STAGGER_MS;
+  }
+  return 0;
+}
+
 /** 재시도 정책에서 현재 attempt에 해당하는 백오프 지연 (ms). */
 function _get_retry_delay(policy: CronRetryPolicy, attempt: number): number {
   const idx = Math.min(attempt - 1, policy.backoff_ms.length - 1);
@@ -270,8 +287,9 @@ function _compute_next_run(schedule: CronSchedule, now: number, on_warn?: (msg: 
         continue;
       }
       if (_match_parsed_cron(parsed, parts)) {
-        const stagger = (schedule.stagger_ms && schedule.stagger_ms > 0 && stagger_id)
-          ? _deterministic_stagger(stagger_id, schedule.stagger_ms)
+        const max_stagger = _resolve_stagger_max_ms(schedule);
+        const stagger = (max_stagger > 0 && stagger_id)
+          ? _deterministic_stagger(stagger_id, max_stagger)
           : 0;
         return candidate_ms + stagger;
       }

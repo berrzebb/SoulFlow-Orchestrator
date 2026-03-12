@@ -11,7 +11,7 @@ export type {
   DashboardTemplateOps, DashboardStatsOps, DashboardMemoryOps, DashboardWorkspaceOps,
   ChannelStatusInfo, DashboardChannelOps, AgentProviderStatusInfo, ProviderConnectionInfo,
   DashboardAgentProviderOps, BootstrapOps, OAuthIntegrationInfo, DashboardOAuthOps,
-  DashboardModelOps, DashboardWorkflowOps, DashboardCliAuthOps,
+  DashboardModelOps, DashboardWorkflowOps, DashboardCliAuthOps, DashboardPromptOps, DashboardUsageOps,
   DashboardOptions, RecentMessage, ChatMediaItem, ChatSessionMessage, ChatSession,
 } from "./service.types.js";
 import { MAX_CHAT_SESSIONS, MAX_MESSAGES_PER_SESSION } from "./service.types.js";
@@ -51,6 +51,8 @@ import { handle_workflow, handle_workflow_node } from "./routes/workflows.js";
 import { handle_kanban } from "./routes/kanban.js";
 import { handle_references } from "./routes/references.js";
 import { handle_agent_definition } from "./routes/agent-definition.js";
+import { handle_prompt } from "./routes/prompt.js";
+import { handle_usage } from "./routes/usage.js";
 import { dispatch_webhook } from "./routes/webhook.js";
 
 const RE_MEDIA_TOKEN = /^\/media\/([a-z0-9]{16,})$/i;
@@ -222,6 +224,8 @@ export class DashboardService implements ServiceLike {
     this.route_map.set("/api/kanban", handle_kanban);
     this.route_map.set("/api/references", handle_references);
     this.route_map.set("/api/agent-definitions", handle_agent_definition);
+    this.route_map.set("/api/prompt", handle_prompt);
+    this.route_map.set("/api/usage", handle_usage);
     this.route_map.set("/api/stats", handle_health);
     this.route_map.set("/api/dlq", handle_health);
     this.route_map.set("/api/workflow/events", handle_health);

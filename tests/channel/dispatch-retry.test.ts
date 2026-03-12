@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { DispatchService } from "@src/channels/dispatch.service.js";
+import { DispatchService, parse_retry_after_ms } from "@src/channels/dispatch.service.js";
 import type { OutboundMessage } from "@src/bus/types.js";
 
 function make_message(overrides?: Partial<OutboundMessage>): OutboundMessage {
@@ -77,6 +77,27 @@ function make_deps(overrides?: any) {
     ...overrides,
   };
 }
+
+// ── parse_retry_after_ms ────────────────────────────────────────────────────
+describe("parse_retry_after_ms", () => {
+  it("Telegram 형식 — 'Too Many Requests: retry after 30' → 30000ms", () => {
+    expect(parse_retry_after_ms("Too Many Requests: retry after 30")).toBe(30_000);
+  });
+  it("소수점 — 'retry after 1.5' → 1500ms (올림)", () => {
+    expect(parse_retry_after_ms("retry after 1.5")).toBe(1500);
+  });
+  it("Discord 형식 — 'retry_after: 2' → 2000ms", () => {
+    expect(parse_retry_after_ms("retry_after: 2")).toBe(2000);
+  });
+  it("retry after 없는 일반 에러 → null", () => {
+    expect(parse_retry_after_ms("rate_limited")).toBeNull();
+    expect(parse_retry_after_ms("channel_not_found")).toBeNull();
+    expect(parse_retry_after_ms("")).toBeNull();
+  });
+  it("0이나 음수 → null", () => {
+    expect(parse_retry_after_ms("retry after 0")).toBeNull();
+  });
+});
 
 describe("DispatchService", () => {
   it("sends successfully on first attempt", async () => {

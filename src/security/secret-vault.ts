@@ -70,6 +70,19 @@ function normalize_secret_name(value: unknown): string {
     .slice(0, 80);
 }
 
+/**
+ * API 키 복붙 시 발생하는 아티팩트 제거:
+ * - 줄바꿈 문자 (multiline 복붙, 파일 trailing newline)
+ * - non-Latin1 유니코드 (스마트 따옴표, 박스드로잉 등)
+ * 내부 공백은 유지 (Bearer 토큰 형식 보존).
+ */
+function normalize_secret_value(value: string): string {
+  return String(value || "")
+    .replace(/[\r\n\u2028\u2029]/g, "")
+    .split("").filter(c => c.charCodeAt(0) <= 0xff).join("")
+    .trim();
+}
+
 function is_valid_ciphertext_shape(token: string): boolean {
   try {
     const parts = String(token || "").trim().split(".");
@@ -301,8 +314,10 @@ export class SecretVaultService implements SecretVaultLike {
   async put_secret(nameRaw: string, plaintext: string): Promise<{ ok: boolean; name: string }> {
     const name = normalize_secret_name(nameRaw);
     if (!name) return { ok: false, name: "" };
+    const value = normalize_secret_value(String(plaintext || ""));
+    if (!value) return { ok: false, name };
     await this.ensure_ready();
-    const ciphertext = await this.encrypt_text(plaintext, `secret:${name}`);
+    const ciphertext = await this.encrypt_text(value, `secret:${name}`);
     const ok = with_sqlite_strict(this.store_path, (db) => {
       db.prepare(`
         INSERT INTO secrets(name, ciphertext, updated_at)

@@ -83,7 +83,7 @@ describe("sub_workflow_handler.runner_execute", () => {
     const run_sub_workflow = vi.fn().mockImplementation(() => new Promise((r) => setTimeout(r, 2000)));
     const runner = make_runner(run_sub_workflow);
     const result = await sub_workflow_handler.runner_execute!(make_node({ workflow_name: "slow-wf", timeout_ms: 10 }), make_ctx(), runner);
-    expect(result.output.error).toContain("timed out");
+    expect(result.output.error).toContain("timeout after");
   });
 
   it("input_mapping 보간 후 run_sub_workflow 호출", async () => {

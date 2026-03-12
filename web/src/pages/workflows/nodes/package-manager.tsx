@@ -1,5 +1,5 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
-import { BuilderField, BuilderRowPair } from "../builder-field";
+import { BuilderField } from "../builder-field";
 
 const DEP_OPS = ["parse_deps", "parse_reqs", "dep_tree", "circular_deps", "dep_stats", "dep_compare"];
 const PKG_OPS = ["list", "install", "uninstall", "audit", "outdated", "info"];

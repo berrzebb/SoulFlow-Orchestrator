@@ -114,7 +114,7 @@ export class ChannelBlockRenderer {
     return this.thinking.length > 0 || this.completed_tools.length > 0 || this.system.length > 0;
   }
 
-  /** 완성된 블록 전체를 채널용 텍스트로 렌더링. */
+  /** 완성된 블록 전체를 채널용 텍스트로 렌더링. 도구가 2개 이상이면 헤더+목록 집약 포맷. */
   render(mode: RenderMode = "plain"): string {
     const parts: string[] = [];
     const fmt = FORMATTERS[mode] ?? FORMATTERS.plain;
@@ -123,9 +123,8 @@ export class ChannelBlockRenderer {
       parts.push(fmt.thinking(t.tokens));
     }
 
-    for (const t of this.completed_tools) {
-      const preview = t.result.replace(/\n+/g, " ").trim().slice(0, 100);
-      parts.push(fmt.tool(t.name, preview, t.is_error));
+    if (this.completed_tools.length > 0) {
+      parts.push(this._render_tools(mode, fmt));
     }
 
     if (this.system.length > 0) {
@@ -144,5 +143,29 @@ export class ChannelBlockRenderer {
     }
 
     return parts.join("\n\n");
+  }
+
+  private _render_tools(mode: RenderMode, fmt: Fmt): string {
+    const tools = this.completed_tools;
+    if (tools.length === 1) {
+      const t = tools[0];
+      const preview = t.result.replace(/\n+/g, " ").trim().slice(0, 120);
+      return fmt.tool(t.name, preview, t.is_error);
+    }
+    // 2개 이상: 헤더 + 목록 집약
+    const err_count = tools.filter((t) => t.is_error).length;
+    const header_icon = err_count > 0 ? "⚠️" : "🔧";
+    const header_suffix = err_count > 0 ? ` (${err_count}개 실패)` : "";
+    const lines = tools.map((t) => {
+      const status = t.is_error ? "❌" : "✅";
+      const preview = t.result.replace(/\n+/g, " ").trim().slice(0, 80);
+      const out = preview || "(no output)";
+      if (mode === "html")     return `  <b>${t.name}</b> ${status} · ${out}`;
+      if (mode === "markdown") return `  *${t.name}* ${status} · ${out}`;
+      return `  ${t.name} [${t.is_error ? "FAIL" : "OK"}] ${out}`;
+    });
+    if (mode === "html")     return `${header_icon} <b>${tools.length}개 도구 사용</b>${header_suffix}\n${lines.join("\n")}`;
+    if (mode === "markdown") return `${header_icon} *${tools.length}개 도구 사용*${header_suffix}\n${lines.join("\n")}`;
+    return `${header_icon} ${tools.length} tools used${header_suffix}\n${lines.join("\n")}`;
   }
 }

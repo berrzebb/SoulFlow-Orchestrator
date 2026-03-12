@@ -170,7 +170,7 @@ export class DispatchService implements ServiceLike {
     }
 
     // retryable + under limit → 새 메시지로 delayed requeue
-    this.schedule_retry(provider, msg, dispatch_retry + 1, last_error);
+    this.schedule_retry(provider, msg, dispatch_retry + 1, last_error, parse_retry_after_ms(last_error));
   }
 
   private dispatch_outbound(msg: OutboundMessage): void {
@@ -208,6 +208,7 @@ export class DispatchService implements ServiceLike {
 
     const attempts = Math.max(1, this.retry_config.inlineRetries + 1);
     let last_error = "";
+    let last_retry_after_ms: number | null = null;
 
     for (let attempt = 1; attempt <= attempts; attempt++) {
       const sent = await this.registry.send(message);
@@ -218,13 +219,14 @@ export class DispatchService implements ServiceLike {
         return sent;
       }
       last_error = String(sent.error || "unknown_error");
+      last_retry_after_ms = parse_retry_after_ms(last_error);
       if (!is_retryable(last_error)) break;
-      if (attempt < attempts) await sleep(this.compute_delay(attempt));
+      if (attempt < attempts) await sleep(this.compute_delay(attempt, last_retry_after_ms));
     }
 
     const dispatch_retry = get_retry_count(message);
     if (allow_requeue && dispatch_retry < this.retry_config.retryMax && is_retryable(last_error)) {
-      this.schedule_retry(provider, message, dispatch_retry + 1, last_error);
+      this.schedule_retry(provider, message, dispatch_retry + 1, last_error, last_retry_after_ms);
       return { ok: false, error: `dispatch_requeued_${dispatch_retry + 1}:${last_error}` };
     }
 
@@ -234,8 +236,8 @@ export class DispatchService implements ServiceLike {
     return { ok: false, error: last_error || "send_failed" };
   }
 
-  private schedule_retry(provider: ChannelProvider, message: OutboundMessage, retry_count: number, error: string): void {
-    const delay = this.compute_delay(retry_count);
+  private schedule_retry(provider: ChannelProvider, message: OutboundMessage, retry_count: number, error: string, retry_after_ms?: number | null): void {
+    const delay = this.compute_delay(retry_count, retry_after_ms);
     const retry_msg = clone_outbound(message);
     retry_msg.metadata = {
       ...(retry_msg.metadata || {}),
@@ -275,7 +277,10 @@ export class DispatchService implements ServiceLike {
     }
   }
 
-  private compute_delay(attempt: number): number {
+  private compute_delay(attempt: number, retry_after_ms?: number | null): number {
+    if (retry_after_ms != null && retry_after_ms > 0) {
+      return Math.min(retry_after_ms, this.retry_config.retryMaxMs);
+    }
     const base = this.retry_config.retryBaseMs * Math.pow(2, attempt - 1);
     const capped = Math.min(base, this.retry_config.retryMaxMs);
     const jitter = this.retry_config.retryJitterMs > 0 ? Math.floor(Math.random() * this.retry_config.retryJitterMs) : 0;
@@ -300,6 +305,14 @@ function get_retry_count(msg: OutboundMessage): number {
 
 function clone_outbound(msg: OutboundMessage): OutboundMessage {
   return { ...msg, media: [...(msg.media || [])], metadata: { ...(msg.metadata || {}) } };
+}
+
+/** Telegram "Too Many Requests: retry after 30" 또는 Discord "retry_after: 1.5"에서 ms 추출. */
+export function parse_retry_after_ms(error: string): number | null {
+  const m = String(error || "").match(/retry[_\s-]*after[:\s]+(\d+(?:\.\d+)?)/i);
+  if (!m) return null;
+  const secs = parseFloat(m[1]);
+  return Number.isFinite(secs) && secs > 0 ? Math.ceil(secs * 1000) : null;
 }
 
 function is_reliable_bus(bus: MessageBusLike): ReliableMessageBus | null {

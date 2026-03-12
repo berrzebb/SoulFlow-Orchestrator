@@ -53,7 +53,9 @@ export interface SanitizeResult {
 
 /** 라인 단위 인젝션 패턴 탐지 + 제거 */
 export function sanitize_untrusted_text(input: string): SanitizeResult {
-  const lines = String(input || "").split(/\r?\n/);
+  const raw = String(input || "");
+  // ReDoS 방지: 패턴 적용 전 입력 길이 제한
+  const lines = (raw.length > 512_000 ? raw.slice(0, 512_000) : raw).split(/\r?\n/);
   const kept: string[] = [];
   const removed: string[] = [];
   for (const line of lines) {

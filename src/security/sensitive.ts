@@ -1,6 +1,8 @@
 import { escape_regexp } from "../utils/common.js";
 
 const REDACTED = "[REDACTED]";
+/** 단일 입력 최대 처리 문자 수. 초과분은 잘라내 ReDoS 방지. */
+const MAX_INPUT_CHARS = 512_000;
 const SECRET_KEYWORDS = [
   "token",
   "api_key",
@@ -160,6 +162,7 @@ export type RedactionResult = {
 export function redact_sensitive_text(input: string): RedactionResult {
   let text = String(input || "");
   if (!text) return { text: "", redacted: false, match_count: 0 };
+  if (text.length > MAX_INPUT_CHARS) text = text.slice(0, MAX_INPUT_CHARS);
   const before = text;
   let count = 0;
 

@@ -76,9 +76,15 @@ export function mmr_rerank(
 
   const selected: ScoredChunk[] = [];
   const remaining = [...scored];
-
-  // 최고 점수 정규화
   const max_score = remaining[0]?.score || 1;
+
+  // 토큰셋 캐시 — 동일 chunk를 루프마다 재계산하지 않도록
+  const token_cache = new Map<string, Set<string>>();
+  const get_tokens = (id: string): Set<string> => {
+    let t = token_cache.get(id);
+    if (!t) { t = tokenize_simple(content_fn(id)); token_cache.set(id, t); }
+    return t;
+  };
 
   while (selected.length < limit && remaining.length > 0) {
     let best_idx = 0;
@@ -88,9 +94,9 @@ export function mmr_rerank(
       const relevance = remaining[i].score / max_score;
       let max_sim = 0;
       if (selected.length > 0) {
-        const candidate_tokens = tokenize_simple(content_fn(remaining[i].chunk_id));
+        const candidate_tokens = get_tokens(remaining[i].chunk_id);
         for (const s of selected) {
-          const sim = jaccard(candidate_tokens, tokenize_simple(content_fn(s.chunk_id)));
+          const sim = jaccard(candidate_tokens, get_tokens(s.chunk_id));
           if (sim > max_sim) max_sim = sim;
         }
       }

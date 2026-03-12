@@ -56,6 +56,16 @@ const VEC_DIMENSIONS = 256;
 const MAX_EMBED_CHARS = 2000;
 /** 배치 임베딩 1회 최대 청크 수. API 요청 크기 제한 대응. */
 const EMBED_BATCH_SIZE = 50;
+/**
+ * consolidate_with_provider() 프롬프트 최대 문자 수.
+ * current_memory + conversation 합산이 이를 초과하면 오래된 메시지부터 제거.
+ * GPT-4o/Claude 기준 ~20K 토큰에 해당.
+ */
+const MAX_CONSOLIDATION_CHARS = 80_000;
+/** UUID, 해시, API 키 등 opaque 식별자를 원본 그대로 보존하도록 LLM에 지시. */
+const IDENTIFIER_PRESERVATION_INSTRUCTIONS =
+  "Preserve all opaque identifiers exactly as written (no shortening or reconstruction), " +
+  "including UUIDs, hashes, IDs, tokens, API keys, hostnames, IPs, ports, URLs, and file names.";
 
 export class MemoryStore implements MemoryStoreLike {
   private readonly root: string;
@@ -719,6 +729,23 @@ export class MemoryStore implements MemoryStoreLike {
     if (lines.length === 0) return true;
 
     const current_memory = redact_sensitive_text(await secret_vault.mask_known_secrets(await this.read_longterm())).text;
+
+    // 오래된 메시지부터 제거하여 프롬프트가 토큰 예산을 초과하지 않도록 보장
+    const budget = Math.max(1000, MAX_CONSOLIDATION_CHARS - current_memory.length - 500);
+    let conversation_text = lines.join("\n");
+    if (conversation_text.length > budget) {
+      let total = 0;
+      const kept: string[] = [];
+      for (let i = lines.length - 1; i >= 0; i--) {
+        total += lines[i].length + 1;
+        if (total > budget) break;
+        kept.unshift(lines[i]);
+      }
+      const dropped = lines.length - kept.length;
+      if (dropped > 0) kept.unshift(`[... ${dropped} older messages truncated ...]`);
+      conversation_text = kept.join("\n");
+    }
+
     const prompt = [
       "Process this conversation and call the save_memory tool with your consolidation.",
       "",
@@ -726,14 +753,14 @@ export class MemoryStore implements MemoryStoreLike {
       current_memory || "(empty)",
       "",
       "## Conversation to Process",
-      lines.join("\n"),
+      conversation_text,
     ].join("\n");
 
     const response = await provider.chat({
       messages: [
         {
           role: "system",
-          content: "You are a memory consolidation agent. Call the save_memory tool with your consolidation of the conversation.",
+          content: `You are a memory consolidation agent. Call the save_memory tool with your consolidation of the conversation. ${IDENTIFIER_PRESERVATION_INSTRUCTIONS}`,
         },
         { role: "user", content: prompt },
       ],
@@ -755,8 +782,8 @@ export class MemoryStore implements MemoryStoreLike {
     const history_entry = args.history_entry;
     if (history_entry !== undefined && history_entry !== null) {
       const raw = typeof history_entry === "string" ? history_entry : JSON.stringify(history_entry);
-      const text = sanitize_untrusted_text(raw).text;
-      if (text.trim()) await this.append_daily(`${text}\n`);
+      const text = sanitize_untrusted_text(raw).text.trim();
+      if (text) await this.append_daily(`${text}\n`);
     }
 
     const memory_new_insights = args.memory_new_insights ?? args.memory_update; // 하위 호환

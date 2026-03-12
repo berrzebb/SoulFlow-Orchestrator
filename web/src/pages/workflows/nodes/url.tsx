@@ -1,5 +1,5 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
-import { BuilderField, BuilderRowPair } from "../builder-field";
+import { BuilderField } from "../builder-field";
 
 const URL_ACTIONS = ["parse", "build", "resolve", "encode", "decode", "query_params", "join", "normalize"] as const;
 const NEEDS_URL2   = ["resolve"];

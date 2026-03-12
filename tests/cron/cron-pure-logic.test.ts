@@ -220,6 +220,35 @@ describe("CronService — pure logic", () => {
     expect(job.state.next_run_at_ms).toBeGreaterThan(Date.now());
   });
 
+  // ── top-of-hour auto-stagger ───────────────────────
+  it("top-of-hour cron: 명시 stagger 없으면 next_run이 정각 + 5분 이내 오프셋", async () => {
+    // "0 * * * *"는 매 시 정각 → 자동 stagger 최대 5분(300_000ms)
+    const job = await svc.add_job("hourly", { kind: "cron", expr: "0 * * * *" }, "m");
+    const next = job.state.next_run_at_ms!;
+    // 정각 기준 시간 계산 (다음 정각)
+    const top_of_hour = Math.ceil(Date.now() / 3_600_000) * 3_600_000;
+    // next_run은 정각 이후 최대 300_000ms 이내여야 함
+    expect(next).toBeGreaterThanOrEqual(top_of_hour);
+    expect(next).toBeLessThanOrEqual(top_of_hour + 300_000);
+  });
+
+  it("top-of-hour cron: 명시적 stagger_ms가 있으면 그것을 사용", async () => {
+    const job = await svc.add_job("hourly-explicit", { kind: "cron", expr: "0 * * * *", stagger_ms: 10_000 }, "m");
+    const next = job.state.next_run_at_ms!;
+    const top_of_hour = Math.ceil(Date.now() / 3_600_000) * 3_600_000;
+    // 명시적 stagger 10초 이내여야 함 (자동 5분 아님)
+    expect(next).toBeGreaterThanOrEqual(top_of_hour);
+    expect(next).toBeLessThanOrEqual(top_of_hour + 10_000);
+  });
+
+  it("non-top-of-hour cron: stagger_ms 없으면 정확히 정각에 실행", async () => {
+    // "0 9 * * *"는 매일 9시 — 시 정각이지만 "매 시"가 아님 → 자동 stagger 없음
+    const job = await svc.add_job("daily-9am", { kind: "cron", expr: "0 9 * * *" }, "m");
+    const next = job.state.next_run_at_ms!;
+    // 다음 실행 시각은 분 경계(60초 배수)여야 함 — stagger 없으면 정확히 분 경계
+    expect(next % 60_000).toBe(0);
+  });
+
   // ── every ──
   it("every: 인터벌 타이머 등록 후 stop에서 정리", async () => {
     let called = false;

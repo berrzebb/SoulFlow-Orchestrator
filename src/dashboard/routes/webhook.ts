@@ -3,6 +3,7 @@
  * 토큰 인증 + 세션 wake + 직접 에이전트 호출 지원.
  */
 
+import { createHash, timingSafeEqual } from "node:crypto";
 import { now_iso, short_id } from "../../utils/common.js";
 import type { WebhookStore } from "../../services/webhook-store.service.js";
 import type { IncomingMessage, ServerResponse } from "node:http";
@@ -23,13 +24,10 @@ function verify_token(req: IncomingMessage, secret: string | undefined): boolean
   const auth = String(req.headers.authorization || "").trim();
   if (!auth.startsWith("Bearer ")) return false;
   const token = auth.slice(7).trim();
-  // timing-safe 비교 (고정 길이 해시 대신 단순 비교 — secret 길이 노출 방지)
-  if (token.length !== secret.length) return false;
-  let diff = 0;
-  for (let i = 0; i < token.length; i += 1) {
-    diff |= token.charCodeAt(i) ^ secret.charCodeAt(i);
-  }
-  return diff === 0;
+  // SHA-256 해시 후 timingSafeEqual — 길이/내용 모두 timing leak 방지
+  const expected = createHash("sha256").update(secret, "utf8").digest();
+  const actual = createHash("sha256").update(token, "utf8").digest();
+  return timingSafeEqual(expected, actual);
 }
 
 /**

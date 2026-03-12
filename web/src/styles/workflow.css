@@ -2247,7 +2247,123 @@ g:hover > .graph-add-handle circle {
   transition: transform 0.15s ease;
 }
 .inspector-card__toggle--closed { transform: rotate(-90deg); }
-.inspector-section-content { padding: 12px; }
+/* Inspector 섹션 내부 — ps-pane-sec 스타일로 border separator 분리 */
+.inspector-section-content {
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.inspector-section-content > .builder-row,
+.inspector-section-content > .builder-row-pair,
+.inspector-section-content > .builder-row-triple {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+}
+.inspector-section-content > .builder-row:last-child,
+.inspector-section-content > .builder-row-pair:last-child,
+.inspector-section-content > .builder-row-triple:last-child {
+  border-bottom: none;
+}
+/* 페어/트리플 안의 builder-row는 부모에서 패딩을 받으므로 자체 padding 제거 */
+.inspector-section-content .builder-row-pair > .builder-row,
+.inspector-section-content .builder-row-triple > .builder-row {
+  padding: 0;
+  border: none;
+}
+
+/* ── wf-model-bar — AI Studio 스타일 백엔드/모델 선택기 ── */
+.wf-model-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.wf-model-bar__pill {
+  display: inline-flex;
+  align-items: center;
+  height: 30px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  overflow: hidden;
+  flex-shrink: 0;
+  transition: border-color 0.15s;
+}
+.wf-model-bar__pill:focus-within { border-color: var(--accent); }
+.wf-model-bar__pill--down { border-color: var(--err, #e74c3c); opacity: 0.75; }
+.wf-model-bar__icon {
+  padding-left: 9px;
+  font-size: 12px;
+  flex-shrink: 0;
+  pointer-events: none;
+  color: var(--muted);
+}
+.wf-model-bar__backend {
+  border: none;
+  background: transparent;
+  font-size: 12px;
+  color: var(--text);
+  cursor: pointer;
+  padding: 0 9px 0 4px;
+  height: 100%;
+  appearance: none;
+  min-width: 70px;
+}
+.wf-model-bar__model {
+  flex: 1;
+  height: 30px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 22px 0 9px;
+  font-size: 12px;
+  color: var(--text);
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%2391a4b7' stroke-width='2.5'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 5px center;
+  cursor: pointer;
+  transition: border-color 0.15s;
+  min-width: 80px;
+}
+.wf-model-bar__model:focus { outline: none; border-color: var(--accent); }
+.wf-model-bar__model:disabled { opacity: 0.5; cursor: not-allowed; }
+input.wf-model-bar__model { background-image: none; padding-right: 9px; }
+
+/* ── wf-setting-row — inline label ↔ control ── */
+.wf-setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 24px;
+}
+.wf-setting-row__label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  flex: 1;
+}
+.wf-setting-row__hint {
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  opacity: 0.8;
+}
+.wf-setting-row__right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.wf-setting-row__value {
+  font-size: 12px;
+  color: var(--muted);
+  min-width: 26px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
 .inspector-empty {
   color: var(--muted);
   font-size: var(--fs-xs);

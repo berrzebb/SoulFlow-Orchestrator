@@ -1,5 +1,5 @@
 import type { FrontendNodeDescriptor, EditPanelProps } from "../node-registry";
-import { BuilderField, BuilderRowPair } from "../builder-field";
+import { BuilderField } from "../builder-field";
 
 const SEMVER_ACTIONS = ["parse", "compare", "satisfies", "bump", "sort", "diff", "valid"] as const;
 const BUMP_TYPES = ["major", "minor", "patch", "prerelease"] as const;

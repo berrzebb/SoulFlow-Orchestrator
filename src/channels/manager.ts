@@ -641,7 +641,7 @@ export class ChannelManager implements ServiceLike {
     const content = String(msg.content || "").trim();
     if (!content) return false;
     const run = this.active_runs.find_by_chat_id(msg.chat_id);
-    if (run) { run.send_input!(content); return true; }
+    if (run?.send_input) { run.send_input(content); return true; }
     return false;
   }
 
@@ -703,7 +703,6 @@ export class ChannelManager implements ServiceLike {
 
     // web 채널은 NDJSON 스트림으로 처리 → 채널(Slack/Telegram 등)에서만 활성화
     const block_renderer = provider !== "web" ? new ChannelBlockRenderer() : null;
-    const block_msg = { id: "" };
 
     try {
       if (!meta.is_recovery) await this.recorder.record_user(provider, message, alias);
@@ -752,12 +751,8 @@ export class ChannelManager implements ServiceLike {
               this.on_agent_event?.(event);
               // web 채널: rich 이벤트를 세션별 NDJSON 스트림으로 추가 라우팅
               if (provider === "web") this.on_web_rich_event?.(message.chat_id, event);
-              // 채널: 블록 완성 시 실시간 편집
-              if (block_renderer?.push(event)) {
-                stream_state.chain = stream_state.chain
-                  .then(() => this._flush_block_render(provider, message, alias, block_renderer, block_msg))
-                  .catch((e) => this.logger.debug("block_render_failed", { error: error_message(e) }));
-              }
+              // 채널: 이벤트 누적 (실제 전송은 턴 종료 후 _send_block_summary에서 일괄)
+              block_renderer?.push(event);
             }
           : undefined,
         on_tool_block: provider !== "web"
@@ -806,6 +801,12 @@ export class ChannelManager implements ServiceLike {
       if (stream_state.finalize_native_stream) {
         await stream_state.finalize_native_stream().catch((e) =>
           this.logger.debug("native_stream_stop_failed", { error: error_message(e) }),
+        );
+      }
+      // 도구 블록 전체를 단일 메시지로 전송 (개별 전송 대신 일괄)
+      if (block_renderer) {
+        await this._send_block_summary(provider, message, alias, block_renderer).catch((e) =>
+          this.logger.debug("block_summary_failed", { error: error_message(e) }),
         );
       }
       await this.deliver_result(provider, message, alias, result, stream_state.message_id, stream_state.tool_count, is_status_mode);
@@ -1004,31 +1005,23 @@ export class ChannelManager implements ServiceLike {
     }
   }
 
-  /** 블록 렌더러 내용을 채널 메시지에 생성/편집. 첫 호출 시 새 메시지 전송, 이후 편집. */
-  private async _flush_block_render(
+
+  /** 에이전트 턴 완료 후 누적된 도구 블록을 단일 메시지로 전송. */
+  private async _send_block_summary(
     provider: ChannelProvider, message: InboundMessage, alias: string,
-    renderer: ChannelBlockRenderer, state: { id: string },
+    renderer: ChannelBlockRenderer,
   ): Promise<void> {
     if (!renderer.has_content()) return;
     const profile = this.effective_render_profile(provider, message.chat_id);
     const text = renderer.render(profile.mode);
     if (!text) return;
-
-    if (state.id) {
-      try {
-        await this.registry.edit_message(provider, message.chat_id, state.id, text);
-      } catch (e) {
-        this.logger.debug("block_render_edit_failed", { error: error_message(e) });
-      }
-    } else {
-      const result = await this.dispatch.send(provider, {
-        id: `blocks-${Date.now()}`, provider, channel: provider, sender_id: alias,
-        chat_id: message.chat_id, content: text, at: now_iso(),
-        reply_to: resolve_reply_to(provider, message), thread_id: message.thread_id,
-        metadata: { kind: "agent_blocks", agent_alias: alias },
-      });
-      if (result.ok && result.message_id) state.id = result.message_id;
-    }
+    const render_parse_mode = profile.mode === "html" ? "HTML" : null;
+    await this.dispatch.send(provider, {
+      id: `blocks-${Date.now()}`, provider, channel: provider, sender_id: alias,
+      chat_id: message.chat_id, content: text, at: now_iso(),
+      reply_to: resolve_reply_to(provider, message), thread_id: message.thread_id,
+      metadata: { kind: "agent_blocks", agent_alias: alias, render_parse_mode },
+    });
   }
 
   private render_reply(raw: string, provider: ChannelProvider, chat_id: string): {

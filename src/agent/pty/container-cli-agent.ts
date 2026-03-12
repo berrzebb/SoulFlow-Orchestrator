@@ -112,11 +112,12 @@ export class ContainerCliAgent implements AgentBackend {
     let tool_calls_count = 0;
 
     // send_input 콜백 등록
-    // stdin_mode="keep" 어댑터(Codex CLI)는 실행 중 stdin 주입(Steer Mode) 우선 시도.
-    // 연결 없거나 "close" 모드(Claude Code)면 followup 큐로 폴백.
+    // stdin_mode="keep" 어댑터(Codex CLI)는 처리 중일 때만 stdin 주입(Steer Mode) 우선 시도.
+    // 완료 후(wait_for_input_ms 대기 중) 또는 연결 없으면 followup 큐로 폴백.
+    let is_processing = false;
     if (options.register_send_input) {
       options.register_send_input((text) => {
-        if (this.adapter.stdin_mode === "keep" && this.bus.steer(session_key, text)) return;
+        if (this.adapter.stdin_mode === "keep" && is_processing && this.bus.steer(session_key, text)) return;
         this.bus.queue_followup(session_key, text);
       });
     }
@@ -182,7 +183,9 @@ export class ContainerCliAgent implements AgentBackend {
           this.logger.warn("context_window_guard_warn", { session_key, estimated_tokens: guard.estimated_tokens });
         }
 
+        is_processing = true;
         const result = await this.bus.send_and_wait(session_key, current_prompt, args_options, env);
+        is_processing = false;
 
         if (result.type === "complete") {
           this.profile_tracker?.mark_good();

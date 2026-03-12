@@ -188,6 +188,26 @@ describe("AgentBackendRegistry — resolve_for_mode", () => {
     reg.register(b, { priority: 1, enabled: true, supported_modes: ["agent"], provider_type: "claude" });
     expect(reg.resolve_for_mode("once")).toBeNull();
   });
+
+  it("circuit half_open 상태 백엔드: resolve_for_mode가 슬롯을 소비하지 않아야 run()에서 허용됨", async () => {
+    // half_open_max=1인 breaker를 가진 백엔드
+    const b = make_backend("half_open_backend");
+    const reg = new AgentBackendRegistry({ provider_registry: stub_registry, backends: [b] });
+
+    // 강제로 half_open 상태로 만들기: 5회 실패 (threshold 기본값) → reset_timeout 경과
+    const breaker = (reg as any).breakers.get("half_open_backend");
+    for (let i = 0; i < 5; i++) breaker.record_failure();
+    // 타임아웃 후 half_open 전환을 강제하기 위해 last_failure_at을 과거로 조작
+    (breaker as any).last_failure_at = Date.now() - 60_000;
+
+    // resolve_for_mode는 can_acquire() 사용 → half_open 슬롯 소비 안 함
+    const resolved = reg.resolve_for_mode("once");
+    expect(resolved?.id).toBe("half_open_backend");
+
+    // run()에서 try_acquire() → 슬롯이 아직 남아있어야 함
+    const result = await reg.run("half_open_backend", { task: "ping" });
+    expect(result.finish_reason).toBe("stop"); // fallback 아님
+  });
 });
 
 // ══════════════════════════════════════════

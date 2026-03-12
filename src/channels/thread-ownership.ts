@@ -97,10 +97,11 @@ export class ThreadOwnership {
 
   /** 스레드 현재 소유자 조회. 만료된 소유권은 null. */
   owner_of(provider: string, chat_id: string, thread_id: string): string | null {
-    const claim = this.claims.get(thread_key(provider, chat_id, thread_id));
+    const key = thread_key(provider, chat_id, thread_id);
+    const claim = this.claims.get(key);
     if (!claim) return null;
     if (Date.now() - claim.last_active_at > this.ttl_ms) {
-      this.claims.delete(thread_key(provider, chat_id, thread_id));
+      this.claims.delete(key);
       return null;
     }
     return claim.agent_alias;

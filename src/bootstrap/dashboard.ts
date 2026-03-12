@@ -38,6 +38,7 @@ import {
   create_config_ops, create_skill_ops, create_tool_ops, create_cli_auth_ops, create_model_ops,
   create_agent_definition_ops,
 } from "../dashboard/ops-factory.js";
+import { UsageStore } from "../gateway/usage-store.js";
 
 export interface DashboardBundleDeps {
   workspace: string;
@@ -103,6 +104,8 @@ export function create_dashboard_bundle(deps: DashboardBundleDeps): DashboardBun
     return { dashboard: null, agent_provider_ops };
   }
 
+  const usage_store = new UsageStore(workspace);
+
   const dash = new DashboardService({
     host: app_config.dashboard.host,
     port: app_config.dashboard.port,
@@ -142,6 +145,21 @@ export function create_dashboard_bundle(deps: DashboardBundleDeps): DashboardBun
     oauth_ops: create_oauth_ops({ oauth_store, oauth_flow, dashboard_port: app_config.dashboard.port, public_url: app_config.dashboard.publicUrl }),
     cli_auth_ops: create_cli_auth_ops({ cli_auth }),
     model_ops: orchestrator_llm_runtime ? create_model_ops(orchestrator_llm_runtime) : null,
+    usage_ops: usage_store,
+    prompt_ops: {
+      async run(input) {
+        const chat_provider = provider_store.list().find((p) => p.enabled && p.model_purpose === "chat");
+        const result = await providers.run_headless_prompt({
+          provider_id: (input.provider_id ?? chat_provider?.provider_type) as import("../providers/types.js").ProviderId | undefined,
+          prompt: input.prompt,
+          system: input.system,
+          model: input.model,
+          temperature: input.temperature,
+          max_tokens: input.max_tokens,
+        });
+        return { content: result?.content ?? null, provider_id: input.provider_id ?? chat_provider?.provider_type ?? null };
+      },
+    },
     agent_definition_ops: create_agent_definition_ops({
       store: agent_definition_store,
       generate_fn: async (prompt) => {
