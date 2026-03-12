@@ -612,6 +612,7 @@
   "kanban.delete_board": "보드 삭제",
   "kanban.delete_card": "카드 삭제",
   "kanban.delete_failed": "카드 삭제 실패",
+  "kanban.confirm_delete_rule": "이 규칙을 삭제하시겠습니까? 되돌릴 수 없습니다.",
   "kanban.delete_rule": "규칙 삭제",
   "kanban.empty_column": "이슈 없음",
   "kanban.files_count": "파일 {count}개",

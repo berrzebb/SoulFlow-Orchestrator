@@ -612,6 +612,7 @@
   "kanban.delete_board": "Delete board",
   "kanban.delete_card": "Delete Card",
   "kanban.delete_failed": "Failed to delete card",
+  "kanban.confirm_delete_rule": "Delete this rule? This cannot be undone.",
   "kanban.delete_rule": "Delete rule",
   "kanban.empty_column": "No issues",
   "kanban.files_count": "{count} files",

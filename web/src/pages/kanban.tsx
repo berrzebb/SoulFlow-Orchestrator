@@ -6,7 +6,7 @@ import { api } from "../api/client";
 import { create_sse } from "../api/sse";
 import { useToast } from "../components/toast";
 import { SearchInput } from "../components/search-input";
-import { DeleteConfirmModal, FormModal } from "../components/modal";
+import { DeleteConfirmModal, FormModal, useConfirm } from "../components/modal";
 import { useT } from "../i18n";
 import { time_ago } from "../utils/format";
 import { useAsyncAction } from "../hooks/use-async-action";
@@ -751,6 +751,7 @@ function RulesPanel({ board_id, onClose }: { board_id: string; onClose: () => vo
   const t = useT();
   const run_action = useAsyncAction();
   const qc = useQueryClient();
+  const { confirm, dialog: confirm_dialog } = useConfirm();
   const [showCreate, setShowCreate] = useState(false);
 
   const { data: rules } = useQuery<Rule[]>({
@@ -766,11 +767,14 @@ function RulesPanel({ board_id, onClose }: { board_id: string; onClose: () => vo
     t("kanban.update_failed"),
   );
 
-  const delete_rule = (rule_id: string) => void run_action(
-    () => api.del(`/api/kanban/rules/${encodeURIComponent(rule_id)}`)
-      .then(() => { void qc.invalidateQueries({ queryKey: ["kanban-rules", board_id] }); }),
-    t("kanban.rule_deleted"),
-    t("kanban.delete_failed"),
+  const delete_rule = (rule_id: string) => confirm(
+    t("kanban.confirm_delete_rule"),
+    () => void run_action(
+      () => api.del(`/api/kanban/rules/${encodeURIComponent(rule_id)}`)
+        .then(() => { void qc.invalidateQueries({ queryKey: ["kanban-rules", board_id] }); }),
+      t("kanban.rule_deleted"),
+      t("kanban.delete_failed"),
+    ),
   );
 
   return (
@@ -805,6 +809,7 @@ function RulesPanel({ board_id, onClose }: { board_id: string; onClose: () => vo
         setShowCreate(false);
         void qc.invalidateQueries({ queryKey: ["kanban-rules", board_id] });
       }} />}
+      {confirm_dialog}
     </div>
   );
 }
