@@ -476,7 +476,7 @@ export class ReferenceStore implements ReferenceStoreLike {
   }
 
   private remove_document(db: DatabaseSync, path: string): void {
-    // 벡터 삭제: ref_chunk_docs의 rowid 기준
+    // 텍스트 벡터 삭제: ref_chunk_docs의 rowid 기준
     const rows = db.prepare("SELECT rowid FROM ref_chunk_docs WHERE chunk_id IN (SELECT chunk_id FROM ref_chunks WHERE doc_path = ?)").all(path) as { rowid: number }[];
     if (rows.length > 0) {
       const placeholders = rows.map(() => "?").join(",");
@@ -484,6 +484,13 @@ export class ReferenceStore implements ReferenceStoreLike {
       try { db.prepare(`DELETE FROM ref_chunks_vec WHERE rowid IN (${placeholders})`).run(...rowids); } catch { /* vec table may not exist */ }
       db.prepare(`DELETE FROM ref_chunks_fts WHERE rowid IN (${placeholders})`).run(...rowids);
       db.prepare(`DELETE FROM ref_chunk_docs WHERE rowid IN (${placeholders})`).run(...rowids);
+    }
+    // 이미지 벡터 삭제: ref_chunks.rowid 기준 (ref_image_chunks_vec는 CASCADE 없음)
+    const chunk_rows = db.prepare("SELECT rowid FROM ref_chunks WHERE doc_path = ?").all(path) as { rowid: number }[];
+    if (chunk_rows.length > 0) {
+      const img_placeholders = chunk_rows.map(() => "?").join(",");
+      const img_rowids = chunk_rows.map((r) => r.rowid);
+      try { db.prepare(`DELETE FROM ref_image_chunks_vec WHERE rowid IN (${img_placeholders})`).run(...img_rowids); } catch { /* image vec table may not exist */ }
     }
     db.prepare("DELETE FROM ref_chunks WHERE doc_path = ?").run(path);
     db.prepare("DELETE FROM ref_documents WHERE path = ?").run(path);
