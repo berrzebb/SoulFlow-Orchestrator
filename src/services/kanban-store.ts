@@ -4,7 +4,7 @@ import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
-import { with_sqlite, type DatabaseSync } from "../utils/sqlite-helper.js";
+import { with_sqlite, with_sqlite_strict, type DatabaseSync } from "../utils/sqlite-helper.js";
 import { now_iso } from "../utils/common.js";
 
 /* ─── 타입 ─── */
@@ -582,6 +582,11 @@ export class KanbanStore implements KanbanStoreLike {
     return with_sqlite(this.sqlite_path, fn, { pragmas: ["foreign_keys=ON"] });
   }
 
+  /** 쓰기 전용 — 에러 발생 시 throw (with_sqlite_strict). */
+  private write_db<T>(fn: (db: DatabaseSync) => T): T {
+    return with_sqlite_strict(this.sqlite_path, fn, { pragmas: ["foreign_keys=ON"] });
+  }
+
   /* ═══ Board ═══ */
 
   async create_board(input: CreateBoardInput): Promise<KanbanBoard> {
@@ -590,7 +595,7 @@ export class KanbanStore implements KanbanStoreLike {
     const prefix = derive_prefix(input.name);
     const columns = input.columns ?? DEFAULT_COLUMNS;
     const ts = now_iso();
-    this.db((db) => {
+    this.write_db((db) => {
       db.prepare(`
         INSERT INTO kanban_boards (board_id, name, prefix, next_seq, scope_type, scope_id, columns_json, created_at, updated_at)
         VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?)
@@ -625,7 +630,7 @@ export class KanbanStore implements KanbanStoreLike {
   async update_board(board_id: string, updates: { name?: string; columns?: KanbanColumnDef[] }): Promise<KanbanBoard | null> {
     await this.initialized;
     const ts = now_iso();
-    this.db((db) => {
+    this.write_db((db) => {
       const sets: string[] = ["updated_at = ?"];
       const params: unknown[] = [ts];
       if (updates.name !== undefined) { sets.push("name = ?"); params.push(updates.name); }
@@ -656,7 +661,7 @@ export class KanbanStore implements KanbanStoreLike {
     const labels = input.labels ?? [];
     const metadata = input.metadata ?? {};
 
-    const result = this.db((db) => {
+    const result = this.write_db((db) => {
       db.exec("BEGIN IMMEDIATE");
       try {
         const board = db.prepare("SELECT * FROM kanban_boards WHERE board_id = ?").get(input.board_id) as BoardRow | undefined;
@@ -736,7 +741,7 @@ export class KanbanStore implements KanbanStoreLike {
   async move_card(card_id: string, column_id: string, position?: number, actor?: string): Promise<KanbanCard | null> {
     await this.initialized;
     const ts = now_iso();
-    const move_info = this.db((db) => {
+    const move_info = this.write_db((db) => {
       db.exec("BEGIN IMMEDIATE");
       try {
         const card = db.prepare("SELECT * FROM kanban_cards WHERE card_id = ?").get(card_id) as CardRow | undefined;
@@ -765,7 +770,7 @@ export class KanbanStore implements KanbanStoreLike {
   async update_card(card_id: string, updates: UpdateCardInput): Promise<KanbanCard | null> {
     await this.initialized;
     const ts = now_iso();
-    const board_id = this.db((db) => {
+    const board_id = this.write_db((db) => {
       const card = db.prepare("SELECT board_id, priority, assignee FROM kanban_cards WHERE card_id = ?").get(card_id) as { board_id: string; priority: string; assignee: string | null } | undefined;
       if (!card) return null;
       const sets: string[] = ["updated_at = ?"];
@@ -818,7 +823,7 @@ export class KanbanStore implements KanbanStoreLike {
     await this.initialized;
     const comment_id = randomUUID();
     const ts = now_iso();
-    const board_id = this.db((db) => {
+    const board_id = this.write_db((db) => {
       db.prepare("INSERT INTO kanban_comments (comment_id, card_id, author, text, created_at) VALUES (?, ?, ?, ?, ?)").run(comment_id, card_id, author, text, ts);
       db.prepare("UPDATE kanban_cards SET updated_at = ? WHERE card_id = ?").run(ts, card_id);
       const card = db.prepare("SELECT board_id FROM kanban_cards WHERE card_id = ?").get(card_id) as { board_id: string } | undefined;
@@ -846,7 +851,7 @@ export class KanbanStore implements KanbanStoreLike {
   async add_relation(source_card_id: string, target_card_id: string, type: RelationType): Promise<KanbanRelation> {
     await this.initialized;
     const relation_id = randomUUID();
-    const board_id = this.db((db) => {
+    const board_id = this.write_db((db) => {
       db.prepare("INSERT OR IGNORE INTO kanban_relations (relation_id, source_card_id, target_card_id, type) VALUES (?, ?, ?, ?)").run(relation_id, source_card_id, target_card_id, type);
       const card = db.prepare("SELECT board_id FROM kanban_cards WHERE card_id = ?").get(source_card_id) as { board_id: string } | undefined;
       return card?.board_id ?? null;
@@ -974,7 +979,7 @@ export class KanbanStore implements KanbanStoreLike {
     await this.initialized;
     const activity_id = randomUUID();
     const ts = now_iso();
-    this.db((db) => {
+    this.write_db((db) => {
       db.prepare("INSERT INTO kanban_activities (activity_id, card_id, board_id, actor, action, detail_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
         .run(activity_id, card_id, board_id, actor, action, JSON.stringify(detail ?? {}), ts);
       return true;
@@ -1006,7 +1011,7 @@ export class KanbanStore implements KanbanStoreLike {
     await this.initialized;
     const rule_id = randomUUID();
     const ts = now_iso();
-    this.db((db) => {
+    this.write_db((db) => {
       db.prepare("INSERT INTO kanban_rules (rule_id, board_id, trigger, condition_json, action_type, action_params_json, enabled, created_at) VALUES (?, ?, ?, ?, ?, ?, 1, ?)")
         .run(rule_id, input.board_id, input.trigger, JSON.stringify(input.condition), input.action_type, JSON.stringify(input.action_params), ts);
       return true;
@@ -1024,7 +1029,7 @@ export class KanbanStore implements KanbanStoreLike {
 
   async update_rule(rule_id: string, updates: { enabled?: boolean; condition?: Record<string, unknown>; action_params?: Record<string, unknown> }): Promise<KanbanRule | null> {
     await this.initialized;
-    this.db((db) => {
+    this.write_db((db) => {
       const sets: string[] = [];
       const params: unknown[] = [];
       if (updates.enabled !== undefined) { sets.push("enabled = ?"); params.push(updates.enabled ? 1 : 0); }
@@ -1062,7 +1067,7 @@ export class KanbanStore implements KanbanStoreLike {
     await this.initialized;
     const template_id = randomUUID();
     const ts = now_iso();
-    this.db((db) => {
+    this.write_db((db) => {
       db.prepare("INSERT INTO kanban_templates (template_id, name, description, columns_json, cards_json, created_at) VALUES (?, ?, ?, ?, ?, ?)")
         .run(template_id, input.name, input.description ?? "", input.columns ? JSON.stringify(input.columns) : null, JSON.stringify(input.cards), ts);
       return true;
@@ -1243,7 +1248,7 @@ export class KanbanStore implements KanbanStoreLike {
     await this.initialized;
     const filter_id = randomUUID();
     const ts = now_iso();
-    this.db((db) => {
+    this.write_db((db) => {
       db.prepare("INSERT INTO kanban_filters (filter_id, board_id, name, criteria_json, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?)")
         .run(filter_id, input.board_id, input.name, JSON.stringify(input.criteria), input.created_by ?? "user:dashboard", ts);
       return true;
