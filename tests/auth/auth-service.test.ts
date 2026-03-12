@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect } from "vitest";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -42,12 +42,18 @@ describe("AuthService — hash_password / verify_password", () => {
 describe("AuthService — JWT sign / verify", () => {
   it("발급 → 검증 성공, payload 일치", () => {
     const { svc } = make_svc();
-    const token = svc.sign_token({ sub: "u1", usr: "alice", role: "admin" });
+    const token = svc.sign_token({ sub: "u1", usr: "alice", role: "superadmin" });
     const p = svc.verify_token(token);
     expect(p).not.toBeNull();
     expect(p!.sub).toBe("u1");
     expect(p!.usr).toBe("alice");
-    expect(p!.role).toBe("admin");
+    expect(p!.role).toBe("superadmin");
+  });
+
+  it("user role JWT 발급", () => {
+    const { svc } = make_svc();
+    const token = svc.sign_token({ sub: "u2", usr: "bob", role: "user" });
+    expect(svc.verify_token(token)?.role).toBe("user");
   });
 
   it("조작된 서명 → null", () => {
@@ -57,10 +63,8 @@ describe("AuthService — JWT sign / verify", () => {
     expect(svc.verify_token(tampered)).toBeNull();
   });
 
-  it("만료된 토큰 → null (exp 조작)", () => {
+  it("만료 기간 내 유효", () => {
     const { svc } = make_svc();
-    // 만료 시간을 과거로 설정한 토큰을 직접 조작은 서명 검증으로 차단됨
-    // 정상 토큰은 7일 후 만료. 여기서는 만료 기간 내 유효성만 검증.
     const token = svc.sign_token({ sub: "u2", usr: "bob", role: "user" });
     expect(svc.verify_token(token)).not.toBeNull();
   });
@@ -79,7 +83,6 @@ describe("AuthService — JWT sign / verify", () => {
     const { svc } = make_svc();
     const { svc: svc2 } = make_svc();
     const token = svc.sign_token({ sub: "u1", usr: "alice", role: "user" });
-    // svc2는 별도 DB → 다른 jwt_secret
     expect(svc2.verify_token(token)).toBeNull();
   });
 });
@@ -88,7 +91,7 @@ describe("AuthService — login", () => {
   it("올바른 credentials → token 반환", async () => {
     const { store, svc } = make_svc();
     const hash = svc.hash_password("secret");
-    store.create_user({ username: "alice", password_hash: hash, role: "user", workspace_path: "/ws/alice" });
+    store.create_user({ username: "alice", password_hash: hash, system_role: "user" });
 
     const result = await svc.login("alice", "secret");
     expect(result).not.toBeNull();
@@ -96,10 +99,18 @@ describe("AuthService — login", () => {
     expect(result!.token.split(".").length).toBe(3);
   });
 
+  it("superadmin 로그인 → role = superadmin", async () => {
+    const { store, svc } = make_svc();
+    const hash = svc.hash_password("adminpw");
+    store.create_user({ username: "root", password_hash: hash, system_role: "superadmin" });
+    const result = await svc.login("root", "adminpw");
+    expect(result!.payload.role).toBe("superadmin");
+  });
+
   it("틀린 비밀번호 → null", async () => {
     const { store, svc } = make_svc();
     const hash = svc.hash_password("real");
-    store.create_user({ username: "bob", password_hash: hash, role: "user", workspace_path: "/ws/bob" });
+    store.create_user({ username: "bob", password_hash: hash, system_role: "user" });
     expect(await svc.login("bob", "wrong")).toBeNull();
   });
 
@@ -111,7 +122,7 @@ describe("AuthService — login", () => {
   it("login 성공 시 last_login_at 갱신", async () => {
     const { store, svc } = make_svc();
     const hash = svc.hash_password("pw");
-    const user = store.create_user({ username: "carol", password_hash: hash, role: "admin", workspace_path: "/ws/carol" });
+    const user = store.create_user({ username: "carol", password_hash: hash, system_role: "superadmin" });
     expect(user.last_login_at).toBeNull();
     await svc.login("carol", "pw");
     expect(store.get_user_by_id(user.id)?.last_login_at).not.toBeNull();

@@ -14,13 +14,14 @@ const INIT_SQL = `
   PRAGMA journal_mode=WAL;
 
   CREATE TABLE IF NOT EXISTS users (
-    id             TEXT PRIMARY KEY,
-    username       TEXT NOT NULL UNIQUE,
-    password_hash  TEXT NOT NULL,
-    role           TEXT NOT NULL DEFAULT 'user',
-    workspace_path TEXT NOT NULL,
-    created_at     TEXT NOT NULL DEFAULT (datetime('now')),
-    last_login_at  TEXT
+    id              TEXT PRIMARY KEY,
+    username        TEXT NOT NULL UNIQUE,
+    password_hash   TEXT NOT NULL,
+    system_role     TEXT NOT NULL DEFAULT 'user',
+    default_team_id TEXT,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    last_login_at   TEXT,
+    disabled_at     TEXT
   );
 
   CREATE TABLE IF NOT EXISTS shared_providers (
@@ -44,10 +45,11 @@ export interface UserRecord {
   id: string;
   username: string;
   password_hash: string;
-  role: "admin" | "user";
-  workspace_path: string;
+  system_role: "superadmin" | "user";
+  default_team_id: string | null;
   created_at: string;
   last_login_at: string | null;
+  disabled_at: string | null;
 }
 
 export interface SharedProviderRecord {
@@ -62,8 +64,9 @@ export interface SharedProviderRecord {
 }
 
 interface UserRow {
-  id: string; username: string; password_hash: string; role: string;
-  workspace_path: string; created_at: string; last_login_at: string | null;
+  id: string; username: string; password_hash: string; system_role: string;
+  default_team_id: string | null; created_at: string;
+  last_login_at: string | null; disabled_at: string | null;
 }
 
 interface SharedProviderRow {
@@ -72,7 +75,7 @@ interface SharedProviderRow {
 }
 
 function row_to_user(r: UserRow): UserRecord {
-  return { ...r, role: r.role as "admin" | "user" };
+  return { ...r, system_role: r.system_role as "superadmin" | "user" };
 }
 
 function row_to_shared_provider(r: SharedProviderRow): SharedProviderRecord {
@@ -96,7 +99,7 @@ export class AdminStore {
 
   is_initialized(): boolean {
     return with_sqlite(this.db_path, (db) => {
-      const row = db.prepare("SELECT COUNT(*) as cnt FROM users WHERE role = 'admin'").get() as { cnt: number };
+      const row = db.prepare("SELECT COUNT(*) as cnt FROM users WHERE system_role = 'superadmin'").get() as { cnt: number };
       return row.cnt > 0;
     }, { pragmas: PRAGMAS }) ?? false;
   }
@@ -143,27 +146,29 @@ export class AdminStore {
   create_user(input: {
     username: string;
     password_hash: string;
-    role: "admin" | "user";
-    workspace_path: string;
+    system_role: "superadmin" | "user";
+    default_team_id?: string | null;
   }): UserRecord {
     const id = randomUUID();
     with_sqlite_strict(this.db_path, (db) => {
       db.prepare(
-        "INSERT INTO users (id, username, password_hash, role, workspace_path) VALUES (?, ?, ?, ?, ?)"
-      ).run(id, input.username, input.password_hash, input.role, input.workspace_path);
+        "INSERT INTO users (id, username, password_hash, system_role, default_team_id) VALUES (?, ?, ?, ?, ?)"
+      ).run(id, input.username, input.password_hash, input.system_role, input.default_team_id ?? null);
       return true;
     }, { pragmas: PRAGMAS });
     return this.get_user_by_id(id)!;
   }
 
-  update_user(id: string, patch: Partial<Pick<UserRecord, "password_hash" | "role" | "last_login_at">>): boolean {
+  update_user(id: string, patch: Partial<Pick<UserRecord, "password_hash" | "system_role" | "last_login_at" | "default_team_id" | "disabled_at">>): boolean {
     const user = this.get_user_by_id(id);
     if (!user) return false;
     const fields: string[] = [];
     const values: unknown[] = [];
     if (patch.password_hash !== undefined) { fields.push("password_hash = ?"); values.push(patch.password_hash); }
-    if (patch.role !== undefined) { fields.push("role = ?"); values.push(patch.role); }
+    if (patch.system_role !== undefined) { fields.push("system_role = ?"); values.push(patch.system_role); }
     if (patch.last_login_at !== undefined) { fields.push("last_login_at = ?"); values.push(patch.last_login_at); }
+    if (patch.default_team_id !== undefined) { fields.push("default_team_id = ?"); values.push(patch.default_team_id); }
+    if (patch.disabled_at !== undefined) { fields.push("disabled_at = ?"); values.push(patch.disabled_at); }
     if (fields.length === 0) return true;
     values.push(id);
     with_sqlite_strict(this.db_path, (db) => {

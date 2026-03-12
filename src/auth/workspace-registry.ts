@@ -11,8 +11,20 @@ export type WorkspaceRuntime = Omit<RuntimeApp, "dashboard"> & {
   stop: () => Promise<void>;
 };
 
-/** 워크스페이스 경로를 받아 런타임을 생성하는 팩토리 함수. */
-export type WorkspaceBootstrapFn = (workspace_path: string) => Promise<WorkspaceRuntime>;
+/** 런타임 캐시 식별자: team + user + 워크스페이스 경로. */
+export type WorkspaceKey = {
+  team_id: string;
+  user_id: string;
+  workspace_path: string;
+};
+
+/** WorkspaceKey를 Map 키 문자열로 직렬화. */
+function cache_key(k: WorkspaceKey): string {
+  return `${k.team_id}:${k.user_id}:${k.workspace_path}`;
+}
+
+/** WorkspaceKey를 받아 런타임을 생성하는 팩토리 함수. */
+export type WorkspaceBootstrapFn = (key: WorkspaceKey) => Promise<WorkspaceRuntime>;
 
 export class WorkspaceRegistry {
   private readonly cache = new Map<string, WorkspaceRuntime>();
@@ -26,12 +38,13 @@ export class WorkspaceRegistry {
    * 워크스페이스 런타임 획득.
    * 캐시에 없으면 bootstrap_workspace() 실행 후 저장.
    */
-  async get_or_create(workspace_path: string): Promise<WorkspaceRuntime> {
-    const cached = this.cache.get(workspace_path);
+  async get_or_create(key: WorkspaceKey): Promise<WorkspaceRuntime> {
+    const k = cache_key(key);
+    const cached = this.cache.get(k);
     if (cached) return cached;
 
-    const runtime = await this.bootstrap(workspace_path);
-    this.cache.set(workspace_path, runtime);
+    const runtime = await this.bootstrap(key);
+    this.cache.set(k, runtime);
     return runtime;
   }
 
@@ -39,10 +52,11 @@ export class WorkspaceRegistry {
    * 특정 워크스페이스 런타임 종료 및 캐시 제거.
    * 사용자 삭제 시 호출.
    */
-  async remove(workspace_path: string): Promise<void> {
-    const runtime = this.cache.get(workspace_path);
+  async remove(key: WorkspaceKey): Promise<void> {
+    const k = cache_key(key);
+    const runtime = this.cache.get(k);
     if (!runtime) return;
-    this.cache.delete(workspace_path);
+    this.cache.delete(k);
     await runtime.stop().catch(() => {});
   }
 
@@ -51,9 +65,9 @@ export class WorkspaceRegistry {
    * 서버 셧다운 시 호출.
    */
   async stop_all(): Promise<void> {
-    const paths = [...this.cache.keys()];
+    const runtimes = [...this.cache.values()];
     this.cache.clear();
-    await Promise.allSettled(paths.map((p) => this.cache.get(p)?.stop() ?? Promise.resolve()));
+    await Promise.allSettled(runtimes.map((rt) => rt.stop()));
   }
 
   /** 현재 활성 워크스페이스 수 (헬스체크용). */
@@ -61,8 +75,8 @@ export class WorkspaceRegistry {
     return this.cache.size;
   }
 
-  /** 주어진 경로가 캐시에 있는지 (테스트/디버그용). */
-  has(workspace_path: string): boolean {
-    return this.cache.has(workspace_path);
+  /** 주어진 키가 캐시에 있는지 (테스트/디버그용). */
+  has(key: WorkspaceKey): boolean {
+    return this.cache.has(cache_key(key));
   }
 }

@@ -16,7 +16,7 @@ const JWT_EXPIRY_SEC = 7 * 24 * 60 * 60; // 7일
 export interface JwtPayload {
   sub: string;   // user.id
   usr: string;   // user.username
-  role: "admin" | "user";
+  role: "superadmin" | "user";
   iat: number;
   exp: number;
 }
@@ -121,7 +121,7 @@ export class AuthService {
 
     this.store.update_user(user.id, { last_login_at: new Date().toISOString() });
 
-    const payload: Omit<JwtPayload, "iat" | "exp"> = { sub: user.id, usr: user.username, role: user.role };
+    const payload: Omit<JwtPayload, "iat" | "exp"> = { sub: user.id, usr: user.username, role: user.system_role };
     const token = this.sign_token(payload);
     const verified = this.verify_token(token)!;
     return { token, payload: verified };
