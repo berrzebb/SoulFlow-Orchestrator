@@ -314,7 +314,7 @@ export default function KanbanPage() {
             }
 
             {selectedCard && (
-              <CardDetailPanel card_id={selectedCard} board_id={board_id} columns={columns}
+              <CardDetailPanel card_id={selectedCard} columns={columns}
                 onClose={() => setSelectedCard(null)} onUpdate={update_card} onMove={move_card} onDelete={delete_card}
                 onSelectCard={setSelectedCard} />
             )}
@@ -499,8 +499,8 @@ function ListView({ cards, columns, selectedCard, onSelect }: {
 
 /* ═══ Card Detail Panel ═══ */
 
-function CardDetailPanel({ card_id, board_id, columns, onClose, onUpdate, onMove, onDelete, onSelectCard }: {
-  card_id: string; board_id: string; columns: ColumnDef[];
+function CardDetailPanel({ card_id, columns, onClose, onUpdate, onMove, onDelete, onSelectCard }: {
+  card_id: string; columns: ColumnDef[];
   onClose: () => void; onUpdate: (id: string, data: Record<string, unknown>) => void;
   onMove: (id: string, col: string) => void; onDelete: (id: string) => void;
   onSelectCard: (id: string) => void;

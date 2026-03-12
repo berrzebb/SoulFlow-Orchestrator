@@ -28,6 +28,13 @@ export interface ProviderConnection {
   updated_at: string;
 }
 
+export interface CliAuthStatus {
+  cli: string;
+  authenticated: boolean;
+  account?: string;
+  error?: string;
+}
+
 export interface ModelInfo {
   id: string;
   name: string;

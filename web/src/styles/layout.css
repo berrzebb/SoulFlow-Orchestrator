@@ -757,7 +757,7 @@ a:focus-visible > .stat-card {
   transition: background 0.15s;
 }
 .ws-back-btn::before {
-  content: "??;
+  content: "<";
   font-size: 16px;
   margin-right: 2px;
   font-weight: 400;

@@ -329,6 +329,7 @@ function CanvasForm({ component, onAction }: { component: CanvasFormComponent; o
 }
 
 function FormField({ field, value, onChange }: { field: CanvasFormField; value: string; onChange: (v: string) => void }) {
+  const t = useT();
   return (
     <div className="canvas-form__field">
       <label className="canvas-form__label" htmlFor={`cf-${field.id}`}>

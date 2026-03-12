@@ -1,7 +1,6 @@
 /** 채팅 세션 탭바 — 세션 목록 탭 + 컨텍스트 메뉴 + 인라인 리네임 */
 
 import { useState, useRef, useEffect } from "react";
-import { useClickOutside } from "../../hooks/use-click-outside";
 import { createPortal } from "react-dom";
 import { useT } from "../../i18n";
 import type { ChatSessionSummary } from "./types";
@@ -67,9 +66,10 @@ export function ChatSessionTabs({ sessions, activeId, creating, onSelect, onClos
 
   // 터치 롱프레스 (500ms) → 컨텍스트 메뉴
   const on_touch_start = (e: React.TouchEvent, id: string) => {
-    const t = e.touches[0];
+    const touch = e.touches[0];
+    if (!touch) return;
     long_press_timer.current = setTimeout(() => {
-      setCtxMenu({ id, x: t.clientX, y: t.clientY });
+      setCtxMenu({ id, x: touch.clientX, y: touch.clientY });
     }, 500);
   };
   const on_touch_end = () => {
