@@ -33,12 +33,12 @@
   border-width: 1.5px;
 }
 
-/* ── Bounded scroll viewport (~3 items visible) ── */
+/* ── Bounded scroll viewport (~3 items visible, 고정 높이) ── */
 .tool-call-list__scroll {
   display: flex;
   flex-direction: column;
   gap: var(--sp-1);
-  max-height: 140px;
+  height: 140px;
   overflow-y: auto;
   scroll-behavior: smooth;
   /* Subtle scrollbar */
@@ -237,7 +237,7 @@
 /* ── Mobile ── */
 @media (max-width: 640px) {
   .tool-call__pre { font-size: 9px; max-height: 120px; }
-  .tool-call-list__scroll { max-height: 120px; }
+  .tool-call-list__scroll { height: 120px; }
   .thinking-block-list__scroll { max-height: 80px; }
   .thinking-block__pre { max-height: 100px; }
 }

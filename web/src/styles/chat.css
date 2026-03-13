@@ -54,7 +54,18 @@
 .chat-messages {
   flex: 1;
   overflow-y: auto;
-  padding: var(--sp-4) var(--sp-4) 210px;
+  padding: var(--sp-4);
+}
+
+/* ===== Bottom Dock ===== */
+.chat-bottom-dock {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  padding: var(--sp-2) 0 max(var(--sp-4), env(safe-area-inset-bottom));
+  gap: var(--sp-2);
 }
 .chat-messages__inner {
   max-width: 720px;
@@ -443,16 +454,10 @@
 .chat-header__select--mirror { max-width: 180px; flex: 0 1 180px; }
 
 /* ===== Bottom Bar ===== */
-/* busy 상태: 프롬프트 바 바로 위 floating pill */
+/* busy 상태: dock 내부 pill */
 .chat-bottom-bar--busy {
-  position: absolute;
-  /* 프롬프트 바 높이(~88px) + 위 여백 */
-  bottom: calc(max(var(--sp-4), env(safe-area-inset-bottom)) + 88px);
-  left: 50%;
-  transform: translateX(-50%);
   width: auto;
   max-width: min(600px, calc(100% - var(--sp-8)));
-  z-index: 11;
   display: flex;
   align-items: center;
   gap: var(--sp-3);
@@ -517,17 +522,12 @@
 }
 .chat-bottom-bar__stop:hover { background: color-mix(in srgb, var(--err) 20%, transparent); }
 @media (max-width: 768px) {
-  .chat-bottom-bar--busy { height: 32px; bottom: calc(var(--sp-2) + 80px); }
+  .chat-bottom-bar--busy { height: 32px; }
 }
 
 .chat-prompt-bar {
-  position: absolute;
-  bottom: max(var(--sp-4), env(safe-area-inset-bottom));
-  left: 50%;
-  transform: translateX(-50%);
   width: min(700px, calc(100% - var(--sp-8)));
   padding: 0 var(--sp-4);
-  z-index: 10;
 }
 .chat-prompt-bar__pill {
   display: flex;
@@ -725,7 +725,7 @@
 
 /* ChatPromptBar 紐⑤컮??*/
 @media (max-width: 768px) {
-  .chat-prompt-bar { bottom: var(--sp-2); padding: 0 var(--sp-2); }
+  .chat-prompt-bar { padding: 0 var(--sp-2); }
   .chat-prompt-bar__pill { border-radius: var(--radius-lg); padding: var(--sp-2); }
   .chat-prompt-bar__hint { display: none; }
   .chat-prompt-bar__btn { width: 44px; height: 44px; padding: var(--sp-2); }
@@ -1139,15 +1139,10 @@
 .chat-tabs { position: relative; }
 
 /* ===== Agent Context Bar ===== */
-/* 프롬프트 바 바로 위 — 에이전트 선택 + 시스템 프롬프트 오버라이드 */
+/* dock 내부 — 에이전트 선택 + 시스템 프롬프트 오버라이드 */
 .agent-context-bar {
-  position: absolute;
-  bottom: calc(max(var(--sp-4), env(safe-area-inset-bottom)) + 88px);
-  left: 50%;
-  transform: translateX(-50%);
   width: min(700px, calc(100% - var(--sp-8)));
   padding: 0 var(--sp-4);
-  z-index: 10;
 }
 .agent-context-bar__row {
   display: flex;
@@ -1175,6 +1170,6 @@
   box-sizing: border-box;
 }
 @media (max-width: 768px) {
-  .agent-context-bar { bottom: calc(var(--sp-2) + 82px); padding: 0 var(--sp-2); }
+  .agent-context-bar { padding: 0 var(--sp-2); }
 }
 

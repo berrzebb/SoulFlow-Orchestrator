@@ -370,42 +370,44 @@ export default function ChatPage() {
               onDismiss={(canvas_id) => dismiss_canvas(activeId, canvas_id)}
             />
           )}
-          {!is_mirror && (
-            <AgentContextBar
-              definitions={agentDefinitions}
-              activeDefinition={activeDefinition}
-              systemPrompt={systemPromptOverride}
-              onDefinitionChange={(def) => {
-                setActiveDefinition(def);
-                if (!def) setSystemPromptOverride("");
-              }}
-              onSystemPromptChange={setSystemPromptOverride}
+          {/* 하단 독: absolute 대신 flex 스택 — textarea 확장 시 겹침 방지 */}
+          <div className="chat-bottom-dock">
+            <ChatBottomBar
+              session_label={session_label}
+              is_busy={is_busy}
+              is_streaming={is_streaming}
+              active_session_id={is_mirror ? mirrorKey : activeId}
+              onStop={cancel_active}
             />
-          )}
-          <ChatPromptBar
-            input={input}
-            setInput={setInput}
-            history={input_history}
-            sending={is_busy}
-            is_streaming={is_streaming}
-            can_send={can_send}
-            onSend={() => void (is_mirror ? send_mirror() : send())}
-            pending_media={is_mirror ? [] : pending_media}
-            onAttach={is_mirror ? undefined : () => fileInputRef.current?.click()}
-            onRemoveMedia={is_mirror ? undefined : (idx: number) => setPendingMedia((prev) => prev.filter((_, i) => i !== idx))}
-            selectedProvider={is_mirror ? undefined : selectedProvider}
-            selectedModel={is_mirror ? undefined : selectedModel}
-            onProviderChange={is_mirror ? undefined : setSelectedProvider}
-            onModelChange={is_mirror ? undefined : setSelectedModel}
-          />
-          {/* 하단 상태바: 처리 중 Thinking/Tool, 대기 중 세션 정보 */}
-          <ChatBottomBar
-            session_label={session_label}
-            is_busy={is_busy}
-            is_streaming={is_streaming}
-            active_session_id={is_mirror ? mirrorKey : activeId}
-            onStop={cancel_active}
-          />
+            {!is_mirror && (
+              <AgentContextBar
+                definitions={agentDefinitions}
+                activeDefinition={activeDefinition}
+                systemPrompt={systemPromptOverride}
+                onDefinitionChange={(def) => {
+                  setActiveDefinition(def);
+                  if (!def) setSystemPromptOverride("");
+                }}
+                onSystemPromptChange={setSystemPromptOverride}
+              />
+            )}
+            <ChatPromptBar
+              input={input}
+              setInput={setInput}
+              history={input_history}
+              sending={is_busy}
+              is_streaming={is_streaming}
+              can_send={can_send}
+              onSend={() => void (is_mirror ? send_mirror() : send())}
+              pending_media={is_mirror ? [] : pending_media}
+              onAttach={is_mirror ? undefined : () => fileInputRef.current?.click()}
+              onRemoveMedia={is_mirror ? undefined : (idx: number) => setPendingMedia((prev) => prev.filter((_, i) => i !== idx))}
+              selectedProvider={is_mirror ? undefined : selectedProvider}
+              selectedModel={is_mirror ? undefined : selectedModel}
+              onProviderChange={is_mirror ? undefined : setSelectedProvider}
+              onModelChange={is_mirror ? undefined : setSelectedModel}
+            />
+          </div>
           {!is_mirror && (
             <input
               type="file"
