@@ -1,6 +1,7 @@
 import { NavLink } from "react-router-dom";
 import { useDashboardStore } from "../store";
 import { useI18n } from "../i18n";
+import { useAuthUser } from "../hooks/use-auth";
 
 type NavItem = { to: string; key: string; icon: string };
 type NavGroup = { label_key: string; items: NavItem[] };
@@ -48,6 +49,8 @@ export function Sidebar() {
   const open = useDashboardStore((s) => s.sidebar_open);
   const close = useDashboardStore((s) => s.close_sidebar);
   const { t } = useI18n();
+  const { data: auth_user } = useAuthUser();
+  const is_superadmin = auth_user?.role === "superadmin";
 
   const cls = [
     "sidebar",
@@ -58,6 +61,8 @@ export function Sidebar() {
   const handle_nav = () => {
     if (window.innerWidth <= 768) close();
   };
+
+  const admin_label = "Admin";
 
   return (
     <>
@@ -97,6 +102,25 @@ export function Sidebar() {
               </ul>
             </li>
           ))}
+
+          {/* superadmin 전용 관리자 콘솔 링크 */}
+          {is_superadmin && (
+            <li className="sidebar__group">
+              {!collapsed && <span className="sidebar__group-label">관리자</span>}
+              <ul className="sidebar__group-items">
+                <li>
+                  <NavLink
+                    to="/admin"
+                    className={({ isActive }) => `sidebar__link ${isActive ? "sidebar__link--active" : ""}`}
+                    onClick={handle_nav}
+                  >
+                    <span className="sidebar__icon" data-tooltip={admin_label}>&#9872;</span>
+                    {!collapsed && <span className="sidebar__label">{admin_label}</span>}
+                  </NavLink>
+                </li>
+              </ul>
+            </li>
+          )}
         </ul>
       </nav>
       <BottomNav />

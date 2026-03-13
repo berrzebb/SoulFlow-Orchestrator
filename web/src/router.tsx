@@ -22,6 +22,7 @@ const KanbanPage = lazyRetry(() => import("./pages/kanban"));
 const WbsPage = lazyRetry(() => import("./pages/wbs"));
 const PromptingPage = lazyRetry(() => import("./pages/prompting/index"));
 const LoginPage = lazyRetry(() => import("./pages/login"));
+const AdminPage = lazyRetry(() => import("./pages/admin/index"));
 
 function PageFallback() {
   return (
@@ -57,6 +58,7 @@ export const router = createHashRouter([
       { path: "prompting", element: lazify(<PromptingPage />) },
       { path: "kanban", element: lazify(<KanbanPage />) },
       { path: "wbs", element: lazify(<WbsPage />) },
+      { path: "admin", element: lazify(<AdminPage />) },
     ],
   },
 ]);

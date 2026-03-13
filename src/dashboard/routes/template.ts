@@ -1,10 +1,14 @@
+import { create_template_ops } from "../ops-factory.js";
 import type { RouteContext } from "../route-context.js";
 
 export async function handle_template(ctx: RouteContext): Promise<boolean> {
-  const { req, url, res, options, json, read_body } = ctx;
+  const { req, url, res, options, json, read_body, personal_dir } = ctx;
   const path = url.pathname;
 
-  const ops = options.template_ops;
+  // 요청마다 JWT에서 해석된 personal_dir 기반으로 격리된 템플릿 ops 생성
+  const ops = personal_dir
+    ? create_template_ops(personal_dir)
+    : options.template_ops;
 
   // GET /api/templates
   if (path === "/api/templates" && req.method === "GET") {
