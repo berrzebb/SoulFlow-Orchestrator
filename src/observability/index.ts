@@ -53,3 +53,12 @@ export {
   type ProviderUsage,
   project_summary,
 } from "./projector.js";
+
+export {
+  type TraceExporterLike,
+  type MetricsExporterLike,
+  NOOP_TRACE_EXPORTER,
+  NOOP_METRICS_EXPORTER,
+  SpanExportAdapter,
+  MetricsExportAdapter,
+} from "./exporter.js";

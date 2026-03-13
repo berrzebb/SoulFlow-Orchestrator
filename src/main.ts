@@ -30,6 +30,8 @@ import { create_logger } from "./logger.js";
 import { ExecutionSpanRecorder } from "./observability/span.js";
 import { MetricsSink } from "./observability/metrics.js";
 import type { ObservabilityLike } from "./observability/context.js";
+import { SpanExportAdapter, MetricsExportAdapter, NOOP_TRACE_EXPORTER, NOOP_METRICS_EXPORTER } from "./observability/exporter.js";
+import type { TraceExporterLike, MetricsExporterLike } from "./observability/exporter.js";
 import { OpsRuntimeService } from "./ops/index.js";
 import { OrchestratorLlmRuntime, ProviderRegistry } from "./providers/index.js";
 import { acquire_runtime_instance_lock } from "./runtime/instance-lock.js";
@@ -43,7 +45,7 @@ import { existsSync } from "node:fs";
 import { AdminStore } from "./auth/admin-store.js";
 import { AuthService } from "./auth/auth-service.js";
 import { WorkspaceRegistry } from "./workspace/registry.js";
-import { create_workspace_context, type UserWorkspace } from "./workspace/workspace-context.js";
+import { create_workspace_context } from "./workspace/workspace-context.js";
 import { randomUUID } from "node:crypto";
 
 export interface RuntimeApp {
@@ -65,6 +67,8 @@ export interface RuntimeApp {
   services: ServiceManager;
   session_prune_timer: ReturnType<typeof setInterval>;
   cli_auth: CliAuthService;
+  /** OB-8: optional exporter cleanup — graceful shutdown 시 잔여 버퍼 flush. */
+  cleanup_observability?: () => Promise<void>;
 }
 
 export async function createRuntime(): Promise<RuntimeApp> {
@@ -106,10 +110,21 @@ export async function createRuntime(): Promise<RuntimeApp> {
   const broadcaster = new MutableBroadcaster();
 
   // OB-5: 공유 observability 인스턴스 — 모든 서비스에 DI로 전달
+  // OB-8: optional exporter ports — 설정 없으면 no-op (성능 영향 0)
+  const trace_exporter: TraceExporterLike = NOOP_TRACE_EXPORTER;
+  const metrics_exporter: MetricsExporterLike = NOOP_METRICS_EXPORTER;
+  const span_export_adapter = new SpanExportAdapter(trace_exporter);
+  const metrics_sink = new MetricsSink();
+  const metrics_export_adapter = new MetricsExportAdapter(
+    metrics_exporter, () => metrics_sink.snapshot(),
+  );
+
   const observability: ObservabilityLike = {
-    spans: new ExecutionSpanRecorder(),
-    metrics: new MetricsSink(),
+    spans: new ExecutionSpanRecorder({ on_end: span_export_adapter.on_span_end }),
+    metrics: metrics_sink,
   };
+
+  metrics_export_adapter.start();
 
   const {
     agent, agent_runtime, agent_inspector,
@@ -122,6 +137,10 @@ export async function createRuntime(): Promise<RuntimeApp> {
     embed_service, embed_worker_config, image_embed_service, oauth_store, oauth_flow, broadcaster, logger,
     chunk_queue,
   });
+
+  // 레거시 세션 키 마이그레이션: {provider}:{chat_id}:... → {provider}:{team_id}:[{user_id}:]{chat_id}:...
+  const key_migrated = await sessions.migrate_legacy_keys(team_id, user_id);
+  if (key_migrated > 0) logger.info(`migrated ${key_migrated} legacy session key(s)`);
 
   const {
     instance_store, channels, primary_provider, default_chat_id,
@@ -261,6 +280,10 @@ export async function createRuntime(): Promise<RuntimeApp> {
     services,
     session_prune_timer,
     cli_auth,
+    cleanup_observability: async () => {
+      await span_export_adapter.shutdown();
+      await metrics_export_adapter.stop();
+    },
   };
 
   return app;
@@ -321,7 +344,7 @@ if (is_main_entry()) {
     const release_lock = async (): Promise<void> => {
       await lock?.release().catch(() => undefined);
     };
-    register_shutdown_handlers(app, boot_logger, release_lock);
+    register_shutdown_handlers(app, boot_logger, release_lock, app.cleanup_observability);
   })().catch((error) => {
     const detail = error_message(error);
     create_logger("boot").error(`bootstrap failed: ${detail}`);
