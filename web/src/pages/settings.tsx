@@ -8,8 +8,6 @@ import { SectionHeader } from "../components/section-header";
 import { ToggleSwitch } from "../components/toggle-switch";
 import { useToast } from "../components/toast";
 import { useT } from "../i18n";
-import { useAuthUser } from "../hooks/use-auth";
-
 interface FieldInfo {
   path: string;
   label: string;
@@ -47,7 +45,6 @@ export default function SettingsPage() {
   const [search, setSearch] = useState("");
 
   const t = useT();
-  const { data: auth_user } = useAuthUser();
 
   if (isLoading || !data) return (
     <div className="page">
