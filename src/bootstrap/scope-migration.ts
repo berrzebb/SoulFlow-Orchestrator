@@ -1,7 +1,10 @@
 /**
- * 글로벌/유저 스코프 마이그레이션.
- * user_dir/runtime/ 에 있던 글로벌 리소스(config, providers, security, definitions)를
- * workspace/runtime/ 으로 한 번만 복사한다. 이미 글로벌에 유효한 데이터가 있으면 건드리지 않는다.
+ * 3-tier 스코프 마이그레이션.
+ *
+ * 단일 유저 → 멀티테넌트 전환 시 데이터를 올바른 스코프 경로로 복사.
+ * - user → global: config, security, providers, definitions
+ * - user → team: channels, oauth, cron, dlq, datasources
+ * - workspace → team: 기존 workspace/runtime/ 에 있던 team-scoped 데이터 (단일 유저 레거시)
  */
 
 import { existsSync, copyFileSync, mkdirSync, readdirSync } from "node:fs";
@@ -111,6 +114,49 @@ export function migrate_to_global_scope(workspace: string, user_dir: string, tea
 
   // 9) datasources
   migrate_dir_if_missing(join(user_rt, "datasources"), join(team_rt, "datasources"));
+
+  // ── workspace → team (단일 유저 레거시 마이그레이션) ──
+  // 이전 단일 유저 모드에서 team-scoped 데이터가 workspace/runtime/ 에 있었을 수 있음.
+  // user_dir 이 workspace 와 달라진 경우(멀티테넌트 전환), workspace/runtime/ 에서 team_rt 로 복사.
+  if (resolve(workspace) !== resolve(effective_team_dir)) {
+    const ws_rt = join(workspace, "runtime");
+
+    // 10) channels (workspace legacy → team)
+    migrate_db({ from: join(ws_rt, "channels", "instances.db"), to: join(team_rt, "channels", "instances.db"), table: "channel_instances" });
+
+    // 11) oauth (workspace legacy → team)
+    migrate_db({ from: join(ws_rt, "oauth", "integrations.db"), to: join(team_rt, "oauth", "integrations.db"), table: "oauth_integrations" });
+
+    // 12) cron (workspace legacy → team)
+    if (existsSync(join(ws_rt, "cron", "cron.db")) && !existsSync(join(team_rt, "cron", "cron.db"))) {
+      copy_sqlite(join(ws_rt, "cron", "cron.db"), join(team_rt, "cron", "cron.db"));
+    }
+
+    // 13) dlq (workspace legacy → team)
+    if (existsSync(join(ws_rt, "dlq", "dlq.db")) && !existsSync(join(team_rt, "dlq", "dlq.db"))) {
+      copy_sqlite(join(ws_rt, "dlq", "dlq.db"), join(team_rt, "dlq", "dlq.db"));
+    }
+
+    // 14) datasources (workspace legacy → team)
+    migrate_dir_if_missing(join(ws_rt, "datasources"), join(team_rt, "datasources"));
+  }
+
+  // ── workspace → user (단일 유저 레거시 → 개인 스코프) ──
+  // sessions, decisions, events 는 user-scoped 데이터.
+  // 이전에는 workspace/runtime/ 에 함께 있었지만 이제 user_dir/runtime/ 으로 분리.
+  if (resolve(workspace) !== resolve(user_dir)) {
+    const ws_rt = join(workspace, "runtime");
+    const dest_rt = join(user_dir, "runtime");
+
+    // 15) sessions (workspace legacy → user)
+    migrate_db({ from: join(ws_rt, "sessions", "sessions.db"), to: join(dest_rt, "sessions", "sessions.db"), table: "session_messages" });
+
+    // 16) decisions (workspace legacy → user)
+    migrate_db({ from: join(ws_rt, "decisions", "decisions.db"), to: join(dest_rt, "decisions", "decisions.db"), table: "decisions" });
+
+    // 17) events (workspace legacy → user)
+    migrate_db({ from: join(ws_rt, "events", "events.db"), to: join(dest_rt, "events", "events.db"), table: "workflow_events" });
+  }
 }
 
 /** 디렉토리 전체를 대상에 없으면 복사. */

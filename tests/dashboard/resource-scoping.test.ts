@@ -34,13 +34,13 @@ function make_ctx(overrides: Record<string, unknown> = {}): RouteContext {
     res,
     url: new URL(String(overrides.pathname ?? "/"), "http://localhost"),
     options: {
-      auth_svc: overrides.auth_svc ?? {},
-      config_ops: overrides.config_ops ?? null,
-      model_ops: overrides.model_ops ?? null,
-      oauth_ops: overrides.oauth_ops ?? null,
-      channel_ops: overrides.channel_ops ?? null,
-      agent_provider_ops: overrides.agent_provider_ops ?? null,
-      secrets: overrides.secrets ?? null,
+      auth_svc: Object.prototype.hasOwnProperty.call(overrides, "auth_svc") ? overrides.auth_svc : {},
+      config_ops: Object.prototype.hasOwnProperty.call(overrides, "config_ops") ? overrides.config_ops : null,
+      model_ops: Object.prototype.hasOwnProperty.call(overrides, "model_ops") ? overrides.model_ops : null,
+      oauth_ops: Object.prototype.hasOwnProperty.call(overrides, "oauth_ops") ? overrides.oauth_ops : null,
+      channel_ops: Object.prototype.hasOwnProperty.call(overrides, "channel_ops") ? overrides.channel_ops : null,
+      agent_provider_ops: Object.prototype.hasOwnProperty.call(overrides, "agent_provider_ops") ? overrides.agent_provider_ops : null,
+      secrets: Object.prototype.hasOwnProperty.call(overrides, "secrets") ? overrides.secrets : null,
     },
     auth_user: overrides.auth_user ?? null,
     team_context: overrides.team_context ?? null,
@@ -174,7 +174,7 @@ describe("oauth.ts — superadmin guard", () => {
 // Resource guards — channel, agent-provider
 // ══════════════════════════════════════════
 
-describe("channel.ts — superadmin guard for mutations", () => {
+describe("channel.ts — team manager permission", () => {
   it("GET /api/channels/status → 일반 유저도 접근 가능", async () => {
     const ctx = make_ctx({
       method: "GET",
@@ -187,17 +187,104 @@ describe("channel.ts — superadmin guard for mutations", () => {
     expect(last_response(ctx).status).toBe(200);
   });
 
-  it("POST /api/channels/instances → 비superadmin 403", async () => {
+  it("POST /api/channels/instances → member(비manager) 403", async () => {
     const ctx = make_ctx({
       method: "POST",
       pathname: "/api/channels/instances",
       auth_user: { role: "user", sub: "u1", tid: "t1" },
-      channel_ops: { create: vi.fn() },
+      team_context: { team_id: "t1", team_role: "member" },
+      channel_ops: { create: vi.fn(async () => ({ ok: true })) },
       body: { instance_id: "ch1", provider: "slack" },
     });
     const handled = await handle_channel(ctx);
     expect(handled).toBe(true);
     expect(last_response(ctx).status).toBe(403);
+  });
+
+  it("POST /api/channels/instances → team manager 허용", async () => {
+    const create_spy = vi.fn(async () => ({ ok: true }));
+    const ctx = make_ctx({
+      method: "POST",
+      pathname: "/api/channels/instances",
+      auth_user: { role: "user", sub: "u1", tid: "t1" },
+      team_context: { team_id: "t1", team_role: "manager" },
+      channel_ops: { create: create_spy },
+      body: { instance_id: "ch1", provider: "slack" },
+    });
+    const handled = await handle_channel(ctx);
+    expect(handled).toBe(true);
+    expect(last_response(ctx).status).toBe(201);
+  });
+
+  it("POST /api/channels/instances → team owner 허용", async () => {
+    const create_spy = vi.fn(async () => ({ ok: true }));
+    const ctx = make_ctx({
+      method: "POST",
+      pathname: "/api/channels/instances",
+      auth_user: { role: "user", sub: "u1", tid: "t1" },
+      team_context: { team_id: "t1", team_role: "owner" },
+      channel_ops: { create: create_spy },
+      body: { instance_id: "ch1", provider: "slack" },
+    });
+    const handled = await handle_channel(ctx);
+    expect(handled).toBe(true);
+    expect(last_response(ctx).status).toBe(201);
+  });
+
+  it("PUT /api/channels/instances/:id → team manager 허용", async () => {
+    const update_spy = vi.fn(async () => ({ ok: true }));
+    const ctx = make_ctx({
+      method: "PUT",
+      pathname: "/api/channels/instances/ch1",
+      auth_user: { role: "user", sub: "u1", tid: "t1" },
+      team_context: { team_id: "t1", team_role: "manager" },
+      channel_ops: { update: update_spy },
+      body: { label: "updated" },
+    });
+    const handled = await handle_channel(ctx);
+    expect(handled).toBe(true);
+    expect(last_response(ctx).status).toBe(200);
+  });
+
+  it("DELETE /api/channels/instances/:id → viewer 403", async () => {
+    const ctx = make_ctx({
+      method: "DELETE",
+      pathname: "/api/channels/instances/ch1",
+      auth_user: { role: "user", sub: "u1", tid: "t1" },
+      team_context: { team_id: "t1", team_role: "viewer" },
+      channel_ops: { remove: vi.fn(async () => ({ ok: true })) },
+    });
+    const handled = await handle_channel(ctx);
+    expect(handled).toBe(true);
+    expect(last_response(ctx).status).toBe(403);
+  });
+
+  it("POST /api/channels/instances → superadmin 허용", async () => {
+    const create_spy = vi.fn(async () => ({ ok: true }));
+    const ctx = make_ctx({
+      method: "POST",
+      pathname: "/api/channels/instances",
+      auth_user: { role: "superadmin", sub: "admin1" },
+      channel_ops: { create: create_spy },
+      body: { instance_id: "ch1", provider: "slack" },
+    });
+    const handled = await handle_channel(ctx);
+    expect(handled).toBe(true);
+    expect(last_response(ctx).status).toBe(201);
+  });
+
+  it("auth 비활성(싱글유저) → 쓰기 통과", async () => {
+    const create_spy = vi.fn(async () => ({ ok: true }));
+    const ctx = make_ctx({
+      method: "POST",
+      pathname: "/api/channels/instances",
+      auth_svc: null,
+      channel_ops: { create: create_spy },
+      body: { instance_id: "ch1", provider: "slack" },
+    });
+    const handled = await handle_channel(ctx);
+    expect(handled).toBe(true);
+    expect(last_response(ctx).status).toBe(201);
   });
 });
 

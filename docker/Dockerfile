@@ -73,9 +73,11 @@ COPY src/ src/
 RUN npm run build
 
 # ── build-web: Vite → dist/web/ ────────────────────────────────
-# web/ 변경 시에만 재빌드. src/ 변경과 무관.
+# web/이 src/의 타입·i18n을 import하므로 src/도 함께 복사.
+# web/ 변경 시에만 재빌드. src/만 변경 시 build-backend만 재실행.
 FROM deps AS build-web
 
+COPY src/ src/
 COPY web/ web/
 RUN cd web && npx vite build
 

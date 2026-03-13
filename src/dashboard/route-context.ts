@@ -113,3 +113,19 @@ export function require_superadmin_for_write(ctx: RouteContext): boolean {
   ctx.json(ctx.res, 403, { error: "superadmin_required" });
   return false;
 }
+
+/**
+ * 팀 공유 리소스(write) 엔드포인트용:
+ * 읽기는 허용, 쓰기는 team owner/manager 또는 superadmin만.
+ * auth 비활성 시 통과.
+ */
+export function require_team_manager_for_write(ctx: RouteContext): boolean {
+  if (!ctx.options.auth_svc) return true;
+  const method = ctx.req.method ?? "";
+  if (method === "GET" || method === "HEAD") return true;
+  if (ctx.auth_user?.role === "superadmin") return true;
+  const role = ctx.team_context?.team_role;
+  if (role === "owner" || role === "manager") return true;
+  ctx.json(ctx.res, 403, { error: "team_manager_required" });
+  return false;
+}

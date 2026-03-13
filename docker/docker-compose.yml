@@ -29,8 +29,6 @@ services:
     environment:
       NODE_ENV: ${NODE_ENV:-production}
       WORKSPACE: /data
-      WORKSPACE_USER_DIR: ${WORKSPACE_USER_DIR:-}
-      ADMIN_DB_PATH: ${ADMIN_DB_PATH:-}
       REDIS_URL: redis://redis:6379
       DEBUG: ${DEBUG:-false}
       SKIP_INSTANCE_LOCK: ${SKIP_INSTANCE_LOCK:-0}

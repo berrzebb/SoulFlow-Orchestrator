@@ -138,15 +138,9 @@ export async function createRuntime(): Promise<RuntimeApp> {
 
   const usage_store = new UsageStore(user_dir);
 
-  // ADMIN_DB_PATH env 또는 workspace/admin/admin.db 자동 감지 → null이면 인증 비활성
-  // admin 디렉토리 존재 + DB 미존재 → 이전에 인증이 설정된 상태에서 DB가 삭제된 것이므로 자동 재생성
-  const admin_db_path = process.env.ADMIN_DB_PATH ?? join(workspace, "admin", "admin.db");
-  if (!existsSync(admin_db_path) && existsSync(join(workspace, "admin"))) {
-    const boot_logger = create_logger("boot");
-    boot_logger.warn(`admin.db missing but admin/ exists — recreating empty DB to preserve auth enforcement`);
-    new AdminStore(admin_db_path); // AdminStore constructor가 빈 DB + 테이블 자동 생성
-  }
-  const auth_svc = existsSync(admin_db_path) ? new AuthService(new AdminStore(admin_db_path)) : null;
+  // 인증은 항상 활성 — admin.db 부재 시 자동 생성 (미초기화 상태로 시작)
+  const admin_db_path = join(workspace, "admin", "admin.db");
+  const auth_svc = new AuthService(new AdminStore(admin_db_path));
 
   // 멀티테넌트: JWT 인증 후 개인 워크스페이스 디렉토리 보장
   const workspace_registry = auth_svc ? new WorkspaceRegistry(workspace) : null;
@@ -265,10 +259,7 @@ function resolve_workspace(): string {
 
 /** 부트 시 워크스페이스 identity 해석 — team_id, user_id, user_dir 반환. */
 function resolve_boot_identity(workspace: string): { team_id: string; user_id: string; user_dir: string } {
-  if (process.env.WORKSPACE_USER_DIR) {
-    return { team_id: "", user_id: "", user_dir: resolve(process.env.WORKSPACE_USER_DIR) };
-  }
-  const admin_db = process.env.ADMIN_DB_PATH ?? join(workspace, "admin", "admin.db");
+  const admin_db = join(workspace, "admin", "admin.db");
   if (existsSync(admin_db)) {
     const superadmin = new AdminStore(admin_db).list_users()
       .find((u) => u.system_role === "superadmin" && u.default_team_id);
