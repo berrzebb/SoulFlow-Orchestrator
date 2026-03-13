@@ -46,7 +46,7 @@ export class SshTool extends Tool {
         const local = String(params.local_path || "");
         const remote = String(params.remote_path || "");
         if (!local || !remote) return "Error: local_path and remote_path required";
-        const scp_args = ["scp", "-P", String(port)];
+        const scp_args = ["scp", "-o", "StrictHostKeyChecking=accept-new", "-o", "ConnectTimeout=10", "-P", String(port)];
         if (identity) scp_args.push("-i", identity);
         scp_args.push(local, `${host}:${remote}`);
         return this.run_ssh(scp_args, timeout);
@@ -55,7 +55,7 @@ export class SshTool extends Tool {
         const local = String(params.local_path || "");
         const remote = String(params.remote_path || "");
         if (!local || !remote) return "Error: local_path and remote_path required";
-        const scp_args = ["scp", "-P", String(port)];
+        const scp_args = ["scp", "-o", "StrictHostKeyChecking=accept-new", "-o", "ConnectTimeout=10", "-P", String(port)];
         if (identity) scp_args.push("-i", identity);
         scp_args.push(`${host}:${remote}`, local);
         return this.run_ssh(scp_args, timeout);

@@ -13,9 +13,16 @@ const GITHUB_INTEGRATION: OAuthIntegrationConfig = {
   token_url: "https://github.com/login/oauth/access_token",
   redirect_uri: "http://localhost:4200/api/oauth/callback",
   expires_at: "2030-01-01T00:00:00Z",
-  settings: {},
+  settings: { allowed_hosts: ["api.github.com"] },
   created_at: "2026-01-01",
   updated_at: "2026-01-01",
+};
+
+/** allowlist 미설정 integration — fetch 차단 대상. */
+const GITHUB_NO_ALLOWLIST: OAuthIntegrationConfig = {
+  ...GITHUB_INTEGRATION,
+  instance_id: "github-no-allow",
+  settings: {},
 };
 
 const SPOTIFY_DISABLED: OAuthIntegrationConfig = {
@@ -87,66 +94,40 @@ describe("OAuthFetchTool", () => {
     expect(parsed[0].expired).toBe(true);
   });
 
-  // ── get_token action ──
+  // ── get_token action 제거됨 (raw token 노출 방지) ──
 
-  it("get_token: 유효한 access_token을 반환한다", async () => {
+  it("get_token: 제거된 action → unsupported 에러", async () => {
     const store = make_mock_store([GITHUB_INTEGRATION]);
-    const flow = make_mock_flow({ token: "ghp_abc123" });
-    const tool = new OAuthFetchTool(store, flow);
-
-    const result = await (tool as unknown as { run: (p: Record<string, unknown>) => Promise<string> })
-      .run({ action: "get_token", service_id: "github" });
-    const parsed = JSON.parse(result);
-
-    expect(parsed.service_id).toBe("github");
-    expect(parsed.service_type).toBe("github");
-    expect(parsed.access_token).toBe("ghp_abc123");
-  });
-
-  it("get_token: service_id 없으면 에러를 반환한다", async () => {
-    const tool = new OAuthFetchTool(make_mock_store(), make_mock_flow());
-
-    const result = await (tool as unknown as { run: (p: Record<string, unknown>) => Promise<string> })
-      .run({ action: "get_token" });
-
-    expect(result).toContain("Error");
-    expect(result).toContain("service_id is required");
-  });
-
-  it("get_token: 존재하지 않는 service_id는 에러를 반환한다", async () => {
-    const tool = new OAuthFetchTool(make_mock_store(), make_mock_flow());
-
-    const result = await (tool as unknown as { run: (p: Record<string, unknown>) => Promise<string> })
-      .run({ action: "get_token", service_id: "nonexistent" });
-
-    expect(result).toContain("Error");
-    expect(result).toContain("not found");
-  });
-
-  it("get_token: 비활성 연동은 에러를 반환한다", async () => {
-    const store = make_mock_store([SPOTIFY_DISABLED]);
     const tool = new OAuthFetchTool(store, make_mock_flow());
 
     const result = await (tool as unknown as { run: (p: Record<string, unknown>) => Promise<string> })
-      .run({ action: "get_token", service_id: "spotify" });
-
-    expect(result).toContain("Error");
-    expect(result).toContain("disabled");
-  });
-
-  it("get_token: 토큰이 없으면 에러를 반환한다", async () => {
-    const store = make_mock_store([GITHUB_INTEGRATION]);
-    const flow = {
-      get_valid_access_token: vi.fn(async () => ({ token: null, error: "token_expired" })),
-      refresh_token: vi.fn(async () => ({ ok: false })),
-    } as unknown as OAuthFlowService;
-    const tool = new OAuthFetchTool(store, flow);
-
-    const result = await (tool as unknown as { run: (p: Record<string, unknown>) => Promise<string> })
       .run({ action: "get_token", service_id: "github" });
 
+    expect(result).toContain("unsupported action");
+  });
+
+  // ── allowlist 강제 (토큰 유출 방지) ──
+
+  it("fetch: allowed_hosts 미설정 → 차단", async () => {
+    const store = make_mock_store([GITHUB_NO_ALLOWLIST]);
+    const tool = new OAuthFetchTool(store, make_mock_flow());
+
+    const result = await (tool as unknown as { run: (p: Record<string, unknown>) => Promise<string> })
+      .run({ action: "fetch", service_id: "github-no-allow", url: "https://api.github.com/user" });
+
     expect(result).toContain("Error");
-    expect(result).toContain("token_expired");
+    expect(result).toContain("allowed_hosts not configured");
+  });
+
+  it("fetch: allowed_hosts에 없는 호스트 → 차단", async () => {
+    const store = make_mock_store([GITHUB_INTEGRATION]);
+    const tool = new OAuthFetchTool(store, make_mock_flow());
+
+    const result = await (tool as unknown as { run: (p: Record<string, unknown>) => Promise<string> })
+      .run({ action: "fetch", service_id: "github", url: "https://evil.example.com/steal" });
+
+    expect(result).toContain("Error");
+    expect(result).toContain("not in allowed_hosts");
   });
 
   // ── fetch action (기본) ──

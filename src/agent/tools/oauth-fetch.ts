@@ -32,7 +32,7 @@ export class OAuthFetchTool extends Tool {
     properties: {
       action: {
         type: "string",
-        enum: ["fetch", "list", "get_token"],
+        enum: ["fetch", "list"],
         description: "수행할 작업 (기본: fetch)",
       },
       service_id: { type: "string", description: "OAuth 연동 ID (e.g., 'github')" },
@@ -62,31 +62,9 @@ export class OAuthFetchTool extends Tool {
 
     switch (action) {
       case "list": return this._list();
-      case "get_token": return await this._get_token(params);
       case "fetch": return await this._fetch(params);
-      default: return `Error: unsupported action "${action}". Use: fetch, list, get_token`;
+      default: return `Error: unsupported action "${action}". Use: fetch, list`;
     }
-  }
-
-  /** 유효한 액세스 토큰만 반환 (raw token 조회용). */
-  private async _get_token(params: Record<string, unknown>): Promise<string> {
-    const service_id = String(params.service_id || "").trim();
-    if (!service_id) return "Error: service_id is required";
-
-    const integration = this.store.get(service_id);
-    if (!integration) return `Error: OAuth integration "${service_id}" not found`;
-    if (!integration.enabled) return `Error: OAuth integration "${service_id}" is disabled`;
-
-    const { token, error } = await this.flow.get_valid_access_token(service_id);
-    if (!token) {
-      return `Error: no valid access token for "${service_id}" — ${error || "token not configured"}`;
-    }
-
-    return JSON.stringify({
-      service_id: integration.instance_id,
-      service_type: integration.service_type,
-      access_token: token,
-    });
   }
 
   /** 워크스페이스에 등록된 OAuth 연동 목록. */
@@ -123,17 +101,17 @@ export class OAuthFetchTool extends Tool {
       return `Error: OAuth integration "${service_id}" is disabled`;
     }
 
-    // host allowlist 검증 — integration.settings.allowed_hosts 설정 시 강제
+    // host allowlist 검증 — allowed_hosts 미설정 시 차단 (토큰 유출 방지)
     const allowed_hosts = Array.isArray(integration.settings?.allowed_hosts)
       ? (integration.settings.allowed_hosts as unknown[]).map(String).filter(Boolean)
       : [];
-    if (allowed_hosts.length > 0) {
-      if (!allowed_hosts.includes(url_or_error.hostname)) {
-        log.warn("oauth_fetch_blocked", { service_id, host: url_or_error.hostname, allowed: allowed_hosts });
-        return `Error: host "${url_or_error.hostname}" is not in allowed_hosts for "${service_id}"`;
-      }
-    } else {
-      log.warn("oauth_fetch_no_allowlist", { service_id, host: url_or_error.hostname });
+    if (allowed_hosts.length === 0) {
+      log.warn("oauth_fetch_blocked_no_allowlist", { service_id, host: url_or_error.hostname });
+      return `Error: allowed_hosts not configured for "${service_id}". Set allowed_hosts in integration settings to enable fetch.`;
+    }
+    if (!allowed_hosts.includes(url_or_error.hostname)) {
+      log.warn("oauth_fetch_blocked", { service_id, host: url_or_error.hostname, allowed: allowed_hosts });
+      return `Error: host "${url_or_error.hostname}" is not in allowed_hosts for "${service_id}"`;
     }
 
     const { token, error } = await this.flow.get_valid_access_token(service_id);

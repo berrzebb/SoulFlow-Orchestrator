@@ -135,6 +135,17 @@ describe("SshTool — scp_upload action", () => {
     }));
     expect(r.success).toBe(true);
   });
+
+  it("scp_upload → StrictHostKeyChecking 포함", async () => {
+    set_exec_success("");
+    await make_tool().execute({
+      action: "scp_upload", host: "server.example.com",
+      local_path: "/tmp/a", remote_path: "/tmp/b",
+    });
+    const [, args] = mock_exec_file.mock.calls[0] as [string, string[]];
+    expect(args).toContain("StrictHostKeyChecking=accept-new");
+    expect(args).toContain("ConnectTimeout=10");
+  });
 });
 
 // ══════════════════════════════════════════
@@ -159,6 +170,17 @@ describe("SshTool — scp_download action", () => {
       identity_file: "/home/user/.ssh/id_rsa",
     }));
     expect(r.success).toBe(true);
+  });
+
+  it("scp_download → StrictHostKeyChecking 포함", async () => {
+    set_exec_success("");
+    await make_tool().execute({
+      action: "scp_download", host: "server.example.com",
+      local_path: "/tmp/a", remote_path: "/tmp/b",
+    });
+    const [, args] = mock_exec_file.mock.calls[0] as [string, string[]];
+    expect(args).toContain("StrictHostKeyChecking=accept-new");
+    expect(args).toContain("ConnectTimeout=10");
   });
 });
 
