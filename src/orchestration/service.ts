@@ -95,7 +95,7 @@ export type OrchestrationServiceDeps = {
   /** Phase Loop 영속화 스토어. */
   phase_workflow_store?: import("../agent/phase-workflow-store.js").PhaseWorkflowStoreLike | null;
   /** SSE 브로드캐스트 (Phase Loop 이벤트 전파). lazy 참조 지원. */
-  get_sse_broadcaster?: () => { broadcast_workflow_event(event: import("../agent/phase-loop.types.js").PhaseLoopEvent): void } | null;
+  get_sse_broadcaster?: () => { broadcast_workflow_event(event: import("../agent/phase-loop.types.js").PhaseLoopEvent, team_id?: string): void } | null;
   /** 실행 전 확인 가드. */
   confirmation_guard?: ConfirmationGuard | null;
   /** 메시지 버스 (Phase Loop 내 interaction 노드용). */
@@ -270,8 +270,8 @@ export class OrchestrationService {
     this.events.append(input).catch(() => { /* 이벤트 로깅 실패가 실행을 차단하면 안 됨 */ });
   }
 
-  /** runner 함수에 전달할 공유 의존성 조립. */
-  private _runner_deps() {
+  /** runner 함수에 전달할 공유 의존성 조립. req 전달 시 per-request workspace 우선 사용. */
+  private _runner_deps(req?: OrchestrationRequest) {
     return {
       providers: this.providers,
       runtime: this.runtime,
@@ -289,7 +289,7 @@ export class OrchestrationService {
       hooks_deps: this.hooks_deps,
       tool_deps: this.tool_deps,
       session_cd: this.session_cd,
-      workspace: this.deps.workspace,
+      workspace: req?.workspace_override ?? this.deps.workspace,
       build_overlay: (mode: "once" | "agent") => this._build_overlay(mode),
       hooks_for: (stream: StreamBuffer, args: { req: OrchestrationRequest; runtime_policy: RuntimeExecutionPolicy }, backend_id: string, task_id?: string, tools_accumulator?: string[]) => this._hooks_for(stream, args, backend_id, task_id, tools_accumulator),
       log_event: (input: AppendWorkflowEventInput) => this.log_event(input),
@@ -300,9 +300,9 @@ export class OrchestrationService {
   }
 
   /** continue_task_loop 전용 추가 의존성 포함 조립. */
-  private _continue_deps(): ContinueTaskDeps {
+  private _continue_deps(req?: OrchestrationRequest): ContinueTaskDeps {
     return {
-      ...this._runner_deps(),
+      ...this._runner_deps(req),
       policy_resolver: this.policy_resolver,
       caps: () => this._caps(),
       build_system_prompt: (names, prov, chat, cats, alias) => this._build_system_prompt(names, prov, chat, cats, alias),
@@ -310,15 +310,15 @@ export class OrchestrationService {
     };
   }
 
-  /** phase workflow 실행용 의존성 조립. */
-  private _phase_deps(): PhaseWorkflowDeps {
+  /** phase workflow 실행용 의존성 조립. req 전달 시 per-request workspace 우선 사용. */
+  private _phase_deps(req?: OrchestrationRequest): PhaseWorkflowDeps {
     return {
       providers: this.providers,
       runtime: this.runtime,
       logger: this.logger,
       process_tracker: this.process_tracker,
-      workspace: this.deps.workspace || "",
-      user_dir: this.deps.user_dir ?? this.deps.workspace ?? "",
+      workspace: req?.workspace_override ?? this.deps.workspace ?? "",
+      user_dir: req?.user_dir_override ?? this.deps.user_dir ?? this.deps.workspace ?? "",
       subagents: this.deps.subagents || null,
       phase_workflow_store: this.deps.phase_workflow_store || null,
       bus: this.deps.bus ?? null,
@@ -365,10 +365,10 @@ export class OrchestrationService {
       build_identity_reply: () => this._build_identity_reply(),
       build_system_prompt: (names, prov, chat, cats, alias) => this._build_system_prompt(names, prov, chat, cats, alias),
       generate_guard_summary: (text) => this._generate_guard_summary(text),
-      run_once: (args) => _run_once(this._runner_deps(), args),
-      run_agent_loop: (args) => _run_agent_loop(this._runner_deps(), args),
-      run_task_loop: (args) => _run_task_loop(this._runner_deps(), args),
-      run_phase_loop: (req, task, hint, cats) => _run_phase_loop(this._phase_deps(), req, task, hint, cats),
+      run_once: (args) => _run_once(this._runner_deps(args.req), args),
+      run_agent_loop: (args) => _run_agent_loop(this._runner_deps(args.req), args),
+      run_task_loop: (args) => _run_task_loop(this._runner_deps(args.req), args),
+      run_phase_loop: (req, task, hint, cats) => _run_phase_loop(this._phase_deps(req), req, task, hint, cats),
       caps: () => this._caps(),
     };
   }
@@ -526,7 +526,7 @@ export class OrchestrationService {
     task_with_media: string,
     media: string[],
   ): Promise<OrchestrationResult> {
-    return _continue_task_loop(this._continue_deps(), req, task, task_with_media, media);
+    return _continue_task_loop(this._continue_deps(req), req, task, task_with_media, media);
   }
 }
 

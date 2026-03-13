@@ -93,6 +93,8 @@ export interface PhaseLoopState {
   auto_approve?: boolean;
   /** HITL/ask_user 대기를 빈 응답으로 자동 재개. */
   auto_resume?: boolean;
+  /** 멀티테넌트: 워크플로우를 생성한 팀. SSE 스코프 브로드캐스트에 사용. */
+  team_id?: string;
 }
 
 // ── Definition (워크플로우 템플릿) ───────────────────
@@ -321,6 +323,8 @@ export interface PhaseLoopRunOptions {
   field_mappings?: FieldMapping[];
   /** resume 시 기존 상태 전달. 있으면 새 state 대신 이 state에서 이어서 실행. */
   resume_state?: PhaseLoopState;
+  /** 멀티테넌트: 워크플로우를 소유한 팀 ID. state에 기록하여 SSE 스코프 전파에 사용. */
+  team_id?: string;
 }
 
 export interface PhaseLoopRunResult {

@@ -90,9 +90,9 @@ export type ChannelManagerDeps = {
   logger: Logger;
   bot_identity: BotIdentitySource;
   /** AgentEvent를 대시보드 SSE로 릴레이할 콜백. */
-  on_agent_event?: ((event: import("../agent/agent.types.js").AgentEvent) => void) | null;
-  /** 웹 채팅 스트리밍 텍스트 릴레이 콜백 (chat_id, content, done). */
-  on_web_stream?: ((chat_id: string, content: string, done: boolean) => void) | null;
+  on_agent_event?: ((event: import("../agent/agent.types.js").AgentEvent, team_id?: string) => void) | null;
+  /** 웹 채팅 스트리밍 텍스트 릴레이 콜백 (chat_id, content, done, team_id?). */
+  on_web_stream?: ((chat_id: string, content: string, done: boolean, team_id?: string) => void) | null;
   /** 웹 채널 실행 중 StreamEvent를 세션별 NDJSON 스트림으로 라우팅. */
   on_web_rich_event?: ((chat_id: string, event: import("./stream-event.js").StreamEvent) => void) | null;
   /** 워크플로우 HITL: 채널 응답을 워크플로우 pending_response로 라우팅. */
@@ -135,8 +135,8 @@ export class ChannelManager implements ServiceLike {
   private readonly config: AppConfig["channel"];
   private readonly workspace_dir: string;
   private readonly logger: Logger;
-  private readonly on_agent_event: ((event: import("../agent/agent.types.js").AgentEvent) => void) | null;
-  private readonly on_web_stream: ((chat_id: string, content: string, done: boolean) => void) | null;
+  private readonly on_agent_event: ((event: import("../agent/agent.types.js").AgentEvent, team_id?: string) => void) | null;
+  private readonly on_web_stream: ((chat_id: string, content: string, done: boolean, team_id?: string) => void) | null;
   private readonly on_web_rich_event: ((chat_id: string, event: import("./stream-event.js").StreamEvent) => void) | null;
   private readonly session_store: import("../session/service.js").SessionStoreLike | null;
   private readonly bot_identity: BotIdentitySource;
@@ -667,6 +667,11 @@ export class ChannelManager implements ServiceLike {
     // web 채널은 status 메시지 편집 API가 없으므로 항상 live 모드로 강제
     const is_status_mode = provider !== "web" && this.config.streaming.enabled && this.config.streaming.mode === "status";
 
+    const msg_meta = (message.metadata || {}) as Record<string, unknown>;
+    const scoped_team_id = typeof msg_meta.team_id === "string" ? msg_meta.team_id : undefined;
+    const scoped_web_stream = this.on_web_stream
+      ? (chat_id: string, content: string, done: boolean) => this.on_web_stream!(chat_id, content, done, scoped_team_id)
+      : null;
     const renderer: ChannelRendererLike = create_channel_renderer(provider, {
       chat_id: message.chat_id,
       provider,
@@ -678,7 +683,7 @@ export class ChannelManager implements ServiceLike {
       dispatch: this.dispatch,
       registry: this.registry,
       logger: this.logger,
-      on_web_stream: this.on_web_stream,
+      on_web_stream: scoped_web_stream,
       on_web_rich_event: this.on_web_rich_event,
     });
 
@@ -694,6 +699,8 @@ export class ChannelManager implements ServiceLike {
       const preferred_provider_id = typeof msg_meta.preferred_provider_id === "string" ? msg_meta.preferred_provider_id : undefined;
       const preferred_model = typeof msg_meta.preferred_model === "string" ? msg_meta.preferred_model : undefined;
       const system_prompt_override = typeof msg_meta.system_prompt_override === "string" ? msg_meta.system_prompt_override : undefined;
+      const workspace_override = typeof msg_meta.workspace_dir === "string" ? msg_meta.workspace_dir : undefined;
+      const msg_team_id = typeof msg_meta.team_id === "string" ? msg_meta.team_id : undefined;
 
       const result = await this.orchestration.execute({
         message, alias, provider, media_inputs,
@@ -703,14 +710,16 @@ export class ChannelManager implements ServiceLike {
         preferred_provider_id,
         preferred_model,
         system_prompt_override,
+        workspace_override,
+        user_dir_override: workspace_override,
         on_stream: (chunk) => renderer.on_text_chunk(chunk),
         on_progress: (event) => {
-          this.bus.publish_progress(event).catch((e) =>
+          this.bus.publish_progress({ ...event, team_id: msg_team_id }).catch((e) =>
             this.logger.debug("progress_publish_failed", { error: error_message(e) }),
           );
         },
         on_agent_event: (event) => {
-          this.on_agent_event?.(event);
+          this.on_agent_event?.(event, msg_team_id);
           const stream_ev = agent_event_to_stream(event);
           if (stream_ev) renderer.on_stream_event(stream_ev);
         },
@@ -766,7 +775,9 @@ export class ChannelManager implements ServiceLike {
       return;
     }
 
-    const rendered = this.render_reply(result.reply, provider, message.chat_id);
+    const msg_workspace = typeof (message.metadata as Record<string, unknown>)?.workspace_dir === "string"
+      ? (message.metadata as Record<string, unknown>).workspace_dir as string : undefined;
+    const rendered = this.render_reply(result.reply, provider, message.chat_id, msg_workspace);
     const mention = format_mention(provider, message.sender_id);
     const max_len = get_provider_max_length(provider);
 
@@ -822,12 +833,12 @@ export class ChannelManager implements ServiceLike {
     void this.recorder.record_assistant(provider, message, alias, rendered.markdown, record_meta).catch((e) => this.logger.warn("record_assistant_failed", { error: error_message(e) }));
   }
 
-  private render_reply(raw: string, provider: ChannelProvider, chat_id: string): {
+  private render_reply(raw: string, provider: ChannelProvider, chat_id: string, workspace_dir?: string): {
     content: string; markdown: string; media: MediaItem[]; parse_mode?: "HTML"; render_mode: RenderMode;
   } {
     const profile = this.effective_render_profile(provider, chat_id);
     const cleaned = sanitize_provider_output(raw);
-    const { content: text_content, media } = extract_media_items(cleaned, this.workspace_dir);
+    const { content: text_content, media } = extract_media_items(cleaned, workspace_dir || this.workspace_dir);
     const fallback = text_content || (media.length > 0 ? "첨부 파일을 확인해주세요." : "");
     const rendered = render_agent_output(fallback, profile);
     return {

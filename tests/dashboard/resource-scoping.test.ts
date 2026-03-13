@@ -288,8 +288,8 @@ describe("channel.ts — team manager permission", () => {
   });
 });
 
-describe("agent-provider.ts — superadmin guard for mutations", () => {
-  it("GET /api/agents/providers → 일반 유저도 접근 가능", async () => {
+describe("agent-provider.ts — scope-based access control", () => {
+  it("GET /api/agents/providers → 일반 유저도 접근 가능 (scope-filtered)", async () => {
     const ctx = make_ctx({
       method: "GET",
       pathname: "/api/agents/providers",
@@ -301,13 +301,42 @@ describe("agent-provider.ts — superadmin guard for mutations", () => {
     expect(last_response(ctx).status).toBe(200);
   });
 
-  it("POST /api/agents/providers → 비superadmin 403", async () => {
+  it("POST /api/agents/providers → personal scope는 본인이 생성 가능", async () => {
+    const create_spy = vi.fn(async () => ({ ok: true }));
     const ctx = make_ctx({
       method: "POST",
       pathname: "/api/agents/providers",
       auth_user: { role: "user", sub: "u1", tid: "t1" },
+      team_context: { team_id: "t1", team_role: "member" },
+      agent_provider_ops: { create: create_spy },
+      body: { instance_id: "p1", provider_type: "openai", scope_type: "personal", scope_id: "u1" },
+    });
+    const handled = await handle_agent_provider(ctx);
+    expect(handled).toBe(true);
+    expect(last_response(ctx).status).toBe(201);
+  });
+
+  it("POST /api/agents/providers → global scope는 비superadmin 403", async () => {
+    const ctx = make_ctx({
+      method: "POST",
+      pathname: "/api/agents/providers",
+      auth_user: { role: "user", sub: "u1", tid: "t1" },
+      team_context: { team_id: "t1", team_role: "member" },
       agent_provider_ops: { create: vi.fn() },
-      body: { instance_id: "p1", provider_type: "openai" },
+      body: { instance_id: "p1", provider_type: "openai", scope_type: "global", scope_id: "" },
+    });
+    const handled = await handle_agent_provider(ctx);
+    expect(handled).toBe(true);
+    expect(last_response(ctx).status).toBe(403);
+  });
+
+  it("POST /api/agents/connections → 비superadmin 403 (인프라 리소스)", async () => {
+    const ctx = make_ctx({
+      method: "POST",
+      pathname: "/api/agents/connections",
+      auth_user: { role: "user", sub: "u1", tid: "t1" },
+      agent_provider_ops: { create_connection: vi.fn() },
+      body: { connection_id: "c1", provider_type: "openai" },
     });
     const handled = await handle_agent_provider(ctx);
     expect(handled).toBe(true);

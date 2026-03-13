@@ -20,7 +20,7 @@ export type PhaseWorkflowDeps = {
   phase_workflow_store: import("../../agent/phase-workflow-store.js").PhaseWorkflowStoreLike | null;
   bus: import("../../bus/types.js").MessageBusLike | null;
   hitl_store: HitlPendingStore;
-  get_sse_broadcaster: (() => { broadcast_workflow_event(event: import("../../agent/phase-loop.types.js").PhaseLoopEvent): void } | null) | undefined;
+  get_sse_broadcaster: (() => { broadcast_workflow_event(event: import("../../agent/phase-loop.types.js").PhaseLoopEvent, team_id?: string): void } | null) | undefined;
   render_hitl: (body: string, type: "choice" | "confirmation" | "question" | "escalation" | "error") => string;
   decision_service: import("../../decision/service.js").DecisionService | null;
   promise_service: import("../../decision/promise.service.js").PromiseService | null;
@@ -137,7 +137,9 @@ export async function run_phase_loop(
     create_task: deps.create_task,
     query_db: deps.query_db,
     on_event: (event) => {
-      deps.get_sse_broadcaster?.()?.broadcast_workflow_event(event);
+      const team_id = typeof (req.message.metadata as Record<string, unknown>)?.team_id === "string"
+        ? (req.message.metadata as Record<string, unknown>).team_id as string : undefined;
+      deps.get_sse_broadcaster?.()?.broadcast_workflow_event(event, team_id);
       req.on_agent_event?.({ type: "content_delta", source: { backend: "phase_loop", task_id: workflow_id }, at: now_iso(), text: `[phase] ${event.type}` });
     },
   });

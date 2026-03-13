@@ -1,7 +1,7 @@
 import type { RouteContext } from "../route-context.js";
 
 function memory_ops_or_503(ctx: RouteContext) {
-  const ops = ctx.options.memory_ops ?? null;
+  const ops = ctx.get_scoped_memory_ops();
   if (!ops) ctx.json(ctx.res, 503, { error: "memory_unavailable" });
   return ops;
 }

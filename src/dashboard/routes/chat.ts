@@ -36,10 +36,12 @@ function append_user_message(session: ChatSession, parsed: ParsedBody): void {
   }
 }
 
-function build_publish_payload(session: ChatSession, parsed: ParsedBody, user_id: string) {
+type PublishContext = { user_id: string; team_id: string; workspace_dir?: string };
+
+function build_publish_payload(session: ChatSession, parsed: ParsedBody, pctx: PublishContext) {
   return {
     id: `web_msg_${short_id(8)}`,
-    provider: "web" as const, channel: "web", sender_id: user_id || "web_user",
+    provider: "web" as const, channel: "web", sender_id: pctx.user_id || "web_user",
     chat_id: session.id, content: parsed.text, at: now_iso(),
     media: parsed.media.length > 0
       ? parsed.media.map((m) => ({ type: m.type as import("../../bus/types.js").MediaItemType, url: m.url, mime: m.mime, name: m.name }))
@@ -48,6 +50,8 @@ function build_publish_payload(session: ChatSession, parsed: ParsedBody, user_id
       ...(parsed.provider_instance_id ? { preferred_provider_id: parsed.provider_instance_id } : {}),
       ...(parsed.model ? { preferred_model: parsed.model } : {}),
       ...(parsed.system_prompt ? { system_prompt_override: parsed.system_prompt } : {}),
+      ...(pctx.team_id ? { team_id: pctx.team_id } : {}),
+      ...(pctx.workspace_dir ? { workspace_dir: pctx.workspace_dir } : {}),
     },
   };
 }
@@ -57,6 +61,10 @@ export async function handle_chat(ctx: RouteContext): Promise<boolean> {
   const path = url.pathname;
   const user_id = auth_user?.sub ?? "";
   const team_id = auth_user?.tid ?? "";
+  const publish_ctx: PublishContext = {
+    user_id, team_id,
+    workspace_dir: ctx.workspace_runtime?.user_content ?? ctx.personal_dir,
+  };
 
   // GET /api/chat/sessions
   if (path === "/api/chat/sessions" && req.method === "GET") {
@@ -154,7 +162,7 @@ export async function handle_chat(ctx: RouteContext): Promise<boolean> {
     append_user_message(session, parsed);
 
     res.write(JSON.stringify({ type: "start" }) + "\n");
-    bus.publish_inbound(build_publish_payload(session, parsed, user_id)).catch(() => {
+    bus.publish_inbound(build_publish_payload(session, parsed, publish_ctx)).catch(() => {
       unsubscribe();
       clearTimeout(timeout);
       if (!res.writableEnded) { res.write(JSON.stringify({ type: "error", error: "publish_failed" }) + "\n"); res.end(); }
@@ -172,7 +180,7 @@ export async function handle_chat(ctx: RouteContext): Promise<boolean> {
     const parsed = parse_chat_body(body);
     if (!parsed.text && parsed.media.length === 0) { json(res, 400, { error: "content_or_media_required" }); return true; }
     append_user_message(session, parsed);
-    await bus.publish_inbound(build_publish_payload(session, parsed, user_id));
+    await bus.publish_inbound(build_publish_payload(session, parsed, publish_ctx));
     json(res, 200, { ok: true, message_count: session.messages.length });
     return true;
   }

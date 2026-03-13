@@ -146,7 +146,7 @@ export function create_workflow_ops(deps: {
   workspace: string;
   logger: Logger;
   skills_loader?: SkillsLoader;
-  on_workflow_event?: (event: import("../../agent/phase-loop.types.js").PhaseLoopEvent) => void;
+  on_workflow_event?: (event: import("../../agent/phase-loop.types.js").PhaseLoopEvent, team_id?: string) => void;
   bus?: import("../../bus/types.js").MessageBusLike;
   cron?: import("../../cron/service.js").CronService;
   invoke_tool?: (tool_id: string, params: Record<string, unknown>, context?: { workflow_id?: string; channel?: string; chat_id?: string; sender_id?: string }) => Promise<string>;
@@ -192,26 +192,28 @@ export function create_workflow_ops(deps: {
 
   const pending_responses = deps.hitl_pending_store;
 
-  /** run_phase_loop 두 번째 인자 — create/resume/resume_orphaned 공통. */
-  const runner_deps = {
-    subagents, store, logger,
-    load_template: (name: string) => load_workflow_template(workspace, name),
-    providers: deps.providers,
-    decision_service: deps.decision_service,
-    promise_service: deps.promise_service,
-    embed: deps.embed,
-    vector_store: deps.vector_store,
-    oauth_fetch: deps.oauth_fetch,
-    get_webhook_data: deps.get_webhook_data,
-    wait_kanban_event: deps.wait_kanban_event,
-    create_task: deps.create_task,
-    query_db: deps.query_db,
-    on_kanban_trigger_waiting: deps.on_kanban_trigger_waiting,
-    kanban_store: deps.kanban_store,
-    on_event: on_workflow_event,
-  };
+  /** run_phase_loop 두 번째 인자 — create/resume/resume_orphaned 공통. team_id로 SSE 스코프 전파. */
+  function build_runner_deps(team_id?: string) {
+    return {
+      subagents, store, logger,
+      load_template: (name: string) => load_workflow_template(workspace, name),
+      providers: deps.providers,
+      decision_service: deps.decision_service,
+      promise_service: deps.promise_service,
+      embed: deps.embed,
+      vector_store: deps.vector_store,
+      oauth_fetch: deps.oauth_fetch,
+      get_webhook_data: deps.get_webhook_data,
+      wait_kanban_event: deps.wait_kanban_event,
+      create_task: deps.create_task,
+      query_db: deps.query_db,
+      on_kanban_trigger_waiting: deps.on_kanban_trigger_waiting,
+      kanban_store: deps.kanban_store,
+      on_event: on_workflow_event ? (evt: import("../../agent/phase-loop.types.js").PhaseLoopEvent) => on_workflow_event(evt, team_id) : undefined,
+    };
+  }
 
-  function build_ask_user(workflow_id: string, target_channel: string, target_chat_id: string) {
+  function build_ask_user(workflow_id: string, target_channel: string, target_chat_id: string, target_team_id?: string) {
     return async (question: string): Promise<string> => {
       // auto_resume 설정 시 즉시 빈 응답으로 재개
       const current = await store.get(workflow_id);
@@ -220,7 +222,7 @@ export function create_workflow_ops(deps: {
         return "";
       }
 
-      on_workflow_event?.({ type: "user_input_requested", workflow_id, phase_id: "", question });
+      on_workflow_event?.({ type: "user_input_requested", workflow_id, phase_id: "", question }, target_team_id);
 
       if (bus && target_channel !== "dashboard" && target_channel !== "web") {
         const formatted = deps.renderer
@@ -332,6 +334,7 @@ export function create_workflow_ops(deps: {
       const objective = String(input.objective || "");
       const channel = String(input.channel || "dashboard");
       const chat_id = String(input.chat_id || "web");
+      const team_id = typeof input.team_id === "string" ? input.team_id : undefined;
 
       let phases: PhaseLoopRunOptions["phases"];
       let nodes: PhaseLoopRunOptions["nodes"];
@@ -377,7 +380,7 @@ export function create_workflow_ops(deps: {
 
       const workflow_id = `wf-${short_id(12)}`;
 
-      const ask_user = build_ask_user(workflow_id, channel, chat_id);
+      const ask_user = build_ask_user(workflow_id, channel, chat_id, team_id);
 
       const origin = { channel, chat_id, sender_id: String(input.sender_id || "") };
 
@@ -389,7 +392,8 @@ export function create_workflow_ops(deps: {
         initial_memory: { origin },
         workspace,
         field_mappings,
-      }, runner_deps).catch((err) => {
+        team_id,
+      }, build_runner_deps(team_id)).catch((err) => {
         logger.error("workflow_create_run_error", { workflow_id, error: error_message(err) });
       });
 
@@ -519,8 +523,8 @@ export function create_workflow_ops(deps: {
         return { ok: false, error: "no_definition_for_resume" };
       }
 
-      const { channel, chat_id } = state;
-      const ask_user = build_ask_user(workflow_id, channel, chat_id);
+      const { channel, chat_id, team_id: resume_team_id } = state;
+      const ask_user = build_ask_user(workflow_id, channel, chat_id, resume_team_id);
 
       void run_phase_loop({
         workflow_id, title: state.title, objective: state.objective,
@@ -535,7 +539,8 @@ export function create_workflow_ops(deps: {
         workspace,
         initial_memory: state.memory,
         resume_state: state,
-      }, runner_deps).catch((err) => {
+        team_id: resume_team_id,
+      }, build_runner_deps(resume_team_id)).catch((err) => {
         logger.error("workflow_resume_run_error", { workflow_id, error: error_message(err) });
       });
 
@@ -555,7 +560,7 @@ export function create_workflow_ops(deps: {
       logger.info("resume_orphaned_workflows", { count: orphans.length });
 
       for (const state of orphans) {
-        const { workflow_id, channel, chat_id } = state;
+        const { workflow_id, channel, chat_id, team_id: orphan_team_id } = state;
         logger.info("resuming_orphaned_workflow", { workflow_id, title: state.title });
         void run_phase_loop({
           workflow_id, title: state.title, objective: state.objective,
@@ -563,14 +568,15 @@ export function create_workflow_ops(deps: {
           phases: state.definition!.phases || [],
           nodes: state.definition!.nodes,
           field_mappings: state.definition!.field_mappings,
-          ask_user: build_ask_user(workflow_id, channel, chat_id),
+          ask_user: build_ask_user(workflow_id, channel, chat_id, orphan_team_id),
           send_message: build_send_message(workflow_id, channel, chat_id),
           ask_channel: build_ask_channel(workflow_id, channel, chat_id),
           invoke_tool: deps.invoke_tool,
           workspace,
           initial_memory: state.memory,
           resume_state: state,
-        }, runner_deps).catch((err) => {
+          team_id: orphan_team_id,
+        }, build_runner_deps(orphan_team_id)).catch((err) => {
           logger.error("workflow_orphan_resume_error", { workflow_id, error: error_message(err) });
         });
       }

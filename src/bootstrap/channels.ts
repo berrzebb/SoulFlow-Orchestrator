@@ -96,7 +96,7 @@ export async function create_channel_bundle(deps: ChannelBundleDeps): Promise<Ch
     dlq_store,
     dedupe_policy: new DefaultOutboundDedupePolicy(),
     logger: logger.child("dispatch"),
-    on_direct_send: (msg) => broadcaster.broadcast_message_event("outbound", msg.sender_id, msg.content, msg.chat_id),
+    on_direct_send: (msg) => broadcaster.broadcast_message_event("outbound", msg.sender_id, msg.content, msg.chat_id, ctx.team_id),
   });
 
   const session_recorder = new SessionRecorder({
@@ -104,7 +104,7 @@ export async function create_channel_bundle(deps: ChannelBundleDeps): Promise<Ch
     daily_memory: agent_runtime,
     sanitize_for_storage: sanitize_provider_output,
     logger: logger.child("session"),
-    on_mirror_message: (event) => broadcaster.broadcast_mirror_message(event),
+    on_mirror_message: (event) => broadcaster.broadcast_mirror_message(event, ctx.team_id),
   });
 
   const slack_token = await instance_store.get_token("slack") || "";

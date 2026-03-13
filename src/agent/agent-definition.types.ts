@@ -45,15 +45,19 @@ export type AgentDefinition = {
   is_builtin: boolean;
   /** 이 정의로 에이전트를 시작한 횟수. */
   use_count: number;
+  /** 3-tier scope: 'global' | 'team' | 'personal'. */
+  scope_type: string;
+  /** scope 대상 ID: team_id 또는 user_id. global이면 ''. */
+  scope_id: string;
   created_at: string;
   updated_at: string;
 };
 
-/** 새 AgentDefinition 생성 입력. id, use_count, timestamps 제외. */
+/** 새 AgentDefinition 생성 입력. id, use_count, timestamps 제외. scope는 생략 시 global 기본값. */
 export type CreateAgentDefinitionInput = Omit<
   AgentDefinition,
-  "id" | "use_count" | "created_at" | "updated_at"
->;
+  "id" | "use_count" | "created_at" | "updated_at" | "scope_type" | "scope_id"
+> & { scope_type?: string; scope_id?: string };
 
 /** AgentDefinition 수정 입력. is_builtin, use_count, timestamps 변경 불가. */
 export type UpdateAgentDefinitionInput = Partial<

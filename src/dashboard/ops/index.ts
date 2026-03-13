@@ -4,7 +4,7 @@ export { create_template_ops } from "./template.js";
 export { create_channel_ops } from "./channel.js";
 export { create_agent_provider_ops } from "./agent-provider.js";
 export { create_bootstrap_ops } from "./bootstrap.js";
-export { create_memory_ops } from "./memory.js";
+export { create_memory_ops, ScopedMemoryOpsCache } from "./memory.js";
 export { create_workspace_ops } from "./workspace.js";
 export { create_oauth_ops } from "./oauth.js";
 export { create_config_ops } from "./config.js";

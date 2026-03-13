@@ -44,6 +44,10 @@ export type AgentProviderConfig = {
   settings: Record<string, unknown>;
   /** 연결 참조. 설정 시 connection의 토큰 + api_base를 상속. */
   connection_id?: string;
+  /** 3-tier scope: 'global' | 'team' | 'personal'. */
+  scope_type: string;
+  /** scope 대상 ID: team_id 또는 user_id. global이면 ''. */
+  scope_id: string;
   created_at: string;
   updated_at: string;
 };
@@ -51,7 +55,7 @@ export type AgentProviderConfig = {
 export type CreateAgentProviderInput = Pick<
   AgentProviderConfig,
   "instance_id" | "provider_type" | "label" | "enabled" | "priority" | "model_purpose" | "supported_modes" | "settings"
-> & { connection_id?: string };
+> & { connection_id?: string; scope_type?: string; scope_id?: string };
 
 /** 백엔드가 제공하는 기능 선언. 오케스트레이터가 보상 전략을 결정하는 데 사용. */
 export type BackendCapabilities = {

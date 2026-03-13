@@ -112,6 +112,7 @@ export async function run_phase_loop(
           nodes: options.nodes,
           field_mappings: options.field_mappings,
         },
+        ...(options.team_id ? { team_id: options.team_id } : {}),
       };
 
   await store.upsert(state);

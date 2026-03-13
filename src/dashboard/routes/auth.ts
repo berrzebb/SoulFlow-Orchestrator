@@ -62,9 +62,14 @@ export async function handle_auth(ctx: RouteContext): Promise<boolean> {
     const workspace = options.workspace ?? "";
     const team_id = "default";
     if (workspace) {
-      const base = join(workspace, "tenants", team_id, "users", result.payload.sub);
-      for (const sub of ["workflows", "skills", "templates", "runtime"]) {
-        mkdirSync(join(base, sub), { recursive: true });
+      // WorkspaceRegistry로 디렉토리 생성 + 런타임 등록 (수동 mkdirSync 대체)
+      if (options.workspace_registry) {
+        options.workspace_registry.get_or_create({ team_id, user_id: result.payload.sub });
+      } else {
+        const base = join(workspace, "tenants", team_id, "users", result.payload.sub);
+        for (const sub of ["workflows", "skills", "templates", "runtime"]) {
+          mkdirSync(join(base, sub), { recursive: true });
+        }
       }
       new TeamStore(team_db_path(workspace, team_id), team_id).upsert_member(result.payload.sub, "owner");
     }
@@ -92,8 +97,13 @@ export async function handle_auth(ctx: RouteContext): Promise<boolean> {
     const result = await auth_svc.login(username, password);
     if (!result) { json(res, 401, { error: "invalid_credentials" }); return true; }
 
+    // 로그인 시 워크스페이스 런타임 즉시 생성 (후속 요청 cold start 방지)
+    if (result.payload.tid) {
+      options.workspace_registry?.get_or_create({ team_id: result.payload.tid, user_id: result.payload.sub });
+    }
+
     res.setHeader("Set-Cookie", make_auth_cookie(result.token));
-    json(res, 200, { ok: true, username: result.payload.usr, role: result.payload.role });
+    json(res, 200, { ok: true, username: result.payload.usr, role: result.payload.role, tid: result.payload.tid });
     return true;
   }
 

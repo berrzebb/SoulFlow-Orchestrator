@@ -8,6 +8,7 @@ import type { create_agent_inspector } from "../agent/inspector.service.js";
 import type { AgentBackendRegistry } from "../agent/agent-registry.js";
 import type { AgentProviderStore } from "../agent/provider-store.js";
 import type { AgentDefinitionStore } from "../agent/agent-definition.store.js";
+import { MemoryStore } from "../agent/memory.service.js";
 import type { MessageBusRuntime } from "../bus/types.js";
 import type { ChannelManager } from "../channels/manager.js";
 import type { ChannelInstanceStore, ChannelRegistryLike } from "../channels/index.js";
@@ -166,6 +167,7 @@ export function create_dashboard_bundle(deps: DashboardBundleDeps): DashboardBun
     bootstrap_ops: create_bootstrap_ops({ provider_store, config_store, provider_registry: providers, agent_backends: agent_backend_registry, workspace }),
     session_store: sessions,
     memory_ops: create_memory_ops(agent.context.memory_store),
+    memory_store_factory: auth_svc ? (root: string) => new MemoryStore(root) : null,
     workspace_ops: create_workspace_ops(user_dir),
     oauth_ops: create_oauth_ops({ oauth_store, oauth_flow, dashboard_port: app_config.dashboard.port, public_url: app_config.dashboard.publicUrl }),
     cli_auth_ops: create_cli_auth_ops({ cli_auth }),
@@ -229,12 +231,13 @@ Description: ${prompt}`,
   dash.set_oauth_callback_handler((code: string, state: string) => oauth_flow.handle_callback(code, state));
   dash.set_webhook_store(webhook_store);
   bus.on_publish((dir, msg) => {
-    broadcaster.broadcast_message_event(dir, msg.sender_id, msg.content, msg.chat_id);
+    const msg_team_id = typeof (msg.metadata as Record<string, unknown>)?.team_id === "string"
+      ? (msg.metadata as Record<string, unknown>).team_id as string : undefined;
+    broadcaster.broadcast_message_event(dir, msg.sender_id, msg.content, msg.chat_id, msg_team_id);
     if (dir === "outbound" && msg.provider === "web" && msg.chat_id) {
       const media = msg.media?.map((m) => ({ type: m.type as string, url: m.url, mime: m.mime, name: m.name }));
       dash.capture_web_outbound(msg.chat_id, msg.content, media);
-      // 메시지 저장 후 SSE 발송 → 폴링 없이 프론트엔드 즉시 refetch
-      broadcaster.broadcast_web_message(msg.chat_id);
+      broadcaster.broadcast_web_message(msg.chat_id, msg_team_id);
     }
   });
 

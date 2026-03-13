@@ -56,9 +56,14 @@ interface DefinitionRow {
   model: string | null;
   is_builtin: number;
   use_count: number;
+  scope_type: string;
+  scope_id: string;
   created_at: string;
   updated_at: string;
 }
+
+/** 3-tier scope 필터. undefined = 전체(superadmin), 배열 = 접근 가능한 scope 목록. */
+export type ScopeFilter = Array<{ scope_type: string; scope_id: string }> | undefined;
 
 function row_to_definition(r: DefinitionRow): AgentDefinition {
   return {
@@ -79,6 +84,8 @@ function row_to_definition(r: DefinitionRow): AgentDefinition {
     model: r.model,
     is_builtin: r.is_builtin === 1,
     use_count: r.use_count,
+    scope_type: r.scope_type ?? "global",
+    scope_id: r.scope_id ?? "",
     created_at: r.created_at,
     updated_at: r.updated_at,
   };
@@ -97,6 +104,14 @@ export class AgentDefinitionStore {
   private _ensure_initialized(): void {
     with_sqlite_strict(this.db_path, (db) => {
       db.exec(INIT_SQL);
+      // 마이그레이션: scope 컬럼 추가 (3-tier 리소스 스코핑)
+      const has_scope = db.prepare(
+        "SELECT 1 FROM pragma_table_info('agent_definitions') WHERE name='scope_type'",
+      ).get();
+      if (!has_scope) {
+        db.exec(`ALTER TABLE agent_definitions ADD COLUMN scope_type TEXT NOT NULL DEFAULT 'global'`);
+        db.exec(`ALTER TABLE agent_definitions ADD COLUMN scope_id TEXT NOT NULL DEFAULT ''`);
+      }
       return true;
     }, { pragmas: PRAGMAS });
   }
@@ -149,11 +164,22 @@ export class AgentDefinitionStore {
 
   // ── 조회 ──
 
-  list(): AgentDefinition[] {
+  list(scope_filter?: ScopeFilter): AgentDefinition[] {
     return with_sqlite(this.db_path, (db) => {
-      const rows = db.prepare(
-        "SELECT * FROM agent_definitions ORDER BY is_builtin DESC, use_count DESC, created_at ASC",
-      ).all() as DefinitionRow[];
+      if (!scope_filter) {
+        // superadmin 또는 싱글유저: 전체 조회
+        const rows = db.prepare(
+          "SELECT * FROM agent_definitions ORDER BY is_builtin DESC, use_count DESC, created_at ASC",
+        ).all() as DefinitionRow[];
+        return rows.map(row_to_definition);
+      }
+      // scope 필터: global ∪ 접근 가능한 scope들
+      const conditions = scope_filter.map((_, i) => `(scope_type = @st${i} AND scope_id = @si${i})`);
+      conditions.unshift("scope_type = 'global'");
+      const sql = `SELECT * FROM agent_definitions WHERE ${conditions.join(" OR ")} ORDER BY is_builtin DESC, use_count DESC, created_at ASC`;
+      const params: Record<string, string> = {};
+      scope_filter.forEach((s, i) => { params[`st${i}`] = s.scope_type; params[`si${i}`] = s.scope_id; });
+      const rows = db.prepare(sql).all(params) as DefinitionRow[];
       return rows.map(row_to_definition);
     }, { pragmas: PRAGMAS }) ?? [];
   }
@@ -176,8 +202,9 @@ export class AgentDefinitionStore {
            tools_json, shared_protocols_json, skills_json,
            use_when, not_use_for, extra_instructions,
            preferred_providers_json, model, is_builtin, use_count,
+           scope_type, scope_id,
            created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, datetime('now'), datetime('now'))
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, datetime('now'), datetime('now'))
       `).run(
         id,
         input.name,
@@ -195,6 +222,8 @@ export class AgentDefinitionStore {
         JSON.stringify(input.preferred_providers),
         input.model,
         input.is_builtin ? 1 : 0,
+        input.scope_type ?? "global",
+        input.scope_id ?? "",
       );
       return true;
     }, { pragmas: PRAGMAS });
@@ -223,6 +252,8 @@ export class AgentDefinitionStore {
           extra_instructions      = ?,
           preferred_providers_json = ?,
           model                   = ?,
+          scope_type              = ?,
+          scope_id                = ?,
           updated_at              = datetime('now')
         WHERE id = ?
       `).run(
@@ -240,6 +271,8 @@ export class AgentDefinitionStore {
         patch.extra_instructions ?? existing.extra_instructions,
         JSON.stringify(patch.preferred_providers ?? existing.preferred_providers),
         patch.model !== undefined ? patch.model : existing.model,
+        patch.scope_type ?? existing.scope_type,
+        patch.scope_id ?? existing.scope_id,
         id,
       );
       return true;

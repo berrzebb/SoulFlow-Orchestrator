@@ -31,7 +31,8 @@ export const handle_workflow: RouteHandler = async (ctx) => {
   if (path === "/api/workflow/runs" && method === "POST") {
     const body = await read_body(req);
     if (!body) { json(res, 400, { error: "invalid_body" }); return true; }
-    const result = await ops.create(body);
+    const team_id = ctx.team_context?.team_id;
+    const result = await ops.create({ ...body, ...(team_id ? { team_id } : {}) });
     json(res, result.ok ? 201 : 400, result);
     return true;
   }

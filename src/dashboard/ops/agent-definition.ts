@@ -2,13 +2,13 @@
 
 import { error_message } from "../../utils/common.js";
 import type { AgentDefinition, CreateAgentDefinitionInput, UpdateAgentDefinitionInput, GeneratedAgentFields } from "../../agent/agent-definition.types.js";
-import type { AgentDefinitionStore } from "../../agent/agent-definition.store.js";
+import type { AgentDefinitionStore, ScopeFilter } from "../../agent/agent-definition.store.js";
 
 /** 자연어 설명 → 구조화된 에이전트 정의 필드 생성 함수. */
 export type AgentGenerateFn = (prompt: string) => Promise<GeneratedAgentFields | null>;
 
 export interface DashboardAgentDefinitionOps {
-  list(): AgentDefinition[];
+  list(scope_filter?: ScopeFilter): AgentDefinition[];
   get(id: string): AgentDefinition | null;
   create(input: CreateAgentDefinitionInput): { ok: boolean; data?: AgentDefinition; error?: string };
   update(id: string, patch: UpdateAgentDefinitionInput): { ok: boolean; error?: string };
@@ -24,7 +24,7 @@ export function create_agent_definition_ops(deps: {
   const { store, generate_fn } = deps;
 
   return {
-    list: () => store.list(),
+    list: (scope_filter?) => store.list(scope_filter),
 
     get: (id) => store.get(id),
 

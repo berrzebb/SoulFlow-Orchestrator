@@ -23,6 +23,7 @@ import type { RouteContext, RouteHandler } from "./route-context.js";
 import { SseManager } from "./sse-manager.js";
 import { MediaTokenStore } from "./media-store.js";
 import { build_dashboard_state, build_merged_tasks } from "./state-builder.js";
+import { ScopedMemoryOpsCache } from "./ops/memory.js";
 import { resolve_web_dir, serve_static } from "./static-server.js";
 import { handle_bootstrap } from "./routes/bootstrap.js";
 import { handle_state } from "./routes/state.js";
@@ -80,6 +81,7 @@ export class DashboardService implements ServiceLike {
   private readonly default_alias: string;
   private readonly _media: MediaTokenStore;
   private readonly _metrics = new SystemMetricsCollector();
+  private readonly _memory_cache: ScopedMemoryOpsCache | null;
 
   constructor(options: DashboardOptions) {
     this.options = options;
@@ -90,6 +92,9 @@ export class DashboardService implements ServiceLike {
     if (!options.workspace) throw new Error("workspace is required for DashboardService");
     const workspace_dir = resolve(options.workspace);
     this._media = new MediaTokenStore(workspace_dir);
+    this._memory_cache = options.memory_store_factory
+      ? new ScopedMemoryOpsCache(options.memory_store_factory)
+      : null;
     this._init_routes();
   }
 
@@ -297,6 +302,12 @@ export class DashboardService implements ServiceLike {
       resolve_request_origin: (r) => this._resolve_request_origin(r),
       bus: this.options.bus,
       add_rich_stream_listener: (id, fn) => this._sse.add_rich_stream_listener(id, fn),
+      get_scoped_memory_ops: () => {
+        if (this._memory_cache && personal_dir && personal_dir !== (this.options.workspace ?? "")) {
+          return this._memory_cache.get(personal_dir);
+        }
+        return this.options.memory_ops ?? null;
+      },
     };
   }
 

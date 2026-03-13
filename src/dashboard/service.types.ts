@@ -119,6 +119,8 @@ export interface AgentProviderStatusInfo {
   supported_modes: string[];
   settings: Record<string, unknown>;
   connection_id?: string;
+  scope_type: string;
+  scope_id: string;
   created_at: string;
   updated_at: string;
   available: boolean;
@@ -140,7 +142,7 @@ export interface ProviderConnectionInfo {
 }
 
 export interface DashboardAgentProviderOps {
-  list(): Promise<AgentProviderStatusInfo[]>;
+  list(scope_filter?: import("../agent/provider-store.js").ProviderScopeFilter): Promise<AgentProviderStatusInfo[]>;
   get(instance_id: string): Promise<AgentProviderStatusInfo | null>;
   create(input: {
     instance_id: string;
@@ -153,6 +155,8 @@ export interface DashboardAgentProviderOps {
     settings?: Record<string, unknown>;
     token?: string;
     connection_id?: string;
+    scope_type?: string;
+    scope_id?: string;
   }): Promise<{ ok: boolean; error?: string }>;
   update(instance_id: string, patch: {
     label?: string;
@@ -334,6 +338,8 @@ export type DashboardOptions = {
   bootstrap_ops?: BootstrapOps | null;
   session_store?: SessionStoreLike | null;
   memory_ops?: DashboardMemoryOps | null;
+  /** per-user MemoryStore 팩토리. 멀티테넌트에서 유저별 메모리 격리에 사용. */
+  memory_store_factory?: ((root: string) => import("../agent/memory.types.js").MemoryStoreLike) | null;
   workspace_ops?: DashboardWorkspaceOps | null;
   oauth_ops?: DashboardOAuthOps | null;
   cli_auth_ops?: DashboardCliAuthOps | null;

@@ -118,7 +118,7 @@ export function start_progress_relay(
     async () => {
       while (!bus.is_closed()) {
         const event = await bus.consume_progress({ timeout_ms: 5000 });
-        if (event) broadcaster.broadcast_progress_event(event);
+        if (event) broadcaster.broadcast_progress_event(event, event.team_id);
       }
     },
     {

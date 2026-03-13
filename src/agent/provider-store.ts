@@ -67,9 +67,14 @@ interface ProviderRow {
   supported_modes: string;
   settings_json: string;
   connection_id: string | null;
+  scope_type: string;
+  scope_id: string;
   created_at: string;
   updated_at: string;
 }
+
+/** 3-tier scope 필터. undefined = 전체(superadmin), 배열 = 접근 가능한 scope 목록. */
+export type ProviderScopeFilter = Array<{ scope_type: string; scope_id: string }> | undefined;
 
 function row_to_connection(r: ConnectionRow): ProviderConnection {
   return {
@@ -94,6 +99,8 @@ function row_to_config(r: ProviderRow): AgentProviderConfig {
     supported_modes: safe_parse_modes(r.supported_modes),
     settings: JSON.parse(r.settings_json),
     connection_id: r.connection_id || undefined,
+    scope_type: r.scope_type ?? "global",
+    scope_id: r.scope_id ?? "",
     created_at: r.created_at,
     updated_at: r.updated_at,
   };
@@ -131,15 +138,32 @@ export class AgentProviderStore {
         "SELECT 1 FROM pragma_table_info('agent_providers') WHERE name='connection_id'",
       ).get();
       if (!has_conn) db.exec(MIGRATE_CONNECTION_ID);
+      // 마이그레이션: scope 컬럼 추가 (3-tier 리소스 스코핑)
+      const has_scope = db.prepare(
+        "SELECT 1 FROM pragma_table_info('agent_providers') WHERE name='scope_type'",
+      ).get();
+      if (!has_scope) {
+        db.exec(`ALTER TABLE agent_providers ADD COLUMN scope_type TEXT NOT NULL DEFAULT 'global'`);
+        db.exec(`ALTER TABLE agent_providers ADD COLUMN scope_id TEXT NOT NULL DEFAULT ''`);
+      }
       return true;
     }, { pragmas: PRAGMAS });
   }
 
   // ── 조회 ──
 
-  list(): AgentProviderConfig[] {
+  list(scope_filter?: ProviderScopeFilter): AgentProviderConfig[] {
     return with_sqlite(this.db_path, (db) => {
-      const rows = db.prepare("SELECT * FROM agent_providers ORDER BY priority ASC, created_at ASC").all() as ProviderRow[];
+      if (!scope_filter) {
+        const rows = db.prepare("SELECT * FROM agent_providers ORDER BY priority ASC, created_at ASC").all() as ProviderRow[];
+        return rows.map(row_to_config);
+      }
+      const conditions = scope_filter.map((_, i) => `(scope_type = @st${i} AND scope_id = @si${i})`);
+      conditions.unshift("scope_type = 'global'");
+      const sql = `SELECT * FROM agent_providers WHERE ${conditions.join(" OR ")} ORDER BY priority ASC, created_at ASC`;
+      const params: Record<string, string> = {};
+      scope_filter.forEach((s, i) => { params[`st${i}`] = s.scope_type; params[`si${i}`] = s.scope_id; });
+      const rows = db.prepare(sql).all(params) as ProviderRow[];
       return rows.map(row_to_config);
     }, { pragmas: PRAGMAS }) ?? [];
   }
@@ -177,8 +201,8 @@ export class AgentProviderStore {
   upsert(input: CreateAgentProviderInput): void {
     with_sqlite_strict(this.db_path, (db) => {
       db.prepare(`
-        INSERT INTO agent_providers (instance_id, provider_type, label, enabled, priority, model_purpose, supported_modes, settings_json, connection_id, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+        INSERT INTO agent_providers (instance_id, provider_type, label, enabled, priority, model_purpose, supported_modes, settings_json, connection_id, scope_type, scope_id, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
         ON CONFLICT(instance_id) DO UPDATE SET
           provider_type = excluded.provider_type,
           label = excluded.label,
@@ -188,6 +212,8 @@ export class AgentProviderStore {
           supported_modes = excluded.supported_modes,
           settings_json = excluded.settings_json,
           connection_id = excluded.connection_id,
+          scope_type = excluded.scope_type,
+          scope_id = excluded.scope_id,
           updated_at = datetime('now')
       `).run(
         input.instance_id,
@@ -199,6 +225,8 @@ export class AgentProviderStore {
         JSON.stringify(input.supported_modes),
         JSON.stringify(input.settings),
         input.connection_id || null,
+        input.scope_type ?? "global",
+        input.scope_id ?? "",
       );
       return true;
     }, { pragmas: PRAGMAS });
@@ -206,7 +234,7 @@ export class AgentProviderStore {
 
   update_settings(
     instance_id: string,
-    patch: Partial<Pick<AgentProviderConfig, "label" | "enabled" | "priority" | "model_purpose" | "supported_modes" | "settings" | "connection_id">>,
+    patch: Partial<Pick<AgentProviderConfig, "label" | "enabled" | "priority" | "model_purpose" | "supported_modes" | "settings" | "connection_id" | "scope_type" | "scope_id">>,
   ): boolean {
     const existing = this.get(instance_id);
     if (!existing) return false;
@@ -218,13 +246,15 @@ export class AgentProviderStore {
     const supported_modes = patch.supported_modes ?? existing.supported_modes;
     const settings = patch.settings ? { ...existing.settings, ...patch.settings } : existing.settings;
     const connection_id = patch.connection_id !== undefined ? (patch.connection_id || null) : (existing.connection_id || null);
+    const scope_type = patch.scope_type ?? existing.scope_type;
+    const scope_id = patch.scope_id ?? existing.scope_id;
 
     with_sqlite_strict(this.db_path, (db) => {
       db.prepare(`
         UPDATE agent_providers
-        SET label = ?, enabled = ?, priority = ?, model_purpose = ?, supported_modes = ?, settings_json = ?, connection_id = ?, updated_at = datetime('now')
+        SET label = ?, enabled = ?, priority = ?, model_purpose = ?, supported_modes = ?, settings_json = ?, connection_id = ?, scope_type = ?, scope_id = ?, updated_at = datetime('now')
         WHERE instance_id = ?
-      `).run(label, enabled ? 1 : 0, priority, model_purpose, JSON.stringify(supported_modes), JSON.stringify(settings), connection_id, instance_id);
+      `).run(label, enabled ? 1 : 0, priority, model_purpose, JSON.stringify(supported_modes), JSON.stringify(settings), connection_id, scope_type, scope_id, instance_id);
       return true;
     }, { pragmas: PRAGMAS });
     return true;

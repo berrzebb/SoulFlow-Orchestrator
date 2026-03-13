@@ -6,6 +6,7 @@ import type { SystemMetricsCollector } from "./system-metrics.js";
 import type { SessionStoreLike } from "../session/index.js";
 import type { JwtPayload } from "../auth/auth-service.js";
 import type { TeamRole } from "../auth/team-store.js";
+import type { DashboardMemoryOps } from "./service.types.js";
 
 /** Phase 8-23: 현재 요청의 팀 문맥. auth_middleware 검증 후 주입. */
 export type TeamContext = {
@@ -67,6 +68,8 @@ export type RouteContext = {
   resolve_request_origin: (req: IncomingMessage) => string;
   bus: DashboardOptions["bus"];
   add_rich_stream_listener: (chat_id: string, fn: (event: import("./broadcaster.js").WebStreamEvent) => void) => () => void;
+  /** per-user 메모리 ops. 멀티테넌트에서 유저별 MemoryStore 캐시 기반. 미설정 시 글로벌 ops fallback. */
+  get_scoped_memory_ops: () => DashboardMemoryOps | null;
 };
 
 export type RouteHandler = (ctx: RouteContext) => Promise<boolean>;
@@ -137,5 +140,48 @@ export function require_team_manager_for_write(ctx: RouteContext): boolean {
   const role = ctx.team_context?.team_role;
   if (role === "owner" || role === "manager") return true;
   ctx.json(ctx.res, 403, { error: "team_manager_required" });
+  return false;
+}
+
+// ── 3-tier resource scoping ──
+
+/** ScopeFilter 타입 re-export (store에서 정의). */
+export type ScopeFilter = Array<{ scope_type: string; scope_id: string }> | undefined;
+
+/**
+ * 현재 요청자가 볼 수 있는 scope 목록.
+ * superadmin/싱글유저 → undefined (전체), 일반 사용자 → global + team + personal.
+ */
+export function build_scope_filter(ctx: RouteContext): ScopeFilter {
+  if (!ctx.options.auth_svc) return undefined;
+  if (ctx.auth_user?.role === "superadmin") return undefined;
+  const scopes: Array<{ scope_type: string; scope_id: string }> = [
+    { scope_type: "global", scope_id: "" },
+  ];
+  if (ctx.team_context?.team_id) {
+    scopes.push({ scope_type: "team", scope_id: ctx.team_context.team_id });
+  }
+  if (ctx.auth_user?.sub) {
+    scopes.push({ scope_type: "personal", scope_id: ctx.auth_user.sub });
+  }
+  return scopes;
+}
+
+/**
+ * 요청자가 해당 scope에 쓰기 가능한지 검사.
+ * global → superadmin만, team → superadmin/owner/manager, personal → 본인 또는 superadmin.
+ */
+export function can_write_scope(ctx: RouteContext, scope_type: string, scope_id: string): boolean {
+  if (!ctx.options.auth_svc) return true;
+  if (ctx.auth_user?.role === "superadmin") return true;
+  if (scope_type === "global") return false;
+  if (scope_type === "team") {
+    if (ctx.team_context?.team_id !== scope_id) return false;
+    const role = ctx.team_context?.team_role;
+    return role === "owner" || role === "manager";
+  }
+  if (scope_type === "personal") {
+    return ctx.auth_user?.sub === scope_id;
+  }
   return false;
 }

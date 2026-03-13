@@ -70,8 +70,8 @@ export function create_agent_provider_ops(deps: {
   }
 
   return {
-    async list() {
-      const configs = provider_store.list();
+    async list(scope_filter?) {
+      const configs = provider_store.list(scope_filter);
       const status_map = new Map(agent_backends.list_backend_status().map((s) => [s.id, s]));
       const token_checks = await Promise.all(configs.map((c) => provider_store.has_resolved_token(c.instance_id)));
       return configs.map((c, i) => {
@@ -101,6 +101,8 @@ export function create_agent_provider_ops(deps: {
         supported_modes: (input.supported_modes ?? ["once", "agent", "task"]) as import("../../orchestration/types.js").ExecutionMode[],
         settings: input.settings || {},
         connection_id: input.connection_id,
+        scope_type: input.scope_type,
+        scope_id: input.scope_id,
       });
       await activate_provider(provider_store, agent_backends, provider_registry, workspace, input.instance_id, input.token || null);
       log.info("provider_create", { id: input.instance_id, provider_type: input.provider_type, connection_id: input.connection_id });

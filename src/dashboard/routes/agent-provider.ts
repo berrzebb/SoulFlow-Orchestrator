@@ -1,5 +1,5 @@
 import type { RouteContext } from "../route-context.js";
-import { require_superadmin_for_write } from "../route-context.js";
+import { build_scope_filter, can_write_scope, require_superadmin_for_write } from "../route-context.js";
 import { error_message } from "../../utils/common.js";
 
 function agent_provider_ops_or_503(ctx: RouteContext) {
@@ -8,12 +8,23 @@ function agent_provider_ops_or_503(ctx: RouteContext) {
   return ops;
 }
 
+/**
+ * 쓰기 요청에 대해 scope 기본값 주입.
+ * scope_type/scope_id가 없으면 personal scope로 기본값 설정.
+ */
+function resolve_write_scope(ctx: RouteContext, body: Record<string, unknown>): { scope_type: string; scope_id: string } {
+  const scope_type = typeof body.scope_type === "string" ? body.scope_type : "personal";
+  let scope_id = typeof body.scope_id === "string" ? body.scope_id : "";
+  if (scope_type === "personal" && !scope_id) scope_id = ctx.auth_user?.sub ?? "";
+  if (scope_type === "team" && !scope_id) scope_id = ctx.team_context?.team_id ?? "";
+  return { scope_type, scope_id };
+}
+
 export async function handle_agent_provider(ctx: RouteContext): Promise<boolean> {
-  if (!require_superadmin_for_write(ctx)) return true;
   const { req, url, res, json, read_body } = ctx;
   const path = url.pathname;
 
-  // GET /api/agents/providers/types
+  // GET /api/agents/providers/types — 프로바이더 타입 목록 (읽기, 제한 없음)
   if (path === "/api/agents/providers/types" && req.method === "GET") {
     const ops = agent_provider_ops_or_503(ctx);
     if (!ops) return true;
@@ -37,21 +48,27 @@ export async function handle_agent_provider(ctx: RouteContext): Promise<boolean>
     return true;
   }
 
-  // GET /api/agents/providers
+  // GET /api/agents/providers — scope-filtered list
   if (path === "/api/agents/providers" && req.method === "GET") {
     const ops = agent_provider_ops_or_503(ctx);
     if (!ops) return true;
-    json(res, 200, await ops.list());
+    json(res, 200, await ops.list(build_scope_filter(ctx)));
     return true;
   }
 
-  // POST /api/agents/providers { ...fields }
+  // POST /api/agents/providers — scope 권한 검사 후 생성
   if (path === "/api/agents/providers" && req.method === "POST") {
     const ops = agent_provider_ops_or_503(ctx);
     if (!ops) return true;
     const body = await read_body(req);
     if (!body) { json(res, 400, { error: "invalid_body" }); return true; }
-    const result = await ops.create(body as Parameters<typeof ops.create>[0]);
+    const scope = resolve_write_scope(ctx, body);
+    if (!can_write_scope(ctx, scope.scope_type, scope.scope_id)) {
+      json(res, 403, { error: "scope_write_denied" });
+      return true;
+    }
+    const input = { ...body, scope_type: scope.scope_type, scope_id: scope.scope_id } as Parameters<typeof ops.create>[0];
+    const result = await ops.create(input);
     json(res, result.ok ? 201 : 400, result);
     return true;
   }
@@ -101,11 +118,17 @@ export async function handle_agent_provider(ctx: RouteContext): Promise<boolean>
     return true;
   }
 
-  // PUT /api/agents/providers/:id { ...fields }
+  // PUT /api/agents/providers/:id — 기존 리소스의 scope로 권한 검사
   if (id_match && req.method === "PUT") {
     const ops = agent_provider_ops_or_503(ctx);
     if (!ops) return true;
     const id = decodeURIComponent(id_match[1]);
+    const existing = await ops.get(id);
+    if (!existing) { json(res, 404, { error: "not_found" }); return true; }
+    if (!can_write_scope(ctx, existing.scope_type, existing.scope_id)) {
+      json(res, 403, { error: "scope_write_denied" });
+      return true;
+    }
     const body = await read_body(req);
     if (!body) { json(res, 400, { error: "invalid_body" }); return true; }
     const result = await ops.update(id, body as Parameters<typeof ops.update>[1]);
@@ -113,17 +136,23 @@ export async function handle_agent_provider(ctx: RouteContext): Promise<boolean>
     return true;
   }
 
-  // DELETE /api/agents/providers/:id
+  // DELETE /api/agents/providers/:id — 기존 리소스의 scope로 권한 검사
   if (id_match && req.method === "DELETE") {
     const ops = agent_provider_ops_or_503(ctx);
     if (!ops) return true;
     const id = decodeURIComponent(id_match[1]);
+    const existing = await ops.get(id);
+    if (!existing) { json(res, 404, { error: "not_found" }); return true; }
+    if (!can_write_scope(ctx, existing.scope_type, existing.scope_id)) {
+      json(res, 403, { error: "scope_write_denied" });
+      return true;
+    }
     const result = await ops.remove(id);
     json(res, result.ok ? 200 : 404, result);
     return true;
   }
 
-  // ── Connection 엔드포인트 ──
+  // ── Connection 엔드포인트 (인프라 레벨 = superadmin only for writes) ──
 
   // GET /api/agents/connections
   if (path === "/api/agents/connections" && req.method === "GET") {
@@ -135,6 +164,7 @@ export async function handle_agent_provider(ctx: RouteContext): Promise<boolean>
 
   // POST /api/agents/connections
   if (path === "/api/agents/connections" && req.method === "POST") {
+    if (!require_superadmin_for_write(ctx)) return true;
     const ops = agent_provider_ops_or_503(ctx);
     if (!ops) return true;
     const body = await read_body(req);
@@ -185,6 +215,7 @@ export async function handle_agent_provider(ctx: RouteContext): Promise<boolean>
 
   // PUT /api/agents/connections/:id
   if (conn_id_match && req.method === "PUT") {
+    if (!require_superadmin_for_write(ctx)) return true;
     const ops = agent_provider_ops_or_503(ctx);
     if (!ops) return true;
     const id = decodeURIComponent(conn_id_match[1]);
@@ -197,6 +228,7 @@ export async function handle_agent_provider(ctx: RouteContext): Promise<boolean>
 
   // DELETE /api/agents/connections/:id
   if (conn_id_match && req.method === "DELETE") {
+    if (!require_superadmin_for_write(ctx)) return true;
     const ops = agent_provider_ops_or_503(ctx);
     if (!ops) return true;
     const id = decodeURIComponent(conn_id_match[1]);

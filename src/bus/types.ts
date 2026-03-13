@@ -40,6 +40,8 @@ export type ProgressEvent = {
   provider: string;
   chat_id: string;
   at: string;
+  /** 멀티테넌트: SSE 스코프 브로드캐스트에 사용. */
+  team_id?: string;
 };
 
 export type MessageBusObserver = (direction: "inbound" | "outbound", message: Message) => void;

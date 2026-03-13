@@ -43,6 +43,10 @@ export type OrchestrationRequest = {
   preferred_model?: string;
   /** 에이전트 컨텍스트 시스템 프롬프트 오버라이드 (웹 채팅 에이전트 선택 시). build_system_prompt 결과를 대체. */
   system_prompt_override?: string;
+  /** per-request 워크스페이스 경로. 멀티테넌트 환경에서 유저별 cwd를 오버라이드. */
+  workspace_override?: string;
+  /** per-request 유저 콘텐츠 루트. 워크플로우/스킬 템플릿 로드 경로. */
+  user_dir_override?: string;
 };
 
 /** 결과에 포함되는 토큰/비용 요약. */

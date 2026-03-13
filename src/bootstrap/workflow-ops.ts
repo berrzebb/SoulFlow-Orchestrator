@@ -75,7 +75,7 @@ export async function create_workflow_ops_bundle(deps: WorkflowOpsBundleDeps): P
     store: phase_workflow_store, subagents: agent.subagents, workspace: user_dir, logger, bus,
     skills_loader: agent.context.skills_loader, tool_index, cron, on_template_changed,
     kanban_store,
-    on_workflow_event: (e) => broadcaster.broadcast_workflow_event(e),
+    on_workflow_event: (e, team_id) => broadcaster.broadcast_workflow_event(e, team_id),
     invoke_tool: (tool_id, params, ctx) => agent.tools.execute(tool_id, params, ctx ? { channel: ctx.channel, chat_id: ctx.chat_id, sender_id: ctx.sender_id, task_id: ctx.workflow_id } : undefined),
     providers,
     get_tool_summaries: () => agent.tools.get_all().map((t) => ({
