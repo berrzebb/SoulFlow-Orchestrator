@@ -1,7 +1,9 @@
 import { set_locale, get_locale, parse_locale } from "../../i18n/index.js";
 import type { RouteContext } from "../route-context.js";
+import { require_superadmin_for_write } from "../route-context.js";
 
 export async function handle_config(ctx: RouteContext): Promise<boolean> {
+  if (!require_superadmin_for_write(ctx)) return true;
   const { req, url, res, options, json, read_body } = ctx;
   const path = url.pathname;
 

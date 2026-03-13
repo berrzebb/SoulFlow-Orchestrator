@@ -1,4 +1,5 @@
 import type { RouteContext } from "../route-context.js";
+import { get_filter_team_id } from "../route-context.js";
 
 function cron_or_503(ctx: RouteContext) {
   const cron = ctx.options.cron ?? null;
@@ -15,7 +16,7 @@ export async function handle_cron(ctx: RouteContext): Promise<boolean> {
     const cron = cron_or_503(ctx);
     if (!cron) return true;
     const include_disabled = url.searchParams.get("include_disabled") === "1";
-    json(res, 200, await cron.list_jobs(include_disabled));
+    json(res, 200, await cron.list_jobs(include_disabled, get_filter_team_id(ctx)));
     return true;
   }
 
@@ -49,7 +50,8 @@ export async function handle_cron(ctx: RouteContext): Promise<boolean> {
     const job_id = decodeURIComponent(job_match[1]);
     const body = await read_body(req);
     const enabled = body?.enabled !== false;
-    const job = await cron.enable_job(job_id, enabled);
+    const scope = { team_id: get_filter_team_id(ctx) };
+    const job = await cron.enable_job(job_id, enabled, scope);
     json(res, job ? 200 : 404, job ?? { error: "not_found" });
     return true;
   }
@@ -59,7 +61,7 @@ export async function handle_cron(ctx: RouteContext): Promise<boolean> {
     const cron = cron_or_503(ctx);
     if (!cron) return true;
     const job_id = decodeURIComponent(job_match[1]);
-    const removed = await cron.remove_job(job_id);
+    const removed = await cron.remove_job(job_id, { team_id: get_filter_team_id(ctx) });
     json(res, removed ? 200 : 404, { removed });
     return true;
   }
@@ -72,7 +74,7 @@ export async function handle_cron(ctx: RouteContext): Promise<boolean> {
     const job_id = decodeURIComponent(run_match[1]);
     const body = await read_body(req);
     const force = body?.force === true;
-    const ok = await cron.run_job(job_id, force);
+    const ok = await cron.run_job(job_id, force, { team_id: get_filter_team_id(ctx) });
     json(res, ok ? 200 : 404, { ok });
     return true;
   }

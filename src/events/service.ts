@@ -403,6 +403,7 @@ export class WorkflowEventService {
     const next_status = this.map_phase_to_status(event);
     const base: TaskState = existing || {
       taskId: task_id,
+      team_id: "",
       title: normalize_text(event.summary).slice(0, 120) || `Workflow:${task_id}`,
       objective: normalize_text(event.summary).slice(0, 200),
       channel: normalize_text(event.provider),

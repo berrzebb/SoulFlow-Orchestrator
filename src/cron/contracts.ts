@@ -1,3 +1,4 @@
+import type { TeamScopeOpts } from "../contracts.js";
 import type { CronJob, CronJobOverrides, CronRetryPolicy, CronSchedule, CronServiceStatus } from "./types.js";
 
 export interface CronScheduler {
@@ -9,12 +10,12 @@ export interface CronScheduler {
     channel?: string | null,
     to?: string | null,
     delete_after_run?: boolean,
-    options?: { retry?: CronRetryPolicy; overrides?: CronJobOverrides },
+    options?: { retry?: CronRetryPolicy; overrides?: CronJobOverrides; team_id?: string },
   ): Promise<CronJob>;
-  remove_job(job_id: string): Promise<boolean>;
-  enable_job(job_id: string, enabled?: boolean): Promise<CronJob | null>;
-  run_job(job_id: string, force?: boolean): Promise<boolean>;
-  list_jobs(include_disabled?: boolean): Promise<CronJob[]>;
+  remove_job(job_id: string, opts?: TeamScopeOpts): Promise<boolean>;
+  enable_job(job_id: string, enabled?: boolean, opts?: TeamScopeOpts): Promise<CronJob | null>;
+  run_job(job_id: string, force?: boolean, opts?: TeamScopeOpts): Promise<boolean>;
+  list_jobs(include_disabled?: boolean, team_id?: string): Promise<CronJob[]>;
   status(): Promise<CronServiceStatus>;
   every(ms: number, fn: () => Promise<void>): void;
   /** 크론 스케줄러 일시 정지 — 등록된 작업은 유지하되 실행을 중단. */

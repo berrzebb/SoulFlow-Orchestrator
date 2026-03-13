@@ -31,6 +31,7 @@ export type CompactionFlushConfig = {
 export type AgentLoopRunOptions = {
   loop_id: string;
   agent_id: string;
+  team_id?: string;
   objective: string;
   context_builder: ContextBuilder;
   providers: ProviderRegistry;
@@ -81,6 +82,7 @@ export type TaskNode = {
 
 export type TaskLoopRunOptions = {
   task_id: string;
+  team_id?: string;
   title: string;
   objective: string;
   channel: string;

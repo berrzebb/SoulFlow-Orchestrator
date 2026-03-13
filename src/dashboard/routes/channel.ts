@@ -1,4 +1,5 @@
 import type { RouteContext } from "../route-context.js";
+import { require_superadmin_for_write } from "../route-context.js";
 
 function channel_ops_or_503(ctx: RouteContext) {
   const ops = ctx.options.channel_ops ?? null;
@@ -7,6 +8,7 @@ function channel_ops_or_503(ctx: RouteContext) {
 }
 
 export async function handle_channel(ctx: RouteContext): Promise<boolean> {
+  if (!require_superadmin_for_write(ctx)) return true;
   const { req, url, res, json, read_body } = ctx;
   const path = url.pathname;
 

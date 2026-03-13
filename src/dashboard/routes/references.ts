@@ -45,7 +45,7 @@ export async function handle_references(ctx: RouteContext): Promise<boolean> {
     const filename = String(body?.filename || "").replace(/[/\\:*?"<>|]/g, "_");
     if (!filename) { json(res, 400, { error: "filename required" }); return true; }
 
-    const refs_dir = join(options.workspace || "workspace", "references");
+    const refs_dir = join(ctx.personal_dir, "references");
     await mkdir(refs_dir, { recursive: true });
 
     if (body?.base64) {
@@ -68,7 +68,7 @@ export async function handle_references(ctx: RouteContext): Promise<boolean> {
   const del_match = path.match(/^\/api\/references\/([^/]+)$/);
   if (del_match && req.method === "DELETE") {
     const filename = decodeURIComponent(del_match[1]);
-    const refs_dir = join(options.workspace || "workspace", "references");
+    const refs_dir = join(ctx.personal_dir, "references");
     const filepath = join(refs_dir, filename);
 
     // path traversal 차단: resolve() 정규화 후 base dir 포함 여부 확인

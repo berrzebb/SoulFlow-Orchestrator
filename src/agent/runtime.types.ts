@@ -36,6 +36,7 @@ export type AgentApprovalRequest = {
     chat_id?: string;
     sender_id?: string;
     task_id?: string;
+    team_id?: string;
   };
 };
 

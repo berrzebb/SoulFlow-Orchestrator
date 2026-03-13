@@ -230,6 +230,7 @@ export class AgentLoopStore {
     const state: AgentLoopState = {
       loopId: options.loop_id,
       agentId: options.agent_id,
+      team_id: options.team_id ?? "",
       objective: options.objective,
       currentTurn: 0,
       maxTurns: max_turns,
@@ -367,6 +368,7 @@ export class AgentLoopStore {
     const existing = this.tasks.get(options.task_id);
     const state: TaskState = existing || {
       taskId: options.task_id,
+      team_id: options.team_id ?? "",
       title: options.title,
       objective: options.objective,
       channel: options.channel,

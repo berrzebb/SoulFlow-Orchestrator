@@ -1,4 +1,5 @@
 import type { RouteContext } from "../route-context.js";
+import { get_filter_team_id } from "../route-context.js";
 
 export async function handle_agent(ctx: RouteContext): Promise<boolean> {
   const { req, url, res, options, json, read_body } = ctx;
@@ -6,7 +7,7 @@ export async function handle_agent(ctx: RouteContext): Promise<boolean> {
 
   // GET /api/agents
   if (path === "/api/agents" && req.method === "GET") {
-    const refs = options.agent.list_subagents();
+    const refs = options.agent.list_subagents(get_filter_team_id(ctx));
     const agents = refs.map((a) => ({
       id: a.id,
       label: a.label || a.id,
@@ -27,7 +28,7 @@ export async function handle_agent(ctx: RouteContext): Promise<boolean> {
   const id_match = path.match(/^\/api\/agents\/([^/]+)$/);
   if (id_match && req.method === "DELETE") {
     const agent_id = decodeURIComponent(id_match[1]);
-    const ok = options.agent.cancel_subagent(agent_id);
+    const ok = options.agent.cancel_subagent(agent_id, { team_id: get_filter_team_id(ctx) });
     json(res, ok ? 200 : 404, { cancelled: ok });
     return true;
   }
@@ -39,7 +40,7 @@ export async function handle_agent(ctx: RouteContext): Promise<boolean> {
     const agent_id = decodeURIComponent(input_match[1]);
     const text = String(body?.text || "").trim();
     if (!text) { json(res, 400, { error: "text_required" }); return true; }
-    const ok = options.agent.send_input_to_subagent(agent_id, text);
+    const ok = options.agent.send_input_to_subagent(agent_id, text, { team_id: get_filter_team_id(ctx) });
     json(res, ok ? 200 : 404, { sent: ok });
     return true;
   }

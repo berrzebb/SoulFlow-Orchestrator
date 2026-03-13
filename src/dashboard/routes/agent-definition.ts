@@ -1,4 +1,5 @@
 import type { RouteContext } from "../route-context.js";
+import { require_superadmin_for_write } from "../route-context.js";
 import type { DashboardAgentDefinitionOps } from "../ops/agent-definition.js";
 
 function ops_or_503(ctx: RouteContext): DashboardAgentDefinitionOps | null {
@@ -8,6 +9,7 @@ function ops_or_503(ctx: RouteContext): DashboardAgentDefinitionOps | null {
 }
 
 export async function handle_agent_definition(ctx: RouteContext): Promise<boolean> {
+  if (!require_superadmin_for_write(ctx)) return true;
   const { req, url, res, json, read_body } = ctx;
   const path = url.pathname;
 

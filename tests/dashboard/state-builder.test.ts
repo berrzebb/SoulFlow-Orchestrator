@@ -348,6 +348,78 @@ describe("build_dashboard_state — approvals/loops/cron", () => {
   });
 });
 
+// ══════════════════════════════════════════
+// team_id 스코핑 테스트
+// ══════════════════════════════════════════
+
+describe("build_merged_tasks — team_id filtering", () => {
+  it("team_id 전달 시 해당 팀 태스크만 반환한다", async () => {
+    const opts = {
+      agent: {
+        list_runtime_tasks: vi.fn(() => [
+          { taskId: "t1", team_id: "alpha", title: "A", status: "running", currentTurn: 1, maxTurns: 10, channel: "", chatId: "", objective: "", memory: {} },
+          { taskId: "t2", team_id: "beta", title: "B", status: "running", currentTurn: 1, maxTurns: 10, channel: "", chatId: "", objective: "", memory: {} },
+        ]),
+        list_stored_tasks: vi.fn(async () => [
+          { taskId: "t3", team_id: "alpha", title: "C", status: "completed", currentTurn: 5, maxTurns: 10, channel: "", chatId: "", objective: "", memory: {} },
+        ]),
+      },
+    } as any;
+    const tasks = await build_merged_tasks(opts, "alpha");
+    expect(tasks).toHaveLength(2);
+    expect(tasks.every((t) => t.taskId !== "t2")).toBe(true);
+  });
+
+  it("team_id 미전달 시 전체 태스크 반환한다", async () => {
+    const opts = {
+      agent: {
+        list_runtime_tasks: vi.fn(() => [
+          { taskId: "t1", team_id: "alpha", title: "A", status: "running", currentTurn: 1, maxTurns: 10, channel: "", chatId: "", objective: "", memory: {} },
+          { taskId: "t2", team_id: "beta", title: "B", status: "running", currentTurn: 1, maxTurns: 10, channel: "", chatId: "", objective: "", memory: {} },
+        ]),
+        list_stored_tasks: vi.fn(async () => []),
+      },
+    } as any;
+    const tasks = await build_merged_tasks(opts);
+    expect(tasks).toHaveLength(2);
+  });
+});
+
+describe("build_dashboard_state — team_id scoping", () => {
+  it("team_id 전달 시 process_tracker에 team_id를 전달한다", async () => {
+    const tracker = {
+      list_active: vi.fn(() => []),
+      list_recent: vi.fn(() => []),
+    };
+    const opts = make_full_options({ process_tracker: tracker });
+    await build_dashboard_state(opts, [], "team-x");
+    expect(tracker.list_active).toHaveBeenCalledWith("team-x");
+    expect(tracker.list_recent).toHaveBeenCalledWith(20, "team-x");
+  });
+
+  it("team_id 미전달 시 process_tracker에 undefined를 전달한다", async () => {
+    const tracker = {
+      list_active: vi.fn(() => []),
+      list_recent: vi.fn(() => []),
+    };
+    const opts = make_full_options({ process_tracker: tracker });
+    await build_dashboard_state(opts, []);
+    expect(tracker.list_active).toHaveBeenCalledWith(undefined);
+    expect(tracker.list_recent).toHaveBeenCalledWith(20, undefined);
+  });
+
+  it("team_id 전달 시 recent_messages를 team_id로 필터링한다", async () => {
+    const opts = make_full_options();
+    const msgs = [
+      { direction: "inbound", sender_id: "u1", content: "a", chat_id: "", at: "2026-01-01", team_id: "alpha" },
+      { direction: "inbound", sender_id: "u2", content: "b", chat_id: "", at: "2026-01-01", team_id: "beta" },
+      { direction: "inbound", sender_id: "u3", content: "c", chat_id: "", at: "2026-01-01", team_id: "alpha" },
+    ] as any[];
+    const state = await build_dashboard_state(opts, msgs, "alpha");
+    expect((state.messages as any[]).length).toBe(2);
+  });
+});
+
 describe("build_dashboard_state — recent_messages sender lookup", () => {
   it("subagent sender → agents.last_message", async () => {
     const opts = make_full_options({

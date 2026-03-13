@@ -19,16 +19,16 @@ export type MirrorMessageEvent = {
 
 export interface SseBroadcasterLike {
   broadcast_process_event(type: "start" | "end", entry: ProcessEntry): void;
-  broadcast_message_event(direction: "inbound" | "outbound", sender_id: string, content?: string, chat_id?: string): void;
-  broadcast_cron_event(type: string, job_id?: string): void;
-  broadcast_progress_event(event: ProgressEvent): void;
+  broadcast_message_event(direction: "inbound" | "outbound", sender_id: string, content?: string, chat_id?: string, team_id?: string): void;
+  broadcast_cron_event(type: string, job_id?: string, team_id?: string): void;
+  broadcast_progress_event(event: ProgressEvent, team_id?: string): void;
   broadcast_task_event(type: "status_change", task: TaskState): void;
-  broadcast_web_stream(chat_id: string, content: string, done: boolean): void;
+  broadcast_web_stream(chat_id: string, content: string, done: boolean, team_id?: string): void;
   /** 어시스턴트 메시지가 세션에 저장된 직후 발송 — 프론트엔드가 폴링 없이 즉시 refetch. */
-  broadcast_web_message(chat_id: string): void;
-  broadcast_mirror_message(event: MirrorMessageEvent): void;
-  broadcast_workflow_event(event: PhaseLoopEvent): void;
-  broadcast_agent_event(event: AgentEvent): void;
+  broadcast_web_message(chat_id: string, team_id?: string): void;
+  broadcast_mirror_message(event: MirrorMessageEvent, team_id?: string): void;
+  broadcast_workflow_event(event: PhaseLoopEvent, team_id?: string): void;
+  broadcast_agent_event(event: AgentEvent, team_id?: string): void;
   /** 웹 채팅 세션에 rich 이벤트(도구, usage) 발행 — on_web_rich_event에서 호출. */
   broadcast_web_rich_event(chat_id: string, event: StreamEvent): void;
   /** 세션별 StreamEvent 리스너 등록. 반환값은 해제 함수. */

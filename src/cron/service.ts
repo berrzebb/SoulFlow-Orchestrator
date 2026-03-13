@@ -1,6 +1,7 @@
 import { mkdir, open, stat, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
+import type { TeamScopeOpts } from "../contracts.js";
 import { with_sqlite, with_sqlite_strict } from "../utils/sqlite-helper.js";
 import type {
   CronJob,
@@ -22,6 +23,7 @@ import { now_ms, error_message, short_id} from "../utils/common.js";
 
 type CronDbRow = {
   id: string;
+  team_id: string;
   name: string;
   enabled: number;
   schedule_kind: string;
@@ -344,6 +346,7 @@ function _row_to_job(row: CronDbRow): CronJob {
   const has_retry = row.retry_max_retries !== null && row.retry_max_retries !== undefined;
   return {
     id: String(row.id || ""),
+    team_id: String(row.team_id || ""),
     name: String(row.name || ""),
     enabled: Number(row.enabled || 0) === 1,
     schedule: {
@@ -397,7 +400,7 @@ export class CronService implements CronScheduler, ServiceLike {
   private _running = false;
   private _paused = false;
   private readonly logger: Logger | null;
-  private readonly _on_change: ((type: import("./types.js").CronChangeType, job_id?: string) => void) | null;
+  private readonly _on_change: ((type: import("./types.js").CronChangeType, job_id?: string, team_id?: string) => void) | null;
 
   constructor(store_path: string, on_job: CronOnJob | null = null, options?: CronServiceOptions) {
     this.store_path = store_path;
@@ -502,6 +505,8 @@ export class CronService implements CronScheduler, ServiceLike {
       for (const col of v2_columns) {
         try { db.exec(`ALTER TABLE cron_jobs ADD COLUMN ${col}`); } catch { /* 이미 존재 */ }
       }
+      // v3 마이그레이션: team_id 컬럼 추가
+      try { db.exec("ALTER TABLE cron_jobs ADD COLUMN team_id TEXT NOT NULL DEFAULT ''"); } catch { /* 이미 존재 */ }
       return true;
     });
   }
@@ -513,18 +518,19 @@ export class CronService implements CronScheduler, ServiceLike {
         db.prepare("DELETE FROM cron_jobs").run();
         const stmt = db.prepare(`
           INSERT INTO cron_jobs (
-            id, name, enabled, schedule_kind, schedule_at_ms, schedule_every_ms, schedule_expr, schedule_tz,
+            id, team_id, name, enabled, schedule_kind, schedule_at_ms, schedule_every_ms, schedule_expr, schedule_tz,
             schedule_stagger_ms,
             payload_kind, payload_message, payload_deliver, payload_channel, payload_to, payload_overrides,
             state_next_run_at_ms, state_last_run_at_ms, state_last_status, state_last_error, state_running,
             state_running_started_at_ms, state_retry_attempt,
             created_at_ms, updated_at_ms, delete_after_run,
             retry_max_retries, retry_backoff_ms
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `);
         for (const job of store.jobs) {
           stmt.run(
             job.id,
+            job.team_id ?? "",
             job.name,
             job.enabled ? 1 : 0,
             job.schedule.kind,
@@ -571,7 +577,7 @@ export class CronService implements CronScheduler, ServiceLike {
     if (this._store) return this._store;
     const rows = with_sqlite(this.sqlite_path,(db) => db.prepare(`
       SELECT
-        id, name, enabled, schedule_kind, schedule_at_ms, schedule_every_ms, schedule_expr, schedule_tz,
+        id, team_id, name, enabled, schedule_kind, schedule_at_ms, schedule_every_ms, schedule_expr, schedule_tz,
         schedule_stagger_ms,
         payload_kind, payload_message, payload_deliver, payload_channel, payload_to, payload_overrides,
         state_next_run_at_ms, state_last_run_at_ms, state_last_status, state_last_error, state_running,
@@ -717,7 +723,7 @@ export class CronService implements CronScheduler, ServiceLike {
       } else {
         job.state.next_run_at_ms = _compute_next_run(job.schedule, now_ms(), (m) => this.logger?.warn(m), job.id);
       }
-      this._notify("executed", job.id);
+      this._notify("executed", job.id, job.team_id);
     } finally {
       await this._release_job_lock(lock_path);
     }
@@ -751,8 +757,8 @@ export class CronService implements CronScheduler, ServiceLike {
     }
   }
 
-  private _notify(type: import("./types.js").CronChangeType, job_id?: string): void {
-    try { this._on_change?.(type, job_id); } catch { /* noop */ }
+  private _notify(type: import("./types.js").CronChangeType, job_id?: string, team_id?: string): void {
+    try { this._on_change?.(type, job_id, team_id); } catch { /* noop */ }
   }
 
   private _is_running_fresh(job: CronJob, now = now_ms()): boolean {
@@ -844,9 +850,10 @@ export class CronService implements CronScheduler, ServiceLike {
     this._notify("resumed");
   }
 
-  async list_jobs(include_disabled = false): Promise<CronJob[]> {
+  async list_jobs(include_disabled = false, team_id?: string): Promise<CronJob[]> {
     const store = await this._load_store();
-    const jobs = include_disabled ? [...store.jobs] : store.jobs.filter((j) => j.enabled);
+    let jobs = include_disabled ? [...store.jobs] : store.jobs.filter((j) => j.enabled);
+    if (team_id !== undefined) jobs = jobs.filter((j) => j.team_id === team_id);
     return jobs.sort((a, b) => {
       const aa = a.state.next_run_at_ms ?? Number.MAX_SAFE_INTEGER;
       const bb = b.state.next_run_at_ms ?? Number.MAX_SAFE_INTEGER;
@@ -862,7 +869,7 @@ export class CronService implements CronScheduler, ServiceLike {
     channel: string | null = null,
     to: string | null = null,
     delete_after_run?: boolean,
-    options?: { retry?: CronRetryPolicy; overrides?: CronJobOverrides },
+    options?: { retry?: CronRetryPolicy; overrides?: CronJobOverrides; team_id?: string },
   ): Promise<CronJob> {
     const store = await this._load_store();
     _validate_schedule_for_add(schedule);
@@ -873,6 +880,7 @@ export class CronService implements CronScheduler, ServiceLike {
     const id = short_id(8);
     const job: CronJob = {
       id,
+      team_id: options?.team_id ?? "",
       name,
       enabled: true,
       schedule,
@@ -900,28 +908,34 @@ export class CronService implements CronScheduler, ServiceLike {
     };
     store.jobs.push(job);
     await this._save_and_rearm();
-    this._notify("added", job.id);
+    this._notify("added", job.id, job.team_id);
     this.logger?.info("cron_job_add", { job_id: job.id, name, schedule: schedule.kind });
     return job;
   }
 
-  async remove_job(job_id: string): Promise<boolean> {
+  async remove_job(job_id: string, opts?: TeamScopeOpts): Promise<boolean> {
     const store = await this._load_store();
+    if (opts?.team_id !== undefined) {
+      const target = store.jobs.find((j) => j.id === job_id);
+      if (!target || target.team_id !== opts.team_id) return false;
+    }
+    const target_team_id = store.jobs.find((j) => j.id === job_id)?.team_id;
     const before = store.jobs.length;
     store.jobs = store.jobs.filter((j) => j.id !== job_id);
     const removed = store.jobs.length < before;
     if (removed) {
       await this._save_and_rearm();
-      this._notify("removed", job_id);
+      this._notify("removed", job_id, target_team_id);
       this.logger?.info("cron_job_remove", { job_id });
     }
     return removed;
   }
 
-  async enable_job(job_id: string, enabled = true): Promise<CronJob | null> {
+  async enable_job(job_id: string, enabled = true, opts?: TeamScopeOpts): Promise<CronJob | null> {
     const store = await this._load_store();
     for (const job of store.jobs) {
       if (job.id !== job_id) continue;
+      if (opts?.team_id !== undefined && job.team_id !== opts.team_id) return null;
       job.enabled = enabled;
       job.updated_at_ms = now_ms();
       if (enabled) {
@@ -930,17 +944,18 @@ export class CronService implements CronScheduler, ServiceLike {
       }
       else job.state.next_run_at_ms = null;
       await this._save_and_rearm();
-      this._notify(enabled ? "enabled" : "disabled", job_id);
+      this._notify(enabled ? "enabled" : "disabled", job_id, job.team_id);
       this.logger?.info("cron_job_toggle", { job_id, enabled });
       return job;
     }
     return null;
   }
 
-  async run_job(job_id: string, force = false): Promise<boolean> {
+  async run_job(job_id: string, force = false, opts?: TeamScopeOpts): Promise<boolean> {
     const store = await this._load_store();
     for (const job of store.jobs) {
       if (job.id !== job_id) continue;
+      if (opts?.team_id !== undefined && job.team_id !== opts.team_id) return false;
       if (!force && !job.enabled) return false;
       await this._execute_job(job);
       await this._save_and_rearm();

@@ -56,11 +56,12 @@ export async function handle_chat(ctx: RouteContext): Promise<boolean> {
   const { req, url, res, json, read_body, auth_user, chat_sessions, session_store, session_store_key, bus, add_rich_stream_listener } = ctx;
   const path = url.pathname;
   const user_id = auth_user?.sub ?? "";
+  const team_id = auth_user?.tid ?? "";
 
   // GET /api/chat/sessions
   if (path === "/api/chat/sessions" && req.method === "GET") {
     const sessions = [...chat_sessions.values()]
-      .filter((s) => s.user_id === user_id)
+      .filter((s) => s.user_id === user_id && s.team_id === team_id)
       .map((s) => ({
         id: s.id,
         created_at: s.created_at,
@@ -74,7 +75,7 @@ export async function handle_chat(ctx: RouteContext): Promise<boolean> {
   // POST /api/chat/sessions — 새 세션 생성
   if (path === "/api/chat/sessions" && req.method === "POST") {
     const id = `web_${short_id(8)}`;
-    const session: ChatSession = { id, user_id, created_at: now_iso(), messages: [] };
+    const session: ChatSession = { id, user_id, team_id, created_at: now_iso(), messages: [] };
     chat_sessions.set(id, session);
     if (chat_sessions.size > MAX_CHAT_SESSIONS) {
       const oldest = chat_sessions.keys().next().value;
@@ -94,7 +95,7 @@ export async function handle_chat(ctx: RouteContext): Promise<boolean> {
     const session_id = decodeURIComponent(id_match[1]);
     const session = chat_sessions.get(session_id);
     // 세션 미존재 또는 다른 사용자 소유 → 동일하게 404 반환 (존재 여부 노출 방지)
-    if (!session || session.user_id !== user_id) { json(res, 404, { error: "not_found" }); return true; }
+    if (!session || session.user_id !== user_id || session.team_id !== team_id) { json(res, 404, { error: "not_found" }); return true; }
     json(res, 200, session);
     return true;
   }
@@ -103,7 +104,7 @@ export async function handle_chat(ctx: RouteContext): Promise<boolean> {
   if (id_match && req.method === "PATCH") {
     const session_id = decodeURIComponent(id_match[1]);
     const session = chat_sessions.get(session_id);
-    if (!session || session.user_id !== user_id) { json(res, 404, { error: "not_found" }); return true; }
+    if (!session || session.user_id !== user_id || session.team_id !== team_id) { json(res, 404, { error: "not_found" }); return true; }
     const body = await read_body(req);
     const name = typeof body?.name === "string" ? body.name.trim().slice(0, 100) : undefined;
     if (name !== undefined) session.name = name || undefined;
@@ -115,7 +116,7 @@ export async function handle_chat(ctx: RouteContext): Promise<boolean> {
   if (id_match && req.method === "DELETE") {
     const session_id = decodeURIComponent(id_match[1]);
     const session = chat_sessions.get(session_id);
-    if (!session || session.user_id !== user_id) { json(res, 404, { error: "not_found" }); return true; }
+    if (!session || session.user_id !== user_id || session.team_id !== team_id) { json(res, 404, { error: "not_found" }); return true; }
     chat_sessions.delete(session_id);
     await session_store?.delete?.(session_store_key(session_id));
     json(res, 200, { deleted: true });
@@ -127,7 +128,7 @@ export async function handle_chat(ctx: RouteContext): Promise<boolean> {
   if (stream_match && req.method === "POST") {
     const session_id = decodeURIComponent(stream_match[1]);
     const session = chat_sessions.get(session_id);
-    if (!session || session.user_id !== user_id) { json(res, 404, { error: "session_not_found" }); return true; }
+    if (!session || session.user_id !== user_id || session.team_id !== team_id) { json(res, 404, { error: "session_not_found" }); return true; }
     const body = await read_body(req);
     const parsed = parse_chat_body(body);
     if (!parsed.text && parsed.media.length === 0) { json(res, 400, { error: "content_or_media_required" }); return true; }
@@ -166,7 +167,7 @@ export async function handle_chat(ctx: RouteContext): Promise<boolean> {
   if (msg_match && req.method === "POST") {
     const session_id = decodeURIComponent(msg_match[1]);
     const session = chat_sessions.get(session_id);
-    if (!session || session.user_id !== user_id) { json(res, 404, { error: "session_not_found" }); return true; }
+    if (!session || session.user_id !== user_id || session.team_id !== team_id) { json(res, 404, { error: "session_not_found" }); return true; }
     const body = await read_body(req);
     const parsed = parse_chat_body(body);
     if (!parsed.text && parsed.media.length === 0) { json(res, 400, { error: "content_or_media_required" }); return true; }

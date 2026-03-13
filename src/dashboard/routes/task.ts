@@ -1,4 +1,5 @@
 import type { RouteContext } from "../route-context.js";
+import { get_filter_team_id } from "../route-context.js";
 
 export async function handle_task(ctx: RouteContext): Promise<boolean> {
   const { req, url, res, options, json, read_body, build_merged_tasks } = ctx;
@@ -6,17 +7,18 @@ export async function handle_task(ctx: RouteContext): Promise<boolean> {
 
   // GET /api/tasks
   if (path === "/api/tasks" && req.method === "GET") {
-    json(res, 200, await build_merged_tasks());
+    json(res, 200, await build_merged_tasks(get_filter_team_id(ctx)));
     return true;
   }
 
   // GET /api/tasks/:id
   const id_match = path.match(/^\/api\/tasks\/([^/]+)$/);
+  const scope = { team_id: get_filter_team_id(ctx) };
   if (id_match && req.method === "GET") {
     const ops = options.task_ops;
     if (!ops) { json(res, 503, { error: "task_ops_unavailable" }); return true; }
     const task_id = decodeURIComponent(id_match[1]);
-    const task = await ops.get_task(task_id);
+    const task = await ops.get_task(task_id, scope);
     json(res, task ? 200 : 404, task ?? { error: "not_found" });
     return true;
   }
@@ -26,7 +28,7 @@ export async function handle_task(ctx: RouteContext): Promise<boolean> {
     const ops = options.task_ops;
     if (!ops) { json(res, 503, { error: "task_ops_unavailable" }); return true; }
     const task_id = decodeURIComponent(id_match[1]);
-    const result = await ops.cancel_task(task_id, "cancelled_from_dashboard");
+    const result = await ops.cancel_task(task_id, "cancelled_from_dashboard", scope);
     json(res, result ? 200 : 404, result ?? { error: "not_found" });
     return true;
   }
@@ -38,7 +40,7 @@ export async function handle_task(ctx: RouteContext): Promise<boolean> {
     const task_id = decodeURIComponent(id_match[1]);
     const body = await read_body(req);
     const text = String(body?.text || "").trim() || undefined;
-    const result = await ops.resume_task(task_id, text);
+    const result = await ops.resume_task(task_id, text, scope);
     json(res, result ? 200 : 404, result ?? { error: "not_found" });
     return true;
   }

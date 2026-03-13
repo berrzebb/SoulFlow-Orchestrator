@@ -1,4 +1,5 @@
 import type { RouteContext } from "../route-context.js";
+import { require_superadmin_for_write } from "../route-context.js";
 
 function oauth_ops_or_503(ctx: RouteContext) {
   const ops = ctx.options.oauth_ops ?? null;
@@ -7,6 +8,7 @@ function oauth_ops_or_503(ctx: RouteContext) {
 }
 
 export async function handle_oauth(ctx: RouteContext): Promise<boolean> {
+  if (!require_superadmin_for_write(ctx)) return true;
   const { req, url, res, options, json, read_body, oauth_callback_handler, oauth_callback_html, resolve_request_origin } = ctx;
   const path = url.pathname;
 

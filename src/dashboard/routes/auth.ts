@@ -8,7 +8,7 @@
  *   GET  /api/auth/me      — 현재 로그인 사용자 정보
  */
 
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { RouteContext } from "../route-context.js";
 import { make_auth_cookie, clear_auth_cookie } from "../../auth/auth-middleware.js";
@@ -57,6 +57,17 @@ export async function handle_auth(ctx: RouteContext): Promise<boolean> {
 
     const result = await auth_svc.setup_superadmin(username, password);
     if (!result) { json(res, 500, { error: "setup_failed" }); return true; }
+
+    // 워크스페이스 디렉토리 + TeamStore 멤버십 동기화 (admin.ts create_user와 동일)
+    const workspace = options.workspace ?? "";
+    const team_id = "default";
+    if (workspace) {
+      const base = join(workspace, "tenants", team_id, "users", result.payload.sub);
+      for (const sub of ["workflows", "skills", "templates", "runtime"]) {
+        mkdirSync(join(base, sub), { recursive: true });
+      }
+      new TeamStore(team_db_path(workspace, team_id), team_id).upsert_member(result.payload.sub, "owner");
+    }
 
     res.setHeader("Set-Cookie", make_auth_cookie(result.token));
     json(res, 201, { ok: true, username: result.payload.usr, role: result.payload.role });
@@ -163,6 +174,9 @@ export async function handle_auth(ctx: RouteContext): Promise<boolean> {
 
     const result = auth_svc.issue_token_for_team(p.sub, team_id);
     if (!result) { json(res, 404, { error: "user_not_found" }); return true; }
+
+    // 새 팀의 워크스페이스 런타임 사전 생성 (후속 요청 cold start 방지)
+    options.workspace_registry?.get_or_create({ team_id, user_id: p.sub });
 
     res.setHeader("Set-Cookie", make_auth_cookie(result.token));
     json(res, 200, { ok: true, tid: team_id });

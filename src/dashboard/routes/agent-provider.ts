@@ -1,4 +1,5 @@
 import type { RouteContext } from "../route-context.js";
+import { require_superadmin_for_write } from "../route-context.js";
 import { error_message } from "../../utils/common.js";
 
 function agent_provider_ops_or_503(ctx: RouteContext) {
@@ -8,6 +9,7 @@ function agent_provider_ops_or_503(ctx: RouteContext) {
 }
 
 export async function handle_agent_provider(ctx: RouteContext): Promise<boolean> {
+  if (!require_superadmin_for_write(ctx)) return true;
   const { req, url, res, json, read_body } = ctx;
   const path = url.pathname;
 

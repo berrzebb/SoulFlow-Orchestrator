@@ -65,6 +65,8 @@ export const DEFAULT_RETRY_ONESHOT: CronRetryPolicy = {
 
 export type CronJob = {
   id: string;
+  /** 소유 팀. 빈 문자열이면 전역(팀 미지정). */
+  team_id: string;
   name: string;
   enabled: boolean;
   schedule: CronSchedule;
@@ -89,7 +91,7 @@ export type CronChangeType = "executed" | "added" | "removed" | "enabled" | "dis
 export type CronServiceOptions = {
   running_lease_ms?: number;
   logger?: import("../logger.js").Logger | null;
-  on_change?: (type: CronChangeType, job_id?: string) => void;
+  on_change?: (type: CronChangeType, job_id?: string, team_id?: string) => void;
 };
 
 export type CronServiceStatus = {

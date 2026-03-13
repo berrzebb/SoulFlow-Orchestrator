@@ -29,8 +29,8 @@ const BOB_TEAM1: JwtPayload = { sub: "bob", usr: "bob", role: "user", tid: "team
 
 // ── 헬퍼 ──
 
-function make_session(id: string, user_id: string): ChatSession {
-  return { id, user_id, created_at: "2026-01-01T00:00:00Z", messages: [] };
+function make_session(id: string, user_id: string, team_id = ""): ChatSession {
+  return { id, user_id, team_id, created_at: "2026-01-01T00:00:00Z", messages: [] };
 }
 
 type JsonSpy = { status: number; data: unknown };
@@ -173,7 +173,7 @@ describe("Phase 8-25: WorkspaceRuntimeLocator 인터페이스", () => {
 describe("Phase 8-26: 팀 전환 시 세션 범위 분리", () => {
   it("같은 유저가 team_1에서 생성한 세션은 team_2 컨텍스트에서 접근 불가", async () => {
     const sessions = new Map<string, ChatSession>();
-    sessions.set("s1", make_session("s1", "alice"));
+    sessions.set("s1", make_session("s1", "alice", "team_1"));
 
     // team_1 컨텍스트에서 세션 조회 → 성공
     const ctx_t1 = make_ctx({
@@ -185,9 +185,7 @@ describe("Phase 8-26: 팀 전환 시 세션 범위 분리", () => {
     await handle_chat(ctx_t1);
     expect(ctx_t1._json.status).toBe(200);
 
-    // team_2 컨텍스트에서 동일 세션 조회 → 여전히 200 (현재는 user_id만 체크)
-    // Phase 8 완전 구현 시에는 team_id 체크도 추가되어 404가 되어야 하지만,
-    // 현재 단계에서는 user_id 격리만 보장
+    // team_2 컨텍스트에서 동일 세션 조회 → 404 (team_id 불일치)
     const ctx_t2 = make_ctx({
       method: "GET",
       path: "/api/chat/sessions/s1",
@@ -195,13 +193,12 @@ describe("Phase 8-26: 팀 전환 시 세션 범위 분리", () => {
       chat_sessions: sessions,
     });
     await handle_chat(ctx_t2);
-    // user_id가 동일하므로 현재는 접근 가능 (Phase 8 partial)
-    expect(ctx_t2._json.status).toBe(200);
+    expect(ctx_t2._json.status).toBe(404);
   });
 
   it("다른 유저의 세션은 같은 팀이라도 접근 불가", async () => {
     const sessions = new Map<string, ChatSession>();
-    sessions.set("s1", make_session("s1", "alice"));
+    sessions.set("s1", make_session("s1", "alice", "team_1"));
 
     const ctx = make_ctx({
       method: "GET",

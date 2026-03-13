@@ -1,4 +1,5 @@
 import type { RouteContext } from "../route-context.js";
+import { get_filter_team_id } from "../route-context.js";
 
 export async function handle_session(ctx: RouteContext): Promise<boolean> {
   const { req, url, res, json, session_store } = ctx;
@@ -11,19 +12,23 @@ export async function handle_session(ctx: RouteContext): Promise<boolean> {
     const provider_filter = url.searchParams.get("provider") ?? "";
     const prefix = provider_filter ? `${provider_filter}:` : "";
     const entries = await store.list_by_prefix(prefix, 200);
-    const list = entries.map((e) => {
-      const parts = e.key.split(":");
-      return {
-        key: e.key,
-        provider: parts[0] ?? "",
-        chat_id: parts[1] ?? "",
-        alias: parts[2] ?? "",
-        thread: parts[3] ?? "main",
-        created_at: e.created_at,
-        updated_at: e.updated_at,
-        message_count: e.message_count,
-      };
-    });
+    const team_id = get_filter_team_id(ctx);
+    const list = entries
+      .map((e) => {
+        const parts = e.key.split(":");
+        return {
+          key: e.key,
+          provider: parts[0] ?? "",
+          team_id: parts[1] ?? "",
+          chat_id: parts[2] ?? "",
+          alias: parts[3] ?? "",
+          thread: parts[4] ?? "main",
+          created_at: e.created_at,
+          updated_at: e.updated_at,
+          message_count: e.message_count,
+        };
+      })
+      .filter((s) => team_id === undefined || s.team_id === team_id);
     json(res, 200, list);
     return true;
   }

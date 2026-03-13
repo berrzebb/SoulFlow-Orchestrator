@@ -1,6 +1,7 @@
 /** 칸반 보드 REST API 핸들러. */
 
 import type { RouteContext } from "../route-context.js";
+import { get_filter_team_id } from "../route-context.js";
 import type { KanbanStoreLike, ScopeType, KanbanColumnDef, Priority, RelationType, KanbanRule, FilterCriteria, KanbanEvent } from "../../services/kanban-store.js";
 import type { KanbanRuleExecutor } from "../../services/kanban-rule-executor.js";
 import { error_message } from "../../utils/common.js";
@@ -19,6 +20,25 @@ function store_or_503(ctx: RouteContext): KanbanStoreLike | null {
   const store = get_store(ctx);
   if (!store) ctx.json(ctx.res, 503, { error: "kanban_unavailable" });
   return store;
+}
+
+/** 사용자가 해당 scope에 접근 가능한지 검사. superadmin/no-auth → 항상 허용. */
+function can_access_scope(ctx: RouteContext, scope_type: string, scope_id: string): boolean {
+  const team_id = get_filter_team_id(ctx);
+  if (team_id === undefined) return true;
+  if (scope_type === "team") return scope_id === team_id;
+  if (scope_type === "personal") return scope_id === (ctx.auth_user?.sub ?? "");
+  return false; // global 등 기타 scope는 superadmin만
+}
+
+/** 보드 ID로 소유권 검사. 보드 없으면 null(404 처리 위임). */
+async function check_board_access(ctx: RouteContext, store: KanbanStoreLike, board_id: string): Promise<{ ok: true } | { ok: false; status: number }> {
+  const team_id = get_filter_team_id(ctx);
+  if (team_id === undefined) return { ok: true };
+  const board = await store.get_board(board_id);
+  if (!board) return { ok: false, status: 404 };
+  if (!can_access_scope(ctx, board.scope_type, board.scope_id)) return { ok: false, status: 403 };
+  return { ok: true };
 }
 
 export async function handle_kanban(ctx: RouteContext): Promise<boolean> {
@@ -40,7 +60,16 @@ export async function handle_kanban(ctx: RouteContext): Promise<boolean> {
       scope_type = t as ScopeType;
       scope_id = rest.join(":");
     }
-    const boards = await store.list_boards(scope_type, scope_id);
+    // 요청된 scope 접근 권한 검사
+    if (scope_type && scope_id && !can_access_scope(ctx, scope_type, scope_id)) {
+      json(res, 403, { error: "forbidden" }); return true;
+    }
+    let boards = await store.list_boards(scope_type, scope_id);
+    // scope 필터 없이 전체 조회 시, 접근 가능한 scope만 반환
+    const team_id = get_filter_team_id(ctx);
+    if (team_id !== undefined && !scope_type) {
+      boards = boards.filter((b) => can_access_scope(ctx, b.scope_type, b.scope_id));
+    }
     json(res, 200, boards);
     return true;
   }
@@ -53,6 +82,9 @@ export async function handle_kanban(ctx: RouteContext): Promise<boolean> {
     if (!body?.name || !body?.scope_type || !body?.scope_id) {
       json(res, 400, { error: "name, scope_type, scope_id required" });
       return true;
+    }
+    if (!can_access_scope(ctx, String(body.scope_type), String(body.scope_id))) {
+      json(res, 403, { error: "forbidden" }); return true;
     }
     try {
       const board = await store.create_board({
@@ -74,6 +106,8 @@ export async function handle_kanban(ctx: RouteContext): Promise<boolean> {
     const store = store_or_503(ctx);
     if (!store) return true;
     const board_id = decodeURIComponent(board_match[1]);
+    const access = await check_board_access(ctx, store, board_id);
+    if (!access.ok) { json(res, access.status, { error: access.status === 403 ? "forbidden" : "not_found" }); return true; }
     const board = await store.get_board(board_id);
     if (!board) { json(res, 404, { error: "not_found" }); return true; }
     const assignee = url.searchParams.get("assignee") ?? undefined;
@@ -95,6 +129,8 @@ export async function handle_kanban(ctx: RouteContext): Promise<boolean> {
     const store = store_or_503(ctx);
     if (!store) return true;
     const board_id = decodeURIComponent(board_match[1]);
+    const access = await check_board_access(ctx, store, board_id);
+    if (!access.ok) { json(res, access.status, { error: access.status === 403 ? "forbidden" : "not_found" }); return true; }
     const body = await read_body(req);
     const board = await store.update_board(board_id, {
       name: body?.name ? String(body.name) : undefined,
@@ -109,6 +145,8 @@ export async function handle_kanban(ctx: RouteContext): Promise<boolean> {
     const store = store_or_503(ctx);
     if (!store) return true;
     const board_id = decodeURIComponent(board_match[1]);
+    const access = await check_board_access(ctx, store, board_id);
+    if (!access.ok) { json(res, access.status, { error: access.status === 403 ? "forbidden" : "not_found" }); return true; }
     const ok = await store.delete_board(board_id);
     json(res, ok ? 200 : 404, ok ? { ok: true } : { error: "not_found" });
     return true;
@@ -122,6 +160,8 @@ export async function handle_kanban(ctx: RouteContext): Promise<boolean> {
     const store = store_or_503(ctx);
     if (!store) return true;
     const board_id = decodeURIComponent(board_cards_match[1]);
+    const access = await check_board_access(ctx, store, board_id);
+    if (!access.ok) { json(res, access.status, { error: access.status === 403 ? "forbidden" : "not_found" }); return true; }
     const body = await read_body(req);
     if (!body?.title) { json(res, 400, { error: "title required" }); return true; }
     try {

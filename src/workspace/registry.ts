@@ -1,40 +1,25 @@
 /**
- * WorkspaceRegistry — (team_id, user_id) 기반 워크스페이스 경로 + 런타임 레지스트리.
+ * WorkspaceRegistry — (team_id, user_id) 기반 per-user 런타임 레지스트리.
  *
  * Phase 4: 경로 계산 + 디렉토리 보장 + 활성 세션 추적
- * Phase 8-25: WorkspaceRuntimeLocator — get_runtime()으로 등록된 런타임 접근
- *             per-user RuntimeApp lazy bootstrap은 후속 구현.
+ * Phase 8: WorkspaceRuntime 기반 런타임 locator — identity + lifecycle 관리
  */
 
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
+import { WorkspaceRuntime } from "./runtime.js";
+
+export { WorkspaceRuntime };
 
 export interface WorkspaceKey {
   team_id: string;
   user_id: string;
 }
 
-export interface WorkspaceEntry {
-  team_id: string;
-  user_id: string;
-  workspace_path: string;
-  /** 최초 등록 시각 (ISO). */
-  registered_at: string;
-  /** 마지막 접근 시각 (ISO). */
-  last_accessed_at: string;
-}
-
-/** Phase 8-25: 런타임 인스턴스 접근 인터페이스. per-user RuntimeApp 완성 후 실 구현. */
-export interface WorkspaceRuntimeLike {
-  team_id: string;
-  user_id: string;
-  workspace_path: string;
-}
-
 const USER_WORKSPACE_SUBDIRS = ["runtime", "workflows", "skills", "templates"];
 
 export class WorkspaceRegistry {
-  private readonly entries = new Map<string, WorkspaceEntry>();
+  private readonly entries = new Map<string, WorkspaceRuntime>();
 
   constructor(private readonly workspace_root: string) {}
 
@@ -43,14 +28,14 @@ export class WorkspaceRegistry {
   }
 
   /**
-   * (team_id, user_id)로 workspace_path를 계산하고 디렉토리를 초기화한다.
-   * 이미 등록된 경우 last_accessed_at만 갱신하여 반환.
+   * (team_id, user_id)로 WorkspaceRuntime을 생성하고 디렉토리를 초기화한다.
+   * 이미 등록된 경우 touch()만 호출하여 반환.
    */
-  get_or_create(key: WorkspaceKey): WorkspaceEntry {
+  get_or_create(key: WorkspaceKey): WorkspaceRuntime {
     const k = this.make_key(key.team_id, key.user_id);
     const existing = this.entries.get(k);
     if (existing) {
-      existing.last_accessed_at = new Date().toISOString();
+      existing.touch();
       return existing;
     }
 
@@ -62,21 +47,18 @@ export class WorkspaceRegistry {
       key.user_id,
     );
 
-    // 개인 워크스페이스 하위 디렉토리 보장
     for (const sub of USER_WORKSPACE_SUBDIRS) {
       mkdirSync(join(workspace_path, sub), { recursive: true });
     }
 
-    const now = new Date().toISOString();
-    const entry: WorkspaceEntry = {
-      team_id: key.team_id,
-      user_id: key.user_id,
+    const layers = [
+      this.workspace_root,
+      join(this.workspace_root, "tenants", key.team_id),
       workspace_path,
-      registered_at: now,
-      last_accessed_at: now,
-    };
-    this.entries.set(k, entry);
-    return entry;
+    ];
+    const runtime = new WorkspaceRuntime(key.team_id, key.user_id, workspace_path, layers);
+    this.entries.set(k, runtime);
+    return runtime;
   }
 
   /** 워크스페이스 경로만 빠르게 계산 (디렉토리 생성 없음). */
@@ -85,45 +67,49 @@ export class WorkspaceRegistry {
   }
 
   /**
-   * 특정 사용자의 레지스트리 항목 제거.
+   * 특정 사용자의 런타임 중지 + 레지스트리에서 제거.
    * 실제 파일 시스템 삭제는 수행하지 않는다.
    */
   remove(key: WorkspaceKey): boolean {
-    return this.entries.delete(this.make_key(key.team_id, key.user_id));
+    const k = this.make_key(key.team_id, key.user_id);
+    const runtime = this.entries.get(k);
+    if (!runtime) return false;
+    runtime.stop();
+    return this.entries.delete(k);
   }
 
-  /** 현재 활성 워크스페이스 목록 반환. */
-  list_active(): WorkspaceEntry[] {
+  /** 활성 런타임 조회. touch()로 last_accessed_at 갱신. 미등록 시 null. */
+  get_runtime(key: WorkspaceKey): WorkspaceRuntime | null {
+    const k = this.make_key(key.team_id, key.user_id);
+    const runtime = this.entries.get(k);
+    if (!runtime) return null;
+    runtime.touch();
+    return runtime;
+  }
+
+  /** 특정 런타임 중지 + 제거. */
+  stop_runtime(key: WorkspaceKey): boolean {
+    return this.remove(key);
+  }
+
+  /** 현재 활성 런타임 목록. */
+  list_active(): WorkspaceRuntime[] {
     return [...this.entries.values()];
   }
 
-  /** 특정 팀의 활성 워크스페이스 목록. */
-  list_by_team(team_id: string): WorkspaceEntry[] {
+  /** 특정 팀의 활성 런타임 목록. */
+  list_by_team(team_id: string): WorkspaceRuntime[] {
     return this.list_active().filter((e) => e.team_id === team_id);
   }
 
-  /** 등록된 워크스페이스 수. */
+  /** 등록된 런타임 수. */
   get size(): number {
     return this.entries.size;
   }
 
-  /**
-   * Phase 8-25: 등록된 워크스페이스의 런타임 인스턴스 조회.
-   * per-user RuntimeApp 미구현 상태에서는 등록된 entry를 런타임 접근용으로 반환.
-   * 등록되지 않은 키는 null 반환.
-   */
-  get_runtime(key: WorkspaceKey): WorkspaceRuntimeLike | null {
-    const k = this.make_key(key.team_id, key.user_id);
-    const entry = this.entries.get(k);
-    if (!entry) return null;
-    return { team_id: entry.team_id, user_id: entry.user_id, workspace_path: entry.workspace_path };
-  }
-
-  /**
-   * 모든 항목 제거 (shutdown 시 호출).
-   * 실제 파일·프로세스 정리는 호출 측 책임.
-   */
-  clear(): void {
+  /** 모든 런타임 중지 + 레지스트리 클리어. */
+  stop_all(): void {
+    for (const runtime of this.entries.values()) runtime.stop();
     this.entries.clear();
   }
 }

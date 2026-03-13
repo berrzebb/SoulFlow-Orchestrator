@@ -1,5 +1,6 @@
 /** 요청 실행 흐름의 통합 추적. run_id → loop/task/subagent 연결 + cascade 취소. */
 
+import type { TeamScopeOpts } from "../contracts.js";
 import { now_iso, short_id } from "../utils/common.js";
 import type { ChannelProvider } from "../channels/types.js";
 import type { ExecutionMode } from "./types.js";
@@ -10,6 +11,8 @@ export type ProcessStatus = "running" | "completed" | "failed" | "cancelled";
 
 export type ProcessEntry = {
   run_id: string;
+  /** 소유 팀. 외부 채널(Slack 등)은 빈 문자열 → superadmin만 조회 가능. */
+  team_id: string;
   provider: ChannelProvider;
   chat_id: string;
   alias: string;
@@ -35,7 +38,7 @@ export interface CancelStrategy {
 }
 
 export interface ProcessTrackerLike {
-  start(params: { provider: ChannelProvider; chat_id: string; alias: string; sender_id: string }): string;
+  start(params: { provider: ChannelProvider; chat_id: string; alias: string; sender_id: string; team_id?: string }): string;
   set_mode(run_id: string, mode: ExecutionMode): void;
   set_executor(run_id: string, executor: string): void;
   link_loop(run_id: string, loop_id: string): void;
@@ -46,9 +49,9 @@ export interface ProcessTrackerLike {
   end(run_id: string, status: ProcessStatus, error?: string): void;
   get(run_id: string): ProcessEntry | null;
   find_active_by_key(provider: ChannelProvider, chat_id: string, alias: string): ProcessEntry | null;
-  list_active(): ProcessEntry[];
-  list_recent(limit?: number): ProcessEntry[];
-  cancel(run_id: string): Promise<{ cancelled: boolean; details: string }>;
+  list_active(team_id?: string): ProcessEntry[];
+  list_recent(limit?: number, team_id?: string): ProcessEntry[];
+  cancel(run_id: string, opts?: TeamScopeOpts): Promise<{ cancelled: boolean; details: string }>;
 }
 
 /* ── Implementation ────────────────────────────────── */
@@ -77,10 +80,11 @@ export class ProcessTracker implements ProcessTrackerLike {
     this.on_change = options?.on_change ?? null;
   }
 
-  start(params: { provider: ChannelProvider; chat_id: string; alias: string; sender_id: string }): string {
+  start(params: { provider: ChannelProvider; chat_id: string; alias: string; sender_id: string; team_id?: string }): string {
     const id = short_id();
     const entry: ProcessEntry = {
       run_id: id,
+      team_id: params.team_id ?? "",
       provider: params.provider,
       chat_id: params.chat_id,
       alias: params.alias,
@@ -159,17 +163,24 @@ export class ProcessTracker implements ProcessTrackerLike {
     return id ? (this.active.get(id) ?? null) : null;
   }
 
-  list_active(): ProcessEntry[] {
-    return [...this.active.values()];
+  list_active(team_id?: string): ProcessEntry[] {
+    const all = [...this.active.values()];
+    if (team_id === undefined) return all;
+    return all.filter((e) => e.team_id === team_id);
   }
 
-  list_recent(limit = 20): ProcessEntry[] {
-    return this.history.slice(-Math.max(1, limit)).reverse();
+  list_recent(limit = 20, team_id?: string): ProcessEntry[] {
+    if (team_id === undefined) return this.history.slice(-Math.max(1, limit)).reverse();
+    const filtered = this.history.filter((e) => e.team_id === team_id);
+    return filtered.slice(-Math.max(1, limit)).reverse();
   }
 
-  async cancel(run_id: string): Promise<{ cancelled: boolean; details: string }> {
+  async cancel(run_id: string, opts?: TeamScopeOpts): Promise<{ cancelled: boolean; details: string }> {
     const e = this.active.get(run_id);
     if (!e) return { cancelled: false, details: "프로세스를 찾을 수 없습니다" };
+    if (opts?.team_id !== undefined && e.team_id !== opts.team_id) {
+      return { cancelled: false, details: "프로세스를 찾을 수 없습니다" };
+    }
     if (!this.cancel_strategy) return { cancelled: false, details: "cancel_strategy 미설정" };
 
     const steps: string[] = [];

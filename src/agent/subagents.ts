@@ -19,6 +19,8 @@ export type SubagentStatus = "idle" | "running" | "completed" | "failed" | "canc
 export interface SubagentRef {
   id: string;
   role: string;
+  /** 소유 팀. 외부 채널 기원은 빈 문자열. */
+  team_id: string;
   model?: string;
   status: SubagentStatus;
   /** CLI 세션 ID (claude: session_id, codex: thread_id). */
@@ -33,6 +35,7 @@ export interface SubagentRef {
 export type SpawnSubagentOptions = {
   task: string;
   role?: string;
+  team_id?: string;
   soul?: string;
   heart?: string;
   label?: string;
@@ -193,6 +196,7 @@ export class SubagentRegistry {
     const ref: SubagentRef = {
       id: subagent_id,
       role,
+      team_id: options.team_id ?? "",
       model: options.model,
       status: "running",
       label,

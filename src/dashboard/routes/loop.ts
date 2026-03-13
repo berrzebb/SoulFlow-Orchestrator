@@ -1,4 +1,5 @@
 import type { RouteContext } from "../route-context.js";
+import { get_filter_team_id } from "../route-context.js";
 
 export async function handle_loop(ctx: RouteContext): Promise<boolean> {
   const { req, url, res, options, json, read_body } = ctx;
@@ -6,7 +7,7 @@ export async function handle_loop(ctx: RouteContext): Promise<boolean> {
 
   // GET /api/loops
   if (path === "/api/loops" && req.method === "GET") {
-    json(res, 200, options.agent.list_active_loops());
+    json(res, 200, options.agent.list_active_loops(get_filter_team_id(ctx)));
     return true;
   }
 
@@ -16,7 +17,7 @@ export async function handle_loop(ctx: RouteContext): Promise<boolean> {
     const loop_id = decodeURIComponent(id_match[1]);
     const body = await read_body(req);
     const reason = String(body?.reason || "stopped_from_dashboard").trim();
-    const result = options.agent.stop_loop(loop_id, reason);
+    const result = options.agent.stop_loop(loop_id, reason, { team_id: get_filter_team_id(ctx) });
     json(res, result ? 200 : 404, result ?? { error: "not_found" });
     return true;
   }

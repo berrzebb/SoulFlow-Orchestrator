@@ -1,13 +1,15 @@
 import type { RouteContext } from "../route-context.js";
+import { get_filter_team_id } from "../route-context.js";
 
 export async function handle_process(ctx: RouteContext): Promise<boolean> {
   const { req, url, res, options, json } = ctx;
   const path = url.pathname;
+  const team_id = get_filter_team_id(ctx);
 
   // GET /api/processes
   if (path === "/api/processes" && req.method === "GET") {
     const tracker = options.process_tracker;
-    json(res, 200, { active: tracker?.list_active() ?? [], recent: tracker?.list_recent(20) ?? [] });
+    json(res, 200, { active: tracker?.list_active(team_id) ?? [], recent: tracker?.list_recent(20, team_id) ?? [] });
     return true;
   }
 
@@ -25,7 +27,7 @@ export async function handle_process(ctx: RouteContext): Promise<boolean> {
     const tracker = options.process_tracker;
     if (!tracker) { json(res, 503, { error: "process_tracker_unavailable" }); return true; }
     const run_id = decodeURIComponent(id_match[1]);
-    const result = await tracker.cancel(run_id);
+    const result = await tracker.cancel(run_id, { team_id });
     json(res, result.cancelled ? 200 : 404, result);
     return true;
   }

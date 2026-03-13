@@ -58,27 +58,39 @@ export function create_skill_ops(deps: {
         return { ok: false, error: error_message(e) };
       }
     },
-    upload_skill: (name: string, zip_buffer: Buffer) => {
-      try {
-        const zip = new AdmZip(zip_buffer);
-        const skill_dir = join(workspace, "skills", name);
-        const entries = zip.getEntries();
-        const top_dirs = new Set(entries.map((e: { entryName: string }) => e.entryName.split("/")[0]).filter(Boolean));
-        const strip_prefix = top_dirs.size === 1 ? `${[...top_dirs][0]}/` : "";
-        for (const entry of entries) {
-          if (entry.isDirectory) continue;
-          const rel = sanitize_rel_path(strip_prefix ? entry.entryName.replace(strip_prefix, "") : entry.entryName);
-          if (!rel) continue;
-          const target = join(skill_dir, rel);
-          if (!is_inside(skill_dir, target)) continue;
-          mkdirSync(join(target, ".."), { recursive: true });
-          writeFileSync(target, entry.getData());
-        }
-        skills_loader.refresh();
-        return { ok: true, path: skill_dir };
-      } catch (e) {
-        return { ok: false, path: "", error: error_message(e) };
-      }
-    },
+    upload_skill: (name, zip_buffer) => upload_skill_to(workspace, name, zip_buffer, skills_loader.refresh.bind(skills_loader)),
+  };
+}
+
+function upload_skill_to(
+  workspace: string, name: string, zip_buffer: Buffer, on_done?: () => void,
+): { ok: boolean; path: string; error?: string } {
+  try {
+    const zip = new AdmZip(zip_buffer);
+    const skill_dir = join(workspace, "skills", name);
+    const entries = zip.getEntries();
+    const top_dirs = new Set(entries.map((e: { entryName: string }) => e.entryName.split("/")[0]).filter(Boolean));
+    const strip_prefix = top_dirs.size === 1 ? `${[...top_dirs][0]}/` : "";
+    for (const entry of entries) {
+      if (entry.isDirectory) continue;
+      const rel = sanitize_rel_path(strip_prefix ? entry.entryName.replace(strip_prefix, "") : entry.entryName);
+      if (!rel) continue;
+      const target = join(skill_dir, rel);
+      if (!is_inside(skill_dir, target)) continue;
+      mkdirSync(join(target, ".."), { recursive: true });
+      writeFileSync(target, entry.getData());
+    }
+    on_done?.();
+    return { ok: true, path: skill_dir };
+  } catch (e) {
+    return { ok: false, path: "", error: error_message(e) };
+  }
+}
+
+/** 기존 skill_ops의 upload 경로를 personal_dir로 override. reads는 유지. */
+export function create_scoped_skill_ops(base: DashboardSkillOps, personal_dir: string): DashboardSkillOps {
+  return {
+    ...base,
+    upload_skill: (name, zip_buffer) => upload_skill_to(personal_dir, name, zip_buffer, base.refresh),
   };
 }

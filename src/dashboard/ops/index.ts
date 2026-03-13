@@ -8,7 +8,7 @@ export { create_memory_ops } from "./memory.js";
 export { create_workspace_ops } from "./workspace.js";
 export { create_oauth_ops } from "./oauth.js";
 export { create_config_ops } from "./config.js";
-export { create_skill_ops, type SkillsLoaderLike } from "./skill.js";
+export { create_skill_ops, create_scoped_skill_ops, type SkillsLoaderLike } from "./skill.js";
 export { create_tool_ops } from "./tool.js";
 export { create_cli_auth_ops } from "./cli-auth.js";
 export { create_model_ops } from "./model.js";

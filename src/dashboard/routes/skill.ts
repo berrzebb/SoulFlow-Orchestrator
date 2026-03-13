@@ -1,7 +1,15 @@
 import type { RouteContext } from "../route-context.js";
+import { create_scoped_skill_ops } from "../ops/skill.js";
+
+function get_skill_ops(ctx: RouteContext) {
+  const base = ctx.options.skill_ops ?? null;
+  if (!base) return null;
+  // personal_dir이 있으면 upload 경로를 사용자별로 격리
+  return ctx.personal_dir ? create_scoped_skill_ops(base, ctx.personal_dir) : base;
+}
 
 function skill_ops_or_503(ctx: RouteContext) {
-  const ops = ctx.options.skill_ops ?? null;
+  const ops = get_skill_ops(ctx);
   if (!ops) ctx.json(ctx.res, 503, { error: "skills_unavailable" });
   return ops;
 }

@@ -226,7 +226,7 @@ describe("CronService — on_change 콜백", () => {
     const on_change = vi.fn();
     const svc = make_svc(undefined, { on_change });
     const job = await svc.add_job("j1", { kind: "every", every_ms: 60_000 }, "msg");
-    expect(on_change).toHaveBeenCalledWith("added", job.id);
+    expect(on_change).toHaveBeenCalledWith("added", job.id, "");
     await svc.stop();
   });
 
@@ -236,7 +236,7 @@ describe("CronService — on_change 콜백", () => {
     const job = await svc.add_job("j1", { kind: "every", every_ms: 60_000 }, "msg");
     on_change.mockClear();
     await svc.remove_job(job.id);
-    expect(on_change).toHaveBeenCalledWith("removed", job.id);
+    expect(on_change).toHaveBeenCalledWith("removed", job.id, "");
     await svc.stop();
   });
 
@@ -247,7 +247,7 @@ describe("CronService — on_change 콜백", () => {
     await svc.enable_job(job.id, false);
     on_change.mockClear();
     await svc.enable_job(job.id, true);
-    expect(on_change).toHaveBeenCalledWith("enabled", job.id);
+    expect(on_change).toHaveBeenCalledWith("enabled", job.id, "");
     await svc.stop();
   });
 
@@ -257,7 +257,7 @@ describe("CronService — on_change 콜백", () => {
     const job = await svc.add_job("j1", { kind: "every", every_ms: 60_000 }, "msg");
     on_change.mockClear();
     await svc.enable_job(job.id, false);
-    expect(on_change).toHaveBeenCalledWith("disabled", job.id);
+    expect(on_change).toHaveBeenCalledWith("disabled", job.id, "");
     await svc.stop();
   });
 

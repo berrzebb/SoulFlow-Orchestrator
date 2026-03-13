@@ -129,9 +129,26 @@ export function create_dashboard_bundle(deps: DashboardBundleDeps): DashboardBun
     process_tracker,
     cron,
     task_ops: {
-      cancel_task: (id, reason) => agent_runtime.cancel_task(id, reason),
-      get_task: (id) => agent_runtime.get_task(id),
-      resume_task: (id, text) => agent_runtime.resume_task(id, text),
+      async cancel_task(id, reason, opts) {
+        if (opts?.team_id !== undefined) {
+          const t = await agent_runtime.get_task(id);
+          if (!t || t.team_id !== opts.team_id) return null;
+        }
+        return agent_runtime.cancel_task(id, reason);
+      },
+      async get_task(id, opts) {
+        const t = await agent_runtime.get_task(id);
+        if (!t) return null;
+        if (opts?.team_id !== undefined && t.team_id !== opts.team_id) return null;
+        return t;
+      },
+      async resume_task(id, text, opts) {
+        if (opts?.team_id !== undefined) {
+          const t = await agent_runtime.get_task(id);
+          if (!t || t.team_id !== opts.team_id) return null;
+        }
+        return agent_runtime.resume_task(id, text);
+      },
     },
     stats_ops: {
       get_cd_score: () => orchestration.get_cd_score(),

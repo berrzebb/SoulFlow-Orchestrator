@@ -1,10 +1,11 @@
 /** /api/models — 모델 관리 REST 라우트. */
 
 import type { RouteContext } from "../route-context.js";
-import { set_no_cache } from "../route-context.js";
+import { set_no_cache, require_superadmin_for_write } from "../route-context.js";
 import { error_message } from "../../utils/common.js";
 
 export async function handle_models(ctx: RouteContext): Promise<boolean> {
+  if (!require_superadmin_for_write(ctx)) return true;
   const { req, url, res, options, json, read_body } = ctx;
   const ops = options.model_ops;
   const path = url.pathname;

@@ -13,7 +13,7 @@ import type { HeartbeatService } from "../heartbeat/index.js";
 import type { OpsRuntimeService } from "../ops/index.js";
 import type { Logger } from "../logger.js";
 import type { ProcessTrackerLike } from "../orchestration/process-tracker.js";
-import type { TaskState } from "../contracts.js";
+import type { TaskState, TeamScopeOpts } from "../contracts.js";
 import type { CronScheduler } from "../cron/index.js";
 import type { DispatchDlqStoreLike } from "../channels/dlq-store.js";
 import type { DispatchServiceLike } from "../channels/dispatch.service.js";
@@ -21,9 +21,9 @@ import type { SecretVaultLike } from "../security/secret-vault.js";
 import type { SessionStoreLike } from "../session/index.js";
 
 export interface DashboardTaskOps {
-  cancel_task(task_id: string, reason?: string): Promise<TaskState | null>;
-  get_task(task_id: string): Promise<TaskState | null>;
-  resume_task(task_id: string, user_input?: string): Promise<TaskState | null>;
+  cancel_task(task_id: string, reason?: string, opts?: TeamScopeOpts): Promise<TaskState | null>;
+  get_task(task_id: string, opts?: TeamScopeOpts): Promise<TaskState | null>;
+  resume_task(task_id: string, user_input?: string, opts?: TeamScopeOpts): Promise<TaskState | null>;
 }
 
 export interface DashboardConfigOps {
@@ -361,7 +361,7 @@ export type DashboardOptions = {
 export const MAX_CHAT_SESSIONS = 20;
 export const MAX_MESSAGES_PER_SESSION = 500;
 
-export type RecentMessage = { direction: "inbound" | "outbound"; sender_id: string; content: string; chat_id: string; at: string };
+export type RecentMessage = { direction: "inbound" | "outbound"; sender_id: string; content: string; chat_id: string; team_id: string; at: string };
 
 export type ChatMediaItem = { type: string; url: string; mime?: string; name?: string };
 export type ChatSessionMessage = { direction: "user" | "assistant"; content: string; at: string; media?: ChatMediaItem[]; model?: string; provider_instance_id?: string };
@@ -370,6 +370,8 @@ export type ChatSession = {
   id: string;
   /** 세션 소유자 user_id. 인증 비활성 시 빈 문자열. */
   user_id: string;
+  /** 세션 소속 team_id. 인증 비활성 시 빈 문자열. */
+  team_id: string;
   created_at: string;
   messages: ChatSessionMessage[];
   /** 사용자 지정 탭 이름 */

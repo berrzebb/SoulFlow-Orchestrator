@@ -276,14 +276,16 @@ export class DashboardService implements ServiceLike {
       options: this.options,
       auth_user,
       team_context,
-      workspace_runtime: null,
+      workspace_runtime: (tid && uid && this.options.workspace_registry)
+        ? this.options.workspace_registry.get_runtime({ team_id: tid, user_id: uid })
+        : null,
       workspace_layers,
       personal_dir,
       json: (r, s, d) => this._json(r, s, d),
       read_body: (r) => this._read_json_body(r, res),
-      add_sse_client: (r) => this._sse.add_client(r),
-      build_state: () => build_dashboard_state(this.options, this._sse.recent_messages),
-      build_merged_tasks: () => build_merged_tasks(this.options),
+      add_sse_client: (r, tid) => this._sse.add_client(r, tid),
+      build_state: (team_id?: string) => build_dashboard_state(this.options, this._sse.recent_messages, team_id),
+      build_merged_tasks: (team_id?: string) => build_merged_tasks(this.options, team_id),
       recent_messages: this._sse.recent_messages,
       metrics: this._metrics,
       chat_sessions: this._chat_sessions,
@@ -440,6 +442,7 @@ export class DashboardService implements ServiceLike {
         // key 형식: "web:{team_id}:{user_id}:{chat_id}:{alias}:main"
         const parts = entry.key.split(":");
         if (parts.length < 5) continue;
+        const team_id = parts[1] ?? "";
         const user_id = parts[2] ?? "";
         const chat_id = parts[3];
         if (!chat_id || this._chat_sessions.has(chat_id)) continue;
@@ -449,7 +452,7 @@ export class DashboardService implements ServiceLike {
           content: String(m.content || ""),
           at: String(m.timestamp || session.created_at),
         }));
-        this._chat_sessions.set(chat_id, { id: chat_id, user_id, created_at: session.created_at, messages });
+        this._chat_sessions.set(chat_id, { id: chat_id, user_id, team_id, created_at: session.created_at, messages });
       }
       if (this._chat_sessions.size > 0) {
         this.logger?.info(`restored ${this._chat_sessions.size} web chat session(s)`);

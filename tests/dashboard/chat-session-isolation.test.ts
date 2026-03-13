@@ -17,8 +17,10 @@ import { handle_chat } from "@src/dashboard/routes/chat.js";
 const USER_A: JwtPayload = { sub: "user_a", usr: "alice", role: "user", tid: "team_1", wdir: "tenants/team_1/users/user_a", iat: 0, exp: 0 };
 const USER_B: JwtPayload = { sub: "user_b", usr: "bob", role: "user", tid: "team_1", wdir: "tenants/team_1/users/user_b", iat: 0, exp: 0 };
 
-function make_session(id: string, user_id: string): ChatSession {
-  return { id, user_id, created_at: "2026-01-01T00:00:00Z", messages: [] };
+function make_session(id: string, user_id: string, team_id?: string): ChatSession {
+  // 이 테스트의 모든 유저는 team_1. user_id가 있으면 team_1, 없으면 "".
+  const tid = team_id ?? (user_id ? "team_1" : "");
+  return { id, user_id, team_id: tid, created_at: "2026-01-01T00:00:00Z", messages: [] };
 }
 
 type JsonSpy = { status: number; data: unknown };
