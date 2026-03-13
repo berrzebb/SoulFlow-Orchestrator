@@ -1,7 +1,7 @@
 import { MAX_CHAT_SESSIONS, MAX_MESSAGES_PER_SESSION, type ChatMediaItem, type ChatSession, type ChatSessionMessage } from "../service.js";
 import { now_iso, short_id } from "../../utils/common.js";
 import type { RouteContext } from "../route-context.js";
-import { set_no_cache } from "../route-context.js";
+import { set_no_cache, require_team_manager_for_write } from "../route-context.js";
 
 type ParsedBody = {
   text: string;
@@ -188,10 +188,13 @@ export async function handle_chat(ctx: RouteContext): Promise<boolean> {
   }
 
   // ── Mirror: 외부 채널 세션을 Web에서 조회 + 양방향 릴레이 ──
+  // 접근 제어: team_manager 이상만 허용 (외부 채널 대화 내용은 팀 리소스)
 
   // GET /api/chat/mirror — 미러 가능한 외부 세션 목록
   if (path === "/api/chat/mirror" && req.method === "GET") {
+    if (!require_team_manager_for_write(ctx)) return true;
     if (!session_store?.list_by_prefix) { json(res, 200, []); return true; }
+    const enabled = new Set(ctx.options.channels.get_status().enabled_channels);
     const provider_filter = url.searchParams.get("provider") ?? "";
     const prefix = provider_filter ? `${provider_filter}:` : "";
     const entries = await session_store.list_by_prefix(prefix, 200);
@@ -209,7 +212,8 @@ export async function handle_chat(ctx: RouteContext): Promise<boolean> {
           updated_at: e.updated_at,
           message_count: e.message_count,
         };
-      });
+      })
+      .filter((e) => enabled.size === 0 || enabled.has(e.provider));
     json(res, 200, list);
     return true;
   }
@@ -217,6 +221,7 @@ export async function handle_chat(ctx: RouteContext): Promise<boolean> {
   // GET /api/chat/mirror/:session_key — 외부 세션 메시지 조회
   const mirror_match = path.match(/^\/api\/chat\/mirror\/([^/]+)$/);
   if (mirror_match && req.method === "GET") {
+    if (!require_team_manager_for_write(ctx)) return true;
     if (!session_store) { json(res, 503, { error: "session_store_unavailable" }); return true; }
     const key = decodeURIComponent(mirror_match[1]);
     const session = await session_store.get_or_create(key);
@@ -242,6 +247,7 @@ export async function handle_chat(ctx: RouteContext): Promise<boolean> {
   // POST /api/chat/mirror/:session_key/messages — Web → 외부 채널 릴레이
   const mirror_msg_match = path.match(/^\/api\/chat\/mirror\/([^/]+)\/messages$/);
   if (mirror_msg_match && req.method === "POST") {
+    if (!require_team_manager_for_write(ctx)) return true;
     const key = decodeURIComponent(mirror_msg_match[1]);
     const parts = key.split(":");
     const provider = parts[0] ?? "";
