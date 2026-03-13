@@ -32,13 +32,15 @@ export interface TeamRecord {
   member_count?: number;
 }
 
+export type TeamRole = "owner" | "manager" | "member" | "viewer";
+
 export interface TeamMember {
-  id: string;
-  username: string;
-  system_role: "superadmin" | "user";
+  user_id: string;
+  username: string | null;
+  system_role: "superadmin" | "user" | null;
+  role: TeamRole;
+  joined_at: string;
   wdir: string;
-  created_at: string;
-  last_login_at: string | null;
 }
 
 export function useAuthStatus() {
@@ -115,5 +117,22 @@ export function useTeamMembers(team_id: string | null) {
     },
     enabled: !!team_id,
     staleTime: 30_000,
+  });
+}
+
+export function useAddTeamMember(team_id: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { user_id: string; role: TeamRole }) =>
+      api.post(`/api/admin/teams/${team_id}/members`, data),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["team-members", team_id] }),
+  });
+}
+
+export function useRemoveTeamMember(team_id: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (user_id: string) => api.del(`/api/admin/teams/${team_id}/members/${user_id}`),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["team-members", team_id] }),
   });
 }

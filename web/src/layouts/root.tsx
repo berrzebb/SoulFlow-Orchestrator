@@ -126,6 +126,11 @@ export function RootLayout() {
             </button>
             {auth_status?.enabled && auth_user && (
               <>
+                {auth_user.tid && (
+                  <span className="topbar__team-badge" title="현재 팀">
+                    {auth_user.tid}
+                  </span>
+                )}
                 <span className="topbar__username" title={auth_user.role}>
                   {auth_user.username}
                 </span>

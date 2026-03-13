@@ -13,8 +13,13 @@ import { PROVIDER_TYPE_LABELS as TYPE_LABELS } from "../../utils/constants";
 import type { ProviderInstance, ProviderConnection, ModalMode, ConnectionModalMode } from "./types";
 import { ProviderModal } from "./provider-modal";
 import { ConnectionModal } from "./connection-modal";
+import { useAuthUser } from "../../hooks/use-auth";
+import {
+  useScopedProviders, useAddTeamProvider, useDeleteTeamProvider,
+  useAddGlobalProvider, useDeleteGlobalProvider, type ScopedProvider, type ProviderInput,
+} from "../../hooks/use-team-providers";
 
-type Tab = "providers" | "chat" | "embedding";
+type Tab = "providers" | "chat" | "embedding" | "shared";
 
 export default function ProvidersPage() {
   const { toast } = useToast();
@@ -22,6 +27,7 @@ export default function ProvidersPage() {
   const [tab, setTab] = useState<Tab>("providers");
   const [modal, setModal] = useState<ModalMode | null>(null);
   const [connModal, setConnModal] = useState<ConnectionModalMode | null>(null);
+  const { data: auth_user } = useAuthUser();
 
   const { items: connections, isLoading: connLoading, deleteTarget: deleteConnTarget, setDeleteTarget: setDeleteConnTarget, remove: removeConn, queryClient: qc } =
     useResourceCRUD<ProviderConnection>({
@@ -56,7 +62,7 @@ export default function ProvidersPage() {
     <div className="page">
       {/* Tab bar */}
       <div className="provider-tabs" role="tablist">
-        {(["providers", "chat", "embedding"] as const).map((t_id) => (
+        {(["providers", "chat", "embedding", "shared"] as const).map((t_id) => (
           <button
             key={t_id}
             role="tab"
@@ -64,10 +70,12 @@ export default function ProvidersPage() {
             className={`provider-tab${tab === t_id ? " provider-tab--active" : ""}`}
             onClick={() => setTab(t_id)}
           >
-            {t_id === "providers" ? t("providers.tab_providers") : t_id === "chat" ? t("providers.tab_chat") : t("providers.tab_embedding")}
-            <span className="provider-tab__count">
-              {t_id === "providers" ? connections.length : t_id === "chat" ? chatProviders.length : embedProviders.length}
-            </span>
+            {t_id === "providers" ? t("providers.tab_providers") : t_id === "chat" ? t("providers.tab_chat") : t_id === "embedding" ? t("providers.tab_embedding") : "공유"}
+            {t_id !== "shared" && (
+              <span className="provider-tab__count">
+                {t_id === "providers" ? connections.length : t_id === "chat" ? chatProviders.length : embedProviders.length}
+              </span>
+            )}
           </button>
         ))}
       </div>
@@ -253,6 +261,11 @@ export default function ProvidersPage() {
         </div>
       )}
 
+      {/* ── Tab: 공유 프로바이더 ── */}
+      {tab === "shared" && (
+        <SharedProvidersTab auth_user={auth_user ?? null} />
+      )}
+
       {/* ── Modals ── */}
       <DeleteConfirmModal
         open={!!deleteTarget}
@@ -295,6 +308,152 @@ export default function ProvidersPage() {
           }}
         />
       )}
+    </div>
+  );
+}
+
+// ── 공유 프로바이더 탭 ─────────────────────────────────────────────────────
+
+const SCOPE_LABELS: Record<string, string> = { global: "전역", team: "팀", personal: "개인" };
+const SCOPE_VARIANTS: Record<string, "info" | "warn" | "ok"> = { global: "info", team: "warn", personal: "ok" };
+
+interface SharedProvidersTabProps {
+  auth_user: { sub: string; role: "superadmin" | "user"; tid: string } | null;
+}
+
+function SharedProvidersTab({ auth_user }: SharedProvidersTabProps) {
+  const { toast } = useToast();
+  const team_id = auth_user?.tid ?? null;
+  const is_superadmin = auth_user?.role === "superadmin";
+
+  const { data: providers = [], isLoading } = useScopedProviders(team_id);
+  const [deleteTarget, setDeleteTarget] = useState<ScopedProvider | null>(null);
+  const [addForm, setAddForm] = useState<{ scope: "team" | "global"; open: boolean; name: string; type: string; model: string; api_key_ref: string }>({
+    scope: "team", open: false, name: "", type: "", model: "", api_key_ref: "",
+  });
+
+  const add_team = useAddTeamProvider(team_id);
+  const del_team = useDeleteTeamProvider(team_id);
+  const add_global = useAddGlobalProvider();
+  const del_global = useDeleteGlobalProvider();
+
+  const open_add = (scope: "team" | "global") =>
+    setAddForm({ scope, open: true, name: "", type: "", model: "", api_key_ref: "" });
+
+  const submit_add = () => {
+    const input: ProviderInput = {
+      name: addForm.name.trim(), type: addForm.type.trim(),
+      model: addForm.model.trim() || undefined,
+      api_key_ref: addForm.api_key_ref.trim() || undefined,
+      enabled: true,
+    };
+    const mut = addForm.scope === "global" ? add_global : add_team;
+    mut.mutate(input, {
+      onSuccess: () => {
+        toast(`${SCOPE_LABELS[addForm.scope]} 프로바이더 추가 완료`, "ok");
+        setAddForm((f) => ({ ...f, open: false }));
+      },
+      onError: (e: unknown) => {
+        const msg = (e as { body?: { error?: string } })?.body?.error ?? "추가 실패";
+        toast(msg, "err");
+      },
+    });
+  };
+
+  const do_delete = (p: ScopedProvider) => {
+    if (p.scope === "global") {
+      del_global.mutate(p.id, {
+        onSuccess: () => toast("전역 프로바이더 삭제 완료", "ok"),
+        onError: () => toast("삭제 실패", "err"),
+      });
+    } else {
+      del_team.mutate(p.id, {
+        onSuccess: () => toast("팀 프로바이더 삭제 완료", "ok"),
+        onError: () => toast("삭제 실패", "err"),
+      });
+    }
+    setDeleteTarget(null);
+  };
+
+  const can_delete = (p: ScopedProvider) =>
+    p.scope === "global" ? is_superadmin : is_superadmin; // team scope: role check would need membership query
+
+  return (
+    <div className="fade-in">
+      <SectionHeader title="공유 프로바이더">
+        <div style={{ display: "flex", gap: "8px" }}>
+          <button className="btn btn--sm btn--accent" onClick={() => open_add("team")}>
+            + 팀 프로바이더
+          </button>
+          {is_superadmin && (
+            <button className="btn btn--sm btn--primary" onClick={() => open_add("global")}>
+              + 전역 프로바이더
+            </button>
+          )}
+        </div>
+      </SectionHeader>
+      <p className="text-sm text-muted mb-3">팀·전역 공유 프로바이더 목록. 범위 배지로 출처를 표시합니다.</p>
+
+      {addForm.open && (
+        <div className="panel panel--inset mb-3">
+          <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center" }}>
+            <span className={`badge badge--${SCOPE_VARIANTS[addForm.scope]}`}>{SCOPE_LABELS[addForm.scope]}</span>
+            <input className="form-input" style={{ flex: "1 1 100px" }} placeholder="이름 *" value={addForm.name}
+              onChange={(e) => setAddForm((f) => ({ ...f, name: e.target.value }))} />
+            <input className="form-input" style={{ flex: "1 1 100px" }} placeholder="타입 * (openai, anthropic...)" value={addForm.type}
+              onChange={(e) => setAddForm((f) => ({ ...f, type: e.target.value }))} />
+            <input className="form-input" style={{ flex: "1 1 120px" }} placeholder="모델" value={addForm.model}
+              onChange={(e) => setAddForm((f) => ({ ...f, model: e.target.value }))} />
+            <input className="form-input" style={{ flex: "1 1 120px" }} placeholder="API 키 참조" value={addForm.api_key_ref}
+              onChange={(e) => setAddForm((f) => ({ ...f, api_key_ref: e.target.value }))} />
+            <button className="btn btn--sm btn--ok" disabled={!addForm.name || !addForm.type || add_team.isPending || add_global.isPending}
+              onClick={submit_add}>
+              추가
+            </button>
+            <button className="btn btn--sm" onClick={() => setAddForm((f) => ({ ...f, open: false }))}>취소</button>
+          </div>
+        </div>
+      )}
+
+      {isLoading ? (
+        <SkeletonGrid count={2} />
+      ) : !providers.length ? (
+        <EmptyState title="공유 프로바이더가 없습니다" />
+      ) : (
+        <div className="stat-grid stat-grid--wide">
+          {providers.map((p) => (
+            <ResourceCard
+              key={`${p.scope}-${p.id}`}
+              resourceId={p.id}
+              title={p.name}
+              subtitle={p.type}
+              statusVariant={p.enabled ? "ok" : "off"}
+              statusLabel={p.enabled ? "활성" : "비활성"}
+              badges={[
+                { label: SCOPE_LABELS[p.scope] ?? p.scope, variant: SCOPE_VARIANTS[p.scope] ?? "info" },
+                ...(p.model ? [{ label: p.model, variant: "info" as const }] : []),
+              ]}
+              {...(can_delete(p) ? { onRemove: () => setDeleteTarget(p) } : {})}
+            >
+              {p.api_key_ref && (
+                <div className="stat-card__extra">
+                  <span className="text-muted text-xs">키 참조: {p.api_key_ref}</span>
+                </div>
+              )}
+              <div className="text-xs text-muted">{new Date(p.created_at).toLocaleDateString()}</div>
+            </ResourceCard>
+          ))}
+        </div>
+      )}
+
+      <DeleteConfirmModal
+        open={!!deleteTarget}
+        title="프로바이더 삭제"
+        message={`'${deleteTarget?.name}' (${SCOPE_LABELS[deleteTarget?.scope ?? ""]}) 프로바이더를 삭제하시겠습니까?`}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => { if (deleteTarget) do_delete(deleteTarget); }}
+        confirmLabel="삭제"
+      />
     </div>
   );
 }

@@ -69,6 +69,16 @@
   min-width: 72px;
   text-align: center;
 }
+.topbar__team-badge {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  border-radius: var(--radius-pill);
+  padding: 2px 8px;
+  letter-spacing: 0.02em;
+}
 .topbar__username {
   font-size: var(--fs-xs);
   color: var(--fg-muted);

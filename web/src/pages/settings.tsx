@@ -8,7 +8,11 @@ import { SectionHeader } from "../components/section-header";
 import { ToggleSwitch } from "../components/toggle-switch";
 import { useToast } from "../components/toast";
 import { useT } from "../i18n";
-import { useAuthUser, useAdminUsers, useAdminTeams, useTeamMembers, type AdminUserRecord } from "../hooks/use-auth";
+import {
+  useAuthUser, useAdminUsers, useAdminTeams, useTeamMembers,
+  useAddTeamMember, useRemoveTeamMember,
+  type AdminUserRecord, type TeamRole,
+} from "../hooks/use-auth";
 
 interface FieldInfo {
   path: string;
@@ -444,19 +448,72 @@ function TeamsPanel() {
   );
 }
 
+const ROLE_OPTIONS: TeamRole[] = ["owner", "manager", "member", "viewer"];
+const ROLE_LABELS: Record<TeamRole, string> = { owner: "오너", manager: "매니저", member: "멤버", viewer: "뷰어" };
+
 function TeamMembersList({ team_id }: { team_id: string }) {
+  const { toast } = useToast();
+  const { data: allUsers = [] } = useAdminUsers();
   const { data: members = [], isLoading } = useTeamMembers(team_id);
+  const add = useAddTeamMember(team_id);
+  const remove = useRemoveTeamMember(team_id);
+  const [addForm, setAddForm] = useState({ open: false, user_id: "", role: "member" as TeamRole });
+
+  // 아직 팀에 없는 사용자 목록 (추가 대상)
+  const memberIds = new Set(members.map((m) => m.user_id));
+  const available = allUsers.filter((u) => !memberIds.has(u.id));
+
+  const submit_add = () => {
+    add.mutate({ user_id: addForm.user_id, role: addForm.role }, {
+      onSuccess: () => { toast("멤버 추가 완료", "ok"); setAddForm({ open: false, user_id: "", role: "member" }); },
+      onError: () => toast("추가 실패", "err"),
+    });
+  };
+
   if (isLoading) return <div className="skeleton skeleton--row" style={{ margin: "4px 0" }} />;
-  if (members.length === 0) return <p className="text-xs text-muted" style={{ padding: "4px 16px" }}>멤버 없음</p>;
+
   return (
     <div style={{ padding: "4px 16px 8px" }}>
       {members.map((m) => (
-        <div key={m.id} className="li-flex" style={{ gap: "8px", padding: "3px 0", fontSize: "12px" }}>
-          <span style={{ fontWeight: 500 }}>{m.username}</span>
-          <Badge status={m.system_role} variant={m.system_role === "superadmin" ? "warn" : "info"} />
-          <span className="text-muted" style={{ fontFamily: "monospace", fontSize: "11px" }}>{m.wdir}</span>
+        <div key={m.user_id} className="li-flex" style={{ gap: "8px", padding: "3px 0", fontSize: "12px" }}>
+          <span style={{ fontWeight: 500 }}>{m.username ?? m.user_id}</span>
+          <Badge status={ROLE_LABELS[m.role] ?? m.role} variant={m.role === "owner" ? "warn" : "info"} />
+          {m.system_role === "superadmin" && <Badge status="superadmin" variant="warn" />}
+          <button
+            className="btn btn--xs"
+            style={{ color: "var(--err)", borderColor: "color-mix(in srgb, var(--err) 30%, transparent)", marginLeft: "auto" }}
+            disabled={remove.isPending}
+            onClick={() => remove.mutate(m.user_id, {
+              onSuccess: () => toast("멤버 제거 완료", "ok"),
+              onError: () => toast("제거 실패", "err"),
+            })}
+          >
+            제거
+          </button>
         </div>
       ))}
+      {members.length === 0 && <p className="text-xs text-muted">멤버 없음</p>}
+
+      {addForm.open ? (
+        <div className="li-flex" style={{ gap: "6px", marginTop: "6px", flexWrap: "wrap" }}>
+          <select className="form-input" style={{ flex: "1 1 140px" }} value={addForm.user_id}
+            onChange={(e) => setAddForm((f) => ({ ...f, user_id: e.target.value }))}>
+            <option value="">사용자 선택</option>
+            {available.map((u) => <option key={u.id} value={u.id}>{u.username}</option>)}
+          </select>
+          <select className="form-input" style={{ flex: "0 0 auto" }} value={addForm.role}
+            onChange={(e) => setAddForm((f) => ({ ...f, role: e.target.value as TeamRole }))}>
+            {ROLE_OPTIONS.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+          </select>
+          <button className="btn btn--xs btn--ok" disabled={!addForm.user_id || add.isPending} onClick={submit_add}>추가</button>
+          <button className="btn btn--xs" onClick={() => setAddForm((f) => ({ ...f, open: false }))}>취소</button>
+        </div>
+      ) : (
+        <button className="btn btn--xs" style={{ marginTop: "6px" }}
+          onClick={() => setAddForm((f) => ({ ...f, open: true }))}>
+          + 멤버 추가
+        </button>
+      )}
     </div>
   );
 }
