@@ -1,9 +1,16 @@
-# 멀티 인스턴스 오버라이드: redis/docker-proxy 비활성화, 기존 네트워크 참여
+# 멀티 인스턴스 오버라이드: 공유 자원(redis, docker-proxy, chunker) 비활성화
+# base 인스턴스의 redis를 공유 네트워크 경유로 사용
 services:
   docker-proxy:
     profiles: ["disabled"]
   redis:
     profiles: ["disabled"]
+  chunker:
+    profiles: ["disabled"]
+  orchestrator:
+    environment:
+      BUS_REDIS_URL: redis://soulflow-${BASE_PROFILE}-redis:6379
+      REDIS_URL: redis://soulflow-${BASE_PROFILE}-redis:6379
 
 networks:
   default:

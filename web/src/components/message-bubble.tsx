@@ -1,30 +1,5 @@
-import { useRef, useEffect, useState, type ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
 import { MarkdownContent } from "../pages/chat/markdown-content";
-
-/** 스트리밍 버블의 min-height를 스크롤 컨테이너의 남은 공간으로 계산. */
-function useStreamingMinHeight(enabled: boolean): [React.RefObject<HTMLDivElement | null>, number] {
-  const ref = useRef<HTMLDivElement>(null);
-  const [height, setHeight] = useState(0);
-
-  useEffect(() => {
-    if (!enabled || !ref.current) { setHeight(0); return; }
-    const compute = () => {
-      const el = ref.current;
-      if (!el) return;
-      const container = el.closest(".chat-messages") as HTMLElement | null;
-      if (!container) return;
-      const pb = parseFloat(getComputedStyle(container).paddingBottom) || 0;
-      const remaining = container.getBoundingClientRect().bottom - pb - el.getBoundingClientRect().top - 16;
-      setHeight(Math.max(remaining, 80));
-    };
-    compute();
-    const ro = new ResizeObserver(compute);
-    ro.observe(document.documentElement);
-    return () => ro.disconnect();
-  }, [enabled]);
-
-  return [ref, height];
-}
 
 export interface MessageBubbleProps {
   role: "user" | "assistant" | "system";
@@ -58,7 +33,7 @@ export function MessageBubble({
   const direction = DIRECTION_MAP[role] ?? "assistant";
   const align = is_user && alignUserRight;
   const text = content ?? "";
-  const [contentRef, streaming_height] = useStreamingMinHeight(!is_user && !!streaming);
+  const contentRef = useRef<HTMLDivElement>(null);
 
   return (
     <div className={`chat-msg chat-msg--${direction}${align ? "" : " chat-msg--left"}`}>
@@ -66,8 +41,7 @@ export function MessageBubble({
       <div className="chat-msg__body">
         <div
           ref={contentRef}
-          className="chat-msg__content"
-          style={streaming && streaming_height ? { minHeight: streaming_height } : undefined}
+          className={`chat-msg__content${streaming ? " chat-msg__content--streaming" : ""}`}
         >
           {is_user
             ? text

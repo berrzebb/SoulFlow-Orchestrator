@@ -169,6 +169,7 @@ import { CrontabTool } from "./crontab.js";
 import { SvgTool } from "./svg.js";
 import { DocumentTool } from "./document.js";
 import { LlmTaskTool, type LlmTaskCallback } from "./llm-task.js";
+import { CanvasTool, type CanvasBroadcastCallback } from "./canvas.js";
 
 const DANGEROUS_COMMANDS = ["rm -rf", "drop table", "format c:", "mkfs", "dd if="];
 
@@ -381,6 +382,7 @@ export {
   SvgTool,
   DocumentTool,
   LlmTaskTool,
+  CanvasTool,
 };
 export { Tool } from "./base.js";
 export type {
@@ -396,6 +398,7 @@ export type {
   PostToolHook,
 } from "./types.js";
 export type { LlmTaskCallback, LlmTaskRequest, LlmTaskResult } from "./llm-task.js";
+export type { CanvasBroadcastCallback } from "./canvas.js";
 export type { DynamicToolManifestEntry } from "./dynamic.js";
 export type { InstallShellToolInput } from "./installer.js";
 export type { DynamicToolStoreLike } from "./store.js";
@@ -418,6 +421,7 @@ export type ToolRegistryFactoryOptions = {
   spawn_callback?: ((request: SpawnRequest) => Promise<{ subagent_id: string; status: string; message?: string }>) | null;
   task_query_callback?: TaskQueryCallback | null;
   event_recorder?: ((event: AppendWorkflowEventInput) => Promise<AppendWorkflowEventResult>) | null;
+  canvas_broadcast?: CanvasBroadcastCallback | null;
   refresh_skills?: () => void;
   runtime_policy?: RuntimeExecutionPolicy;
   pre_hooks?: PreToolHook[];
@@ -627,6 +631,9 @@ export function create_default_tool_registry(args?: ToolRegistryFactoryOptions):
   }
   if (args?.llm_callback) {
     registry.register(new LlmTaskTool(args.llm_callback));
+  }
+  if (args?.canvas_broadcast) {
+    registry.register(new CanvasTool({ broadcast_callback: args.canvas_broadcast }));
   }
 
   const dynamic_store_path = args?.dynamic_store_path;

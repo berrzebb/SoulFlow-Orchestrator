@@ -100,6 +100,13 @@ export function RootLayout() {
         const d = data as { session_key?: string; direction?: string; sender_id?: string; content?: string; at?: string };
         if (d.session_key) set_mirror_event({ session_key: d.session_key, direction: d.direction ?? "", sender_id: d.sender_id ?? "", content: d.content ?? "", at: d.at ?? "" });
       },
+      canvas: (data: unknown) => {
+        const d = data as { chat_id?: string; spec?: { canvas_id: string; title?: string; components: unknown[] } };
+        if (d.chat_id && d.spec) {
+          const { push_canvas } = useDashboardStore.getState();
+          push_canvas(d.chat_id, d.spec as import("../../../src/dashboard/canvas.types").CanvasSpec);
+        }
+      },
       task: () => void qc.invalidateQueries({ queryKey: ["state"] }),
       agent: () => void qc.invalidateQueries({ queryKey: ["state"] }),
       progress: () => void qc.invalidateQueries({ queryKey: ["state"] }),

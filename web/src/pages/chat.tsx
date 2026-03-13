@@ -17,6 +17,7 @@ import { ChatSessionTabs } from "./chat/chat-session-tabs";
 import { ChatBottomBar } from "./chat/chat-status-bar";
 import { SessionBrowser } from "./chat/session-browser";
 import { AgentContextBar, compose_agent_prompt } from "./chat/agent-context-bar";
+import { CanvasPanel } from "./chat/canvas-panel";
 import type { ChatSessionSummary, ChatSession, ChatMessage, ChatMediaItem } from "./chat/types";
 import type { AgentDefinition } from "../../../src/agent/agent-definition.types";
 
@@ -55,6 +56,8 @@ export default function ChatPage() {
   const web_stream = useDashboardStore((s) => s.web_stream);
   const set_web_stream = useDashboardStore((s) => s.set_web_stream);
   const mirror_event = useDashboardStore((s) => s.mirror_event);
+  const canvas_specs = useDashboardStore((s) => s.canvas_specs);
+  const dismiss_canvas = useDashboardStore((s) => s.dismiss_canvas);
   const { stream: ndjson_stream, tool_calls: ndjson_tool_calls, thinking_blocks: ndjson_thinking, start: start_stream, cancel: cancel_stream } = useNdjsonStream();
 
   const is_mirror = !!mirrorKey;
@@ -358,6 +361,15 @@ export default function ChatPage() {
             pending_approvals={is_mirror ? [] : pending_approvals}
             onResolveApproval={(id, text) => void resolve_approval(id, text)}
           />
+          {!is_mirror && activeId && (canvas_specs.get(activeId)?.length ?? 0) > 0 && (
+            <CanvasPanel
+              specs={canvas_specs.get(activeId)!}
+              onAction={(action_id, data) => {
+                void api.post(`/api/chat/sessions/${encodeURIComponent(activeId)}/canvas-action`, { action_id, data });
+              }}
+              onDismiss={(canvas_id) => dismiss_canvas(activeId, canvas_id)}
+            />
+          )}
           {!is_mirror && (
             <AgentContextBar
               definitions={agentDefinitions}

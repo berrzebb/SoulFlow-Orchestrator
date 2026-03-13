@@ -29,6 +29,8 @@ services:
     environment:
       NODE_ENV: ${NODE_ENV:-production}
       WORKSPACE: /data
+      BUS_BACKEND: ${BUS_BACKEND:-redis}
+      BUS_REDIS_URL: ${BUS_REDIS_URL:-redis://redis:6379}
       REDIS_URL: redis://redis:6379
       DEBUG: ${DEBUG:-false}
       SKIP_INSTANCE_LOCK: ${SKIP_INSTANCE_LOCK:-0}
@@ -55,9 +57,6 @@ services:
       NODE_ENV: ${NODE_ENV:-production}
       REDIS_URL: redis://redis:6379
       NODE_OPTIONS: "--max-old-space-size=${CHUNKER_HEAP_MB:-512}"
-    depends_on:
-      redis:
-        condition: service_healthy
     deploy:
       resources:
         limits:
@@ -66,9 +65,12 @@ services:
 
   redis:
     image: redis:7-alpine
+    container_name: ${PROJECT_NAME:-soulflow}-redis
     restart: unless-stopped
     volumes:
       - redis-data:/data
+    ports:
+      - "6379:6379"
     command: >
       redis-server
       --appendonly yes
