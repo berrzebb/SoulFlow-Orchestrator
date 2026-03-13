@@ -151,7 +151,7 @@ export async function acquire_runtime_instance_lock(args: {
   const retries = Math.max(1, Number(args?.retries || 20));
   const retry_ms = Math.max(50, Number(args?.retry_ms || 200));
   const key = build_lock_key(workspace);
-  const lock_path = join(resolve(workspace), "runtime", ".locks", `${key}.lock`);
+  const lock_path = join(resolve(workspace), ".locks", `${key}.lock`);
   let last_holder_pid: number | null = null;
 
   for (let i = 0; i < retries; i += 1) {

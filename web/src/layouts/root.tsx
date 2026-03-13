@@ -55,13 +55,16 @@ export function RootLayout() {
   }, [auth_status, auth_user, location.pathname, navigate]);
 
   // 첫 실행 시 프로바이더 미설정이면 셋업 위저드로 리다이렉트
+  // auth 상태 로드 전에는 대기 — 로그인이 반드시 먼저 수행되어야 함
   useEffect(() => {
     if (location.pathname === "/setup") return;
     if (location.pathname === "/login") return;
+    if (auth_status === undefined) return;
+    if (auth_status.enabled && !auth_user) return;
     api.get<{ needed: boolean }>("/api/bootstrap/status")
       .then((res) => { if (res.needed) navigate("/setup"); })
       .catch(() => {});
-  }, [location.pathname, navigate]);
+  }, [location.pathname, navigate, auth_status, auth_user]);
 
   useEffect(() => {
     let msg_timer: ReturnType<typeof setTimeout> | null = null;
