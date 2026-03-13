@@ -1,0 +1,18 @@
+.map-embed {
+  margin: 0.75rem 0;
+  border-radius: 0.5rem;
+  overflow: hidden;
+  border: 1px solid var(--border-color, #e5e7eb);
+}
+
+.map-embed__canvas {
+  height: 280px;
+  width: 100%;
+}
+
+/* 모바일: 터치 스크롤과 지도 스크롤 충돌 방지 */
+@media (max-width: 640px) {
+  .map-embed__canvas {
+    height: 220px;
+  }
+}

@@ -136,8 +136,9 @@ describe("MapTool — URL 인코딩", () => {
 describe("MapTool — 출력 형식", () => {
   it("마크다운 링크 형식: [label](url) (Provider)", async () => {
     const r = await exec({ location: "강남역", provider: "kakao" });
-    // [강남역](url) (카카오맵)
-    expect(r).toMatch(/^\[.+\]\(https?:\/\/.+\) \(.+\)$/);
+    // geocoding 성공 시 멀티라인 — 첫 번째 줄만 형식 검증
+    const first_line = r.split("\n")[0];
+    expect(first_line).toMatch(/^\[.+\]\(https?:\/\/.+\) \(.+\)$/);
   });
 
   it("Google Maps 표기는 'Google Maps'", async () => {

@@ -8,6 +8,7 @@ import type { Components } from "react-markdown";
 import type { Pluggable } from "unified";
 import "highlight.js/styles/github-dark.min.css";
 import "katex/dist/katex.min.css";
+import { MapBlock } from "./map-embed.js";
 
 /** highlight.js + KaTeX가 추가하는 클래스명/인라인 스타일을 sanitize에서 허용 */
 const SANITIZE_SCHEMA = {
@@ -40,6 +41,14 @@ function preprocess_latex(content: string): string {
 
 const SAFE_URL_RE = /^https?:\/\//i;
 
+/** map 코드블록을 Leaflet 지도로 렌더링 */
+function MapCode({ className, children }: React.HTMLAttributes<HTMLElement>) {
+  if (typeof className === "string" && className.includes("language-map")) {
+    return <MapBlock raw={String(children).trim()} />;
+  }
+  return <code className={className}>{children}</code>;
+}
+
 /** 안전한 링크만 렌더링, javascript:/data: 등 차단 */
 function SafeLink({ href, children, ...rest }: React.AnchorHTMLAttributes<HTMLAnchorElement> & { children?: React.ReactNode }) {
   if (!href || !SAFE_URL_RE.test(href)) {
@@ -61,6 +70,7 @@ function SafeImage({ src, alt }: React.ImgHTMLAttributes<HTMLImageElement>) {
 const COMPONENTS: Components = {
   a: SafeLink as Components["a"],
   img: SafeImage as Components["img"],
+  code: MapCode as Components["code"],
 };
 
 const REMARK_PLUGINS: Pluggable[] = [remarkGfm, remarkMath];
