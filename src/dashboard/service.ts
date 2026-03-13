@@ -265,13 +265,18 @@ export class DashboardService implements ServiceLike {
 
   private _build_route_context(req: IncomingMessage, res: ServerResponse, url: URL): RouteContext {
     const auth_user = ((req as unknown as Record<string, unknown>)["_auth_user"] as import("../auth/auth-service.js").JwtPayload | undefined) ?? null;
+    const team_context = ((req as unknown as Record<string, unknown>)["_team_context"] as import("./route-context.js").TeamContext | undefined) ?? null;
     const resolver = this.options.workspace_resolver;
     const workspace_layers = resolver ? resolver.layers_for_jwt(auth_user) : [this.options.workspace ?? ""];
     const personal_dir = resolver ? resolver.personal_dir(auth_user) : (this.options.workspace ?? "");
+    const tid = auth_user?.tid ?? "";
+    const uid = auth_user?.sub ?? "";
     return {
       req, res, url,
       options: this.options,
       auth_user,
+      team_context,
+      workspace_runtime: null,
       workspace_layers,
       personal_dir,
       json: (r, s, d) => this._json(r, s, d),
@@ -283,7 +288,7 @@ export class DashboardService implements ServiceLike {
       metrics: this._metrics,
       chat_sessions: this._chat_sessions,
       session_store: this.session_store,
-      session_store_key: (id) => this._session_store_key(auth_user?.sub ?? "", id),
+      session_store_key: (id) => this._session_store_key(tid, uid, id),
       register_media_token: (abs) => this._media.register(abs),
       oauth_callback_handler: this._oauth_callback_handler,
       oauth_callback_html: (s, m) => this._oauth_callback_html(s, m),
@@ -333,6 +338,7 @@ export class DashboardService implements ServiceLike {
         }
         // 3단계: 팀 멤버십 검증 — JWT의 tid가 실제 멤버십인지 확인 (팀 전환 후에도 유효)
         // superadmin은 모든 팀 접근 허용. 일반 유저는 TeamStore 멤버십 필수.
+        let team_role: import("../auth/team-store.js").TeamRole = "member";
         if (db_user.system_role !== "superadmin" && payload.tid && payload.tid !== "default") {
           const workspace = this.options.workspace ?? "";
           const team_db = join(workspace, "tenants", payload.tid, "team.db");
@@ -345,9 +351,16 @@ export class DashboardService implements ServiceLike {
             this._json(res, 403, { error: "not_a_member" });
             return;
           }
+          team_role = membership.role;
+        } else if (db_user.system_role === "superadmin") {
+          team_role = "owner";
         }
         // 검증된 페이로드를 요청 객체에 첨부 (라우트 핸들러에서 접근 가능)
         (req as unknown as Record<string, unknown>)["_auth_user"] = payload;
+        // Phase 8-23: team_context 주입
+        if (payload.tid) {
+          (req as unknown as Record<string, unknown>)["_team_context"] = { team_id: payload.tid, team_role };
+        }
         // workspace_middleware: 개인 워크스페이스 디렉토리 보장 (lazy init)
         this.options.workspace_registry?.get_or_create({ team_id: payload.tid, user_id: payload.sub });
       }
@@ -413,8 +426,8 @@ export class DashboardService implements ServiceLike {
 <script>setTimeout(()=>window.close(),2000)</script></body></html>`;
   }
 
-  private _session_store_key(user_id: string, chat_id: string): string {
-    return `web:${user_id}:${chat_id}:${this.default_alias}:main`;
+  private _session_store_key(team_id: string, user_id: string, chat_id: string): string {
+    return `web:${team_id}:${user_id}:${chat_id}:${this.default_alias}:main`;
   }
 
   /** SessionStore에서 web 세션을 복원하여 _chat_sessions에 로드. */
@@ -424,11 +437,11 @@ export class DashboardService implements ServiceLike {
     try {
       const entries = await store.list_by_prefix("web:", MAX_CHAT_SESSIONS);
       for (const entry of entries) {
-        // key 형식: "web:{user_id}:{chat_id}:{alias}:main"
+        // key 형식: "web:{team_id}:{user_id}:{chat_id}:{alias}:main"
         const parts = entry.key.split(":");
-        if (parts.length < 4) continue;
-        const user_id = parts[1] ?? "";
-        const chat_id = parts[2];
+        if (parts.length < 5) continue;
+        const user_id = parts[2] ?? "";
+        const chat_id = parts[3];
         if (!chat_id || this._chat_sessions.has(chat_id)) continue;
         const session = await store.get_or_create(entry.key);
         const messages: ChatSession["messages"] = session.messages.map((m) => ({

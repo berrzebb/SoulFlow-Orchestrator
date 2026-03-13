@@ -5,6 +5,20 @@ import type { DashboardOptions, ChatSession, RecentMessage } from "./service.js"
 import type { SystemMetricsCollector } from "./system-metrics.js";
 import type { SessionStoreLike } from "../session/index.js";
 import type { JwtPayload } from "../auth/auth-service.js";
+import type { TeamRole } from "../auth/team-store.js";
+
+/** Phase 8-23: 현재 요청의 팀 문맥. auth_middleware 검증 후 주입. */
+export type TeamContext = {
+  team_id: string;
+  team_role: TeamRole;
+};
+
+/** Phase 8-24: 사용자 워크스페이스 런타임 접근 인터페이스. per-user RuntimeApp 완성 전까지 null. */
+export type WorkspaceRuntimeLike = {
+  team_id: string;
+  user_id: string;
+  workspace_path: string;
+};
 
 export type RouteContext = {
   req: IncomingMessage;
@@ -13,6 +27,10 @@ export type RouteContext = {
   options: DashboardOptions;
   /** 인증된 사용자의 JWT 페이로드. 인증 비활성 또는 미인증 시 null. */
   auth_user: JwtPayload | null;
+  /** Phase 8-23: 현재 요청의 팀 문맥. 인증 비활성 또는 미인증 시 null. */
+  team_context: TeamContext | null;
+  /** Phase 8-24: 현재 사용자의 워크스페이스 런타임. per-user RuntimeApp 완성 전까지 null. */
+  workspace_runtime: WorkspaceRuntimeLike | null;
   /** [global, team, personal] 워크스페이스 레이어 경로 (낮은 → 높은 우선순위). */
   workspace_layers: string[];
   /** 저장/삭제용 개인 workspace 경로 (최상위 레이어). */

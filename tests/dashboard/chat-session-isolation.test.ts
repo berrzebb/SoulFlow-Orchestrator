@@ -55,6 +55,8 @@ function make_ctx(overrides: {
     url,
     options: {} as any,
     auth_user: overrides.auth_user ?? null,
+    team_context: overrides.auth_user?.tid ? { team_id: overrides.auth_user.tid, team_role: "member" as const } : null,
+    workspace_runtime: null,
     workspace_layers: [],
     personal_dir: "/tmp",
     json: (_res: ServerResponse, status: number, data: unknown) => {
@@ -69,7 +71,7 @@ function make_ctx(overrides: {
     metrics: {} as any,
     chat_sessions: overrides.chat_sessions ?? new Map(),
     session_store: null,
-    session_store_key: (id: string) => `web:${overrides.auth_user?.sub ?? ""}:${id}:default:main`,
+    session_store_key: (id: string) => `web:${overrides.auth_user?.tid ?? ""}:${overrides.auth_user?.sub ?? ""}:${id}:default:main`,
     register_media_token: vi.fn().mockReturnValue(null),
     oauth_callback_handler: undefined,
     oauth_callback_html: vi.fn().mockReturnValue(""),

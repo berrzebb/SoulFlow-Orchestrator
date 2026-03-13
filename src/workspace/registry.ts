@@ -1,14 +1,9 @@
 /**
- * WorkspaceRegistry — (team_id, user_id, workspace_path) 기반 워크스페이스 경로 레지스트리.
+ * WorkspaceRegistry — (team_id, user_id) 기반 워크스페이스 경로 + 런타임 레지스트리.
  *
- * 현재 구현 범위 (Phase 4 초기):
- *   - 워크스페이스 경로 계산 및 디렉토리 보장
- *   - 활성 세션 추적 (team_id × user_id → workspace_path 매핑)
- *   - get_or_create(): 경로 계산 + 디렉토리 초기화 (런타임 부트스트랩은 별도)
- *
- * 추후 확장 (Phase 4 완성):
- *   - per-user RuntimeApp 인스턴스 관리 (lazy bootstrap)
- *   - stop_all(): 모든 사용자 런타임 종료
+ * Phase 4: 경로 계산 + 디렉토리 보장 + 활성 세션 추적
+ * Phase 8-25: WorkspaceRuntimeLocator — get_runtime()으로 등록된 런타임 접근
+ *             per-user RuntimeApp lazy bootstrap은 후속 구현.
  */
 
 import { mkdirSync } from "node:fs";
@@ -27,6 +22,13 @@ export interface WorkspaceEntry {
   registered_at: string;
   /** 마지막 접근 시각 (ISO). */
   last_accessed_at: string;
+}
+
+/** Phase 8-25: 런타임 인스턴스 접근 인터페이스. per-user RuntimeApp 완성 후 실 구현. */
+export interface WorkspaceRuntimeLike {
+  team_id: string;
+  user_id: string;
+  workspace_path: string;
 }
 
 const USER_WORKSPACE_SUBDIRS = ["runtime", "workflows", "skills", "templates"];
@@ -103,6 +105,18 @@ export class WorkspaceRegistry {
   /** 등록된 워크스페이스 수. */
   get size(): number {
     return this.entries.size;
+  }
+
+  /**
+   * Phase 8-25: 등록된 워크스페이스의 런타임 인스턴스 조회.
+   * per-user RuntimeApp 미구현 상태에서는 등록된 entry를 런타임 접근용으로 반환.
+   * 등록되지 않은 키는 null 반환.
+   */
+  get_runtime(key: WorkspaceKey): WorkspaceRuntimeLike | null {
+    const k = this.make_key(key.team_id, key.user_id);
+    const entry = this.entries.get(k);
+    if (!entry) return null;
+    return { team_id: entry.team_id, user_id: entry.user_id, workspace_path: entry.workspace_path };
   }
 
   /**

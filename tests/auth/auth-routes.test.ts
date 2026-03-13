@@ -47,6 +47,8 @@ function make_ctx(
     url: new URL(pathname, "http://localhost"),
     options: { auth_svc } as unknown as RouteContext["options"],
     auth_user: auth_user ?? null,
+    team_context: null,
+    workspace_runtime: null,
     json: (r, status, data) => {
       sent.status = status;
       sent.data = data;
