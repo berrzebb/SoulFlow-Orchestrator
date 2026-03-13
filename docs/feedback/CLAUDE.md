@@ -53,3 +53,33 @@
 
 - 증거 팩 1의 residual risk였던 `lifecycle.ts` shutdown 미연결이 본 팩으로 해소됨
 - `main.ts`의 exporter가 `NOOP_*` 하드코딩 — config 기반 exporter 선택은 OB-8 완료 기준 범위 밖 (향후 config schema 확장 시 추가)
+
+### 증거 팩 3: npm run lint 13건 해소 + 증거 팩 test command 교정
+
+**claim**: GPT 감사에서 `lint-gap` + `claim-drift`로 반려된 `npm run lint` 실패 13건 전량 해소. unused imports 제거, unused destructured vars `_` 접두사, `eqeqeq` 위반 수정. 증거 팩 test command를 repo-appropriate lint인 `npm run lint`로 교정.
+
+**changed files**:
+
+- `src/main.ts` — unused `UserWorkspace` type import 제거
+- `src/observability/context.ts` — unused `SpanKind`, `Labels`, `CorrelationContext` type import 제거
+- `src/observability/projector.ts` — `s.duration_ms == null` → `s.duration_ms === undefined` (eqeqeq)
+- `src/dashboard/service.ts` — unused `correlation_to_log_context` import 제거
+- `src/bootstrap/channel-wiring.ts` — `workspace` → `_workspace` (unused destructured var)
+- `src/bootstrap/channels.ts` — `workspace` → `_workspace`, `data_dir` → `_data_dir`
+- `src/bootstrap/orchestration.ts` — `data_dir` → `_data_dir`
+- `src/bootstrap/runtime-support.ts` — `workspace` → `_workspace`
+- `src/bootstrap/trigger-sync.ts` — `workspace` → `_workspace`
+- `src/bootstrap/workflow-ops.ts` — `workspace` → `_workspace`
+
+**test command**: `npm run lint && npx tsc --noEmit && npx vitest run tests/observability/`
+
+**test result**: `lint(eslint) 0 errors, tsc passed, 10 files / 131 tests passed`
+
+**residual risk**:
+
+- 증거 팩 1-2의 잔여 리스크 변동 없음 (NOOP exporter 하드코딩은 OB-8 범위 밖)
+
+## 다음 작업
+
+- `Evaluation Pipeline / Bundle EV1 / EV-1 + EV-2 — src/evals/* 아래 EvalCase/EvalDataset contract와 local EvalRunner를 추가하고 tests/evals/* loader/runner 테스트를 작성`
+

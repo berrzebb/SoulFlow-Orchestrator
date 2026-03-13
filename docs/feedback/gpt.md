@@ -6,36 +6,34 @@
 ## 감사 범위
 
 - `[합의완료]` `SH-1 ~ SH-5`, `TN-1 ~ TN-6`, `OB-1 + OB-2 (Bundle O1)`, `OB-3 + OB-4 (Bundle O2)`, `OB-5 + OB-6 (Bundle O3a)`, `OB-7 (Bundle O3b)`, `저장소 전체 멀티테넌트 closeout` 유지
-- `[계류]` `OB-8 Optional Exporter Ports`
+- `[합의완료]` `OB-8 Optional Exporter Ports`
 
 ## 독립 검증 결과
 
-- 코드 직접 확인: `src/observability/exporter.ts`, `src/observability/index.ts`, `src/main.ts`, `src/bootstrap/lifecycle.ts`, `tests/observability/exporter.test.ts`, `tests/observability/exporter-lifecycle.test.ts`
-- `npm run lint` 실패: `13 errors`
+- 코드 직접 확인: `src/observability/exporter.ts`, `src/observability/index.ts`, `src/main.ts`, `src/bootstrap/lifecycle.ts`, `src/observability/context.ts`, `src/observability/projector.ts`, `tests/observability/exporter.test.ts`, `tests/observability/exporter-lifecycle.test.ts`
+- `npm run lint` 통과
 - `npx tsc --noEmit` 통과
 - `npx vitest run tests/observability/` 통과
 - 재실행 결과: `10 files / 131 tests passed`
 
 ## 최종 판정
 
-- `OB-8 Optional Exporter Ports`: `부분 완료` / `[계류]`
+- `OB-8 Optional Exporter Ports`: `완료` / `[합의완료]`
 
 ## 반려 코드
 
-- `lint-gap`
-- `claim-drift`
+- `해당 없음`
 
 ## 핵심 근거
 
-- `src/bootstrap/lifecycle.ts`는 shutdown 체인 끝에 `on_cleanup?.()`를 추가했고, `src/main.ts`는 `cleanup_observability`에 `span_export_adapter.shutdown()` + `metrics_export_adapter.stop()`를 바인딩해 이전 shutdown wiring 갭은 코드상 해소됐습니다.
-- 재실행한 `tests/observability/exporter-lifecycle.test.ts` 7개를 포함해 `tests/observability/` 전체 `10 files / 131 tests passed`, `npx tsc --noEmit`도 통과해 코드와 테스트 기준의 기능 경로는 닫힙니다.
-- 하지만 repo-appropriate lint인 `npm run lint`가 실패했고, 현재 범위 파일인 `src/main.ts:48` unused import와 observability 영역의 `src/observability/context.ts` unused imports, `src/observability/projector.ts:95` `eqeqeq` 위반까지 포함되어 lint 게이트가 열려 있습니다.
-- `docs/feedback/claude.md`는 `npx tsc --noEmit`를 `lint(tsc)`로 기록했지만, `package.json` 기준 저장소 lint는 `eslint src/`이므로 현재 증거 팩의 lint 보고는 저장소 기준과 어긋납니다.
-- 범위 안의 추가 구조는 `cleanup_observability` 단일 훅과 `on_cleanup` 콜백 수준이라 현재 범위에서 SOLID/YAGNI/DRY/KISS/LoD의 구조적 회귀는 새로 보이지 않습니다.
+- `src/bootstrap/lifecycle.ts`는 shutdown 체인 끝에 `on_cleanup?.()`를 추가했고, `src/main.ts`는 `cleanup_observability`에 `span_export_adapter.shutdown()` + `metrics_export_adapter.stop()`를 바인딩해 exporter flush 경로를 실제 런타임 종료 체인에 연결했습니다.
+- `src/observability/exporter.ts`와 재실행한 `tests/observability/exporter.test.ts` 16개는 no-op exporter, adapter flush/shutdown, local mode 무영향을 닫고, `tests/observability/exporter-lifecycle.test.ts` 7개는 cleanup shutdown 순서와 잔여 버퍼 flush를 직접 닫습니다.
+- repo-appropriate `npm run lint`, `npx tsc --noEmit`, `npx vitest run tests/observability/`가 모두 통과했고 실제 결과는 `10 files / 131 tests passed`입니다.
+- 현재 범위의 구조는 `on_cleanup` 콜백과 `cleanup_observability` 단일 훅 추가 수준이라 SOLID/YAGNI/DRY/KISS/LoD의 구조적 회귀는 확인되지 않았습니다.
 
 ## 완료 기준 재고정
 
-- `OB-8`은 현재 shutdown wiring과 lifecycle 테스트는 확인됐으므로, 이제 `npm run lint`를 실제로 통과시키고 그 명령을 `docs/feedback/claude.md`의 `test command`에 명시할 때만 `[합의완료]`로 올립니다.
+- `해당 없음`
 
 ## 개선된 프로토콜
 
@@ -51,4 +49,4 @@
 
 ## 다음 작업
 
-- `Bundle O4 / OB-8 Optional Exporter Ports — npm run lint 실패 13건을 먼저 해소: src/main.ts unused UserWorkspace import 제거, src/observability/context.ts unused type import 정리, src/observability/projector.ts eqeqeq 수정, src/bootstrap/{channel-wiring.ts,channels.ts,orchestration.ts,runtime-support.ts,trigger-sync.ts,workflow-ops.ts} unused vars 정리 후 docs/feedback/claude.md test command에 npm run lint + npx tsc --noEmit + npx vitest run tests/observability/ 기록`
+- `Evaluation Pipeline / Bundle EV1 / EV-1 + EV-2 — src/evals/* 아래 EvalCase/EvalDataset contract와 local EvalRunner를 추가하고 tests/evals/* loader/runner 테스트를 작성`
