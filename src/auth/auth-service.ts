@@ -172,6 +172,23 @@ export class AuthService {
 
   delete_shared_provider(id: string): boolean { return this.store.delete_shared_provider(id); }
 
+  // ── 팀 전환 ──
+
+  /**
+   * 기존 사용자 검증 없이 새 팀 컨텍스트로 JWT 재발급.
+   * 멤버십 검증은 호출 측(route handler) 책임.
+   */
+  issue_token_for_team(user_id: string, team_id: string): { token: string; payload: JwtPayload } | null {
+    const user = this.store.get_user_by_id(user_id);
+    if (!user) return null;
+    const wdir = `tenants/${team_id}/users/${user.id}`;
+    const payload: Omit<JwtPayload, "iat" | "exp"> = {
+      sub: user.id, usr: user.username, role: user.system_role, tid: team_id, wdir,
+    };
+    const token = this.sign_token(payload);
+    return { token, payload: this.verify_token(token)! };
+  }
+
   // ── 로그인 헬퍼 ──
 
   /**

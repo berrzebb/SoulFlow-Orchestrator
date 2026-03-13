@@ -6,7 +6,9 @@ import { create_sse } from "../api/sse";
 import { useDashboardStore } from "../store";
 import { useI18n } from "../i18n";
 import { api } from "../api/client";
-import { useAuthStatus, useAuthUser, useLogout } from "../hooks/use-auth";
+import { useRef, useState } from "react";
+import { useAuthStatus, useAuthUser, useLogout, useMyTeams, useSwitchTeam } from "../hooks/use-auth";
+import { useClickOutside } from "../hooks/use-click-outside";
 
 export function RootLayout() {
   const set_connection = useDashboardStore((s) => s.set_connection);
@@ -30,6 +32,11 @@ export function RootLayout() {
   const { data: auth_status } = useAuthStatus();
   const { data: auth_user, isLoading: auth_loading } = useAuthUser();
   const logout = useLogout();
+  const { data: my_teams = [] } = useMyTeams();
+  const switch_team = useSwitchTeam();
+  const [team_menu_open, set_team_menu_open] = useState(false);
+  const team_menu_ref = useRef<HTMLDivElement>(null);
+  useClickOutside(team_menu_ref, () => set_team_menu_open(false), team_menu_open);
 
   // auth 활성화 시 미인증 → /login 리다이렉트
   useEffect(() => {
@@ -127,9 +134,41 @@ export function RootLayout() {
             {auth_status?.enabled && auth_user && (
               <>
                 {auth_user.tid && (
-                  <span className="topbar__team-badge" title="현재 팀">
-                    {auth_user.tid}
-                  </span>
+                  <div ref={team_menu_ref} className="topbar__team-switcher">
+                    <button
+                      className="topbar__team-badge"
+                      onClick={() => set_team_menu_open((o) => !o)}
+                      aria-haspopup="listbox"
+                      aria-expanded={team_menu_open}
+                      title="팀 전환"
+                    >
+                      {my_teams.find((t) => t.id === auth_user.tid)?.name ?? auth_user.tid}
+                      {" ▾"}
+                    </button>
+                    {team_menu_open && (
+                      <div className="topbar__team-menu" role="listbox" aria-label="팀 전환">
+                        {my_teams.map((t) => (
+                          <button
+                            key={t.id}
+                            className={`topbar__team-menu-item${t.id === auth_user.tid ? " topbar__team-menu-item--active" : ""}`}
+                            role="option"
+                            aria-selected={t.id === auth_user.tid}
+                            disabled={switch_team.isPending}
+                            onClick={() => {
+                              if (t.id !== auth_user.tid) switch_team.mutate(t.id, { onSuccess: () => set_team_menu_open(false) });
+                              else set_team_menu_open(false);
+                            }}
+                          >
+                            <span>{t.name || t.id}</span>
+                            <span className="topbar__team-role">{t.role}</span>
+                          </button>
+                        ))}
+                        {my_teams.length === 0 && (
+                          <span className="topbar__team-menu-empty">소속 팀 없음</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 )}
                 <span className="topbar__username" title={auth_user.role}>
                   {auth_user.username}

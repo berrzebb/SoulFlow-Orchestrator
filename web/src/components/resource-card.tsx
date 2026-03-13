@@ -32,11 +32,11 @@ export interface ResourceCardProps {
   onTestSuccess?: (detail: string) => string;
   onTestFail?: (error: string) => string;
 
-  /** Edit 버튼 클릭 */
-  onEdit: () => void;
+  /** Edit 버튼 클릭 (생략 시 편집 버튼 숨김) */
+  onEdit?: () => void;
 
-  /** Remove 버튼 클릭 */
-  onRemove: () => void;
+  /** Remove 버튼 클릭 (생략 시 삭제 버튼 숨김) */
+  onRemove?: () => void;
 
   /** 카드 본문에 추가 콘텐츠 (extra/tags 영역) */
   children?: ReactNode;
@@ -133,14 +133,16 @@ export function ResourceCard({
 
       {/* Actions */}
       <div className="stat-card__actions">
-        <button
-          className="btn btn--xs"
-          onClick={onEdit}
-          disabled={disabled}
-          aria-label={t("common.edit")}
-        >
-          {t("common.edit")}
-        </button>
+        {onEdit && (
+          <button
+            className="btn btn--xs"
+            onClick={onEdit}
+            disabled={disabled}
+            aria-label={t("common.edit")}
+          >
+            {t("common.edit")}
+          </button>
+        )}
 
         {testUrl && (
           <button
@@ -153,14 +155,16 @@ export function ResourceCard({
           </button>
         )}
 
-        <button
-          className="btn btn--xs btn--danger"
-          onClick={onRemove}
-          disabled={disabled}
-          aria-label={t("common.remove")}
-        >
-          {t("common.remove")}
-        </button>
+        {onRemove && (
+          <button
+            className="btn btn--xs btn--danger"
+            onClick={onRemove}
+            disabled={disabled}
+            aria-label={t("common.remove")}
+          >
+            {t("common.remove")}
+          </button>
+        )}
       </div>
     </div>
   );

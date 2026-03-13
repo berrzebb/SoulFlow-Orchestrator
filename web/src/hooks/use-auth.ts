@@ -13,6 +13,16 @@ export interface AuthUser {
   tid: string;
   wdir: string;
   exp: number;
+  /** 현재 팀에서의 역할. null = 멤버십 없음 또는 인증 비활성. */
+  team_role?: TeamRole | null;
+}
+
+export interface MyTeam {
+  id: string;
+  name: string;
+  created_at: string;
+  /** 이 팀에서 현재 사용자의 역할. */
+  role: TeamRole;
 }
 
 export interface AdminUserRecord {
@@ -134,5 +144,31 @@ export function useRemoveTeamMember(team_id: string | null) {
   return useMutation({
     mutationFn: (user_id: string) => api.del(`/api/admin/teams/${team_id}/members/${user_id}`),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ["team-members", team_id] }),
+  });
+}
+
+/** 현재 사용자가 속한 팀 목록 (각 팀에서의 role 포함). */
+export function useMyTeams() {
+  const { data: status } = useAuthStatus();
+  return useQuery<MyTeam[]>({
+    queryKey: ["my-teams"],
+    queryFn: async () => {
+      const res = await api.get<{ teams: MyTeam[] }>("/api/auth/my-teams");
+      return res.teams;
+    },
+    enabled: status?.enabled === true,
+    staleTime: 60_000,
+  });
+}
+
+/** 현재 팀 컨텍스트를 전환 — 새 JWT 발급 후 auth-me 캐시 갱신. */
+export function useSwitchTeam() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (team_id: string) => api.post("/api/auth/switch-team", { team_id }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["auth-me"] });
+      void qc.invalidateQueries({ queryKey: ["scoped-providers"] });
+    },
   });
 }

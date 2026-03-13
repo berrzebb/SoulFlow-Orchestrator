@@ -8,8 +8,15 @@
  *   GET  /api/auth/me      — 현재 로그인 사용자 정보
  */
 
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import type { RouteContext } from "../route-context.js";
 import { make_auth_cookie, clear_auth_cookie } from "../../auth/auth-middleware.js";
+import { TeamStore } from "../../auth/team-store.js";
+
+function team_db_path(workspace: string, team_id: string): string {
+  return join(workspace, "tenants", team_id, "team.db");
+}
 
 export async function handle_auth(ctx: RouteContext): Promise<boolean> {
   const { req, res, url, options, json, read_body } = ctx;
@@ -91,10 +98,74 @@ export async function handle_auth(ctx: RouteContext): Promise<boolean> {
 
   if (url.pathname === "/api/auth/me" && req.method === "GET") {
     if (!auth_svc) { json(res, 503, { error: "auth_not_configured" }); return true; }
-    // auth_svc 활성 시 미들웨어가 DB 검증까지 완료 → auth_user 보장
     const p = ctx.auth_user;
     if (!p) { json(res, 401, { error: "not_authenticated" }); return true; }
-    json(res, 200, { sub: p.sub, username: p.usr, role: p.role, tid: p.tid, wdir: p.wdir, exp: p.exp });
+
+    // TeamStore에서 현재 팀 role 조회 (없으면 null)
+    const workspace = options.workspace ?? "";
+    let team_role: string | null = null;
+    if (workspace && p.tid) {
+      const db = team_db_path(workspace, p.tid);
+      if (existsSync(db)) team_role = new TeamStore(db, p.tid).get_membership(p.sub)?.role ?? null;
+    }
+
+    json(res, 200, { sub: p.sub, username: p.usr, role: p.role, tid: p.tid, wdir: p.wdir, exp: p.exp, team_role });
+    return true;
+  }
+
+  // ── GET /api/auth/my-teams ──
+
+  if (url.pathname === "/api/auth/my-teams" && req.method === "GET") {
+    if (!auth_svc) { json(res, 503, { error: "auth_not_configured" }); return true; }
+    const p = ctx.auth_user;
+    if (!p) { json(res, 401, { error: "not_authenticated" }); return true; }
+
+    const workspace = options.workspace ?? "";
+    const all_teams = auth_svc.list_teams();
+
+    // superadmin은 모든 팀, 일반 사용자는 멤버십이 있는 팀만
+    if (p.role === "superadmin") {
+      json(res, 200, { teams: all_teams.map((t) => ({ ...t, role: "owner" as const })) });
+      return true;
+    }
+
+    const my_teams = [];
+    for (const team of all_teams) {
+      const db = team_db_path(workspace, team.id);
+      if (!existsSync(db)) continue;
+      const membership = new TeamStore(db, team.id).get_membership(p.sub);
+      if (membership) my_teams.push({ ...team, role: membership.role });
+    }
+    json(res, 200, { teams: my_teams });
+    return true;
+  }
+
+  // ── POST /api/auth/switch-team ──
+
+  if (url.pathname === "/api/auth/switch-team" && req.method === "POST") {
+    if (!auth_svc) { json(res, 503, { error: "auth_not_configured" }); return true; }
+    const p = ctx.auth_user;
+    if (!p) { json(res, 401, { error: "not_authenticated" }); return true; }
+
+    const body = await read_body(req);
+    const team_id = typeof body?.team_id === "string" ? body.team_id.trim() : "";
+    if (!team_id) { json(res, 400, { error: "team_id_required" }); return true; }
+
+    const workspace = options.workspace ?? "";
+
+    // superadmin은 멤버십 검증 없이 모든 팀으로 전환 가능
+    if (p.role !== "superadmin") {
+      const db = team_db_path(workspace, team_id);
+      if (!existsSync(db)) { json(res, 403, { error: "not_a_member" }); return true; }
+      const membership = new TeamStore(db, team_id).get_membership(p.sub);
+      if (!membership) { json(res, 403, { error: "not_a_member" }); return true; }
+    }
+
+    const result = auth_svc.issue_token_for_team(p.sub, team_id);
+    if (!result) { json(res, 404, { error: "user_not_found" }); return true; }
+
+    res.setHeader("Set-Cookie", make_auth_cookie(result.token));
+    json(res, 200, { ok: true, tid: team_id });
     return true;
   }
 

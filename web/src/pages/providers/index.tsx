@@ -318,7 +318,7 @@ const SCOPE_LABELS: Record<string, string> = { global: "전역", team: "팀", pe
 const SCOPE_VARIANTS: Record<string, "info" | "warn" | "ok"> = { global: "info", team: "warn", personal: "ok" };
 
 interface SharedProvidersTabProps {
-  auth_user: { sub: string; role: "superadmin" | "user"; tid: string } | null;
+  auth_user: { sub: string; role: "superadmin" | "user"; tid: string; team_role?: string | null } | null;
 }
 
 function SharedProvidersTab({ auth_user }: SharedProvidersTabProps) {
@@ -375,8 +375,9 @@ function SharedProvidersTab({ auth_user }: SharedProvidersTabProps) {
     setDeleteTarget(null);
   };
 
+  const can_manage_team = is_superadmin || auth_user?.team_role === "owner" || auth_user?.team_role === "manager";
   const can_delete = (p: ScopedProvider) =>
-    p.scope === "global" ? is_superadmin : is_superadmin; // team scope: role check would need membership query
+    p.scope === "global" ? is_superadmin : can_manage_team;
 
   return (
     <div className="fade-in">
