@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import { Badge } from "../../components/badge";
@@ -11,21 +11,19 @@ import {
   useUpdateTeam, useDeleteTeam,
   type AdminUserRecord, type TeamRole,
 } from "../../hooks/use-auth";
-import {
-  useGlobalProviders, useAddGlobalProvider, useDeleteGlobalProvider,
-  type ScopedProvider, type ProviderInput,
-} from "../../hooks/use-team-providers";
 import { useResourceCRUD } from "../../hooks/use-resource-crud";
 import { useToggleMutation } from "../../hooks/use-toggle-mutation";
 import type { ChannelInstance } from "../channels/types";
+import { MonitoringPanel } from "./monitoring-panel";
 
-type AdminTab = "teams" | "users" | "providers" | "channels";
+type AdminTab = "teams" | "users" | "providers" | "channels" | "monitoring";
 
 const TABS: { id: AdminTab; label: string }[] = [
   { id: "teams", label: "팀 관리" },
   { id: "users", label: "사용자 관리" },
   { id: "providers", label: "전역 프로바이더" },
   { id: "channels", label: "채널" },
+  { id: "monitoring", label: "모니터링" },
 ];
 
 export default function AdminPage() {
@@ -70,6 +68,7 @@ export default function AdminPage() {
       {tab === "users" && <UsersPanel />}
       {tab === "providers" && <GlobalProvidersPanel />}
       {tab === "channels" && <ChannelsPanel />}
+      {tab === "monitoring" && <MonitoringPanel />}
     </div>
   );
 }
@@ -488,107 +487,19 @@ function UsersPanel() {
 
 // ── Global Providers Panel ────────────────────────────────────────────────────
 
-const PROVIDER_TYPES = ["anthropic", "openai", "ollama", "gemini", "azure-openai", "custom"];
-
 function GlobalProvidersPanel() {
-  const { toast } = useToast();
-  const { data: providers = [], isLoading } = useGlobalProviders();
-  const add = useAddGlobalProvider();
-  const del = useDeleteGlobalProvider();
-  const [form, setForm] = useState<{ open: boolean } & ProviderInput>({
-    open: false, name: "", type: "anthropic", model: "", api_key_ref: "",
-  });
-
-  const submit_add = () => {
-    const input: ProviderInput = { name: form.name.trim(), type: form.type };
-    if (form.model) input.model = form.model;
-    if (form.api_key_ref) input.api_key_ref = form.api_key_ref;
-    add.mutate(input, {
-      onSuccess: () => {
-        toast("전역 프로바이더 추가 완료", "ok");
-        setForm({ open: false, name: "", type: "anthropic", model: "", api_key_ref: "" });
-      },
-      onError: () => toast("추가 실패", "err"),
-    });
-  };
-
   return (
     <section className="panel mb-3">
-      <div className="li-flex" style={{ justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
-        <div>
-          <h2 style={{ margin: 0 }}>전역 프로바이더</h2>
-          <p className="text-xs text-muted" style={{ marginTop: "4px" }}>모든 팀에서 공유하는 AI 프로바이더</p>
-        </div>
-        <button className="btn btn--sm btn--primary" onClick={() => setForm((f) => ({ ...f, open: !f.open }))}>
-          {form.open ? "취소" : "+ 추가"}
-        </button>
+      <div style={{ marginBottom: "12px" }}>
+        <h2 style={{ margin: 0 }}>전역 프로바이더</h2>
+        <p className="text-xs text-muted" style={{ marginTop: "4px" }}>모든 팀에서 공유하는 AI 프로바이더 관리는 프로바이더 페이지에서 수행합니다.</p>
       </div>
-
-      {form.open && (
-        <div className="panel panel--inset mb-2">
-          <div className="li-flex" style={{ gap: "8px", flexWrap: "wrap" }}>
-            <input
-              className="form-input" style={{ flex: "1 1 140px" }}
-              placeholder="이름" value={form.name}
-              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-            />
-            <select
-              className="form-input" style={{ flex: "0 0 130px" }}
-              value={form.type}
-              onChange={(e) => setForm((f) => ({ ...f, type: e.target.value }))}
-            >
-              {PROVIDER_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-            </select>
-            <input
-              className="form-input" style={{ flex: "1 1 120px" }}
-              placeholder="모델 (선택)" value={form.model ?? ""}
-              onChange={(e) => setForm((f) => ({ ...f, model: e.target.value }))}
-            />
-            <input
-              className="form-input" style={{ flex: "1 1 140px" }}
-              placeholder="API 키 참조 (선택)" value={form.api_key_ref ?? ""}
-              onChange={(e) => setForm((f) => ({ ...f, api_key_ref: e.target.value }))}
-            />
-            <button
-              className="btn btn--sm btn--ok"
-              disabled={!form.name || !form.type || add.isPending}
-              onClick={submit_add}
-            >
-              {add.isPending ? "추가 중..." : "추가"}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {isLoading ? (
-        <div className="skeleton skeleton--row" />
-      ) : (
-        <div className="users-list">
-          {providers.map((p: ScopedProvider) => (
-            <div key={p.id} className="users-list__item li-flex">
-              <div className="users-list__info">
-                <span className="users-list__name">{p.name}</span>
-                <Badge status={p.type} variant="info" />
-                {p.model && <span className="text-xs text-muted">{p.model}</span>}
-              </div>
-              <button
-                className="btn btn--xs btn--danger"
-                disabled={del.isPending}
-                onClick={() => { if (confirm(`'${p.name}' 삭제?`)) del.mutate(p.id, { onSuccess: () => toast("삭제 완료", "ok"), onError: () => toast("삭제 실패", "err") }); }}
-              >
-                삭제
-              </button>
-            </div>
-          ))}
-          {providers.length === 0 && (
-            <p className="text-xs text-muted" style={{ padding: "8px 0" }}>전역 프로바이더가 없습니다.</p>
-          )}
-        </div>
-      )}
+      <NavLink to="/providers" className="btn btn--sm btn--primary">
+        프로바이더 관리 →
+      </NavLink>
     </section>
   );
 }
-
 // ── Channels Panel ────────────────────────────────────────────────────────────
 
 function ChannelsPanel() {
@@ -634,7 +545,7 @@ function ChannelsPanel() {
             <div key={ch.instance_id} className="users-list__item li-flex">
               <div className="users-list__info">
                 <span className="users-list__name">{ch.label || ch.instance_id}</span>
-                <Badge status={TYPE_LABELS[ch.type] ?? ch.type} variant="info" />
+                <Badge status={TYPE_LABELS[ch.provider] ?? ch.provider} variant="info" />
                 {ch.enabled ? (
                   <Badge status="활성" variant="ok" />
                 ) : (
