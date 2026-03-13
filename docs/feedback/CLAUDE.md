@@ -12,8 +12,9 @@
 - `[합의완료]` OB-5 + OB-6 (Bundle O3a)
 - `[합의완료]` OB-7 (Bundle O3b)
 - `[합의완료]` 저장소 전체 멀티테넌트 closeout
+- `[합의완료]` OB-8 Optional Exporter Ports
 
-## OB-8 Optional Exporter Ports `[GPT미검증]`
+## OB-8 Optional Exporter Ports `[합의완료]`
 
 ### 증거 팩 1: TraceExporter / MetricsExporter 인터페이스 + no-op 어댑터 + bootstrap wiring
 
@@ -78,6 +79,31 @@
 **residual risk**:
 
 - 증거 팩 1-2의 잔여 리스크 변동 없음 (NOOP exporter 하드코딩은 OB-8 범위 밖)
+
+## EV-1 + EV-2 Evaluation Pipeline `[GPT미검증]`
+
+### 증거 팩 1: EvalCase/EvalDataset contract + EvalRunner + loader + 테스트
+
+**claim**: `EvalCase` / `EvalDataset` / `EvalResult` / `EvalRunSummary` 데이터 모델과 `EvalExecutorLike` / `EvalScorerLike` DI 인터페이스 정의. 내장 scorer 3종 (`EXACT_MATCH_SCORER`, `CONTAINS_SCORER`, `REGEX_SCORER`). JSON 기반 dataset loader (`load_eval_dataset`, `load_eval_datasets`) + 유효성 검증. `EvalRunner` — 순차 케이스 실행, 태그 필터, 타임아웃, 에러 캡처, 요약 통계.
+
+**changed files**:
+
+- `src/evals/contracts.ts` — 신규: `EvalCase`, `EvalDataset`, `EvalResult`, `EvalRunSummary`, `EvalExecutorLike`, `EvalScorerLike`
+- `src/evals/scorers.ts` — 신규: `EXACT_MATCH_SCORER`, `CONTAINS_SCORER`, `REGEX_SCORER`
+- `src/evals/loader.ts` — 신규: `load_eval_dataset` (단일 JSON), `load_eval_datasets` (디렉토리), `validate_dataset`/`validate_case` 검증
+- `src/evals/runner.ts` — 신규: `EvalRunner` 클래스 (executor + scorer DI, timeout, tag filter)
+- `src/evals/index.ts` — 신규: public API re-exports
+- `tests/evals/loader.test.ts` — 신규 10 테스트: 유효 JSON 로드, fallback name, auto id, 파일 미존재 에러, cases 누락 에러, input 누락 에러, metadata 보존, 디렉토리 다중 로드, 디렉토리 미존재 빈 배열, 빈 디렉토리 빈 배열
+- `tests/evals/runner.test.ts` — 신규 14 테스트: 전체 데이터셋 실행 통계, EXACT_MATCH 성공/실패, REGEX 매치/잘못된 정규식, expected 미지정, executor 에러/예외, 태그 필터, 타임아웃, 기본 scorer, 빈 데이터셋, 커스텀 scorer DI, duration_ms 측정
+
+**test command**: `npm run lint && npx tsc --noEmit && npx vitest run tests/evals/`
+
+**test result**: `lint(eslint) 0 errors, tsc passed, 2 files / 24 tests passed`
+
+**residual risk**:
+
+- `EvalRunner`는 순차 실행 — 대규모 데이터셋에서 병렬 실행 옵션 미구현 (향후 필요 시 추가)
+- bootstrap/main.ts에 eval 모듈 미연결 — 현재는 독립 모듈로 존재 (eval CLI/API 엔드포인트는 별도 번들 범위)
 
 ## 다음 작업
 
