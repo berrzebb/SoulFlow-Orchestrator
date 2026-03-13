@@ -226,6 +226,21 @@ export class AdminStore {
     return this.get_team(id)!;
   }
 
+  update_team(id: string, patch: { name: string }): TeamRecord | null {
+    with_sqlite_strict(this.db_path, (db) => {
+      db.prepare("UPDATE teams SET name = ? WHERE id = ?").run(patch.name, id);
+      return true;
+    }, { pragmas: PRAGMAS });
+    return this.get_team(id);
+  }
+
+  delete_team(id: string): boolean {
+    return with_sqlite_strict(this.db_path, (db) => {
+      const info = db.prepare("DELETE FROM teams WHERE id = ?").run(id);
+      return (info.changes ?? 0) > 0;
+    }, { pragmas: PRAGMAS }) ?? false;
+  }
+
   // ── 공유 프로바이더 ──
 
   list_shared_providers(enabled_only = false): SharedProviderRecord[] {

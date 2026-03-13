@@ -10,7 +10,8 @@ import { useToast } from "../components/toast";
 import { useT } from "../i18n";
 import {
   useAuthUser, useAdminUsers, useAdminTeams, useTeamMembers,
-  useAddTeamMember, useRemoveTeamMember,
+  useAddTeamMember, useRemoveTeamMember, useUpdateTeamMemberRole,
+  useUpdateTeam, useDeleteTeam,
   type AdminUserRecord, type TeamRole,
 } from "../hooks/use-auth";
 
@@ -370,6 +371,8 @@ function TeamsPanel() {
   const { data: teams = [], isLoading } = useAdminTeams();
   const [form, setForm] = useState({ open: false, id: "", name: "" });
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [rename_target, set_rename_target] = useState<string | null>(null);
+  const [rename_draft, set_rename_draft] = useState("");
 
   const create = useMutation({
     mutationFn: () => api.post("/api/admin/teams", { id: form.id.trim(), name: form.name.trim() }),
@@ -383,6 +386,30 @@ function TeamsPanel() {
       toast(msg === "id_must_be_lowercase_alphanumeric_hyphen" ? "ID는 소문자·숫자·하이픈만 허용" : "생성 실패", "err");
     },
   });
+
+  const update_team = useUpdateTeam();
+  const delete_team = useDeleteTeam();
+
+  const start_rename = (t: { id: string; name: string }) => {
+    set_rename_target(t.id);
+    set_rename_draft(t.name);
+  };
+
+  const commit_rename = (id: string) => {
+    if (!rename_draft.trim()) return;
+    update_team.mutate({ id, name: rename_draft.trim() }, {
+      onSuccess: () => { toast("팀 이름 변경 완료", "ok"); set_rename_target(null); },
+      onError: () => toast("이름 변경 실패", "err"),
+    });
+  };
+
+  const do_delete = (t: { id: string; name: string }) => {
+    if (!confirm(`팀 '${t.name}'을 삭제하면 모든 멤버십과 팀 데이터가 삭제됩니다. 계속하시겠습니까?`)) return;
+    delete_team.mutate(t.id, {
+      onSuccess: () => toast("팀 삭제 완료", "ok"),
+      onError: () => toast("팀 삭제 실패", "err"),
+    });
+  };
 
   return (
     <section className="panel mb-3">
@@ -424,17 +451,42 @@ function TeamsPanel() {
           {teams.map((t) => (
             <div key={t.id}>
               <div className="users-list__item li-flex">
-                <div className="users-list__info">
-                  <span className="users-list__name">{t.name}</span>
-                  <span className="text-xs text-muted">ID: {t.id}</span>
-                  <Badge status={`${t.member_count ?? 0}명`} variant="info" />
+                <div className="users-list__info" style={{ flex: 1 }}>
+                  {rename_target === t.id ? (
+                    <div className="li-flex" style={{ gap: "6px" }}>
+                      <input
+                        className="form-input" style={{ flex: "1" }}
+                        value={rename_draft}
+                        onChange={(e) => set_rename_draft(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter") commit_rename(t.id); if (e.key === "Escape") set_rename_target(null); }}
+                        autoFocus
+                      />
+                      <button className="btn btn--xs btn--ok" disabled={!rename_draft.trim() || update_team.isPending} onClick={() => commit_rename(t.id)}>저장</button>
+                      <button className="btn btn--xs" onClick={() => set_rename_target(null)}>취소</button>
+                    </div>
+                  ) : (
+                    <>
+                      <span className="users-list__name">{t.name}</span>
+                      <span className="text-xs text-muted">ID: {t.id}</span>
+                      <Badge status={`${t.member_count ?? 0}명`} variant="info" />
+                    </>
+                  )}
                 </div>
-                <button
-                  className="btn btn--xs"
-                  onClick={() => setExpanded((prev) => prev === t.id ? null : t.id)}
-                >
-                  {expanded === t.id ? "접기" : "멤버"}
-                </button>
+                {rename_target !== t.id && (
+                  <div className="li-flex" style={{ gap: "6px" }}>
+                    <button className="btn btn--xs" onClick={() => setExpanded((prev) => prev === t.id ? null : t.id)}>
+                      {expanded === t.id ? "접기" : "멤버"}
+                    </button>
+                    <button className="btn btn--xs" onClick={() => start_rename(t)}>이름 변경</button>
+                    <button
+                      className="btn btn--xs btn--danger"
+                      disabled={delete_team.isPending}
+                      onClick={() => do_delete(t)}
+                    >
+                      삭제
+                    </button>
+                  </div>
+                )}
               </div>
               {expanded === t.id && <TeamMembersList team_id={t.id} />}
             </div>
@@ -457,6 +509,7 @@ function TeamMembersList({ team_id }: { team_id: string }) {
   const { data: members = [], isLoading } = useTeamMembers(team_id);
   const add = useAddTeamMember(team_id);
   const remove = useRemoveTeamMember(team_id);
+  const update_role = useUpdateTeamMemberRole(team_id);
   const [addForm, setAddForm] = useState({ open: false, user_id: "", role: "member" as TeamRole });
 
   // 아직 팀에 없는 사용자 목록 (추가 대상)
@@ -476,8 +529,20 @@ function TeamMembersList({ team_id }: { team_id: string }) {
     <div style={{ padding: "4px 16px 8px" }}>
       {members.map((m) => (
         <div key={m.user_id} className="li-flex" style={{ gap: "8px", padding: "3px 0", fontSize: "12px" }}>
-          <span style={{ fontWeight: 500 }}>{m.username ?? m.user_id}</span>
-          <Badge status={ROLE_LABELS[m.role] ?? m.role} variant={m.role === "owner" ? "warn" : "info"} />
+          <span style={{ fontWeight: 500, minWidth: "80px" }}>{m.username ?? m.user_id}</span>
+          {/* 역할 인라인 변경 select */}
+          <select
+            className="form-input"
+            style={{ fontSize: "11px", padding: "2px 4px", height: "24px", flex: "0 0 auto" }}
+            value={m.role}
+            disabled={update_role.isPending}
+            onChange={(e) => update_role.mutate({ user_id: m.user_id, role: e.target.value as TeamRole }, {
+              onSuccess: () => toast("역할 변경 완료", "ok"),
+              onError: () => toast("역할 변경 실패", "err"),
+            })}
+          >
+            {ROLE_OPTIONS.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+          </select>
           {m.system_role === "superadmin" && <Badge status="superadmin" variant="warn" />}
           <button
             className="btn btn--xs"

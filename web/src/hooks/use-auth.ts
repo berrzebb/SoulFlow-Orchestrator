@@ -147,6 +147,35 @@ export function useRemoveTeamMember(team_id: string | null) {
   });
 }
 
+export function useUpdateTeamMemberRole(team_id: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ user_id, role }: { user_id: string; role: TeamRole }) =>
+      api.patch(`/api/admin/teams/${team_id}/members/${user_id}`, { role }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["team-members", team_id] }),
+  });
+}
+
+export function useUpdateTeam() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, name }: { id: string; name: string }) =>
+      api.patch(`/api/admin/teams/${id}`, { name }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["admin-teams"] }),
+  });
+}
+
+export function useDeleteTeam() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.del(`/api/admin/teams/${id}`),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["admin-teams"] });
+      void qc.invalidateQueries({ queryKey: ["my-teams"] });
+    },
+  });
+}
+
 /** 현재 사용자가 속한 팀 목록 (각 팀에서의 role 포함). */
 export function useMyTeams() {
   const { data: status } = useAuthStatus();

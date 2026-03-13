@@ -7,15 +7,18 @@
  *   PATCH  /api/admin/users/:id/password            — 비밀번호 변경
  *   PATCH  /api/admin/users/:id/team                — 팀 변경 + TeamStore 멤버십 동기화
  *
- *   GET    /api/admin/teams                         — 팀 목록
+ *   GET    /api/admin/teams                         — 팀 목록 (TeamStore 기반 member_count)
  *   POST   /api/admin/teams                         — 팀 생성 (team.db 초기화 포함)
  *   GET    /api/admin/teams/:id                     — 팀 단건 조회
+ *   PATCH  /api/admin/teams/:id                     — 팀 이름 변경
+ *   DELETE /api/admin/teams/:id                     — 팀 삭제
  *   GET    /api/admin/teams/:id/members             — 팀 멤버 목록 (TeamStore)
  *   POST   /api/admin/teams/:id/members             — 멤버 추가/역할 변경
+ *   PATCH  /api/admin/teams/:id/members/:user_id    — 멤버 역할 변경
  *   DELETE /api/admin/teams/:id/members/:user_id    — 멤버 제거
  */
 
-import { mkdirSync } from "node:fs";
+import { mkdirSync, rmSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import type { RouteContext } from "../route-context.js";
 import { TeamStore, type TeamRole } from "../../auth/team-store.js";
@@ -148,11 +151,15 @@ export async function handle_admin(ctx: RouteContext): Promise<boolean> {
 
   if (url.pathname === "/api/admin/teams" && req.method === "GET") {
     const teams = auth_svc.list_teams();
-    const all_users = auth_svc.list_users();
-    const result = teams.map((t) => ({
-      ...t,
-      member_count: all_users.filter((u) => (u.default_team_id ?? "default") === t.id).length,
-    }));
+    const result = teams.map((t) => {
+      // TeamStore 실제 멤버십 기반 카운트
+      let member_count = 0;
+      if (workspace) {
+        const db = team_db_path(workspace, t.id);
+        if (existsSync(db)) member_count = new TeamStore(db, t.id).list_members().length;
+      }
+      return { ...t, member_count };
+    });
     json(res, 200, { teams: result });
     return true;
   }
@@ -221,26 +228,64 @@ export async function handle_admin(ctx: RouteContext): Promise<boolean> {
     }
   }
 
-  // ── DELETE /api/admin/teams/:id/members/:user_id ──
+  // ── PATCH / DELETE /api/admin/teams/:id/members/:user_id ──
 
   const mbr_u_m = RE_TEAM_MBR_U.exec(url.pathname);
-  if (mbr_u_m && req.method === "DELETE") {
+  if (mbr_u_m) {
     const [, team_id, user_id] = mbr_u_m;
     if (!workspace) { json(res, 503, { error: "workspace_not_configured" }); return true; }
-    const removed = new TeamStore(team_db_path(workspace, team_id), team_id).remove_member(user_id);
-    json(res, removed ? 200 : 404, removed ? { ok: true } : { error: "not_found" });
-    return true;
+
+    if (req.method === "PATCH") {
+      const body = await read_body(req);
+      const raw_role = body?.role;
+      const role: TeamRole = VALID_ROLES.includes(raw_role as TeamRole) ? raw_role as TeamRole : "member";
+      const updated = new TeamStore(team_db_path(workspace, team_id), team_id).upsert_member(user_id, role);
+      json(res, 200, updated);
+      return true;
+    }
+
+    if (req.method === "DELETE") {
+      const removed = new TeamStore(team_db_path(workspace, team_id), team_id).remove_member(user_id);
+      json(res, removed ? 200 : 404, removed ? { ok: true } : { error: "not_found" });
+      return true;
+    }
   }
 
-  // ── GET /api/admin/teams/:id ──
+  // ── GET / PATCH / DELETE /api/admin/teams/:id ──
 
   const team_m = RE_TEAM.exec(url.pathname);
-  if (team_m && req.method === "GET") {
+  if (team_m) {
+    const team_id = team_m[1];
     const teams = auth_svc.list_teams();
-    const team = teams.find((t) => t.id === team_m[1]);
-    if (!team) { json(res, 404, { error: "not_found" }); return true; }
-    json(res, 200, team);
-    return true;
+    const team = teams.find((t) => t.id === team_id);
+
+    if (req.method === "GET") {
+      if (!team) { json(res, 404, { error: "not_found" }); return true; }
+      json(res, 200, team);
+      return true;
+    }
+
+    if (req.method === "PATCH") {
+      if (!team) { json(res, 404, { error: "not_found" }); return true; }
+      const body = await read_body(req);
+      const name = typeof body?.name === "string" ? body.name.trim() : "";
+      if (!name) { json(res, 400, { error: "name_required" }); return true; }
+      const updated = auth_svc.update_team(team_id, { name });
+      json(res, 200, updated ?? team);
+      return true;
+    }
+
+    if (req.method === "DELETE") {
+      if (!team) { json(res, 404, { error: "not_found" }); return true; }
+      auth_svc.delete_team(team_id);
+      // 팀 디렉토리 삭제 (tenants/<team_id>/)
+      if (workspace) {
+        const tenant_dir = join(workspace, "tenants", team_id);
+        if (existsSync(tenant_dir)) rmSync(tenant_dir, { recursive: true, force: true });
+      }
+      json(res, 200, { ok: true });
+      return true;
+    }
   }
 
   return false;

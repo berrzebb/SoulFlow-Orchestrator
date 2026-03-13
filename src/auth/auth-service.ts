@@ -149,6 +149,10 @@ export class AuthService {
 
   ensure_team(id: string, name: string) { return this.store.ensure_team(id, name); }
 
+  update_team(id: string, patch: { name: string }) { return this.store.update_team(id, patch); }
+
+  delete_team(id: string): boolean { return this.store.delete_team(id); }
+
   delete_user(id: string): boolean { return this.store.delete_user(id); }
 
   update_password(id: string, password: string): boolean {
