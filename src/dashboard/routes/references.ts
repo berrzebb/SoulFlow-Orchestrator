@@ -4,6 +4,7 @@ import { existsSync } from "node:fs";
 import { writeFile, unlink, mkdir } from "node:fs/promises";
 import { join, resolve as path_resolve, sep } from "node:path";
 import type { RouteContext } from "../route-context.js";
+import { sanitize_filename, is_inside } from "../ops/shared.js";
 
 export async function handle_references(ctx: RouteContext): Promise<boolean> {
   const { req, url, res, options, json, read_body } = ctx;
@@ -42,20 +43,22 @@ export async function handle_references(ctx: RouteContext): Promise<boolean> {
   // POST /api/references/upload — 파일 업로드 (JSON: { filename, content } 또는 { filename, base64 })
   if (path === "/api/references/upload" && req.method === "POST") {
     const body = await read_body(req);
-    const filename = String(body?.filename || "").replace(/[/\\:*?"<>|]/g, "_");
+    const filename = sanitize_filename(String(body?.filename || ""));
     if (!filename) { json(res, 400, { error: "filename required" }); return true; }
 
     const refs_dir = join(ctx.workspace_runtime?.user_content ?? ctx.personal_dir, "references");
     await mkdir(refs_dir, { recursive: true });
 
+    const filepath = join(refs_dir, filename);
+    if (!is_inside(refs_dir, filepath)) { json(res, 400, { error: "invalid filename" }); return true; }
+
     if (body?.base64) {
-      // 바이너리 파일 (PDF/DOCX/PPTX/HWPX/이미지): base64 디코딩 후 원본 바이너리로 저장
       const buf = Buffer.from(String(body.base64), "base64");
-      await writeFile(join(refs_dir, filename), buf);
+      await writeFile(filepath, buf);
     } else {
       const content = String(body?.content || "");
       if (!content) { json(res, 400, { error: "content or base64 required" }); return true; }
-      await writeFile(join(refs_dir, filename), content, "utf-8");
+      await writeFile(filepath, content, "utf-8");
     }
 
     // 파일 저장 즉시 응답 — 인덱싱은 백그라운드에서 비동기 처리

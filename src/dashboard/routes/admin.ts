@@ -22,6 +22,7 @@ import { mkdirSync, rmSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import type { RouteContext } from "../route-context.js";
 import { TeamStore, type TeamRole } from "../../auth/team-store.js";
+import { sanitize_filename, is_inside } from "../ops/shared.js";
 
 const RE_USER       = /^\/api\/admin\/users\/([^/]+)$/;
 const RE_USER_PW    = /^\/api\/admin\/users\/([^/]+)\/password$/;
@@ -278,10 +279,13 @@ export async function handle_admin(ctx: RouteContext): Promise<boolean> {
     if (req.method === "DELETE") {
       if (!team) { json(res, 404, { error: "not_found" }); return true; }
       auth_svc.delete_team(team_id);
-      // 팀 디렉토리 삭제 (tenants/<team_id>/)
       if (workspace) {
-        const tenant_dir = join(workspace, "tenants", team_id);
-        if (existsSync(tenant_dir)) rmSync(tenant_dir, { recursive: true, force: true });
+        const safe_id = sanitize_filename(team_id);
+        const tenants_base = join(workspace, "tenants");
+        const tenant_dir = join(tenants_base, safe_id);
+        if (safe_id && is_inside(tenants_base, tenant_dir) && existsSync(tenant_dir)) {
+          rmSync(tenant_dir, { recursive: true, force: true });
+        }
       }
       json(res, 200, { ok: true });
       return true;
