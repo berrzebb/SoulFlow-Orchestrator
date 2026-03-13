@@ -26,7 +26,7 @@ export interface TriggerSyncDeps {
 
 export async function run_trigger_sync(deps: TriggerSyncDeps): Promise<void> {
   const {
-    workspace, user_dir, app_config, bus, orchestration, cron,
+    workspace: _workspace, user_dir, app_config, bus, orchestration, cron,
     webhook_store, kanban_store,
     primary_provider, default_chat_id, logger,
   } = deps;

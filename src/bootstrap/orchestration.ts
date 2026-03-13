@@ -113,7 +113,7 @@ export function make_wait_kanban_event(store: KanbanStoreLike) {
 
 export async function create_orchestration_bundle(deps: OrchestrationBundleDeps): Promise<OrchestrationBundleResult> {
   const {
-    workspace, user_dir, data_dir, app_config,
+    workspace, user_dir, data_dir: _data_dir, app_config,
     providers, agent, agent_runtime, agent_backend_registry, provider_caps,
     bus, events, decisions, process_tracker, mcp,
     phase_workflow_store, broadcaster, confirmation_guard,

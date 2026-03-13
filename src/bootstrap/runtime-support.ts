@@ -47,7 +47,7 @@ export interface RuntimeSupportResult {
 
 export function create_runtime_support(deps: RuntimeSupportDeps): RuntimeSupportResult {
   const {
-    workspace, user_dir, app_config, provider_store,
+    workspace: _workspace, user_dir, app_config, provider_store,
     agent, agent_runtime, bus, channel_manager,
     cron, decisions, providers, sessions, dlq_store,
     primary_provider, default_chat_id, logger,

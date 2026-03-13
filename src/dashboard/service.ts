@@ -22,7 +22,6 @@ import { SystemMetricsCollector } from "./system-metrics.js";
 import type { RouteContext, RouteHandler } from "./route-context.js";
 import { create_correlation } from "../observability/correlation.js";
 import { NOOP_OBSERVABILITY, type ObservabilityLike } from "../observability/context.js";
-import { correlation_to_log_context } from "../logger.js";
 import { SseManager } from "./sse-manager.js";
 import { MediaTokenStore } from "./media-store.js";
 import { build_dashboard_state, build_merged_tasks } from "./state-builder.js";

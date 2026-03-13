@@ -4,9 +4,8 @@
  * SpanRecorderLike + MetricsSinkLike를 하나로 묶어 DI 한 번에 주입.
  * 미설정 시 NOOP_OBSERVABILITY로 무비용 fallback.
  */
-import type { SpanRecorderLike, SpanHandle, ExecutionSpan, SpanKind } from "./span.js";
-import type { MetricsSinkLike, MetricsSnapshot, Labels } from "./metrics.js";
-import type { CorrelationContext } from "./correlation.js";
+import type { SpanRecorderLike, SpanHandle, ExecutionSpan } from "./span.js";
+import type { MetricsSinkLike, MetricsSnapshot } from "./metrics.js";
 
 export interface ObservabilityLike {
   readonly spans: SpanRecorderLike;

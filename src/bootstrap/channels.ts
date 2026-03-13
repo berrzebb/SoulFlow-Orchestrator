@@ -64,7 +64,7 @@ export interface ChannelBundleResult {
 
 export async function create_channel_bundle(deps: ChannelBundleDeps): Promise<ChannelBundleResult> {
   const {
-    ctx, workspace, user_dir, data_dir, app_config, shared_vault,
+    ctx, workspace: _workspace, user_dir, data_dir: _data_dir, app_config, shared_vault,
     bus, broadcaster, agent, agent_runtime, sessions, logger,
   } = deps;
 

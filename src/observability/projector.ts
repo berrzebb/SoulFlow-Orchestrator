@@ -92,7 +92,7 @@ function compute_latency_summary(spans: ReadonlyArray<ExecutionSpan>): LatencyPe
   const by_kind = new Map<SpanKind, number[]>();
 
   for (const s of spans) {
-    if (s.duration_ms == null) continue;
+    if (s.duration_ms === undefined) continue;
     let arr = by_kind.get(s.kind);
     if (!arr) { arr = []; by_kind.set(s.kind, arr); }
     arr.push(s.duration_ms);

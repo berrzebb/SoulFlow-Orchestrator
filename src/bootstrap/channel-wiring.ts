@@ -74,7 +74,7 @@ export interface ChannelWiringResult {
 
 export function create_channel_wiring(deps: ChannelWiringDeps): ChannelWiringResult {
   const {
-    workspace, user_dir, app_config, agent, agent_runtime, agent_backend_registry,
+    workspace: _workspace, user_dir, app_config, agent, agent_runtime, agent_backend_registry,
     bus, broadcaster, channels, instance_store,
     dispatch, session_recorder, media_collector, approval,
     active_run_controller, render_profile_store,

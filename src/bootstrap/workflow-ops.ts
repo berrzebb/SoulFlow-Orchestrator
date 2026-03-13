@@ -63,7 +63,7 @@ export interface WorkflowOpsBundleResult {
 
 export async function create_workflow_ops_bundle(deps: WorkflowOpsBundleDeps): Promise<WorkflowOpsBundleResult> {
   const {
-    workspace, user_dir, agent, bus, providers, provider_store, decisions,
+    workspace: _workspace, user_dir, agent, bus, providers, provider_store, decisions,
     phase_workflow_store, kanban_store, kanban_tool, kanban_automation,
     hitl_pending_store, persona_renderer, broadcaster, channel_manager,
     embed_service, vector_store_service, webhook_store, query_db_service,
