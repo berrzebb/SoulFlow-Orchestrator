@@ -7,6 +7,7 @@ import type { SessionStoreLike } from "../session/index.js";
 import type { JwtPayload } from "../auth/auth-service.js";
 import type { TeamRole } from "../auth/team-store.js";
 import type { DashboardMemoryOps } from "./service.types.js";
+import { type CorrelationContext, create_correlation } from "../observability/correlation.js";
 
 /** Phase 8-23: 현재 요청의 팀 문맥. auth_middleware 검증 후 주입. */
 export type TeamContext = {
@@ -70,6 +71,8 @@ export type RouteContext = {
   add_rich_stream_listener: (chat_id: string, fn: (event: import("./broadcaster.js").WebStreamEvent) => void) => () => void;
   /** per-user 메모리 ops. 멀티테넌트에서 유저별 MemoryStore 캐시 기반. 미설정 시 글로벌 ops fallback. */
   get_scoped_memory_ops: () => DashboardMemoryOps | null;
+  /** OB-1: 요청 단위 correlation context. service.ts에서 1회 생성 후 고정. */
+  correlation: CorrelationContext;
 };
 
 export type RouteHandler = (ctx: RouteContext) => Promise<boolean>;
@@ -184,4 +187,15 @@ export function can_write_scope(ctx: RouteContext, scope_type: string, scope_id:
     return ctx.auth_user?.sub === scope_id;
   }
   return false;
+}
+
+// ── OB-1: Correlation Context ──
+
+/** RouteContext에서 CorrelationContext 추출. 매 요청마다 새 trace_id를 생성. */
+export function extract_correlation(ctx: RouteContext): CorrelationContext {
+  return create_correlation({
+    team_id: ctx.team_context?.team_id,
+    user_id: ctx.auth_user?.sub,
+    workspace_dir: ctx.workspace_runtime?.workspace_path,
+  });
 }

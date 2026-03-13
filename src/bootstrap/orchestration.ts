@@ -35,6 +35,7 @@ import { create_logger } from "../logger.js";
 import { create_cd_observer } from "../agent/cd-scoring.js";
 import { HookRunner, load_hooks_from_file } from "../hooks/index.js";
 import type { TeamWorkspace } from "../workspace/workspace-context.js";
+import type { ObservabilityLike } from "../observability/context.js";
 
 export interface OrchestrationBundleDeps {
   ctx: TeamWorkspace;
@@ -69,6 +70,7 @@ export interface OrchestrationBundleDeps {
   primary_provider: string;
   default_chat_id: string;
   logger: ReturnType<typeof create_logger>;
+  observability?: ObservabilityLike | null;
 }
 
 export interface OrchestrationBundleResult {
@@ -243,6 +245,7 @@ export async function create_orchestration_bundle(deps: OrchestrationBundleDeps)
     tool_index,
     create_task: create_task_fn,
     hook_runner,
+    observability: deps.observability,
   });
 
   // 팀 스코프: 크론 잡은 팀 멤버 간 공유

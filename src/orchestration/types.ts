@@ -1,5 +1,6 @@
 import type { InboundMessage, ProgressEvent } from "../bus/types.js";
 import type { ChannelProvider } from "../channels/types.js";
+import type { CorrelationContext } from "../observability/correlation.js";
 
 export type ExecutionMode = "once" | "agent" | "task" | "phase";
 
@@ -47,6 +48,8 @@ export type OrchestrationRequest = {
   workspace_override?: string;
   /** per-request 유저 콘텐츠 루트. 워크플로우/스킬 템플릿 로드 경로. */
   user_dir_override?: string;
+  /** OB-1: 실행 경로 correlation context. 채널/대시보드 진입점에서 생성. */
+  correlation?: CorrelationContext;
 };
 
 /** 결과에 포함되는 토큰/비용 요약. */

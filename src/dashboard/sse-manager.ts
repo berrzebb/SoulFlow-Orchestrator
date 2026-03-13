@@ -7,6 +7,8 @@ import type { ProgressEvent } from "../bus/types.js";
 import type { AgentEvent } from "../agent/agent.types.js";
 import type { RecentMessage } from "./service.types.js";
 import type { SseBroadcasterLike, WebStreamEvent } from "./broadcaster.js";
+import type { CanvasSpec } from "./canvas.types.js";
+import { NOOP_OBSERVABILITY, type ObservabilityLike } from "../observability/context.js";
 import { now_iso, short_id } from "../utils/common.js";
 import { set_no_cache } from "./route-context.js";
 import { pick_agent_event_fields } from "./state-builder.js";
@@ -21,6 +23,9 @@ export class SseManager implements SseBroadcasterLike {
   readonly recent_messages: RecentMessage[] = [];
   /** 세션별 WebStreamEvent 리스너 (chat_id → 리스너 집합 + 텍스트 offset). */
   private readonly rich_listeners = new Map<string, { listeners: Set<RichStreamListener>; offset: number }>();
+  private _obs: ObservabilityLike = NOOP_OBSERVABILITY;
+
+  set_observability(obs: ObservabilityLike): void { this._obs = obs; }
 
   get client_count(): number { return this.clients.size; }
 
@@ -41,12 +46,14 @@ export class SseManager implements SseBroadcasterLike {
   }
 
   broadcast_process_event(type: "start" | "end", entry: ProcessEntry): void {
+    this._count_broadcast("process");
     if (this.clients.size === 0) return;
     const payload = `event: process\ndata: ${JSON.stringify({ type, run_id: entry.run_id, alias: entry.alias, mode: entry.mode, status: entry.status, at: now_iso() })}\n\n`;
     this._broadcast_scoped(payload, (entry as { team_id?: string }).team_id);
   }
 
   broadcast_message_event(direction: "inbound" | "outbound", sender_id: string, content?: string, chat_id?: string, team_id?: string): void {
+    this._count_broadcast("message");
     const at = now_iso();
     this.recent_messages.push({ direction, sender_id, content: String(content || "").slice(0, 200), chat_id: chat_id || "", team_id: team_id || "", at });
     while (this.recent_messages.length > MAX_RECENT_MESSAGES) this.recent_messages.shift();
@@ -55,22 +62,26 @@ export class SseManager implements SseBroadcasterLike {
   }
 
   broadcast_cron_event(type: string, job_id?: string, team_id?: string): void {
+    this._count_broadcast("cron");
     if (this.clients.size === 0) return;
     this._broadcast_scoped(`event: cron\ndata: ${JSON.stringify({ type, job_id: job_id ?? null, at: now_iso() })}\n\n`, team_id);
   }
 
   broadcast_progress_event(event: ProgressEvent, team_id?: string): void {
+    this._count_broadcast("progress");
     if (this.clients.size === 0) return;
     this._broadcast_scoped(`event: progress\ndata: ${JSON.stringify(event)}\n\n`, team_id);
   }
 
   broadcast_task_event(type: "status_change", task: TaskState): void {
+    this._count_broadcast("task");
     if (this.clients.size === 0) return;
     const payload = `event: task\ndata: ${JSON.stringify({ type, taskId: task.taskId, title: task.title, status: task.status, exitReason: task.exitReason, currentStep: task.currentStep, currentTurn: task.currentTurn, maxTurns: task.maxTurns, channel: task.channel, chatId: task.chatId, objective: (task.objective || "").slice(0, 200), at: now_iso() })}\n\n`;
     this._broadcast_scoped(payload, task.team_id);
   }
 
   broadcast_web_stream(chat_id: string, content: string, done: boolean, team_id?: string): void {
+    this._count_broadcast("web_stream");
     if (this.clients.size > 0) {
       this._broadcast_scoped(`event: web_stream\ndata: ${JSON.stringify({ chat_id, content, done })}\n\n`, team_id);
     }
@@ -116,20 +127,32 @@ export class SseManager implements SseBroadcasterLike {
     this._broadcast_scoped(`event: web_message\ndata: ${JSON.stringify({ chat_id })}\n\n`, team_id);
   }
 
+  broadcast_canvas(chat_id: string, spec: CanvasSpec, team_id?: string): void {
+    this._count_broadcast("canvas");
+    if (this.clients.size === 0) return;
+    this._broadcast_scoped(`event: canvas\ndata: ${JSON.stringify({ chat_id, spec })}\n\n`, team_id);
+  }
+
   broadcast_mirror_message(event: { session_key: string; direction: string; sender_id: string; content: string; at: string }, team_id?: string): void {
     if (this.clients.size === 0) return;
     this._broadcast_scoped(`event: mirror_message\ndata: ${JSON.stringify(event)}\n\n`, team_id);
   }
 
   broadcast_workflow_event(event: import("../agent/phase-loop.types.js").PhaseLoopEvent, team_id?: string): void {
+    this._count_broadcast("workflow");
     if (this.clients.size === 0) return;
     this._broadcast_scoped(`event: workflow\ndata: ${JSON.stringify({ ...event, at: now_iso() })}\n\n`, team_id);
   }
 
   broadcast_agent_event(event: AgentEvent, team_id?: string): void {
+    this._count_broadcast("agent");
     if (this.clients.size === 0) return;
     const slim = { type: event.type, backend: event.source.backend, task_id: event.source.task_id, at: event.at, ...pick_agent_event_fields(event) };
     this._broadcast_scoped(`event: agent\ndata: ${JSON.stringify(slim)}\n\n`, team_id);
+  }
+
+  private _count_broadcast(event_type: string): void {
+    this._obs.metrics.counter("sse_broadcasts_total", 1, { event_type });
   }
 
   /** 전체 클라이언트에 전송. */

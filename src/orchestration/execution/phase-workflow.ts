@@ -6,6 +6,7 @@ import type { ProcessTrackerLike } from "../process-tracker.js";
 import type { ProviderRegistry } from "../../providers/service.js";
 import type { AgentRuntimeLike } from "../../agent/runtime.types.js";
 import type { HitlPendingStore } from "../hitl-pending-store.js";
+import { NOOP_OBSERVABILITY, type ObservabilityLike } from "../../observability/context.js";
 import { error_result } from "./helpers.js";
 import { now_iso, error_message, short_id } from "../../utils/common.js";
 
@@ -31,10 +32,39 @@ export type PhaseWorkflowDeps = {
   wait_kanban_event?: (board_id: string, filter: { actions?: string[]; column_id?: string }) => Promise<{ card_id: string; board_id: string; action: string; actor: string; detail: Record<string, unknown>; created_at: string } | null>;
   create_task?: (opts: { title: string; objective: string; channel?: string; chat_id?: string; max_turns?: number; initial_memory?: Record<string, unknown> }) => Promise<{ task_id: string; status: string; result?: unknown; error?: string }>;
   query_db?: (datasource: string, query: string, params?: Record<string, unknown>) => Promise<{ rows: unknown[]; affected_rows: number }>;
+  observability?: ObservabilityLike | null;
 };
 
 /** Phase 워크플로우 실행: 템플릿 선택 또는 동적 생성 → phase-loop-runner 실행. */
 export async function run_phase_loop(
+  deps: PhaseWorkflowDeps,
+  req: OrchestrationRequest,
+  task_with_media: string,
+  workflow_hint?: string,
+  node_categories?: string[],
+): Promise<OrchestrationResult> {
+  const obs = deps.observability ?? NOOP_OBSERVABILITY;
+  const correlation = { run_id: req.run_id, provider: req.provider, chat_id: req.message.chat_id };
+  const span = obs.spans.start("workflow_run", "run_phase_loop", correlation, { workflow_hint: workflow_hint ?? "" });
+  const start = Date.now();
+
+  try {
+    const result = await _run_phase_loop_inner(deps, req, task_with_media, workflow_hint, node_categories);
+    const status = result.error ? "error" : "ok";
+    span.end(status);
+    obs.metrics.counter("workflow_runs_total", 1, { status });
+    obs.metrics.histogram("workflow_run_duration_ms", Date.now() - start, {});
+    return result;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    span.fail(message);
+    obs.metrics.counter("workflow_runs_total", 1, { status: "error" });
+    obs.metrics.histogram("workflow_run_duration_ms", Date.now() - start, {});
+    throw err;
+  }
+}
+
+async function _run_phase_loop_inner(
   deps: PhaseWorkflowDeps,
   req: OrchestrationRequest,
   task_with_media: string,

@@ -4,6 +4,10 @@ import type { ProviderRegistry } from "../providers/service.js";
 import type { ServiceLike } from "../runtime/service.types.js";
 import type { AppConfig } from "../config/schema.js";
 import type { Logger } from "../logger.js";
+import { create_correlation } from "../observability/correlation.js";
+import { NOOP_OBSERVABILITY, type ObservabilityLike } from "../observability/context.js";
+import { start_delivery, finish_delivery } from "../observability/delivery-trace.js";
+import { correlation_to_log_context } from "../logger.js";
 import type { CommandRouter } from "./commands/router.js";
 import { format_mention, type CommandContext } from "./commands/types.js";
 import type { DispatchService } from "./dispatch.service.js";
@@ -110,6 +114,8 @@ export type ChannelManagerDeps = {
   render_profile_store?: import("./commands/render.handler.js").RenderProfileStore;
   /** 스레드 소유권 관리. 미지정 시 소유권 검사 비활성. */
   thread_ownership?: ThreadOwnership | null;
+  /** OB-5: observability 주입. 미설정 시 no-op. */
+  observability?: import("../observability/context.js").ObservabilityLike | null;
 };
 
 // ActiveRun 타입은 active-run-controller.ts에서 import
@@ -146,6 +152,7 @@ export class ChannelManager implements ServiceLike {
   private readonly on_activity_end: (() => void) | null;
   private readonly renderer: PersonaMessageRendererLike | null;
   private readonly thread_ownership: ThreadOwnership | null;
+  private readonly _obs: ObservabilityLike;
 
   private _bot_ids_cache: Record<string, string> | null = null;
   private _bot_ids_cache_at = 0;
@@ -197,6 +204,7 @@ export class ChannelManager implements ServiceLike {
     this.on_activity_end = deps.on_activity_end ?? null;
     this.renderer = deps.renderer ?? null;
     this.thread_ownership = deps.thread_ownership ?? null;
+    this._obs = deps.observability ?? NOOP_OBSERVABILITY;
     this.active_runs = deps.active_run_controller ?? new ActiveRunController();
     this.render_store = deps.render_profile_store ?? new InMemoryRenderProfileStore();
     this.inbound_lanes = new LaneQueue({
@@ -358,6 +366,12 @@ export class ChannelManager implements ServiceLike {
     if (!provider) return;
     const ck = render_key(provider, message.chat_id);
 
+    // OB-5: channel inbound span + metrics
+    const msg_meta = (message.metadata && typeof message.metadata === "object") ? message.metadata as Record<string, unknown> : {};
+    const inbound_corr = create_correlation({ provider, chat_id: message.chat_id, user_id: message.sender_id, team_id: typeof msg_meta.team_id === "string" ? msg_meta.team_id : undefined });
+    const inbound_span = this._obs.spans.start("channel_inbound", "message", inbound_corr, { provider, chat_id: message.chat_id });
+    this._obs.metrics.counter("channel_inbound_total", 1, { provider });
+
     this.mark_seen(message);
     this.on_activity_start?.();
 
@@ -481,11 +495,15 @@ export class ChannelManager implements ServiceLike {
     } finally {
       await this.registry.set_typing(channel_id, message.chat_id, false, anchor_ts);
     }
+    } catch (err) {
+      inbound_span.fail(err instanceof Error ? err.message : String(err));
+      throw err;
     } finally {
       // current-turn override는 이번 턴 응답까지만 적용 — 다음 턴에 누수 방지
       if (tone) this.tone_overrides.delete(ck);
       // 모든 경로(조기 반환/invoke_and_reply)에서 busy_count 감소 보장
       this.on_activity_end?.();
+      if (!inbound_span.span.ended_at) inbound_span.end("ok");
     }
   }
 
@@ -702,11 +720,22 @@ export class ChannelManager implements ServiceLike {
       const workspace_override = typeof msg_meta.workspace_dir === "string" ? msg_meta.workspace_dir : undefined;
       const msg_team_id = typeof msg_meta.team_id === "string" ? msg_meta.team_id : undefined;
 
+      const correlation = create_correlation({
+        team_id: msg_team_id,
+        user_id: message.sender_id,
+        chat_id: message.chat_id,
+        provider,
+        run_id,
+      });
+      const corr_log = this.logger.child("orchestration", correlation_to_log_context(correlation));
+      corr_log.info("orchestration_start", { alias });
+
       const result = await this.orchestration.execute({
         message, alias, provider, media_inputs,
         session_history: history,
         resumed_task_id,
         run_id,
+        correlation,
         preferred_provider_id,
         preferred_model,
         system_prompt_override,
@@ -927,17 +956,38 @@ export class ChannelManager implements ServiceLike {
     provider: ChannelProvider, message: InboundMessage, sender_id: string, content: string,
     metadata: Record<string, unknown>, media?: MediaItem[], id_prefix?: string,
   ): Promise<string | undefined> {
-    const outbound = {
-      id: `${id_prefix || provider}-${Date.now()}`, provider, instance_id: message.instance_id || provider, channel: provider, sender_id,
-      chat_id: message.chat_id, content, media, at: now_iso(),
-      reply_to: resolve_reply_to(provider, message), thread_id: message.thread_id, metadata,
-    };
-    if (provider === "web") {
-      await this.bus.publish_outbound(outbound);
-      return undefined;
+    // OB-5: channel outbound metrics
+    this._obs.metrics.counter("channel_outbound_total", 1, { provider });
+
+    // OB-6: delivery trace — requested vs delivered channel 추적
+    const requested_channel = String((message.metadata as Record<string, unknown>)?.origin_channel || message.instance_id || provider);
+    const delivery_handle = start_delivery(this._obs, {
+      requested_channel,
+      delivered_channel: provider,
+      delivery_attempt: 1,
+      reply_target_chat_id: message.chat_id,
+      reply_target_sender_id: message.sender_id,
+    }, { provider, chat_id: message.chat_id });
+    const delivery_start = Date.now();
+
+    try {
+      const outbound = {
+        id: `${id_prefix || provider}-${Date.now()}`, provider, instance_id: message.instance_id || provider, channel: provider, sender_id,
+        chat_id: message.chat_id, content, media, at: now_iso(),
+        reply_to: resolve_reply_to(provider, message), thread_id: message.thread_id, metadata,
+      };
+      if (provider === "web") {
+        await this.bus.publish_outbound(outbound);
+        finish_delivery(delivery_handle, this._obs, "sent", Date.now() - delivery_start);
+        return undefined;
+      }
+      const result = await this.dispatch.send(provider, outbound);
+      finish_delivery(delivery_handle, this._obs, "sent", Date.now() - delivery_start);
+      return result.message_id;
+    } catch (err) {
+      finish_delivery(delivery_handle, this._obs, "failed", Date.now() - delivery_start);
+      throw err;
     }
-    const result = await this.dispatch.send(provider, outbound);
-    return result.message_id;
   }
 
   /** 긴 메시지를 채널 한도에 맞게 분할 전송. 첫 청크에만 멘션 + 미디어 포함. */

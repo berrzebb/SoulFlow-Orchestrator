@@ -28,6 +28,7 @@ import type { SessionStoreLike } from "../session/index.js";
 import type { MutableBroadcaster } from "../dashboard/broadcaster.js";
 import type { UsageStore } from "../gateway/usage-store.js";
 import { create_logger } from "../logger.js";
+import type { ObservabilityLike } from "../observability/context.js";
 import { ChannelManager } from "../channels/index.js";
 import { create_command_router } from "../channels/create-command-router.js";
 import { TaskResumeService } from "../channels/task-resume.service.js";
@@ -63,6 +64,7 @@ export interface ChannelWiringDeps {
   memory_consolidation: MemoryConsolidationService;
   logger: ReturnType<typeof create_logger>;
   usage_store?: UsageStore | null;
+  observability?: ObservabilityLike | null;
 }
 
 export interface ChannelWiringResult {
@@ -135,6 +137,7 @@ export function create_channel_wiring(deps: ChannelWiringDeps): ChannelWiringRes
     renderer: persona_renderer,
     active_run_controller,
     render_profile_store,
+    observability: deps.observability,
   });
 
   // ActiveRunController에 ProcessTracker 연결 (cancel 시 run 종료 기록)

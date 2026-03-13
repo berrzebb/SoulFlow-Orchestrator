@@ -43,6 +43,7 @@ import { UsageStore } from "../gateway/usage-store.js";
 import type { AuthService } from "../auth/auth-service.js";
 import { WorkspaceResolver } from "../workspace/resolver.js";
 import type { WorkspaceRegistry } from "../workspace/registry.js";
+import type { ObservabilityLike } from "../observability/context.js";
 
 export interface DashboardBundleDeps {
   workspace: string;
@@ -84,6 +85,7 @@ export interface DashboardBundleDeps {
   usage_store?: UsageStore | null;
   auth_svc?: AuthService | null;
   workspace_registry?: WorkspaceRegistry | null;
+  observability?: ObservabilityLike | null;
 }
 
 export interface DashboardBundleResult {
@@ -225,9 +227,11 @@ Description: ${prompt}`,
     default_alias: app_config.channel.defaultAlias,
     workspace,
     webhookSecret: app_config.dashboard.webhookSecret,
+    observability: deps.observability,
   });
 
   broadcaster.attach(dash.sse);
+  if (deps.observability) dash.sse.set_observability(deps.observability);
   dash.set_oauth_callback_handler((code: string, state: string) => oauth_flow.handle_callback(code, state));
   dash.set_webhook_store(webhook_store);
   bus.on_publish((dir, msg) => {

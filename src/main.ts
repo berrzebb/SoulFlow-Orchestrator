@@ -17,7 +17,7 @@ import { create_runtime_support } from "./bootstrap/runtime-support.js";
 import { create_runtime_data } from "./bootstrap/runtime-data.js";
 import { create_channel_wiring } from "./bootstrap/channel-wiring.js";
 import { register_shutdown_handlers } from "./bootstrap/lifecycle.js";
-import { AgentDomain, PollTool } from "./agent/index.js";
+import { AgentDomain, PollTool, CanvasTool } from "./agent/index.js";
 import type { MessageBusRuntime } from "./bus/index.js";
 import { ChannelManager, type ChannelRegistryLike } from "./channels/index.js";
 import { CronService } from "./cron/index.js";
@@ -27,6 +27,9 @@ import { DecisionService } from "./decision/index.js";
 import { WorkflowEventService } from "./events/index.js";
 import { HeartbeatService } from "./heartbeat/index.js";
 import { create_logger } from "./logger.js";
+import { ExecutionSpanRecorder } from "./observability/span.js";
+import { MetricsSink } from "./observability/metrics.js";
+import type { ObservabilityLike } from "./observability/context.js";
 import { OpsRuntimeService } from "./ops/index.js";
 import { OrchestratorLlmRuntime, ProviderRegistry } from "./providers/index.js";
 import { acquire_runtime_instance_lock } from "./runtime/instance-lock.js";
@@ -102,6 +105,12 @@ export async function createRuntime(): Promise<RuntimeApp> {
 
   const broadcaster = new MutableBroadcaster();
 
+  // OB-5: 공유 observability 인스턴스 — 모든 서비스에 DI로 전달
+  const observability: ObservabilityLike = {
+    spans: new ExecutionSpanRecorder(),
+    metrics: new MetricsSink(),
+  };
+
   const {
     agent, agent_runtime, agent_inspector,
     persona_renderer, tone_pref_store,
@@ -126,6 +135,10 @@ export async function createRuntime(): Promise<RuntimeApp> {
   // channels 생성 후 PollTool 지연 등록 (AgentDomain이 channels보다 먼저 생성되므로)
   agent.tools.register(new PollTool(channels));
   const dashboard: { current: DashboardService | null } = { current: null };
+  // CanvasTool 지연 등록 — dashboard.current는 클로저 실행 시점에 평가
+  agent.tools.register(new CanvasTool({
+    broadcast_callback: (chat_id, spec) => { dashboard.current?.sse.broadcast_canvas(chat_id, spec); },
+  }));
 
   const { orchestration, cron, create_task_fn, oauth_fetch_service } = await create_orchestration_bundle({
     ctx, workspace, user_dir, data_dir, app_config,
@@ -136,6 +149,7 @@ export async function createRuntime(): Promise<RuntimeApp> {
     embed_service, vector_store_service, webhook_store, kanban_store, query_db_service,
     persona_renderer, hitl_pending_store, tool_index,
     resolve_instance_to_type, primary_provider, default_chat_id, logger,
+    observability,
   });
 
   const usage_store = new UsageStore(user_dir);
@@ -155,7 +169,7 @@ export async function createRuntime(): Promise<RuntimeApp> {
     process_tracker, confirmation_guard, orchestration,
     providers, mcp, cron, decisions, sessions,
     persona_renderer, tone_pref_store, memory_consolidation, logger,
-    usage_store,
+    usage_store, observability,
   });
 
   const { orchestrator_llm_runtime, services, heartbeat, ops } = create_runtime_support({
@@ -187,7 +201,7 @@ export async function createRuntime(): Promise<RuntimeApp> {
     sessions, dlq_store, dispatch, oauth_store, oauth_flow,
     kanban_store, kanban_automation, reference_store, webhook_store,
     agent_definition_store, workflow_ops_result, usage_store,
-    auth_svc, workspace_registry,
+    auth_svc, workspace_registry, observability,
   });
   dashboard.current = dashboard_instance;
 

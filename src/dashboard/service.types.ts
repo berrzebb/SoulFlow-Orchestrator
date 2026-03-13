@@ -362,6 +362,8 @@ export type DashboardOptions = {
   /** 멀티유저 워크스페이스 경로 레지스트리. JWT 인증 후 자동 디렉토리 보장. */
   workspace_registry?: import("../workspace/registry.js").WorkspaceRegistry | null;
   logger?: Logger | null;
+  /** OB-5: observability 주입. 미설정 시 no-op. */
+  observability?: import("../observability/context.js").ObservabilityLike | null;
 };
 
 export const MAX_CHAT_SESSIONS = 20;

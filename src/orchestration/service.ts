@@ -7,6 +7,8 @@ import type { RuntimePolicyResolver } from "../channels/runtime-policy.js";
 import type { SecretVaultService } from "../security/secret-vault.js";
 import type { CompactionFlushConfig } from "../agent/loop.js";
 import type { Logger } from "../logger.js";
+import { correlation_to_log_context } from "../logger.js";
+import { NOOP_OBSERVABILITY as NOOP_OBS } from "../observability/context.js";
 import type { ToolExecutionContext } from "../agent/tools/types.js";
 import type { ExecutionMode, OrchestrationRequest, OrchestrationResult } from "./types.js";
 import { StreamBuffer } from "../channels/stream-buffer.js";
@@ -120,6 +122,8 @@ export type OrchestrationServiceDeps = {
   tool_index?: import("./tool-index.js").ToolIndex | null;
   /** 사용자 정의 훅 실행기 (HOOK.md / settings). */
   hook_runner?: import("../hooks/runner.js").HookRunner | null;
+  /** OB-5: observability 주입. 미설정 시 no-op. */
+  observability?: import("../observability/context.js").ObservabilityLike | null;
 };
 
 
@@ -148,6 +152,7 @@ export class OrchestrationService {
   private readonly tool_index: import("./tool-index.js").ToolIndex | null;
   private readonly hook_runner: import("../hooks/runner.js").HookRunner | null;
   private _renderer: PersonaMessageRendererLike | null;
+  private readonly _obs: import("../observability/context.js").ObservabilityLike;
 
   constructor(deps: OrchestrationServiceDeps) {
     this._renderer = deps.renderer ?? null;
@@ -166,6 +171,7 @@ export class OrchestrationService {
     this.session_cd = deps.session_cd;
     this.tool_index = deps.tool_index ?? null;
     this.hook_runner = deps.hook_runner ?? null;
+    this._obs = deps.observability ?? NOOP_OBS;
     this.deps = deps;
 
     this.streaming_cfg = {
@@ -324,6 +330,7 @@ export class OrchestrationService {
       bus: this.deps.bus ?? null,
       hitl_store: this.hitl_store,
       get_sse_broadcaster: this.deps.get_sse_broadcaster,
+      observability: this._obs,
       render_hitl: (body, type) => this._render_hitl(body, type),
       decision_service: this.deps.decision_service || null,
       promise_service: this.deps.promise_service || null,
@@ -374,6 +381,17 @@ export class OrchestrationService {
   }
 
   async execute(req: OrchestrationRequest): Promise<OrchestrationResult> {
+    // OB-1: correlation-bound 로그 — 이후 모든 로그에 trace_id/team_id 등이 포함됨
+    if (req.correlation) {
+      const corr_log = this.logger.child("orchestration:execute", correlation_to_log_context(req.correlation));
+      corr_log.info("execute_start", { mode: "pending", provider: req.message.instance_id });
+    }
+
+    // OB-5: orchestration span + metrics
+    const exec_start = Date.now();
+    const exec_span = this._obs.spans.start("orchestration_run", "execute", req.correlation ?? {}, { provider: req.provider });
+
+    try {
     // Phase 4.4: Request Preflight — seal, skill 검색, secret 검증, context 조립을 한 경로로 수렴
     const preflight = await run_request_preflight(this._preflight_deps(), req);
 
@@ -381,11 +399,15 @@ export class OrchestrationService {
     if (preflight.kind === "resume") {
       const resume_result = await this.continue_task_loop(req, preflight.resumed_task, preflight.task_with_media, preflight.media);
       record_turn_to_daily(req, resume_result, this.runtime.get_context_builder()?.memory_store);
+      exec_span.end("ok", { mode: resume_result.mode });
+      this._record_orchestration_metrics(exec_start, req.provider);
       return resume_result;
     }
 
     // secret 검증 실패 → 조기 차단
     if (!preflight.secret_guard.ok) {
+      exec_span.end("ok", { mode: "once", secret_blocked: true });
+      this._record_orchestration_metrics(exec_start, req.provider);
       return { reply: format_secret_notice(preflight.secret_guard), mode: "once", tool_calls_count: 0, streamed: false };
     }
 
@@ -393,7 +415,21 @@ export class OrchestrationService {
     const result = await execute_dispatch(this._dispatch_deps(), req, preflight);
     // 오케스트레이터 레벨 daily 기록 — 에이전트가 memory 도구를 호출하지 않아도 보장
     record_turn_to_daily(req, result, this.runtime.get_context_builder()?.memory_store);
+    exec_span.end(result.error ? "error" : "ok", { mode: result.mode });
+    this._record_orchestration_metrics(exec_start, req.provider);
     return result;
+
+    } catch (err) {
+      exec_span.fail(err instanceof Error ? err.message : String(err));
+      this._obs.metrics.counter("orchestration_runs_total", 1, { provider: req.provider, status: "error" });
+      this._obs.metrics.histogram("orchestration_run_duration_ms", Date.now() - exec_start, { provider: req.provider });
+      throw err;
+    }
+  }
+
+  private _record_orchestration_metrics(start: number, provider: string): void {
+    this._obs.metrics.counter("orchestration_runs_total", 1, { provider });
+    this._obs.metrics.histogram("orchestration_run_duration_ms", Date.now() - start, { provider });
   }
 
   /** 컨텍스트 압축 전 메모리 자동 저장 설정 생성. 200K 컨텍스트 기준. */
