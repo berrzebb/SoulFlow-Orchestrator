@@ -160,6 +160,7 @@ export async function handle_chat(ctx: RouteContext): Promise<boolean> {
     req.on("close", () => { clearTimeout(timeout); unsubscribe(); });
 
     append_user_message(session, parsed);
+    session_store?.append_message(session_store_key(session_id), { role: "user", content: parsed.text, timestamp: now_iso() }).catch(() => {});
 
     res.write(JSON.stringify({ type: "start" }) + "\n");
     bus.publish_inbound(build_publish_payload(session, parsed, publish_ctx)).catch(() => {
@@ -180,6 +181,7 @@ export async function handle_chat(ctx: RouteContext): Promise<boolean> {
     const parsed = parse_chat_body(body);
     if (!parsed.text && parsed.media.length === 0) { json(res, 400, { error: "content_or_media_required" }); return true; }
     append_user_message(session, parsed);
+    await session_store?.append_message(session_store_key(session_id), { role: "user", content: parsed.text, timestamp: now_iso() });
     await bus.publish_inbound(build_publish_payload(session, parsed, publish_ctx));
     json(res, 200, { ok: true, message_count: session.messages.length });
     return true;

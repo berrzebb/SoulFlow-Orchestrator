@@ -521,6 +521,8 @@ export class DashboardService implements ServiceLike {
       if (session.messages.length > MAX_MESSAGES_PER_SESSION) {
         session.messages.splice(0, session.messages.length - MAX_MESSAGES_PER_SESSION);
       }
+      const store_key = this._session_store_key(session.team_id, session.user_id, chat_id);
+      this.session_store?.append_message(store_key, { role: "assistant", content, timestamp: now_iso() }).catch(() => {});
     }
   }
 }
