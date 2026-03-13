@@ -13,6 +13,8 @@ export interface MessageBubbleProps {
   showRoleBadge?: boolean;
   /** 유저 메시지 우측 정렬 (기본 true) */
   alignUserRight?: boolean;
+  /** 메시지 본문 위 헤더 영역 (Thinking 블록 등) */
+  header?: ReactNode;
   /** 메시지 본문 아래 추가 콘텐츠 (미디어 등) */
   children?: ReactNode;
   /** 타임스탬프 레이블 (기본: role 기반) */
@@ -27,7 +29,7 @@ const DIRECTION_MAP: Record<string, "user" | "assistant"> = {
 
 export function MessageBubble({
   role, content, at, avatar, streaming,
-  showRoleBadge, alignUserRight = true, children, timeLabel,
+  showRoleBadge, alignUserRight = true, header, children, timeLabel,
 }: MessageBubbleProps) {
   const is_user = role === "user";
   const direction = DIRECTION_MAP[role] ?? "assistant";
@@ -43,11 +45,8 @@ export function MessageBubble({
           ref={contentRef}
           className={`chat-msg__content${streaming ? " chat-msg__content--streaming" : ""}`}
         >
-          {is_user
-            ? text
-            : streaming
-              ? <span className="chat-stream-text">{text}</span>
-              : <MarkdownContent content={text} />}
+          {header}
+          {is_user ? text : <MarkdownContent content={text} />}
           {streaming && <span className="chat-cursor" />}
           {children}
         </div>

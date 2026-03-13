@@ -2,7 +2,7 @@ import { forwardRef } from "react";
 import { EmptyState } from "../../components/empty-state";
 import { useT } from "../../i18n";
 import { ChatMessageBubble } from "./message-bubble";
-import { ToolCallList, ThinkingBlockList } from "./tool-call-block";
+import { ToolCallList } from "./tool-call-block";
 import { ApprovalBanner } from "../../components/approval-banner";
 import type { PendingApproval } from "../../components/approval-banner";
 import type { ToolCallEntry, ThinkingEntry } from "../../hooks/use-ndjson-stream";
@@ -30,18 +30,19 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(function
           <EmptyState icon="💬" title={t("chat.no_messages")} />
         )}
 
-        {props.messages.map((m, i) => (
-          <ChatMessageBubble
-            key={`${m.at}-${m.direction}-${i}`}
-            message={m}
-            streaming={props.is_streaming && i === last_idx && m.direction === "assistant"}
-          />
-        ))}
+        {props.messages.map((m, i) => {
+          const is_streaming_bubble = props.is_streaming && i === last_idx && m.direction === "assistant";
+          return (
+            <ChatMessageBubble
+              key={`${m.at}-${m.direction}-${i}`}
+              message={m}
+              streaming={is_streaming_bubble}
+              thinking_blocks={is_streaming_bubble ? props.thinking_blocks : undefined}
+            />
+          );
+        })}
 
-        {/* 스트리밍 중 thinking / 도구 호출 블록 — 마지막 어시스턴트 메시지 아래에 표시 */}
-        {props.is_streaming && props.thinking_blocks && props.thinking_blocks.length > 0 && (
-          <ThinkingBlockList blocks={props.thinking_blocks} />
-        )}
+        {/* 스트리밍 중 도구 호출 블록 — 마지막 버블 아래 */}
         {props.is_streaming && props.tool_calls && props.tool_calls.length > 0 && (
           <ToolCallList calls={props.tool_calls} />
         )}

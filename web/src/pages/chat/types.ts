@@ -12,6 +12,11 @@ export interface ChatSessionSummary {
   name?: string;
 }
 
+export interface ChatThinkingBlock {
+  tokens: number;
+  preview: string;
+}
+
 export interface ChatMessage {
   direction: "user" | "assistant";
   content: string;
@@ -19,6 +24,8 @@ export interface ChatMessage {
   media?: ChatMediaItem[];
   model?: string;
   provider_instance_id?: string;
+  /** 스트리밍 완료 후에도 유지되는 thinking 블록 (클라이언트 측 보존) */
+  thinking_blocks?: ChatThinkingBlock[];
 }
 
 export interface ChatSession {

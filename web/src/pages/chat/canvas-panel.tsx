@@ -139,7 +139,7 @@ function SvgBarChart({ component }: { component: CanvasChartComponent }) {
   const group_w = ba_w / labels.length;
   const bar_gap = 2;
   const bar_w = Math.max(2, (group_w - bar_gap * (n_ds + 1)) / n_ds);
-  const max_val = datasets.reduce((m, d) => d.data.reduce((mi, v) => Math.max(mi, Number(v) || 0), m), 1);
+  const max_val = datasets.reduce<number>((m, d) => d.data.reduce<number>((mi, v) => Math.max(mi, Number(v) || 0), m), 1);
 
   return (
     <svg viewBox={`0 0 ${vw} ${vh}`} className="canvas-chart__svg">
@@ -189,7 +189,7 @@ function SvgLineChart({ component }: { component: CanvasChartComponent }) {
   const ba_w = vw - pad.l - pad.r;
   const ba_h = vh - pad.t - pad.b;
   const ba_x = pad.l, ba_y = pad.t;
-  const max_val = datasets.reduce((m, d) => d.data.reduce((mi, v) => Math.max(mi, Number(v) || 0), m), 1);
+  const max_val = datasets.reduce<number>((m, d) => d.data.reduce<number>((mi, v) => Math.max(mi, Number(v) || 0), m), 1);
   const pt_x = (li: number) => ba_x + (li / Math.max(labels.length - 1, 1)) * ba_w;
   const pt_y = (val: number) => ba_y + ba_h - (val / max_val) * ba_h;
 

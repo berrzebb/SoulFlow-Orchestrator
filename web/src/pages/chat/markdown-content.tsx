@@ -1,24 +1,42 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
 import rehypeHighlight from "rehype-highlight";
+import rehypeKatex from "rehype-katex";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import type { Components } from "react-markdown";
 import type { Pluggable } from "unified";
 import "highlight.js/styles/github-dark.min.css";
+import "katex/dist/katex.min.css";
 
-/** highlight.js가 추가하는 클래스명을 sanitize에서 허용 */
+/** highlight.js + KaTeX가 추가하는 클래스명/인라인 스타일을 sanitize에서 허용 */
 const SANITIZE_SCHEMA = {
   ...defaultSchema,
   attributes: {
     ...defaultSchema.attributes,
     code: [...(defaultSchema.attributes?.code ?? []), "className"],
-    span: [...(defaultSchema.attributes?.span ?? []), "className"],
+    span: [...(defaultSchema.attributes?.span ?? []), "className", "style"],
+    div:  [...(defaultSchema.attributes?.div  ?? []), "className", "style"],
   },
   tagNames: [
     ...(defaultSchema.tagNames ?? []),
     "del", "input",
   ],
 };
+
+/** AI 모델이 생성하는 LaTeX 수식 구분자를 remark-math 호환 $$...$$ 형식으로 변환 */
+const DISPLAY_MATH_RE = /\\\[([\s\S]*?)\\\]/g;          // 표준: \[...\]
+const INLINE_MATH_RE = /\\\(([\s\S]*?)\\\)/g;           // 표준: \(...\)
+/** AI 비표준 형식: 줄 전체가 [ ... ] 이고 \command 포함 */
+const AI_DISPLAY_MATH_RE = /^\[ (.*?\\[a-zA-Z].*?) \]$/gm;
+
+function preprocess_latex(content: string): string {
+  // replace()에서 $$$$이 리터럴 $$, $1이 캡처그룹
+  return content
+    .replace(DISPLAY_MATH_RE, "\n$$$$\n$1\n$$$$\n")     // \[...\] → $$...$$
+    .replace(INLINE_MATH_RE, "$$$1$$")                   // \(...\) → $...$
+    .replace(AI_DISPLAY_MATH_RE, "\n$$$$\n$1\n$$$$\n"); // [ ... ] → $$...$$
+}
 
 const SAFE_URL_RE = /^https?:\/\//i;
 
@@ -45,8 +63,12 @@ const COMPONENTS: Components = {
   img: SafeImage as Components["img"],
 };
 
-const REMARK_PLUGINS: Pluggable[] = [remarkGfm];
-const REHYPE_PLUGINS: Pluggable[] = [rehypeHighlight, [rehypeSanitize, SANITIZE_SCHEMA]];
+const REMARK_PLUGINS: Pluggable[] = [remarkGfm, remarkMath];
+const REHYPE_PLUGINS: Pluggable[] = [
+  rehypeHighlight,
+  [rehypeKatex, { output: "html" }],
+  [rehypeSanitize, SANITIZE_SCHEMA],
+];
 
 export function MarkdownContent({ content }: { content: string }) {
   return (
@@ -56,7 +78,7 @@ export function MarkdownContent({ content }: { content: string }) {
         rehypePlugins={REHYPE_PLUGINS}
         components={COMPONENTS}
       >
-        {content}
+        {preprocess_latex(content)}
       </ReactMarkdown>
     </div>
   );

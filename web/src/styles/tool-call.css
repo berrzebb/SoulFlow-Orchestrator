@@ -167,6 +167,16 @@
   border-top: 1px solid color-mix(in srgb, var(--line) 50%, transparent);
 }
 
+/* 채팅 버블 내부 — Thinking이 본문 위에 위치: 상단 구분선 제거, 하단 구분선으로 본문과 분리 */
+.chat-msg__content .thinking-block-list {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+  margin-bottom: var(--sp-3);
+  padding-bottom: var(--sp-2);
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 50%, transparent);
+}
+
 .thinking-block-list__scroll {
   display: flex;
   flex-direction: column;
