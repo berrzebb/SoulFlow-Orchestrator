@@ -30,6 +30,7 @@ services:
       NODE_ENV: ${NODE_ENV:-production}
       WORKSPACE: /data
       WORKSPACE_USER_DIR: ${WORKSPACE_USER_DIR:-}
+      ADMIN_DB_PATH: ${ADMIN_DB_PATH:-}
       REDIS_URL: redis://redis:6379
       DEBUG: ${DEBUG:-false}
       SKIP_INSTANCE_LOCK: ${SKIP_INSTANCE_LOCK:-0}
@@ -39,6 +40,8 @@ services:
       - ${HOST_WORKSPACE:-.}/.agents/.claude:/root/.claude
       - ${HOST_WORKSPACE:-.}/.agents/.codex:/root/.codex
       - ${HOST_WORKSPACE:-.}/.agents/.gemini:/root/.gemini
+    # Agent Browser: /dev/shm 공유 메모리 (Chromium 렌더링 안정성)
+    shm_size: "256m"
     deploy:
       resources:
         limits:

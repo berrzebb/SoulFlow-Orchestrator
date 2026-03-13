@@ -12,8 +12,22 @@ set "YELLOW=[93m"
 set "RED=[91m"
 set "NC=[0m"
 
-REM Buildkit 비활성화 (Podman 권한 문제 우회)
-set "DOCKER_BUILDKIT=0"
+REM 컨테이너 런타임 감지 (CONTAINER_RUNTIME env 또는 자동 감지)
+if defined CONTAINER_RUNTIME (
+  set "RT=%CONTAINER_RUNTIME%"
+) else (
+  where podman >nul 2>nul
+  if !errorlevel! equ 0 (
+    podman ps >nul 2>nul
+    if !errorlevel! equ 0 (
+      set "RT=podman"
+    ) else (
+      set "RT=docker"
+    )
+  ) else (
+    set "RT=docker"
+  )
+)
 
 REM 파라미터 파싱
 set "WORKSPACE="
@@ -139,7 +153,7 @@ if not exist "%WORKSPACE%\.agents\.gemini" mkdir "%WORKSPACE%\.agents\.gemini"
 REM instance 모드: 기본 인프라(redis, docker-proxy) 먼저 보장
 if not "%INSTANCE%"=="" (
   set "BASE_PROJECT=soulflow-%COMMAND%"
-  set "PROJECT_NAME=!BASE_PROJECT!" && docker compose -f docker/docker-compose.yml -p !BASE_PROJECT! up -d redis docker-proxy 2>nul
+  set "PROJECT_NAME=!BASE_PROJECT!" && !RT! compose -f docker/docker-compose.yml -p !BASE_PROJECT! up -d redis docker-proxy 2>nul
   set "PROJECT_NAME=soulflow-%COMMAND%-!INSTANCE!"
 )
 
@@ -148,7 +162,7 @@ set "EFFECTIVE_WATCH=%WATCH%"
 if /i "%COMMAND%"=="dev" if "%WATCH%"=="" set "EFFECTIVE_WATCH=all"
 
 REM compose 실행
-set "COMPOSE_CMD=docker compose -f docker/docker-compose.yml"
+set "COMPOSE_CMD=!RT! compose -f docker/docker-compose.yml"
 if "!EFFECTIVE_WATCH!"=="all" set "COMPOSE_CMD=!COMPOSE_CMD! -f docker/docker-compose.dev.override.yml"
 if "!EFFECTIVE_WATCH!"=="web" set "COMPOSE_CMD=!COMPOSE_CMD! -f docker/docker-compose.web-watch.override.yml"
 if not "%INSTANCE%"=="" (
@@ -191,7 +205,7 @@ goto end
 :build
 echo.
 echo %YELLOW%🔨 이미지 빌드 중...%NC%
-docker compose -f docker/docker-compose.yml build
+!RT! compose -f docker/docker-compose.yml build
 if !errorlevel! equ 0 (
   echo.
   echo %GREEN%✅ 이미지 빌드 완료%NC%
@@ -205,7 +219,7 @@ goto end
 :down
 echo.
 echo %YELLOW%모든 환경 중지 중...%NC%
-docker compose -f docker/docker-compose.yml down -v 2>nul
+!RT! compose -f docker/docker-compose.yml down -v 2>nul
 echo.
 echo %GREEN%✅ 모든 환경이 중지되었습니다%NC%
 echo.
@@ -215,7 +229,7 @@ goto end
 echo.
 echo %BLUE%환경 상태:%NC%
 echo.
-docker compose ps
+!RT! compose ps
 goto end
 
 :logs
@@ -242,12 +256,12 @@ if not "!LOG_PROFILE!"=="" (
   echo.
   echo %BLUE%로그 확인 중: !LOG_PROJECT! ^(Ctrl+C로 종료^)%NC%
   echo.
-  docker compose -f docker/docker-compose.yml -p !LOG_PROJECT! logs -f
+  !RT! compose -f docker/docker-compose.yml -p !LOG_PROJECT! logs -f
 ) else (
   echo.
   echo %BLUE%로그 확인 중... (Ctrl+C로 종료)%NC%
   echo.
-  docker compose logs -f
+  !RT! compose logs -f
 )
 goto end
 
@@ -263,15 +277,15 @@ set "AGENTS_DIR=%WORKSPACE%\.agents"
 if /i "%2"=="claude" (
   echo %YELLOW%🔑 Claude 에이전트 로그인 중...%NC%
   if not exist "!AGENTS_DIR!\.claude" mkdir "!AGENTS_DIR!\.claude"
-  docker run --rm -it -v "!AGENTS_DIR!\.claude:/root/.claude" soulflow-orchestrator claude login
+  !RT! run --rm -it -v "!AGENTS_DIR!\.claude:/root/.claude" soulflow-orchestrator claude login
 ) else if /i "%2"=="codex" (
   echo %YELLOW%🔑 Codex 에이전트 로그인 중...%NC%
   if not exist "!AGENTS_DIR!\.codex" mkdir "!AGENTS_DIR!\.codex"
-  docker run --rm -it -p 1455:1456 -v "!AGENTS_DIR!\.codex:/root/.codex" -v "%cd%\scripts\oauth-relay.mjs:/tmp/relay.mjs:ro" soulflow-orchestrator bash -c "node /tmp/relay.mjs 1456 1455 & codex auth login"
+  !RT! run --rm -it -p 1455:1456 -v "!AGENTS_DIR!\.codex:/root/.codex" -v "%cd%\scripts\oauth-relay.mjs:/tmp/relay.mjs:ro" soulflow-orchestrator bash -c "node /tmp/relay.mjs 1456 1455 & codex auth login"
 ) else if /i "%2"=="gemini" (
   echo %YELLOW%🔑 Gemini 에이전트 로그인 중...%NC%
   if not exist "!AGENTS_DIR!\.gemini" mkdir "!AGENTS_DIR!\.gemini"
-  docker run --rm -it -v "!AGENTS_DIR!\.gemini:/root/.gemini" soulflow-orchestrator gemini auth login
+  !RT! run --rm -it -v "!AGENTS_DIR!\.gemini:/root/.gemini" soulflow-orchestrator gemini auth login
 ) else (
   echo %RED%에이전트를 지정하세요%NC%
   echo 사용법: run.cmd login [claude^|codex^|gemini]

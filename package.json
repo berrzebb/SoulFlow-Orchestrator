@@ -16,8 +16,11 @@
     "dev": "tsx watch --clear-screen=false src/main.ts",
     "dev:once": "tsx src/main.ts",
     "health:llm": "tsx src/orchestrator-llm-health.ts",
-    "docker:build": "node -e \"process.env.DOCKER_BUILDKIT='0';require('child_process').execSync('docker compose -f docker/docker-compose.yml build',{stdio:'inherit'})\"",
-    "docker:down": "docker compose -f docker/docker-compose.yml down -v"
+    "container:build": "node scripts/container.cjs compose:build",
+    "container:up": "node scripts/container.cjs compose:up",
+    "container:down": "node scripts/container.cjs compose:down",
+    "container:logs": "node scripts/container.cjs compose:logs",
+    "container:restart": "node scripts/container.cjs compose:restart"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

@@ -6,6 +6,15 @@
 
 set -e
 
+# 컨테이너 런타임 감지 (Linux/macOS: Docker 우선)
+get_runtime() {
+  if [ -n "$CONTAINER_RUNTIME" ]; then echo "$CONTAINER_RUNTIME"; return; fi
+  if command -v docker &>/dev/null && docker ps &>/dev/null 2>&1; then echo "docker"; return; fi
+  if command -v podman &>/dev/null && podman ps &>/dev/null 2>&1; then echo "podman"; return; fi
+  echo "docker"
+}
+RUNTIME=$(get_runtime)
+
 BLUE='\033[0;34m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -128,7 +137,6 @@ run_env() {
   done
 
   # 프리셋 → 환경변수
-  export DOCKER_BUILDKIT=0
   export BUILD_TARGET
   export NODE_ENV
   export DEBUG
@@ -144,7 +152,7 @@ run_env() {
   # instance 모드: 기본 인프라(redis, docker-proxy)를 먼저 보장
   if [ -n "$INSTANCE" ]; then
     local base_project="soulflow-$profile"
-    PROJECT_NAME="$base_project" docker compose -f docker/docker-compose.yml -p "$base_project" up -d redis docker-proxy 2>/dev/null || true
+    PROJECT_NAME="$base_project" $RUNTIME compose -f docker/docker-compose.yml -p "$base_project" up -d redis docker-proxy 2>/dev/null || true
   fi
 
   # compose 실행
@@ -161,12 +169,12 @@ run_env() {
     compose_args+=("-f" "docker/docker-compose.instance.override.yml")
   fi
   # 기존 컨테이너 정지 (포트 해제 보장)
-  docker compose "${compose_args[@]}" -p "$project_name" down --remove-orphans 2>/dev/null || true
+  $RUNTIME compose "${compose_args[@]}" -p "$project_name" down --remove-orphans 2>/dev/null || true
 
   # watch=web: 이미지 빌드 없이 기존 이미지 사용
   compose_args+=("-p" "$project_name" "up" "-d")
   [ "$effective_watch" != "web" ] && compose_args+=("--build")
-  docker compose "${compose_args[@]}"
+  $RUNTIME compose "${compose_args[@]}"
 
   echo -e "\n${GREEN}✅ $profile 환경이 시작되었습니다!${NC}"
   echo -e "${GREEN}   프로젝트: $project_name${NC}"
@@ -199,17 +207,17 @@ agent_login() {
     claude)
       echo -e "\n${YELLOW}🔑 Claude 에이전트 로그인 중...${NC}"
       mkdir -p "$agents_dir/.claude"
-      docker run --rm -it -v "$agents_dir/.claude:/root/.claude" soulflow-orchestrator claude login
+      $RUNTIME run --rm -it -v "$agents_dir/.claude:/root/.claude" soulflow-orchestrator claude login
       ;;
     codex)
       echo -e "\n${YELLOW}🔑 Codex 에이전트 로그인 중...${NC}"
       mkdir -p "$agents_dir/.codex"
-      docker run --rm -it -p 1455:1456 -v "$agents_dir/.codex:/root/.codex" -v "$(pwd)/scripts/oauth-relay.mjs:/tmp/relay.mjs:ro" soulflow-orchestrator bash -c "node /tmp/relay.mjs 1456 1455 & codex auth login"
+      $RUNTIME run --rm -it -p 1455:1456 -v "$agents_dir/.codex:/root/.codex" -v "$(pwd)/scripts/oauth-relay.mjs:/tmp/relay.mjs:ro" soulflow-orchestrator bash -c "node /tmp/relay.mjs 1456 1455 & codex auth login"
       ;;
     gemini)
       echo -e "\n${YELLOW}🔑 Gemini 에이전트 로그인 중...${NC}"
       mkdir -p "$agents_dir/.gemini"
-      docker run --rm -it -v "$agents_dir/.gemini:/root/.gemini" soulflow-orchestrator gemini auth login
+      $RUNTIME run --rm -it -v "$agents_dir/.gemini:/root/.gemini" soulflow-orchestrator gemini auth login
       ;;
     *)
       echo -e "${RED}알 수 없는 에이전트: $agent${NC}"
@@ -225,17 +233,17 @@ case "$COMMAND" in
     ;;
   build)
     echo -e "\n${YELLOW}🔨 이미지 빌드 중...${NC}"
-    DOCKER_BUILDKIT=0 docker compose -f docker/docker-compose.yml build
+    $RUNTIME compose -f docker/docker-compose.yml build
     echo -e "${GREEN}✅ 이미지 빌드 완료${NC}\n"
     ;;
   down)
     echo -e "\n${YELLOW}모든 환경 중지 중...${NC}"
-    docker compose -f docker/docker-compose.yml down -v 2>/dev/null || true
+    $RUNTIME compose -f docker/docker-compose.yml down -v 2>/dev/null || true
     echo -e "${GREEN}✅ 모든 환경이 중지되었습니다${NC}\n"
     ;;
   status)
     echo -e "\n${BLUE}환경 상태:${NC}"
-    docker compose ps 2>/dev/null || echo "실행 중인 환경 없음"
+    $RUNTIME compose ps 2>/dev/null || echo "실행 중인 환경 없음"
     ;;
   logs)
     PROFILE_ARG="${POSITIONAL_ARGS[0]:-}"
@@ -243,10 +251,10 @@ case "$COMMAND" in
       PROJECT="soulflow-$PROFILE_ARG"
       [ -n "$INSTANCE" ] && PROJECT="$PROJECT-$INSTANCE"
       echo -e "\n${BLUE}로그 확인 중: $PROJECT (Ctrl+C로 종료)${NC}\n"
-      docker compose -f docker/docker-compose.yml -p "$PROJECT" logs -f
+      $RUNTIME compose -f docker/docker-compose.yml -p "$PROJECT" logs -f
     else
       echo -e "\n${BLUE}로그 확인 중... (Ctrl+C로 종료)${NC}\n"
-      docker compose logs -f
+      $RUNTIME compose logs -f
     fi
     ;;
   login)

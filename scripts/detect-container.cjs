@@ -106,7 +106,13 @@ function getImageName() {
   return 'soulflow-orchestrator';
 }
 
+function getComposeCommand() {
+  const runtime = getContainerRuntime();
+  return `${runtime} compose`;
+}
+
 module.exports = {
   getContainerRuntime,
-  getImageName
+  getImageName,
+  getComposeCommand,
 };

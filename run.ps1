@@ -13,6 +13,21 @@ param(
 
 $ErrorActionPreference = "Continue"
 
+# 컨테이너 런타임 감지 (Windows: Podman 우선)
+function Get-ContainerRuntime {
+  if ($env:CONTAINER_RUNTIME) { return $env:CONTAINER_RUNTIME }
+  if (Get-Command podman -ErrorAction SilentlyContinue) {
+    & podman ps 2>&1 | Out-Null
+    if ($LASTEXITCODE -eq 0) { return "podman" }
+  }
+  if (Get-Command docker -ErrorAction SilentlyContinue) {
+    & docker ps 2>&1 | Out-Null
+    if ($LASTEXITCODE -eq 0) { return "docker" }
+  }
+  return "docker"
+}
+$Runtime = Get-ContainerRuntime
+
 # Named 파라미터 파싱 — 소비된 값은 PositionalArgs에서 제외
 $Workspace = $null
 $WebPort = $null
@@ -143,7 +158,6 @@ function Start-Environment {
   }
 
   # 프리셋 → 환경변수
-  $env:DOCKER_BUILDKIT = 0
   $env:BUILD_TARGET = $p.BUILD_TARGET
   $env:NODE_ENV = $p.NODE_ENV
   $env:DEBUG = $p.DEBUG
@@ -159,7 +173,7 @@ function Start-Environment {
   if ($Instance) {
     $baseProject = "soulflow-$ProfileName"
     $env:PROJECT_NAME = $baseProject
-    docker compose -f docker/docker-compose.yml -p $baseProject up -d redis docker-proxy 2>$null
+    & $Runtime compose -f docker/docker-compose.yml -p $baseProject up -d redis docker-proxy 2>$null
     $env:PROJECT_NAME = $projectName
   }
 
@@ -177,12 +191,12 @@ function Start-Environment {
   }
   # 기존 컨테이너 정지 (포트 해제 보장)
   $downArgs = $composeArgs + @("-p", $projectName, "down", "--remove-orphans")
-  docker compose @downArgs 2>$null
+  & $Runtime compose @downArgs 2>$null
 
   # watch=web: 이미지 빌드 없이 기존 이미지 사용
   $composeArgs += @("-p", $projectName, "up", "-d")
   if ($effectiveWatch -ne "web") { $composeArgs += "--build" }
-  docker compose @composeArgs
+  & $Runtime compose @composeArgs
 
   if ($LASTEXITCODE -eq 0) {
     Write-Host ""
@@ -214,7 +228,7 @@ function Stop-AllEnvironments {
   Write-Host "모든 환경 중지 중..." -ForegroundColor Yellow
   Write-Host ""
 
-  docker compose -f docker/docker-compose.yml down -v 2>$null
+  & $Runtime compose -f docker/docker-compose.yml down -v 2>$null
 
   Write-Host ""
   Write-Host "✅ 모든 환경이 중지되었습니다" -ForegroundColor Green
@@ -225,7 +239,7 @@ function Show-Status {
   Write-Host ""
   Write-Host "환경 상태:" -ForegroundColor Blue
   Write-Host ""
-  docker compose ps
+  & $Runtime compose ps
   Write-Host ""
 }
 
@@ -247,9 +261,9 @@ function Show-Logs {
   Write-Host ""
 
   if ($projectName) {
-    docker compose -f docker/docker-compose.yml -p $projectName logs -f
+    & $Runtime compose -f docker/docker-compose.yml -p $projectName logs -f
   } else {
-    docker compose logs -f
+    & $Runtime compose logs -f
   }
 }
 
@@ -269,19 +283,19 @@ function Start-AgentLogin {
       Write-Host "🔑 Claude 에이전트 로그인 중..." -ForegroundColor Yellow
       $dir = Join-Path $AgentsDir ".claude"
       if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
-      docker run --rm -it -v "${dir}:/root/.claude" soulflow-orchestrator claude login
+      & $Runtime run --rm -it -v "${dir}:/root/.claude" soulflow-orchestrator claude login
     }
     "codex" {
       Write-Host "🔑 Codex 에이전트 로그인 중..." -ForegroundColor Yellow
       $dir = Join-Path $AgentsDir ".codex"
       if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
-      docker run --rm -it -p 1455:1456 -v "${dir}:/root/.codex" -v "$(Get-Location)\scripts\oauth-relay.mjs:/tmp/relay.mjs:ro" soulflow-orchestrator bash -c "node /tmp/relay.mjs 1456 1455 & codex auth login"
+      & $Runtime run --rm -it -p 1455:1456 -v "${dir}:/root/.codex" -v "$(Get-Location)\scripts\oauth-relay.mjs:/tmp/relay.mjs:ro" soulflow-orchestrator bash -c "node /tmp/relay.mjs 1456 1455 & codex auth login"
     }
     "gemini" {
       Write-Host "🔑 Gemini 에이전트 로그인 중..." -ForegroundColor Yellow
       $dir = Join-Path $AgentsDir ".gemini"
       if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
-      docker run --rm -it -v "${dir}:/root/.gemini" soulflow-orchestrator gemini auth login
+      & $Runtime run --rm -it -v "${dir}:/root/.gemini" soulflow-orchestrator gemini auth login
     }
     default {
       Write-Host "알 수 없는 에이전트: $Agent" -ForegroundColor Red
@@ -300,9 +314,8 @@ switch ($Command.ToLower()) {
   "prod"    { Start-Environment "prod" }
   "build" {
     Write-Host ""
-    Write-Host "🔨 이미지 빌드 중..." -ForegroundColor Yellow
-    $env:DOCKER_BUILDKIT = 0
-    docker compose -f docker/docker-compose.yml build
+    Write-Host "이미지 빌드 중..." -ForegroundColor Yellow
+    & $Runtime compose -f docker/docker-compose.yml build
     if ($LASTEXITCODE -eq 0) {
       Write-Host ""
       Write-Host "✅ 이미지 빌드 완료" -ForegroundColor Green
