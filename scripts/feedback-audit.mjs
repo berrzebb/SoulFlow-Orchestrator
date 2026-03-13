@@ -235,22 +235,27 @@ ${scopeText}
 1. \`docs/feedback/claude.md\`를 읽습니다.
 2. 완료 주장과 근거 파일, 테스트 파일을 추출합니다.
 3. 관련 코드를 직접 확인합니다.
-4. 관련 테스트를 직접 실행합니다.
+4. 관련 lint와 테스트를 직접 실행합니다. 테스트가 없더라도 repo-appropriate lint는 생략하지 마세요.
 5. 판정을 \`docs/feedback/gpt.md\`에만 반영합니다.
 6. 설계 문서(\`docs/ko/design/**\`, \`docs/en/design/**\`)는 수정하지 마세요.
+7. 현재 범위 안에서 \`SOLID\`, \`YAGNI\`, \`DRY\`, \`KISS\`, \`LoD\` 5원칙 위반이 있는지도 함께 봅니다.
 
 판정 규칙:
-- \`완료\`: 코드와 테스트로 닫힘
+- \`완료\`: 코드, lint, 테스트(또는 테스트 부재 근거)로 닫힘
 - \`부분 완료\`: 구현은 있으나 근거가 부족하거나 일부만 닫힘
 - \`미완료\`: 주장과 코드가 불일치하거나 테스트가 없음
 - 이미 \`[합의완료]\`인 이전 트랙은 재판정하지 말고 유지하세요.
 - 이번 범위에 대해서만 \`[합의완료]\`, \`[계류]\`, \`[GPT미검증]\`를 갱신하세요.
 - \`docs/feedback/claude.md\`에 현재 범위의 증거 패키지(\`claim\`, \`changed files\`, \`test command\`, \`test result\`, \`residual risk\`)가 없거나 약하면 \`needs-evidence\`를 우선 사용하세요.
+- \`lint\`가 실행되지 않았거나 실패했으면 \`[합의완료]\`로 올리지 말고 \`lint-gap\`을 우선 사용하세요.
+- 현재 범위에서 \`SOLID\`, \`YAGNI\`, \`DRY\`, \`KISS\`, \`LoD\` 위반이 구조적 회귀를 만들면 \`principle-drift\`를 사용하세요.
 - \`[계류]\` 판정이면 \`## 반려 코드\`를 반드시 추가하고, 아래 코드 중 1~3개만 쓰세요:
   - \`needs-evidence\`
   - \`scope-mismatch\`
+  - \`lint-gap\`
   - \`test-gap\`
   - \`claim-drift\`
+  - \`principle-drift\`
 - 같은 범위가 반복 계류로 보이면 \`## 완료 기준 재고정\` 한 줄을 추가하세요.
 
 답변 파일:
@@ -272,6 +277,10 @@ ${scopeText}
 - 이 섹션에는 아래 운영 규칙만 간단히 유지하세요:
   - Claude는 \`builder\`, GPT는 \`auditor\`
   - Claude 보고는 \`claim\`, \`changed files\`, \`test command\`, \`test result\`, \`residual risk\` 5칸 증거 팩
+  - 어떤 작업이든 Claude는 돌아오기 전에 repo-appropriate \`lint\`를 반드시 통과시키고, \`test command\`에 그 명령을 남긴다
+  - \`lint\` 미실행 또는 실패는 \`lint-gap\`으로 계류한다
+  - 감사 피드백은 항상 \`SOLID\`, \`YAGNI\`, \`DRY\`, \`KISS\`, \`LoD\` 5원칙 위반을 현재 범위 안에서 함께 본다
+  - 구조적 5원칙 위반은 \`principle-drift\`로 계류한다
   - GPT 판정은 \`[합의완료]\`, \`[계류]\`, \`[GPT미검증]\`과 반려 코드 사용
   - 범위 밖 주장은 \`scope-mismatch\`로 분리
   - 현재 범위가 모두 \`[합의완료]\`이면 다음 작업은 improved 승격 문서에서 가져옴

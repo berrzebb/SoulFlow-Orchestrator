@@ -33,5 +33,23 @@
 **residual risk**:
 
 - `main.ts`에서 `trace_exporter` / `metrics_exporter`가 현재 하드코딩된 `NOOP_*` — config 기반 exporter 선택 로직 미구현 (향후 config schema 확장 시 추가)
-- `lifecycle.ts` shutdown에 exporter adapter의 `shutdown()`/`stop()` 호출 미연결 — graceful shutdown 시 잔여 버퍼 flush 보장 필요
+- ~~`lifecycle.ts` shutdown에 exporter adapter의 `shutdown()`/`stop()` 호출 미연결~~ → 증거 팩 2에서 해소
 
+### 증거 팩 2: Graceful shutdown 경로 exporter flush 연결
+
+**claim**: `register_shutdown_handlers`에 `on_cleanup` 콜백 추가, `RuntimeApp.cleanup_observability`에 `span_export_adapter.shutdown()` + `metrics_export_adapter.stop()` 클로저 바인딩, 부트 진입점에서 `on_cleanup`으로 전달. shutdown 체인에서 `services.stop → agent_backends.close → bus.close → sessions.close → on_cleanup` 순서로 호출. exporter shutdown 시 잔여 버퍼가 flush되고 exporter가 정리됨.
+
+**changed files**:
+
+- `src/bootstrap/lifecycle.ts` — `register_shutdown_handlers`에 `on_cleanup?: () => Promise<void>` 4번째 매개변수 추가, shutdown 체인 마지막 `.then(() => on_cleanup?.())` 추가
+- `src/main.ts` — `RuntimeApp.cleanup_observability` 필드 추가, `createRuntime()`에서 `span_export_adapter.shutdown()` + `metrics_export_adapter.stop()` 클로저 바인딩, 부트 진입점에서 `register_shutdown_handlers(app, logger, release_lock, app.cleanup_observability)` 호출
+- `tests/observability/exporter-lifecycle.test.ts` — 신규 7 테스트: SpanExportAdapter shutdown 2개 (잔여 버퍼 flush, 빈 버퍼 shutdown), MetricsExportAdapter stop 2개 (최종 export + shutdown, timer 해제), cleanup_observability 통합 3개 (양쪽 순차 shutdown, 버퍼 잔여 span flush, no-op exporter 안전성)
+
+**test command**: `npx tsc --noEmit && npx vitest run tests/observability/`
+
+**test result**: `lint(tsc) passed, 10 files / 131 tests passed`
+
+**residual risk**:
+
+- 증거 팩 1의 residual risk였던 `lifecycle.ts` shutdown 미연결이 본 팩으로 해소됨
+- `main.ts`의 exporter가 `NOOP_*` 하드코딩 — config 기반 exporter 선택은 OB-8 완료 기준 범위 밖 (향후 config schema 확장 시 추가)

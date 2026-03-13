@@ -357,13 +357,13 @@ ${gptMd}
 작업:
 1. gpt.md의 보정 요청을 확인하세요.
 2. 보정 대상과 무관한 범위 확장 주장은 섞지 마세요. 범위 밖 작업은 분리하세요.
-3. 관련 코드를 수정하세요.
-4. 테스트를 실행하여 통과를 확인하세요.
+3. 관련 코드를 수정하세요. 수정은 항상 \`SOLID\`, \`YAGNI\`, \`DRY\`, \`KISS\`, \`LoD\` 5원칙을 현재 범위 안에서 지키는 방향이어야 합니다.
+4. repo-appropriate lint를 반드시 먼저 실행하고 통과시키세요. 테스트가 있으면 함께 실행하세요.
 5. docs/feedback/claude.md를 갱신하세요. 현재 라운드 항목은 [GPT미검증]으로 유지하고, 아래 5칸 증거 팩 형식을 따르세요:
    - claim
    - changed files
-   - test command
-   - test result
+   - test command  (lint 명령 포함 필수)
+   - test result   (lint 통과 여부 포함 필수)
    - residual risk
 6. 설계 문서(docs/ko/design/**, docs/en/design/**)는 수정하지 마세요.
 `;
