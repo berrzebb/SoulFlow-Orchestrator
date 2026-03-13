@@ -5,36 +5,28 @@
 
 ## 감사 범위
 
-- `[합의완료]` `SH-1 ~ SH-5`
-- `[합의완료]` `TN-1 ~ TN-6`
-- `[합의완료]` `OB-1 + OB-2 (Bundle O1)`
-- `[합의완료]` `OB-3 + OB-4 (Bundle O2)`
-- `[합의완료]` `OB-5 + OB-6 (Bundle O3a)`
-- `[계류]` `OB-7 (Bundle O3b)`
-- `[계류]` 저장소 전체 멀티테넌트 closeout
+- `[합의완료]` 기존 `SH-1 ~ SH-5`, `TN-1 ~ TN-6`, `OB-1 + OB-2 (Bundle O1)`, `OB-3 + OB-4 (Bundle O2)`, `OB-5 + OB-6 (Bundle O3a)` 유지
+- `[계류]` 기존 `OB-7 (Bundle O3b)` 유지
+- `[계류]` 저장소 전체 멀티테넌트 closeout — `멀티테넌트 데이터 격리 수정 (보안): workflow_events team_id 필터, session/process detail ownership 검사, decisions/promises/agent_providers team scoping`
 
 ## 독립 검증 결과
 
-- 코드 직접 확인: `src/main.ts`, `src/bootstrap/dashboard.ts`, `src/bootstrap/channel-wiring.ts`, `src/bootstrap/orchestration.ts`, `src/dashboard/service.ts`, `src/dashboard/sse-manager.ts`, `src/channels/manager.ts`, `src/orchestration/service.ts`, `src/orchestration/execution/phase-workflow.ts`, `src/observability/delivery-trace.ts`
-- 타입 검사 재실행: `npm run typecheck` 통과
-- O3a 전용 재실행: `2 files / 25 tests passed`
-- 재실행 파일: `tests/observability/injection-points.test.ts` `18 tests`, `tests/observability/delivery-trace.test.ts` `7 tests`
+- 코드 직접 확인: `src/events/types.ts`, `src/events/service.ts`, `src/orchestration/service.ts`, `src/dashboard/state-builder.ts`, `src/dashboard/routes/session.ts`, `src/dashboard/routes/process.ts`, `src/channels/session-recorder.ts`
+- `npm run typecheck` 통과
+- `npx vitest run tests/events/workflow-event-service.test.ts tests/dashboard/state-builder.test.ts tests/dashboard/resource-scoping.test.ts tests/dashboard/route-context.test.ts tests/dashboard/idor-ownership.test.ts tests/dashboard/phase8-runtime-session.test.ts tests/decision/decision-service.test.ts tests/decision/promise-service.test.ts tests/orchestration/service.test.ts tests/orchestration/service-mock-preflight.test.ts` 통과
+- 재실행 결과: `10 files / 257 tests passed`
 
 ## 최종 판정
 
-- `OB-5 + OB-6 (Bundle O3a)`: `완료` / `[합의완료]`
-- `OB-7 (Bundle O3b)`: `[계류]` 유지
-- 저장소 전체 멀티테넌트 closeout: `[계류]` 유지
+- `저장소 전체 멀티테넌트 closeout / 멀티테넌트 데이터 격리 수정 (보안)`: `부분 완료` / `[계류]`
 
 ## 핵심 근거
 
-- `src/main.ts`가 공유 `ExecutionSpanRecorder` + `MetricsSink` 인스턴스를 만들고 bootstrap 경로(`src/bootstrap/dashboard.ts`, `src/bootstrap/channel-wiring.ts`, `src/bootstrap/orchestration.ts`)로 실제 전달합니다.
-- `src/dashboard/service.ts`, `src/dashboard/sse-manager.ts`, `src/channels/manager.ts`, `src/orchestration/service.ts`, `src/orchestration/execution/phase-workflow.ts`에서 O3a가 주장한 span, counter, histogram 주입이 런타임 경로에 존재합니다.
-- `src/channels/manager.ts`의 `send_outbound()`는 `start_delivery()` / `finish_delivery()`를 호출하고, `src/observability/delivery-trace.ts`는 `delivery_total`과 `delivery_duration_ms`를 mismatch 라벨 포함으로 기록합니다.
-- `tests/observability/injection-points.test.ts`는 계측 헬퍼 중심 검증이고 런타임 배선 여부는 코드 직접 확인으로 닫았으며, 해당 테스트 18개와 `tests/observability/delivery-trace.test.ts` 7개를 실제 재실행해 모두 통과했습니다.
-- 따라서 이번 범위의 미검증 사유였던 테스트 환경 제약은 해소됐고, O3a는 코드와 테스트 기준으로 닫힙니다.
+- `src/events/types.ts`와 `src/events/service.ts`에는 `team_id` 타입·저장·조회 필터가 실제로 추가됐지만, 재실행한 `tests/events/workflow-event-service.test.ts`에는 `team_id` 저장/필터 자체를 닫는 케이스가 없습니다.
+- `src/orchestration/service.ts`와 `src/dashboard/state-builder.ts`는 `req.message.metadata.team_id` 주입, `events/decisions/promises/agent_providers` 스코프 전달을 구현했지만, 재실행한 orchestration/state-builder 테스트는 그 인수 전달을 직접 검증하지 않습니다.
+- `src/dashboard/routes/process.ts`는 `GET /api/processes/:id`에서 `entry.team_id !== team_id`면 404 처리하지만, 현재 테스트는 `DELETE /api/processes/:id`만 검증하고 상세 GET ownership 테스트가 없습니다.
+- `src/dashboard/routes/session.ts`는 `GET /api/sessions/:key`에서 `web:` 키만 팀 비교를 수행해 비-`web:` 세션은 그대로 통과하며, 이 라우트를 직접 닫는 테스트도 현재 워크트리에서 찾지 못했습니다.
 
 ## 다음 작업
 
-- `OB-7`은 `project_summary()`의 대시보드 소비 경로가 연결될 때까지 `[계류]` 유지
-- 저장소 전체 멀티테넌트 closeout은 별도 검증 유지
+- `저장소 전체 멀티테넌트 closeout — src/dashboard/routes/session.ts 의 GET /api/sessions/:key 에 비-web 세션 ownership 검증과 web key chat_id 파싱 보정을 추가하고, tests/dashboard/session-route-ownership.test.ts 로 /api/sessions/:key 와 /api/processes/:id 상세 ownership 테스트를 작성`

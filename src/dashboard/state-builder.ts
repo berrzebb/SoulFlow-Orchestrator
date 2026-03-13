@@ -47,10 +47,16 @@ export async function build_dashboard_state(
   const heartbeat = options.heartbeat.status();
   const [tasks, decisions, promises, workflow_events, agent_providers] = await Promise.all([
     build_merged_tasks(options, team_id),
-    options.decisions.get_effective_decisions({ include_p2: true }),
-    options.promises.get_effective_promises({ include_p2: true }),
-    options.events.list({ limit: 40 }),
-    options.agent_provider_ops ? options.agent_provider_ops.list() : Promise.resolve([]),
+    options.decisions.get_effective_decisions({ include_p2: true, team_id: team_id ?? null }),
+    options.promises.get_effective_promises({ include_p2: true, team_id: team_id ?? null }),
+    options.events.list({ limit: 40, team_id }),
+    options.agent_provider_ops
+      ? options.agent_provider_ops.list(
+          team_id !== undefined
+            ? [{ scope_type: "global", scope_id: "" }, { scope_type: "team", scope_id: team_id }]
+            : undefined,
+        )
+      : Promise.resolve([]),
   ]);
 
   const subagents = options.agent.list_subagents(team_id);

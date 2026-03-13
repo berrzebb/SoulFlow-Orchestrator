@@ -13,12 +13,14 @@ export async function handle_process(ctx: RouteContext): Promise<boolean> {
     return true;
   }
 
-  // GET /api/processes/:id
+  // GET /api/processes/:id — team ownership 검사
   const id_match = path.match(/^\/api\/processes\/([^/]+)$/);
   if (id_match && req.method === "GET") {
     const run_id = decodeURIComponent(id_match[1]);
     const entry = options.process_tracker?.get(run_id);
-    json(res, entry ? 200 : 404, entry ?? { error: "not_found" });
+    if (!entry) { json(res, 404, { error: "not_found" }); return true; }
+    if (team_id !== undefined && entry.team_id !== team_id) { json(res, 404, { error: "not_found" }); return true; }
+    json(res, 200, entry);
     return true;
   }
 

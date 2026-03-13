@@ -20,7 +20,10 @@
     "container:up": "node scripts/container.cjs compose:up",
     "container:down": "node scripts/container.cjs compose:down",
     "container:logs": "node scripts/container.cjs compose:logs",
-    "container:restart": "node scripts/container.cjs compose:restart"
+    "container:restart": "node scripts/container.cjs compose:restart",
+    "feedback:audit": "node scripts/feedback-audit.mjs",
+    "feedback:respond": "node scripts/feedback-respond.mjs",
+    "feedback:loop": "node scripts/feedback-audit.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

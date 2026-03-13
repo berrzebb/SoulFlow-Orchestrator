@@ -33,12 +33,19 @@ export async function handle_session(ctx: RouteContext): Promise<boolean> {
     return true;
   }
 
-  // GET /api/sessions/:key
+  // GET /api/sessions/:key — 세션 상세 조회 (team ownership 검사)
   const key_match = path.match(/^\/api\/sessions\/([^/]+)$/);
   if (key_match && req.method === "GET") {
     const store = session_store;
     if (!store) { json(res, 503, { error: "session_store_unavailable" }); return true; }
     const key = decodeURIComponent(key_match[1]);
+    const team_id = get_filter_team_id(ctx);
+    if (team_id !== undefined) {
+      const key_parts = key.split(":");
+      // 목록 API와 동일: parts[1]을 team_id로 사용하여 ownership 검사
+      const key_team = key_parts[1] ?? "";
+      if (key_team !== team_id) { json(res, 404, { error: "not_found" }); return true; }
+    }
     const session = await store.get_or_create(key);
     const parts = key.split(":");
     const messages = session.messages.map((m) => ({

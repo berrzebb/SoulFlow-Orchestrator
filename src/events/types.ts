@@ -26,6 +26,7 @@ export type WorkflowEvent = {
   source: WorkflowEventSource;
   detail_file?: string | null;
   at: string;
+  team_id: string;
 };
 
 export type AppendWorkflowEventInput = {
@@ -43,6 +44,7 @@ export type AppendWorkflowEventInput = {
   source?: WorkflowEventSource;
   detail?: string | null;
   at?: string;
+  team_id?: string;
 };
 
 export type AppendWorkflowEventResult = {
@@ -57,6 +59,7 @@ export type ListWorkflowEventsFilter = {
   agent_id?: string;
   chat_id?: string;
   source?: WorkflowEventSource;
+  team_id?: string;
   limit?: number;
   offset?: number;
 };

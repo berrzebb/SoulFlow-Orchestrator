@@ -11,6 +11,10 @@ const repoRoot = resolve(__dirname, "..");
 const claudePath = resolve(repoRoot, "docs", "feedback", "claude.md");
 const gptPath = resolve(repoRoot, "docs", "feedback", "gpt.md");
 const sessionPath = resolve(repoRoot, ".claude", "feedback-audit.session");
+const promotionDocPaths = [
+  resolve(repoRoot, "docs", "ko", "design", "improved", "feedback-promotion.md"),
+  resolve(repoRoot, "docs", "en", "design", "improved", "feedback-promotion.md"),
+];
 
 function usage() {
   console.log(`Usage: node scripts/feedback-audit.mjs [options]
@@ -173,7 +177,49 @@ function detectScope(markdown) {
   return "현재 docs/feedback/claude.md의 미합의 항목";
 }
 
-function buildPrompt(scopeText) {
+function readSectionLines(markdown, heading) {
+  const lines = markdown.split(/\r?\n/);
+  const start = lines.findIndex((line) => new RegExp(`^##\\s+${heading}\\s*$`).test(line.trim()));
+  if (start < 0) {
+    return [];
+  }
+  const end = lines.findIndex((line, idx) => idx > start && /^##\s+/.test(line.trim()));
+  return lines.slice(start + 1, end >= 0 ? end : lines.length);
+}
+
+function loadPromotionHint() {
+  for (const docPath of promotionDocPaths) {
+    if (!existsSync(docPath)) {
+      continue;
+    }
+
+    const markdown = readFileSync(docPath, "utf8");
+    const lines = readSectionLines(markdown, "현재 승격 대상").concat(readSectionLines(markdown, "Current Promotion Target"));
+    const firstBullet = lines
+      .map((line) => line.trim())
+      .find((line) => line.startsWith("- "));
+
+    if (firstBullet) {
+      return {
+        docPath,
+        nextTask: firstBullet.replace(/^- /, "").trim(),
+      };
+    }
+  }
+
+  return null;
+}
+
+function buildPrompt(scopeText, promotionHint) {
+  const promotionSection = promotionHint ? `
+
+합의 승격 규칙:
+- 현재 감사 범위가 검증 후 모두 \`[합의완료]\`이면 \`## 다음 작업\`은 임의 생성하지 말고 아래 승격 후보를 그대로 사용하세요.
+- 승격 후보 출처: \`${promotionHint.docPath.replace(/\\/g, "/")}\`
+- 현재 승격 후보:
+  - ${promotionHint.nextTask}
+` : "";
+
   return `다음 감사 프로토콜로 동작하세요.
 
 역할:
@@ -210,6 +256,17 @@ ${scopeText}
   - 최종 판정
   - 핵심 근거 3~5줄
   - 다음 작업
+
+다음 작업 작성 규칙:
+- \`## 다음 작업\`은 반드시 비워두지 마세요.
+- 일반론 금지: \`별도 감사로 유지\`, \`계속 진행\`, \`후속 작업\` 같은 추상 문구만 쓰지 마세요.
+- 현재 감사 범위가 \`[계류]\`이면, 같은 범위에서 가장 먼저 수정할 1개 작업을 쓰세요.
+- 현재 감사 범위가 \`[합의완료]\`이면, \`docs/feedback/claude.md\`에서 다음 \`[GPT미검증]\` 또는 \`[계류]\` 항목 1개를 골라 쓰세요.
+- 다음 작업에는 가능하면 번들/트랙 이름과 함께 정확한 파일, 경로, 테스트 타깃을 포함하세요.
+- 예시 형식:
+  - \`Bundle O4 / OB-8 Optional Exporter Ports — src/observability/* exporter 포트 추가, tests/observability/* exporter 테스트 작성\`
+  - \`저장소 전체 멀티테넌트 closeout — src/dashboard/routes/chat.ts 의 /api/chat/mirror* ownership 검사 추가, tests/dashboard/chat-mirror-ownership.test.ts 작성\`
+${promotionSection}
 
 운영 원칙:
 - 합의가 닫히기 전까지는 \`docs/feedback/*.md\`만 업데이트합니다.
@@ -372,7 +429,8 @@ function main() {
 
   const claudeMd = readFileSync(claudePath, "utf8");
   const scopeText = args.scope ?? detectScope(claudeMd);
-  const prompt = buildPrompt(scopeText);
+  const promotionHint = loadPromotionHint();
+  const prompt = buildPrompt(scopeText, promotionHint);
   const codexBin = resolveCodexBin();
 
   if (args.dryRun) {

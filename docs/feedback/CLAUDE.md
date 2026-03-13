@@ -10,7 +10,7 @@
 - `[합의완료]` OB-1 + OB-2 (Bundle O1)
 - `[합의완료]` OB-3 + OB-4 (Bundle O2)
 - `[합의완료]` OB-5 + OB-6 (Bundle O3a)
-- `[계류]` OB-7 (Bundle O3b) — 프로젝터 구현 완료, 대시보드 연결 미완
+- `[GPT미검증]` OB-7 (Bundle O3b) — 프로젝터 + 대시보드 배선 + 통합 테스트 + mirror 스코핑 + 세션 영속화 완료
 - `[계류]` 저장소 전체 멀티테넌트 closeout
 
 독립 검증 결과:
@@ -30,7 +30,7 @@
 - **Observability Layer / Bundle O1 (OB-1 + OB-2)**: `[합의완료]`
 - **Observability Layer / Bundle O2 (OB-3 + OB-4)**: `[합의완료]`
 - **Observability Layer / Bundle O3a (OB-5 + OB-6)**: `[합의완료]`
-- **Observability Layer / Bundle O3b (OB-7)**: `[계류]` — 프로젝터 구현 완료, 대시보드 연결 미완
+- **Observability Layer / Bundle O3b (OB-7)**: `[GPT미검증]` — 대시보드 배선 + 통합 테스트 완료
 - **저장소 전체 멀티테넌트**: `[계류]`
 
 ## O2 구현 메모
@@ -127,12 +127,41 @@ GPT 감사에서 `spawn EPERM`으로 8개 suite 0 tests 실행 — 이는 **Code
 
 GPT가 코드 확인으로 배선 완료를 인정(`src/main.ts`, `src/bootstrap/*`, `src/orchestration/service.ts`). 테스트 재실행만 남음.
 
-### OB-7 수용
+### OB-7 완료
 
-GPT 지적 타당. 설계 문서 기준 `state-builder.ts`와 `routes/state.ts`에 `project_summary()` 연결 필요. 현재는 프로젝터 구현 + 단위 테스트만 존재, 대시보드 소비 경로 미완.
+대시보드 소비 경로 배선 완료:
+
+- `src/dashboard/state-builder.ts` — `project_summary(options.observability)` → `observability` 필드 추가
+- `routes/state.ts` → `build_state()` → API 응답에 자동 포함
+- `tests/dashboard/state-builder.test.ts` — OB-7 통합 테스트 5개 추가 (null fallback, 5-key shape, failure_summary, provider_usage, empty data)
+- 전체 state-builder 테스트: 38 tests passed
+
+### Mirror 라우트 스코핑 완료
+
+- `src/dashboard/routes/chat.ts` — `require_team_manager_for_write` 접근 제어 추가 (GET/POST 모든 mirror 경로)
+- `GET /api/chat/mirror` — 활성 채널(`enabled_channels`) 기반 세션 필터링 추가
+- `POST /api/chat/mirror/:key/messages` — team_manager 이상만 릴레이 허용 (일반 member → 403)
+- `tests/dashboard/chat-mirror-scoping.test.ts` — 14개 테스트 (역할별 접근, 채널 필터, 에러 케이스)
+- 멀티테넌트 회귀: `12 files / 195 tests passed`
+
+### 웹 채팅 세션 영속화 수정
+
+- `src/dashboard/routes/chat.ts` — user 메시지 `session_store.append_message()` 추가 (스트리밍 + 일반 경로)
+- `src/dashboard/service.ts` — `capture_web_outbound()` assistant 응답 영속화
+- 기존 `_restore_web_sessions()`가 재시작 시 자동 복원
+
+### 멀티테넌트 데이터 격리 수정 (보안)
+
+6개 파일 수정, `tsc --noEmit` 통과, `12 files / 221 tests passed`:
+
+- `src/events/types.ts` — `WorkflowEvent`, `AppendWorkflowEventInput`, `ListWorkflowEventsFilter`에 `team_id` 필드 추가
+- `src/events/service.ts` — `workflow_events` 테이블 `team_id TEXT NOT NULL DEFAULT ''` ALTER TABLE 마이그레이션, `list()` SQL 필터, `append()` 저장, `row_to_event()` 매핑
+- `src/orchestration/service.ts` — `log_event()` closure에 `req.message.metadata.team_id` 자동 주입 (`_runner_deps`, `_dispatch_deps`)
+- `src/dashboard/state-builder.ts` — `events.list({ team_id })`, `decisions/promises({ team_id })`, `agent_providers.list(scope_filter)` 전달
+- `src/dashboard/routes/session.ts` — `GET /api/sessions/:key` team ownership 검사 (web 세션 키의 team_id 비교)
+- `src/dashboard/routes/process.ts` — `GET /api/processes/:id` team ownership 검사 (`entry.team_id !== team_id` → 404)
 
 ## 다음 작업
 
-- `OB-7`은 `project_summary()`의 대시보드 소비 경로가 연결될 때까지 `[계류]` 유지
-- 저장소 전체 멀티테넌트 closeout은 별도 검증 유지
+- `저장소 전체 멀티테넌트 closeout — src/dashboard/routes/session.ts 의 GET /api/sessions/:key 에 비-web 세션 ownership 검증과 web key chat_id 파싱 보정을 추가하고, tests/dashboard/session-route-ownership.test.ts 로 /api/sessions/:key 와 /api/processes/:id 상세 ownership 테스트를 작성`
 

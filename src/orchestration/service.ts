@@ -271,9 +271,10 @@ export class OrchestrationService {
   }
 
 /** 워크플로우 이벤트 기록. events 서비스가 없으면 무시. */
-  private log_event(input: AppendWorkflowEventInput): void {
+  private log_event(input: AppendWorkflowEventInput, team_id?: string): void {
     if (!this.events) return;
-    this.events.append(input).catch(() => { /* 이벤트 로깅 실패가 실행을 차단하면 안 됨 */ });
+    const patched = team_id && !input.team_id ? { ...input, team_id } : input;
+    this.events.append(patched).catch(() => { /* 이벤트 로깅 실패가 실행을 차단하면 안 됨 */ });
   }
 
   /** runner 함수에 전달할 공유 의존성 조립. req 전달 시 per-request workspace 우선 사용. */
@@ -298,7 +299,7 @@ export class OrchestrationService {
       workspace: req?.workspace_override ?? this.deps.workspace,
       build_overlay: (mode: "once" | "agent") => this._build_overlay(mode),
       hooks_for: (stream: StreamBuffer, args: { req: OrchestrationRequest; runtime_policy: RuntimeExecutionPolicy }, backend_id: string, task_id?: string, tools_accumulator?: string[]) => this._hooks_for(stream, args, backend_id, task_id, tools_accumulator),
-      log_event: (input: AppendWorkflowEventInput) => this.log_event(input),
+      log_event: (input: AppendWorkflowEventInput) => this.log_event(input, req?.message?.metadata?.team_id as string | undefined),
       convert_agent_result: (result: AgentRunResult, mode: ExecutionMode, stream: StreamBuffer, req: OrchestrationRequest) => this._convert_agent_result(result, mode, stream, req),
       build_persona_followup: (heart: string) => this.build_persona_followup(heart),
       build_compaction_flush: (req?: OrchestrationRequest) => this.build_compaction_flush(req),
@@ -355,8 +356,9 @@ export class OrchestrationService {
     };
   }
 
-  /** execute dispatcher 처리용 의존성 조립. */
-  private _dispatch_deps(): ExecuteDispatcherDeps {
+  /** execute dispatcher 처리용 의존성 조립. req에서 team_id를 추출하여 log_event에 주입. */
+  private _dispatch_deps(req?: OrchestrationRequest): ExecuteDispatcherDeps {
+    const team_id = req?.message?.metadata?.team_id as string | undefined;
     return {
       providers: this.providers,
       runtime: this.runtime,
@@ -368,7 +370,7 @@ export class OrchestrationService {
       process_tracker: this.process_tracker,
       guard: this.guard,
       tool_index: this.tool_index,
-      log_event: (e) => this.log_event(e),
+      log_event: (e) => this.log_event(e, team_id),
       build_identity_reply: () => this._build_identity_reply(),
       build_system_prompt: (names, prov, chat, cats, alias) => this._build_system_prompt(names, prov, chat, cats, alias),
       generate_guard_summary: (text) => this._generate_guard_summary(text),
@@ -412,7 +414,7 @@ export class OrchestrationService {
     }
 
     // Phase 4.5: Execute Dispatcher — gateway 라우팅 → short-circuit → mode 분기 → finalize
-    const result = await execute_dispatch(this._dispatch_deps(), req, preflight);
+    const result = await execute_dispatch(this._dispatch_deps(req), req, preflight);
     // 오케스트레이터 레벨 daily 기록 — 에이전트가 memory 도구를 호출하지 않아도 보장
     record_turn_to_daily(req, result, this.runtime.get_context_builder()?.memory_store);
     exec_span.end(result.error ? "error" : "ok", { mode: result.mode });
