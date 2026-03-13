@@ -81,7 +81,14 @@ export function useLogin() {
   return useMutation({
     mutationFn: (creds: { username: string; password: string }) =>
       api.post("/api/auth/login", creds),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ["auth-me"] }),
+    onSuccess: () => {
+      // 이전 유저 캐시 완전 초기화 후 새 유저 정보 즉시 로드
+      qc.clear();
+      void qc.prefetchQuery({ queryKey: ["auth-me"], queryFn: async () => {
+        try { return await api.get<AuthUser>("/api/auth/me"); }
+        catch { return null; }
+      } });
+    },
   });
 }
 
@@ -90,8 +97,8 @@ export function useLogout() {
   return useMutation({
     mutationFn: () => api.post("/api/auth/logout"),
     onSuccess: () => {
-      qc.setQueryData<AuthUser | null>(["auth-me"], null);
-      void qc.invalidateQueries({ queryKey: ["auth-me"] });
+      // 전체 캐시 초기화 — 이전 유저 데이터 완전 제거
+      qc.clear();
     },
   });
 }

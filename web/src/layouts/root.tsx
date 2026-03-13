@@ -30,7 +30,7 @@ export function RootLayout() {
   const toggle_locale = () => set_locale(locale === "en" ? "ko" : "en");
 
   const { data: auth_status } = useAuthStatus();
-  const { data: auth_user, isLoading: auth_loading } = useAuthUser();
+  const { data: auth_user, isLoading: auth_loading, isFetching: auth_fetching } = useAuthUser();
   const logout = useLogout();
   const { data: my_teams = [] } = useMyTeams();
   const switch_team = useSwitchTeam();
@@ -39,12 +39,13 @@ export function RootLayout() {
   useClickOutside(team_menu_ref, () => set_team_menu_open(false), team_menu_open);
 
   // auth 활성화 시 미인증 → /login 리다이렉트
+  // isFetching도 체크: 로그인 직후 refetch 중 null 상태로 오인해 다시 /login으로 보내는 race condition 방지
   useEffect(() => {
     if (!auth_status?.enabled) return;
-    if (auth_loading) return;
+    if (auth_loading || auth_fetching) return;
     if (location.pathname === "/login") return;
     if (auth_user === null) navigate("/login", { replace: true });
-  }, [auth_status, auth_user, auth_loading, location.pathname, navigate]);
+  }, [auth_status, auth_user, auth_loading, auth_fetching, location.pathname, navigate]);
 
   // 로그인 페이지에서 이미 인증된 상태면 홈으로
   useEffect(() => {
