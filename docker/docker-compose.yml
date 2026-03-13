@@ -46,6 +46,24 @@ services:
           memory: ${MEMORY:-1G}
           cpus: "${CPUS:-2}"
 
+  chunker:
+    image: soulflow-orchestrator
+    container_name: ${PROJECT_NAME:-soulflow}-chunker
+    restart: unless-stopped
+    command: ["node", "dist/chunker/main.js"]
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      REDIS_URL: redis://redis:6379
+      NODE_OPTIONS: "--max-old-space-size=${CHUNKER_HEAP_MB:-512}"
+    depends_on:
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: ${CHUNKER_MEMORY:-512M}
+          cpus: "${CHUNKER_CPUS:-1}"
+
   redis:
     image: redis:7-alpine
     restart: unless-stopped

@@ -20,6 +20,7 @@ import type { ImageEmbedFn } from "../services/embed.service.js";
 import { create_vector_store_service } from "../services/vector-store.service.js";
 import { WebhookStore } from "../services/webhook-store.service.js";
 import { create_query_db_service } from "../services/query-db.service.js";
+import { ChunkQueue } from "../chunker/queue.js";
 
 export interface RuntimeDataDeps {
   ctx: UserWorkspace;
@@ -45,6 +46,7 @@ export interface RuntimeDataResult {
   vector_store_service: ReturnType<typeof create_vector_store_service> | undefined;
   webhook_store: WebhookStore;
   query_db_service: ReturnType<typeof create_query_db_service> | undefined;
+  chunk_queue: ChunkQueue | undefined;
 }
 
 export async function create_runtime_data(deps: RuntimeDataDeps): Promise<RuntimeDataResult> {
@@ -132,10 +134,26 @@ export async function create_runtime_data(deps: RuntimeDataDeps): Promise<Runtim
 
   const webhook_store = new WebhookStore();
 
+  // ── Chunk queue: Redis가 있을 때만 비동기 청킹 큐 활성화 ──
+  let chunk_queue: ChunkQueue | undefined;
+  if (app_config.bus.backend === "redis" && app_config.bus.redis.url) {
+    try {
+      chunk_queue = new ChunkQueue(app_config.bus.redis.url);
+      await chunk_queue.connect();
+      deps.logger.info("chunk queue connected (async chunking enabled)");
+    } catch (err) {
+      deps.logger.warn("chunk queue connection failed, falling back to worker_threads", {
+        error: String(err),
+      });
+      chunk_queue = undefined;
+    }
+  }
+
   return {
     data_dir: ctx.user_runtime,
     sessions_dir, bus, decisions, events,
     provider_store, agent_definition_store, oauth_store, oauth_flow,
     embed_service, embed_worker_config, image_embed_service, vector_store_service, webhook_store, query_db_service,
+    chunk_queue,
   };
 }

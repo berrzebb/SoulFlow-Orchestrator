@@ -52,6 +52,7 @@ export interface AgentCoreDeps {
   embed_service: EmbedServiceFn | undefined;
   embed_worker_config: import("../agent/memory.types.js").EmbedWorkerConfig | undefined;
   image_embed_service: ImageEmbedFn | undefined;
+  chunk_queue: import("../chunker/queue.js").ChunkQueue | undefined;
   oauth_store: OAuthIntegrationStore;
   oauth_flow: OAuthFlowService;
   broadcaster: MutableBroadcaster;
@@ -173,6 +174,9 @@ export async function create_agent_core(deps: AgentCoreDeps): Promise<AgentCoreR
   }
   if (embed_worker_config) {
     agent.context.memory_store.set_embed_worker_config?.(embed_worker_config);
+  }
+  if (deps.chunk_queue) {
+    (agent.context.memory_store as import("../agent/memory.service.js").MemoryStore).set_chunk_queue(deps.chunk_queue);
   }
   agent.context.set_daily_injection(app_config.memory.dailyInjectionDays, app_config.memory.dailyInjectionMaxChars);
   agent.context.set_longterm_injection(app_config.memory.longtermInjectionMaxChars);

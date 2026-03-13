@@ -18,6 +18,9 @@ import type {
 import { today_key, now_iso} from "../utils/common.js";
 import { redact_sensitive_text } from "../security/sensitive.js";
 import { sanitize_untrusted_text } from "../security/content-sanitizer.js";
+import type { ChunkQueue } from "../chunker/queue.js";
+import type { ChunkJobResult } from "../chunker/protocol.js";
+import { decode_f32 } from "../chunker/protocol.js";
 import { get_shared_secret_vault } from "../security/secret-vault-factory.js";
 import { parse_tool_calls_from_text } from "./tool-call-parser.js";
 import { rrf_merge, apply_temporal_decay, mmr_rerank } from "./memory-scoring.js";
@@ -74,6 +77,7 @@ export class MemoryStore implements MemoryStoreLike {
   private embed_fn: EmbedFn | null = null;
   private embed_worker_config: import("./memory.types.js").EmbedWorkerConfig | null = null;
   private rechunk_worker: Worker | null = null;
+  private chunk_queue: ChunkQueue | null = null;
 
   constructor(workspace_root: string) {
     this.root = workspace_root;
@@ -88,6 +92,12 @@ export class MemoryStore implements MemoryStoreLike {
   /** 워커 스레드용 임베딩 API 설정 주입. */
   set_embed_worker_config(config: import("./memory.types.js").EmbedWorkerConfig): void {
     this.embed_worker_config = config;
+  }
+
+  /** Redis 기반 chunk queue 주입. 설정 시 worker_threads 대신 사용. */
+  set_chunk_queue(queue: ChunkQueue): void {
+    this.chunk_queue = queue;
+    queue.on_complete((result) => this.handle_chunk_result(result));
   }
 
   private async ensure_initialized(): Promise<void> {
@@ -268,9 +278,27 @@ export class MemoryStore implements MemoryStoreLike {
     return this.rechunk_worker;
   }
 
-  /** 청킹(+ 임베딩)을 워커 스레드로 위임. 메인 스레드 블로킹 없음. */
+  /** 청킹(+ 임베딩)을 비동기로 위임. chunk_queue가 있으면 Redis, 없으면 worker_threads 폴백. */
   private schedule_rechunk(doc_key: string, kind: string, day: string, content: string): void {
     if (process.env.SKIP_RECHUNK_TESTS) return;
+
+    // Redis chunk queue 우선
+    if (this.chunk_queue) {
+      this.chunk_queue.submit({
+        doc_key, kind, day, content,
+        embed: this.embed_worker_config ?? undefined,
+      }).catch(() => {
+        // 큐 실패 시 worker_threads 폴백
+        this.schedule_rechunk_local(doc_key, kind, day, content);
+      });
+      return;
+    }
+
+    this.schedule_rechunk_local(doc_key, kind, day, content);
+  }
+
+  /** worker_threads 로컬 폴백 (Redis 미사용 환경). */
+  private schedule_rechunk_local(doc_key: string, kind: string, day: string, content: string): void {
     try {
       const job: RechunkJob = {
         sqlite_path: this.sqlite_path,
@@ -280,6 +308,78 @@ export class MemoryStore implements MemoryStoreLike {
       this.get_rechunk_worker().postMessage(job);
     } catch {
       // 워커 실패 시 무시 — 청킹은 eventual consistency 허용
+    }
+  }
+
+  /** chunk queue 완료 콜백 — worker 결과를 SQLite에 저장. */
+  private handle_chunk_result(result: ChunkJobResult): void {
+    if (result.error || result.chunks.length === 0) return;
+
+    try {
+      with_sqlite_strict(this.sqlite_path, (db) => {
+        const existing = db
+          .prepare("SELECT chunk_id, content_hash FROM memory_chunks WHERE doc_key = ?")
+          .all(result.doc_key) as { chunk_id: string; content_hash: string }[];
+
+        const new_ids = new Set(result.chunks.map((c) => c.chunk_id));
+        const existing_map = new Map(existing.map((r) => [r.chunk_id, r.content_hash]));
+
+        // 삭제: 새 청크에 없는 기존 청크
+        const to_delete = existing.filter((r) => !new_ids.has(r.chunk_id));
+        if (to_delete.length > 0) {
+          const ids = to_delete.map((r) => r.chunk_id);
+          const ph = ids.map(() => "?").join(",");
+          const del_rowids = db
+            .prepare(`SELECT rowid FROM memory_chunks WHERE chunk_id IN (${ph})`)
+            .all(...ids) as { rowid: number }[];
+          if (del_rowids.length > 0) {
+            try {
+              const vec_ph = del_rowids.map(() => "?").join(",");
+              db.prepare(`DELETE FROM memory_chunks_vec WHERE rowid IN (${vec_ph})`)
+                .run(...del_rowids.map((r) => r.rowid));
+            } catch { /* vec table may not exist */ }
+          }
+          const del_stmt = db.prepare("DELETE FROM memory_chunks WHERE chunk_id = ?");
+          for (const id of ids) del_stmt.run(id);
+        }
+
+        // Upsert: 변경된 청크만
+        const upsert = db.prepare(`
+          INSERT INTO memory_chunks (chunk_id, doc_key, kind, day, heading, start_line, end_line, content, content_hash)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(chunk_id) DO UPDATE SET
+            content = excluded.content,
+            content_hash = excluded.content_hash
+        `);
+
+        const upserted_rowids: Array<{ chunk_id: string; rowid: number }> = [];
+        for (const c of result.chunks) {
+          if (existing_map.get(c.chunk_id) === c.content_hash) continue;
+          upsert.run(c.chunk_id, result.doc_key, c.heading_level > 0 ? "daily" : "longterm",
+            "", c.heading, c.start_line, c.end_line, c.content, c.content_hash);
+          const row = db.prepare("SELECT rowid FROM memory_chunks WHERE chunk_id = ?").get(c.chunk_id) as { rowid: number } | undefined;
+          if (row) upserted_rowids.push({ chunk_id: c.chunk_id, rowid: row.rowid });
+        }
+
+        // 벡터 저장
+        if (result.embeddings?.length && upserted_rowids.length > 0) {
+          sqliteVec.load(db);
+          const ins_vec = db.prepare("INSERT OR REPLACE INTO memory_chunks_vec (rowid, embedding) VALUES (?, ?)");
+          const embed_map = new Map(result.embeddings.map((e) => [e.chunk_id, e.vector_b64]));
+          const tx = db.transaction(() => {
+            for (const { chunk_id, rowid } of upserted_rowids) {
+              const b64 = embed_map.get(chunk_id);
+              if (!b64) continue;
+              ins_vec.run(BigInt(rowid), decode_f32(b64));
+            }
+          });
+          tx();
+        }
+
+        return true;
+      });
+    } catch {
+      // 저장 실패 — eventual consistency 허용
     }
   }
 

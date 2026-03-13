@@ -1,6 +1,6 @@
 /** 스트리밍 중 도구 호출 및 thinking 시각화 — 진행 중 / 완료 / 오류 상태 표시. */
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import type { ToolCallEntry, ThinkingEntry } from "../../hooks/use-ndjson-stream";
 import { useT } from "../../i18n";
 
@@ -32,12 +32,22 @@ function tool_icon(name: string): string {
 }
 
 export function ThinkingBlockList({ blocks }: { blocks: ThinkingEntry[] }) {
+  const scroll_ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = scroll_ref.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [blocks.length]);
+
   if (blocks.length === 0) return null;
+
   return (
     <div className="thinking-block-list">
-      {blocks.map((b, i) => (
-        <ThinkingBlock key={`${i}-${b.tokens}-${b.preview.slice(0, 16)}`} entry={b} />
-      ))}
+      <div className="thinking-block-list__scroll" ref={scroll_ref}>
+        {blocks.map((b, i) => (
+          <ThinkingBlock key={`${i}-${b.tokens}-${b.preview.slice(0, 16)}`} entry={b} />
+        ))}
+      </div>
     </div>
   );
 }
@@ -69,12 +79,36 @@ function ThinkingBlock({ entry }: { entry: ThinkingEntry }) {
 }
 
 export function ToolCallList({ calls }: { calls: ToolCallEntry[] }) {
+  const scroll_ref = useRef<HTMLDivElement>(null);
+  const done_count = calls.filter(c => c.done).length;
+  const scroll_dep = calls.length + done_count;
+
+  useEffect(() => {
+    const el = scroll_ref.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [scroll_dep]);
+
   if (calls.length === 0) return null;
+
   return (
     <div className="tool-call-list">
-      {calls.map((c) => (
-        <ToolCallBlock key={c.id} entry={c} />
-      ))}
+      <div className="tool-call-list__summary">
+        <span className="tool-call-list__label">🔧 {calls.length}</span>
+        {done_count > 0 && (
+          <span className="tool-call-list__done">✓ {done_count}</span>
+        )}
+        {calls.length > done_count && (
+          <span className="tool-call-list__running">
+            <span className="tool-call__spinner" aria-hidden="true" />
+            {calls.length - done_count}
+          </span>
+        )}
+      </div>
+      <div className="tool-call-list__scroll" ref={scroll_ref}>
+        {calls.map((c) => (
+          <ToolCallBlock key={c.id} entry={c} />
+        ))}
+      </div>
     </div>
   );
 }
