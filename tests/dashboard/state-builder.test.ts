@@ -164,7 +164,7 @@ describe("build_dashboard_state", () => {
     const state = await build_dashboard_state(make_full_options(), []);
     const expected_keys = ["now", "queue", "channels", "heartbeat", "ops", "agents", "tasks",
       "messages", "processes", "approvals", "active_loops", "cd_score", "cron",
-      "decisions", "promises", "workflow_events", "agent_providers"];
+      "decisions", "promises", "workflow_events", "agent_providers", "observability"];
     for (const key of expected_keys) {
       expect(state).toHaveProperty(key);
     }
@@ -417,6 +417,82 @@ describe("build_dashboard_state — team_id scoping", () => {
     ] as any[];
     const state = await build_dashboard_state(opts, msgs, "alpha");
     expect((state.messages as any[]).length).toBe(2);
+  });
+});
+
+// ══════════════════════════════════════════
+// OB-7: observability → project_summary 연동
+// ══════════════════════════════════════════
+
+describe("build_dashboard_state — observability (OB-7)", () => {
+  function make_observability(spans: unknown[] = [], counters: unknown[] = []) {
+    return {
+      spans: { start: vi.fn(), get_spans: vi.fn(() => spans) },
+      metrics: {
+        counter: vi.fn(), gauge: vi.fn(), histogram: vi.fn(),
+        snapshot: vi.fn(() => ({ counters, gauges: [], histograms: [] })),
+      },
+    };
+  }
+
+  it("observability 미설정 → null", async () => {
+    const state = await build_dashboard_state(make_full_options(), []);
+    expect(state.observability).toBeNull();
+  });
+
+  it("observability 설정 → ObservabilitySummary 5개 키 포함", async () => {
+    const obs = make_observability();
+    const opts = make_full_options({ observability: obs });
+    const state = await build_dashboard_state(opts, []);
+    const summary = state.observability as Record<string, unknown>;
+    expect(summary).not.toBeNull();
+    expect(summary).toHaveProperty("failure_summary");
+    expect(summary).toHaveProperty("error_rate");
+    expect(summary).toHaveProperty("latency_summary");
+    expect(summary).toHaveProperty("delivery_mismatch");
+    expect(summary).toHaveProperty("provider_usage");
+  });
+
+  it("spans에 에러가 있으면 failure_summary에 반영된다", async () => {
+    const spans = [
+      { span_id: "s1", trace_id: "tr1", kind: "orchestration_run", name: "run1",
+        started_at: "2026-01-01T00:00:00Z", ended_at: "2026-01-01T00:00:01Z",
+        duration_ms: 1000, status: "error", error: "timeout", attributes: {}, correlation: {} },
+    ];
+    const obs = make_observability(spans);
+    const opts = make_full_options({ observability: obs });
+    const state = await build_dashboard_state(opts, []);
+    const summary = state.observability as Record<string, unknown>;
+    const failures = summary.failure_summary as Array<{ kind: string; count: number }>;
+    expect(failures).toHaveLength(1);
+    expect(failures[0].kind).toBe("orchestration_run");
+    expect(failures[0].count).toBe(1);
+  });
+
+  it("counters에 orchestration_runs_total → provider_usage 반영", async () => {
+    const counters = [
+      { name: "orchestration_runs_total", labels: { provider: "claude", status: "ok" }, value: 5 },
+      { name: "orchestration_runs_total", labels: { provider: "claude", status: "error" }, value: 1 },
+    ];
+    const obs = make_observability([], counters);
+    const opts = make_full_options({ observability: obs });
+    const state = await build_dashboard_state(opts, []);
+    const summary = state.observability as Record<string, unknown>;
+    const usage = summary.provider_usage as Array<{ provider: string; total: number; errors: number }>;
+    expect(usage).toHaveLength(1);
+    expect(usage[0]).toMatchObject({ provider: "claude", total: 6, errors: 1 });
+  });
+
+  it("빈 spans/metrics → 모든 필드가 빈 배열 또는 0", async () => {
+    const obs = make_observability();
+    const opts = make_full_options({ observability: obs });
+    const state = await build_dashboard_state(opts, []);
+    const summary = state.observability as Record<string, unknown>;
+    expect(summary.failure_summary).toEqual([]);
+    expect(summary.error_rate).toEqual({ total: 0, errors: 0, rate: 0 });
+    expect(summary.latency_summary).toEqual([]);
+    expect(summary.delivery_mismatch).toEqual([]);
+    expect(summary.provider_usage).toEqual([]);
   });
 });
 

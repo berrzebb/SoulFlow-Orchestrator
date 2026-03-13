@@ -4,6 +4,7 @@ import type { DashboardOptions, RecentMessage } from "./service.js";
 import type { ProcessEntry } from "../orchestration/process-tracker.js";
 import type { AgentEvent } from "../agent/agent.types.js";
 import { now_seoul_iso } from "../utils/common.js";
+import { project_summary } from "../observability/projector.js";
 
 export async function build_merged_tasks(options: DashboardOptions, team_id?: string): Promise<Array<{
   taskId: string; title: string; status: string; currentStep?: string; exitReason?: string;
@@ -123,6 +124,7 @@ export async function build_dashboard_state(
     promises: promises.map((p) => ({ id: p.id, canonical_key: p.canonical_key, value: p.value, priority: p.priority, scope: p.scope, source: p.source })),
     workflow_events: workflow_events.map((e) => ({ event_id: e.event_id, task_id: e.task_id, run_id: e.run_id, agent_id: e.agent_id, phase: e.phase, summary: e.summary, at: e.at })),
     agent_providers,
+    observability: options.observability ? project_summary(options.observability) : null,
   };
 }
 
