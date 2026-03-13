@@ -4,8 +4,9 @@ import { create_scoped_skill_ops } from "../ops/skill.js";
 function get_skill_ops(ctx: RouteContext) {
   const base = ctx.options.skill_ops ?? null;
   if (!base) return null;
-  // personal_dir이 있으면 upload 경로를 사용자별로 격리
-  return ctx.personal_dir ? create_scoped_skill_ops(base, ctx.personal_dir) : base;
+  // workspace_runtime 또는 personal_dir로 upload 경로를 사용자별로 격리
+  const upload_dir = ctx.workspace_runtime?.user_content ?? ctx.personal_dir;
+  return upload_dir ? create_scoped_skill_ops(base, upload_dir) : base;
 }
 
 function skill_ops_or_503(ctx: RouteContext) {
