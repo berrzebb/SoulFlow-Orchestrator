@@ -132,6 +132,7 @@ import { PhoneTool } from "./phone.js";
 import { EmailValidateTool } from "./email-validate.js";
 import { CountryTool } from "./country.js";
 import { UnitConvertTool } from "./unit-convert.js";
+import { MapTool } from "./map.js";
 import { HealthcheckTool } from "./healthcheck.js";
 import { WhoisTool } from "./whois.js";
 import { AsciiArtTool } from "./ascii-art.js";
@@ -343,6 +344,7 @@ export {
   EmailValidateTool,
   CountryTool,
   UnitConvertTool,
+  MapTool,
   HealthcheckTool,
   WhoisTool,
   AsciiArtTool,
@@ -561,6 +563,7 @@ export function create_default_tool_registry(args?: ToolRegistryFactoryOptions):
   registry.register(new EmailValidateTool());
   registry.register(new CountryTool());
   registry.register(new UnitConvertTool());
+  registry.register(new MapTool());
   registry.register(new HealthcheckTool());
   registry.register(new WhoisTool());
   registry.register(new AsciiArtTool());
