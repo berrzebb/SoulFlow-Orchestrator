@@ -20,6 +20,9 @@ import type { SessionStoreLike } from "../session/index.js";
 import { set_no_cache } from "./route-context.js";
 import { SystemMetricsCollector } from "./system-metrics.js";
 import type { RouteContext, RouteHandler } from "./route-context.js";
+import { create_correlation } from "../observability/correlation.js";
+import { NOOP_OBSERVABILITY, type ObservabilityLike } from "../observability/context.js";
+import { correlation_to_log_context } from "../logger.js";
 import { SseManager } from "./sse-manager.js";
 import { MediaTokenStore } from "./media-store.js";
 import { build_dashboard_state, build_merged_tasks } from "./state-builder.js";
@@ -81,11 +84,13 @@ export class DashboardService implements ServiceLike {
   private readonly default_alias: string;
   private readonly _media: MediaTokenStore;
   private readonly _metrics = new SystemMetricsCollector();
+  private readonly _obs: ObservabilityLike;
   private readonly _memory_cache: ScopedMemoryOpsCache | null;
 
   constructor(options: DashboardOptions) {
     this.options = options;
     this.logger = options.logger ?? null;
+    this._obs = options.observability ?? NOOP_OBSERVABILITY;
     this.web_dir = resolve_web_dir();
     this.session_store = options.session_store ?? null;
     this.default_alias = options.default_alias || "default";
@@ -308,6 +313,11 @@ export class DashboardService implements ServiceLike {
         }
         return this.options.memory_ops ?? null;
       },
+      correlation: create_correlation({
+        team_id: tid || undefined,
+        user_id: uid || undefined,
+        workspace_dir: this.options.workspace,
+      }),
     };
   }
 
@@ -319,7 +329,10 @@ export class DashboardService implements ServiceLike {
     if (url.pathname === "/" || url.pathname === "/index.html") {
       res.statusCode = 302; res.setHeader("Location", "/web/"); res.end(); return;
     }
-    if (url.pathname.startsWith("/web")) { await serve_static(this.web_dir, url.pathname, res); return; }
+    if (url.pathname.startsWith("/web") || url.pathname.startsWith("/assets/")) {
+      const web_path = url.pathname.startsWith("/assets/") ? `/web${url.pathname}` : url.pathname;
+      await serve_static(this.web_dir, web_path, res); return;
+    }
 
     // 미디어 토큰
     const media_match = RE_MEDIA_TOKEN.exec(url.pathname);
@@ -379,23 +392,41 @@ export class DashboardService implements ServiceLike {
       }
     }
 
-    // API 라우트 디스패치: exact match 먼저, 그 다음 prefix 매칭
+    // OB-5: API 라우트 디스패치 — span + metrics 계측
     const ctx = this._build_route_context(req, res, url);
-    const direct = this.route_map.get(url.pathname);
-    if (direct && await direct(ctx)) return;
+    const method = req.method || "GET";
+    const route_start = Date.now();
+    const span = this._obs.spans.start("dashboard_route", `${method} ${url.pathname}`, ctx.correlation, { method, path: url.pathname });
 
-    const segments = url.pathname.split("/").filter(Boolean);
-    for (let depth = Math.min(segments.length, 3); depth >= 2; depth--) {
-      const prefix = "/" + segments.slice(0, depth).join("/");
-      const handler = this.route_map.get(prefix);
-      if (handler && await handler(ctx)) return;
-    }
-    for (const handler of this.fallback_routes) {
-      if (await handler(ctx)) return;
-    }
+    try {
+      const direct = this.route_map.get(url.pathname);
+      if (direct && await direct(ctx)) { span.end("ok"); this._record_request_metrics(method, url.pathname, route_start); return; }
 
-    res.statusCode = 404;
-    res.end("not_found");
+      const segments = url.pathname.split("/").filter(Boolean);
+      for (let depth = Math.min(segments.length, 3); depth >= 2; depth--) {
+        const prefix = "/" + segments.slice(0, depth).join("/");
+        const handler = this.route_map.get(prefix);
+        if (handler && await handler(ctx)) { span.end("ok"); this._record_request_metrics(method, url.pathname, route_start); return; }
+      }
+      for (const handler of this.fallback_routes) {
+        if (await handler(ctx)) { span.end("ok"); this._record_request_metrics(method, url.pathname, route_start); return; }
+      }
+
+      res.statusCode = 404;
+      res.end("not_found");
+      span.end("ok", { status_code: 404 });
+      this._record_request_metrics(method, url.pathname, route_start);
+    } catch (err) {
+      span.fail(error_message(err));
+      this._obs.metrics.counter("http_requests_total", 1, { method, status: "error" });
+      this._obs.metrics.histogram("http_request_duration_ms", Date.now() - route_start, { method });
+      throw err;
+    }
+  }
+
+  private _record_request_metrics(method: string, _path: string, start: number): void {
+    this._obs.metrics.counter("http_requests_total", 1, { method });
+    this._obs.metrics.histogram("http_request_duration_ms", Date.now() - start, { method });
   }
 
   /** Webhook 스토어 + /hooks/wake, /hooks/agent 엔드포인트 등록. */

@@ -2,7 +2,7 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { resolve } from "node:path";
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   plugins: [
     react({
       babel: {
@@ -10,7 +10,7 @@ export default defineConfig({
       },
     }),
   ],
-  base: "./",
+  base: command === "build" ? "/web/" : "/",
   resolve: {
     alias: { "@": resolve(__dirname, "src") },
   },
@@ -34,4 +34,4 @@ export default defineConfig({
       "/ws": { target: "ws://127.0.0.1:4200", ws: true },
     },
   },
-});
+}));
