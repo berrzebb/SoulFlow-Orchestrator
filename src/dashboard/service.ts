@@ -282,7 +282,7 @@ export class DashboardService implements ServiceLike {
       auth_user,
       team_context,
       workspace_runtime: (tid && uid && this.options.workspace_registry)
-        ? this.options.workspace_registry.get_runtime({ team_id: tid, user_id: uid })
+        ? this.options.workspace_registry.get_or_create({ team_id: tid, user_id: uid })
         : null,
       workspace_layers,
       personal_dir,
