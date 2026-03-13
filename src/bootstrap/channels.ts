@@ -26,9 +26,11 @@ import { ProcessTracker } from "../orchestration/process-tracker.js";
 import { ConfirmationGuard } from "../orchestration/confirmation-guard.js";
 import { HitlPendingStore } from "../orchestration/hitl-pending-store.js";
 import { resolve_reply_to } from "../channels/types.js";
+import type { TeamWorkspace } from "../workspace/workspace-context.js";
 import { create_logger } from "../logger.js";
 
 export interface ChannelBundleDeps {
+  ctx: TeamWorkspace;
   workspace: string;
   /** 개인 콘텐츠 루트 (미디어 다운로드, 채널 workspace_dir). */
   user_dir: string;
@@ -62,11 +64,12 @@ export interface ChannelBundleResult {
 
 export async function create_channel_bundle(deps: ChannelBundleDeps): Promise<ChannelBundleResult> {
   const {
-    workspace, user_dir, data_dir, app_config, shared_vault,
+    ctx, workspace, user_dir, data_dir, app_config, shared_vault,
     bus, broadcaster, agent, agent_runtime, sessions, logger,
   } = deps;
 
-  const instance_store = new ChannelInstanceStore(join(data_dir, "channels", "instances.db"), shared_vault);
+  // 팀 스코프: 채널 인스턴스는 팀 멤버 간 공유
+  const instance_store = new ChannelInstanceStore(join(ctx.team_runtime, "channels", "instances.db"), shared_vault);
   const channels = await create_channels_from_store(instance_store, user_dir);
 
   // 기본 채널 타겟 해석
@@ -80,8 +83,9 @@ export async function create_channel_bundle(deps: ChannelBundleDeps): Promise<Ch
       ).trim()
     : "";
 
+  // 팀 스코프: DLQ도 팀 단위
   const dlq_store = app_config.channel.dispatch.dlqEnabled
-    ? new SqliteDispatchDlqStore(join(data_dir, "dlq", "dlq.db"))
+    ? new SqliteDispatchDlqStore(join(ctx.team_runtime, "dlq", "dlq.db"))
     : null;
   const dispatch = new DispatchService({
     bus,

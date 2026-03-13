@@ -6,7 +6,7 @@ import type { SecretVaultService } from "../security/secret-vault.js";
 import type { create_logger } from "../logger.js";
 import type { EmbedServiceFn } from "./agent-core.js";
 import type { EmbedWorkerConfig } from "../agent/memory.types.js";
-import { resolve_from_workspace } from "./runtime-paths.js";
+import type { UserWorkspace } from "../workspace/workspace-context.js";
 import { create_message_bus } from "../bus/index.js";
 import type { MessageBusRuntime } from "../bus/types.js";
 import { DecisionService } from "../decision/index.js";
@@ -22,15 +22,14 @@ import { WebhookStore } from "../services/webhook-store.service.js";
 import { create_query_db_service } from "../services/query-db.service.js";
 
 export interface RuntimeDataDeps {
-  workspace: string;
-  /** 사용자 콘텐츠 루트 (WORKSPACE_USER_DIR). 미설정 시 workspace와 동일. */
-  user_dir: string;
+  ctx: UserWorkspace;
   app_config: AppConfig;
   shared_vault: SecretVaultService;
   logger: ReturnType<typeof create_logger>;
 }
 
 export interface RuntimeDataResult {
+  /** @deprecated ctx.user_runtime 사용 권장. 하위 번들 호환용. */
   data_dir: string;
   sessions_dir: string;
   bus: MessageBusRuntime;
@@ -49,13 +48,37 @@ export interface RuntimeDataResult {
 }
 
 export async function create_runtime_data(deps: RuntimeDataDeps): Promise<RuntimeDataResult> {
-  const { workspace, user_dir, app_config, shared_vault } = deps;
+  const { ctx, app_config, shared_vault } = deps;
 
-  const data_dir = resolve_from_workspace(user_dir, app_config.dataDir, join(user_dir, "runtime"));
-  const decisions_dir = join(data_dir, "decisions");
-  const events_dir = join(data_dir, "events");
-  const sessions_dir = join(data_dir, "sessions");
+  // ── 글로벌 스코프 (admin_runtime): config, security, providers, definitions ──
+  const provider_store = new AgentProviderStore(
+    join(ctx.admin_runtime, "agent-providers", "providers.db"),
+    shared_vault,
+  );
+  const agent_definition_store = new AgentDefinitionStore(
+    join(ctx.admin_runtime, "agent-definitions", "definitions.db"),
+  );
 
+  // ── 팀 스코프 (team_runtime): oauth, datasources ──
+  const oauth_store = new OAuthIntegrationStore(
+    join(ctx.team_runtime, "oauth", "integrations.db"),
+    shared_vault,
+  );
+  const oauth_flow = new OAuthFlowService(oauth_store);
+  oauth_flow.load_custom_presets();
+
+  const query_db_service = create_query_db_service(ctx.team_runtime);
+
+  // ── 유저 스코프 (user_runtime): sessions, decisions, events, vector store ──
+  const decisions_dir = join(ctx.user_runtime, "decisions");
+  const events_dir = join(ctx.user_runtime, "events");
+  const sessions_dir = join(ctx.user_runtime, "sessions");
+
+  const decisions = new DecisionService(ctx.user_content, decisions_dir);
+  const events = new WorkflowEventService(ctx.user_content, events_dir, null, app_config.taskLoopMaxTurns);
+  const vector_store_service = create_vector_store_service(ctx.user_runtime);
+
+  // ── 글로벌 인프라 (메시지 버스) ──
   const bus = await create_message_bus({
     backend: app_config.bus.backend,
     redis: {
@@ -67,26 +90,7 @@ export async function create_runtime_data(deps: RuntimeDataDeps): Promise<Runtim
     },
   });
 
-  const decisions = new DecisionService(workspace, decisions_dir);
-  const events = new WorkflowEventService(workspace, events_dir, null, app_config.taskLoopMaxTurns);
-
-  const provider_store = new AgentProviderStore(
-    join(data_dir, "agent-providers", "providers.db"),
-    shared_vault,
-  );
-
-  const agent_definition_store = new AgentDefinitionStore(
-    join(data_dir, "agent-definitions", "definitions.db"),
-  );
-
-  const oauth_store = new OAuthIntegrationStore(
-    join(data_dir, "oauth", "integrations.db"),
-    shared_vault,
-  );
-  const oauth_flow = new OAuthFlowService(oauth_store);
-  oauth_flow.load_custom_presets();
-
-  // embed 서비스: 등록된 embedding 프로바이더에서 생성
+  // ── embed 서비스: 등록된 embedding 프로바이더에서 생성 ──
   const embed_instance_id = app_config.embedding.instanceId
     || provider_store.list_for_purpose("embedding")[0]?.instance_id;
   const embed_provider = embed_instance_id ? provider_store.get(embed_instance_id) : null;
@@ -100,7 +104,7 @@ export async function create_runtime_data(deps: RuntimeDataDeps): Promise<Runtim
     })
     : undefined;
 
-  // 워커 스레드용 임베딩 config: API key는 skip_auth 여부에 따라 null 또는 resolved value
+  // 워커 스레드용 임베딩 config
   const SKIP_AUTH_EMBED = new Set(["ollama", "orchestrator_llm", "container_cli"]);
   const embed_worker_config: EmbedWorkerConfig | undefined = embed_provider && embed_instance_id
     ? {
@@ -114,7 +118,7 @@ export async function create_runtime_data(deps: RuntimeDataDeps): Promise<Runtim
     }
     : undefined;
 
-  // 이미지(멀티모달) embed 서비스: imageInstanceId로 지정된 프로바이더 사용
+  // 이미지(멀티모달) embed 서비스
   const image_instance_id = app_config.embedding.imageInstanceId || undefined;
   const image_provider = image_instance_id ? provider_store.get(image_instance_id) : null;
   const image_embed_service: ImageEmbedFn | undefined = image_provider
@@ -126,12 +130,11 @@ export async function create_runtime_data(deps: RuntimeDataDeps): Promise<Runtim
     })
     : undefined;
 
-  const vector_store_service = create_vector_store_service(data_dir);
   const webhook_store = new WebhookStore();
-  const query_db_service = create_query_db_service(data_dir);
 
   return {
-    data_dir, sessions_dir, bus, decisions, events,
+    data_dir: ctx.user_runtime,
+    sessions_dir, bus, decisions, events,
     provider_store, agent_definition_store, oauth_store, oauth_flow,
     embed_service, embed_worker_config, image_embed_service, vector_store_service, webhook_store, query_db_service,
   };

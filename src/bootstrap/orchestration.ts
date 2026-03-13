@@ -34,8 +34,10 @@ import { create_task_service } from "../services/create-task.service.js";
 import { create_logger } from "../logger.js";
 import { create_cd_observer } from "../agent/cd-scoring.js";
 import { HookRunner, load_hooks_from_file } from "../hooks/index.js";
+import type { TeamWorkspace } from "../workspace/workspace-context.js";
 
 export interface OrchestrationBundleDeps {
+  ctx: TeamWorkspace;
   workspace: string;
   user_dir: string;
   data_dir: string;
@@ -243,7 +245,8 @@ export async function create_orchestration_bundle(deps: OrchestrationBundleDeps)
     hook_runner,
   });
 
-  const cron = new CronService(join(data_dir, "cron"), create_cron_job_handler({
+  // 팀 스코프: 크론 잡은 팀 멤버 간 공유
+  const cron = new CronService(join(deps.ctx.team_runtime, "cron"), create_cron_job_handler({
     config: {
       agent_loop_max_turns: app_config.agentLoopMaxTurns,
       per_turn_timeout_ms: 600_000,
@@ -281,7 +284,7 @@ export async function create_orchestration_bundle(deps: OrchestrationBundleDeps)
       }
     },
   }), {
-    on_change: (type, job_id) => broadcaster.broadcast_cron_event(type, job_id),
+    on_change: (type, job_id, team_id) => broadcaster.broadcast_cron_event(type, job_id, team_id),
   });
 
   return { orchestration, cron, create_task_fn, oauth_fetch_service };

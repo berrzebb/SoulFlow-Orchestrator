@@ -2,6 +2,7 @@ import { error_message } from "./utils/common.js";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { seed_default_workflows } from "./bootstrap/runtime-paths.js";
+import { migrate_to_global_scope } from "./bootstrap/scope-migration.js";
 import { create_config_bundle } from "./bootstrap/config.js";
 import { create_provider_bundle } from "./bootstrap/providers.js";
 import { create_agent_core } from "./bootstrap/agent-core.js";
@@ -39,6 +40,7 @@ import { existsSync } from "node:fs";
 import { AdminStore } from "./auth/admin-store.js";
 import { AuthService } from "./auth/auth-service.js";
 import { WorkspaceRegistry } from "./workspace/registry.js";
+import { create_workspace_context, type UserWorkspace } from "./workspace/workspace-context.js";
 import { randomUUID } from "node:crypto";
 
 export interface RuntimeApp {
@@ -66,22 +68,29 @@ export async function createRuntime(): Promise<RuntimeApp> {
   const workspace = resolve_workspace();
   const app_root = resolve_app_root();
 
-  // admin.db에서 superadmin wdir 자동 감지 → user_dir 결정
-  const user_dir = resolve_user_dir(workspace);
+  // 부트 identity 해석 → team_id, user_id 추출
+  const { team_id, user_id, user_dir } = resolve_boot_identity(workspace);
+
+  // 3-tier 스코프 마이그레이션: user → global, user → team
+  const team_dir = team_id ? join(workspace, "tenants", team_id) : undefined;
+  migrate_to_global_scope(workspace, user_dir, team_dir);
 
   // 기본 워크플로우 템플릿 시드 (user_dir/workflows/ 가 비어있으면 default-workflows/ 에서 복사)
   seed_default_workflows(user_dir, app_root);
 
-  const { shared_vault, config_store, app_config } = await create_config_bundle(workspace, user_dir);
+  const { shared_vault, config_store, app_config } = await create_config_bundle(workspace);
+
+  // 3-tier 워크스페이스 문맥 생성
+  const ctx = create_workspace_context({ workspace, team_id, user_id });
 
   const logger = create_logger("runtime");
-  logger.info(`user_dir=${user_dir}`);
+  logger.info(`workspace_context team_id=${ctx.team_id} user_id=${ctx.user_id} admin=${ctx.admin_runtime} team=${ctx.team_runtime} user=${ctx.user_runtime}`);
 
   const {
     data_dir, sessions_dir, bus, decisions, events,
     provider_store, agent_definition_store, oauth_store, oauth_flow,
     embed_service, embed_worker_config, image_embed_service, vector_store_service, webhook_store, query_db_service,
-  } = await create_runtime_data({ workspace, user_dir, app_config, shared_vault, logger });
+  } = await create_runtime_data({ ctx, app_config, shared_vault, logger });
 
   const {
     providers, cli_auth, mcp, agent_backend_registry, agent_backends,
@@ -109,7 +118,7 @@ export async function createRuntime(): Promise<RuntimeApp> {
     active_run_controller, render_profile_store,
     process_tracker, confirmation_guard, hitl_pending_store,
   } = await create_channel_bundle({
-    workspace, user_dir, data_dir, app_config, shared_vault,
+    ctx, workspace, user_dir, data_dir, app_config, shared_vault,
     bus, broadcaster, agent, agent_runtime, sessions, logger,
   });
   // channels 생성 후 PollTool 지연 등록 (AgentDomain이 channels보다 먼저 생성되므로)
@@ -117,7 +126,7 @@ export async function createRuntime(): Promise<RuntimeApp> {
   const dashboard: { current: DashboardService | null } = { current: null };
 
   const { orchestration, cron, create_task_fn, oauth_fetch_service } = await create_orchestration_bundle({
-    workspace, user_dir, data_dir, app_config,
+    ctx, workspace, user_dir, data_dir, app_config,
     providers, agent, agent_runtime, agent_backend_registry, provider_caps,
     bus, events, decisions, process_tracker, mcp,
     phase_workflow_store, broadcaster, confirmation_guard,
@@ -130,7 +139,13 @@ export async function createRuntime(): Promise<RuntimeApp> {
   const usage_store = new UsageStore(user_dir);
 
   // ADMIN_DB_PATH env 또는 workspace/admin/admin.db 자동 감지 → null이면 인증 비활성
+  // admin 디렉토리 존재 + DB 미존재 → 이전에 인증이 설정된 상태에서 DB가 삭제된 것이므로 자동 재생성
   const admin_db_path = process.env.ADMIN_DB_PATH ?? join(workspace, "admin", "admin.db");
+  if (!existsSync(admin_db_path) && existsSync(join(workspace, "admin"))) {
+    const boot_logger = create_logger("boot");
+    boot_logger.warn(`admin.db missing but admin/ exists — recreating empty DB to preserve auth enforcement`);
+    new AdminStore(admin_db_path); // AdminStore constructor가 빈 DB + 테이블 자동 생성
+  }
   const auth_svc = existsSync(admin_db_path) ? new AuthService(new AdminStore(admin_db_path)) : null;
 
   // 멀티테넌트: JWT 인증 후 개인 워크스페이스 디렉토리 보장
@@ -248,16 +263,26 @@ function resolve_workspace(): string {
   return join(resolve(src_dir, ".."), "workspace");
 }
 
-/** 사용자 콘텐츠 경로. WORKSPACE_USER_DIR env > admin.db superadmin > workspace 순서로 결정. */
-function resolve_user_dir(workspace: string): string {
-  if (process.env.WORKSPACE_USER_DIR) return resolve(process.env.WORKSPACE_USER_DIR);
+/** 부트 시 워크스페이스 identity 해석 — team_id, user_id, user_dir 반환. */
+function resolve_boot_identity(workspace: string): { team_id: string; user_id: string; user_dir: string } {
+  if (process.env.WORKSPACE_USER_DIR) {
+    return { team_id: "", user_id: "", user_dir: resolve(process.env.WORKSPACE_USER_DIR) };
+  }
   const admin_db = process.env.ADMIN_DB_PATH ?? join(workspace, "admin", "admin.db");
   if (existsSync(admin_db)) {
     const superadmin = new AdminStore(admin_db).list_users()
       .find((u) => u.system_role === "superadmin" && u.default_team_id);
-    if (superadmin) return join(workspace, "tenants", superadmin.default_team_id!, "users", superadmin.id);
+    if (superadmin) {
+      return {
+        team_id: superadmin.default_team_id!,
+        user_id: superadmin.id,
+        user_dir: join(workspace, "tenants", superadmin.default_team_id!, "users", superadmin.id),
+      };
+    }
+    // auth 활성이지만 팀 미배정 → 루트 오염 방지
+    return { team_id: "", user_id: "", user_dir: join(workspace, "_shared") };
   }
-  return workspace;
+  return { team_id: "", user_id: "", user_dir: workspace };
 }
 
 function resolve_app_root(): string {
