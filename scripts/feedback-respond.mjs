@@ -111,6 +111,17 @@ function readSection(markdown, heading) {
   };
 }
 
+function readBulletSection(markdown, heading) {
+  const section = readSection(markdown, heading);
+  if (!section) {
+    return [];
+  }
+  return section.lines
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith("- "))
+    .map((line) => line.replace(/^- /, "").trim());
+}
+
 function replaceSection(markdown, heading, replacementLines) {
   const lines = markdown.split(/\r?\n/);
   const section = readSection(markdown, heading);
@@ -318,20 +329,43 @@ function syncPromotionDocs(gptMd, args) {
 }
 
 function buildFixPrompt(corrections, gptMd) {
+  const rejectCodes = readBulletSection(gptMd, "반려 코드");
+  const resetCriteria = readBulletSection(gptMd, "완료 기준 재고정");
+  const protocolRules = readBulletSection(gptMd, "개선된 프로토콜");
+  const nextTasks = readBulletSection(gptMd, "다음 작업");
+
   return `GPT 감사자가 다음 항목에 보정을 요청했습니다.
 
 보정 대상:
 ${corrections.map(c => `- ${c}`).join("\n")}
+
+반려 코드:
+${rejectCodes.length > 0 ? rejectCodes.map((code) => `- ${code}`).join("\n") : "- 없음"}
+
+완료 기준 재고정:
+${resetCriteria.length > 0 ? resetCriteria.map((line) => `- ${line}`).join("\n") : "- 없음"}
+
+현재 프로토콜:
+${protocolRules.length > 0 ? protocolRules.map((line) => `- ${line}`).join("\n") : "- docs/feedback/gpt.md 기준 유지"}
+
+다음 작업:
+${nextTasks.length > 0 ? nextTasks.map((line) => `- ${line}`).join("\n") : "- 없음"}
 
 GPT 피드백 원문 (docs/feedback/gpt.md):
 ${gptMd}
 
 작업:
 1. gpt.md의 보정 요청을 확인하세요.
-2. 관련 코드를 수정하세요.
-3. 테스트를 실행하여 통과를 확인하세요.
-4. docs/feedback/claude.md를 갱신하세요 — 수정한 내용을 반영하고 상태를 [GPT미검증]으로 유지하세요.
-5. 설계 문서(docs/ko/design/**, docs/en/design/**)는 수정하지 마세요.
+2. 보정 대상과 무관한 범위 확장 주장은 섞지 마세요. 범위 밖 작업은 분리하세요.
+3. 관련 코드를 수정하세요.
+4. 테스트를 실행하여 통과를 확인하세요.
+5. docs/feedback/claude.md를 갱신하세요. 현재 라운드 항목은 [GPT미검증]으로 유지하고, 아래 5칸 증거 팩 형식을 따르세요:
+   - claim
+   - changed files
+   - test command
+   - test result
+   - residual risk
+6. 설계 문서(docs/ko/design/**, docs/en/design/**)는 수정하지 마세요.
 `;
 }
 

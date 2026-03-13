@@ -245,6 +245,13 @@ ${scopeText}
 - \`미완료\`: 주장과 코드가 불일치하거나 테스트가 없음
 - 이미 \`[합의완료]\`인 이전 트랙은 재판정하지 말고 유지하세요.
 - 이번 범위에 대해서만 \`[합의완료]\`, \`[계류]\`, \`[GPT미검증]\`를 갱신하세요.
+- \`docs/feedback/claude.md\`에 현재 범위의 증거 패키지(\`claim\`, \`changed files\`, \`test command\`, \`test result\`, \`residual risk\`)가 없거나 약하면 \`needs-evidence\`를 우선 사용하세요.
+- \`[계류]\` 판정이면 \`## 반려 코드\`를 반드시 추가하고, 아래 코드 중 1~3개만 쓰세요:
+  - \`needs-evidence\`
+  - \`scope-mismatch\`
+  - \`test-gap\`
+  - \`claim-drift\`
+- 같은 범위가 반복 계류로 보이면 \`## 완료 기준 재고정\` 한 줄을 추가하세요.
 
 답변 파일:
 - \`docs/feedback/gpt.md\`
@@ -254,8 +261,20 @@ ${scopeText}
   - 감사 범위
   - 독립 검증 결과
   - 최종 판정
+  - 반려 코드
   - 핵심 근거 3~5줄
+  - 완료 기준 재고정
+  - 개선된 프로토콜
   - 다음 작업
+
+개선된 프로토콜 작성 규칙:
+- 현재 \`docs/feedback/gpt.md\`에 \`## 개선된 프로토콜\` 섹션이 있으면 삭제하지 말고 유지하거나 짧게 갱신하세요.
+- 이 섹션에는 아래 운영 규칙만 간단히 유지하세요:
+  - Claude는 \`builder\`, GPT는 \`auditor\`
+  - Claude 보고는 \`claim\`, \`changed files\`, \`test command\`, \`test result\`, \`residual risk\` 5칸 증거 팩
+  - GPT 판정은 \`[합의완료]\`, \`[계류]\`, \`[GPT미검증]\`과 반려 코드 사용
+  - 범위 밖 주장은 \`scope-mismatch\`로 분리
+  - 현재 범위가 모두 \`[합의완료]\`이면 다음 작업은 improved 승격 문서에서 가져옴
 
 다음 작업 작성 규칙:
 - \`## 다음 작업\`은 반드시 비워두지 마세요.
