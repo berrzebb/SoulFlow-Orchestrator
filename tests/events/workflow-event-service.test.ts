@@ -366,3 +366,72 @@ describe("WorkflowEventService — sync_task_state_from_event 빈 task_id", () =
     expect(task_store_mock.get).not.toHaveBeenCalled();
   });
 });
+
+// ══════════════════════════════════════════════════════════════
+// team_id 저장·필터 — 멀티테넌트 데이터 격리 검증
+// ══════════════════════════════════════════════════════════════
+
+describe("WorkflowEventService — team_id 저장·필터", () => {
+  let workspace_tid: string;
+  let svc: WorkflowEventService;
+
+  beforeEach(async () => {
+    workspace_tid = await mkdtemp(join(tmpdir(), "evt-tid-"));
+    svc = new WorkflowEventService(workspace_tid);
+  });
+
+  afterEach(async () => {
+    await rm(workspace_tid, { recursive: true, force: true }).catch(() => {});
+  });
+
+  it("append: team_id 저장 + 반환", async () => {
+    const { event } = await svc.append({ phase: "assign", summary: "팀 이벤트", team_id: "team_a" });
+    expect(event.team_id).toBe("team_a");
+  });
+
+  it("append: team_id 미지정 → 빈 문자열", async () => {
+    const { event } = await svc.append({ phase: "assign", summary: "무팀 이벤트" });
+    expect(event.team_id).toBe("");
+  });
+
+  it("list: team_id 필터로 해당 팀만 조회", async () => {
+    await svc.append({ phase: "assign", summary: "a1", team_id: "team_a" });
+    await svc.append({ phase: "assign", summary: "b1", team_id: "team_b" });
+    await svc.append({ phase: "assign", summary: "a2", team_id: "team_a" });
+    const events = await svc.list({ team_id: "team_a" });
+    expect(events.length).toBe(2);
+    expect(events.every((e) => e.team_id === "team_a")).toBe(true);
+  });
+
+  it("list: team_id 미지정 → 전체 반환", async () => {
+    await svc.append({ phase: "assign", summary: "a1", team_id: "team_a" });
+    await svc.append({ phase: "assign", summary: "b1", team_id: "team_b" });
+    const events = await svc.list({});
+    expect(events.length).toBe(2);
+  });
+
+  it("list: team_id='' → 빈 team_id 이벤트만 반환", async () => {
+    await svc.append({ phase: "assign", summary: "no-team" });
+    await svc.append({ phase: "assign", summary: "has-team", team_id: "team_a" });
+    const events = await svc.list({ team_id: "" });
+    expect(events.length).toBe(1);
+    expect(events[0].summary).toBe("no-team");
+  });
+
+  it("dedup: 동일 event_id → team_id 보존", async () => {
+    const eid = "dedup-tid-test";
+    await svc.append({ phase: "assign", summary: "first", event_id: eid, team_id: "team_x" });
+    const { deduped, event } = await svc.append({ phase: "done", summary: "second", event_id: eid, team_id: "team_y" });
+    expect(deduped).toBe(true);
+    expect(event.team_id).toBe("team_x");
+  });
+
+  it("team_id DB 컬럼에 저장됨 (직접 조회)", async () => {
+    await svc.append({ phase: "assign", summary: "db-check", event_id: "db-tid", team_id: "team_db" });
+    const sqlite_path = join(workspace_tid, "runtime", "events", "events.db");
+    const row = with_sqlite(sqlite_path, (db) =>
+      db.prepare("SELECT team_id FROM workflow_events WHERE event_id = ?").get("db-tid") as { team_id: string } | undefined,
+    );
+    expect(row?.team_id).toBe("team_db");
+  });
+});

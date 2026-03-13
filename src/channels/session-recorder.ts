@@ -44,7 +44,8 @@ export class SessionRecorder {
   async record_user(provider: ChannelProvider, message: InboundMessage, alias: string): Promise<void> {
     if (!this.sessions) return;
     try {
-      const key = session_key(provider, message.chat_id, alias, message.thread_id);
+      const tid = extract_team_id(message.metadata);
+      const key = session_key(provider, message.chat_id, alias, message.thread_id, tid || undefined);
       const safe = this.sanitize(String(message.content || ""));
       const ts = now_iso();
       const msg = {
@@ -69,7 +70,8 @@ export class SessionRecorder {
   ): Promise<void> {
     if (!this.sessions) return;
     try {
-      const key = session_key(provider, message.chat_id, alias, message.thread_id);
+      const tid = extract_team_id(message.metadata);
+      const key = session_key(provider, message.chat_id, alias, message.thread_id, tid || undefined);
       const safe = this.sanitize(String(content || ""));
       const ts = now_iso();
       const msg = {
@@ -101,10 +103,11 @@ export class SessionRecorder {
     thread_id: string | undefined,
     max_messages: number,
     max_age_ms: number,
+    team_id?: string,
   ): Promise<ChatMessage[]> {
     if (!this.sessions) return [];
     try {
-      const key = session_key(provider, chat_id, alias, thread_id);
+      const key = session_key(provider, chat_id, alias, thread_id, team_id);
       // DB에서 직접 로드하여 재시작 후에도 최신 데이터 보장
       const session = await this.sessions.get_or_create(key);
       const now = Date.now();
@@ -129,10 +132,10 @@ export class SessionRecorder {
   }
 
   /** 지정 채널의 마지막 assistant 메시지 content 조회. /verify 등에서 사용. */
-  async get_last_assistant_content(provider: ChannelProvider, chat_id: string, alias: string): Promise<string | null> {
+  async get_last_assistant_content(provider: ChannelProvider, chat_id: string, alias: string, team_id?: string): Promise<string | null> {
     if (!this.sessions) return null;
     try {
-      const key = session_key(provider, chat_id, alias, undefined);
+      const key = session_key(provider, chat_id, alias, undefined, team_id);
       const session = await this.sessions.get_or_create(key);
       for (let i = session.messages.length - 1; i >= 0; i--) {
         const msg = session.messages[i];
@@ -168,7 +171,13 @@ export class SessionRecorder {
   }
 }
 
-function session_key(provider: ChannelProvider, chat_id: string, alias: string, thread_id?: string): string {
+function extract_team_id(metadata?: Record<string, unknown>): string {
+  return typeof metadata?.team_id === "string" ? metadata.team_id : "";
+}
+
+function session_key(provider: ChannelProvider, chat_id: string, alias: string, thread_id?: string, team_id?: string): string {
   const thread = thread_id?.trim() || "main";
-  return `${provider}:${chat_id}:${alias}:${thread}`;
+  return team_id
+    ? `${provider}:${team_id}:${chat_id}:${alias}:${thread}`
+    : `${provider}:${chat_id}:${alias}:${thread}`;
 }

@@ -131,6 +131,20 @@ export function require_superadmin_for_write(ctx: RouteContext): boolean {
 }
 
 /**
+ * 팀 리소스 접근 제어 (모든 HTTP 메서드 차단).
+ * 외부 채널 세션 mirror 등 읽기 자체가 팀 리소스 접근인 경우 사용.
+ * auth 비활성 시 통과.
+ */
+export function require_team_manager(ctx: RouteContext): boolean {
+  if (!ctx.options.auth_svc) return true;
+  if (ctx.auth_user?.role === "superadmin") return true;
+  const role = ctx.team_context?.team_role;
+  if (role === "owner" || role === "manager") return true;
+  ctx.json(ctx.res, 403, { error: "team_manager_required" });
+  return false;
+}
+
+/**
  * 팀 공유 리소스(write) 엔드포인트용:
  * 읽기는 허용, 쓰기는 team owner/manager 또는 superadmin만.
  * auth 비활성 시 통과.

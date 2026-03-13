@@ -15,6 +15,7 @@ import { handle_chat } from "@src/dashboard/routes/chat.js";
 const MANAGER: JwtPayload = { sub: "mgr", usr: "manager", role: "user", tid: "team_1", wdir: "tenants/team_1/users/mgr", iat: 0, exp: 0 };
 const MEMBER: JwtPayload = { sub: "usr", usr: "member", role: "user", tid: "team_1", wdir: "tenants/team_1/users/usr", iat: 0, exp: 0 };
 const SUPERADMIN: JwtPayload = { sub: "admin", usr: "admin", role: "superadmin", tid: "default", wdir: "tenants/default/users/admin", iat: 0, exp: 0 };
+const TEAM2_MANAGER: JwtPayload = { sub: "mgr2", usr: "manager2", role: "user", tid: "team_2", wdir: "tenants/team_2/users/mgr2", iat: 0, exp: 0 };
 
 type JsonSpy = { status: number; data: unknown };
 
@@ -82,9 +83,11 @@ function make_mirror_ctx(overrides: {
   };
 }
 
+// 5-part 키 (team_id 포함)
 const ENTRIES = [
-  { key: "slack:C1:bot:main", created_at: "2026-01-01", updated_at: "2026-01-01", message_count: 5 },
-  { key: "telegram:123:bot:main", created_at: "2026-01-01", updated_at: "2026-01-01", message_count: 3 },
+  { key: "slack:team_1:C1:bot:main", created_at: "2026-01-01", updated_at: "2026-01-01", message_count: 5 },
+  { key: "telegram:team_1:123:bot:main", created_at: "2026-01-01", updated_at: "2026-01-01", message_count: 3 },
+  { key: "slack:team_2:C2:bot:main", created_at: "2026-01-01", updated_at: "2026-01-01", message_count: 7 },
   { key: "web:team_1:user_a:s1:default:main", created_at: "2026-01-01", updated_at: "2026-01-01", message_count: 1 },
 ];
 
@@ -101,11 +104,11 @@ describe("GET /api/chat/mirror — role-based access", () => {
     await handle_chat(ctx);
     expect(ctx._json.status).toBe(200);
     const list = ctx._json.data as any[];
-    // web: 프리픽스 세션은 제외됨
-    expect(list).toHaveLength(2);
+    // web: 프리픽스 세션 제외, 나머지 3개 (team_1 slack + team_1 telegram + team_2 slack)
+    expect(list).toHaveLength(3);
   });
 
-  it("superadmin → 전체 목록 반환", async () => {
+  it("superadmin → 전체 목록 반환 (team 필터 없음)", async () => {
     const ctx = make_mirror_ctx({
       method: "GET", path: "/api/chat/mirror",
       auth_user: SUPERADMIN, team_role: "owner",
@@ -113,10 +116,10 @@ describe("GET /api/chat/mirror — role-based access", () => {
     });
     await handle_chat(ctx);
     expect(ctx._json.status).toBe(200);
-    expect((ctx._json.data as any[]).length).toBe(2);
+    expect((ctx._json.data as any[]).length).toBe(3);
   });
 
-  it("team_manager → 활성 채널 세션만 반환", async () => {
+  it("team_manager → 자기 팀 세션만 반환 + 채널 필터", async () => {
     const ctx = make_mirror_ctx({
       method: "GET", path: "/api/chat/mirror",
       auth_user: MANAGER, team_role: "manager",
@@ -126,21 +129,25 @@ describe("GET /api/chat/mirror — role-based access", () => {
     await handle_chat(ctx);
     expect(ctx._json.status).toBe(200);
     const list = ctx._json.data as any[];
+    // team_1의 slack만 (team_2 slack 제외, telegram 제외)
     expect(list).toHaveLength(1);
     expect(list[0].provider).toBe("slack");
+    expect(list[0].team_id).toBe("team_1");
+    expect(list[0].chat_id).toBe("C1");
   });
 
-  it("일반 member → GET은 허용 (require_team_manager_for_write는 GET 통과)", async () => {
+  it("일반 member → 403 (team_manager_required)", async () => {
     const ctx = make_mirror_ctx({
       method: "GET", path: "/api/chat/mirror",
       auth_user: MEMBER, team_role: "member",
       session_entries: ENTRIES,
     });
     await handle_chat(ctx);
-    expect(ctx._json.status).toBe(200);
+    expect(ctx._json.status).toBe(403);
+    expect((ctx._json.data as any).error).toBe("team_manager_required");
   });
 
-  it("enabled_channels가 비면 모든 provider 세션 반환", async () => {
+  it("enabled_channels가 비면 자기 팀 전체 provider 반환", async () => {
     const ctx = make_mirror_ctx({
       method: "GET", path: "/api/chat/mirror",
       auth_user: MANAGER, team_role: "manager",
@@ -149,7 +156,9 @@ describe("GET /api/chat/mirror — role-based access", () => {
     });
     await handle_chat(ctx);
     expect(ctx._json.status).toBe(200);
-    expect((ctx._json.data as any[]).length).toBe(2);
+    const list = ctx._json.data as any[];
+    // team_1: slack + telegram (team_2 제외)
+    expect(list).toHaveLength(2);
   });
 
   it("session_store 없음 → 빈 배열", async () => {
@@ -157,11 +166,63 @@ describe("GET /api/chat/mirror — role-based access", () => {
       method: "GET", path: "/api/chat/mirror",
       auth_enabled: false,
     });
-    // session_store.list_by_prefix가 있으므로 제거
     (ctx as any).session_store = null;
     await handle_chat(ctx);
     expect(ctx._json.status).toBe(200);
     expect(ctx._json.data).toEqual([]);
+  });
+
+  it("교차 팀: team_2 manager → team_1 세션 안 보임", async () => {
+    const ctx = make_mirror_ctx({
+      method: "GET", path: "/api/chat/mirror",
+      auth_user: TEAM2_MANAGER, team_role: "manager",
+      enabled_channels: [],
+      session_entries: ENTRIES,
+    });
+    await handle_chat(ctx);
+    expect(ctx._json.status).toBe(200);
+    const list = ctx._json.data as any[];
+    // team_2 세션만 (slack:team_2:C2:bot:main)
+    expect(list).toHaveLength(1);
+    expect(list[0].team_id).toBe("team_2");
+  });
+});
+
+// ══════════════════════════════════════════
+// GET /api/chat/mirror — 5-part key 파싱 검증
+// ══════════════════════════════════════════
+
+describe("GET /api/chat/mirror — 5-part key parsing", () => {
+  it("5-part 키: provider/team_id/chat_id/alias/thread 정확히 파싱", async () => {
+    const ctx = make_mirror_ctx({
+      method: "GET", path: "/api/chat/mirror",
+      auth_enabled: false,
+      session_entries: [
+        { key: "slack:team_1:C_HELLO:mybot:thread_42", created_at: "2026-01-01", updated_at: "2026-01-02", message_count: 10 },
+      ],
+    });
+    await handle_chat(ctx);
+    expect(ctx._json.status).toBe(200);
+    const list = ctx._json.data as any[];
+    expect(list).toHaveLength(1);
+    expect(list[0]).toMatchObject({
+      provider: "slack", team_id: "team_1", chat_id: "C_HELLO", alias: "mybot", thread: "thread_42",
+    });
+  });
+
+  it("4-part 레거시 키: team_id는 빈 문자열", async () => {
+    const ctx = make_mirror_ctx({
+      method: "GET", path: "/api/chat/mirror",
+      auth_enabled: false,
+      session_entries: [
+        { key: "slack:C1:bot:main", created_at: "2026-01-01", updated_at: "2026-01-01", message_count: 2 },
+      ],
+    });
+    await handle_chat(ctx);
+    const list = ctx._json.data as any[];
+    expect(list).toHaveLength(1);
+    expect(list[0].team_id).toBe("");
+    expect(list[0].chat_id).toBe("C1");
   });
 });
 
@@ -170,23 +231,59 @@ describe("GET /api/chat/mirror — role-based access", () => {
 // ══════════════════════════════════════════
 
 describe("GET /api/chat/mirror/:key — access control", () => {
-  it("superadmin → 세션 메시지 조회 성공", async () => {
+  it("superadmin → 5-part 세션 메시지 조회 성공", async () => {
     const ctx = make_mirror_ctx({
       method: "GET",
-      path: "/api/chat/mirror/slack%3AC1%3Abot%3Amain",
+      path: "/api/chat/mirror/slack%3Ateam_1%3AC1%3Abot%3Amain",
       auth_user: SUPERADMIN, team_role: "owner",
       session_messages: [{ role: "user", content: "hello" }, { role: "assistant", content: "hi" }],
     });
     await handle_chat(ctx);
     expect(ctx._json.status).toBe(200);
-    const data = ctx._json.data as { messages: any[] };
+    const data = ctx._json.data as any;
     expect(data.messages).toHaveLength(2);
+    expect(data.provider).toBe("slack");
+    expect(data.team_id).toBe("team_1");
+    expect(data.chat_id).toBe("C1");
+    expect(data.alias).toBe("bot");
+    expect(data.thread).toBe("main");
+  });
+
+  it("team_manager → 자기 팀 세션 조회 성공", async () => {
+    const ctx = make_mirror_ctx({
+      method: "GET",
+      path: "/api/chat/mirror/slack%3Ateam_1%3AC1%3Abot%3Amain",
+      auth_user: MANAGER, team_role: "manager",
+      session_messages: [{ role: "user", content: "test" }],
+    });
+    await handle_chat(ctx);
+    expect(ctx._json.status).toBe(200);
+  });
+
+  it("team_manager → 다른 팀 세션 → 404", async () => {
+    const ctx = make_mirror_ctx({
+      method: "GET",
+      path: "/api/chat/mirror/slack%3Ateam_2%3AC2%3Abot%3Amain",
+      auth_user: MANAGER, team_role: "manager",
+    });
+    await handle_chat(ctx);
+    expect(ctx._json.status).toBe(404);
+  });
+
+  it("일반 member → 403", async () => {
+    const ctx = make_mirror_ctx({
+      method: "GET",
+      path: "/api/chat/mirror/slack%3Ateam_1%3AC1%3Abot%3Amain",
+      auth_user: MEMBER, team_role: "member",
+    });
+    await handle_chat(ctx);
+    expect(ctx._json.status).toBe(403);
   });
 
   it("session_store 없음 → 503", async () => {
     const ctx = make_mirror_ctx({
       method: "GET",
-      path: "/api/chat/mirror/slack%3AC1%3Abot%3Amain",
+      path: "/api/chat/mirror/slack%3Ateam_1%3AC1%3Abot%3Amain",
       auth_enabled: false,
     });
     (ctx as any).session_store = null;
@@ -200,10 +297,10 @@ describe("GET /api/chat/mirror/:key — access control", () => {
 // ══════════════════════════════════════════
 
 describe("POST /api/chat/mirror/:key/messages — write access", () => {
-  it("team_manager → 메시지 릴레이 성공", async () => {
+  it("team_manager → 자기 팀 릴레이 성공", async () => {
     const ctx = make_mirror_ctx({
       method: "POST",
-      path: "/api/chat/mirror/slack%3AC1%3Abot%3Amain/messages",
+      path: "/api/chat/mirror/slack%3Ateam_1%3AC1%3Abot%3Amain/messages",
       auth_user: MANAGER, team_role: "manager",
       body: { content: "relay this" },
     });
@@ -215,7 +312,7 @@ describe("POST /api/chat/mirror/:key/messages — write access", () => {
   it("일반 member → 403 (team_manager_required)", async () => {
     const ctx = make_mirror_ctx({
       method: "POST",
-      path: "/api/chat/mirror/slack%3AC1%3Abot%3Amain/messages",
+      path: "/api/chat/mirror/slack%3Ateam_1%3AC1%3Abot%3Amain/messages",
       auth_user: MEMBER, team_role: "member",
       body: { content: "attack" },
     });
@@ -226,7 +323,7 @@ describe("POST /api/chat/mirror/:key/messages — write access", () => {
   it("superadmin → 릴레이 성공", async () => {
     const ctx = make_mirror_ctx({
       method: "POST",
-      path: "/api/chat/mirror/slack%3AC1%3Abot%3Amain/messages",
+      path: "/api/chat/mirror/slack%3Ateam_1%3AC1%3Abot%3Amain/messages",
       auth_user: SUPERADMIN, team_role: "owner",
       body: { content: "admin relay" },
     });
@@ -237,7 +334,7 @@ describe("POST /api/chat/mirror/:key/messages — write access", () => {
   it("auth 비활성 → 릴레이 성공", async () => {
     const ctx = make_mirror_ctx({
       method: "POST",
-      path: "/api/chat/mirror/slack%3AC1%3Abot%3Amain/messages",
+      path: "/api/chat/mirror/slack%3Ateam_1%3AC1%3Abot%3Amain/messages",
       auth_enabled: false,
       body: { content: "single user" },
     });
@@ -248,7 +345,7 @@ describe("POST /api/chat/mirror/:key/messages — write access", () => {
   it("빈 content → 400", async () => {
     const ctx = make_mirror_ctx({
       method: "POST",
-      path: "/api/chat/mirror/slack%3AC1%3Abot%3Amain/messages",
+      path: "/api/chat/mirror/slack%3Ateam_1%3AC1%3Abot%3Amain/messages",
       auth_user: MANAGER, team_role: "manager",
       body: { content: "" },
     });
@@ -265,5 +362,31 @@ describe("POST /api/chat/mirror/:key/messages — write access", () => {
     });
     await handle_chat(ctx);
     expect(ctx._json.status).toBe(400);
+  });
+
+  it("교차 팀 릴레이 → 404", async () => {
+    const ctx = make_mirror_ctx({
+      method: "POST",
+      path: "/api/chat/mirror/slack%3Ateam_2%3AC2%3Abot%3Amain/messages",
+      auth_user: MANAGER, team_role: "manager",
+      body: { content: "cross-team attack" },
+    });
+    await handle_chat(ctx);
+    expect(ctx._json.status).toBe(404);
+  });
+
+  it("릴레이 metadata에 team_id 포함", async () => {
+    const ctx = make_mirror_ctx({
+      method: "POST",
+      path: "/api/chat/mirror/slack%3Ateam_1%3AC1%3Abot%3Amain/messages",
+      auth_user: MANAGER, team_role: "manager",
+      body: { content: "with team" },
+    });
+    await handle_chat(ctx);
+    expect(ctx._json.status).toBe(200);
+    const call = (ctx.bus.publish_inbound as any).mock.calls[0][0];
+    expect(call.metadata.team_id).toBe("team_1");
+    expect(call.chat_id).toBe("C1");
+    expect(call.provider).toBe("slack");
   });
 });

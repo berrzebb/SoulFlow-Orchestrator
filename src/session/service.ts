@@ -381,4 +381,68 @@ export class SessionStore implements SessionStoreLike {
     }
     return count;
   }
+
+  /**
+   * 레거시 세션 키를 멀티테넌트 형식으로 마이그레이션.
+   *
+   * web 구 형식:     web:{chat_id}:{alias}:{thread}           (4파트)
+   * web 신 형식:     web:{team_id}:{user_id}:{chat_id}:{alias}:{thread} (6파트)
+   * external 구 형식: {provider}:{chat_id}:{alias}:{thread}    (4파트)
+   * external 신 형식: {provider}:{team_id}:{chat_id}:{alias}:{thread}   (5파트)
+   */
+  async migrate_legacy_keys(team_id: string, user_id: string): Promise<number> {
+    await this.initialized;
+    const all_sessions = this.with_sqlite((db) =>
+      db.prepare("SELECT key FROM sessions").all() as Array<{ key: string }>,
+    ) ?? [];
+
+    let migrated = 0;
+    for (const { key } of all_sessions) {
+      const parts = key.split(":");
+      const provider = parts[0] ?? "";
+      if (!provider) continue;
+
+      const is_web = provider === "web";
+      // web 신 형식: 6파트, external 신 형식: 5파트 → 이미 마이그레이션 됨
+      if (is_web && parts.length >= 6) continue;
+      if (!is_web && parts.length >= 5) continue;
+      // 구 형식: {provider}:{chat_id}:{alias}:{thread} (4파트)
+      if (parts.length < 3) continue;
+
+      const chat_id = parts[1] ?? "";
+      const alias = parts[2] ?? "";
+      const thread = parts[3] ?? "main";
+      if (!chat_id) continue;
+
+      const new_key = is_web
+        ? `${provider}:${team_id}:${user_id}:${chat_id}:${alias}:${thread}`
+        : `${provider}:${team_id}:${chat_id}:${alias}:${thread}`;
+
+      const old_session = await this.load(key);
+      if (!old_session || old_session.messages.length === 0) {
+        await this.delete(key);
+        continue;
+      }
+
+      const existing = await this.load(new_key);
+      if (existing && existing.messages.length > 0) {
+        existing.messages = [...old_session.messages, ...existing.messages];
+        existing.created_at = old_session.created_at;
+        await this.save(existing);
+      } else {
+        await this.save(new Session({
+          key: new_key,
+          messages: old_session.messages,
+          created_at: old_session.created_at,
+          updated_at: old_session.updated_at,
+          metadata: old_session.metadata,
+          last_consolidated: old_session.last_consolidated,
+        }));
+      }
+
+      await this.delete(key);
+      migrated++;
+    }
+    return migrated;
+  }
 }

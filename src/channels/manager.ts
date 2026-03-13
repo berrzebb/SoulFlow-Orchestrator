@@ -708,17 +708,17 @@ export class ChannelManager implements ServiceLike {
     try {
       if (!meta.is_recovery) await this.recorder.record_user(provider, message, alias);
       const media_inputs = await this.media.collect(provider, message);
+      const msg_meta = (message.metadata || {}) as Record<string, unknown>;
+      const msg_team_id = typeof msg_meta.team_id === "string" ? msg_meta.team_id : undefined;
       const history = await this.recorder.get_history(
         provider, message.chat_id, alias, message.thread_id,
         12, this.config.sessionHistoryMaxAgeMs,
+        msg_team_id,
       );
-
-      const msg_meta = (message.metadata || {}) as Record<string, unknown>;
       const preferred_provider_id = typeof msg_meta.preferred_provider_id === "string" ? msg_meta.preferred_provider_id : undefined;
       const preferred_model = typeof msg_meta.preferred_model === "string" ? msg_meta.preferred_model : undefined;
       const system_prompt_override = typeof msg_meta.system_prompt_override === "string" ? msg_meta.system_prompt_override : undefined;
       const workspace_override = typeof msg_meta.workspace_dir === "string" ? msg_meta.workspace_dir : undefined;
-      const msg_team_id = typeof msg_meta.team_id === "string" ? msg_meta.team_id : undefined;
 
       const correlation = create_correlation({
         team_id: msg_team_id,
