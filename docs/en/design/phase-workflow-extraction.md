@@ -144,7 +144,7 @@ Contract validation:
 - Required properties present (providers, runtime, logger, workspace, hitl_store, render_hitl) ✓
 - OrchestrationService imports and delegates to extracted module ✓
 
-**Regression Tests**: 303 tests pass (vitest run tests/orchestration/)
+**Regression Tests**: Representative regression tests and type checks pass
 
 ## Semantic Preservation Checklist
 
@@ -162,8 +162,8 @@ Contract validation:
 - Phase event emission order unchanged
 
 ✅ State management:
-- `hitl_store` remains in service (not extracted)
-- `session_cd` remains in service (will be extracted in future phase)
+- `hitl_store` remains a service-owned injected collaborator
+- `session_cd` remains a service-owned injected collaborator
 
 ## Files Changed
 
@@ -181,11 +181,8 @@ Contract validation:
 ✅ Test suite: 301 tests pass
 ✅ No unused imports in service.ts (removed now_iso, short_id)
 
-## Next Steps
+## Follow-up
 
-Future considerations:
-1. **Phase 4.3**: State holder extraction (phase_pending_responses)
-2. **Phase 4.4**: Session CD extraction (session_cd)
-3. **Phase 5**: Request context / gateway routing extraction (if needed)
-
-State objects should remain in service.ts until their usage patterns are fully isolated in extracted modules.
+- Keep strengthening characterization tests that directly lock `run_phase_loop()` delegation
+- Preserve the boundary so phase workflow policy does not drift back into `service.ts`
+- Keep the separation between phase workflow execution and service collaborators (`hitl_store`, `session_cd`)

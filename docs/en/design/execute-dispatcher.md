@@ -133,7 +133,7 @@ Contract validation:
 - finalize closure records done/blocked events ✓
 - ReadyPreflight discriminated union type is available ✓
 
-**Regression**: 316+ tests pass (7 new + 309 existing)
+**Regression**: Representative regression tests and type checks pass
 
 ## Semantic Preservation Checklist
 
@@ -176,11 +176,11 @@ The service is now:
 2. An orchestration facade (execute routing + finalization)
 3. A stateful collaborator holder (hitl_store, session_cd)
 
-## Next Steps
+## Follow-up
 
-**Phase 4.6** (if needed): Extract execute() dispatcher routing logic
-- Separate resolve_gateway result dispatching from finalize
-- Move gateway decision result handling to dedicated collaborator
+- Keep strengthening characterization tests for `execute_dispatch()`
+- Preserve the boundary between gateway decision and dispatcher execution
+- If provider policy later moves into `ExecutionGateway` or another port, prevent the dispatcher from becoming another orchestrator
 
 ## Design Decisions
 

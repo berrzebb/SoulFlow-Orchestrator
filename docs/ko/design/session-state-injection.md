@@ -1,6 +1,6 @@
 # 설계: Session CD Collaborator 주입 (Phase 4.3)
 
-> **상태**: 구현 완료 · 인라인 상태 생성 제거
+> **상태**: 구현 완료 · `session_cd`를 필수 collaborator 주입으로 전환
 
 ## 개요
 
@@ -9,7 +9,7 @@
 유지 사항:
 - 의미 보존 (CD 점수 계산 규칙 변경 없음)
 - 공개 API 계약 (`get_cd_score()`, `reset_cd_score()` 유지)
-- 후방 호환성 (주입은 선택사항, fallback 지원)
+- bootstrap이 collaborator 생명주기를 명시적으로 소유
 
 ## 문제 정의
 
@@ -46,32 +46,31 @@ export type CDObserver = {
 
 ```typescript
 // 1. CDObserver 타입 import
-import { create_cd_observer, type CDObserver } from "../agent/cd-scoring.js";
+import { type CDObserver } from "../agent/cd-scoring.js";
 
-// 2. OrchestrationServiceDeps에 optional session_cd 추가
+// 2. OrchestrationServiceDeps에 required session_cd 추가
 export type OrchestrationServiceDeps = {
   // ... 기존 필드
-  /** 세션 CD 관찰자. 없으면 내부에서 생성. */
-  session_cd?: CDObserver;
+  /** 세션 CD 관찰자. bootstrap에서 반드시 주입한다. */
+  session_cd: CDObserver;
   // ...
 };
 
 // 3. 클래스 필드 타입 명시
 private readonly session_cd: CDObserver;
 
-// 4. 생성자 주입 + fallback
+// 4. 생성자 주입
 constructor(deps: OrchestrationServiceDeps) {
   // ...
-  this.session_cd = deps.session_cd ?? create_cd_observer();
+  this.session_cd = deps.session_cd;
   // ...
 }
 ```
 
 ### 주요 특징
 
-- **선택적 주입**: `session_cd?: CDObserver` → 점진적 마이그레이션 가능
-- **기본 동작**: 미주입 시 내부에서 `create_cd_observer()` 호출
-- **bootstrap 변경 불필요**: 기존 코드 호환
+- **필수 주입**: `session_cd: CDObserver` → service 내부 인라인 생성 제거
+- **명시적 생명주기**: bootstrap이 observer 생성/소유 책임을 가짐
 - **모든 내부 접근 불변**: 내부 경로는 `this.session_cd`로 동일
 
 ## 테스트 커버리지
@@ -80,7 +79,7 @@ constructor(deps: OrchestrationServiceDeps) {
 
 계약 검증:
 - `CDObserver` 타입 정의됨 ✓
-- `OrchestrationServiceDeps.session_cd` optional 필드 포함 ✓
+- `OrchestrationServiceDeps.session_cd` required 필드 포함 ✓
 - 공개 메서드 (`get_cd_score()`, `reset_cd_score()`) 유지 ✓
 - Collaborator 주입 패턴 작동 ✓
 
@@ -102,16 +101,16 @@ constructor(deps: OrchestrationServiceDeps) {
 - `runner_deps.session_cd` → 모든 runner 전달 동일
 - Tool 이벤트 관찰 경로 불변
 
-✅ 후방 호환성:
-- Bootstrap 코드 변경 불필요
-- 외부 호출자 사용 방식 불변
-- 기존 `new OrchestrationService(deps)` 호출 계속 작동
+✅ 조립 책임 명시:
+- `session_cd` 생성 책임은 service가 아니라 bootstrap이 소유
+- `new OrchestrationService(deps)`는 항상 완전한 collaborator 세트를 받음
+- 인라인 `create_cd_observer()` 경로 제거
 
 ## 변경 파일
 
 | 파일 | 변경 |
 |------|------|
-| `src/orchestration/service.ts` | +import CDObserver, +OrchestrationServiceDeps 선택사항 추가, ~생성자 주입 패턴 |
+| `src/orchestration/service.ts` | +import CDObserver, +OrchestrationServiceDeps 필수 필드 추가, ~생성자 주입 패턴 |
 | `tests/orchestration/session-state.test.ts` | **NEW** (6개 테스트: 타입 계약 + 주입 검증) |
 | `docs/LARGE_FILE_SPLIT_DESIGN.md` | Phase 4.3 완료 상태 업데이트 |
 
@@ -119,7 +118,7 @@ constructor(deps: OrchestrationServiceDeps) {
 
 ✅ TypeScript 컴파일: `npx tsc -p tsconfig.json --noEmit`
 ✅ 테스트 스위트: 309 tests 통과 (22개 테스트 파일)
-✅ bootstrap 변경 불필요 (선택적 주입, fallback 지원)
+✅ bootstrap 명시 주입 경로 검증 완료
 
 ## OrchestrationService의 상태
 
@@ -136,10 +135,8 @@ Phase 4.1, 4.2, 4.3 후:
 3. 추출된 모듈 레벨 함수로 실행 위임
 4. 요청 전처리 및 응답 최종화
 
-## 다음 단계
+## 후속 작업
 
-향후 phase에서 추출 가능:
-- **Phase 4.4**: 요청 preflight/보안 (`seal_text`, `seal_list`, `inspect_secrets`)
-- **Phase 4.5**: execute() dispatcher 로직 (gateway + 모드 라우팅)
-
-현재 범위는 state holder 분리로 완료.
+- `session_cd`를 service 내부 상태가 아니라 injected collaborator로 유지
+- bootstrap 외 경로에서 observer를 임의 생성하지 않도록 방지
+- 관련 테스트에서 fallback 생성에 의존하는 가정이 다시 생기지 않도록 회귀 고정

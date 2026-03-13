@@ -1,6 +1,6 @@
 # Design: Session CD Collaborator Injection (Phase 4.3)
 
-> **Status**: Implementation complete · Session state removed from inline creation
+> **Status**: Implementation complete · `session_cd` converted to required collaborator injection
 
 ## Overview
 
@@ -9,7 +9,7 @@ Completes the service decomposition by removing the last inline state creation (
 Maintains:
 - Semantic preservation (no CD scoring rule changes)
 - Public API contract (`get_cd_score()`, `reset_cd_score()` unchanged)
-- Backward compatibility (injection is optional with fallback)
+- Explicit bootstrap ownership of collaborator lifecycle
 
 ## Problem Statement
 
@@ -46,32 +46,31 @@ export type CDObserver = {
 
 ```typescript
 // 1. Import CDObserver type
-import { create_cd_observer, type CDObserver } from "../agent/cd-scoring.js";
+import { type CDObserver } from "../agent/cd-scoring.js";
 
-// 2. Add optional session_cd to OrchestrationServiceDeps
+// 2. Add required session_cd to OrchestrationServiceDeps
 export type OrchestrationServiceDeps = {
   // ... existing fields
-  /** 세션 CD 관찰자. 없으면 내부에서 생성. */
-  session_cd?: CDObserver;
+  /** Session CD observer. Must be injected by bootstrap. */
+  session_cd: CDObserver;
   // ...
 };
 
 // 3. Class field declaration with type
 private readonly session_cd: CDObserver;
 
-// 4. Constructor injection with fallback
+// 4. Constructor injection
 constructor(deps: OrchestrationServiceDeps) {
   // ...
-  this.session_cd = deps.session_cd ?? create_cd_observer();
+  this.session_cd = deps.session_cd;
   // ...
 }
 ```
 
 ### Key Characteristics
 
-- **Optional injection**: `session_cd?: CDObserver` allows gradual migration
-- **Default behavior**: If not injected, `create_cd_observer()` is called internally
-- **No bootstrap changes needed**: Existing code continues to work without modification
+- **Required injection**: `session_cd: CDObserver` removes inline creation from the service
+- **Explicit lifecycle**: bootstrap owns observer creation and lifetime
 - **All accesses unchanged**: Internal code paths remain identical (`this.session_cd`)
 
 ## Test Coverage
@@ -80,7 +79,7 @@ constructor(deps: OrchestrationServiceDeps) {
 
 Contract validation:
 - `CDObserver` type properly defined ✓
-- `OrchestrationServiceDeps.session_cd` optional field present ✓
+- `OrchestrationServiceDeps.session_cd` required field present ✓
 - Public API methods (`get_cd_score()`, `reset_cd_score()`) still available ✓
 - Collaborator injection pattern works ✓
 
@@ -102,16 +101,16 @@ Contract validation:
 - `runner_deps.session_cd` passed to execution runners same way
 - Tool event observation paths unchanged
 
-✅ Backward compatibility:
-- Bootstrap code needs no modification
-- Service usage from external callers unchanged
-- Old code calling `new OrchestrationService(deps)` continues to work
+✅ Explicit assembly responsibility:
+- `session_cd` creation belongs to bootstrap, not the service
+- `new OrchestrationService(deps)` always receives a complete collaborator set
+- The inline `create_cd_observer()` path is removed
 
 ## Files Changed
 
 | File | Changes |
 |------|---------|
-| `src/orchestration/service.ts` | +import CDObserver, +optional session_cd field in OrchestrationServiceDeps, ~constructor injection pattern |
+| `src/orchestration/service.ts` | +import CDObserver, +required session_cd field in OrchestrationServiceDeps, ~constructor injection pattern |
 | `tests/orchestration/session-state.test.ts` | **NEW** (6 tests: type contract + injection validation) |
 | `docs/LARGE_FILE_SPLIT_DESIGN.md` | Phase 4.3 completion status |
 
@@ -119,7 +118,7 @@ Contract validation:
 
 ✅ TypeScript compilation: `npx tsc -p tsconfig.json --noEmit`
 ✅ Test suite: 309 tests pass (22 test files)
-✅ No bootstrap changes needed (optional injection with fallback)
+✅ Explicit bootstrap injection path verified
 
 ## State of OrchestrationService
 
@@ -136,10 +135,8 @@ The service is now primarily a coordinator and facade that:
 3. Delegates execution to extracted module-level functions
 4. Handles request preprocessing and response finalization
 
-## Next Steps
+## Follow-up
 
-Future phases could extract:
-- **Phase 4.4**: Request preflight/security (`seal_text`, `seal_list`, `inspect_secrets`)
-- **Phase 4.5**: Execute() dispatcher logic (gateway + mode routing)
-
-But current scope is complete with state holder separation.
+- Keep `session_cd` as an injected collaborator rather than service-owned state
+- Prevent non-bootstrap call sites from reintroducing ad-hoc observer creation
+- Add regression coverage so tests do not depend on fallback creation paths again

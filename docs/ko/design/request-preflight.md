@@ -20,7 +20,7 @@
 - L366-369: Skill 해석 + secret 검증
 - L374-391: Context 조립
 
-이 inline 로직이 방지하는 것:
+이 inline 로직이 막는 문제:
 - Preflight을 독립적으로 테스트
 - 다른 맥락에서 preflight 계산 재사용
 - "데이터 수집"과 "실행" 분리
@@ -125,7 +125,7 @@ collect_skill_provider_preferences: (names) => collect_skill_provider_prefs(this
 - ReadyPreflight이 모든 context 필드 포함 ✓
 - `collect_skill_provider_prefs`가 중복 제거 ✓
 
-**회귀 테스트**: 309+ 테스트 통과 (7개 신규 + 302개 기존)
+**회귀 테스트**: 대표 회귀 테스트와 타입 검증 기준 통과
 
 ## Semantic 보존 체크리스트
 
@@ -159,16 +159,15 @@ Phase 4.1–4.4 완료 후:
 - **남은 메서드**: execute() 디스패처, security 헬퍼, 시스템 프롬프트 빌더, renderer 관리
 
 현재 서비스는:
-1. 의존성 컨테이너 (`_preflight_deps()`, `_runner_deps()`, `_continue_deps()`, `_phase_deps()`)
-2. 오케스트레이션 파사드 (`execute()` 라우팅 + 결과 최종화)
+1. 의존성 컨테이너 (`_preflight_deps()`, `_runner_deps()`, `_continue_deps()`, `_phase_deps()`, `_dispatch_deps()`)
+2. 오케스트레이션 파사드 (`execute()` 진입 + dispatcher 위임 + 결과 최종화)
 3. Stateful collaborator 홀더 (hitl_store, session_cd)
 
-## 다음 단계
+## 후속 작업
 
-**Phase 4.5**: execute() 디스패처 로직 추출
-- `resolve_gateway()` 결과 분기
-- Mode 라우팅 (phase/once/agent/task)
-- 최종화 + 이벤트 로깅
+- `run_request_preflight()`의 characterisation test를 계속 강화
+- `execute()`가 preflight 이후 dispatcher로만 위임한다는 경계를 유지
+- preflight에 실행 정책이나 dispatcher 책임이 다시 유입되지 않도록 방지
 
 ## 설계 결정
 

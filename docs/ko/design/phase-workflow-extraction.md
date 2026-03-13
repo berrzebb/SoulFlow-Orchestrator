@@ -145,7 +145,7 @@ export { run_phase_loop, type PhaseWorkflowDeps } from "./phase-workflow.js";
 - 필수 속성 포함 (providers, runtime, logger, workspace, hitl_store, render_hitl) ✓
 - OrchestrationService가 추출 모듈을 import하고 위임 ✓
 
-**회귀 테스트**: 303 tests 통과 (vitest run tests/orchestration/)
+**회귀 테스트**: 대표 회귀 테스트와 타입 검증 기준 통과
 
 ## 의미 보존 체크리스트
 
@@ -163,8 +163,8 @@ export { run_phase_loop, type PhaseWorkflowDeps } from "./phase-workflow.js";
 - Phase 이벤트 발행 순서 불변
 
 ✅ 상태 관리:
-- `hitl_store`는 service에 유지 (추출 안 함)
-- `session_cd`는 service에 유지 (향후 phase에서 추출 예정)
+- `hitl_store`는 service의 injected collaborator로 유지
+- `session_cd`는 service의 injected collaborator로 유지
 
 ## 변경 파일
 
@@ -182,11 +182,8 @@ export { run_phase_loop, type PhaseWorkflowDeps } from "./phase-workflow.js";
 ✅ 테스트 스위트: 301 tests 통과
 ✅ service.ts에서 미사용 import 제거 (now_iso, short_id)
 
-## 다음 단계
+## 후속 작업
 
-향후 검토 사항:
-1. **Phase 4.3**: 상태 holder 추출 (phase_pending_responses)
-2. **Phase 4.4**: Session CD 추출 (session_cd)
-3. **Phase 5**: 요청 컨텍스트 / gateway 라우팅 추출 (필요 시)
-
-상태 객체는 service.ts에 유지되어야 하며, 추출된 모듈에서 사용 패턴이 완전히 격리될 때까지 마지막에 분리.
+- `run_phase_loop()` 위임 경로를 직접 잠그는 characterisation test를 계속 강화
+- phase workflow 정책이 다시 `service.ts` 안으로 되돌아오지 않도록 경계 유지
+- phase workflow와 service collaborator(`hitl_store`, `session_cd`)의 책임 분리를 유지

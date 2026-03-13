@@ -134,7 +134,7 @@ async execute(req: OrchestrationRequest): Promise<OrchestrationResult> {
 - finalize 클로저가 done/blocked 이벤트 기록 ✓
 - ReadyPreflight discriminated union 타입 사용 가능 ✓
 
-**회귀 테스트**: 316+ 테스트 통과 (7개 신규 + 309개 기존)
+**회귀 테스트**: 대표 회귀 테스트와 타입 검증 기준 통과
 
 ## Semantic 보존 체크리스트
 
@@ -177,11 +177,11 @@ Phase 4.1–4.5 완료 후:
 2. 오케스트레이션 파사드 (execute 라우팅 + 최종화)
 3. Stateful collaborator 홀더 (hitl_store, session_cd)
 
-## 다음 단계
+## 후속 작업
 
-**Phase 4.6** (필요 시): execute() dispatcher 분기 로직 추출
-- resolve_gateway 결과 분기를 finalize에서 분리
-- gateway 결정 결과 처리를 dedicated collaborator로 이동
+- `execute_dispatch()`의 characterisation test를 계속 강화
+- gateway 결정과 dispatcher 실행의 경계를 유지
+- 향후 provider policy가 `ExecutionGateway`나 별도 port로 이동하더라도 dispatcher가 새 오케스트레이터가 되지 않도록 제한
 
 ## 설계 결정
 

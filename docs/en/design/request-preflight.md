@@ -19,7 +19,7 @@ Maintains:
 - L366-369: Skill resolution + secret validation
 - L374-391: Context assembly
 
-This inline logic prevents:
+This inline logic mainly caused:
 - Testing preflight in isolation
 - Reusing preflight calculation in other contexts
 - Clear separation of "gathering data" from "executing"
@@ -124,7 +124,7 @@ Contract validation:
 - ReadyPreflight contains all context fields ✓
 - `collect_skill_provider_prefs` deduplicates providers ✓
 
-**Regression**: 309+ tests pass (7 new + 302 existing)
+**Regression**: Representative regression tests and type checks pass
 
 ## Semantic Preservation Checklist
 
@@ -158,16 +158,15 @@ After Phase 4.1–4.4:
 - **Remaining methods**: execute() dispatcher, security helpers, system prompt builder, renderer management
 
 The service is now:
-1. A dependency container (`_preflight_deps()`, `_runner_deps()`, `_continue_deps()`, `_phase_deps()`)
-2. An orchestration facade (`execute()` routing + result finalization)
+1. A dependency container (`_preflight_deps()`, `_runner_deps()`, `_continue_deps()`, `_phase_deps()`, `_dispatch_deps()`)
+2. An orchestration facade (`execute()` entry + dispatcher delegation + result finalization)
 3. A stateful collaborator holder (hitl_store, session_cd)
 
-## Next Steps
+## Follow-up
 
-**Phase 4.5**: Extract execute() dispatcher logic
-- `resolve_gateway()` result branching
-- Mode routing (phase/once/agent/task)
-- Finalization + event logging
+- Keep strengthening characterization tests for `run_request_preflight()`
+- Preserve the boundary where `execute()` only performs preflight and then delegates
+- Prevent execution policy or dispatcher responsibilities from drifting back into preflight
 
 ## Design Decisions
 
