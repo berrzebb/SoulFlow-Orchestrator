@@ -10,6 +10,12 @@
   width: 100%;
 }
 
+.map-embed__error {
+  padding: 0.5rem 0.75rem;
+  color: var(--color-error, #ef4444);
+  font-size: 0.85rem;
+}
+
 /* 모바일: 터치 스크롤과 지도 스크롤 충돌 방지 */
 @media (max-width: 640px) {
   .map-embed__canvas {

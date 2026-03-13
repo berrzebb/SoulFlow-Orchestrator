@@ -1,4 +1,4 @@
-/** 지도 도구 — 위치 맥락에서 Google Maps / Kakao Maps / Naver Maps 링크 생성. */
+/** 지도 도구 — 위치 맥락에서 Google Maps / Kakao Maps / Naver Maps 링크 + 임베드 생성. */
 
 import { Tool } from "./base.js";
 import type { JsonSchema, ToolCategory } from "./types.js";
@@ -20,13 +20,36 @@ function build_link(location: string, provider: MapProvider): string {
   }
 }
 
+interface NominatimResult {
+  lat: string;
+  lon: string;
+  display_name: string;
+}
+
+/** Nominatim(OSM) 무료 지오코딩 — API 키 불필요. */
+async function geocode(location: string): Promise<{ lat: number; lon: number } | null> {
+  try {
+    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(location)}&format=json&limit=1&accept-language=ko`;
+    const res = await fetch(url, {
+      headers: { "User-Agent": "SoulFlow/1.0 (map-tool)" },
+      signal: AbortSignal.timeout(5000),
+    });
+    const data = (await res.json()) as NominatimResult[];
+    if (!data[0]) return null;
+    return { lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon) };
+  } catch {
+    return null;
+  }
+}
+
 export class MapTool extends Tool {
   readonly name = "map";
   readonly category: ToolCategory = "data";
   readonly description =
-    "Generates a map link for a location. Use when the user mentions a place, address, or asks for directions. " +
+    "Generates a map link and embedded map preview for a location. " +
+    "Use when the user mentions a place, address, or asks for directions. " +
     "Supported providers: google (default), kakao, naver. " +
-    "Returns a clickable URL with a short label.";
+    "Returns a clickable URL with an embedded interactive map.";
   readonly parameters: JsonSchema = {
     type: "object",
     properties: {
@@ -56,6 +79,17 @@ export class MapTool extends Tool {
     const label = params.label ? String(params.label) : location;
     const url = build_link(location, provider);
 
-    return `[${label}](${url}) (${PROVIDER_LABELS[provider]})`;
+    const link_line = `[${label}](${url}) (${PROVIDER_LABELS[provider]})`;
+
+    // geocoding 성공 여부와 무관하게 코드블록 항상 포함
+    // — lat/lon 없으면 프론트엔드가 클라이언트 측 geocoding 수행
+    const coords = await geocode(location);
+    const map_data: Record<string, unknown> = { location, label, zoom: 15 };
+    if (coords) {
+      map_data.lat = coords.lat;
+      map_data.lon = coords.lon;
+    }
+    const map_json = JSON.stringify(map_data);
+    return `${link_line}\n\n\`\`\`map\n${map_json}\n\`\`\``;
   }
 }

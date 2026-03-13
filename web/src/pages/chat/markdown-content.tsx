@@ -1,3 +1,4 @@
+import React from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
@@ -41,12 +42,19 @@ function preprocess_latex(content: string): string {
 
 const SAFE_URL_RE = /^https?:\/\//i;
 
-/** map 코드블록을 Leaflet 지도로 렌더링 */
-function MapCode({ className, children }: React.HTMLAttributes<HTMLElement>) {
-  if (typeof className === "string" && className.includes("language-map")) {
-    return <MapBlock raw={String(children).trim()} />;
+/** pre > code.language-map 구조를 감지해 Leaflet 지도로 렌더링.
+ *  code 컴포넌트 대신 pre를 오버라이드 — div가 pre 안에 중첩되는 HTML 구조 오류 방지. */
+function MapPre({ children, ...rest }: React.HTMLAttributes<HTMLPreElement>) {
+  // children 중 code.language-map 요소 탐색
+  const kids = React.Children.toArray(children);
+  for (const child of kids) {
+    if (!React.isValidElement(child)) continue;
+    const props = child.props as { className?: string; children?: React.ReactNode };
+    if (typeof props.className === "string" && props.className.includes("language-map")) {
+      return <MapBlock raw={String(props.children ?? "").trim()} />;
+    }
   }
-  return <code className={className}>{children}</code>;
+  return <pre {...rest}>{children}</pre>;
 }
 
 /** 안전한 링크만 렌더링, javascript:/data: 등 차단 */
@@ -70,7 +78,7 @@ function SafeImage({ src, alt }: React.ImgHTMLAttributes<HTMLImageElement>) {
 const COMPONENTS: Components = {
   a: SafeLink as Components["a"],
   img: SafeImage as Components["img"],
-  code: MapCode as Components["code"],
+  pre: MapPre as Components["pre"],
 };
 
 const REMARK_PLUGINS: Pluggable[] = [remarkGfm, remarkMath];
