@@ -368,6 +368,8 @@ export type ChatSessionMessage = { direction: "user" | "assistant"; content: str
 
 export type ChatSession = {
   id: string;
+  /** 세션 소유자 user_id. 인증 비활성 시 빈 문자열. */
+  user_id: string;
   created_at: string;
   messages: ChatSessionMessage[];
   /** 사용자 지정 탭 이름 */

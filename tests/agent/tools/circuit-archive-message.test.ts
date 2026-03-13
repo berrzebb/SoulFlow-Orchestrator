@@ -168,7 +168,8 @@ describe("CircuitBreakerTool — stats / config", () => {
 const { mock_run_shell } = vi.hoisted(() => ({ mock_run_shell: vi.fn() }));
 
 vi.mock("@src/agent/tools/shell-runtime.js", () => ({
-  run_shell_command: mock_run_shell,
+  // ArchiveTool은 shell injection 방지를 위해 run_command_argv(cmd, args, opts) 사용
+  run_command_argv: mock_run_shell,
 }));
 
 import { ArchiveTool } from "@src/agent/tools/archive.js";
@@ -208,27 +209,32 @@ describe("ArchiveTool — cancelled signal", () => {
   });
 });
 
+// run_command_argv(cmd, args, opts) 호출을 "cmd args..." 형태로 합쳐 검증하는 헬퍼
+function called_cmd(): string {
+  const [cmd, args] = [mock_run_shell.mock.calls[0][0] as string, mock_run_shell.mock.calls[0][1] as string[]];
+  return [cmd, ...args].join(" ");
+}
+
 describe("ArchiveTool — tar.gz 명령 분기", () => {
   it("list tar.gz → tar tzf 호출", async () => {
     const r = await make_archive().execute({ operation: "list", archive_path: "/tmp/test.tar.gz" });
     expect(mock_run_shell).toHaveBeenCalled();
-    const cmd = mock_run_shell.mock.calls[0][0] as string;
-    expect(cmd).toContain("tar tzf");
+    expect(called_cmd()).toContain("tar tzf");
     expect(r).toContain("file1.txt");
   });
 
   it("extract tar.gz → tar xzf 호출", async () => {
     await make_archive().execute({ operation: "extract", archive_path: "/tmp/test.tar.gz", output_dir: "/tmp/out" });
-    const cmd = mock_run_shell.mock.calls[0][0] as string;
-    expect(cmd).toContain("tar xzf");
-    expect(cmd).toContain("-C");
+    expect(called_cmd()).toContain("tar xzf");
+    expect(called_cmd()).toContain("-C");
   });
 
   it("create tar.gz with files → tar czf 호출", async () => {
-    await make_archive().execute({ operation: "create", archive_path: "/tmp/out.tar.gz", files: "a.txt b.txt" });
-    const cmd = mock_run_shell.mock.calls[0][0] as string;
-    expect(cmd).toContain("tar czf");
-    expect(cmd).toContain("a.txt b.txt");
+    // files는 배열 타입 (shell injection 방지를 위한 argv 기반 실행)
+    await make_archive().execute({ operation: "create", archive_path: "/tmp/out.tar.gz", files: ["a.txt", "b.txt"] });
+    expect(called_cmd()).toContain("tar czf");
+    expect(called_cmd()).toContain("a.txt");
+    expect(called_cmd()).toContain("b.txt");
   });
 
   it("create tar.gz without files → Error: unsupported", async () => {
@@ -240,20 +246,18 @@ describe("ArchiveTool — tar.gz 명령 분기", () => {
 describe("ArchiveTool — zip 명령 분기", () => {
   it("list zip → unzip -l 호출", async () => {
     await make_archive().execute({ operation: "list", archive_path: "/tmp/test.zip", format: "zip" });
-    const cmd = mock_run_shell.mock.calls[0][0] as string;
-    expect(cmd).toContain("unzip -l");
+    expect(called_cmd()).toContain("unzip -l");
   });
 
   it("extract zip → unzip -o 호출", async () => {
     await make_archive().execute({ operation: "extract", archive_path: "/tmp/test.zip", format: "zip", output_dir: "/tmp/out" });
-    const cmd = mock_run_shell.mock.calls[0][0] as string;
-    expect(cmd).toContain("unzip -o");
+    expect(called_cmd()).toContain("unzip -o");
   });
 
   it("create zip with files → zip -r 호출", async () => {
-    await make_archive().execute({ operation: "create", archive_path: "/tmp/out.zip", format: "zip", files: "src/" });
-    const cmd = mock_run_shell.mock.calls[0][0] as string;
-    expect(cmd).toContain("zip -r");
+    // files는 배열 타입
+    await make_archive().execute({ operation: "create", archive_path: "/tmp/out.zip", format: "zip", files: ["src/"] });
+    expect(called_cmd()).toContain("zip -r");
   });
 
   it("create zip without files → Error: unsupported", async () => {

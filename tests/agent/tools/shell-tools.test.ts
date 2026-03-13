@@ -4,12 +4,16 @@
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const { mock_run } = vi.hoisted(() => ({
+const { mock_run, mock_argv } = vi.hoisted(() => ({
   mock_run: vi.fn(),
+  // ArchiveTool은 shell injection 방지를 위해 run_command_argv를 사용.
+  // 별도 인스턴스로 분리해야 mockReturnValueOnce 큐 오염을 방지할 수 있다.
+  mock_argv: vi.fn(),
 }));
 
 vi.mock("@src/agent/tools/shell-runtime.js", () => ({
   run_shell_command: mock_run,
+  run_command_argv: mock_argv,
 }));
 
 import { ArchiveTool } from "@src/agent/tools/archive.js";
@@ -45,7 +49,7 @@ describe("ArchiveTool — 파라미터 검증", () => {
 
 describe("ArchiveTool — tar.gz 조작", () => {
   it("list 성공", async () => {
-    mock_run.mockReturnValueOnce(ok("file1.txt\nfile2.txt"));
+    mock_argv.mockReturnValueOnce(ok("file1.txt\nfile2.txt"));
     const r = await new ArchiveTool({ workspace: WS }).execute({
       operation: "list", archive_path: "test.tar.gz",
     });
@@ -53,7 +57,7 @@ describe("ArchiveTool — tar.gz 조작", () => {
   });
 
   it("extract 성공", async () => {
-    mock_run.mockReturnValueOnce(ok("", ""));
+    mock_argv.mockReturnValueOnce(ok("", ""));
     const r = await new ArchiveTool({ workspace: WS }).execute({
       operation: "extract", archive_path: "test.tar.gz", output_dir: "/tmp/out",
     });
@@ -68,9 +72,9 @@ describe("ArchiveTool — tar.gz 조작", () => {
   });
 
   it("create: files 있음 → 성공", async () => {
-    mock_run.mockReturnValueOnce(ok(""));
+    mock_argv.mockReturnValueOnce(ok(""));
     const r = await new ArchiveTool({ workspace: WS }).execute({
-      operation: "create", archive_path: "test.tar.gz", files: "src/ README.md",
+      operation: "create", archive_path: "test.tar.gz", files: ["src/", "README.md"],
     });
     expect(String(r)).toContain("create");
   });
@@ -78,7 +82,7 @@ describe("ArchiveTool — tar.gz 조작", () => {
 
 describe("ArchiveTool — zip 조작", () => {
   it("list zip 성공", async () => {
-    mock_run.mockReturnValueOnce(ok("Archive:  test.zip\n  Length  File\n   1234  file.txt"));
+    mock_argv.mockReturnValueOnce(ok("Archive:  test.zip\n  Length  File\n   1234  file.txt"));
     const r = await new ArchiveTool({ workspace: WS }).execute({
       operation: "list", format: "zip", archive_path: "test.zip",
     });
@@ -86,7 +90,7 @@ describe("ArchiveTool — zip 조작", () => {
   });
 
   it("extract zip 성공", async () => {
-    mock_run.mockReturnValueOnce(ok("inflating: file.txt"));
+    mock_argv.mockReturnValueOnce(ok("inflating: file.txt"));
     const r = await new ArchiveTool({ workspace: WS }).execute({
       operation: "extract", format: "zip", archive_path: "test.zip",
     });

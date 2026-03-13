@@ -36,10 +36,10 @@ function append_user_message(session: ChatSession, parsed: ParsedBody): void {
   }
 }
 
-function build_publish_payload(session: ChatSession, parsed: ParsedBody) {
+function build_publish_payload(session: ChatSession, parsed: ParsedBody, user_id: string) {
   return {
     id: `web_msg_${short_id(8)}`,
-    provider: "web" as const, channel: "web", sender_id: "web_user",
+    provider: "web" as const, channel: "web", sender_id: user_id || "web_user",
     chat_id: session.id, content: parsed.text, at: now_iso(),
     media: parsed.media.length > 0
       ? parsed.media.map((m) => ({ type: m.type as import("../../bus/types.js").MediaItemType, url: m.url, mime: m.mime, name: m.name }))
@@ -53,17 +53,20 @@ function build_publish_payload(session: ChatSession, parsed: ParsedBody) {
 }
 
 export async function handle_chat(ctx: RouteContext): Promise<boolean> {
-  const { req, url, res, json, read_body, chat_sessions, session_store, session_store_key, bus, add_rich_stream_listener } = ctx;
+  const { req, url, res, json, read_body, auth_user, chat_sessions, session_store, session_store_key, bus, add_rich_stream_listener } = ctx;
   const path = url.pathname;
+  const user_id = auth_user?.sub ?? "";
 
   // GET /api/chat/sessions
   if (path === "/api/chat/sessions" && req.method === "GET") {
-    const sessions = [...chat_sessions.values()].map((s) => ({
-      id: s.id,
-      created_at: s.created_at,
-      message_count: s.messages.length,
-      ...(s.name ? { name: s.name } : {}),
-    }));
+    const sessions = [...chat_sessions.values()]
+      .filter((s) => s.user_id === user_id)
+      .map((s) => ({
+        id: s.id,
+        created_at: s.created_at,
+        message_count: s.messages.length,
+        ...(s.name ? { name: s.name } : {}),
+      }));
     json(res, 200, sessions);
     return true;
   }
@@ -71,7 +74,7 @@ export async function handle_chat(ctx: RouteContext): Promise<boolean> {
   // POST /api/chat/sessions — 새 세션 생성
   if (path === "/api/chat/sessions" && req.method === "POST") {
     const id = `web_${short_id(8)}`;
-    const session: ChatSession = { id, created_at: now_iso(), messages: [] };
+    const session: ChatSession = { id, user_id, created_at: now_iso(), messages: [] };
     chat_sessions.set(id, session);
     if (chat_sessions.size > MAX_CHAT_SESSIONS) {
       const oldest = chat_sessions.keys().next().value;
@@ -90,7 +93,9 @@ export async function handle_chat(ctx: RouteContext): Promise<boolean> {
   if (id_match && req.method === "GET") {
     const session_id = decodeURIComponent(id_match[1]);
     const session = chat_sessions.get(session_id);
-    json(res, session ? 200 : 404, session ?? { error: "not_found" });
+    // 세션 미존재 또는 다른 사용자 소유 → 동일하게 404 반환 (존재 여부 노출 방지)
+    if (!session || session.user_id !== user_id) { json(res, 404, { error: "not_found" }); return true; }
+    json(res, 200, session);
     return true;
   }
 
@@ -98,7 +103,7 @@ export async function handle_chat(ctx: RouteContext): Promise<boolean> {
   if (id_match && req.method === "PATCH") {
     const session_id = decodeURIComponent(id_match[1]);
     const session = chat_sessions.get(session_id);
-    if (!session) { json(res, 404, { error: "not_found" }); return true; }
+    if (!session || session.user_id !== user_id) { json(res, 404, { error: "not_found" }); return true; }
     const body = await read_body(req);
     const name = typeof body?.name === "string" ? body.name.trim().slice(0, 100) : undefined;
     if (name !== undefined) session.name = name || undefined;
@@ -109,9 +114,11 @@ export async function handle_chat(ctx: RouteContext): Promise<boolean> {
   // DELETE /api/chat/sessions/:id
   if (id_match && req.method === "DELETE") {
     const session_id = decodeURIComponent(id_match[1]);
-    const deleted = chat_sessions.delete(session_id);
+    const session = chat_sessions.get(session_id);
+    if (!session || session.user_id !== user_id) { json(res, 404, { error: "not_found" }); return true; }
+    chat_sessions.delete(session_id);
     await session_store?.delete?.(session_store_key(session_id));
-    json(res, deleted ? 200 : 404, { deleted });
+    json(res, 200, { deleted: true });
     return true;
   }
 
@@ -120,7 +127,7 @@ export async function handle_chat(ctx: RouteContext): Promise<boolean> {
   if (stream_match && req.method === "POST") {
     const session_id = decodeURIComponent(stream_match[1]);
     const session = chat_sessions.get(session_id);
-    if (!session) { json(res, 404, { error: "session_not_found" }); return true; }
+    if (!session || session.user_id !== user_id) { json(res, 404, { error: "session_not_found" }); return true; }
     const body = await read_body(req);
     const parsed = parse_chat_body(body);
     if (!parsed.text && parsed.media.length === 0) { json(res, 400, { error: "content_or_media_required" }); return true; }
@@ -146,7 +153,7 @@ export async function handle_chat(ctx: RouteContext): Promise<boolean> {
     append_user_message(session, parsed);
 
     res.write(JSON.stringify({ type: "start" }) + "\n");
-    bus.publish_inbound(build_publish_payload(session, parsed)).catch(() => {
+    bus.publish_inbound(build_publish_payload(session, parsed, user_id)).catch(() => {
       unsubscribe();
       clearTimeout(timeout);
       if (!res.writableEnded) { res.write(JSON.stringify({ type: "error", error: "publish_failed" }) + "\n"); res.end(); }
@@ -159,12 +166,12 @@ export async function handle_chat(ctx: RouteContext): Promise<boolean> {
   if (msg_match && req.method === "POST") {
     const session_id = decodeURIComponent(msg_match[1]);
     const session = chat_sessions.get(session_id);
-    if (!session) { json(res, 404, { error: "session_not_found" }); return true; }
+    if (!session || session.user_id !== user_id) { json(res, 404, { error: "session_not_found" }); return true; }
     const body = await read_body(req);
     const parsed = parse_chat_body(body);
     if (!parsed.text && parsed.media.length === 0) { json(res, 400, { error: "content_or_media_required" }); return true; }
     append_user_message(session, parsed);
-    await bus.publish_inbound(build_publish_payload(session, parsed));
+    await bus.publish_inbound(build_publish_payload(session, parsed, user_id));
     json(res, 200, { ok: true, message_count: session.messages.length });
     return true;
   }

@@ -32,7 +32,7 @@ export class OAuthFetchTool extends Tool {
     properties: {
       action: {
         type: "string",
-        enum: ["fetch", "list"],
+        enum: ["fetch", "list", "get_token"],
         description: "수행할 작업 (기본: fetch)",
       },
       service_id: { type: "string", description: "OAuth 연동 ID (e.g., 'github')" },
@@ -62,9 +62,31 @@ export class OAuthFetchTool extends Tool {
 
     switch (action) {
       case "list": return this._list();
+      case "get_token": return await this._get_token(params);
       case "fetch": return await this._fetch(params);
-      default: return `Error: unsupported action "${action}". Use: fetch, list`;
+      default: return `Error: unsupported action "${action}". Use: fetch, list, get_token`;
     }
+  }
+
+  /** 유효한 액세스 토큰만 반환 (raw token 조회용). */
+  private async _get_token(params: Record<string, unknown>): Promise<string> {
+    const service_id = String(params.service_id || "").trim();
+    if (!service_id) return "Error: service_id is required";
+
+    const integration = this.store.get(service_id);
+    if (!integration) return `Error: OAuth integration "${service_id}" not found`;
+    if (!integration.enabled) return `Error: OAuth integration "${service_id}" is disabled`;
+
+    const { token, error } = await this.flow.get_valid_access_token(service_id);
+    if (!token) {
+      return `Error: no valid access token for "${service_id}" — ${error || "token not configured"}`;
+    }
+
+    return JSON.stringify({
+      service_id: integration.instance_id,
+      service_type: integration.service_type,
+      access_token: token,
+    });
   }
 
   /** 워크스페이스에 등록된 OAuth 연동 목록. */
@@ -102,7 +124,7 @@ export class OAuthFetchTool extends Tool {
     }
 
     // host allowlist 검증 — integration.settings.allowed_hosts 설정 시 강제
-    const allowed_hosts = Array.isArray(integration.settings.allowed_hosts)
+    const allowed_hosts = Array.isArray(integration.settings?.allowed_hosts)
       ? (integration.settings.allowed_hosts as unknown[]).map(String).filter(Boolean)
       : [];
     if (allowed_hosts.length > 0) {
