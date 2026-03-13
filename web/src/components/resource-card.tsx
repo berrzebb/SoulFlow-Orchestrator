@@ -46,6 +46,9 @@ export interface ResourceCardProps {
 
   /** 버튼 disable 상태 */
   disabled?: boolean;
+
+  /** action bar에 추가 버튼 삽입 (Edit 앞에 렌더링) */
+  extraActions?: ReactNode;
 }
 
 /**
@@ -86,6 +89,7 @@ export function ResourceCard({
   children,
   className,
   disabled,
+  extraActions,
 }: ResourceCardProps) {
   const t = useT();
 
@@ -133,6 +137,7 @@ export function ResourceCard({
 
       {/* Actions */}
       <div className="stat-card__actions">
+        {extraActions}
         {onEdit && (
           <button
             className="btn btn--xs"

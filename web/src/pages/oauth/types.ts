@@ -4,6 +4,7 @@ export interface OAuthIntegration {
   label: string;
   enabled: boolean;
   scopes: string[];
+  allowed_hosts: string[];
   token_configured: boolean;
   expired: boolean;
   expires_at: string | null;

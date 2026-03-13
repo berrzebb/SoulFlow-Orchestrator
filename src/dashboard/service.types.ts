@@ -211,6 +211,7 @@ export interface OAuthIntegrationInfo {
   label: string;
   enabled: boolean;
   scopes: string[];
+  allowed_hosts: string[];
   token_configured: boolean;
   expired: boolean;
   expires_at: string | null;
@@ -228,6 +229,7 @@ export interface DashboardOAuthOps {
     client_id: string;
     client_secret?: string;
     scopes: string[];
+    allowed_hosts?: string[];
     auth_url?: string;
     token_url?: string;
   }): Promise<{ ok: boolean; instance_id?: string; error?: string }>;
@@ -235,6 +237,7 @@ export interface DashboardOAuthOps {
     label?: string;
     enabled?: boolean;
     scopes?: string[];
+    allowed_hosts?: string[];
   }): Promise<{ ok: boolean; error?: string }>;
   remove(id: string): Promise<{ ok: boolean; error?: string }>;
   start_auth(id: string, client_secret?: string, origin?: string): Promise<{ ok: boolean; auth_url?: string; error?: string }>;

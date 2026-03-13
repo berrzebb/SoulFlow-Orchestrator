@@ -25,6 +25,7 @@ export function OAuthModal({ mode, presets, onClose, onSaved }: {
   const [authUrl, setAuthUrl] = useState("");
   const [tokenUrl, setTokenUrl] = useState("");
   const [scopeText, setScopeText] = useState((initial?.scopes ?? []).join(", "));
+  const [allowedHostsText, setAllowedHostsText] = useState((initial?.allowed_hosts ?? []).join(", "));
   const { pending: saving, run } = useAsyncState();
 
   const active_preset = presets.find((p) => p.service_type === serviceType);
@@ -56,11 +57,13 @@ export function OAuthModal({ mode, presets, onClose, onSaved }: {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     void run(async () => {
+      const allowed_hosts = parse_csv(allowedHostsText);
       if (isEdit) {
         await api.put(`/api/oauth/integrations/${encodeURIComponent(initial!.instance_id)}`, {
           label: label || initial!.instance_id,
           enabled,
           scopes: parse_csv(scopeText),
+          allowed_hosts,
         });
       } else {
         const body: Record<string, unknown> = {
@@ -68,6 +71,7 @@ export function OAuthModal({ mode, presets, onClose, onSaved }: {
           label: label || serviceType,
           client_id: clientId,
           scopes: parse_csv(scopeText),
+          allowed_hosts,
         };
         if (clientSecret) body.client_secret = clientSecret;
         if (is_custom) {
@@ -75,8 +79,7 @@ export function OAuthModal({ mode, presets, onClose, onSaved }: {
           body.token_url = tokenUrl;
         }
         await api.post("/api/oauth/integrations", body);
-        // 폼 초기화 (신규 추가 후 모달이 닫히면 다음 오픈 시 깨끗한 폼 준비)
-        setLabel(""); setClientId(""); setClientSecret(""); setAuthUrl(""); setTokenUrl("");
+        setLabel(""); setClientId(""); setClientSecret(""); setAuthUrl(""); setTokenUrl(""); setAllowedHostsText("");
       }
       onSaved();
     }, isEdit ? t("oauth.updated") : t("oauth.added"),
@@ -154,6 +157,10 @@ export function OAuthModal({ mode, presets, onClose, onSaved }: {
           </div>
         )}
         <input className="form-input" value={scopeText} onChange={(e) => setScopeText(e.target.value)} placeholder={t("oauth.scopes_hint")} />
+      </FormGroup>
+
+      <FormGroup label={t("oauth.allowed_hosts")} hint={t("oauth.allowed_hosts_hint")}>
+        <input className="form-input" value={allowedHostsText} onChange={(e) => setAllowedHostsText(e.target.value)} placeholder="api.github.com, api.example.com" />
       </FormGroup>
     </FormModal>
   );

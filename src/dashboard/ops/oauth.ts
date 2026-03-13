@@ -20,12 +20,19 @@ export function create_oauth_ops(deps: {
     return request_origin ?? `http://localhost:${dashboard_port}`;
   }
 
+  function extract_allowed_hosts(settings: Record<string, unknown>): string[] {
+    return Array.isArray(settings?.allowed_hosts)
+      ? (settings.allowed_hosts as unknown[]).map(String).filter(Boolean)
+      : [];
+  }
+
   async function build_info(config: import("../../oauth/integration-store.js").OAuthIntegrationConfig): Promise<OAuthIntegrationInfo> {
     const has_token = await oauth_store.has_access_token(config.instance_id);
     const has_secret = await oauth_store.has_client_secret(config.instance_id);
     return {
       instance_id: config.instance_id, service_type: config.service_type,
       label: config.label, enabled: config.enabled, scopes: config.scopes,
+      allowed_hosts: extract_allowed_hosts(config.settings),
       token_configured: has_token, expired: oauth_store.is_expired(config.instance_id),
       expires_at: config.expires_at, has_client_secret: has_secret,
       created_at: config.created_at, updated_at: config.updated_at,
@@ -44,11 +51,13 @@ export function create_oauth_ops(deps: {
       const auth_url = input.auth_url || preset?.auth_url || "";
       const token_url = input.token_url || preset?.token_url || "";
       const redirect_uri = `${resolve_origin(undefined)}/api/oauth/callback`;
+      const settings: Record<string, unknown> = {};
+      if (input.allowed_hosts?.length) settings.allowed_hosts = input.allowed_hosts;
       oauth_store.upsert({
         instance_id, service_type: input.service_type,
         label: input.label || instance_id, enabled: true,
         scopes: input.scopes || preset?.default_scopes || [],
-        auth_url, token_url, redirect_uri, settings: {},
+        auth_url, token_url, redirect_uri, settings,
       });
       await oauth_store.vault_store_client_id(instance_id, input.client_id);
       if (input.client_secret) await oauth_store.vault_store_client_secret(instance_id, input.client_secret);
@@ -57,8 +66,13 @@ export function create_oauth_ops(deps: {
     },
 
     async update(id, patch) {
-      if (!oauth_store.get(id)) return { ok: false, error: "not_found" };
+      const existing = oauth_store.get(id);
+      if (!existing) return { ok: false, error: "not_found" };
       oauth_store.update_settings(id, patch);
+      if (patch.allowed_hosts !== undefined) {
+        const settings = { ...existing.settings, allowed_hosts: patch.allowed_hosts };
+        oauth_store.update_settings_json(id, settings);
+      }
       log.info("oauth_integration_update", { id, fields: Object.keys(patch) });
       return { ok: true };
     },

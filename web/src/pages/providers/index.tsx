@@ -70,7 +70,7 @@ export default function ProvidersPage() {
             className={`provider-tab${tab === t_id ? " provider-tab--active" : ""}`}
             onClick={() => setTab(t_id)}
           >
-            {t_id === "providers" ? t("providers.tab_providers") : t_id === "chat" ? t("providers.tab_chat") : t_id === "embedding" ? t("providers.tab_embedding") : "공유"}
+            {t_id === "providers" ? t("providers.tab_providers") : t_id === "chat" ? t("providers.tab_chat") : t_id === "embedding" ? t("providers.tab_embedding") : t("providers.tab_shared")}
             {t_id !== "shared" && (
               <span className="provider-tab__count">
                 {t_id === "providers" ? connections.length : t_id === "chat" ? chatProviders.length : embedProviders.length}
@@ -314,7 +314,6 @@ export default function ProvidersPage() {
 
 // ── 공유 프로바이더 탭 ─────────────────────────────────────────────────────
 
-const SCOPE_LABELS: Record<string, string> = { global: "전역", team: "팀", personal: "개인" };
 const SCOPE_VARIANTS: Record<string, "info" | "warn" | "ok"> = { global: "info", team: "warn", personal: "ok" };
 
 interface SharedProvidersTabProps {
@@ -323,6 +322,7 @@ interface SharedProvidersTabProps {
 
 function SharedProvidersTab({ auth_user }: SharedProvidersTabProps) {
   const { toast } = useToast();
+  const t = useT();
   const team_id = auth_user?.tid ?? null;
   const is_superadmin = auth_user?.role === "superadmin";
 
@@ -350,11 +350,11 @@ function SharedProvidersTab({ auth_user }: SharedProvidersTabProps) {
     const mut = addForm.scope === "global" ? add_global : add_team;
     mut.mutate(input, {
       onSuccess: () => {
-        toast(`${SCOPE_LABELS[addForm.scope]} 프로바이더 추가 완료`, "ok");
+        toast(t("providers.shared_add_success"), "ok");
         setAddForm((f) => ({ ...f, open: false }));
       },
       onError: (e: unknown) => {
-        const msg = (e as { body?: { error?: string } })?.body?.error ?? "추가 실패";
+        const msg = (e as { body?: { error?: string } })?.body?.error ?? t("providers.shared_add_error");
         toast(msg, "err");
       },
     });
@@ -363,13 +363,13 @@ function SharedProvidersTab({ auth_user }: SharedProvidersTabProps) {
   const do_delete = (p: ScopedProvider) => {
     if (p.scope === "global") {
       del_global.mutate(p.id, {
-        onSuccess: () => toast("전역 프로바이더 삭제 완료", "ok"),
-        onError: () => toast("삭제 실패", "err"),
+        onSuccess: () => toast(t("providers.shared_remove_success"), "ok"),
+        onError: () => toast(t("providers.shared_remove_error"), "err"),
       });
     } else {
       del_team.mutate(p.id, {
-        onSuccess: () => toast("팀 프로바이더 삭제 완료", "ok"),
-        onError: () => toast("삭제 실패", "err"),
+        onSuccess: () => toast(t("providers.shared_remove_success"), "ok"),
+        onError: () => toast(t("providers.shared_remove_error"), "err"),
       });
     }
     setDeleteTarget(null);
@@ -379,39 +379,44 @@ function SharedProvidersTab({ auth_user }: SharedProvidersTabProps) {
   const can_delete = (p: ScopedProvider) =>
     p.scope === "global" ? is_superadmin : can_manage_team;
 
+  const scope_label = (scope: string) =>
+    scope === "global" ? t("providers.scope_global") :
+    scope === "team" ? t("providers.scope_team") :
+    scope === "personal" ? t("providers.scope_personal") : scope;
+
   return (
     <div className="fade-in">
-      <SectionHeader title="공유 프로바이더">
+      <SectionHeader title={t("providers.shared_title")}>
         <div style={{ display: "flex", gap: "8px" }}>
           <button className="btn btn--sm btn--accent" onClick={() => open_add("team")}>
-            + 팀 프로바이더
+            {t("providers.add_team")}
           </button>
           {is_superadmin && (
             <button className="btn btn--sm btn--primary" onClick={() => open_add("global")}>
-              + 전역 프로바이더
+              {t("providers.add_global")}
             </button>
           )}
         </div>
       </SectionHeader>
-      <p className="text-sm text-muted mb-3">팀·전역 공유 프로바이더 목록. 범위 배지로 출처를 표시합니다.</p>
+      <p className="text-sm text-muted mb-3">{t("providers.shared_description")}</p>
 
       {addForm.open && (
         <div className="panel panel--inset mb-3">
           <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center" }}>
-            <span className={`badge badge--${SCOPE_VARIANTS[addForm.scope]}`}>{SCOPE_LABELS[addForm.scope]}</span>
-            <input className="form-input" style={{ flex: "1 1 100px" }} placeholder="이름 *" value={addForm.name}
+            <span className={`badge badge--${SCOPE_VARIANTS[addForm.scope]}`}>{scope_label(addForm.scope)}</span>
+            <input className="form-input" style={{ flex: "1 1 100px" }} placeholder={t("providers.name_placeholder")} value={addForm.name}
               onChange={(e) => setAddForm((f) => ({ ...f, name: e.target.value }))} />
-            <input className="form-input" style={{ flex: "1 1 100px" }} placeholder="타입 * (openai, anthropic...)" value={addForm.type}
+            <input className="form-input" style={{ flex: "1 1 100px" }} placeholder={t("providers.type_placeholder")} value={addForm.type}
               onChange={(e) => setAddForm((f) => ({ ...f, type: e.target.value }))} />
-            <input className="form-input" style={{ flex: "1 1 120px" }} placeholder="모델" value={addForm.model}
+            <input className="form-input" style={{ flex: "1 1 120px" }} placeholder={t("providers.model")} value={addForm.model}
               onChange={(e) => setAddForm((f) => ({ ...f, model: e.target.value }))} />
-            <input className="form-input" style={{ flex: "1 1 120px" }} placeholder="API 키 참조" value={addForm.api_key_ref}
+            <input className="form-input" style={{ flex: "1 1 120px" }} placeholder={t("providers.api_key_ref_label")} value={addForm.api_key_ref}
               onChange={(e) => setAddForm((f) => ({ ...f, api_key_ref: e.target.value }))} />
             <button className="btn btn--sm btn--ok" disabled={!addForm.name || !addForm.type || add_team.isPending || add_global.isPending}
               onClick={submit_add}>
-              추가
+              {t("common.add")}
             </button>
-            <button className="btn btn--sm" onClick={() => setAddForm((f) => ({ ...f, open: false }))}>취소</button>
+            <button className="btn btn--sm" onClick={() => setAddForm((f) => ({ ...f, open: false }))}>{t("common.cancel")}</button>
           </div>
         </div>
       )}
@@ -419,7 +424,7 @@ function SharedProvidersTab({ auth_user }: SharedProvidersTabProps) {
       {isLoading ? (
         <SkeletonGrid count={2} />
       ) : !providers.length ? (
-        <EmptyState title="공유 프로바이더가 없습니다" />
+        <EmptyState title={t("providers.no_shared")} />
       ) : (
         <div className="stat-grid stat-grid--wide">
           {providers.map((p) => (
@@ -429,16 +434,16 @@ function SharedProvidersTab({ auth_user }: SharedProvidersTabProps) {
               title={p.name}
               subtitle={p.type}
               statusVariant={p.enabled ? "ok" : "off"}
-              statusLabel={p.enabled ? "활성" : "비활성"}
+              statusLabel={p.enabled ? t("providers.status_active") : t("providers.status_inactive")}
               badges={[
-                { label: SCOPE_LABELS[p.scope] ?? p.scope, variant: SCOPE_VARIANTS[p.scope] ?? "info" },
+                { label: scope_label(p.scope), variant: SCOPE_VARIANTS[p.scope] ?? "info" },
                 ...(p.model ? [{ label: p.model, variant: "info" as const }] : []),
               ]}
               {...(can_delete(p) ? { onRemove: () => setDeleteTarget(p) } : {})}
             >
               {p.api_key_ref && (
                 <div className="stat-card__extra">
-                  <span className="text-muted text-xs">키 참조: {p.api_key_ref}</span>
+                  <span className="text-muted text-xs">{t("providers.key_ref", { ref: p.api_key_ref })}</span>
                 </div>
               )}
               <div className="text-xs text-muted">{new Date(p.created_at).toLocaleDateString()}</div>
@@ -449,11 +454,11 @@ function SharedProvidersTab({ auth_user }: SharedProvidersTabProps) {
 
       <DeleteConfirmModal
         open={!!deleteTarget}
-        title="프로바이더 삭제"
-        message={`'${deleteTarget?.name}' (${SCOPE_LABELS[deleteTarget?.scope ?? ""]}) 프로바이더를 삭제하시겠습니까?`}
+        title={t("providers.shared_delete_title")}
+        message={t("providers.shared_delete_message", { name: deleteTarget?.name ?? "", scope: scope_label(deleteTarget?.scope ?? "") })}
         onClose={() => setDeleteTarget(null)}
         onConfirm={() => { if (deleteTarget) do_delete(deleteTarget); }}
-        confirmLabel="삭제"
+        confirmLabel={t("common.delete")}
       />
     </div>
   );

@@ -179,6 +179,16 @@ export class OAuthIntegrationStore {
     return true;
   }
 
+  update_settings_json(instance_id: string, settings: Record<string, unknown>): boolean {
+    return with_sqlite_strict(this.db_path, (db) => {
+      const r = db.prepare(`
+        UPDATE oauth_integrations SET settings_json = ?, updated_at = datetime('now')
+        WHERE instance_id = ?
+      `).run(JSON.stringify(settings), instance_id);
+      return r.changes > 0;
+    }, { pragmas: PRAGMAS });
+  }
+
   remove(instance_id: string): boolean {
     return with_sqlite_strict(this.db_path, (db) => {
       const r = db.prepare("DELETE FROM oauth_integrations WHERE instance_id = ?").run(instance_id);

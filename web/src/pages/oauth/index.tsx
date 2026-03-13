@@ -73,12 +73,6 @@ export default function OAuthPage() {
     onError: (err) => toast(t("oauth.refresh_failed", { error: (err as Error).message }), "err"),
   });
 
-  const test = useMutation({
-    mutationFn: (id: string) => api.post(`/api/oauth/integrations/${encodeURIComponent(id)}/test`),
-    onSuccess: () => toast(t("oauth.test_passed"), "ok"),
-    onError: (err) => toast(t("oauth.test_failed", { error: (err as Error).message }), "err"),
-  });
-
   const builtin_presets = presets.filter((p) => p.is_builtin);
   const custom_presets = presets.filter((p) => !p.is_builtin && p.service_type !== "custom");
 
@@ -119,27 +113,7 @@ export default function OAuthPage() {
                 onTestFail={(err) => err}
                 onEdit={() => setModal({ kind: "edit", instance: inst })}
                 onRemove={() => setDeleteTarget(inst)}
-              >
-                {inst.scopes.length > 0 && (
-                  <div className="stat-card__tags">
-                    {inst.scopes.map((s) => (
-                      <Badge key={s} status={s} variant="info" />
-                    ))}
-                  </div>
-                )}
-                <div className="stat-card__extra text-xs text-muted">
-                  {inst.expires_at && (
-                    <span title={inst.expires_at} className={inst.expired ? "text-warn" : ""}>
-                      {inst.expired ? t("oauth.expired_at") : t("oauth.expires_at")} {time_ago(inst.expires_at)}
-                    </span>
-                  )}
-                  {inst.expires_at && inst.updated_at && " · "}
-                  {inst.updated_at && (
-                    <span title={inst.updated_at}>{time_ago(inst.updated_at)}</span>
-                  )}
-                </div>
-                {/* Additional actions for OAuth */}
-                <div className="stat-card__actions" style={{ marginTop: "var(--sp-2)" }}>
+                extraActions={<>
                   <button
                     className="btn btn--xs btn--accent"
                     onClick={() => {
@@ -155,24 +129,39 @@ export default function OAuthPage() {
                     {connect.isPending ? t("oauth.connecting") : t("oauth.connect")}
                   </button>
                   {inst.token_configured && (
-                    <>
-                      <button
-                        className="btn btn--xs"
-                        onClick={() => refresh.mutate(inst.instance_id)}
-                        disabled={refresh.isPending}
-                        aria-label={t("common.refresh")}
-                      >
-                        {refresh.isPending ? t("oauth.refreshing") : t("common.refresh")}
-                      </button>
-                      <button
-                        className="btn btn--xs btn--ok"
-                        onClick={() => test.mutate(inst.instance_id)}
-                        disabled={test.isPending}
-                        aria-label={t("common.test")}
-                      >
-                        {test.isPending ? t("common.testing") : t("common.test")}
-                      </button>
-                    </>
+                    <button
+                      className="btn btn--xs"
+                      onClick={() => refresh.mutate(inst.instance_id)}
+                      disabled={refresh.isPending}
+                      aria-label={t("common.refresh")}
+                    >
+                      {refresh.isPending ? t("oauth.refreshing") : t("common.refresh")}
+                    </button>
+                  )}
+                </>}
+              >
+                {inst.scopes.length > 0 && (
+                  <div className="stat-card__tags">
+                    {inst.scopes.map((s) => (
+                      <Badge key={s} status={s} variant="info" />
+                    ))}
+                  </div>
+                )}
+                <div className="stat-card__extra text-xs" style={{ marginTop: "var(--sp-1)" }}>
+                  <span className="text-muted">{t("oauth.allowed_hosts")}: </span>
+                  {inst.allowed_hosts?.length
+                    ? <span>{inst.allowed_hosts.join(", ")}</span>
+                    : <span className="text-warn">{t("oauth.allowed_hosts_empty")}</span>}
+                </div>
+                <div className="stat-card__extra text-xs text-muted">
+                  {inst.expires_at && (
+                    <span title={inst.expires_at} className={inst.expired ? "text-warn" : ""}>
+                      {inst.expired ? t("oauth.expired_at") : t("oauth.expires_at")} {time_ago(inst.expires_at)}
+                    </span>
+                  )}
+                  {inst.expires_at && inst.updated_at && " · "}
+                  {inst.updated_at && (
+                    <span title={inst.updated_at}>{time_ago(inst.updated_at)}</span>
                   )}
                 </div>
               </ResourceCard>
