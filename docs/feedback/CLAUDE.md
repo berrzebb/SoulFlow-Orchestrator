@@ -1,6 +1,6 @@
 # Claude 증거 제출
 
-> 마지막 업데이트: 2026-03-15 02:45
+> 마지막 업데이트: 2026-03-15 03:00
 > GPT 감사 문서: `docs/feedback/gpt.md`
 
 ## 합의완료
@@ -40,6 +40,49 @@
 - `[합의완료]` E4 + E5 — MemoryIngestionReducer + OutputReductionKpi
 - `[합의완료]` F1 + F2 — Provider Error Taxonomy + Acceptance Rubric
 - `[합의완료]` F3 + F4 + F5 — Route Calibration Policy + Workflow Compiler Policy + Memory Quality Rules
+- `[합의완료]` RPF-1 + RPF-2 + RPF-3 — RepoProfile + RiskTierPolicy + ApprovalPolicy
+
+## [합의완료] RPF-1 + RPF-2 + RPF-3 — RepoProfile + RiskTierPolicy + ApprovalPolicy
+
+### Claim
+
+- RPF-1: `src/repo-profile/repo-profile.ts` (신규) — `RepoProfile` (repo_id/capabilities/commands/protected_paths). `load_repo_profile(source)` — unknown 입력 유효성 검사, 알 수 없는 capability 필터, 비문자열 항목 필터. `create_default_profile(repo_id)`, `DEFAULT_REPO_PROFILE`.
+- RPF-2: `src/repo-profile/risk-tier.ts` (신규) — `RiskTier` (low/medium/high/critical), `RiskTierPolicy` (critical/high/low 패턴 목록), `DEFAULT_RISK_TIER_POLICY` (low: tests/**/docs/**/**.md/**.test.ts). `classify_surface(surface, profile, policy?)` — protected_paths → critical_patterns → high_patterns → low_patterns → "medium" 순 평가. `classify_surfaces()`, `max_risk_tier()`. glob 매칭: 문자별 파싱으로 이중 치환 오염 방지 ("**/" = 선택적 경로 접두사).
+- RPF-3: `src/repo-profile/approval-policy.ts` (신규) — `ApprovalDecision` (auto_allow/ask_user/blocked), `ApprovalPolicy`, `ManualOverride`, `DEFAULT_APPROVAL_POLICY` (auto: low/medium, ask: high, blocked: critical). `evaluate_approval(tier, policy, path?)` — manual_overrides 먼저 평가(경로 제공 시), tier 목록 조회, ask_user fallback.
+- 통합: `src/repo-profile/index.ts` (신규) — 3개 모듈 barrel export.
+
+### 변경 파일
+
+- `src/repo-profile/repo-profile.ts` (신규) — RPF-1: RepoProfile 계약 + 로더
+- `src/repo-profile/risk-tier.ts` (신규) — RPF-2: ChangeSurface / RiskTierPolicy
+- `src/repo-profile/approval-policy.ts` (신규) — RPF-3: ApprovalPolicy + evaluate
+- `src/repo-profile/index.ts` (신규) — barrel export
+- `tests/repo-profile/repo-profile.test.ts` (신규) — RPF-1 테스트 11개
+- `tests/repo-profile/risk-tier.test.ts` (신규) — RPF-2 테스트 19개
+- `tests/repo-profile/approval-policy.test.ts` (신규) — RPF-3 테스트 13개
+
+### Test Command
+
+```bash
+npx vitest run tests/repo-profile/
+npx eslint src/repo-profile/repo-profile.ts src/repo-profile/risk-tier.ts src/repo-profile/approval-policy.ts src/repo-profile/index.ts tests/repo-profile/repo-profile.test.ts tests/repo-profile/risk-tier.test.ts tests/repo-profile/approval-policy.test.ts
+npx tsc --noEmit
+```
+
+### Test Result
+
+- `npx vitest run tests/repo-profile/`: **3 files / 43 tests passed** (RPF-1:11, RPF-2:19, RPF-3:13)
+- `npx eslint ...`: **0 errors, 0 warnings**
+- `npx tsc --noEmit`: **통과**
+
+### Residual Risk
+
+- `load_repo_profile()`은 unknown 입력을 수용하므로 런타임 파싱 실패 시 TypeError를 던짐. caller가 try/catch로 감싸야 함.
+- glob `**/` 패턴은 경로 접두사를 선택적으로 처리하므로 루트 레벨 파일(`CHANGELOG.md`)도 `**/*.md`에 매칭됨 — 의도된 동작.
+- `evaluate_approval()`의 manual_overrides는 순서 의존적 (첫 번째 매칭 우선). 패턴이 겹칠 경우 선언 순서가 결정에 영향을 줌.
+- `classify_surface()`의 protected_paths 체크는 glob 매칭과 prefix 매칭을 모두 시도 — prefix 체크(`startsWith`)가 glob보다 관대할 수 있음.
+
+---
 
 ## [합의완료] F3 + F4 + F5 — Route Calibration Policy + Workflow Compiler Policy + Memory Quality Rules
 
@@ -212,6 +255,8 @@ npx tsc --noEmit
 
 - `detect_output_kind`는 휴리스틱 기반 — JSON으로 시작하지만 diff를 포함하는 복합 출력 등 엣지 케이스에서 오감지 가능. 감지 실패 시 `plain` fallback으로 기존 truncation과 동일하게 동작.
 - `reducer` 미주입 시 `emit_result`가 기존 경로를 사용하므로, 기존 배포 환경에서 reducer를 연결하기 전까지 3-projection 분리 효과 없음. 점진적 롤아웃 전제.
+
+
 
 
 
