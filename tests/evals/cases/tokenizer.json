@@ -1,0 +1,90 @@
+{
+  "name": "tokenizer",
+  "description": "토크나이저/하이브리드 검색 회귀 평가 — 토큰화, 키워드 추출, FTS, RRF, MMR",
+  "cases": [
+    {
+      "id": "tk-en-tokenize",
+      "input": "{\"type\":\"tokenize\",\"text\":\"Hello World\"}",
+      "expected": "hello world",
+      "tags": ["smoke", "tokenize"],
+      "metadata": { "scenario": "영어 기본 토큰화" }
+    },
+    {
+      "id": "tk-en-keywords",
+      "input": "{\"type\":\"extract_keywords\",\"query\":\"the quick brown fox jumps\"}",
+      "expected": "quick brown fox jumps",
+      "tags": ["smoke", "keywords"],
+      "metadata": { "scenario": "영어 불용어 필터링 후 키워드 추출" }
+    },
+    {
+      "id": "tk-en-fts",
+      "input": "{\"type\":\"build_fts_query\",\"query\":\"the quick brown fox\"}",
+      "expected": "\"quick\" OR \"brown\" OR \"fox\"",
+      "tags": ["fts"],
+      "metadata": { "scenario": "영어 FTS5 쿼리 생성 — 불용어 제외" }
+    },
+    {
+      "id": "tk-ko-particle",
+      "input": "{\"type\":\"tokenize\",\"text\":\"데이터베이스에서 검색\"}",
+      "expected": "데이터베이스에서 데이터베이스 검색",
+      "tags": ["smoke", "tokenize"],
+      "metadata": { "scenario": "한국어 조사 탈락 — '에서' 제거 후 원형 추출" }
+    },
+    {
+      "id": "tk-ko-stop",
+      "input": "{\"type\":\"tokenize\",\"text\":\"오늘 서울 날씨\"}",
+      "expected": "서울 날씨",
+      "tags": ["tokenize"],
+      "metadata": { "scenario": "한국어 불용어 '오늘' 필터링" }
+    },
+    {
+      "id": "tk-ko-keywords",
+      "input": "{\"type\":\"extract_keywords\",\"query\":\"오늘 서울에서 날씨 검색\"}",
+      "expected": "서울에서 서울 날씨 검색",
+      "tags": ["keywords"],
+      "metadata": { "scenario": "한국어 키워드 추출 — 불용어 제거 + 조사 탈락 원형" }
+    },
+    {
+      "id": "tk-ko-fts",
+      "input": "{\"type\":\"build_fts_query\",\"query\":\"오늘 서울에서 날씨\"}",
+      "expected": "\"서울에서\" OR \"서울\" OR \"날씨\"",
+      "tags": ["fts"],
+      "metadata": { "scenario": "한국어 FTS5 쿼리 — 불용어 제외, 조사 탈락 원형 포함" }
+    },
+    {
+      "id": "tk-zh-tokenize",
+      "input": "{\"type\":\"tokenize\",\"text\":\"机器学习\"}",
+      "expected": "机 器 学 习 机器 器学 学习",
+      "tags": ["smoke", "tokenize"],
+      "metadata": { "scenario": "중국어 유니그램 + 바이그램 토큰화" }
+    },
+    {
+      "id": "tk-mixed-script",
+      "input": "{\"type\":\"tokenize\",\"text\":\"Seoul 날씨 good\"}",
+      "expected": "seoul 날씨 good",
+      "tags": ["tokenize"],
+      "metadata": { "scenario": "혼합 스크립트 — 영어+한국어 자동 감지" }
+    },
+    {
+      "id": "tk-normalize",
+      "input": "{\"type\":\"normalize_query\",\"query\":\"오늘 서울 날씨 어때?\"}",
+      "expected": "서울 날씨 어때",
+      "tags": ["smoke", "normalize"],
+      "metadata": { "scenario": "질의 정규화 — 불용어/구두점 제거" }
+    },
+    {
+      "id": "tk-rrf-overlap",
+      "input": "{\"type\":\"rrf_merge\",\"fts_ranked\":[\"doc1\",\"doc2\",\"doc3\"],\"vec_ranked\":[\"doc3\",\"doc1\"]}",
+      "expected": "doc1,doc3,doc2",
+      "tags": ["smoke", "rrf"],
+      "metadata": { "scenario": "RRF 융합 — 양쪽 랭킹에 등장한 doc1이 최상위" }
+    },
+    {
+      "id": "tk-mmr-diversity",
+      "input": "{\"type\":\"mmr_rerank\",\"items\":[{\"id\":\"a\",\"score\":1.0,\"content\":\"hello world foo\"},{\"id\":\"b\",\"score\":0.9,\"content\":\"hello world bar\"},{\"id\":\"c\",\"score\":0.8,\"content\":\"completely different topic\"}],\"limit\":2,\"lambda\":0.5}",
+      "expected": "a,c",
+      "tags": ["smoke", "mmr"],
+      "metadata": { "scenario": "MMR 다양성 리랭킹 — 유사 b 대신 다양한 c 선택" }
+    }
+  ]
+}

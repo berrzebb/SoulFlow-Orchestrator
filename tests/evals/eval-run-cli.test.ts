@@ -148,6 +148,7 @@ describe("eval-run CLI — bundles", () => {
     expect(stdout).toContain("Smoke bundles:");
     expect(stdout).toContain("routing");
     expect(stdout).toContain("safety");
+    expect(stdout).toContain("tokenizer");
   });
 
   it("--full → 모든 번들 실행", () => {
@@ -169,6 +170,14 @@ describe("eval-run CLI — bundles", () => {
     const { stdout } = run("--bundle routing --threshold 0");
     expect(stdout).toContain("Overall:");
     expect(stdout).toContain("threshold: 0%");
+  });
+
+  it("--bundle tokenizer --scorer exact --threshold 100 → 전체 통과", () => {
+    const { stdout } = run("--bundle tokenizer --scorer exact --threshold 100");
+    expect(stdout).toContain("Running: tokenizer");
+    // bundle tags=["smoke"] → smoke 태그 케이스만 필터 (7/12)
+    expect(stdout).toContain("Passed: 7");
+    expect(stdout).toContain("Failed: 0");
   });
 
   it("--bundle guardrails --scorer exact --threshold 100 → 전체 통과", () => {

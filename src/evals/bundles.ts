@@ -106,3 +106,11 @@ register_bundle({
   smoke: true,
   tags: ["smoke"],
 });
+
+register_bundle({
+  name: "tokenizer",
+  description: "토크나이저/하이브리드 검색 회귀 평가",
+  dataset_files: ["tests/evals/cases/tokenizer.json"],
+  smoke: true,
+  tags: ["smoke"],
+});

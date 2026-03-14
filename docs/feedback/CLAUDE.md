@@ -21,41 +21,36 @@
 - `[합의완료]` EG-5 Guardrail Observability + Eval Fixture
 - `[합의완료]` PA-1 + PA-2 — Ports & Adapters Boundary Fix
 - `[합의완료]` TR-1 + TR-2 — Shared Tokenizer/QueryNormalizer + LexicalProfile
+- `[합의완료]` TR-3 + TR-4 — Hybrid Merge/Rerank + Session Novelty Gate Tokenizer 정렬
 
-## TR-3 + TR-4 — Hybrid Merge/Rerank + Session Novelty Gate Tokenizer 정렬
+## TR-5 — Tokenizer/Hybrid Retrieval Eval Fixture + Regression Artifact
 
 ### Claim
 
-**LanguageRuleLike 계약 + 언어별 모듈 추출**: `LanguageRuleLike` 인터페이스를 `src/search/types.ts`에 정의. `unicode61-tokenizer.ts`의 인라인 불용어 사전(STOP_EN 45개, STOP_KO 60개) + 한국어 조사 탈락 + CJK 바이그램 로직을 `src/search/languages/{en,ko,zh}.ts` 3개 파일로 분리. 토크나이저 본체는 `detect_language_rule()`로 위임하여 139줄 → 64줄로 단순화. 새 언어 추가 시 파일 1개 구현 + `index.ts` 등록만으로 확장 가능.
+`guardrail-executor.ts` 패턴을 따라 토크나이저 + 하이브리드 검색 파이프라인 전체를 `EvalExecutorLike`로 감싸는 `tokenizer-executor.ts` 생성. 6가지 입력 타입(tokenize, extract_keywords, build_fts_query, normalize_query, rrf_merge, mmr_rerank)을 지원. 12개 eval fixture 케이스를 `tests/evals/cases/tokenizer.json`에 정의 — 영어/한국어/중국어 토큰화, 불용어 필터링, 조사 탈락, FTS5 쿼리 생성, RRF 융합, MMR 다양성 리랭킹을 커버. `tokenizer` 번들을 smoke=true로 등록하여 CI에서 상시 회귀 감지.
 
-**TR-3**: `memory-scoring.ts`의 `tokenize_simple()` (자체 정규식 기반 토큰화)를 `DEFAULT_TOKENIZER.tokenize()`로 교체. MMR 리랭킹의 Jaccard 유사도가 공유 토크나이저의 한국어 조사 탈락 + CJK 바이그램을 활용.
-
-**TR-4**: `session-reuse.ts`의 `normalize_query()` (자체 정규식 정규화)를 `DEFAULT_TOKENIZER.tokenize().join(" ")`로 교체. 세션 novelty gate의 중복 질의 감지가 한국어 조사 탈락을 활용하여 near-duplicate 감지 정확도 향상.
+**[계류] 반려 코드 수정**: `scripts/eval-run.ts`의 `EXECUTOR_MAP`에 `tokenizer: create_tokenizer_executor` 매핑 추가. `tests/evals/eval-run-cli.test.ts`에 `--bundle tokenizer --scorer exact --threshold 100` CLI 경로 회귀 테스트 + `--smoke` 테스트에 tokenizer 포함 검증 추가.
 
 ### Changed Files
 
-**New files (4)**: `src/search/languages/en.ts`, `src/search/languages/ko.ts`, `src/search/languages/zh.ts`, `src/search/languages/index.ts`
+**New (3)**: `src/evals/tokenizer-executor.ts`, `tests/evals/cases/tokenizer.json` (12 cases), `tests/evals/tokenizer-executor.test.ts` (16 tests)
 
-**Refactored (3)**: `src/search/types.ts` (LanguageRuleLike 추가), `src/search/unicode61-tokenizer.ts` (languages/ 위임), `src/search/index.ts` (barrel export 확장)
-
-**Migrated consumers (2)**: `src/agent/memory-scoring.ts` (tokenize_simple 제거, DEFAULT_TOKENIZER 사용), `src/orchestration/guardrails/session-reuse.ts` (normalize_query → DEFAULT_TOKENIZER)
-
-**Test (2)**: `tests/search/tokenizer-policy.test.ts` (36 tests — LanguageRuleLike 계약 + TR-3/TR-4 소비자 회귀), `tests/orchestration/guardrails/session-reuse.test.ts` (23 tests — 조사 탈락 near-duplicate 테스트 추가)
+**Modified (4)**: `src/evals/bundles.ts` (tokenizer 번들 등록), `src/evals/index.ts` (export 추가), `scripts/eval-run.ts` (EXECUTOR_MAP에 tokenizer 매핑), `tests/evals/eval-run-cli.test.ts` (CLI 경로 회귀 2건)
 
 ### Test Command
 
 ```bash
-npm run lint && npx tsc --noEmit && npx vitest run tests/search/tokenizer-policy.test.ts tests/agent/memory-scoring.test.ts tests/orchestration/guardrails/session-reuse.test.ts tests/agent/memory-service-search.test.ts
+npm run lint && npx tsc --noEmit && npx vitest run tests/evals/ && npm run eval:smoke
 ```
 
 ### Test Result
 
 - lint: 0 errors
 - tsc: passed
-- vitest: 4 files / 110 tests passed
+- vitest: 8 files / 108 tests passed (기존 91 + 신규 17)
+- eval:smoke: 17/17 (100.0%) ≥ threshold 80%
+- `--bundle tokenizer --scorer exact --threshold 100`: 7/7 (100.0%)
 
 ### Residual Risk
 
-- `memory.service.ts`의 FTS5 테이블 생성 시 `tokenize='unicode61 remove_diacritics 2'` 하드코딩 잔존 — `MEMORY_CHUNK_PROFILE` 적용은 후속 작업
-- `tool-index.ts`의 in-memory `tokenize()` EN-only 유지 (도구 도메인 전용, 공유 계약 범위 외)
-- `compute_similarity()`의 Jaccard는 독립 구현 유지 — `memory-scoring.ts`의 `jaccard()`과 중복이나, 입력 타입(string vs Set) 및 컨텍스트 상이하여 통합 대상 아님
+- `apply_temporal_decay()`는 eval executor 미포함 — 시간 기반 함수라 deterministic fixture 구성 어려움. `memory-scoring.test.ts`에서 단위 테스트로 커버

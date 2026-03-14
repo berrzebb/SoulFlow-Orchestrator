@@ -29,6 +29,7 @@ import { EXACT_MATCH_SCORER, CONTAINS_SCORER, REGEX_SCORER } from "../src/evals/
 import { create_report, save_baseline, load_baseline, compute_diff, render_markdown_summary } from "../src/evals/report.js";
 import { get_bundle, get_smoke_bundles, list_bundles, load_bundle_datasets } from "../src/evals/bundles.js";
 import { create_guardrail_executor } from "../src/evals/guardrail-executor.js";
+import { create_tokenizer_executor } from "../src/evals/tokenizer-executor.js";
 import type { EvalExecutorLike, EvalScorerLike, EvalDataset } from "../src/evals/contracts.js";
 
 interface CliArgs {
@@ -210,6 +211,7 @@ const ECHO_EXECUTOR: EvalExecutorLike = {
 
 const EXECUTOR_MAP: Record<string, () => EvalExecutorLike> = {
   guardrails: create_guardrail_executor,
+  tokenizer: create_tokenizer_executor,
 };
 
 function resolve_executor(dataset_name: string): EvalExecutorLike {
