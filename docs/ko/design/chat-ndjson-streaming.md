@@ -1,96 +1,107 @@
-# 설계: Chat NDJSON 스트리밍
+# Chat NDJSON Streaming 설계
 
-> **상태**: 구현 완료
+## 목적
 
-## 개요
+`chat ndjson streaming`은 웹 채팅에서 진행 중인 응답을 세션 단위의 HTTP 스트림으로 전달하기 위한 설계다.
+이 설계의 목적은 활성 채팅 세션에 대해서만 필요한 스트림을 열고, 탭 가시성 변화와 취소를 포함한 브라우저 생명주기를 HTTP 스트림 쪽에서 직접 제어하게 만드는 것이다.
 
-Web Chat UI의 스트리밍 응답을 기존 글로벌 SSE에서 **세션별 NDJSON HTTP 스트림**으로 개선한다.
-Fetch ReadableStream 기반으로 탭 전환 시 버퍼링, 세션별 독립 연결, delta 기반 전송을 지원한다.
+이 구조는 다음 문제를 풀기 위해 채택됐다.
 
-## 기존 방식과의 비교
+- 전역 SSE 하나에 모든 웹 채팅 스트림을 실어 보내는 결합도를 낮춘다
+- 현재 보고 있는 세션에 대해서만 로컬 스트림을 유지한다
+- 브라우저 탭이 숨김 상태일 때 렌더링 낭비를 줄인다
+- 메시지 전송과 스트림 수신을 같은 요청 범위 안에서 다룬다
 
-| | 기존 (SSE 글로벌) | **개선 (NDJSON 로컬)** |
-|---|---|---|
-| 전송 채널 | `/api/sse` 전역 이벤트 | `/messages/stream` 세션 전용 |
-| 콘텐츠 단위 | 누적 전체 (`content`) | delta만 전송 (`content.slice(offset)`) |
-| 탭 전환 | 계속 렌더링 (낭비) | 버퍼링 후 복귀 시 일괄 적용 |
-| 연결 범위 | 모든 클라이언트 공유 | 해당 세션 요청자만 |
-| 취소 | 불가 | `AbortController` |
-| Fallback | — | SSE `web_stream` (다른 세션 또는 미지원 시) |
+## 현재 채택된 전송 모델
 
-## 서버 아키텍처
+현재 웹 채팅은 두 개의 스트림 계층을 함께 사용한다.
 
-```
-POST /api/chat/sessions/:id/messages/stream
-          │
-          ├─ add_stream_listener(session_id, fn)  ← 발행 전에 등록 (delta 유실 방지)
-          │
-          ├─ bus.publish_inbound(...)
-          │
-          └─ SseManager.broadcast_web_stream(chat_id, content, done)
-                  │
-                  └─ delta = content.slice(offset)
-                     fn(delta, done)  →  res.write(JSON)
-```
+- 세션 전용 NDJSON 스트림
+- 전역 SSE `web_stream` 브로드캐스트
 
-### NDJSON 이벤트 타입
+세션 전용 NDJSON 스트림은 웹 채팅의 기본 경로다.
+브라우저는 `POST /api/chat/sessions/:id/messages/stream` 요청으로 메시지 전송과 스트림 구독을 동시에 시작하고, 서버는 같은 응답 본문을 `application/x-ndjson` 형식으로 계속 흘려 보낸다.
 
-```jsonc
-{ "type": "start" }                        // 메시지 수신 확인
-{ "type": "delta", "content": "안녕" }     // 스트리밍 delta
-{ "type": "done" }                          // 스트림 완료
-{ "type": "error", "error": "timeout" }    // 오류 (타임아웃 2분, 발행 실패)
-```
+전역 SSE `web_stream`은 여전히 유지된다.
+이 경로는 대시보드 전체 알림, 다른 뷰와의 호환성, 로컬 NDJSON 스트림을 직접 사용하지 않는 소비자 쪽의 공통 브로드캐스트 계층으로 남아 있다.
 
-### 핵심 파일
+즉 현재 설계는 “NDJSON이 SSE를 완전히 대체한다”가 아니라 “웹 채팅의 주 스트림은 세션 전용 NDJSON으로 내리고, 전역 SSE는 공통 브로드캐스트 계층으로 유지한다”는 구조다.
 
-| 파일 | 역할 |
-|---|---|
-| `src/dashboard/sse-manager.ts` | `stream_listeners` Map, delta 계산, `add_stream_listener()` |
-| `src/dashboard/broadcaster.ts` | `SseBroadcasterLike`에 선택적 `add_stream_listener?` 추가 |
-| `src/dashboard/route-context.ts` | `RouteContext`에 `add_stream_listener` 필드 추가 |
-| `src/dashboard/service.ts` | `_build_route_context`에서 `this._sse.add_stream_listener` 바인딩 |
-| `src/dashboard/routes/chat.ts` | `POST .../messages/stream` 엔드포인트 |
+## 서버 경계
 
-## 프론트엔드 아키텍처
+서버 쪽의 source of truth는 다음 경계에 있다.
 
-### useNdjsonStream 훅
+- `src/dashboard/routes/chat.ts`
+- `src/dashboard/sse-manager.ts`
+- `src/dashboard/broadcaster.ts`
+- `src/dashboard/route-context.ts`
+- `src/dashboard/service.ts`
 
-```typescript
-const { stream, start, cancel } = useNdjsonStream();
-// stream: { chat_id, content, done } | null
-// start(chat_id, body): Promise<void>  — 스트림 완료 시 resolve
-// cancel(): void                        — AbortController 취소
-```
+이 설계에서 채팅 라우트는 두 가지 역할을 가진다.
 
-**탭 가시성 버퍼링:**
-- `document.visibilityState === "hidden"` → delta를 `buffer_ref`에 누적
-- `visibilitychange` 이벤트로 탭 복귀 감지 → 버퍼 한번에 flush
+- 세션 소유권과 요청 본문을 검증한다
+- 스트림 리스너를 등록한 뒤 inbound publish를 시작한다
 
-### chat.tsx 스트림 우선순위
+중요한 점은 리스너 등록이 발행보다 먼저 일어난다는 것이다.
+이 순서를 통해 에이전트가 매우 빠르게 첫 이벤트를 내보내더라도 초기 조각이 유실되지 않게 한다.
 
-```typescript
-const active_stream =
-  ndjson_stream?.chat_id === activeId ? ndjson_stream    // 1순위: NDJSON 로컬
-  : web_stream?.chat_id === activeId ? web_stream        // 2순위: SSE 글로벌 (fallback)
-  : null;
-```
+`SseManager`는 전역 SSE만 담당하지 않는다.
+현재 구조에서는 세션별 rich stream listener 등록점이기도 하며, 누적 문자열이 아니라 증분 이벤트를 세션 구독자에게 넘기는 역할도 맡는다.
 
-### 생명주기
+## 이벤트 모델
 
-```
-send() 호출
-  → start_stream(chat_id, body)  // fire-and-forget, setSending(false) 즉시
-  → NDJSON delta 수신 → virtual_msg로 실시간 렌더링
-  → type:"done" 수신 → stream.done = true
-  → qc.invalidateQueries(["chat-session", id])  // refetch
-  → activeSession.messages에 assistant 메시지 도착
-  → cancel_stream()  // 중복 방지, 가상 메시지 제거
-```
+NDJSON 스트림은 단순히 “완성된 답변 문자열”만 보내는 계층이 아니다.
+현재 구조에서는 채팅 라우트가 시작 이벤트를 먼저 내보내고, 이후에는 채널/브로드캐스터에서 생성한 rich stream event를 그대로 흘려 보낸다.
+마지막에는 완료 또는 오류 이벤트로 종료한다.
 
-## 설계 결정사항
+이 설계의 핵심은 다음과 같다.
 
-- **리스너 등록 순서**: 메시지 발행(`bus.publish_inbound`) *전에* `add_stream_listener` 등록. 에이전트가 빠르게 응답할 경우 초기 delta를 놓치지 않기 위함.
-- **SSE fallback 유지**: `web_stream` 글로벌 스토어는 그대로 유지. Mirror 세션, NDJSON 미지원 채널 등에서 계속 동작.
-- **타임아웃**: 2분(120초). 에이전트 응답이 없으면 `type:"error"` 후 연결 종료.
-- **Content-Type**: `application/x-ndjson; charset=utf-8` — 줄 단위 JSON 스트림 명시.
+- 스트림은 세션 단위다
+- 이벤트는 줄 단위 JSON으로 전송된다
+- 완료와 오류도 같은 스트림 계약 안에서 표현된다
+- 전송 계층은 메시지 저장소 자체를 대체하지 않는다
+
+즉 NDJSON 스트림은 “진행 중 상태 전달”을 위한 계층이고, 최종 메시지의 영속 source of truth는 여전히 채팅 세션 저장소다.
+
+## 프런트엔드 모델
+
+프런트엔드의 source of truth는 다음 경계에 있다.
+
+- `web/src/hooks/use-ndjson-stream.ts`
+- `web/src/pages/chat.tsx`
+- `web/src/store.ts`
+- `web/src/layouts/root.tsx`
+
+웹 채팅은 `useNdjsonStream` 훅으로 세션 전용 스트림을 연다.
+이 훅은 로컬 abort controller, NDJSON 파싱, 가시성 기반 버퍼링, 완료 후 정리를 한 곳에서 처리한다.
+
+현재 구조에서 중요한 동작은 다음과 같다.
+
+- 탭이 숨겨져 있으면 수신 조각을 즉시 렌더링하지 않고 버퍼에 누적한다
+- 탭이 다시 보이면 버퍼를 한 번에 flush한다
+- 사용자가 다른 세션으로 이동하거나 전송을 취소하면 스트림을 중단할 수 있다
+- 활성 세션이 NDJSON 스트림을 갖고 있으면 그 스트림이 우선이고, 없을 때만 `web_stream`을 fallback으로 사용한다
+
+이 설계는 브라우저 렌더링 비용과 연결 범위를 세션 단위로 좁히기 위한 것이다.
+
+## 현재 구조에서의 의미
+
+이 프로젝트는 채널 브로드캐스트와 대시보드 UI를 동시에 갖고 있기 때문에, 하나의 전역 스트림만으로 모든 실시간 갱신을 설명하기 어렵다.
+`chat ndjson streaming`은 그 문제를 해결하기 위해 웹 채팅의 실시간 응답 경로를 더 좁고 명시적인 계약으로 분리한다.
+
+현재 구조에서 이 설계가 의미하는 바는 다음과 같다.
+
+- 채팅 응답 스트림은 세션 단위 요청으로 수립한다
+- 글로벌 브로드캐스트는 보조 계층으로 유지한다
+- 렌더링 최적화는 훅 계층에서 처리한다
+- 세션 저장과 실시간 전송을 같은 것으로 보지 않는다
+
+## 비목표
+
+- 채널 전체 브로드캐스트 계층을 제거하는 것
+- 채팅 세션 영속 저장소를 NDJSON 스트림으로 대체하는 것
+- 웹 이외 채널의 렌더링 계약을 강제로 통일하는 것
+- 에이전트 내부 이벤트 형식을 채팅 UI 전용으로 고정하는 것
+
+이 문서는 현재 채택된 스트리밍 설계 개념을 설명한다.
+세부 rollout, 마이그레이션 순서, 후속 작업은 `docs/*/design/improved/*`에서 관리한다.

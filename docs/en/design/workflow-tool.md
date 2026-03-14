@@ -1,91 +1,105 @@
-# Design: WorkflowTool — Natural Language → Workflow CRUD + Execution Agent Tool
+# Workflow Tool Design
 
-> **Status**: Implementation complete
+## Purpose
 
-## Overview
+`workflow tool` is the agent-facing tool contract used to create, inspect, modify, and execute structured workflow definitions.
+Its purpose is to let agents participate in workflow authoring without turning workflow persistence into ad-hoc file writing.
 
-A single CRUD tool that allows agents to create, query, run, and delete workflows during conversation.
-Natural language → DAG inference is the agent's (LLM) responsibility; WorkflowTool saves/executes structured definitions.
+In other words, this design exists so that an agent can work through a workflow contract instead of directly editing raw YAML as its primary source of truth.
 
-## Problem
+## Role in the current architecture
 
-27 orchestration nodes + graph editor were complete, but agents had no programmatic means to CRUD workflows. When a user said "crawl RSS every morning and summarize," the agent could only guide them to the dashboard UI.
+Workflow tool sits between:
 
-## Architecture
+- model-side reasoning that decides what phases or nodes are needed
+- dashboard-side workflow operations that store and run workflow definitions
 
-### Single Tool + Action Parameter Pattern
+The current responsibility split is:
 
-Same pattern as `CronTool` and `DecisionTool`:
+- model or workflow writer
+  - infers the graph or phase structure
+- workflow tool
+  - exposes structured actions for create/read/update/run operations
+- dashboard workflow ops
+  - owns template storage, retrieval, deletion, and run creation
 
-```
-WorkflowTool
-├── action: create | list | get | run | update | delete | export
-├── name: workflow name/slug
-├── definition: WorkflowDefinition (for create/update)
-└── variables: runtime variable overrides (for run)
-```
+So workflow tool is not the source of truth for workflow definitions.
+It is the structured control surface used to reach that source of truth.
 
-### Action Flow
+## Action-based contract
 
-| Action | Input | Behavior | Output |
-|--------|-------|----------|--------|
-| `create` | name + definition | Save YAML + auto-register cron | `{ ok, slug }` |
-| `list` | - | List templates | `[{ title, slug, phases, orche_nodes, trigger }]` |
-| `get` | name | Single lookup | WorkflowDefinition JSON |
-| `run` | name or definition | Immediate async execution | `{ ok, workflow_id }` |
-| `update` | name + definition | Overwrite + re-register cron | `{ ok, slug }` |
-| `delete` | name | Delete file + unregister cron | `{ ok, name }` |
-| `export` | name | Return YAML string | raw YAML |
+The current design uses one tool with an action parameter rather than many separate workflow tools.
+That keeps workflow operations under one explicit contract.
 
-### Dependency Injection
+The main actions are:
 
-```typescript
-// DashboardWorkflowOps interface (dashboard/service.ts)
-// Implemented in ops-factory.ts, injected into WorkflowTool in main.ts
-constructor(ops: DashboardWorkflowOps)
-```
+- `create`
+- `list`
+- `get`
+- `run`
+- `update`
+- `delete`
+- `export`
+- `flowchart`
+- `sequence`
+- `node_types`
+- `models`
 
-### Automatic Node Catalog Injection
+The intent is not to maximize tool count.
+It is to make workflow creation, mutation, inspection, and execution explicit under a single structured API.
 
-`build_node_catalog()` traverses the NodeHandler registry to generate a text representation of all 27 nodes' I/O schemas. This is included in the tool description so agents know which node types are available.
+## Relationship to node catalog and model discovery
 
-```
-## Available Workflow Node Types (27)
-- http [🌐]: (url: string, method: string, ...) → (status: number, body: string, ...)
-- code [💻]: (language: string, code: string) → (result: string, stdout: string, ...)
-...
-```
+Workflow tool is not only a storage wrapper.
+It also exposes node catalog and backend/model discovery so the agent can understand the valid workflow surface before attempting creation.
 
-## Execution Flow
+This means:
 
-```
-User: "Crawl RSS every morning at 9 and summarize"
-    ↓
-Agent (LLM): natural language → DAG inference
-    ↓
-Agent → workflow tool: { action: "create", name: "daily-rss", definition: { ... } }
-    ↓
-WorkflowTool.handle_create() → ops.save_template() → YAML save + cron registration
-    ↓
-Agent: "Created daily-rss workflow with a 9 AM cron schedule."
-```
+- node types come from the registry-backed catalog
+- workflow definitions are expected to align with that catalog
+- backend/model selection is tied to actually available runtime options
 
-## File Structure
+So the tool acts as both a workflow control surface and a schema discovery surface.
 
-```
-src/agent/tools/
-  workflow.ts            # WorkflowTool class (7 action handlers)
-  workflow-catalog.ts    # Node catalog text generation
-  index.ts               # export + registration
+## Storage boundary
 
-src/dashboard/
-  service.ts             # DashboardWorkflowOps interface
-  ops-factory.ts         # create_workflow_ops() implementation
+Workflow tool does not own raw file persistence directly.
+In the current architecture, storage and retrieval are delegated to `DashboardWorkflowOps`.
 
-src/main.ts              # WorkflowTool registration (ops injection)
-```
+That boundary follows these rules:
 
-## Related Documents
+- workflow tool calls ops
+- ops own template storage and run creation
+- agents should not treat arbitrary file writes as the primary workflow authoring path
 
-→ [Node Registry](./node-registry.md) — Source for 27-node catalog
-→ [Phase Loop](./phase-loop.md) — Workflow execution engine
+This keeps dashboard UI, runtime, and agent tooling aligned to the same storage rules.
+
+## Execution boundary
+
+The `run` action supports both template-based execution and inline-definition execution.
+In both cases, actual run creation still goes through the same workflow ops boundary.
+
+So workflow tool does not directly execute the workflow engine itself.
+It bridges from structured declaration into runtime execution creation.
+
+## Meaning in the current project
+
+This project combines dashboard workflow authoring with agent-driven automation.
+Workflow tool is the layer that connects those two surfaces.
+
+In the current architecture this means:
+
+- users can ask for workflows in natural language
+- agents turn those requests into structured workflow actions
+- the same workflow definition can be used by storage, execution, and visualization
+- diagram generation and node discovery are part of the same workflow surface
+
+## Non-goals
+
+- fully deterministic natural-language-to-graph generation by itself
+- managing workflow YAML through arbitrary file writes as the main contract
+- re-implementing the workflow execution engine inside the tool
+- creating a storage path that bypasses dashboard workflow ops
+
+This document describes the currently adopted workflow tool design concept.
+Rollout details and work breakdown belong under `docs/*/design/improved/*`.

@@ -1,142 +1,153 @@
-# Design: Session CD Collaborator Injection (Phase 4.3)
+# Session State Injection Design
 
-> **Status**: Implementation complete · `session_cd` converted to required collaborator injection
+## Purpose
 
-## Overview
+`session state injection` defines how session-scoped collaborators are assembled outside the orchestration service and injected into it explicitly.
+Its purpose is to reduce hidden state inside the service and make **session observers, pending HITL state, and compaction-related collaborators explicit parts of assembly**.
 
-Completes the service decomposition by removing the last inline state creation (`session_cd`) from `OrchestrationService` and making it injectable via dependency injection.
+The core intent is:
 
-Maintains:
-- Semantic preservation (no CD scoring rule changes)
-- Public API contract (`get_cd_score()`, `reset_cd_score()` unchanged)
-- Explicit bootstrap ownership of collaborator lifecycle
+- keep `OrchestrationService` closer to a coordinator than a hidden state owner
+- let bootstrap own the lifecycle of session-scoped collaborators
+- make tests able to inject mock collaborators directly
+- ensure hooks, runners, and dashboard-facing accessors observe the same session state
 
-## Problem Statement
+## Session-Scoped Collaborators
 
-`OrchestrationService` has one remaining inline state creation:
-```typescript
-private readonly session_cd = create_cd_observer();  // inline creation
+The main collaborators in this design are:
+
+- `session_cd`
+  - an observer that tracks execution events and exposes CD score
+- `hitl_pending_store`
+  - a pending-state store for human-in-the-loop responses
+- compaction-related collaborators
+  - injected config or helpers used for memory flush and context preservation
+
+The key design rule is that these are not inline service-owned state variables.
+They are externally assembled collaborators.
+
+## Assembly Location
+
+Session state is assembled in bootstrap:
+
+```text
+bootstrap
+  -> create session collaborators
+  -> inject into OrchestrationService
+  -> pass through to hooks / runners / dashboard accessors
 ```
 
-This prevents:
-- Injection of custom/mock CD observers in tests
-- External lifecycle management of the session state
-- Complete dependency injection pattern
+So the orchestration service is not the source of session state.
+It is the consumer and coordinator of already-created state.
 
-All other dependencies are already injected via `OrchestrationServiceDeps`.
+## Why Injection Matters
 
-## Solution Architecture
+### 1. Testability
 
-### Module Structure
+If the service creates its own session observer or pending store:
 
-**Updated File**: `src/orchestration/service.ts`
+- mock replacement becomes harder
+- lifecycle control becomes implicit
+- narrow state-transition tests become more complex
 
-The `CDObserver` interface already defines the necessary contract:
-```typescript
-export type CDObserver = {
-  observe: (event: AgentEvent) => CDEvent | null;
-  get_score: () => { total: number; events: CDEvent[] };
-  reset: () => void;
-};
-```
+Injection makes those collaborators easy to replace in tests.
 
-### Dependency Injection Pattern
+### 2. Consistency Across Paths
 
-**Modified**: `src/orchestration/service.ts`
+Session state is used in multiple paths:
 
-```typescript
-// 1. Import CDObserver type
-import { type CDObserver } from "../agent/cd-scoring.js";
+- hooks
+- once / agent / task runners
+- workflow continuation
+- dashboard stats
+- HITL bridge paths
 
-// 2. Add required session_cd to OrchestrationServiceDeps
-export type OrchestrationServiceDeps = {
-  // ... existing fields
-  /** Session CD observer. Must be injected by bootstrap. */
-  session_cd: CDObserver;
-  // ...
-};
+These paths must not observe different instances of the same session-scoped state.
+Bootstrap-level ownership solves that.
 
-// 3. Class field declaration with type
-private readonly session_cd: CDObserver;
+### 3. Clearer Service Responsibility
 
-// 4. Constructor injection
-constructor(deps: OrchestrationServiceDeps) {
-  // ...
-  this.session_cd = deps.session_cd;
-  // ...
-}
-```
+`OrchestrationService` should focus on request coordination and execution dispatch.
+If it also creates and owns session observers and pending state, it becomes both execution coordinator and state factory.
 
-### Key Characteristics
+This design intentionally avoids that responsibility mix.
 
-- **Required injection**: `session_cd: CDObserver` removes inline creation from the service
-- **Explicit lifecycle**: bootstrap owns observer creation and lifetime
-- **All accesses unchanged**: Internal code paths remain identical (`this.session_cd`)
+## Meaning of `session_cd`
 
-## Test Coverage
+`session_cd` is a session-level event observer.
 
-**New File**: `tests/orchestration/session-state.test.ts` (6 tests)
+From the design perspective, the important point is not the scoring formula itself.
+The important point is that the observer is injected rather than constructed inline.
 
-Contract validation:
-- `CDObserver` type properly defined ✓
-- `OrchestrationServiceDeps.session_cd` required field present ✓
-- Public API methods (`get_cd_score()`, `reset_cd_score()`) still available ✓
-- Collaborator injection pattern works ✓
+This document therefore describes placement and ownership, not the scoring algorithm.
 
-**Regression Tests**: 309 tests pass (6 new + 303 existing)
+## Meaning of `hitl_pending_store`
 
-## Semantic Preservation Checklist
+`hitl_pending_store` preserves pending interaction state until a user reply arrives.
 
-✅ No CD scoring rule changes:
-- `observe()` behavior unchanged
-- `get_score()` calculation unchanged
-- `reset()` functionality unchanged
+It needs to be injected because:
 
-✅ Public API unchanged:
-- `get_cd_score()` returns same structure
-- `reset_cd_score()` clears state same way
+- dashboard and channel bridges must observe the same pending state
+- workflow continuation must resume against the same pending store
+- a hidden internal map would make the state invisible to adjacent layers
 
-✅ Integration unchanged:
-- `hooks_deps.session_cd` passed to `build_agent_hooks` same way
-- `runner_deps.session_cd` passed to execution runners same way
-- Tool event observation paths unchanged
+So pending HITL state is a shared collaborator between orchestration and surrounding runtime surfaces.
 
-✅ Explicit assembly responsibility:
-- `session_cd` creation belongs to bootstrap, not the service
-- `new OrchestrationService(deps)` always receives a complete collaborator set
-- The inline `create_cd_observer()` path is removed
+## Relation to Compaction
 
-## Files Changed
+Session-state injection also connects to the compaction path.
 
-| File | Changes |
-|------|---------|
-| `src/orchestration/service.ts` | +import CDObserver, +required session_cd field in OrchestrationServiceDeps, ~constructor injection pattern |
-| `tests/orchestration/session-state.test.ts` | **NEW** (6 tests: type contract + injection validation) |
-| `docs/LARGE_FILE_SPLIT_DESIGN.md` | Phase 4.3 completion status |
+Why:
 
-## Validation
+- compaction flush decisions depend on current execution state
+- those decisions are not just pure prompt logic; they interact with runtime collaborators
+- compaction helpers therefore fit better as injected config or injected collaborators
 
-✅ TypeScript compilation: `npx tsc -p tsconfig.json --noEmit`
-✅ Test suite: 309 tests pass (22 test files)
-✅ Explicit bootstrap injection path verified
+At the design level, the main rule is that the service should not create private execution-state machinery on its own.
 
-## State of OrchestrationService
+## Public Contracts
 
-After Phase 4.1, 4.2, and 4.3:
-- **Inline state**: 0 (all moved to injection or lazy init)
-- **Injected state**: hitl_store, session_cd (collaborators)
-- **Lazy-initialized state**: _renderer (caching only)
-- **Extracted logic**: run_once, run_agent_loop, run_task_loop, continue_task_loop, run_phase_loop
-- **Remaining methods**: execute(), security helpers, system prompt builder, renderer management, result conversion
+Session state should not remain trapped entirely inside the orchestration layer.
+Some state must be observable or controllable from adjacent layers.
 
-The service is now primarily a coordinator and facade that:
-1. Accepts requests via `execute()`
-2. Manages stateful collaborators (hitl_store, session_cd)
-3. Delegates execution to extracted module-level functions
-4. Handles request preprocessing and response finalization
+Examples include:
 
-## Follow-up
+- reading current CD score
+- resetting CD score
+- resolving pending HITL input
 
-- Keep `session_cd` as an injected collaborator rather than service-owned state
-- Prevent non-bootstrap call sites from reintroducing ad-hoc observer creation
-- Add regression coverage so tests do not depend on fallback creation paths again
+These contracts do not exist to expose internal structures directly.
+They exist so the surrounding system can interact with the same session state consistently.
+
+## Boundaries
+
+This design does not:
+
+- define the full session-memory retrieval policy
+- describe the detailed CD scoring algorithm
+- define the full workflow state machine
+- define the final dashboard presentation of session metrics
+
+`session state injection` is about collaborator ownership and dependency boundaries.
+
+## Meaning in This Project
+
+This project runs orchestration alongside channels, dashboard, and workflow features.
+In that environment, hiding session state inside one service is less useful than assembling it explicitly and sharing it across paths.
+
+This document fixes that top-level design:
+
+- session state is modeled as collaborators
+- bootstrap creates those collaborators
+- orchestration consumes and coordinates them
+- hooks, runners, and dashboard paths share the same state
+
+## Non-Goals
+
+- recording phase or completion status
+- tracking test counts
+- documenting the detailed math behind scoring
+- designing the entire HITL UX here
+
+This document describes the adopted session-state injection design.
+Detailed breakdown and follow-up work belong in `docs/*/design/improved/*`.

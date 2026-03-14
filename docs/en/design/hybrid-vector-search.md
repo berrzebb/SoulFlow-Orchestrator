@@ -1,106 +1,173 @@
-# Hybrid Search: FTS5 + sqlite-vec
+# Hybrid Vector Search Design
 
-> **Status**: `completed` | **Dependencies**: sqlite-vec v0.1.7-alpha.2, OpenRouter Embeddings API
+## Purpose
 
-## Problem
+`hybrid vector search` is the retrieval design used to complement keyword matching with semantic similarity when lexical search alone is not enough.
+Its goal is not to send every query through a vector path, but to keep lexical search as the default and add semantic retrieval only when it helps.
 
-FTS5 BM25 키워드 매칭만으로는 시멘틱 유사성을 포착하지 못함.
-- "파일 내용 바꿔줘" → `edit_file` 도구를 찾지 못함 (키워드 불일치)
-- "어제 뭐 했는지 알려줘" → 메모리에서 관련 일지를 찾지 못함
+The core intent is:
 
-## Solution
+- resolve simple requests quickly with lexical search alone
+- recover meaning-equivalent requests even when wording differs
+- pay embedding cost at retrieval time, not on every write
+- keep the system operational even when embeddings are unavailable
 
-FTS5 BM25 (키워드) + sqlite-vec KNN (시멘틱)을 결합한 하이브리드 검색.
+## Core Principles
 
-### Architecture
+The project uses the following principles for hybrid retrieval:
 
-```
-Query Text
-    |
-    +---> FTS5 BM25 (keyword match, fast)
-    |         |
-    |         v
-    |     ranked results (priority)
-    |
-    +---> sqlite-vec KNN (semantic match, lazy embed)
-              |
-              v
-          supplementary results
-              |
-    +---------+
-    v
-  Merged Set (FTS5 first, vector fills remaining slots)
-```
+- lexical retrieval builds the primary candidate set
+- semantic retrieval acts as a supplement, not the default path
+- indexing and runtime selection are separate concerns
+- embedding freshness is tracked by `content_hash`
+- when embeddings are unavailable, the system degrades to lexical-only
 
-### Embedding Strategy: Lazy + Content-Hash
+This is a lexical-first architecture with semantic supplementation.
 
-임베딩은 비용이 높은 외부 API 호출 → **검색 시점에 lazy하게 수행**.
+## Scope
 
-1. **쓰기 시**: `content_hash` (FNV-1a 32bit)만 저장. 임베딩 API 호출 없음.
-2. **검색 시**: `vec0` 테이블에 없는 행 검출 → 배치 임베딩 → 저장.
-3. **변경 감지**: `content_hash` 불일치 시 재임베딩.
+This design is a shared concept across:
 
-| 동작 | 빈도 | API 호출 |
-|------|------|----------|
-| 도구 등록 (build) | 서버 시작 시 1회 | 없음 |
-| 메모리 쓰기 | 매 대화 | 없음 |
-| 도구 검색 (select) | 매 요청 | 첫 호출 시 1회 (이후 캐시) |
-| 메모리 검색 | /memory search | stale 문서만 |
+- tool selection
+- memory retrieval
+- reference-oriented retrieval
+- future novelty-gate and session-reuse dedupe paths
 
-### Parameters
+Each subsystem may use different ranking details, but the retrieval philosophy is the same.
 
-| Parameter | Value | Rationale |
-|-----------|-------|-----------|
-| Model | `text-embedding-3-small` | OpenRouter 경유, 저비용 |
-| Dimensions | 256 | 도구 165개, 메모리 수백 건 → 256차원 충분 |
-| Max chars | 1500 (tools), 2000 (memory) | 임베딩 입력 truncate |
-| Distance | L2 on normalized vectors | `cosine_sim = 1 - (L2^2 / 2)` |
+## Retrieval Shape
 
-### Applied Stores
-
-#### 1. Tool Index (`src/orchestration/tool-index.ts`)
-
-```sql
--- 기존 FTS5 테이블에 추가
-ALTER TABLE tools ADD COLUMN content_hash TEXT NOT NULL DEFAULT '';
-CREATE VIRTUAL TABLE tools_vec USING vec0(embedding float[256]);
+```text
+Query
+  -> normalize / tokenize
+  -> lexical retrieval
+  -> candidate sufficiency check
+  -> semantic supplement (optional)
+  -> merged ranked results
 ```
 
-- `build()`: FTS5 + tools 테이블에 content_hash 저장, vec0는 비워둠
-- `select()` (async): FTS5 BM25 → 벡터 KNN 보강 → 머지
-- `ensure_embeddings_fresh()`: 첫 select 시 전체 도구 배치 임베딩 (165개 → API 2회)
+The important point is that the semantic path is not always open.
+If lexical retrieval is already sufficient, the request ends there.
 
-#### 2. Memory Store (`src/agent/memory.service.ts`)
+## Lexical-First Layer
 
-```sql
-ALTER TABLE memory_docs ADD COLUMN content_hash TEXT NOT NULL DEFAULT '';
-CREATE VIRTUAL TABLE memory_vec USING vec0(embedding float[256]);
-```
+The first-stage retriever is lexical.
 
-- `search()`: FTS5 결과 + `vector_search()` 결과 머지
-- `vector_search()`: stale 문서 배치 임베딩 → KNN
+In the current project, that layer includes:
 
-### Dependency Injection
+- FTS-backed storage
+- an in-memory lexical mirror
+- category and tag fallbacks
+- query normalization and Korean keyword expansion
 
-```typescript
-// EmbedFn 타입 (memory.service.ts에 정의)
-type EmbedFn = (texts: string[], opts: { model?: string; dimensions?: number })
-  => Promise<{ embeddings: number[][] }>;
+This keeps the system useful even without vector retrieval.
+Semantic retrieval improves recall, but it does not define the baseline behavior.
 
-// main.ts에서 주입
-agent.context.memory_store.set_embed?.(embed_service);
-get_tool_index().set_embed(embed_service);
-```
+## Semantic Supplement Layer
 
-`set_embed()`가 호출되지 않으면 벡터 검색이 비활성화되고 FTS5만 사용 (graceful degradation).
+Semantic retrieval only runs for items that have embeddings or can be embedded on demand.
 
-### File Changes
+The intended flow is:
 
-| File | Change |
-|------|--------|
-| `src/orchestration/tool-index.ts` | sqlite-vec 로드, vec0 테이블, `set_embed()`, async `select()`, `vector_search()`, `ensure_embeddings_fresh()` |
-| `src/orchestration/tool-selector.ts` | `select_tools_for_request()` async 변환 |
-| `src/orchestration/service.ts` | `await select_tools_for_request()` |
-| `src/agent/memory.service.ts` | `EmbedFn` 타입, `set_embed()`, vec0 테이블, hybrid `search()`, `vector_search()` |
-| `src/agent/memory.types.ts` | `set_embed?()` optional 메서드 추가 |
-| `src/main.ts` | `set_embed()` 연결 (memory + tool-index) |
+1. a query arrives
+2. lexical retrieval runs first
+3. the system checks whether lexical results are sufficient
+4. only then does it inspect embeddings
+5. stale or missing embeddings are created lazily
+6. vector similarity fills remaining slots
+
+This design exists to reduce both cost and latency.
+The system does not call an external embedding API on every tool build or memory write.
+
+## Lazy Embeddings and Content Hash
+
+Embedding freshness is tracked through `content_hash`, not through timestamps alone.
+
+- writes may store the document and its `content_hash`
+- retrieval regenerates embeddings only when they are missing or stale
+- unchanged content should not be embedded again
+
+This reduces:
+
+- write-path API cost
+- unnecessary re-embedding of unchanged content
+
+## Merge Policy
+
+Lexical and semantic results are not blended as equal authorities.
+
+The merge model is:
+
+- preserve lexical order as the baseline
+- use semantic results to fill open slots
+- do not reinsert items that are already selected
+- treat category/core fallback as part of the full selection policy
+
+Semantic retrieval improves selection quality, but it does not replace the main ranking model.
+
+## Graceful Degradation
+
+The design does not assume that an embedding provider is always available.
+
+The system must continue to function when:
+
+- no embedding provider is configured
+- sqlite-vec is disabled
+- the embedding API fails temporarily
+- freshness checks cannot complete for part of the corpus
+
+In those cases the retrieval path falls back to lexical-only behavior.
+The search quality may change, but the product should continue to work.
+
+## Relation to Tool Selection
+
+Tool selection uses a lexical-first candidate path, with semantic retrieval as optional supplementation.
+
+That matters because tool selection is not a generic retrieval problem.
+It is a bounded candidate-selection problem with token budget and explainability constraints.
+
+The dedicated tool-selection policy is documented separately in `tool-selection-fts5`.
+This document defines the shared retrieval philosophy beneath it.
+
+## Relation to Memory Search
+
+Memory retrieval benefits more from semantic supplementation because it deals with longer documents and narrative content.
+Still, the same rules apply:
+
+- lexical first
+- lazy embeddings
+- `content_hash` freshness
+- semantic supplementation instead of semantic replacement
+
+Future novelty-gate and reuse-evidence paths should share the same tokenizer and normalization policy.
+
+## Boundaries
+
+This design does not:
+
+- decide whether a query is recall, retry, or new search
+- define tool budgets or search budgets
+- make final freshness decisions per request type
+- generate user-facing answers
+
+`hybrid vector search` is a retrieval-layer concept, not an orchestration-policy layer.
+
+## Meaning in This Project
+
+This project is a local-first orchestrator, so retrieval cannot depend exclusively on high-cost vector paths.
+The design therefore fixes these ideas:
+
+- use a fast lexical baseline
+- add semantic retrieval only when it helps
+- track freshness through `content_hash`
+- prefer graceful degradation over hard failure
+
+## Non-Goals
+
+- locking the project to a single provider or embedding model as the source of truth
+- making every search semantic-first
+- storing rollout or completion state in this document
+- managing detailed work items for tool selection, memory retrieval, or novelty-gate expansion
+
+This document describes the adopted retrieval design.
+Detailed tokenizer integration, retrieval expansion, and rollout work belong in `docs/*/design/improved/*`.

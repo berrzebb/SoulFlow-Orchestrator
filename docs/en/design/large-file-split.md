@@ -1,133 +1,98 @@
-# Large File Split Design
+# Design: Large-File Structural Decomposition
 
-> Status: Completed · English maintenance mirror  
-> Canonical source: `docs/LARGE_FILE_SPLIT_DESIGN.md`
+## Overview
 
-## Purpose
+Large-file structural decomposition is not about making files look smaller. It is an architectural strategy for lowering change fragility by separating **assembly boundaries** from **execution boundaries**. In this project, large-file problems are treated as boundary problems rather than simple formatting problems.
 
-This document summarizes the large-file split effort.
-The goal was not to make files look cleaner, but to reduce change fragility while preserving runtime behavior.
+## Design Intent
 
-Two goals drove the work:
+Large files are risky not because of line count alone, but because they often accumulate the wrong combinations of responsibility:
 
-- clarify composition boundaries without changing system semantics
-- split safely without undermining the automated development pipeline this project is built around
+- initialization order and side effects get mixed together
+- assembly code and business policy live in the same file
+- changing one execution path can unintentionally affect other modes
+- meaningful test boundaries become unclear
 
-## Core Judgment
+For that reason, the purpose of decomposition is not “split aggressively.” It is to separate composition, orchestration, and execution by responsibility.
 
-Splitting through a `bootstrap` layer was the right direction.
-However, `bootstrap` must remain a composition layer, not a new dumping ground.
+## Core Principles
 
-Allowed in `bootstrap`:
+### 1. The composition root should stay thin
 
-- object creation order
-- runtime bundle assembly
-- startup/shutdown lifecycle wiring
+The top-level entry file should describe how the runtime is assembled, not carry detailed policies of every subsystem. It should mainly own composition, startup, and shutdown sequencing.
 
-Not allowed in `bootstrap`:
+### 2. Bootstrap is an assembly layer
 
-- business rules
-- workflow execution logic
-- channel/provider/domain policies
-- dashboard route logic
-- tool/node registry semantics
+Bootstrap modules are not a new business layer. They are the assembly layer that wires already existing services and configuration together.
 
-## Why Large Files Were a Risk
+### 3. Executors should be separated from dispatch
 
-The problem was never line count by itself.
-The real risks were:
+Request dispatch, preflight, once/agent/task/phase execution, and continuation logic should not collapse into one large method. They should live in dedicated execution modules.
 
-- initialization ordering dependencies
-- shutdown ordering dependencies
-- deferred binding left inside composition
-- state and side effects mixed in the same file
-- drift between generators, registries, and executors
+### 4. Facades preserve public contracts
 
-## Result Summary
+Internal decomposition should not force public contract churn. Service facades remain stable while implementation moves into smaller modules behind them.
 
-### Phase 2. Low-risk Split
+## Adopted Structure
 
-Completed.
+```mermaid
+flowchart TD
+    A[Main / Composition Root] --> B[Bootstrap Modules]
+    B --> C[Runtime Assembly]
+    C --> D[Service Facades]
+    D --> E[Execution Modules]
+    D --> F[Dashboard / Ops Modules]
+```
 
-- `src/dashboard/ops-factory.ts` was reduced to a facade
-- real implementations moved into `src/dashboard/ops/`
+The point of this structure is not to split files mechanically. It is to keep composition, runtime facade, and execution modules in separate architectural layers.
 
-### Phase 3. Composition Split
+## Signals That a File Should Be Decomposed
 
-Completed.
+In the current project, decomposition is justified when:
 
-Most of `main.ts` was split into bootstrap bundles under `src/bootstrap/`.
+- creation order and usage order are mixed together
+- multiple execution modes are embedded in one method
+- state storage and state transition logic live in the same file
+- UI route assembly and actual ops implementation are coupled
 
-- `config.ts`
-- `runtime-paths.ts`
-- `providers.ts`
-- `runtime-data.ts`
-- `agent-core.ts`
-- `channels.ts`
-- `channel-wiring.ts`
-- `orchestration.ts`
-- `workflow-ops.ts`
-- `dashboard.ts`
-- `runtime-tools.ts`
-- `trigger-sync.ts`
-- `services.ts`
-- `lifecycle.ts`
+High line count by itself is not enough.
 
-What remains in `main.ts` is acceptable composition-root work:
+## Main Decomposition Axes
 
-- final `RuntimeApp` assembly
-- main entry boot / lock / shutdown wiring
+### Bootstrap Decomposition
 
-### Phase 4. Execution Split
+Runtime startup, configuration loading, service assembly, and shutdown wiring belong in bootstrap modules. These modules assemble the system but do not invent new business policy.
 
-Completed.
+### Execution Decomposition
 
-- `Phase 4.1`: execution runners
-- `Phase 4.2`: phase workflow path
-- `Phase 4.3`: `session_cd` state holder
-- `Phase 4.4`: request preflight
-- `Phase 4.5`: execute dispatcher
+Preflight, execution-mode dispatch, once/agent/task/phase execution, and continuation should live in dedicated execution modules. That makes execution behavior easier to test and evolve independently.
 
-Main extracted modules:
+### Ops / UI Assembly Decomposition
 
-- `src/orchestration/execution/run-once.ts`
-- `src/orchestration/execution/run-agent-loop.ts`
-- `src/orchestration/execution/run-task-loop.ts`
-- `src/orchestration/execution/continue-task-loop.ts`
-- `src/orchestration/execution/phase-workflow.ts`
-- `src/orchestration/execution/execute-dispatcher.ts`
-- `src/orchestration/request-preflight.ts`
+Areas with large assembly surfaces, such as dashboard and workflow tooling, should separate façade-style orchestration from concrete implementation details.
 
-## Current State
+## Boundaries That Must Be Preserved
 
-The structural split phases are complete.
+Even after decomposition, several boundaries should remain stable:
 
-Current file posture:
+- bootstrap should not own business rules
+- execution modules should not know the composition root
+- facades preserve public contracts while hiding implementation movement
+- structural refactors and feature changes should be kept separate whenever possible
 
-- `src/main.ts`: reduced to composition-root scope
-- `src/dashboard/ops-factory.ts`: reduced to a re-export facade
-- `src/orchestration/service.ts`: still important, but now primarily a facade over extracted collaborators
+## Non-goals
 
-The remaining work is no longer “large-file splitting”.
-It is stabilization work:
+This document does not define:
 
-- strengthening regression tests
-- cleanup and import hygiene
-- keeping docs aligned with the new boundaries
+- phase-by-phase completion reports
+- per-file diff statistics
+- test-count or verification logs
+- migration checklists
 
-## Rules That Still Matter
+Those belong in implementation code or `docs/*/design/improved`.
 
-Even after the split, the following rules remain important:
+## Related Documents
 
-- keep facades stable
-- preserve public contracts
-- preserve side-effect ordering
-- split stateful objects last
-- never mix structural refactors with behavior changes in the same change set
-
-## Recommended Follow-up
-
-1. strengthen characterization tests around bootstrap and execution boundaries
-2. add more representative regression tests for `OrchestrationService.execute()`
-3. watch import cycles across the new bootstrap/execution layers
-4. land new features on top of the new boundaries instead of bypassing them
+- [Execute Dispatcher Design](./execute-dispatcher.md)
+- [Request Preflight Design](./request-preflight.md)
+- [Phase Loop Design](./phase-loop.md)

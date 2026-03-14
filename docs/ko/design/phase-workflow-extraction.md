@@ -1,189 +1,117 @@
-# 설계: Phase Workflow 추출 (Phase 4.2)
-
-> **상태**: 구현 완료 · Phase workflow 경로 OrchestrationService에서 분리
+# 설계: Phase Workflow Runtime Boundary
 
 ## 개요
 
-**phase workflow 실행 경로**를 `OrchestrationService`에서 독립 모듈 `src/orchestration/execution/phase-workflow.ts`로 추출.
-Phase 4.1 실행 runner 추출과 동일한 패턴 적용.
+Phase Workflow Runtime Boundary는 phase workflow 실행 경로를 서비스 facade와 분리해, **phase 기반 워크플로우 조직화 로직이 독립된 실행 모듈**로 유지되도록 하는 설계다.
 
-유지 사항:
-- 의미 보존 (정책 변경 금지, 예외처리 방식 변경 금지)
-- 공개 API 계약 (OrchestrationService.execute() 유지)
-- 계약 검증을 통한 테스트 가능성
+이 문서의 목적은 현재 프로젝트에서 phase workflow가 어떤 계층에 위치하고, orchestration service와 어떤 관계를 가지는지를 설명하는 데 있다.
 
-## 문제 정의
+## 설계 의도
 
-`OrchestrationService`가 5가지 관심사를 혼합:
-1. 요청 sealing과 보안 preflight
-2. 모드 라우팅 (once/agent/task/phase 분기)
-3. Runner 실행 (Phase 4.1 추출)
-4. Phase workflow 조직화 (Phase 4.2 대상)
-5. 상태 관리 (phase_pending_responses, session_cd)
+phase workflow 경로는 단순한 하위 함수가 아니라, 다음 요소를 함께 다루는 별도의 실행 축이다.
 
-이 혼합은 변경 취약점을 유발: phase workflow 로직 수정이 다른 실행 모드에 영향을 줄 수 있음.
+- 템플릿 기반 워크플로우 로딩
+- 동적 workflow 생성
+- phase별 runner 조정
+- 채널/HITL 콜백 연결
+- phase 요약과 결과 조립
 
-## 솔루션 아키텍처
+이 책임을 서비스 facade 안에 그대로 두면, 다른 실행 모드와 경계가 흐려지고 변경 영향 범위가 커진다. 그래서 현재 구조는 phase workflow 경로를 전용 execution 모듈로 둔다.
 
-### 모듈 구조
+## 핵심 원칙
 
-**신규 파일**: `src/orchestration/execution/phase-workflow.ts` (~290줄)
+### 1. 서비스는 facade, phase workflow는 runtime module이다
 
-```typescript
-export type PhaseWorkflowDeps = {
-  // 핵심 의존성
-  providers: ProviderRegistry;
-  runtime: AgentRuntimeLike;
-  logger: Logger;
+Orchestration service는 외부 요청을 받아 적절한 실행 경로로 위임하는 facade로 남고, phase workflow의 실제 조직화는 독립 모듈이 맡는다.
 
-  // 워크스페이스 및 경로 컨텍스트
-  workspace: string;
-  process_tracker: ProcessTrackerLike | null;
+### 2. phase workflow는 자체 의존성 묶음을 가진다
 
-  // Phase workflow 인프라
-  subagents: SubagentRegistry | null;
-  phase_workflow_store: PhaseWorkflowStoreLike | null;
-  bus: MessageBusLike | null;
+phase runtime은 provider, runtime, store, bus, HITL renderer, node execution collaborator 같은 묶음을 한 번에 받아 동작한다. 이 묶음은 service 내부 필드 접근을 직접 퍼뜨리는 대신 명시적 dependency bundle로 전달된다.
 
-  // 상태 관리
-  hitl_store: HitlPendingStore;
+### 3. phase workflow는 실행 모드 중 하나이지만 별도 구조를 가진다
 
-  // SSE 브로드캐스트 및 HITL 렌더링 콜백
-  get_sse_broadcaster: (() => { broadcast_workflow_event(...): void } | null) | undefined;
-  render_hitl: (body: string, type: HitlType) => string;
+`once`, `agent`, `task`와 같은 실행 모드와 같은 dispatcher 축에 올라가지만, 내부 동작은 훨씬 구조화된 graph/phase 런타임이다.
 
-  // 선택사항: 결정/약속 서비스
-  decision_service: DecisionService | null;
-  promise_service: PromiseService | null;
+### 4. channel/HITL 연결은 runtime 경계 안에서 해결한다
 
-  // 노드 실행 의존성 (노드 핸들러로 전달)
-  embed: ((texts, opts) => Promise<...>) | undefined;
-  vector_store: ((op, opts) => Promise<...>) | undefined;
-  oauth_fetch: ((service_id, opts) => Promise<...>) | undefined;
-  get_webhook_data: ((path) => Promise<...>) | undefined;
-  wait_kanban_event: ((board_id, filter) => Promise<...>) | undefined;
-  create_task: ((opts) => Promise<...>) | undefined;
-  query_db: ((datasource, query, params?) => Promise<...>) | undefined;
-};
+phase workflow는 상호작용 노드와 HITL 상태를 지원해야 하므로, 채널 전송과 응답 대기를 runtime 경계 안에서 callback 형태로 다룬다.
 
-export async function run_phase_loop(
-  deps: PhaseWorkflowDeps,
-  req: OrchestrationRequest,
-  task_with_media: string,
-  workflow_hint?: string,
-  node_categories?: string[],
-): Promise<OrchestrationResult>;
+## 현재 채택한 구조
+
+```mermaid
+flowchart TD
+    A[Orchestration Service] --> B[Execution Dispatcher]
+    B --> C[Phase Workflow Runtime]
+
+    C --> D[Workflow Template / Dynamic Workflow]
+    C --> E[Phase Loop Runner]
+    C --> F[Channel / HITL Callbacks]
+    C --> G[Result Summary]
 ```
 
-### 추출된 함수
+## 서비스와의 관계
 
-| 함수 | 목적 | 범위 |
-|------|------|------|
-| `run_phase_loop` | **Export됨** 진입점 · 템플릿 로딩 또는 동적 워크플로우 생성 조정 | 공개 API |
-| `generate_dynamic_workflow` | LLM 기반 자연어 hint 워크플로우 생성 | 모듈 내부 |
-| `format_workflow_preview` | 워크플로우 미리보기 텍스트 포맷팅 | 모듈 내부 |
-| `build_phase_channel_callbacks` | phase 노드용 send_message/ask_channel 콜백 빌더 | 모듈 내부 |
-| `format_phase_summary` | phase 결과에서 최종 실행 요약 포맷팅 | 모듈 내부 |
+Orchestration service는 phase workflow 자체를 구현하는 곳이 아니라, phase runtime에 필요한 dependency bundle을 조립해 넘기는 곳이다.
 
-### 서비스 통합
+즉 서비스 계층의 책임은 다음에 가깝다.
 
-**수정**: `src/orchestration/service.ts`
+- 요청 수신
+- 적절한 실행 경로 선택
+- dependency bundle 조립
+- 결과 수령 및 상위 계약 유지
 
-```typescript
-// 신규 private 헬퍼 메서드
-private _phase_deps(): PhaseWorkflowDeps {
-  return {
-    providers: this.deps.providers,
-    runtime: this.deps.runtime,
-    logger: this.logger,
-    workspace: this.workspace,
-    process_tracker: this.deps.process_tracker,
-    subagents: this.subagents,
-    phase_workflow_store: this.phase_workflow_store,
-    bus: this.bus,
-    hitl_store: this.hitl_store,
-    get_sse_broadcaster: this.deps.get_sse_broadcaster,
-    render_hitl: (body, type) => this._render_hitl(body, type),
-    decision_service: this.decision_service,
-    promise_service: this.promise_service,
-    embed: this.deps.embed,
-    vector_store: this.deps.vector_store,
-    oauth_fetch: this.deps.oauth_fetch,
-    get_webhook_data: this.deps.get_webhook_data,
-    wait_kanban_event: this.deps.wait_kanban_event,
-    create_task: this.deps.create_task,
-    query_db: this.deps.query_db,
-  };
-}
+반대로 phase runtime의 책임은 다음에 가깝다.
 
-// 위임 패턴으로 구현 변경
-private async run_phase_loop(req, task_with_media, workflow_hint?, node_categories?) {
-  return _run_phase_loop(this._phase_deps(), req, task_with_media, workflow_hint, node_categories);
-}
+- workflow 템플릿 해석
+- 동적 workflow 생성
+- phase 진행
+- phase-level interaction wiring
+- 최종 결과 요약
 
-// 제거 (이제 모듈 내부):
-// - generate_dynamic_workflow (53줄)
-// - format_workflow_preview (12줄)
-// - build_phase_channel_callbacks (56줄)
-// - format_phase_summary (29줄)
-```
+## Dependency Bundle
 
-**수정**: `src/orchestration/execution/index.ts`
+Phase workflow는 여러 collaborator를 요구한다. 현재 구조에서 중요한 점은 이들이 service 내부 전역 상태로 흩어지지 않고, phase runtime 경계로 명시적으로 전달된다는 점이다.
 
-```typescript
-export { run_phase_loop, type PhaseWorkflowDeps } from "./phase-workflow.js";
-```
+대표적으로 다음 축이 포함된다.
 
-## 테스트 커버리지
+- providers / runtime
+- workspace context
+- workflow store / subagent registry / message bus
+- HITL store 및 renderer
+- node execution collaborator
+- decision / promise 같은 부가 서비스
 
-**신규 파일**: `tests/orchestration/phase-workflow.test.ts` (5개 테스트)
+이렇게 dependency bundle을 명시하면 phase runtime을 독립적으로 검증하고 유지하기 쉬워진다.
 
-계약 검증:
-- `run_phase_loop` exported 및 호출 가능 ✓
-- 함수 파라미터 개수 (5개) ✓
-- `PhaseWorkflowDeps` 타입 정의됨 ✓
-- 필수 속성 포함 (providers, runtime, logger, workspace, hitl_store, render_hitl) ✓
-- OrchestrationService가 추출 모듈을 import하고 위임 ✓
+## Dynamic Workflow와의 관계
 
-**회귀 테스트**: 대표 회귀 테스트와 타입 검증 기준 통과
+phase workflow 경로는 정적 템플릿만 실행하는 계층이 아니다. 현재 구조는 workflow hint나 node category 정보를 이용해 동적 workflow를 생성하는 경로도 같은 runtime boundary 안에서 다룬다.
 
-## 의미 보존 체크리스트
+즉 template-based execution과 dynamic synthesis는 서로 다른 기능이지만, 동일한 phase runtime 모델 위에서 동작한다.
 
-✅ 정책 변경 없음:
-- 워크플로우 로딩 로직 불변
-- 동적 생성 프롬프트 불변
-- 요약 포맷팅 불변
+## HITL / Channel과의 관계
 
-✅ 예외처리 방식 변경 없음:
-- 에러 전파 불변
-- HITL 에러 케이스 불변
+phase workflow는 interaction nodes를 포함할 수 있으므로, 채널 전송과 응답 대기 능력을 직접 사용한다. 다만 이 능력은 runtime 모듈 안에서 callback 형태로 주입된다.
 
-✅ 이벤트 타이밍 변경 없음:
-- SSE 브로드캐스트 타이밍 불변
-- Phase 이벤트 발행 순서 불변
+이 구조의 장점은 다음과 같다.
 
-✅ 상태 관리:
-- `hitl_store`는 service의 injected collaborator로 유지
-- `session_cd`는 service의 injected collaborator로 유지
+- runtime은 채널 서비스 구현 세부를 직접 소유하지 않는다.
+- service facade는 phase runtime 내부 상호작용 로직을 품지 않는다.
+- workflow와 HITL의 경계가 명확해진다.
 
-## 변경 파일
+## 비목표
 
-| 파일 | 변경 |
-|------|------|
-| `src/orchestration/execution/phase-workflow.ts` | **NEW** (~290줄) |
-| `src/orchestration/execution/index.ts` | +2 exports (run_phase_loop, PhaseWorkflowDeps 타입) |
-| `src/orchestration/service.ts` | -150줄 (5개 메서드 추출) + 1줄 위임 + _phase_deps() 빌더 |
-| `tests/orchestration/phase-workflow.test.ts` | **NEW** (계약 검증) |
-| `docs/LARGE_FILE_SPLIT_DESIGN.md` | Phase 4 상태 업데이트 |
+이 문서는 다음 내용을 정의하지 않는다.
 
-## 검증
+- 특정 refactor 단계의 전후 diff
+- 테스트 개수와 통과 결과
+- phase extraction 작업 보고
+- 세부 이행 순서
 
-✅ TypeScript 컴파일: `npx tsc -p tsconfig.json --noEmit`
-✅ 테스트 스위트: 301 tests 통과
-✅ service.ts에서 미사용 import 제거 (now_iso, short_id)
+그 내용은 구현 코드 또는 `docs/*/design/improved`에서 다룬다.
 
-## 후속 작업
+## 관련 문서
 
-- `run_phase_loop()` 위임 경로를 직접 잠그는 characterisation test를 계속 강화
-- phase workflow 정책이 다시 `service.ts` 안으로 되돌아오지 않도록 경계 유지
-- phase workflow와 service collaborator(`hitl_store`, `session_cd`)의 책임 분리를 유지
+- [Phase Loop 설계](./phase-loop.md)
+- [Interaction Nodes 설계](./interaction-nodes.md)
+- [Loop Continuity + HITL 설계](./loop-continuity-hitl.md)

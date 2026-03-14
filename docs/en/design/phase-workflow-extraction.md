@@ -1,188 +1,117 @@
-# Design: Phase Workflow Extraction (Phase 4.2)
-
-> **Status**: Implementation complete · Phase workflow path separated from OrchestrationService
+# Design: Phase Workflow Runtime Boundary
 
 ## Overview
 
-Extracts the **phase workflow execution path** from `OrchestrationService` into a standalone module `src/orchestration/execution/phase-workflow.ts`, following the same pattern as Phase 4.1 execution runners.
+The Phase Workflow Runtime Boundary defines the separation that keeps phase-workflow execution as a **dedicated runtime module** instead of leaving it embedded inside the service façade.
 
-Maintains:
-- Semantic preservation (no policy changes, no exception handling changes)
-- Public API contract (OrchestrationService.execute() unchanged)
-- Testability through contract validation
+The purpose of this document is to explain where phase-workflow execution lives in the current architecture and how it relates to the orchestration service.
 
-## Problem Statement
+## Design Intent
 
-`OrchestrationService` combines 5 related concerns:
-1. Request sealing and security preflight
-2. Mode routing (once/agent/task/phase dispatch)
-3. Execution via runners (Phase 4.1 extraction)
-4. Phase workflow orchestration (Phase 4.2 target)
-5. State management (phase_pending_responses, session_cd)
+The phase-workflow path is not a minor helper. It coordinates several responsibilities together:
 
-This mixing creates change vulnerability: modifications to phase workflow logic risk affecting other execution modes.
+- template-backed workflow loading
+- dynamic workflow generation
+- phase-by-phase runner orchestration
+- channel and HITL callback wiring
+- phase summary and result assembly
 
-## Solution Architecture
+If those responsibilities stay inside the service façade, the boundaries between execution modes become blurry and the change surface grows. The current architecture therefore keeps phase workflow orchestration in a dedicated execution module.
 
-### Module Structure
+## Core Principles
 
-**New File**: `src/orchestration/execution/phase-workflow.ts` (~290 lines)
+### 1. The service is a façade; phase workflow is a runtime module
 
-```typescript
-export type PhaseWorkflowDeps = {
-  // Core dependencies
-  providers: ProviderRegistry;
-  runtime: AgentRuntimeLike;
-  logger: Logger;
+The orchestration service remains the external façade that accepts requests and delegates to execution paths. The actual organization of phase workflows belongs to a dedicated runtime module.
 
-  // Workspace and path context
-  workspace: string;
-  process_tracker: ProcessTrackerLike | null;
+### 2. Phase workflow operates on an explicit dependency bundle
 
-  // Phase workflow infrastructure
-  subagents: SubagentRegistry | null;
-  phase_workflow_store: PhaseWorkflowStoreLike | null;
-  bus: MessageBusLike | null;
+The phase runtime receives providers, runtime objects, stores, buses, HITL rendering, and node-execution collaborators as an explicit dependency set instead of reaching through service internals everywhere.
 
-  // State management
-  hitl_store: HitlPendingStore;
+### 3. Phase workflow is one execution mode with its own internal structure
 
-  // Callbacks for SSE broadcasting and HITL rendering
-  get_sse_broadcaster: (() => { broadcast_workflow_event(...): void } | null) | undefined;
-  render_hitl: (body: string, type: HitlType) => string;
+It sits on the same dispatcher axis as `once`, `agent`, and `task`, but internally it behaves like a structured graph/phase runtime rather than a simple loop.
 
-  // Optional decision/promise services
-  decision_service: DecisionService | null;
-  promise_service: PromiseService | null;
+### 4. Channel and HITL wiring is solved inside the runtime boundary
 
-  // Node execution dependencies (passed through to node handlers)
-  embed: ((texts, opts) => Promise<...>) | undefined;
-  vector_store: ((op, opts) => Promise<...>) | undefined;
-  oauth_fetch: ((service_id, opts) => Promise<...>) | undefined;
-  get_webhook_data: ((path) => Promise<...>) | undefined;
-  wait_kanban_event: ((board_id, filter) => Promise<...>) | undefined;
-  create_task: ((opts) => Promise<...>) | undefined;
-  query_db: ((datasource, query, params?) => Promise<...>) | undefined;
-};
+Because phase workflows can include interaction nodes and waiting states, channel send/ask capabilities are handled inside the phase runtime through injected callbacks.
 
-export async function run_phase_loop(
-  deps: PhaseWorkflowDeps,
-  req: OrchestrationRequest,
-  task_with_media: string,
-  workflow_hint?: string,
-  node_categories?: string[],
-): Promise<OrchestrationResult>;
+## Adopted Structure
+
+```mermaid
+flowchart TD
+    A[Orchestration Service] --> B[Execution Dispatcher]
+    B --> C[Phase Workflow Runtime]
+
+    C --> D[Workflow Template / Dynamic Workflow]
+    C --> E[Phase Loop Runner]
+    C --> F[Channel / HITL Callbacks]
+    C --> G[Result Summary]
 ```
 
-### Extracted Functions
+## Relationship to the Service Layer
 
-| Function | Purpose | Scope |
-|----------|---------|-------|
-| `run_phase_loop` | **Exported** entry point orchestrating template loading or dynamic workflow generation | Public API |
-| `generate_dynamic_workflow` | LLM-based workflow generation from natural language hints | Module-internal |
-| `format_workflow_preview` | Format workflow preview text for display | Module-internal |
-| `build_phase_channel_callbacks` | Build send_message/ask_channel callbacks for phase nodes | Module-internal |
-| `format_phase_summary` | Format final execution summary from phase results | Module-internal |
+The orchestration service does not implement phase workflow behavior directly. Its role is to build the dependency bundle and preserve the public execution contract.
 
-### Service Integration
+That means the service layer is responsible for:
 
-**Modified**: `src/orchestration/service.ts`
+- receiving the request
+- choosing the execution path
+- assembling the dependency bundle
+- receiving the result and preserving outer contracts
 
-```typescript
-// New private helper method
-private _phase_deps(): PhaseWorkflowDeps {
-  return {
-    providers: this.deps.providers,
-    runtime: this.deps.runtime,
-    logger: this.logger,
-    workspace: this.workspace,
-    process_tracker: this.deps.process_tracker,
-    subagents: this.subagents,
-    phase_workflow_store: this.phase_workflow_store,
-    bus: this.bus,
-    hitl_store: this.hitl_store,
-    get_sse_broadcaster: this.deps.get_sse_broadcaster,
-    render_hitl: (body, type) => this._render_hitl(body, type),
-    decision_service: this.decision_service,
-    promise_service: this.promise_service,
-    embed: this.deps.embed,
-    vector_store: this.deps.vector_store,
-    oauth_fetch: this.deps.oauth_fetch,
-    get_webhook_data: this.deps.get_webhook_data,
-    wait_kanban_event: this.deps.wait_kanban_event,
-    create_task: this.deps.create_task,
-    query_db: this.deps.query_db,
-  };
-}
+The phase runtime is responsible for:
 
-// Replaced implementation with delegation
-private async run_phase_loop(req, task_with_media, workflow_hint?, node_categories?) {
-  return _run_phase_loop(this._phase_deps(), req, task_with_media, workflow_hint, node_categories);
-}
+- workflow template interpretation
+- dynamic workflow generation
+- phase progression
+- phase-level interaction wiring
+- final result summarization
 
-// Removed (now module-internal):
-// - generate_dynamic_workflow (53 lines)
-// - format_workflow_preview (12 lines)
-// - build_phase_channel_callbacks (56 lines)
-// - format_phase_summary (29 lines)
-```
+## Dependency Bundle
 
-**Modified**: `src/orchestration/execution/index.ts`
+Phase workflow requires a broad set of collaborators. The important design choice is that they are passed explicitly into the runtime boundary instead of remaining hidden in service-local state.
 
-```typescript
-export { run_phase_loop, type PhaseWorkflowDeps } from "./phase-workflow.js";
-```
+Representative collaborators include:
 
-## Test Coverage
+- providers and runtime
+- workspace context
+- workflow store, subagent registry, and message bus
+- HITL store and renderer
+- node-execution collaborators
+- auxiliary services such as decision or promise services
 
-**New File**: `tests/orchestration/phase-workflow.test.ts` (5 tests)
+This makes the phase runtime easier to test and maintain independently.
 
-Contract validation:
-- `run_phase_loop` exported and callable ✓
-- Function parameter count (5 parameters) ✓
-- `PhaseWorkflowDeps` type properly defined ✓
-- Required properties present (providers, runtime, logger, workspace, hitl_store, render_hitl) ✓
-- OrchestrationService imports and delegates to extracted module ✓
+## Relationship to Dynamic Workflow Generation
 
-**Regression Tests**: Representative regression tests and type checks pass
+The phase-workflow path is not limited to static templates. The current design also allows workflow hints and node-category context to synthesize dynamic workflows inside the same runtime boundary.
 
-## Semantic Preservation Checklist
+Template-backed execution and dynamic synthesis are different features, but they run on the same phase-runtime model.
 
-✅ No policy changes:
-- Workflow loading logic unchanged
-- Dynamic generation prompt unchanged
-- Summary formatting unchanged
+## Relationship to HITL and Channels
 
-✅ No exception handling changes:
-- Error propagation unchanged
-- HITL error cases unchanged
+Because phase workflows may include interaction nodes, the runtime needs direct access to channel-send and response-wait behavior. Those capabilities are injected as callbacks inside the runtime boundary.
 
-✅ No event timing changes:
-- SSE broadcast timing unchanged
-- Phase event emission order unchanged
+This gives the architecture three benefits:
 
-✅ State management:
-- `hitl_store` remains a service-owned injected collaborator
-- `session_cd` remains a service-owned injected collaborator
+- the runtime does not own concrete channel-service implementation details
+- the service façade does not absorb interaction-specific workflow logic
+- the workflow/HITL boundary stays explicit
 
-## Files Changed
+## Non-goals
 
-| File | Changes |
-|------|---------|
-| `src/orchestration/execution/phase-workflow.ts` | **NEW** (~290 lines) |
-| `src/orchestration/execution/index.ts` | +2 exports (run_phase_loop, PhaseWorkflowDeps type) |
-| `src/orchestration/service.ts` | -150 lines (5 methods extracted) + 1-line delegation + _phase_deps() builder |
-| `tests/orchestration/phase-workflow.test.ts` | **NEW** (contract validation) |
-| `docs/LARGE_FILE_SPLIT_DESIGN.md` | Updated Phase 4 status |
+This document does not define:
 
-## Validation
+- before/after diff reports for a refactor phase
+- test counts or pass logs
+- extraction rollout reports
+- migration sequencing
 
-✅ TypeScript compilation: `npx tsc -p tsconfig.json --noEmit`
-✅ Test suite: 301 tests pass
-✅ No unused imports in service.ts (removed now_iso, short_id)
+Those belong in implementation code or `docs/*/design/improved`.
 
-## Follow-up
+## Related Documents
 
-- Keep strengthening characterization tests that directly lock `run_phase_loop()` delegation
-- Preserve the boundary so phase workflow policy does not drift back into `service.ts`
-- Keep the separation between phase workflow execution and service collaborators (`hitl_store`, `session_cd`)
+- [Phase Loop Design](./phase-loop.md)
+- [Interaction Nodes Design](./interaction-nodes.md)
+- [Loop Continuity + HITL Design](./loop-continuity-hitl.md)

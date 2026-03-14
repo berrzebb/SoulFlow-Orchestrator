@@ -1,159 +1,157 @@
-# Design: Interaction Nodes & Runner-Level Execution
-
-> **Status**: Implementation complete · 10 new node types · Runner special-node dispatch
+# Design: Interaction Nodes
 
 ## Overview
 
-Extends the workflow engine with **10 new orchestration nodes** requiring runner-level context (channel communication, retry loops, batch execution, tool invocation) that cannot be handled by the generic `execute_orche_node` dispatcher alone.
+Interaction Nodes are the workflow-node layer used for concerns that plain data-processing nodes cannot model well: **human input, channel responses, execution control, and tool bridging**.
 
-## Problem
+The purpose of this document is to explain what the project currently treats as interaction nodes, and why some nodes require runner-level execution instead of generic executor handling.
 
-The existing `execute_orche_node` path provides `OrcheNodeExecutorContext` (memory + abort_signal + workspace), which is insufficient for nodes that need:
-- Channel send/receive (HITL, Approval, Form, Notify, Escalation, SendFile)
-- Retry orchestration with backoff (Retry)
-- Parallel sub-execution (Batch)
-- Tool registry access (Tool Invoke)
-- Multi-source quorum evaluation (Gate)
+## Design Intent
 
-## Architecture
+The workflow engine is not composed only of pure compute nodes. Real operational flows also need to:
 
-### Execution Flow
+- ask users questions and wait for answers
+- request structured approval or rejection
+- collect form-style input
+- send notifications or escalations
+- retry a failed node
+- process collections in batches or controlled loops
+- invoke tools dynamically
 
-```
-phase-loop-runner: orche node block
-  │
-  ├── execute_special_node(node, state, options, deps)
-  │     ├── hitl       → ask_channel(prompt, timeout) → ChannelResponse
-  │     ├── approval   → ask_channel(structured:approval) → votes, approved
-  │     ├── form       → ask_channel(structured:form) → fields
-  │     ├── notify     → send_message(content) → ok, message_id
-  │     ├── send_file  → send_message([file:path]) → ok
-  │     ├── escalation → evaluate_condition → send_message if triggered
-  │     ├── retry      → loop: execute_orche_node(target) + backoff
-  │     ├── batch      → parallel: execute_orche_node(body) per item
-  │     ├── tool_invoke→ invoke_tool(tool_id, params) → result
-  │     └── default    → null (fallback to generic executor)
-  │
-  └── execute_orche_node(node, ctx) ← generic path for remaining nodes
-```
+Those concerns cannot be represented well through a generic executor context that only carries memory and workspace. The current structure therefore separates **generic node execution** from **runner-aware special node execution**.
 
-### Callback Protocol
+## Core Principles
 
-Three optional callbacks on `PhaseLoopRunOptions`:
+### 1. Interaction is modeled as nodes
 
-| Callback | Pattern | Used by |
-|----------|---------|---------|
-| `send_message` | fire-and-forget | Notify, SendFile, Escalation |
-| `ask_channel` | send + wait for response | HITL, Approval, Form |
-| `invoke_tool` | tool_id + params → string | Tool Invoke |
+Human input and channel interaction are not treated as implicit side effects outside the graph. They are declared as workflow nodes, so design, persistence, observability, and resume all stay inside the same graph model.
 
-All callbacks are optional — nodes gracefully degrade when unavailable (warn log + default output).
+### 2. Node definition and execution context are separate
 
-### Channel Communication Types
+Nodes are registered in the node registry, but some nodes require additional runtime callbacks to execute. Registry and special dispatch are separate responsibilities.
 
-```typescript
-interface ChannelSendRequest {
-  target: "origin" | "specified";
-  channel?: string;
-  chat_id?: string;
-  content: string;
-  structured?: { type: "approval" | "form"; payload: Record<string, unknown> };
-  parse_mode?: string;
-}
+### 3. Channel I/O is injected through callbacks
 
-interface ChannelResponse {
-  response: string;
-  responded_by?: { user_id?: string; username?: string; channel?: string };
-  responded_at: string;
-  timed_out: boolean;
-  approved?: boolean;       // Approval
-  comment?: string;         // Approval
-  votes?: Array<...>;       // Approval (multi-approver)
-  fields?: Record<...>;     // Form
-}
+The phase runner gains interaction capabilities through callbacks such as `send_message`, `ask_channel`, and `invoke_tool`. The executor does not hard-code channel implementation details.
+
+### 4. Human-in-the-loop is a normal state
+
+HITL, approval, and form collection are not treated as failures or interrupts. They are normal workflow states.
+
+## Adopted Structure
+
+```mermaid
+flowchart TD
+    A[Workflow Definition] --> B[Node Registry]
+    B --> C[Generic Node Handler]
+    B --> D[Interaction Node Descriptor]
+
+    E[Phase Loop Runner] --> C
+    E --> F[Special Node Dispatch]
+
+    F --> G[ask_channel]
+    F --> H[send_message]
+    F --> I[invoke_tool]
 ```
 
-## Node Catalog
+Generic nodes can stay on the standard executor path, while interaction nodes are handled through special dispatch in the phase loop runner.
 
-### Interaction Category (channel-bound)
+## Node Categories
 
-| Node | Shape | Purpose | Runner Logic |
-|------|-------|---------|-------------|
-| HITL | rect | Free-text Q&A | ask_channel → response |
-| Approval | rect | Binary approve/reject + quorum | ask_channel(structured:approval) → approved, votes |
-| Form | rect | Schema-based structured input | ask_channel(structured:form) → fields |
-| Escalation | rect | Conditional alert to higher channel | evaluate_condition → send_message |
+### Human-in-the-loop
 
-### Flow Category (execution control)
+These nodes require direct input from a user or operator.
 
-| Node | Shape | Purpose | Runner Logic |
-|------|-------|---------|-------------|
-| Gate | diamond | K-of-N quorum check | Handler-only (checks memory) |
-| Retry | rect | Failed node re-execution | Loop with backoff strategy |
-| Batch | rect | Parallel array processing | Concurrent execution with limit |
-| Assert | diamond | Data validation checkpoint | Handler-only (evaluates + throws) |
+- HITL
+- Approval
+- Form
 
-### Advanced Category
+They need outbound prompting, structured response collection, and waiting-state support.
 
-| Node | Shape | Purpose | Runner Logic |
-|------|-------|---------|-------------|
-| Tool Invoke | rect | Dynamic tool execution | invoke_tool callback |
-| Cache | rect | TTL-based key-value cache | Handler-only (in-memory store) |
+### Notification / Escalation
 
-## SSE Events
+These nodes send messages to a channel but do not always wait for a response.
 
-```typescript
-| { type: "node_waiting"; node_id; node_type; reason }   // HITL/Approval/Form waiting
-| { type: "node_retry"; node_id; attempt; max_attempts; error }  // Retry backoff
-```
+- Notify
+- SendFile
+- Escalation
 
-## Escalation Condition Evaluation
+Their focus is delivery, with optional condition-based escalation.
 
-```
-always        → always escalate
-on_timeout    → any depends_on node has timed_out=true
-on_rejection  → any depends_on node has approved=false
-custom        → evaluate custom_expression against memory
-```
+### Control / Recovery
 
-## Retry Backoff Strategies
+These nodes express execution policy inside the graph.
 
-| Strategy | Formula |
-|----------|---------|
-| exponential | `initial * 2^(attempt-1)` |
-| linear | `initial * attempt` |
-| fixed | `initial` |
+- Retry
+- Batch
+- Gate
+- Assert
+- Reconcile-style nodes
 
-All capped at `max_delay_ms`.
+They are closer to execution control than to pure data transformation.
 
-## Batch Execution
+### Tool Bridge
 
-1. Extract array from `memory[array_field]`
-2. Process in chunks of `concurrency` (default 5)
-3. Each item: inject as `memory._batch_item` + `_batch_index`
-4. Execute `body_node` per item via `execute_orche_node`
-5. Collect results, track succeeded/failed counts
-6. `on_item_error: "halt"` stops after first failure
+These nodes delegate dynamic tool execution through runner capabilities.
 
-## Files Changed
+- Tool Invoke
 
-| File | Change |
-|------|--------|
-| `src/agent/nodes/hitl.ts` | New handler |
-| `src/agent/nodes/approval.ts` | New handler |
-| `src/agent/nodes/form.ts` | New handler |
-| `src/agent/nodes/tool-invoke.ts` | New handler |
-| `src/agent/nodes/gate.ts` | New handler |
-| `src/agent/nodes/escalation.ts` | New handler |
-| `src/agent/nodes/cache.ts` | New handler |
-| `src/agent/nodes/retry.ts` | New handler |
-| `src/agent/nodes/batch.ts` | New handler |
-| `src/agent/nodes/assert.ts` | New handler |
-| `src/agent/nodes/index.ts` | Register 10 handlers |
-| `src/agent/workflow-node.types.ts` | 10 type definitions + OrcheNodeType/OrcheNodeDefinition unions |
-| `src/agent/phase-loop.types.ts` | ChannelSendRequest, ChannelResponse, RunOptions callbacks, SSE events |
-| `src/agent/phase-loop-runner.ts` | execute_special_node dispatch + 9 handler functions |
-| `web/src/pages/workflows/nodes/*.tsx` | 10 frontend descriptors |
-| `web/src/pages/workflows/nodes/index.ts` | Register 10 descriptors + category map |
-| `web/src/pages/workflows/node-registry.ts` | interaction category |
-| `web/src/i18n/ko.ts`, `en.ts` | ~80 i18n keys |
+They allow workflow definitions to rely on tool invocation without embedding transport-specific tool logic directly in the graph.
+
+## Runner-aware Execution
+
+Interaction nodes require a broader runtime context than generic nodes.
+
+- channel send
+- channel ask/wait
+- run-state updates
+- retry and backoff
+- batch execution
+- tool invocation
+
+For that reason, the current structure intentionally keeps two paths:
+
+- generic node execution
+- special node dispatch inside the phase loop runner
+
+This is not an exception path. It is a deliberate layer boundary.
+
+## State and Observability
+
+Interaction nodes can produce states such as:
+
+- waiting_user_input
+- waiting_approval
+- retrying
+- notifying
+- escalated
+
+Those states connect directly to workflow runtime state, SSE events, and resume logic. Interaction nodes are therefore part of the runtime state model, not just UI elements.
+
+## Boundary from Generic Nodes
+
+The following are usually not treated as interaction nodes:
+
+- pure data transformation
+- template rendering
+- static branching
+- memory read/write
+
+The practical distinction is whether the node requires a human, a channel, execution policy, or an external tool bridge.
+
+## Non-goals
+
+This document does not define:
+
+- full parameter lists for each node
+- detailed UI shape of every node
+- retry constants, quorum thresholds, or backoff numbers
+- status tables or completion tracking
+
+Those belong in implementation code or `docs/*/design/improved`.
+
+## Related Documents
+
+- [Node Registry Design](./node-registry.md)
+- [Loop Continuity + HITL Design](./loop-continuity-hitl.md)
+- [Phase Loop Design](./phase-loop.md)

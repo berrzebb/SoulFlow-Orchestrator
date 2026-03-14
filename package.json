@@ -29,7 +29,9 @@
     "eval:full": "tsx scripts/eval-run.ts --full --threshold 70",
     "feedback:audit": "node scripts/feedback-audit.mjs",
     "feedback:respond": "node scripts/feedback-respond.mjs",
-    "feedback:loop": "node scripts/feedback-audit.mjs"
+    "feedback:loop": "node scripts/feedback-audit.mjs",
+    "check:knip": "knip",
+    "check:types": "vitest run tests/repo-profile/types.test.ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -40,6 +42,7 @@
     "@types/ws": "^8.18.1",
     "@vitest/coverage-v8": "^4.0.18",
     "eslint": "^10.0.2",
+    "fast-check": "^4.6.0",
     "tsx": "^4.19.4",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.56.1",

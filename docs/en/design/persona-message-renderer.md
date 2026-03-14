@@ -1,8 +1,5 @@
 # Persona Message Renderer Design
 
-> Status: Design retained · English maintenance mirror  
-> Canonical source: `docs/PERSONA_MESSAGE_RENDERER_DESIGN.md`
-
 ## Purpose
 
 This document summarizes the design goal of making all user-facing messages follow
@@ -139,7 +136,7 @@ Recommended priority order:
 5. role heart / default heart
 6. default fallback tone
 
-## Current Product Policy Notes
+## Current Product Policy
 
 The current intended policy is:
 
@@ -149,15 +146,16 @@ The current intended policy is:
 
 These are product decisions, not bugs.
 
-## Completion Criteria
+## Relationship to the Role / Protocol Layer
 
-The design is considered fully reflected in implementation when:
+This design is intentionally separate from the `role / protocol architecture`.
 
-- all deterministic user-facing messages pass through the renderer
-- identity short-circuiting happens before backend free-form generation
-- the renderer reflects stored tone preferences and current-turn tone overrides
-- the sanitizer is reduced to a final leak guard
-- concept-style roleplay changes only the surface style, not core identity or policy behavior
+- role / protocol
+  - defines execution baselines and system prompt behavior
+- persona renderer
+  - defines the expression layer for deterministic user-facing text
+
+So even though both belong to the broader persona system, runtime prompt policy and user-facing deterministic phrasing are treated as different layers.
 
 ## Maintenance Rules
 
@@ -165,3 +163,6 @@ The design is considered fully reflected in implementation when:
 - renderer owns expression; classifier/gateway/orchestrator own meaning
 - when a new deterministic message is added, add a renderer intent first
 - widen ad-hoc concept support only after safety and policy boundaries are fixed
+
+This document describes the currently adopted design concept.
+Detailed improvement work and execution breakdown belong under `docs/*/design/improved/*`.

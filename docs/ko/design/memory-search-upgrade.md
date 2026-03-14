@@ -1,208 +1,163 @@
-# Memory Search Upgrade: Chunking + Scored Hybrid + Temporal Decay
+# 메모리 검색 설계
 
-> **Status**: `implemented` | **Dependencies**: sqlite-vec, FTS5, embed service
-> **Reference**: OpenClaw memory system, memsearch (zilliztech)
+## 목적
 
-## Problem
+`memory search`는 대화 중 생성된 기록과 장기 메모리를 다시 찾아 쓸 수 있게 만드는 검색 계층이다.
+이 설계의 목적은 단순히 메모리를 저장하는 것이 아니라, **짧은 daily 기록과 긴 longterm 문서를 같은 시스템에서 검색 가능하게 유지하면서도 최근성과 의미 유사성을 함께 반영하는 것**이다.
 
-현재 메모리 검색의 3가지 병목:
+핵심 의도는 다음과 같다.
 
-1. **문서 단위 임베딩** — longterm 메모리가 커지면 벡터가 평균화되어 검색 정밀도 하락
-2. **단순 합집합 병합** — FTS5 결과 + 벡터 결과를 점수 없이 합치므로 순위 품질 낮음
-3. **시간 무시** — 3주 전 기록과 어제 기록이 동일 가중치
+- 문서 단위가 아니라 검색 가능한 chunk 단위로 메모리를 다룬다
+- lexical 검색과 semantic 검색을 함께 사용하되 lexical을 기준으로 둔다
+- 최근 기록은 더 잘 보이게 하고, 오래된 기록은 자연스럽게 감쇠한다
+- 대화가 압축되기 전에 durable memory를 남길 수 있도록 flush 지점을 제공한다
 
-## Solution: 4단계 개선
+## 메모리 모델
 
-### Phase 1: Heading-Based Chunking
+현재 메모리 계층은 크게 두 종류를 다룬다.
 
-문서를 헤딩 단위로 분할하여 각 청크가 하나의 토픽을 대표.
+- `daily`
+  - 날짜 단위의 일지형 기록
+- `longterm`
+  - 장기적으로 유지해야 하는 구조화/서술형 기억
 
-```
-## 사용자 선호
-dark mode 선호, 한국어 응답...
+상위 설계에서 중요한 점은 둘이 같은 검색 시스템 안에서 검색되지만, 같은 의미로 관리되지는 않는다는 점이다.
 
-## 프로젝트 구조
-src/agent/ — 에이전트 런타임...
-```
+- `daily`는 recency가 중요하다
+- `longterm`은 상대적으로 evergreen 성격을 가진다
 
-위 longterm을 2개 청크로 분할:
-- chunk[0]: "사용자 선호\ndark mode 선호, 한국어 응답..."
-- chunk[1]: "프로젝트 구조\nsrc/agent/ — 에이전트 런타임..."
+## 저장과 검색의 분리
 
-#### Chunking Algorithm
+메모리의 source of truth는 문서 단위 저장소다.
+검색은 그 위의 파생 인덱스를 사용한다.
 
-```
-1. 마크다운 헤딩(# ~ ######)으로 섹션 분할
-2. 섹션이 MAX_CHUNK_SIZE(1500자) 초과 시 단락(\n\n) 경계에서 재분할
-3. 오버랩: 2줄 (문맥 연속성)
-4. 각 청크에 SHA-256 해시 부여: hash(source:startLine:endLine:contentHash)
-5. 해시 불변 청크는 재임베딩 스킵
-```
-
-#### Schema Change
-
-```sql
--- 기존 memory_documents는 그대로 유지 (source of truth)
--- 새 테이블: 청크 인덱스
-CREATE TABLE memory_chunks (
-  chunk_id    TEXT PRIMARY KEY,   -- SHA-256 composite hash
-  doc_key     TEXT NOT NULL,      -- memory_documents.doc_key FK
-  heading     TEXT NOT NULL DEFAULT '',
-  start_line  INTEGER NOT NULL,
-  end_line    INTEGER NOT NULL,
-  content     TEXT NOT NULL,
-  content_hash TEXT NOT NULL
-);
-
--- FTS5는 청크 단위로 재구축
-CREATE VIRTUAL TABLE memory_chunks_fts USING fts5(
-  content,
-  content='memory_chunks',
-  content_rowid='rowid',
-  tokenize='unicode61 remove_diacritics 2'
-);
-
--- vec0도 청크 단위
-CREATE VIRTUAL TABLE memory_chunks_vec USING vec0(
-  embedding float[256]
-);
+```text
+memory document
+  -> chunking
+  -> lexical index
+  -> optional vector index
+  -> ranked retrieval
 ```
 
-### Phase 2: Scored Hybrid Fusion (RRF)
+이 구조의 의도는 다음과 같다.
 
-FTS5 BM25 + 벡터 KNN 결과를 **Reciprocal Rank Fusion**으로 병합.
+- 저장 포맷을 검색 포맷에 종속시키지 않는다
+- chunk 인덱스는 재생성 가능해야 한다
+- embedding이 없더라도 lexical 검색은 계속 가능해야 한다
 
-```
-RRF_score(chunk) = sum_over_rankers( 1 / (k + rank_i) )
-```
+## Chunk 기반 검색
 
-- `k = 60` (memsearch 기본값, 낮은 순위의 과도한 영향 방지)
-- 각 ranker(FTS5, vector)에서 `top_k × 3` 후보를 가져옴
-- 두 ranker의 RRF 점수를 합산하여 최종 순위 결정
+메모리 검색은 전체 문서가 아니라 chunk를 검색 단위로 사용한다.
 
-#### Why RRF over Weighted Fusion
+chunking의 목적은 다음과 같다.
 
-| 방식 | 장점 | 단점 |
-|------|------|------|
-| Weighted (0.7v + 0.3t) | 직관적 | BM25 점수와 벡터 점수 스케일이 다름, 정규화 필요 |
-| **RRF** | 스케일 무관 (순위 기반), 튜닝 불필요 | k 파라미터 1개만 |
+- 긴 문서의 여러 주제를 하나의 embedding으로 평균화하지 않는다
+- 검색 결과가 “문서 전체”가 아니라 “관련 구간”을 가리키게 한다
+- line / file / snippet 형태로 근거를 사용자나 실행기에 돌려줄 수 있게 한다
 
-RRF는 점수 정규화 없이 순위만으로 병합하므로 구현이 간단하고 안정적.
+chunk는 일반적으로 다음 정보를 가진다.
 
-#### Pseudocode
+- 원본 문서 키
+- heading
+- line range
+- chunk content
+- content hash
+- 생성 시각 또는 원문 시각
 
-```typescript
-function rrf_merge(
-  fts_results: { id: string; rank: number }[],
-  vec_results: { id: string; rank: number }[],
-  k = 60,
-): { id: string; score: number }[] {
-  const scores = new Map<string, number>();
+즉 메모리 검색의 실제 retrieval 단위는 `memory document`가 아니라 `memory chunk`다.
 
-  for (const r of fts_results) {
-    scores.set(r.id, (scores.get(r.id) || 0) + 1 / (k + r.rank));
-  }
-  for (const r of vec_results) {
-    scores.set(r.id, (scores.get(r.id) || 0) + 1 / (k + r.rank));
-  }
+## 하이브리드 검색
 
-  return [...scores.entries()]
-    .map(([id, score]) => ({ id, score }))
-    .sort((a, b) => b.score - a.score);
-}
-```
+메모리 검색은 lexical 검색과 semantic 검색을 같이 사용한다.
 
-### Phase 3: Temporal Decay
+기본 원칙은 다음과 같다.
 
-검색 결과에 시간 감쇠를 적용하여 최근 기억을 우선.
+- lexical 검색이 기본 candidate set을 만든다
+- semantic 검색은 embedding이 있을 때 보강층으로 동작한다
+- embedding provider가 없으면 lexical-only로 degrade 된다
+- chunk freshness는 `content_hash` 기준으로 확인한다
 
-```
-decayed_score = rrf_score * e^(-lambda * age_days)
-lambda = ln(2) / half_life_days
-```
+이 설계는 메모리 검색을 `hybrid-vector-search` 철학 위에 올린 특화 사례다.
 
-| 파라미터 | 값 | 근거 |
-|----------|-----|------|
-| half_life | 14일 | 일별 기록은 2주 후 50% 감쇠 |
-| longterm 면제 | true | 장기 기억은 감쇠 없음 (evergreen) |
+## 점수 병합
 
-감쇠 곡선:
-- 오늘: 100%
-- 7일: ~71%
-- 14일: 50%
-- 30일: ~23%
-- 60일: ~5%
+메모리 검색은 단순 합집합이 아니라 rank 기반 병합을 사용한다.
 
-### Phase 4: Compaction Flush
+상위 설계 개념은 다음과 같다.
 
-컨텍스트 압축 전 자동으로 메모리 저장 턴을 삽입.
+- lexical 결과와 semantic 결과를 각각 순위 목록으로 취급한다
+- 두 목록은 reciprocal-rank 스타일의 병합으로 합쳐진다
+- 점수 스케일 정규화보다 순위 안정성을 우선한다
 
-#### Trigger Condition
+이 접근은 BM25 점수와 vector distance를 억지로 같은 스케일로 맞추는 문제를 피하기 위한 것이다.
 
-에이전트 루프에서 토큰 사용량이 임계점에 도달하면:
-```
-current_tokens >= context_window - reserve_floor - soft_threshold
-```
+## 시간 감쇠
 
-기본값 (200K 컨텍스트 기준):
-- `reserve_floor`: 20,000 토큰
-- `soft_threshold`: 4,000 토큰
-- 트리거: ~176,000 토큰
+메모리 검색은 모든 기록을 동일 가중치로 보지 않는다.
 
-#### Mechanism
+특히 `daily` 계열은 시간 감쇠를 적용할 수 있어야 한다.
 
-1. 에이전트 루프가 토큰 임계점 감지
-2. 사용자 메시지 처리 전에 silent memory flush turn 삽입
-3. 시스템: "Session nearing compaction. Store durable memories now."
-4. 에이전트가 `memory(action="append_daily", ...)` 호출
-5. 응답이 NO_REPLY면 스킵, 아니면 메모리 저장 후 원래 대화 계속
-6. 1 compaction 주기당 최대 1회 flush
+그 이유는 다음과 같다.
 
-## Implementation Plan
+- 어제의 작업 문맥과 세 달 전의 일지는 같은 중요도가 아니다
+- 최근 맥락을 더 잘 회수해야 세션 연속성이 좋아진다
+- 오래된 기록은 사라지지 않더라도 상위 랭크를 덜 차지해야 한다
 
-### Phase 1: Chunking (memory.service.ts)
+반대로 `longterm`은 모든 경우에 강한 감쇠를 주는 대상이 아니다.
+상위 설계 관점에서 `daily`와 `longterm`은 recency 정책이 다를 수 있어야 한다.
 
-| 변경 | 파일 |
-|------|------|
-| `chunk_markdown()` 함수 | `src/agent/memory-chunker.ts` (신규) |
-| `memory_chunks` + `_fts` + `_vec` 테이블 | `memory.service.ts` — `ensure_initialized()` |
-| 문서 쓰기 시 자동 re-chunk | `sqlite_upsert_document()`, `sqlite_append_document()` |
-| `search()` 대상을 chunks로 변경 | `memory.service.ts` — `search()` |
+## Compaction Flush와의 관계
 
-### Phase 2: RRF Fusion (memory.service.ts)
+메모리 검색 설계는 저장소 설계만이 아니라, 대화 compaction과도 연결된다.
 
-| 변경 | 파일 |
-|------|------|
-| `rrf_merge()` 유틸 | `src/agent/memory-scoring.ts` (신규) |
-| `search()`에서 RRF 적용 | `memory.service.ts` |
+컨텍스트가 압축되기 전에 다음이 가능해야 한다.
 
-### Phase 3: Temporal Decay (memory.service.ts)
+- 중요한 대화 내용을 durable memory로 저장
+- 이후 검색 경로에서 다시 찾을 수 있도록 chunk 인덱스에 반영
 
-| 변경 | 파일 |
-|------|------|
-| `temporal_decay()` | `src/agent/memory-scoring.ts` |
-| 청크에 `created_at` 타임스탬프 | `memory_chunks` 스키마 |
+즉 memory search는 저장 이후 retrieval만 담당하는 것이 아니라, **기억 보존과 재발견이 이어지는 폐쇄 루프**의 검색 측면이다.
 
-### Phase 4: Compaction Flush (loop.service.ts)
+## 검색 결과 형태
 
-| 변경 | 파일 |
-|------|------|
-| 토큰 카운트 임계점 감지 | `src/agent/loop.service.ts` |
-| flush turn 삽입 로직 | `src/agent/loop.service.ts` |
+메모리 검색 결과는 단순 텍스트 리스트보다, “어디에서 나온 어떤 근거인지”를 포함하는 구조를 지향한다.
 
-## Migration
+예를 들면:
 
-- 기존 `memory_documents` 테이블은 source of truth로 유지
-- `memory_chunks` + `_fts` + `_vec`는 파생 인덱스 (rebuild 가능)
-- 첫 검색 시 lazy re-chunking + re-embedding
-- 기존 `memory_vec` 테이블은 deprecated → `memory_chunks_vec`로 대체
-- `MemoryStoreLike` 인터페이스 변경 없음 (내부 구현만 변경)
+- source file or logical path
+- line number or line range
+- snippet text
+- optional score metadata
 
-## Metrics
+이 구조는 이후 novelty gate, session reuse, answer synthesis, audit에서도 재사용할 수 있다.
 
-| Before | After (예상) |
-|--------|-------------|
-| 문서 1개 = 벡터 1개 | 문서 1개 = 청크 N개 벡터 |
-| 합집합 병합 (순위 무시) | RRF 점수 기반 순위 |
-| 시간 무시 | 14일 반감기 감쇠 |
-| Compaction 시 기억 소실 | 자동 flush로 보존 |
+## 경계
+
+이 설계가 하지 않는 일도 명확하다.
+
+- 어떤 기억을 저장할지 최종 결정하지 않는다
+- 세션 요약 정책 전체를 정의하지 않는다
+- 사용자-facing 답변 문장을 생성하지 않는다
+- novelty gate의 reuse / retry 결정을 직접 내리지 않는다
+
+즉 `memory search`는 저장소 위의 retrieval 설계이지, conversation policy 전체가 아니다.
+
+## 현재 프로젝트에서의 의미
+
+현재 프로젝트는 메모리를 단순 텍스트 append 저장소가 아니라, 검색 가능한 작업 기억 계층으로 사용한다.
+이 문서는 그 상위 설계를 다음처럼 고정한다.
+
+- 문서는 source of truth다
+- 검색은 chunk 단위다
+- 검색은 hybrid다
+- recency는 ranking에 반영된다
+- compaction 직전 durable memory flush와 연결된다
+
+## 비목표
+
+- 특정 embedding provider 하나를 강제하는 것
+- 모든 메모리 저장을 자동화 규칙 하나로 고정하는 것
+- 현재 구현 상태나 테스트 통과 여부를 기록하는 것
+- 세부 scoring 파라미터와 rollout 순서를 이 문서에서 관리하는 것
+
+이 문서는 현재 채택된 메모리 검색 설계 개념을 설명한다.
+세부 breakdown과 후속 작업은 `docs/*/design/improved/*`에서 관리한다.

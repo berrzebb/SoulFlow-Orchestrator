@@ -1,236 +1,108 @@
-# 설계: 오케스트레이터 LLM — 모델 무관 분류기 런타임
-
-> **상태**: 구현 완료
+# 설계: Orchestrator LLM
 
 ## 개요
 
-오케스트레이터의 분류기가 현재 phi4-mini에 하드코딩되어 있다. 이 설계는 모든 phi4 전용 네이밍과 인프라를 모델 무관(model-agnostic) **오케스트레이터 LLM** 추상화로 교체하여, 대시보드 설정만으로 OpenAI 호환 로컬 모델(Qwen, DeepSeek, Phi-4, Gemma 등)을 핫스왑할 수 있게 한다.
+Orchestrator LLM은 분류기, 워크플로우 생성 보조, fallback 추론 같은 **오케스트레이터 전용 추론 수요**를 위해 존재하는 로컬 모델 런타임 계층이다. 이 설계의 목적은 특정 모델명이나 특정 실행 엔진을 제품 개념으로 고정하지 않고, “오케스트레이터가 사용하는 로컬 추론 자원”을 하나의 경계로 다루는 데 있다.
 
-### 목표
+## 설계 의도
 
-1. **리네이밍**: phi4 → orchestrator-llm (파일명, 클래스명, 설정 키, i18n)
-2. **백엔드 추상화**: ollama / vLLM / LM Studio 교체 가능
-3. **대시보드 모델 관리**: 설치된 모델 목록, pull, 삭제, 활성 모델 변경
-4. **모델 교체 시 코드 변경 0**: 설정만으로 완료
+현재 프로젝트는 모든 추론을 동일한 provider로 처리하지 않는다. 특히 다음 종류의 작업은 일반 사용자-facing agent provider와 다른 요구를 가진다.
 
-### 왜 지금인가
+- execution mode 분류
+- workflow synthesis 또는 hint expansion
+- 일부 로컬 fallback reasoning
 
-Phase Loop는 `phase` 모드를 감지하고 워크플로우 구조를 생성할 수 있는 분류기가 필요하다. phi4-mini로는 불가능하다. Qwen3-4B나 DeepSeek-3B(비슷한 VRAM, 훨씬 나은 JSON 생성 능력)로의 교체가 사소해야 한다. 현재 하드코딩은 이름 변경만으로도 고통스럽다(19+ 파일, 48+ 참조).
+이 경로를 일반 provider와 같은 방식으로만 다루면 모델명, 포트, 런타임 엔진, health check, model lifecycle 관리가 코드 전반에 흩어진다. Orchestrator LLM 설계는 이 문제를 하나의 제품 개념으로 묶는다.
 
----
+## 핵심 원칙
 
-## 현재 아키텍처
+### 1. 모델명은 설정값이고, 제품 경계는 런타임이다
 
-```
-사용자 메시지
-  ↓
-ProviderRegistry.run_orchestrator()
-  ↓ orchestrator_provider_id = "phi4_local"
-Phi4LocalProvider.chat()     ← OpenAI 호환 /v1/chat/completions
-  ↓
-Phi4RuntimeManager           ← ollama serve / docker 컨테이너 라이프사이클
-  ├─ start/stop
-  ├─ pull_model (내부)
-  ├─ warmup
-  └─ health_check
-```
+현재 프로젝트가 직접 소유하는 것은 특정 모델이 아니라 **오케스트레이터용 로컬 추론 런타임**이다. 어떤 모델을 쓰는지는 그 런타임의 설정 문제다.
 
-**하드코딩된 참조**: `Phi4LocalProvider`, `Phi4RuntimeManager`, `Phi4RuntimeEngine`, `Phi4RuntimeOptions`, `Phi4RuntimeStatus`, `Phi4ServiceAdapter`, `"phi4_local"` provider ID, `app_config.phi4.*` 설정 키, `cfg.phi4.*` i18n 키.
+### 2. provider 호출과 runtime lifecycle은 분리한다
 
----
+실제 추론 호출을 수행하는 provider adapter와, 로컬 엔진을 띄우고 상태를 관리하는 runtime manager는 같은 책임을 가지지 않는다.
 
-## 목표 아키텍처
+### 3. dashboard는 provider보다 runtime 관점을 본다
 
-```
-사용자 메시지
-  ↓
-ProviderRegistry.run_orchestrator()
-  ↓ orchestrator_provider_id = "orchestrator_llm"
-OrchestratorLlmProvider.chat()    ← 동일한 OpenAI 호환 API
-  ↓
-OrchestratorLlmRuntime            ← 엔진 무관 런타임 매니저
-  ├─ start/stop
-  ├─ list_models()        ← 신규: GET /api/tags
-  ├─ pull_model(name)     ← 신규: POST /api/pull (public)
-  ├─ delete_model(name)   ← 신규: DELETE /api/delete
-  ├─ list_running()       ← 신규: GET /api/ps (public)
-  ├─ switch_model(name)   ← 신규: 설정 변경 + warmup
-  └─ health_check()
+오케스트레이터 모델은 단순 chat completion endpoint가 아니라, 시작/중지/health/model switch를 포함한 운영 자원이다. 따라서 UI와 service layer도 runtime 상태 모델을 중심으로 다루는 것이 맞다.
+
+### 4. local fallback 축으로 재사용 가능해야 한다
+
+Orchestrator LLM은 classifier 전용 자원일 뿐 아니라, 일부 경로에서는 최후의 로컬 fallback provider 성격도 가질 수 있다.
+
+## 현재 채택한 구조
+
+```mermaid
+flowchart TD
+    A[Orchestration Layer] --> B[ProviderRegistry.run_orchestrator]
+    B --> C[provider id: orchestrator_llm]
+    C --> D[OrchestratorLlmProvider]
+    D --> E[Local OpenAI-compatible API]
+    E --> F[OrchestratorLlmRuntime]
 ```
 
----
+핵심은 provider와 runtime이 같은 객체가 아니라는 점이다.
 
-## 타입 설계
+## 주요 구성 요소
 
-### 런타임 타입
+### OrchestratorLlmProvider
 
-```typescript
-/** 엔진 백엔드 — 모두 OpenAI 호환 API 노출 */
-export type OrchestratorLlmEngine = "native" | "docker" | "podman";
+Provider는 실제 추론 요청을 보낸다. 이 계층은 OpenAI-compatible chat 호출 같은 실행 adapter 역할을 한다.
 
-export type OrchestratorLlmOptions = {
-  enabled?: boolean;
-  engine?: "auto" | OrchestratorLlmEngine;
-  image?: string;          // 기본: "ollama/ollama:latest"
-  container?: string;      // 기본: "orchestrator-llm"
-  port?: number;           // 기본: 11434
-  model?: string;          // 기본: "phi4-mini" (대시보드에서 변경)
-  pull_model?: boolean;
-  auto_stop?: boolean;
-  api_base?: string;
-  gpu_enabled?: boolean;
-  gpu_args?: string[];
-};
+### OrchestratorLlmRuntime
 
-export type OrchestratorLlmStatus = {
-  enabled: boolean;
-  running: boolean;
-  engine?: OrchestratorLlmEngine;
-  container: string;
-  image: string;
-  port: number;
-  model: string;
-  api_base: string;
-  last_error?: string;
-  model_loaded?: boolean;
-  gpu_percent?: number;
-};
-```
+Runtime은 로컬 엔진의 lifecycle과 모델 관리를 담당한다. 이 계층은 실행 환경의 상태를 다루며, provider 호출 코드가 프로세스/컨테이너 관리 세부를 알지 않게 만든다.
 
-### 모델 관리 타입
+### Service / Dashboard Adapter
 
-```typescript
-export type ModelInfo = {
-  name: string;
-  size: number;
-  modified_at: string;
-  digest: string;
-  parameter_size?: string;    // 예: "3.8B"
-  quantization_level?: string; // 예: "Q4_K_M"
-};
+서비스 계층과 대시보드는 runtime manager를 직접 노출하기보다, adapter와 ops를 통해 제품 수준 인터페이스로 다룬다. 이 때문에 UI는 “API provider”가 아니라 “로컬 추론 런타임”을 관리하는 느낌으로 동작한다.
 
-export type RunningModelInfo = {
-  name: string;
-  size: number;
-  size_vram: number;
-  expires_at: string;
-};
+## 런타임 경계
 
-export type PullProgress = {
-  status: string;
-  completed?: number;
-  total?: number;
-};
-```
+현재 런타임 경계에서 중요한 책임은 다음과 같다.
 
----
+- 엔진 탐색과 선택
+- 시작과 중지
+- health check
+- 모델 warm-up
+- 설치된 모델 조회
+- pull / delete / switch 같은 모델 관리 작업
 
-## 리네이밍 맵
+즉 orchestrator LLM은 단순 호출 endpoint가 아니라 **로컬 추론 인프라 자원**이다.
 
-### 파일
+## 엔진 모델
 
-| 현재 | 변경 후 |
-|------|---------|
-| `src/providers/phi4.provider.ts` | `src/providers/orchestrator-llm.provider.ts` |
-| `src/providers/phi4.runtime.ts` | `src/providers/orchestrator-llm.runtime.ts` |
-| `src/providers/phi4-service.adapter.ts` | `src/providers/orchestrator-llm-service.adapter.ts` |
-| `src/phi4-health.ts` | `src/orchestrator-llm-health.ts` |
+현재 구조는 단일 배포 방식을 강제하지 않는다. 로컬 엔진은 native, container-based, auto-detected 같은 여러 운영 형태를 가질 수 있다.
 
-### 클래스 및 타입
+여기서 중요한 설계 의도는 특정 엔진을 선택하는 것이 아니라 다음 경계를 유지하는 것이다.
 
-| 현재 | 변경 후 |
-|------|---------|
-| `Phi4LocalProvider` | `OrchestratorLlmProvider` |
-| `Phi4RuntimeManager` | `OrchestratorLlmRuntime` |
-| `Phi4RuntimeEngine` | `OrchestratorLlmEngine` |
-| `Phi4RuntimeOptions` | `OrchestratorLlmOptions` |
-| `Phi4RuntimeStatus` | `OrchestratorLlmStatus` |
-| `Phi4ServiceAdapter` | `OrchestratorLlmServiceAdapter` |
+- 호출자는 엔진 세부를 모른다.
+- runtime manager가 엔진 차이를 흡수한다.
+- 설정은 모델/포트/엔진을 바꾸더라도 제품 경계는 유지된다.
 
-### Provider ID
+## Provider Registry와의 관계
 
-`"phi4_local"` → `"orchestrator_llm"` (ProviderId 참조 전체)
+ProviderRegistry는 `orchestrator_llm`을 하나의 provider id로 취급한다. 하지만 이 provider는 일반 외부 API provider와 성격이 다르다. 현재 프로젝트에서 이것은 다음 두 역할을 겸한다.
 
-### Config 키
+- orchestrator 전용 로컬 reasoning provider
+- 일부 경로의 로컬 fallback provider
 
-`app_config.phi4` → `app_config.orchestratorLlm`
+따라서 이 계층은 단순 integration entry가 아니라, 시스템 내부에 상주할 수 있는 로컬 추론 기반축이다.
 
-### i18n
+## 비목표
 
-`cfg.section.phi4` / `cfg.phi4.*` → `cfg.section.orchestratorLlm` / `cfg.orchestratorLlm.*`
+이 문서는 다음 내용을 정의하지 않는다.
 
----
+- 특정 모델 추천 목록
+- 엔진별 배포 절차
+- role/prompt 정책 계층
+- hosted observability나 외부 model registry 통합
 
-## 모델 관리 API
-
-`OrchestratorLlmRuntime`의 public 메서드로 노출, Ollama HTTP API 기반:
-
-| 메서드 | Ollama API | 설명 |
-|--------|-----------|------|
-| `list_models()` | `GET /api/tags` | 로컬 설치된 전체 모델 |
-| `pull_model(name)` | `POST /api/pull` | 모델 다운로드 (스트리밍 진행률) |
-| `delete_model(name)` | `DELETE /api/delete` | 디스크에서 모델 제거 |
-| `list_running()` | `GET /api/ps` | 현재 VRAM에 로드된 모델 |
-| `switch_model(name)` | config + warmup | 활성 분류기 모델 변경 |
-
-### 대시보드 API 라우트
-
-`models`를 최상위 리소스로 정규화. 런타임 상태는 models의 하위 리소스.
-
-```
-GET    /api/models                  → ModelInfo[]          설치된 전체 모델
-POST   /api/models                  → PullProgress         모델 다운로드 (body: { name })
-DELETE /api/models                  → { ok: boolean }      모델 삭제 (body: { name })
-GET    /api/models/active           → RunningModelInfo[]   VRAM 로드 모델
-GET    /api/models/runtime          → OrchestratorLlmStatus 런타임 상태
-PATCH  /api/models/runtime          → OrchestratorLlmStatus 활성 모델 변경 (body: { name })
-```
-
----
-
-## 대시보드 UI
-
-기존 "Phi-4 Runtime" 설정 섹션이 "오케스트레이터 LLM"으로 변경:
-
-- **상태 카드**: running/stopped, 엔진 유형, GPU %, 활성 모델
-- **모델 선택기**: `list_models()`로 채워진 드롭다운, 현재 모델 하이라이트
-- **모델 액션**: Pull (텍스트 입력 + 버튼), Delete (모델별 버튼 + 확인)
-- **실행 중 모델**: VRAM 사용량 테이블
-
----
-
-## 마이그레이션
-
-자동 설정 마이그레이션 불필요. 기존 SQLite config store의 `phi4` 키를 가진 사용자는 새 `orchestratorLlm` 키의 기본값을 받게 됨. 기존 phi4 키는 고아 상태(무해).
-
----
-
-## 영향 파일
-
-### 파일 리네이밍 (4)
-`phi4.provider.ts`, `phi4.runtime.ts`, `phi4-service.adapter.ts`, `phi4-health.ts`
-
-### 소스 수정 (~19)
-`providers/types.ts`, `providers/service.ts`, `providers/executor.ts`, `providers/index.ts`, `config/schema.ts`, `config/config-meta.ts`, `main.ts`, `orchestration/classifier.ts`, `orchestration/service.ts`, `orchestration/types.ts`, `orchestration/gateway.ts`, `orchestration/tool-selector.ts`, `channels/output-sanitizer.ts`, `agent/subagents.ts`, `agent/backends/openai-compatible.agent.ts`, `dashboard/ops-factory.ts`
-
-### 웹 (~3)
-`web/src/i18n/en.ts`, `web/src/i18n/ko.ts`, `web/src/pages/setup.tsx`
-
-### 테스트 (~10)
-`config-defaults.test.ts`, `e2e/runner.ts`, `e2e/harness.ts`, `feedback-analyzer.test.ts`, `executor-provider.test.ts`, `health-scorer.test.ts`, `status-handler.test.ts`, `classifier-golden.test.ts`, `persona-spawn-injection.test.ts`, `channel-pipeline-integration.test.ts`
-
----
-
-## 검증
-
-1. `npx tsc --noEmit` — 타입 에러 0
-2. `npx vitest run` — 기존 테스트 전체 통과
-3. `grep -r "phi4\|Phi4\|phi-4" src/ --include="*.ts"` — 잔여 참조 0건
-4. 대시보드에서 "오케스트레이터 LLM" 섹션 + 모델 목록 표시 확인
-
----
+그 내용은 구현 코드 또는 `docs/*/design/improved`에서 다룬다.
 
 ## 관련 문서
 
-→ [Phase Loop](./phase-loop.md) — Phase Loop는 분류기 업그레이드 필요; 이 설계가 모델 교체를 가능하게 함
-→ [PTY 에이전트 백엔드](./pty-agent-backend.md) — PTY 에이전트는 오케스트레이터가 스폰; 분류기가 실행 모드 결정
+- [Execute Dispatcher 설계](./execute-dispatcher.md)
+- [Role / Protocol Architecture 설계](./role-protocol-architecture.md)

@@ -1,106 +1,97 @@
-# Design: Container Code Runner — Multi-Language Container Sandbox Execution
+# Container Code Runner Design
 
-> **Status**: Implementation complete
+## Purpose
 
-## Overview
+`container code runner` is the design that allows the code node to execute non-JavaScript and non-shell languages inside a constrained container runtime.
+Its purpose is to support multi-language workflow execution while keeping resource limits, filesystem boundaries, and network policy explicit.
 
-Extends the Code node from JavaScript/Shell-only to **7 languages** (Python, Ruby, Bash, Go, Rust, Deno, Bun).
-Runs in podman/docker containers in one-shot or persistent sandbox mode.
+The current project uses this design to satisfy the following needs:
 
-## Problem
+- run Python, Go, Rust, and similar languages from workflows
+- avoid hard-coupling those runtimes to the local host environment
+- keep code execution inside a constrained and mostly read-only sandbox
+- preserve one code node abstraction while offering multiple execution paths
 
-The existing Code node only supported `vm` module (JavaScript) and `child_process` (Shell).
-Python data processing, Go performance logic, etc. could not run directly in workflows.
-Container PTY infrastructure already exists, enabling language-agnostic sandboxed execution.
+## Current execution model
 
-## Architecture
+The current code node has three execution paths:
 
-### 3 Execution Paths
+- JavaScript
+  - in-process `vm` sandbox
+- shell
+  - local shell runtime
+- container language
+  - podman/docker-backed container code runner
 
-```
-Code Node (code.ts)
-├── language: "javascript"  → vm sandbox (existing)
-├── language: "shell"       → child_process (existing)
-└── language: python|ruby|bash|go|rust|deno|bun
-    → container-code-runner.ts
-    → podman/docker run --rm (one-shot)
-    → or named container + exec (persistent)
-```
+So container code runner is not a separate workflow node type.
+It is the third execution path of the `code` node.
+That lets workflow authors keep one node abstraction while changing language and isolation level.
 
-### Security Constraints
+## Runtime mapping
 
-| Constraint | Value |
-|-----------|-------|
-| Network | `--network=none` (default, opt-in to allow) |
-| Filesystem | `--read-only` + `/tmp` tmpfs (64MB) |
-| Memory | `--memory=256m` |
-| CPU | `--cpus=1` |
-| Workspace | `-v workspace:/workspace:ro` (read-only) |
-| Code mount | `-v tmpdir:/code:ro` |
+Container code runner does not treat a language name as a raw shell command.
+It maps each supported language to:
 
-### Runtime Mapping
+- a default image
+- a temporary file extension
+- an in-container execution command
 
-| Language | Image | Extension | Command |
-|----------|-------|-----------|---------|
-| python | `python:3.12-slim` | `.py` | `python3 script.py` |
-| ruby | `ruby:3.3-slim` | `.rb` | `ruby script.rb` |
-| bash | `bash:5` | `.sh` | `bash script.sh` |
-| go | `golang:1.22-alpine` | `.go` | `go run script.go` |
-| rust | `rust:1.77-slim` | `.rs` | `rustc script.rs -o /tmp/out && /tmp/out` |
-| deno | `denoland/deno:2.0` | `.ts` | `deno run --allow-all script.ts` |
-| bun | `oven/bun:1` | `.ts` | `bun run script.ts` |
+This means language support is managed as code-level runtime policy rather than as prompt convention or free-form command text.
 
-### Execution Modes
+## Isolation boundary
 
-**One-shot** (`keep_container: false`, default):
-```
-podman run --rm --network=none --memory=256m ... python:3.12-slim python3 /code/script.py
-```
+The current design uses the following default boundaries:
 
-**Persistent** (`keep_container: true`):
-```
-podman run -d --name code-xxx ... python:3.12-slim sleep 3600
-podman exec code-xxx python3 /code/script.py
-```
-Reuses the same container to save image pull + initialization cost.
+- read-only mounted code directory
+- read-only mounted workspace
+- limited memory and CPU
+- `tmpfs` for temporary writable space
+- `--network=none` by default
 
-### Container Engine Detection
+The important point is that the container is not just a convenience layer.
+It is part of the sandbox policy for multi-language code execution.
+Network access and container persistence are explicit opt-in options on the code node.
 
-Auto-detects podman → docker in order, caches result. Errors if neither available.
+## One-shot and persistent modes
 
-## Type Extensions
+The current design supports two execution modes:
 
-```typescript
-// workflow-node.types.ts
-type CodeLanguage =
-  | "javascript" | "shell"
-  | "python" | "ruby" | "bash" | "go" | "rust" | "deno" | "bun";
+- one-shot
+  - `run --rm` style execution
+- persistent
+  - named container reuse followed by `exec`
 
-interface CodeNodeDefinition extends NodeBase {
-  node_type: "code";
-  language: CodeLanguage;
-  code: string;
-  timeout_ms?: number;
-  container_image?: string;   // Image override
-  network_access?: boolean;   // Allow network
-  keep_container?: boolean;   // Keep container alive
-}
-```
+One-shot is the default path because it favors isolation and simplicity.
+Persistent mode exists as a performance optimization for repeated execution under the same runtime.
 
-## File Structure
+So `keep_container` is not the baseline contract.
+It is an explicit optimization mode.
 
-```
-src/agent/
-  workflow-node.types.ts       # CodeLanguage extension, CodeNodeDefinition
-  nodes/
-    code.ts                    # 3 execution path dispatch (JS/Shell/Container)
-    container-code-runner.ts   # Container execution engine
+## Engine selection
 
-web/src/pages/workflows/
-  nodes/code.tsx               # 9 language options + container settings UI
-```
+The current system supports both podman and docker, but treats them through one “available container engine” contract.
+Engine detection happens ahead of execution and can be cached, while the code node simply consumes the selected engine result.
 
-## Related Documents
+This keeps workflow definitions from being tightly coupled to one engine’s CLI syntax.
 
-→ [Node Registry](./node-registry.md) — 27-node registration architecture
-→ [PTY Agent Backend](./pty-agent-backend.md) — Container infrastructure
+## Meaning in the current project
+
+This project is both a local-first orchestrator and a multi-language workflow system.
+Container code runner is the design used to add safe language execution without exploding the number of workflow node types.
+
+In the current architecture this means:
+
+- multi-language execution stays inside the `code` node abstraction
+- local shell execution and container sandbox execution remain distinct paths
+- resource limits and network policy are explicit node options
+- execution results are normalized into the shared output contract
+
+## Non-goals
+
+- forcing all code execution through containers
+- becoming a full long-lived development environment by itself
+- moving general container orchestration into the workflow code node
+- making docker/podman CLI syntax the source of truth for workflow design
+
+This document describes the currently adopted container code runner design concept.
+Rollout details and future work belong under `docs/*/design/improved/*`.

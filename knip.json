@@ -1,0 +1,38 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "entry": [
+    "src/bootstrap-templates.ts",
+    "src/chunker/main.ts",
+    "src/chunker/worker.ts",
+    "src/*/index.ts",
+    "src/*/**/index.ts",
+    "scripts/**/*.{ts,mjs,cjs,js}",
+    ".claude/hooks/**/*.mjs",
+    "vitest.e2e.config.ts",
+    "tests/helpers/**/*.ts"
+  ],
+  "project": [
+    "src/**/*.ts",
+    "scripts/**/*.{ts,mjs,cjs,js}",
+    "tests/**/*.ts"
+  ],
+  "ignore": [
+    "tests/e2e/**"
+  ],
+  "ignoreDependencies": [],
+  "ignoreExportsUsedInFile": true,
+  "rules": {
+    "files": "warn",
+    "exports": "error",
+    "types": "error",
+    "nsTypes": "error",
+    "enumMembers": "error",
+    "classMembers": "error",
+    "duplicates": "error",
+    "dependencies": "warn",
+    "devDependencies": "warn",
+    "optionalPeerDependencies": "off",
+    "unlisted": "off",
+    "unresolved": "off"
+  }
+}

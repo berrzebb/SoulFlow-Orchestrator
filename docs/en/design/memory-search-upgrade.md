@@ -1,208 +1,165 @@
-# Memory Search Upgrade: Chunking + Scored Hybrid + Temporal Decay
+# Memory Search Design
 
-> **Status**: `implemented` | **Dependencies**: sqlite-vec, FTS5, embed service
-> **Reference**: OpenClaw memory system, memsearch (zilliztech)
+## Purpose
 
-## Problem
+`memory search` is the retrieval layer used to find prior daily records and long-term memory inside the project.
+Its goal is not just to store memory, but to make **short-lived daily notes and durable long-term documents searchable in one system while preserving both semantic relevance and recency**.
 
-Three bottlenecks in current memory search:
+The core intent is:
 
-1. **Document-level embeddings** — As longterm memory grows, vectors average out and search precision degrades
-2. **Naive union merge** — FTS5 + vector results merged without scores, yielding poor ranking quality
-3. **No time awareness** — A 3-week-old record and yesterday's record carry the same weight
+- search memory at chunk granularity rather than whole-document granularity
+- combine lexical and semantic retrieval while keeping lexical search as the baseline
+- surface recent daily context more aggressively than stale history
+- preserve durable memory before conversation compaction removes high-context turns
 
-## Solution: 4-Phase Improvement
+## Memory Model
 
-### Phase 1: Heading-Based Chunking
+The project uses two main memory classes:
 
-Split documents by heading to ensure each chunk represents a single topic.
+- `daily`
+  - day-oriented running notes and session-level history
+- `longterm`
+  - durable, structured, or evergreen memory
 
-```
-## User Preferences
-prefers dark mode, Korean responses...
+These two classes share one retrieval system, but they are not treated identically.
 
-## Project Structure
-src/agent/ — agent runtime...
-```
+- `daily` is recency-sensitive
+- `longterm` is relatively evergreen
 
-The above longterm document splits into 2 chunks:
-- chunk[0]: "User Preferences\nprefers dark mode, Korean responses..."
-- chunk[1]: "Project Structure\nsrc/agent/ — agent runtime..."
+## Separation of Storage and Retrieval
 
-#### Chunking Algorithm
+The source of truth is the document-level store.
+Retrieval runs on derived search indexes built on top of it.
 
-```
-1. Split by markdown headings (# through ######)
-2. Re-split sections exceeding MAX_CHUNK_SIZE (1500 chars) at paragraph (\n\n) boundaries
-3. Overlap: 2 lines (context continuity)
-4. Assign SHA-256 hash per chunk: hash(source:startLine:endLine:contentHash)
-5. Skip re-embedding for hash-unchanged chunks
-```
-
-#### Schema Change
-
-```sql
--- Existing memory_documents retained as source of truth
--- New table: chunk index
-CREATE TABLE memory_chunks (
-  chunk_id    TEXT PRIMARY KEY,   -- SHA-256 composite hash
-  doc_key     TEXT NOT NULL,      -- memory_documents.doc_key FK
-  heading     TEXT NOT NULL DEFAULT '',
-  start_line  INTEGER NOT NULL,
-  end_line    INTEGER NOT NULL,
-  content     TEXT NOT NULL,
-  content_hash TEXT NOT NULL
-);
-
--- FTS5 rebuilt at chunk level
-CREATE VIRTUAL TABLE memory_chunks_fts USING fts5(
-  content,
-  content='memory_chunks',
-  content_rowid='rowid',
-  tokenize='unicode61 remove_diacritics 2'
-);
-
--- vec0 at chunk level
-CREATE VIRTUAL TABLE memory_chunks_vec USING vec0(
-  embedding float[256]
-);
+```text
+memory document
+  -> chunking
+  -> lexical index
+  -> optional vector index
+  -> ranked retrieval
 ```
 
-### Phase 2: Scored Hybrid Fusion (RRF)
+This separation exists so that:
 
-Merge FTS5 BM25 + vector KNN results using **Reciprocal Rank Fusion**.
+- the storage format is not forced to equal the retrieval format
+- chunk indexes remain rebuildable
+- lexical retrieval still works even when embeddings are unavailable
 
-```
-RRF_score(chunk) = sum_over_rankers( 1 / (k + rank_i) )
-```
+## Chunk-Based Retrieval
 
-- `k = 60` (memsearch default; prevents over-influence of low ranks)
-- Each ranker (FTS5, vector) retrieves `top_k × 3` candidates
-- Sum RRF scores from both rankers for final ranking
+Memory retrieval operates on chunks rather than full documents.
 
-#### Why RRF over Weighted Fusion
+Chunking exists to:
 
-| Method | Pros | Cons |
-|--------|------|------|
-| Weighted (0.7v + 0.3t) | Intuitive | BM25 and vector scores have different scales; normalization needed |
-| **RRF** | Scale-independent (rank-based), no tuning needed | Only 1 param (k) |
+- avoid averaging multiple topics into one embedding
+- return the relevant section instead of an entire document
+- support file/line/snippet style evidence in downstream systems
 
-RRF merges by rank alone — no score normalization needed, making it simple and stable.
+A chunk normally carries:
 
-#### Pseudocode
+- source document key
+- heading
+- line range
+- chunk content
+- content hash
+- creation or source timestamp
 
-```typescript
-function rrf_merge(
-  fts_results: { id: string; rank: number }[],
-  vec_results: { id: string; rank: number }[],
-  k = 60,
-): { id: string; score: number }[] {
-  const scores = new Map<string, number>();
+So the real retrieval unit is the `memory chunk`, not the raw memory document.
 
-  for (const r of fts_results) {
-    scores.set(r.id, (scores.get(r.id) || 0) + 1 / (k + r.rank));
-  }
-  for (const r of vec_results) {
-    scores.set(r.id, (scores.get(r.id) || 0) + 1 / (k + r.rank));
-  }
+## Hybrid Retrieval
 
-  return [...scores.entries()]
-    .map(([id, score]) => ({ id, score }))
-    .sort((a, b) => b.score - a.score);
-}
-```
+Memory search combines lexical and semantic retrieval.
 
-### Phase 3: Temporal Decay
+The governing rules are:
 
-Apply time decay to search results, prioritizing recent memories.
+- lexical retrieval builds the baseline candidate set
+- semantic retrieval supplements when embeddings are available
+- if embeddings are missing, retrieval degrades to lexical-only
+- embedding freshness is checked through `content_hash`
 
-```
-decayed_score = rrf_score * e^(-lambda * age_days)
-lambda = ln(2) / half_life_days
-```
+This makes memory search a domain-specific application of the broader `hybrid-vector-search` design.
 
-| Parameter | Value | Rationale |
-|-----------|-------|-----------|
-| half_life | 14 days | Daily records decay 50% after 2 weeks |
-| longterm exempt | true | Long-term memory has no decay (evergreen) |
+## Rank Fusion
 
-Decay curve:
-- Today: 100%
-- 7 days: ~71%
-- 14 days: 50%
-- 30 days: ~23%
-- 60 days: ~5%
+Memory search should not simply union lexical and semantic hits.
+It needs a stable merged ranking.
 
-### Phase 4: Compaction Flush
+The top-level design uses this model:
 
-Automatically insert a memory-save turn before context compression.
+- lexical and semantic results are treated as ranked lists
+- the final result is produced through reciprocal-rank style fusion
+- rank stability is preferred over brittle score normalization
 
-#### Trigger Condition
+This avoids forcing BM25 scores and vector distances into one artificial scale.
 
-When token usage in the agent loop reaches a threshold:
-```
-current_tokens >= context_window - reserve_floor - soft_threshold
-```
+## Temporal Decay
 
-Defaults (for 200K context):
-- `reserve_floor`: 20,000 tokens
-- `soft_threshold`: 4,000 tokens
-- Trigger: ~176,000 tokens
+Not every memory should have equal weight forever.
 
-#### Mechanism
+For `daily` memory especially, time decay is part of the retrieval design.
 
-1. Agent loop detects token threshold
-2. Insert silent memory flush turn before user message processing
-3. System: "Session nearing compaction. Store durable memories now."
-4. Agent calls `memory(action="append_daily", ...)`
-5. If response is NO_REPLY, skip; otherwise save memory then continue original conversation
-6. Max 1 flush per compaction cycle
+Why:
 
-## Implementation Plan
+- yesterday’s work log is usually more relevant than a note from months ago
+- recent context improves session continuity
+- old records should remain searchable without dominating the top of the ranking
 
-### Phase 1: Chunking (memory.service.ts)
+`longterm` memory is different.
+At the design level, daily and long-term memory may follow different recency rules.
 
-| Change | File |
-|--------|------|
-| `chunk_markdown()` function | `src/agent/memory-chunker.ts` (new) |
-| `memory_chunks` + `_fts` + `_vec` tables | `memory.service.ts` — `ensure_initialized()` |
-| Auto re-chunk on document write | `sqlite_upsert_document()`, `sqlite_append_document()` |
-| Switch `search()` target to chunks | `memory.service.ts` — `search()` |
+## Relation to Compaction Flush
 
-### Phase 2: RRF Fusion (memory.service.ts)
+Memory search is tied to the compaction path as well as the retrieval path.
 
-| Change | File |
-|--------|------|
-| `rrf_merge()` utility | `src/agent/memory-scoring.ts` (new) |
-| Apply RRF in `search()` | `memory.service.ts` |
+Before conversation state is compacted, the system should be able to:
 
-### Phase 3: Temporal Decay (memory.service.ts)
+- promote durable information into memory
+- later retrieve it through the same chunk-based search path
 
-| Change | File |
-|--------|------|
-| `temporal_decay()` | `src/agent/memory-scoring.ts` |
-| `created_at` timestamp on chunks | `memory_chunks` schema |
+So memory search is part of a closed loop:
+preserve -> index -> retrieve -> reuse.
 
-### Phase 4: Compaction Flush (loop.service.ts)
+## Result Shape
 
-| Change | File |
-|--------|------|
-| Token count threshold detection | `src/agent/loop.service.ts` |
-| Flush turn insertion logic | `src/agent/loop.service.ts` |
+Memory search results are designed to return evidence, not just strings.
 
-## Migration
+Typical fields include:
 
-- Existing `memory_documents` table preserved as source of truth
-- `memory_chunks` + `_fts` + `_vec` are derived indexes (rebuildable)
-- Lazy re-chunking + re-embedding on first search
-- Existing `memory_vec` table deprecated → replaced by `memory_chunks_vec`
-- `MemoryStoreLike` interface unchanged (internal implementation only)
+- source file or logical path
+- line or line range
+- snippet text
+- optional score metadata
 
-## Metrics
+That structure is useful not only for answer synthesis, but also for novelty gates, session reuse, and audit paths.
 
-| Before | After (expected) |
-|--------|-----------------|
-| 1 document = 1 vector | 1 document = N chunk vectors |
-| Union merge (rank ignored) | RRF score-based ranking |
-| No time awareness | 14-day half-life decay |
-| Memory loss on compaction | Auto flush for preservation |
+## Boundaries
+
+This design does not:
+
+- decide what should be stored in memory in the first place
+- define the entire session summarization policy
+- generate user-facing responses
+- make final reuse vs retry decisions for novelty gating
+
+`memory search` is the retrieval design over memory, not the full conversation-policy layer.
+
+## Meaning in This Project
+
+The project treats memory as a searchable working-memory system, not a plain append-only log.
+This document fixes the adopted design:
+
+- documents are the source of truth
+- retrieval runs at chunk level
+- retrieval is hybrid
+- recency affects ranking
+- durable flush before compaction is part of the design
+
+## Non-Goals
+
+- forcing one embedding provider as the single source of truth
+- collapsing all memory-saving behavior into one universal rule
+- recording completion or rollout status here
+- managing detailed scoring parameters or implementation sequence in this document
+
+This document describes the adopted memory-search design.
+Detailed work breakdown and rollout tasks belong in `docs/*/design/improved/*`.

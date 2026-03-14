@@ -1,8 +1,5 @@
 # 페르소나 메시지 렌더러 설계
 
-> 상태: 설계 유지 중 · 한국어 미러  
-> 기준본: `docs/PERSONA_MESSAGE_RENDERER_DESIGN.md`
-
 ## 목적
 
 이 문서는 모든 사용자-facing 발화가
@@ -138,7 +135,7 @@ Renderer는 다음 입력을 받아 최종 문장을 만든다.
 5. role heart / default heart
 6. fallback default tone
 
-## 현재 정책 메모
+## 현재 정책
 
 현재 기준으로 유지하는 제품 정책:
 
@@ -148,15 +145,16 @@ Renderer는 다음 입력을 받아 최종 문장을 만든다.
 
 이 정책은 버그가 아니라 의도된 보수 정책이다.
 
-## 완료 판정 기준
+## role / protocol 계층과의 관계
 
-다음이 충족되면 설계가 실구현에 반영된 것으로 본다.
+이 설계는 실행 baseline을 다루는 `role / protocol architecture`와 분리된다.
 
-- 사용자-facing deterministic message가 renderer를 통과한다
-- identity short-circuit가 backend 자유응답보다 우선한다
-- renderer가 tone preference와 current-turn tone override를 반영한다
-- sanitizer는 최종 leak guard 역할만 담당한다
-- roleplay/concept는 identity를 깨지 않고 surface style만 바꾼다
+- role / protocol
+  - system prompt와 실행 기준을 정한다
+- persona renderer
+  - deterministic user-facing 문장의 표현 계층을 정한다
+
+즉 같은 persona 시스템 안에 있지만, 실행자 prompt와 사용자-facing 문장을 같은 계층으로 취급하지 않는다.
 
 ## 유지보수 원칙
 
@@ -164,3 +162,6 @@ Renderer는 다음 입력을 받아 최종 문장을 만든다.
 - renderer는 표현 계층이고, 의미 결정은 classifier/gateway/orchestrator가 담당한다
 - 새 deterministic message가 생기면 renderer intent부터 추가한다
 - ad-hoc concept 지원은 safety/policy 경계를 먼저 고정한 뒤 넓힌다
+
+이 문서는 현재 채택된 설계 개념을 설명한다.
+세부 개선 작업과 분해는 `docs/*/design/improved/*`에서 관리한다.

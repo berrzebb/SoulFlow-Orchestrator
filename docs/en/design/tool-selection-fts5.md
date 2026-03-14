@@ -1,183 +1,145 @@
-# Tool Selection Optimization: SQLite FTS5
+# Design: Tool Selection Lexical Foundation
 
-> **Status**: `in-progress` | **Type**: Performance optimization
+## Overview
 
-## Problem
+The Tool Selection Lexical Foundation is the lexical retrieval layer that narrows tool candidates **before** full execution instead of exposing the entire tool surface to the model on every request. Although the filename includes `fts5`, the current architecture is not just FTS5 alone. It combines a **persistent lexical store, an in-memory lexical mirror, and optional vector supplementation**.
 
-165개 도구의 전체 스키마를 매 요청마다 전송하면 ~25,000 토큰 소비. 현재 in-memory 키워드 카운팅 인덱스로 ~80% 절감했으나, 랭킹 품질에 한계가 있음.
+## Design Intent
 
-### 현재 방식의 한계 (키워드 카운팅)
+If tool selection is treated only as a prompt-engineering problem, several issues appear:
 
-| 문제 | 예시 |
-|------|------|
-| 빈도 편향 | description에 "file"이 5번 나오는 도구가 정확히 "read_file"인 도구보다 높은 점수 |
-| 문서 길이 무시 | 짧은 description의 도구가 불리 (매칭 키워드가 적을 수밖에 없음) |
-| 역문서 빈도 부재 | "execute"같은 흔한 단어와 "crontab"같은 희귀 단어가 동일 가중치 |
-| 비영속 | 프로세스 재시작 시 매번 인메모리 인덱스 재구축 |
+- every request tends to carry the full tool schema set
+- token cost and execution budget grow quickly
+- mixed Korean/English requests perform poorly on direct tool-name matching
+- different execution modes end up seeing the same undifferentiated tool surface
 
-## Solution: SQLite FTS5 + BM25
+For that reason, the current project treats tool selection not as “let the model choose from everything,” but as an **execution-time candidate-narrowing problem**.
 
-### Architecture
+## Core Principles
 
-```
-                    ┌─────────────┐
-                    │ ToolRegistry│
-                    │  (165 tools)│
-                    └──────┬──────┘
-                           │ build()
-                    ┌──────▼──────┐
-                    │  ToolIndex  │
-                    │ (singleton) │
-                    └──────┬──────┘
-                           │
-                    ┌──────▼──────┐
-                    │  SQLite DB  │
-                    │  FTS5 + WAL │
-                    └──────┬──────┘
-                           │
-              ┌────────────┼────────────┐
-              │            │            │
-         ┌────▼───┐  ┌────▼───┐  ┌────▼───┐
-         │ tools  │  │fts_cont│  │tools_fts│
-         │(master)│  │(content)│  │ (FTS5) │
-         └────────┘  └────────┘  └─────────┘
-```
+### 1. Tool selection is a retrieval layer
 
-### DB Schema
+The first job of tool selection is not to make the final execution decision. It is to shrink the candidate set that the model and runtime need to reason about.
 
-```sql
--- 마스터 테이블: 메타데이터
-CREATE TABLE tools (
-  name     TEXT PRIMARY KEY,
-  category TEXT NOT NULL,
-  core     INTEGER NOT NULL DEFAULT 0,
-  desc_raw TEXT NOT NULL DEFAULT ''
-);
+### 2. Lexical search is primary; vectors are supplementary
 
--- FTS5 content backing table
-CREATE TABLE tools_fts_content (
-  rowid       INTEGER PRIMARY KEY AUTOINCREMENT,
-  name        TEXT NOT NULL,
-  description TEXT NOT NULL DEFAULT '',
-  tags        TEXT NOT NULL DEFAULT ''
-);
+Vector search does not replace the lexical foundation. The lexical path performs primary candidate generation, and vectors open only as a semantic support path.
 
--- FTS5 가상 테이블 (BM25 랭킹 자동 지원)
-CREATE VIRTUAL TABLE tools_fts USING fts5(
-  name, description, tags,
-  content='tools_fts_content',
-  content_rowid='rowid',
-  tokenize='unicode61 remove_diacritics 2'
-);
+### 3. Persistent storage and runtime mirrors are used together
+
+Searchable tool documents are persisted, but request-time selection prefers a faster in-memory lexical mirror built from that source.
+
+### 4. Query normalization must support multilingual usage
+
+Direct tool-name matching is not enough. Korean keyword expansion, identifier splitting, and stop-word removal all belong to the same lexical policy.
+
+## Adopted Structure
+
+```mermaid
+flowchart TD
+    A[Tool Schemas] --> B[ToolIndex.build]
+    B --> C[Persistent Lexical Store]
+    B --> D[In-Memory Lexical Mirror]
+
+    E[Request] --> F[Query Normalization]
+    F --> G[Selection Pipeline]
+    C --> G
+    D --> G
+    G --> H[Optional Vector Supplement]
+    H --> I[Selected Tool Candidates]
 ```
 
-### BM25 Column Weights
+## Main Components
 
-```sql
-SELECT name, bm25(tools_fts, 5.0, 2.0, 1.0) AS rank
-FROM tools_fts
-WHERE tools_fts MATCH ?
-ORDER BY rank
-```
+### ToolIndex
 
-| Column | Weight | Rationale |
-|--------|--------|-----------|
-| `name` | 5.0 | 도구 이름 직접 매칭이 가장 강력한 신호 |
-| `description` | 2.0 | 설명 내 키워드 매칭 |
-| `tags` | 1.0 | action enum, 카테고리 등 보조 태그 |
+ToolIndex is the center of the current tool-selection layer. It reads tool metadata, maintains the lexical backing store, and prepares the runtime mirror used for fast selection.
 
-### Query Pipeline
+### Persistent Lexical Store
 
-```
-사용자 요청 (한/영 혼합)
-    │
-    ▼
-[1] 한국어 키워드 확장 (KO_KEYWORD_MAP)
-    "파일 검색" → + "file filesystem read_file write_file search web_search grep find"
-    │
-    ▼
-[2] 영어 토큰화 + 불용어 제거
-    │
-    ▼
-[3] FTS5 MATCH 쿼리 생성
-    "file" OR "filesystem" OR "read_file" OR "search" OR "grep" OR "find"
-    │
-    ▼
-[4] BM25 랭킹 (SQLite 내부)
-    │
-    ▼
-[5] Core 도구 (13개) + BM25 상위 N개 + 카테고리 폴백
-    │
-    ▼
-  Selected tools (20~35개)
-```
+The persistent store holds the source search documents for tools. That includes names, descriptions, categories, action-derived tags, and content hashes.
 
-### Selection Rules
+Its purposes are:
 
-1. **Core 도구** (13개) — 항상 포함: message, ask_user, request_file, send_file, read_file, write_file, edit_file, list_dir, search_files, exec, memory, datetime, chain
-2. **분류기 지정 도구** — classifier가 명시적으로 요청한 도구
-3. **FTS5 BM25 상위** — 요청 텍스트 매칭, once=25개, agent/task=35개
-4. **카테고리 폴백** — 매칭 도구 < 15개이면 분류기 카테고리로 보강
+- preserve the durable tool-search corpus
+- keep lexical policy aligned with the storage layer
+- provide stable rows that can be associated with optional vector entries
 
-### Auto-Update Mechanism
+In that sense, FTS5 is the storage form of the lexical foundation, not the whole runtime selection algorithm.
 
-```
-ToolRegistry.register(tool)
-    │
-    ▼
-OrchestrationService.execute()
-    │ rebuild_tool_index(schemas, category_map, db_path)
-    ▼
-ToolIndex.build()
-    │ DELETE + INSERT (transactional)
-    ▼
-  FTS5 인덱스 자동 갱신
-```
+### In-Memory Lexical Mirror
 
-- `rebuild_tool_index()`는 매 요청 디스패치 시 호출 (변경 감지 최적화 가능)
-- 도구 추가/제거 시 다음 요청에서 자동 반영
-- WAL 모드로 읽기/쓰기 동시성 보장
+Request-time selection should not depend entirely on disk-backed search. The current structure therefore builds an in-memory lexical mirror from the stored tool corpus.
 
-## Comparison: Before vs After
+Typical contents include:
 
-| Metric | Keyword Counting | FTS5 BM25 |
-|--------|-----------------|-----------|
-| Ranking quality | 단순 매칭 횟수 | TF-IDF 기반 BM25 (문서 길이 정규화, 역문서 빈도) |
-| Partial match | 불가 | FTS5 토크나이저 지원 |
-| Storage | 인메모리 (프로세스 재시작 시 소멸) | 디스크 영속 (WAL) |
-| Build time | ~2ms (Map 순회) | ~5ms (SQLite INSERT + FTS 인덱싱) |
-| Query time | ~0.5ms (Map 룩업) | ~1ms (FTS5 MATCH + BM25) |
-| Token savings | ~80% | ~80% (동일, 선택 도구 수 동일) |
-| Dependencies | 없음 | better-sqlite3 (기존 의존성) |
+- token -> weighted tool map
+- category -> tool list
+- core tool set
 
-> 165개 도구 규모에서 성능 차이는 체감 불가. **BM25 랭킹 품질 향상**이 핵심 가치.
+Its purpose is fast candidate generation under low request-time overhead.
 
-## File Changes
+## Query Normalization
 
-| File | Change |
-|------|--------|
-| `src/orchestration/tool-index.ts` | **Rewrite**: in-memory → SQLite FTS5 |
-| `src/orchestration/tool-selector.ts` | `rebuild_tool_index()` 시그니처에 `db_path` 추가 |
-| `src/orchestration/service.ts` | `rebuild_tool_index()` 호출 시 `db_path` 전달 |
+The lexical foundation does not search raw user text unchanged. It normalizes requests to improve retrieval quality.
 
-## DB Location
+Typical policies include:
 
-```
-{workspace}/runtime/tools/tool-index.db
-```
+- English tokenization
+- stop-word removal
+- identifier decomposition
+- Korean keyword expansion
 
-프로젝트 컨벤션에 따라 `{data_dir}/` 하위에 배치. 다른 SQLite DB들과 동일한 패턴:
-- `{data_dir}/config/config.db`
-- `{data_dir}/events/events.db`
-- `{data_dir}/sessions/sessions.db`
-- `{data_dir}/cron/cron.db`
+In particular, Korean requests can be expanded into English tool tags through rules such as `KO_KEYWORD_MAP`. That is a key part of multilingual lexical candidate generation.
 
-## Future: Vector Extension
+## Selection Pipeline
 
-현재는 FTS5 BM25만 사용. 향후 sqlite-vec 확장을 추가하여 의미론적 유사도 검색을 보강할 수 있음:
+The current tool-selection order is roughly:
 
-1. Ollama 임베딩 모델로 도구 description 벡터화
-2. `vec_f32` 컬럼에 저장
-3. 쿼리 시 FTS5 BM25 + cosine similarity 하이브리드 랭킹
+1. guarantee core tools
+2. apply classifier-explicit tools
+3. run lexical search
+4. use category fallback
+5. apply optional vector supplementation
 
-이는 도구가 500개 이상으로 증가하거나, "비슷한 기능의 도구"를 구분해야 할 때 의미가 있음. 현재 165개 규모에서는 FTS5만으로 충분.
+That order is intentional:
+
+- essential tools are guaranteed first
+- classifier intent is respected early
+- lexical search provides most candidates
+- category fallback handles lexical under-recall
+- vector search supplements only when needed
+
+So vector search is not the center of the system. It is the final support layer.
+
+## Relationship to Execution Modes
+
+The current architecture does not expose the same core tool set to every execution mode. Simple responses and multi-turn execution use different tool budgets.
+
+- `once`: smaller minimal set
+- `agent`, `task`: broader core set
+
+This shows that tool selection is both a retrieval concern and part of execution-budget policy.
+
+## Relationship to Hybrid Vector Search
+
+`tool-selection-fts5` focuses on lexical foundations and candidate generation for tools. `hybrid-vector-search` is the broader retrieval concept used across memory, references, and other retrieval surfaces.
+
+So this document is not about retrieval in general. It is about **the role of lexical retrieval in tool narrowing**.
+
+## Non-goals
+
+This document does not define:
+
+- role / protocol prompt policy
+- gateway routing rules
+- tool execution logic itself
+- session reuse freshness policy
+- rollout of tokenizer improvements
+
+Those belong in implementation code or `docs/*/design/improved`.
+
+## Related Documents
+
+- [Hybrid Vector Search Design](./hybrid-vector-search.md)
+- [Provider-Neutral Output Reduction Design](./provider-neutral-output-reduction.md)

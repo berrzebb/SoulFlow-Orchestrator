@@ -1,230 +1,111 @@
-# 설계: 공유 i18n 프로토콜 — 통합 다국어 인프라
-
-> **상태**: 완료 — 5개 Phase 전체 구현 (인프라 · 자동화 · 도구/노드 통합 · 렌더링 · 정리)
+# 설계: 공유 i18n 프로토콜
 
 ## 개요
 
-파편화된 i18n 시스템(3개 분리 소스, 900+ 키 수동 동기화)을 **단일 소스 오브 트루스** JSON 기반 프로토콜로 교체. 프론트엔드와 백엔드가 공유하며, 자동화 도구가 누락/고아 키를 감지.
+공유 i18n 프로토콜은 프론트엔드와 백엔드가 **같은 번역 키와 같은 해석 규칙**을 사용하도록 만드는 다국어 계층이다. 이 설계의 목적은 번역 데이터를 여러 코드 경로에 중복 보관하지 않고, UI와 시스템 메타데이터가 하나의 locale source 위에서 동작하게 하는 데 있다.
 
-## 문제
+## 설계 의도
 
-현재 i18n은 새 기능마다 **3개 이상 파일 수정** 필요:
+현재 프로젝트는 다음 종류의 텍스트를 함께 다룬다.
 
-| 소스 | 형식 | 키 수 | 사용처 |
-|------|------|-------|--------|
-| `web/src/i18n/en.ts` | TS Record | ~450 | 프론트엔드 UI |
-| `web/src/i18n/ko.ts` | TS Record | ~450 | 프론트엔드 UI |
-| `web/src/i18n/tool-descriptions.ts` | 별도 TS | ~22 도구 × 2 언어 | 도구 페이지 |
-| 백엔드 Tool 클래스 | 하드코딩 `readonly description` | ~60 도구 | LLM 도구 스키마 |
-| 노드 descriptor | 하드코딩 `toolbar_label`, 스키마 설명 | ~76 노드 | 워크플로우 에디터 |
+- 일반 UI 문자열
+- 대시보드와 워크플로우 빌더 문구
+- 도구 및 노드 설명 메타데이터
+- 상태 라벨과 카테고리 이름
 
-**문제점:**
-1. 기능당 3파일 수정 → 높은 마찰, 누락 쉬움
-2. 누락 키 감지 없음 → 키 문자열로 사일런트 폴백
-3. 도구 설명이 FE i18n과 BE 하드코딩 사이에 중복
-4. 노드 descriptor에 i18n 없음 (영어 전용 `toolbar_label`, `description`)
-5. 새 언어 추가 시 모든 파일 수정 필요
+이 텍스트를 프론트엔드와 백엔드가 서로 다른 형식으로 따로 관리하면, 키 누락·번역 드리프트·도구 설명 중복이 쉽게 발생한다. 공유 i18n 프로토콜은 이를 막기 위한 공통 계층이다.
 
-## 아키텍처
+## 핵심 원칙
 
-### 단일 소스 오브 트루스
+### 1. 번역 데이터는 공통 locale dictionary에 둔다
 
-```
-src/i18n/
-├── protocol.ts              ← 공유 타입 + create_t() (FE & BE)
-├── index.ts                 ← 백엔드 진입점 (JSON 로드, t 내보내기)
-└── locales/
-    ├── en.json              ← 전체 영어 번역 (플랫 키)
-    └── ko.json              ← 전체 한국어 번역
-    └── {locale}.json        ← 향후: ja.json, zh.json, ...
+번역 원문은 계층별 하드코딩 문자열이 아니라 공통 locale dictionary에서 관리한다. 프론트엔드와 백엔드는 같은 키 집합을 읽는다.
 
-web/src/i18n/
-├── index.tsx                ← React 프로바이더 (공유 JSON + 프로토콜 import)
-└── (en.ts, ko.ts, tool-descriptions.ts → 마이그레이션 후 삭제)
-```
+### 2. 해석 규칙도 공유한다
 
-### 키 네임스페이스 규칙
+단순히 JSON 파일만 공유하는 것이 아니라, 키 조회와 변수 치환 규칙까지 같은 프로토콜을 사용한다.
 
-| 접두사 | 도메인 | 예시 |
-|--------|--------|------|
-| `common.*` | 공통 UI 문자열 | `common.save`, `common.cancel` |
-| `nav.*` | 내비게이션 | `nav.overview`, `nav.chat` |
-| `workflows.*` | 워크플로우 빌더 UI | `workflows.llm_backend`, `workflows.add_node` |
-| `tool.{이름}.desc` | 도구 설명 | `tool.exec.desc` |
-| `tool.{이름}.param.{매개변수}` | 도구 매개변수 설명 | `tool.exec.param.command` |
-| `node.{타입}.label` | 노드 툴바 라벨 | `node.git.label` |
-| `node.{타입}.desc` | 노드 설명 | `node.git.desc` |
-| `node.{타입}.input.{필드}` | 노드 입력 필드 설명 | `node.git.input.operation` |
-| `node.{타입}.output.{필드}` | 노드 출력 필드 설명 | `node.git.output.stdout` |
-| `cat.{id}` | 노드 카테고리 라벨 | `cat.flow`, `cat.ai` |
+### 3. 메타데이터도 i18n 대상이다
 
-### 공유 프로토콜 (`src/i18n/protocol.ts`)
+버튼 텍스트만 다국어 대상이 아니다. 도구 설명, 노드 라벨, 카테고리 이름 같은 메타데이터도 번역 가능한 키로 다룬다.
 
-```typescript
-export type Locale = "en" | "ko";
-export type TranslationDict = Record<string, string>;
-export type TFunction = (key: string, vars?: Record<string, string | number>) => string;
+### 4. locale 데이터와 런타임 정책을 분리한다
 
-export function create_t(dict: TranslationDict, fallback?: TranslationDict): TFunction;
-export function parse_locale(value: unknown): Locale;
+번역 데이터는 locale file에 있고, 현재 locale 선택과 `t()` 함수 노출은 각 런타임 계층이 맡는다.
+
+## 현재 채택한 구조
+
+```mermaid
+flowchart LR
+    A[src/i18n/locales/*.json] --> B[src/i18n/protocol.ts]
+    B --> C[Backend i18n entry]
+    B --> D[Frontend i18n provider]
+
+    C --> E[Tools / Services / Routes]
+    D --> F[React UI / Builder / Dashboard]
 ```
 
-### 백엔드 사용 (`src/i18n/index.ts`)
+## 주요 구성 요소
 
-```typescript
-import en from "./locales/en.json" with { type: "json" };
-import ko from "./locales/ko.json" with { type: "json" };
+### Locale Dictionaries
 
-const DICTS: Record<Locale, TranslationDict> = { en, ko };
+locale dictionary는 실제 번역 문자열의 저장소다. 현재 구조는 언어별 JSON 사전을 기준점으로 사용한다.
 
-export function set_locale(locale: Locale): void;
-export function get_t(locale?: Locale): TFunction;
-export function t(key: string, vars?): string;  // current_locale 사용
-```
+### Shared Protocol
 
-### 프론트엔드 사용 (`web/src/i18n/index.tsx`)
+공유 프로토콜은 번역 키 조회, fallback, 변수 치환 같은 공통 동작을 정의한다. 프론트엔드와 백엔드는 서로 다른 구현을 두는 대신 같은 프로토콜을 재사용한다.
 
-```typescript
-import en from "../../src/i18n/locales/en.json";
-import ko from "../../src/i18n/locales/ko.json";
-import { create_t, type Locale } from "../../src/i18n/protocol";
+### Backend Entry
 
-// React 컨텍스트가 로케일 전환 + t() 함수 제공
-// 공유 프로토콜의 동일한 create_t() 사용
-```
+백엔드 진입점은 현재 locale에 맞는 translator를 제공한다. 이 계층은 도구 설명, 서버 응답 메타데이터, 워크플로우 관련 텍스트를 해석하는 데 사용된다.
 
-### 노드 Descriptor i18n 통합
+### Frontend Provider
 
-```typescript
-// 변경 전: 하드코딩 영어
-export const git_descriptor = {
-  toolbar_label: "+ Git",
-  output_schema: [
-    { name: "stdout", type: "string", description: "Command stdout" },
-  ],
-};
+프론트엔드 provider는 React 계층에 locale 상태와 translator를 제공한다. UI는 이 provider를 통해 문자열을 가져오며, 공통 locale dictionary를 그대로 사용한다.
 
-// 변경 후: i18n 키 참조 (렌더링 시 t()로 해석)
-export const git_descriptor = {
-  toolbar_label: "node.git.label",  // i18n 키
-  output_schema: [
-    { name: "stdout", type: "string", description: "node.git.output.stdout" },
-  ],
-};
-```
+## 키 설계
 
-## 자동화 도구 (`scripts/i18n-sync.ts`)
+현재 구조는 의미 단위의 네임스페이스 키를 사용한다. 핵심은 번역 키가 특정 화면 구현보다 **도메인 의미**를 기준으로 나뉘어야 한다는 점이다.
 
-### 기능
+대표적인 범주는 다음과 같다.
 
-1. **스캔** — FE/BE 소스에서 모든 `t("key")` 호출 추출
-2. **도구 스캔** — `src/agent/tools/*.ts`에서 도구명 추출
-3. **노드 스캔** — `web/src/pages/workflows/nodes/*.tsx`에서 노드 타입 추출
-4. **비교** — 스캔된 키 vs `en.json` / `ko.json` 대조
-5. **보고** — 누락 키, 고아 키, 미번역 ko 키 출력
-6. **생성** — 누락 키에 스텁 자동 생성 (EN값 = 키, KO = EN 복사)
+- 공통 UI
+- 내비게이션
+- 워크플로우 빌더
+- 도구 메타데이터
+- 노드 메타데이터
+- 카테고리 및 상태 라벨
 
-### 사용법
+즉 키는 “이 컴포넌트 안의 문자열”이 아니라 “이 개념을 어떤 언어로 표시할 것인가”를 표현한다.
 
-```bash
-# 보고 모드 (기본): 누락/고아 키 표시
-npx tsx scripts/i18n-sync.ts
+## 도구 및 노드와의 관계
 
-# 생성 모드: 누락 키에 스텁 추가
-npx tsx scripts/i18n-sync.ts --fix
+공유 i18n 프로토콜은 UI에만 머물지 않는다. 도구 정의와 노드 descriptor도 번역 키를 사용할 수 있어야 한다.
 
-# 검사 모드 (CI): 누락 키 있으면 exit 1
-npx tsx scripts/i18n-sync.ts --check
-```
+이 구조의 장점은 다음과 같다.
 
-### 출력 예시
+- 도구 설명이 UI와 서버에서 따로 드리프트하지 않는다.
+- 노드 라벨과 스키마 설명을 빌더와 문서에서 같은 기준으로 다룰 수 있다.
+- 새 언어 추가 시 descriptor 코드를 대규모로 다시 쓰지 않아도 된다.
 
-```
-[i18n-sync] 소스 스캔 중...
-  t() 호출 588건 (80개 파일)
-  백엔드 도구 60개
-  프론트엔드 노드 76개
+## 자동 검증의 위치
 
-[i18n-sync] en.json 검사...
-  ✓ 정의된 키 1,200개
-  ✗ 누락 키 15개:
-    - node.docker.label
-    - node.docker.desc
-    - tool.web_auth.desc
-    ...
-  ⚠ 고아 키 3개 (정의됐지만 미사용):
-    - workflows.old_feature
-    ...
+i18n의 단일 source of truth를 유지하려면, 누락 키·고아 키·미번역 항목을 검사하는 자동화가 필요하다. 이 자동화는 프로토콜의 일부라기보다 **프로토콜을 지키는 운영 수단**이다.
 
-[i18n-sync] ko.json 검사...
-  ✗ 미번역 키 42개 (en에 있지만 ko에 없음)
-```
+즉 상위 설계에서 중요한 점은 “자동 검사 스크립트가 있다”보다 “공유 키 집합이 검증 가능한 구조여야 한다”이다.
 
-## 마이그레이션 계획
+## 비목표
 
-### Phase 1: 인프라 (현재)
-- [x] `src/i18n/protocol.ts` — 공유 타입 + `create_t()`
-- [ ] `scripts/i18n-migrate.ts` — 기존 TS → JSON 변환
-- [ ] `src/i18n/locales/en.json`, `ko.json` — 마이그레이션으로 생성
-- [ ] `src/i18n/index.ts` — 백엔드 진입점
-- [ ] `web/src/i18n/index.tsx` — 공유 JSON 사용하도록 리팩터
+이 문서는 다음 내용을 정의하지 않는다.
 
-### Phase 2: 자동화
-- [ ] `scripts/i18n-sync.ts` — 스캔 + 비교 + 보고 + 생성
+- 특정 locale 파일의 전체 키 목록
+- 마이그레이션 단계
+- 자동 생성 스크립트의 상세 CLI 사용법
+- 완료 상태나 phase 진행률
 
-### Phase 3: 도구 통합
-- [ ] 백엔드 도구: `description` → i18n 키 참조
-- [ ] `web/src/i18n/tool-descriptions.ts` 삭제
+그 내용은 구현 코드 또는 `docs/*/design/improved`에서 관리한다.
 
-### Phase 4: 노드 통합
-- [ ] 노드 descriptor: `toolbar_label` + 스키마 설명 → i18n 키
-- [ ] 노드 카테고리 라벨 → i18n 키
-- [ ] `i18n-sync.ts --fix`로 누락 노드/도구 스텁 생성
+## 관련 문서
 
-### Phase 5: 정리
-- [ ] `web/src/i18n/en.ts`, `web/src/i18n/ko.ts` 삭제
-- [ ] `tsc --noEmit` 검증
-
-## 영향 파일
-
-| 파일 | 변경 |
-|------|------|
-| `src/i18n/protocol.ts` | **신규** — 공유 타입 |
-| `src/i18n/index.ts` | **신규** — 백엔드 진입점 |
-| `src/i18n/locales/en.json` | **신규** — 영어 번역 |
-| `src/i18n/locales/ko.json` | **신규** — 한국어 번역 |
-| `web/src/i18n/index.tsx` | **수정** — 공유 JSON 사용 |
-| `web/src/i18n/en.ts` | **삭제** (Phase 5) |
-| `web/src/i18n/ko.ts` | **삭제** (Phase 5) |
-| `web/src/i18n/tool-descriptions.ts` | **삭제** (Phase 3) |
-| `scripts/i18n-migrate.ts` | **신규** — 일회성 마이그레이션 |
-| `scripts/i18n-sync.ts` | **신규** — 지속적 자동화 |
-| `src/agent/tools/base.ts` | **수정** — i18n 인식 description |
-| `web/src/pages/workflows/node-registry.ts` | **수정** — i18n 키 지원 |
-| 76× `web/src/pages/workflows/nodes/*.tsx` | **수정** — descriptor에 i18n 키 |
-| 60× `src/agent/tools/*.ts` | **수정** — i18n 키 description |
-
-## 설계 결정
-
-### 왜 플랫 JSON인가? (중첩 아님)
-- 현재 시스템이 이미 플랫 도트 표기 키 사용 (`"workflows.llm_backend"`)
-- 플랫 키가 검색 간편 (`grep "tool.exec.desc"`)
-- 객체 병합 시 키 충돌 위험 없음
-- 기존 `t()` 함수 시그니처와 직접 호환
-
-### 왜 파일별 colocated i18n이 아닌가?
-- 검토: 각 노드/도구가 `{ en: {...}, ko: {...} }` 인라인 정의
-- 기각: 새 언어 추가 시 140+ 파일 수정 필요
-- 중앙 JSON: `ja.json` 추가 → 끝, 소스 파일 변경 없음
-
-### 왜 JSON인가? (TS 아님)
-- JSON은 언어 무관 — 향후 Python/Go 서비스에서도 소비 가능
-- 빌드 단계 불필요 — 백엔드가 직접 읽음
-- Vite가 JSON을 네이티브 임포트
-- JSON Schema로 검증 가능
-
-### 백엔드 도구 설명과 i18n
-- 도구 설명은 LLM API 호출에 포함 — 항상 영어
-- Tool 클래스의 `description` 필드는 영어 유지 (LLM 대상)
-- i18n 키 (`tool.{이름}.desc`)는 **대시보드 UI 표시용**만
-- 런타임 성능 우려 없음 — 설명은 스키마 생성 시 1회 해석
+- [Node Registry 설계](./node-registry.md)
+- [Workflow Builder Command Palette 설계](./workflow-builder-command-palette.md)

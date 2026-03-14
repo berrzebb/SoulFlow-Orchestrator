@@ -1,188 +1,122 @@
-# Design: Node Registry — OCP-Based Node Architecture
-
-> **Status**: Implementation complete · 47 node types registered + container sandbox code execution + interaction nodes
+# Design: Node Registry
 
 ## Overview
 
-Node Registry eliminates the Open-Closed Principle (OCP) violation where adding a new node type required modifying **8 files across 18+ locations**. Now: **1 descriptor file + 1 barrel registration line**.
+Node Registry is the shared registration layer for workflow nodes. Its purpose is to replace scattered switch statements and constant maps with **one explicit registration model**.
 
-## Problem
+In the current project, backend execution and frontend workflow building share the same `node_type` concept. They do not share the same descriptor object, however; each layer keeps a descriptor that matches its own responsibility.
 
-Before the refactoring, each of these locations needed manual updates per new node:
+## Design Intent
 
-| Location | File | Type |
-|----------|------|------|
-| `ORCHE_COLORS` | graph-editor.tsx | Record |
-| `ORCHE_ICONS` | graph-editor.tsx | Record |
-| `ORCHE_TYPES` | graph-editor.tsx | Set |
-| `AuxNode` switch | graph-editor.tsx | 12-case switch |
-| `addOrcheNode` defaults | graph-editor.tsx | Record |
-| Toolbar buttons | graph-editor.tsx | 12 × JSX |
-| `OrcheNodeEditModal` | builder.tsx | 12 × if-block |
-| `execute_orche_node` | orche-node-executor.ts | 12-case switch |
-| `test_orche_node` | orche-node-executor.ts | 12-case switch |
-| `NODE_OUTPUT_SCHEMAS` | workflow-node.types.ts | Record |
-| Type unions (×3) | graph-editor / phase-loop.types | literal unions |
+Node Registry exists to solve a specific class of problems.
 
-## Architecture
+- Minimize the number of places that must change when a new node type is added.
+- Let the executor and the builder represent the same node meaning in different ways.
+- Make UI and execution metadata queryable instead of hard-coded across multiple branches.
+- Treat node definitions as contracts and descriptors, not just string literals.
 
-### Core Concept: Descriptor + Handler
+## Core Principles
 
-```
-┌──────────────────────────────────────────────────┐
-│  Backend: NodeHandler                             │
-│  node_type, icon, color, shape,                   │
-│  output_schema, input_schema, create_default(),   │
-│  execute(), test()                                │
-├──────────────────────────────────────────────────┤
-│  Frontend: FrontendNodeDescriptor                 │
-│  node_type, icon, color, shape,                   │
-│  toolbar_label, output_schema, input_schema,      │
-│  create_default(), EditPanel component            │
-└──────────────────────────────────────────────────┘
-```
+### 1. Backend and frontend share the same `node_type`
 
-### Backend Layer (`src/agent/`)
+The same workflow definition is identified by the same type name on both server and client. That shared type is the stable meaning boundary.
 
-```typescript
-// node-registry.ts
-interface NodeHandler {
-  node_type: string;
-  icon: string;
-  color: string;
-  shape: "rect" | "diamond";
-  output_schema: OutputField[];
-  input_schema: OutputField[];
-  create_default: () => Record<string, unknown>;
-  execute: (node, ctx) => Promise<OrcheNodeExecuteResult>;
-  test: (node, ctx) => OrcheNodeTestResult;
-}
+### 2. Descriptors are layer-specific
 
-function register_node(handler: NodeHandler): void;
-function get_node_handler(type: string): NodeHandler | undefined;
-function get_all_handlers(): NodeHandler[];
+The backend needs execution contracts. The frontend needs editing contracts. For that reason, the same node has different descriptors in each layer.
+
+- backend: execute handler, schemas, defaults
+- frontend: icon, color, toolbar label, edit panel, defaults
+
+### 3. Registration is the extension point
+
+Adding a node should not mean editing a large central switch. It should mean defining a new descriptor and registering it.
+
+### 4. The registry describes the node; the executor runs it
+
+The registry provides identity and metadata. Execution order, phase semantics, and state propagation belong to executor layers.
+
+## Adopted Structure
+
+```mermaid
+flowchart LR
+    A[Workflow Definition] --> B[node_type]
+    B --> C[Backend Node Registry]
+    B --> D[Frontend Node Registry]
+
+    C --> E[NodeHandler]
+    D --> F[FrontendNodeDescriptor]
+
+    E --> G[Workflow Executor]
+    F --> H[Builder / Inspector / Palette]
 ```
 
-### Frontend Layer (`web/src/pages/workflows/`)
+## Backend Registry
 
-```typescript
-// node-registry.ts
-interface FrontendNodeDescriptor {
-  node_type: string;
-  icon: string;
-  color: string;
-  shape: "rect" | "diamond";
-  toolbar_label: string;
-  output_schema: OutputField[];
-  input_schema: OutputField[];
-  create_default: () => Record<string, unknown>;
-  EditPanel: React.ComponentType<EditPanelProps>;
-}
+The backend registry resolves a `node_type` into an executable handler. A handler carries information such as:
 
-interface EditPanelProps {
-  node: Record<string, unknown>;
-  update: (partial: Record<string, unknown>) => void;
-  t: (key: string) => string;
-}
-```
+- execute function
+- test or validation function
+- input schema
+- output schema
+- default parameter factory
 
-## Data-Driven Patterns
+Its purpose is to express what code is required to execute a node.
 
-### Toolbar (auto-generated)
+## Frontend Registry
 
-```tsx
-{get_all_frontend_nodes().map((d) => (
-  <button key={d.node_type} onClick={() => addOrcheNode(d.node_type)}
-    style={{ color: d.color }}>
-    {d.toolbar_label}
-  </button>
-))}
-```
+The frontend registry resolves the same `node_type` into a builder-facing descriptor. That descriptor carries information such as:
 
-### AuxNode (shape-based dispatch)
+- icon
+- color and shape
+- toolbar or palette label
+- edit panel component
+- default parameter factory
 
-```tsx
-const desc = get_frontend_node(node.type);
-if (desc?.shape === "rect") return <OrcheRectNode .../>;
-// diamond: 4 specialized components (IF/Merge/Split/Switch)
-```
+Its purpose is to express how a node should be shown and edited.
 
-### EditModal (single delegation)
+## Registration Model
 
-```tsx
-const desc = get_frontend_node(node.node_type);
-{desc?.EditPanel && <desc.EditPanel node={node} update={update} t={t} />}
-```
+The current structure separates registry APIs from descriptor files.
 
-### Executor (registry lookup)
+- registry files handle registration and lookup
+- each node file exports its own descriptor
+- barrel files are the assembly points that register descriptors together
 
-```typescript
-const handler = get_node_handler(node.node_type);
-return handler.execute(node, ctx);
-```
+That means adding a node follows a stable pattern:
 
-## File Structure
+1. define backend handler
+2. define frontend descriptor
+3. register both through layer-specific barrels
+4. reuse the same `node_type`
 
-```
-src/agent/
-  node-registry.ts           # NodeHandler + registry API
-  nodes/
-    index.ts                  # barrel registration (idempotent)
-    http.ts, code.ts, if.ts, merge.ts, set.ts, split.ts,
-    llm.ts, switch.ts, wait.ts, template.ts, oauth.ts, sub-workflow.ts,
-    filter.ts, loop.ts, transform.ts, db.ts, file.ts,
-    analyzer.ts, retriever.ts, ai-agent.ts, text-splitter.ts,
-    task.ts, spawn-agent.ts, decision.ts, promise.ts,
-    embedding.ts, vector-store.ts,
-    notify.ts, aggregate.ts, send-file.ts, error-handler.ts, webhook.ts,
-    hitl.ts, approval.ts, form.ts, tool-invoke.ts, gate.ts,
-    escalation.ts, cache.ts, retry.ts, batch.ts, assert.ts,
-    container-code-runner.ts   # Container sandbox runner (python, ruby, go, ...)
+## Relationship to Other Design Elements
 
-web/src/pages/workflows/
-  node-registry.ts            # FrontendNodeDescriptor + registry API
-  nodes/
-    index.ts                  # barrel registration (idempotent)
-    http.tsx, code.tsx, if.tsx, merge.tsx, set.tsx, split.tsx,
-    llm.tsx, switch.tsx, wait.tsx, template.tsx, oauth.tsx, sub-workflow.tsx,
-    filter.tsx, loop.tsx, transform.tsx, db.tsx, file.tsx,
-    analyzer.tsx, retriever.tsx, ai-agent.tsx, text-splitter.tsx,
-    task.tsx, spawn-agent.tsx, decision.tsx, promise.tsx,
-    embedding.tsx, vector-store.tsx,
-    notify.tsx, aggregate.tsx, send-file.tsx, error-handler.tsx, webhook.tsx,
-    hitl.tsx, approval.tsx, form.tsx, tool-invoke.tsx, gate.tsx,
-    escalation.tsx, cache.tsx, retry.tsx, batch.tsx, assert.tsx
-```
+### Workflow Executor
 
-## Type Safety
+The executor looks up handlers through the registry. The registry does not control execution order; phase runners and loop runners do.
 
-`OrcheNodeType` union is defined in two canonical locations:
-- Backend: `src/agent/workflow-node.types.ts`
-- Frontend: `web/src/pages/workflows/graph-editor.tsx`
+### Node Palette / Builder
 
-All other files import from these sources. Adding a new node type requires updating the union in these 2 files + creating 2 descriptor files.
+The builder uses the frontend registry to construct node lists, visual metadata, and edit panels. The palette and inspector sit on top of the registry.
 
-## Adding a New Node
+### Interaction / Special Nodes
 
-1. Create `src/agent/nodes/my-node.ts` — implements `NodeHandler`
-2. Add to `src/agent/nodes/index.ts` barrel
-3. Create `web/src/pages/workflows/nodes/my-node.tsx` — implements `FrontendNodeDescriptor` with `EditPanel`
-4. Add to `web/src/pages/workflows/nodes/index.ts` barrel
-5. Add `"my_node"` to `OrcheNodeType` in both `workflow-node.types.ts` and `graph-editor.tsx`
+Some nodes require runner-level context. In those cases, the registry still provides type identity and metadata, while the phase loop runner performs special dispatch. Registry and special-runner logic complement each other rather than replace one another.
 
-## Affected Files
+## Non-goals
 
-| File | Change |
-|------|--------|
-| `src/agent/node-registry.ts` | **New** |
-| `src/agent/nodes/*.ts` (12) | **New** |
-| `src/agent/nodes/index.ts` | **New** |
-| `src/agent/orche-node-executor.ts` | switch → registry lookup |
-| `src/agent/workflow-node.types.ts` | Deleted `NODE_OUTPUT_SCHEMAS` |
-| `web/src/pages/workflows/node-registry.ts` | **New** |
-| `web/src/pages/workflows/nodes/*.tsx` (12) | **New** |
-| `web/src/pages/workflows/nodes/index.ts` | **New** |
-| `web/src/pages/workflows/output-schema.ts` | Proxy-based registry lookup |
-| `web/src/pages/workflows/graph-editor.tsx` | Deleted ORCHE_* constants, data-driven |
-| `web/src/pages/workflows/builder.tsx` | 12 if-blocks → `desc.EditPanel` |
-| `src/agent/phase-loop.types.ts` | Import `OrcheNodeType` |
+This document does not define:
+
+- detailed business logic of individual nodes
+- retry or abort policy inside phase runners
+- work classification for adding nodes
+- completion status tables or audit state
+
+Those belong in implementation code or `docs/*/design/improved`.
+
+## Related Documents
+
+- [Interaction Nodes Design](./interaction-nodes.md)
+- [Workflow Tool Design](./workflow-tool.md)
+- [Workflow Builder Command Palette Design](./workflow-builder-command-palette.md)

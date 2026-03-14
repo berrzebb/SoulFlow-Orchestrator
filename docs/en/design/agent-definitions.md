@@ -1,251 +1,178 @@
-# Design: Agent Gallery & Definition System
+# Agent Definitions Design
 
-> **Status**: Design complete, implementation in progress
+## Purpose
 
-## Overview
+`agent definitions` describe how the project stores and exposes role-like agents across built-in assets, user-defined records, and scoped visibility rules.
+The goal is to let **runtime execution and dashboard editing share one structured definition model**.
 
-A system that allows users to define their own agents and explore/reuse them in a gallery. The structured frontmatter format of existing `src/skills/roles/*/SKILL.md` files is exposed directly as a UI form, enabling creation of agents with clear roles and boundaries — either manually or with AI assistance.
+The core intent is:
 
-A new top-level route `/agents`, completely separate from `/workspace/agents` (runtime monitoring).
+- store role-like agents as structured definitions rather than opaque prompt blobs
+- treat built-in and user-defined agents through one read model
+- apply `global | team | personal` scope rules consistently
+- allow runtime, dashboard, and workflow features to consume the same definition layer
 
-## Problem
+## Source of Truth
 
-Agent role/behavior rules currently exist only in `src/skills/roles/*/SKILL.md` files:
-- Users must edit the file system directly to create custom agents
-- No UI for extending or adapting existing role skills
-- Agent role boundaries ("Do NOT use for...") are only implicitly defined
-- No way to describe an agent in natural language and convert it to a structured definition
+Agent definitions come from two sources:
 
-## Core Design Principle: Composed System Prompt
+- built-in definitions
+  - derived from system role-skill assets
+- custom definitions
+  - persisted in SQLite and owned by users or teams
 
-`AgentDefinition` is a **SKILL.md equivalent** stored in DB instead of files. The final system prompt is composed from layers — not a single text block:
+At the top-level design, the important point is that their origins differ but their read model is shared.
+Execution and UI layers should care more about the common `AgentDefinition` contract than the storage origin.
 
-```
-[Shared Protocols]       ← Selected _shared/ documents (common rules)
-        +
-[Role SKILL.md body]     ← soul + heart + role responsibilities
-        +
-[Tool Skills body]       ← agent capability scope
-        +
-[use_when / not_use_for] ← explicit role boundary
-        +
-[extra_instructions]     ← custom additional instructions
-```
+## Core Model
 
-AI generation also produces individual fields — not a raw text blob.
+An agent definition typically includes:
 
-## Data Model
+- name and description
+- icon
+- role-skill reference
+- `soul`
+- `heart`
+- allowed tools
+- shared protocols
+- additional skills
+- `use_when`
+- `not_use_for`
+- extra instructions
+- preferred providers
+- model preference
+- scope (`global | team | personal`)
 
-### AgentDefinition
+This is not just prompt storage.
+It is a structured role-and-boundary model.
 
-```typescript
-type AgentDefinition = {
-  id: string;
-  name: string;
-  description: string;   // "Use when X." summary
+## Built-In vs Custom
 
-  icon?: string;         // emoji
+Built-in and custom definitions live in the same conceptual system, but mutation rules differ.
 
-  // SKILL.md frontmatter fields
-  role_skill: string | null;     // base role skill name (e.g., "role:pm")
-  soul: string;                  // persona — character/personality
-  heart: string;                 // persona — communication style
-  tools: string[];               // allowed tool list
-  shared_protocols: string[];    // _shared/ protocols to include
-  skills: string[];              // additional tool-type skills
+- built-in
+  - system-provided
+  - not directly editable or deletable
+  - forkable into custom definitions
+- custom
+  - user- or team-owned
+  - editable and deletable subject to scope rules
 
-  // Boundary definition
-  use_when: string;              // "Use when..." situations
-  not_use_for: string;           // "Do NOT use for..." exclusions
-  extra_instructions: string;    // additional custom instructions
+This distinction preserves the boundary between system assets and tenant-owned assets.
 
-  // Execution config
-  preferred_providers: string[];
-  model?: string;
+## Scope Model
 
-  is_builtin: boolean;           // true = read-only system-provided
-  use_count: number;             // usage count
-  created_at: string;
-  updated_at: string;
-};
-```
+Agent definitions follow the same 3-tier scope structure used elsewhere in the project:
 
-**Built-in agents** = content of `src/skills/roles/*/SKILL.md` seeded into DB.
-When a user forks, an `is_builtin: false` custom definition is created.
+- `global`
+  - shared system-wide
+- `team`
+  - shared within one team
+- `personal`
+  - owned by one user
 
-### Common Rules (Shared Protocols)
+The model differs between read visibility and write authority.
 
-Protocol documents in `src/skills/_shared/`:
+### Read Visibility
 
-| Protocol | Description |
-|---------|-------------|
-| `clarification-protocol` | Ambiguous request classification (LOW/MEDIUM/HIGH) |
-| `phase-gates` | Task phase transition checklists |
-| `error-escalation` | Error escalation rules |
-| `session-metrics` | Session metrics collection criteria |
-| `difficulty-guide` | Task difficulty assessment guide |
+Typical visible definitions are:
 
-Same structure as the `shared_protocols` field in role skills.
-
-## Architecture
-
-```
-Dashboard UI (/agents)
-  Gallery view / card grid
-  Create/edit modal (SKILL.md form structure)
-  AI generation panel (natural language → structured fields)
-         │
-         └──── REST API ────────────────┐
-                                        │
-                          AgentDefinitionStore (SQLite)
-                            agent_definitions table
-                                        │
-                          Builtin seed (role skills → DB)
+```text
+visible definitions
+  = global
+  + current team
+  + current personal
 ```
 
-## API Endpoints
+### Write Authority
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/api/agent-definitions` | Full list (builtin + custom) |
-| POST | `/api/agent-definitions` | Create new definition |
-| PUT | `/api/agent-definitions/:id` | Update (custom only) |
-| DELETE | `/api/agent-definitions/:id` | Delete (custom only) |
-| POST | `/api/agent-definitions/generate` | Natural language → structured definition via AI (SSE) |
-| POST | `/api/agent-definitions/:id/fork` | Fork builtin → create custom |
+Write authority is stricter:
 
-## UI Design
+- `global` belongs to admin-level control
+- `team` requires team-management authority
+- `personal` is writable only by the owner
 
-### Gallery Page (`/agents`)
+So the design is not just about listing definitions.
+It is about scope-aware visibility and mutation.
 
-```
-┌─────────────────────────────────────────────────────┐
-│  [🔍 Search agents...]          [+ New Agent]        │
-│  [All] [concierge] [pm] [implementer] [reviewer]...  │
-├─────────────────────────────────────────────────────┤
-│  Built-in Agents                                    │
-│  ┌──────────────┐  ┌──────────────┐  ┌───────────┐ │
-│  │ 🎩 Concierge │  │ 📋 PM        │  │ 🔧 Impl.  │ │
-│  │ Front desk   │  │ Planning     │  │ Code impl │ │
-│  │ [role:concierge] │  │ [role:pm]    │  │ [role:impl] │ │
-│  │      [Fork]  │  │      [Fork]  │  │   [Fork]  │ │
-│  └──────────────┘  └──────────────┘  └───────────┘ │
-├─────────────────────────────────────────────────────┤
-│  My Agents                                          │
-│  ┌──────────────┐                                   │
-│  │ 🔍 PR Review │                                   │
-│  │ GitHub PR    │                                   │
-│  │ [role:reviewer] │                                │
-│  │ [Edit] [Del] │                                   │
-│  └──────────────┘                                   │
-└─────────────────────────────────────────────────────┘
-```
+## Relation to Role / Protocol Architecture
 
-### Create/Edit Modal
+`agent definitions` is closely related to `role-protocol-architecture`, but it solves a different problem.
 
-SKILL.md frontmatter structure exposed directly as form fields:
+- role / protocol architecture
+  - explains how role assets and shared protocols are interpreted and compiled
+- agent definitions
+  - explains how role-like definitions are stored, exposed, and scoped
 
-```
-┌─ Agent Configuration ────────────────────────────────┐
-│  [Generate with AI] tab  │  [Write manually] tab      │
-│                                                       │
-│  ① Basic Info                                        │
-│     Icon [🤖]   Name [________________]              │
-│     Description (Use when...) [__________________]   │
-│                                                       │
-│  ② Role (Role Skill)                                 │
-│     [role:pm ▼]  → soul/heart auto-populated         │
-│     soul: [overridable text field]                   │
-│     heart: [overridable text field]                  │
-│                                                       │
-│  ③ Common Rules (Shared Protocols)                   │
-│     [✓] clarification-protocol                      │
-│     [✓] phase-gates                                 │
-│     [ ] error-escalation                            │
-│     [ ] session-metrics / difficulty-guide          │
-│                                                       │
-│  ④ Allowed Tools                                     │
-│     Add/remove from role defaults                    │
-│     [read_file ✓] [write_file ✓] [exec ✓] ...       │
-│                                                       │
-│  ⑤ Additional Skills                                │
-│     [+ Add skill]  github / cron / memory ...        │
-│                                                       │
-│  ⑥ Boundary                                         │
-│     Use when: [__________________________________]   │
-│     Do NOT use for: [____________________________]   │
-│                                                       │
-│  ⑦ Extra Instructions                               │
-│     [optional text editor]                           │
-│                                                       │
-│                          [Cancel]  [Save]            │
-└──────────────────────────────────────────────────────┘
-```
+So role/protocol is the interpretation layer, while agent definitions is the storage and exposure layer.
 
-### AI Generation Flow
+## Relation to Dashboard
 
-```
-User input: "An agent that automates GitHub PR reviews"
-                    │
-                    ▼
-POST /api/agent-definitions/generate (SSE)
-  LLM context:
-    - Available role skills list
-    - Available tools list
-    - _shared/ protocol list
-    - AgentDefinition field schema
-                    │
-                    ▼
-  SSE streaming generates each field sequentially:
-    role_skill: "role:reviewer"
-    soul: "Guardian of code quality..."
-    heart: "Cites specific code lines with improvement suggestions..."
-    tools: ["read_file", "exec", "web_fetch"]
-    shared_protocols: ["clarification-protocol", ...]
-    use_when: "PR code review, quality inspection..."
-    not_use_for: "Direct code modification — delegate to implementer"
-                    │
-                    ▼
-  UI: Shows fields being filled in real-time
-  User: Review, optionally modify, then [Save]
-```
+The dashboard should be able to list, create, update, and fork agent definitions.
 
-## File Structure
+At the design level:
 
-### Backend
+- the dashboard is not the source of truth
+- it is an editing surface over the scoped definition store
+- structured fields are preferred over raw prompt-blob editing
 
-```
-src/agent/
-  agent-definition.types.ts      # AgentDefinition types
-  agent-definition.store.ts      # SQLite CRUD
-  agent-definition-builtin.ts    # role skills → DB seed data
+So dashboard editing is a presentation layer over the definition model, not the definition model itself.
 
-src/dashboard/ops/
-  agent-definition.ts            # REST API handlers
-```
+## Relation to Runtime
 
-### Frontend
+Agent definitions are not only gallery assets.
+They should be connectable to runtime behavior.
 
-```
-web/src/pages/agents/
-  index.tsx                      # Gallery main page
-  agent-card.tsx                 # Individual card component
-  agent-modal.tsx                # Create/edit modal
-```
+Examples:
 
-## Builtin vs Custom Policy
+- selecting a role-like agent for a workflow node
+- mapping an alias to a role-skill baseline
+- feeding role-like structure into prompt-profile compilation
 
-| Aspect | Builtin | Custom |
-|--------|---------|--------|
-| Source | `src/skills/roles/*/SKILL.md` seed | User-created |
-| Edit | Not allowed | Allowed |
-| Delete | Not allowed | Allowed |
-| Fork | Allowed → creates custom | Allowed |
-| `is_builtin` | `true` | `false` |
+That is why the definition store matters to execution, not just UI.
 
-## Implementation References
+## Fork Model
 
-- `src/agent/provider-store.ts` — SQLite store pattern reference
-- `src/dashboard/ops/agent-provider.ts` — API handler pattern reference
-- `src/skills/roles/pm/SKILL.md` — Builtin agent data source
-- `src/skills/_shared/*.md` — Common rules protocol source
+Forking creates a new custom definition from an existing built-in or custom definition.
+
+This matters because it:
+
+- protects system-provided definitions from in-place mutation
+- lets teams and users create safe variants
+- preserves role shape and scope intent while creating a tenant-owned copy
+
+Forking is therefore not just a convenience action.
+It is part of the boundary between system assets and tenant assets.
+
+## Boundaries
+
+This design does not:
+
+- redefine full role-skill parsing rules
+- describe prompt compiler internals in detail
+- lock down dashboard layout specifics
+- record phase, audit, or completion status
+
+`agent definitions` documents storage, exposure, and scope boundaries for role-like agents.
+
+## Meaning in This Project
+
+This project combines built-in role skills, workflow role selection, dashboard editing, and tenant scope rules.
+That makes a file-only definition model insufficient.
+
+This document fixes the adopted top-level design:
+
+- built-in and custom agents share one definition model
+- definitions have explicit scope
+- dashboard surfaces can edit them
+- runtime execution can bind to them
+
+## Non-Goals
+
+- storing current audit state
+- tracking UI completion status
+- managing rollout order or migration steps here
+- copying `improved` work-breakdown details into this document
+
+This document describes the adopted agent-definition design.
+Detailed rollout and work breakdown belong in `docs/*/design/improved/*`.

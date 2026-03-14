@@ -1,120 +1,151 @@
-# Vector Store: sqlite-vec Native KNN
+# sqlite-vec Vector Store Design
 
-> **Status**: `completed` | **Dependency**: sqlite-vec v0.1.7-alpha.2
+## Purpose
 
-## Problem
+The `vector store` provides a shared local similarity-search foundation for subsystems that need embedding-based retrieval.
+Its goal is to avoid JavaScript-side brute-force scans and instead provide **local native KNN search inside SQLite**.
 
-기존 vector-store는 query 시 **전체 행을 JS로 로드 → JSON.parse → 코사인 유사도 계산**.
-데이터 1,000건 기준: 1,000회 JSON.parse + 1,000회 코사인 루프 + JS 정렬.
+The core intent is:
 
-## Solution
+- execute vector lookup inside the local database
+- separate metadata storage from vector storage
+- standardize normalized-vector handling and distance interpretation
+- expose only the bounded operations needed by retrieval layers
 
-sqlite-vec의 `vec0` 가상 테이블로 KNN을 SQL 레벨에서 처리.
+## Position in the Stack
 
-### Architecture
+The vector store sits below retrieval policy and above the database implementation.
 
-```
-                ┌──────────────┐
-                │ vector-store │
-                │   service    │
-                └──────┬───────┘
-                       │ with_vec_db()
-                ┌──────▼───────┐
-                │  SQLite + WAL│
-                │  + sqlite-vec│
-                └──────┬───────┘
-                       │
-            ┌──────────┼──────────┐
-            │          │          │
-       ┌────▼───┐ ┌───▼────┐ ┌──▼──────────┐
-       │{col}_  │ │{col}_  │ │ sqlite_master│
-       │ meta   │ │  vec   │ │ (existence)  │
-       │(TEXT id)│ │(vec0)  │ └─────────────┘
-       └────────┘ └────────┘
+```text
+retrieval or search service
+  -> vector-store service
+  -> SQLite + sqlite-vec
 ```
 
-### Schema
+So this is not a product feature by itself.
+It is shared infrastructure for memory, references, eval paths, and future retrieval components.
 
-```sql
--- 메타데이터 (text id, document, metadata)
-CREATE TABLE "{col}_meta" (
-  rid        INTEGER PRIMARY KEY AUTOINCREMENT,
-  id         TEXT UNIQUE NOT NULL,
-  document   TEXT NOT NULL DEFAULT '',
-  metadata_json TEXT NOT NULL DEFAULT '{}',
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
+## Basic Structure
 
--- vec0 가상 테이블 (float32 벡터, L2 distance)
-CREATE VIRTUAL TABLE "{col}_vec" USING vec0(
-  embedding float[{dim}]
-);
-```
+Each collection is modeled as two layers:
 
-### Cosine Similarity via L2 on Normalized Vectors
+- metadata table
+  - id, document, metadata, and related fields
+- vec table
+  - the actual embedding vectors
 
-sqlite-vec 0.1.7-alpha.2는 `distance_metric='cosine'` 미지원.
-대신 **벡터를 L2 정규화 후 저장** → L2 거리로 코사인 유사도 도출:
+This separation exists so that:
 
-```
-cosine_similarity = 1 - (L2_distance² / 2)
-```
+- human-readable fields are not mixed with vector storage representation
+- metadata lookups and KNN lookups are linked explicitly
+- collection lifecycle remains simple
 
-| L2 distance | Cosine similarity | 의미 |
-|-------------|------------------|------|
-| 0.0 | 1.0 | 동일 |
-| 1.0 | 0.5 | 직교에 가까움 |
-| 1.414 | 0.0 | 직교 |
-| 2.0 | -1.0 | 반대 |
+## Vector Normalization
 
-### Operations
+The design assumes normalized vectors.
 
-**upsert**: meta INSERT OR UPDATE → get rid → vec DELETE + INSERT (normalized)
-```sql
-INSERT INTO "{col}_meta" (id, document, metadata_json) VALUES (?, ?, ?)
-  ON CONFLICT(id) DO UPDATE SET ...;
-DELETE FROM "{col}_vec" WHERE rowid = ?;
-INSERT INTO "{col}_vec" (rowid, embedding) VALUES (?, ?);  -- Float32Array
-```
+Core rules:
 
-**query**: vec0 MATCH + JOIN meta → L2 → cosine 변환
-```sql
-SELECT m.id, v.distance, m.document, m.metadata_json
-FROM "{col}_vec" v
-JOIN "{col}_meta" m ON m.rid = v.rowid
-WHERE v.embedding MATCH ?  -- Float32Array (normalized)
-  AND k = ?
-ORDER BY v.distance
-```
+- vectors are L2-normalized before storage
+- query vectors are normalized before lookup
+- distance comes from sqlite-vec’s native KNN search
+- similarity interpretation is derived from normalized-vector distance behavior
 
-**delete**: meta에서 rid 조회 → vec + meta 삭제
+This keeps cosine-style semantic comparison compatible with an L2-oriented local KNN engine.
 
-### Before vs After
+## Operation Model
 
-| Metric | Before (JS brute-force) | After (sqlite-vec) |
-|--------|------------------------|-------------------|
-| Query 1K vectors | ~15ms (JSON.parse×1K + cosine×1K) | ~1ms (native KNN) |
-| Query 10K vectors | ~150ms | ~3ms |
-| Storage | TEXT JSON (`[0.1, 0.2, ...]`) | binary float32 blob |
-| Memory | 전체 행 JS 로드 | SQL 내부 처리, 결과만 반환 |
-| Dependencies | 없음 | sqlite-vec (prebuild .so/.dll) |
+The vector store exposes only a minimal shared contract:
 
-### File Changes
+- `upsert`
+- `query`
+- `delete`
 
-| File | Change |
-|------|--------|
-| `src/services/vector-store.service.ts` | **Rewrite**: JS cosine → sqlite-vec native KNN |
-| `package.json` | `sqlite-vec` 의존성 추가 |
+At the design level, this matters because the vector store is not a general document database.
+It is a similarity-index service used by higher retrieval layers.
 
-### Container Integration
+## Collection Model
 
-- sqlite-vec npm 패키지가 플랫폼별 prebuild 바이너리 제공 (linux-x64, darwin-arm64 등)
-- `npm ci`로 자동 설치 → 별도 `.so` 빌드 불필요
-- `sqliteVec.load(db)` 호출 시 `db.loadExtension()`으로 확장 로드
+The store must support separation by `store_id` and `collection`.
 
-### Caveats
+That means:
 
-- vec0 virtual table은 **UPDATE 미지원** → DELETE + INSERT 패턴 필수
-- rowid는 **BigInt 필수** (better-sqlite3 제약)
-- 차원(dim)은 CREATE 시 고정 → 컬렉션 생성 후 변경 불가
-- vec0 테이블은 첫 upsert 시 lazy 생성 (차원을 알아야 하므로)
+- unrelated features do not need to share one physical dataset
+- one store can still host multiple collections
+- different retrieval subsystems can maintain independent lifecycles
+
+Collections usually imply fixed vector dimensions.
+So dimensionality behaves like part of collection identity.
+
+## Relationship to sqlite-vec
+
+The current implementation uses sqlite-vec, but the top-level design is not “about one extension function.”
+
+The higher-level concept is:
+
+- local SQLite-backed vector storage
+- native KNN
+- metadata + vector separation
+- graceful isolation when vector lookup is unavailable
+
+So sqlite-vec is the current implementation choice, while the design concept is a local native vector index.
+
+## Error Isolation and Graceful Degradation
+
+Because the vector store sits inside retrieval paths, failure here must not collapse the entire system.
+
+The design must tolerate:
+
+- sqlite-vec load failures
+- uninitialized collections
+- dimension mismatches
+- per-query execution errors
+
+In those situations, higher retrieval layers should still be able to fall back to lexical-only behavior or return empty results safely.
+
+The vector store improves retrieval quality, but it should not become a hard availability dependency for the whole product.
+
+## Relation to Retrieval Policy
+
+The vector store does not define ranking policy.
+
+Higher layers decide:
+
+- whether lexical candidates are built first
+- whether semantic-only retrieval is allowed
+- which fusion policy is used
+- how freshness is managed
+
+The vector store is responsible only for semantic nearest-neighbor lookup.
+
+## Boundaries
+
+This design does not:
+
+- generate embeddings itself
+- define tokenization, lexical retrieval, or RRF fusion
+- classify query intent or novelty
+- build user-facing responses
+
+`vector-store-sqlite-vec` is the storage-layer design beneath retrieval, not the full retrieval-policy design.
+
+## Meaning in This Project
+
+This project is local-first, so vector retrieval is also expected to run locally rather than through a hosted vector database.
+This document fixes the adopted design:
+
+- SQLite is the base store
+- sqlite-vec provides native KNN
+- metadata and vectors are stored separately
+- similarity is interpreted through normalized-vector rules
+- failures must be isolatable by higher retrieval layers
+
+## Non-Goals
+
+- solving every retrieval problem through the vector store alone
+- putting full retrieval-policy logic into this document
+- recording implementation status here
+- managing embedding-provider rollout or migration sequencing here
+
+This document describes the adopted vector-store design.
+Detailed implementation planning and work breakdown belong in `docs/*/design/improved/*`.

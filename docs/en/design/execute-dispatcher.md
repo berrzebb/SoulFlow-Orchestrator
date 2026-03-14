@@ -1,191 +1,178 @@
-# Design: Execute Dispatcher Extraction (Phase 4.5)
+# Execute Dispatcher Design
 
-> **Status**: Implementation complete · Execute dispatcher consolidated into single module
+## Purpose
 
-## Overview
+`execute dispatcher` is the orchestration routing layer that turns a prepared request into an actual execution path.
+Its responsibility is to decide how a request should be handled and to pass that decision consistently into runners and gateway bindings.
 
-Extracts the dispatcher logic from `OrchestrationService.execute()` into a dedicated `execute-dispatcher.ts` module. Consolidates gateway routing, short-circuit branches (identity/builtin/inquiry), mode dispatch (phase/once/agent/task), and finalize orchestration into one code path with proper dependency injection.
+The current project does not send every request through the same agent loop.
+Instead, the dispatcher chooses among:
 
-Maintains:
-- Semantic preservation (gateway → short-circuit → mode dispatch → finalize)
-- Public API contract (`execute()` signature unchanged)
-- Dependency injection pattern for testability
+- short-circuit replies
+- direct tool execution
+- once execution
+- agent loop
+- task loop
+- phase workflow
 
-## Problem Statement
+## Position
 
-`OrchestrationService.execute()` contains ~180 lines of dispatcher logic:
-- L374–401: Gateway routing decision
-- L403–417: Short-circuit branches (identity/builtin/inquiry early returns)
-- L422–436: Finalize closure (event logging + process tracker)
-- L438–459: Mode dispatch (phase / once / agent / task)
-- L480–526: Escalation handling and executor fallback
-
-This inline logic prevents:
-- Testing dispatcher in isolation
-- Reusing dispatcher logic in other contexts
-- Clear separation of "data gathering" (preflight) from "execution dispatch"
-
-## Solution Architecture
-
-### Module Structure
-
-**File**: `src/orchestration/execution/execute-dispatcher.ts`
-
-```typescript
-// Dependency injection type
-export type ExecuteDispatcherDeps = {
-  providers: ProviderRegistry;
-  runtime: AgentRuntimeLike;
-  logger: Logger;
-  config: {
-    executor_provider: ExecutorProvider;
-    provider_caps?: ProviderCapabilities;
-  };
-  process_tracker: ProcessTrackerLike | null;
-  guard: ConfirmationGuard | null;
-  tool_index: ToolIndex | null;
-  log_event: (input: AppendWorkflowEventInput) => void;
-  build_identity_reply: () => string;
-  build_system_prompt: (names: string[], provider: string, chat_id: string, cats?: ReadonlySet<string>, alias?: string) => Promise<string>;
-  generate_guard_summary: (task_text: string) => Promise<string>;
-  run_once: (args: RunExecutionArgs) => Promise<OrchestrationResult>;
-  run_agent_loop: (args: RunExecutionArgs & { media: string[]; history_lines: string[] }) => Promise<OrchestrationResult>;
-  run_task_loop: (args: RunExecutionArgs & { media: string[] }) => Promise<OrchestrationResult>;
-  run_phase_loop: (req: OrchestrationRequest, task_with_media: string, workflow_hint?: string, node_categories?: string[]) => Promise<OrchestrationResult>;
-  caps: () => ProviderCapabilities;
-};
-
-// Main function
-export async function execute_dispatch(
-  deps: ExecuteDispatcherDeps,
-  req: OrchestrationRequest,
-  preflight: ReadyPreflight,
-): Promise<OrchestrationResult>
+```text
+Inbound Request
+  -> Request Preflight
+  -> Execute Dispatcher
+  -> once / agent / task / phase runner
 ```
 
-### Key Characteristics
+The dispatcher sits after preflight and before any runner.
+Input assembly ends in preflight. Route selection, escalation, and fallback begin in the dispatcher.
 
-- **Dependency injection**: All external calls provided as function references via deps
-- **Semantic preservation**: gateway routing → short-circuit → mode dispatch → finalize order maintained
-- **Type safety**: ReadyPreflight discriminated union ensures only ready-state fields are available
-- **Lazy evaluation**: Tool selection and system prompt building happen only when needed
-- **Finalize closure**: Event logging and process tracker updates wrapped in finalized step
+## Core Responsibilities
 
-### Integration
+### 1. Accept the gateway decision
 
-**Modified**: `src/orchestration/service.ts`
+The dispatcher consumes the result of `resolve_gateway()` and turns it into an executable route.
 
-```typescript
-// 1. Add _dispatch_deps() method
-private _dispatch_deps(): ExecuteDispatcherDeps {
-  return {
-    providers: this.providers,
-    runtime: this.runtime,
-    logger: this.logger,
-    config: { executor_provider: this.config.executor_provider, provider_caps: this.config.provider_caps },
-    process_tracker: this.process_tracker,
-    guard: this.guard,
-    tool_index: this.tool_index,
-    log_event: (e) => this.log_event(e),
-    build_identity_reply: () => this._build_identity_reply(),
-    build_system_prompt: (names, prov, chat, cats, alias) => this._build_system_prompt(names, prov, chat, cats, alias),
-    generate_guard_summary: (text) => this._generate_guard_summary(text),
-    run_once: (args) => _run_once(this._runner_deps(), args),
-    run_agent_loop: (args) => _run_agent_loop(this._runner_deps(), args),
-    run_task_loop: (args) => _run_task_loop(this._runner_deps(), args),
-    run_phase_loop: (req, task, hint, cats) => _run_phase_loop(this._phase_deps(), req, task, hint, cats),
-    caps: () => this._caps(),
-  };
-}
+That decision is based on:
 
-// 2. Simplified execute()
-async execute(req: OrchestrationRequest): Promise<OrchestrationResult> {
-  const preflight = await run_request_preflight(this._preflight_deps(), req);
+- the current user request
+- recent session history
+- active tasks in the chat
+- available skills and tool categories
+- executor capability
 
-  if (preflight.kind === "resume") {
-    return this.continue_task_loop(req, preflight.resumed_task, preflight.task_with_media, preflight.media);
-  }
+The dispatcher does not replace this judgment. It operationalizes it.
 
-  if (!preflight.secret_guard.ok) {
-    return { reply: format_secret_notice(preflight.secret_guard), mode: "once", tool_calls_count: 0, streamed: false };
-  }
+### 2. Handle short-circuits
 
-  return execute_dispatch(this._dispatch_deps(), req, preflight);
-}
+Not every request should reach a runner.
+The dispatcher exits early for:
 
-// 3. Removed methods
-// - run_once
-// - run_agent_loop
-// - run_task_loop
-// - run_phase_loop
+- `identity`
+- `builtin`
+- `inquiry`
+
+When a tool call is both deterministic and safe, it may also use direct tool execution instead of opening an LLM loop.
+
+The goal is to avoid expensive execution paths whenever a cheaper path is sufficient.
+
+### 3. Apply session reuse and freshness gates
+
+For non-phase execution, the dispatcher may decide that a recent answer or recent search evidence should be reused instead of triggering fresh tool work.
+
+It can evaluate:
+
+- whether the same question was already handled
+- whether the new question is the same topic
+- whether the evidence is still fresh enough
+
+This is the first cost-control gate in the execution path.
+
+### 4. Finalize mode and executor
+
+After short-circuits, the dispatcher fixes the actual execution mode and executor.
+
+- `phase`
+- `once`
+- `agent`
+- `task`
+
+It also folds in user provider preference, configured executor, and capability-based fallback.
+
+### 5. Open tool-selection and system-prompt entry
+
+For non-phase paths, the dispatcher opens the tool-selection and system-prompt stage.
+
+It does not define prompt policy itself.
+Prompt content comes from runtime, role, and protocol layers. The dispatcher only decides which execution path receives that prepared prompt.
+
+### 6. Manage confirmation, escalation, and fallback
+
+The dispatcher is not only a router. It is also a bounded control layer.
+
+- it can defer risky work through a confirmation guard
+- it can escalate a once result into task execution
+- it can escalate an agent outcome into task execution
+- it can retry through an executor fallback chain
+
+This means the dispatcher owns allowed escalation and fallback inside the execution boundary.
+
+### 7. Finalize results consistently
+
+All execution results pass through the same finalization path.
+
+- append workflow events
+- update process tracking
+- preserve usage and tool-call counts
+- append follow-up checklists for validation roles
+
+This keeps closing behavior consistent across runners.
+
+## Boundaries
+
+The dispatcher must not:
+
+- reseal inputs or re-inspect secrets
+- rebuild skill recommendations from scratch
+- interpret role or protocol documents directly
+- generate persona phrasing directly
+- own tool execution bodies
+- generate or persist workflow definitions
+
+It is the routing layer between prepared requests and execution engines, not a replacement for preflight or runners.
+
+## Routing Order in the Current Architecture
+
+The current project follows roughly this sequence:
+
+```text
+gateway decision
+  -> identity / builtin / inquiry short-circuit
+  -> optional direct tool
+  -> session reuse gate
+  -> mode / executor resolution
+  -> phase branch or tool selection
+  -> confirmation guard
+  -> once / agent / task runner
+  -> escalation / fallback
+  -> finalize
 ```
 
-## Test Coverage
+This order is intentional:
 
-**File**: `tests/orchestration/execute-dispatcher.test.ts` (7 structural tests)
+- do the cheapest decisions first
+- open the most expensive loops last
+- exhaust deterministic handling and reuse before fresh execution
+- close results under one consistent policy
 
-Contract validation:
-- Dispatcher receives ExecuteDispatcherDeps ✓
-- Dispatcher receives ReadyPreflight with all required fields ✓
-- Dependency injection pattern works (build_identity_reply callable) ✓
-- run_once can be called with RunExecutionArgs ✓
-- log_event can be called for event recording ✓
-- finalize closure records done/blocked events ✓
-- ReadyPreflight discriminated union type is available ✓
+## Relationship to Gateway and Direct Execution
 
-**Regression**: Representative regression tests and type checks pass
+The dispatcher includes gateway and direct execution, but it is not the same layer as either of them.
 
-## Semantic Preservation Checklist
+- gateway decides what kind of request this is
+- direct executor runs safe deterministic tools without an LLM
+- dispatcher places both into the full execution route
 
-✅ **Gateway routing first**: active_tasks_in_chat → resolve_gateway decision
-✅ **Short-circuit returns early**: identity/builtin/inquiry branches exit before tool selection
-✅ **Finalize wraps results**: done/blocked event logging + process_tracker teardown
-✅ **Mode dispatch split**: phase branches before tool selection, once/agent/task after
-✅ **Escalation preserved**: once → task, agent → task escalation logic intact
-✅ **Executor fallback**: claude_code → chatgpt fallback when available
-✅ **Public API**: `execute()` signature unchanged, return type unchanged
+Even if gateway or direct execution expands, the dispatcher should remain focused on route selection plus bounded escalation/finalization.
 
-## Files Changed
+## Relationship to Session Reuse Policy
 
-| File | Changes |
-|------|---------|
-| `src/orchestration/execution/execute-dispatcher.ts` | **NEW** (300+ LOC: types + main function) |
-| `src/orchestration/service.ts` | 4 methods removed (run_once, run_agent_loop, run_task_loop, run_phase_loop), dead code 4 functions removed, execute() simplified, _dispatch_deps() added |
-| `tests/orchestration/execute-dispatcher.test.ts` | **NEW** (7 structural tests) |
-| `docs/en/design/execute-dispatcher.md` | **NEW** |
-| `docs/ko/design/execute-dispatcher.md` | **NEW** |
-| `docs/LARGE_FILE_SPLIT_DESIGN.md` | Phase 4.5 completion status |
+The dispatcher is the first application point for session reuse, but not the source of truth for reuse policy.
 
-## Validation
+Its job is only to:
 
-✅ TypeScript: `npx tsc -p tsconfig.json --noEmit`
-✅ Tests: `npx vitest run tests/orchestration/execute-dispatcher.test.ts` (7/7 pass)
-✅ All tests: 316+ tests pass (no regressions)
+- consume reuse evidence
+- short-circuit when reuse is valid
+- otherwise continue into normal execution
 
-## State of OrchestrationService
+The policy details themselves belong to the guardrail layer.
 
-After Phase 4.1–4.5:
-- **Inline state**: 0 (all injected: hitl_store, session_cd, dispatcher logic)
-- **Preprocessing**: Moved to request-preflight module
-- **Dispatching**: Moved to execute-dispatcher module
-- **Extracted logic**: run_once, run_agent_loop, run_task_loop, continue_task_loop, run_phase_loop
-- **Remaining methods**: execute() dispatcher entry point, security/prompt/renderer helpers, state management
+## Non-goals
 
-The service is now:
-1. A dependency container (_preflight_deps, _runner_deps, _continue_deps, _phase_deps, _dispatch_deps)
-2. An orchestration facade (execute routing + finalization)
-3. A stateful collaborator holder (hitl_store, session_cd)
+- audit state or completion tracking
+- long-term session memory strategy
+- tool ranking algorithm design
+- role / protocol / persona source-of-truth ownership
 
-## Follow-up
-
-- Keep strengthening characterization tests for `execute_dispatch()`
-- Preserve the boundary between gateway decision and dispatcher execution
-- If provider policy later moves into `ExecutionGateway` or another port, prevent the dispatcher from becoming another orchestrator
-
-## Design Decisions
-
-1. **Function refs over wrapper methods**: _dispatch_deps() returns function references instead of wrapper methods for cleaner dependency graph
-2. **Deps parameter pattern**: Follows RunnerDeps pattern for consistency across executor modules
-3. **Optional process_tracker/guard**: Gracefully handles null collaborators (composable design)
-4. **Semantic preservation over optimization**: Heavy context computed in finalize closure even for early branches (for clarity over micro-optimization)
-5. **ReadyPreflight only**: Dispatcher only receives ReadyPreflight (resume and secret_guard handled before dispatch)
+This document explains the currently adopted dispatcher boundary in the project.
+Detailed work decomposition belongs under `docs/*/design/improved/*`.

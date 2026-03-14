@@ -1,106 +1,94 @@
-# 설계: Container Code Runner — 다중 언어 컨테이너 샌드박스 코드 실행
+# Container Code Runner 설계
 
-> **상태**: 구현 완료
+## 목적
 
-## 개요
+`container code runner`는 code node가 JavaScript와 shell 외의 언어를 안전한 격리 환경에서 실행할 수 있게 하는 설계다.
+이 구조의 목적은 다중 언어 코드 실행을 지원하면서도, 로컬 프로세스 실행과는 다른 자원 제약과 파일시스템 경계를 분명히 유지하는 것이다.
 
-Code 노드를 JavaScript/Shell 전용에서 **7개 언어** (Python, Ruby, Bash, Go, Rust, Deno, Bun)로 확장.
-podman/docker 컨테이너에서 one-shot 또는 persistent 모드로 샌드박스 실행.
+현재 이 설계는 다음 요구를 위해 채택됐다.
 
-## 문제
+- workflow 안에서 Python, Go, Rust 같은 언어를 직접 실행한다
+- 언어별 런타임을 로컬 개발 환경에 강하게 결합하지 않는다
+- 코드 실행을 읽기 전용 workspace와 제한된 자원 안에 둔다
+- code node 하나가 여러 실행 경로를 가질 수 있게 한다
 
-기존 Code 노드는 `vm` 모듈(JavaScript)과 `child_process`(Shell)만 지원.
-Python 데이터 처리, Go 성능 로직 등을 워크플로우에서 직접 실행할 수 없었음.
-컨테이너 PTY 인프라는 이미 존재하므로 이를 활용한 언어 불문 샌드박스 실행이 가능.
+## 현재 실행 모델
 
-## 아키텍처
+현재 code node는 세 가지 실행 경로를 가진다.
 
-### 3가지 실행 경로
+- JavaScript
+  - 인프로세스 `vm` sandbox
+- shell
+  - 로컬 shell runtime
+- container language
+  - podman/docker 기반 container code runner
 
-```
-Code Node (code.ts)
-├── language: "javascript"  → vm sandbox (기존)
-├── language: "shell"       → child_process (기존)
-└── language: python|ruby|bash|go|rust|deno|bun
-    → container-code-runner.ts
-    → podman/docker run --rm (one-shot)
-    → 또는 named container + exec (persistent)
-```
+즉 container code runner는 별도 노드가 아니라 `code` node의 세 번째 실행 경로다.
+이 덕분에 workflow 작성자는 같은 `code` node 타입을 유지하면서 언어와 격리 수준만 바꿀 수 있다.
 
-### 보안 제약
+## 런타임 매핑
 
-| 제약 | 값 |
-|------|---|
-| 네트워크 | `--network=none` (기본, 옵트인으로 허용) |
-| 파일시스템 | `--read-only` + `/tmp` tmpfs (64MB) |
-| 메모리 | `--memory=256m` |
-| CPU | `--cpus=1` |
-| 워크스페이스 | `-v workspace:/workspace:ro` (읽기 전용) |
-| 코드 마운트 | `-v tmpdir:/code:ro` |
+container code runner는 언어 이름을 곧바로 실행 명령으로 쓰지 않는다.
+현재 구조에서는 언어별 runtime mapping을 통해 다음을 함께 결정한다.
 
-### 런타임 매핑
+- 기본 이미지
+- 임시 파일 확장자
+- 컨테이너 내부 실행 명령
 
-| 언어 | 이미지 | 확장자 | 실행 명령 |
-|------|--------|--------|----------|
-| python | `python:3.12-slim` | `.py` | `python3 script.py` |
-| ruby | `ruby:3.3-slim` | `.rb` | `ruby script.rb` |
-| bash | `bash:5` | `.sh` | `bash script.sh` |
-| go | `golang:1.22-alpine` | `.go` | `go run script.go` |
-| rust | `rust:1.77-slim` | `.rs` | `rustc script.rs -o /tmp/out && /tmp/out` |
-| deno | `denoland/deno:2.0` | `.ts` | `deno run --allow-all script.ts` |
-| bun | `oven/bun:1` | `.ts` | `bun run script.ts` |
+이 구조의 의미는 “언어 지원”을 프롬프트 문구가 아니라 코드 계약으로 관리한다는 점이다.
 
-### 실행 모드
+## 격리 경계
 
-**One-shot** (`keep_container: false`, 기본):
-```
-podman run --rm --network=none --memory=256m ... python:3.12-slim python3 /code/script.py
-```
+container code runner는 현재 다음 경계를 기본값으로 둔다.
 
-**Persistent** (`keep_container: true`):
-```
-podman run -d --name code-xxx ... python:3.12-slim sleep 3600
-podman exec code-xxx python3 /code/script.py
-```
-동일 컨테이너 재사용으로 이미지 pull + 초기화 비용 절감.
+- 읽기 전용 코드 마운트
+- 읽기 전용 workspace 마운트
+- 제한된 메모리와 CPU
+- `tmpfs` 기반 임시 쓰기 공간
+- 기본 `--network=none`
 
-### 컨테이너 엔진 감지
+이 설계의 핵심은 컨테이너가 단순 편의 기능이 아니라 sandbox 정책의 일부라는 점이다.
+네트워크 허용이나 container 유지 역시 code node 입력에서 명시적으로 opt-in 해야 한다.
 
-podman → docker 순으로 자동 감지, 결과 캐싱. 둘 다 없으면 에러.
+## one-shot과 persistent
 
-## 타입 확장
+현재 구조는 두 실행 모드를 함께 가진다.
 
-```typescript
-// workflow-node.types.ts
-type CodeLanguage =
-  | "javascript" | "shell"
-  | "python" | "ruby" | "bash" | "go" | "rust" | "deno" | "bun";
+- one-shot
+  - `run --rm` 기반의 일회성 실행
+- persistent
+  - 이름 있는 컨테이너를 유지한 뒤 `exec`로 재사용
 
-interface CodeNodeDefinition extends NodeBase {
-  node_type: "code";
-  language: CodeLanguage;
-  code: string;
-  timeout_ms?: number;
-  container_image?: string;   // 이미지 오버라이드
-  network_access?: boolean;   // 네트워크 허용
-  keep_container?: boolean;   // 컨테이너 유지
-}
-```
+one-shot은 격리와 단순성을 우선하는 기본 경로다.
+persistent는 동일 언어/환경을 반복 호출하는 workflow에서 초기화 비용을 줄이기 위한 선택적 경로다.
 
-## 파일 구조
+즉 `keep_container`는 성능 최적화 옵션이지 기본 실행 계약이 아니다.
 
-```
-src/agent/
-  workflow-node.types.ts       # CodeLanguage 확장, CodeNodeDefinition
-  nodes/
-    code.ts                    # 3 실행 경로 분기 (JS/Shell/Container)
-    container-code-runner.ts   # 컨테이너 실행 엔진
+## 엔진 선택
 
-web/src/pages/workflows/
-  nodes/code.tsx               # 9개 언어 선택 + 컨테이너 옵션 UI
-```
+현재 container code runner는 podman과 docker를 모두 수용하지만, 내부에서는 “사용 가능한 컨테이너 엔진”이라는 공통 계약으로 다룬다.
+엔진 감지는 실행 전 한 번 수행되고 캐시될 수 있으며, code node는 그 결과를 소비하기만 한다.
 
-## 관련 문서
+이 구조는 특정 엔진 종속 문법을 workflow 정의로 노출하지 않기 위한 것이다.
 
-→ [Node Registry](./node-registry.md) — 27개 노드 등록 아키텍처
-→ [PTY 에이전트 백엔드](./pty-agent-backend.md) — 컨테이너 인프라
+## 현재 프로젝트에서의 의미
+
+이 프로젝트는 로컬 실행기이면서도 다중 언어 workflow와 에이전트 자동화를 함께 지원한다.
+container code runner는 그 사이에서 “도구를 많이 늘리지 않고도 안전한 언어 실행 경로를 추가하는 방식”으로 의미를 가진다.
+
+현재 구조에서 이 설계가 의미하는 바는 다음과 같다.
+
+- 다중 언어 실행은 `code` node로 통합한다
+- 로컬 shell과 container sandbox를 분리한다
+- 자원 제한과 네트워크 정책을 node 옵션으로 명시한다
+- code execution 결과는 공통 output contract로 정규화한다
+
+## 비목표
+
+- 모든 code 실행을 컨테이너로 강제하는 것
+- 장기 상태를 가진 개발 환경 전체를 제공하는 것
+- 컨테이너 오케스트레이션 자체를 workflow code node가 담당하게 하는 것
+- docker/podman 세부 명령을 workflow 정의의 source of truth로 만드는 것
+
+이 문서는 현재 채택된 container code runner 설계 개념을 설명한다.
+세부 rollout과 후속 작업은 `docs/*/design/improved/*`에서 관리한다.

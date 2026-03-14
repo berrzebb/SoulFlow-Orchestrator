@@ -1,176 +1,140 @@
-# Design: Request Preflight Extraction (Phase 4.4)
+# Request Preflight Design
 
-> **Status**: Implementation complete · Request preprocessing consolidated into single module
+## Purpose
 
-## Overview
+`request preflight` is the layer that performs input normalization and execution preparation before orchestration begins.
+Its job is to avoid sending raw inbound requests directly into execution, and instead produce a prepared request shape that later stages can reason about consistently.
 
-Extracts the request preprocessing logic from `OrchestrationService.execute()` into a dedicated `request-preflight.ts` module. Consolidates `seal_text`, `seal_list`, `inspect_secrets`, `resolve_context_skills`, `collect_skill_tool_names`, and context assembly into one code path.
+The design has four core intentions:
 
-Maintains:
-- Semantic preservation (seal → resumed check → heavy context)
-- Public API contract (`execute()` signature unchanged)
-- Discriminated union return type for type-safe branching
+- do not let sensitive inbound text flow directly into execution
+- detect resumable work before expensive preparation
+- compute skill, runtime policy, and tool context only once
+- let the dispatcher focus on routing instead of input assembly
 
-## Problem Statement
+## Position
 
-`OrchestrationService.execute()` contains ~60 lines of preprocessing logic:
-- L354-356: Seal inputs (text + list)
-- L359-364: Resumed task branch
-- L366-369: Skill resolution + secret validation
-- L374-391: Context assembly
+It sits at the start of `OrchestrationService.execute()`.
 
-This inline logic mainly caused:
-- Testing preflight in isolation
-- Reusing preflight calculation in other contexts
-- Clear separation of "gathering data" from "executing"
-
-## Solution Architecture
-
-### Module Structure
-
-**File**: `src/orchestration/request-preflight.ts`
-
-```typescript
-// Types
-export type RequestPreflightDeps = {
-  vault: SecretVaultService;
-  runtime: AgentRuntimeLike;
-  policy_resolver: RuntimePolicyResolver;
-  workspace: string | undefined;
-  tool_index: ToolIndex | null;
-};
-
-export type ResumedPreflight = {
-  kind: "resume";
-  task_with_media: string;
-  media: string[];
-  resumed_task: TaskState;
-};
-
-export type ReadyPreflight = {
-  kind: "ready";
-  task_with_media: string;
-  media: string[];
-  skill_names: string[];
-  secret_guard: { ok: boolean; missing_keys: string[]; invalid_ciphertexts: string[] };
-  runtime_policy: RuntimeExecutionPolicy;
-  // ... rest of context
-};
-
-export type RequestPreflightResult = ResumedPreflight | ReadyPreflight;
-
-// Main function
-export async function run_request_preflight(
-  deps: RequestPreflightDeps,
-  req: OrchestrationRequest,
-): Promise<RequestPreflightResult>;
-
-// Exported helper (used by continue_task_loop)
-export function collect_skill_provider_prefs(
-  runtime: AgentRuntimeLike,
-  skill_names: string[],
-): string[];
+```text
+Inbound Request
+  -> Request Preflight
+  -> Execute Dispatcher
+  -> once / agent / task / phase runner
 ```
 
-### Key Characteristics
+`request preflight` comes before the dispatcher and far before any runner.
+It does not choose an execution strategy. It prepares the shared inputs needed for that choice.
 
-- **Discriminated union**: Branching on `preflight.kind` instead of nested `if` statements
-- **Semantic preservation**: `seal → resumed check → heavy context` order maintained
-- **Module-internal helpers**: `seal_text`, `seal_list`, `inspect_secrets`, etc. not exported
-- **Lazy context**: Context assembly only for `kind: "ready"` path
+## Responsibilities
 
-### Integration
+### 1. Seal inbound input
 
-**Modified**: `src/orchestration/service.ts`
+Message text and media inputs are sealed first.
 
-```typescript
-// 1. Constructor adds _preflight_deps()
-private _preflight_deps(): RequestPreflightDeps {
-  return {
-    vault: this.vault,
-    runtime: this.runtime,
-    policy_resolver: this.policy_resolver,
-    workspace: this.deps.workspace,
-    tool_index: this.tool_index,
-  };
-}
+- text goes through `seal_inbound_sensitive_text()`
+- if sealing fails, the system still avoids passing raw text by falling back to `redact_sensitive_text()`
+- local references are preserved during media sealing because they are path semantics, not user prose
 
-// 2. execute() simplified to one call
-async execute(req: OrchestrationRequest): Promise<OrchestrationResult> {
-  const preflight = await run_request_preflight(this._preflight_deps(), req);
+This guarantees that later phases all operate on the same sealed view of the request.
 
-  if (preflight.kind === "resume") {
-    return this.continue_task_loop(req, preflight.resumed_task, preflight.task_with_media, preflight.media);
-  }
+### 2. Detect resumable execution early
 
-  if (!preflight.secret_guard.ok) {
-    return { reply: format_secret_notice(preflight.secret_guard), mode: "once", ... };
-  }
+When `resumed_task_id` is provided, preflight checks whether the runtime still has a matching task in `running` state.
 
-  const { task_with_media, media, skill_names, ... } = preflight;
-  // Gateway routing continues with preflight data
-}
+- if so, it returns `kind: "resume"`
+- it does not build heavy context for that path
+- the resume decision happens after sealing and before the rest of preflight
 
-// 3. _continue_deps() updated
-collect_skill_provider_preferences: (names) => collect_skill_provider_prefs(this.runtime, names),
-```
+This keeps retry and long-running task continuation fast.
 
-## Test Coverage
+### 3. Inspect secret references
 
-**File**: `tests/orchestration/request-preflight.test.ts` (7 tests)
+Preflight inspects sealed text and media for secret references and returns a structured `secret_guard`.
 
-Contract validation:
-- `kind: "ready"` returned for normal path ✓
-- ReadyPreflight contains all context fields ✓
-- `collect_skill_provider_prefs` deduplicates providers ✓
+It captures:
 
-**Regression**: Representative regression tests and type checks pass
+- missing keys
+- invalid ciphertexts
 
-## Semantic Preservation Checklist
+This layer does not decrypt secrets or make the execution decision itself.
+It only produces the evidence needed for later stages to decide whether execution can continue.
 
-✅ **Seal order preserved**: Text seal → list seal (inline methods removed, logic integrated)
-✅ **Resumed branching**: Checked after seal, before heavy computation
-✅ **Secret validation**: Early return for `ok: false`
-✅ **Context assembly**: Only calculated for `kind: "ready"`
-✅ **Public API**: `execute()` signature and behavior unchanged
+### 4. Assemble skill, policy, and execution context
 
-## Files Changed
+When the request is not a resume path, preflight computes the shared execution context.
 
-| File | Changes |
-|------|---------|
-| `src/orchestration/request-preflight.ts` | **NEW** (350 LOC: types + main function + 5 helpers) |
-| `src/orchestration/service.ts` | 6 methods removed, execute() simplified, _preflight_deps() added, _continue_deps() updated |
-| `tests/orchestration/request-preflight.test.ts` | **NEW** (7 tests) |
-| `docs/LARGE_FILE_SPLIT_DESIGN.md` | Phase 4.4 completion status |
+- combines always-on skills with recommended skills
+- resolves `runtime_policy`
+- gathers tool definitions and categories
+- creates request scope, request task id, and event metadata
+- builds context block and tool execution context
+- collects skill-level provider preferences
+- gathers active tasks in the current chat
 
-## Validation
+The dispatcher consumes this prepared state instead of rebuilding it.
 
-✅ TypeScript: `npx tsc -p tsconfig.json --noEmit`
-✅ Tests: `npx vitest run tests/orchestration/request-preflight.test.ts` (7/7 pass)
-✅ All tests: 309+ tests pass (no regressions)
+### 5. Prepare the tool index
 
-## State of OrchestrationService
+Preflight may rebuild the tool index using current tool definitions and category metadata.
 
-After Phase 4.1–4.4:
-- **Inline state**: 0 (all injected: hitl_store, session_cd)
-- **Preprocessing**: Moved to request-preflight module
-- **Extracted logic**: run_once, run_agent_loop, run_task_loop, continue_task_loop, run_phase_loop
-- **Remaining methods**: execute() dispatcher, security helpers, system prompt builder, renderer management
+This is not tool selection.
+It is synchronization of the searchable tool space with the current runtime state.
 
-The service is now:
-1. A dependency container (`_preflight_deps()`, `_runner_deps()`, `_continue_deps()`, `_phase_deps()`, `_dispatch_deps()`)
-2. An orchestration facade (`execute()` entry + dispatcher delegation + result finalization)
-3. A stateful collaborator holder (hitl_store, session_cd)
+## Inputs and Outputs
 
-## Follow-up
+### Inputs
 
-- Keep strengthening characterization tests for `run_request_preflight()`
-- Preserve the boundary where `execute()` only performs preflight and then delegates
-- Prevent execution policy or dispatcher responsibilities from drifting back into preflight
+- inbound `OrchestrationRequest`
+- secret vault
+- agent runtime
+- runtime policy resolver
+- workspace path
+- optional tool index
 
-## Design Decisions
+### Outputs
 
-1. **Discriminated Union over Conditional**: `kind: "resume" | "ready"` prevents type-unsafe branching
-2. **Module-Level Helpers**: seal_text, build_context_message not exported (internal contract)
-3. **Optional tool_index**: ToolIndex can be null (graceful degradation)
-4. **Semantic Over Optimization**: Heavy context computed even for cases that branch early (clarity over micro-optimization)
+Preflight returns one of two shapes.
+
+- `ResumedPreflight`
+  - an already-running task can be resumed
+- `ReadyPreflight`
+  - the dispatcher has all context needed to choose and execute a route
+
+This `kind`-based split prevents the resume path from being mixed with the normal execution path.
+
+## Boundaries
+
+`request preflight` must not:
+
+- choose between once / agent / task / phase
+- perform gateway routing
+- generate user-facing replies
+- perform tool selection
+- assemble role/protocol prompt profiles
+
+It is a preparation layer, not an execution layer.
+
+## Meaning in the Current Architecture
+
+The current project does not treat `execute()` as one large monolithic function.
+Instead it uses `preflight -> dispatcher -> runner`.
+
+Within that shape, preflight fixes the following invariants:
+
+- input normalization ends here
+- later layers only see sealed input
+- resume vs ready is decided here
+- shared runtime context is assembled here once
+
+That separation is what allows the dispatcher to focus on route selection instead of request assembly.
+
+## Non-goals
+
+- audit state or completion tracking
+- workflow progress bookkeeping
+- session reuse policy decisions themselves
+- role/protocol prompt compilation
+
+This document describes the currently adopted design concept.
+Execution planning and remaining work live under `docs/*/design/improved/*`.

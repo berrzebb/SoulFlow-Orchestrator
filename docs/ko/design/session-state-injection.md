@@ -1,142 +1,154 @@
-# 설계: Session CD Collaborator 주입 (Phase 4.3)
+# 세션 상태 주입 설계
 
-> **상태**: 구현 완료 · `session_cd`를 필수 collaborator 주입으로 전환
+## 목적
 
-## 개요
+`session state injection`은 오케스트레이션 서비스가 필요한 세션성 collaborator를 직접 생성하지 않고 외부에서 주입받도록 만드는 설계다.
+이 구조의 목적은 서비스 내부에 숨어 있는 상태를 줄이고, **세션 점수, HITL 대기 상태, compaction 관련 상태 같은 실행 중 collaborator를 명시적으로 조립하는 것**이다.
 
-서비스 분해 완성: 마지막 인라인 상태 생성 (`session_cd`)을 `OrchestrationService`에서 제거하고 의존성 주입을 통해 collaborator로 분리.
+핵심 의도는 다음과 같다.
 
-유지 사항:
-- 의미 보존 (CD 점수 계산 규칙 변경 없음)
-- 공개 API 계약 (`get_cd_score()`, `reset_cd_score()` 유지)
-- bootstrap이 collaborator 생명주기를 명시적으로 소유
+- `OrchestrationService`를 숨겨진 상태 생성기보다 조정자에 가깝게 만든다
+- 세션성 state의 lifecycle을 bootstrap이 소유하게 한다
+- 테스트에서 mock collaborator를 쉽게 주입할 수 있게 한다
+- runner와 hooks가 같은 세션 상태를 공유하게 만든다
 
-## 문제 정의
+## 주입 대상 상태
 
-`OrchestrationService`의 유일한 인라인 상태 생성:
-```typescript
-private readonly session_cd = create_cd_observer();  // 인라인 생성
+현재 설계에서 세션 상태로 보는 대표 collaborator는 다음과 같다.
+
+- `session_cd`
+  - 실행 이벤트를 관찰하고 CD score를 계산하는 observer
+- `hitl_pending_store`
+  - 사용자 응답을 기다리는 pending state 저장소
+- compaction flush 관련 collaborator
+  - 메모리 flush나 context reserve 계산에 쓰이는 주입형 구성
+
+상위 설계의 핵심은 이것들을 “service 내부 인라인 상태”가 아니라 **외부에서 조립되는 collaborator**로 다루는 것이다.
+
+## 조립 위치
+
+세션 상태는 bootstrap 계층에서 조립한다.
+
+```text
+bootstrap
+  -> create session collaborators
+  -> inject into OrchestrationService
+  -> pass through to hooks / runners / dashboard accessors
 ```
 
-제약 사항:
-- 테스트에서 custom/mock CD observer 주입 불가
-- 세션 상태의 외부 생명주기 관리 불가
-- 완전한 의존성 주입 패턴 미달성
+즉 orchestration service는 세션 상태의 source가 아니라, 이미 만들어진 상태를 소비하는 계층이다.
 
-다른 모든 의존성은 이미 `OrchestrationServiceDeps`로 주입됨.
+## 왜 주입형이어야 하는가
 
-## 솔루션 아키텍처
+이 설계의 이유는 명확하다.
 
-### 모듈 구조
+### 1. 테스트 가능성
 
-**수정 파일**: `src/orchestration/service.ts`
+세션 상태를 서비스 내부에서 직접 만들면:
 
-`CDObserver` 인터페이스가 이미 필요한 계약을 정의:
-```typescript
-export type CDObserver = {
-  observe: (event: AgentEvent) => CDEvent | null;
-  get_score: () => { total: number; events: CDEvent[] };
-  reset: () => void;
-};
-```
+- mock observer 주입이 어렵고
+- lifecycle 제어가 어렵고
+- 특정 state transition만 검증하는 테스트가 복잡해진다
 
-### 의존성 주입 패턴
+주입형 구조에서는 테스트가 필요한 collaborator만 교체하면 된다.
 
-**수정**: `src/orchestration/service.ts`
+### 2. 실행 경로 일관성
 
-```typescript
-// 1. CDObserver 타입 import
-import { type CDObserver } from "../agent/cd-scoring.js";
+세션 상태는 한 곳에서만 쓰이지 않는다.
 
-// 2. OrchestrationServiceDeps에 required session_cd 추가
-export type OrchestrationServiceDeps = {
-  // ... 기존 필드
-  /** 세션 CD 관찰자. bootstrap에서 반드시 주입한다. */
-  session_cd: CDObserver;
-  // ...
-};
+- hooks
+- once / agent / task runner
+- workflow continuation
+- dashboard stats
+- HITL bridge
 
-// 3. 클래스 필드 타입 명시
-private readonly session_cd: CDObserver;
+이 경로들이 서로 다른 인스턴스를 보지 않게 하려면, 생성 위치를 bootstrap에 고정하는 편이 낫다.
 
-// 4. 생성자 주입
-constructor(deps: OrchestrationServiceDeps) {
-  // ...
-  this.session_cd = deps.session_cd;
-  // ...
-}
-```
+### 3. 서비스 책임 축소
 
-### 주요 특징
+`OrchestrationService`는 요청 조정과 실행 분기에 집중해야 한다.
+세션성 observer와 pending store를 직접 생성하는 순간, 서비스는 orchestration coordinator이면서 동시에 state owner가 된다.
 
-- **필수 주입**: `session_cd: CDObserver` → service 내부 인라인 생성 제거
-- **명시적 생명주기**: bootstrap이 observer 생성/소유 책임을 가짐
-- **모든 내부 접근 불변**: 내부 경로는 `this.session_cd`로 동일
+이 설계는 그 혼합 책임을 피하려는 것이다.
 
-## 테스트 커버리지
+## session_cd의 의미
 
-**신규 파일**: `tests/orchestration/session-state.test.ts` (6개 테스트)
+`session_cd`는 세션 이벤트를 관찰하는 collaborator다.
 
-계약 검증:
-- `CDObserver` 타입 정의됨 ✓
-- `OrchestrationServiceDeps.session_cd` required 필드 포함 ✓
-- 공개 메서드 (`get_cd_score()`, `reset_cd_score()`) 유지 ✓
-- Collaborator 주입 패턴 작동 ✓
+상위 설계 관점에서 중요한 점은:
 
-**회귀 테스트**: 309 tests 통과 (신규 6 + 기존 303)
+- 점수 규칙 그 자체보다
+- **관찰 대상 상태가 외부에서 주입된다는 점**
 
-## 의미 보존 체크리스트
+이다.
 
-✅ CD 점수 규칙 변경 없음:
-- `observe()` 동작 불변
-- `get_score()` 계산 불변
-- `reset()` 기능 불변
+즉 이 문서의 목적은 CD scoring 알고리즘을 설명하는 것이 아니라, 그 observer가 orchestration 내부에서 어떻게 위치해야 하는지를 정의하는 것이다.
 
-✅ 공개 API 불변:
-- `get_cd_score()` 반환 구조 동일
-- `reset_cd_score()` 상태 초기화 동일
+## HITL pending state의 의미
 
-✅ 통합 불변:
-- `hooks_deps.session_cd` → `build_agent_hooks` 전달 동일
-- `runner_deps.session_cd` → 모든 runner 전달 동일
-- Tool 이벤트 관찰 경로 불변
+`hitl_pending_store`는 사람 응답이 도착하기 전의 대기 상태를 유지하는 세션성 저장소다.
 
-✅ 조립 책임 명시:
-- `session_cd` 생성 책임은 service가 아니라 bootstrap이 소유
-- `new OrchestrationService(deps)`는 항상 완전한 collaborator 세트를 받음
-- 인라인 `create_cd_observer()` 경로 제거
+이 저장소를 주입형으로 두는 이유는 다음과 같다.
 
-## 변경 파일
+- dashboard와 channel bridge가 같은 pending state를 봐야 한다
+- workflow continuation이 이전 대기 상태를 이어받아야 한다
+- 서비스 내부 hidden map으로 두면 외부 시스템과 일관성이 깨진다
 
-| 파일 | 변경 |
-|------|------|
-| `src/orchestration/service.ts` | +import CDObserver, +OrchestrationServiceDeps 필수 필드 추가, ~생성자 주입 패턴 |
-| `tests/orchestration/session-state.test.ts` | **NEW** (6개 테스트: 타입 계약 + 주입 검증) |
-| `docs/LARGE_FILE_SPLIT_DESIGN.md` | Phase 4.3 완료 상태 업데이트 |
+따라서 pending state는 route layer와 orchestration layer 사이의 공유 collaborator다.
 
-## 검증
+## Compaction과 세션 상태
 
-✅ TypeScript 컴파일: `npx tsc -p tsconfig.json --noEmit`
-✅ 테스트 스위트: 309 tests 통과 (22개 테스트 파일)
-✅ bootstrap 명시 주입 경로 검증 완료
+세션 상태 주입 설계는 memory compaction과도 연결된다.
 
-## OrchestrationService의 상태
+이유는 다음과 같다.
 
-Phase 4.1, 4.2, 4.3 후:
-- **인라인 상태**: 0 (모두 주입 또는 lazy init으로 이동)
-- **주입된 상태**: hitl_store, session_cd (collaborators)
-- **Lazy 초기화 상태**: _renderer (캐싱만)
-- **추출된 로직**: run_once, run_agent_loop, run_task_loop, continue_task_loop, run_phase_loop
-- **남은 메서드**: execute(), 보안 helper, 시스템 프롬프트 빌더, renderer 관리, 결과 변환
+- compaction flush는 세션 토큰 사용량과 현재 실행 상태를 반영해야 한다
+- 이 판단은 pure function만으로 끝나지 않고, 실행기 collaborator와 연결된다
+- 따라서 compaction 관련 구성 역시 주입 가능한 collaborator 또는 config로 두는 편이 맞다
 
-서비스는 이제 주로 다음을 수행하는 조정자/facade:
-1. `execute()`를 통해 요청 수신
-2. Stateful collaborators 관리 (hitl_store, session_cd)
-3. 추출된 모듈 레벨 함수로 실행 위임
-4. 요청 전처리 및 응답 최종화
+상위 설계 관점에서는 “flush를 언제 호출하는가”보다 “service가 혼자 상태를 만들지 않는다”는 원칙이 더 중요하다.
 
-## 후속 작업
+## 공개 계약
 
-- `session_cd`를 service 내부 상태가 아니라 injected collaborator로 유지
-- bootstrap 외 경로에서 observer를 임의 생성하지 않도록 방지
-- 관련 테스트에서 fallback 생성에 의존하는 가정이 다시 생기지 않도록 회귀 고정
+세션 상태는 내부에만 존재하면 안 되고, 필요한 경우 외부 읽기 API를 통해 노출될 수 있어야 한다.
+
+예를 들면:
+
+- 현재 CD score 조회
+- CD score reset
+- pending HITL 응답 해소
+
+이 공개 계약은 내부 자료구조를 노출하기 위한 것이 아니라, orchestration 외부 계층이 동일한 세션 상태를 참조할 수 있게 하기 위한 것이다.
+
+## 경계
+
+이 설계가 하지 않는 일은 다음과 같다.
+
+- session memory retrieval 정책 전체를 정의하지 않는다
+- CD scoring 세부 알고리즘을 설명하지 않는다
+- workflow 상태 머신 전체를 설명하지 않는다
+- dashboard stats UI의 최종 표현 방식을 정의하지 않는다
+
+즉 `session state injection`은 세션성 collaborator의 소유권과 주입 경계를 설명하는 문서다.
+
+## 현재 프로젝트에서의 의미
+
+현재 프로젝트는 단일 오케스트레이션 서비스가 channels, dashboard, workflows와 함께 동작한다.
+이 환경에서는 세션 상태를 한 클래스 안에 감춰 두는 것보다, bootstrap에서 명시적으로 조립해 여러 경로가 공유하는 것이 더 적절하다.
+
+이 문서는 그 상위 설계를 다음처럼 고정한다.
+
+- 세션 상태는 collaborator다
+- collaborator는 bootstrap이 생성한다
+- orchestration service는 소비자이자 조정자다
+- hooks, runners, dashboard는 같은 세션 상태를 공유한다
+
+## 비목표
+
+- 현재 구현 phase나 완료 상태 기록
+- 테스트 통과 수치 기록
+- 세션 점수 규칙의 상세 수학
+- HITL UX 전체 설계
+
+이 문서는 현재 채택된 세션 상태 주입 설계를 설명한다.
+세부 분해와 후속 작업은 `docs/*/design/improved/*`에서 관리한다.

@@ -1,192 +1,178 @@
-# 설계: Execute Dispatcher 추출 (Phase 4.5)
+# Execute Dispatcher 설계
 
-> **상태**: 구현 완료 · Execute dispatcher를 단일 모듈로 수렴
+## 목적
 
-## 개요
+`execute dispatcher`는 preflight가 준비한 요청을 실제 실행 경로로 연결하는 오케스트레이션 분기 계층이다.
+이 계층의 역할은 “이 요청을 어떤 방식으로 처리할 것인가”를 한 곳에서 결정하고, 그 결정을 runner와 gateway binding으로 일관되게 전달하는 것이다.
 
-`OrchestrationService.execute()` 중반부의 dispatcher 로직을 `execute-dispatcher.ts` 모듈로 분리.
-gateway 라우팅 → identity/builtin/inquiry short-circuit → phase/once/agent/task 분기 → finalize를 한 코드 경로로 수렴.
+현재 프로젝트는 모든 요청을 동일한 agent loop로 처리하지 않는다.
+대신 dispatcher가 요청 성격과 현재 런타임 상태를 보고 다음 경로를 선택한다.
 
-유지:
-- Semantic 보존 (gateway → short-circuit → mode 분기 → finalize)
-- Public API contract (`execute()` 시그니처 변경 없음)
-- 의존성 주입 패턴으로 테스트 용이성
+- short-circuit 응답
+- direct tool 실행
+- once 실행
+- agent loop
+- task loop
+- phase workflow
 
-## 문제 정의
+## 위치
 
-`OrchestrationService.execute()`가 ~180줄의 dispatcher 로직을 포함:
-- L374–401: Gateway 라우팅 결정
-- L403–417: Short-circuit 분기 (identity/builtin/inquiry 조기 반환)
-- L422–436: finalize 클로저 (이벤트 로깅 + process tracker)
-- L438–459: Mode 분기 (phase / once / agent / task)
-- L480–526: 에스컬레이션 + executor fallback
-
-이 inline 로직이 방지하는 것:
-- Dispatcher를 독립적으로 테스트
-- 다른 맥락에서 dispatcher 계산 재사용
-- "데이터 수집"과 "실행 분기" 분리
-
-## 솔루션 아키텍처
-
-### 모듈 구조
-
-**파일**: `src/orchestration/execution/execute-dispatcher.ts`
-
-```typescript
-// 의존성 주입 타입
-export type ExecuteDispatcherDeps = {
-  providers: ProviderRegistry;
-  runtime: AgentRuntimeLike;
-  logger: Logger;
-  config: {
-    executor_provider: ExecutorProvider;
-    provider_caps?: ProviderCapabilities;
-  };
-  process_tracker: ProcessTrackerLike | null;
-  guard: ConfirmationGuard | null;
-  tool_index: ToolIndex | null;
-  log_event: (input: AppendWorkflowEventInput) => void;
-  build_identity_reply: () => string;
-  build_system_prompt: (names: string[], provider: string, chat_id: string, cats?: ReadonlySet<string>, alias?: string) => Promise<string>;
-  generate_guard_summary: (task_text: string) => Promise<string>;
-  run_once: (args: RunExecutionArgs) => Promise<OrchestrationResult>;
-  run_agent_loop: (args: RunExecutionArgs & { media: string[]; history_lines: string[] }) => Promise<OrchestrationResult>;
-  run_task_loop: (args: RunExecutionArgs & { media: string[] }) => Promise<OrchestrationResult>;
-  run_phase_loop: (req: OrchestrationRequest, task_with_media: string, workflow_hint?: string, node_categories?: string[]) => Promise<OrchestrationResult>;
-  caps: () => ProviderCapabilities;
-};
-
-// 메인 함수
-export async function execute_dispatch(
-  deps: ExecuteDispatcherDeps,
-  req: OrchestrationRequest,
-  preflight: ReadyPreflight,
-): Promise<OrchestrationResult>
+```text
+Inbound Request
+  -> Request Preflight
+  -> Execute Dispatcher
+  -> once / agent / task / phase runner
 ```
 
-### 주요 특징
+dispatcher는 preflight 이후, 실제 runner 이전에 존재한다.
+입력 조립은 preflight에서 끝나고, 실행 분기와 fallback은 dispatcher가 담당한다.
 
-- **의존성 주입**: 모든 외부 호출이 deps의 함수 참조로 제공됨
-- **Semantic 보존**: gateway 라우팅 → short-circuit → mode 분기 → finalize 순서 유지
-- **타입 안전성**: ReadyPreflight discriminated union으로 ready 상태 필드만 접근 가능
-- **Lazy evaluation**: 도구 선택과 시스템 프롬프트 빌드는 필요할 때만 실행
-- **finalize 클로저**: 이벤트 로깅과 process tracker 업데이트를 최종 단계로 포장
+## 핵심 책임
 
-### 통합
+### 1. gateway 판단 수용
 
-**수정**: `src/orchestration/service.ts`
+dispatcher는 `resolve_gateway()`의 결정을 받아 현재 요청의 1차 실행 전략을 얻는다.
 
-```typescript
-// 1. _dispatch_deps() 메서드 추가
-private _dispatch_deps(): ExecuteDispatcherDeps {
-  return {
-    providers: this.providers,
-    runtime: this.runtime,
-    logger: this.logger,
-    config: { executor_provider: this.config.executor_provider, provider_caps: this.config.provider_caps },
-    process_tracker: this.process_tracker,
-    guard: this.guard,
-    tool_index: this.tool_index,
-    log_event: (e) => this.log_event(e),
-    build_identity_reply: () => this._build_identity_reply(),
-    build_system_prompt: (names, prov, chat, cats, alias) => this._build_system_prompt(names, prov, chat, cats, alias),
-    generate_guard_summary: (text) => this._generate_guard_summary(text),
-    run_once: (args) => _run_once(this._runner_deps(), args),
-    run_agent_loop: (args) => _run_agent_loop(this._runner_deps(), args),
-    run_task_loop: (args) => _run_task_loop(this._runner_deps(), args),
-    run_phase_loop: (req, task, hint, cats) => _run_phase_loop(this._phase_deps(), req, task, hint, cats),
-    caps: () => this._caps(),
-  };
-}
+이 판단에는 다음 요소가 반영된다.
 
-// 2. execute() 단순화
-async execute(req: OrchestrationRequest): Promise<OrchestrationResult> {
-  const preflight = await run_request_preflight(this._preflight_deps(), req);
+- 현재 사용자 요청
+- 최근 세션 히스토리
+- 활성 task 존재 여부
+- 사용 가능한 skill / tool category
+- executor capability
 
-  if (preflight.kind === "resume") {
-    return this.continue_task_loop(req, preflight.resumed_task, preflight.task_with_media, preflight.media);
-  }
+dispatcher는 이 결과를 실행 가능한 분기로 바꾼다.
 
-  if (!preflight.secret_guard.ok) {
-    return { reply: format_secret_notice(preflight.secret_guard), mode: "once", tool_calls_count: 0, streamed: false };
-  }
+### 2. short-circuit 처리
 
-  return execute_dispatch(this._dispatch_deps(), req, preflight);
-}
+모든 요청이 runner까지 갈 필요는 없다.
+dispatcher는 다음 경우를 조기 종료한다.
 
-// 3. 제거 메서드
-// - run_once
-// - run_agent_loop
-// - run_task_loop
-// - run_phase_loop
+- `identity`
+- `builtin`
+- `inquiry`
+
+또한 direct tool 실행이 안전하고 결정적일 때는 LLM loop 대신 직접 실행할 수 있다.
+
+이 구조의 목적은 비싼 실행 루프를 최소화하고, 결정론적 처리를 앞당기는 데 있다.
+
+### 3. session reuse / freshness gate 적용
+
+phase 실행이 아닌 경우, dispatcher는 최근 세션 증거를 보고 재사용이 적절한지 먼저 판단할 수 있다.
+
+- 이미 같은 질의가 최근에 처리되었는지
+- 같은 주제인지
+- freshness window 안인지
+
+이 계층은 “지금 당장 새 도구 호출이 필요한가”를 판단하는 첫 번째 경제성 게이트다.
+
+### 4. executor / mode 확정
+
+short-circuit를 통과한 요청은 실제 mode와 executor를 확정한다.
+
+- `phase`
+- `once`
+- `agent`
+- `task`
+
+동시에 사용자 선호 provider, configured executor, capability fallback도 반영한다.
+
+### 5. tool selection 및 system prompt 진입
+
+phase가 아닌 경로에 대해서는 dispatcher가 tool selection과 system prompt 진입점을 연다.
+
+다만 이 계층은 prompt 내용을 직접 정의하지 않는다.
+prompt baseline은 runtime / role / protocol 계층이 제공하고, dispatcher는 그것을 어느 실행 경로에 넣을지만 결정한다.
+
+### 6. confirmation / escalation / fallback 관리
+
+dispatcher는 단순 분기기만이 아니라 bounded control layer이기도 하다.
+
+- confirmation guard로 위험 작업을 보류
+- once 결과가 부족하면 task loop로 escalation
+- agent 결과가 approval 성격이면 task loop로 escalation
+- executor 실패 시 fallback chain 재시도
+
+즉 dispatcher는 요청을 “한 번 어디로 보낼지”만 고르는 것이 아니라, 실행 경계 내에서 허용된 승격과 fallback도 책임진다.
+
+### 7. finalize와 공통 종료 처리
+
+모든 실행 결과는 dispatcher의 finalize 경로를 지나며 정리된다.
+
+- workflow event 기록
+- process tracker 정리
+- usage / tool count 반영
+- validator / reviewer 역할의 follow-up checklist 부착
+
+이 설계 덕분에 runner마다 결과 마감 정책을 따로 중복 구현하지 않는다.
+
+## 경계
+
+dispatcher가 하지 않아야 할 일도 중요하다.
+
+- 입력 seal, secret 점검, skill 추천을 다시 하지 않는다
+- role policy나 protocol 문서를 직접 해석하지 않는다
+- persona 문장을 직접 생성하지 않는다
+- tool body 실행 자체를 소유하지 않는다
+- workflow definition을 생성하거나 저장하지 않는다
+
+즉 dispatcher는 “준비된 요청을 실행기 쪽으로 연결하는 계층”이지, preflight나 runner의 대체물이 아니다.
+
+## 현재 구조의 라우팅 순서
+
+현재 채택된 흐름은 대략 다음 순서를 따른다.
+
+```text
+gateway decision
+  -> identity / builtin / inquiry short-circuit
+  -> optional direct tool
+  -> session reuse gate
+  -> mode / executor resolution
+  -> phase branch or tool selection
+  -> confirmation guard
+  -> once / agent / task runner
+  -> escalation / fallback
+  -> finalize
 ```
 
-## 테스트 커버리지
+이 순서의 의도는 다음과 같다.
 
-**파일**: `tests/orchestration/execute-dispatcher.test.ts` (7개 structural 테스트)
+- 가장 싼 판단을 먼저 한다
+- 가장 비싼 loop는 가장 늦게 연다
+- deterministic 처리와 reuse 가능성을 먼저 소진한다
+- 결과 마감은 항상 동일한 정책으로 묶는다
 
-계약 검증:
-- dispatcher가 ExecuteDispatcherDeps를 수신 ✓
-- dispatcher가 모든 필드를 가진 ReadyPreflight를 수신 ✓
-- 의존성 주입 패턴 동작 (build_identity_reply callable) ✓
-- run_once를 RunExecutionArgs로 호출 가능 ✓
-- log_event를 이벤트 기록으로 호출 가능 ✓
-- finalize 클로저가 done/blocked 이벤트 기록 ✓
-- ReadyPreflight discriminated union 타입 사용 가능 ✓
+## gateway 및 direct execution과의 관계
 
-**회귀 테스트**: 대표 회귀 테스트와 타입 검증 기준 통과
+dispatcher는 gateway와 direct execution을 포함하지만, 둘과 동일한 계층은 아니다.
 
-## Semantic 보존 체크리스트
+- gateway는 “무슨 종류의 요청인가”를 판단한다
+- direct executor는 LLM 없이 실행 가능한 결정론적 도구를 수행한다
+- dispatcher는 이 둘을 받아 전체 실행 경로에 배치한다
 
-✅ **Gateway 라우팅 먼저**: active_tasks_in_chat → resolve_gateway 결정
-✅ **Short-circuit 조기 반환**: identity/builtin/inquiry 분기가 도구 선택 전 종료
-✅ **finalize로 결과 포장**: done/blocked 이벤트 로깅 + process_tracker 정리
-✅ **Mode 분기 분리**: phase는 도구 선택 전에 분기, once/agent/task는 후에
-✅ **에스컬레이션 보존**: once → task, agent → task 에스컬레이션 로직 유지
-✅ **Executor fallback**: claude_code → chatgpt fallback (사용 가능할 때)
-✅ **Public API**: `execute()` 시그니처 변경 없음, 반환 타입 변경 없음
+따라서 gateway나 direct executor가 확장되더라도 dispatcher의 책임은
+“경로 선택과 bounded escalation/finalize”
+로 유지되어야 한다.
 
-## 수정 파일 요약
+## 세션 재사용 정책과의 관계
 
-| 파일 | 변경 |
-|------|------|
-| `src/orchestration/execution/execute-dispatcher.ts` | **NEW** (300+ LOC: 타입 + 메인 함수) |
-| `src/orchestration/service.ts` | 4개 메서드 제거 (run_once, run_agent_loop, run_task_loop, run_phase_loop), dead code 4개 함수 제거, execute() 단순화, _dispatch_deps() 추가 |
-| `tests/orchestration/execute-dispatcher.test.ts` | **NEW** (7개 structural 테스트) |
-| `docs/en/design/execute-dispatcher.md` | **NEW** |
-| `docs/ko/design/execute-dispatcher.md` | **NEW** |
-| `docs/LARGE_FILE_SPLIT_DESIGN.md` | Phase 4.5 완료 상태 |
+dispatcher는 세션 재사용의 첫 적용 지점이다.
+하지만 재사용 정책의 source of truth 자체는 별도 guardrail 계층에 있다.
 
-## 검증
+즉 dispatcher는 다음만 한다.
 
-✅ TypeScript: `npx tsc -p tsconfig.json --noEmit`
-✅ 테스트: `npx vitest run tests/orchestration/execute-dispatcher.test.ts` (7/7 통과)
-✅ 전체 테스트: 316+ 테스트 통과 (회귀 없음)
+- evidence를 받아 reuse를 평가한다
+- reuse가 유효하면 short-circuit한다
+- 그렇지 않으면 정상 실행으로 넘긴다
 
-## OrchestrationService의 상태
+재사용 판정 규칙, freshness, retry bypass 같은 정책 세부는 guardrail 설계 문서가 담당한다.
 
-Phase 4.1–4.5 완료 후:
-- **Inline 상태**: 0 (모두 주입됨: hitl_store, session_cd, dispatcher 로직)
-- **Preprocessing**: request-preflight 모듈로 이동
-- **Dispatching**: execute-dispatcher 모듈로 이동
-- **추출된 로직**: run_once, run_agent_loop, run_task_loop, continue_task_loop, run_phase_loop
-- **남은 메서드**: execute() dispatcher 진입점, security/prompt/renderer 헬퍼, 상태 관리
+## 비목표
 
-현재 서비스는:
-1. 의존성 컨테이너 (_preflight_deps, _runner_deps, _continue_deps, _phase_deps, _dispatch_deps)
-2. 오케스트레이션 파사드 (execute 라우팅 + 최종화)
-3. Stateful collaborator 홀더 (hitl_store, session_cd)
+- 작업 완료 여부나 감사 상태 관리
+- 세션 메모리 영속화 전략 정의
+- tool ranking 알고리즘 설계
+- role / protocol / persona 자체의 source of truth 역할
 
-## 후속 작업
-
-- `execute_dispatch()`의 characterisation test를 계속 강화
-- gateway 결정과 dispatcher 실행의 경계를 유지
-- 향후 provider policy가 `ExecutionGateway`나 별도 port로 이동하더라도 dispatcher가 새 오케스트레이터가 되지 않도록 제한
-
-## 설계 결정
-
-1. **Wrapper 메서드 대신 함수 참조**: _dispatch_deps()가 함수 참조를 반환하여 cleaner 의존성 그래프
-2. **Deps 패러미터 패턴**: RunnerDeps 패턴을 따라 executor 모듈 간 일관성
-3. **Optional process_tracker/guard**: null collaborator를 gracefully 처리 (composable 설계)
-4. **최적화 대신 semantic 보존**: Heavy context를 finalize 클로저에서도 계산 (명확성 > 마이크로 최적화)
-5. **ReadyPreflight만**: Dispatcher는 ReadyPreflight만 수신 (resume/secret_guard는 dispatch 전에 처리)
+이 문서는 현재 프로젝트가 dispatcher를 어떤 책임 경계로 채택했는지 설명한다.
+세부 작업 분해와 후속 구현은 `docs/*/design/improved/*`에서 관리한다.

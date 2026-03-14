@@ -1,172 +1,111 @@
-# 설계: 다중 환경 설정 — 컨테이너 기반 격리 실행
-
-> **상태**: 구현 완료
+# 설계: 다중 환경 설정
 
 ## 개요
 
-다중 환경 설정(Multi-Environment Setup)은 SoulFlow Orchestrator를 위한 격리된 컨테이너 실행 환경(개발, 테스트, 스테이징, 프로덕션)을 제공합니다. 사용자는 한 줄의 명령(`make dev` 또는 `run.cmd dev`)을 실행하면 시스템이 모든 설정, Docker 구성, 서비스 초기화를 자동으로 처리합니다.
+다중 환경 설정은 프로젝트를 개발, 테스트, 검증, 운영 같은 서로 다른 실행 프로필로 분리해 다루기 위한 운영 설계다. 이 설계의 목적은 사용자가 복잡한 로컬 도구 체인을 직접 조립하지 않고도, **같은 인터페이스로 서로 다른 격리 환경**을 다룰 수 있게 만드는 데 있다.
 
-핵심 원칙: **사용자는 npm, docker 명령, Node.js 버전을 이해할 필요가 없어야 한다.**
+## 설계 의도
 
-## 문제 정의
+현재 프로젝트는 로컬 개발 환경, 테스트 환경, 검증 환경, 운영 환경이 서로 다른 포트·워크스페이스·서비스 조합을 가질 수 있다. 이 차이를 사용자가 직접 compose 파일과 환경 변수를 손으로 맞추게 하면 다음 문제가 생긴다.
 
-- **이전**: 사용자가 수동으로 `npm install`, `npm run build`, `docker compose up` 등을 실행
-- **문제**: 비개발자 사용자는 시스템을 사용할 수 없었고, 같은 머신의 여러 사용자 간에 환경 충돌 발생
-- **해결**: 환경별 단일 명령어 + 컨테이너 빌드를 통한 사용자별 자동 격리
+- 실행 진입점이 플랫폼마다 달라진다.
+- 같은 머신에서 여러 환경이 충돌하기 쉽다.
+- 사용자가 Node/npm/Docker 내부 빌드 순서를 알아야 한다.
+- 환경 차이가 문서에만 남고 실제 구성이 표준화되지 않는다.
 
-## 아키텍처
+다중 환경 설정은 이 문제를 **프로필 기반 실행**으로 정리한다.
 
+## 핵심 원칙
+
+### 1. 환경은 프로필로 선택한다
+
+환경 차이는 개별 명령 조합이 아니라 명시적인 profile로 모델링한다. 사용자는 profile을 선택하고, 시스템은 그에 맞는 실행 구성을 조립한다.
+
+### 2. 진입점은 플랫폼별로 다르더라도 의미는 같아야 한다
+
+Make, batch, PowerShell 같은 진입점은 플랫폼 차이를 흡수하는 얇은 래퍼여야 한다. “dev를 실행한다”, “test를 내린다” 같은 의미는 동일해야 한다.
+
+### 3. 환경 조립은 컨테이너 우선이다
+
+로컬 의존성 설치 절차를 사용자에게 떠넘기기보다, 실행 환경 자체를 컨테이너 조립으로 관리한다. 이 설계는 특히 사용자 중심 배포 경험을 위해 중요하다.
+
+### 4. 워크스페이스와 포트 충돌은 프로필 계층에서 해결한다
+
+환경이 다르면 데이터 경로, 포트, 프로젝트 이름도 분리되어야 한다. 격리는 애플리케이션 시작 후가 아니라 환경 조립 단계에서 결정된다.
+
+## 현재 채택한 구조
+
+```mermaid
+flowchart TD
+    A[User Entry Point] --> B[Profile Selection]
+    B --> C[Environment Setup Script]
+    C --> D[Generated Compose / Env]
+    D --> E[Container Runtime]
+    E --> F[Application + Workspace]
 ```
-사용자 실행: ./run.sh dev  또는  run.cmd dev  또는  .\run.ps1 dev
-    ↓
-셸 스크립트 (run.sh / run.cmd / run.ps1)
-    ↓
-setup-environment.js (docker-compose.{profile}.yml + .env.{profile} 생성)
-    ↓
-docker compose up -d (격리된 컨테이너 시작)
-    ↓
-애플리케이션 http://localhost:4200에서 실행
-```
+
+## 주요 구성 요소
+
+### Entry Scripts
+
+플랫폼별 진입 스크립트는 사용자가 환경을 여는 가장 얇은 표면이다. 이 계층의 역할은 셸 차이를 감추고, profile 기반 실행을 같은 의미로 노출하는 데 있다.
+
+### Environment Setup
+
+환경 설정 생성기는 profile을 실제 실행 구성으로 바꾼다. 포트, workspace, Docker project 이름, 환경 변수, 생성 파일 위치 등이 이 단계에서 결정된다.
+
+### Generated Runtime Configuration
+
+생성된 compose 파일과 env 파일은 특정 profile의 실행 산출물이다. 즉 손으로 유지하는 설정보다, 선택된 profile의 결과로 보는 것이 현재 구조에 맞다.
+
+### Workspace Isolation
+
+환경별 workspace 분리는 단순 편의 기능이 아니라 데이터 격리 경계다. profile 차이와 사용자 차이는 여기에서 실제 파일시스템/컨테이너 경계로 반영된다.
 
 ## 환경 프로필
 
-| 프로필 | 포트 | Redis | 목적 | 워크스페이스 |
-|--------|------|-------|------|------------|
-| dev | 4200 | 6379 | 개발, 자동 리로드 | `/data/workspace-dev` |
-| test | 4201 | 6380 | 테스트, CI/CD 격리 | `/data/workspace-test` |
-| staging | 4202 | 6381 | 배포 전 검증 | `/data/workspace-staging` |
-| prod | 4200 | 6379 | 프로덕션 배포 | `/data` |
+프로필은 일반적으로 다음 차이를 담는다.
 
-## 주요 기능
+- 포트
+- workspace 경로
+- 빌드/런타임 성격
+- 부가 서비스 구성
 
-### 1. 플랫폼 중립적 진입점
+중요한 점은 profile이 단순 label이 아니라, 서로 충돌하지 않는 실행 조합의 이름이라는 것이다.
 
-동일한 명령 인터페이스를 갖는 세 가지 스크립트:
-- **Makefile** (Linux/macOS): `make dev`, `make down` 등
-- **run.cmd** (Windows 명령 프롬프트): `run.cmd dev`, `run.cmd down` 등
-- **run.ps1** (Windows PowerShell): `.\run.ps1 dev`, `.\run.ps1 down` 등
+## 사용자 경험 관점
 
-모두 동일한 JavaScript 설정 생성기(`setup-environment.js`)로 위임합니다.
+이 설계는 운영자보다 소비자에 가까운 사용자를 전제한다. 따라서 사용자는 다음 정도만 알면 된다.
 
-### 2. 동적 Docker Compose 생성
+- 어떤 profile을 열 것인지
+- 어떻게 시작하고 내릴 것인지
+- 어느 주소로 접속하는지
 
-- `setup-environment.js`가 런타임에 `docker-compose.{profile}.yml` 생성
-- `WORKSPACE` 환경변수를 통해 커스텀 워크스페이스 경로 지원
-- 공유 시스템에서의 사용자별 프로젝트 격리: `soulflow-{profile}-{username}`
+반대로 내부 빌드 순서, node_modules 관리, compose 세부 문법은 상위 사용자 문서와 실행 스크립트가 숨기는 것이 맞다.
 
-### 3. 컨테이너 전용 Node 모듈
+## 보안과 격리의 관계
 
-- `.dockerignore`는 Docker 컨텍스트에서 로컬 `node_modules` 제외
-- 모든 빌드는 컨테이너 내부에서 수행 (깨끗한 환경)
-- 사용자는 로컬에서 `npm install`을 실행할 필요 없음
+다중 환경 설정은 개발 편의 기능이면서 동시에 격리 계층이다. profile이 다르면 다음 경계도 달라질 수 있다.
 
-### 4. 비기술적 문서
+- 네트워크 노출 범위
+- 데이터 볼륨
+- 워크스페이스 루트
+- 포트 바인딩
 
-- **QUICKSTART.md**: 3단계 (Docker 설치 → 명령 실행 → 브라우저 열기)
-- **ENVIRONMENT_SETUP.md**: 최소한의 운영 정보 (포트 표, 워크스페이스 재정의, 중지 명령)
-- **README.md 빠른 시작**: 설정 마법사가 설정 안내 (수동 `.env` 편집 불필요)
+즉 환경 설정은 단순 배포 스크립트가 아니라, 런타임 격리 모델의 일부다.
 
-## 수정된 파일
+## 비목표
 
-### 스크립트 진입점
-- `Makefile` — Unix/Linux/macOS 셸 스크립트 인터페이스
-- `run.cmd` — Windows 배치 스크립트 인터페이스
-- `run.ps1` — Windows PowerShell 스크립트 인터페이스
-- `setup-environment.js` — 동적 Docker Compose + .env 파일 생성기
+이 문서는 다음 내용을 정의하지 않는다.
 
-### 설정
-- `.env.example` — 사용자 친화적 설정 템플릿
-- `docker-compose.dev.yml`, `.test.yml`, `.staging.yml` — 환경별 자동 생성
+- 개별 셸 스크립트의 전체 사용법
+- Dockerfile 상세 빌드 단계
+- 특정 profile rollout 상태
+- 완료/부분 완료 같은 진행 표기
 
-### 문서
-- `QUICKSTART.md` — 3단계로 단순화, npm/Node.js/Git 참조 제거
-- `ENVIRONMENT_SETUP.md` — 최소한의 운영 가이드 (45줄 → 400+ 줄의 기술 세부 정보 제거)
-- `README.md` (빠른 시작 섹션) — 비기술적 빠른 시작 가이드
+그 내용은 구현 코드 또는 `docs/*/design/improved`에서 다룬다.
 
-### 제거/단순화
-- 삭제: 모든 `npm run env:*` 스크립트 (불필요한 추상화 계층)
-- 문서에서 제거: npm install, npm build, docker exec, Node.js 버전 요구사항, .env 수동 편집
+## 관련 문서
 
-## 타입 설계
-
-### EnvProfile (setup-environment.js)
-
-```typescript
-interface EnvProfile {
-  name: string;                    // 표시 이름 (예: "Development")
-  projectName: string;             // Docker 프로젝트 식별자
-  webPort: number;                 // 웹 서버 포트
-  redisPort: number;               // Redis 포트
-  workspace: string;               // 컨테이너 워크스페이스 경로
-  nodeEnv: "development" | "test" | "production";
-  debug: "true" | "false";
-  composeFile: string;             // 출력 파일명
-  buildTarget: "dev" | "production" | "full";
-}
-
-const ENV_PROFILES: Record<string, EnvProfile> = {
-  dev: { ... },
-  test: { ... },
-  staging: { ... },
-  prod: { ... },
-};
-```
-
-## 실행 흐름
-
-```
-1. 사용자 입력: make dev
-   ↓
-2. Makefile은 .env를 읽거나 CLI WORKSPACE 변수 읽음
-   ↓
-3. 실행: WORKSPACE=/custom/path node setup-environment.js dev
-   ↓
-4. setup-environment.js:
-   - ENV_PROFILES["dev"] 읽음
-   - WORKSPACE 환경변수가 설정되면 workspace 재정의
-   - docker-compose.dev.yml 생성
-   - .env.dev 생성
-   - 요약 출력
-   ↓
-5. docker compose -f docker-compose.dev.yml up -d
-   ↓
-6. 컨테이너 시작, npm build + dev 서버가 컨테이너 내부에서 실행
-   ↓
-7. 사용자가 http://localhost:4200에 접속
-```
-
-## 사용자 격리 (공유 시스템)
-
-시작 중에 `WORKSPACE` 환경변수가 설정된 경우:
-
-```bash
-WORKSPACE=/home/alice/workspace make dev
-```
-
-시스템은:
-1. 데이터 지속성을 위해 커스텀 워크스페이스 사용
-2. 프로젝트 이름 수정: `soulflow-dev-alice` (포트/볼륨 충돌 방지)
-3. 각 사용자는 격리됨: 컨테이너, 볼륨, 데이터
-
-## 테스트
-
-- 수동: `make dev`, `make test`, `make staging`, `make prod`
-- 확인: `http://localhost:{port}` 응답 확인
-- 중지: `make down`
-- 여러 환경: 별도 터미널에서 동시 실행
-- 커스텀 워크스페이스: `WORKSPACE=/custom/path make dev`
-
-## 문서 기준
-
-모든 사용자 대면 문서는 **비기술적, 운영 친화적** 스타일을 따릅니다:
-- ❌ npm, Node.js 버전, docker 명령, .env 파일 구문 언급 금지
-- ✅ 간단한 작업 중심 언어: "Docker 설치", "이 명령 실행", "브라우저 열기"
-- ✅ 최소 명령 블록, 빌드 프로세스 설명 없음
-- ✅ 참조 스타일 (튜토리얼 스타일 아님) 구조
-
-## 기존 작업에 미치는 영향
-
-- **CI/CD**: Docker 기반 빌드는 영향 없음; 모든 컴파일은 여전히 컨테이너에서 발생
-- **개발**: `make dev`가 이전의 수동 `npm install + npm run dev` 단계 대체
-- **테스트**: 별도의 `make test` 환경은 테스트 실행을 격리 상태로 유지
-- **문서**: 모든 가이드 (QUICKSTART, ENVIRONMENT_SETUP, README) 단순화
+- [PTY 에이전트 백엔드 설계](./pty-agent-backend.md)
+- [멀티테넌트 설계](./multi-tenant.md)

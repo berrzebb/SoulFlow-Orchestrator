@@ -1,224 +1,127 @@
-# Workflow Builder: Command Palette (NodePalette)
-
-**Status**: ✅ Implemented
+# Design: Workflow Builder Command Palette
 
 ## Overview
 
-Implemented a **[+ Tool / Skill]** button in the workflow builder toolbar that opens a searchable **Command Palette popover** for selecting and adding tools/skills with a single click.
+The Workflow Builder Command Palette is the search-driven insertion surface for **tool nodes and skill nodes** inside the workflow builder. Its purpose is to simplify canvas authoring while giving the project a unified way to expose multiple tool sources through one selection interface.
 
-### Goals
-- Simplify tool/skill selection (2-step → 1-step UI)
-- Enable search by name + description (fuzzy matching)
-- Group by tool source (Built-in, Registered, MCP servers)
-- Display MCP connection status
-- Support keyboard navigation (↑↓ browse, Enter select, Esc close)
-- Mobile-responsive design
+This document explains the role and boundary of the current command palette. Rollout steps and work sequencing belong in `docs/*/design/improved`.
 
-## Architecture
+## Design Intent
 
-### Component Structure
+The workflow builder needs a fast insertion path for several resource kinds:
 
-```
-WorkflowBuilderPage
-├── toolbar: [+ Tool / Skill] button
-├── NodePalette (paletteOpen && toolsData)
-│   ├── search input
-│   ├── group list
-│   │   ├── Built-in (native tools)
-│   │   ├── Registered (other tools)
-│   │   ├── MCP: {server} (server tools + connection status)
-│   │   └── Skills
-│   └── items (hoverable, keyboard navigable)
-└── onSelectTool / onSelectSkill callbacks
-    ├── append to tool_nodes / skill_nodes
-    ├── set attach_to first phase
-    └── auto-select in inspector
-```
+- built-in tools
+- registered tools
+- MCP-provided tools
+- skill-backed nodes
 
-### Data Flow
+If each source is exposed through a separate UI, insertion becomes unnecessarily heavy. The current structure therefore uses **one searchable insertion surface** and converts the selected item into the workflow-native node shape.
 
-1. **Query**: `/api/tools` → `toolsData` (names, definitions, mcp_servers)
-2. **Query**: `/api/skills` → `skillsData` (SkillListItem[])
-3. **Filter**: by query on name/description
-4. **Categorize**: via build_items() into native/registered/mcp
-5. **Render**: PaletteItem[] → UI
-6. **Select**: onSelectTool/onSelectSkill → append to workflow
+## Core Principles
 
-## Type Design
+### 1. The palette is an insertion interface, not a catalog manager
 
-### McpServer (node-palette.tsx)
-```typescript
-interface McpServer {
-  name: string;
-  connected?: boolean;  // optional (API response may omit)
-  tools: string[];
-  error?: string;
-}
-```
+Its job is not to manage the full lifecycle of tools. Its job is to quickly add the right node to the workflow currently being edited.
 
-### ToolsData (node-palette.tsx)
-```typescript
-export interface ToolsData {
-  names: string[];                        // all tool names (unique)
-  definitions: Array<Record<string, unknown>>;  // OpenAPI defs
-  mcp_servers: McpServer[];              // MCP server list
-  native_tools?: string[];               // Built-in tool names
-}
+### 2. Tool sources are unified, but provenance is preserved
+
+Users interact with one search surface, but results remain grouped by source such as built-in, registered, MCP, and skills.
+
+### 3. Selection is converted into workflow-native structure
+
+Choosing an item does not persist a raw string. It creates a `tool_node` or `skill_node` draft that can be attached to the current workflow definition.
+
+### 4. It complements the builder instead of replacing it
+
+The command palette does not replace the canvas, the inspector, or the node registry. It is the fast-add surface.
+
+## Adopted Structure
+
+```mermaid
+flowchart LR
+    A[Builder Toolbar] --> B[Command Palette]
+    B --> C[Built-in Tools]
+    B --> D[Registered Tools]
+    B --> E[MCP Tools]
+    B --> F[Skills]
+
+    C --> G[tool_node draft]
+    D --> G
+    E --> G
+    F --> H[skill_node draft]
+
+    G --> I[Workflow Definition]
+    H --> I
+    I --> J[Inspector Selection]
 ```
 
-### PaletteItem (internal)
-```typescript
-interface PaletteItem {
-  kind: "tool" | "skill";
-  id: string;
-  description: string;
-  group: string;
-}
-```
+## Input Data
 
-### NodePaletteProps
-```typescript
-interface NodePaletteProps {
-  tools: ToolsData;
-  skills: SkillItem[];
-  onSelectTool: (tool_id: string, description: string) => void;
-  onSelectSkill: (skill_name: string, description: string) => void;
-  onClose: () => void;
-}
-```
+The command palette reads from multiple sources while presenting one unified surface.
 
-## Affected Files
+- tool inventory
+- tool definitions
+- MCP server availability and tool lists
+- skill inventory
 
-| File | Change |
-|------|--------|
-| `web/src/components/node-palette.tsx` | Make McpServer.connected optional |
-| `web/src/pages/workflows/builder.tsx` | NodePalette import, state, toolbar button, callbacks |
-| `web/src/styles/layout.css` | Add .node-palette* classes (~170 lines) |
-| `src/i18n/locales/en.json` | Add palette.open_tools_skills key |
-| `src/i18n/locales/ko.json` | Add palette.open_tools_skills key |
+That data is used for search, grouping, and labeling.
 
-## CSS Classes
+## User Flow
 
-### Popover Structure
-```css
-.node-palette__backdrop     /* transparent overlay */
-.node-palette              /* popover container */
-├── .node-palette__search  /* search input section */
-├── .node-palette__list    /* item list (scrollable) */
-│   └── .node-palette__group          /* group section */
-│       ├── .node-palette__group-header  /* group header (toggleable) */
-│       │   ├── .node-palette__group-arrow
-│       │   ├── .node-palette__group-name
-│       │   ├── .node-palette__group-count
-│       │   └── .node-palette__status  /* MCP connection badge */
-│       └── .node-palette__item       /* item */
-│           ├── .node-palette__item-icon
-│           ├── .node-palette__item-name
-│           └── .node-palette__item-desc
-└── .node-palette__empty  /* no results state */
-```
+The current palette flow is:
 
-### Colors & States
-- `.node-palette__status--ok`: var(--ok) — MCP connected
-- `.node-palette__status--err`: var(--err) — MCP disconnected
-- `.node-palette__item--active`: keyboard focus or mouse hover
-- `.node-palette__item-desc`: text-overflow ellipsis
+1. the user opens the add action in the builder
+2. the palette shows a searchable list
+3. the user selects an item
+4. the item is converted into a `tool_node` or `skill_node` draft
+5. the draft is attached to the appropriate place in the workflow
+6. the inspector opens on the new node for editing
 
-## Keyboard Interactions
+In other words, the palette is both a selection UI and a **draft-node generator**.
 
-| Key | Action |
-|-----|--------|
-| ↑/↓ | navigate items (cursor moves) |
-| Enter | select current item (trigger callback) |
-| Esc | close popover |
-| Click | select item or toggle group |
+## Grouping and Search
 
-## State Management (builder.tsx)
+The palette combines search with grouped provenance.
 
-```typescript
-const [paletteOpen, setPaletteOpen] = useState(false);
-const paletteBtnRef = useRef<HTMLButtonElement>(null);
+- built-in
+- registered
+- per-MCP-server groups
+- skills
 
-// Tool selection
-const handleSelectTool = (tool_id: string, description: string) => {
-  const newNode: ToolNodeDef = {
-    id: `tool-${idx}`,
-    tool_id,
-    description,
-    attach_to: [firstPhaseId],
-  };
-  setWorkflow({ ...workflow, tool_nodes: [...old, newNode] });
-  setPaletteOpen(false);
-  setInspectorNodeId(`${firstPhaseId}__tool_${newNode.id}`);
-};
-```
+Search exists to navigate the whole insertion surface. Grouping exists to preserve where a capability came from.
 
-## Usage Example
+## Position of MCP and Skills
 
-### Button Click Flow
-1. User clicks "[+ Tool / Skill]"
-2. `paletteOpen = true` → NodePalette renders
-3. User types search query (e.g., "http")
-4. Filtered items shown (http_request, http_proxy, etc.)
-5. User clicks item or presses Enter → onSelectTool called
-6. New node appended to tool_nodes
-7. Auto-selected in inspector for editing
-8. Popover closes
+MCP tools and skills are both insertable resources, but they are not the same kind of thing.
 
-### Group Structure
-```
-┌─────────────────────────────────────┐
-│ 🔍 Search tools & skills...         │
-├─────────────────────────────────────┤
-│ ▾ Built-in (5)                      │
-│   🔧 shell_execute — Run shell...   │
-│   🔧 http_request — HTTP call...    │
-│ ▾ MCP: slack (3)             🟢     │
-│   🔧 slack_post_message             │
-│   🔧 slack_list_channels            │
-│ ▾ MCP: github (2)             🔴   │
-│   ⚡ github_search_code             │
-│ ▾ Skills (2)                        │
-│   ⚡ deploy — Deploy service        │
-│   ⚡ hwpx — HWPX document build     │
-└─────────────────────────────────────┘
-```
+- MCP: capability exposed by an external server
+- Skill: reusable task or template-like capability
 
-## Mobile Considerations
+The command palette presents them together without collapsing them into one data model.
 
-- Popover width: 90vw (max 100%)
-- Height: max 70vh (screen height)
-- Touch target minimum 44px
-- Search input always visible
+## Relationship to the Canvas and Node Palette
 
-## Performance Optimizations
+The current builder has multiple add-entry points:
 
-1. **Query Caching**: tools/skills cached with 60s stale time
-2. **Memoization**: build_items() runs per-render on already-cached data
-3. **Keyboard Navigation**: stopPropagation on mouse events
-4. **Deferred Inspector Selection**: setTimeout ensures render order
+- canvas-based node insertion
+- inspector-based editing
+- command-palette-based quick insertion
 
-## Compatibility
+The command palette focuses specifically on fast searchable insertion. Detailed parameter editing and graph placement remain the responsibility of the inspector and builder canvas.
 
-- **NodePicker**: Side panel in graph editor (unchanged)
-- **AddHandle**: Mid-edge node insertion (unchanged)
-- **Cron/Channel buttons**: Separate modals (unchanged)
+## Non-goals
 
-## Test Scenarios
+This document does not define:
 
-1. ✅ "[+ Tool / Skill]" click → popover opens
-2. ✅ Type search query → real-time filtering
-3. ✅ MCP servers grouped + connection badges shown
-4. ✅ Tool click → tool_node added (description pre-filled)
-5. ✅ Skill click → skill_node added
-6. ✅ Keyboard (↑↓ Enter) navigation works
-7. ✅ Esc or backdrop click → popover closes
-8. ✅ Added node auto-selected in inspector
+- exact CSS structure
+- detailed keyboard event handling
+- icon-set or styling choices
+- completion status or test scenario lists
 
-## Future Improvements
+Those belong in implementation code or `docs/*/design/improved`.
 
-- [ ] Pin frequently-used tools/skills
-- [ ] Favorites feature
-- [ ] Parameter hints per tool
-- [ ] Drag & drop to canvas
-- [ ] Macro / template nodes
+## Related Documents
+
+- [Workflow Tool Design](./workflow-tool.md)
+- [Node Registry Design](./node-registry.md)
+- [Phase Loop Design](./phase-loop.md)

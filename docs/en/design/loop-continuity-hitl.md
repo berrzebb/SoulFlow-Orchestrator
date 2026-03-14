@@ -1,123 +1,134 @@
-# Design: Agent Loop Continuity + Task HITL
+# Design: Loop Continuity + HITL
 
-> **Status**: Implemented
+## Overview
 
-## Problem
+The Loop Continuity + HITL design describes the runtime model that allows long-running tasks and workflows to **pause for user input, approval, or follow-up direction** without losing execution continuity.
 
-### 1. Agent Loop Premature Termination
+The core idea is that a loop is not defined only by “start, run once, terminate.” It may enter a waiting state and later continue from that state.
 
-Agent loops exit after 1 turn regardless of task completion.
+## Design Intent
 
-**Root cause A — `check_should_continue` hard-coded to stop:**
+The current project treats the following situations as normal execution flow:
 
-```typescript
-// src/orchestration/service.ts:508
-check_should_continue: async ({ state }) => {
-  if (state.currentTurn > 1) return false;  // always stops after turn 1
-  return AGENT_TOOL_NUDGE;
-},
+- asking the user for additional information
+- waiting for approval or rejection
+- waiting for a response from an external channel
+- receiving new follow-up direction while execution is already in flight
+
+For that reason, HITL is modeled as a **normal runtime transition**, not as an exception-recovery path.
+
+## Core Principles
+
+### 1. Waiting is not failure
+
+States such as `waiting_user_input` and `waiting_approval` are normal runtime states. They must integrate with restart, resume, and SSE signaling.
+
+### 2. Continuity is anchored in run state
+
+Continuity is defined by the active run state, not by a single process lifetime or a single turn. Input acts as a signal that reactivates the run state.
+
+### 3. Support both live input and persisted resume
+
+Injecting input into a still-running loop and resuming a persisted waiting state are different mechanisms, but they must operate on the same state model.
+
+### 4. Clarification and approval are different transitions
+
+Free-form user answers and structured approval responses may both look like “input,” but they drive different state transitions.
+
+## Adopted Structure
+
+```mermaid
+flowchart TD
+    A[Running Loop] --> B{Needs Human Input}
+    B -- No --> A
+    B -- Yes --> C[Waiting State]
+
+    C --> D[Live send_input]
+    C --> E[Persisted Resume]
+
+    D --> F[Continue Loop]
+    E --> F
 ```
 
-**Root cause B — ContainerCliAgent exits immediately after CLI `complete`:**
+The key is to treat `run -> wait -> resume` as one lifecycle instead of as disconnected executions.
 
-```typescript
-// src/agent/pty/container-cli-agent.ts:151-164
-if (result.type === "complete") {
-  const followups = this.bus.lane_queue.drain_followups(session_key);
-  if (followups.length > 0) { continue; }      // only continues if pre-queued
-  const collected = this.bus.lane_queue.drain_collected(session_key);
-  if (collected) { continue; }                  // only continues if pre-collected
-  return this.build_result(last_content, "stop", ...);  // no wait mechanism
-}
-```
+## Main Components
 
-**Expected behavior:** Loop continues until:
-- Work is complete (agent signals "done")
-- Max turns reached
-- HITL condition not met
-- Abort signal
+### Loop Service
 
-### 2. Task HITL Not Connected
+Loop Service is the stateful service layer for loop-oriented execution. Input injection, stored waiting state, and resume metadata are coordinated here.
 
-Task mode has mailbox injection (`loop.service.ts:inject_message`) and resume service (`task-resume.service.ts`), but:
+### Task Resume Service
 
-- ContainerCliAgent's PTY loop is **not connected** to `inject_message` mailbox
-- `register_send_input` callback queues to followups, but loop has already exited on `complete`
-- User message arrives → task resume attempted → loop already terminated → injection fails
+Task Resume Service is responsible for waking up runs that have already transitioned into a waiting state. Channel replies, user messages, and approval events are mapped back into the correct run.
 
-**Expected behavior:** During task execution, user messages should be injectable via HITL (approval, direction change, additional input).
+### Channel Manager
 
----
+Channel Manager is the ingress point that decides which execution should receive inbound input. If an active run exists, it uses the live-input path. If a persisted waiting state exists, it uses the resume path.
 
-## Architecture Gap
+### Execution Runners
 
-```
-Current:
-  User message → TaskResumeService → inject_message(loop_id) → mailbox
-                                                                  ↓
-  ContainerCliAgent.run() → while loop → complete → [NO CONNECTION] → exit
+`task`, `phase`, and `workflow` runners must treat waiting as a normal outcome. A runner therefore needs to represent not only “continue execution” but also “pause here and wait for external input.”
 
-Expected:
-  User message → TaskResumeService → inject_message(loop_id) → mailbox
-                                                                  ↓
-  ContainerCliAgent.run() → while loop → complete → wait for input → continue
-                                                      ↑
-                                              mailbox → followup queue bridge
-```
+## Input Paths
 
----
+### Live Input
 
-## Proposed Solutions
+This path injects follow-up input while the execution is still alive.
 
-### Option A: Minimal Fix (within existing architecture)
+Typical uses:
 
-1. **`check_should_continue`**: Replace hard-coded `return false` with actual completion detection
-   - Check if the agent's response contains completion signals
-   - Allow configurable max turns per mode
+- steering an in-flight run
+- adding constraints
+- quick clarification
 
-2. **ContainerCliAgent wait mechanism**: After `complete`, wait briefly for followup injection
-   ```typescript
-   if (result.type === "complete") {
-     // existing followup/collected checks...
+### Persisted Resume
 
-     // NEW: wait for potential HITL injection (task mode only)
-     if (options.wait_for_input) {
-       const injected = await this.wait_for_followup(session_key, timeout_ms);
-       if (injected) { current_prompt = injected; continue; }
-     }
+This path reactivates an execution after it has been stored in a waiting state.
 
-     return this.build_result(...);
-   }
-   ```
+Typical uses:
 
-3. **Mailbox → followup bridge**: Connect `loop.service.inject_message` to `bus.queue_followup`
+- approval waits
+- long user response delays
+- channel-driven continuation
 
-### Option B: Architecture Refinement
+## State Model
 
-1. **Unify task/agent loop**: Both modes use TaskNode workflow
-2. **PTY backend as executor**: ContainerCliAgent becomes a pure executor within TaskNode
-3. **HITL as TaskNode state**: `waiting_user_input` state pauses execution, resumes on input
+Important states in this design are:
 
-### Option C: Event-driven continuation
+- running
+- waiting_user_input
+- waiting_approval
+- resumed
+- completed
+- aborted
 
-1. **Completion evaluator**: After agent `complete`, a lightweight evaluator checks if the original task is satisfied
-2. **Auto-continue**: If not satisfied, generate a continuation prompt and feed back into the loop
-3. **HITL events**: Expose an event bus for user input injection during any execution mode
+These states are not only UI markers. They also drive input routing, resume behavior, SSE signaling, and channel handling.
 
----
+## Relationship to Workflows
 
-## Affected Files
+HITL is not just an extra option on a single node. It is a runtime capability that workflows can use. Interaction nodes project that capability into the workflow graph.
 
-| File | Responsibility |
-|------|----------------|
-| `src/orchestration/service.ts` | `check_should_continue`, `run_agent_loop`, `run_task_loop` |
-| `src/agent/pty/container-cli-agent.ts` | PTY execution loop, followup drain |
-| `src/agent/loop.service.ts` | Task loop, mailbox injection |
-| `src/channels/task-resume.service.ts` | HITL resume flow |
-| `src/channels/manager.ts` | Active run management, message routing |
-| `src/agent/pty/lane-queue.ts` | Followup/collect queue |
+That ties loop continuity directly to:
 
-## Related Docs
+- interaction nodes
+- phase loop runners
+- task loop continuation
+- channel-bound execution
 
-→ [PTY Agent Backend](./pty-agent-backend.md) — container execution architecture
-→ [Phase Loop Design](./phase-loop.md) — task node workflow
+## Non-goals
+
+This document does not define:
+
+- historical bug analyses
+- retrospective notes about premature loop termination
+- completion status of implementation steps
+- operational constants such as queue depth or timeout thresholds
+
+Those belong in implementation code or `docs/*/design/improved`.
+
+## Related Documents
+
+- [Interaction Nodes Design](./interaction-nodes.md)
+- [Interactive Loop Design](./interactive-loop.md)
+- [Phase Loop Design](./phase-loop.md)

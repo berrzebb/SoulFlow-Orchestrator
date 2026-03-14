@@ -1,172 +1,111 @@
-# Design: Multi-Environment Setup — Container-Based Isolated Execution
-
-> **Status**: Implementation complete
+# Design: Multi-Environment Setup
 
 ## Overview
 
-Multi-Environment Setup provides isolated, containerized execution environments (development, testing, staging, production) for SoulFlow Orchestrator. Users run a single command (`make dev` or `run.cmd dev`) and the system handles all configuration, Docker composition, and service initialization automatically.
+Multi-environment setup is the operational design that lets the project run as separate profiles for development, testing, verification, and operation. Its purpose is to let users work with **different isolated runtime profiles through one consistent interface**, without manually assembling the local toolchain each time.
 
-Key principle: **Users should never need to understand npm, docker commands, or Node.js versions.**
+## Design Intent
 
-## Problem Statement
+The current project may run with different ports, workspaces, and service combinations depending on the environment. If those differences are managed manually through hand-edited compose files and ad hoc environment variables, several problems appear:
 
-- **Before**: Users manually ran `npm install`, `npm run build`, `docker compose up`, etc.
-- **Issue**: Non-technical users couldn't use the system; multiple users on same machine caused environment conflicts
-- **Solution**: Single command per environment + automatic per-user isolation via containerized builds
+- entry points drift across platforms
+- multiple environments conflict on the same machine
+- users must understand Node/npm/Docker sequencing
+- environment differences live in documentation instead of in executable profiles
 
-## Architecture
+The multi-environment design solves that by making execution **profile-driven**.
 
+## Core Principles
+
+### 1. Environments are selected as profiles
+
+Environment differences are not modeled as arbitrary command combinations. They are modeled as named profiles, and the system assembles the correct runtime from that choice.
+
+### 2. Entry points may differ by platform, but not by meaning
+
+Make, batch, and PowerShell entry points are thin wrappers over the same operational meaning. “Run dev” and “bring down test” should mean the same thing regardless of shell.
+
+### 3. Runtime assembly is container-first
+
+Instead of asking users to reproduce local dependency setup, the system treats the containerized runtime as the primary unit of environment assembly. This is especially important for user-facing setup simplicity.
+
+### 4. Port and workspace isolation are part of profile resolution
+
+If environments differ, their ports, project names, and workspace roots should differ too. Isolation is decided during environment assembly, not after the application has already started.
+
+## Adopted Structure
+
+```mermaid
+flowchart TD
+    A[User Entry Point] --> B[Profile Selection]
+    B --> C[Environment Setup Script]
+    C --> D[Generated Compose / Env]
+    D --> E[Container Runtime]
+    E --> F[Application + Workspace]
 ```
-User runs: ./run.sh dev  or  run.cmd dev  or  .\run.ps1 dev
-    ↓
-Shell script (run.sh / run.cmd / run.ps1)
-    ↓
-setup-environment.js (generates docker-compose.{profile}.yml + .env.{profile})
-    ↓
-docker compose up -d (starts isolated containers)
-    ↓
-Application running on http://localhost:4200
-```
+
+## Main Components
+
+### Entry Scripts
+
+Platform-specific entry scripts are the thinnest user-facing surface. Their role is to hide shell differences and expose the same profile-based actions consistently.
+
+### Environment Setup
+
+The setup generator turns a selected profile into concrete runtime configuration. Ports, workspace roots, Docker project names, environment variables, and generated file names are resolved here.
+
+### Generated Runtime Configuration
+
+Generated compose and env files are outputs of the chosen profile. In the current design, they are derived artifacts rather than the primary source of environment meaning.
+
+### Workspace Isolation
+
+Per-profile workspace separation is not only a convenience feature. It is part of the data-isolation boundary. Profile and user differences become real filesystem and container boundaries here.
 
 ## Environment Profiles
 
-| Profile | Port | Redis | Purpose | Workspace |
-|---------|------|-------|---------|-----------|
-| dev | 4200 | 6379 | Development, auto-reload | `/data/workspace-dev` |
-| test | 4201 | 6380 | Testing, CI/CD isolation | `/data/workspace-test` |
-| staging | 4202 | 6381 | Pre-production validation | `/data/workspace-staging` |
-| prod | 4200 | 6379 | Production deployment | `/data` |
+Profiles typically encode differences such as:
 
-## Key Features
+- ports
+- workspace paths
+- runtime/build posture
+- attached supporting services
 
-### 1. Platform-Agnostic Entry Points
+The key point is that a profile is not just a label. It is the name of a non-conflicting execution bundle.
 
-Three scripts with identical command interface:
-- **Makefile** (Linux/macOS): `make dev`, `make down`, etc.
-- **run.cmd** (Windows Command Prompt): `run.cmd dev`, `run.cmd down`, etc.
-- **run.ps1** (Windows PowerShell): `.\run.ps1 dev`, `.\run.ps1 down`, etc.
+## User Experience Perspective
 
-All delegate to the same JavaScript configuration generator (`setup-environment.js`).
+This design assumes a user closer to a consumer than to an operator. That means users should only need to know:
 
-### 2. Dynamic Docker Composition
+- which profile to open
+- how to start and stop it
+- which address to open
 
-- `setup-environment.js` generates `docker-compose.{profile}.yml` at runtime
-- Supports custom workspace paths via `WORKSPACE` environment variable
-- Per-user project isolation: `soulflow-{profile}-{username}` for shared systems
+Internal build order, node_modules management, and compose specifics should stay behind the entry scripts and user-facing documentation.
 
-### 3. Container-Only Node Modules
+## Relationship to Isolation and Security
 
-- `.dockerignore` excludes local `node_modules` from Docker context
-- All builds happen inside container (clean environment)
-- Users never need to run `npm install` locally
+Multi-environment setup is both a convenience feature and an isolation layer. Different profiles may imply different:
 
-### 4. Non-Technical Documentation
+- network exposure
+- data volumes
+- workspace roots
+- port bindings
 
-- **QUICKSTART.md**: 3 steps (Install Docker → Run command → Open browser)
-- **ENVIRONMENT_SETUP.md**: Minimal operational info (port table, workspace override, stop command)
-- **README.md quick start**: Setup wizard guides configuration (no manual `.env` editing)
+So environment setup is not just a deployment helper. It is part of the runtime isolation model.
 
-## Files Modified
+## Non-goals
 
-### Script Entry Points
-- `Makefile` — Unix/Linux/macOS shell script interface
-- `run.cmd` — Windows batch script interface
-- `run.ps1` — Windows PowerShell script interface
-- `setup-environment.js` — Dynamic Docker Compose + .env file generator
+This document does not define:
 
-### Configuration
-- `.env.example` — User-friendly configuration template
-- `docker-compose.dev.yml`, `.test.yml`, `.staging.yml` — Auto-generated per environment
+- full command usage for each shell script
+- detailed Docker build steps
+- rollout status of specific profiles
+- completion-state reporting
 
-### Documentation
-- `QUICKSTART.md` — Simplified to 3 steps, removed npm/Node.js/Git references
-- `ENVIRONMENT_SETUP.md` — Minimal operational guide (45 lines → removed 400+ lines of technical detail)
-- `README.md` (빠른 시작 section) — Non-technical quick start guide
+Those belong in implementation code or `docs/*/design/improved`.
 
-### Removed/Simplified
-- Deleted: All `npm run env:*` scripts (unnecessary abstraction layer)
-- Removed from docs: npm install, npm build, docker exec, Node.js version requirements, .env manual editing
+## Related Documents
 
-## Type Design
-
-### EnvProfile (setup-environment.js)
-
-```typescript
-interface EnvProfile {
-  name: string;                    // Display name (e.g., "Development")
-  projectName: string;             // Docker project identifier
-  webPort: number;                 // Web server port
-  redisPort: number;               // Redis port
-  workspace: string;               // Container workspace path
-  nodeEnv: "development" | "test" | "production";
-  debug: "true" | "false";
-  composeFile: string;             // Output filename
-  buildTarget: "dev" | "production" | "full";
-}
-
-const ENV_PROFILES: Record<string, EnvProfile> = {
-  dev: { ... },
-  test: { ... },
-  staging: { ... },
-  prod: { ... },
-};
-```
-
-## Execution Flow
-
-```
-1. User types: make dev
-   ↓
-2. Makefile reads .env or CLI WORKSPACE variable
-   ↓
-3. Exports: WORKSPACE=/custom/path node setup-environment.js dev
-   ↓
-4. setup-environment.js:
-   - Reads ENV_PROFILES["dev"]
-   - Overrides workspace if WORKSPACE env var set
-   - Generates docker-compose.dev.yml
-   - Generates .env.dev
-   - Prints summary
-   ↓
-5. docker compose -f docker-compose.dev.yml up -d
-   ↓
-6. Container starts, npm build + dev server runs inside
-   ↓
-7. User accesses http://localhost:4200
-```
-
-## User Isolation (Shared Systems)
-
-When `WORKSPACE` environment variable is set during startup:
-
-```bash
-WORKSPACE=/home/alice/workspace make dev
-```
-
-The system:
-1. Uses the custom workspace for data persistence
-2. Modifies project name: `soulflow-dev-alice` (prevents port/volume conflicts)
-3. Each user gets isolated: containers, volumes, data
-
-## Testing
-
-- Manual: `make dev`, `make test`, `make staging`, `make prod`
-- Verify: `http://localhost:{port}` responds
-- Stop: `make down`
-- Multiple environments: Run in separate terminals simultaneously
-- Custom workspace: `WORKSPACE=/custom/path make dev`
-
-## Documentation Standards
-
-All user-facing documents follow **non-technical, operations-friendly** style:
-- ❌ No mention of npm, Node.js versions, docker commands, .env file syntax
-- ✅ Simple task-oriented language: "Install Docker", "Run this command", "Open browser"
-- ✅ Minimal command blocks, no build process explanations
-- ✅ Reference-style (not tutorial-style) structure
-
-## Impact on Existing Work
-
-- **CI/CD**: Docker-based builds unaffected; all compilation still happens in container
-- **Development**: `make dev` replaces previous `npm install + npm run dev` manual steps
-- **Testing**: Separate `make test` environment keeps test runs isolated
-- **Documentation**: All guides (QUICKSTART, ENVIRONMENT_SETUP, README) simplified
+- [PTY Agent Backend Design](./pty-agent-backend.md)
+- [Multi-tenant Design](./multi-tenant.md)

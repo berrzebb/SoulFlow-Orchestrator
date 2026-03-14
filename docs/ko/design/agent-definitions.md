@@ -1,251 +1,176 @@
-# 설계: Agent Gallery & Definition System — 에이전트 정의 및 갤러리
+# 에이전트 정의 설계
 
-> **상태**: 설계 완료, 구현 진행 중
+## 목적
 
-## 개요
+`agent definitions`는 시스템이 사용하는 역할형 에이전트를 파일 자산과 데이터 저장소 양쪽에서 다룰 수 있게 만드는 정의 계층이다.
+이 설계의 목적은 built-in 역할 자산, 사용자 정의 에이전트, 팀/개인 스코프를 한 모델로 정리하여 **실행기와 대시보드가 같은 정의 체계를 공유하게 하는 것**이다.
 
-사용자가 자신만의 에이전트를 정의하고, 갤러리에서 탐색·재사용할 수 있는 시스템. 기존 `src/skills/roles/*/SKILL.md`의 구조화된 frontmatter 형식을 그대로 UI 폼으로 노출하여, 명확한 역할과 경계를 가진 에이전트를 직접 또는 AI 보조를 통해 생성.
+핵심 의도는 다음과 같다.
 
-기존 `/workspace/agents`(런타임 모니터링)와 완전히 분리된 새 최상위 라우트 `/agents`.
+- 역할 에이전트를 구조화된 정의로 저장한다
+- built-in 역할과 사용자 정의 역할을 같은 읽기 모델로 본다
+- `global | team | personal` 스코프에 따라 가시성과 쓰기 권한을 나눈다
+- runtime 실행, dashboard 편집, workflow 생성이 같은 정의를 소비하도록 만든다
 
-## 문제
+## source of truth
 
-현재 에이전트 역할/행동 규칙은 `src/skills/roles/*/SKILL.md` 파일에만 존재:
-- 사용자가 커스텀 에이전트를 만들려면 파일 시스템을 직접 편집해야 함
-- 기존 role skill을 기반으로 변형하거나 확장할 UI가 없음
-- 에이전트의 역할 경계(Do NOT use for...)가 암묵적으로만 정의됨
-- 자연어로 에이전트를 설명하고 구조화된 정의로 변환하는 수단 없음
+에이전트 정의는 두 source를 가진다.
 
-## 핵심 설계 원칙: Composed System Prompt
+- built-in 정의
+  - 역할 skill 자산에서 유래한 시스템 제공 정의
+- custom 정의
+  - SQLite 저장소에 영속화된 사용자/팀 정의
 
-`AgentDefinition`은 파일이 아닌 DB에 저장되는 **SKILL.md equivalent**. 최종 시스템 프롬프트는 단일 텍스트가 아닌 레이어 합성:
+상위 설계 관점에서 중요한 점은, 둘의 출처는 다르지만 **읽기 모델은 하나**라는 것이다.
+즉 실행기나 UI는 “이게 파일에서 왔는지 DB에서 왔는지”보다, 공통 `AgentDefinition` 계약을 더 중요하게 본다.
 
-```
-[Shared Protocols]      ← 선택된 _shared/ 문서들 (공통 규칙)
-        +
-[Role SKILL.md body]    ← soul + heart + 역할 책임 정의
-        +
-[Tool Skills body]      ← 에이전트 능력 범위
-        +
-[use_when / not_use_for] ← 명시적 역할 경계
-        +
-[extra_instructions]    ← 커스텀 추가 지침
-```
+## 핵심 모델
 
-AI 생성 시에도 raw 텍스트 덩어리가 아닌 각 필드를 개별적으로 생성.
+에이전트 정의는 대략 다음 요소를 가진다.
 
-## 데이터 모델
+- 이름과 설명
+- icon
+- role skill 참조
+- `soul`
+- `heart`
+- 허용 도구 목록
+- shared protocol 목록
+- 추가 skill 목록
+- `use_when`
+- `not_use_for`
+- extra instructions
+- preferred providers
+- model preference
+- scope (`global | team | personal`)
 
-### AgentDefinition
+이 모델의 의미는 단순 prompt 저장이 아니라, **역할 경계와 행동 기준을 구조화된 필드로 유지하는 것**이다.
 
-```typescript
-type AgentDefinition = {
-  id: string;
-  name: string;
-  description: string;   // "Use when X." 요약
+## Built-in과 Custom
 
-  icon?: string;         // 이모지
+이 설계는 built-in과 custom을 같은 목록에서 다루되, mutation 규칙은 다르게 본다.
 
-  // SKILL.md frontmatter 대응 필드
-  role_skill: string | null;     // 기반 role skill 이름 (e.g., "role:pm")
-  soul: string;                  // 페르소나 — 성격/캐릭터
-  heart: string;                 // 페르소나 — 행동 양식/어투
-  tools: string[];               // 허용 도구 목록
-  shared_protocols: string[];    // 포함할 _shared/ 프로토콜
-  skills: string[];              // 추가 tool-type skill 목록
+- built-in
+  - 시스템이 제공
+  - 수정/삭제 불가
+  - fork를 통해 새 custom 정의 생성 가능
+- custom
+  - 사용자가 소유
+  - scope 권한에 따라 수정/삭제 가능
 
-  // 경계 정의
-  use_when: string;              // "Use when..." 상황 설명
-  not_use_for: string;           // "Do NOT use for..." 금지 영역
-  extra_instructions: string;    // 추가 커스텀 지시사항
+이 구분은 단순 UI 상태가 아니라, “시스템 자산”과 “사용자 자산”의 경계를 유지하기 위한 것이다.
 
-  // 실행 설정
-  preferred_providers: string[];
-  model?: string;
+## Scope 모델
 
-  is_builtin: boolean;           // true = 읽기 전용 시스템 제공
-  use_count: number;             // 사용 횟수
-  created_at: string;
-  updated_at: string;
-};
-```
+에이전트 정의는 멀티테넌트 설계와 같은 3-tier scope 모델을 따른다.
 
-**빌트인 에이전트** = 기존 `src/skills/roles/*/SKILL.md` 내용을 DB에 시드.
-사용자가 복사하면 `is_builtin: false`인 커스텀 정의 생성.
+- `global`
+  - 시스템 전역 정의
+- `team`
+  - 한 팀에서 공유되는 정의
+- `personal`
+  - 한 사용자의 개인 정의
 
-### 공통 규칙 (Shared Protocols)
+이 모델은 읽기와 쓰기에서 다르게 적용된다.
 
-`src/skills/_shared/` 디렉토리의 프로토콜 문서들:
+### 읽기
 
-| 프로토콜 | 설명 |
-|---------|------|
-| `clarification-protocol` | 모호한 요청 분류 기준 (LOW/MEDIUM/HIGH) |
-| `phase-gates` | 작업 단계 전환 체크리스트 |
-| `error-escalation` | 에러 에스컬레이션 규칙 |
-| `session-metrics` | 세션 메트릭 수집 기준 |
-| `difficulty-guide` | 작업 난이도 판단 가이드 |
+현재 요청자의 컨텍스트에 따라 보이는 정의는 보통 다음 합집합이다.
 
-role skill에서 `shared_protocols` 필드로 참조하는 것과 동일한 구조.
-
-## 아키텍처
-
-```
-Dashboard UI (/agents)
-  갤러리 뷰 / 카드 그리드
-  생성/편집 모달 (SKILL.md 폼 구조)
-  AI 생성 패널 (자연어 → 구조화 필드)
-         │
-         └──── REST API ────────────────┐
-                                        │
-                          AgentDefinitionStore (SQLite)
-                            agent_definitions 테이블
-                                        │
-                          빌트인 시드 (role skills → DB)
+```text
+visible definitions
+  = global
+  + current team
+  + current personal
 ```
 
-## API 엔드포인트
+### 쓰기
 
-| 메서드 | 경로 | 설명 |
-|--------|------|------|
-| GET | `/api/agent-definitions` | 전체 목록 (builtin + custom) |
-| POST | `/api/agent-definitions` | 새 정의 생성 |
-| PUT | `/api/agent-definitions/:id` | 수정 (custom only) |
-| DELETE | `/api/agent-definitions/:id` | 삭제 (custom only) |
-| POST | `/api/agent-definitions/generate` | 자연어 → 구조화 정의 AI 생성 (SSE) |
-| POST | `/api/agent-definitions/:id/fork` | 빌트인 복제 → 커스텀 생성 |
+쓰기 권한은 더 좁다.
 
-## UI 설계
+- `global`은 관리자 영역
+- `team`은 팀 관리 권한 필요
+- `personal`은 본인만 수정 가능
 
-### 갤러리 페이지 (`/agents`)
+즉 agent definition 설계는 “목록을 보여준다”보다, **scope-aware visibility와 mutation을 같이 정의하는 저장소 설계**다.
 
-```
-┌─────────────────────────────────────────────────────┐
-│  [🔍 에이전트 검색...]        [+ 새 에이전트]         │
-│  [전체] [concierge] [pm] [implementer] [reviewer]... │
-├─────────────────────────────────────────────────────┤
-│  Built-in Agents                                    │
-│  ┌──────────────┐  ┌──────────────┐  ┌───────────┐ │
-│  │ 🎩 Concierge │  │ 📋 PM        │  │ 🔧 Impl.  │ │
-│  │ 사용자 대면  │  │ 기획 전담    │  │ 구현 전문 │ │
-│  │ [role:concierge] │  │ [role:pm]    │  │ [role:impl] │ │
-│  │ [복사]       │  │ [복사]       │  │ [복사]    │ │
-│  └──────────────┘  └──────────────┘  └───────────┘ │
-├─────────────────────────────────────────────────────┤
-│  My Agents                                          │
-│  ┌──────────────┐                                   │
-│  │ 🔍 PR Review │                                   │
-│  │ GitHub PR 전문│                                  │
-│  │ [role:reviewer] │                                │
-│  │ [편집] [삭제] │                                  │
-│  └──────────────┘                                   │
-└─────────────────────────────────────────────────────┘
-```
+## Role / Protocol Architecture와의 관계
 
-### 에이전트 생성/편집 모달
+`agent definitions`는 `role-protocol-architecture`와 직접 연결된다.
 
-SKILL.md frontmatter 구조를 그대로 폼으로 노출:
+차이는 다음과 같다.
 
-```
-┌─ 에이전트 설정 ──────────────────────────────────────┐
-│  [AI로 생성] 탭   │   [직접 작성] 탭                  │
-│                                                      │
-│  ① 기본 정보                                         │
-│     아이콘 [🤖]   이름 [________________]            │
-│     설명 (Use when...) [__________________]          │
-│                                                      │
-│  ② 역할 (Role Skill)                                 │
-│     [role:pm ▼]  → soul/heart 자동 채워짐             │
-│     soul: [재정의 가능한 텍스트]                      │
-│     heart: [재정의 가능한 텍스트]                     │
-│                                                      │
-│  ③ 공통 규칙 (Shared Protocols)                      │
-│     [✓] clarification-protocol                      │
-│     [✓] phase-gates                                 │
-│     [ ] error-escalation                            │
-│     [ ] session-metrics / difficulty-guide          │
-│                                                      │
-│  ④ 허용 도구 (Tools)                                 │
-│     role 기본값에서 추가/제거                        │
-│     [read_file ✓] [write_file ✓] [exec ✓] ...       │
-│                                                      │
-│  ⑤ 추가 스킬 (Skills)                               │
-│     [+ 스킬 추가]  github / cron / memory ...        │
-│                                                      │
-│  ⑥ 경계 (Boundary)                                  │
-│     Use when: [__________________________________]   │
-│     Do NOT use for: [____________________________]   │
-│                                                      │
-│  ⑦ 추가 지침 (Extra Instructions)                   │
-│     [선택사항 텍스트 에디터]                         │
-│                                                      │
-│                          [취소]  [저장]              │
-└──────────────────────────────────────────────────────┘
-```
+- role / protocol architecture
+  - 역할 자산과 shared protocol을 어떻게 해석하고 컴파일할지 설명
+- agent definitions
+  - 어떤 역할 정의가 저장되고 노출되며 scope를 가지는지 설명
 
-### AI 생성 흐름
+즉 role/protocol이 해석 계층이라면, agent definitions는 저장과 노출 계층이다.
 
-```
-사용자 입력: "GitHub PR 리뷰를 자동화하는 에이전트"
-                    │
-                    ▼
-POST /api/agent-definitions/generate (SSE)
-  LLM 컨텍스트:
-    - 사용 가능한 role skills 목록
-    - 사용 가능한 tools 목록
-    - _shared/ 프로토콜 목록
-    - AgentDefinition 필드 스키마
-                    │
-                    ▼
-  SSE 스트리밍으로 각 필드 순차 생성:
-    role_skill: "role:reviewer"
-    soul: "코드 품질의 수호자..."
-    heart: "구체적 코드 라인을 인용..."
-    tools: ["read_file", "exec", "web_fetch"]
-    shared_protocols: ["clarification-protocol", ...]
-    use_when: "PR 코드 리뷰, 품질 검사..."
-    not_use_for: "코드 직접 수정..."
-                    │
-                    ▼
-  UI: 각 필드가 실시간으로 채워지는 모습 표시
-  사용자: 검토 후 수정하거나 그대로 [저장]
-```
+## Dashboard와의 관계
 
-## 파일 구조
+대시보드는 에이전트 정의를 조회, 생성, 수정, fork할 수 있어야 한다.
 
-### 백엔드
+상위 설계 관점에서 중요한 점은 다음과 같다.
 
-```
-src/agent/
-  agent-definition.types.ts      # AgentDefinition 타입
-  agent-definition.store.ts      # SQLite CRUD
-  agent-definition-builtin.ts    # role skills → DB 시드 데이터
+- dashboard는 정의의 source of truth가 아니다
+- dashboard는 저장소와 scope policy를 통해 정의를 편집하는 surface다
+- UI가 raw prompt blob을 편집하는 것이 아니라, 구조화된 정의 필드를 다루는 것이 바람직하다
 
-src/dashboard/ops/
-  agent-definition.ts            # REST API 핸들러
-```
+즉 대시보드 편집은 저장소 위의 표현 계층이다.
 
-### 프론트엔드
+## 실행기와의 관계
 
-```
-web/src/pages/agents/
-  index.tsx                      # 갤러리 메인
-  agent-card.tsx                 # 개별 카드 컴포넌트
-  agent-modal.tsx                # 생성/편집 모달
-```
+에이전트 정의는 단순 갤러리 자산이 아니라 실행기에 연결될 수 있어야 한다.
 
-## 빌트인 vs 커스텀 정책
+예를 들면:
 
-| 항목 | 빌트인 | 커스텀 |
-|------|--------|--------|
-| 출처 | `src/skills/roles/*/SKILL.md` 시드 | 사용자 생성 |
-| 수정 | 불가 | 가능 |
-| 삭제 | 불가 | 가능 |
-| 복사 | 가능 → 커스텀 생성 | 가능 |
-| `is_builtin` | `true` | `false` |
+- 특정 역할 에이전트를 선택해 workflow node에 연결
+- 특정 alias가 role skill과 연결된 baseline을 사용
+- prompt profile compiler가 role/policy를 해석
 
-## 구현 참조
+따라서 정의 저장소는 UI 기능만을 위한 부가 저장소가 아니라, 실행기와 연결될 수 있는 역할 정의 저장소다.
 
-- `src/agent/provider-store.ts` — SQLite 스토어 패턴 참조
-- `src/dashboard/ops/agent-provider.ts` — API 핸들러 패턴 참조
-- `src/skills/roles/pm/SKILL.md` — 빌트인 에이전트 데이터 소스
-- `src/skills/_shared/*.md` — 공통 규칙 프로토콜 소스
+## Fork 모델
+
+fork는 built-in 또는 기존 정의를 복사해 새 custom 정의를 만드는 동작이다.
+
+이 설계에서 fork가 중요한 이유는:
+
+- 시스템 제공 역할을 직접 수정하지 않게 하고
+- 팀이나 개인이 자신에게 맞는 변형본을 만들게 하며
+- 원본의 scope와 역할 정보를 안전하게 계승할 수 있게 하기 때문이다
+
+즉 fork는 copy convenience가 아니라 시스템 자산 보호 장치다.
+
+## 경계
+
+이 설계가 하지 않는 일은 다음과 같다.
+
+- role skill parsing 규칙 전체를 다시 정의하지 않는다
+- prompt compiler 세부 조립 로직을 설명하지 않는다
+- dashboard UI의 세부 배치를 고정하지 않는다
+- 현재 구현 phase나 완료 상태를 기록하지 않는다
+
+`agent definitions`는 역할 정의의 저장, 노출, 스코프 경계를 설명하는 문서다.
+
+## 현재 프로젝트에서의 의미
+
+현재 프로젝트는 built-in role skill, workflow 역할 선택, dashboard 편집, 팀 스코프를 함께 다룬다.
+그래서 에이전트 정의는 단일 파일 자산만으로 설명하기 어렵고, 구조화된 정의 저장소가 필요하다.
+
+이 문서는 그 상위 설계를 다음처럼 고정한다.
+
+- built-in과 custom은 하나의 정의 모델을 공유한다
+- 정의는 scope를 가진다
+- dashboard는 정의를 편집할 수 있다
+- 실행기는 이 정의 계층과 연결될 수 있다
+
+## 비목표
+
+- 현재 라운드의 감사 결과 기록
+- 특정 UI 화면의 완료 상태 기록
+- migration 순서나 rollout 단계 관리
+- improved 문서의 work breakdown을 여기로 끌어오는 것
+
+이 문서는 현재 채택된 에이전트 정의 설계 개념을 설명한다.
+세부 작업 분류와 rollout은 `docs/*/design/improved/*`에서 관리한다.

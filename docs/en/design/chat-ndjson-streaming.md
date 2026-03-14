@@ -1,96 +1,110 @@
-# Design: Chat NDJSON Streaming
+# Chat NDJSON Streaming Design
 
-> **Status**: Implemented
+## Purpose
 
-## Overview
+`chat ndjson streaming` is the design used to deliver in-progress web chat responses through a session-scoped HTTP stream.
+Its purpose is to open a stream only for the active chat session and let the browser control cancellation, visibility buffering, and stream lifecycle directly through the HTTP request itself.
 
-Improves Web Chat UI streaming from a global SSE event to a **per-session NDJSON HTTP stream**.
-Uses Fetch ReadableStream with tab-visibility buffering, independent per-session connections, and delta-only transmission.
+This design exists to solve the following problems:
 
-## Comparison
+- reduce coupling to a single global SSE stream for every web chat response
+- keep the active chat session on its own local stream
+- avoid unnecessary rendering while the browser tab is hidden
+- treat message submission and response streaming as the same request boundary
 
-| | Before (Global SSE) | **After (NDJSON Local)** |
-|---|---|---|
-| Channel | `/api/sse` global events | `/messages/stream` per-session |
-| Content unit | Full accumulated (`content`) | Delta only (`content.slice(offset)`) |
-| Tab switch | Renders continuously (wasteful) | Buffers, flushes on tab return |
-| Connection scope | Shared across all clients | Request-scoped to session owner |
-| Cancellation | Not possible | `AbortController` |
-| Fallback | — | SSE `web_stream` (other sessions or unsupported) |
+## Current transport model
 
-## Server Architecture
+The current web chat architecture uses two streaming layers together:
 
-```
-POST /api/chat/sessions/:id/messages/stream
-          │
-          ├─ add_stream_listener(session_id, fn)  ← register BEFORE publish (no delta loss)
-          │
-          ├─ bus.publish_inbound(...)
-          │
-          └─ SseManager.broadcast_web_stream(chat_id, content, done)
-                  │
-                  └─ delta = content.slice(offset)
-                     fn(delta, done)  →  res.write(JSON)
-```
+- session-scoped NDJSON streaming
+- global SSE `web_stream`
 
-### NDJSON Event Types
+Session-scoped NDJSON streaming is the primary web chat path.
+The browser sends `POST /api/chat/sessions/:id/messages/stream`, and the server uses that same HTTP response as an `application/x-ndjson` stream for the response lifecycle.
 
-```jsonc
-{ "type": "start" }                         // message received acknowledgment
-{ "type": "delta", "content": "Hello" }     // streaming delta
-{ "type": "done" }                           // stream complete
-{ "type": "error", "error": "timeout" }     // error (2min timeout or publish failure)
-```
+The global SSE `web_stream` still remains in the system.
+It serves as the shared broadcast layer for dashboard-wide updates, compatibility with consumers that do not directly use local NDJSON streaming, and other web-facing real-time surfaces.
 
-### Key Files
+So the current design is not “NDJSON replaces SSE entirely.”
+It is “web chat uses session-scoped NDJSON as its primary response stream, while global SSE remains as the shared broadcast layer.”
 
-| File | Role |
-|---|---|
-| `src/dashboard/sse-manager.ts` | `stream_listeners` Map, delta tracking, `add_stream_listener()` |
-| `src/dashboard/broadcaster.ts` | Optional `add_stream_listener?` in `SseBroadcasterLike` |
-| `src/dashboard/route-context.ts` | `add_stream_listener` field in `RouteContext` |
-| `src/dashboard/service.ts` | Binds `this._sse.add_stream_listener` in `_build_route_context` |
-| `src/dashboard/routes/chat.ts` | `POST .../messages/stream` endpoint |
+## Server boundaries
 
-## Frontend Architecture
+The server-side source of truth for this design sits in:
 
-### useNdjsonStream Hook
+- `src/dashboard/routes/chat.ts`
+- `src/dashboard/sse-manager.ts`
+- `src/dashboard/broadcaster.ts`
+- `src/dashboard/route-context.ts`
+- `src/dashboard/service.ts`
 
-```typescript
-const { stream, start, cancel } = useNdjsonStream();
-// stream: { chat_id, content, done } | null
-// start(chat_id, body): Promise<void>  — resolves when streaming completes
-// cancel(): void                        — AbortController cancellation
-```
+In this design, the chat route has two responsibilities:
 
-**Tab visibility buffering:**
-- `document.visibilityState === "hidden"` → accumulate deltas in `buffer_ref`
-- `visibilitychange` event detects tab return → flush buffer at once
+- validate session ownership and request payload
+- register a stream listener before inbound publish begins
 
-### Stream Priority in chat.tsx
+The ordering is important.
+Listener registration happens before publish so that a very fast first response chunk is not lost.
 
-```typescript
-const active_stream =
-  ndjson_stream?.chat_id === activeId ? ndjson_stream    // 1st: NDJSON local
-  : web_stream?.chat_id === activeId ? web_stream        // 2nd: SSE global (fallback)
-  : null;
-```
+`SseManager` is not only a global SSE sender in the current architecture.
+It also acts as the registration point for session-scoped rich stream listeners and forwards incremental stream events instead of only accumulated content snapshots.
 
-### Lifecycle
+## Event model
 
-```
-send() called
-  → start_stream(chat_id, body)  // fire-and-forget, setSending(false) immediately
-  → NDJSON delta received → renders as virtual_msg in real-time
-  → type:"done" received → stream.done = true
-  → qc.invalidateQueries(["chat-session", id])  // refetch
-  → assistant message arrives in activeSession.messages
-  → cancel_stream()  // prevents duplicate, removes virtual message
-```
+The NDJSON stream is not just a pipe for one final response string.
+In the current design, the chat route writes a start event first, then forwards rich stream events produced by the broadcaster/channel path, and finally closes with either a done event or an error event.
 
-## Design Decisions
+The key properties are:
 
-- **Listener registration order**: `add_stream_listener` is registered *before* `bus.publish_inbound`. This prevents missing early deltas when the agent responds quickly.
-- **SSE fallback preserved**: The global `web_stream` store is kept. Mirror sessions and other channels continue to work as before.
-- **Timeout**: 2 minutes (120s). If no agent response, sends `type:"error"` and closes.
-- **Content-Type**: `application/x-ndjson; charset=utf-8` — explicitly signals line-delimited JSON stream.
+- the stream is scoped to one chat session
+- events are transmitted as line-delimited JSON
+- completion and failure are part of the same stream contract
+- the transport layer does not replace message persistence
+
+The stream therefore exists for in-progress delivery.
+The persistent source of truth for final messages remains the chat session store.
+
+## Frontend model
+
+The frontend source of truth for this design sits in:
+
+- `web/src/hooks/use-ndjson-stream.ts`
+- `web/src/pages/chat.tsx`
+- `web/src/store.ts`
+- `web/src/layouts/root.tsx`
+
+Web chat opens the local stream through `useNdjsonStream`.
+That hook owns the abort controller, NDJSON parsing, visibility-based buffering, and completion cleanup.
+
+Important current behaviors are:
+
+- when the tab is hidden, incoming chunks are buffered instead of rendered immediately
+- when the tab becomes visible again, the buffered content is flushed
+- the stream can be cancelled when the user switches sessions or aborts the send
+- if the active session has a local NDJSON stream, that stream wins; the global `web_stream` only acts as fallback
+
+This keeps rendering cost and connection scope tied to the active session instead of the entire dashboard.
+
+## Meaning in the current project
+
+This project combines channel broadcasting and dashboard UI in the same system.
+A single global real-time stream is not enough to explain every web chat behavior cleanly.
+
+`chat ndjson streaming` is the design used to split the active chat response path into a narrower and more explicit transport contract.
+
+In the current architecture this means:
+
+- chat response streaming is established per session request
+- global broadcasting remains as a shared auxiliary layer
+- rendering optimization lives in the frontend hook layer
+- response transport and persistent session storage are treated as different concerns
+
+## Non-goals
+
+- removing the global broadcast layer entirely
+- replacing the persistent chat session store with NDJSON transport
+- forcing every non-web channel to use the same transport contract
+- freezing internal agent event shapes around web chat only
+
+This document describes the currently adopted streaming design concept.
+Migration details, rollout order, and remaining implementation work belong under `docs/*/design/improved/*`.

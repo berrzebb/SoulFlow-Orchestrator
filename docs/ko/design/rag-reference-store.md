@@ -1,319 +1,105 @@
-# 설계: RAG Reference Store 확장
+# 설계: RAG Reference Store
 
-> **Status**: `planned` | **Type**: 기능 확장
+## 개요
 
-## 현황 분석
+RAG Reference Store는 사용자 요청에 문맥화된 참고 자료를 공급하는 **참조 저장소 + 검색 계층**이다. 이 설계의 목적은 워크스페이스 안의 reference 자료를 단순 첨부 파일이 아니라, 검색 가능하고 요약 가능한 컨텍스트 자산으로 다루게 하는 데 있다.
 
-### 이미 구현된 것
+## 설계 의도
 
-| 컴포넌트 | 상태 | 설명 |
-|---------|------|------|
-| `ReferenceStore` | ✅ 완성 | `workspace/references/` → FTS5+KNN hybrid, lazy embed, debounce sync |
-| `_build_reference_context()` | ✅ 완성 | 사용자 메시지로 검색 → 시스템 프롬프트 주입 |
-| `sqlite-vec` KNN | ✅ 완성 | L2 normalized 벡터, 256차원 |
-| `EmbedFn` 주입 | ✅ 완성 | `set_embed()` → `agent-core.ts`에서 연결 |
+프로젝트는 장문의 자료, reference 문서, 작업 문맥, 스킬 레퍼런스 같은 정보를 모두 프롬프트 본문에 직접 밀어 넣지 않는다. 대신 다음 질문에 답할 수 있는 저장소 계층이 필요하다.
 
-### 없는 것 (이번 설계 범위)
+- 지금 이 요청과 관련된 reference는 무엇인가
+- 전체 문서가 아니라 어떤 청크가 필요한가
+- lexical 검색과 semantic 검색을 어떻게 같이 쓸 것인가
 
-| 대상 | 현재 | 목표 |
-|------|------|------|
-| `skills/*/references/*.md` | SKILL.md 링크만, 미인덱싱 | RAG 인덱싱 → 관련 청크만 주입 |
-| `.pdf`, `.docx`, `.hwpx` | `SUPPORTED_EXTENSIONS` 미포함 | 텍스트 추출 → 청킹 → 인덱싱 |
-| 이미지 (`.jpg`, `.png` 등) | 미지원 | 멀티모달 임베딩 모델 조건부 인덱싱 |
-| 영상 (`.mp4`, `.webm` 등) | 미지원 | 프레임 샘플링(ffmpeg) + 오디오 전사(Whisper) |
+RAG Reference Store는 이 문제를 해결하기 위한 공통 retrieval 계층이다.
 
----
+## 핵심 원칙
 
-## 아키텍처
+### 1. 참조 자료는 저장과 검색을 함께 가진다
 
-```
-┌─────────────────────────────────────────────────────────┐
-│                    RAGStore (통합 인터페이스)               │
-│  ┌──────────────────┐    ┌──────────────────────────┐   │
-│  │  ReferenceStore  │    │    SkillRefStore          │   │
-│  │  workspace/      │    │  src/skills/*/           │   │
-│  │  references/     │    │  references/*.md          │   │
-│  └──────────────────┘    └──────────────────────────┘   │
-└─────────────────────────────────────────────────────────┘
-         │ search(query)           │ search(query, skill?)
-         └───────────┬─────────────┘
-                     ▼
-          context.service.ts
-          _build_reference_context()
-          _build_skill_reference_context()  ← 신규
-```
+reference는 파일만 저장한다고 끝나지 않는다. 검색, 청킹, 메타데이터 관리, freshness 판단이 함께 있어야 실제 컨텍스트 자산이 된다.
 
-### 인덱싱 파이프라인
+### 2. retrieval은 hybrid여야 한다
 
-```
-파일 감지 (sync)
-    │
-    ├── .md / .txt / ... (기존 텍스트)
-    │       └── chunk_text() → FTS5 + vec0
-    │
-    ├── .pdf / .docx / .hwpx  ← Phase 1 신규
-    │       └── extract_text() → chunk_text() → FTS5 + vec0
-    │
-    ├── .jpg / .png / .webp   ← Phase 2 신규
-    │       └── encode_base64() → embed_image() → vec0 only
-    │
-    └── .mp4 / .webm          ← Phase 3 신규
-            ├── ffmpeg → frames → embed_image() → vec0
-            └── Whisper → transcript → chunk_text() → FTS5 + vec0
+현재 구조는 lexical 검색과 vector 검색을 함께 쓴다. 하나는 빠른 candidate 확보에, 다른 하나는 의미 기반 재정렬과 보강에 사용된다.
+
+### 3. context는 전체 문서가 아니라 관련 청크로 만든다
+
+RAG는 “파일을 보여준다”가 아니라, 현재 요청에 필요한 근거를 추려 시스템이나 워크플로우 컨텍스트에 주입하는 방식이어야 한다.
+
+### 4. 참조 저장소는 워크플로우와 스킬 모두의 기반이 된다
+
+workspace references가 현재 핵심이지만, 구조적으로는 skill reference나 richer document ingestion도 같은 retrieval 철학 아래에 둔다.
+
+## 현재 채택한 구조
+
+```mermaid
+flowchart TD
+    A[Reference Files] --> B[Chunking / Metadata]
+    B --> C[Lexical Index]
+    B --> D[Vector Index]
+
+    E[User Query] --> F[Hybrid Search]
+    C --> F
+    D --> F
+    F --> G[Reference Context Builder]
+    G --> H[Prompt / Workflow Context]
 ```
 
----
+## 주요 구성 요소
 
-## Phase 1: 바이너리 텍스트 문서 지원
+### Reference Store
 
-### 추출 전략
+Reference Store는 reference 파일을 감시하고, 청크와 문서 메타데이터를 저장하며, hybrid retrieval의 기본 저장소 역할을 한다.
 
-| 포맷 | 방법 | 패키지 |
-|------|------|--------|
-| `.pdf` | `PdfTool` 기존 로직 재사용 (`extract_pdf_text`) | 내장 (pdf-lib 우회, 직접 파싱) |
-| `.docx` | DOCX XML 언패킹 → `word/document.xml` 파싱 | `mammoth` npm |
-| `.hwpx` | ZIP 언패킹 → `Contents/section0.xml` 파싱 | Node.js `unzip` (native AdmZip) |
+### Chunk Model
 
-#### `ReferenceStore` 변경점
+문서는 chunk 단위로 저장된다. chunk는 검색의 최소 단위이며, 실제 컨텍스트 주입도 chunk 중심으로 이뤄진다.
 
-```typescript
-// SUPPORTED_EXTENSIONS에 추가
-const SUPPORTED_EXTENSIONS = new Set([
-  // 기존 텍스트 포맷 ...
-  ".pdf", ".docx", ".hwpx",               // ← Phase 1 추가
-]);
+### Hybrid Retrieval
 
-// chunk_text() 분기 확장
-private async chunk_text_async(content_or_path: string, source_path: string, raw_buf?: Buffer): Promise<ReferenceChunk[]> {
-  const ext = extname(source_path).toLowerCase();
-  if ([".pdf", ".docx", ".hwpx"].includes(ext)) {
-    const text = await this.extract_binary_text(raw_buf!, ext);
-    return this.chunk_fixed(text, source_path);
-  }
-  // 기존 sync 경로
-  const ext2 = extname(source_path).toLowerCase();
-  if (ext2 === ".md") return this.chunk_markdown(content_or_path, source_path);
-  return this.chunk_fixed(content_or_path, source_path);
-}
-```
+hybrid retrieval은 lexical search와 vector search를 결합한다. lexical 경로는 빠르게 후보를 줄이고, vector 경로는 의미 기반으로 보강하거나 재정렬한다.
 
-> **주의**: `sync()`는 현재 동기(readFileSync). 바이너리 추출 시 async로 전환 필요.
-> `chunk_text()`를 `async chunk_text()`로 변경하고 sync() 내부를 `await` 처리.
+### Context Builder
 
-#### PDF 추출 — 자체 구현 (외부 의존성 없음)
+검색 결과는 그대로 사용자에게 던져지지 않는다. context builder가 관련 청크를 정리해 프롬프트 또는 실행 문맥으로 변환한다.
 
-`PdfTool`의 `extract_pdf_text()` 로직을 `reference-store.ts`에서 직접 재사용:
-```typescript
-import { PdfTool } from "../agent/tools/pdf.js"; // 정적 메서드 추출 또는 복사
-```
+## 문서와 미디어의 관계
 
-또는 공통 `extract_pdf_text(buf: Buffer): string` 유틸 함수로 분리 → `src/utils/doc-extractor.ts`.
+현재 설계의 중심은 텍스트 reference지만, reference store 자체는 richer ingestion으로 확장 가능한 저장소 계층으로 본다. 중요한 점은 포맷별 파이프라인이 달라도 **검색 결과는 같은 retrieval 계약**으로 수렴해야 한다는 것이다.
 
-#### DOCX 추출 — mammoth
+즉 top-level 설계에서 중요한 것은 특정 포맷 지원 여부보다, 다양한 자료형도 같은 reference retrieval 모델에 연결된다는 점이다.
 
-```typescript
-import mammoth from "mammoth";
-const { value: text } = await mammoth.extractRawText({ buffer: buf });
-```
+## Skill References와의 관계
 
-#### HWPX 추출 — AdmZip + XML
+스킬은 자신의 body만이 아니라 별도 reference 집합을 가질 수 있다. 이 경우에도 reference retrieval 철학은 동일하다.
 
-```typescript
-import AdmZip from "adm-zip";
-const zip = new AdmZip(buf);
-const entry = zip.getEntry("Contents/section0.xml");
-const xml = entry?.getData().toString("utf-8") ?? "";
-// XML 태그 제거: /<[^>]+>/g → ''
-const text = xml.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-```
+- 전체 reference를 통째로 주입하지 않는다.
+- 현재 요청과 관련된 reference chunk를 선택한다.
+- skill 활성 문맥과 일반 workspace reference를 함께 고려할 수 있다.
 
-### 패키지 추가
+따라서 RAG Reference Store는 workspace reference 저장소이면서 동시에 skill-aware retrieval의 기반 계층이 된다.
 
-```bash
-npm install mammoth adm-zip
-npm install --save-dev @types/adm-zip
-```
+## Freshness와 동기화
 
----
+reference retrieval이 신뢰 가능하려면 저장소와 실제 파일 상태 사이의 동기화가 필요하다. 따라서 reference store는 단순 append-only 캐시가 아니라, 파일 변경과 chunk 인덱스를 다시 맞출 수 있는 구조여야 한다.
 
-## Phase 1b: Skills References RAG (SkillRefStore)
+상위 설계에서 중요한 점은 freshness가 “검색 품질” 문제가 아니라, **컨텍스트 신뢰도 문제**라는 것이다.
 
-### 목적
+## 비목표
 
-현재 `load_skills_for_context()`는 SKILL.md body 전체를 주입.
-`file-maker/references/pdf.md` 같은 상세 레퍼런스는 링크만 있고 실제 내용은 미주입.
-→ 쿼리와 관련된 레퍼런스 청크만 검색해서 주입.
+이 문서는 다음 내용을 정의하지 않는다.
 
-### 설계
+- 특정 포맷별 extractor 구현
+- 개별 임베딩 모델 비교
+- 인덱스 재구축 스크립트 사용법
+- 단계별 구현 진행 상황
 
-`SkillRefStore` — `ReferenceStore`와 동일 인터페이스(`ReferenceStoreLike`), 별도 DB.
+그 내용은 구현 코드 또는 `docs/*/design/improved`에서 다룬다.
 
-```typescript
-// src/services/skill-ref-store.ts
-export class SkillRefStore implements ReferenceStoreLike {
-  constructor(
-    private readonly skills_roots: string[],  // ["src/skills", "workspace/skills"]
-    private readonly data_dir: string,
-  ) { ... }
-  // scan_files(): skills_roots 하위 모든 references/*.md 스캔
-  // DB: runtime/skill-refs.db
-}
-```
+## 관련 문서
 
-스캔 경로: `skills_root/**/references/**/*.md` (단, `SKILL.md` 자체는 제외).
-
-### 컨텍스트 주입
-
-```typescript
-// context.service.ts 신규 메서드
-private async _build_skill_reference_context(
-  user_message: string,
-  active_skill_names: string[],
-): Promise<string> {
-  if (!this._skill_ref_store) return "";
-  const results = await this._skill_ref_store.search(user_message, {
-    limit: 4,
-    doc_filter: active_skill_names.length > 0
-      ? active_skill_names.join("|")
-      : undefined,
-  });
-  // ...포맷 후 반환
-}
-```
-
-`active_skill_names`는 `build_context()` 호출 시 이미 전달되는 `skill_names` 재사용.
-
----
-
-## Phase 2: 이미지 지원
-
-### 조건
-
-`embed_fn` 모델이 멀티모달 지원 여부를 런타임에 감지:
-
-```typescript
-// EmbedFn 확장
-type EmbedInput = string | { image_url: string } | { image_base64: string };
-type EmbedFn = (inputs: EmbedInput[], opts: { model?: string; dimensions?: number }) => Promise<{ embeddings: number[][] }>;
-```
-
-`set_embed()` 후 probe 호출로 이미지 지원 여부 확인 → `this.multimodal_supported` 플래그.
-
-### 이미지 인덱싱
-
-```typescript
-const SUPPORTED_IMAGE_EXTENSIONS = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp"]);
-
-// sync()에서 이미지 파일 처리
-const b64 = readFileSync(abs_path).toString("base64");
-const data_url = `data:image/${ext.slice(1)};base64,${b64}`;
-// FTS 없음 — vec0만
-to_embed_multimodal.push({ chunk_id, input: { image_base64: data_url } });
-```
-
-메타데이터: `{ type: "image", file_name, alt_text: ""  }` — 향후 사용자가 설명 추가 가능.
-
-### API 형식 (jina-clip-v2 예시)
-
-```json
-{
-  "model": "jina-clip-v2",
-  "input": [
-    { "text": "쿼리 텍스트" },
-    { "image": "data:image/png;base64,..." }
-  ]
-}
-```
-
-현재 `EmbeddingTool`의 `call_api()`는 `input: string[]`만 지원 → 확장 필요.
-
----
-
-## Phase 3: 영상 지원
-
-### 파이프라인
-
-```
-video file (.mp4, .webm, .mov)
-    │
-    ├── ffmpeg (컨테이너 내)
-    │     └── 1fps 프레임 샘플링 → JPEG 배열
-    │           └── 멀티모달 embed → vec0
-    │
-    └── ffmpeg audio extract → PCM
-          └── Whisper (Ollama: whisper 모델)
-                └── 전사 텍스트 → chunk_fixed() → FTS5 + vec0
-```
-
-### 제약
-
-- ffmpeg 미설치 시 graceful skip (컨테이너에는 기본 설치)
-- 영상 길이 제한 권장: 10분 (프레임 수 상한)
-- Whisper 미설치 시 전사 없이 프레임 embed만 수행
-
----
-
-## DB 스키마 변경 (ReferenceStore)
-
-```sql
--- ref_documents에 media_type 추가
-ALTER TABLE ref_documents ADD COLUMN media_type TEXT NOT NULL DEFAULT 'text';
--- 'text' | 'image' | 'video'
-
--- 이미지/영상 전용 메타
-CREATE TABLE IF NOT EXISTS ref_media (
-  chunk_id    TEXT PRIMARY KEY REFERENCES ref_chunks(chunk_id) ON DELETE CASCADE,
-  file_path   TEXT NOT NULL,
-  media_type  TEXT NOT NULL,  -- 'image' | 'video_frame' | 'video_transcript'
-  timestamp_s REAL,           -- 영상 프레임 타임스탬프 (초)
-  alt_text    TEXT            -- 이미지 설명 (사용자 입력 가능)
-);
-```
-
----
-
-## 구현 순서
-
-### Phase 1 (텍스트 우선, 이번 구현)
-
-1. `src/utils/doc-extractor.ts` — `extract_text(buf, ext)` 유틸 (PDF/DOCX/HWPX)
-2. `ReferenceStore` 수정:
-   - `sync()` async 전환
-   - `SUPPORTED_EXTENSIONS`에 `.pdf`, `.docx`, `.hwpx` 추가
-   - `chunk_text()` async 전환 + 바이너리 분기
-3. `npm install mammoth adm-zip`
-4. `src/services/skill-ref-store.ts` — SkillRefStore (ReferenceStoreLike 구현)
-5. `agent-core.ts` — SkillRefStore 생성 + embed 연결
-6. `context.service.ts` — `_build_skill_reference_context()` 추가
-7. 테스트: `tests/services/doc-extractor.test.ts`, `tests/services/skill-ref-store.test.ts`
-
-### Phase 2 (이미지)
-
-8. `EmbedFn` 타입 확장 (멀티모달 input 허용)
-9. `ReferenceStore` — 이미지 경로 인덱싱 + vec0 전용 저장
-10. `ref_media` 테이블 추가
-
-### Phase 3 (영상)
-
-11. `src/utils/video-extractor.ts` — ffmpeg 프레임 추출 + Whisper 전사
-12. `ReferenceStore` — 영상 처리 파이프라인 연결
-
----
-
-## 검증
-
-```
-# Phase 1 텍스트
-workspace/references/report.pdf 업로드
-→ sync() → PDF 텍스트 추출 → 청킹 → 임베딩
-→ "보고서 요약" 쿼리 → 관련 청크 시스템 프롬프트 주입
-
-# Phase 1b Skills
-"PDF 만들어줘" 요청
-→ SkillRefStore.search("PDF 만들어줘", { doc_filter: "file-maker" })
-→ file-maker/references/pdf.md 관련 청크 주입
-
-# Phase 2 이미지
-workspace/references/diagram.png 업로드 (멀티모달 모델 설정 시)
-→ 이미지 임베딩 → "아키텍처 다이어그램" 쿼리 → 이미지 경로 응답
-```
+- [하이브리드 벡터 검색 설계](./hybrid-vector-search.md)
+- [메모리 검색 설계](./memory-search-upgrade.md)
+- [sqlite-vec 벡터 스토어 설계](./vector-store-sqlite-vec.md)
