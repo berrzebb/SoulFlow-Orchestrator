@@ -6,7 +6,7 @@ Built with **React + Vite**. Supports **Korean/English i18n** (auto-detected fro
 
 Global state management via Zustand (`store.ts`) — SSE connection status, sidebar, theme, web streaming.
 
-Navigate between 10 sections via the sidebar. Toggle dark/light theme with the button at the bottom of the sidebar.
+The sidebar is organized into 4 groups: **Main** (Overview, Chat), **Build** (Prompting, Workflows, Kanban, WBS, Workspace), **Connect** (Channels, Providers), **System** (Secrets, Settings). Superadmin users see an additional **Admin** link. Toggle dark/light theme with the button at the bottom of the sidebar.
 
 ## Setup Wizard
 
@@ -21,18 +21,20 @@ On first launch with no providers configured, the dashboard auto-redirects to `/
 
 ## Pages
 
-| Page | Path | Function |
-|------|------|----------|
-| Overview | `/` | Runtime status summary, system metrics, SSE live feed |
-| Workspace | `/workspace` | Memory · sessions · skills · cron · tools · agents · templates · OAuth · models · references (10 tabs) |
-| Chat | `/chat` | Web-based agent conversation (markdown rendering + code highlighting) |
-| Channels | `/channels` | Channel connection status · global settings |
-| Providers | `/providers` | Agent provider CRUD |
-| Secrets | `/secrets` | AES-256-GCM secret management |
-| Workflows | `/workflows` | Phase Loop workflow management · 141-node graph editor · agent chat |
-| Kanban | `/kanban` | Drag-and-drop kanban board · automation rules |
-| WBS | `/wbs` | Kanban card hierarchy tree view (parent_id-based) |
-| Settings | `/settings` | Global runtime settings (section tabs, inline edit, ToggleSwitch) |
+| Group | Page | Path | Function |
+|-------|------|------|----------|
+| Main | Overview | `/` | Runtime status summary, system metrics, SSE live feed |
+| Main | Chat | `/chat` | Web-based agent conversation (markdown rendering + code highlighting) |
+| Build | **Prompting** | `/prompting` | Prompting Studio — text/image/video generation, agent design & testing, gallery, A/B compare |
+| Build | Workflows | `/workflows` | Phase Loop workflow management · 141-node graph editor · agent chat |
+| Build | Kanban | `/kanban` | Drag-and-drop kanban board · automation rules |
+| Build | WBS | `/wbs` | Kanban card hierarchy tree view (parent_id-based) |
+| Build | Workspace | `/workspace` | Memory · sessions · skills · cron · tools · agents · templates · OAuth · models · references (10 tabs) |
+| Connect | Channels | `/channels` | Channel connection status · global settings |
+| Connect | Providers | `/providers` | Agent provider CRUD · Circuit Breaker state |
+| System | Secrets | `/secrets` | AES-256-GCM secret management |
+| System | Settings | `/settings` | Global runtime settings (section tabs, inline edit, ToggleSwitch) |
+| Admin | Admin | `/admin` | Team/user management · global providers · monitoring (superadmin only) |
 
 ## Overview
 
@@ -110,6 +112,47 @@ Manage the orchestrator LLM runtime and models. The orchestrator is a lightweigh
 | **Switch** | Change the active classifier model — config update + automatic warmup |
 | **VRAM monitor** | Currently VRAM-loaded models + memory usage |
 | **Runtime status** | running/stopped · engine (`native`/`docker`/`podman`) · GPU utilization · API Base |
+
+## Prompting Studio
+
+`/prompting` — A unified environment for prompt experimentation, agent design, and multi-modal generation. Organized into 6 tabs:
+
+| Tab | Icon | Purpose |
+|-----|------|---------|
+| **Text** | `T` | Template-based prompt execution with `{{variable}}` substitution · model/temperature/max_tokens controls |
+| **Image** | `◎` | Image generation model execution · provider/model picker |
+| **Video** | `▷` | Video generation model execution · provider/model picker |
+| **Agent** | `🤖` | Full agent definition editor + live test chat |
+| **Gallery** | `◈` | Agent definition CRUD gallery · fork/clone · link to Agent tab |
+| **Compare** | `⚖` | Run the same prompt across multiple models in parallel · side-by-side result/cost/latency comparison (A/B test) |
+
+### Agent Tab
+
+The Agent tab is the primary tool for designing and testing sub-agents. It combines a full definition form with an integrated chat panel:
+
+**Definition fields:**
+- `name`, `description`, `icon` — identity
+- `role_skill` — one of 8 built-in role skills (`role:concierge`, `role:pm`, `role:pl`, `role:implementer`, `role:reviewer`, `role:debugger`, `role:validator`, `role:generalist`) or empty for custom
+- `soul` / `heart` — personality and behavioral guidelines
+- `tools` — comma-separated tool list
+- `shared_protocols` — shared behavior protocols (`clarification-protocol`, `phase-gates`, `error-escalation`, `session-metrics`, `difficulty-guide`)
+- `skills` — additional skill references
+- `use_when` / `not_use_for` — routing guidance
+- `extra_instructions` — additional prompt text
+
+**Generate from description**: Describe what you want in natural language → AI auto-fills all definition fields.
+
+**Test chat**: Immediately run the agent with the current definition — no save required. Results shown inline.
+
+**Gallery integration**: Save to Gallery, or open any Gallery agent in the Agent tab for editing.
+
+### Compare Tab
+
+Parallel model evaluation for A/B testing:
+
+1. Add 2+ model targets (provider + model picker per slot)
+2. Set system prompt, user prompt, temperature, max_tokens
+3. Run → results displayed side-by-side with: generated text · latency (ms) · estimated cost · token counts
 
 ## Chat Page
 
