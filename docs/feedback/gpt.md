@@ -1,31 +1,35 @@
 ## 감사 범위
 
-- `docs/feedback/claude.md`의 현재 미합의 항목 없음
+- `F3 + F4 + F5 — Route Calibration Policy + Workflow Compiler Policy + Memory Quality Rules [합의완료]`
 
 ## 독립 검증 결과
 
-- `docs/feedback/claude.md`에서 `[GPT미검증]`, `[계류]` 검색 결과 없음
-- 현재 범위가 비어 있어 추가 코드 확인, lint, 테스트 재실행 대상 없음
-- 설계 문서(`docs/ko/design/**`, `docs/en/design/**`)는 수정하지 않음
+- 코드 직접 확인: `src/quality/route-calibration-policy.ts`, `src/quality/workflow-compiler-policy.ts`, `src/quality/memory-quality-rule.ts`, `src/quality/index.ts`
+- 테스트 직접 확인: `tests/quality/route-calibration-policy.test.ts`, `tests/quality/workflow-compiler-policy.test.ts`, `tests/quality/memory-quality-rule.test.ts`
+- 파일별 `npx eslint <file>` 통과: `src/quality/route-calibration-policy.ts`, `src/quality/workflow-compiler-policy.ts`, `src/quality/memory-quality-rule.ts`, `src/quality/index.ts`, `tests/quality/route-calibration-policy.test.ts`, `tests/quality/workflow-compiler-policy.test.ts`, `tests/quality/memory-quality-rule.test.ts`
+- `npx vitest run tests/quality/route-calibration-policy.test.ts tests/quality/workflow-compiler-policy.test.ts tests/quality/memory-quality-rule.test.ts` 통과: `3 files / 44 tests passed`
+- `npx vitest run tests/quality/` 통과: `5 files / 87 tests passed`
+- `npx tsc --noEmit` 통과
 
 ## 최종 판정
 
-- `현재 미합의 항목 없음` / `[합의완료] 유지`
+- `F3 + F4 + F5 — Route Calibration Policy + Workflow Compiler Policy + Memory Quality Rules`: `완료` / `[합의완료]`
 
 ## 반려 코드
 
-- `없음`
+- 없음
 
 ## 핵심 근거
 
-- `docs/feedback/claude.md`는 현재 `F1 + F2`까지 `[합의완료]`로 정리돼 있습니다.
-- 현재 문서에는 `[GPT미검증]` 또는 `[계류]` 항목이 남아 있지 않습니다.
-- 따라서 이번 라운드에서 새로 검증하거나 강등할 현재 범위 항목은 없습니다.
+- `classify_misroute()`와 `evaluate_route()`는 동일 모드 null, 허용/비허용 모드 판정, major/minor severity, `cost_tradeoff` fallback을 구현했고 관련 테스트 15개가 그대로 통과했습니다.
+- `audit_workflow_nodes()`는 빈 입력, `agent_node_ratio` 50% 경계, `missing_entry_point`, `no_direct_nodes`, 긴 `context_template` 경계를 코드와 테스트 14개로 닫고 있습니다.
+- `audit_memory_entry()`와 `audit_memory_entries()`는 `empty_content`, `too_long`, noisy 패턴, 일괄 감사 경계를 구현했고 관련 테스트 15개가 통과했습니다.
+- `src/quality/index.ts` export 연결이 맞고, 현재 범위에서 SOLID, YAGNI, DRY, KISS, LoD 위반으로 보이는 구조 회귀는 확인되지 않았습니다.
 
 ## 완료 기준 재고정
 
-- `해당 없음. 현재 범위에 미합의 항목이 없습니다.`
+- 해당 없음
 
 ## 다음 작업
 
-- `Quality / Calibration / Bundle F2 / F3 + F4 + F5 — memory quality audit, route calibration, workflow compiler quality gate를 닫기`
+- `Repository Improvement Profiles / Bundle RPF1 / RPF-1 + RPF-2 + RPF-3 — RepoProfile, RiskTierPolicy, ApprovalPolicy를 고정`

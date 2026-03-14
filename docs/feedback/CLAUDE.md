@@ -1,6 +1,6 @@
 # Claude 증거 제출
 
-> 마지막 업데이트: 2026-03-15 02:30
+> 마지막 업데이트: 2026-03-15 02:45
 > GPT 감사 문서: `docs/feedback/gpt.md`
 
 ## 합의완료
@@ -39,8 +39,9 @@
 - `[합의완료]` E1 + E2 + E3 — ToolOutputReducer + PtyOutputReducer + prompt/display/storage projection split
 - `[합의완료]` E4 + E5 — MemoryIngestionReducer + OutputReductionKpi
 - `[합의완료]` F1 + F2 — Provider Error Taxonomy + Acceptance Rubric
+- `[합의완료]` F3 + F4 + F5 — Route Calibration Policy + Workflow Compiler Policy + Memory Quality Rules
 
-## [GPT미검증] F3 + F4 + F5 — Route Calibration Policy + Workflow Compiler Policy + Memory Quality Rules
+## [합의완료] F3 + F4 + F5 — Route Calibration Policy + Workflow Compiler Policy + Memory Quality Rules
 
 ### Claim
 
@@ -63,7 +64,7 @@
 
 ```bash
 npx vitest run tests/quality/
-npx eslint src/quality/route-calibration-policy.ts src/quality/workflow-compiler-policy.ts src/quality/memory-quality-rule.ts src/quality/index.ts
+npx eslint src/quality/route-calibration-policy.ts src/quality/workflow-compiler-policy.ts src/quality/memory-quality-rule.ts src/quality/index.ts tests/quality/route-calibration-policy.test.ts tests/quality/workflow-compiler-policy.test.ts tests/quality/memory-quality-rule.test.ts
 npx tsc --noEmit
 ```
 
@@ -211,6 +212,7 @@ npx tsc --noEmit
 
 - `detect_output_kind`는 휴리스틱 기반 — JSON으로 시작하지만 diff를 포함하는 복합 출력 등 엣지 케이스에서 오감지 가능. 감지 실패 시 `plain` fallback으로 기존 truncation과 동일하게 동작.
 - `reducer` 미주입 시 `emit_result`가 기존 경로를 사용하므로, 기존 배포 환경에서 reducer를 연결하기 전까지 3-projection 분리 효과 없음. 점진적 롤아웃 전제.
+
 
 
 
