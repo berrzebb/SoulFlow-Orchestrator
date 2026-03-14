@@ -20,46 +20,40 @@
 - `[합의완료]` EG-3 + EG-4 Reuse Integration + Hard Enforcement
 - `[합의완료]` EG-5 Guardrail Observability + Eval Fixture
 - `[합의완료]` PA-1 + PA-2 — Ports & Adapters Boundary Fix
+- `[합의완료]` TR-1 + TR-2 — Shared Tokenizer/QueryNormalizer + LexicalProfile
 
-## PA-1 + PA-2 — SecretVault / OrchestrationService Boundary Fix `[합의완료]`
+## TR-1 + TR-2 — Shared Tokenizer/QueryNormalizer + LexicalProfile `[합의완료]`
 
 ### Claim
 
-**PA-1**: `SecretVaultService`와 `OrchestrationService` 두 서비스의 소비자 경계를 `*Like` 인터페이스 포트로 전환.
+**TR-1**: `TokenizerPolicyLike` + `QueryNormalizerLike` 공유 인터페이스를 `src/search/types.ts`에 정의. `Unicode61Tokenizer` 기본 어댑터 구현. `memory-query-expansion.ts`의 130줄 자체 토크나이저(stop words, 조사 탈락, CJK 바이그램)를 `DEFAULT_TOKENIZER` 위임으로 교체 (23줄).
 
-- `SecretVaultService` → `SecretVaultLike`: 13개 소비자 파일 마이그레이션. concrete import는 정의 파일(`secret-vault.ts`) + 팩토리(`secret-vault-factory.ts`)에만 잔존.
-- `OrchestrationService` → `OrchestrationServiceLike`: 3-method 최소 포트를 `types.ts`에 추출. 5개 소비자 파일 마이그레이션. `service.ts`에 `implements` 추가.
-
-**PA-2**: 위 2개 서비스에 한정하여 concrete import 경계를 고정. `tests/architecture/di-boundaries.test.ts`로 회귀 방지. 다른 서비스(`DecisionService`, `PromiseService`, Tool 클래스 등)의 concrete 생성은 이번 scope 밖.
+**TR-2**: `LexicalProfile` 타입으로 FTS5 tokenizer 절 + BM25 가중치를 표준화. `tool-index.ts`의 하드코딩된 `tokenize='unicode61 remove_diacritics 2'` 2곳을 `build_fts5_tokenize_clause(TOOL_INDEX_PROFILE)`로 교체. `TokenizerAdapterLike` 확장 계약으로 ICU/커스텀 어댑터 플러그인 가능.
 
 ### Changed Files
 
-**SecretVaultLike boundary (13 files)**:
-`src/orchestration/service.ts`, `src/orchestration/request-preflight.ts`, `src/providers/service.ts`, `src/cron/runtime-handler.ts`, `src/agent/index.ts`, `src/agent/tools/dynamic.ts`, `src/agent/tools/secret-tool.ts`, `src/agent/tools/shell.ts`, `src/bootstrap/config.ts`, `src/bootstrap/runtime-data.ts`, `src/bootstrap/channels.ts`, `src/bootstrap/providers.ts`, `src/security/secret-vault-factory.ts`
+**New files (4)**: `src/search/types.ts`, `src/search/unicode61-tokenizer.ts`, `src/search/lexical-profiles.ts`, `src/search/index.ts`
 
-**OrchestrationServiceLike boundary (6 files)**:
-`src/orchestration/types.ts`, `src/orchestration/service.ts`, `src/channels/manager.ts`, `src/channels/create-command-router.ts`, `src/bootstrap/channel-wiring.ts`, `src/bootstrap/dashboard.ts`, `src/bootstrap/trigger-sync.ts`
+**Migrated consumers (2)**: `src/agent/memory-query-expansion.ts` (DEFAULT_TOKENIZER 위임), `src/orchestration/tool-index.ts` (LexicalProfile FTS5 설정)
 
-**Boundary regression test (1 file)**:
-`tests/architecture/di-boundaries.test.ts`
+**Test (1)**: `tests/search/tokenizer-policy.test.ts` (28 tests — 계약 + 통합 회귀)
 
 ### Test Command
 
 ```bash
-npm run lint && npx tsc --noEmit && npx vitest run tests/architecture/di-boundaries.test.ts tests/orchestration/guardrails/ tests/evals/ tests/security/secret-vault.test.ts
+npm run lint && npx tsc --noEmit && npx vitest run tests/search/tokenizer-policy.test.ts tests/agent/memory-service-search.test.ts tests/orchestration/tool-index.test.ts
 ```
 
 ### Test Result
 
 - lint: 0 errors
 - tsc: passed
-- vitest: 13 files / 186 tests passed (di-boundaries 2 tests 포함)
+- vitest: 3 files / 118 tests passed
 
 ### Residual Risk
 
-- `ContextBuilder`가 `DecisionService`, `PromiseService`를 직접 생성 — 후속 PA 번들에서 `*Like` 포트 추출 예정
-- `PromiseService`가 내부적으로 `new DecisionService()` 생성 (위임 패턴)
-- `create_default_tool_registry()`가 100+ Tool 인스턴스 직접 생성 — 도구 전용 composition root로 분류, 별도 리팩토링 대상
-- 22개 모듈 레벨 `create_logger()` 싱글턴 — 설계상 의도적 허용
-
+- `tool-index.ts`의 in-memory `tokenize()`는 의도적으로 EN-only — 다언어 `Unicode61Tokenizer`와 행동이 다르므로 유지
+- `tool-index.ts`의 `KO_KEYWORD_MAP` (150+ 항목)은 도구 도메인 전용이라 공유 계약에 포함하지 않음
+- `memory.service.ts`의 FTS5 테이블 생성도 하드코딩 — `MEMORY_CHUNK_PROFILE` 적용은 후속 작업
+- `TokenizerAdapterLike`의 ICU 실 어댑터는 미구현 (계약만 정의, YAGNI)
 

@@ -15,6 +15,7 @@ import Database from "better-sqlite3";
 import * as sqliteVec from "sqlite-vec";
 import type { ToolSchema } from "../agent/tools/types.js";
 import type { EmbedFn } from "../agent/memory.service.js";
+import { TOOL_INDEX_PROFILE, build_fts5_tokenize_clause } from "../search/index.js";
 
 /** 모든 모드에서 항상 포함되는 core 도구. */
 const CORE_TOOLS = new Set([
@@ -152,6 +153,8 @@ const KO_KEYWORD_MAP: Record<string, string[]> = {
 const VEC_DIMENSIONS = 256;
 const MAX_EMBED_CHARS = 1500;
 
+const FTS5_TOKENIZE = build_fts5_tokenize_clause(TOOL_INDEX_PROFILE);
+
 const INIT_SQL = `
   CREATE TABLE IF NOT EXISTS tools (
     name         TEXT PRIMARY KEY,
@@ -170,7 +173,7 @@ const INIT_SQL = `
     name, description, tags,
     content='tool_docs',
     content_rowid='rowid',
-    tokenize='unicode61 remove_diacritics 2'
+    ${FTS5_TOKENIZE}
   );
 `;
 
@@ -293,7 +296,7 @@ export class ToolIndex {
         name, description, tags,
         content='tool_docs',
         content_rowid='rowid',
-        tokenize='unicode61 remove_diacritics 2'
+        ${FTS5_TOKENIZE}
       )`);
       db.exec("DELETE FROM tools_vec");
 
