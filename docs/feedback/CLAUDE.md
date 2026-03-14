@@ -1,6 +1,6 @@
 # Claude 증거 제출
 
-> 마지막 업데이트: 2026-03-14 21:28
+> 마지막 업데이트: 2026-03-14 21:52
 > GPT 감사 문서: `docs/feedback/gpt.md`
 
 ## 합의완료
@@ -33,6 +33,46 @@
 - `[합의완료]` SO-1 + SO-2 + SO-3 — Output Contract Inventory + Shared Result Contracts + OutputParserRegistry
 - `[합의완료]` SO-4 + SO-5 — SchemaChain Validator/Normalizer + Bounded SchemaRepairLoop
 - `[합의완료]` SO-6 + SO-7 — runtime/workflow/gateway binding + parser-repair regression artifact
+
+## `[GPT미검증]` PAR-1 + PAR-2 — ParallelResultEnvelope + ConflictSet + DeterministicReconcilePolicy + ReconcileNode
+
+### Claim
+
+- PAR-1: `src/orchestration/parallel-contracts.ts` (신규) — `ParallelAgentResult`, `ParallelResultEnvelope`, `ConflictField`, `ConflictSet` 타입. `build_parallel_envelope()` (성공/실패 계수), `detect_conflicts()` (content 또는 parsed 필드별 충돌 감지, 에러 결과 제외, consensus 필드 분리).
+- PAR-2: `src/orchestration/reconcile-policy.ts` (신규) — `DeterministicReconcilePolicy` (`majority_vote` / `first_wins` / `last_wins` / `merge_union`). `apply_reconcile_policy(envelope, policy, conflict_set?)` — 동일 입력 → 동일 출력 결정론적 보장. `merge_union`은 parsed 객체 필드 합집합, content는 배열 합산.
+- PAR-2 Node: `src/agent/nodes/reconcile.ts` (신규) — `ReconcileNodeDefinition` (source_node_ids, policy, use_parsed?). memory에서 source 노드 결과 수집 → envelope → conflict 감지 → policy 적용 → reconciled/conflicts/policy_applied/succeeded/failed 출력.
+- `src/agent/workflow-node.types.ts` (수정) — `ReconcileNodeDefinition` 추가, `OrcheNodeType`에 `"reconcile"` 추가, `OrcheNodeDefinition` union에 추가.
+- `src/agent/nodes/index.ts` (수정) — `reconcile_handler` import + 등록.
+
+### 변경 파일
+
+- `src/orchestration/parallel-contracts.ts` (신규) — PAR-1: 10 함수/타입
+- `src/orchestration/reconcile-policy.ts` (신규) — PAR-2: 정책 + 적용 함수
+- `src/agent/nodes/reconcile.ts` (신규) — PAR-2 노드 핸들러
+- `src/agent/workflow-node.types.ts` (수정) — ReconcileNodeDefinition + OrcheNodeType
+- `src/agent/nodes/index.ts` (수정) — reconcile_handler 등록
+- `tests/orchestration/parallel-contracts.test.ts` (신규) — PAR-1 테스트 10개
+- `tests/orchestration/reconcile-policy.test.ts` (신규) — PAR-2 정책 테스트 11개
+- `tests/agent/nodes/reconcile.test.ts` (신규) — ReconcileNode 통합 테스트 9개
+
+### Test Command
+
+```bash
+npx vitest run tests/orchestration/parallel-contracts.test.ts tests/orchestration/reconcile-policy.test.ts tests/agent/nodes/reconcile.test.ts
+npx eslint src/orchestration/parallel-contracts.ts src/orchestration/reconcile-policy.ts src/agent/nodes/reconcile.ts tests/orchestration/parallel-contracts.test.ts tests/orchestration/reconcile-policy.test.ts tests/agent/nodes/reconcile.test.ts
+npx tsc --noEmit
+```
+
+### Test Result
+
+- `npx vitest run ...`: **3 files / 30 tests passed**
+- `npx eslint` 대상 6파일: **0 errors, 0 warnings**
+- `npx tsc --noEmit`: **통과**
+
+### Residual Risk
+
+- `majority_vote` 동수(tie) 시 첫 번째 등장 값 선택 — 입력 순서가 결과에 영향. `source_node_ids` 순서가 결정론성의 기준.
+- `merge_union`의 객체 합산은 나중 에이전트의 고유 키를 추가하지 않음 (첫 번째 고유 키 우선). 필드 충돌 시 consensus를 우선합니다.
 
 ## `[합의완료]` SO-6 + SO-7 — runtime/workflow/gateway binding + parser-repair regression artifact
 
