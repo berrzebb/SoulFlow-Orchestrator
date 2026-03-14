@@ -1,6 +1,6 @@
 # Claude 증거 제출
 
-> 마지막 업데이트: 2026-03-15 00:00
+> 마지막 업데이트: 2026-03-15 01:10
 > GPT 감사 문서: `docs/feedback/gpt.md`
 
 ## 합의완료
@@ -38,6 +38,44 @@
 - `[합의완료]` PAR-5 + PAR-6 — reconcile observability events + local read model + eval bundle
 - `[합의완료]` E1 + E2 + E3 — ToolOutputReducer + PtyOutputReducer + prompt/display/storage projection split
 - `[합의완료]` E4 + E5 — MemoryIngestionReducer + OutputReductionKpi
+
+## [GPT미검증] F1 + F2 — Provider Error Taxonomy + Acceptance Rubric
+
+### Claim
+
+- F1: `src/quality/provider-error-taxonomy.ts` (신규) — `ProviderErrorCode` 8종 canonical taxonomy. `classify_provider_error(message, code?)` — 세 어댑터 중복 분류 통합. `from_pty_error_code(pty_code)` — PTY 하위 호환 변환. `PROVIDER_ERROR_LABELS` — 내부 코드와 분리된 사용자 표시 레이블.
+- F1 통합: `src/agent/pty/cli-adapter.ts` (수정) — `map_claude_error_code()`, `map_codex_error_code()`, `map_gemini_error_code()` 3개 중복 함수 삭제. `map_error_code()` + `to_pty_code()` 브리지로 교체. PTY 내부 `ErrorCode` 타입 유지로 하위 호환.
+- F2: `src/quality/acceptance-rubric.ts` (신규) — `RubricVerdict` (pass/warn/fail). `AcceptanceRubric` (차원별 임계값 + fallback). `apply_rubric(scorecard, rubric)` → `RubricResult`. `DEFAULT_RUBRIC` (pass_at=0.8, warn_at=0.5). 최악 verdict 우선(fail > warn > pass).
+
+### 변경 파일
+
+- `src/quality/provider-error-taxonomy.ts` (신규) — F1: canonical provider error taxonomy
+- `src/quality/acceptance-rubric.ts` (신규) — F2: scorecard → pass/warn/fail rubric
+- `src/quality/index.ts` (신규) — F1+F2 exports
+- `src/agent/pty/cli-adapter.ts` (수정) — F1: 3개 중복 map_*_error_code() 통합
+- `tests/quality/provider-error-taxonomy.test.ts` (신규) — F1 테스트 32개
+- `tests/quality/acceptance-rubric.test.ts` (신규) — F2 테스트 11개
+
+### Test Command
+
+```bash
+npx vitest run tests/quality/
+npx eslint src/quality/provider-error-taxonomy.ts src/quality/acceptance-rubric.ts src/quality/index.ts src/agent/pty/cli-adapter.ts tests/quality/provider-error-taxonomy.test.ts tests/quality/acceptance-rubric.test.ts
+npx tsc --noEmit
+```
+
+### Test Result
+
+- `npx vitest run tests/quality/`: **2 files / 43 tests passed**
+- `npx eslint ...`: **0 errors, 0 warnings**
+- `npx tsc --noEmit`: **통과**
+
+### Residual Risk
+
+- `to_pty_code()`의 `ProviderErrorCode → ErrorCode` 매핑은 PTY 내부 타입을 유지하기 위한 경계 브리지. 향후 PTY가 `ProviderErrorCode`를 직접 사용하도록 마이그레이션하면 제거 가능.
+- `classify_provider_error()`는 정규식 기반 — 공급자별 비정형 에러 메시지에서 오감지 가능. `from_pty_error_code()` 경로는 명시적 매핑으로 안전.
+
+---
 
 ## [합의완료] E4 + E5 — MemoryIngestionReducer + OutputReductionKpi
 

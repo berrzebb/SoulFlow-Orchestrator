@@ -7,7 +7,8 @@
  *   Gemini CLI:  https://geminicli.com/docs/cli/cli-reference/
  */
 
-import type { CliAdapter, StdinMode, BuildArgsOptions, AgentInputMessage, AgentOutputMessage } from "./types.js";
+import type { CliAdapter, StdinMode, BuildArgsOptions, AgentInputMessage, AgentOutputMessage, ErrorCode } from "./types.js";
+import { classify_provider_error, type ProviderErrorCode } from "../../quality/provider-error-taxonomy.js";
 
 /**
  * Claude Code (-p --output-format stream-json) 어댑터.
@@ -113,7 +114,7 @@ export class ClaudeCliAdapter implements CliAdapter {
     if (type === "error") {
       return {
         type: "error",
-        code: map_claude_error_code(parsed),
+        code: map_error_code(parsed),
         message: String(parsed.error ?? parsed.message ?? "unknown_error"),
       };
     }
@@ -212,7 +213,7 @@ export class CodexCliAdapter implements CliAdapter {
     if (type === "error") {
       return {
         type: "error",
-        code: map_codex_error_code(parsed),
+        code: map_error_code(parsed),
         message: String(parsed.message ?? parsed.error ?? "unknown_error"),
       };
     }
@@ -293,22 +294,25 @@ function extract_tool_result_text(block: Record<string, unknown>): string {
   return String(content ?? "");
 }
 
-function map_claude_error_code(parsed: Record<string, unknown>): import("./types.js").ErrorCode {
-  const err = String(parsed.error ?? parsed.message ?? "").toLowerCase();
-  if (err.includes("token") || err.includes("context")) return "token_limit";
-  if (err.includes("auth") || err.includes("key")) return "auth";
-  if (err.includes("rate")) return "rate_limit";
-  if (err.includes("billing") || err.includes("quota")) return "billing";
-  return "fatal";
+/** ProviderErrorCode → PTY 내부 ErrorCode 변환 (경계 브리지). */
+function to_pty_code(code: ProviderErrorCode): ErrorCode {
+  const MAP: Record<ProviderErrorCode, ErrorCode> = {
+    auth_invalid: "auth",
+    billing_exceeded: "billing",
+    rate_limited: "rate_limit",
+    context_overflow: "token_limit",
+    model_unavailable: "failover",
+    provider_crash: "crash",
+    network_error: "timeout",
+    unknown: "fatal",
+  };
+  return MAP[code];
 }
 
-function map_codex_error_code(parsed: Record<string, unknown>): import("./types.js").ErrorCode {
-  const err = String(parsed.message ?? parsed.error ?? "").toLowerCase();
-  if (err.includes("token") || err.includes("context")) return "token_limit";
-  if (err.includes("auth") || err.includes("key") || err.includes("unauthorized")) return "auth";
-  if (err.includes("rate")) return "rate_limit";
-  if (err.includes("billing") || err.includes("quota")) return "billing";
-  return "fatal";
+/** 파싱된 JSON → PTY ErrorCode. 세 어댑터의 중복 분류 로직을 통합. */
+function map_error_code(parsed: Record<string, unknown>): ErrorCode {
+  const msg = String(parsed.error ?? parsed.message ?? "");
+  return to_pty_code(classify_provider_error(msg));
 }
 
 /** 도구 아이템에서 입력 파라미터를 추출. arguments(JSON) 또는 개별 필드. */
@@ -420,7 +424,7 @@ export class GeminiCliAdapter implements CliAdapter {
     if (type === "error") {
       return {
         type: "error",
-        code: map_gemini_error_code(parsed),
+        code: map_error_code(parsed),
         message: String(parsed.message ?? parsed.error ?? "unknown_error"),
       };
     }
@@ -434,14 +438,6 @@ export class GeminiCliAdapter implements CliAdapter {
   }
 }
 
-function map_gemini_error_code(parsed: Record<string, unknown>): import("./types.js").ErrorCode {
-  const err = String(parsed.message ?? parsed.error ?? "").toLowerCase();
-  if (err.includes("token") || err.includes("context")) return "token_limit";
-  if (err.includes("auth") || err.includes("key") || err.includes("unauthorized")) return "auth";
-  if (err.includes("rate") || err.includes("quota")) return "rate_limit";
-  if (err.includes("billing")) return "billing";
-  return "fatal";
-}
 
 /** system_prompt, tool_definitions, 도구 필터링을 결합하여 developer_instructions 문자열 생성. */
 function build_developer_instructions(options: BuildArgsOptions): string {
