@@ -18,6 +18,8 @@ const repoRoot = resolve(__dirname, "..");
 const claudePath = resolve(repoRoot, "docs", "feedback", "claude.md");
 const gptPath = resolve(repoRoot, "docs", "feedback", "gpt.md");
 const promotionPlanPath = resolve(repoRoot, "docs", "ko", "design", "improved", "feedback-promotion.plan.json");
+const koExecutionOrderPath = resolve(repoRoot, "docs", "ko", "design", "improved", "execution-order.md");
+const enExecutionOrderPath = resolve(repoRoot, "docs", "en", "design", "improved", "execution-order.md");
 const koPromotionPath = resolve(repoRoot, "docs", "ko", "design", "improved", "feedback-promotion.md");
 const enPromotionPath = resolve(repoRoot, "docs", "en", "design", "improved", "feedback-promotion.md");
 const STATUS_TAG_RE = /\[(합의완료|계류|GPT미검증)(?:[^\]]*)\]/;
@@ -50,7 +52,12 @@ function parseArgs(argv) {
 
 function extractStatusFromLine(line) {
   const match = line.match(STATUS_TAG_RE);
-  return match ? match[1] : null;
+  if (!match) {
+    return null;
+  }
+
+  const statuses = [...match[0].matchAll(/합의완료|계류|GPT미검증/g)].map((item) => item[0]);
+  return statuses.at(-1) ?? null;
 }
 
 /** 감사 범위 + 최종 판정에서 상태 태그가 있는 항목을 추출 */
@@ -90,7 +97,7 @@ function syncApproved(claudeMd, gptMd) {
   const auditSection = readSection(gptMd, "감사 범위");
   const approvedScopeLines = (auditSection?.lines ?? [])
     .map((line) => line.trim())
-    .filter((line) => line.startsWith("- ") && line.includes("[합의완료]"));
+    .filter((line) => line.startsWith("- ") && extractStatusFromLine(line) === "합의완료");
 
   for (const scopeLine of approvedScopeLines) {
     const ids = collectIdsFromLine(scopeLine);
@@ -239,7 +246,7 @@ function normalizeGptAuditScopeStatus(gptMd) {
       return line;
     }
     const status = extractStatusFromLine(line);
-    if (!status || (status !== "계류" && status !== "GPT미검증")) {
+    if (!status) {
       return line;
     }
     const ids = collectIdsFromLine(line);
@@ -247,7 +254,10 @@ function normalizeGptAuditScopeStatus(gptMd) {
       return line;
     }
     const isClosed = ids.every((id) => verdictApprovedIds.has(id));
-    return isClosed ? replaceStatusTag(line, "합의완료") : line;
+    if (isClosed && !/\[합의완료\]/.test(line)) {
+      return replaceStatusTag(line, "합의완료");
+    }
+    return line;
   });
 
   const updated = replaceSection(gptMd, "감사 범위", replacementLines);
@@ -283,7 +293,7 @@ function normalizeResetCriteriaSection(gptMd) {
   return { updated, changed: updated !== gptMd };
 }
 
-function findNextAuditTaskInClaude(claudeMd) {
+function findNextAuditTaskInClaude(claudeMd, approvedIds = new Set()) {
   const auditSection = readSection(claudeMd, "감사 범위");
   const lines = auditSection ? auditSection.lines : claudeMd.split(/\r?\n/);
 
@@ -296,20 +306,130 @@ function findNextAuditTaskInClaude(claudeMd) {
     if (!trimmed.startsWith("- ")) {
       continue;
     }
+    const ids = collectIdsFromLine(line);
+    if (ids.length > 0 && ids.every((id) => approvedIds.has(id))) {
+      continue;
+    }
     return trimmed.replace(/^- /, "").trim();
   }
 
   return null;
 }
 
-function syncGptNextTaskWithPromotion(gptMd, claudeMd, state) {
+function findPendingVerdictTaskInGpt(gptMd) {
   const verdictSection = readSection(gptMd, "최종 판정");
-  const verdictItems = verdictSection ? parseStatusLines(verdictSection.lines.join("\n")) : [];
-  if (verdictItems.length === 0 || verdictItems.some((item) => item.status !== "합의완료")) {
+  if (!verdictSection) {
+    return null;
+  }
+
+  for (const line of verdictSection.lines) {
+    if (extractStatusFromLine(line) !== "계류") {
+      continue;
+    }
+    const trimmed = line.trim();
+    if (!trimmed.startsWith("- ")) {
+      continue;
+    }
+    return stripStatusFormatting(trimmed.replace(/^- /, "").trim());
+  }
+
+  return null;
+}
+
+function findAdditionalTaskInGpt(gptMd) {
+  const section = readSection(gptMd, "추가 작업");
+  if (!section) {
+    return null;
+  }
+
+  for (const line of section.lines) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith("- ")) {
+      continue;
+    }
+    const value = trimmed.replace(/^- /, "").trim();
+    if (isEmptyMarker(value)) {
+      continue;
+    }
+    return value;
+  }
+
+  return null;
+}
+
+function normalizeAdditionalTasksSection(gptMd) {
+  const section = readSection(gptMd, "추가 작업");
+  if (!section) {
     return { updated: gptMd, changed: false };
   }
 
-  const activeAuditTask = findNextAuditTaskInClaude(claudeMd);
+  const approvedIds = extractApprovedIdsFromSection(gptMd, "최종 판정");
+  if (approvedIds.size === 0) {
+    return { updated: gptMd, changed: false };
+  }
+
+  const keptLines = [section.lines[0]];
+  for (const line of section.lines.slice(1)) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith("- ")) {
+      keptLines.push(line);
+      continue;
+    }
+
+    const ids = collectIdsFromLine(line);
+    if (ids.length > 0 && ids.every((id) => approvedIds.has(id))) {
+      continue;
+    }
+
+    keptLines.push(line);
+  }
+
+  const hasTask = keptLines.some((line, index) => {
+    if (index === 0) return false;
+    const trimmed = line.trim();
+    return trimmed.startsWith("- ") && !isEmptyMarker(trimmed.replace(/^- /, "").trim());
+  });
+
+  const updated = hasTask
+    ? replaceSection(gptMd, "추가 작업", keptLines)
+    : removeSection(gptMd, "추가 작업");
+
+  return { updated, changed: updated !== gptMd };
+}
+
+function syncGptNextTaskWithPromotion(gptMd, claudeMd, state) {
+  const verdictSection = readSection(gptMd, "최종 판정");
+  const verdictItems = verdictSection ? parseStatusLines(verdictSection.lines.join("\n")) : [];
+  if (verdictItems.length === 0) {
+    return { updated: gptMd, changed: false };
+  }
+
+  const additionalTask = findAdditionalTaskInGpt(gptMd);
+  if (additionalTask) {
+    const updated = replaceSection(gptMd, "다음 작업", [
+      "## 다음 작업",
+      "",
+      `- ${additionalTask}`,
+    ]);
+    return { updated, changed: updated !== gptMd };
+  }
+
+  const pendingVerdictTask = findPendingVerdictTaskInGpt(gptMd);
+  if (pendingVerdictTask) {
+    const updated = replaceSection(gptMd, "다음 작업", [
+      "## 다음 작업",
+      "",
+      `- \`${pendingVerdictTask}\``,
+    ]);
+    return { updated, changed: updated !== gptMd };
+  }
+
+  if (verdictItems.some((item) => item.status !== "합의완료")) {
+    return { updated: gptMd, changed: false };
+  }
+
+  const approvedIds = resolvePromotionApprovedIds(claudeMd, gptMd);
+  const activeAuditTask = findNextAuditTaskInClaude(claudeMd, approvedIds);
   const nextTask =
     activeAuditTask ??
     state?.nextStage?.next_task_ko ??
@@ -398,6 +518,146 @@ function loadPromotionPlan() {
   return JSON.parse(readFileSync(promotionPlanPath, "utf8"));
 }
 
+function extractImprovedOrderSlugs(markdown) {
+  const seen = new Set();
+  const slugs = [];
+  const re = /\]\(\.\/([a-z0-9-]+)\/README\.md\)/gi;
+  let match;
+  while ((match = re.exec(markdown)) !== null) {
+    const slug = match[1];
+    if (slug === "feedback-promotion") continue;
+    if (seen.has(slug)) continue;
+    seen.add(slug);
+    slugs.push(slug);
+  }
+  return slugs;
+}
+
+function extractDocTitle(markdown) {
+  const firstHeading = markdown.split(/\r?\n/).find((line) => /^#\s+/.test(line.trim()));
+  if (!firstHeading) return null;
+  return firstHeading
+    .replace(/^#\s+/, "")
+    .replace(/^(설계|Design):\s*/i, "")
+    .trim();
+}
+
+function extractOrderedIds(workBreakdownMd) {
+  const lines = workBreakdownMd.split(/\r?\n/);
+  const ordered = [];
+  const seen = new Set();
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!/^\d+\.\s+/.test(trimmed)) continue;
+    for (const id of collectIdsFromLine(trimmed)) {
+      if (seen.has(id)) continue;
+      seen.add(id);
+      ordered.push(id);
+    }
+  }
+
+  if (ordered.length > 0) {
+    return ordered;
+  }
+
+  for (const line of lines) {
+    const match = line.match(/^##\s+([A-Z]{1,4}-\d+)\b/);
+    if (!match) continue;
+    const id = match[1];
+    if (seen.has(id)) continue;
+    seen.add(id);
+    ordered.push(id);
+  }
+
+  return ordered;
+}
+
+function extractIdTitleMap(workBreakdownMd) {
+  const map = new Map();
+  for (const line of workBreakdownMd.split(/\r?\n/)) {
+    const match = line.match(/^##\s+([A-Z]{1,4}-\d+)\s+(.+?)\s*$/);
+    if (!match) continue;
+    map.set(match[1], match[2].trim());
+  }
+  return map;
+}
+
+function buildAutoNextTask(title, ids, titleMap, locale) {
+  const labels = ids.map((id) => titleMap.get(id) ?? id);
+  const idText = ids.join(" + ");
+  if (locale === "en") {
+    const actionText = labels.length > 1
+      ? `close ${labels.slice(0, -1).join(", ")} and ${labels.at(-1)}`
+      : `close ${labels[0]}`;
+    return `\`${title} / ${idText} — ${actionText}\``;
+  }
+  const actionText = labels.length > 1
+    ? `${labels.slice(0, -1).join(", ")}와 ${labels.at(-1)}를 닫기`
+    : `${labels[0]}를 닫기`;
+  return `\`${title} / ${idText} — ${actionText}\``;
+}
+
+function extractStageSlug(stage) {
+  const ref = stage?.source_docs_ko?.[0] ?? stage?.source_docs_en?.[0] ?? "";
+  const match = String(ref).match(/^\.\/([^/]+)\//);
+  return match ? match[1] : null;
+}
+
+function deriveAutoPromotionStage(plan, approvedIds) {
+  if (!existsSync(koExecutionOrderPath)) {
+    return null;
+  }
+
+  const koOrderMd = readFileSync(koExecutionOrderPath, "utf8");
+  const orderedSlugs = extractImprovedOrderSlugs(koOrderMd);
+  const lastPlannedSlug = plan?.stages?.length ? extractStageSlug(plan.stages.at(-1)) : null;
+  const startIndex = lastPlannedSlug ? orderedSlugs.indexOf(lastPlannedSlug) + 1 : 0;
+  const candidateSlugs = startIndex > 0 ? orderedSlugs.slice(startIndex) : orderedSlugs;
+
+  for (const slug of candidateSlugs) {
+    const koReadmePath = resolve(repoRoot, "docs", "ko", "design", "improved", slug, "README.md");
+    const enReadmePath = resolve(repoRoot, "docs", "en", "design", "improved", slug, "README.md");
+    const koWbsPath = resolve(repoRoot, "docs", "ko", "design", "improved", slug, "work-breakdown.md");
+    const enWbsPath = resolve(repoRoot, "docs", "en", "design", "improved", slug, "work-breakdown.md");
+
+    if (!existsSync(koWbsPath)) {
+      continue;
+    }
+
+    const koWbsMd = readFileSync(koWbsPath, "utf8");
+    const orderedIds = extractOrderedIds(koWbsMd);
+    if (orderedIds.length === 0) {
+      continue;
+    }
+
+    const remainingIds = orderedIds.filter((id) => !approvedIds.has(id));
+    if (remainingIds.length === 0) {
+      continue;
+    }
+
+    const nextIds = remainingIds.slice(0, Math.min(2, remainingIds.length));
+    const koTitleMap = extractIdTitleMap(koWbsMd);
+    const enWbsMd = existsSync(enWbsPath) ? readFileSync(enWbsPath, "utf8") : "";
+    const enTitleMap = enWbsMd ? extractIdTitleMap(enWbsMd) : new Map();
+    const koTitle = existsSync(koReadmePath) ? (extractDocTitle(readFileSync(koReadmePath, "utf8")) ?? slug) : slug;
+    const enTitle = existsSync(enReadmePath) ? (extractDocTitle(readFileSync(enReadmePath, "utf8")) ?? koTitle) : koTitle;
+
+    return {
+      id: `auto:${slug}`,
+      agree_ids: nextIds,
+      agreed_label_ko: `\`${koTitle} (${nextIds.join(" + ")})\``,
+      agreed_label_en: `\`${enTitle} (${nextIds.join(" + ")})\``,
+      next_task_ko: buildAutoNextTask(koTitle, nextIds, koTitleMap, "ko"),
+      next_task_en: buildAutoNextTask(enTitle, nextIds, enTitleMap.size > 0 ? enTitleMap : koTitleMap, "en"),
+      source_docs_ko: [`./${slug}/README.md`, `./${slug}/work-breakdown.md`],
+      source_docs_en: [`./${slug}/README.md`, `./${slug}/work-breakdown.md`],
+    };
+  }
+
+  return null;
+}
+
 function computePromotionState(plan, approvedIds) {
   const agreedStages = [];
   let nextStage = null;
@@ -412,6 +672,10 @@ function computePromotionState(plan, approvedIds) {
     if (nextStage === null) {
       nextStage = stage;
     }
+  }
+
+  if (nextStage === null) {
+    nextStage = deriveAutoPromotionStage(plan, approvedIds);
   }
 
   return { agreedStages, nextStage };
@@ -649,6 +913,17 @@ function main() {
       console.log("Normalized '## 완료 기준 재고정' in gpt.md for pending verdicts.");
     } else {
       console.log("(dry-run) would normalize '## 완료 기준 재고정' in gpt.md for pending verdicts.");
+    }
+  }
+
+  const additionalTasksSync = normalizeAdditionalTasksSection(gptMd);
+  if (additionalTasksSync.changed) {
+    gptMd = additionalTasksSync.updated;
+    if (!args.dryRun) {
+      writeFileSync(gptPath, gptMd, "utf8");
+      console.log("Normalized '## 추가 작업' in gpt.md by removing already agreed items.");
+    } else {
+      console.log("(dry-run) would normalize '## 추가 작업' in gpt.md by removing already agreed items.");
     }
   }
 

@@ -153,7 +153,12 @@ function deleteSavedSessionId() {
 
 function extractStatusFromLine(line) {
   const match = line.match(STATUS_TAG_RE);
-  return match ? match[1] : null;
+  if (!match) {
+    return null;
+  }
+
+  const statuses = [...match[0].matchAll(/합의완료|계류|GPT미검증/g)].map((item) => item[0]);
+  return statuses.at(-1) ?? null;
 }
 
 function detectScope(markdown) {

@@ -1,6 +1,6 @@
 # Claude 증거 제출
 
-> 마지막 업데이트: 2026-03-14 17:16
+> 마지막 업데이트: 2026-03-14 18:18
 > GPT 감사 문서: `docs/feedback/gpt.md`
 
 ## 합의완료
@@ -26,7 +26,6 @@
 - `[합의완료]` GW-1 + GW-2 — RequestPlan/ResultEnvelope + Ingress Normalization/Classification
 - `[합의완료]` GW-3 + GW-4 — ExecutionGateway + DirectExecutor
 - `[합의완료]` GW-5 + GW-6 — Service Binding + Delivery Envelope Regression
-
-
-
+- `[합의완료]` EG-R1 — Failed-Attempt-Aware Session Reuse
+- `[합의완료]` RP-1 + RP-2 — RolePolicyResolver + ProtocolResolver
 
