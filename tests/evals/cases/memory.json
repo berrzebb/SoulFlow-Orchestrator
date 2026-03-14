@@ -1,0 +1,9 @@
+{
+  "name": "memory",
+  "description": "메모리/검색 평가",
+  "cases": [
+    { "id": "mm-1", "input": "지난주 회의에서 논의한 내용 요약해줘", "expected": "echo", "tags": ["smoke"] },
+    { "id": "mm-2", "input": "프로젝트 X의 최근 변경사항 알려줘", "expected": "echo", "tags": ["smoke"] },
+    { "id": "mm-3", "input": "지난달 배포 이력 조회", "expected": "echo", "tags": ["full"] }
+  ]
+}

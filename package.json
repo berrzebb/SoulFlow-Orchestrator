@@ -21,6 +21,10 @@
     "container:down": "node scripts/container.cjs compose:down",
     "container:logs": "node scripts/container.cjs compose:logs",
     "container:restart": "node scripts/container.cjs compose:restart",
+    "eval:smoke": "tsx scripts/eval-run.ts --smoke --threshold 80",
+    "eval:routing": "tsx scripts/eval-run.ts --bundle routing",
+    "eval:compiler": "tsx scripts/eval-run.ts --bundle compiler",
+    "eval:full": "tsx scripts/eval-run.ts --full --threshold 70",
     "feedback:audit": "node scripts/feedback-audit.mjs",
     "feedback:respond": "node scripts/feedback-respond.mjs",
     "feedback:loop": "node scripts/feedback-audit.mjs"

@@ -15,6 +15,7 @@
 - `[합의완료]` OB-8 Optional Exporter Ports
 - `[합의완료]` EV-1 + EV-2 Evaluation Pipeline
 - `[합의완료]` EV-3 + EV-4 Judge / Scorer Split + Run Report
+- `[합의완료]` EV-5 + EV-6 Scenario Bundle Registry + CLI/CI Gate
 
 ## OB-8 Optional Exporter Ports `[합의완료]`
 
@@ -136,3 +137,33 @@
 
 - `claim-drift` 해소: `scripts/eval-run.mjs`(동적 `await import("../src/evals/*.js")`) → `scripts/eval-run.ts`(정적 TypeScript import)로 변환. `tsx` 런타임에서 `.js` 확장자가 Node16 moduleResolution으로 `.ts`에 매핑되어 런타임 모듈 로드 성공. `npx tsx scripts/eval-run.ts <dataset-dir>` 실행 검증 완료.
 - `test-gap` 해소: `tests/evals/eval-run-cli.test.ts` 10 테스트 추가. `execSync`로 `npx tsx scripts/eval-run.ts` 서브프로세스 스폰, 임시 디렉토리에 테스트 데이터셋 JSON 생성 후 모든 CLI 옵션 (--help, --output, --baseline, --save-baseline, --markdown, --scorer, --tags) 검증.
+
+## EV-5 + EV-6 Scenario Bundle Registry + CLI/CI Gate `[합의완료]`
+
+### 증거 팩 1: bundle registry + fixture datasets + CLI bundle/smoke/full + CI gate
+
+**claim**: `EvalBundle` 인터페이스 + 번들 레지스트리 (`register_bundle`, `get_bundle`, `list_bundles`, `get_smoke_bundles`, `load_bundle_datasets`). 기본 5개 번들 등록 (routing, direct-vs-agent, compiler, memory, safety). fixture 데이터셋 5개 (`tests/evals/cases/*.json`). CLI에 `--bundle`, `--smoke`, `--full`, `--threshold` 옵션 추가. `package.json`에 `eval:smoke`, `eval:routing`, `eval:compiler`, `eval:full` npm 스크립트 추가. threshold 미달 시 exit 1 (CI gate).
+
+**changed files**:
+
+- `src/evals/bundles.ts` — 신규: `EvalBundle` 인터페이스, `register_bundle`/`get_bundle`/`list_bundles`/`get_smoke_bundles`/`load_bundle_datasets`/`clear_registry`, 기본 5개 번들 (routing smoke, direct-vs-agent smoke, compiler, memory, safety smoke)
+- `src/evals/index.ts` — bundles re-export 추가
+- `scripts/eval-run.ts` — `--bundle`/`--smoke`/`--full`/`--threshold` 옵션, `resolve_datasets` (번들/smoke/full/dir 분기), `merge_tags` (번들 태그 자동 적용), threshold 미달 시 exit 1
+- `package.json` — `eval:smoke` (threshold 80), `eval:routing`, `eval:compiler`, `eval:full` (threshold 70) 스크립트
+- `tests/evals/cases/routing.json` — fixture 4 케이스 (smoke 2, full 2)
+- `tests/evals/cases/direct-vs-agent.json` — fixture 4 케이스
+- `tests/evals/cases/compiler.json` — fixture 4 케이스
+- `tests/evals/cases/memory.json` — fixture 3 케이스
+- `tests/evals/cases/safety.json` — fixture 3 케이스
+- `tests/evals/bundles.test.ts` — 신규 11 테스트: 등록/조회 2개, 중복 에러 1개, list 순서 1개, smoke 필터 1개, clear 1개, fixture 로드 1개, 다중 파일 로드 1개, 미존재 에러 1개, 기본 5개 확인 1개, smoke 번들 확인 1개
+- `tests/evals/eval-run-cli.test.ts` — 7 테스트 추가: --bundle routing 1개, --bundle unknown 에러 1개, --smoke 1개, --full 1개, --threshold 100 exit 1개, --threshold 0 통과 1개, --help 번들 옵션 1개
+
+**test command**: `npm run lint && npx tsc --noEmit && npx vitest run tests/evals/`
+
+**test result**: `lint(eslint) 0 errors, tsc passed, 6 files / 78 tests passed`
+
+**residual risk**:
+
+- fixture 데이터셋은 echo executor 기반 — 실제 에이전트 연결 시 케이스 내용 조정 필요 (EV-7+ 범위)
+- `eval:smoke`/`eval:full` threshold 값 (80%/70%)은 초기값 — 실제 에이전트 연동 후 조정 필요
+

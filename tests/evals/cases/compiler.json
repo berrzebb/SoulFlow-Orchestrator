@@ -1,0 +1,10 @@
+{
+  "name": "compiler",
+  "description": "워크플로우 컴파일러 평가",
+  "cases": [
+    { "id": "cp-1", "input": "매일 아침 9시에 슬랙 채널에 인사 보내기", "expected": "echo", "tags": ["smoke"] },
+    { "id": "cp-2", "input": "새 PR이 생기면 리뷰 요청 알림 보내기", "expected": "echo", "tags": ["smoke"] },
+    { "id": "cp-3", "input": "매주 월요일 팀 미팅 요약 생성", "expected": "echo", "tags": ["full"] },
+    { "id": "cp-4", "input": "에러 로그 감지 시 온콜 담당자에게 알림", "expected": "echo", "tags": ["full"] }
+  ]
+}

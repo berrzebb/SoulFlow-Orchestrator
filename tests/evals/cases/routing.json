@@ -1,0 +1,10 @@
+{
+  "name": "routing",
+  "description": "메시지 라우팅 분류 평가",
+  "cases": [
+    { "id": "rt-1", "input": "오늘 날씨 어때?", "expected": "echo", "tags": ["smoke"], "metadata": { "expected_route": "direct" } },
+    { "id": "rt-2", "input": "이 프로젝트의 코드를 분석해서 리팩터링 계획을 세워줘", "expected": "echo", "tags": ["smoke"], "metadata": { "expected_route": "agent" } },
+    { "id": "rt-3", "input": "안녕하세요", "expected": "echo", "tags": ["full"], "metadata": { "expected_route": "direct" } },
+    { "id": "rt-4", "input": "tests/ 디렉토리에 있는 실패하는 테스트를 수정해줘", "expected": "echo", "tags": ["full"], "metadata": { "expected_route": "agent" } }
+  ]
+}

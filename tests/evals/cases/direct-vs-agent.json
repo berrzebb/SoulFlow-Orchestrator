@@ -1,0 +1,10 @@
+{
+  "name": "direct-vs-agent",
+  "description": "direct/agent 모드 선택 평가",
+  "cases": [
+    { "id": "da-1", "input": "간단한 인사", "expected": "echo", "tags": ["smoke"], "metadata": { "expected_route": "direct" } },
+    { "id": "da-2", "input": "복잡한 멀티스텝 작업 수행", "expected": "echo", "tags": ["smoke"], "metadata": { "expected_route": "agent" } },
+    { "id": "da-3", "input": "현재 시간 알려줘", "expected": "echo", "tags": ["full"], "metadata": { "expected_route": "direct" } },
+    { "id": "da-4", "input": "버그를 찾아서 수정하고 테스트까지 작성해줘", "expected": "echo", "tags": ["full"], "metadata": { "expected_route": "agent" } }
+  ]
+}

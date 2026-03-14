@@ -39,10 +39,10 @@ describe("eval-run CLI", () => {
     expect(stdout).toContain("--scorer");
   });
 
-  it("dataset dir 미지정 → 에러 + usage", () => {
+  it("입력 미지정 → 에러 + usage", () => {
     const { stderr, stdout, exitCode } = run("", { expectFail: true });
     const output = stderr + stdout;
-    expect(output).toContain("dataset directory is required");
+    expect(output).toContain("specify");
     expect(exitCode).not.toBe(0);
   });
 
@@ -127,5 +127,55 @@ describe("eval-run CLI", () => {
     const report = JSON.parse(readFileSync(reportPath, "utf-8"));
     expect(report.total).toBe(1);
     expect(report.scorecards[0].case_id).toBe("c1");
+  });
+});
+
+describe("eval-run CLI — bundles", () => {
+  it("--bundle routing → routing 번들 실행", () => {
+    const { stdout } = run("--bundle routing");
+    expect(stdout).toContain("Running: routing");
+  });
+
+  it("--bundle unknown → 에러", () => {
+    const { stderr, stdout, exitCode } = run("--bundle nonexistent", { expectFail: true });
+    const output = stderr + stdout;
+    expect(output).toContain("unknown bundle");
+    expect(exitCode).not.toBe(0);
+  });
+
+  it("--smoke → smoke 번들들만 실행", () => {
+    const { stdout } = run("--smoke");
+    expect(stdout).toContain("Smoke bundles:");
+    expect(stdout).toContain("routing");
+    expect(stdout).toContain("safety");
+  });
+
+  it("--full → 모든 번들 실행", () => {
+    const { stdout } = run("--full");
+    expect(stdout).toContain("Full run:");
+    expect(stdout).toContain("routing");
+    expect(stdout).toContain("compiler");
+    expect(stdout).toContain("memory");
+  });
+
+  it("--threshold 100 + scorer exact → pass rate 미달 시 exit 1", () => {
+    const { stdout, exitCode } = run("--bundle routing --threshold 100 --scorer exact", { expectFail: true });
+    expect(stdout).toContain("Overall:");
+    expect(stdout).toContain("threshold: 100%");
+    expect(exitCode).not.toBe(0);
+  });
+
+  it("--threshold 0 → 항상 통과", () => {
+    const { stdout } = run("--bundle routing --threshold 0");
+    expect(stdout).toContain("Overall:");
+    expect(stdout).toContain("threshold: 0%");
+  });
+
+  it("--help → bundle/smoke/full 옵션 표시", () => {
+    const { stdout } = run("--help");
+    expect(stdout).toContain("--bundle");
+    expect(stdout).toContain("--smoke");
+    expect(stdout).toContain("--full");
+    expect(stdout).toContain("--threshold");
   });
 });
