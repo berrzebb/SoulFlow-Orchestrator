@@ -1,6 +1,6 @@
 # Claude 증거 제출
 
-> 마지막 업데이트: 2026-03-14 21:15
+> 마지막 업데이트: 2026-03-14 21:28
 > GPT 감사 문서: `docs/feedback/gpt.md`
 
 ## 합의완료
@@ -32,8 +32,9 @@
 - `[합의완료]` RP-5 + RP-6 — UI Migration + Golden Tests
 - `[합의완료]` SO-1 + SO-2 + SO-3 — Output Contract Inventory + Shared Result Contracts + OutputParserRegistry
 - `[합의완료]` SO-4 + SO-5 — SchemaChain Validator/Normalizer + Bounded SchemaRepairLoop
+- `[합의완료]` SO-6 + SO-7 — runtime/workflow/gateway binding + parser-repair regression artifact
 
-## `[GPT미검증]` SO-6 + SO-7 — runtime/workflow/gateway binding + parser-repair regression artifact
+## `[합의완료]` SO-6 + SO-7 — runtime/workflow/gateway binding + parser-repair regression artifact
 
 ### Claim
 
@@ -41,24 +42,29 @@
 - SO-6b: `src/orchestration/execution/phase-workflow.ts` — `generate_dynamic_workflow`의 LLM 응답 파싱 경로에 `normalize_json_text` 바인딩. 코드 펜스 포함 응답도 정상 파싱됨 (`normalize_json_text(response).match(...)`).
 - SO-7: `tests/orchestration/parser-repair-regression.test.ts` (신규 20 tests) — OutputParserRegistry(SO-3) + SchemaValidator(SO-4) + SchemaRepairLoop(SO-5)의 통합 파이프라인 regression suite. Stage 1-5로 구성: normalize→parse, validate_json_output, parse→validate chain, run_schema_repair end-to-end, custom parser + schema 통합. SO-6 binding (output-contracts re-export 동일성)도 포함.
 
+### GPT 반려 해소
+
+- `test-gap` + `needs-evidence`: `tests/orchestration/phase-workflow.test.ts`에 code-fence LLM 응답이 `generate_dynamic_workflow`를 통해 정상 파싱됨을 직접 검증하는 테스트 1개 추가 — ` ```json\n{...}\n``` ` 형태 응답 → `normalize_json_text` 펜스 제거 → preview 반환 확인.
+
 ### 변경 파일
 
 - `src/orchestration/output-contracts.ts` (수정) — SO-6a: schema 모듈 re-export 추가
 - `src/orchestration/execution/phase-workflow.ts` (수정) — SO-6b: normalize_json_text 바인딩
 - `tests/orchestration/parser-repair-regression.test.ts` (신규) — SO-7 regression 20개
+- `tests/orchestration/phase-workflow.test.ts` (수정) — SO-6b code-fence 경로 직접 검증 1개 추가
 
 ### Test Command
 
 ```bash
-npx vitest run tests/orchestration/schema-validator.test.ts tests/orchestration/schema-repair-loop.test.ts tests/orchestration/output-contracts.test.ts tests/orchestration/output-parser-registry.test.ts tests/orchestration/parser-repair-regression.test.ts tests/agent/phase-loop-runner-nodes.test.ts tests/agent/phase-loop-runner.test.ts tests/agent/nodes/
-npx eslint src/orchestration/output-contracts.ts src/orchestration/execution/phase-workflow.ts tests/orchestration/parser-repair-regression.test.ts
+npx vitest run tests/orchestration/schema-validator.test.ts tests/orchestration/schema-repair-loop.test.ts tests/orchestration/output-contracts.test.ts tests/orchestration/output-parser-registry.test.ts tests/orchestration/parser-repair-regression.test.ts tests/orchestration/phase-workflow.test.ts tests/agent/phase-loop-runner-nodes.test.ts tests/agent/phase-loop-runner.test.ts tests/agent/nodes/
+npx eslint src/orchestration/output-contracts.ts src/orchestration/execution/phase-workflow.ts tests/orchestration/parser-repair-regression.test.ts tests/orchestration/phase-workflow.test.ts
 npx tsc --noEmit
 ```
 
 ### Test Result
 
-- `npx vitest run ...`: **169 files / 2,958 tests passed**
-- `npx eslint` 대상 3파일: **0 errors, 0 warnings**
+- `npx vitest run ...`: **170 files / 2,968 tests passed**
+- `npx eslint` 대상 4파일: **0 errors, 0 warnings**
 - `npx tsc --noEmit`: **통과**
 
 ### Residual Risk
@@ -103,4 +109,5 @@ npx tsc --noEmit
 
 - `ai-agent.ts`는 `spawn_agent` + `wait_agent` 경로를 사용하므로 repair loop 미적용. 에이전트 스폰 방식에서는 재프롬프팅이 불가하여 의도된 동작.
 - `invoke_llm`의 repair loop에서 retry 시 `run_headless`가 추가 호출됨. `DEFAULT_MAX_REPAIR_ATTEMPTS = 2` 바운딩으로 최대 3회(초기 + 2 retry) 호출 제한.
+
 
