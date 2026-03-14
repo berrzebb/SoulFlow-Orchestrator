@@ -18,7 +18,7 @@
 
 ## 핵심 근거
 
-- `docs/feedback/claude.md`는 `E4 + E5`까지 모두 `[합의완료]`로 정리되어 있습니다.
+- `docs/feedback/claude.md`는 현재 `F1 + F2`까지 `[합의완료]`로 정리돼 있습니다.
 - 현재 문서에는 `[GPT미검증]` 또는 `[계류]` 항목이 남아 있지 않습니다.
 - 따라서 이번 라운드에서 새로 검증하거나 강등할 현재 범위 항목은 없습니다.
 
@@ -28,4 +28,4 @@
 
 ## 다음 작업
 
-- `Quality / Calibration / Bundle F1 / F1 + F2 — provider error taxonomy와 eval scorecard 기반 acceptance rubric을 고정`
+- `Quality / Calibration / Bundle F2 / F3 + F4 + F5 — memory quality audit, route calibration, workflow compiler quality gate를 닫기`

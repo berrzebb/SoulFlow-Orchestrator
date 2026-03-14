@@ -38,11 +38,11 @@ export function classify_provider_error(message: string, code?: string): Provide
 
   if (/invalid.*api.*key|unauthorized|authentication.*fail|invalid.*token/i.test(src))
     return "auth_invalid";
-  if (/billing|quota.*exceeded|insufficient.*fund|payment.*required/i.test(src))
+  if (/billing|quota.*(month|day|week|annual|account|plan)|insufficient.*fund|payment.*required/i.test(src))
     return "billing_exceeded";
-  if (/rate.*limit|too.*many.*request|request.*per.*minute/i.test(src))
+  if (/rate.*limit|too.*many.*request|request.*per.*minute|quota.*exceeded/i.test(src))
     return "rate_limited";
-  if (/context.*overflow|token.*limit|prompt.*too.*large|buffer.*overflow|context.*length/i.test(src))
+  if (/context.*overflow|context.*window|token.*limit|prompt.*too.*large|buffer.*overflow|context.*length/i.test(src))
     return "context_overflow";
   if (/failover|model.*unavailable|overloaded|service.*unavailable|model.*not.*found/i.test(src))
     return "model_unavailable";

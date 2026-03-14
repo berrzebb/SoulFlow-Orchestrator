@@ -38,8 +38,9 @@
 - `[합의완료]` PAR-5 + PAR-6 — reconcile observability events + local read model + eval bundle
 - `[합의완료]` E1 + E2 + E3 — ToolOutputReducer + PtyOutputReducer + prompt/display/storage projection split
 - `[합의완료]` E4 + E5 — MemoryIngestionReducer + OutputReductionKpi
+- `[합의완료]` F1 + F2 — Provider Error Taxonomy + Acceptance Rubric
 
-## [GPT미검증] F1 + F2 — Provider Error Taxonomy + Acceptance Rubric
+## [합의완료] F1 + F2 — Provider Error Taxonomy + Acceptance Rubric
 
 ### Claim
 
@@ -56,17 +57,22 @@
 - `tests/quality/provider-error-taxonomy.test.ts` (신규) — F1 테스트 32개
 - `tests/quality/acceptance-rubric.test.ts` (신규) — F2 테스트 11개
 
+### GPT 반려 해소
+
+- `claim-drift [major]`: `classify_provider_error()`의 billing 패턴에서 `quota.*exceeded` 제거 → `rate_limited` 패턴으로 이동. billing은 `billing|quota.*(month|day|week|annual|account|plan)|insufficient.*fund|payment.*required`로 축소. "quota exceeded" 단독은 rate_limit으로 올바르게 복원.
+- `test-gap [major]`: "context window exceeded"가 regex에 없어 `fatal`로 떨어지는 버그 수정 → context_overflow 패턴에 `context.*window` 추가. `tests/agent/pty/cli-adapter.test.ts` Test Command에 포함.
+
 ### Test Command
 
 ```bash
-npx vitest run tests/quality/
+npx vitest run tests/quality/ tests/agent/pty/cli-adapter.test.ts
 npx eslint src/quality/provider-error-taxonomy.ts src/quality/acceptance-rubric.ts src/quality/index.ts src/agent/pty/cli-adapter.ts tests/quality/provider-error-taxonomy.test.ts tests/quality/acceptance-rubric.test.ts
 npx tsc --noEmit
 ```
 
 ### Test Result
 
-- `npx vitest run tests/quality/`: **2 files / 43 tests passed**
+- `npx vitest run tests/quality/ tests/agent/pty/cli-adapter.test.ts`: **3 files / 163 tests passed**
 - `npx eslint ...`: **0 errors, 0 warnings**
 - `npx tsc --noEmit`: **통과**
 
@@ -74,6 +80,7 @@ npx tsc --noEmit
 
 - `to_pty_code()`의 `ProviderErrorCode → ErrorCode` 매핑은 PTY 내부 타입을 유지하기 위한 경계 브리지. 향후 PTY가 `ProviderErrorCode`를 직접 사용하도록 마이그레이션하면 제거 가능.
 - `classify_provider_error()`는 정규식 기반 — 공급자별 비정형 에러 메시지에서 오감지 가능. `from_pty_error_code()` 경로는 명시적 매핑으로 안전.
+- billing vs rate_limit 경계: `quota.*exceeded` 단독은 rate_limited, 기간/계정 컨텍스트(`month|day|annual|account|plan`)가 있을 때만 billing으로 분류.
 
 ---
 
@@ -163,4 +170,5 @@ npx tsc --noEmit
 
 - `detect_output_kind`는 휴리스틱 기반 — JSON으로 시작하지만 diff를 포함하는 복합 출력 등 엣지 케이스에서 오감지 가능. 감지 실패 시 `plain` fallback으로 기존 truncation과 동일하게 동작.
 - `reducer` 미주입 시 `emit_result`가 기존 경로를 사용하므로, 기존 배포 환경에서 reducer를 연결하기 전까지 3-projection 분리 효과 없음. 점진적 롤아웃 전제.
+
 
