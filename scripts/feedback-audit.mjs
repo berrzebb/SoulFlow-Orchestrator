@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync, rmSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, mkdirSync, rmSync, statSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
@@ -132,18 +132,28 @@ function parseArgs(argv) {
   return args;
 }
 
-function readSavedSessionId() {
+function readSavedSession(claudeMdMtime) {
   if (!existsSync(sessionPath)) {
     return null;
   }
 
-  const value = readFileSync(sessionPath, "utf8").trim();
-  return value || null;
+  try {
+    const stored = JSON.parse(readFileSync(sessionPath, "utf8"));
+    if (!stored.id) return null;
+    if (stored.mtime !== claudeMdMtime) {
+      console.log("claude.md changed since last audit — starting fresh session.");
+      return null;
+    }
+    return stored.id;
+  } catch {
+    // 구형 plain-text 포맷 또는 파싱 실패 → 무효화
+    return null;
+  }
 }
 
-function writeSavedSessionId(sessionId) {
+function writeSavedSession(sessionId, claudeMdMtime) {
   mkdirSync(resolve(repoRoot, ".claude"), { recursive: true });
-  writeFileSync(sessionPath, `${sessionId}\n`, "utf8");
+  writeFileSync(sessionPath, JSON.stringify({ id: sessionId, mtime: claudeMdMtime }) + "\n", "utf8");
 }
 
 function deleteSavedSessionId() {
@@ -237,6 +247,44 @@ function buildPromotionSection(promotionHint) {
 `;
 }
 
+/**
+ * [GPT미검증] 블록의 `변경 파일` 목록과 `Test Command`의 eslint 범위를 비교.
+ * 테스트 파일이 변경 파일에 있지만 eslint 명령에 없으면 경고를 반환한다.
+ */
+function checkEslintCoverage(markdown) {
+  const warnings = [];
+  const h2Blocks = markdown.split(/(?=^## )/m);
+
+  for (const block of h2Blocks) {
+    if (!block.includes("[GPT미검증]")) continue;
+
+    const headingMatch = block.match(/^## (.+)/);
+    const heading = headingMatch ? headingMatch[1].trim() : "(unknown)";
+
+    // 변경 파일 섹션에서 경로 추출
+    const changedFilesMatch = block.match(/### 변경 파일\n([\s\S]*?)(?=\n###|\n---|\n## |$)/);
+    const changedFiles = changedFilesMatch
+      ? [...changedFilesMatch[1].matchAll(/- `([^`]+)`/g)].map((m) => m[1])
+      : [];
+
+    // Test Command 섹션에서 eslint 줄 추출
+    const testCmdMatch = block.match(/### Test Command\n[\s\S]*?```[^\n]*\n([\s\S]*?)```/);
+    const eslintLine = testCmdMatch
+      ? (testCmdMatch[1].split("\n").find((l) => /npx eslint/.test(l)) ?? "")
+      : "";
+
+    const eslintTokens = eslintLine.split(/\s+/).filter((t) => t && !t.startsWith("-") && t !== "npx" && t !== "eslint");
+    const eslintSet = new Set(eslintTokens);
+
+    const missing = changedFiles.filter((f) => !eslintSet.has(f));
+    if (missing.length > 0) {
+      warnings.push({ heading, missing });
+    }
+  }
+
+  return warnings;
+}
+
 function buildPrompt(scopeText, promotionHint) {
   const template = readFileSync(promptTemplatePath, "utf8");
   const promotionSection = buildPromotionSection(promotionHint);
@@ -249,7 +297,7 @@ function resolveCodexBin() {
   return resolveBinary("codex", "CODEX_BIN");
 }
 
-function determineResumeTarget(args) {
+function determineResumeTarget(args, claudeMdMtime) {
   if (args.resume === false) {
     return null;
   }
@@ -258,7 +306,7 @@ function determineResumeTarget(args) {
     return { type: "session", value: args.sessionId };
   }
 
-  const saved = readSavedSessionId();
+  const saved = readSavedSession(claudeMdMtime);
   if (saved) {
     return { type: "session", value: saved };
   }
@@ -398,6 +446,20 @@ function main() {
   }
 
   const claudeMd = readFileSync(claudePath, "utf8");
+  const { mtimeMs: claudeMdMtime } = statSync(claudePath);
+
+  // B: eslint 범위 일관성 사전 체크
+  const eslintWarnings = checkEslintCoverage(claudeMd);
+  if (eslintWarnings.length > 0) {
+    console.warn("⚠ eslint 범위 불일치 — 감사 전 확인 권장:");
+    for (const { heading, missing } of eslintWarnings) {
+      console.warn(`  ${heading}`);
+      for (const f of missing) {
+        console.warn(`    누락: ${f}`);
+      }
+    }
+    console.warn("");
+  }
 
   if (!args.scope && !hasPendingItems(claudeMd)) {
     console.log("No [GPT미검증] or [계류] items in claude.md. Skipping audit.");
@@ -418,7 +480,7 @@ function main() {
     return;
   }
 
-  const resumeTarget = determineResumeTarget(args);
+  const resumeTarget = determineResumeTarget(args, claudeMdMtime);
   if (resumeTarget?.type === "session") {
     console.log(`Resuming audit session: ${resumeTarget.value}`);
   } else if (resumeTarget?.type === "last") {
@@ -458,11 +520,11 @@ function main() {
       deleteSavedSessionId();
       console.log("No remaining [계류] items — session reset for next audit.");
     } else if (threadId) {
-      writeSavedSessionId(threadId);
+      writeSavedSession(threadId, claudeMdMtime);
       console.log(`Saved audit session: ${threadId}`);
     }
   } else if (threadId) {
-    writeSavedSessionId(threadId);
+    writeSavedSession(threadId, claudeMdMtime);
     console.log(`Saved audit session: ${threadId}`);
   }
 
