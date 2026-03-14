@@ -647,6 +647,19 @@ export interface BatchNodeDefinition extends NodeBase {
   on_item_error?: "continue" | "halt";
 }
 
+// ── Reconcile Node ───────────────────────────────────
+
+/** PAR-2: 병렬 에이전트 결과를 결정론적 정책으로 합의하는 노드. */
+export interface ReconcileNodeDefinition extends NodeBase {
+  node_type: "reconcile";
+  /** 병렬로 실행된 노드의 ID 목록. */
+  source_node_ids: string[];
+  /** 적용할 해소 정책. */
+  policy: "majority_vote" | "first_wins" | "last_wins" | "merge_union";
+  /** true이면 parsed 필드로 충돌 감지 (기본: false → content 사용). */
+  use_parsed?: boolean;
+}
+
 // ── Assert Node ──────────────────────────────────────
 
 export interface AssertionDefinition {
@@ -1931,7 +1944,7 @@ export type OrcheNodeType = "http" | "code" | "if" | "merge" | "set" | "split"
   | "embedding" | "vector_store"
   | "notify" | "aggregate" | "send_file" | "error_handler" | "webhook"
   | "hitl" | "approval" | "form" | "tool_invoke" | "gate" | "escalation"
-  | "cache" | "retry" | "batch" | "assert"
+  | "cache" | "retry" | "batch" | "reconcile" | "assert"
   | "git" | "shell" | "web_search" | "web_scrape" | "archive" | "process"
   | "docker" | "web_table" | "network" | "web_form" | "system_info" | "package_manager"
   | "data_format" | "encoding" | "regex" | "diff" | "screenshot" | "database"
@@ -2010,6 +2023,7 @@ export type OrcheNodeDefinition =
   | CacheNodeDefinition
   | RetryNodeDefinition
   | BatchNodeDefinition
+  | ReconcileNodeDefinition
   | AssertNodeDefinition
   | GitNodeDefinition
   | ShellNodeDefinition

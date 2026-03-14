@@ -42,6 +42,7 @@ import { escalation_handler } from "./escalation.js";
 import { cache_handler } from "./cache.js";
 import { retry_handler } from "./retry.js";
 import { batch_handler } from "./batch.js";
+import { reconcile_handler } from "./reconcile.js";
 import { assert_handler } from "./assert.js";
 import { git_handler } from "./git.js";
 import { shell_handler } from "./shell.js";
@@ -181,6 +182,7 @@ const ALL_HANDLERS = [
   cache_handler,
   retry_handler,
   batch_handler,
+  reconcile_handler,
   assert_handler,
   git_handler,
   shell_handler,
