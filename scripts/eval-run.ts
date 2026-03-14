@@ -1,10 +1,8 @@
-#!/usr/bin/env node
-
 /**
  * EV-4: eval-run CLI — 데이터셋 로드 → 실행 → report + baseline diff.
  *
  * Usage:
- *   node scripts/eval-run.mjs <dataset-dir> [options]
+ *   npx tsx scripts/eval-run.ts <dataset-dir> [options]
  *
  * Options:
  *   --baseline <path>   Baseline JSON 파일 경로 (diff 비교용)
@@ -18,6 +16,28 @@
 
 import { resolve } from "node:path";
 import { writeFileSync } from "node:fs";
+import { load_eval_datasets } from "../src/evals/loader.js";
+import { EvalRunner } from "../src/evals/runner.js";
+import { EXACT_MATCH_SCORER, CONTAINS_SCORER, REGEX_SCORER } from "../src/evals/scorers.js";
+import { create_report, save_baseline, load_baseline, compute_diff, render_markdown_summary } from "../src/evals/report.js";
+import type { EvalExecutorLike, EvalScorerLike } from "../src/evals/contracts.js";
+
+interface CliArgs {
+  datasetDir: string | null;
+  baseline: string | null;
+  saveBaseline: boolean;
+  output: string | null;
+  markdown: boolean;
+  tags: string[] | null;
+  scorer: string;
+  help: boolean;
+}
+
+const SCORER_MAP: Record<string, EvalScorerLike> = {
+  exact: EXACT_MATCH_SCORER,
+  contains: CONTAINS_SCORER,
+  regex: REGEX_SCORER,
+};
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
@@ -33,13 +53,7 @@ async function main() {
     process.exit(1);
   }
 
-  const { load_eval_datasets } = await import("../src/evals/loader.js");
-  const { EvalRunner } = await import("../src/evals/runner.js");
-  const { EXACT_MATCH_SCORER, CONTAINS_SCORER, REGEX_SCORER } = await import("../src/evals/scorers.js");
-  const { create_report, save_baseline, load_baseline, compute_diff, render_markdown_summary } = await import("../src/evals/report.js");
-
-  const scorerMap = { exact: EXACT_MATCH_SCORER, contains: CONTAINS_SCORER, regex: REGEX_SCORER };
-  const scorer = scorerMap[args.scorer] ?? CONTAINS_SCORER;
+  const scorer = SCORER_MAP[args.scorer] ?? CONTAINS_SCORER;
 
   const datasets = load_eval_datasets(resolve(args.datasetDir));
   if (datasets.length === 0) {
@@ -47,8 +61,9 @@ async function main() {
     return;
   }
 
-  /** @type {import("../src/evals/contracts.js").EvalExecutorLike} */
-  const echo_executor = { async execute(input) { return { output: `echo: ${input}` }; } };
+  const echo_executor: EvalExecutorLike = {
+    async execute(input: string) { return { output: `echo: ${input}` }; },
+  };
 
   const runner = new EvalRunner(echo_executor, scorer, {
     filter_tags: args.tags?.length ? args.tags : undefined,
@@ -97,8 +112,11 @@ async function main() {
   }
 }
 
-function parseArgs(argv) {
-  const args = { datasetDir: null, baseline: null, saveBaseline: false, output: null, markdown: false, tags: null, scorer: "contains", help: false };
+function parseArgs(argv: string[]): CliArgs {
+  const args: CliArgs = {
+    datasetDir: null, baseline: null, saveBaseline: false,
+    output: null, markdown: false, tags: null, scorer: "contains", help: false,
+  };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === "--baseline") { args.baseline = argv[++i]; continue; }
@@ -114,7 +132,7 @@ function parseArgs(argv) {
 }
 
 function printUsage() {
-  console.log(`Usage: node scripts/eval-run.mjs <dataset-dir> [options]
+  console.log(`Usage: npx tsx scripts/eval-run.ts <dataset-dir> [options]
 
 Options:
   --baseline <path>   Baseline JSON file path for diff comparison
@@ -126,4 +144,4 @@ Options:
   -h, --help          Show this help`);
 }
 
-main().catch((e) => { console.error(e.message ?? e); process.exit(1); });
+main().then(() => process.exit(0)).catch((e: unknown) => { console.error(e instanceof Error ? e.message : e); process.exit(1); });

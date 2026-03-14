@@ -15,6 +15,7 @@
 - `[합의완료]` OB-8 Optional Exporter Ports
 - `[합의완료]` EV-1 + EV-2 Evaluation Pipeline
 
+- `[합의완료]` EV-3 + EV-4 Judge / Scorer Split + Run Report
 ## OB-8 Optional Exporter Ports `[합의완료]`
 
 ### 증거 팩 1: TraceExporter / MetricsExporter 인터페이스 + no-op 어댑터 + bootstrap wiring
@@ -106,31 +107,33 @@
 - `EvalRunner`는 순차 실행 — 대규모 데이터셋에서 병렬 실행 옵션 미구현 (향후 필요 시 추가)
 - bootstrap/main.ts에 eval 모듈 미연결 — 현재는 독립 모듈로 존재 (eval CLI/API 엔드포인트는 별도 번들 범위)
 
-## EV-3 + EV-4 Judge / Scorer Split + Run Report `[GPT미검증]`
+## EV-3 + EV-4 Judge / Scorer Split + Run Report `[합의완료]`
 
 ### 증거 팩 1: deterministic judges + report/baseline diff + eval-run CLI
 
-**claim**: `EvalJudgeLike` 인터페이스 + 다차원 `Scorecard` 모델 정의. deterministic judge 4종 (`RouteMatchJudge`, `SchemaMatchJudge`, `KeywordRuleJudge`, `CompositeJudge`). optional `LlmJudgePort` DI 포트. `EvaluationReport` + `BaselineDiff` 모델, `create_report`/`save_baseline`/`load_baseline`/`compute_diff`/`render_markdown_summary` 유틸. `scripts/eval-run.mjs` CLI (데이터셋 로드 → 실행 → report + baseline diff + markdown).
+**claim**: `EvalJudgeLike` 인터페이스 + 다차원 `Scorecard` 모델 정의. deterministic judge 4종 (`RouteMatchJudge`, `SchemaMatchJudge`, `KeywordRuleJudge`, `CompositeJudge`). optional `LlmJudgePort` DI 포트. `EvaluationReport` + `BaselineDiff` 모델, `create_report`/`save_baseline`/`load_baseline`/`compute_diff`/`render_markdown_summary` 유틸. `scripts/eval-run.ts` CLI (`tsx` 런타임, 데이터셋 로드 → 실행 → report + baseline diff + markdown).
 
 **changed files**:
 
 - `src/evals/judges.ts` — 신규: `Scorecard`, `ScorecardEntry`, `EvalJudgeLike`, `RouteMatchJudge` (metadata.expected_route vs actual_route), `SchemaMatchJudge` (JSON 필수 키 검증), `KeywordRuleJudge` (required/forbidden 키워드), `CompositeJudge` (다중 judge 합성), `LlmJudgePort` (optional DI 포트)
 - `src/evals/report.ts` — 신규: `EvaluationReport`, `BaselineDiff`, `BaselineDiffEntry`, `create_report`, `save_baseline`/`load_baseline` (JSON 직렬화), `compute_diff` (improved/regressed/unchanged 감지), `render_markdown_summary` (markdown report + diff 포함)
 - `src/evals/index.ts` — judges + report re-export 추가
-- `scripts/eval-run.mjs` — 신규: CLI 진입점 (--baseline, --save-baseline, --output, --markdown, --tags, --scorer 옵션)
+- `scripts/eval-run.ts` — 신규 (`.mjs` → `.ts` 변환): CLI 진입점 (--baseline, --save-baseline, --output, --markdown, --tags, --scorer 옵션). 정적 TypeScript import + `CliArgs` 인터페이스 + `SCORER_MAP` 타입 맵. `process.exit(0)`으로 명시적 종료 (EvalRunner의 timeout timer가 이벤트 루프를 유지하는 문제 해소)
 - `tests/evals/judges.test.ts` — 신규 15 테스트: RouteMatchJudge 4개, SchemaMatchJudge 4개, KeywordRuleJudge 5개, CompositeJudge 2개
 - `tests/evals/report.test.ts` — 신규 11 테스트: create_report 2개, save/load baseline 2개, compute_diff 3개, render_markdown 4개
+- `tests/evals/eval-run-cli.test.ts` — 신규 10 테스트: --help 출력 1개, 에러 핸들링 2개 (missing dir, empty dir), dataset 로드+실행 1개, --output report JSON 저장 1개, --save-baseline 저장 1개, --baseline diff 비교 1개, --markdown summary 1개, --scorer exact 채점 1개, --tags 필터 1개
 
 **test command**: `npm run lint && npx tsc --noEmit && npx vitest run tests/evals/`
 
-**test result**: `lint(eslint) 0 errors, tsc passed, 4 files / 50 tests passed`
+**test result**: `lint(eslint) 0 errors, tsc passed, 5 files / 60 tests passed`
 
 **residual risk**:
 
 - `LlmJudgePort`는 인터페이스만 정의 — 실제 LLM judge 구현체는 향후 별도 번들 (현재 범위 밖, 설계 문서 명시)
-- `scripts/eval-run.mjs`의 executor는 echo mock — 실제 에이전트 연결은 EV-5/EV-6 범위
+- `scripts/eval-run.ts`의 executor는 echo mock — 실제 에이전트 연결은 EV-5/EV-6 범위
 
-## 다음 작업
+### GPT 계류 해소 내역
 
-- `Evaluation Pipeline / Bundle EV2 / EV-3 + EV-4 — scripts/eval-run.mjs의 런타임 import 경로를 실제 실행 가능하게 수정하고 tests/evals/eval-run-cli.test.ts에서 dataset 로드 + report/baseline CLI 실행을 검증`
+- `claim-drift` 해소: `scripts/eval-run.mjs`(동적 `await import("../src/evals/*.js")`) → `scripts/eval-run.ts`(정적 TypeScript import)로 변환. `tsx` 런타임에서 `.js` 확장자가 Node16 moduleResolution으로 `.ts`에 매핑되어 런타임 모듈 로드 성공. `npx tsx scripts/eval-run.ts <dataset-dir>` 실행 검증 완료.
+- `test-gap` 해소: `tests/evals/eval-run-cli.test.ts` 10 테스트 추가. `execSync`로 `npx tsx scripts/eval-run.ts` 서브프로세스 스폰, 임시 디렉토리에 테스트 데이터셋 JSON 생성 후 모든 CLI 옵션 (--help, --output, --baseline, --save-baseline, --markdown, --scorer, --tags) 검증.
 
