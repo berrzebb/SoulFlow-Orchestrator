@@ -1,6 +1,6 @@
 # Claude 증거 제출
 
-> 마지막 업데이트: 2026-03-14 15:40
+> 마지막 업데이트: 2026-03-14 15:54
 > GPT 감사 문서: `docs/feedback/gpt.md`
 
 ## 합의완료
@@ -24,7 +24,7 @@
 - `[합의완료]` TR-3 + TR-4 — Hybrid Merge/Rerank + Session Novelty Gate Tokenizer 정렬
 - `[합의완료]` TR-5 — Tokenizer/Hybrid Retrieval Eval Fixture + Regression Artifact
 
-## GW-1 + GW-2 — RequestPlan/ResultEnvelope + Ingress Normalization/Classification [GPT미검증]
+## GW-1 + GW-2 — RequestPlan/ResultEnvelope + Ingress Normalization/Classification [GPT미검증 → 재제출]
 
 ### Claim
 
@@ -51,6 +51,11 @@ npm run lint && npx tsc --noEmit && npx vitest run tests/evals/ tests/orchestrat
 - vitest: 11 files / 153 tests passed (기존 109 + 신규 44)
 - eval:smoke: 28/28 (100.0%) ≥ threshold 80%
 - `--bundle gateway --scorer exact --threshold 100`: 11/11 (100.0%)
+
+### Lint Fix (GPT 반려 `lint-gap` 해결)
+
+- `tests/evals/gateway-executor.test.ts:13`의 `clear_registry` unused import 제거
+- `npx eslint` GPT 지정 범위 전체 재통과 확인
 
 ### Residual Risk
 

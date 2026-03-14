@@ -10,7 +10,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { create_gateway_executor } from "@src/evals/gateway-executor.js";
 import { EvalRunner } from "@src/evals/runner.js";
 import { EXACT_MATCH_SCORER } from "@src/evals/scorers.js";
-import { get_bundle, load_bundle_datasets, clear_registry } from "@src/evals/bundles.js";
+import { get_bundle, load_bundle_datasets } from "@src/evals/bundles.js";
 import type { EvalExecutorLike } from "@src/evals/contracts.js";
 
 let executor: EvalExecutorLike;
