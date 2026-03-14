@@ -148,4 +148,30 @@ describe("run_phase_loop — 템플릿 미매칭 + LLM 동적 생성 분기", ()
     expect(result.reply).toContain("다음 워크플로우를 생성했습니다");
     expect(result.reply).toContain("Phase 1");
   });
+
+  it("SO-6b — code-fence 응답 → normalize_json_text 바인딩으로 정상 파싱 → preview 반환", async () => {
+    const inner = JSON.stringify({
+      title: "Fence Workflow",
+      objective: "fence test",
+      phases: [{
+        phase_id: "p1", title: "Fenced Phase",
+        agents: [{ agent_id: "a1", role: "analyst", label: "Analyst", backend: "openrouter", system_prompt: "Analyze." }],
+        critic: { backend: "openrouter", system_prompt: "Review", gate: true },
+      }],
+    });
+    const fenced_response = `\`\`\`json\n${inner}\n\`\`\``;
+    const deps = make_deps({
+      workspace: "/nonexistent-workspace-xyz",
+      providers: {
+        run_orchestrator: vi.fn().mockResolvedValue({ content: fenced_response }),
+        get_orchestrator_provider_id: vi.fn().mockReturnValue("openrouter"),
+        get_secret_vault: vi.fn().mockReturnValue({ mask_known_secrets: vi.fn().mockResolvedValue("") }),
+      } as never,
+      phase_workflow_store: { upsert: vi.fn().mockResolvedValue(undefined) } as never,
+    });
+    const result = await run_phase_loop(deps, make_req(), "unique code fence workflow task abc");
+    expect(result.mode).toBe("phase");
+    expect(result.reply).toContain("다음 워크플로우를 생성했습니다");
+    expect(result.reply).toContain("Fenced Phase");
+  });
 });
