@@ -6,13 +6,13 @@
 [![Lines of Code](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/berrzebb/SoulFlow-Orchestrator/gh-pages/badges/loc.json)](https://github.com/berrzebb/SoulFlow-Orchestrator)
 [![Node](https://img.shields.io/badge/node-%3E%3D22-brightgreen)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/typescript-5.8-blue)](https://www.typescriptlang.org/)
-[![License](https://img.shields.io/github/license/berrzebb/SoulFlow-Orchestrator)](LICENSE)
+[![License](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE)
 
 [한국어](README.ko.md) | English
 
-An asynchronous orchestration runtime that processes Slack · Telegram · Discord messages through **headless agents**.
+A local-first asynchronous orchestration runtime that routes Slack · Telegram · Discord messages to **headless agents**.
 
-The batteries-included solution featuring 9 agent backends (Claude/Codex/Gemini × CLI/SDK + OpenAI-compatible + OpenRouter + Ollama + container), an 8-role skill system, CircuitBreaker-based provider resilience, AES-256-GCM security vault, OAuth 2.0 integrations, a 141-node workflow graph editor, WorkflowTool for agent-driven CRUD, and a React + Vite web dashboard with i18n and markdown rendering.
+The batteries-included solution featuring 9 agent backends (Claude/Codex/Gemini × CLI/SDK + OpenAI-compatible + OpenRouter + Ollama + container), 8-role skill system, CircuitBreaker-based provider resilience, AES-256-GCM security vault, OAuth 2.0 integrations, 141-node workflow graph editor, **Prompting Studio** (text/image/video generation · agent design · Gallery · A/B compare), HITL approval gates, and a React + Vite web dashboard with i18n and markdown rendering.
 
 ## Table of Contents
 
