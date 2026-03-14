@@ -281,7 +281,7 @@ export interface DashboardWorkflowOps {
   delete_template(name: string): boolean;
   import_template(yaml_content: string): { ok: boolean; name?: string; error?: string };
   export_template(name: string): string | null;
-  list_roles(): Array<{ id: string; name: string; description: string; soul: string | null; heart: string | null; tools: string[] }>;
+  list_roles(): Array<{ id: string; name: string; description: string; soul: string | null; heart: string | null; tools: string[]; use_when: string; not_use_for: string; preferred_model: string | null; shared_protocols: string[]; rendered_prompt: string | null }>;
   resume(workflow_id: string): Promise<{ ok: boolean; error?: string }>;
   update_settings(workflow_id: string, settings: { auto_approve?: boolean; auto_resume?: boolean }): Promise<{ ok: boolean; error?: string }>;
   run_single_node?(node: Record<string, unknown>, input_memory: Record<string, unknown>): Promise<{ ok: boolean; output?: unknown; duration_ms?: number; error?: string }>;

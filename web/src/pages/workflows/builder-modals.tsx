@@ -608,14 +608,12 @@ export function AgentEditModal({ workflow, subNodeId, onChange, onClose, onSubNo
   const applyRole = (roleId: string) => {
     const preset = roles?.find((r) => r.id === roleId);
     if (!preset) { updateAgent({ role: roleId }); return; }
-    const prompt_parts: string[] = [];
-    if (preset.soul) prompt_parts.push(preset.soul);
-    if (preset.heart) prompt_parts.push(preset.heart);
     updateAgent({
       role: preset.id,
       label: preset.name,
-      system_prompt: prompt_parts.join("\n\n") || "",
+      system_prompt: preset.rendered_prompt ?? "",
       tools: preset.tools.length > 0 ? preset.tools : undefined,
+      model: preset.preferred_model || undefined,
     });
   };
 

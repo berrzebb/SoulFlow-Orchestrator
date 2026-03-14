@@ -14,7 +14,7 @@
  * - build_ask_user / build_send_message / build_ask_channel (auto_resume, bus 없음)
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { mkdtemp, rm, mkdir, writeFile } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { create_workflow_ops } from "@src/dashboard/ops/workflow.js";
@@ -290,18 +290,47 @@ describe("list_roles()", () => {
     expect(ops.list_roles()).toEqual([]);
   });
 
-  it("skills_loader 있음 → role 목록 반환", () => {
+  it("skills_loader 있음 → enriched role 목록 반환 (RP-5)", () => {
+    const meta = {
+      role: "analyst", name: "role:analyst",
+      summary: "Use when data analysis needed. Do NOT use for coding.",
+      soul: "curious", heart: "logical", tools: ["web_search"],
+      shared_protocols: [], model: "sonnet", path: null,
+    };
     const ops = make_ops(make_store(), workspace, {
       skills_loader: {
-        list_role_skills: vi.fn().mockReturnValue([
-          { role: "analyst", name: "role:analyst", summary: "분석가", soul: "curious", heart: "logical", tools: ["web_search"] },
-        ]),
+        list_role_skills: vi.fn().mockReturnValue([meta]),
+        get_role_skill: vi.fn().mockImplementation((id: string) => id === "analyst" ? meta : null),
+        list_shared_protocols: vi.fn().mockReturnValue([]),
       },
     });
     const roles = ops.list_roles();
     expect(roles).toHaveLength(1);
     expect(roles[0].id).toBe("analyst");
     expect(roles[0].name).toBe("analyst");
+    expect(roles[0].use_when).toBe("data analysis needed");
+    expect(roles[0].not_use_for).toBe("coding");
+    expect(roles[0].preferred_model).toBe("sonnet");
+    expect(roles[0].rendered_prompt).toContain("# Role: analyst");
+  });
+
+  it("resolver 미매칭 role → raw fallback", () => {
+    const meta = {
+      role: null, name: "role:custom",
+      summary: "Custom role", soul: null, heart: null,
+      tools: ["tool_a"], shared_protocols: [], model: null, path: null,
+    };
+    const ops = make_ops(make_store(), workspace, {
+      skills_loader: {
+        list_role_skills: vi.fn().mockReturnValue([meta]),
+        get_role_skill: vi.fn().mockReturnValue(null),
+        list_shared_protocols: vi.fn().mockReturnValue([]),
+      },
+    });
+    const roles = ops.list_roles();
+    expect(roles).toHaveLength(1);
+    expect(roles[0].id).toBe("role:custom");
+    expect(roles[0].rendered_prompt).toBeNull();
   });
 });
 

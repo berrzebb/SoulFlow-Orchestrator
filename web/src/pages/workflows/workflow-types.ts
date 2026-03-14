@@ -9,6 +9,11 @@ export interface RolePreset {
   soul: string | null;
   heart: string | null;
   tools: string[];
+  use_when: string;
+  not_use_for: string;
+  preferred_model: string | null;
+  shared_protocols: string[];
+  rendered_prompt: string | null;
 }
 
 export interface AgentDef {

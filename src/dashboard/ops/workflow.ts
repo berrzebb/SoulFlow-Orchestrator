@@ -4,6 +4,9 @@ import type { PhaseWorkflowStoreLike } from "../../agent/phase-workflow-store.js
 import type { SubagentRegistry } from "../../agent/subagents.js";
 import type { SkillsLoader } from "../../agent/skills.service.js";
 import type { DashboardWorkflowOps } from "../service.js";
+import { create_role_policy_resolver } from "../../orchestration/role-policy-resolver.js";
+import { create_protocol_resolver } from "../../orchestration/protocol-resolver.js";
+import { create_prompt_profile_compiler } from "../../orchestration/prompt-profile-compiler.js";
 import type { PhaseLoopRunOptions, ChannelSendRequest, ChannelResponse, WorkflowDefinition } from "../../agent/phase-loop.types.js";
 import {
   load_workflow_templates, load_workflow_template,
@@ -499,14 +502,27 @@ export function create_workflow_ops(deps: {
 
     list_roles() {
       if (!skills_loader) return [];
-      return skills_loader.list_role_skills().map((m) => ({
-        id: m.role || m.name,
-        name: m.name.replace(/^role:/, ""),
-        description: m.summary,
-        soul: m.soul,
-        heart: m.heart,
-        tools: m.tools,
-      }));
+      const compiler = create_prompt_profile_compiler(
+        create_role_policy_resolver(skills_loader),
+        create_protocol_resolver(skills_loader),
+      );
+      return skills_loader.list_role_skills().map((m) => {
+        const role_id = m.role || m.name;
+        const profile = compiler.compile(role_id);
+        return {
+          id: role_id,
+          name: m.name.replace(/^role:/, ""),
+          description: m.summary,
+          soul: profile?.soul ?? m.soul,
+          heart: profile?.heart ?? m.heart,
+          tools: profile ? [...profile.tools] : m.tools,
+          use_when: profile?.use_when ?? "",
+          not_use_for: profile?.not_use_for ?? "",
+          preferred_model: profile?.preferred_model ?? null,
+          shared_protocols: profile ? profile.protocol_sections.map((p) => p.name) : [],
+          rendered_prompt: profile ? compiler.render_system_section(profile) : null,
+        };
+      });
     },
 
     async resume(workflow_id) {
