@@ -10,6 +10,7 @@ Inbound                    Execution                  Outbound
 Media security checks     Approval gates (HITL)      Output sanitizer
 Sensitive auto-sealing    Tool-level secret inject   Secret reference masking
 Private host blocking     Sandbox policy             Outbound deduplication
+Webhook edge guard        Filesystem containment     Token egress guard
                           Subagent isolation         DLQ (failure recovery)
                                                      Session recording
 ```
@@ -194,6 +195,55 @@ Dual-layer recording for audit and memory:
 - Token bucket rate limiter
 - Exponential backoff (base × 2^attempt, capped)
 - Non-retryable errors bypass retry: `invalid_auth`, `channel_not_found`, `permission_denied`
+
+---
+
+---
+
+## 8. Security Hardening
+
+Additional hardening controls applied at the channel edge, execution, and outbound boundaries.
+
+### Webhook Edge Guard
+
+Incoming webhook requests are validated before entering the processing pipeline:
+
+- **Signature verification**: Slack, Telegram, and Discord webhooks are verified against their respective HMAC/token schemes
+- **SSRF prevention**: Webhook URLs from untrusted sources are validated against the private host blocklist (same rules as Media Security § 6)
+- **Replay protection**: Request timestamps are checked; requests older than 5 minutes are rejected
+- **Rate gate**: Per-IP request rate limiting at the webhook entry point
+
+### Outbound Token Egress Guard
+
+Prevents secrets from leaving the system through agent tool call outputs:
+
+- After each tool execution, outputs are scanned for secret patterns (same regex set as § 3)
+- `{{secret:*}}` references in tool results are re-sealed before being included in the agent context
+- Bare `sv1.*` ciphertext is stripped from outbound messages
+
+### Filesystem Containment
+
+CLI-based agent backends (Claude Code, Codex CLI, Gemini CLI) run with restricted filesystem access:
+
+| Rule | Restriction |
+|------|-------------|
+| Read/write root | `/data` (workspace) and `/agents` (auth tokens) only |
+| Parent traversal | `../` paths outside allowed roots are blocked |
+| Symlink following | Disabled for paths outside the allowed root |
+| Exec outside `/usr` | Blocked — agents may not spawn arbitrary binaries |
+
+### Tool-Level Security Policy
+
+Each node/tool type carries a security policy that controls:
+
+| Policy | Description |
+|--------|-------------|
+| `requires_approval` | Forces HITL approval before execution |
+| `secret_injection` | Whether `{{secret:*}}` placeholders are resolved for this tool |
+| `network_access` | Whether the tool may make outbound network calls |
+| `filesystem_scope` | Read-only, read-write, or no-access to workspace |
+
+Policies are defined per tool type and can be overridden in dashboard → **Settings** → `security.toolPolicies`.
 
 ---
 

@@ -272,18 +272,37 @@ function normalizeResetCriteriaSection(gptMd) {
   return { updated, changed: updated !== gptMd };
 }
 
-function syncGptNextTaskWithPromotion(gptMd, state) {
-  if (!state?.nextStage) {
-    return { updated: gptMd, changed: false };
+function findNextAuditTaskInClaude(claudeMd) {
+  const auditSection = readSection(claudeMd, "감사 범위");
+  const lines = auditSection ? auditSection.lines : claudeMd.split(/\r?\n/);
+
+  for (const line of lines) {
+    if (!/\[(GPT미검증|계류)\]/.test(line)) {
+      continue;
+    }
+    const trimmed = line.trim();
+    if (!trimmed.startsWith("- ")) {
+      continue;
+    }
+    return trimmed.replace(/^- /, "").trim();
   }
 
+  return null;
+}
+
+function syncGptNextTaskWithPromotion(gptMd, claudeMd, state) {
   const verdictSection = readSection(gptMd, "최종 판정");
   const verdictItems = verdictSection ? parseStatusLines(verdictSection.lines.join("\n")) : [];
   if (verdictItems.length === 0 || verdictItems.some((item) => item.status !== "합의완료")) {
     return { updated: gptMd, changed: false };
   }
 
-  const nextTask = state.nextStage.next_task_ko ?? state.nextStage.next_task_en;
+  const nextTask =
+    state?.nextStage?.next_task_ko ??
+    state?.nextStage?.next_task_en ??
+    findNextAuditTaskInClaude(claudeMd) ??
+    "`현재 등록된 다음 작업 없음`";
+
   if (!nextTask) {
     return { updated: gptMd, changed: false };
   }
@@ -629,7 +648,7 @@ function main() {
     : null;
 
   if (args.syncNext) {
-    const gptNextSync = syncGptNextTaskWithPromotion(gptMd, promotionState);
+    const gptNextSync = syncGptNextTaskWithPromotion(gptMd, claudeMd, promotionState);
     if (gptNextSync.changed) {
       gptMd = gptNextSync.updated;
       if (!args.dryRun) {

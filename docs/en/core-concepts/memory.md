@@ -47,12 +47,33 @@ The memory system supports hybrid search combining multiple retrieval strategies
 
 | Strategy | Technology | Strength |
 |----------|-----------|----------|
-| **Keyword (FTS5)** | SQLite FTS5 full-text index | Exact term matching, fast |
+| **Keyword (FTS5/BM25)** | SQLite FTS5 full-text index with BM25 ranking | Exact term matching, fast |
 | **Semantic (sqlite-vec)** | Native KNN vector search | Meaning-based similarity |
 
 When an embedding model is available (Ollama or external), memory entries are automatically chunked and vectorized. Search results are merged using **Reciprocal Rank Fusion (RRF)** with temporal decay and **MMR (Maximal Marginal Relevance)** reranking to balance relevance and diversity.
 
 Without an embedding model, search falls back to FTS5 keyword matching only.
+
+### Tokenization Infrastructure
+
+The hybrid search pipeline uses a shared tokenization layer for consistent query processing:
+
+| Component | Role |
+|-----------|------|
+| **TokenizerPolicy** | Pluggable multi-language tokenization strategy — selects language-specific rules at runtime |
+| **QueryNormalizer** | Normalizes queries before FTS5/BM25 indexing (lowercasing, punctuation removal, CJK segmentation) |
+| **LexicalProfile** | BM25 parameter tuning per content type (long-form memories vs. short snippets) |
+| **LanguageRuleLike** | Contract that language-specific rules implement (Korean/CJK word splitting, Latin stopword removal) |
+
+The tokenizer policy is applied consistently at both **write time** (when storing memories) and **read time** (when searching), ensuring FTS5 index terms match query terms exactly.
+
+### Session Novelty Gate
+
+To avoid surfacing already-seen content, the retrieval pipeline includes a session novelty gate:
+
+- Tracks document IDs retrieved during the current session
+- Filters out previously returned results from subsequent searches
+- Ensures agents receive fresh context rather than repeated information
 
 ## Memory Consolidation
 

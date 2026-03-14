@@ -335,6 +335,55 @@ AES-256-GCM으로 암호화된 민감정보를 관리합니다.
 - 추가 · 삭제 · Reveal (복호화 확인)
 - 에이전트는 참조명으로만 접근 — 실제 값은 도구 실행 경로에서만 복호화
 
+## 관찰 가능성 (Observability)
+
+SoulFlow는 프로덕션 모니터링과 디버깅을 위한 내장 관찰 가능성 레이어를 포함합니다.
+
+### 실행 스팬
+
+모든 에이전트 실행은 요청의 전체 라이프사이클을 캡처하는 **스팬**으로 래핑됩니다:
+
+| 필드 | 설명 |
+|------|------|
+| `trace_id` | 인바운드 메시지부터 최종 응답까지 전파되는 상관 ID |
+| `span_id` | 고유 스팬 식별자 (도구 호출, LLM 추론, 노드마다 별도 스팬) |
+| `parent_span_id` | 중첩/서브에이전트 호출의 트리 재구성에 활용 |
+| `duration_ms` | 벽시계 기준 실행 시간 |
+| `status` | `ok` / `error` / `cancelled` |
+| `attributes` | 프로바이더, 모델, 토큰 사용량, 도구 이름, 에러 유형 |
+
+스팬은 `workspace/runtime/spans/spans.db`에 저장되며 대시보드 → **Workspace** → **Events**에서 확인 가능합니다.
+
+### 메트릭
+
+메트릭 싱크는 런타임 카운터와 히스토그램을 수집합니다:
+
+| 메트릭 | 유형 | 설명 |
+|--------|------|------|
+| `agent.requests` | 카운터 | 백엔드별 총 에이전트 호출 수 |
+| `agent.latency_ms` | 히스토그램 | 엔드투엔드 요청 지연 시간 |
+| `agent.tokens_in` / `tokens_out` | 카운터 | 프로바이더별 토큰 사용량 |
+| `tool.calls` | 카운터 | 도구 이름별 호출 횟수 |
+| `delivery.success` / `delivery.fail` | 카운터 | 아웃바운드 메시지 전달 결과 |
+
+### 전달 추적 (Delivery Trace)
+
+각 아웃바운드 메시지는 **전달 추적** 기록을 가집니다 — 전송 시도, 재시도 횟수, 최종 상태가 포함됩니다. `trace_id`를 통해 발생 스팬과 연결되어 엔드투엔드 요청 상관 관계를 파악할 수 있습니다.
+
+전달 실패는 DLQ(Dead Letter Queue)에 저장되며 `trace_id`로 검색 가능합니다.
+
+### 선택적 내보내기 (Exporters)
+
+스팬과 메트릭을 외부 관찰 가능성 플랫폼으로 내보낼 수 있습니다. 대시보드 → **Settings** → `observability`에서 설정:
+
+| 내보내기 방식 | 형식 | 설정 키 |
+|--------------|------|---------|
+| OpenTelemetry Collector | OTLP/gRPC | `observability.otlp.endpoint` |
+| Prometheus | Pull (스크랩) | `observability.prometheus.enabled` |
+| 콘솔 (디버그) | 구조화 JSON | `observability.console.enabled` |
+
+내보내기가 설정되지 않으면 스팬과 메트릭은 SQLite에 로컬 보관됩니다 (기본 보존: 7일).
+
 ## 실시간 피드
 
 Overview 페이지는 SSE(Server-Sent Events)로 실시간 이벤트를 표시합니다. `SseManager`가 다음 이벤트를 브로드캐스트합니다:

@@ -38,11 +38,19 @@ flowchart TD
         WEB[Web Chat]
     end
 
+    subgraph Security["보안 경계"]
+        direction TB
+        WHOOK[웹훅 엣지 가드\n서명 검증 · SSRF 차단 · 재전송 방지]
+        SEAL[민감정보 Sealing · AES-256-GCM]
+        EGRS[토큰 Egress 가드\n출력 시크릿 재밀봉]
+    end
+
     subgraph Pipeline["처리 파이프라인"]
         direction TB
-        SEAL[민감정보 Sealing]
         CMD[슬래시 커맨드 · 가드 · 21종 핸들러]
-        ORCH[오케스트레이터 · 분류기 · ToolIndex FTS5]
+        NGRD[Ingress 정규화\n채널 중립 · 멘션 제거]
+        ORCH[오케스트레이터 · 분류기 · ToolIndex FTS5/BM25]
+        GW[Gateway 계약\nRequestPlan · ResultEnvelope · CostTier]
     end
 
     subgraph Backends["에이전트 백엔드 (9)"]
@@ -87,24 +95,36 @@ flowchart TD
         CATALOG[ModelCatalog · ReferenceStore]
     end
 
+    subgraph Observability["관찰성"]
+        direction LR
+        SPANS[실행 스팬 · 메트릭 싱크]
+        TRACE[전달 추적 · DLQ]
+    end
+
     DASH[대시보드 · OAuth · SSE · i18n]
 
-    Channels --> Pipeline
-    Pipeline --> Backends
-    Pipeline --> Workflows
+    Channels --> Security
+    Security --> Pipeline
+    Pipeline --> GW
+    GW --> Backends
+    GW --> Workflows
     Workflows --> Backends
     INTERACT -.->|ASK_USER · 승인| Channels
     CTR --> PTY
     Backends --> Skills
-    Skills --> OUT([응답 · 스트리밍])
+    Skills --> EGRS
+    EGRS --> OUT([응답 · 스트리밍])
     Workflows --> Services
     DASH -.-> Pipeline
+    Backends -.->|spans/metrics| Observability
+    Pipeline -.->|이벤트| Observability
 ```
 
 **인바운드 파이프라인**
 
 ```mermaid
 flowchart LR
+  WHOOK["웹훅 엣지 가드\n서명 검증 · SSRF · 재전송 방지"]
   CH["채널 read()"]
   DD{"중복 체크"}
   CMD{"CommandRouter\n슬래시 커맨드 + 퍼지 매칭"}
@@ -112,13 +132,16 @@ flowchart LR
   APR["ApprovalService"]
   SEAL["Sensitive Seal\nAES-256-GCM"]
   MEDIA["MediaCollector"]
-  ORCH["OrchestrationService\nonce · agent · task · phase"]
-  BACK["AgentBackend"]
+  NGRD["Ingress 정규화\n채널 중립 · 멘션 제거"]
+  ORCH["OrchestrationService\nonce · agent · task · phase\nFTS5/BM25 ToolIndex"]
+  BACK["AgentBackend\n가드레일 · 예산 계약"]
   TOOL["도구 실행 + 시크릿 복호화"]
-  REC["SessionRecorder"]
+  REC["SessionRecorder + 스팬"]
   DISP["DispatchService"]
+  EGRS["토큰 Egress 가드"]
   OUT["채널 send()"]
 
+  WHOOK --> CH
   CH --> DD
   DD -->|신규| CMD
   DD -->|중복| X(skip)
@@ -127,11 +150,11 @@ flowchart LR
   GUARD -->|위험 작업| APR
   GUARD -->|일반| SEAL
   APR -->|승인 완료| SEAL
-  SEAL --> MEDIA --> ORCH
+  SEAL --> MEDIA --> NGRD --> ORCH
   ORCH --> BACK
   BACK -->|tool_calls| TOOL
   TOOL -->|result| BACK
-  BACK --> REC --> DISP --> OUT
+  BACK --> REC --> DISP --> EGRS --> OUT
 ```
 
 **역할 위임 계층**
@@ -362,6 +385,7 @@ next/
       ops/          ← 13개 ops 모듈
       routes/       ← 라우트 핸들러
     decision/       ← 결정사항 서비스
+    evals/          ← 평가 파이프라인 (EvalRunner, EvalCase, judges, scorers, bundles)
     events/         ← 워크플로우 이벤트 서비스
     heartbeat/      ← 하트비트 서비스
     i18n/           ← 공유 i18n 프로토콜 + JSON 로케일
@@ -381,6 +405,8 @@ next/
     scaffold/       ← 코드 생성기 (tool, node, handler, route, page)
     generate-diagrams.mjs ← SVG 다이어그램 생성
     i18n-sync.ts    ← i18n 키 동기화 (--check / --fix)
+  tests/
+    evals/          ← 평가 테스트 케이스 (cases/*.json) 및 executor 테스트
   <workspace>/      ← --workspace 로 지정 (런타임 데이터)
     runtime/        ← SQLite DB (sessions, tasks, events, cron, kanban, dlq 등)
     skills/         ← 사용자 정의 스킬
@@ -405,6 +431,8 @@ next/
 | SDK 백엔드 실패 | 로그의 `backend_fallback` 확인 (`claude_sdk` → `claude_cli` 자동 전환) |
 | OAuth Connect 안 됨 | 팝업 차단 해제, Client ID/Secret 확인, Redirect URI 설정 확인 |
 | LLM 런타임 점검 | `npm run health:llm` |
+| CLI 에이전트 미인증 | `./run.sh login claude --workspace=...` (3.5단계) — 컨테이너는 `~/.claude`가 아닌 `{workspace}/.agents/.claude`를 사용 |
+| 평가 실행 | `npm run eval:smoke` (빠른 검증) / `npm run eval:full` (전체 케이스) |
 
 ## 라이선스
 

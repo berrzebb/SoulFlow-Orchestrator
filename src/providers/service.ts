@@ -42,11 +42,11 @@ function is_transient_error_content(content: string): boolean {
 
 function parse_provider_id(raw: string): ProviderId | null {
   const v = String(raw || "").trim().toLowerCase();
-  if (v === "chatgpt") return "chatgpt";
-  if (v === "claude_code") return "claude_code";
+  if (v === "chatgpt" || v === "codex_cli" || v === "codex_appserver") return "chatgpt";
+  if (v === "claude_code" || v === "claude_cli" || v === "claude_sdk") return "claude_code";
   if (v === "openrouter") return "openrouter";
-  if (v === "orchestrator_llm") return "orchestrator_llm";
-  if (v === "gemini") return "gemini";
+  if (v === "orchestrator_llm" || v === "ollama" || v === "openai_compatible") return "orchestrator_llm";
+  if (v === "gemini" || v === "gemini_cli") return "gemini";
   return null;
 }
 
@@ -188,18 +188,20 @@ export class ProviderRegistry {
     return [...this.providers.keys()];
   }
 
-  set_active_provider(provider_id: ProviderId): void {
-    if (!this.providers.has(provider_id)) throw new Error(`provider_not_found:${provider_id}`);
-    this.active_provider_id = provider_id;
+  set_active_provider(provider_id: string): void {
+    const resolved = parse_provider_id(provider_id) ?? (provider_id as ProviderId);
+    if (!this.providers.has(resolved)) throw new Error(`provider_not_found:${provider_id}`);
+    this.active_provider_id = resolved;
   }
 
   get_active_provider_id(): ProviderId {
     return this.active_provider_id;
   }
 
-  set_orchestrator_provider(provider_id: ProviderId): void {
-    if (!this.providers.has(provider_id)) throw new Error(`provider_not_found:${provider_id}`);
-    this.orchestrator_provider_id = provider_id;
+  set_orchestrator_provider(provider_id: string): void {
+    const resolved = parse_provider_id(provider_id) ?? (provider_id as ProviderId);
+    if (!this.providers.has(resolved)) throw new Error(`provider_not_found:${provider_id}`);
+    this.orchestrator_provider_id = resolved;
   }
 
   get_orchestrator_provider_id(): ProviderId {

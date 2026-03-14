@@ -330,6 +330,55 @@ Manage AES-256-GCM encrypted secrets.
 - Add · delete · Reveal (confirm decrypted value)
 - Agents access by reference only — actual values decrypted only in tool execution path
 
+## Observability
+
+SoulFlow includes a built-in observability layer for production monitoring and debugging.
+
+### Execution Spans
+
+Every agent execution is wrapped in a **span** — a structured record that captures the full lifecycle of a request:
+
+| Field | Description |
+|-------|-------------|
+| `trace_id` | Correlation ID propagated from inbound message to final reply |
+| `span_id` | Unique span identifier (each tool call, LLM inference, node gets its own span) |
+| `parent_span_id` | Enables tree reconstruction for nested/subagent calls |
+| `duration_ms` | Wall-clock duration |
+| `status` | `ok` / `error` / `cancelled` |
+| `attributes` | Provider, model, token usage, tool name, error type |
+
+Spans are stored in `workspace/runtime/spans/spans.db` and viewable in dashboard → **Workspace** → **Events**.
+
+### Metrics
+
+The metrics sink collects runtime counters and histograms:
+
+| Metric | Type | Description |
+|--------|------|-------------|
+| `agent.requests` | Counter | Total agent invocations per backend |
+| `agent.latency_ms` | Histogram | End-to-end request latency |
+| `agent.tokens_in` / `tokens_out` | Counter | Token usage per provider |
+| `tool.calls` | Counter | Tool invocation count per tool name |
+| `delivery.success` / `delivery.fail` | Counter | Outbound message delivery outcomes |
+
+### Delivery Trace
+
+Each outbound message carries a **delivery trace** — a record of the send attempt, retry count, and final status. The delivery trace links back to the originating span via `trace_id`, enabling end-to-end request correlation.
+
+Failed deliveries appear in the Dead Letter Queue (DLQ) and are searchable by `trace_id`.
+
+### Optional Exporters
+
+Spans and metrics can be exported to external observability platforms. Configure in dashboard → **Settings** → `observability`:
+
+| Exporter | Format | Config Key |
+|----------|--------|-----------|
+| OpenTelemetry Collector | OTLP/gRPC | `observability.otlp.endpoint` |
+| Prometheus | Pull (scrape) | `observability.prometheus.enabled` |
+| Console (debug) | Structured JSON | `observability.console.enabled` |
+
+When no exporter is configured, spans and metrics are kept local in SQLite (retention: 7 days by default).
+
 ## Live Feed
 
 The Overview page shows real-time events via SSE (Server-Sent Events). `SseManager` broadcasts the following events:

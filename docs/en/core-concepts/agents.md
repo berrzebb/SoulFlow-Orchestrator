@@ -117,6 +117,45 @@ Subagent output is buffered and flushed every **1.5 seconds** or when the buffer
 
 Subagents can announce @mentions for task routing, enabling work to be passed between specialized agents.
 
+## Execution Guardrails
+
+Guardrails prevent runaway or wasteful agent execution by tracking outcomes, budgets, and failure patterns.
+
+### Budget Contract
+
+Every task execution is assigned a **budget contract** that communicates resource limits to the agent upfront:
+
+| Limit | Description |
+|-------|-------------|
+| `max_turns` | Maximum reasoning turns the agent may take |
+| `max_tokens` | Token budget for the execution context |
+| `max_retries` | Retry ceiling for tool call failures |
+
+The agent receives the remaining budget in its system context, enabling self-regulation of scope and verbosity.
+
+### Outcome-Aware Session Reuse
+
+When a session ends (success or failure), the outcome is recorded. On retry or re-run:
+
+- **Successful sessions** — their context may be reused to skip already-completed steps
+- **Failed sessions** — their context is excluded from reuse; the agent starts fresh to avoid inheriting a poisoned state
+
+### Novelty Policy
+
+Before re-attempting a previously tried approach, the agent evaluates whether it has any new information that would change the outcome. Approaches that failed without new input are skipped automatically.
+
+### Failed-Attempt Short-Circuit
+
+If the same operation fails `N` consecutive times (configurable), execution short-circuits with a structured failure report rather than retrying indefinitely. The threshold is per operation type:
+
+```
+tool_call failures     → 3 attempts
+LLM inference errors   → 2 attempts
+Network/API errors     → exponential backoff, max 5 attempts
+```
+
+Failed short-circuits surface in the dashboard as `guardrail_abort` events with detailed diagnostics.
+
 ## Approval Gates
 
 Tool executions can be gated behind user approval. See [Security — Approval Workflow](./security.md#5-approval-workflow-hitl) for details.

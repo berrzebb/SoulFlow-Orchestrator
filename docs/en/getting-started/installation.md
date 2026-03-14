@@ -57,6 +57,31 @@ If no provider is configured, the dashboard automatically redirects to the **Set
 
 All configuration is handled through the Wizard — no `.env` file needed.
 
+### Step 3.5: Log in CLI agents (required for CLI backends)
+
+If you selected a CLI-based agent backend (`claude_cli`, `codex_cli`, or `gemini_cli`) in the Wizard, you must authenticate the CLI agent before it can run.
+
+CLI agent credentials are stored at **`{workspace}/.agents/`**, not the system root. The `run.sh login` command writes auth files to this workspace-specific path:
+
+```bash
+# Linux/macOS
+./run.sh login claude --workspace=/path/to/workspace   # Claude Code
+./run.sh login codex  --workspace=/path/to/workspace   # Codex CLI
+./run.sh login gemini --workspace=/path/to/workspace   # Gemini CLI
+
+# Windows
+.\run.ps1 login claude --workspace=D:\workspace
+```
+
+> **Why is this needed?** CLI agents (Claude Code, Codex, Gemini) run as separate processes inside the container with isolated credential storage. The container mounts `{workspace}/.agents` as the agent home directory — not your local `~/.claude` or `~/.codex`.
+
+After login, verify authentication status via the dashboard → **Providers** page, or check the startup log for:
+```
+cli-auth claude authenticated=true
+```
+
+> **SDK backends** (`claude_sdk`, `codex_appserver`) use API keys entered in Step 3 — no separate login needed.
+
 ### Step 4: Verify it works
 
 Type the following in any chat channel:
@@ -236,6 +261,8 @@ node dist/main.js
 | SDK backend fails | Check log for `backend_fallback` (auto-fallback to CLI) |
 | Container won't start | Verify Docker/Podman daemon is running, check `run.sh logs` |
 | Agent login fails | Re-run `./run.sh login claude --workspace=...` |
+| `cli-auth ... authenticated=false` in logs | Run `./run.sh login <agent> --workspace=...` (see Step 3.5) |
+| CLI agent not responding after setup | Confirm `{workspace}/.agents/.claude` (or `.codex`) exists; login was done with correct workspace path |
 
 ## Next Steps
 

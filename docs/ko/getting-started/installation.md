@@ -57,6 +57,31 @@ http://localhost:4200
 
 `.env` 파일 없이 Wizard 하나로 모든 설정을 완료할 수 있습니다.
 
+### 3.5단계: CLI 에이전트 로그인 (CLI 백엔드 사용 시 필수)
+
+Wizard에서 CLI 기반 에이전트 백엔드(`claude_cli`, `codex_cli`, `gemini_cli`)를 선택한 경우, 사용 전 CLI 에이전트 인증이 필요합니다.
+
+CLI 에이전트 인증 정보는 시스템 루트(`~/.claude` 등)가 아닌 **`{workspace}/.agents/`** 경로에 저장됩니다. `run.sh login` 명령이 이 경로에 인증 파일을 씁니다:
+
+```bash
+# Linux/macOS
+./run.sh login claude --workspace=/path/to/workspace   # Claude Code
+./run.sh login codex  --workspace=/path/to/workspace   # Codex CLI
+./run.sh login gemini --workspace=/path/to/workspace   # Gemini CLI
+
+# Windows
+.\run.ps1 login claude --workspace=D:\workspace
+```
+
+> **왜 별도 로그인이 필요한가?** CLI 에이전트는 컨테이너 내부에서 격리된 인증 저장소로 별도 프로세스로 실행됩니다. 컨테이너는 로컬 `~/.claude`가 아닌 `{workspace}/.agents`를 에이전트 홈으로 마운트합니다.
+
+로그인 후 대시보드 → **Providers** 페이지에서 인증 상태를 확인하거나, 시작 로그에서 다음을 확인하세요:
+```
+cli-auth claude authenticated=true
+```
+
+> **SDK 백엔드**(`claude_sdk`, `codex_appserver`)는 3단계에서 입력한 API 키를 사용하므로 별도 로그인이 필요하지 않습니다.
+
 ### 4단계: 동작 확인
 
 채팅 채널에서 다음을 입력해 검증합니다:
@@ -236,6 +261,8 @@ node dist/main.js
 | SDK 백엔드 실패 | 로그에서 `backend_fallback` 확인 (자동으로 CLI로 전환됨) |
 | 컨테이너 시작 실패 | Docker/Podman 데몬 실행 확인, `run.sh logs` 확인 |
 | 에이전트 로그인 실패 | `./run.sh login claude --workspace=...` 재실행 |
+| 로그에 `cli-auth ... authenticated=false` | `./run.sh login <agent> --workspace=...` 실행 (3.5단계 참조) |
+| CLI 에이전트가 설정 후에도 응답하지 않음 | `{workspace}/.agents/.claude` (또는 `.codex`) 존재 여부 확인; 올바른 workspace 경로로 로그인했는지 확인 |
 
 ## 다음 단계
 
