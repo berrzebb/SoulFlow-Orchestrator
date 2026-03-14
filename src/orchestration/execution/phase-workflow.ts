@@ -9,6 +9,7 @@ import type { HitlPendingStore } from "../hitl-pending-store.js";
 import { NOOP_OBSERVABILITY, type ObservabilityLike } from "../../observability/context.js";
 import { error_result } from "./helpers.js";
 import { now_iso, error_message, short_id } from "../../utils/common.js";
+import { normalize_json_text } from "../output-contracts.js";
 
 export type PhaseWorkflowDeps = {
   providers: ProviderRegistry;
@@ -241,7 +242,7 @@ async function generate_dynamic_workflow(
     const response = llm_response?.content;
     if (!response) return null;
 
-    const json_match = response.match(/\{[\s\S]*"phases"[\s\S]*\}/);
+    const json_match = normalize_json_text(response).match(/\{[\s\S]*"phases"[\s\S]*\}/);
     if (!json_match) return null;
 
     const raw = JSON.parse(json_match[0]) as Record<string, unknown>;

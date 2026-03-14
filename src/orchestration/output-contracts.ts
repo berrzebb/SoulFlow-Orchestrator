@@ -1,8 +1,9 @@
 /**
- * SO-1 + SO-2: Output Contract Inventory + Shared Result Contracts.
+ * SO-1 + SO-2 + SO-6: Output Contract Inventory + Shared Result Contracts + Schema Binding.
  *
  * 오케스트레이션 파이프라인의 모든 결과 계약을 단일 진입점에서 관리.
  * 새 결과 타입 추가 시 OutputContractMap에 등록하여 인벤토리 일관성 유지.
+ * SO-6: schema-validator/schema-repair-loop를 단일 진입점으로 re-export.
  */
 
 import type { OrchestrationResult } from "./types.js";
@@ -56,6 +57,8 @@ export function make_error_result(error: string): ContentResult {
  *   OrchestrationService → OrchestrationResult
  *     ↓
  *   Gateway → ResultEnvelope (delivery 관심사)
+ *
+ * SchemaChain (SO-4+SO-5): validate/repair 계약은 하단 re-export 참조.
  */
 export type OutputContractMap = {
   ContentResult: ContentResult;
@@ -74,3 +77,9 @@ export type { ResultEnvelope, CostTier, ReplyChannelRef } from "./gateway-contra
 export type { AgentRunResult, AgentFinishReason } from "../agent/agent.types.js";
 export type { InvokeLlmResult } from "../agent/node-registry.js";
 export type { OrcheNodeExecuteResult } from "../agent/orche-node-executor.js";
+
+// SO-6: SchemaChain 단일 진입점 — gateway/runtime/workflow가 직접 import 불필요.
+export type { SchemaValidationError } from "./schema-validator.js";
+export { normalize_json_text, validate_schema, validate_json_output } from "./schema-validator.js";
+export type { SchemaRepairResult } from "./schema-repair-loop.js";
+export { run_schema_repair, DEFAULT_MAX_REPAIR_ATTEMPTS, format_repair_prompt } from "./schema-repair-loop.js";
