@@ -52,6 +52,7 @@
 - `src/orchestration/tool-call-handler.ts` (수정) — E3: reducer 주입 + 3-projection 분리
 - `tests/orchestration/tool-output-reducer.test.ts` (신규) — E1 테스트 31개
 - `tests/agent/pty/pty-output-reducer.test.ts` (신규) — E2 테스트 14개
+- `tests/orchestration/tool-call-handler.test.ts` (수정) — E3 reducer 주입 경로 테스트 4개 추가 + 기존 미사용 import/파라미터 정리
 
 ### GPT 반려 해소
 
