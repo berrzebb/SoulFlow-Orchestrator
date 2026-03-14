@@ -18,3 +18,5 @@ export type { GuardrailEvalInput } from "./guardrail-executor.js";
 export { create_guardrail_executor } from "./guardrail-executor.js";
 export type { TokenizerEvalInput } from "./tokenizer-executor.js";
 export { create_tokenizer_executor } from "./tokenizer-executor.js";
+export type { GatewayEvalInput } from "./gateway-executor.js";
+export { create_gateway_executor } from "./gateway-executor.js";

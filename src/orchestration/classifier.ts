@@ -268,6 +268,19 @@ export function fast_classify(task: string, ctx: ClassifierContext): Classificat
   return history_tools ? { mode, tools: history_tools } : { mode };
 }
 
+// ── GW-2: 비용 기반 실행 경로 분류 ────────────────────────────────────────────
+
+import type { CostTier } from "./gateway-contracts.js";
+
+/** ClassificationResult → CostTier 매핑. LLM 호출 없음. */
+export function classify_cost_tier(result: ClassificationResult): CostTier {
+  if (result.mode === "identity" || result.mode === "builtin" || result.mode === "inquiry") {
+    return "no_token";
+  }
+  if (result.mode === "once") return "model_direct";
+  return "agent_required";
+}
+
 // ── 이하 호환성 유지 (에스컬레이션 판별) ────────────────────────────────────
 
 /** @internal — exported for unit testing. */

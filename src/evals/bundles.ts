@@ -114,3 +114,11 @@ register_bundle({
   smoke: true,
   tags: ["smoke"],
 });
+
+register_bundle({
+  name: "gateway",
+  description: "GW-2: gateway 분류 + 비용 라우팅 + ingress 정규화 회귀 평가",
+  dataset_files: ["tests/evals/cases/gateway.json"],
+  smoke: true,
+  tags: ["smoke"],
+});

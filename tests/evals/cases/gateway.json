@@ -1,0 +1,90 @@
+{
+  "name": "gateway",
+  "description": "GW-2: gateway 분류 + 비용 기반 라우팅 + ingress 정규화 회귀 평가",
+  "cases": [
+    {
+      "id": "gw-classify-identity",
+      "input": "{\"type\":\"classify\",\"text\":\"너 누구야\"}",
+      "expected": "identity",
+      "tags": ["smoke", "classify"]
+    },
+    {
+      "id": "gw-classify-builtin",
+      "input": "{\"type\":\"classify\",\"text\":\"/help\"}",
+      "expected": "builtin",
+      "tags": ["smoke", "classify"]
+    },
+    {
+      "id": "gw-classify-once",
+      "input": "{\"type\":\"classify\",\"text\":\"오늘 날씨 알려줘\"}",
+      "expected": "once",
+      "tags": ["smoke", "classify"]
+    },
+    {
+      "id": "gw-classify-agent",
+      "input": "{\"type\":\"classify\",\"text\":\"이 파일을 분석하고 보고서를 작성해줘\"}",
+      "expected": "agent",
+      "tags": ["smoke", "classify"]
+    },
+    {
+      "id": "gw-cost-identity",
+      "input": "{\"type\":\"cost_tier\",\"text\":\"너 누구야\"}",
+      "expected": "no_token",
+      "tags": ["smoke", "cost_tier"]
+    },
+    {
+      "id": "gw-cost-builtin",
+      "input": "{\"type\":\"cost_tier\",\"text\":\"/help\"}",
+      "expected": "no_token",
+      "tags": ["smoke", "cost_tier"]
+    },
+    {
+      "id": "gw-cost-once",
+      "input": "{\"type\":\"cost_tier\",\"text\":\"오늘 날씨 알려줘\"}",
+      "expected": "model_direct",
+      "tags": ["smoke", "cost_tier"]
+    },
+    {
+      "id": "gw-cost-agent",
+      "input": "{\"type\":\"cost_tier\",\"text\":\"이 파일을 분석하고 보고서를 작성해줘\"}",
+      "expected": "agent_required",
+      "tags": ["smoke", "cost_tier"]
+    },
+    {
+      "id": "gw-normalize-slack-mention",
+      "input": "{\"type\":\"normalize\",\"text\":\"<@U12345> 안녕하세요\",\"provider\":\"slack\"}",
+      "expected": "안녕하세요",
+      "tags": ["smoke", "normalize"]
+    },
+    {
+      "id": "gw-normalize-telegram-cmd",
+      "input": "{\"type\":\"normalize\",\"text\":\"/start@mybot\",\"provider\":\"telegram\"}",
+      "expected": "/start",
+      "tags": ["smoke", "normalize"]
+    },
+    {
+      "id": "gw-normalize-web-passthrough",
+      "input": "{\"type\":\"normalize\",\"text\":\"hello world\",\"provider\":\"web\"}",
+      "expected": "hello world",
+      "tags": ["smoke", "normalize"]
+    },
+    {
+      "id": "gw-classify-task",
+      "input": "{\"type\":\"classify\",\"text\":\"백그라운드에서 전체 테스트를 돌려줘\"}",
+      "expected": "task",
+      "tags": ["full", "classify"]
+    },
+    {
+      "id": "gw-cost-task",
+      "input": "{\"type\":\"cost_tier\",\"text\":\"백그라운드에서 전체 테스트를 돌려줘\"}",
+      "expected": "agent_required",
+      "tags": ["full", "cost_tier"]
+    },
+    {
+      "id": "gw-normalize-slack-no-mention",
+      "input": "{\"type\":\"normalize\",\"text\":\"그냥 메시지\",\"provider\":\"slack\"}",
+      "expected": "그냥 메시지",
+      "tags": ["full", "normalize"]
+    }
+  ]
+}

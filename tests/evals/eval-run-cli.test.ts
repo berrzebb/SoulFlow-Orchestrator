@@ -149,6 +149,7 @@ describe("eval-run CLI — bundles", () => {
     expect(stdout).toContain("routing");
     expect(stdout).toContain("safety");
     expect(stdout).toContain("tokenizer");
+    expect(stdout).toContain("gateway");
   });
 
   it("--full → 모든 번들 실행", () => {
@@ -185,6 +186,14 @@ describe("eval-run CLI — bundles", () => {
     expect(stdout).toContain("Running: guardrails");
     // bundle tags=["smoke"] → smoke 태그 케이스만 필터 (4/8)
     expect(stdout).toContain("Passed: 4");
+    expect(stdout).toContain("Failed: 0");
+  });
+
+  it("--bundle gateway --scorer exact --threshold 100 → 전체 통과", () => {
+    const { stdout } = run("--bundle gateway --scorer exact --threshold 100");
+    expect(stdout).toContain("Running: gateway");
+    // bundle tags=["smoke"] → smoke 태그 케이스만 필터 (11/14)
+    expect(stdout).toContain("Passed: 11");
     expect(stdout).toContain("Failed: 0");
   });
 
