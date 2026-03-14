@@ -269,21 +269,8 @@ ${scopeText}
   - 반려 코드
   - 핵심 근거 3~5줄
   - 완료 기준 재고정
-  - 개선된 프로토콜
   - 다음 작업
-
-개선된 프로토콜 작성 규칙:
-- 현재 \`docs/feedback/gpt.md\`에 \`## 개선된 프로토콜\` 섹션이 있으면 삭제하지 말고 유지하거나 짧게 갱신하세요.
-- 이 섹션에는 아래 운영 규칙만 간단히 유지하세요:
-  - Claude는 \`builder\`, GPT는 \`auditor\`
-  - Claude 보고는 \`claim\`, \`changed files\`, \`test command\`, \`test result\`, \`residual risk\` 5칸 증거 팩
-  - 어떤 작업이든 Claude는 돌아오기 전에 repo-appropriate \`lint\`를 반드시 통과시키고, \`test command\`에 그 명령을 남긴다
-  - \`lint\` 미실행 또는 실패는 \`lint-gap\`으로 계류한다
-  - 감사 피드백은 항상 \`SOLID\`, \`YAGNI\`, \`DRY\`, \`KISS\`, \`LoD\` 5원칙 위반을 현재 범위 안에서 함께 본다
-  - 구조적 5원칙 위반은 \`principle-drift\`로 계류한다
-  - GPT 판정은 \`[합의완료]\`, \`[계류]\`, \`[GPT미검증]\`과 반려 코드 사용
-  - 범위 밖 주장은 \`scope-mismatch\`로 분리
-  - 현재 범위가 모두 \`[합의완료]\`이면 다음 작업은 improved 승격 문서에서 가져옴
+- \`## 개선된 프로토콜\` 섹션이 있으면 삭제하고 다시 만들지 마세요.
 
 다음 작업 작성 규칙:
 - \`## 다음 작업\`은 반드시 비워두지 마세요.

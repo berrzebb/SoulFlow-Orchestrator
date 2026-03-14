@@ -14,8 +14,8 @@
 - `[합의완료]` 저장소 전체 멀티테넌트 closeout
 - `[합의완료]` OB-8 Optional Exporter Ports
 - `[합의완료]` EV-1 + EV-2 Evaluation Pipeline
-
 - `[합의완료]` EV-3 + EV-4 Judge / Scorer Split + Run Report
+
 ## OB-8 Optional Exporter Ports `[합의완료]`
 
 ### 증거 팩 1: TraceExporter / MetricsExporter 인터페이스 + no-op 어댑터 + bootstrap wiring
@@ -136,4 +136,3 @@
 
 - `claim-drift` 해소: `scripts/eval-run.mjs`(동적 `await import("../src/evals/*.js")`) → `scripts/eval-run.ts`(정적 TypeScript import)로 변환. `tsx` 런타임에서 `.js` 확장자가 Node16 moduleResolution으로 `.ts`에 매핑되어 런타임 모듈 로드 성공. `npx tsx scripts/eval-run.ts <dataset-dir>` 실행 검증 완료.
 - `test-gap` 해소: `tests/evals/eval-run-cli.test.ts` 10 테스트 추가. `execSync`로 `npx tsx scripts/eval-run.ts` 서브프로세스 스폰, 임시 디렉토리에 테스트 데이터셋 JSON 생성 후 모든 CLI 옵션 (--help, --output, --baseline, --save-baseline, --markdown, --scorer, --tags) 검증.
-
