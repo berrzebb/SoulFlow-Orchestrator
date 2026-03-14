@@ -1,6 +1,6 @@
 ## 감사 범위
 
-- `E1 + E2 + E3 — ToolOutputReducer + PtyOutputReducer + prompt/display/storage projection split [GPT미검증 → 합의완료]`
+- `E1 + E2 + E3 — ToolOutputReducer + PtyOutputReducer + prompt/display/storage projection split [합의완료]`
 - 기존 `[합의완료]` 트랙은 재판정하지 않고 유지
 
 ## 독립 검증 결과
@@ -32,4 +32,4 @@
 
 ## 다음 작업
 
-- `Provider-Neutral Output Reduction / Bundle E1 / E1 + E2 + E3 — ToolOutputReducer, PtyOutputReducer, prompt/display/storage projection split를 고정`
+- `Provider-Neutral Output Reduction / Bundle E2 / E4 + E5 — noisy output memory policy와 reducer regression/KPI를 닫기`

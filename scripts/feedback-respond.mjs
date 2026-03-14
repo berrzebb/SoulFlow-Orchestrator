@@ -470,6 +470,13 @@ function collectIdsFromLine(line) {
     ids.add(`${idMatch[1]}-${idMatch[2]}`);
   }
 
+  // 단일 문자 접두사 ID: E1, E2, F3, G1 등 (dash 없이 숫자 직결)
+  const singleRe = /\b([A-Z])(\d{1,2})\b/g;
+  let singleMatch;
+  while ((singleMatch = singleRe.exec(line)) !== null) {
+    ids.add(`${singleMatch[1]}${singleMatch[2]}`);
+  }
+
   return [...ids];
 }
 
