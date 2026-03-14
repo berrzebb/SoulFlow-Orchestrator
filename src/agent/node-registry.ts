@@ -8,6 +8,7 @@ import type { OrcheNodeDefinition } from "./workflow-node.types.js";
 import type { OrcheNodeExecutorContext, OrcheNodeExecuteResult, OrcheNodeTestResult } from "./orche-node-executor.js";
 import type { PhaseLoopState, PhaseLoopRunOptions, PhaseLoopEvent } from "./phase-loop.types.js";
 import type { Logger } from "../logger.js";
+import type { ParsedContentResult } from "../orchestration/output-contracts.js";
 
 /** LLM 단일 호출 옵션. */
 export interface InvokeLlmOptions {
@@ -21,10 +22,9 @@ export interface InvokeLlmOptions {
   abort_signal?: AbortSignal;
 }
 
-/** LLM 호출 결과. */
-export interface InvokeLlmResult {
+/** LLM 호출 결과. ParsedContentResult 확장 — content는 string으로 좁힘 (LLM은 항상 문자열 반환). */
+export interface InvokeLlmResult extends ParsedContentResult {
   content: string;
-  parsed?: unknown;
   usage?: Record<string, number>;
 }
 

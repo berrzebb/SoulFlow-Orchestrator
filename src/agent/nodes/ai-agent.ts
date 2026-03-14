@@ -5,6 +5,7 @@ import type { AiAgentNodeDefinition, OrcheNodeDefinition } from "../workflow-nod
 import type { OrcheNodeExecutorContext, OrcheNodeExecuteResult, OrcheNodeTestResult } from "../orche-node-executor.js";
 import { resolve_templates } from "../orche-node-executor.js";
 import { error_message } from "../../utils/common.js";
+import { parse_output } from "../../orchestration/output-parser-registry.js";
 
 export const ai_agent_handler: NodeHandler = {
   node_type: "ai_agent",
@@ -79,10 +80,7 @@ export const ai_agent_handler: NodeHandler = {
       const completion = await wait(agent_id, (n.max_turns ?? 10) * 30_000);
       const result_text = completion.result ?? completion.error ?? "";
 
-      let parsed: unknown = null;
-      if (n.output_json_schema && result_text) {
-        try { parsed = JSON.parse(result_text); } catch { /* not JSON */ }
-      }
+      const parsed = (n.output_json_schema && result_text) ? parse_output("json", result_text) ?? null : null;
 
       return {
         output: {

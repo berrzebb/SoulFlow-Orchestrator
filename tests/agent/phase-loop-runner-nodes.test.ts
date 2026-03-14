@@ -95,6 +95,128 @@ describe("run_phase_loop — L1172 invoke_llm system prompt 포함", () => {
 });
 
 // ══════════════════════════════════════════════════════════
+// SO-3 — invoke_llm parse_output("json", ...) 경로 검증
+// ══════════════════════════════════════════════════════════
+
+describe("run_phase_loop — invoke_llm JSON parsing via parse_output", () => {
+  it("output_json_schema 지정 + 유효 JSON 응답 → parsed 필드에 파싱 결과 포함", async () => {
+    const store = make_store();
+    const subagents = make_subagents();
+    const run_headless = vi.fn().mockResolvedValue({
+      content: '{"category":"positive","score":0.95}',
+      usage: { prompt_tokens: 10, completion_tokens: 20 },
+    });
+    const providers = { run_headless } as any;
+
+    const result = await run_phase_loop({
+      workflow_id: "wf-llm-json",
+      title: "LLM JSON Parse WF",
+      objective: "test parse_output json path",
+      channel: "slack",
+      chat_id: "C1",
+      workspace: "/tmp/nodes",
+      phases: [],
+      nodes: [
+        {
+          node_id: "llm_json",
+          node_type: "llm",
+          title: "LLM with schema",
+          backend: "openrouter",
+          prompt_template: "Classify this text",
+          output_json_schema: { type: "object", properties: { category: { type: "string" }, score: { type: "number" } } },
+        } as any,
+      ],
+    }, {
+      subagents: subagents as any,
+      store: store as any,
+      logger: noop_logger,
+      providers,
+    });
+
+    expect(result.status).toBe("completed");
+    const output = result.memory["llm_json"] as Record<string, unknown>;
+    expect(output.parsed).toEqual({ category: "positive", score: 0.95 });
+  });
+
+  it("output_json_schema 지정 + 비JSON 응답 → parsed는 null", async () => {
+    const store = make_store();
+    const subagents = make_subagents();
+    const run_headless = vi.fn().mockResolvedValue({
+      content: "This is not JSON at all",
+      usage: {},
+    });
+    const providers = { run_headless } as any;
+
+    const result = await run_phase_loop({
+      workflow_id: "wf-llm-nojson",
+      title: "LLM Non-JSON Parse WF",
+      objective: "test parse_output json fallback",
+      channel: "slack",
+      chat_id: "C1",
+      workspace: "/tmp/nodes",
+      phases: [],
+      nodes: [
+        {
+          node_id: "llm_nojson",
+          node_type: "llm",
+          title: "LLM with schema but non-JSON response",
+          backend: "openrouter",
+          prompt_template: "Generate something",
+          output_json_schema: { type: "object" },
+        } as any,
+      ],
+    }, {
+      subagents: subagents as any,
+      store: store as any,
+      logger: noop_logger,
+      providers,
+    });
+
+    expect(result.status).toBe("completed");
+    const output = result.memory["llm_nojson"] as Record<string, unknown>;
+    expect(output.parsed).toBeNull();
+  });
+
+  it("output_json_schema 미지정 → parsed는 null (파싱 스킵)", async () => {
+    const store = make_store();
+    const subagents = make_subagents();
+    const run_headless = vi.fn().mockResolvedValue({
+      content: '{"valid":"json"}',
+      usage: {},
+    });
+    const providers = { run_headless } as any;
+
+    const result = await run_phase_loop({
+      workflow_id: "wf-llm-noschema",
+      title: "LLM No Schema WF",
+      objective: "test no schema → no parsing",
+      channel: "slack",
+      chat_id: "C1",
+      workspace: "/tmp/nodes",
+      phases: [],
+      nodes: [
+        {
+          node_id: "llm_plain",
+          node_type: "llm",
+          title: "LLM without schema",
+          backend: "openrouter",
+          prompt_template: "Just respond",
+        } as any,
+      ],
+    }, {
+      subagents: subagents as any,
+      store: store as any,
+      logger: noop_logger,
+      providers,
+    });
+
+    expect(result.status).toBe("completed");
+    const output = result.memory["llm_plain"] as Record<string, unknown>;
+    expect(output.parsed).toBeNull();
+  });
+});
+
+// ══════════════════════════════════════════════════════════
 // L1199, L1204 — spawn_agent lambda body (await=false)
 // L1206 — wait_agent lambda body (await=true)
 // ══════════════════════════════════════════════════════════

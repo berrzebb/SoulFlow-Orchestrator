@@ -31,6 +31,7 @@ import {
 import { execute_orche_node, apply_preset } from "./orche-node-executor.js";
 import { get_node_handler, type RunnerContext } from "./node-registry.js";
 import { resolve_executor_provider } from "../providers/executor.js";
+import { parse_output } from "../orchestration/output-parser-registry.js";
 import {
   create_worktree,
   create_isolated_directory,
@@ -1194,10 +1195,7 @@ function build_runner_services(
         abort_signal: opts.abort_signal,
       });
       const content = result.content || "";
-      let parsed: unknown = undefined;
-      if (opts.output_json_schema && content) {
-        try { parsed = JSON.parse(content); } catch { /* not JSON */ }
-      }
+      const parsed = (opts.output_json_schema && content) ? parse_output("json", content) ?? undefined : undefined;
       return { content, parsed, usage: result.usage as Record<string, number> | undefined };
     };
   }
