@@ -5,6 +5,7 @@
  */
 
 import type { RiskTier } from "./risk-tier.js";
+import { match_glob } from "./_glob.js";
 
 export type ApprovalDecision = "auto_allow" | "ask_user" | "blocked";
 
@@ -27,30 +28,6 @@ export const DEFAULT_APPROVAL_POLICY: ApprovalPolicy = {
   manual_overrides: [],
 };
 
-// glob 패턴 매칭: "**/" = 선택적 경로 접두사, "**" = 임의 문자, "*" = 슬래시 제외 임의 문자
-function match_override(path: string, pattern: string): boolean {
-  const escaped = pattern.replace(/[.+^${}()|[\]\\]/g, "\\$&");
-  let i = 0;
-  let re = "";
-  while (i < escaped.length) {
-    if (escaped[i] === "*" && escaped[i + 1] === "*") {
-      if (escaped[i + 2] === "/") {
-        re += "(.*/)?";
-        i += 3;
-      } else {
-        re += ".*";
-        i += 2;
-      }
-    } else if (escaped[i] === "*") {
-      re += "[^/]*";
-      i++;
-    } else {
-      re += escaped[i++];
-    }
-  }
-  return new RegExp("^" + re + "$").test(path);
-}
-
 /**
  * 위험 등급과 경로를 기반으로 승인 결정.
  * path가 제공되면 manual_overrides를 먼저 평가한다.
@@ -63,7 +40,7 @@ export function evaluate_approval(
 ): ApprovalDecision {
   if (path) {
     for (const override of policy.manual_overrides) {
-      if (match_override(path, override.path_pattern)) {
+      if (match_glob(override.path_pattern, path)) {
         return override.decision;
       }
     }
