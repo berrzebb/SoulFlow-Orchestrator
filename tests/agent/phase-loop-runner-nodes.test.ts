@@ -217,6 +217,135 @@ describe("run_phase_loop — invoke_llm JSON parsing via parse_output", () => {
 });
 
 // ══════════════════════════════════════════════════════════
+// SO-5 — invoke_llm schema repair loop 통합 검증
+// ══════════════════════════════════════════════════════════
+
+describe("run_phase_loop — invoke_llm schema repair loop", () => {
+  it("invalid initial → repair retry로 run_headless 재호출 (총 3회: 초기 + 2 repair)", async () => {
+    const store = make_store();
+    const subagents = make_subagents();
+    const run_headless = vi.fn()
+      .mockResolvedValueOnce({ content: '{"oops": true}', usage: {} })
+      .mockResolvedValueOnce({ content: '{"still": "wrong"}', usage: {} })
+      .mockResolvedValueOnce({ content: '{"name": "Fixed", "score": 1}', usage: {} });
+    const providers = { run_headless } as any;
+
+    const result = await run_phase_loop({
+      workflow_id: "wf-repair",
+      title: "Repair Loop WF",
+      objective: "test schema repair retry",
+      channel: "slack",
+      chat_id: "C1",
+      workspace: "/tmp/nodes",
+      phases: [],
+      nodes: [
+        {
+          node_id: "llm_repair",
+          node_type: "llm",
+          title: "LLM with repair",
+          backend: "openrouter",
+          prompt_template: "Generate structured output",
+          output_json_schema: { type: "object", properties: { name: { type: "string" }, score: { type: "number" } }, required: ["name", "score"] },
+        } as any,
+      ],
+    }, {
+      subagents: subagents as any,
+      store: store as any,
+      logger: noop_logger,
+      providers,
+    });
+
+    expect(result.status).toBe("completed");
+    const output = result.memory["llm_repair"] as Record<string, unknown>;
+    expect(output.parsed).toEqual({ name: "Fixed", score: 1 });
+    expect(run_headless).toHaveBeenCalledTimes(3);
+  });
+
+  it("repair 소진 시 최대 DEFAULT_MAX_REPAIR_ATTEMPTS(2)에서 중단", async () => {
+    const store = make_store();
+    const subagents = make_subagents();
+    const run_headless = vi.fn().mockResolvedValue({
+      content: '{"always": "invalid"}',
+      usage: {},
+    });
+    const providers = { run_headless } as any;
+
+    const result = await run_phase_loop({
+      workflow_id: "wf-repair-exhaust",
+      title: "Repair Exhaust WF",
+      objective: "test repair bounding",
+      channel: "slack",
+      chat_id: "C1",
+      workspace: "/tmp/nodes",
+      phases: [],
+      nodes: [
+        {
+          node_id: "llm_exhaust",
+          node_type: "llm",
+          title: "LLM with exhausted repair",
+          backend: "openrouter",
+          prompt_template: "Generate structured output",
+          output_json_schema: { type: "object", properties: { name: { type: "string" } }, required: ["name"] },
+        } as any,
+      ],
+    }, {
+      subagents: subagents as any,
+      store: store as any,
+      logger: noop_logger,
+      providers,
+    });
+
+    expect(result.status).toBe("completed");
+    expect(run_headless).toHaveBeenCalledTimes(3);
+    const output = result.memory["llm_exhaust"] as Record<string, unknown>;
+    expect(output.parsed).toEqual({ always: "invalid" });
+  });
+
+  it("repair retry 메시지에 assistant + error feedback 포함", async () => {
+    const store = make_store();
+    const subagents = make_subagents();
+    const run_headless = vi.fn()
+      .mockResolvedValueOnce({ content: '{"bad": true}', usage: {} })
+      .mockResolvedValueOnce({ content: '{"name": "OK"}', usage: {} });
+    const providers = { run_headless } as any;
+
+    await run_phase_loop({
+      workflow_id: "wf-repair-msg",
+      title: "Repair Message WF",
+      objective: "test repair prompt structure",
+      channel: "slack",
+      chat_id: "C1",
+      workspace: "/tmp/nodes",
+      phases: [],
+      nodes: [
+        {
+          node_id: "llm_msg",
+          node_type: "llm",
+          title: "LLM repair message check",
+          backend: "openrouter",
+          prompt_template: "Generate output",
+          output_json_schema: { type: "object", properties: { name: { type: "string" } }, required: ["name"] },
+        } as any,
+      ],
+    }, {
+      subagents: subagents as any,
+      store: store as any,
+      logger: noop_logger,
+      providers,
+    });
+
+    const retry_call = run_headless.mock.calls[1][0];
+    const messages = retry_call.messages as Array<{ role: string; content: string }>;
+    const assistant_msg = messages.find((m: { role: string }) => m.role === "assistant");
+    const repair_msg = messages[messages.length - 1];
+    expect(assistant_msg).toBeDefined();
+    expect(assistant_msg!.content).toBe('{"bad": true}');
+    expect(repair_msg.role).toBe("user");
+    expect(repair_msg.content).toContain("schema validation errors");
+  });
+});
+
+// ══════════════════════════════════════════════════════════
 // L1199, L1204 — spawn_agent lambda body (await=false)
 // L1206 — wait_agent lambda body (await=true)
 // ══════════════════════════════════════════════════════════
