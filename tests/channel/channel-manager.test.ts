@@ -9,7 +9,7 @@ import { describe, it, expect, vi } from "vitest";
 import {
   create_harness, inbound,
   create_noop_logger, FakeChannelRegistry, FakeDispatchService,
-  FakeApprovalService, FakeTaskResumeService, create_test_channel_config,
+  create_test_channel_config,
   FakeOrchestrationService,
 } from "@helpers/harness.ts";
 import { MessageBus } from "@src/bus/service.ts";
@@ -17,7 +17,7 @@ import { ChannelManager } from "@src/channels/manager.ts";
 import { CommandRouter } from "@src/channels/commands/router.ts";
 import { SessionRecorder } from "@src/channels/session-recorder.ts";
 import { MediaCollector } from "@src/channels/media-collector.ts";
-import type { ChannelRegistryLike, InboundMessage } from "@src/channels/types.ts";
+import type { ChannelRegistryLike } from "@src/channels/types.ts";
 import type { DispatchService } from "@src/channels/dispatch.service.ts";
 import type { OrchestrationService } from "@src/orchestration/service.ts";
 import type { TaskResumeService } from "@src/channels/task-resume.service.ts";
@@ -39,7 +39,7 @@ class ExtendedFakeTaskResume {
 
   constructor(stale: any[] = []) { this.stale = stale; }
 
-  async try_resume(_provider: string, _message: unknown) { return this.try_resume_result; }
+  async try_resume() { return this.try_resume_result; }
   async resume_after_approval(task_id: string, tool_result: string): Promise<boolean> {
     this.resume_spy(task_id, tool_result);
     return this.resume_result;
@@ -60,7 +60,7 @@ class ExtendedFakeApproval {
   reply: ApprovalResult = { handled: false };
   async try_handle_text_reply(): Promise<ApprovalResult> { return this.reply; }
   async try_handle_approval_reactions(): Promise<{ handled: boolean }> { return { handled: false }; }
-  prune_seen(_ttl?: number, _max?: number): void {}
+  prune_seen(): void {}
 }
 
 // ──────────────────────────────────────────────────
@@ -343,7 +343,7 @@ describe("ChannelManager — approval text reply 분기", () => {
       task_resume.resume_result = true;
       const approval = new ExtendedFakeApproval();
       approval.reply = { handled: true, task_id: "t1", tool_result: "ok" };
-      const { manager, registry } = await make_manager({ workspace: ws, task_resume, approval });
+      const { manager } = await make_manager({ workspace: ws, task_resume, approval });
       await manager.handle_inbound_message(inbound("yes", { provider: "telegram" }));
       expect(task_resume.resume_spy).toHaveBeenCalledWith("t1", "ok");
     } finally { await rm(ws, { recursive: true, force: true }); }

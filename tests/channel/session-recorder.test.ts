@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { SessionRecorder } from "@src/channels/session-recorder.js";
 import type { InboundMessage } from "@src/bus/types.js";
 
@@ -443,5 +443,108 @@ describe("SessionRecorder — record_user metadata", () => {
     const recorder = make_recorder_cov({ sessions });
     await recorder.record_user("slack", make_message_cov(), "assistant");
     expect(sessions.append_message).toHaveBeenCalledOnce();
+  });
+});
+
+// ══════════════════════════════════════════════════════════
+// is_delivery_retry — Slack webhook retry 감지
+// ══════════════════════════════════════════════════════════
+
+describe("SessionRecorder — is_delivery_retry", () => {
+  const LARGE_WINDOW = 60_000; // 테스트에서 "항상 recent" 처리
+
+  it("sessions=null → false", async () => {
+    const recorder = make_recorder_cov({ sessions: null });
+    const result = await recorder.is_delivery_retry("slack", make_message_cov({ content: "Q" }), "bot");
+    expect(result).toBe(false);
+  });
+
+  it("메시지 < 2개 → false", async () => {
+    const sessions = make_sessions_cov([
+      { role: "assistant", content: "A", timestamp: new Date().toISOString() },
+    ]);
+    const recorder = make_recorder_cov({ sessions });
+    const result = await recorder.is_delivery_retry("slack", make_message_cov({ content: "Q" }), "bot");
+    expect(result).toBe(false);
+  });
+
+  it("incoming content 없음 → false", async () => {
+    const sessions = make_sessions_cov([
+      { role: "user", content: "Q", timestamp: new Date().toISOString() },
+      { role: "assistant", content: "A", timestamp: new Date().toISOString() },
+    ]);
+    const recorder = make_recorder_cov({ sessions });
+    const result = await recorder.is_delivery_retry("slack", make_message_cov({ content: "" }), "bot");
+    expect(result).toBe(false);
+  });
+
+  it("user:Q → assistant:A(recent) → user:Q(incoming) → true (retry 감지)", async () => {
+    const sessions = make_sessions_cov([
+      { role: "user", content: "hello", timestamp: new Date(Date.now() - 5_000).toISOString() },
+      { role: "assistant", content: "hi there", timestamp: new Date().toISOString() },
+    ]);
+    const recorder = make_recorder_cov({ sessions });
+    const result = await recorder.is_delivery_retry(
+      "slack",
+      make_message_cov({ content: "hello" }),
+      "bot",
+      LARGE_WINDOW,
+    );
+    expect(result).toBe(true);
+  });
+
+  it("user:Q → assistant:A(too old, within_ms=0) → user:Q → false (너무 오래됨)", async () => {
+    const sessions = make_sessions_cov([
+      { role: "user", content: "hello", timestamp: new Date(Date.now() - 5_000).toISOString() },
+      { role: "assistant", content: "hi there", timestamp: new Date(Date.now() - 100).toISOString() },
+    ]);
+    const recorder = make_recorder_cov({ sessions });
+    const result = await recorder.is_delivery_retry(
+      "slack",
+      make_message_cov({ content: "hello" }),
+      "bot",
+      0, // within_ms=0 → 모든 응답이 "오래됨"으로 처리
+    );
+    expect(result).toBe(false);
+  });
+
+  it("user:Q → assistant:A(recent) → user:Q2 (내용 다름) → false", async () => {
+    const sessions = make_sessions_cov([
+      { role: "user", content: "original question", timestamp: new Date(Date.now() - 5_000).toISOString() },
+      { role: "assistant", content: "answer", timestamp: new Date().toISOString() },
+    ]);
+    const recorder = make_recorder_cov({ sessions });
+    const result = await recorder.is_delivery_retry(
+      "slack",
+      make_message_cov({ content: "different question" }),
+      "bot",
+      LARGE_WINDOW,
+    );
+    expect(result).toBe(false);
+  });
+
+  it("마지막 메시지가 user인 경우 → false (assistant 없음)", async () => {
+    const sessions = make_sessions_cov([
+      { role: "user", content: "Q1", timestamp: new Date(Date.now() - 5_000).toISOString() },
+      { role: "user", content: "Q2", timestamp: new Date().toISOString() },
+    ]);
+    const recorder = make_recorder_cov({ sessions });
+    const result = await recorder.is_delivery_retry(
+      "slack",
+      make_message_cov({ content: "Q2" }),
+      "bot",
+      LARGE_WINDOW,
+    );
+    expect(result).toBe(false);
+  });
+
+  it("sessions.get_or_create throw → false (예외 격리)", async () => {
+    const sessions = {
+      get_or_create: vi.fn().mockRejectedValue(new Error("DB error")),
+      append_message: vi.fn(),
+    };
+    const recorder = make_recorder_cov({ sessions });
+    const result = await recorder.is_delivery_retry("slack", make_message_cov({ content: "Q" }), "bot");
+    expect(result).toBe(false);
   });
 });

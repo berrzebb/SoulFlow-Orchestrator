@@ -37,8 +37,9 @@
 - `[합의완료]` PAR-3 + PAR-4 — CriticGate/RetryBudget + CriticGateNode + workflow schema
 - `[합의완료]` PAR-5 + PAR-6 — reconcile observability events + local read model + eval bundle
 - `[합의완료]` E1 + E2 + E3 — ToolOutputReducer + PtyOutputReducer + prompt/display/storage projection split
+- `[합의완료]` E4 + E5 — MemoryIngestionReducer + OutputReductionKpi
 
-## [GPT미검증] E4 + E5 — MemoryIngestionReducer + OutputReductionKpi
+## [합의완료] E4 + E5 — MemoryIngestionReducer + OutputReductionKpi
 
 ### Claim
 
@@ -55,24 +56,27 @@
 - `src/evals/output-reduction-executor.ts` (신규) — E5: 회귀 평가 executor + scorer
 - `tests/evals/cases/output-reduction.json` (신규) — E5: 13 케이스 (smoke)
 - `src/evals/bundles.ts` (수정) — E5: output-reduction 번들 등록
-- `tests/orchestration/memory-ingestion-reducer.test.ts` (신규) — E4 테스트 11개 + recorder 하위 호환 4개
+- `tests/orchestration/memory-ingestion-reducer.test.ts` (신규) — E4 테스트 13개 (recorder 하위 호환 포함)
 - `tests/orchestration/output-reduction-kpi.test.ts` (신규) — E5 테스트 13개
 - `scripts/eval-run.ts` (수정) — output-reduction executor + BUNDLE_SCORER_MAP 등록
 - `src/channels/session-recorder.ts` (수정) — `is_delivery_retry()` 메서드 (Bonus Fix)
 - `src/channels/manager.ts` (수정) — delivery retry early-exit 체크 (Bonus Fix)
-- `tests/channel/channel-manager.test.ts` (수정) — `scoped_team_id` 4번째 인자 기대값 반영
+- `tests/channel/channel-manager.test.ts` (수정) — `scoped_team_id` 4번째 인자 기대값 반영 + 미사용 import/param/var 제거 (lint clean)
+- `tests/channel/session-recorder.test.ts` (수정) — `is_delivery_retry()` 7개 직접 테스트 추가
 
 ### Test Command
 
 ```bash
-npx vitest run tests/orchestration/memory-ingestion-reducer.test.ts tests/orchestration/output-reduction-kpi.test.ts tests/channel/channel-manager.test.ts
+npx vitest run tests/orchestration/memory-ingestion-reducer.test.ts tests/orchestration/output-reduction-kpi.test.ts tests/channel/channel-manager.test.ts tests/channel/session-recorder.test.ts
+npx eslint tests/channel/channel-manager.test.ts tests/channel/session-recorder.test.ts
 npx tsc --noEmit
 npx tsx scripts/eval-run.ts --bundle output-reduction --threshold 100
 ```
 
 ### Test Result
 
-- `npx vitest run ...`: **3 files / 106 tests passed** (26 신규 + 80 channel-manager)
+- `npx vitest run ...`: **4 files / 219 tests passed** (7 is_delivery_retry 신규 + 33 session-recorder + 106 E4+E5+channel-manager)
+- `npx eslint ...`: **0 errors, 0 warnings**
 - `npx tsc --noEmit`: **통과**
 - `npx tsx scripts/eval-run.ts --bundle output-reduction --threshold 100`: **13/13 (100%)**
 
@@ -121,3 +125,4 @@ npx tsc --noEmit
 
 - `detect_output_kind`는 휴리스틱 기반 — JSON으로 시작하지만 diff를 포함하는 복합 출력 등 엣지 케이스에서 오감지 가능. 감지 실패 시 `plain` fallback으로 기존 truncation과 동일하게 동작.
 - `reducer` 미주입 시 `emit_result`가 기존 경로를 사용하므로, 기존 배포 환경에서 reducer를 연결하기 전까지 3-projection 분리 효과 없음. 점진적 롤아웃 전제.
+
