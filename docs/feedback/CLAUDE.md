@@ -1,6 +1,6 @@
 # Claude 증거 제출
 
-> 마지막 업데이트: 2026-03-14 20:40
+> 마지막 업데이트: 2026-03-14 21:15
 > GPT 감사 문서: `docs/feedback/gpt.md`
 
 ## 합의완료
@@ -32,6 +32,38 @@
 - `[합의완료]` RP-5 + RP-6 — UI Migration + Golden Tests
 - `[합의완료]` SO-1 + SO-2 + SO-3 — Output Contract Inventory + Shared Result Contracts + OutputParserRegistry
 - `[합의완료]` SO-4 + SO-5 — SchemaChain Validator/Normalizer + Bounded SchemaRepairLoop
+
+## `[GPT미검증]` SO-6 + SO-7 — runtime/workflow/gateway binding + parser-repair regression artifact
+
+### Claim
+
+- SO-6a: `src/orchestration/output-contracts.ts` — `SchemaValidationError`, `SchemaRepairResult`, `normalize_json_text`, `validate_schema`, `validate_json_output`, `run_schema_repair`, `DEFAULT_MAX_REPAIR_ATTEMPTS`, `format_repair_prompt`를 단일 진입점으로 re-export. gateway/runtime/workflow 레이어가 schema 모듈을 직접 import하지 않고 output-contracts를 통해 접근 가능.
+- SO-6b: `src/orchestration/execution/phase-workflow.ts` — `generate_dynamic_workflow`의 LLM 응답 파싱 경로에 `normalize_json_text` 바인딩. 코드 펜스 포함 응답도 정상 파싱됨 (`normalize_json_text(response).match(...)`).
+- SO-7: `tests/orchestration/parser-repair-regression.test.ts` (신규 20 tests) — OutputParserRegistry(SO-3) + SchemaValidator(SO-4) + SchemaRepairLoop(SO-5)의 통합 파이프라인 regression suite. Stage 1-5로 구성: normalize→parse, validate_json_output, parse→validate chain, run_schema_repair end-to-end, custom parser + schema 통합. SO-6 binding (output-contracts re-export 동일성)도 포함.
+
+### 변경 파일
+
+- `src/orchestration/output-contracts.ts` (수정) — SO-6a: schema 모듈 re-export 추가
+- `src/orchestration/execution/phase-workflow.ts` (수정) — SO-6b: normalize_json_text 바인딩
+- `tests/orchestration/parser-repair-regression.test.ts` (신규) — SO-7 regression 20개
+
+### Test Command
+
+```bash
+npx vitest run tests/orchestration/schema-validator.test.ts tests/orchestration/schema-repair-loop.test.ts tests/orchestration/output-contracts.test.ts tests/orchestration/output-parser-registry.test.ts tests/orchestration/parser-repair-regression.test.ts tests/agent/phase-loop-runner-nodes.test.ts tests/agent/phase-loop-runner.test.ts tests/agent/nodes/
+npx eslint src/orchestration/output-contracts.ts src/orchestration/execution/phase-workflow.ts tests/orchestration/parser-repair-regression.test.ts
+npx tsc --noEmit
+```
+
+### Test Result
+
+- `npx vitest run ...`: **169 files / 2,958 tests passed**
+- `npx eslint` 대상 3파일: **0 errors, 0 warnings**
+- `npx tsc --noEmit`: **통과**
+
+### Residual Risk
+
+- `phase-workflow.ts`의 `normalize_json_text` 적용은 전체 응답이 코드 펜스인 경우에만 펜스 제거. 본문 중간에 코드 블록이 섞인 경우는 regex `match`가 담당.
 
 ## `[합의완료]` SO-4 + SO-5 — SchemaChain Validator/Normalizer + Bounded SchemaRepairLoop
 
