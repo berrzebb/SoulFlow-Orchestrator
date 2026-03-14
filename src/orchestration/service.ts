@@ -72,6 +72,10 @@ type OrchestratorConfig = {
   streaming_max_chars: number;
   max_tool_result_chars: number;
   orchestrator_max_tokens: number;
+  /** EG-2: run당 최대 tool 호출 수. 0 = 비활성. */
+  max_tool_calls_per_run: number;
+  /** EG-1: 세션 재사용 freshness window (ms). 0 = 비활성. */
+  freshness_window_ms: number;
 };
 
 export type OrchestrationServiceDeps = {

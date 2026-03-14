@@ -120,6 +120,10 @@ const OrchestrationSchema = z.object({
   executorProvider: z.string().default(""),
   /** 실행기 모델 오버라이드. 빈 문자열이면 인스턴스/프로바이더 기본 모델. */
   executorModel: z.string().default(""),
+  /** run 전체 최대 tool 호출 수. 0 = 비활성 (무제한). */
+  maxToolCallsPerRun: z.number().min(0).default(0),
+  /** 세션 근거 재사용 freshness window (ms). 이 기간 내 탐색은 "신선"으로 간주. 0 = 비활성. */
+  freshnessWindowMs: z.number().min(0).default(300_000),
 });
 
 const DashboardSchema = z.object({

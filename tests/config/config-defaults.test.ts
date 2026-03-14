@@ -17,6 +17,40 @@ describe("get_config_defaults", () => {
     expect(defaults.orchestratorLlm.enabled).toBe(false);
     expect(defaults.orchestratorLlm.port).toBe(11434);
   });
+
+  it("EG-2: maxToolCallsPerRun 기본값 0 (비활성)", () => {
+    const defaults = get_config_defaults();
+    expect(defaults.orchestration.maxToolCallsPerRun).toBe(0);
+  });
+
+  it("EG-1: freshnessWindowMs 기본값 300_000 (5분)", () => {
+    const defaults = get_config_defaults();
+    expect(defaults.orchestration.freshnessWindowMs).toBe(300_000);
+  });
+
+  it("EG-2: maxToolCallsPerRun 양수값 허용", () => {
+    const base = get_config_defaults() as Record<string, unknown>;
+    const orch = { ...(base.orchestration as Record<string, unknown>), maxToolCallsPerRun: 50 };
+    const result = AppConfigSchema.safeParse({ ...base, orchestration: orch });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.orchestration.maxToolCallsPerRun).toBe(50);
+    }
+  });
+
+  it("EG-2: maxToolCallsPerRun 음수 → 거부", () => {
+    const base = get_config_defaults() as Record<string, unknown>;
+    const orch = { ...(base.orchestration as Record<string, unknown>), maxToolCallsPerRun: -1 };
+    const result = AppConfigSchema.safeParse({ ...base, orchestration: orch });
+    expect(result.success).toBe(false);
+  });
+
+  it("EG-1: freshnessWindowMs 음수 → 거부", () => {
+    const base = get_config_defaults() as Record<string, unknown>;
+    const orch = { ...(base.orchestration as Record<string, unknown>), freshnessWindowMs: -100 };
+    const result = AppConfigSchema.safeParse({ ...base, orchestration: orch });
+    expect(result.success).toBe(false);
+  });
 });
 
 describe("set_nested", () => {

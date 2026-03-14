@@ -155,6 +155,8 @@ export const CONFIG_FIELDS: ConfigFieldMeta[] = [
   { path: "orchestration.orchestratorModel", label: "Orchestrator Model", section: "orchestration", type: "string", env_key: "", default_value: "", sensitive: false, restart_required: true, description: "Model override for orchestrator. Empty = use instance default model" },
   { path: "orchestration.executorProvider", label: "Executor Provider", section: "orchestration", type: "string", env_key: "", default_value: "", sensitive: false, restart_required: true, description: "Provider instance for task execution (registered in Providers page with purpose=chat). Empty = auto-select" },
   { path: "orchestration.executorModel", label: "Executor Model", section: "orchestration", type: "string", env_key: "", default_value: "", sensitive: false, restart_required: true, description: "Model override for executor. Empty = use instance default model" },
+  { path: "orchestration.maxToolCallsPerRun", label: "Max Tool Calls Per Run", section: "orchestration", type: "number", env_key: "", default_value: 0, sensitive: false, restart_required: false, description: "Maximum tool calls allowed per single run. 0 = unlimited (disabled)" },
+  { path: "orchestration.freshnessWindowMs", label: "Freshness Window (ms)", section: "orchestration", type: "number", env_key: "", default_value: 300_000, sensitive: false, restart_required: false, description: "Session reuse freshness window in milliseconds. Queries within this window are considered fresh. 0 = disabled" },
 
   // ── Dashboard ──
   { path: "dashboard.enabled", label: "Enabled", section: "dashboard", type: "boolean", env_key: "DASHBOARD_ENABLED", default_value: true, sensitive: false, restart_required: true, description: "Enable the web dashboard HTTP server" },

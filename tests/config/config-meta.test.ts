@@ -82,6 +82,8 @@ describe("config-meta default_value — schema 기본값과 일치 (C-18)", () =
     "memory.longtermInjectionMaxChars",
     "memory.dailyInjectionDays",
     "memory.dailyInjectionMaxChars",
+    "orchestration.maxToolCallsPerRun",
+    "orchestration.freshnessWindowMs",
   ];
 
   for (const p of paths) {
