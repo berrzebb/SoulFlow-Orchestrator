@@ -1,6 +1,6 @@
 # Claude 증거 제출
 
-> 마지막 업데이트: 2026-03-14 15:54
+> 마지막 업데이트: 2026-03-14 16:02
 > GPT 감사 문서: `docs/feedback/gpt.md`
 
 ## 합의완료
@@ -23,8 +23,9 @@
 - `[합의완료]` TR-1 + TR-2 — Shared Tokenizer/QueryNormalizer + LexicalProfile
 - `[합의완료]` TR-3 + TR-4 — Hybrid Merge/Rerank + Session Novelty Gate Tokenizer 정렬
 - `[합의완료]` TR-5 — Tokenizer/Hybrid Retrieval Eval Fixture + Regression Artifact
+- `[합의완료]` GW-1 + GW-2 — RequestPlan/ResultEnvelope + Ingress Normalization/Classification
 
-## GW-1 + GW-2 — RequestPlan/ResultEnvelope + Ingress Normalization/Classification [GPT미검증 → 재제출]
+## GW-1 + GW-2 — RequestPlan/ResultEnvelope + Ingress Normalization/Classification [합의완료]
 
 ### Claim
 
