@@ -31,6 +31,7 @@ import { get_bundle, get_smoke_bundles, list_bundles, load_bundle_datasets } fro
 import { create_guardrail_executor } from "../src/evals/guardrail-executor.js";
 import { create_tokenizer_executor } from "../src/evals/tokenizer-executor.js";
 import { create_gateway_executor } from "../src/evals/gateway-executor.js";
+import { create_output_reduction_executor, create_output_reduction_scorer } from "../src/evals/output-reduction-executor.js";
 import type { EvalExecutorLike, EvalScorerLike, EvalDataset } from "../src/evals/contracts.js";
 
 interface CliArgs {
@@ -78,7 +79,8 @@ async function main() {
     console.log(`\nRunning: ${dataset.name} (${dataset.cases.length} cases)`);
 
     const executor = resolve_executor(dataset.name);
-    const runner = new EvalRunner(executor, scorer, {
+    const bundle_scorer = resolve_bundle_scorer(dataset.name, scorer);
+    const runner = new EvalRunner(executor, bundle_scorer, {
       filter_tags: tags?.length ? tags : undefined,
     });
     const summary = await runner.run_dataset(dataset);
@@ -214,10 +216,20 @@ const EXECUTOR_MAP: Record<string, () => EvalExecutorLike> = {
   guardrails: create_guardrail_executor,
   tokenizer: create_tokenizer_executor,
   gateway: create_gateway_executor,
+  "output-reduction": create_output_reduction_executor,
+};
+
+/** 번들 전용 커스텀 scorer — CLI --scorer 플래그보다 우선. */
+const BUNDLE_SCORER_MAP: Record<string, () => EvalScorerLike> = {
+  "output-reduction": create_output_reduction_scorer,
 };
 
 function resolve_executor(dataset_name: string): EvalExecutorLike {
   return EXECUTOR_MAP[dataset_name]?.() ?? ECHO_EXECUTOR;
+}
+
+function resolve_bundle_scorer(dataset_name: string, fallback: EvalScorerLike): EvalScorerLike {
+  return BUNDLE_SCORER_MAP[dataset_name]?.() ?? fallback;
 }
 
 function printUsage() {

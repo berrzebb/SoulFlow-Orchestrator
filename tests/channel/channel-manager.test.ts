@@ -606,8 +606,8 @@ describe("ChannelManager — deliver_result 분기", () => {
       });
 
       await manager.handle_inbound_message(inbound("web msg", { provider: "web", channel: "web" }));
-      // web provider는 bus를 통해 outbound 전송
-      expect(on_web_stream).toHaveBeenCalledWith(expect.any(String), "", true);
+      // web provider는 bus를 통해 outbound 전송 (4번째 인자: scoped_team_id = undefined)
+      expect(on_web_stream).toHaveBeenCalledWith(expect.any(String), "", true, undefined);
     } finally { await rm(ws, { recursive: true, force: true }); }
   });
 });

@@ -57,22 +57,24 @@
 - `src/evals/bundles.ts` (수정) — E5: output-reduction 번들 등록
 - `tests/orchestration/memory-ingestion-reducer.test.ts` (신규) — E4 테스트 11개 + recorder 하위 호환 4개
 - `tests/orchestration/output-reduction-kpi.test.ts` (신규) — E5 테스트 13개
-
-### Bonus Fix
-
-- `src/channels/session-recorder.ts` + `src/channels/manager.ts` — Slack webhook retry로 동일 이벤트가 재전송될 때 `user:Q → assistant:A → user:Q` 패턴이 생성되어 `reuse_summary`가 오발동하던 버그 수정. `is_delivery_retry()` 메서드로 직전 응답 3초 이내 동일 메시지 재도착 감지 → early return.
+- `scripts/eval-run.ts` (수정) — output-reduction executor + BUNDLE_SCORER_MAP 등록
+- `src/channels/session-recorder.ts` (수정) — `is_delivery_retry()` 메서드 (Bonus Fix)
+- `src/channels/manager.ts` (수정) — delivery retry early-exit 체크 (Bonus Fix)
+- `tests/channel/channel-manager.test.ts` (수정) — `scoped_team_id` 4번째 인자 기대값 반영
 
 ### Test Command
 
 ```bash
-npx vitest run tests/orchestration/memory-ingestion-reducer.test.ts tests/orchestration/output-reduction-kpi.test.ts
+npx vitest run tests/orchestration/memory-ingestion-reducer.test.ts tests/orchestration/output-reduction-kpi.test.ts tests/channel/channel-manager.test.ts
 npx tsc --noEmit
+npx tsx scripts/eval-run.ts --bundle output-reduction --threshold 100
 ```
 
 ### Test Result
 
-- `npx vitest run ...`: **2 files / 26 tests passed**
+- `npx vitest run ...`: **3 files / 106 tests passed** (26 신규 + 80 channel-manager)
 - `npx tsc --noEmit`: **통과**
+- `npx tsx scripts/eval-run.ts --bundle output-reduction --threshold 100`: **13/13 (100%)**
 
 ### Residual Risk
 

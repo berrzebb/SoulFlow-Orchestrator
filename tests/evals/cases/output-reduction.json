@@ -74,10 +74,10 @@
     },
     {
       "id": "or-memory-overflow",
-      "input": "{\"text\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\", \"max_chars\": 100, \"mode\": \"memory\"}",
+      "input": "{\"text\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\", \"max_chars\": 100, \"mode\": \"memory\"}",
       "expected": "{\"max_prompt_chars\": 200, \"truncated\": true}",
       "tags": ["smoke"],
-      "metadata": {"desc": "memory mode: 큰 텍스트 → storage_text(1.5×) 적용, 200자 이내"}
+      "metadata": {"desc": "memory mode: 250자 plain 텍스트 → display_text(2×=200) 기준으로 truncate"}
     },
     {
       "id": "or-memory-json",
