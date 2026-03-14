@@ -9,6 +9,7 @@ import { format_tool_label, format_tool_block } from "./prompts.js";
 import { now_iso, error_message } from "../utils/common.js";
 import type { BudgetTracker } from "./guardrails/enforcement.js";
 import { is_over_budget } from "./guardrails/enforcement.js";
+import type { ToolOutputReducer } from "./tool-output-reducer.js";
 
 export type ToolCallEntry = { name: string; arguments?: Record<string, unknown> };
 export type ToolCallState = { suppress: boolean; file_requested?: boolean; done_sent?: boolean; tool_count: number };
@@ -26,6 +27,8 @@ export type ToolCallHandlerDeps = {
   logger: Logger;
   execute_tool: (name: string, params: Record<string, unknown>, ctx?: ToolExecutionContext) => Promise<string>;
   log_event: (input: AppendWorkflowEventInput) => void;
+  /** 3-projection reducer. 미지정 시 기존 truncate_tool_result 동작으로 fallback. */
+  reducer?: ToolOutputReducer;
 };
 
 export function create_tool_call_handler(
@@ -67,14 +70,31 @@ export function create_tool_call_handler(
         });
       }
       const emit_result = (result_text: string, is_error: boolean) => {
-        const truncated = is_error ? result_text : truncate_tool_result(result_text, max_chars);
+        // 3-projection: reducer 제공 시 prompt/display/storage 분리, 미제공 시 fallback
+        let prompt: string;
+        let display: string;
+        let storage_preview: string;
+
+        if (deps.reducer && !is_error) {
+          const reduced = deps.reducer.reduce({
+            tool_name: tc.name, params: tc.arguments || {}, result_text, is_error,
+          });
+          prompt = reduced.prompt_text;
+          display = reduced.display_text;
+          storage_preview = reduced.storage_text.slice(0, 500);
+        } else {
+          prompt = is_error ? result_text : truncate_tool_result(result_text, max_chars);
+          display = result_text;
+          storage_preview = prompt.slice(0, 500);
+        }
+
         if (stream_ctx?.on_tool_event) {
           stream_ctx.on_tool_event({
             type: "tool_result",
             source: { backend: "claude_cli" as const, task_id: tool_ctx.task_id },
             at: now_iso(),
             tool_name: tc.name, tool_id: "",
-            result: truncated, params: tc.arguments, is_error,
+            result: prompt, params: tc.arguments, is_error,
           });
         }
         if (stream_ctx?.log_ctx) {
@@ -84,18 +104,18 @@ export function create_tool_call_handler(
             agent_id: lc.agent_id, provider: lc.provider, channel: lc.provider, chat_id: lc.chat_id,
             source: "system", phase: "progress",
             summary: `tool: ${tc.name}${is_error ? " (error)" : ""}`,
-            detail: truncated.slice(0, 500),
+            detail: storage_preview,
             payload: { tool_name: tc.name, is_error },
           });
         }
-        const block = format_tool_block(label, result_text, is_error);
+        const block = format_tool_block(label, display, is_error);
         if (stream_ctx?.on_tool_block) {
           stream_ctx.on_tool_block(block);
         } else if (stream_ctx?.on_stream) {
           stream_ctx.buffer.append(block);
           flush_stream();
         }
-        return truncated;
+        return prompt;
       };
 
       try {

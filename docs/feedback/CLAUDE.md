@@ -1,6 +1,6 @@
 # Claude 증거 제출
 
-> 마지막 업데이트: 2026-03-14 22:42
+> 마지막 업데이트: 2026-03-14 23:05
 > GPT 감사 문서: `docs/feedback/gpt.md`
 
 ## 합의완료
@@ -37,41 +37,37 @@
 - `[합의완료]` PAR-3 + PAR-4 — CriticGate/RetryBudget + CriticGateNode + workflow schema
 - `[합의완료]` PAR-5 + PAR-6 — reconcile observability events + local read model + eval bundle
 
-## `[합의완료]` PAR-5 + PAR-6 — reconcile observability events + local read model + eval bundle
+## `[GPT미검증]` E1 + E2 + E3 — ToolOutputReducer + PtyOutputReducer + prompt/display/storage projection split
 
 ### Claim
 
-- PAR-5: `src/orchestration/reconcile-trace.ts` (신규) — `ReconcileTraceEvent` (`reconcile_start` / `reconcile_conflict` / `reconcile_retry` / `reconcile_finalized`). `emit_reconcile_event(recorder, event, correlation, attributes)` — 기존 `"orchestration_run"` SpanKind 재사용, SpanKind enum 변경 없음. `filter_reconcile_spans(recorder)` — reconcile 이벤트 span만 필터링.
-- PAR-6: `src/orchestration/reconcile-read-model.ts` (신규) — `ReconcileSummary`, `CriticSummary`, `ReconcileReadModel` 타입. `extract_reconcile_read_model(memory)` — `policy_applied` 키로 reconcile 노드 식별, `verdict`+`rounds_used`+`passed` 키로 critic_gate 노드 식별. `__rounds_used` 접미사 내부 추적 키 건너뜀. `has_failures`, `total_conflicts`, `unresolved_count` 집계.
-- Eval bundle: `src/evals/parallel-conflict-executor.ts` (신규) — `reconcile` / `critic` / `read_model` 3가지 입력 타입. `src/evals/bundles.ts`에 `"parallel-conflict"` 번들 등록. `tests/evals/cases/parallel-conflict.json` — 16케이스 (reconcile 7 + critic 4 + read_model 5).
+- E1: `src/orchestration/tool-output-reducer.ts` (신규) — `ToolOutputKind` (plain/shell/test/json/diff/log/table), `ReducedOutput`, `ToolOutputReducer`. `detect_output_kind(tool_name, text)` — 패턴 기반 kind 감지. `create_tool_output_reducer(max_prompt_chars)` — factory. `is_error=true` 시 pass-through. kind별 `prompt_text` (LLM용, max_chars), `display_text` (표시용, 2×), `storage_text` (저장용, 1.5×). JSON 파싱 실패 → plain fallback. `truncate_half` — 기존 `truncate_tool_result` 동작 보존.
+- E2: `src/agent/pty/pty-output-reducer.ts` (신규) — `PtyOutputReducer`. `create_pty_output_reducer(max_chars)`. `assistant_chunk`: MAX_CHUNK_CHARS(10,000) 크기 가드. `tool_result`: ToolOutputReducer.prompt_text 적용. `complete`: SOFT_MAX(5×max_chars) 초과 시에만 soft compaction. 그 외 pass-through.
+- E3: `src/orchestration/tool-call-handler.ts` (수정) — `ToolCallHandlerDeps.reducer?: ToolOutputReducer` 추가. `emit_result` 내부에서 reducer 제공 시 prompt/display/storage 3-projection 분리. 미제공 시 기존 `truncate_tool_result` 동작으로 fallback — 기존 24개 테스트 영향 없음.
 
 ### 변경 파일
 
-- `src/orchestration/reconcile-trace.ts` (신규) — PAR-5: trace event 헬퍼
-- `src/orchestration/reconcile-read-model.ts` (신규) — PAR-6: local read model 추출
-- `src/evals/parallel-conflict-executor.ts` (신규) — eval executor (3타입 라우팅)
-- `src/evals/bundles.ts` (수정) — "parallel-conflict" 번들 등록
-- `tests/orchestration/reconcile-trace.test.ts` (신규) — PAR-5 테스트 10개
-- `tests/orchestration/reconcile-read-model.test.ts` (신규) — PAR-6 테스트 13개
-- `tests/evals/parallel-conflict-executor.test.ts` (신규) — executor + bundle 테스트 20개
-- `tests/evals/cases/parallel-conflict.json` (신규) — eval 데이터셋 16케이스
+- `src/orchestration/tool-output-reducer.ts` (신규) — E1: kind 감지 + 3-projection reducer
+- `src/agent/pty/pty-output-reducer.ts` (신규) — E2: PTY normalized output reducer
+- `src/orchestration/tool-call-handler.ts` (수정) — E3: reducer 주입 + 3-projection 분리
+- `tests/orchestration/tool-output-reducer.test.ts` (신규) — E1 테스트 31개
+- `tests/agent/pty/pty-output-reducer.test.ts` (신규) — E2 테스트 14개
 
 ### Test Command
 
 ```bash
-npx vitest run tests/orchestration/reconcile-trace.test.ts tests/orchestration/reconcile-read-model.test.ts tests/evals/parallel-conflict-executor.test.ts
-npx eslint src/orchestration/reconcile-trace.ts src/orchestration/reconcile-read-model.ts src/evals/parallel-conflict-executor.ts tests/orchestration/reconcile-trace.test.ts tests/orchestration/reconcile-read-model.test.ts tests/evals/parallel-conflict-executor.test.ts
+npx vitest run tests/orchestration/tool-output-reducer.test.ts tests/agent/pty/pty-output-reducer.test.ts tests/orchestration/tool-call-handler.test.ts
+npx eslint src/orchestration/tool-output-reducer.ts src/agent/pty/pty-output-reducer.ts src/orchestration/tool-call-handler.ts tests/orchestration/tool-output-reducer.test.ts tests/agent/pty/pty-output-reducer.test.ts
 npx tsc --noEmit
 ```
 
 ### Test Result
 
-- `npx vitest run ...`: **3 files / 43 tests passed**
-- `npx eslint` 대상 6파일: **0 errors, 0 warnings**
+- `npx vitest run ...`: **3 files / 69 tests passed** (신규 45 + 기존 24 회귀 통과)
+- `npx eslint` 대상 5파일: **0 errors, 0 warnings**
 - `npx tsc --noEmit`: **통과**
 
 ### Residual Risk
 
-- `emit_reconcile_event`는 즉시 `handle.end("ok")`를 호출하므로 span duration이 항상 ~0ms. reconcile 파이프라인에서 실제 소요 시간을 측정하려면 caller가 start/end를 직접 관리해야 함.
-- `extract_reconcile_read_model`의 노드 감지는 key presence 기반 — `policy_applied` 또는 `verdict`+`rounds_used`+`passed`가 우연히 일치하는 다른 노드가 있으면 오감지 가능. 워크플로우 memory 네임스페이스가 격리된 현재 설계에서는 문제 없음.
-
+- `detect_output_kind`는 휴리스틱 기반 — JSON으로 시작하지만 diff를 포함하는 복합 출력 등 엣지 케이스에서 오감지 가능. 감지 실패 시 `plain` fallback으로 기존 truncation과 동일하게 동작.
+- `reducer` 미주입 시 `emit_result`가 기존 경로를 사용하므로, 기존 배포 환경에서 reducer를 연결하기 전까지 3-projection 분리 효과 없음. 점진적 롤아웃 전제.
