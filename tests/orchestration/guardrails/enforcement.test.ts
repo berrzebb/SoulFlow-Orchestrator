@@ -55,6 +55,7 @@ describe("build_session_evidence", () => {
     const snap = build_session_evidence(
       [
         { role: "user", content: "Hello, World!" },
+        { role: "assistant", content: "reply" },
         { role: "user", content: "current" },
       ],
       10_000, 5_000,
@@ -68,8 +69,11 @@ describe("build_session_evidence", () => {
     const snap = build_session_evidence(
       [
         { role: "user", content: "a" },
+        { role: "assistant", content: "a-reply" },
         { role: "user", content: "b" },
+        { role: "assistant", content: "b-reply" },
         { role: "user", content: "c" },
+        { role: "assistant", content: "c-reply" },
         { role: "user", content: "current" },
       ],
       now, window,

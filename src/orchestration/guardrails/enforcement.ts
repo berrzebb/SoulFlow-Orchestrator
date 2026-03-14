@@ -12,34 +12,75 @@ import { STOP_REASON_BUDGET_EXCEEDED } from "./budget-policy.js";
 
 // ── Session Evidence ──
 
+/** 세션 히스토리 항목 (타임스탬프 선택 포함). */
+type HistoryEntry = { role: string; content: string; timestamp_ms?: number };
+
 /**
  * session_history (role/content 배열) → SessionEvidenceSnapshot 변환.
  *
  * - user 메시지만 질의 후보로 추출
- * - timestamp는 세션 window 내에서 균등 배분 (정확한 시각 불필요 — freshness 판단용 근사치)
+ * - 실패 응답(빈 content, 응답 없음)은 failed_queries로 분류
+ * - timestamp_ms가 있으면 실제 타임스탬프 사용, 없으면 합성 타임스탬프
  * - 현재 incoming 질의(마지막 user 메시지)는 제외 — 자기 자신과 비교 방지
  */
 export function build_session_evidence(
-  session_history: ReadonlyArray<{ role: string; content: string }>,
+  session_history: ReadonlyArray<HistoryEntry>,
   now_ms: number,
   freshness_window_ms: number,
 ): SessionEvidenceSnapshot {
+  const user_indices: number[] = [];
+  for (let i = 0; i < session_history.length; i++) {
+    if (session_history[i].role === "user") user_indices.push(i);
+  }
   // 마지막 user 메시지는 현재 질의 → 제외
-  const all_user = session_history.filter(h => h.role === "user");
-  const past_user = all_user.slice(0, -1);
-  if (past_user.length === 0) return { recent_queries: [] };
+  const past_indices = user_indices.slice(0, -1);
+  if (past_indices.length === 0) return { recent_queries: [], failed_queries: [] };
 
   const window = Math.max(freshness_window_ms, 1);
-  const step = past_user.length > 1 ? window / past_user.length : 0;
+  const step = past_indices.length > 1 ? window / past_indices.length : 0;
 
-  return {
-    recent_queries: past_user.map((msg, i) => ({
-      normalized: normalize_query(msg.content),
-      original: msg.content,
-      timestamp_ms: now_ms - window + (i * step),
-      had_tool_calls: false,
-    })),
-  };
+  const succeeded: SessionEvidenceSnapshot["recent_queries"][number][] = [];
+  const failed: NonNullable<SessionEvidenceSnapshot["failed_queries"]>[number][] = [];
+
+  for (let pi = 0; pi < past_indices.length; pi++) {
+    const idx = past_indices[pi];
+    const msg = session_history[idx];
+    const ts = msg.timestamp_ms ?? (now_ms - window + (pi * step));
+
+    // 다음 assistant 응답 탐색
+    const response_ok = has_successful_response(session_history, idx);
+
+    if (response_ok) {
+      succeeded.push({
+        normalized: normalize_query(msg.content),
+        original: msg.content,
+        timestamp_ms: ts,
+        had_tool_calls: false,
+      });
+    } else {
+      failed.push({
+        normalized: normalize_query(msg.content),
+        original: msg.content,
+        timestamp_ms: ts,
+      });
+    }
+  }
+
+  return { recent_queries: succeeded, failed_queries: failed };
+}
+
+/** user 메시지 다음에 비어있지 않은 assistant 응답이 있는지 판별. */
+function has_successful_response(
+  history: ReadonlyArray<HistoryEntry>,
+  user_idx: number,
+): boolean {
+  for (let j = user_idx + 1; j < history.length; j++) {
+    if (history[j].role === "user") return false;
+    if (history[j].role === "assistant") {
+      return !!history[j].content.trim();
+    }
+  }
+  return false;
 }
 
 // ── Reuse Reply ──

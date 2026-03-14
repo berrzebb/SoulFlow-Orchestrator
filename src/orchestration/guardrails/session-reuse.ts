@@ -23,6 +23,12 @@ export interface SessionEvidenceSnapshot {
     /** 도구 호출이 수반됐는지 여부. */
     had_tool_calls: boolean;
   }>;
+  /** 실패/중단된 시도의 질의 목록 — 재시도 의도 판별용. */
+  failed_queries?: ReadonlyArray<{
+    normalized: string;
+    original: string;
+    timestamp_ms: number;
+  }>;
 }
 
 /** 재사용 판단 결과. */
@@ -93,6 +99,14 @@ export function evaluate_reuse(
 
   const { freshness_window_ms, similarity_threshold } = options;
   const disabled = freshness_window_ms <= 0;
+
+  // EG-R1: 재시도 의도 bypass — 실패 질의와 매칭 시 new_search 반환
+  if (evidence.failed_queries) {
+    for (const entry of evidence.failed_queries) {
+      const sim = compute_similarity(normalized, entry.normalized);
+      if (sim >= similarity_threshold) return { kind: "new_search" };
+    }
+  }
 
   let best_match: { normalized: string; age_ms: number; similarity: number } | null = null;
 
