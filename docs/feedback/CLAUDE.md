@@ -1,6 +1,6 @@
 # Claude 증거 제출
 
-> 마지막 업데이트: 2026-03-14 20:30
+> 마지막 업데이트: 2026-03-14 20:40
 > GPT 감사 문서: `docs/feedback/gpt.md`
 
 ## 합의완료
@@ -31,8 +31,13 @@
 - `[합의완료]` RP-3 + RP-4 — PromptProfileCompiler + Runtime Binding
 - `[합의완료]` RP-5 + RP-6 — UI Migration + Golden Tests
 - `[합의완료]` SO-1 + SO-2 + SO-3 — Output Contract Inventory + Shared Result Contracts + OutputParserRegistry
+- `[합의완료]` SO-4 + SO-5 — SchemaChain Validator/Normalizer + Bounded SchemaRepairLoop
 
-## `[GPT미검증]` SO-4 + SO-5 — SchemaChain Validator/Normalizer + Bounded SchemaRepairLoop
+## `[합의완료]` SO-4 + SO-5 — SchemaChain Validator/Normalizer + Bounded SchemaRepairLoop
+
+### GPT 반려 해소
+
+- `test-gap`: `tests/agent/phase-loop-runner-nodes.test.ts`에 통합 테스트 3개 추가 — (1) invalid initial 응답 시 `run_headless` 재호출 총 3회(초기 + repair 2회) 확인, (2) 항상 invalid인 경우 `DEFAULT_MAX_REPAIR_ATTEMPTS(2)` 바운딩에서 중단 + 호출 횟수 3회 확인, (3) repair retry 메시지에 assistant content + "schema validation errors" 피드백 포함 확인.
 
 ### Claim
 
@@ -46,6 +51,7 @@
 - `src/agent/phase-loop-runner.ts` (수정) — `invoke_llm` 내 `parse_output("json", ...)` → `run_schema_repair(...)` 교체. import 변경.
 - `tests/orchestration/schema-validator.test.ts` (신규) — SO-4 테스트 23개
 - `tests/orchestration/schema-repair-loop.test.ts` (신규) — SO-5 테스트 12개
+- `tests/agent/phase-loop-runner-nodes.test.ts` (수정) — invoke_llm repair loop 통합 테스트 3개 추가
 
 ### Test Command
 
@@ -57,11 +63,12 @@ npx tsc --noEmit
 
 ### Test Result
 
-- `npx vitest run ...`: **168 files / 2,935 tests passed**
-- `npx eslint` 대상 5파일: **0 errors, 0 warnings**
+- `npx vitest run ...`: **168 files / 2,938 tests passed**
+- `npx eslint` 대상 6파일: **0 errors, 0 warnings**
 - `npx tsc --noEmit`: **통과**
 
 ### Residual Risk
 
 - `ai-agent.ts`는 `spawn_agent` + `wait_agent` 경로를 사용하므로 repair loop 미적용. 에이전트 스폰 방식에서는 재프롬프팅이 불가하여 의도된 동작.
 - `invoke_llm`의 repair loop에서 retry 시 `run_headless`가 추가 호출됨. `DEFAULT_MAX_REPAIR_ATTEMPTS = 2` 바운딩으로 최대 3회(초기 + 2 retry) 호출 제한.
+
