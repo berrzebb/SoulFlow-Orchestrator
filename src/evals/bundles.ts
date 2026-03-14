@@ -122,3 +122,11 @@ register_bundle({
   smoke: true,
   tags: ["smoke"],
 });
+
+register_bundle({
+  name: "parallel-conflict",
+  description: "PAR-1~PAR-6: reconcile 파이프라인 + critic gate + read model 회귀 평가",
+  dataset_files: ["tests/evals/cases/parallel-conflict.json"],
+  smoke: true,
+  tags: ["smoke"],
+});

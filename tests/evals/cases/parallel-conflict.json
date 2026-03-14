@@ -1,0 +1,118 @@
+{
+  "name": "parallel-conflict",
+  "description": "PAR-1~PAR-6: reconcile 파이프라인 + critic gate + read model 회귀 평가",
+  "cases": [
+    {
+      "id": "pc-reconcile-majority",
+      "input": "{\"type\":\"reconcile\",\"agent_results\":[{\"agent_id\":\"a1\",\"content\":\"answer-A\"},{\"agent_id\":\"a2\",\"content\":\"answer-A\"},{\"agent_id\":\"a3\",\"content\":\"answer-A\"}],\"policy\":\"majority_vote\"}",
+      "expected": "answer-A",
+      "tags": ["smoke", "reconcile", "majority_vote"],
+      "metadata": { "scenario": "3개 전원 동의 → consensus → 문자열 직접 반환" }
+    },
+    {
+      "id": "pc-reconcile-majority-conflict",
+      "input": "{\"type\":\"reconcile\",\"agent_results\":[{\"agent_id\":\"a1\",\"content\":\"answer-A\"},{\"agent_id\":\"a2\",\"content\":\"answer-A\"},{\"agent_id\":\"a3\",\"content\":\"answer-B\"}],\"policy\":\"majority_vote\"}",
+      "expected": "{\"content\":\"answer-A\"}",
+      "tags": ["reconcile", "majority_vote"],
+      "metadata": { "scenario": "content 충돌 존재 → conflict_set 경로 → {content} 객체 반환 (결정론적)" }
+    },
+    {
+      "id": "pc-reconcile-first-wins",
+      "input": "{\"type\":\"reconcile\",\"agent_results\":[{\"agent_id\":\"a1\",\"content\":\"first\"},{\"agent_id\":\"a2\",\"content\":\"second\"},{\"agent_id\":\"a3\",\"content\":\"third\"}],\"policy\":\"first_wins\"}",
+      "expected": "first",
+      "tags": ["smoke", "reconcile", "first_wins"],
+      "metadata": { "scenario": "first_wins → 첫 번째 성공 에이전트 결과 반환" }
+    },
+    {
+      "id": "pc-reconcile-last-wins",
+      "input": "{\"type\":\"reconcile\",\"agent_results\":[{\"agent_id\":\"a1\",\"content\":\"first\"},{\"agent_id\":\"a2\",\"content\":\"second\"},{\"agent_id\":\"a3\",\"content\":\"third\"}],\"policy\":\"last_wins\"}",
+      "expected": "third",
+      "tags": ["smoke", "reconcile", "last_wins"],
+      "metadata": { "scenario": "last_wins → 마지막 성공 에이전트 결과 반환" }
+    },
+    {
+      "id": "pc-reconcile-merge-union-parsed",
+      "input": "{\"type\":\"reconcile\",\"agent_results\":[{\"agent_id\":\"a1\",\"content\":null,\"parsed\":{\"name\":\"Alice\",\"age\":30}},{\"agent_id\":\"a2\",\"content\":null,\"parsed\":{\"name\":\"Alice\",\"score\":95}}],\"policy\":\"merge_union\",\"use_parsed\":true}",
+      "expected": "{\"name\":\"Alice\",\"age\":30,\"score\":95}",
+      "tags": ["smoke", "reconcile", "merge_union"],
+      "metadata": { "scenario": "merge_union parsed — consensus 필드 + 고유 필드 합집합" }
+    },
+    {
+      "id": "pc-reconcile-merge-union-content",
+      "input": "{\"type\":\"reconcile\",\"agent_results\":[{\"agent_id\":\"a1\",\"content\":\"part-one\"},{\"agent_id\":\"a2\",\"content\":\"part-two\"}],\"policy\":\"merge_union\"}",
+      "expected": "[\"part-one\",\"part-two\"]",
+      "tags": ["reconcile", "merge_union"],
+      "metadata": { "scenario": "merge_union content — parsed 없음, content 배열로 합산" }
+    },
+    {
+      "id": "pc-reconcile-all-failed",
+      "input": "{\"type\":\"reconcile\",\"agent_results\":[{\"agent_id\":\"a1\",\"content\":null,\"error\":\"timeout\"},{\"agent_id\":\"a2\",\"content\":null,\"error\":\"oom\"}],\"policy\":\"first_wins\"}",
+      "expected": "null",
+      "tags": ["reconcile"],
+      "metadata": { "scenario": "모든 에이전트 실패 → null 반환" }
+    },
+    {
+      "id": "pc-critic-pass",
+      "input": "{\"type\":\"critic\",\"value\":10,\"condition\":\"value > 5\"}",
+      "expected": "pass",
+      "tags": ["smoke", "critic"],
+      "metadata": { "scenario": "조건 true → pass verdict" }
+    },
+    {
+      "id": "pc-critic-fail",
+      "input": "{\"type\":\"critic\",\"value\":3,\"condition\":\"value > 5\"}",
+      "expected": "fail",
+      "tags": ["smoke", "critic"],
+      "metadata": { "scenario": "조건 false → fail verdict" }
+    },
+    {
+      "id": "pc-critic-rework",
+      "input": "{\"type\":\"critic\",\"value\":\"rework\",\"condition\":\"value\"}",
+      "expected": "rework",
+      "tags": ["critic"],
+      "metadata": { "scenario": "조건 'rework' 반환 → rework verdict" }
+    },
+    {
+      "id": "pc-critic-error",
+      "input": "{\"type\":\"critic\",\"value\":null,\"condition\":\"undeclared_var.field\"}",
+      "expected": "fail",
+      "tags": ["critic"],
+      "metadata": { "scenario": "조건 평가 에러 → fail verdict (에러 경로)" }
+    },
+    {
+      "id": "pc-read-model-no-failures",
+      "input": "{\"type\":\"read_model\",\"memory\":{\"rec1\":{\"policy_applied\":\"majority_vote\",\"succeeded\":3,\"failed\":0,\"conflicts\":{\"fields\":[]}}},\"field\":\"has_failures\"}",
+      "expected": "false",
+      "tags": ["smoke", "read_model"],
+      "metadata": { "scenario": "failed=0 reconcile 노드 → has_failures false" }
+    },
+    {
+      "id": "pc-read-model-has-failures",
+      "input": "{\"type\":\"read_model\",\"memory\":{\"rec1\":{\"policy_applied\":\"first_wins\",\"succeeded\":1,\"failed\":2,\"conflicts\":{\"fields\":[]}}},\"field\":\"has_failures\"}",
+      "expected": "true",
+      "tags": ["smoke", "read_model"],
+      "metadata": { "scenario": "failed>0 reconcile 노드 → has_failures true" }
+    },
+    {
+      "id": "pc-read-model-total-conflicts",
+      "input": "{\"type\":\"read_model\",\"memory\":{\"rec1\":{\"policy_applied\":\"majority_vote\",\"succeeded\":2,\"failed\":0,\"conflicts\":{\"fields\":[\"f1\",\"f2\"]}},\"rec2\":{\"policy_applied\":\"first_wins\",\"succeeded\":1,\"failed\":0,\"conflicts\":{\"fields\":[\"f3\"]}}},\"field\":\"total_conflicts\"}",
+      "expected": "3",
+      "tags": ["read_model"],
+      "metadata": { "scenario": "복수 reconcile 노드 충돌 필드 합산 → 3" }
+    },
+    {
+      "id": "pc-read-model-unresolved",
+      "input": "{\"type\":\"read_model\",\"memory\":{\"c1\":{\"verdict\":\"fail\",\"rounds_used\":2,\"passed\":false},\"c2\":{\"verdict\":\"pass\",\"rounds_used\":1,\"passed\":true}},\"field\":\"unresolved_count\"}",
+      "expected": "1",
+      "tags": ["smoke", "read_model"],
+      "metadata": { "scenario": "critic verdict=fail 1개 → unresolved_count=1" }
+    },
+    {
+      "id": "pc-read-model-skip-budget-key",
+      "input": "{\"type\":\"read_model\",\"memory\":{\"c1__rounds_used\":3,\"c1\":{\"verdict\":\"pass\",\"rounds_used\":1,\"passed\":true}},\"field\":\"critic_count\"}",
+      "expected": "1",
+      "tags": ["read_model"],
+      "metadata": { "scenario": "__rounds_used 내부 추적 키 건너뜀 → critic_count=1 (budget key 제외)" }
+    }
+  ]
+}
