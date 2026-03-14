@@ -54,6 +54,7 @@
 
 /* ── Block ── */
 .tool-call {
+  flex-shrink: 0; /* 많은 도구 호출 시 flex 축소로 항목들이 합쳐지는 현상 방지 */
   border-radius: var(--radius-md);
   font-size: var(--fs-xs);
   overflow: hidden;
@@ -189,6 +190,7 @@
 }
 
 .thinking-block {
+  flex-shrink: 0; /* flex 축소 방지 */
   border-radius: var(--radius-md);
   font-size: var(--fs-xs);
   overflow: hidden;
