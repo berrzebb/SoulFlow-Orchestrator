@@ -660,6 +660,21 @@ export interface ReconcileNodeDefinition extends NodeBase {
   use_parsed?: boolean;
 }
 
+// ── CriticGate Node ──────────────────────────────────
+
+/** PAR-3: reconcile 결과를 조건 표현식으로 평가하고 retry budget을 관리하는 노드. */
+export interface CriticGateNodeDefinition extends NodeBase {
+  node_type: "critic_gate";
+  /** 평가 대상 노드 ID (memory에서 읽음). */
+  source_node_id: string;
+  /** `value` 변수를 참조하는 JS 표현식. true/"pass" → pass, "rework" → rework, 그 외 → fail. */
+  condition: string;
+  /** 최대 rework 재시도 횟수 (기본 2). */
+  max_rounds?: number;
+  /** rework 판정 시 downstream에 전달할 지시 메시지. */
+  rework_instruction?: string;
+}
+
 // ── Assert Node ──────────────────────────────────────
 
 export interface AssertionDefinition {
@@ -1944,7 +1959,7 @@ export type OrcheNodeType = "http" | "code" | "if" | "merge" | "set" | "split"
   | "embedding" | "vector_store"
   | "notify" | "aggregate" | "send_file" | "error_handler" | "webhook"
   | "hitl" | "approval" | "form" | "tool_invoke" | "gate" | "escalation"
-  | "cache" | "retry" | "batch" | "reconcile" | "assert"
+  | "cache" | "retry" | "batch" | "reconcile" | "critic_gate" | "assert"
   | "git" | "shell" | "web_search" | "web_scrape" | "archive" | "process"
   | "docker" | "web_table" | "network" | "web_form" | "system_info" | "package_manager"
   | "data_format" | "encoding" | "regex" | "diff" | "screenshot" | "database"
@@ -2024,6 +2039,7 @@ export type OrcheNodeDefinition =
   | RetryNodeDefinition
   | BatchNodeDefinition
   | ReconcileNodeDefinition
+  | CriticGateNodeDefinition
   | AssertNodeDefinition
   | GitNodeDefinition
   | ShellNodeDefinition
