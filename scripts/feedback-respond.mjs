@@ -20,6 +20,8 @@ const gptPath = resolve(repoRoot, "docs", "feedback", "gpt.md");
 const promotionPlanPath = resolve(repoRoot, "docs", "ko", "design", "improved", "feedback-promotion.plan.json");
 const koPromotionPath = resolve(repoRoot, "docs", "ko", "design", "improved", "feedback-promotion.md");
 const enPromotionPath = resolve(repoRoot, "docs", "en", "design", "improved", "feedback-promotion.md");
+const STATUS_TAG_RE = /\[(합의완료|계류|GPT미검증)(?:[^\]]*)\]/;
+const STATUS_TAG_RE_GLOBAL = /`?\[(합의완료|계류|GPT미검증)(?:[^\]]*)\]`?/g;
 
 function usage() {
   console.log(`Usage: node scripts/feedback-respond.mjs [options]
@@ -46,28 +48,33 @@ function parseArgs(argv) {
   return args;
 }
 
+function extractStatusFromLine(line) {
+  const match = line.match(STATUS_TAG_RE);
+  return match ? match[1] : null;
+}
+
 /** 감사 범위 + 최종 판정에서 상태 태그가 있는 항목을 추출 */
 function parseStatusLines(markdown) {
   const items = [];
   for (const line of markdown.split(/\r?\n/)) {
-    const m = line.match(/\[(합의완료|계류|GPT미검증)\]/);
-    if (!m) continue;
+    const status = extractStatusFromLine(line);
+    if (!status) continue;
     // 상태 태그를 제거한 순수 항목 텍스트 (비교용 키)
     const key = line
-      .replace(/`?\[(?:합의완료|계류|GPT미검증)\]`?/g, "")
+      .replace(STATUS_TAG_RE_GLOBAL, "")
       .replace(/\*\*/g, "")
       .replace(/`/g, "")
       .replace(/^[\s-]*/, "")
       .replace(/:\s*$/, "")
       .trim();
-    items.push({ status: m[1], key, raw: line.trim() });
+    items.push({ status, key, raw: line.trim() });
   }
   return items;
 }
 
 function stripStatusFormatting(line) {
   return line
-    .replace(/`?\[(?:합의완료|계류|GPT미검증)\]`?/g, "")
+    .replace(STATUS_TAG_RE_GLOBAL, "")
     .replace(/^[\s#-]*/, "")
     .replace(/`/g, "")
     .replace(/\*\*/g, "")
@@ -96,7 +103,7 @@ function syncApproved(claudeMd, gptMd) {
     let localChange = false;
 
     for (let i = 0; i < lines.length; i++) {
-      if (!/\[GPT미검증\]/.test(lines[i])) {
+      if (extractStatusFromLine(lines[i]) !== "GPT미검증") {
         continue;
       }
       const lineIds = collectIdsFromLine(lines[i]);
@@ -198,7 +205,7 @@ function removeSection(markdown, heading) {
 }
 
 function replaceStatusTag(line, status) {
-  return line.replace(/\[(합의완료|계류|GPT미검증)\]/, `[${status}]`);
+  return line.replace(STATUS_TAG_RE, `[${status}]`);
 }
 
 function extractApprovedIdsFromSection(markdown, heading) {
@@ -228,7 +235,11 @@ function normalizeGptAuditScopeStatus(gptMd) {
   }
 
   const replacementLines = auditSection.lines.map((line, index) => {
-    if (index === 0 || !/\[(계류|GPT미검증)\]/.test(line)) {
+    if (index === 0) {
+      return line;
+    }
+    const status = extractStatusFromLine(line);
+    if (!status || (status !== "계류" && status !== "GPT미검증")) {
       return line;
     }
     const ids = collectIdsFromLine(line);
@@ -277,7 +288,8 @@ function findNextAuditTaskInClaude(claudeMd) {
   const lines = auditSection ? auditSection.lines : claudeMd.split(/\r?\n/);
 
   for (const line of lines) {
-    if (!/\[(GPT미검증|계류)\]/.test(line)) {
+    const status = extractStatusFromLine(line);
+    if (status !== "GPT미검증" && status !== "계류") {
       continue;
     }
     const trimmed = line.trim();
@@ -297,10 +309,11 @@ function syncGptNextTaskWithPromotion(gptMd, claudeMd, state) {
     return { updated: gptMd, changed: false };
   }
 
+  const activeAuditTask = findNextAuditTaskInClaude(claudeMd);
   const nextTask =
+    activeAuditTask ??
     state?.nextStage?.next_task_ko ??
     state?.nextStage?.next_task_en ??
-    findNextAuditTaskInClaude(claudeMd) ??
     "`현재 등록된 다음 작업 없음`";
 
   if (!nextTask) {
@@ -343,7 +356,7 @@ function collectIdsFromLine(line) {
 function extractApprovedIds(markdown) {
   const ids = new Set();
   for (const line of markdown.split(/\r?\n/)) {
-    if (!line.includes("[합의완료]")) {
+    if (extractStatusFromLine(line) !== "합의완료") {
       continue;
     }
     for (const id of collectIdsFromLine(line)) {
@@ -356,7 +369,7 @@ function extractApprovedIds(markdown) {
 function extractPendingIds(markdown) {
   const ids = new Set();
   for (const line of markdown.split(/\r?\n/)) {
-    if (!line.includes("[계류]")) {
+    if (extractStatusFromLine(line) !== "계류") {
       continue;
     }
     for (const id of collectIdsFromLine(line)) {
@@ -639,27 +652,6 @@ function main() {
     }
   }
 
-  const promotionPlan = loadPromotionPlan();
-  const promotionState = promotionPlan
-    ? computePromotionState(
-        promotionPlan,
-        resolvePromotionApprovedIds(claudeMd, gptMd),
-      )
-    : null;
-
-  if (args.syncNext) {
-    const gptNextSync = syncGptNextTaskWithPromotion(gptMd, claudeMd, promotionState);
-    if (gptNextSync.changed) {
-      gptMd = gptNextSync.updated;
-      if (!args.dryRun) {
-        writeFileSync(gptPath, gptMd, "utf8");
-        console.log("Normalized '## 다음 작업' in gpt.md from promotion state.");
-      } else {
-        console.log("(dry-run) would normalize '## 다음 작업' in gpt.md from promotion state.");
-      }
-    }
-  }
-
   const gptItems = parseStatusLines(gptMd);
   const claudeItems = parseStatusLines(claudeMd);
   const unverified = claudeItems.filter(i => i.status === "GPT미검증");
@@ -695,6 +687,28 @@ function main() {
       console.log(`Updated: ${claudePath}`);
     } else {
       console.log("(dry-run — no file written)");
+    }
+  }
+
+  const effectiveClaudeMd = updated;
+  const promotionPlan = loadPromotionPlan();
+  const promotionState = promotionPlan
+    ? computePromotionState(
+        promotionPlan,
+        resolvePromotionApprovedIds(effectiveClaudeMd, gptMd),
+      )
+    : null;
+
+  if (args.syncNext) {
+    const gptNextSync = syncGptNextTaskWithPromotion(gptMd, effectiveClaudeMd, promotionState);
+    if (gptNextSync.changed) {
+      gptMd = gptNextSync.updated;
+      if (!args.dryRun) {
+        writeFileSync(gptPath, gptMd, "utf8");
+        console.log("Normalized '## 다음 작업' in gpt.md from promotion state.");
+      } else {
+        console.log("(dry-run) would normalize '## 다음 작업' in gpt.md from promotion state.");
+      }
     }
   }
 

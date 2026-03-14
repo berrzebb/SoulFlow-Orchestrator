@@ -15,6 +15,7 @@ const promotionDocPaths = [
   resolve(repoRoot, "docs", "ko", "design", "improved", "feedback-promotion.md"),
   resolve(repoRoot, "docs", "en", "design", "improved", "feedback-promotion.md"),
 ];
+const STATUS_TAG_RE = /\[(합의완료|계류|GPT미검증)(?:[^\]]*)\]/;
 
 function usage() {
   console.log(`Usage: node scripts/feedback-audit.mjs [options]
@@ -150,6 +151,11 @@ function deleteSavedSessionId() {
   }
 }
 
+function extractStatusFromLine(line) {
+  const match = line.match(STATUS_TAG_RE);
+  return match ? match[1] : null;
+}
+
 function detectScope(markdown) {
   const lines = markdown.split(/\r?\n/);
   const start = lines.findIndex((line) => /^##\s+감사 범위\s*$/.test(line.trim()));
@@ -164,12 +170,12 @@ function detectScope(markdown) {
     .map((line) => line.trim())
     .filter((line) => line.startsWith("- "));
 
-  const pending = normalized.filter((line) => line.includes("[GPT미검증]"));
+  const pending = normalized.filter((line) => extractStatusFromLine(line) === "GPT미검증");
   if (pending.length > 0) {
     return pending.map((line) => line.replace(/^- /, "")).join("\n");
   }
 
-  const fallback = normalized.filter((line) => line.includes("[계류]"));
+  const fallback = normalized.filter((line) => extractStatusFromLine(line) === "계류");
   if (fallback.length > 0) {
     return fallback.map((line) => line.replace(/^- /, "")).join("\n");
   }

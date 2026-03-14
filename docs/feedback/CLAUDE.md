@@ -1,6 +1,6 @@
 # Claude 증거 제출
 
-> 마지막 업데이트: 2026-03-14 16:02
+> 마지막 업데이트: 2026-03-14 16:22
 > GPT 감사 문서: `docs/feedback/gpt.md`
 
 ## 합의완료
@@ -24,6 +24,47 @@
 - `[합의완료]` TR-3 + TR-4 — Hybrid Merge/Rerank + Session Novelty Gate Tokenizer 정렬
 - `[합의완료]` TR-5 — Tokenizer/Hybrid Retrieval Eval Fixture + Regression Artifact
 - `[합의완료]` GW-1 + GW-2 — RequestPlan/ResultEnvelope + Ingress Normalization/Classification
+- `[합의완료]` GW-3 + GW-4 — ExecutionGateway + DirectExecutor
+
+## GW-3 + GW-4 — ExecutionGateway + DirectExecutor [합의완료]
+
+### Claim
+
+`ExecutionGateway`(`execution-gateway.ts`) — provider/executor 결정 + fallback chain 공식화. `ExecutionRoute { primary, fallbacks }` 타입으로 결정 결과 표현. `ProviderCapabilities` 기반 가용성 판별 + 우선순위(chatgpt → claude_code → openrouter → orchestrator_llm) fallback chain 자동 구성. no_token 경로는 fallback 없음(LLM 불필요).
+
+`DirectExecutor`(`direct-executor.ts`) — LLM 없이 결정론적 도구 실행. 6개 read-only/bounded-write 도구(datetime, task_query, read_file, list_dir, search_files, memory) 허용. 실패 시 dispatcher가 once 모드로 폴백.
+
+`execute-dispatcher.ts` 통합 — optional deps로 backward compatible. `direct_tool` 단축 경로(성공 시 LLM 스킵, 실패 시 once 폴백). Gateway 기반 fallback chain(legacy `claude_code → chatgpt` 하드코딩 대체).
+
+`gateway.ts` — `GatewayDecision`에 `direct_tool` variant 추가. `gateway-contracts.ts` — `to_request_plan`에 direct_tool 매핑 추가. Eval fixture 8개 추가(route 4 + direct 4, smoke 태그). gateway 번들 22 cases / 19 smoke.
+
+### Changed Files
+
+**New (2)**: `src/orchestration/execution-gateway.ts`, `src/orchestration/execution/direct-executor.ts`
+
+**New Tests (2)**: `tests/orchestration/execution-gateway.test.ts` (19 tests), `tests/orchestration/execution/direct-executor.test.ts` (16 tests)
+
+**Modified (5)**: `src/orchestration/gateway.ts` (direct_tool variant), `src/orchestration/gateway-contracts.ts` (direct_tool mapping), `src/orchestration/execution/execute-dispatcher.ts` (GW-3/GW-4 통합), `src/evals/gateway-executor.ts` (route+direct handler), `tests/evals/cases/gateway.json` (14→22 cases)
+
+**Modified Tests (1)**: `tests/evals/eval-run-cli.test.ts` (Passed: 11→19)
+
+### Test Command
+
+```bash
+npm run lint && npx tsc --noEmit && npx vitest run tests/evals/ tests/orchestration/execution-gateway.test.ts tests/orchestration/execution/direct-executor.test.ts tests/orchestration/gateway-contracts.test.ts tests/orchestration/ingress-normalizer.test.ts tests/orchestration/execute-dispatcher.test.ts tests/orchestration/gateway.test.ts && npx tsx scripts/eval-run.ts --bundle gateway --scorer exact --threshold 100
+```
+
+### Test Result
+
+- lint: 0 errors
+- tsc: passed
+- vitest: 15 files / 224 tests passed (기존 153 + 신규 35 + 기존 수정 36)
+- `--bundle gateway --scorer exact --threshold 100`: 19/19 (100.0%)
+
+### Residual Risk
+
+- `execute-dispatcher.ts`의 gateway/direct_executor deps는 optional — 미주입 시 기존 legacy 경로 유지 (backward compatible)
+- dispatcher 실제 호출 통합은 service.ts에서 deps 주입 시 활성화 — 현재는 unit test 레벨 검증만 완료
 
 ## GW-1 + GW-2 — RequestPlan/ResultEnvelope + Ingress Normalization/Classification [합의완료]
 
@@ -62,3 +103,4 @@ npm run lint && npx tsc --noEmit && npx vitest run tests/evals/ tests/orchestrat
 
 - `direct_tool` 경로는 GW-4에서 구현 예정 — 현재는 타입 계약만 정의, executor 미구현
 - `ChannelIngressNormalizer`의 Discord 정규화는 현재 passthrough — Discord 고유 멘션 형식 필요 시 추가
+
