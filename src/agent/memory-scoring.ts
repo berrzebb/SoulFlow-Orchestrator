@@ -1,5 +1,7 @@
 /** 메모리 검색 스코어링: RRF 융합 + 시간 감쇠. */
 
+import { DEFAULT_TOKENIZER } from "../search/index.js";
+
 /** RRF 파라미터. 낮을수록 상위 순위 집중, 높을수록 균등. memsearch 기본값. */
 const RRF_K = 60;
 
@@ -82,7 +84,7 @@ export function mmr_rerank(
   const token_cache = new Map<string, Set<string>>();
   const get_tokens = (id: string): Set<string> => {
     let t = token_cache.get(id);
-    if (!t) { t = tokenize_simple(content_fn(id)); token_cache.set(id, t); }
+    if (!t) { t = new Set(DEFAULT_TOKENIZER.tokenize(content_fn(id))); token_cache.set(id, t); }
     return t;
   };
 
@@ -111,11 +113,6 @@ export function mmr_rerank(
   return selected;
 }
 
-function tokenize_simple(text: string): Set<string> {
-  return new Set(
-    text.toLowerCase().replace(/[^a-z0-9가-힣\s]/g, " ").split(/\s+/).filter(w => w.length >= 2),
-  );
-}
 
 function jaccard(a: Set<string>, b: Set<string>): number {
   let intersection = 0;

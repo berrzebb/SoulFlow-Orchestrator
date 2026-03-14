@@ -103,10 +103,21 @@ describe("evaluate_reuse — same-query fixtures", () => {
 describe("evaluate_reuse — synonym-query fixtures", () => {
   it("유사 질의 (단어 겹침 높음) + fresh → same_topic", () => {
     const evidence = make_evidence([{ query: "오늘 서울 날씨 어때", age_ms: 120_000 }]);
-    // 질의: "서울 오늘 날씨" — 단어 3/4 겹침 (Jaccard ≈ 0.75, 임계값 0.7로 조정)
-    const opts = { ...DEFAULT_OPTS, similarity_threshold: 0.7 };
+    // 토크나이저가 "오늘"(KO 불용어)을 제거하므로:
+    // evidence: "서울 날씨 어때" / incoming: "서울 날씨" → Jaccard 2/3 ≈ 0.667
+    const opts = { ...DEFAULT_OPTS, similarity_threshold: 0.6 };
     const result = evaluate_reuse("서울 오늘 날씨", evidence, NOW, opts);
     expect(result.kind).toBe("same_topic");
+  });
+
+  it("한국어 조사 탈락으로 near-duplicate 감지 향상", () => {
+    // "데이터베이스에서" → 조사 "에서" 탈락 → "데이터베이스에서 데이터베이스"
+    // "데이터베이스 검색" → "데이터베이스 검색"
+    // 조사 탈락 덕분에 "데이터베이스"가 교집합에 포함됨
+    const evidence = make_evidence([{ query: "데이터베이스에서 검색", age_ms: 60_000 }]);
+    const opts = { ...DEFAULT_OPTS, similarity_threshold: 0.5 };
+    const result = evaluate_reuse("데이터베이스 검색", evidence, NOW, opts);
+    expect(result.kind).not.toBe("new_search");
   });
 
   it("유사도 미달 → new_search", () => {

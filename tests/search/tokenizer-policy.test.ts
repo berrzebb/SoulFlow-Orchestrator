@@ -1,5 +1,5 @@
 /**
- * TR-1+TR-2 계약 테스트 — TokenizerPolicy, QueryNormalizer, LexicalProfile.
+ * TR-1~TR-4 계약 테스트 — TokenizerPolicy, QueryNormalizer, LexicalProfile, LanguageRuleLike.
  */
 import { describe, it, expect } from "vitest";
 import {
@@ -10,12 +10,17 @@ import {
   MEMORY_CHUNK_PROFILE,
   build_fts5_tokenize_clause,
   build_bm25_call,
+  ENGLISH_RULES,
+  KOREAN_RULES,
+  CHINESE_RULES,
+  detect_language_rule,
 } from "../../src/search/index.js";
 import type {
   TokenizerPolicyLike,
   QueryNormalizerLike,
   LexicalProfile,
   TokenizerAdapterLike,
+  LanguageRuleLike,
 } from "../../src/search/index.js";
 
 // ── TokenizerPolicyLike 계약 ────────────────────────────────────────────────
@@ -246,5 +251,97 @@ describe("소비자 마이그레이션 회귀: tool-index FTS5 profile", () => {
     expect(content).not.toContain("function tokenize(");
     expect(content).not.toContain("STOP_WORDS_EN");
     expect(content).not.toContain("STOP_WORDS_KO");
+  });
+});
+
+// ── LanguageRuleLike 계약 ───────────────────────────────────────────────
+
+describe("LanguageRuleLike contract — 언어 규칙 분리", () => {
+  it("ENGLISH_RULES가 LanguageRuleLike 만족", () => {
+    const rule: LanguageRuleLike = ENGLISH_RULES;
+    expect(rule.lang).toBe("en");
+    expect(rule.tokenize_segment("hello")).toEqual(["hello"]);
+    expect(rule.is_stop_word("the")).toBe(true);
+    expect(rule.is_stop_word("database")).toBe(false);
+    expect(rule.is_valid_keyword("db")).toBe(false); // 2글자 영어 → invalid
+    expect(rule.is_valid_keyword("database")).toBe(true);
+  });
+
+  it("KOREAN_RULES가 조사 탈락 포함", () => {
+    const rule: LanguageRuleLike = KOREAN_RULES;
+    expect(rule.lang).toBe("ko");
+    expect(rule.matches_script("데이터")).toBe(true);
+    expect(rule.matches_script("hello")).toBe(false);
+    const tokens = rule.tokenize_segment("데이터베이스에서");
+    expect(tokens).toContain("데이터베이스");
+    expect(rule.is_stop_word("오늘")).toBe(true);
+    expect(rule.is_stop_word("서울")).toBe(false);
+  });
+
+  it("CHINESE_RULES가 유니그램 + 바이그램 생성", () => {
+    const rule: LanguageRuleLike = CHINESE_RULES;
+    expect(rule.lang).toBe("zh");
+    expect(rule.matches_script("数据")).toBe(true);
+    const tokens = rule.tokenize_segment("数据库");
+    expect(tokens).toContain("数");
+    expect(tokens).toContain("数据");
+    expect(tokens).toContain("据库");
+  });
+
+  it("detect_language_rule가 스크립트에 맞는 규칙 반환", () => {
+    expect(detect_language_rule("데이터")).toBe(KOREAN_RULES);
+    expect(detect_language_rule("数据")).toBe(CHINESE_RULES);
+    expect(detect_language_rule("hello")).toBe(ENGLISH_RULES);
+  });
+
+  it("새 언어 규칙이 LanguageRuleLike 계약을 만족 (stub Japanese)", () => {
+    const JA_RULES: LanguageRuleLike = {
+      lang: "ja",
+      matches_script: (s) => /[\u3040-\u309f\u30a0-\u30ff]/.test(s),
+      tokenize_segment: (s) => [s],
+      is_stop_word: () => false,
+      is_valid_keyword: (t) => t.length >= 1,
+    };
+    expect(JA_RULES.matches_script("こんにちは")).toBe(true);
+    expect(JA_RULES.tokenize_segment("テスト")).toEqual(["テスト"]);
+  });
+});
+
+// ── TR-3 소비자 회귀: memory-scoring ─────────────────────────────────────
+
+describe("소비자 마이그레이션 회귀: memory-scoring (TR-3)", () => {
+  it("memory-scoring.ts가 자체 tokenize_simple을 제거하고 DEFAULT_TOKENIZER 사용 (정적 분석)", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const content = readFileSync(join(__dirname, "..", "..", "src", "agent", "memory-scoring.ts"), "utf-8");
+    expect(content).toContain("DEFAULT_TOKENIZER");
+    expect(content).not.toContain("function tokenize_simple");
+    expect(content).not.toContain("[^a-z0-9가-힣\\s]");
+  });
+});
+
+// ── TR-4 소비자 회귀: session-reuse ──────────────────────────────────────
+
+describe("소비자 마이그레이션 회귀: session-reuse (TR-4)", () => {
+  it("session-reuse.ts가 DEFAULT_TOKENIZER를 import (정적 분석)", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const content = readFileSync(
+      join(__dirname, "..", "..", "src", "orchestration", "guardrails", "session-reuse.ts"),
+      "utf-8",
+    );
+    expect(content).toContain("DEFAULT_TOKENIZER");
+    // 자체 정규화 로직이 남아있지 않은지 확인
+    expect(content).not.toContain("[^\\p{L}\\p{N}\\s]");
+    expect(content).not.toContain(".toLowerCase()");
+  });
+
+  it("normalize_query가 DEFAULT_TOKENIZER와 동일한 토큰화 결과", async () => {
+    const { normalize_query } = await import(
+      "../../src/orchestration/guardrails/session-reuse.js"
+    );
+    const from_reuse = normalize_query("데이터베이스에서 검색을 수행");
+    const from_tokenizer = DEFAULT_TOKENIZER.tokenize("데이터베이스에서 검색을 수행").join(" ");
+    expect(from_reuse).toBe(from_tokenizer);
   });
 });

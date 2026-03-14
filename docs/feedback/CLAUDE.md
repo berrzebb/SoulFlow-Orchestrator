@@ -22,38 +22,40 @@
 - `[합의완료]` PA-1 + PA-2 — Ports & Adapters Boundary Fix
 - `[합의완료]` TR-1 + TR-2 — Shared Tokenizer/QueryNormalizer + LexicalProfile
 
-## TR-1 + TR-2 — Shared Tokenizer/QueryNormalizer + LexicalProfile `[합의완료]`
+## TR-3 + TR-4 — Hybrid Merge/Rerank + Session Novelty Gate Tokenizer 정렬
 
 ### Claim
 
-**TR-1**: `TokenizerPolicyLike` + `QueryNormalizerLike` 공유 인터페이스를 `src/search/types.ts`에 정의. `Unicode61Tokenizer` 기본 어댑터 구현. `memory-query-expansion.ts`의 130줄 자체 토크나이저(stop words, 조사 탈락, CJK 바이그램)를 `DEFAULT_TOKENIZER` 위임으로 교체 (23줄).
+**LanguageRuleLike 계약 + 언어별 모듈 추출**: `LanguageRuleLike` 인터페이스를 `src/search/types.ts`에 정의. `unicode61-tokenizer.ts`의 인라인 불용어 사전(STOP_EN 45개, STOP_KO 60개) + 한국어 조사 탈락 + CJK 바이그램 로직을 `src/search/languages/{en,ko,zh}.ts` 3개 파일로 분리. 토크나이저 본체는 `detect_language_rule()`로 위임하여 139줄 → 64줄로 단순화. 새 언어 추가 시 파일 1개 구현 + `index.ts` 등록만으로 확장 가능.
 
-**TR-2**: `LexicalProfile` 타입으로 FTS5 tokenizer 절 + BM25 가중치를 표준화. `tool-index.ts`의 하드코딩된 `tokenize='unicode61 remove_diacritics 2'` 2곳을 `build_fts5_tokenize_clause(TOOL_INDEX_PROFILE)`로 교체. `TokenizerAdapterLike` 확장 계약으로 ICU/커스텀 어댑터 플러그인 가능.
+**TR-3**: `memory-scoring.ts`의 `tokenize_simple()` (자체 정규식 기반 토큰화)를 `DEFAULT_TOKENIZER.tokenize()`로 교체. MMR 리랭킹의 Jaccard 유사도가 공유 토크나이저의 한국어 조사 탈락 + CJK 바이그램을 활용.
+
+**TR-4**: `session-reuse.ts`의 `normalize_query()` (자체 정규식 정규화)를 `DEFAULT_TOKENIZER.tokenize().join(" ")`로 교체. 세션 novelty gate의 중복 질의 감지가 한국어 조사 탈락을 활용하여 near-duplicate 감지 정확도 향상.
 
 ### Changed Files
 
-**New files (4)**: `src/search/types.ts`, `src/search/unicode61-tokenizer.ts`, `src/search/lexical-profiles.ts`, `src/search/index.ts`
+**New files (4)**: `src/search/languages/en.ts`, `src/search/languages/ko.ts`, `src/search/languages/zh.ts`, `src/search/languages/index.ts`
 
-**Migrated consumers (2)**: `src/agent/memory-query-expansion.ts` (DEFAULT_TOKENIZER 위임), `src/orchestration/tool-index.ts` (LexicalProfile FTS5 설정)
+**Refactored (3)**: `src/search/types.ts` (LanguageRuleLike 추가), `src/search/unicode61-tokenizer.ts` (languages/ 위임), `src/search/index.ts` (barrel export 확장)
 
-**Test (1)**: `tests/search/tokenizer-policy.test.ts` (28 tests — 계약 + 통합 회귀)
+**Migrated consumers (2)**: `src/agent/memory-scoring.ts` (tokenize_simple 제거, DEFAULT_TOKENIZER 사용), `src/orchestration/guardrails/session-reuse.ts` (normalize_query → DEFAULT_TOKENIZER)
+
+**Test (2)**: `tests/search/tokenizer-policy.test.ts` (36 tests — LanguageRuleLike 계약 + TR-3/TR-4 소비자 회귀), `tests/orchestration/guardrails/session-reuse.test.ts` (23 tests — 조사 탈락 near-duplicate 테스트 추가)
 
 ### Test Command
 
 ```bash
-npm run lint && npx tsc --noEmit && npx vitest run tests/search/tokenizer-policy.test.ts tests/agent/memory-service-search.test.ts tests/orchestration/tool-index.test.ts
+npm run lint && npx tsc --noEmit && npx vitest run tests/search/tokenizer-policy.test.ts tests/agent/memory-scoring.test.ts tests/orchestration/guardrails/session-reuse.test.ts tests/agent/memory-service-search.test.ts
 ```
 
 ### Test Result
 
 - lint: 0 errors
 - tsc: passed
-- vitest: 3 files / 118 tests passed
+- vitest: 4 files / 110 tests passed
 
 ### Residual Risk
 
-- `tool-index.ts`의 in-memory `tokenize()`는 의도적으로 EN-only — 다언어 `Unicode61Tokenizer`와 행동이 다르므로 유지
-- `tool-index.ts`의 `KO_KEYWORD_MAP` (150+ 항목)은 도구 도메인 전용이라 공유 계약에 포함하지 않음
-- `memory.service.ts`의 FTS5 테이블 생성도 하드코딩 — `MEMORY_CHUNK_PROFILE` 적용은 후속 작업
-- `TokenizerAdapterLike`의 ICU 실 어댑터는 미구현 (계약만 정의, YAGNI)
-
+- `memory.service.ts`의 FTS5 테이블 생성 시 `tokenize='unicode61 remove_diacritics 2'` 하드코딩 잔존 — `MEMORY_CHUNK_PROFILE` 적용은 후속 작업
+- `tool-index.ts`의 in-memory `tokenize()` EN-only 유지 (도구 도메인 전용, 공유 계약 범위 외)
+- `compute_similarity()`의 Jaccard는 독립 구현 유지 — `memory-scoring.ts`의 `jaccard()`과 중복이나, 입력 타입(string vs Set) 및 컨텍스트 상이하여 통합 대상 아님

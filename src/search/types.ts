@@ -35,6 +35,28 @@ export interface LexicalProfile {
   readonly bm25_weights?: readonly number[];
 }
 
+// ── LanguageRuleLike ─────────────────────────────────────────────────────
+
+/**
+ * 언어별 토큰화 규칙 계약.
+ * 새 언어 추가 시 이 인터페이스를 구현하고 languages/index.ts에 등록.
+ */
+export interface LanguageRuleLike {
+  /** BCP 47 언어 코드. */
+  readonly lang: string;
+  /** 세그먼트가 이 언어의 스크립트에 속하는지 판별. */
+  matches_script(segment: string): boolean;
+  /**
+   * 텍스트 세그먼트를 토큰으로 분해.
+   * 언어별 특수 처리(조사 탈락, 바이그램 등) 및 불용어 필터링 포함.
+   */
+  tokenize_segment(segment: string): string[];
+  /** 토큰이 불용어인지 판별. */
+  is_stop_word(token: string): boolean;
+  /** 토큰이 유효한 키워드인지 판별. */
+  is_valid_keyword(token: string): boolean;
+}
+
 // ── TR-2: TokenizerAdapterLike ──────────────────────────────────────────────
 
 /**

@@ -8,6 +8,8 @@
  * - 새로운 탐색 → new_search
  */
 
+import { DEFAULT_TOKENIZER } from "../../search/index.js";
+
 /** 세션에서 추출한 최근 탐색 근거. */
 export interface SessionEvidenceSnapshot {
   /** 최근 탐색 질의 목록 (정규화된 형태). */
@@ -45,15 +47,11 @@ export const DEFAULT_REUSE_OPTIONS: ReuseEvaluationOptions = {
 };
 
 /**
- * 질의 정규화: 소문자 변환, 공백 정리, 구두점 제거.
- * 동의어/near-duplicate 비교의 전처리 단계.
+ * 질의 정규화: 공유 토크나이저로 토큰화 후 공백 결합.
+ * 한국어 조사 탈락, CJK 바이그램 등 언어별 정규화 포함.
  */
 export function normalize_query(query: string): string {
-  return query
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}\s]/gu, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+  return DEFAULT_TOKENIZER.tokenize(query).join(" ");
 }
 
 /**

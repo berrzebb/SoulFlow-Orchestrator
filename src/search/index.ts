@@ -5,6 +5,7 @@ export type {
   QueryNormalizerLike,
   LexicalProfile,
   TokenizerAdapterLike,
+  LanguageRuleLike,
 } from "./types.js";
 
 export { Unicode61Tokenizer, DEFAULT_TOKENIZER } from "./unicode61-tokenizer.js";
@@ -17,3 +18,10 @@ export {
   build_fts5_tokenize_clause,
   build_bm25_call,
 } from "./lexical-profiles.js";
+
+export {
+  ENGLISH_RULES,
+  KOREAN_RULES,
+  CHINESE_RULES,
+  detect_language_rule,
+} from "./languages/index.js";
