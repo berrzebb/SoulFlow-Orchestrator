@@ -61,6 +61,10 @@ import {
 // ── GW-3/GW-4: Gateway + DirectExecutor 바인딩 ──
 import { create_execution_gateway, type ExecutionGatewayLike } from "./execution-gateway.js";
 import { create_direct_executor, type DirectExecutorLike } from "./execution/direct-executor.js";
+// ── RP-3/RP-4: PromptProfileCompiler 바인딩 ──
+import { create_prompt_profile_compiler, type PromptProfileCompilerLike } from "./prompt-profile-compiler.js";
+import { create_role_policy_resolver } from "./role-policy-resolver.js";
+import { create_protocol_resolver } from "./protocol-resolver.js";
 import { streaming_cfg_for } from "./execution/runner-deps.js";
 import { record_turn_to_daily } from "./turn-memory-recorder.js";
 import { record_guardrail_metrics } from "./guardrails/observability.js";
@@ -163,6 +167,7 @@ export class OrchestrationService implements OrchestrationServiceLike {
   private readonly _obs: import("../observability/context.js").ObservabilityLike;
   private readonly _execution_gateway: ExecutionGatewayLike;
   private readonly _direct_executor: DirectExecutorLike;
+  private readonly _profile_compiler: PromptProfileCompilerLike;
 
   constructor(deps: OrchestrationServiceDeps) {
     this._renderer = deps.renderer ?? null;
@@ -184,6 +189,12 @@ export class OrchestrationService implements OrchestrationServiceLike {
     this._obs = deps.observability ?? NOOP_OBS;
     this._execution_gateway = create_execution_gateway();
     this._direct_executor = create_direct_executor();
+    // RP-3/RP-4: PromptProfileCompiler — role resolver + protocol resolver 통합
+    const skills_loader = deps.agent_runtime.get_context_builder().skills_loader;
+    this._profile_compiler = create_prompt_profile_compiler(
+      create_role_policy_resolver(skills_loader),
+      create_protocol_resolver(skills_loader),
+    );
     this.deps = deps;
 
     this.streaming_cfg = {
@@ -558,26 +569,29 @@ export class OrchestrationService implements OrchestrationServiceLike {
     return reply_result(mode, stream, final_reply, result.tool_calls_count, result.parsed_output, usage);
   }
 
-  /** 시스템 프롬프트를 빌드. alias에 대응하는 role skill이 있으면 role persona를 적용하고, 없으면 concierge 힌트를 사용. */
+  /** 시스템 프롬프트를 빌드. alias에 대응하는 role skill이 있으면 컴파일된 role profile을 적용하고, 없으면 concierge 힌트를 사용. */
   private async _build_system_prompt(skill_names: string[], provider: string, chat_id: string, tool_categories?: ReadonlySet<string>, alias?: string): Promise<string> {
     const context_builder = this.runtime.get_context_builder();
+    const session_ctx = { channel: provider, chat_id };
 
-    // alias에 대응하는 role skill이 있으면 role persona 적용
+    // RP-4: alias에 대응하는 role → PromptProfileCompiler로 합성
     const role = alias || "";
-    const role_skill = role ? context_builder.skills_loader.get_role_skill(role) : null;
-    if (role_skill) {
-      return context_builder.build_role_system_prompt(
-        role, skill_names, undefined, { channel: provider, chat_id },
-      );
+    if (role) {
+      const profile = this._profile_compiler.compile(role);
+      if (profile) {
+        const base = await context_builder.build_system_prompt(skill_names, undefined, session_ctx, tool_categories);
+        const role_section = this._profile_compiler.render_system_section(profile);
+        return `${base}\n\n${role_section}`;
+      }
     }
 
-    // role skill 없으면 기본 시스템 프롬프트 + concierge 힌트
+    // role 미매칭 → 기본 시스템 프롬프트 + concierge 힌트
     const system = await context_builder.build_system_prompt(
-      skill_names, undefined, { channel: provider, chat_id }, tool_categories,
+      skill_names, undefined, session_ctx, tool_categories,
     );
-    const concierge_skill = context_builder.skills_loader.get_role_skill("concierge");
-    const active_role_hint = concierge_skill?.heart
-      ? `\n\n# Active Role: concierge\n${concierge_skill.heart}`
+    const concierge_profile = this._profile_compiler.compile("concierge");
+    const active_role_hint = concierge_profile?.heart
+      ? `\n\n# Active Role: concierge\n${concierge_profile.heart}`
       : "";
     return `${system}${active_role_hint}`;
   }

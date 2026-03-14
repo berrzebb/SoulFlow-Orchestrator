@@ -37,7 +37,8 @@ export interface RolePolicySkillSource {
 }
 
 /** SKILL.md description에서 use_when/not_use_for 추출. */
-function parse_description(desc: string): { use_when: string; not_use_for: string } {
+function parse_description(desc: string | undefined | null): { use_when: string; not_use_for: string } {
+  if (!desc) return { use_when: "", not_use_for: "" };
   const use_match = desc.match(/Use when\s+(.+?)(?:\.|$)/i);
   const not_match = desc.match(/Do NOT use for\s+(.+?)(?:\.|$)/i);
   return {
@@ -47,7 +48,8 @@ function parse_description(desc: string): { use_when: string; not_use_for: strin
 }
 
 /** resources/ 하위 파일 로드. 없으면 null. */
-function load_resource(skill_path: string, filename: string): string | null {
+function load_resource(skill_path: string | undefined | null, filename: string): string | null {
+  if (!skill_path) return null;
   const resources_dir = join(dirname(skill_path), "resources");
   const file = join(resources_dir, filename);
   if (!existsSync(file)) return null;
@@ -61,8 +63,8 @@ function normalize_role_policy(meta: SkillMetadata): RolePolicy {
     role_id: meta.role || meta.name,
     soul: meta.soul || "",
     heart: meta.heart || "",
-    tools: meta.tools,
-    shared_protocols: meta.shared_protocols,
+    tools: meta.tools || [],
+    shared_protocols: meta.shared_protocols || [],
     preferred_model: meta.model,
     use_when,
     not_use_for,

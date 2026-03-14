@@ -378,20 +378,19 @@ describe("OrchestrationService — _convert_agent_result normalize_agent_reply=n
 // ══════════════════════════════════════════
 
 describe("OrchestrationService — _build_system_prompt (L478-507)", () => {
-  it("alias 있고 role_skill 존재 → build_role_system_prompt 호출 (L483-487)", async () => {
+  it("alias 있고 role_skill 존재 → compiler 경로로 base + role section 합성 (RP-4)", async () => {
     const { service, cb } = make_service();
-    // alias="assistant" → get_role_skill("assistant") 반환값 있음
-    cb.skills_loader.get_role_skill = vi.fn().mockReturnValue({ heart: "role persona" });
-    cb.build_role_system_prompt = vi.fn().mockResolvedValue("role_system_prompt");
+    // alias="assistant" → get_role_skill("assistant") 반환값 있음 (compiler가 사용)
+    cb.skills_loader.get_role_skill = vi.fn().mockReturnValue({ role: "assistant", heart: "role persona", soul: "soul text" });
+    cb.build_system_prompt = vi.fn().mockResolvedValue("base_system");
 
     const result = await (service as any)._build_system_prompt(
       ["skill1"], "slack", "C1", undefined, "assistant",
     );
 
-    expect(cb.build_role_system_prompt).toHaveBeenCalledWith(
-      "assistant", ["skill1"], undefined, { channel: "slack", chat_id: "C1" },
-    );
-    expect(result).toBe("role_system_prompt");
+    // RP-4: compiler 경로 → base + rendered role section
+    expect(result).toContain("base_system");
+    expect(result).toContain("# Role: assistant");
   });
 
   it("alias 없음 + concierge_skill heart 있음 → 기본 프롬프트 + Active Role 힌트 (L493-497)", async () => {
