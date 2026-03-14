@@ -17,6 +17,9 @@ import type { ConfirmationGuard } from "../confirmation-guard.js";
 import { format_guard_prompt } from "../confirmation-guard.js";
 import type { AppendWorkflowEventInput } from "../../events/index.js";
 import { resolve_gateway } from "../gateway.js";
+import { to_request_plan } from "../gateway-contracts.js";
+import type { ExecutionGatewayLike } from "../execution-gateway.js";
+import type { DirectExecutorLike, ExecuteToolFn } from "./direct-executor.js";
 import { error_message } from "../../utils/common.js";
 import { select_tools_for_request } from "../tool-selector.js";
 import { is_once_escalation, is_agent_escalation } from "../classifier.js";
@@ -49,6 +52,12 @@ export type ExecuteDispatcherDeps = {
   run_task_loop: (args: RunExecutionArgs & { media: string[] }) => Promise<OrchestrationResult>;
   run_phase_loop: (req: OrchestrationRequest, task_with_media: string, workflow_hint?: string, node_categories?: string[]) => Promise<OrchestrationResult>;
   caps: () => ProviderCapabilities;
+  /** GW-3: provider 결정 + fallback chain. 미설정 시 기존 하드코딩 로직 사용. */
+  execution_gateway?: ExecutionGatewayLike;
+  /** GW-4: agent 없이 결정론적 도구 실행. */
+  direct_executor?: DirectExecutorLike;
+  /** GW-4: direct executor용 도구 실행 함수. */
+  execute_tool?: ExecuteToolFn;
 };
 
 /** execute() preflight 이후 dispatcher 로직. gateway 라우팅 → short-circuit/runner 진입 → finalize */
@@ -110,7 +119,26 @@ export async function execute_dispatch(
     return { reply: decision.summary, mode: "once", tool_calls_count: 0, streamed: false };
   }
 
-  const { mode } = decision;
+  // GW-4: Short-circuit: direct_tool — LLM 없이 결정론적 도구 실행
+  if (decision.action === "direct_tool") {
+    if (deps.direct_executor?.is_allowed(decision.tool_name) && deps.execute_tool) {
+      const dr = await deps.direct_executor.execute(
+        { tool_name: decision.tool_name, args: decision.args },
+        deps.execute_tool,
+        tool_ctx,
+      );
+      if (!dr.error) {
+        deps.log_event({ ...evt_base, phase: "done", summary: `direct_tool: ${dr.tool_name}`, payload: { mode: "once", tool: dr.tool_name } });
+        return { reply: dr.output, mode: "once", tool_calls_count: 1, streamed: false, tools_used: [dr.tool_name] };
+      }
+      deps.logger.warn("direct_tool failed, falling back to once", { tool: dr.tool_name, error: dr.error });
+    }
+    // Fallback: once 모드로 전환하여 LLM 처리
+    deps.log_event({ ...evt_base, phase: "progress", summary: "direct_tool fallback to once", payload: { tool: decision.tool_name } });
+  }
+
+  // direct_tool 폴백 시 mode가 없으므로 명시적 추출
+  const mode: import("../types.js").ExecutionMode = decision.action === "execute" ? decision.mode : "once";
 
   // EG-3: session reuse short-circuit — phase 제외, once/agent/task 모드에서만 판단
   if (mode !== "phase") {
@@ -124,8 +152,12 @@ export async function execute_dispatch(
       }
     }
   }
+  // direct_tool 폴백 시 executor가 없으므로 preference에서 해결
+  const raw_executor = decision.action === "execute"
+    ? decision.executor
+    : resolve_executor_provider(deps.config.executor_provider, deps.caps());
   // 사용자 지정 프로바이더가 있으면 gateway 선택을 오버라이드
-  const executor = (req.preferred_provider_id as import("../../providers/executor.js").ExecutorProvider | undefined) ?? decision.executor;
+  const executor = (req.preferred_provider_id as import("../../providers/executor.js").ExecutorProvider | undefined) ?? raw_executor;
 
   // finalize: done/blocked 이벤트 기록 + process tracker 종료 + completion check 추가 (검증 역할 전용)
   const finalize = (result: OrchestrationResult): OrchestrationResult => {
@@ -158,8 +190,8 @@ export async function execute_dispatch(
   // phase 모드 → Phase Loop Runner에 위임 (도구 선택 전에 분기)
   if (mode === "phase") {
     deps.log_event({ ...evt_base, phase: "progress", summary: "executing: phase", payload: { mode, executor } });
-    const workflow_hint = decision.workflow_id;
-    const node_cats = decision.node_categories;
+    const workflow_hint = "workflow_id" in decision ? decision.workflow_id : undefined;
+    const node_cats = "node_categories" in decision ? decision.node_categories : undefined;
     return finalize(await deps.run_phase_loop(req, task_with_media, workflow_hint, node_cats));
   }
 
@@ -248,7 +280,17 @@ export async function execute_dispatch(
 
     if (first.reply || first.suppress_reply) return finalize(first);
 
-    if (executor === "claude_code") {
+    // GW-3: gateway 기반 fallback chain — 없으면 기존 하드코딩 로직
+    if (deps.execution_gateway) {
+      const plan = to_request_plan(decision);
+      const route = deps.execution_gateway.resolve(plan, deps.caps(), deps.config.executor_provider);
+      for (const fb of route.fallbacks) {
+        if (fb === executor) continue;
+        deps.logger.warn("executor failed, trying fallback", { executor, fallback: fb, error: first.error });
+        const retry = await run_loop(fb);
+        if (retry.reply || retry.suppress_reply) return finalize(retry);
+      }
+    } else if (executor === "claude_code") {
       const fallback = resolve_executor_provider("chatgpt", deps.caps());
       if (fallback !== executor) {
         deps.logger.warn("executor failed, trying fallback", { executor, fallback, error: first.error });

@@ -1,6 +1,6 @@
 {
   "name": "gateway",
-  "description": "GW-2: gateway 분류 + 비용 기반 라우팅 + ingress 정규화 회귀 평가",
+  "description": "GW-2/3/4: gateway 분류 + 비용 기반 라우팅 + ingress 정규화 + 실행 경로 + 직접 실행 회귀 평가",
   "cases": [
     {
       "id": "gw-classify-identity",
@@ -85,6 +85,54 @@
       "input": "{\"type\":\"normalize\",\"text\":\"그냥 메시지\",\"provider\":\"slack\"}",
       "expected": "그냥 메시지",
       "tags": ["full", "normalize"]
+    },
+    {
+      "id": "gw-route-identity-no-fallback",
+      "input": "{\"type\":\"route\",\"plan_kind\":\"identity\"}",
+      "expected": "chatgpt:0",
+      "tags": ["smoke", "route"]
+    },
+    {
+      "id": "gw-route-once-has-fallback",
+      "input": "{\"type\":\"route\",\"plan_kind\":\"once\",\"executor\":\"chatgpt\"}",
+      "expected": "chatgpt:2",
+      "tags": ["smoke", "route"]
+    },
+    {
+      "id": "gw-route-agent-claude-fallback",
+      "input": "{\"type\":\"route\",\"plan_kind\":\"agent\",\"executor\":\"claude_code\"}",
+      "expected": "claude_code:2",
+      "tags": ["smoke", "route"]
+    },
+    {
+      "id": "gw-route-direct-tool-no-fallback",
+      "input": "{\"type\":\"route\",\"plan_kind\":\"direct_tool\"}",
+      "expected": "chatgpt:0",
+      "tags": ["smoke", "route"]
+    },
+    {
+      "id": "gw-direct-datetime-allowed",
+      "input": "{\"type\":\"direct\",\"tool_name\":\"datetime\"}",
+      "expected": "allowed",
+      "tags": ["smoke", "direct"]
+    },
+    {
+      "id": "gw-direct-read-file-allowed",
+      "input": "{\"type\":\"direct\",\"tool_name\":\"read_file\"}",
+      "expected": "allowed",
+      "tags": ["smoke", "direct"]
+    },
+    {
+      "id": "gw-direct-exec-denied",
+      "input": "{\"type\":\"direct\",\"tool_name\":\"exec\"}",
+      "expected": "denied",
+      "tags": ["smoke", "direct"]
+    },
+    {
+      "id": "gw-direct-web-search-denied",
+      "input": "{\"type\":\"direct\",\"tool_name\":\"web_search\"}",
+      "expected": "denied",
+      "tags": ["smoke", "direct"]
     }
   ]
 }

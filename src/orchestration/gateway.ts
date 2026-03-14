@@ -18,6 +18,7 @@ export type GatewayDecision =
   | { action: "builtin"; command: string; args?: string }
   | { action: "inquiry"; summary: string }
   | { action: "identity" }
+  | { action: "direct_tool"; tool_name: string; args?: Record<string, unknown> }
   | { action: "execute"; mode: ExecutionMode; executor: ExecutorProvider; workflow_id?: string; tool_categories?: string[]; node_categories?: string[] };
 
 export type GatewayDeps = {

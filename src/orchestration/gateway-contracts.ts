@@ -61,6 +61,9 @@ export function to_request_plan(decision: GatewayDecision): RequestPlan {
   if (decision.action === "inquiry") {
     return { route: "no_token", kind: "inquiry", summary: decision.summary };
   }
+  if (decision.action === "direct_tool") {
+    return { route: "no_token", kind: "direct_tool", plan: { tool_name: decision.tool_name, args: decision.args } };
+  }
   const { mode, executor, tool_categories, workflow_id, node_categories } = decision;
   if (mode === "once") {
     return { route: "model_direct", kind: "once", executor, tool_categories };
