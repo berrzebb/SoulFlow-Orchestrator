@@ -44,6 +44,21 @@ export interface AgentProvider {
   token_configured: boolean;
 }
 
+export interface FailedValidatorEntry {
+  kind: string;
+  command: string;
+  output?: string;
+}
+
+export interface ValidatorSummary {
+  repo_id: string;
+  total_validators: number;
+  passed_validators: number;
+  failed_validators: FailedValidatorEntry[];
+  artifact_bundle_id?: string;
+  created_at: string;
+}
+
 export interface DashboardState {
   now: string;
   queue: { inbound: number; outbound: number };
@@ -61,6 +76,7 @@ export interface DashboardState {
   workflow_events: WorkflowEvent[];
   cd_score: { total: number } | null;
   agent_providers?: AgentProvider[];
+  validator_summary?: ValidatorSummary;
 }
 
 export const ACTIVE_TASK_STATUSES = new Set(["running", "waiting_approval", "waiting_user_input"]);

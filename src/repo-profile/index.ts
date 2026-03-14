@@ -29,3 +29,6 @@ export {
   deserialize_bundle,
   is_bundle_passing,
 } from "./artifact-bundle.js";
+
+export type { FailedValidatorEntry, ValidatorSummary } from "./validator-summary-adapter.js";
+export { adapt_bundle_to_summary, validator_badge_variant } from "./validator-summary-adapter.js";

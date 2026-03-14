@@ -9,7 +9,7 @@ import { PROVIDER_COLORS } from "../../utils/constants";
 import { fmt_time } from "../../utils/format";
 import { MetricBar, StatusDot, fmt_uptime, fmt_kbps } from "../overview/helpers";
 import { ProcessesSection } from "../overview/processes-section";
-import type { DashboardState, SystemMetrics } from "../overview/types";
+import type { DashboardState, SystemMetrics, ValidatorSummary } from "../overview/types";
 import { PHASE_VARIANT } from "../overview/types";
 import { SkeletonGrid } from "../../components/skeleton-grid";
 
@@ -254,7 +254,64 @@ export function MonitoringPanel() {
         </div>
       )}
 
+      {/* Validator Summary */}
+      {s.validator_summary && (
+        <ValidatorSummaryPanel summary={s.validator_summary} />
+      )}
+
       <div className="overview__timestamp text-xs text-muted">{s.now || "-"}</div>
     </div>
+  );
+}
+
+function ValidatorSummaryPanel({ summary }: { summary: ValidatorSummary }) {
+  const t = useT();
+  const variant = summary.failed_validators.length === 0
+    ? (summary.total_validators === 0 ? "off" : "ok")
+    : summary.failed_validators.length < summary.total_validators ? "warn" : "err";
+
+  return (
+    <section className="panel panel--flush">
+      <SectionHeader title={t("overview.validator_summary") || "Validator Status"}>
+        <span className="text-xs text-muted">{summary.repo_id}</span>
+      </SectionHeader>
+      <div className="grid-stack">
+        <div className="kv mt-0 mb-0">
+          <Badge
+            status={
+              summary.total_validators === 0
+                ? (t("overview.validator_none") || "No validators")
+                : summary.failed_validators.length === 0
+                  ? (t("overview.validator_all_passed") || "All passed")
+                  : (t("overview.validator_failed_fmt", { count: summary.failed_validators.length }) || `${summary.failed_validators.length} failed`)
+            }
+            variant={variant}
+          />
+          <span className="text-xs text-muted">
+            {t("overview.validator_passed_fmt", {
+              passed: summary.passed_validators,
+              total: summary.total_validators,
+            }) || `${summary.passed_validators}/${summary.total_validators} passed`}
+          </span>
+        </div>
+        {summary.failed_validators.length > 0 && (
+          <ul className="list list--compact">
+            {summary.failed_validators.map((f, i) => (
+              <li key={`${f.kind}-${i}`}>
+                <span className="li-text li-flex">
+                  <Badge status={f.kind} variant="err" />
+                  <span className="text-xs text-muted truncate">{f.command}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+        {summary.artifact_bundle_id && (
+          <div className="text-xs text-muted">
+            Bundle: <code>{summary.artifact_bundle_id}</code>
+          </div>
+        )}
+      </div>
+    </section>
   );
 }

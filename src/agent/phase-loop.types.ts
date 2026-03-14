@@ -95,6 +95,15 @@ export interface PhaseLoopState {
   auto_resume?: boolean;
   /** 멀티테넌트: 워크플로우를 생성한 팀. SSE 스코프 브로드캐스트에 사용. */
   team_id?: string;
+  /** RPF-4F: 이 실행에 연결된 ArtifactBundle 요약. 대시보드 표면 렌더링용. */
+  artifact_bundle?: {
+    repo_id: string;
+    created_at: string;
+    is_passing: boolean;
+    total_validators: number;
+    passed_validators: number;
+    failed_kinds: string[];
+  };
 }
 
 // ── Definition (워크플로우 템플릿) ───────────────────

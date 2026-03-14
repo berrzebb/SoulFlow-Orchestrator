@@ -367,6 +367,8 @@ export type DashboardOptions = {
   logger?: Logger | null;
   /** OB-5: observability 주입. 미설정 시 no-op. */
   observability?: import("../observability/context.js").ObservabilityLike | null;
+  /** RPF-4F: 최신 ValidatorSummary 공급 포트. 미설정 시 /api/state에서 validator_summary 생략. */
+  validator_summary_ops?: { get_latest(): import("../repo-profile/validator-summary-adapter.js").ValidatorSummary | null } | null;
 };
 
 export const MAX_CHAT_SESSIONS = 20;

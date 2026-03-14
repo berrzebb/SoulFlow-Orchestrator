@@ -77,6 +77,15 @@ interface PhaseDefinitionBrief {
   max_loop_iterations?: number;
 }
 
+interface ArtifactBundleEntry {
+  repo_id: string;
+  created_at: string;
+  is_passing: boolean;
+  total_validators: number;
+  passed_validators: number;
+  failed_kinds: string[];
+}
+
 interface PhaseLoopState {
   workflow_id: string;
   title: string;
@@ -90,6 +99,7 @@ interface PhaseLoopState {
   definition?: { phases: PhaseDefinitionBrief[] };
   auto_approve?: boolean;
   auto_resume?: boolean;
+  artifact_bundle?: ArtifactBundleEntry;
 }
 
 const STATUS_VARIANT: Record<string, "ok" | "warn" | "err" | "off"> = {
@@ -220,6 +230,10 @@ export default function WorkflowDetailPage() {
               </div>
             </div>
           </div>
+
+          {wf.artifact_bundle && (
+            <ArtifactEntryCard bundle={wf.artifact_bundle} />
+          )}
 
           {wf.phases.map((phase, i) => {
             const def = wf.definition?.phases?.find((d) => d.phase_id === phase.phase_id);
@@ -654,6 +668,39 @@ function CriticCard({ critic }: { critic: PhaseCriticState }) {
         </div>
       )}
     </div>
+  );
+}
+
+function ArtifactEntryCard({ bundle }: { bundle: ArtifactBundleEntry }) {
+  const t = useT();
+  const variant = bundle.is_passing ? "ok" : "err";
+  return (
+    <section className="panel panel--flush">
+      <div className="kv mt-0 mb-0">
+        <Badge
+          status={bundle.is_passing
+            ? (t("workflows.artifact_bundle_passing") || "Passing")
+            : (t("workflows.artifact_bundle_failed_fmt", { count: bundle.failed_kinds.length }) || `${bundle.failed_kinds.length} failed`)
+          }
+          variant={variant}
+        />
+        <span className="text-xs text-muted fw-600">
+          {t("workflows.artifact_bundle") || "Artifact Bundle"}
+        </span>
+        <span className="text-xs text-muted">{bundle.repo_id}</span>
+        <span className="text-xs text-muted">
+          {bundle.passed_validators}/{bundle.total_validators} validators
+        </span>
+      </div>
+      {bundle.failed_kinds.length > 0 && (
+        <div className="text-xs text-err mt-1">
+          Failed: {bundle.failed_kinds.join(", ")}
+        </div>
+      )}
+      <div className="text-xs text-muted mt-1">
+        {new Date(bundle.created_at).toLocaleString()}
+      </div>
+    </section>
   );
 }
 

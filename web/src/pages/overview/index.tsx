@@ -74,6 +74,23 @@ export default function OverviewPage() {
         </ul>
       </section>
 
+      {/* Validator Summary — 실패가 있을 때만 노출 */}
+      {s.validator_summary && s.validator_summary.failed_validators.length > 0 && (
+        <section className="panel panel--flush">
+          <h2>{t("overview.validator_summary") || "Validator Status"}</h2>
+          <div className="kv mt-0">
+            <Badge
+              status={`${s.validator_summary.failed_validators.length} failed`}
+              variant="err"
+            />
+            <span className="text-xs text-muted">{s.validator_summary.repo_id}</span>
+            <span className="text-xs text-muted">
+              {s.validator_summary.passed_validators}/{s.validator_summary.total_validators} passed
+            </span>
+          </div>
+        </section>
+      )}
+
       <div className="overview__timestamp text-xs text-muted">{s.now || "-"}</div>
     </div>
   );

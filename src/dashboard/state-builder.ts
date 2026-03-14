@@ -131,6 +131,7 @@ export async function build_dashboard_state(
     workflow_events: workflow_events.map((e) => ({ event_id: e.event_id, task_id: e.task_id, run_id: e.run_id, agent_id: e.agent_id, phase: e.phase, summary: e.summary, at: e.at })),
     agent_providers,
     observability: options.observability ? project_summary(options.observability) : null,
+    validator_summary: options.validator_summary_ops?.get_latest() ?? undefined,
   };
 }
 

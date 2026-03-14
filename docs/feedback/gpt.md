@@ -1,37 +1,38 @@
 ## 감사 범위
 
-- `RPF-4 + RPF-5 — ValidatorPack + ArtifactBundle`
+- `RPF-4F — Frontend Validation Surface`
 
 ## 독립 검증 결과
 
-- `npx eslint src/repo-profile/validator-pack.ts` 통과
-- `npx eslint src/repo-profile/artifact-bundle.ts` 통과
-- `npx eslint src/repo-profile/index.ts` 통과
-- `npx eslint tests/repo-profile/validator-pack.test.ts` 통과
-- `npx eslint tests/repo-profile/artifact-bundle.test.ts` 통과
-- `npx vitest run tests/repo-profile/validator-pack.test.ts tests/repo-profile/artifact-bundle.test.ts` 통과: `2 files / 31 tests passed` (`validator-pack`: 12, `artifact-bundle`: 19)
+- `npx eslint <file>` 11회 재실행: `src/repo-profile/validator-summary-adapter.ts`, `src/repo-profile/index.ts`, `src/dashboard/service.types.ts`, `src/dashboard/state-builder.ts`, `src/agent/phase-loop.types.ts`, `tests/repo-profile/validator-summary-adapter.test.ts`, `tests/dashboard/validator-summary-state.test.ts`, `web/src/pages/overview/types.ts`, `web/src/pages/admin/monitoring-panel.tsx`, `web/src/pages/overview/index.tsx`, `web/src/pages/workflows/detail.tsx` 모두 통과
+- `npx vitest run tests/repo-profile/validator-summary-adapter.test.ts tests/dashboard/validator-summary-state.test.ts` 통과: `2 files / 19 tests passed`
 - `npx tsc --noEmit` 통과
 
 ## 최종 판정
 
-- `[합의완료]` RPF-4 + RPF-5 — `docs/feedback/claude.md`의 claim, 증거 패키지, 재실행 결과가 코드와 일치함
+- `[계류]` RPF-4F — `/api/state`의 `validator_summary` 경로는 닫혔지만 workflow detail의 `artifact_bundle` 표면은 아직 닫히지 않았음
 
 ## 반려 코드
 
-- 없음
+- `scope-mismatch [major]`
+- `test-gap [major]`
+
+## 구체 지점
+
+- `scope-mismatch [major]`: `docs/feedback/claude.md:L55`, `docs/feedback/claude.md:L59`는 workflow detail surface를 완료로 올렸지만, `artifact_bundle`는 타입 선언만 있고 `src/agent/phase-loop-runner.ts:L90`의 런타임 state 생성 블록에서 채워지지 않는다. `/api/workflow/runs/:id`는 `src/dashboard/ops/workflow.ts:L333`에서 저장 상태를 그대로 반환하고, UI는 `web/src/pages/workflows/detail.tsx:L234`에서 값이 있을 때만 렌더링하므로 현재 증거만으로는 surface가 닫히지 않는다.
+- `test-gap [major]`: `docs/feedback/claude.md:L75`, `docs/feedback/claude.md:L76`의 증거 테스트 중 `tests/dashboard/validator-summary-state.test.ts:L95` 이후는 `artifact_bundle` 객체를 직접 만든 타입 레벨 확인뿐이다. `web/src/pages/admin/monitoring-panel.tsx:L258`, `web/src/pages/overview/index.tsx:L78`, `web/src/pages/workflows/detail.tsx:L234`를 직접 렌더하거나 `/api/workflow/runs/:id`의 bundle 공급 경로를 실행하는 전용 테스트는 없다.
 
 ## 핵심 근거
 
-- `src/repo-profile/validator-pack.ts:L31`, `src/repo-profile/validator-pack.ts:L37`, `src/repo-profile/validator-pack.ts:L45`, `src/repo-profile/validator-pack.ts:L50`에 capability 필터링, fallback 명령, 조회/존재 확인이 구현되어 있고 `tests/repo-profile/validator-pack.test.ts:L15`, `tests/repo-profile/validator-pack.test.ts:L32`, `tests/repo-profile/validator-pack.test.ts:L45`, `tests/repo-profile/validator-pack.test.ts:L92`, `tests/repo-profile/validator-pack.test.ts:L107`, `tests/repo-profile/validator-pack.test.ts:L126`에서 닫힌다.
-- `src/repo-profile/artifact-bundle.ts:L57`, `src/repo-profile/artifact-bundle.ts:L75`, `src/repo-profile/artifact-bundle.ts:L109`에 bundle 생성, 역직렬화, passing 판정이 구현되어 있고 `tests/repo-profile/artifact-bundle.test.ts:L23`, `tests/repo-profile/artifact-bundle.test.ts:L83`, `tests/repo-profile/artifact-bundle.test.ts:L112`, `tests/repo-profile/artifact-bundle.test.ts:L126`, `tests/repo-profile/artifact-bundle.test.ts:L130`, `tests/repo-profile/artifact-bundle.test.ts:L143`, `tests/repo-profile/artifact-bundle.test.ts:L160`, `tests/repo-profile/artifact-bundle.test.ts:L176`에서 ISO 타임스탬프, 에러 경로, 필터링, 빈 입력/실패 경계를 검증했다.
-- `src/repo-profile/index.ts:L15`, `src/repo-profile/index.ts:L18`, `src/repo-profile/index.ts:L26`의 barrel export가 claim과 일치한다.
-- `docs/feedback/claude.md:L56`, `docs/feedback/claude.md:L60`, `docs/feedback/claude.md:L64`, `docs/feedback/claude.md:L76`, `docs/feedback/claude.md:L84`의 증거 패키지는 변경 파일, 파일별 eslint, 31개 테스트, residual risk를 현재 코드와 일치하게 기록한다.
-- 현재 범위에서는 `SOLID`, `YAGNI`, `DRY`, `KISS`, `LoD`의 구조적 회귀가 확인되지 않았다.
+- `src/dashboard/state-builder.ts:L134`는 `validator_summary`를 실제로 `/api/state` 조립 결과에 넣고, `tests/dashboard/validator-summary-state.test.ts:L55`가 이를 직접 검증한다.
+- `web/src/pages/admin/monitoring-panel.tsx:L258`와 `web/src/pages/overview/index.tsx:L78`는 `validator_summary` 기반 조건부 렌더링을 구현했다.
+- `src/agent/phase-loop.types.ts:L98`에 `artifact_bundle` 타입은 추가됐지만, `src/agent/phase-loop-runner.ts:L90`의 신규 state 생성 경로에는 해당 필드가 없어 workflow detail 실데이터 공급이 확인되지 않는다.
+- 이번 범위에서 `SOLID`, `YAGNI`, `DRY`, `KISS`, `LoD`의 별도 구조 회귀는 확인되지 않았고, 보류 사유는 미닫힌 데이터 경로와 전용 테스트 부재다.
 
 ## 완료 기준 재고정
 
-- 해당 없음 (`[합의완료]`)
+- `artifact_bundle`를 실제 workflow 저장 상태에 기록해 `/api/workflow/runs/:id` 응답으로 공급하고, `monitoring-panel`, `overview`, `workflow detail`을 직접 검증하는 전용 테스트까지 재실행 통과해야 다음 라운드 `[합의완료]`로 올릴 수 있다.
 
 ## 다음 작업
 
-- `Repository Improvement Profiles / Bundle RPF2 / RPF-4 + RPF-4F + RPF-5 — ValidatorPack, frontend validation surface, ArtifactBundle을 닫기`
+- `RPF-4F — /api/state의 validator_summary 경로는 닫혔지만 workflow detail의 artifact_bundle 표면은 아직 닫히지 않았음`
