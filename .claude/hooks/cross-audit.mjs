@@ -3,10 +3,10 @@
  * PostToolUse hook: 양방향 감사 자동화.
  *
  * (A) Claude가 docs/feedback/claude.md 편집 + [GPT미검증] 존재 →
- *     feedback-audit.mjs 동기 실행 → GPT 응답 대기 → gpt.md 내용 stdout 출력
+ *     feedback-audit.mjs 동기 실행 → feedback-respond.mjs 자동 동기화 → 결과 출력
  *
  * (B) 모든 Edit/Write 시 gpt.md가 claude.md보다 최신이면 →
- *     미확인 GPT 응답 알림 stdout 출력 (1회)
+ *     feedback-respond.mjs 자동 동기화 실행 → 결과 출력
  */
 import { readFileSync, existsSync, appendFileSync, statSync, writeFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
@@ -43,7 +43,43 @@ function write_ack_time(ms) {
   writeFileSync(ackFile, String(ms), "utf8");
 }
 
-/** (B) gpt.md가 claude.md보다 최신이고 아직 확인하지 않았으면 알림. */
+/** feedback-respond.mjs 실행하여 GPT 판정을 claude.md에 동기화. */
+function run_respond() {
+  const respondScript = resolve(repoRoot, "scripts", "feedback-respond.mjs");
+  if (!existsSync(respondScript)) {
+    log("RESPOND: feedback-respond.mjs not found");
+    return null;
+  }
+
+  const result = spawnSync(
+    process.execPath,
+    [respondScript],
+    {
+      cwd: repoRoot,
+      stdio: ["ignore", "pipe", "pipe"],
+      encoding: "utf8",
+      env: { ...process.env, FEEDBACK_LOOP_ACTIVE: "1" },
+    },
+  );
+
+  if (result.error) {
+    log(`RESPOND ERROR: ${result.error.message}`);
+    return null;
+  }
+
+  const output = (result.stdout || "").trim();
+  if (output) log(`RESPOND: ${output.split("\n")[0]}`);
+  return { status: result.status, stdout: output };
+}
+
+/** claude.md에 [GPT미검증]이 남아있는지 확인. */
+function has_unverified() {
+  const claudePath = find_feedback_file("claude.md") || find_feedback_file("CLAUDE.md");
+  if (!claudePath) return false;
+  return readFileSync(claudePath, "utf8").includes("[GPT미검증]");
+}
+
+/** (B) gpt.md가 claude.md보다 최신이면 자동 동기화 실행. */
 function check_pending_gpt_response() {
   const gptPath = find_feedback_file("gpt.md");
   const claudePath = find_feedback_file("claude.md") || find_feedback_file("CLAUDE.md");
@@ -54,14 +90,29 @@ function check_pending_gpt_response() {
   const lastAck = read_ack_time();
 
   if (gptMtime > claudeMtime && gptMtime > lastAck) {
-    write_ack_time(gptMtime);
+    log("NOTIFY: pending GPT response detected — running auto-sync");
+
+    const respondResult = run_respond();
+    // respond가 gpt.md를 정규화하면 mtime이 변경됨 — 최신 mtime으로 ack 갱신
+    write_ack_time(Math.max(gptMtime, get_mtime(gptPath)));
     const content = readFileSync(gptPath, "utf8");
-    log("NOTIFY: pending GPT response detected");
-    process.stdout.write(
-      `\n[cross-audit] GPT 감사 응답이 도착했습니다.\n` +
-      `--- docs/feedback/gpt.md ---\n${content}\n---\n` +
-      `위 피드백을 검토하고 docs/feedback/claude.md 를 업데이트하세요.\n`,
-    );
+
+    if (respondResult?.stdout) {
+      process.stdout.write(`\n[cross-audit] GPT 응답 자동 동기화:\n${respondResult.stdout}\n`);
+    }
+
+    if (!has_unverified()) {
+      process.stdout.write(
+        `\n[cross-audit] GPT 감사 응답 도착 — 모든 항목 [합의완료] 자동 동기화 완료.\n` +
+        `--- docs/feedback/gpt.md (요약) ---\n${content}\n---\n`,
+      );
+    } else {
+      process.stdout.write(
+        `\n[cross-audit] GPT 감사 응답이 도착했습니다.\n` +
+        `--- docs/feedback/gpt.md ---\n${content}\n---\n` +
+        `[계류] 항목이 있습니다. docs/feedback/claude.md 를 검토하고 보정하세요.\n`,
+      );
+    }
   }
 }
 
@@ -113,17 +164,36 @@ function run_audit_and_wait() {
 
   log("AUDIT COMPLETE");
 
+  // feedback-audit.mjs 내부에서 feedback-respond.mjs를 이미 실행함.
+  // 그 출력(sync 결과)을 표시.
+  const auditOutput = (result.stdout || "").trim();
+  if (auditOutput) {
+    process.stdout.write(`\n[cross-audit] audit 출력:\n${auditOutput}\n`);
+  }
+
   const gptPath = find_feedback_file("gpt.md");
   if (gptPath && existsSync(gptPath)) {
     const mtimeAfter = get_mtime(gptPath);
     const updated = mtimeAfter > mtimeBefore;
     const content = readFileSync(gptPath, "utf8");
     write_ack_time(Date.now());
-    process.stdout.write(
-      `\n[cross-audit] GPT 감사 완료${updated ? " (gpt.md 갱신됨)" : ""}.\n` +
-      `--- docs/feedback/gpt.md ---\n${content}\n---\n` +
-      `위 피드백을 검토하고 docs/feedback/claude.md 를 업데이트하세요.\n`,
-    );
+
+    if (!has_unverified()) {
+      // 자동 동기화 완료 — [합의완료] 인식
+      log("AUTO-SYNC: all items agreed");
+      process.stdout.write(
+        `\n[cross-audit] GPT 감사 완료${updated ? " (gpt.md 갱신됨)" : ""} — 모든 항목 [합의완료] 자동 동기화 완료.\n` +
+        `--- docs/feedback/gpt.md (요약) ---\n${content}\n---\n` +
+        `커밋 준비가 완료되었습니다.\n`,
+      );
+    } else {
+      // [계류] 또는 [GPT미검증] 잔여 — 수동 보정 필요
+      process.stdout.write(
+        `\n[cross-audit] GPT 감사 완료${updated ? " (gpt.md 갱신됨)" : ""}.\n` +
+        `--- docs/feedback/gpt.md ---\n${content}\n---\n` +
+        `[계류] 항목이 있습니다. docs/feedback/claude.md 를 검토하고 보정하세요.\n`,
+      );
+    }
   } else {
     process.stdout.write("[cross-audit] 감사 완료. gpt.md 파일을 찾을 수 없습니다.\n");
   }
