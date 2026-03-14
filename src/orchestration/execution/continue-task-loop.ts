@@ -13,6 +13,7 @@ import { resolve_executor_provider } from "../../providers/executor.js";
 import {
   create_tool_call_handler, type ToolCallState,
 } from "../tool-call-handler.js";
+import { create_budget_tracker, is_over_budget, STOP_REASON_BUDGET_EXCEEDED } from "../guardrails/index.js";
 import {
   create_stream_handler, flush_remaining, emit_execution_info,
 } from "../agent-hooks-builder.js";
@@ -46,6 +47,7 @@ export async function continue_task_loop(
   const executor = resolve_executor_provider(deps.config.executor_provider, deps.caps());
   const system_base = await deps.build_system_prompt(skill_names, req.provider, req.message.chat_id, undefined, req.alias);
   emit_execution_info(stream, req.on_stream, "task (재개)", executor, deps.logger);
+  const budget = create_budget_tracker(deps.config.max_tool_calls_per_run);
   let total_tool_count = 0;
 
   if (req.run_id) {
@@ -79,6 +81,7 @@ export async function continue_task_loop(
           flush_remaining(stream, req.on_stream);
           const final = sanitize_provider_output(String(native_result.content || "")).trim();
           total_tool_count += native_result.tool_calls_count;
+          budget.used += native_result.tool_calls_count;
           const clear_patch = { ...memory, last_output: final, __user_input: undefined };
           if (native_result.finish_reason === "cancelled") {
             return { status: "completed" as const, memory_patch: { ...clear_patch, suppress_final_reply: true }, current_step: "execute", exit_reason: "cancelled" };
@@ -123,7 +126,7 @@ export async function continue_task_loop(
             buffer: stream, on_stream: req.on_stream, on_tool_block: req.on_tool_block,
             on_tool_event: (e) => deps.session_cd.observe(e),
             log_ctx: req.run_id ? { run_id: req.run_id, agent_id: String(executor), provider: req.provider, chat_id: req.message.chat_id } : undefined,
-          }),
+          }, budget),
           compaction_flush: deps.build_compaction_flush(req),
         });
 
@@ -181,7 +184,9 @@ export async function continue_task_loop(
 
   const output = sanitize_provider_output(output_raw).trim();
   if (!output) return { ...error_result("task", stream, `resume_task_no_output:${result.state.status}`, total_tool_count), run_id: req.run_id };
-  return { ...reply_result("task", stream, normalize_agent_reply(output, req.alias, req.message.sender_id), total_tool_count), run_id: req.run_id };
+  const cont_result = { ...reply_result("task", stream, normalize_agent_reply(output, req.alias, req.message.sender_id), total_tool_count), run_id: req.run_id };
+  if (is_over_budget(budget)) cont_result.stop_reason = STOP_REASON_BUDGET_EXCEEDED;
+  return cont_result;
 }
 
 /** 스킬 추천: always_skills + 태스크 기반 추천. */

@@ -14,6 +14,7 @@ import { error_message, now_ms, short_id } from "../../utils/common.js";
 import {
   create_tool_call_handler, type ToolCallState,
 } from "../tool-call-handler.js";
+import { create_budget_tracker, is_over_budget, STOP_REASON_BUDGET_EXCEEDED } from "../guardrails/index.js";
 import {
   create_stream_handler, flush_remaining, emit_execution_info,
 } from "../agent-hooks-builder.js";
@@ -87,6 +88,7 @@ export async function run_task_loop(
     payload: { mode: "task", executor: args.executor },
   });
   const FILE_WAIT_MARKER = "__file_request_waiting__";
+  const budget = create_budget_tracker(deps.config.max_tool_calls_per_run);
   let total_tool_count = 0;
   const tools_used: string[] = [];
 
@@ -112,6 +114,7 @@ export async function run_task_loop(
           flush_remaining(stream, args.req.on_stream);
           const final = sanitize_provider_output(String(native_result.content || "")).trim();
           total_tool_count += native_result.tool_calls_count;
+          budget.used += native_result.tool_calls_count;
           if (native_result.finish_reason === "cancelled") {
             return { status: "completed", memory_patch: { ...memory, suppress_final_reply: true, last_output: final }, current_step: "execute", exit_reason: "cancelled" };
           }
@@ -160,7 +163,7 @@ export async function run_task_loop(
               if (e.type === "tool_use" && e.tool_name) tools_used.push(e.tool_name);
             },
             log_ctx: args.req.run_id ? { run_id: args.req.run_id, agent_id: String(args.executor), provider: args.req.provider, chat_id: args.req.message.chat_id } : undefined,
-          }),
+          }, budget),
           compaction_flush: deps.build_compaction_flush(args.req),
         });
 
@@ -239,5 +242,6 @@ export async function run_task_loop(
 
   const task_result = reply_result("task", stream, normalize_agent_reply(output, args.req.alias, args.req.message.sender_id), total_tool_count);
   task_result.tools_used = [...new Set(tools_used)];
+  if (is_over_budget(budget)) task_result.stop_reason = STOP_REASON_BUDGET_EXCEEDED;
   return task_result;
 }

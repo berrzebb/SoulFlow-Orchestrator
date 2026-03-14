@@ -17,33 +17,41 @@
 - `[합의완료]` EV-3 + EV-4 Judge / Scorer Split + Run Report
 - `[합의완료]` EV-5 + EV-6 Scenario Bundle Registry + CLI/CI Gate
 - `[합의완료]` EG-1 + EG-2 Session Reuse Policy + Budget Contract
+- `[합의완료]` EG-3 + EG-4 Reuse Integration + Hard Enforcement
 
-## EG-1 + EG-2 Session Reuse Policy + Budget Contract `[합의완료]`
+## EG-3 + EG-4 Reuse Integration + Hard Enforcement `[합의완료]`
 
-### 증거 팩 1: session reuse policy + budget contract + config surface + 회귀 테스트
+### 증거 팩: session reuse dispatcher short-circuit + budget enforcement + runner parity
 
-**claim**: EG-1 — `SessionEvidenceSnapshot` / `SearchReuseDecision` 타입, `normalize_query` (소문자+구두점 제거+공백 정규화), `compute_similarity` (Jaccard coefficient), `evaluate_reuse` (exact+fresh→reuse_summary, similar+fresh→same_topic, stale→stale_retry, no match→new_search), `EMPTY_EVIDENCE` 상수. EG-2 — `ExecutionBudgetPolicy` / `ToolCallBudgetState` 불변 상태 추적, `create_budget_state` / `is_budget_enabled` / `is_budget_exceeded` / `remaining_calls` / `record_tool_calls`, `DISABLED_POLICY` (0=무제한) / `STOP_REASON_BUDGET_EXCEEDED` 상수. Config surface — `orchestration.maxToolCallsPerRun` (min(0), default 0=비활성), `orchestration.freshnessWindowMs` (min(0), default 300_000=5분) Zod 스키마 + CONFIG_FIELDS meta + `OrchestratorConfig` 타입 + bootstrap 전파.
+**claim**: EG-3 — `build_session_evidence`, `format_reuse_reply`, `execute-dispatcher`에 session reuse short-circuit (`const { mode } = decision;` 이후, `if (mode !== "phase")` 가드 — once/agent/task 모드에서만 판단, `stop_reason: session_reuse:{kind}`로 조기 종료). EG-4 — `BudgetTracker` mutable counter, `tool-call-handler` pre-check + `budget.used` 증가, 4개 runner parity (run-once, run-agent-loop, run-task-loop, continue-task-loop) — legacy handler budget 전달 + native 사후 `stop_reason`, `OrchestrationResult.stop_reason`, config 전파.
 
 **changed files**:
 
-- `src/orchestration/guardrails/session-reuse.ts` — 신규: `SessionEvidenceSnapshot`, `SearchReuseDecision`, `ReuseEvaluationOptions`, `DEFAULT_REUSE_OPTIONS`, `normalize_query`, `compute_similarity`, `evaluate_reuse`, `EMPTY_EVIDENCE`
-- `src/orchestration/guardrails/budget-policy.ts` — 신규: `ExecutionBudgetPolicy`, `ToolCallBudgetState`, `DISABLED_POLICY`, `STOP_REASON_BUDGET_EXCEEDED`, `create_budget_state`, `is_budget_enabled`, `is_budget_exceeded`, `remaining_calls`, `record_tool_calls`
-- `src/orchestration/guardrails/index.ts` — 신규: re-exports
-- `src/config/schema.ts` — OrchestrationSchema에 `maxToolCallsPerRun`, `freshnessWindowMs` 추가
-- `src/config/config-meta.ts` — CONFIG_FIELDS에 2개 필드 항목 추가
-- `src/orchestration/service.ts` — `OrchestratorConfig`에 `max_tool_calls_per_run`, `freshness_window_ms` 추가
-- `src/bootstrap/orchestration.ts` — config 매핑 2개 추가
-- `tests/orchestration/guardrails/session-reuse.test.ts` — 신규 22 테스트: normalize 4, similarity 5, evaluate_reuse 13 (same-query 3, synonym 2, stale-vs-fresh 3, edge 5)
-- `tests/orchestration/guardrails/budget-policy.test.ts` — 신규 15 테스트: policy 3, state 4, exceeded 3, disabled 3, constant 1, batch record 1
-- `tests/config/config-defaults.test.ts` — 5 테스트 추가: 기본값 검증 2, 양수 허용 1, 음수 거부 2
-- `tests/config/config-meta.test.ts` — C-18 default_value 일치 검증에 2 경로 추가
+- `src/orchestration/guardrails/enforcement.ts` — 신규: `build_session_evidence`, `format_reuse_reply`, `BudgetTracker`, `create_budget_tracker`, `is_over_budget`, `remaining_budget`
+- `src/orchestration/guardrails/index.ts` — re-exports 추가
+- `src/orchestration/types.ts` — `OrchestrationResult.stop_reason?: string` 추가
+- `src/orchestration/execution/runner-deps.ts` — `RunnerDeps.config`에 `max_tool_calls_per_run`, `freshness_window_ms` 추가
+- `src/orchestration/execution/execute-dispatcher.ts` — session reuse short-circuit (`mode !== "phase"` 가드 포함)
+- `src/orchestration/tool-call-handler.ts` — `budget?: BudgetTracker` 파라미터, pre-check + 증가
+- `src/orchestration/service.ts` — `_runner_deps().config`, `_dispatch_deps().config` 전파
+- `src/orchestration/execution/run-once.ts` — budget tracker + handler 전달 + stop_reason
+- `src/orchestration/execution/run-agent-loop.ts` — budget tracker + check_should_continue + stop_reason
+- `src/orchestration/execution/run-task-loop.ts` — budget tracker + native sync + stop_reason
+- `src/orchestration/execution/continue-task-loop.ts` — budget tracker + native sync + stop_reason
+- `tests/orchestration/guardrails/enforcement.test.ts` — 신규 19 테스트
+- `tests/orchestration/execution/run-once-mock-tool-handler.test.ts` — `make_deps()` config 추가 (회귀 수정)
 
-**test command**: `npm run lint && npx tsc --noEmit && npx vitest run tests/orchestration/guardrails/ tests/config/config-defaults.test.ts tests/config/config-meta.test.ts`
+**test command**: `npm run lint && npx tsc --noEmit && npx vitest run tests/orchestration/guardrails/ tests/orchestration/execute-dispatcher.test.ts tests/orchestration/execution/`
 
-**test result**: `lint(eslint) 0 errors, tsc passed, 4 files / 65 tests passed`
+**test result**: `lint 0 errors, tsc passed, guardrails 3 files / 56 tests passed, dispatcher+execution 14 files / 177 tests passed — 전부 녹색`
 
 **residual risk**:
 
-- guardrails 모듈은 독립 계약 — orchestration 서비스 내부 호출부(EG-3 enforcement)는 Bundle EG2 범위
-- `evaluate_reuse`의 Jaccard similarity는 단어 집합 기반 — 의미론적 유사도(embedding)는 향후 확장 가능하나 현재 범위 밖
+- native 백엔드 경로는 자체 tool loop 관리 → handler 레벨 budget 차단 불가, 사후 `stop_reason`만 설정 (정보성)
+- session reuse short-circuit는 `freshness_window_ms > 0`일 때만 활성 — config에서 0 설정 시 비활성
+
+**GPT [계류] 수정 사항**:
+
+- `claim-drift` 수정: session reuse short-circuit를 `const { mode } = decision;` 이후로 이동, `if (mode !== "phase")` 가드 추가 → phase 경로 차단 불가 보장 (execute-dispatcher.ts L116)
+- `test-gap` 수정: `run-once-mock-tool-handler.test.ts`의 `make_deps()`에 `config` 객체 추가 (`max_tool_calls_per_run: 0, freshness_window_ms: 0`) → 3/3 테스트 녹색 복구
 

@@ -291,6 +291,8 @@ export class OrchestrationService {
         task_loop_max_turns: this.config.task_loop_max_turns,
         executor_provider: this.config.executor_provider,
         max_tool_result_chars: this.config.max_tool_result_chars,
+        max_tool_calls_per_run: this.config.max_tool_calls_per_run,
+        freshness_window_ms: this.config.freshness_window_ms,
       },
       logger: this.logger,
       agent_backends: this.agent_backends,
@@ -370,6 +372,7 @@ export class OrchestrationService {
       config: {
         executor_provider: this.config.executor_provider,
         provider_caps: this.config.provider_caps,
+        freshness_window_ms: this.config.freshness_window_ms,
       },
       process_tracker: this.process_tracker,
       guard: this.guard,

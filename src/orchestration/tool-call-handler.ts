@@ -7,6 +7,8 @@ import type { AppendWorkflowEventInput } from "../events/index.js";
 import { StreamBuffer } from "../channels/stream-buffer.js";
 import { format_tool_label, format_tool_block } from "./prompts.js";
 import { now_iso, error_message } from "../utils/common.js";
+import type { BudgetTracker } from "./guardrails/enforcement.js";
+import { is_over_budget } from "./guardrails/enforcement.js";
 
 export type ToolCallEntry = { name: string; arguments?: Record<string, unknown> };
 export type ToolCallState = { suppress: boolean; file_requested?: boolean; done_sent?: boolean; tool_count: number };
@@ -31,6 +33,7 @@ export function create_tool_call_handler(
   tool_ctx: ToolExecutionContext,
   state: ToolCallState,
   stream_ctx?: ToolCallStreamContext,
+  budget?: BudgetTracker,
 ): (args: { tool_calls: ToolCallEntry[] }) => Promise<string> {
   const max_chars = deps.max_tool_result_chars;
   const flush_stream = () => {
@@ -43,6 +46,11 @@ export function create_tool_call_handler(
   return async ({ tool_calls }) => {
     const outputs: string[] = [];
     for (const tc of tool_calls) {
+      // EG-4: budget 초과 시 이후 tool 실행 스킵
+      if (budget && is_over_budget(budget)) {
+        outputs.push(`[tool:${tc.name}] skipped: budget exceeded (${budget.used}/${budget.max})`);
+        continue;
+      }
       if (tc.name === "request_file") state.file_requested = true;
       if (tc.name === "message" && is_done_phase((tc.arguments || {}) as Record<string, unknown>)) {
         state.suppress = true;
@@ -94,11 +102,13 @@ export function create_tool_call_handler(
         deps.logger.debug("tool_call", { name: tc.name, args: tc.arguments });
         const result = await deps.execute_tool(tc.name, tc.arguments || {}, tool_ctx);
         state.tool_count += 1;
+        if (budget) budget.used += 1;
         deps.logger.debug("tool_result", { name: tc.name, result: String(result).slice(0, 200) });
         const truncated = emit_result(result, false);
         outputs.push(`[tool:${tc.name}] ${truncated}`);
       } catch (e) {
         state.tool_count += 1;
+        if (budget) budget.used += 1;
         const err_msg = error_message(e);
         deps.logger.debug("tool_error", { name: tc.name, error: err_msg });
         emit_result(err_msg, true);

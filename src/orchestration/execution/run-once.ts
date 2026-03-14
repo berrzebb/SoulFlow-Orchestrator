@@ -13,6 +13,7 @@ import { detect_escalation } from "../classifier.js";
 import {
   create_tool_call_handler, type ToolCallState,
 } from "../tool-call-handler.js";
+import { create_budget_tracker, is_over_budget, STOP_REASON_BUDGET_EXCEEDED } from "../guardrails/index.js";
 import {
   create_stream_handler, flush_remaining, emit_execution_info,
 } from "../agent-hooks-builder.js";
@@ -71,6 +72,9 @@ export async function run_once(deps: RunnerDeps, args: RunExecutionArgs): Promis
         flush_remaining(stream, args.req.on_stream);
         const orch = deps.convert_agent_result(result, "once", stream, args.req);
         orch.tools_used = [...new Set(tools_used)];
+        // EG-4: native 경로 사후 budget 확인
+        const max = deps.config.max_tool_calls_per_run;
+        if (max > 0 && orch.tool_calls_count >= max) orch.stop_reason = STOP_REASON_BUDGET_EXCEEDED;
         return orch;
       } catch (e) {
         const msg = error_message(e);
@@ -99,6 +103,7 @@ export async function run_once(deps: RunnerDeps, args: RunExecutionArgs): Promis
 
     if (response.has_tool_calls) {
       deps.logger.debug("once: tool calls", { count: response.tool_calls.length });
+      const budget = create_budget_tracker(deps.config.max_tool_calls_per_run);
       const tool_state: ToolCallState = { suppress: false, tool_count: 0 };
       const handler = create_tool_call_handler(deps.tool_deps, args.tool_ctx, tool_state, {
         buffer: stream, on_stream: args.req.on_stream, on_tool_block: args.req.on_tool_block,
@@ -107,10 +112,16 @@ export async function run_once(deps: RunnerDeps, args: RunExecutionArgs): Promis
           if (e.type === "tool_use" && e.tool_name) tools_used.push(e.tool_name);
         },
         log_ctx: args.req.run_id ? { run_id: args.req.run_id, agent_id: String(args.executor), provider: args.req.provider, chat_id: args.req.message.chat_id } : undefined,
-      });
+      }, budget);
       const tool_output = await handler({ tool_calls: response.tool_calls });
 
       if (tool_state.suppress) return suppress_result("once", stream, tool_state.tool_count);
+      if (is_over_budget(budget)) {
+        const r = reply_result("once", stream, normalize_agent_reply(tool_output, args.req.alias, args.req.message.sender_id), tool_state.tool_count);
+        r.tools_used = [...new Set(tools_used)];
+        r.stop_reason = STOP_REASON_BUDGET_EXCEEDED;
+        return r;
+      }
 
       const followup = await deps.providers.run_headless({
         provider_id: args.executor,

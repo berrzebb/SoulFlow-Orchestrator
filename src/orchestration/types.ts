@@ -82,4 +82,6 @@ export type OrchestrationResult = {
   matched_skills?: string[];
   /** 이번 실행에서 사용된 도구 이름 목록. SessionMessage.tools_used에 저장. */
   tools_used?: string[];
+  /** EG-4: 정상적 조기 종료 사유. error와 구분 — error는 실패, stop_reason은 정책 기반 종료. */
+  stop_reason?: string;
 };

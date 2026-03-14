@@ -22,6 +22,8 @@ import { select_tools_for_request } from "../tool-selector.js";
 import { is_once_escalation, is_agent_escalation } from "../classifier.js";
 import { error_result } from "./helpers.js";
 import { generate_completion_checks, format_follow_up } from "../completion-checker.js";
+import { build_session_evidence, format_reuse_reply, evaluate_reuse } from "../guardrails/index.js";
+import { now_ms } from "../../utils/common.js";
 
 const VALIDATION_ROLES = new Set(["validator", "reviewer"]);
 
@@ -32,6 +34,8 @@ export type ExecuteDispatcherDeps = {
   config: {
     executor_provider: ExecutorProvider;
     provider_caps?: ProviderCapabilities;
+    /** EG-3: session reuse freshness window (ms). 0 = 비활성. */
+    freshness_window_ms?: number;
   };
   process_tracker: ProcessTrackerLike | null;
   guard: ConfirmationGuard | null;
@@ -107,6 +111,19 @@ export async function execute_dispatch(
   }
 
   const { mode } = decision;
+
+  // EG-3: session reuse short-circuit — phase 제외, once/agent/task 모드에서만 판단
+  if (mode !== "phase") {
+    const fw = deps.config.freshness_window_ms ?? 0;
+    if (fw > 0 && req.session_history.length > 1) {
+      const evidence = build_session_evidence(req.session_history, now_ms(), fw);
+      const reuse = evaluate_reuse(task_with_media, evidence, now_ms(), { freshness_window_ms: fw, similarity_threshold: 0.85 });
+      if (reuse.kind === "reuse_summary" || reuse.kind === "same_topic") {
+        deps.log_event({ ...evt_base, phase: "done", summary: `session_reuse: ${reuse.kind}`, payload: { kind: reuse.kind, matched: reuse.matched_query } });
+        return { reply: format_reuse_reply(reuse), mode: "once", tool_calls_count: 0, streamed: false, stop_reason: `session_reuse:${reuse.kind}` };
+      }
+    }
+  }
   // 사용자 지정 프로바이더가 있으면 gateway 선택을 오버라이드
   const executor = (req.preferred_provider_id as import("../../providers/executor.js").ExecutorProvider | undefined) ?? decision.executor;
 

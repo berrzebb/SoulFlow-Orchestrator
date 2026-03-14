@@ -26,3 +26,12 @@ export {
   remaining_calls,
   record_tool_calls,
 } from "./budget-policy.js";
+
+export type { BudgetTracker } from "./enforcement.js";
+export {
+  build_session_evidence,
+  format_reuse_reply,
+  create_budget_tracker,
+  is_over_budget,
+  remaining_budget,
+} from "./enforcement.js";

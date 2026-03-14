@@ -13,6 +13,7 @@ import { AGENT_TOOL_NUDGE } from "../prompts.js";
 import {
   create_tool_call_handler, type ToolCallState,
 } from "../tool-call-handler.js";
+import { create_budget_tracker, is_over_budget, STOP_REASON_BUDGET_EXCEEDED } from "../guardrails/index.js";
 import {
   create_stream_handler, flush_remaining, emit_execution_info,
 } from "../agent-hooks-builder.js";
@@ -58,6 +59,9 @@ export async function run_agent_loop(
         flush_remaining(stream, args.req.on_stream);
         const orch = deps.convert_agent_result(result, "agent", stream, args.req);
         orch.tools_used = [...new Set(tools_used)];
+        // EG-4: native 경로 사후 budget 확인
+        const max = deps.config.max_tool_calls_per_run;
+        if (max > 0 && orch.tool_calls_count >= max) orch.stop_reason = STOP_REASON_BUDGET_EXCEEDED;
         return orch;
       } catch (e) {
         const msg = error_message(e);
@@ -68,6 +72,7 @@ export async function run_agent_loop(
   }
 
   // legacy headless 경로
+  const budget = create_budget_tracker(deps.config.max_tool_calls_per_run);
   const state: ToolCallState = { suppress: false, tool_count: 0 };
 
   const loop_id = `loop-${now_ms()}-${short_id(8)}`;
@@ -97,6 +102,7 @@ export async function run_agent_loop(
     on_stream_event: args.req.on_stream_event,
     check_should_continue: async ({ state: s }) => {
       if (s.currentTurn >= (deps.config.agent_loop_max_turns ?? 10)) return false;
+      if (is_over_budget(budget)) return false;
       return AGENT_TOOL_NUDGE;
     },
     on_tool_calls: create_tool_call_handler(deps.tool_deps, args.tool_ctx, state, {
@@ -106,7 +112,7 @@ export async function run_agent_loop(
         if (e.type === "tool_use" && e.tool_name) tools_used.push(e.tool_name);
       },
       log_ctx: args.req.run_id ? { run_id: args.req.run_id, agent_id: String(args.executor), provider: args.req.provider, chat_id: args.req.message.chat_id } : undefined,
-    }),
+    }, budget),
     compaction_flush: deps.build_compaction_flush(args.req),
   });
 
@@ -129,5 +135,6 @@ export async function run_agent_loop(
   const final_reply = state.tool_count === 0 ? append_no_tool_notice(reply) : reply;
   const legacy_result = reply_result("agent", stream, final_reply, state.tool_count);
   legacy_result.tools_used = [...new Set(tools_used)];
+  if (is_over_budget(budget)) legacy_result.stop_reason = STOP_REASON_BUDGET_EXCEEDED;
   return legacy_result;
 }

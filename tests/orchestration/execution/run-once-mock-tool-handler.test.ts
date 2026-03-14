@@ -54,6 +54,14 @@ function make_deps(headless_responses?: Array<Record<string, unknown>>): Partial
   return {
     providers: { run_headless } as any,
     logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } as any,
+    config: {
+      agent_loop_max_turns: 10,
+      task_loop_max_turns: 5,
+      executor_provider: "chatgpt" as any,
+      max_tool_result_chars: 4000,
+      max_tool_calls_per_run: 0,
+      freshness_window_ms: 0,
+    },
     build_overlay: vi.fn(() => "overlay"),
     build_persona_followup: vi.fn(() => "persona followup prompt"),
     agent_backends: undefined,
