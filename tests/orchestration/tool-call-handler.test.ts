@@ -10,7 +10,8 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { create_tool_call_handler } from "@src/orchestration/tool-call-handler.js";
-import type { ToolCallHandlerDeps, ToolCallState, ToolCallEntry } from "@src/orchestration/tool-call-handler.js";
+import type { ToolCallHandlerDeps, ToolCallState } from "@src/orchestration/tool-call-handler.js";
+import { create_tool_output_reducer } from "@src/orchestration/tool-output-reducer.js";
 import { StreamBuffer } from "@src/channels/stream-buffer.js";
 import type { ToolExecutionContext } from "@src/agent/tools/types.js";
 import type { AgentEvent } from "@src/agent/agent.types.js";
@@ -90,7 +91,7 @@ describe("create_tool_call_handler — 도구 실행 핸들러", () => {
     it("실행 순서 보존 → 결과 순서 일치", async () => {
       let call_count = 0;
       const deps = createMockDeps();
-      (deps.execute_tool as any).mockImplementation(async (name: string) => {
+      (deps.execute_tool as any).mockImplementation(async () => {
         call_count += 1;
         return `result-${call_count}`;
       });
@@ -514,5 +515,99 @@ describe("create_tool_call_handler — 도구 실행 핸들러", () => {
 
       expect(deps.execute_tool).toHaveBeenCalledWith("no_args_tool", {}, mockToolContext);
     });
+  });
+});
+
+// ── E3: reducer 주입 경로 ─────────────────────────────────────────
+
+describe("create_tool_call_handler — reducer 주입 3-projection", () => {
+  beforeEach(() => { vi.clearAllMocks(); });
+
+  /**
+   * reducer 주입 시 emit_result 내부에서:
+   *   on_tool_event.result  ← prompt_text
+   *   on_tool_block         ← display_text 기반 블록
+   *   log_event.detail      ← storage_text (≤ 500자)
+   */
+  it("on_tool_event.result = prompt_text (reducer 경로)", async () => {
+    const long_text = "json line ".repeat(100); // 1,000자 → 기본 max(5000)보다 짧지만 reducer 경유
+    const reducer = create_tool_output_reducer(50); // max 50 → 반드시 truncate 발생
+    const deps = createMockDeps(long_text);
+    deps.reducer = reducer;
+    const state = createMockState();
+    const events: AgentEvent[] = [];
+
+    const handler = create_tool_call_handler(deps, mockToolContext, state, {
+      buffer: new StreamBuffer(),
+      on_tool_event: (e) => events.push(e),
+    });
+    await handler({ tool_calls: [{ name: "read_file", arguments: { path: "/a.txt" } }] });
+
+    const result_event = events.find((e) => e.type === "tool_result");
+    expect(result_event).toBeDefined();
+    // prompt_text는 max=50으로 truncate → 원문보다 짧아야 함
+    expect(result_event!.result!.length).toBeLessThan(long_text.length);
+  });
+
+  it("on_tool_block content = display_text 기반 (reducer 경로)", async () => {
+    const long_text = "x".repeat(500);
+    // max=50: prompt=50, display=100 → display는 prompt보다 길 수 있음
+    const reducer = create_tool_output_reducer(50);
+    const deps = createMockDeps(long_text);
+    deps.reducer = reducer;
+    const state = createMockState();
+    const blocks: string[] = [];
+
+    const handler = create_tool_call_handler(deps, mockToolContext, state, {
+      buffer: new StreamBuffer(),
+      on_tool_block: (b) => blocks.push(b),
+    });
+    await handler({ tool_calls: [{ name: "tool_x" }] });
+
+    expect(blocks).toHaveLength(1);
+    // display_text가 format_tool_block에 전달됨 — 블록에 도구명 포함 확인
+    expect(blocks[0]).toContain("`tool_x`");
+  });
+
+  it("log_event.detail = storage_text (reducer 경로, ≤ 500자)", async () => {
+    const long_text = "s".repeat(1000);
+    const reducer = create_tool_output_reducer(200); // storage = 200*1.5=300자
+    const deps = createMockDeps(long_text);
+    deps.reducer = reducer;
+    const state = createMockState();
+    const log_ctx = { run_id: "r1", agent_id: "a1", provider: "slack", chat_id: "c1" };
+
+    const handler = create_tool_call_handler(deps, mockToolContext, state, {
+      buffer: new StreamBuffer(),
+      log_ctx,
+    });
+    await handler({ tool_calls: [{ name: "store_tool" }] });
+
+    expect(deps.log_event).toHaveBeenCalled();
+    const call = (deps.log_event as any).mock.calls[0][0];
+    // storage_text.slice(0,500) → 항상 ≤ 500
+    expect(call.detail.length).toBeLessThanOrEqual(500);
+    // storage_text는 원문보다 짧음 (300자로 reduce)
+    expect(call.detail.length).toBeLessThan(long_text.length);
+  });
+
+  it("is_error=true → reducer 미사용, fallback 동작 (에러 전체 반환)", async () => {
+    const reducer = create_tool_output_reducer(10); // max 10으로 설정해도 에러는 그대로
+    const deps = createMockDeps();
+    (deps.execute_tool as any).mockRejectedValue(new Error("critical failure details"));
+    deps.reducer = reducer;
+    const state = createMockState();
+    const events: AgentEvent[] = [];
+
+    const handler = create_tool_call_handler(deps, mockToolContext, state, {
+      buffer: new StreamBuffer(),
+      on_tool_event: (e) => events.push(e),
+    });
+    await handler({ tool_calls: [{ name: "err_tool" }] });
+
+    const result_event = events.find((e) => e.type === "tool_result");
+    expect(result_event?.is_error).toBe(true);
+    // is_error 시 reducer 미적용 → 전체 에러 메시지 보존
+    expect(result_event!.result).toContain("critical failure details");
   });
 });

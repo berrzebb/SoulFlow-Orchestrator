@@ -37,7 +37,7 @@
 - `[합의완료]` PAR-3 + PAR-4 — CriticGate/RetryBudget + CriticGateNode + workflow schema
 - `[합의완료]` PAR-5 + PAR-6 — reconcile observability events + local read model + eval bundle
 
-## `[GPT미검증]` E1 + E2 + E3 — ToolOutputReducer + PtyOutputReducer + prompt/display/storage projection split
+## `[GPT미검증]` E1 + E2 + E3 — ToolOutputReducer + PtyOutputReducer + prompt/display/storage projection split (rev2)
 
 ### Claim
 
@@ -53,18 +53,22 @@
 - `tests/orchestration/tool-output-reducer.test.ts` (신규) — E1 테스트 31개
 - `tests/agent/pty/pty-output-reducer.test.ts` (신규) — E2 테스트 14개
 
+### GPT 반려 해소
+
+- `test-gap [major]`: `tests/orchestration/tool-call-handler.test.ts`에 reducer 주입 케이스 4개 추가 — (1) `on_tool_event.result = prompt_text` (max=50 강제 truncate로 검증), (2) `on_tool_block = display_text` 기반 블록, (3) `log_event.detail = storage_text ≤ 500자`, (4) `is_error=true → reducer 미사용, 에러 전체 보존`.
+
 ### Test Command
 
 ```bash
 npx vitest run tests/orchestration/tool-output-reducer.test.ts tests/agent/pty/pty-output-reducer.test.ts tests/orchestration/tool-call-handler.test.ts
-npx eslint src/orchestration/tool-output-reducer.ts src/agent/pty/pty-output-reducer.ts src/orchestration/tool-call-handler.ts tests/orchestration/tool-output-reducer.test.ts tests/agent/pty/pty-output-reducer.test.ts
+npx eslint src/orchestration/tool-output-reducer.ts src/agent/pty/pty-output-reducer.ts src/orchestration/tool-call-handler.ts tests/orchestration/tool-output-reducer.test.ts tests/agent/pty/pty-output-reducer.test.ts tests/orchestration/tool-call-handler.test.ts
 npx tsc --noEmit
 ```
 
 ### Test Result
 
-- `npx vitest run ...`: **3 files / 69 tests passed** (신규 45 + 기존 24 회귀 통과)
-- `npx eslint` 대상 5파일: **0 errors, 0 warnings**
+- `npx vitest run ...`: **3 files / 73 tests passed** (신규 49 + 기존 24 → 이전 69+4)
+- `npx eslint` 대상 6파일: **0 errors, 0 warnings**
 - `npx tsc --noEmit`: **통과**
 
 ### Residual Risk
