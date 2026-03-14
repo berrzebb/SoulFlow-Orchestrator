@@ -13,6 +13,7 @@
 - `[합의완료]` OB-7 (Bundle O3b)
 - `[합의완료]` 저장소 전체 멀티테넌트 closeout
 - `[합의완료]` OB-8 Optional Exporter Ports
+- `[합의완료]` EV-1 + EV-2 Evaluation Pipeline
 
 ## OB-8 Optional Exporter Ports `[합의완료]`
 
@@ -80,7 +81,7 @@
 
 - 증거 팩 1-2의 잔여 리스크 변동 없음 (NOOP exporter 하드코딩은 OB-8 범위 밖)
 
-## EV-1 + EV-2 Evaluation Pipeline `[GPT미검증]`
+## EV-1 + EV-2 Evaluation Pipeline `[합의완료]`
 
 ### 증거 팩 1: EvalCase/EvalDataset contract + EvalRunner + loader + 테스트
 
@@ -105,7 +106,31 @@
 - `EvalRunner`는 순차 실행 — 대규모 데이터셋에서 병렬 실행 옵션 미구현 (향후 필요 시 추가)
 - bootstrap/main.ts에 eval 모듈 미연결 — 현재는 독립 모듈로 존재 (eval CLI/API 엔드포인트는 별도 번들 범위)
 
+## EV-3 + EV-4 Judge / Scorer Split + Run Report `[GPT미검증]`
+
+### 증거 팩 1: deterministic judges + report/baseline diff + eval-run CLI
+
+**claim**: `EvalJudgeLike` 인터페이스 + 다차원 `Scorecard` 모델 정의. deterministic judge 4종 (`RouteMatchJudge`, `SchemaMatchJudge`, `KeywordRuleJudge`, `CompositeJudge`). optional `LlmJudgePort` DI 포트. `EvaluationReport` + `BaselineDiff` 모델, `create_report`/`save_baseline`/`load_baseline`/`compute_diff`/`render_markdown_summary` 유틸. `scripts/eval-run.mjs` CLI (데이터셋 로드 → 실행 → report + baseline diff + markdown).
+
+**changed files**:
+
+- `src/evals/judges.ts` — 신규: `Scorecard`, `ScorecardEntry`, `EvalJudgeLike`, `RouteMatchJudge` (metadata.expected_route vs actual_route), `SchemaMatchJudge` (JSON 필수 키 검증), `KeywordRuleJudge` (required/forbidden 키워드), `CompositeJudge` (다중 judge 합성), `LlmJudgePort` (optional DI 포트)
+- `src/evals/report.ts` — 신규: `EvaluationReport`, `BaselineDiff`, `BaselineDiffEntry`, `create_report`, `save_baseline`/`load_baseline` (JSON 직렬화), `compute_diff` (improved/regressed/unchanged 감지), `render_markdown_summary` (markdown report + diff 포함)
+- `src/evals/index.ts` — judges + report re-export 추가
+- `scripts/eval-run.mjs` — 신규: CLI 진입점 (--baseline, --save-baseline, --output, --markdown, --tags, --scorer 옵션)
+- `tests/evals/judges.test.ts` — 신규 15 테스트: RouteMatchJudge 4개, SchemaMatchJudge 4개, KeywordRuleJudge 5개, CompositeJudge 2개
+- `tests/evals/report.test.ts` — 신규 11 테스트: create_report 2개, save/load baseline 2개, compute_diff 3개, render_markdown 4개
+
+**test command**: `npm run lint && npx tsc --noEmit && npx vitest run tests/evals/`
+
+**test result**: `lint(eslint) 0 errors, tsc passed, 4 files / 50 tests passed`
+
+**residual risk**:
+
+- `LlmJudgePort`는 인터페이스만 정의 — 실제 LLM judge 구현체는 향후 별도 번들 (현재 범위 밖, 설계 문서 명시)
+- `scripts/eval-run.mjs`의 executor는 echo mock — 실제 에이전트 연결은 EV-5/EV-6 범위
+
 ## 다음 작업
 
-- `Evaluation Pipeline / Bundle EV1 / EV-1 + EV-2 — src/evals/* 아래 EvalCase/EvalDataset contract와 local EvalRunner를 추가하고 tests/evals/* loader/runner 테스트를 작성`
+- `Evaluation Pipeline / Bundle EV2 / EV-3 + EV-4 — scripts/eval-run.mjs의 런타임 import 경로를 실제 실행 가능하게 수정하고 tests/evals/eval-run-cli.test.ts에서 dataset 로드 + report/baseline CLI 실행을 검증`
 
