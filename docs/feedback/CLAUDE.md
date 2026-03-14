@@ -34,6 +34,44 @@
 - `[합의완료]` SO-4 + SO-5 — SchemaChain Validator/Normalizer + Bounded SchemaRepairLoop
 - `[합의완료]` SO-6 + SO-7 — runtime/workflow/gateway binding + parser-repair regression artifact
 - `[합의완료]` PAR-1 + PAR-2 — ParallelResultEnvelope + ConflictSet + DeterministicReconcilePolicy + ReconcileNode
+- `[합의완료]` PAR-3 + PAR-4 — CriticGate/RetryBudget + CriticGateNode + workflow schema
+
+## `[합의완료]` PAR-3 + PAR-4 — CriticGate/RetryBudget + CriticGateNode + workflow schema
+
+### Claim
+
+- PAR-3: `src/orchestration/critic-gate.ts` (신규) — `CriticVerdict` (`pass`/`fail`/`rework`), `CriticGateResult`, `RetryBudget`, `DEFAULT_MAX_ROUNDS=2`. `evaluate_critic_condition(value, condition)` JS 표현식 평가 → verdict 반환. `run_critic_gate(initial, critic_fn, retry_fn, max_rounds?)` bounded retry loop — rework 시 retry_fn 콜백 호출, max_rounds 초과 시 `fail` 강제 종료.
+- PAR-3 Node: `src/agent/nodes/critic-gate.ts` (신규) — `CriticGateNode`. `rounds_used`를 memory 키(`{node_id}__rounds_used`)에 누적하여 budget 추적. execute 시 조건 평가 → verdict/passed/reason/rework_instruction/rounds_used 출력. max_rounds 초과 시 verdict를 `fail`로 강제 전환, pass/fail 시 rounds_used 초기화.
+- PAR-4: `src/agent/workflow-node.types.ts` (수정) — `CriticGateNodeDefinition` (source_node_id, condition, max_rounds?, rework_instruction?). `OrcheNodeType`에 `"critic_gate"` 추가. `OrcheNodeDefinition` union에 추가.
+- `src/agent/nodes/index.ts` (수정) — `critic_gate_handler` import + 등록.
+
+### 변경 파일
+
+- `src/orchestration/critic-gate.ts` (신규) — PAR-3: 순수 함수 모듈
+- `src/agent/nodes/critic-gate.ts` (신규) — PAR-3 노드 핸들러
+- `src/agent/workflow-node.types.ts` (수정) — CriticGateNodeDefinition + OrcheNodeType
+- `src/agent/nodes/index.ts` (수정) — critic_gate_handler 등록
+- `tests/orchestration/critic-gate.test.ts` (신규) — PAR-3 테스트 15개
+- `tests/agent/nodes/critic-gate.test.ts` (신규) — PAR-3 Node 테스트 12개
+
+### Test Command
+
+```bash
+npx vitest run tests/orchestration/critic-gate.test.ts tests/agent/nodes/critic-gate.test.ts
+npx eslint src/orchestration/critic-gate.ts src/agent/nodes/critic-gate.ts tests/orchestration/critic-gate.test.ts tests/agent/nodes/critic-gate.test.ts
+npx tsc --noEmit
+```
+
+### Test Result
+
+- `npx vitest run ...`: **2 files / 27 tests passed**
+- `npx eslint` 대상 4파일: **0 errors, 0 warnings**
+- `npx tsc --noEmit`: **통과**
+
+### Residual Risk
+
+- `evaluate_critic_condition`은 `new Function`으로 JS 표현식을 평가 — 신뢰할 수 없는 입력이 들어오면 임의 코드 실행 가능. 워크플로우 정의는 관리자만 수정 가능한 구조로 운영 수준에서 제한 전제.
+- `CriticGateNode`의 `rounds_used`는 memory 키로 추적되므로 동일 node_id가 여러 워크플로우 실행에 공유되는 경우 간섭 가능. 워크플로우 실행마다 memory가 격리되는 현재 설계에서는 문제 없음.
 
 ## `[합의완료]` PAR-1 + PAR-2 — ParallelResultEnvelope + ConflictSet + DeterministicReconcilePolicy + ReconcileNode
 
@@ -150,6 +188,7 @@ npx tsc --noEmit
 
 - `ai-agent.ts`는 `spawn_agent` + `wait_agent` 경로를 사용하므로 repair loop 미적용. 에이전트 스폰 방식에서는 재프롬프팅이 불가하여 의도된 동작.
 - `invoke_llm`의 repair loop에서 retry 시 `run_headless`가 추가 호출됨. `DEFAULT_MAX_REPAIR_ATTEMPTS = 2` 바운딩으로 최대 3회(초기 + 2 retry) 호출 제한.
+
 
 
 
