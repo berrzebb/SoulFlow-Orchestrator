@@ -31,47 +31,53 @@ function tool_icon(name: string): string {
   return "🔧";
 }
 
+/** Thinking 섹션 — 기본 접힘, 클릭 시 고정 높이 블록 표시. */
 export function ThinkingBlockList({ blocks }: { blocks: ThinkingEntry[] }) {
-  const scroll_ref = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
+  const body_ref = useRef<HTMLDivElement>(null);
+  const t = useT();
 
+  // 스트리밍 중 새 블록 추가 시 펼쳐진 상태면 자동 스크롤
   useEffect(() => {
-    const el = scroll_ref.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [blocks.length]);
+    if (open) {
+      const el = body_ref.current;
+      if (el) el.scrollTop = el.scrollHeight;
+    }
+  }, [blocks.length, open]);
 
   if (blocks.length === 0) return null;
 
-  return (
-    <div className="thinking-block-list">
-      <div className="thinking-block-list__scroll" ref={scroll_ref}>
-        {blocks.map((b, i) => (
-          <ThinkingBlock key={`${i}-${b.tokens}-${b.preview.slice(0, 16)}`} entry={b} />
-        ))}
-      </div>
-    </div>
-  );
-}
+  const total_tokens = blocks.reduce((sum, b) => sum + b.tokens, 0);
 
-function ThinkingBlock({ entry }: { entry: ThinkingEntry }) {
-  const t = useT();
-  const [expanded, setExpanded] = useState(false);
   return (
-    <div className="thinking-block">
+    <div className="thinking-section">
       <button
-        className="thinking-block__header"
-        onClick={() => setExpanded((e) => !e)}
-        aria-expanded={expanded}
-        aria-label={`${t("chat.thinking_label")}: ${entry.tokens.toLocaleString()} ${t("chat.tokens")}`}
+        className="thinking-section__header"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-label={`${t("chat.thinking_label")}: ${total_tokens.toLocaleString()} ${t("chat.tokens")}`}
       >
-        <span className="thinking-block__icon" aria-hidden="true">💭</span>
-        <span className="thinking-block__label">
-          {t("chat.thinking_label")} <span className="thinking-block__tokens">({entry.tokens.toLocaleString()} {t("chat.tokens")})</span>
+        <span className="thinking-section__icon" aria-hidden="true">💭</span>
+        <span className="thinking-section__title">
+          {t("chat.thinking_label")}
+          {total_tokens > 0 && (
+            <span className="thinking-section__tokens">
+              ({total_tokens.toLocaleString()} {t("chat.tokens")})
+            </span>
+          )}
         </span>
-        <span className="thinking-block__expand-icon" aria-hidden="true">{expanded ? "▲" : "▼"}</span>
+        <span className="thinking-section__chevron" aria-hidden="true">{open ? "▲" : "▼"}</span>
       </button>
-      {expanded && (
-        <div className="thinking-block__detail">
-          <pre className="thinking-block__pre">{entry.preview || t("chat.no_preview")}</pre>
+      {open && (
+        <div className="thinking-section__body" ref={body_ref}>
+          {blocks.map((b, i) => (
+            <pre
+              key={`${i}-${b.tokens}`}
+              className={`thinking-section__pre${i > 0 ? " thinking-section__pre--sep" : ""}`}
+            >
+              {b.preview || t("chat.no_preview")}
+            </pre>
+          ))}
         </div>
       )}
     </div>
