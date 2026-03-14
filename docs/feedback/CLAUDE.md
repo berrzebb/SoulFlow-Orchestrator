@@ -33,8 +33,9 @@
 - `[합의완료]` SO-1 + SO-2 + SO-3 — Output Contract Inventory + Shared Result Contracts + OutputParserRegistry
 - `[합의완료]` SO-4 + SO-5 — SchemaChain Validator/Normalizer + Bounded SchemaRepairLoop
 - `[합의완료]` SO-6 + SO-7 — runtime/workflow/gateway binding + parser-repair regression artifact
+- `[합의완료]` PAR-1 + PAR-2 — ParallelResultEnvelope + ConflictSet + DeterministicReconcilePolicy + ReconcileNode
 
-## `[GPT미검증]` PAR-1 + PAR-2 — ParallelResultEnvelope + ConflictSet + DeterministicReconcilePolicy + ReconcileNode
+## `[합의완료]` PAR-1 + PAR-2 — ParallelResultEnvelope + ConflictSet + DeterministicReconcilePolicy + ReconcileNode
 
 ### Claim
 
@@ -72,7 +73,7 @@ npx tsc --noEmit
 ### Residual Risk
 
 - `majority_vote` 동수(tie) 시 첫 번째 등장 값 선택 — 입력 순서가 결과에 영향. `source_node_ids` 순서가 결정론성의 기준.
-- `merge_union`의 객체 합산은 나중 에이전트의 고유 키를 추가하지 않음 (첫 번째 고유 키 우선). 필드 충돌 시 consensus를 우선합니다.
+- `merge_union`은 consensus 필드를 먼저 배치하고, 각 에이전트의 고유 필드를 등장 순서대로 추가합니다. 동일 필드가 여러 에이전트에 있으면 먼저 등장한 값이 우선 (덮어쓰지 않음). 나중 에이전트의 고유 키도 모두 결과에 포함됩니다.
 
 ## `[합의완료]` SO-6 + SO-7 — runtime/workflow/gateway binding + parser-repair regression artifact
 
@@ -149,5 +150,6 @@ npx tsc --noEmit
 
 - `ai-agent.ts`는 `spawn_agent` + `wait_agent` 경로를 사용하므로 repair loop 미적용. 에이전트 스폰 방식에서는 재프롬프팅이 불가하여 의도된 동작.
 - `invoke_llm`의 repair loop에서 retry 시 `run_headless`가 추가 호출됨. `DEFAULT_MAX_REPAIR_ATTEMPTS = 2` 바운딩으로 최대 3회(초기 + 2 retry) 호출 제한.
+
 
 
