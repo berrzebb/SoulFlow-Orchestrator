@@ -44,16 +44,21 @@ function write_ack_time(ms) {
 }
 
 /** feedback-respond.mjs 실행하여 GPT 판정을 claude.md에 동기화. */
-function run_respond() {
+function run_respond(mode = "full") {
   const respondScript = resolve(repoRoot, "scripts", "feedback-respond.mjs");
   if (!existsSync(respondScript)) {
     log("RESPOND: feedback-respond.mjs not found");
     return null;
   }
 
+  const args = [respondScript];
+  if (mode === "gpt-only") {
+    args.push("--gpt-only");
+  }
+
   const result = spawnSync(
     process.execPath,
-    [respondScript],
+    args,
     {
       cwd: repoRoot,
       stdio: ["ignore", "pipe", "pipe"],
@@ -70,6 +75,16 @@ function run_respond() {
   const output = (result.stdout || "").trim();
   if (output) log(`RESPOND: ${output.split("\n")[0]}`);
   return { status: result.status, stdout: output };
+}
+
+function is_improved_planning_file(normalizedPath) {
+  return normalizedPath.endsWith("/docs/ko/design/improved/feedback-promotion.plan.json")
+    || normalizedPath.endsWith("/docs/ko/design/improved/execution-order.md")
+    || normalizedPath.endsWith("/docs/en/design/improved/execution-order.md")
+    || normalizedPath.endsWith("/docs/ko/design/improved/work-catalog.md")
+    || normalizedPath.endsWith("/docs/en/design/improved/work-catalog.md")
+    || normalizedPath.endsWith("/docs/ko/design/improved/feedback-promotion.md")
+    || normalizedPath.endsWith("/docs/en/design/improved/feedback-promotion.md");
 }
 
 /** claude.md에 [GPT미검증]이 남아있는지 확인. */
@@ -92,7 +107,7 @@ function check_pending_gpt_response() {
   if (gptMtime > claudeMtime && gptMtime > lastAck) {
     log("NOTIFY: pending GPT response detected — running auto-sync");
 
-    const respondResult = run_respond();
+    const respondResult = run_respond("full");
     // respond가 gpt.md를 정규화하면 mtime이 변경됨 — 최신 mtime으로 ack 갱신
     write_ack_time(Math.max(gptMtime, get_mtime(gptPath)));
     const content = readFileSync(gptPath, "utf8");
@@ -242,6 +257,22 @@ async function main() {
       }
       log("EXIT: no [GPT미검증] tag");
     }
+    return;
+  }
+
+  if (is_improved_planning_file(normalized)) {
+    log("MATCH: improved planning doc changed — running gpt-only sync");
+
+    if (process.env.FEEDBACK_HOOK_DRY_RUN === "1") {
+      process.stdout.write("would-run: node scripts/feedback-respond.mjs --gpt-only\n");
+      return;
+    }
+
+    const respondResult = run_respond("gpt-only");
+    if (respondResult?.stdout) {
+      process.stdout.write(`\n[cross-audit] GPT 작업 분배 문서 동기화:\n${respondResult.stdout}\n`);
+    }
+    write_ack_time(Date.now());
     return;
   }
 

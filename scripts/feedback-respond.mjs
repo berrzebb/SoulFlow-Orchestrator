@@ -26,6 +26,7 @@ function usage() {
 
 Options:
   --auto-fix         Invoke claude -p for [계류] corrections
+  --gpt-only         Normalize only gpt.md / promotion docs and skip claude.md sync
   --no-sync-next     Do not normalize the "## 다음 작업" section in gpt.md
   --dry-run          Show changes without writing
   -h, --help         Show this help
@@ -33,9 +34,10 @@ Options:
 }
 
 function parseArgs(argv) {
-  const args = { autoFix: false, dryRun: false, syncNext: true };
+  const args = { autoFix: false, dryRun: false, syncNext: true, gptOnly: false };
   for (const arg of argv) {
     if (arg === "--auto-fix") args.autoFix = true;
+    else if (arg === "--gpt-only") args.gptOnly = true;
     else if (arg === "--no-sync-next") args.syncNext = false;
     else if (arg === "--dry-run") args.dryRun = true;
     else if (arg === "-h" || arg === "--help") { usage(); process.exit(0); }
@@ -167,6 +169,10 @@ function readBulletSection(markdown, heading) {
     .map((line) => line.replace(/^- /, "").trim());
 }
 
+function isEmptyMarker(line) {
+  return /^`?(해당 없음|없음|none)`?$/i.test(line.trim());
+}
+
 function replaceSection(markdown, heading, replacementLines) {
   const lines = markdown.split(/\r?\n/);
   const section = readSection(markdown, heading);
@@ -237,6 +243,35 @@ function normalizeGptAuditScopeStatus(gptMd) {
   return { updated, changed: updated !== gptMd };
 }
 
+function normalizeResetCriteriaSection(gptMd) {
+  const verdictSection = readSection(gptMd, "최종 판정");
+  const verdictItems = verdictSection ? parseStatusLines(verdictSection.lines.join("\n")) : [];
+  const hasPending = verdictItems.some((item) => item.status === "계류");
+  const currentCriteria = readBulletSection(gptMd, "완료 기준 재고정");
+  const hasMeaningfulCriteria = currentCriteria.some((line) => !isEmptyMarker(line));
+
+  if (!hasPending || hasMeaningfulCriteria) {
+    return { updated: gptMd, changed: false };
+  }
+
+  const rejectCodes = readBulletSection(gptMd, "반려 코드").filter((line) => !isEmptyMarker(line));
+  const pendingLabels = verdictItems
+    .filter((item) => item.status === "계류")
+    .map((item) => stripStatusFormatting(item.raw).replace(/:\s*완료\s*\/?$/, "").trim());
+
+  const focus = rejectCodes.length > 0
+    ? rejectCodes.join(", ")
+    : pendingLabels.join(", ") || "현재 계류 항목";
+
+  const updated = replaceSection(gptMd, "완료 기준 재고정", [
+    "## 완료 기준 재고정",
+    "",
+    `- 현재 범위는 \`${focus}\` 보정과 관련 lint/테스트 재통과가 확인되어야 \`[합의완료]\`로 승격한다.`,
+  ]);
+
+  return { updated, changed: updated !== gptMd };
+}
+
 function syncGptNextTaskWithPromotion(gptMd, state) {
   if (!state?.nextStage) {
     return { updated: gptMd, changed: false };
@@ -297,6 +332,31 @@ function extractApprovedIds(markdown) {
     }
   }
   return ids;
+}
+
+function extractPendingIds(markdown) {
+  const ids = new Set();
+  for (const line of markdown.split(/\r?\n/)) {
+    if (!line.includes("[계류]")) {
+      continue;
+    }
+    for (const id of collectIdsFromLine(line)) {
+      ids.add(id);
+    }
+  }
+  return ids;
+}
+
+function resolvePromotionApprovedIds(claudeMd, gptMd) {
+  const approved = mergeIdSets(
+    extractApprovedIdsFromSection(claudeMd, "합의완료"),
+    extractApprovedIdsFromSection(gptMd, "최종 판정"),
+  );
+  const downgraded = extractPendingIds(readSection(gptMd, "최종 판정")?.lines.join("\n") ?? "");
+  for (const id of downgraded) {
+    approved.delete(id);
+  }
+  return approved;
 }
 
 function loadPromotionPlan() {
@@ -415,10 +475,7 @@ function syncPromotionDocs(gptMd, args) {
   }
 
   const claudeMd = existsSync(claudePath) ? readFileSync(claudePath, "utf8") : "";
-  const approvedIds = mergeIdSets(
-    extractApprovedIdsFromSection(claudeMd, "합의완료"),
-    extractApprovedIdsFromSection(gptMd, "최종 판정"),
-  );
+  const approvedIds = resolvePromotionApprovedIds(claudeMd, gptMd);
   const state = computePromotionState(plan, approvedIds);
   const outputs = [
     { path: koPromotionPath, content: renderPromotionDoc("ko", state) },
@@ -438,6 +495,45 @@ function syncPromotionDocs(gptMd, args) {
   }
 
   return changed;
+}
+
+function syncDemotedAnchors(claudeMd, gptMd) {
+  const section = readSection(claudeMd, "합의완료");
+  if (!section) {
+    return { updated: claudeMd, removed: [] };
+  }
+
+  const downgradedIds = extractPendingIds(readSection(gptMd, "최종 판정")?.lines.join("\n") ?? "");
+  if (downgradedIds.size === 0) {
+    return { updated: claudeMd, removed: [] };
+  }
+
+  const lines = claudeMd.split(/\r?\n/);
+  const removed = [];
+  const replacement = section.lines.filter((line, index) => {
+    if (index === 0) {
+      return true;
+    }
+    const ids = collectIdsFromLine(line);
+    if (ids.length === 0) {
+      return true;
+    }
+    const shouldRemove = ids.every((id) => downgradedIds.has(id));
+    if (shouldRemove) {
+      removed.push(stripStatusFormatting(line));
+      return false;
+    }
+    return true;
+  });
+
+  if (removed.length === 0) {
+    return { updated: claudeMd, removed };
+  }
+
+  return {
+    updated: replaceSection(claudeMd, "합의완료", replacement),
+    removed,
+  };
 }
 
 function buildFixPrompt(corrections, gptMd) {
@@ -484,12 +580,12 @@ function main() {
     console.log("gpt.md not found — nothing to respond to.");
     return;
   }
-  if (!existsSync(claudePath)) {
+  if (!existsSync(claudePath) && !args.gptOnly) {
     throw new Error(`Missing: ${claudePath}`);
   }
 
   let gptMd = readFileSync(gptPath, "utf8");
-  const claudeMd = readFileSync(claudePath, "utf8");
+  const claudeMd = existsSync(claudePath) ? readFileSync(claudePath, "utf8") : "";
 
   const withoutProtocolSection = removeSection(gptMd, "개선된 프로토콜");
   if (withoutProtocolSection !== gptMd) {
@@ -513,14 +609,22 @@ function main() {
     }
   }
 
+  const resetCriteriaSync = normalizeResetCriteriaSection(gptMd);
+  if (resetCriteriaSync.changed) {
+    gptMd = resetCriteriaSync.updated;
+    if (!args.dryRun) {
+      writeFileSync(gptPath, gptMd, "utf8");
+      console.log("Normalized '## 완료 기준 재고정' in gpt.md for pending verdicts.");
+    } else {
+      console.log("(dry-run) would normalize '## 완료 기준 재고정' in gpt.md for pending verdicts.");
+    }
+  }
+
   const promotionPlan = loadPromotionPlan();
   const promotionState = promotionPlan
     ? computePromotionState(
         promotionPlan,
-        mergeIdSets(
-          extractApprovedIdsFromSection(claudeMd, "합의완료"),
-          extractApprovedIdsFromSection(gptMd, "최종 판정"),
-        ),
+        resolvePromotionApprovedIds(claudeMd, gptMd),
       )
     : null;
 
@@ -542,6 +646,12 @@ function main() {
   const unverified = claudeItems.filter(i => i.status === "GPT미검증");
 
   let updated = claudeMd;
+  const demotionSync = syncDemotedAnchors(updated, gptMd);
+  updated = demotionSync.updated;
+  if (demotionSync.removed.length > 0) {
+    console.log(`Removing ${demotionSync.removed.length} downgraded item(s) from claude.md agreed anchor:`);
+    for (const item of demotionSync.removed) console.log(`  ↺ ${item}`);
+  }
   const { updated: afterApproved, synced } = syncApproved(updated, gptMd);
   updated = afterApproved;
 
@@ -575,6 +685,13 @@ function main() {
     for (const file of promotionChanged) {
       console.log(`  ✓ ${file}`);
     }
+  }
+
+  if (args.gptOnly) {
+    if (promotionChanged.length === 0) {
+      console.log("GPT-only sync complete.");
+    }
+    return;
   }
 
   const corrections = extractCorrections(gptMd, gptItems);
