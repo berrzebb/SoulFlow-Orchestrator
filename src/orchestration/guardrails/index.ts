@@ -35,3 +35,5 @@ export {
   is_over_budget,
   remaining_budget,
 } from "./enforcement.js";
+
+export { record_guardrail_metrics } from "./observability.js";

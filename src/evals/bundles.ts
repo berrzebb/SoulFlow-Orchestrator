@@ -98,3 +98,11 @@ register_bundle({
   smoke: true,
   tags: ["smoke"],
 });
+
+register_bundle({
+  name: "guardrails",
+  description: "실행 가드레일 결정 회귀 평가",
+  dataset_files: ["tests/evals/cases/guardrails.json"],
+  smoke: true,
+  tags: ["smoke"],
+});

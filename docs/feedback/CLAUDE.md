@@ -18,40 +18,35 @@
 - `[합의완료]` EV-5 + EV-6 Scenario Bundle Registry + CLI/CI Gate
 - `[합의완료]` EG-1 + EG-2 Session Reuse Policy + Budget Contract
 - `[합의완료]` EG-3 + EG-4 Reuse Integration + Hard Enforcement
+- `[합의완료]` EG-5 Guardrail Observability + Eval Fixture
 
-## EG-3 + EG-4 Reuse Integration + Hard Enforcement `[합의완료]`
+## EG-5 Guardrail Observability + Eval Fixture `[합의완료]`
 
-### 증거 팩: session reuse dispatcher short-circuit + budget enforcement + runner parity
+### 증거 팩: guardrail decision → observability metrics + eval pipeline + CLI 연결
 
-**claim**: EG-3 — `build_session_evidence`, `format_reuse_reply`, `execute-dispatcher`에 session reuse short-circuit (`const { mode } = decision;` 이후, `if (mode !== "phase")` 가드 — once/agent/task 모드에서만 판단, `stop_reason: session_reuse:{kind}`로 조기 종료). EG-4 — `BudgetTracker` mutable counter, `tool-call-handler` pre-check + `budget.used` 증가, 4개 runner parity (run-once, run-agent-loop, run-task-loop, continue-task-loop) — legacy handler budget 전달 + native 사후 `stop_reason`, `OrchestrationResult.stop_reason`, config 전파.
+**claim**: EG-5 — `record_guardrail_metrics` 함수 (`stop_reason` 파싱 → `guardrail_session_reuse_total{kind, provider}`, `guardrail_budget_exceeded_total{provider, mode}` counters 방출), `service.ts`에서 `execute_dispatch` + `continue_task_loop` 결과에 대해 호출 + span attributes에 `stop_reason` 추가, `create_guardrail_executor` (guardrail 결정 함수를 `EvalExecutorLike`로 어댑팅 — session_reuse/budget 두 타입, JSON input 파싱), `scripts/eval-run.ts`에서 `EXECUTOR_MAP`으로 번들별 executor 라우팅 (`guardrails` → `create_guardrail_executor`), `tests/evals/cases/guardrails.json` 8개 케이스 (reuse 4 + budget 4), `guardrails` 번들 등록 (smoke: true), CLI `--bundle guardrails --scorer exact --threshold 100` → 4/4 통과 (smoke 태그 필터).
 
 **changed files**:
 
-- `src/orchestration/guardrails/enforcement.ts` — 신규: `build_session_evidence`, `format_reuse_reply`, `BudgetTracker`, `create_budget_tracker`, `is_over_budget`, `remaining_budget`
-- `src/orchestration/guardrails/index.ts` — re-exports 추가
-- `src/orchestration/types.ts` — `OrchestrationResult.stop_reason?: string` 추가
-- `src/orchestration/execution/runner-deps.ts` — `RunnerDeps.config`에 `max_tool_calls_per_run`, `freshness_window_ms` 추가
-- `src/orchestration/execution/execute-dispatcher.ts` — session reuse short-circuit (`mode !== "phase"` 가드 포함)
-- `src/orchestration/tool-call-handler.ts` — `budget?: BudgetTracker` 파라미터, pre-check + 증가
-- `src/orchestration/service.ts` — `_runner_deps().config`, `_dispatch_deps().config` 전파
-- `src/orchestration/execution/run-once.ts` — budget tracker + handler 전달 + stop_reason
-- `src/orchestration/execution/run-agent-loop.ts` — budget tracker + check_should_continue + stop_reason
-- `src/orchestration/execution/run-task-loop.ts` — budget tracker + native sync + stop_reason
-- `src/orchestration/execution/continue-task-loop.ts` — budget tracker + native sync + stop_reason
-- `tests/orchestration/guardrails/enforcement.test.ts` — 신규 19 테스트
-- `tests/orchestration/execution/run-once-mock-tool-handler.test.ts` — `make_deps()` config 추가 (회귀 수정)
+- `src/orchestration/guardrails/observability.ts` — 신규: `record_guardrail_metrics`
+- `src/orchestration/guardrails/index.ts` — `record_guardrail_metrics` re-export 추가
+- `src/orchestration/service.ts` — `_record_guardrail_metrics` → `record_guardrail_metrics` 위임, span에 `stop_reason` attribute 추가, resume 경로에도 메트릭 방출
+- `src/evals/guardrail-executor.ts` — 신규: `create_guardrail_executor`, `GuardrailEvalInput` 타입
+- `src/evals/index.ts` — `guardrail-executor` re-exports 추가
+- `src/evals/bundles.ts` — `guardrails` 번들 등록
+- `scripts/eval-run.ts` — `EXECUTOR_MAP` + `resolve_executor()` 추가, per-dataset executor 선택
+- `tests/evals/cases/guardrails.json` — 신규: 8개 eval 케이스
+- `tests/orchestration/guardrails/observability.test.ts` — 신규 7 테스트
+- `tests/evals/guardrail-executor.test.ts` — 신규 12 테스트
+- `tests/evals/eval-run-cli.test.ts` — `--bundle guardrails` CLI 회귀 테스트 추가
 
-**test command**: `npm run lint && npx tsc --noEmit && npx vitest run tests/orchestration/guardrails/ tests/orchestration/execute-dispatcher.test.ts tests/orchestration/execution/`
+**test command**: `npm run lint && npx tsc --noEmit && npx vitest run tests/orchestration/guardrails/ tests/evals/guardrail-executor.test.ts tests/evals/bundles.test.ts && npx tsx scripts/eval-run.ts --bundle guardrails --scorer exact --threshold 100`
 
-**test result**: `lint 0 errors, tsc passed, guardrails 3 files / 56 tests passed, dispatcher+execution 14 files / 177 tests passed — 전부 녹색`
+**test result**: `lint 0 errors, tsc passed, 6 files / 86 tests passed, CLI guardrails 4/4 (100%) threshold met, eval-run-cli.test.ts 18/18 passed`
 
 **residual risk**:
 
-- native 백엔드 경로는 자체 tool loop 관리 → handler 레벨 budget 차단 불가, 사후 `stop_reason`만 설정 (정보성)
-- session reuse short-circuit는 `freshness_window_ms > 0`일 때만 활성 — config에서 0 설정 시 비활성
-
-**GPT [계류] 수정 사항**:
-
-- `claim-drift` 수정: session reuse short-circuit를 `const { mode } = decision;` 이후로 이동, `if (mode !== "phase")` 가드 추가 → phase 경로 차단 불가 보장 (execute-dispatcher.ts L116)
-- `test-gap` 수정: `run-once-mock-tool-handler.test.ts`의 `make_deps()`에 `config` 객체 추가 (`max_tool_calls_per_run: 0, freshness_window_ms: 0`) → 3/3 테스트 녹색 복구
+- `same_topic` eval 케이스는 `similarity_threshold: 0.7`을 명시적으로 지정 — 기본값 0.85에서는 짧은 한글 쿼리로 same_topic 트리거 어려움 (Jaccard 특성)
+- guardrail metrics는 `service.ts` execute/resume 경로에서만 방출 — 직접 runner 호출 시 metrics 미기록
+- CLI bundle 태그 필터로 8개 중 4개(smoke)만 실행 — 나머지 4개는 단위 테스트에서만 검증
 

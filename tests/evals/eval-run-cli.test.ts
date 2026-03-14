@@ -171,6 +171,14 @@ describe("eval-run CLI — bundles", () => {
     expect(stdout).toContain("threshold: 0%");
   });
 
+  it("--bundle guardrails --scorer exact --threshold 100 → 전체 통과", () => {
+    const { stdout } = run("--bundle guardrails --scorer exact --threshold 100");
+    expect(stdout).toContain("Running: guardrails");
+    // bundle tags=["smoke"] → smoke 태그 케이스만 필터 (4/8)
+    expect(stdout).toContain("Passed: 4");
+    expect(stdout).toContain("Failed: 0");
+  });
+
   it("--help → bundle/smoke/full 옵션 표시", () => {
     const { stdout } = run("--help");
     expect(stdout).toContain("--bundle");

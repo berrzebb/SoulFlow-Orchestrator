@@ -28,6 +28,7 @@ import { EvalRunner } from "../src/evals/runner.js";
 import { EXACT_MATCH_SCORER, CONTAINS_SCORER, REGEX_SCORER } from "../src/evals/scorers.js";
 import { create_report, save_baseline, load_baseline, compute_diff, render_markdown_summary } from "../src/evals/report.js";
 import { get_bundle, get_smoke_bundles, list_bundles, load_bundle_datasets } from "../src/evals/bundles.js";
+import { create_guardrail_executor } from "../src/evals/guardrail-executor.js";
 import type { EvalExecutorLike, EvalScorerLike, EvalDataset } from "../src/evals/contracts.js";
 
 interface CliArgs {
@@ -68,20 +69,16 @@ async function main() {
   const scorer = SCORER_MAP[args.scorer] ?? CONTAINS_SCORER;
   const tags = merge_tags(args);
 
-  const echo_executor: EvalExecutorLike = {
-    async execute(input: string) { return { output: `echo: ${input}` }; },
-  };
-
-  const runner = new EvalRunner(echo_executor, scorer, {
-    filter_tags: tags?.length ? tags : undefined,
-  });
-
   let total_passed = 0;
   let total_cases = 0;
 
   for (const dataset of datasets) {
     console.log(`\nRunning: ${dataset.name} (${dataset.cases.length} cases)`);
 
+    const executor = resolve_executor(dataset.name);
+    const runner = new EvalRunner(executor, scorer, {
+      filter_tags: tags?.length ? tags : undefined,
+    });
     const summary = await runner.run_dataset(dataset);
     const scorecards = summary.results.map((r) => ({
       case_id: r.case_id,
@@ -205,6 +202,18 @@ function parseArgs(argv: string[]): CliArgs {
     if (!args.datasetDir) { args.datasetDir = arg; continue; }
   }
   return args;
+}
+
+const ECHO_EXECUTOR: EvalExecutorLike = {
+  async execute(input: string) { return { output: `echo: ${input}` }; },
+};
+
+const EXECUTOR_MAP: Record<string, () => EvalExecutorLike> = {
+  guardrails: create_guardrail_executor,
+};
+
+function resolve_executor(dataset_name: string): EvalExecutorLike {
+  return EXECUTOR_MAP[dataset_name]?.() ?? ECHO_EXECUTOR;
 }
 
 function printUsage() {

@@ -1,0 +1,62 @@
+{
+  "name": "guardrails",
+  "description": "실행 가드레일 결정 회귀 평가 — session reuse + budget enforcement",
+  "cases": [
+    {
+      "id": "gr-reuse-exact",
+      "input": "{\"type\":\"session_reuse\",\"query\":\"오늘 날씨 어때?\",\"session_history\":[{\"role\":\"user\",\"content\":\"오늘 날씨 어때?\"},{\"role\":\"assistant\",\"content\":\"서울은 맑음입니다.\"},{\"role\":\"user\",\"content\":\"오늘 날씨 어때?\"}],\"freshness_window_ms\":300000}",
+      "expected": "reuse_summary",
+      "tags": ["smoke", "reuse"],
+      "metadata": { "scenario": "동일 질문 반복 — 정확 일치" }
+    },
+    {
+      "id": "gr-reuse-similar",
+      "input": "{\"type\":\"session_reuse\",\"query\":\"오늘 서울 날씨 기온 어때\",\"session_history\":[{\"role\":\"user\",\"content\":\"오늘 서울 날씨 어때\"},{\"role\":\"assistant\",\"content\":\"서울은 맑음입니다.\"},{\"role\":\"user\",\"content\":\"오늘 서울 날씨 기온 어때\"}],\"freshness_window_ms\":300000,\"similarity_threshold\":0.7}",
+      "expected": "same_topic",
+      "tags": ["reuse"],
+      "metadata": { "scenario": "단어 추가 — 유사 주제 (Jaccard 0.8, threshold 0.7)" }
+    },
+    {
+      "id": "gr-reuse-new",
+      "input": "{\"type\":\"session_reuse\",\"query\":\"주식 시장 분석해줘\",\"session_history\":[{\"role\":\"user\",\"content\":\"오늘 날씨 어때?\"},{\"role\":\"assistant\",\"content\":\"서울은 맑음입니다.\"},{\"role\":\"user\",\"content\":\"주식 시장 분석해줘\"}],\"freshness_window_ms\":300000}",
+      "expected": "new_search",
+      "tags": ["smoke", "reuse"],
+      "metadata": { "scenario": "완전히 다른 질문 — 새 탐색" }
+    },
+    {
+      "id": "gr-reuse-empty-history",
+      "input": "{\"type\":\"session_reuse\",\"query\":\"안녕하세요\",\"session_history\":[{\"role\":\"user\",\"content\":\"안녕하세요\"}],\"freshness_window_ms\":300000}",
+      "expected": "new_search",
+      "tags": ["reuse"],
+      "metadata": { "scenario": "히스토리 1건 — 자기 자신 제외 후 비교 대상 없음" }
+    },
+    {
+      "id": "gr-budget-exceeded",
+      "input": "{\"type\":\"budget\",\"max_tool_calls\":5,\"used_tool_calls\":6}",
+      "expected": "budget_exceeded",
+      "tags": ["smoke", "budget"],
+      "metadata": { "scenario": "사용량 > 한도 — 초과" }
+    },
+    {
+      "id": "gr-budget-at-limit",
+      "input": "{\"type\":\"budget\",\"max_tool_calls\":5,\"used_tool_calls\":5}",
+      "expected": "budget_exceeded",
+      "tags": ["budget"],
+      "metadata": { "scenario": "사용량 == 한도 — 경계값 초과" }
+    },
+    {
+      "id": "gr-budget-within",
+      "input": "{\"type\":\"budget\",\"max_tool_calls\":10,\"used_tool_calls\":3}",
+      "expected": "within_budget",
+      "tags": ["smoke", "budget"],
+      "metadata": { "scenario": "사용량 < 한도 — 정상" }
+    },
+    {
+      "id": "gr-budget-disabled",
+      "input": "{\"type\":\"budget\",\"max_tool_calls\":0,\"used_tool_calls\":100}",
+      "expected": "within_budget",
+      "tags": ["budget"],
+      "metadata": { "scenario": "한도 0 — 비활성 (무제한)" }
+    }
+  ]
+}

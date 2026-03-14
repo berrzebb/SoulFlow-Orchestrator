@@ -60,6 +60,7 @@ import {
 } from "./execution/execute-dispatcher.js";
 import { streaming_cfg_for } from "./execution/runner-deps.js";
 import { record_turn_to_daily } from "./turn-memory-recorder.js";
+import { record_guardrail_metrics } from "./guardrails/observability.js";
 
 type OrchestratorConfig = {
   executor_provider: ExecutorProvider;
@@ -408,8 +409,9 @@ export class OrchestrationService {
     if (preflight.kind === "resume") {
       const resume_result = await this.continue_task_loop(req, preflight.resumed_task, preflight.task_with_media, preflight.media);
       record_turn_to_daily(req, resume_result, this.runtime.get_context_builder()?.memory_store);
-      exec_span.end("ok", { mode: resume_result.mode });
+      exec_span.end("ok", { mode: resume_result.mode, ...(resume_result.stop_reason ? { stop_reason: resume_result.stop_reason } : {}) });
       this._record_orchestration_metrics(exec_start, req.provider);
+      this._record_guardrail_metrics(resume_result, req.provider);
       return resume_result;
     }
 
@@ -424,8 +426,9 @@ export class OrchestrationService {
     const result = await execute_dispatch(this._dispatch_deps(req), req, preflight);
     // 오케스트레이터 레벨 daily 기록 — 에이전트가 memory 도구를 호출하지 않아도 보장
     record_turn_to_daily(req, result, this.runtime.get_context_builder()?.memory_store);
-    exec_span.end(result.error ? "error" : "ok", { mode: result.mode });
+    exec_span.end(result.error ? "error" : "ok", { mode: result.mode, ...(result.stop_reason ? { stop_reason: result.stop_reason } : {}) });
     this._record_orchestration_metrics(exec_start, req.provider);
+    this._record_guardrail_metrics(result, req.provider);
     return result;
 
     } catch (err) {
@@ -439,6 +442,11 @@ export class OrchestrationService {
   private _record_orchestration_metrics(start: number, provider: string): void {
     this._obs.metrics.counter("orchestration_runs_total", 1, { provider });
     this._obs.metrics.histogram("orchestration_run_duration_ms", Date.now() - start, { provider });
+  }
+
+  /** EG-5: guardrail decision 메트릭 방출. stop_reason 기반. */
+  private _record_guardrail_metrics(result: OrchestrationResult, provider: string): void {
+    record_guardrail_metrics(this._obs.metrics, result, provider);
   }
 
   /** 컨텍스트 압축 전 메모리 자동 저장 설정 생성. 200K 컨텍스트 기준. */
