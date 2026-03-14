@@ -436,4 +436,6 @@ next/
 
 ## 라이선스
 
-MIT
+[GNU Affero General Public License v3.0](LICENSE) (AGPL-3.0-only)
+
+Copyright (C) 2026 Hyun Park
