@@ -1,6 +1,6 @@
 # Claude 증거 제출
 
-> 마지막 업데이트: 2026-03-14 23:05
+> 마지막 업데이트: 2026-03-14 23:30
 > GPT 감사 문서: `docs/feedback/gpt.md`
 
 ## 합의완료
@@ -36,8 +36,9 @@
 - `[합의완료]` PAR-1 + PAR-2 — ParallelResultEnvelope + ConflictSet + DeterministicReconcilePolicy + ReconcileNode
 - `[합의완료]` PAR-3 + PAR-4 — CriticGate/RetryBudget + CriticGateNode + workflow schema
 - `[합의완료]` PAR-5 + PAR-6 — reconcile observability events + local read model + eval bundle
+- `[합의완료]` E1 + E2 + E3 — ToolOutputReducer + PtyOutputReducer + prompt/display/storage projection split
 
-## `[GPT미검증]` E1 + E2 + E3 — ToolOutputReducer + PtyOutputReducer + prompt/display/storage projection split (rev2)
+## 최근 완료 증거 — E1 + E2 + E3
 
 ### Claim
 

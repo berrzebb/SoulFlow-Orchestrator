@@ -1,19 +1,19 @@
 ## 감사 범위
 
-- `PAR-5 + PAR-6 — reconcile observability events + local read model + eval bundle [합의완료]`
+- `E1 + E2 + E3 — ToolOutputReducer + PtyOutputReducer + prompt/display/storage projection split [GPT미검증 → 합의완료]`
 - 기존 `[합의완료]` 트랙은 재판정하지 않고 유지
 
 ## 독립 검증 결과
 
-- 코드 직접 확인: `src/orchestration/reconcile-trace.ts`, `src/orchestration/reconcile-read-model.ts`, `src/evals/parallel-conflict-executor.ts`, `src/evals/bundles.ts`, `tests/evals/cases/parallel-conflict.json`
+- 코드 직접 확인: `src/orchestration/tool-output-reducer.ts`, `src/agent/pty/pty-output-reducer.ts`, `src/orchestration/tool-call-handler.ts`, `tests/orchestration/tool-output-reducer.test.ts`, `tests/agent/pty/pty-output-reducer.test.ts`, `tests/orchestration/tool-call-handler.test.ts`
 - `npm run lint` 통과
-- `npx eslint src/orchestration/reconcile-trace.ts src/orchestration/reconcile-read-model.ts src/evals/parallel-conflict-executor.ts tests/orchestration/reconcile-trace.test.ts tests/orchestration/reconcile-read-model.test.ts tests/evals/parallel-conflict-executor.test.ts` 통과
+- `npx eslint src/orchestration/tool-output-reducer.ts src/agent/pty/pty-output-reducer.ts src/orchestration/tool-call-handler.ts tests/orchestration/tool-output-reducer.test.ts tests/agent/pty/pty-output-reducer.test.ts tests/orchestration/tool-call-handler.test.ts` 통과
 - `npx tsc --noEmit` 통과
-- `npx vitest run tests/orchestration/reconcile-trace.test.ts tests/orchestration/reconcile-read-model.test.ts tests/evals/parallel-conflict-executor.test.ts` 통과: `3 files / 43 tests passed`
+- `npx vitest run tests/orchestration/tool-output-reducer.test.ts tests/agent/pty/pty-output-reducer.test.ts tests/orchestration/tool-call-handler.test.ts` 통과: `3 files / 73 tests passed`
 
 ## 최종 판정
 
-- `PAR-5 + PAR-6 — reconcile observability events + local read model + eval bundle`: `완료` / `[합의완료]`
+- `E1 + E2 + E3 — ToolOutputReducer + PtyOutputReducer + prompt/display/storage projection split`: `완료` / `[합의완료]`
 
 ## 반려 코드
 
@@ -21,10 +21,10 @@
 
 ## 핵심 근거
 
-- `src/orchestration/reconcile-trace.ts`에 `emit_reconcile_event`, `filter_reconcile_spans`, reconcile 전용 이벤트 타입이 실제 구현되어 있고, span kind는 `orchestration_run`으로 유지됩니다.
-- `src/orchestration/reconcile-read-model.ts`는 `policy_applied` 기반 reconcile 식별, `verdict`+`rounds_used`+`passed` 기반 critic 식별, `__rounds_used` 추적 키 제외, 집계 필드 계산을 코드로 직접 수행합니다.
-- `tests/orchestration/reconcile-trace.test.ts`, `tests/orchestration/reconcile-read-model.test.ts`, `tests/evals/parallel-conflict-executor.test.ts`가 에러 경로, all-failed 경계, read-model 집계, bundle registration, 16-case eval runner 통합까지 직접 검증합니다.
-- `docs/feedback/claude.md`의 claim, test result, residual risk는 현재 구현과 재실행 결과와 일치하며, 현재 범위에서 SOLID, YAGNI, DRY, KISS, LoD 구조 회귀는 확인되지 않았습니다.
+- `src/orchestration/tool-output-reducer.ts`와 `src/agent/pty/pty-output-reducer.ts`는 kind 감지, JSON fallback, assistant chunk guard, soft compaction을 실제로 구현하고 관련 테스트가 직접 통과했습니다.
+- `tests/orchestration/tool-call-handler.test.ts`에는 reducer 주입 경로 전용 케이스가 추가되어 `on_tool_event.result`, `on_tool_block`, `log_event.detail`, `is_error` fallback을 직접 검증합니다.
+- `docs/feedback/claude.md`의 claim, 변경 파일, test command, test result, residual risk는 현재 구현과 재실행 결과와 일치합니다.
+- 현재 범위에서 SOLID, YAGNI, DRY, KISS, LoD 구조 회귀는 확인되지 않았습니다.
 
 ## 완료 기준 재고정
 
