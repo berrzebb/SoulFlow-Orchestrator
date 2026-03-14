@@ -1,6 +1,6 @@
 {
   "name": "gateway",
-  "description": "GW-2/3/4: gateway 분류 + 비용 기반 라우팅 + ingress 정규화 + 실행 경로 + 직접 실행 회귀 평가",
+  "description": "GW-2/3/4/6: gateway 분류 + 비용 기반 라우팅 + ingress 정규화 + 실행 경로 + 직접 실행 + delivery envelope 회귀 평가",
   "cases": [
     {
       "id": "gw-classify-identity",
@@ -133,6 +133,36 @@
       "input": "{\"type\":\"direct\",\"tool_name\":\"web_search\"}",
       "expected": "denied",
       "tags": ["smoke", "direct"]
+    },
+    {
+      "id": "gw-envelope-slack-once-reply",
+      "input": "{\"type\":\"envelope\",\"mode\":\"once\",\"provider\":\"slack\",\"chat_id\":\"C123\",\"has_reply\":true}",
+      "expected": "slack:C123:model_direct:has_content",
+      "tags": ["smoke", "envelope"]
+    },
+    {
+      "id": "gw-envelope-telegram-agent-reply",
+      "input": "{\"type\":\"envelope\",\"mode\":\"agent\",\"provider\":\"telegram\",\"chat_id\":\"T456\",\"has_reply\":true}",
+      "expected": "telegram:T456:agent_required:has_content",
+      "tags": ["smoke", "envelope"]
+    },
+    {
+      "id": "gw-envelope-web-once-no-reply",
+      "input": "{\"type\":\"envelope\",\"mode\":\"once\",\"provider\":\"web\",\"chat_id\":\"W789\",\"has_reply\":false}",
+      "expected": "web:W789:model_direct:no_content",
+      "tags": ["smoke", "envelope"]
+    },
+    {
+      "id": "gw-envelope-slack-thread-affinity",
+      "input": "{\"type\":\"envelope\",\"mode\":\"agent\",\"provider\":\"slack\",\"chat_id\":\"C123\",\"thread_id\":\"ts1234\",\"has_reply\":true}",
+      "expected": "slack:C123:agent_required:has_content:thread=ts1234",
+      "tags": ["smoke", "envelope"]
+    },
+    {
+      "id": "gw-envelope-phase-cost-tier",
+      "input": "{\"type\":\"envelope\",\"mode\":\"phase\",\"provider\":\"slack\",\"chat_id\":\"C999\",\"has_reply\":true}",
+      "expected": "slack:C999:agent_required:has_content",
+      "tags": ["smoke", "envelope"]
     }
   ]
 }

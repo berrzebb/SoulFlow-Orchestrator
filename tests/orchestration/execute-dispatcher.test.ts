@@ -16,6 +16,8 @@ import type { Logger } from "@src/logger.js";
 import type { ConfirmationGuard } from "@src/orchestration/confirmation-guard.js";
 import * as gatewayModule from "@src/orchestration/gateway.js";
 import type { GatewayDecision } from "@src/orchestration/gateway.js";
+import { create_execution_gateway } from "@src/orchestration/execution-gateway.js";
+import { create_direct_executor } from "@src/orchestration/execution/direct-executor.js";
 
 /* ── Mock Implementations ── */
 
@@ -183,7 +185,7 @@ describe("Phase 4.5: Execute Dispatcher 분리", () => {
 
     it("run_once을 호출할 수 있는 의존성을 가진다", async () => {
       const deps = createMockDeps();
-      const runOnceSpy = vi.fn(async (args: RunExecutionArgs) => ({
+      const runOnceSpy = vi.fn(async () => ({
         reply: "once executed",
         mode: "once" as const,
         tool_calls_count: 1,
@@ -918,5 +920,131 @@ describe("execute-dispatcher L85: session_lookup 람다 — inquiry 경로에서
     expect(result.mode).toBe("once");
     expect(result.reply).toContain("task-inquiry-1");
     expect(findSessionSpy).toHaveBeenCalledWith("task-inquiry-1");
+  });
+});
+
+// ── GW-5: ExecutionGateway + DirectExecutor 바인딩 검증 ──
+
+describe("execute_dispatch — GW-5 gateway/direct binding", () => {
+  let gatewaySpy: any;
+  beforeEach(() => { gatewaySpy = vi.spyOn(gatewayModule, "resolve_gateway"); });
+  afterEach(() => { vi.restoreAllMocks(); });
+
+  function make_gw5_deps(overrides: Partial<ExecuteDispatcherDeps> = {}): ExecuteDispatcherDeps {
+    return {
+      providers: { run_orchestrator: vi.fn(async () => ({ content: "mock" })) } as any,
+      runtime: {
+        list_active_tasks: vi.fn(() => []),
+        find_session_by_task: vi.fn(() => null),
+        get_context_builder: vi.fn(() => ({
+          skills_loader: { get_skill_metadata: vi.fn(() => null), get_role_skill: vi.fn(() => null) },
+        })),
+      } as any,
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } as any,
+      config: {
+        executor_provider: "chatgpt",
+        provider_caps: { chatgpt_available: true, claude_available: true, openrouter_available: false },
+      },
+      process_tracker: null,
+      guard: null,
+      tool_index: null,
+      log_event: vi.fn(),
+      build_identity_reply: vi.fn(() => "I am Claude"),
+      build_system_prompt: vi.fn(async () => "system"),
+      generate_guard_summary: vi.fn(async () => "summary"),
+      run_once: vi.fn(async () => ({ reply: "done", mode: "once" as const, tool_calls_count: 0, streamed: false })),
+      run_agent_loop: vi.fn(async () => ({ reply: "done", mode: "agent" as const, tool_calls_count: 0, streamed: false })),
+      run_task_loop: vi.fn(async () => ({ reply: "done", mode: "task" as const, tool_calls_count: 0, streamed: false })),
+      run_phase_loop: vi.fn(async () => ({ reply: "done", mode: "phase" as const, tool_calls_count: 0, streamed: false })),
+      caps: vi.fn(() => ({ chatgpt_available: true, claude_available: true, openrouter_available: false })),
+      execution_gateway: create_execution_gateway(),
+      direct_executor: create_direct_executor(),
+      execute_tool: vi.fn(async (name: string) => `tool_result:${name}`),
+      ...overrides,
+    };
+  }
+
+  it("direct_tool + direct_executor → LLM 없이 도구 직접 실행", async () => {
+    const executeTool = vi.fn(async () => `current_time:2026-03-14T16:00:00Z`);
+    const deps = make_gw5_deps({ execute_tool: executeTool });
+
+    gatewaySpy.mockResolvedValue({
+      action: "direct_tool",
+      tool_name: "datetime",
+    } as GatewayDecision);
+
+    const result = await execute_dispatch(deps, mockRequest, mockPreflight);
+
+    expect(result.reply).toContain("current_time");
+    expect(result.tool_calls_count).toBe(1);
+    expect(result.tools_used).toEqual(["datetime"]);
+    expect(executeTool).toHaveBeenCalledWith("datetime", {}, mockPreflight.tool_ctx);
+    expect(deps.run_once).not.toHaveBeenCalled();
+  });
+
+  it("direct_tool + 비허용 도구 → once 모드 폴백", async () => {
+    const deps = make_gw5_deps();
+
+    gatewaySpy.mockResolvedValue({
+      action: "direct_tool",
+      tool_name: "web_search",
+    } as GatewayDecision);
+
+    const result = await execute_dispatch(deps, mockRequest, mockPreflight);
+
+    expect(result.mode).toBe("once");
+    expect(deps.run_once).toHaveBeenCalled();
+  });
+
+  it("direct_tool + 실행 실패 → once 모드 폴백", async () => {
+    const executeTool = vi.fn(async () => { throw new Error("tool crash"); });
+    const deps = make_gw5_deps({ execute_tool: executeTool });
+
+    gatewaySpy.mockResolvedValue({
+      action: "direct_tool",
+      tool_name: "datetime",
+    } as GatewayDecision);
+
+    const result = await execute_dispatch(deps, mockRequest, mockPreflight);
+
+    expect(result.mode).toBe("once");
+    expect(deps.run_once).toHaveBeenCalled();
+  });
+
+  it("execution_gateway fallback: primary 실패 → gateway 체인으로 재시도", async () => {
+    let call_count = 0;
+    const runAgentLoop = vi.fn(async () => {
+      call_count++;
+      if (call_count === 1) return { reply: "", mode: "agent" as const, tool_calls_count: 0, streamed: false, error: "primary_failed" };
+      return { reply: "fallback ok", mode: "agent" as const, tool_calls_count: 1, streamed: false };
+    });
+    const deps = make_gw5_deps({ run_agent_loop: runAgentLoop });
+
+    gatewaySpy.mockResolvedValue({
+      action: "execute",
+      mode: "agent",
+      executor: "chatgpt",
+    } as GatewayDecision);
+
+    const result = await execute_dispatch(deps, mockRequest, mockPreflight);
+
+    expect(result.reply).toBe("fallback ok");
+    expect(call_count).toBe(2);
+    expect(deps.logger.warn).toHaveBeenCalledWith(
+      "executor failed, trying fallback",
+      expect.objectContaining({ executor: "chatgpt" }),
+    );
+  });
+
+  it("execution_gateway: no_token 경로 → fallback 없음", async () => {
+    const deps = make_gw5_deps();
+
+    gatewaySpy.mockResolvedValue({ action: "identity" } as GatewayDecision);
+
+    const result = await execute_dispatch(deps, mockRequest, mockPreflight);
+
+    expect(result.reply).toBe("I am Claude");
+    expect(deps.run_once).not.toHaveBeenCalled();
+    expect(deps.run_agent_loop).not.toHaveBeenCalled();
   });
 });

@@ -192,8 +192,8 @@ describe("eval-run CLI — bundles", () => {
   it("--bundle gateway --scorer exact --threshold 100 → 전체 통과", () => {
     const { stdout } = run("--bundle gateway --scorer exact --threshold 100");
     expect(stdout).toContain("Running: gateway");
-    // bundle tags=["smoke"] → smoke 태그 케이스만 필터 (19/22: GW-2 11 + GW-3 route 4 + GW-4 direct 4)
-    expect(stdout).toContain("Passed: 19");
+    // bundle tags=["smoke"] → smoke 태그 케이스만 필터 (24/27: GW-2 11 + GW-3 route 4 + GW-4 direct 4 + GW-6 envelope 5)
+    expect(stdout).toContain("Passed: 24");
     expect(stdout).toContain("Failed: 0");
   });
 

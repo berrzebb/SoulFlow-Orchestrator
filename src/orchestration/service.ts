@@ -58,6 +58,9 @@ import {
   execute_dispatch,
   type ExecuteDispatcherDeps,
 } from "./execution/execute-dispatcher.js";
+// ── GW-3/GW-4: Gateway + DirectExecutor 바인딩 ──
+import { create_execution_gateway, type ExecutionGatewayLike } from "./execution-gateway.js";
+import { create_direct_executor, type DirectExecutorLike } from "./execution/direct-executor.js";
 import { streaming_cfg_for } from "./execution/runner-deps.js";
 import { record_turn_to_daily } from "./turn-memory-recorder.js";
 import { record_guardrail_metrics } from "./guardrails/observability.js";
@@ -158,6 +161,8 @@ export class OrchestrationService implements OrchestrationServiceLike {
   private readonly hook_runner: import("../hooks/runner.js").HookRunner | null;
   private _renderer: PersonaMessageRendererLike | null;
   private readonly _obs: import("../observability/context.js").ObservabilityLike;
+  private readonly _execution_gateway: ExecutionGatewayLike;
+  private readonly _direct_executor: DirectExecutorLike;
 
   constructor(deps: OrchestrationServiceDeps) {
     this._renderer = deps.renderer ?? null;
@@ -177,6 +182,8 @@ export class OrchestrationService implements OrchestrationServiceLike {
     this.tool_index = deps.tool_index ?? null;
     this.hook_runner = deps.hook_runner ?? null;
     this._obs = deps.observability ?? NOOP_OBS;
+    this._execution_gateway = create_execution_gateway();
+    this._direct_executor = create_direct_executor();
     this.deps = deps;
 
     this.streaming_cfg = {
@@ -387,6 +394,9 @@ export class OrchestrationService implements OrchestrationServiceLike {
       run_task_loop: (args) => _run_task_loop(this._runner_deps(args.req), args),
       run_phase_loop: (req, task, hint, cats) => _run_phase_loop(this._phase_deps(req), req, task, hint, cats),
       caps: () => this._caps(),
+      execution_gateway: this._execution_gateway,
+      direct_executor: this._direct_executor,
+      execute_tool: (name, params, ctx) => this.runtime.execute_tool(name, params, ctx),
     };
   }
 

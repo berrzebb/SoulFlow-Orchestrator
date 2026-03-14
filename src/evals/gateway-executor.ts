@@ -1,7 +1,7 @@
 /**
- * GW-2/3/4: Gateway Eval Executor.
+ * GW-2/3/4/6: Gateway Eval Executor.
  *
- * classifier + cost_tier + route + direct 분류를 EvalExecutorLike로 감싸
+ * classifier + cost_tier + route + direct + envelope 분류를 EvalExecutorLike로 감싸
  * eval pipeline에서 라우팅 회귀 테스트를 실행할 수 있게 한다.
  *
  * input JSON schema:
@@ -10,6 +10,7 @@
  *   normalize  → { type, text, provider }             — ingress 정규화
  *   route      → { type, plan_kind, executor?, caps } — ExecutionGateway 경로 결정
  *   direct     → { type, tool_name }                  — DirectExecutor 허용 판별
+ *   envelope   → { type, mode, provider, chat_id, thread_id?, has_reply } — delivery envelope 구성 검증
  */
 
 import type { EvalExecutorLike } from "./contracts.js";
@@ -19,8 +20,10 @@ import { normalize_ingress } from "../orchestration/ingress-normalizer.js";
 import { create_execution_gateway } from "../orchestration/execution-gateway.js";
 import { create_direct_executor } from "../orchestration/execution/direct-executor.js";
 import type { RequestPlan } from "../orchestration/gateway-contracts.js";
+import { build_delivery_envelope } from "../orchestration/gateway-contracts.js";
 import type { ProviderCapabilities, ExecutorProvider } from "../providers/executor.js";
 import type { InboundMessage } from "../bus/types.js";
+import type { ExecutionMode } from "../orchestration/types.js";
 
 /** executor가 파싱하는 입력 구조. */
 export type GatewayEvalInput =
@@ -28,7 +31,8 @@ export type GatewayEvalInput =
   | { type: "cost_tier"; text: string; active_tasks?: number }
   | { type: "normalize"; text: string; provider: string }
   | { type: "route"; plan_kind: string; executor?: string; preference?: string; caps?: Partial<ProviderCapabilities> }
-  | { type: "direct"; tool_name: string };
+  | { type: "direct"; tool_name: string }
+  | { type: "envelope"; mode: string; provider: string; chat_id: string; thread_id?: string; has_reply: boolean };
 
 /** eval용 RequestPlan 생성 헬퍼. */
 function build_eval_plan(kind: string, executor?: ExecutorProvider): RequestPlan {
@@ -98,6 +102,18 @@ export function create_gateway_executor(): EvalExecutorLike {
         if (input.type === "direct") {
           const de = create_direct_executor();
           return { output: de.is_allowed(input.tool_name) ? "allowed" : "denied" };
+        }
+
+        if (input.type === "envelope") {
+          const mode = input.mode as ExecutionMode;
+          const result = {
+            reply: input.has_reply ? "test reply" : null,
+            mode,
+            tool_calls_count: 0,
+            streamed: false,
+          };
+          const envelope = build_delivery_envelope(result, input.provider, input.chat_id, input.thread_id);
+          return { output: `${envelope.reply_to.provider}:${envelope.reply_to.chat_id}:${envelope.cost_tier}:${envelope.content ? "has_content" : "no_content"}${envelope.reply_to.thread_id ? `:thread=${envelope.reply_to.thread_id}` : ""}` };
         }
 
         return { output: "", error: `unknown gateway eval type: ${(input as Record<string, unknown>).type}` };

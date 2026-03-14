@@ -16,6 +16,7 @@ import {
   build_reply_ref,
   plan_cost_tier,
   result_cost_tier,
+  build_delivery_envelope,
 } from "@src/orchestration/gateway-contracts.js";
 import type { GatewayDecision } from "@src/orchestration/gateway.js";
 import type { OrchestrationResult } from "@src/orchestration/types.js";
@@ -154,5 +155,62 @@ describe("to_result_envelope — OrchestrationResult → ResultEnvelope", () => 
     const envelope = to_result_envelope(result, ref);
     expect(envelope.streamed).toBe(true);
     expect(envelope.suppress_reply).toBe(true);
+  });
+});
+
+describe("GW-6: build_delivery_envelope — channel affinity regression", () => {
+  it("slack once → reply_to에 slack provider + chat_id 보존", () => {
+    const result: OrchestrationResult = { reply: "hello", mode: "once", tool_calls_count: 1, streamed: false };
+    const env = build_delivery_envelope(result, "slack", "C123");
+    expect(env.reply_to).toEqual({ provider: "slack", chat_id: "C123" });
+    expect(env.content).toBe("hello");
+    expect(env.cost_tier).toBe("model_direct");
+  });
+
+  it("telegram agent → reply_to에 telegram provider 보존 + cost_tier=agent_required", () => {
+    const result: OrchestrationResult = { reply: "done", mode: "agent", tool_calls_count: 5, streamed: true };
+    const env = build_delivery_envelope(result, "telegram", "T456");
+    expect(env.reply_to).toEqual({ provider: "telegram", chat_id: "T456" });
+    expect(env.cost_tier).toBe("agent_required");
+    expect(env.streamed).toBe(true);
+  });
+
+  it("thread_id 보존 → channel affinity + thread routing", () => {
+    const result: OrchestrationResult = { reply: "reply", mode: "once", tool_calls_count: 0, streamed: false };
+    const env = build_delivery_envelope(result, "slack", "C123", "ts1234.5678");
+    expect(env.reply_to).toEqual({ provider: "slack", chat_id: "C123", thread_id: "ts1234.5678" });
+  });
+
+  it("web 채널 → reply_to에 web provider 보존", () => {
+    const result: OrchestrationResult = { reply: null, mode: "once", tool_calls_count: 0, streamed: false, suppress_reply: true };
+    const env = build_delivery_envelope(result, "web", "W789");
+    expect(env.reply_to.provider).toBe("web");
+    expect(env.content).toBeNull();
+    expect(env.suppress_reply).toBe(true);
+  });
+
+  it("phase 모드 → cost_tier=agent_required", () => {
+    const result: OrchestrationResult = { reply: "workflow done", mode: "phase", tool_calls_count: 0, streamed: false };
+    const env = build_delivery_envelope(result, "slack", "C999");
+    expect(env.cost_tier).toBe("agent_required");
+    expect(env.mode).toBe("phase");
+  });
+
+  it("error 전파 → envelope.error 보존", () => {
+    const result: OrchestrationResult = { reply: null, mode: "agent", tool_calls_count: 0, streamed: false, error: "timeout" };
+    const env = build_delivery_envelope(result, "slack", "C123");
+    expect(env.error).toBe("timeout");
+    expect(env.content).toBeNull();
+  });
+
+  it("usage + tools_used 전파", () => {
+    const result: OrchestrationResult = {
+      reply: "done", mode: "once", tool_calls_count: 2, streamed: false,
+      usage: { prompt_tokens: 100, completion_tokens: 50 },
+      tools_used: ["bash", "read_file"],
+    };
+    const env = build_delivery_envelope(result, "slack", "C123");
+    expect(env.usage).toEqual({ prompt_tokens: 100, completion_tokens: 50 });
+    expect(env.tools_used).toEqual(["bash", "read_file"]);
   });
 });

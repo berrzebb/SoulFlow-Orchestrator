@@ -115,3 +115,13 @@ export function result_cost_tier(mode: ExecutionMode): CostTier {
   if (mode === "once") return "model_direct";
   return "agent_required";
 }
+
+/** delivery 경계 편의 함수: OrchestrationResult + 채널 정보 → ResultEnvelope. */
+export function build_delivery_envelope(
+  result: OrchestrationResult,
+  provider: ChannelProvider,
+  chat_id: string,
+  thread_id?: string,
+): ResultEnvelope {
+  return to_result_envelope(result, build_reply_ref(provider, chat_id, thread_id));
+}
