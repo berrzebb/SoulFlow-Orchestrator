@@ -706,6 +706,11 @@ export class ChannelManager implements ServiceLike {
     });
 
     try {
+      // webhook retry 방어: 직전 응답 후 3초 이내 동일 메시지 재도착 → 중복 처리 차단
+      if (!meta.is_recovery && await this.recorder.is_delivery_retry(provider, message, alias)) {
+        this.logger.info("delivery_retry_skipped", { provider, chat_id: message.chat_id, alias });
+        return;
+      }
       if (!meta.is_recovery) await this.recorder.record_user(provider, message, alias);
       const media_inputs = await this.media.collect(provider, message);
       const msg_meta = (message.metadata || {}) as Record<string, unknown>;

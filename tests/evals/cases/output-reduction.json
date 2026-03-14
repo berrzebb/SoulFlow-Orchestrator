@@ -1,0 +1,97 @@
+{
+  "name": "output-reduction",
+  "description": "E4+E5: MemoryIngestionReducer + ToolOutputReducer 회귀 평가 — kind 감지, 압축률, memory 경로 통합",
+  "cases": [
+    {
+      "id": "or-plain-short",
+      "input": "{\"text\": \"hello world\", \"max_chars\": 500}",
+      "expected": "{\"truncated\": false}",
+      "tags": ["smoke"],
+      "metadata": {"desc": "짧은 plain 텍스트는 잘리지 않아야 함"}
+    },
+    {
+      "id": "or-plain-overflow",
+      "input": "{\"text\": \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\", \"max_chars\": 100}",
+      "expected": "{\"kind\": \"plain\", \"max_prompt_chars\": 100, \"truncated\": true}",
+      "tags": ["smoke"],
+      "metadata": {"desc": "plain 텍스트 max_chars 초과 → truncated"}
+    },
+    {
+      "id": "or-json-kind",
+      "input": "{\"text\": \"{\\\"name\\\": \\\"Alice\\\", \\\"age\\\": 30, \\\"city\\\": \\\"Seoul\\\"}\", \"max_chars\": 500}",
+      "expected": "{\"kind\": \"json\", \"contains\": \"{3 keys}\"}",
+      "tags": ["smoke"],
+      "metadata": {"desc": "JSON 객체 → json kind + key summary"}
+    },
+    {
+      "id": "or-json-array",
+      "input": "{\"text\": \"[\\\"a\\\", \\\"b\\\", \\\"c\\\"]\", \"max_chars\": 500}",
+      "expected": "{\"kind\": \"json\"}",
+      "tags": ["smoke"],
+      "metadata": {"desc": "JSON 배열 → json kind"}
+    },
+    {
+      "id": "or-diff-kind",
+      "input": "{\"text\": \"diff --git a/src/foo.ts b/src/foo.ts\\n--- a/src/foo.ts\\n+++ b/src/foo.ts\\n@@ -1,3 +1,4 @@\\n-old line\\n+new line 1\\n+new line 2\", \"max_chars\": 500}",
+      "expected": "{\"kind\": \"diff\", \"contains\": \"+2\"}",
+      "tags": ["smoke"],
+      "metadata": {"desc": "unified diff → diff kind + +/- 통계"}
+    },
+    {
+      "id": "or-test-kind",
+      "input": "{\"text\": \"✓ test A passed\\n✗ test B failed: expected 1 to be 2\\n3 tests passing, 1 failing\", \"hint\": \"vitest\", \"max_chars\": 500}",
+      "expected": "{\"kind\": \"test\", \"contains\": \"failing\"}",
+      "tags": ["smoke"],
+      "metadata": {"desc": "test runner 출력 → test kind + 실패 라인 포함"}
+    },
+    {
+      "id": "or-log-kind",
+      "input": "{\"text\": \"[INFO] Service started\\n[DEBUG] Connecting\\n[ERROR] Connection refused\\n[INFO] Retrying\", \"max_chars\": 500}",
+      "expected": "{\"kind\": \"log\", \"contains\": \"ERROR\"}",
+      "tags": ["smoke"],
+      "metadata": {"desc": "구조적 로그 → log kind + ERROR 라인 포함"}
+    },
+    {
+      "id": "or-table-kind",
+      "input": "{\"text\": \"| Name | Score |\\n|------|-------|\\n| Alice | 95 |\\n| Bob | 87 |\\n| Carol | 92 |\", \"max_chars\": 500}",
+      "expected": "{\"kind\": \"table\", \"contains\": \"rows\"}",
+      "tags": ["smoke"],
+      "metadata": {"desc": "pipe-delimited 테이블 → table kind + rows 표시"}
+    },
+    {
+      "id": "or-shell-kind",
+      "input": "{\"text\": \"$ npm install\\nnpm warn deprecated\\nError: EACCES permission denied\", \"hint\": \"bash\", \"max_chars\": 500}",
+      "expected": "{\"kind\": \"shell\", \"contains\": \"EACCES\"}",
+      "tags": ["smoke"],
+      "metadata": {"desc": "shell 출력 → shell kind + 에러 라인 포함"}
+    },
+    {
+      "id": "or-memory-plain",
+      "input": "{\"text\": \"short reply\", \"max_chars\": 500, \"mode\": \"memory\"}",
+      "expected": "{\"truncated\": false}",
+      "tags": ["smoke"],
+      "metadata": {"desc": "memory mode: 짧은 텍스트 → 잘리지 않음"}
+    },
+    {
+      "id": "or-memory-overflow",
+      "input": "{\"text\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\", \"max_chars\": 100, \"mode\": \"memory\"}",
+      "expected": "{\"max_prompt_chars\": 200, \"truncated\": true}",
+      "tags": ["smoke"],
+      "metadata": {"desc": "memory mode: 큰 텍스트 → storage_text(1.5×) 적용, 200자 이내"}
+    },
+    {
+      "id": "or-memory-json",
+      "input": "{\"text\": \"{\\\"key\\\": \\\"value\\\", \\\"count\\\": 42}\", \"max_chars\": 500, \"mode\": \"memory\"}",
+      "expected": "{\"truncated\": false}",
+      "tags": ["smoke"],
+      "metadata": {"desc": "memory mode: 짧은 JSON → kind 관계 없이 그대로"}
+    },
+    {
+      "id": "or-prompt-storage-ratio",
+      "input": "{\"text\": \"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\", \"max_chars\": 100}",
+      "expected": "{\"max_prompt_chars\": 100}",
+      "tags": ["smoke"],
+      "metadata": {"desc": "prompt_chars ≤ max_chars 보장"}
+    }
+  ]
+}

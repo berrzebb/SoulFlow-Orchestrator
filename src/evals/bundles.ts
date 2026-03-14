@@ -130,3 +130,11 @@ register_bundle({
   smoke: true,
   tags: ["smoke"],
 });
+
+register_bundle({
+  name: "output-reduction",
+  description: "E4+E5: MemoryIngestionReducer + ToolOutputReducer kind 감지 + 압축률 회귀 평가",
+  dataset_files: ["tests/evals/cases/output-reduction.json"],
+  smoke: true,
+  tags: ["smoke"],
+});

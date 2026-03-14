@@ -6,6 +6,7 @@
 
 import type { OrchestrationRequest, OrchestrationResult } from "./types.js";
 import type { MemoryStoreLike } from "../agent/memory.types.js";
+import type { MemoryIngestionReducer } from "./memory-ingestion-reducer.js";
 
 const MAX_CONTENT_CHARS = 600;
 
@@ -16,11 +17,15 @@ function truncate(text: string): string {
 /**
  * 한 턴(user + bot)을 daily 메모리에 append.
  * 에러/suppress/builtin 결과는 건너뜀.
+ *
+ * reducer 제공 시 bot reply에 storage_text 기준 reduction 적용.
+ * 미제공 시 기존 MAX_CONTENT_CHARS truncation으로 fallback.
  */
 export function record_turn_to_daily(
   req: OrchestrationRequest,
   result: OrchestrationResult,
   memory: MemoryStoreLike | null | undefined,
+  reducer?: MemoryIngestionReducer,
 ): void {
   if (!memory) return;
   if (result.error || result.suppress_reply || result.builtin_command) return;
@@ -34,11 +39,12 @@ export function record_turn_to_daily(
   const hhmm = now.toISOString().slice(11, 16);
   // provider:chat_id:alias 형식으로 출처 표기
   const source = `${req.provider}:${req.message.chat_id}:${req.alias}`;
+  const stored_bot = reducer ? reducer.reduce(bot_text) : truncate(bot_text);
 
   const entry = [
     `### ${source} ${hhmm}`,
     `**User:** ${truncate(user_text)}`,
-    `**Bot:** ${truncate(bot_text)}`,
+    `**Bot:** ${stored_bot}`,
     "",
   ].join("\n");
 

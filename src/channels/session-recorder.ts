@@ -131,6 +131,51 @@ export class SessionRecorder {
     }
   }
 
+  /**
+   * Webhook retry 감지: `user:Q → assistant:A(recent) → user:Q(incoming)` 패턴 확인.
+   *
+   * Slack은 응답이 늦으면 동일 이벤트를 재전송. 직전 응답 후 within_ms 이내에
+   * 동일 내용이 다시 도착하면 retry로 판정 → 중복 처리 방지.
+   */
+  async is_delivery_retry(
+    provider: ChannelProvider,
+    message: InboundMessage,
+    alias: string,
+    within_ms = 3_000,
+  ): Promise<boolean> {
+    if (!this.sessions) return false;
+    try {
+      const tid = extract_team_id(message.metadata);
+      const key = session_key(provider, message.chat_id, alias, message.thread_id, tid || undefined);
+      const session = await this.sessions.get_or_create(key);
+      const msgs = session.messages;
+      if (msgs.length < 2) return false;
+
+      const content = String(message.content || "").trim();
+      if (!content) return false;
+      const now = Date.now();
+
+      // 역순으로 가장 최근 assistant 메시지를 찾아 within_ms 이내인지 확인
+      for (let i = msgs.length - 1; i >= 1; i--) {
+        const cur = msgs[i] as Record<string, unknown>;
+        if (cur.role !== "assistant") continue;
+
+        const ts_raw = String(cur.timestamp || cur.at || "");
+        if (!ts_raw) break;
+        const ts = Date.parse(ts_raw);
+        if (!Number.isFinite(ts) || now - ts > within_ms) break; // 오래된 응답 → retry 아님
+
+        // 직전 user 메시지와 현재 content 비교
+        const prev = msgs[i - 1] as Record<string, unknown>;
+        if (prev.role !== "user") continue;
+        if (String(prev.content || "").trim() === content) return true;
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  }
+
   /** 지정 채널의 마지막 assistant 메시지 content 조회. /verify 등에서 사용. */
   async get_last_assistant_content(provider: ChannelProvider, chat_id: string, alias: string, team_id?: string): Promise<string | null> {
     if (!this.sessions) return null;

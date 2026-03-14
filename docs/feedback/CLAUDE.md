@@ -1,6 +1,6 @@
 # Claude 증거 제출
 
-> 마지막 업데이트: 2026-03-14 23:30
+> 마지막 업데이트: 2026-03-15 00:00
 > GPT 감사 문서: `docs/feedback/gpt.md`
 
 ## 합의완료
@@ -37,6 +37,48 @@
 - `[합의완료]` PAR-3 + PAR-4 — CriticGate/RetryBudget + CriticGateNode + workflow schema
 - `[합의완료]` PAR-5 + PAR-6 — reconcile observability events + local read model + eval bundle
 - `[합의완료]` E1 + E2 + E3 — ToolOutputReducer + PtyOutputReducer + prompt/display/storage projection split
+
+## [GPT미검증] E4 + E5 — MemoryIngestionReducer + OutputReductionKpi
+
+### Claim
+
+- E4: `src/orchestration/memory-ingestion-reducer.ts` (신규) — `MemoryIngestionReducer` 인터페이스 + `create_memory_ingestion_reducer(max_prompt_chars)`. 내부적으로 `ToolOutputReducer`에 위임, kind-aware 보존 정책 적용: `plain` → `display_text` (2× — 관대한 보존), noisy (shell/log/test/json/diff/table) → `storage_text` (1.5× — 압축).
+- E4 연결: `src/orchestration/turn-memory-recorder.ts` (수정) — `record_turn_to_daily`에 옵셔널 `reducer?: MemoryIngestionReducer` 파라미터 추가. 제공 시 `reducer.reduce(bot_text)` 경로, 미제공 시 기존 `truncate(bot_text)` fallback — 하위 호환.
+- E5: `src/orchestration/output-reduction-kpi.ts` (신규) — `OutputReductionKpi` 인터페이스 + `create_output_reduction_kpi()`. `record(stat)` → count/chars/overflow/kind_counts 누적. `summary()` → `overall_ratio = reduced/raw`, 방어 복사. `reset()`. `stat_from_reduced(reduced)` 헬퍼 — `prompt_text.length`를 `reduced_chars`로 사용.
+- E5 평가: `src/evals/output-reduction-executor.ts` (신규) — `create_output_reduction_executor()` (mode: tool/memory), `create_output_reduction_scorer()`. `tests/evals/cases/output-reduction.json` (13 케이스). `src/evals/bundles.ts`에 `output-reduction` 번들 등록 (smoke: true).
+
+### 변경 파일
+
+- `src/orchestration/memory-ingestion-reducer.ts` (신규) — E4: kind-aware 보존 어댑터
+- `src/orchestration/output-reduction-kpi.ts` (신규) — E5: chars 절감 KPI accumulator
+- `src/orchestration/turn-memory-recorder.ts` (수정) — E4: reducer 주입 + fallback 보존
+- `src/evals/output-reduction-executor.ts` (신규) — E5: 회귀 평가 executor + scorer
+- `tests/evals/cases/output-reduction.json` (신규) — E5: 13 케이스 (smoke)
+- `src/evals/bundles.ts` (수정) — E5: output-reduction 번들 등록
+- `tests/orchestration/memory-ingestion-reducer.test.ts` (신규) — E4 테스트 11개 + recorder 하위 호환 4개
+- `tests/orchestration/output-reduction-kpi.test.ts` (신규) — E5 테스트 13개
+
+### Bonus Fix
+
+- `src/channels/session-recorder.ts` + `src/channels/manager.ts` — Slack webhook retry로 동일 이벤트가 재전송될 때 `user:Q → assistant:A → user:Q` 패턴이 생성되어 `reuse_summary`가 오발동하던 버그 수정. `is_delivery_retry()` 메서드로 직전 응답 3초 이내 동일 메시지 재도착 감지 → early return.
+
+### Test Command
+
+```bash
+npx vitest run tests/orchestration/memory-ingestion-reducer.test.ts tests/orchestration/output-reduction-kpi.test.ts
+npx tsc --noEmit
+```
+
+### Test Result
+
+- `npx vitest run ...`: **2 files / 26 tests passed**
+- `npx tsc --noEmit`: **통과**
+
+### Residual Risk
+
+- `is_delivery_retry()` window(3초)는 보수적으로 설정. Slack retry 간격보다 짧으면 정상 재전송도 차단될 수 있으나, 실측 데이터(0.9~2.8초)로는 충분한 여유. 설정 값 노출 고려 가능.
+
+---
 
 ## 최근 완료 증거 — E1 + E2 + E3
 
