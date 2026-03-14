@@ -42,8 +42,9 @@
 - `[합의완료]` F3 + F4 + F5 — Route Calibration Policy + Workflow Compiler Policy + Memory Quality Rules
 - `[합의완료]` RPF-1 + RPF-2 + RPF-3 — RepoProfile + RiskTierPolicy + ApprovalPolicy
 - `[합의완료]` QG-1 ~ QG-4 — Pipeline Integration + Knip + Type Snapshot + Property Testing
+- `[합의완료]` RPF-4 + RPF-5 — ValidatorPack + ArtifactBundle
 
-## [GPT미검증] RPF-4 + RPF-5 — ValidatorPack + ArtifactBundle
+## [합의완료] RPF-4 + RPF-5 — ValidatorPack + ArtifactBundle
 
 ### Claim
 
@@ -57,20 +58,28 @@
 - `src/repo-profile/artifact-bundle.ts` (신규) — RPF-5: ArtifactBundle 계약 + 직렬화
 - `src/repo-profile/index.ts` (수정) — RPF-4+5 barrel export 추가
 - `tests/repo-profile/validator-pack.test.ts` (신규) — RPF-4 테스트 12개
-- `tests/repo-profile/artifact-bundle.test.ts` (신규) — RPF-5 테스트 18개
+- `tests/repo-profile/artifact-bundle.test.ts` (신규) — RPF-5 테스트 19개
 
 ### Test Command
 
 ```bash
 npx vitest run tests/repo-profile/validator-pack.test.ts tests/repo-profile/artifact-bundle.test.ts
-npx eslint src/repo-profile/validator-pack.ts src/repo-profile/artifact-bundle.ts src/repo-profile/index.ts tests/repo-profile/validator-pack.test.ts tests/repo-profile/artifact-bundle.test.ts
+npx eslint src/repo-profile/validator-pack.ts
+npx eslint src/repo-profile/artifact-bundle.ts
+npx eslint src/repo-profile/index.ts
+npx eslint tests/repo-profile/validator-pack.test.ts
+npx eslint tests/repo-profile/artifact-bundle.test.ts
 npx tsc --noEmit
 ```
 
 ### Test Result
 
 - `npx vitest run ...`: **2 files / 31 tests passed** (RPF-4:12, RPF-5:19)
-- `npx eslint ...`: **0 errors, 0 warnings**
+- `npx eslint src/repo-profile/validator-pack.ts`: **0 errors, 0 warnings**
+- `npx eslint src/repo-profile/artifact-bundle.ts`: **0 errors, 0 warnings**
+- `npx eslint src/repo-profile/index.ts`: **0 errors, 0 warnings**
+- `npx eslint tests/repo-profile/validator-pack.test.ts`: **0 errors, 0 warnings**
+- `npx eslint tests/repo-profile/artifact-bundle.test.ts`: **0 errors, 0 warnings**
 - `npx tsc --noEmit`: **통과**
 
 ### Residual Risk

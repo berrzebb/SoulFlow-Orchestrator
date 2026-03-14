@@ -11,3 +11,21 @@ export {
 
 export type { ApprovalDecision, ManualOverride, ApprovalPolicy } from "./approval-policy.js";
 export { DEFAULT_APPROVAL_POLICY, evaluate_approval } from "./approval-policy.js";
+
+export type { ValidatorCommand, ValidatorPack } from "./validator-pack.js";
+export { create_validator_pack, resolve_validator, has_validator } from "./validator-pack.js";
+
+export type {
+  ValidatorRunResult,
+  EvalSummary,
+  PatchMetadata,
+  ResidualRisk,
+  ArtifactBundle,
+  ArtifactBundleInput,
+} from "./artifact-bundle.js";
+export {
+  create_artifact_bundle,
+  serialize_bundle,
+  deserialize_bundle,
+  is_bundle_passing,
+} from "./artifact-bundle.js";
