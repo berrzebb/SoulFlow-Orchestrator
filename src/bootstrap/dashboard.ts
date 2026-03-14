@@ -23,7 +23,7 @@ import type { OpsRuntimeService } from "../ops/index.js";
 import type { OrchestratorLlmRuntime, ProviderRegistry } from "../providers/index.js";
 import type { ProcessTracker } from "../orchestration/process-tracker.js";
 import type { CronService } from "../cron/index.js";
-import type { OrchestrationService } from "../orchestration/service.js";
+import type { OrchestrationServiceLike } from "../orchestration/types.js";
 import type { SessionStoreLike } from "../session/index.js";
 import type { OAuthIntegrationStore } from "../oauth/integration-store.js";
 import type { OAuthFlowService } from "../oauth/flow-service.js";
@@ -67,7 +67,7 @@ export interface DashboardBundleDeps {
   mcp: McpClientManager;
   ops: OpsRuntimeService;
   orchestrator_llm_runtime: OrchestratorLlmRuntime;
-  orchestration: OrchestrationService;
+  orchestration: OrchestrationServiceLike;
   process_tracker: ProcessTracker;
   cron: CronService;
   sessions: SessionStoreLike;

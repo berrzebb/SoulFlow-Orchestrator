@@ -2,7 +2,7 @@ import { Tool } from "./base.js";
 import { run_shell_command } from "./shell-runtime.js";
 import type { JsonSchema, ToolExecutionContext } from "./types.js";
 import { get_shared_secret_vault } from "../../security/secret-vault-factory.js";
-import type { SecretVaultService } from "../../security/secret-vault.js";
+import type { SecretVaultLike } from "../../security/secret-vault.js";
 import { redact_sensitive_text } from "../../security/sensitive.js";
 
 export type DynamicToolManifestEntry = {
@@ -39,7 +39,7 @@ export class DynamicShellTool extends Tool {
   private readonly command_template: string;
   private readonly working_dir: string;
   private readonly requires_approval: boolean;
-  private readonly secret_vault: SecretVaultService;
+  private readonly secret_vault: SecretVaultLike;
 
   constructor(entry: DynamicToolManifestEntry, default_working_dir: string) {
     super();

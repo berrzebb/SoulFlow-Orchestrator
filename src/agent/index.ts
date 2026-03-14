@@ -22,7 +22,7 @@ import type { WorkflowEventService } from "../events/index.js";
 import type { AgentBackendRegistry } from "./agent-registry.js";
 import { seal_inbound_sensitive_text } from "../security/inbound-seal.js";
 import { redact_sensitive_text } from "../security/sensitive.js";
-import type { SecretVaultService } from "../security/secret-vault.js";
+import type { SecretVaultLike } from "../security/secret-vault.js";
 import type { Logger } from "../logger.js";
 
 export class AgentDomain implements ServiceLike {
@@ -44,7 +44,7 @@ export class AgentDomain implements ServiceLike {
       data_dir?: string;
       events?: WorkflowEventService | null;
       agent_backends?: AgentBackendRegistry | null;
-      secret_vault?: SecretVaultService | null;
+      secret_vault?: SecretVaultLike | null;
       logger?: Logger | null;
       provider_caps?: ProviderCapabilities;
       on_task_change?: (task: import("../contracts.js").TaskState) => void;

@@ -1,4 +1,4 @@
-import type { SecretVaultService } from "../../security/secret-vault.js";
+import type { SecretVaultLike } from "../../security/secret-vault.js";
 import { Tool } from "./base.js";
 import type { JsonSchema } from "./types.js";
 
@@ -17,9 +17,9 @@ export class SecretTool extends Tool {
     },
   };
 
-  private readonly vault: SecretVaultService;
+  private readonly vault: SecretVaultLike;
 
-  constructor(vault: SecretVaultService) {
+  constructor(vault: SecretVaultLike) {
     super();
     this.vault = vault;
   }

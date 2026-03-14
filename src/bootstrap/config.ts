@@ -5,10 +5,10 @@ import { ConfigStore } from "../config/config-store.js";
 import { load_config_merged, type AppConfig } from "../config/schema.js";
 import { get_shared_secret_vault, set_default_vault_workspace } from "../security/secret-vault-factory.js";
 import { init_log_level } from "../logger.js";
-import type { SecretVaultService } from "../security/secret-vault.js";
+import type { SecretVaultLike } from "../security/secret-vault.js";
 
 export interface ConfigBundle {
-  shared_vault: SecretVaultService;
+  shared_vault: SecretVaultLike;
   config_store: ConfigStore;
   app_config: AppConfig;
 }

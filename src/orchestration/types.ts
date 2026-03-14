@@ -60,6 +60,13 @@ export type ResultUsage = {
   total_cost_usd?: number;
 };
 
+/** PA-1: OrchestrationService의 소비자 경계 포트. */
+export interface OrchestrationServiceLike {
+  execute(req: OrchestrationRequest): Promise<OrchestrationResult>;
+  get_cd_score(): { total: number; events: Array<{ indicator: string; points: number; context: string; at: string }> };
+  reset_cd_score(): void;
+}
+
 export type OrchestrationResult = {
   reply: string | null;
   error?: string;

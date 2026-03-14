@@ -16,7 +16,7 @@ import { extract_reaction_names, is_control_stop_reaction } from "./approval.ser
 import type { TaskResumeService } from "./task-resume.service.js";
 import type { SessionRecorder } from "./session-recorder.js";
 import type { MediaCollector } from "./media-collector.js";
-import type { OrchestrationService } from "../orchestration/service.js";
+import type { OrchestrationServiceLike } from "../orchestration/types.js";
 import type { OrchestrationResult } from "../orchestration/types.js";
 import type { ProcessTrackerLike } from "../orchestration/process-tracker.js";
 import type { ActiveRunControllerLike, ActiveRun } from "./active-run-controller.js";
@@ -81,7 +81,7 @@ export type ChannelManagerDeps = {
   registry: ChannelRegistryLike;
   dispatch: DispatchService;
   command_router: CommandRouter;
-  orchestration: OrchestrationService;
+  orchestration: OrchestrationServiceLike;
   approval: ApprovalService;
   task_resume: TaskResumeService;
   session_recorder: SessionRecorder;
@@ -131,7 +131,7 @@ export class ChannelManager implements ServiceLike {
   private readonly registry: ChannelRegistryLike;
   private readonly dispatch: DispatchService;
   private readonly commands: CommandRouter;
-  private readonly orchestration: OrchestrationService;
+  private readonly orchestration: OrchestrationServiceLike;
   private readonly approval: ApprovalService;
   private readonly task_resume: TaskResumeService;
   private readonly recorder: SessionRecorder;

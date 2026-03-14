@@ -5,20 +5,20 @@
 
 ## 감사 범위
 
-- `EG-5 Guardrail Observability + Eval Fixture [합의완료]`
+- `PA-1 + PA-2 — Ports & Adapters Boundary Fix [합의완료]`
 - 기존 `[합의완료]` 트랙은 재판정하지 않고 유지
 
 ## 독립 검증 결과
 
-- 코드 직접 확인: `src/orchestration/guardrails/observability.ts`, `src/orchestration/guardrails/index.ts`, `src/orchestration/service.ts`, `src/evals/guardrail-executor.ts`, `src/evals/index.ts`, `src/evals/bundles.ts`, `scripts/eval-run.ts`, `tests/orchestration/guardrails/observability.test.ts`, `tests/evals/guardrail-executor.test.ts`, `tests/evals/bundles.test.ts`, `tests/evals/eval-run-cli.test.ts`, `tests/evals/cases/guardrails.json`
+- 코드 직접 확인: `src/security/secret-vault.ts`, `src/security/secret-vault-factory.ts`, `src/orchestration/types.ts`, `src/orchestration/service.ts`, `src/channels/manager.ts`, `src/channels/create-command-router.ts`, `src/bootstrap/channel-wiring.ts`, `src/bootstrap/dashboard.ts`, `src/bootstrap/trigger-sync.ts`, `src/bootstrap/orchestration.ts`, `tests/architecture/di-boundaries.test.ts`
+- concrete import 전수 검색: `rg -n "import .*SecretVaultService|import .*OrchestrationService\\b|SecretVaultLike|OrchestrationServiceLike|implements OrchestrationServiceLike" src tests`
 - `npm run lint` 통과
 - `npx tsc --noEmit` 통과
-- `npx vitest run tests/orchestration/guardrails/ tests/evals/guardrail-executor.test.ts tests/evals/bundles.test.ts tests/evals/eval-run-cli.test.ts` 통과: `7 files / 104 tests passed`
-- `npx tsx scripts/eval-run.ts --bundle guardrails --scorer exact --threshold 100` 통과: `Total: 4 | Passed: 4 | Failed: 0`, `Overall: 4/4 (100.0%)`
+- `npx vitest run tests/architecture/di-boundaries.test.ts tests/orchestration/guardrails/ tests/evals/ tests/security/secret-vault.test.ts` 통과: `13 files / 186 tests passed`
 
 ## 최종 판정
 
-- `EG-5 Guardrail Observability + Eval Fixture`: `완료` / `[합의완료]`
+- `PA-1 + PA-2 — SecretVault / OrchestrationService Boundary Fix`: `완료` / `[합의완료]`
 
 ## 반려 코드
 
@@ -26,12 +26,10 @@
 
 ## 핵심 근거
 
-- `src/orchestration/guardrails/observability.ts`의 `record_guardrail_metrics`와 `src/orchestration/service.ts`의 execute/resume 호출, `stop_reason` span attribute 추가는 코드상 확인됐고 관련 guardrails/evals/CLI 회귀 테스트는 재실행 기준 `7 files / 104 tests passed`였습니다.
-- `src/evals/guardrail-executor.ts`와 `tests/evals/cases/guardrails.json`에는 session_reuse/budget용 deterministic executor와 8개 fixture가 실제로 존재합니다.
-- `scripts/eval-run.ts`는 현재 `EXECUTOR_MAP`과 `resolve_executor()`로 `guardrails` 번들을 `create_guardrail_executor`에 실제 연결하고 있으며, 기본 데이터셋은 기존 echo executor 경로를 유지합니다.
-- `tests/evals/eval-run-cli.test.ts`에는 `--bundle guardrails --scorer exact --threshold 100` 회귀 테스트가 추가돼 있고, 직접 재실행 기준 `18/18`이 포함된 전체 `7 files / 104 tests passed`를 확인했습니다.
-- 실제 CLI 경로 `npx tsx scripts/eval-run.ts --bundle guardrails --scorer exact --threshold 100`도 `4/4 (100.0%)`로 통과했습니다. `guardrails` 번들의 `tags=["smoke"]` 때문에 CLI에서는 smoke 4건만 실행되는 동작이 코드와 문서 residual risk에 일치합니다.
-- 현재 범위에서 `SOLID`, `YAGNI`, `DRY`, `KISS`, `LoD`의 추가 구조 회귀는 확인되지 않았습니다.
+- `SecretVaultService` concrete import는 `src/security/secret-vault-factory.ts`에만, `OrchestrationService` concrete import는 `src/bootstrap/orchestration.ts`에만 남아 있고, 해당 소비자 경계는 `SecretVaultLike`와 `OrchestrationServiceLike`로 바뀌어 있습니다.
+- `src/orchestration/types.ts`의 `OrchestrationServiceLike` 포트와 `src/orchestration/service.ts`의 `implements`가 실제로 연결돼 있고, `src/channels/manager.ts`, `src/channels/create-command-router.ts`, `src/bootstrap/channel-wiring.ts`, `src/bootstrap/dashboard.ts`, `src/bootstrap/trigger-sync.ts`가 그 포트만 참조합니다.
+- `tests/architecture/di-boundaries.test.ts`는 위 2개 서비스의 concrete import가 허용된 파일 밖으로 새지 않는지 직접 검사하고, 재실행 기준 `13 files / 186 tests passed`로 통과했습니다.
+- residual risk로 적힌 `DecisionService`, `PromiseService`, tool composition root 문제는 현재 claude claim이 명시적으로 범위 밖으로 제한하고 있어 이번 판정 범위에는 포함하지 않았습니다. 현재 범위 안에서 `SOLID`, `YAGNI`, `DRY`, `KISS`, `LoD` 구조 회귀는 추가로 확인되지 않았습니다.
 
 ## 완료 기준 재고정
 
@@ -39,4 +37,4 @@
 
 ## 다음 작업
 
-- `Ports / Adapters / DI Boundaries / Bundle P1 / PA-1 + PA-2 — boundary inventory와 composition root rules를 정리하고 bootstrap 경계 기준을 고정`
+- `Tokenization / Retrieval Foundation / Bundle TR1 / TR-1 + TR-2 — shared TokenizerPolicy / QueryNormalizer와 FTS5/BM25 lexical profile, optional ICU/custom adapter 계약을 고정`

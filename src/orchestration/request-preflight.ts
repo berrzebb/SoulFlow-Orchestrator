@@ -10,7 +10,7 @@ import type { RuntimeExecutionPolicy } from "../providers/types.js";
 import type { ChannelProvider } from "../channels/types.js";
 import type { ToolExecutionContext, ToolSchema } from "../agent/tools/types.js";
 import type { AgentRuntimeLike } from "../agent/runtime.types.js";
-import type { SecretVaultService } from "../security/secret-vault.js";
+import type { SecretVaultLike } from "../security/secret-vault.js";
 import type { RuntimePolicyResolver } from "../channels/runtime-policy.js";
 import type { AppendWorkflowEventInput } from "../events/index.js";
 import type { OrchestrationRequest } from "./types.js";
@@ -22,7 +22,7 @@ import { inbound_scope_id, compose_task_with_media, build_context_message, build
 import { rebuild_tool_index } from "./tool-selector.js";
 
 export type RequestPreflightDeps = {
-  vault: SecretVaultService;
+  vault: SecretVaultLike;
   runtime: AgentRuntimeLike;
   policy_resolver: RuntimePolicyResolver;
   workspace: string | undefined;
@@ -148,7 +148,7 @@ export async function run_request_preflight(
 
 /* ── Internal Helpers ── */
 
-async function seal_text(vault: SecretVaultService, provider: ChannelProvider, chat_id: string, raw: string): Promise<string> {
+async function seal_text(vault: SecretVaultLike, provider: ChannelProvider, chat_id: string, raw: string): Promise<string> {
   if (!raw.trim()) return "";
   try {
     const sealed = await seal_inbound_sensitive_text(raw, { provider, chat_id, vault });
@@ -158,7 +158,7 @@ async function seal_text(vault: SecretVaultService, provider: ChannelProvider, c
   }
 }
 
-async function seal_list(vault: SecretVaultService, provider: ChannelProvider, chat_id: string, values: string[]): Promise<string[]> {
+async function seal_list(vault: SecretVaultLike, provider: ChannelProvider, chat_id: string, values: string[]): Promise<string[]> {
   const tasks = values
     .map((v) => String(v || "").trim())
     .filter(Boolean)
@@ -171,7 +171,7 @@ async function seal_list(vault: SecretVaultService, provider: ChannelProvider, c
 }
 
 async function inspect_secrets(
-  vault: SecretVaultService,
+  vault: SecretVaultLike,
   inputs: string[],
 ): Promise<{ ok: boolean; missing_keys: string[]; invalid_ciphertexts: string[] }> {
   const filtered = inputs.filter((t) => t.trim());

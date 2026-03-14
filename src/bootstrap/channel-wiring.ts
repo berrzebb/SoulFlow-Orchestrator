@@ -20,7 +20,7 @@ import type { TonePreferenceStore } from "../channels/persona-message-renderer.j
 import type { CronService } from "../cron/index.js";
 import type { DecisionService } from "../decision/index.js";
 import type { McpClientManager } from "../mcp/index.js";
-import type { OrchestrationService } from "../orchestration/service.js";
+import type { OrchestrationServiceLike } from "../orchestration/types.js";
 import type { ProcessTracker } from "../orchestration/process-tracker.js";
 import type { ConfirmationGuard } from "../orchestration/confirmation-guard.js";
 import type { ProviderRegistry } from "../providers/index.js";
@@ -53,7 +53,7 @@ export interface ChannelWiringDeps {
   render_profile_store: InMemoryRenderProfileStore;
   process_tracker: ProcessTracker;
   confirmation_guard: ConfirmationGuard;
-  orchestration: OrchestrationService;
+  orchestration: OrchestrationServiceLike;
   providers: ProviderRegistry;
   mcp: McpClientManager;
   cron: CronService;

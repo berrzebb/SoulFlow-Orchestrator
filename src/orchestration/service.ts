@@ -4,13 +4,13 @@ import type { AgentRuntimeLike } from "../agent/runtime.types.js";
 import type { ProviderRegistry } from "../providers/service.js";
 import type { RuntimeExecutionPolicy } from "../providers/types.js";
 import type { RuntimePolicyResolver } from "../channels/runtime-policy.js";
-import type { SecretVaultService } from "../security/secret-vault.js";
+import type { SecretVaultLike } from "../security/secret-vault.js";
 import type { CompactionFlushConfig } from "../agent/loop.js";
 import type { Logger } from "../logger.js";
 import { correlation_to_log_context } from "../logger.js";
 import { NOOP_OBSERVABILITY as NOOP_OBS } from "../observability/context.js";
 import type { ToolExecutionContext } from "../agent/tools/types.js";
-import type { ExecutionMode, OrchestrationRequest, OrchestrationResult } from "./types.js";
+import type { ExecutionMode, OrchestrationRequest, OrchestrationResult, OrchestrationServiceLike } from "./types.js";
 import { StreamBuffer } from "../channels/stream-buffer.js";
 import {
   sanitize_provider_output,
@@ -82,7 +82,7 @@ type OrchestratorConfig = {
 export type OrchestrationServiceDeps = {
   providers: ProviderRegistry;
   agent_runtime: AgentRuntimeLike;
-  secret_vault: SecretVaultService;
+  secret_vault: SecretVaultLike;
   runtime_policy_resolver: RuntimePolicyResolver;
   config: OrchestratorConfig;
   logger: Logger;
@@ -136,10 +136,10 @@ export type OrchestrationServiceDeps = {
  * 메시지 수신 → 실행 모드 분류(once/agent/task) → 프로바이더 실행 → 결과 반환.
  * ChannelManager로부터 독립된 단일 책임 서비스.
  */
-export class OrchestrationService {
+export class OrchestrationService implements OrchestrationServiceLike {
   private readonly providers: ProviderRegistry;
   private readonly runtime: AgentRuntimeLike;
-  private readonly vault: SecretVaultService;
+  private readonly vault: SecretVaultLike;
   private readonly policy_resolver: RuntimePolicyResolver;
   private readonly config: OrchestratorConfig;
   private readonly logger: Logger;

@@ -4,7 +4,7 @@ import { OrchestratorLlmProvider } from "./orchestrator-llm.provider.js";
 import type { ChatMessage, ChatOptions, LlmProvider, LlmResponse, ProviderId } from "./types.js";
 import type { ContextBuilder } from "../agent/context.js";
 import { redact_sensitive_text, redact_sensitive_unknown } from "../security/sensitive.js";
-import type { SecretVaultService } from "../security/secret-vault.js";
+import type { SecretVaultLike } from "../security/secret-vault.js";
 import { CircuitBreaker, type CircuitBreakerOptions } from "./circuit-breaker.js";
 import { ProviderHealthScorer, type HealthScorerOptions } from "./health-scorer.js";
 import { sleep } from "../utils/common.js";
@@ -58,7 +58,7 @@ export class ProviderRegistry {
   private orchestrator_provider_id: ProviderId = "orchestrator_llm";
   private readonly orchestrator_max_tokens: number;
   private readonly orchestrator_model_override?: string;
-  private readonly secret_vault: SecretVaultService;
+  private readonly secret_vault: SecretVaultLike;
 
   constructor(options: {
     openrouter_api_key?: string | null;
@@ -77,7 +77,7 @@ export class ProviderRegistry {
     health_scorer?: HealthScorerOptions;
     cli_configs?: Record<string, { command?: string; args?: string; timeout_ms?: number; permission_config?: import("./cli-permission.js").CliPermissionConfig }>;
     /** 명시적 vault 주입. */
-    secret_vault: SecretVaultService;
+    secret_vault: SecretVaultLike;
   }) {
     this.secret_vault = options.secret_vault;
     const cli = options?.cli_configs || {};
@@ -137,7 +137,7 @@ export class ProviderRegistry {
     this.orchestrator_provider_id = this.resolve_default_orchestrator_provider(options?.orchestrator_provider);
   }
 
-  get_secret_vault(): SecretVaultService {
+  get_secret_vault(): SecretVaultLike {
     return this.secret_vault;
   }
 

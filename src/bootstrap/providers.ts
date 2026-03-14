@@ -2,7 +2,7 @@
 
 import { join } from "node:path";
 import type { AppConfig } from "../config/schema.js";
-import type { SecretVaultService } from "../security/secret-vault.js";
+import type { SecretVaultLike } from "../security/secret-vault.js";
 import type { AgentBackend } from "../agent/agent.types.js";
 import type { ProviderCapabilities } from "../providers/executor.js";
 import type { CliPermissionConfig } from "../providers/cli-permission.js";
@@ -33,7 +33,7 @@ export interface ProviderBundleDeps {
   user_dir: string;
   data_dir: string;
   app_config: AppConfig;
-  shared_vault: SecretVaultService;
+  shared_vault: SecretVaultLike;
   provider_store: AgentProviderStore;
   logger: ReturnType<typeof create_logger>;
 }

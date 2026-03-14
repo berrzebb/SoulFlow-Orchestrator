@@ -2,7 +2,7 @@
 
 import { join } from "node:path";
 import type { AppConfig } from "../config/schema.js";
-import type { SecretVaultService } from "../security/secret-vault.js";
+import type { SecretVaultLike } from "../security/secret-vault.js";
 import type { create_logger } from "../logger.js";
 import type { EmbedServiceFn } from "./agent-core.js";
 import type { EmbedWorkerConfig } from "../agent/memory.types.js";
@@ -25,7 +25,7 @@ import { ChunkQueue } from "../chunker/queue.js";
 export interface RuntimeDataDeps {
   ctx: UserWorkspace;
   app_config: AppConfig;
-  shared_vault: SecretVaultService;
+  shared_vault: SecretVaultLike;
   logger: ReturnType<typeof create_logger>;
 }
 

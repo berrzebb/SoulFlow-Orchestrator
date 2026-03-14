@@ -19,34 +19,47 @@
 - `[합의완료]` EG-1 + EG-2 Session Reuse Policy + Budget Contract
 - `[합의완료]` EG-3 + EG-4 Reuse Integration + Hard Enforcement
 - `[합의완료]` EG-5 Guardrail Observability + Eval Fixture
+- `[합의완료]` PA-1 + PA-2 — Ports & Adapters Boundary Fix
 
-## EG-5 Guardrail Observability + Eval Fixture `[합의완료]`
+## PA-1 + PA-2 — SecretVault / OrchestrationService Boundary Fix `[합의완료]`
 
-### 증거 팩: guardrail decision → observability metrics + eval pipeline + CLI 연결
+### Claim
 
-**claim**: EG-5 — `record_guardrail_metrics` 함수 (`stop_reason` 파싱 → `guardrail_session_reuse_total{kind, provider}`, `guardrail_budget_exceeded_total{provider, mode}` counters 방출), `service.ts`에서 `execute_dispatch` + `continue_task_loop` 결과에 대해 호출 + span attributes에 `stop_reason` 추가, `create_guardrail_executor` (guardrail 결정 함수를 `EvalExecutorLike`로 어댑팅 — session_reuse/budget 두 타입, JSON input 파싱), `scripts/eval-run.ts`에서 `EXECUTOR_MAP`으로 번들별 executor 라우팅 (`guardrails` → `create_guardrail_executor`), `tests/evals/cases/guardrails.json` 8개 케이스 (reuse 4 + budget 4), `guardrails` 번들 등록 (smoke: true), CLI `--bundle guardrails --scorer exact --threshold 100` → 4/4 통과 (smoke 태그 필터).
+**PA-1**: `SecretVaultService`와 `OrchestrationService` 두 서비스의 소비자 경계를 `*Like` 인터페이스 포트로 전환.
 
-**changed files**:
+- `SecretVaultService` → `SecretVaultLike`: 13개 소비자 파일 마이그레이션. concrete import는 정의 파일(`secret-vault.ts`) + 팩토리(`secret-vault-factory.ts`)에만 잔존.
+- `OrchestrationService` → `OrchestrationServiceLike`: 3-method 최소 포트를 `types.ts`에 추출. 5개 소비자 파일 마이그레이션. `service.ts`에 `implements` 추가.
 
-- `src/orchestration/guardrails/observability.ts` — 신규: `record_guardrail_metrics`
-- `src/orchestration/guardrails/index.ts` — `record_guardrail_metrics` re-export 추가
-- `src/orchestration/service.ts` — `_record_guardrail_metrics` → `record_guardrail_metrics` 위임, span에 `stop_reason` attribute 추가, resume 경로에도 메트릭 방출
-- `src/evals/guardrail-executor.ts` — 신규: `create_guardrail_executor`, `GuardrailEvalInput` 타입
-- `src/evals/index.ts` — `guardrail-executor` re-exports 추가
-- `src/evals/bundles.ts` — `guardrails` 번들 등록
-- `scripts/eval-run.ts` — `EXECUTOR_MAP` + `resolve_executor()` 추가, per-dataset executor 선택
-- `tests/evals/cases/guardrails.json` — 신규: 8개 eval 케이스
-- `tests/orchestration/guardrails/observability.test.ts` — 신규 7 테스트
-- `tests/evals/guardrail-executor.test.ts` — 신규 12 테스트
-- `tests/evals/eval-run-cli.test.ts` — `--bundle guardrails` CLI 회귀 테스트 추가
+**PA-2**: 위 2개 서비스에 한정하여 concrete import 경계를 고정. `tests/architecture/di-boundaries.test.ts`로 회귀 방지. 다른 서비스(`DecisionService`, `PromiseService`, Tool 클래스 등)의 concrete 생성은 이번 scope 밖.
 
-**test command**: `npm run lint && npx tsc --noEmit && npx vitest run tests/orchestration/guardrails/ tests/evals/guardrail-executor.test.ts tests/evals/bundles.test.ts && npx tsx scripts/eval-run.ts --bundle guardrails --scorer exact --threshold 100`
+### Changed Files
 
-**test result**: `lint 0 errors, tsc passed, 6 files / 86 tests passed, CLI guardrails 4/4 (100%) threshold met, eval-run-cli.test.ts 18/18 passed`
+**SecretVaultLike boundary (13 files)**:
+`src/orchestration/service.ts`, `src/orchestration/request-preflight.ts`, `src/providers/service.ts`, `src/cron/runtime-handler.ts`, `src/agent/index.ts`, `src/agent/tools/dynamic.ts`, `src/agent/tools/secret-tool.ts`, `src/agent/tools/shell.ts`, `src/bootstrap/config.ts`, `src/bootstrap/runtime-data.ts`, `src/bootstrap/channels.ts`, `src/bootstrap/providers.ts`, `src/security/secret-vault-factory.ts`
 
-**residual risk**:
+**OrchestrationServiceLike boundary (6 files)**:
+`src/orchestration/types.ts`, `src/orchestration/service.ts`, `src/channels/manager.ts`, `src/channels/create-command-router.ts`, `src/bootstrap/channel-wiring.ts`, `src/bootstrap/dashboard.ts`, `src/bootstrap/trigger-sync.ts`
 
-- `same_topic` eval 케이스는 `similarity_threshold: 0.7`을 명시적으로 지정 — 기본값 0.85에서는 짧은 한글 쿼리로 same_topic 트리거 어려움 (Jaccard 특성)
-- guardrail metrics는 `service.ts` execute/resume 경로에서만 방출 — 직접 runner 호출 시 metrics 미기록
-- CLI bundle 태그 필터로 8개 중 4개(smoke)만 실행 — 나머지 4개는 단위 테스트에서만 검증
+**Boundary regression test (1 file)**:
+`tests/architecture/di-boundaries.test.ts`
+
+### Test Command
+
+```bash
+npm run lint && npx tsc --noEmit && npx vitest run tests/architecture/di-boundaries.test.ts tests/orchestration/guardrails/ tests/evals/ tests/security/secret-vault.test.ts
+```
+
+### Test Result
+
+- lint: 0 errors
+- tsc: passed
+- vitest: 13 files / 186 tests passed (di-boundaries 2 tests 포함)
+
+### Residual Risk
+
+- `ContextBuilder`가 `DecisionService`, `PromiseService`를 직접 생성 — 후속 PA 번들에서 `*Like` 포트 추출 예정
+- `PromiseService`가 내부적으로 `new DecisionService()` 생성 (위임 패턴)
+- `create_default_tool_registry()`가 100+ Tool 인스턴스 직접 생성 — 도구 전용 composition root로 분류, 별도 리팩토링 대상
+- 22개 모듈 레벨 `create_logger()` 싱글턴 — 설계상 의도적 허용
+
 

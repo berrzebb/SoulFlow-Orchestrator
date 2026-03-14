@@ -2,7 +2,7 @@
 
 import { join } from "node:path";
 import type { AppConfig } from "../config/schema.js";
-import type { SecretVaultService } from "../security/secret-vault.js";
+import type { SecretVaultLike } from "../security/secret-vault.js";
 import type { MessageBusRuntime } from "../bus/types.js";
 import type { MutableBroadcaster } from "../dashboard/broadcaster.js";
 import type { AgentDomain } from "../agent/index.js";
@@ -36,7 +36,7 @@ export interface ChannelBundleDeps {
   user_dir: string;
   data_dir: string;
   app_config: AppConfig;
-  shared_vault: SecretVaultService;
+  shared_vault: SecretVaultLike;
   bus: MessageBusRuntime;
   broadcaster: MutableBroadcaster;
   agent: AgentDomain;

@@ -26,7 +26,7 @@ import type { AgentDomain } from "../agent/index.js";
 import type { CronService } from "../cron/index.js";
 import type { DecisionService } from "../decision/index.js";
 import type { ProcessTracker } from "../orchestration/process-tracker.js";
-import type { OrchestrationService } from "../orchestration/service.js";
+import type { OrchestrationServiceLike } from "../orchestration/types.js";
 import type { ProviderRegistry } from "../providers/index.js";
 import type { AgentBackendRegistry } from "../agent/agent-registry.js";
 import type { McpClientManager } from "../mcp/index.js";
@@ -45,7 +45,7 @@ export type CommandRouterDeps = {
   agent: AgentDomain;
   agent_runtime: ReturnType<typeof import("../agent/runtime.service.js").create_agent_runtime>;
   process_tracker: ProcessTracker;
-  orchestration: OrchestrationService;
+  orchestration: OrchestrationServiceLike;
   providers: ProviderRegistry;
   agent_backend_registry: AgentBackendRegistry;
   mcp: McpClientManager;

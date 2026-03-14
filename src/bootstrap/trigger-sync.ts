@@ -3,7 +3,7 @@
 import { error_message, now_iso, make_run_id } from "../utils/common.js";
 import type { AppConfig } from "../config/schema.js";
 import type { MessageBusRuntime } from "../bus/types.js";
-import type { OrchestrationService } from "../orchestration/service.js";
+import type { OrchestrationServiceLike } from "../orchestration/types.js";
 import type { CronService } from "../cron/index.js";
 import type { KanbanStoreLike } from "../services/kanban-store.js";
 import type { WebhookStore } from "../services/webhook-store.service.js";
@@ -15,7 +15,7 @@ export interface TriggerSyncDeps {
   user_dir: string;
   app_config: AppConfig;
   bus: MessageBusRuntime;
-  orchestration: OrchestrationService;
+  orchestration: OrchestrationServiceLike;
   cron: CronService;
   webhook_store: WebhookStore;
   kanban_store: KanbanStoreLike;

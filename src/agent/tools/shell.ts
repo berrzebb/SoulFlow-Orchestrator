@@ -4,7 +4,7 @@ import { Tool } from "./base.js";
 import { run_shell_command } from "./shell-runtime.js";
 import type { JsonSchema, ToolExecutionContext } from "./types.js";
 import { get_shared_secret_vault } from "../../security/secret-vault-factory.js";
-import type { SecretVaultService } from "../../security/secret-vault.js";
+import type { SecretVaultLike } from "../../security/secret-vault.js";
 import { redact_sensitive_text } from "../../security/sensitive.js";
 
 type ShellToolOptions = {
@@ -74,7 +74,7 @@ export class ExecTool extends Tool {
   private readonly write_approval_patterns: RegExp[];
   private readonly allow_patterns: RegExp[];
   private readonly restrict_to_working_dir: boolean;
-  private readonly secret_vault: SecretVaultService;
+  private readonly secret_vault: SecretVaultLike;
 
   constructor(options: ShellToolOptions) {
     super();

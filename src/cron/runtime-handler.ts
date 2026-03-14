@@ -11,7 +11,7 @@ import { parse_executor_preference, resolve_executor_provider } from "../provide
 import { sanitize_provider_output } from "../channels/output-sanitizer.js";
 import { seal_inbound_sensitive_text } from "../security/inbound-seal.js";
 import { redact_sensitive_text } from "../security/sensitive.js";
-import type { SecretVaultService } from "../security/secret-vault.js";
+import type { SecretVaultLike } from "../security/secret-vault.js";
 import type { CronJob, CronOnJob } from "./types.js";
 import type { MessageProvider } from "../bus/types.js";
 import { AGENT_PER_TURN_TIMEOUT_MS } from "../utils/timeouts.js";
@@ -41,7 +41,7 @@ export type CronRuntimeHandlerDeps = {
   events: WorkflowEventService;
   agent_runtime: AgentRuntimeLike;
   agent_backends: AgentBackendRegistry;
-  secret_vault: SecretVaultService;
+  secret_vault: SecretVaultLike;
   on_workflow_trigger?: WorkflowTriggerCallback;
 };
 
