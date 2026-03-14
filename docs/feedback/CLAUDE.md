@@ -1,6 +1,6 @@
 # Claude 증거 제출
 
-> 마지막 업데이트: 2026-03-15 01:10
+> 마지막 업데이트: 2026-03-15 02:30
 > GPT 감사 문서: `docs/feedback/gpt.md`
 
 ## 합의완료
@@ -39,6 +39,47 @@
 - `[합의완료]` E1 + E2 + E3 — ToolOutputReducer + PtyOutputReducer + prompt/display/storage projection split
 - `[합의완료]` E4 + E5 — MemoryIngestionReducer + OutputReductionKpi
 - `[합의완료]` F1 + F2 — Provider Error Taxonomy + Acceptance Rubric
+
+## [GPT미검증] F3 + F4 + F5 — Route Calibration Policy + Workflow Compiler Policy + Memory Quality Rules
+
+### Claim
+
+- F3: `src/quality/route-calibration-policy.ts` (신규) — `MisrouteCode` 6종 (`unnecessary_agent`, `unnecessary_task`, `missed_agent`, `phase_over_once`, `cost_tradeoff`, `latency_tradeoff`). `classify_misroute(actual, expected)` — 두 ExecutionMode 간 미스루트 코드 결정 + severity (major/minor). `evaluate_route(actual, criteria)` — `RouteAcceptanceCriteria` 기준 통과 여부 + cost_tradeoff 경고. `DEFAULT_ROUTE_CRITERIA` (allowed: once|agent, preferred: once).
+- F4: `src/quality/workflow-compiler-policy.ts` (신규) — `CompilerViolationCode` 4종 (`agent_heavy`, `inline_role_prompt`, `missing_entry_point`, `no_direct_nodes`). `WorkflowCompilerPolicy` (max_agent_ratio=0.5, max_inline_prompt_chars=300, require_entry_point=true). `audit_workflow_nodes(nodes, policy)` → `WorkflowAuditResult` (violations 목록 + agent_node_ratio). agent_heavy는 major(passed:false), 나머지는 minor.
+- F5: `src/quality/memory-quality-rule.ts` (신규) — `MemoryViolationCode` 3종 (`empty_content`, `too_long`, `noisy_content`). `MemoryQualityRule` (max_chars=2000, noisy_pattern_check=true). `audit_memory_entry(entry, rule)` + `audit_memory_entries(entries, rule)` — 일괄 감사. NOISY_PATTERNS: shell 프롬프트(`$`), stack trace(`at `+도메인), 테스트 러너(PASS/FAIL), diff 헤더, ANSI 코드. empty_content/too_long은 major, noisy는 minor.
+- 통합: `src/quality/index.ts` (수정) — F3+F4+F5 exports 추가.
+
+### 변경 파일
+
+- `src/quality/route-calibration-policy.ts` (신규) — F3: ExecutionMode 라우팅 적합성 정책
+- `src/quality/workflow-compiler-policy.ts` (신규) — F4: 워크플로우 노드 구조 품질 정책
+- `src/quality/memory-quality-rule.ts` (신규) — F5: 메모리 항목 품질 검사 규칙
+- `src/quality/index.ts` (수정) — F3+F4+F5 exports
+- `tests/quality/route-calibration-policy.test.ts` (신규) — F3 테스트 15개
+- `tests/quality/workflow-compiler-policy.test.ts` (신규) — F4 테스트 14개
+- `tests/quality/memory-quality-rule.test.ts` (신규) — F5 테스트 15개
+
+### Test Command
+
+```bash
+npx vitest run tests/quality/
+npx eslint src/quality/route-calibration-policy.ts src/quality/workflow-compiler-policy.ts src/quality/memory-quality-rule.ts src/quality/index.ts
+npx tsc --noEmit
+```
+
+### Test Result
+
+- `npx vitest run tests/quality/`: **5 files / 87 tests passed** (F1:32 + F2:11 + F3:15 + F4:14 + F5:15)
+- `npx eslint ...`: **0 errors, 0 warnings**
+- `npx tsc --noEmit`: **통과**
+
+### Residual Risk
+
+- `classify_misroute()` 매핑 미정의 조합은 `cost_tradeoff` fallback으로 처리 — 향후 새 ExecutionMode 추가 시 명시적 매핑 필요.
+- `audit_workflow_nodes()`의 `agent_heavy` 판정은 전체 노드 중 phase 노드 비율 기준. trigger 노드는 agent 노드가 아니지만 분모에 포함 — 소규모 워크플로우에서 비율이 과도하게 높아질 수 있음.
+- `NOISY_PATTERNS` 정규식은 휴리스틱 — 한국어 메모에 영문 at 포함 시 stack trace 오감지 가능. `hint` 필드로 오버라이드 불가 설계 (판정에 영향 없음이 명시적 계약).
+
+---
 
 ## [합의완료] F1 + F2 — Provider Error Taxonomy + Acceptance Rubric
 
@@ -170,5 +211,6 @@ npx tsc --noEmit
 
 - `detect_output_kind`는 휴리스틱 기반 — JSON으로 시작하지만 diff를 포함하는 복합 출력 등 엣지 케이스에서 오감지 가능. 감지 실패 시 `plain` fallback으로 기존 truncation과 동일하게 동작.
 - `reducer` 미주입 시 `emit_result`가 기존 경로를 사용하므로, 기존 배포 환경에서 reducer를 연결하기 전까지 3-projection 분리 효과 없음. 점진적 롤아웃 전제.
+
 
 
