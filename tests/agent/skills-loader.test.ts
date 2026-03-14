@@ -2,7 +2,7 @@
  * SkillsLoader 종합 커버리지 — 메타데이터 파싱, 스킬 조회, 역할/별칭/공유 프로토콜.
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from "node:fs";
+import { mkdtempSync, writeFileSync, mkdirSync, rmSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { SkillsLoader } from "@src/agent/skills.ts";
@@ -279,6 +279,12 @@ describe("SkillsLoader — 공유 프로토콜", () => {
     const proto = loader.get_shared_protocol("nonexistent/proto");
     expect(proto).toBeNull();
   });
+
+  it("list_shared_protocols: 등록된 프로토콜 이름 목록 반환", () => {
+    const names = loader.list_shared_protocols();
+    expect(names).toContain("common/style");
+    expect(names.length).toBeGreaterThanOrEqual(1);
+  });
 });
 
 describe("SkillsLoader — 내부 파싱 메서드", () => {
@@ -399,11 +405,11 @@ describe("SkillsLoader — list_skills filter_unavailable", () => {
   it("filter_unavailable=true → 조건 미충족 스킬 제외", () => {
     // First create the env-skill and heading-only if not already present
     const skills_root = join(workspace, "skills");
-    if (!require("node:fs").existsSync(join(skills_root, "env-skill"))) {
+    if (!existsSync(join(skills_root, "env-skill"))) {
       mkdirSync(join(skills_root, "env-skill"), { recursive: true });
       writeFileSync(join(skills_root, "env-skill", "SKILL.md"), "---\nname: env-skill\nsummary: Needs env var\nrequires:\n- env:TOTALLY_MISSING_ENV_VAR_12345\n---\nBody.\n");
     }
-    if (!require("node:fs").existsSync(join(skills_root, "heading-only"))) {
+    if (!existsSync(join(skills_root, "heading-only"))) {
       mkdirSync(join(skills_root, "heading-only"), { recursive: true });
       writeFileSync(join(skills_root, "heading-only", "SKILL.md"), "---\nname: heading-only\n---\n# Just a heading\n## Another heading\n");
     }

@@ -475,6 +475,11 @@ export class SkillsLoader {
     return this.shared_protocols.get(name) || null;
   }
 
+  /** 등록된 모든 공유 프로토콜 이름 목록. */
+  list_shared_protocols(): readonly string[] {
+    return [...this.shared_protocols.keys()];
+  }
+
   private register_alias(alias_raw: string, name: string): void {
     const alias = this.normalize_skill_key(alias_raw);
     if (!alias) return;
