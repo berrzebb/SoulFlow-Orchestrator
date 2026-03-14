@@ -6,7 +6,6 @@
  * SKILL.md 자체는 제외 — 본문은 load_skills_for_context()가 처리.
  */
 
-import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
 import { join, extname, basename } from "node:path";
 import * as sqliteVec from "sqlite-vec";
@@ -14,8 +13,9 @@ import type { EmbedFn } from "../agent/memory.service.js";
 import type { ReferenceStoreLike, ReferenceSearchResult } from "./reference-store.js";
 import { now_iso } from "../utils/common.js";
 import { with_sqlite, with_sqlite_strict, with_sqlite_async, type DatabaseSync } from "../utils/sqlite-helper.js";
+import { sha256_short } from "../utils/crypto.js";
+import { normalize_vec, VEC_DIMENSIONS } from "../utils/vec.js";
 
-const VEC_DIMENSIONS = 256;
 const MAX_EMBED_CHARS = 1500;
 const CHUNK_SIZE = 1200;
 const SYNC_DEBOUNCE_MS = 5 * 60_000; // 스킬 파일은 자주 바뀌지 않으므로 5분
@@ -353,16 +353,4 @@ export class SkillRefStore implements ReferenceStoreLike {
       } catch { /* 임베딩 실패 시 FTS만 사용 */ }
     }
   }
-}
-
-function sha256_short(input: string): string {
-  return createHash("sha256").update(input).digest("hex").slice(0, 16);
-}
-
-function normalize_vec(v: number[]): number[] {
-  let norm = 0;
-  for (const x of v) norm += x * x;
-  norm = Math.sqrt(norm);
-  if (norm === 0) return v;
-  return v.map((x) => x / norm);
 }

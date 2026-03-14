@@ -56,6 +56,12 @@ export default defineConfig({
       reporter: ["text", "html", "json-summary", "json"],
       reportsDirectory: "coverage",
       reportOnFailure: true,
+      thresholds: {
+        lines: 85,
+        statements: 85,
+        branches: 75,
+        functions: 85,
+      },
     },
   },
 });

@@ -4,6 +4,15 @@
  */
 
 import type { AgentBackend, AgentProviderConfig } from "./agent.types.js";
+import type {
+  CliProviderSettings,
+  ContainerCliSettings,
+  ClaudeSdkSettings,
+  CodexAppServerSettings,
+  OpenAiCompatibleSettings,
+  OpenRouterSettings,
+  OllamaSettings,
+} from "./provider-settings.types.js";
 import type { ProviderRegistry } from "../providers/service.js";
 import { ClaudeSdkAgent } from "./backends/claude-sdk.agent.js";
 import { CodexAppServerAgent } from "./backends/codex-appserver.agent.js";
@@ -70,28 +79,29 @@ function create_cli_backend(
   adapter: CliAdapter,
   deps: AgentProviderFactoryDeps,
 ): ContainerCliAgent {
-  const s = config.settings;
+  const s = config.settings as CliProviderSettings;
   const logger = create_logger(`pty:${config.instance_id}`);
   const default_env: Record<string, string> = {};
   if (deps.agents_home) default_env.HOME = deps.agents_home;
-  if (typeof s.env === "object" && s.env !== null) {
-    for (const [k, v] of Object.entries(s.env as Record<string, unknown>)) {
+  // env는 JSON 저장 값이므로 런타임 타입 체크 유지 (실제 값이 선언 타입과 다를 수 있음)
+  if (s.env != null && typeof s.env === "object") {
+    for (const [k, v] of Object.entries(s.env)) {
       if (typeof v === "string") default_env[k] = v;
     }
   }
 
-  if (Array.isArray(s.secret_mappings)) {
-    const secrets = resolve_secrets(s.secret_mappings as SecretMapping[]);
+  if (s.secret_mappings) {
+    const secrets = resolve_secrets(s.secret_mappings);
     Object.assign(default_env, secrets);
   }
 
-  const execution_mode = typeof s.execution_mode === "string" ? s.execution_mode : "local";
+  const execution_mode = s.execution_mode ?? "local";
   let pty_factory: PtyFactory;
   let is_alive: ((pid: string) => Promise<boolean>) | undefined;
 
   if (execution_mode === "docker") {
     const docker = new CliDockerOps({ docker_host: process.env.DOCKER_HOST });
-    const image = typeof s.image === "string" ? s.image : "soulflow/agent-runner:latest";
+    const image = s.image ?? "soulflow/agent-runner:latest";
     pty_factory = create_docker_pty_factory({ docker, image });
     is_alive = async (pid) => {
       try { await docker.inspect(pid); return true; }
@@ -105,8 +115,8 @@ function create_cli_backend(
     pty_factory,
     adapter,
     default_env,
-    cwd: typeof s.cwd === "string" ? s.cwd : deps.workspace,
-    max_idle_ms: typeof s.max_idle_ms === "number" ? s.max_idle_ms : 300_000,
+    cwd: s.cwd ?? deps.workspace,
+    max_idle_ms: s.max_idle_ms ?? 300_000,
     logger,
     is_alive,
   });
@@ -114,12 +124,13 @@ function create_cli_backend(
   const bus = new AgentBus({ pool, adapter, logger });
 
   const profile_key_map = new Map<number, Record<string, string>>();
-  if (Array.isArray(s.auth_profiles)) {
+  if (s.auth_profiles) {
     for (let i = 0; i < s.auth_profiles.length; i++) {
-      const entry = s.auth_profiles[i] as Record<string, unknown> | undefined;
-      if (entry && typeof entry.env === "object" && entry.env !== null) {
+      const entry = s.auth_profiles[i];
+      // env는 JSON 저장 값이므로 런타임 타입 체크 유지
+      if (entry?.env != null && typeof entry.env === "object") {
         const env_map: Record<string, string> = {};
-        for (const [k, v] of Object.entries(entry.env as Record<string, unknown>)) {
+        for (const [k, v] of Object.entries(entry.env)) {
           if (typeof v === "string") env_map[k] = v;
         }
         if (Object.keys(env_map).length > 0) profile_key_map.set(i, env_map);
@@ -137,8 +148,8 @@ function create_cli_backend(
     bus,
     adapter,
     logger,
-    auth_profile_count: typeof s.auth_profile_count === "number" ? s.auth_profile_count : profile_key_map.size || undefined,
-    fallback_configured: typeof s.fallback_configured === "boolean" ? s.fallback_configured : undefined,
+    auth_profile_count: s.auth_profile_count ?? (profile_key_map.size || undefined),
+    fallback_configured: s.fallback_configured,
     default_env,
     auth_service: deps.cli_auth_service,
     profile_key_map: profile_key_map.size > 0 ? profile_key_map : undefined,
@@ -161,52 +172,52 @@ register_agent_provider_factory("gemini_cli", (config, _token, deps) => {
 });
 
 register_agent_provider_factory("claude_sdk", (config) => {
-  const s = config.settings;
+  const s = config.settings as ClaudeSdkSettings;
   return new ClaudeSdkAgent({
     id: config.instance_id,
-    cwd: typeof s.cwd === "string" ? s.cwd : undefined,
-    model: typeof s.model === "string" ? s.model : undefined,
-    max_budget_usd: typeof s.max_budget_usd === "number" ? s.max_budget_usd : undefined,
+    cwd: s.cwd,
+    model: s.model,
+    max_budget_usd: s.max_budget_usd,
   });
 });
 
 register_agent_provider_factory("codex_appserver", (config) => {
-  const s = config.settings;
+  const s = config.settings as CodexAppServerSettings;
   return new CodexAppServerAgent({
     id: config.instance_id,
-    cwd: typeof s.cwd === "string" ? s.cwd : undefined,
-    command: typeof s.command === "string" ? s.command : undefined,
-    model: typeof s.model === "string" ? s.model : undefined,
-    request_timeout_ms: typeof s.request_timeout_ms === "number" ? s.request_timeout_ms : undefined,
+    cwd: s.cwd,
+    command: s.command,
+    model: s.model,
+    request_timeout_ms: s.request_timeout_ms,
   });
 });
 
 /** OpenAI-compatible 계열 공통 설정 추출. */
 function extract_openai_settings(
-  s: Record<string, unknown>,
+  s: OpenAiCompatibleSettings,
   defaults: { api_base: string; model: string },
 ): Pick<import("./backends/openai-compatible.agent.js").OpenAiCompatibleConfig, "api_base" | "model" | "max_tokens" | "temperature" | "request_timeout_ms"> {
   return {
-    api_base: typeof s.api_base === "string" ? s.api_base : defaults.api_base,
-    model: typeof s.model === "string" ? s.model : defaults.model,
-    max_tokens: typeof s.max_tokens === "number" ? s.max_tokens : undefined,
-    temperature: typeof s.temperature === "number" ? s.temperature : undefined,
-    request_timeout_ms: typeof s.request_timeout_ms === "number" ? s.request_timeout_ms : undefined,
+    api_base: s.api_base ?? defaults.api_base,
+    model: s.model ?? defaults.model,
+    max_tokens: s.max_tokens,
+    temperature: s.temperature,
+    request_timeout_ms: s.request_timeout_ms,
   };
 }
 
 register_agent_provider_factory("openai_compatible", (config, token) => {
   return new OpenAiCompatibleAgent(config.instance_id, {
-    ...extract_openai_settings(config.settings, { api_base: "https://api.openai.com/v1", model: "gpt-4o" }),
+    ...extract_openai_settings(config.settings as OpenAiCompatibleSettings, { api_base: "https://api.openai.com/v1", model: "gpt-4o" }),
     api_key: token || "",
   });
 });
 
 register_agent_provider_factory("openrouter", (config, token) => {
-  const s = config.settings;
+  const s = config.settings as OpenRouterSettings;
   const extra_headers: Record<string, string> = {};
-  if (typeof s.site_url === "string" && s.site_url) extra_headers["HTTP-Referer"] = s.site_url;
-  if (typeof s.app_name === "string" && s.app_name) extra_headers["X-Title"] = s.app_name;
+  if (s.site_url) extra_headers["HTTP-Referer"] = s.site_url;
+  if (s.app_name) extra_headers["X-Title"] = s.app_name;
   return new OpenAiCompatibleAgent(config.instance_id, {
     ...extract_openai_settings(s, { api_base: "https://openrouter.ai/api/v1", model: "anthropic/claude-sonnet-4" }),
     api_key: token || "",
@@ -215,7 +226,7 @@ register_agent_provider_factory("openrouter", (config, token) => {
 });
 
 register_agent_provider_factory("ollama", (config, _token) => {
-  const s = config.settings;
+  const s = config.settings as OllamaSettings;
   const base = extract_openai_settings(s, { api_base: "http://ollama:11434/v1", model: "llama3.2" });
   return new OpenAiCompatibleAgent(config.instance_id, {
     ...base,
@@ -223,15 +234,14 @@ register_agent_provider_factory("ollama", (config, _token) => {
     request_timeout_ms: base.request_timeout_ms ?? 600_000,
     api_key: "",
     // 함수 호출 미지원 모델을 위해 no_tool_choice를 settings에서 제어 가능 (기본값: false)
-    no_tool_choice: s.no_tool_choice === true,
+    no_tool_choice: s.no_tool_choice ?? false,
   });
 });
 
 register_agent_provider_factory("container_cli", (config, _token, deps) => {
-  const s = config.settings;
-  const cli_type = typeof s.cli_type === "string" ? s.cli_type : "claude";
-  const adapter = cli_type === "codex" ? new CodexCliAdapter()
-    : cli_type === "gemini" ? new GeminiCliAdapter()
+  const s = config.settings as ContainerCliSettings;
+  const adapter = s.cli_type === "codex" ? new CodexCliAdapter()
+    : s.cli_type === "gemini" ? new GeminiCliAdapter()
     : new ClaudeCliAdapter();
   return create_cli_backend(config, adapter, deps);
 });

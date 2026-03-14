@@ -6,7 +6,6 @@
  * debounce: 60초 이내 재호출 스킵.
  */
 
-import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join, extname } from "node:path";
@@ -16,8 +15,9 @@ import type { ImageEmbedFn } from "./embed.service.js";
 import { extract_doc_text, BINARY_DOC_EXTENSIONS } from "../utils/doc-extractor.js";
 import { now_iso } from "../utils/common.js";
 import { with_sqlite, with_sqlite_strict, with_sqlite_async, type DatabaseSync } from "../utils/sqlite-helper.js";
+import { sha256_short } from "../utils/crypto.js";
+import { normalize_vec, VEC_DIMENSIONS } from "../utils/vec.js";
 
-const VEC_DIMENSIONS = 256;
 const MAX_EMBED_CHARS = 1500;
 const CHUNK_SIZE = 1200;
 const SYNC_DEBOUNCE_MS = 60_000;
@@ -571,14 +571,3 @@ export class ReferenceStore implements ReferenceStoreLike {
   }
 }
 
-function sha256_short(input: string): string {
-  return createHash("sha256").update(input).digest("hex").slice(0, 16);
-}
-
-function normalize_vec(v: number[]): number[] {
-  let norm = 0;
-  for (const x of v) norm += x * x;
-  norm = Math.sqrt(norm);
-  if (norm === 0) return v;
-  return v.map((x) => x / norm);
-}

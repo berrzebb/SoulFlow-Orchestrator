@@ -16,6 +16,7 @@ import * as sqliteVec from "sqlite-vec";
 import type { ToolSchema } from "../agent/tools/types.js";
 import type { EmbedFn } from "../agent/memory.service.js";
 import { TOOL_INDEX_PROFILE, build_fts5_tokenize_clause } from "../search/index.js";
+import { normalize_vec, VEC_DIMENSIONS } from "../utils/vec.js";
 
 /** 모든 모드에서 항상 포함되는 core 도구. */
 const CORE_TOOLS = new Set([
@@ -150,7 +151,6 @@ const KO_KEYWORD_MAP: Record<string, string[]> = {
   "랜덤": ["random", "generate"],
 };
 
-const VEC_DIMENSIONS = 256;
 const MAX_EMBED_CHARS = 1500;
 
 const FTS5_TOKENIZE = build_fts5_tokenize_clause(TOOL_INDEX_PROFILE);
@@ -613,14 +613,6 @@ export class ToolIndex {
   get size(): number { return this.tool_count; }
 }
 
-/** L2 정규화. */
-function normalize_vec(v: number[]): number[] {
-  let norm = 0;
-  for (const x of v) norm += x * x;
-  norm = Math.sqrt(norm);
-  if (norm === 0) return v;
-  return v.map(x => x / norm);
-}
 
 /** FNV-1a 32bit 해시 (content 변경 감지용). */
 function simple_hash(s: string): string {

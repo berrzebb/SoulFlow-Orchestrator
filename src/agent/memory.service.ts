@@ -21,6 +21,7 @@ import { sanitize_untrusted_text } from "../security/content-sanitizer.js";
 import type { ChunkQueue } from "../chunker/queue.js";
 import type { ChunkJobResult } from "../chunker/protocol.js";
 import { decode_f32 } from "../chunker/protocol.js";
+import { normalize_vec_f32, VEC_DIMENSIONS } from "../utils/vec.js";
 import { get_shared_secret_vault } from "../security/secret-vault-factory.js";
 import { parse_tool_calls_from_text } from "./tool-call-parser.js";
 import { rrf_merge, apply_temporal_decay, mmr_rerank } from "./memory-scoring.js";
@@ -53,7 +54,6 @@ type MemoryDocRow = {
 /** 임베딩 함수 시그니처. 없으면 벡터 검색 비활성. */
 export type EmbedFn = (texts: string[], opts: { model?: string; dimensions?: number }) => Promise<{ embeddings: number[][] }>;
 
-const VEC_DIMENSIONS = 256;
 /** 임베딩 입력 최대 문자 수 (초과 시 truncate). */
 const MAX_EMBED_CHARS = 2000;
 /** 배치 임베딩 1회 최대 청크 수. API 요청 크기 제한 대응. */
@@ -588,7 +588,7 @@ export class MemoryStore implements MemoryStoreLike {
 
       const { embeddings } = await this.embed_fn([query.slice(0, MAX_EMBED_CHARS)], { dimensions: VEC_DIMENSIONS });
       if (!embeddings?.[0]?.length) return [];
-      const query_vec = normalize_vec(embeddings[0]);
+      const query_vec = normalize_vec_f32(embeddings[0]);
 
       let db: Database.Database | null = null;
       try {
@@ -662,7 +662,7 @@ export class MemoryStore implements MemoryStoreLike {
 
         const tx = db.transaction(() => {
           for (let i = 0; i < batch.length; i++) {
-            ins_vec.run(BigInt(batch[i].rowid), normalize_vec(embeddings[i]));
+            ins_vec.run(BigInt(batch[i].rowid), normalize_vec_f32(embeddings[i]));
           }
         });
         tx();
@@ -865,15 +865,6 @@ export class MemoryStore implements MemoryStoreLike {
   }
 }
 
-/** L2 단위 벡터로 정규화. */
-function normalize_vec(v: number[]): Float32Array {
-  let norm = 0;
-  for (let i = 0; i < v.length; i++) norm += v[i] * v[i];
-  norm = Math.sqrt(norm);
-  const out = new Float32Array(v.length);
-  if (norm > 0) for (let i = 0; i < v.length; i++) out[i] = v[i] / norm;
-  return out;
-}
 
 /** 청크의 나이(일)를 계산. longterm → null (evergreen, 감쇠 면제). */
 function chunk_age_days(kind: string, day: string): number | null {

@@ -7,6 +7,7 @@ import { HTTP_FETCH_TIMEOUT_MS } from "../utils/timeouts.js";
 import * as sqliteVec from "sqlite-vec";
 import { chunk_markdown } from "./memory-chunker.js";
 import type { EmbedWorkerConfig } from "./memory.types.js";
+import { normalize_vec_f32 } from "../utils/vec.js";
 
 export type RechunkJob = {
   sqlite_path: string;
@@ -111,7 +112,7 @@ async function embed_new_chunks(
     const ins_vec = db.prepare("INSERT OR REPLACE INTO memory_chunks_vec (rowid, embedding) VALUES (?, ?)");
     const tx = db.transaction(() => {
       for (let i = 0; i < rows.length; i++) {
-        ins_vec.run(BigInt(rows[i].rowid), normalize_vec(embeddings[i]));
+        ins_vec.run(BigInt(rows[i].rowid), normalize_vec_f32(embeddings[i]));
       }
     });
     tx();
@@ -146,12 +147,3 @@ async function fetch_embeddings(texts: string[], cfg: EmbedWorkerConfig): Promis
   return all;
 }
 
-/** L2 단위 벡터로 정규화. */
-function normalize_vec(v: number[]): Float32Array {
-  let norm = 0;
-  for (let i = 0; i < v.length; i++) norm += v[i] * v[i];
-  norm = Math.sqrt(norm);
-  const out = new Float32Array(v.length);
-  if (norm > 0) for (let i = 0; i < v.length; i++) out[i] = v[i] / norm;
-  return out;
-}

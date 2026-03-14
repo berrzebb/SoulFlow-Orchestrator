@@ -1,6 +1,6 @@
 /** 마크다운 헤딩 기반 청킹 — memsearch 방식을 SQLite 환경에 적용. */
 
-import { createHash } from "node:crypto";
+import { sha256_short } from "../utils/crypto.js";
 
 export interface MemoryChunk {
   chunk_id: string;
@@ -158,6 +158,3 @@ function make_chunk(section: RawSection, source_key: string): MemoryChunk {
   };
 }
 
-function sha256_short(input: string): string {
-  return createHash("sha256").update(input).digest("hex").slice(0, 16);
-}
