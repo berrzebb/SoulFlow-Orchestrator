@@ -1,6 +1,6 @@
 # Claude 증거 제출
 
-> 마지막 업데이트: 2026-03-14 19:10
+> 마지막 업데이트: 2026-03-14 20:30
 > GPT 감사 문서: `docs/feedback/gpt.md`
 
 ## 합의완료
@@ -30,41 +30,38 @@
 - `[합의완료]` RP-1 + RP-2 — RolePolicyResolver + ProtocolResolver
 - `[합의완료]` RP-3 + RP-4 — PromptProfileCompiler + Runtime Binding
 - `[합의완료]` RP-5 + RP-6 — UI Migration + Golden Tests
+- `[합의완료]` SO-1 + SO-2 + SO-3 — Output Contract Inventory + Shared Result Contracts + OutputParserRegistry
 
-## `[합의완료]` RP-5 + RP-6 — UI Migration + Golden Tests
+## `[GPT미검증]` SO-4 + SO-5 — SchemaChain Validator/Normalizer + Bounded SchemaRepairLoop
 
 ### Claim
 
-- RP-5: `list_roles()` API가 `PromptProfileCompiler` 경유로 마이그레이션. `RolePreset` 타입에 `use_when`, `not_use_for`, `preferred_model`, `shared_protocols`, `rendered_prompt` 추가. 프론트엔드 `applyRole()`이 soul+heart 수동 조립 대신 `rendered_prompt` 사용.
-- RP-6: role resolve → compile → render 파이프라인의 golden test 17개. 4개 role archetype (concierge, implementer, reviewer, minimal) + coverage validation.
+- SO-4: `src/orchestration/schema-validator.ts` — JSON Schema 검증 + JSON 텍스트 정규화를 독립 모듈로 추출. `validate_schema(data, schema)` 순수 함수로 object/array/string/number/integer/null/enum 지원. `normalize_json_text(raw)` 로 코드 펜스(` ```json ``` `) 자동 제거. `validate_json_output(raw, schema)` 로 파싱 + 검증 한 번에 수행. 기존 도구 클래스(`JsonSchemaTool`, `ValidatorTool`)의 private 검증 로직과 동일하나, 파이프라인 어디서든 사용 가능한 독립 함수로 분리.
+- SO-5: `src/orchestration/schema-repair-loop.ts` — `run_schema_repair(retry, schema, initial_content, max_attempts?)` 바운딩된 수리 루프. 초기 LLM 응답을 `validate_json_output`으로 검증하고, 에러 시 `format_repair_prompt`로 에러 피드백 프롬프트를 생성하여 `retry` 콜백으로 LLM 재호출. `DEFAULT_MAX_REPAIR_ATTEMPTS = 2`. 소비자로부터 LLM 호출 방식을 분리 (콜백 패턴). `phase-loop-runner.ts`의 `invoke_llm`에 통합 — `output_json_schema` 지정 시 자동으로 repair loop 진입, 기존 `parse_output("json", ...)` 대체.
 
 ### 변경 파일
 
-- `src/dashboard/ops/workflow.ts` (수정) — `list_roles()` compiler 경유, enriched 반환
-- `src/dashboard/service.types.ts` (수정) — `list_roles()` 반환 타입 enrichment
-- `web/src/pages/workflows/workflow-types.ts` (수정) — `RolePreset` 인터페이스 enrichment
-- `web/src/pages/workflows/builder-modals.tsx` (수정) — `applyRole()` → `rendered_prompt` + `preferred_model` 사용
-- `web/src/pages/workflows/inspector-params.tsx` (수정) — `applyRole()` 동일 마이그레이션
-- `tests/dashboard/ops/workflow-ops.test.ts` (수정) — `list_roles()` enriched 필드 검증 + resolver 미매칭 fallback 테스트
-- `tests/orchestration/role-protocol-golden.test.ts` (신규) — 17개 golden test
+- `src/orchestration/schema-validator.ts` (신규) — SO-4 스키마 검증 + 정규화
+- `src/orchestration/schema-repair-loop.ts` (신규) — SO-5 바운딩된 수리 루프
+- `src/agent/phase-loop-runner.ts` (수정) — `invoke_llm` 내 `parse_output("json", ...)` → `run_schema_repair(...)` 교체. import 변경.
+- `tests/orchestration/schema-validator.test.ts` (신규) — SO-4 테스트 23개
+- `tests/orchestration/schema-repair-loop.test.ts` (신규) — SO-5 테스트 12개
 
 ### Test Command
 
 ```bash
-npx vitest run tests/dashboard/ops/workflow-ops.test.ts tests/orchestration/role-protocol-golden.test.ts tests/orchestration/prompt-profile-compiler.test.ts tests/orchestration/role-policy-resolver.test.ts tests/orchestration/protocol-resolver.test.ts tests/orchestration/service.test.ts
-npx eslint src/dashboard/ops/workflow.ts src/dashboard/service.types.ts tests/dashboard/ops/workflow-ops.test.ts tests/orchestration/role-protocol-golden.test.ts
+npx vitest run tests/orchestration/schema-validator.test.ts tests/orchestration/schema-repair-loop.test.ts tests/orchestration/output-contracts.test.ts tests/orchestration/output-parser-registry.test.ts tests/agent/phase-loop-runner-nodes.test.ts tests/agent/phase-loop-runner.test.ts tests/agent/nodes/
+npx eslint src/orchestration/schema-validator.ts src/orchestration/schema-repair-loop.ts src/agent/phase-loop-runner.ts tests/orchestration/schema-validator.test.ts tests/orchestration/schema-repair-loop.test.ts
 npx tsc --noEmit
 ```
 
 ### Test Result
 
-- `npx vitest run ...`: **6 files / 129 tests passed**
-- `npx eslint` 대상 4파일: **0 errors, 0 warnings**
+- `npx vitest run ...`: **168 files / 2,935 tests passed**
+- `npx eslint` 대상 5파일: **0 errors, 0 warnings**
 - `npx tsc --noEmit`: **통과**
 
 ### Residual Risk
 
-- `applyRole()`이 `rendered_prompt`를 `system_prompt`에 설정. phase-loop-runner는 `agent_def.system_prompt`를 직접 사용하므로, 기존 soul+heart 조립 대신 compiler 렌더링 결과가 사용됨. 동일 정보의 구조화된 표현이므로 의미적 회귀 없음.
-
-
-
+- `ai-agent.ts`는 `spawn_agent` + `wait_agent` 경로를 사용하므로 repair loop 미적용. 에이전트 스폰 방식에서는 재프롬프팅이 불가하여 의도된 동작.
+- `invoke_llm`의 repair loop에서 retry 시 `run_headless`가 추가 호출됨. `DEFAULT_MAX_REPAIR_ATTEMPTS = 2` 바운딩으로 최대 3회(초기 + 2 retry) 호출 제한.

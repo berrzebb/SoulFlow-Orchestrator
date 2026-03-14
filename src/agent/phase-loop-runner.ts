@@ -31,7 +31,7 @@ import {
 import { execute_orche_node, apply_preset } from "./orche-node-executor.js";
 import { get_node_handler, type RunnerContext } from "./node-registry.js";
 import { resolve_executor_provider } from "../providers/executor.js";
-import { parse_output } from "../orchestration/output-parser-registry.js";
+import { run_schema_repair } from "../orchestration/schema-repair-loop.js";
 import {
   create_worktree,
   create_isolated_directory,
@@ -1195,8 +1195,26 @@ function build_runner_services(
         abort_signal: opts.abort_signal,
       });
       const content = result.content || "";
-      const parsed = (opts.output_json_schema && content) ? parse_output("json", content) ?? undefined : undefined;
-      return { content, parsed, usage: result.usage as Record<string, number> | undefined };
+      if (opts.output_json_schema && content) {
+        const repair = await run_schema_repair(
+          async (last_content, repair_prompt) => {
+            const retry_msgs: import("../providers/types.js").ChatMessage[] = [
+              ...messages,
+              { role: "assistant", content: last_content },
+              { role: "user", content: repair_prompt },
+            ];
+            const r = await providers.run_headless({
+              provider_id, messages: retry_msgs, model,
+              temperature: opts.temperature, max_tokens: opts.max_tokens, abort_signal: opts.abort_signal,
+            });
+            return r.content || "";
+          },
+          opts.output_json_schema,
+          content,
+        );
+        return { content: repair.content, parsed: repair.parsed ?? undefined, usage: result.usage as Record<string, number> | undefined };
+      }
+      return { content, usage: result.usage as Record<string, number> | undefined };
     };
   }
 
