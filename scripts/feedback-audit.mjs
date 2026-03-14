@@ -247,6 +247,9 @@ ${scopeText}
 2. 완료 주장과 근거 파일, 테스트 파일을 추출합니다.
 3. 관련 코드를 직접 확인합니다.
 4. 관련 lint와 테스트를 직접 실행합니다. 테스트가 없더라도 repo-appropriate lint는 생략하지 마세요.
+   - lint 대상: 증거 패키지의 변경 파일(`src/**/*.ts`, `tests/**/*.ts`) 각각 `npx eslint <file>` 실행.
+   - `src/**`와 `tests/**`의 eslint 규칙이 다를 수 있으므로 반드시 파일별로 분리 실행하세요.
+   - lint exit code ≠ 0이면 즉시 `lint-gap [major]` + `구체 지점` (파일명:L{line} + 오류 메시지).
 5. 판정을 \`docs/feedback/gpt.md\`에만 반영합니다.
 6. 설계 문서(\`docs/ko/design/**\`, \`docs/en/design/**\`)는 수정하지 마세요.
 7. 현재 범위 안에서 \`SOLID\`, \`YAGNI\`, \`DRY\`, \`KISS\`, \`LoD\` 5원칙 위반이 있는지도 함께 봅니다.
@@ -261,6 +264,7 @@ ${scopeText}
 - 단, 회귀가 원래 완료 기준 자체를 직접 깨뜨리면 기존 \`[합의완료]\` 항목을 \`[계류]\`로 강등할 수 있습니다.
 - \`docs/feedback/claude.md\`에 현재 범위의 증거 패키지(\`claim\`, \`changed files\`, \`test command\`, \`test result\`, \`residual risk\`)가 없거나 약하면 \`needs-evidence\`를 우선 사용하세요.
 - \`lint\`가 실행되지 않았거나 실패했으면 \`[합의완료]\`로 올리지 말고 \`lint-gap\`을 우선 사용하세요.
+- \`lint-gap\` 반려 시 \`## 구체 지점\`은 필수: 오류가 발생한 파일명:L{line}과 오류 메시지 전문을 인용하세요. "N건"만 쓰는 것은 허용하지 않습니다.
 - 현재 범위에서 \`SOLID\`, \`YAGNI\`, \`DRY\`, \`KISS\`, \`LoD\` 위반이 구조적 회귀를 만들면 \`principle-drift\`를 사용하세요.
 - \`[계류]\` 판정이면 \`## 반려 코드\`를 반드시 추가하고, 아래 코드 중 1~3개만 쓰세요:
   - \`needs-evidence\`
@@ -280,6 +284,7 @@ ${scopeText}
 - 결정론적 보장: **동수(tie) / 빈 입력 / 전체 실패** 경계 케이스 존재 여부
 - 에러 경로: **에러 발생 케이스**를 직접 실행하는 테스트 존재 여부
 - 문서-코드 정합성: \`residual risk\` 또는 \`claim\`의 설명이 **실제 코드 동작**과 일치하는지
+- **Bonus Fix / 부가 수정**이 있으면 해당 메서드/함수를 직접 호출하는 전용 테스트가 증거 패키지에 포함되었는지 확인
 - 위 항목 중 하나라도 누락이면 \`test-gap [major]\`, 문서 불일치만이면 \`claim-drift [minor]\`로 분리하세요.
 
 답변 파일:
