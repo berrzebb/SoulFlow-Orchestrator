@@ -161,6 +161,10 @@ function extractStatusFromLine(line) {
   return statuses.at(-1) ?? null;
 }
 
+function hasPendingItems(markdown) {
+  return /\[(GPT미검증|계류)\]/.test(markdown);
+}
+
 function detectScope(markdown) {
   const lines = markdown.split(/\r?\n/);
   const start = lines.findIndex((line) => /^##\s+감사 범위\s*$/.test(line.trim()));
@@ -475,6 +479,13 @@ function main() {
   }
 
   const claudeMd = readFileSync(claudePath, "utf8");
+
+  if (!args.scope && !hasPendingItems(claudeMd)) {
+    console.log("No [GPT미검증] or [계류] items in claude.md. Skipping audit.");
+    runRespond(args);
+    return;
+  }
+
   const scopeText = args.scope ?? detectScope(claudeMd);
   const promotionHint = loadPromotionHint();
   const prompt = buildPrompt(scopeText, promotionHint);
@@ -521,13 +532,19 @@ function main() {
     process.exit(result.status ?? 1);
   }
 
-  if (threadId) {
-    writeSavedSessionId(threadId);
-    console.log(`Saved audit session: ${threadId}`);
-  }
-
   if (existsSync(gptPath)) {
     console.log(`\nUpdated: ${gptPath}`);
+    const gptMd = readFileSync(gptPath, "utf8");
+    if (!hasPendingItems(gptMd) && threadId) {
+      deleteSavedSessionId();
+      console.log("No remaining [계류] items — session reset for next audit.");
+    } else if (threadId) {
+      writeSavedSessionId(threadId);
+      console.log(`Saved audit session: ${threadId}`);
+    }
+  } else if (threadId) {
+    writeSavedSessionId(threadId);
+    console.log(`Saved audit session: ${threadId}`);
   }
 
   runRespond(args);
