@@ -91,6 +91,11 @@ export interface DashboardBundleDeps {
 export interface DashboardBundleResult {
   dashboard: DashboardService | null;
   agent_provider_ops: ReturnType<typeof create_agent_provider_ops>;
+  /** RPF-4F: 최신 ValidatorSummary 공급/업데이트 포트. 외부에서 set_latest()로 push 가능. */
+  validator_summary_ops: {
+    get_latest(): import("../repo-profile/validator-summary-adapter.js").ValidatorSummary | null;
+    set_latest(s: import("../repo-profile/validator-summary-adapter.js").ValidatorSummary | null): void;
+  };
 }
 
 export function create_dashboard_bundle(deps: DashboardBundleDeps): DashboardBundleResult {
@@ -111,8 +116,14 @@ export function create_dashboard_bundle(deps: DashboardBundleDeps): DashboardBun
     provider_registry: providers, workspace,
   });
 
+  let _latest_summary: import("../repo-profile/validator-summary-adapter.js").ValidatorSummary | null = null;
+  const validator_summary_ops = {
+    get_latest: () => _latest_summary,
+    set_latest: (s: import("../repo-profile/validator-summary-adapter.js").ValidatorSummary | null) => { _latest_summary = s; },
+  };
+
   if (!app_config.dashboard.enabled) {
-    return { dashboard: null, agent_provider_ops };
+    return { dashboard: null, agent_provider_ops, validator_summary_ops };
   }
 
   const usage_store = provided_usage_store ?? new UsageStore(user_dir);
@@ -228,6 +239,7 @@ Description: ${prompt}`,
     workspace,
     webhookSecret: app_config.dashboard.webhookSecret,
     observability: deps.observability,
+    validator_summary_ops,
   });
 
   broadcaster.attach(dash.sse);
@@ -245,5 +257,5 @@ Description: ${prompt}`,
     }
   });
 
-  return { dashboard: dash, agent_provider_ops };
+  return { dashboard: dash, agent_provider_ops, validator_summary_ops };
 }

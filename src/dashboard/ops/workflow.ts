@@ -338,6 +338,9 @@ export function create_workflow_ops(deps: {
       const channel = String(input.channel || "dashboard");
       const chat_id = String(input.chat_id || "web");
       const team_id = typeof input.team_id === "string" ? input.team_id : undefined;
+      const artifact_bundle = (input.artifact_bundle && typeof input.artifact_bundle === "object")
+        ? input.artifact_bundle as PhaseLoopRunOptions["artifact_bundle"]
+        : undefined;
 
       let phases: PhaseLoopRunOptions["phases"];
       let nodes: PhaseLoopRunOptions["nodes"];
@@ -396,6 +399,7 @@ export function create_workflow_ops(deps: {
         workspace,
         field_mappings,
         team_id,
+        artifact_bundle,
       }, build_runner_deps(team_id)).catch((err) => {
         logger.error("workflow_create_run_error", { workflow_id, error: error_message(err) });
       });

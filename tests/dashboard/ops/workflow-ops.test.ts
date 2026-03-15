@@ -533,4 +533,45 @@ describe("create()", () => {
     const result = await ops.create({ title: "Run It", template_name: "my-template", objective: "run now" } as any);
     expect(result.ok).toBe(true);
   });
+
+  it("artifact_bundle 포함 create → run_phase_loop에 artifact_bundle 전달", async () => {
+    const ops = make_ops(make_store(), workspace);
+    const bundle = {
+      repo_id: "test-repo",
+      created_at: "2026-01-01T00:00:00.000Z",
+      is_passing: true,
+      total_validators: 3,
+      passed_validators: 3,
+      failed_kinds: [] as string[],
+    };
+    const result = await ops.create({
+      title: "Bundle Workflow",
+      objective: "test",
+      channel: "slack",
+      chat_id: "C1",
+      nodes: [{ node_id: "set1", node_type: "set", title: "Set", assignments: [{ key: "done", value: "true" }] }],
+      artifact_bundle: bundle,
+    } as any);
+    expect(result.ok).toBe(true);
+    expect(run_phase_loop).toHaveBeenCalledWith(
+      expect.objectContaining({ artifact_bundle: bundle }),
+      expect.anything(),
+    );
+  });
+
+  it("artifact_bundle 미제공 create → run_phase_loop에 artifact_bundle 없음", async () => {
+    const ops = make_ops(make_store(), workspace);
+    const result = await ops.create({
+      title: "No Bundle Workflow",
+      objective: "test",
+      channel: "slack",
+      chat_id: "C1",
+      nodes: [{ node_id: "set1", node_type: "set", title: "Set", assignments: [{ key: "done", value: "true" }] }],
+    } as any);
+    expect(result.ok).toBe(true);
+    expect(run_phase_loop).toHaveBeenCalledWith(
+      expect.objectContaining({ artifact_bundle: undefined }),
+      expect.anything(),
+    );
+  });
 });

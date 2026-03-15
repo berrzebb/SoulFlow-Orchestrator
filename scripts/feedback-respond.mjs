@@ -431,9 +431,9 @@ function syncGptNextTaskWithPromotion(gptMd, claudeMd, state) {
   const approvedIds = resolvePromotionApprovedIds(claudeMd, gptMd);
   const activeAuditTask = findNextAuditTaskInClaude(claudeMd, approvedIds);
   const nextTask =
-    activeAuditTask ??
     state?.nextStage?.next_task_ko ??
     state?.nextStage?.next_task_en ??
+    activeAuditTask ??
     "`현재 등록된 다음 작업 없음`";
 
   if (!nextTask) {
@@ -451,23 +451,25 @@ function syncGptNextTaskWithPromotion(gptMd, claudeMd, state) {
 
 function collectIdsFromLine(line) {
   const ids = new Set();
-  const rangeRe = /\b([A-Z]{2,})-(\d+)\s*~\s*(?:\1-?)?(\d+)\b/g;
+  const rangeRe = /\b([A-Z]{2,})-(\d+)([A-Z]?)\s*~\s*(?:\1-?)?(\d+)([A-Z]?)\b/g;
   let rangeMatch;
   while ((rangeMatch = rangeRe.exec(line)) !== null) {
     const prefix = rangeMatch[1];
     const start = Number(rangeMatch[2]);
-    const end = Number(rangeMatch[3]);
-    if (Number.isFinite(start) && Number.isFinite(end) && end >= start) {
+    const startSuffix = rangeMatch[3] ?? "";
+    const end = Number(rangeMatch[4]);
+    const endSuffix = rangeMatch[5] ?? "";
+    if (Number.isFinite(start) && Number.isFinite(end) && end >= start && startSuffix === endSuffix) {
       for (let i = start; i <= end; i++) {
-        ids.add(`${prefix}-${i}`);
+        ids.add(`${prefix}-${i}${startSuffix}`);
       }
     }
   }
 
-  const idRe = /\b([A-Z]{2,})-(\d+)\b/g;
+  const idRe = /\b([A-Z]{2,})-(\d+)([A-Z]?)\b/g;
   let idMatch;
   while ((idMatch = idRe.exec(line)) !== null) {
-    ids.add(`${idMatch[1]}-${idMatch[2]}`);
+    ids.add(`${idMatch[1]}-${idMatch[2]}${idMatch[3] ?? ""}`);
   }
 
   // 단일 문자 접두사 ID: E1, E2, F3, G1 등 (dash 없이 숫자 직결)
@@ -569,7 +571,7 @@ function extractOrderedIds(workBreakdownMd) {
   }
 
   for (const line of lines) {
-    const match = line.match(/^##\s+([A-Z]{1,4}-\d+)\b/);
+    const match = line.match(/^##\s+([A-Z]{1,4}-\d+[A-Z]?)\b/);
     if (!match) continue;
     const id = match[1];
     if (seen.has(id)) continue;
@@ -583,7 +585,7 @@ function extractOrderedIds(workBreakdownMd) {
 function extractIdTitleMap(workBreakdownMd) {
   const map = new Map();
   for (const line of workBreakdownMd.split(/\r?\n/)) {
-    const match = line.match(/^##\s+([A-Z]{1,4}-\d+)\s+(.+?)\s*$/);
+    const match = line.match(/^##\s+([A-Z]{1,4}-\d+[A-Z]?)\s+(.+?)\s*$/);
     if (!match) continue;
     map.set(match[1], match[2].trim());
   }

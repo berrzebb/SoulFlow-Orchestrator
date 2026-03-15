@@ -334,6 +334,8 @@ export interface PhaseLoopRunOptions {
   resume_state?: PhaseLoopState;
   /** 멀티테넌트: 워크플로우를 소유한 팀 ID. state에 기록하여 SSE 스코프 전파에 사용. */
   team_id?: string;
+  /** RPF-4F: 워크플로우 시작 시 주입할 ArtifactBundle 요약. 저장 state에 기록되어 /api/workflow/runs/:id로 공급됨. */
+  artifact_bundle?: PhaseLoopState["artifact_bundle"];
 }
 
 export interface PhaseLoopRunResult {

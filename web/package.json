@@ -9,7 +9,9 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "lint": "eslint src/"
+    "lint": "eslint src/",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@codemirror/commands": "^6.10.2",
@@ -37,6 +39,8 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
     "@types/js-yaml": "^4.0.9",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
@@ -44,6 +48,7 @@
     "babel-plugin-react-compiler": "^1.0.0",
     "eslint": "^10.0.3",
     "eslint-plugin-react-hooks": "^7.1.0-canary-46103596-20260305",
+    "happy-dom": "^20.8.4",
     "typescript": "^5.7.0",
     "typescript-eslint": "^8.56.1",
     "vite": "^7.3.1"

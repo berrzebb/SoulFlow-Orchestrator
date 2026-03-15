@@ -114,6 +114,7 @@ export async function run_phase_loop(
           field_mappings: options.field_mappings,
         },
         ...(options.team_id ? { team_id: options.team_id } : {}),
+        ...(options.artifact_bundle ? { artifact_bundle: options.artifact_bundle } : {}),
       };
 
   await store.upsert(state);

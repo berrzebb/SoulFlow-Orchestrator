@@ -77,7 +77,7 @@ interface PhaseDefinitionBrief {
   max_loop_iterations?: number;
 }
 
-interface ArtifactBundleEntry {
+export interface ArtifactBundleEntry {
   repo_id: string;
   created_at: string;
   is_passing: boolean;

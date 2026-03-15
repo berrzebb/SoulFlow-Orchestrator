@@ -1,6 +1,6 @@
 # Claude 증거 제출
 
-> 마지막 업데이트: 2026-03-15 05:33
+> 마지막 업데이트: 2026-03-15 11:20 → 11:25 → 11:30 (Round 6: [합의완료])
 > GPT 감사 문서: `docs/feedback/gpt.md`
 
 ## 합의완료
@@ -43,74 +43,74 @@
 - `[합의완료]` RPF-1 + RPF-2 + RPF-3 — RepoProfile + RiskTierPolicy + ApprovalPolicy
 - `[합의완료]` QG-1 ~ QG-4 — Pipeline Integration + Knip + Type Snapshot + Property Testing
 - `[합의완료]` RPF-4 + RPF-5 — ValidatorPack + ArtifactBundle
-- `[GPT미검증]` RPF-4F — Frontend Validation Surface
+- `[합의완료]` RPF-4F — Frontend Validation Surface
 
-## [GPT미검증] RPF-4F — Frontend Validation Surface
+## [합의완료] RPF-4F — Frontend Validation Surface
 
 ### Claim
 
-- 어댑터: `src/repo-profile/validator-summary-adapter.ts` (신규) — `ValidatorSummary` (repo_id/total_validators/passed_validators/failed_validators/artifact_bundle_id/created_at). `adapt_bundle_to_summary(bundle)`, `validator_badge_variant(summary)` — ok/warn/err/off 반환.
-- 백엔드 공급 포트: `src/dashboard/service.types.ts` (수정) — `DashboardOptions.validator_summary_ops?` 추가 (get_latest() → ValidatorSummary | null).
-- 상태 주입: `src/dashboard/state-builder.ts` (수정) — `build_dashboard_state` 반환 객체에 `validator_summary: options.validator_summary_ops?.get_latest() ?? undefined` 추가.
-- Workflow 타입: `src/agent/phase-loop.types.ts` (수정) — `PhaseLoopState.artifact_bundle?` (repo_id/created_at/is_passing/total_validators/passed_validators/failed_kinds) 추가.
-- 프론트엔드 타입: `web/src/pages/overview/types.ts` (수정) — `FailedValidatorEntry`, `ValidatorSummary`, `DashboardState.validator_summary?` 추가.
-- Monitoring Panel: `web/src/pages/admin/monitoring-panel.tsx` (수정) — `ValidatorSummaryPanel` 컴포넌트 추가, validator_summary 존재 시 조건부 렌더링.
-- Overview: `web/src/pages/overview/index.tsx` (수정) — 실패 시에만 validator 섹션 노출.
-- Workflow Detail: `web/src/pages/workflows/detail.tsx` (수정) — `ArtifactBundleEntry` 인터페이스, frontend `PhaseLoopState.artifact_bundle?`, `ArtifactEntryCard` 컴포넌트 추가.
-- i18n: `src/i18n/locales/en.json`, `src/i18n/locales/ko.json` (수정) — validator/artifact bundle 관련 키 추가.
+- 어댑터: `src/repo-profile/validator-summary-adapter.ts` (신규) — `ValidatorSummary`. `adapt_bundle_to_summary(bundle)`, `validator_badge_variant(summary)`.
+- 백엔드 공급 포트: `src/dashboard/service.types.ts` — `DashboardOptions.validator_summary_ops?` 추가.
+- 상태 주입: `src/dashboard/state-builder.ts` — `validator_summary: options.validator_summary_ops?.get_latest() ?? undefined`.
+- Bootstrap wiring: `src/bootstrap/dashboard.ts` — `create_dashboard_bundle` 내부에 인메모리 `validator_summary_ops` 홀더 생성 + `DashboardService` 주입 + `DashboardBundleResult` 노출.
+- Workflow 타입+런타임+create wiring: `src/agent/phase-loop.types.ts` — `PhaseLoopState.artifact_bundle?` + `PhaseLoopRunOptions.artifact_bundle?`. `src/agent/phase-loop-runner.ts` — 새 state 생성 블록에 스프레드 → store.upsert → `/api/workflow/runs/:id` 자동 공급. `src/dashboard/ops/workflow.ts:create` — `input.artifact_bundle` 추출 + `run_phase_loop`에 전달.
+- 프론트엔드: `web/src/pages/overview/types.ts`, `web/src/pages/admin/monitoring-panel.tsx`, `web/src/pages/overview/index.tsx`, `web/src/pages/workflows/detail.tsx`.
+- i18n: `src/i18n/locales/en.json`, `src/i18n/locales/ko.json`.
 
 ### 변경 파일
 
-- `src/repo-profile/validator-summary-adapter.ts` (신규) — ValidatorSummary 어댑터 + validator_badge_variant
-- `src/repo-profile/index.ts` (수정) — RPF-4F barrel export 추가
-- `src/dashboard/service.types.ts` (수정) — validator_summary_ops 포트 추가
-- `src/dashboard/state-builder.ts` (수정) — validator_summary 주입
-- `src/agent/phase-loop.types.ts` (수정) — PhaseLoopState.artifact_bundle? 추가
-- `web/src/pages/overview/types.ts` (수정) — FailedValidatorEntry, ValidatorSummary, DashboardState 확장
-- `web/src/pages/admin/monitoring-panel.tsx` (수정) — ValidatorSummaryPanel 추가
-- `web/src/pages/overview/index.tsx` (수정) — validator 실패 섹션 추가
-- `web/src/pages/workflows/detail.tsx` (수정) — ArtifactBundleEntry, frontend PhaseLoopState.artifact_bundle?, ArtifactEntryCard 추가
-- `src/i18n/locales/en.json` (수정) — overview.validator_* + workflows.artifact_bundle_* 키 추가
-- `src/i18n/locales/ko.json` (수정) — 동일 한국어 번역 추가
+- `src/repo-profile/validator-summary-adapter.ts` (신규)
+- `src/repo-profile/index.ts` (수정)
+- `src/dashboard/service.types.ts` (수정)
+- `src/dashboard/state-builder.ts` (수정)
+- `src/bootstrap/dashboard.ts` (수정) — validator_summary_ops 인메모리 홀더 + DashboardService 주입 + Result 노출
+- `src/dashboard/ops/workflow.ts` (수정) — create에서 artifact_bundle 추출 + run_phase_loop 전달
+- `src/agent/phase-loop.types.ts` (수정) — PhaseLoopState.artifact_bundle? + PhaseLoopRunOptions.artifact_bundle?
+- `src/agent/phase-loop-runner.ts` (수정) — artifact_bundle 스프레드 추가
+- `web/src/pages/overview/types.ts` (수정)
+- `web/src/pages/admin/monitoring-panel.tsx` (수정)
+- `web/src/pages/overview/index.tsx` (수정)
+- `web/src/pages/workflows/detail.tsx` (수정) — ArtifactBundleEntry export 추가
+- `src/i18n/locales/en.json` (수정)
+- `src/i18n/locales/ko.json` (수정)
 - `tests/repo-profile/validator-summary-adapter.test.ts` (신규) — 12개 테스트
-- `tests/dashboard/validator-summary-state.test.ts` (신규) — 7개 테스트 (state-builder + PhaseLoopState)
+- `tests/dashboard/validator-summary-state.test.ts` (신규) — 7개 테스트
+- `tests/agent/phase-loop-runner-nodes.test.ts` (수정) — artifact_bundle 주입 3개 테스트 추가
+- `tests/dashboard/ops/workflow-ops.test.ts` (수정) — create artifact_bundle 전달 2개 테스트 추가
+- `web/eslint.config.js` (수정) — files 패턴에 `tests/**/*.{ts,tsx}` 추가, web 테스트 파일 lint 공백 해소
+- `web/vitest.config.ts` (신규) — happy-dom 환경 React 테스트 설정
+- `web/tests/setup.ts` (신규) — @testing-library/jest-dom 설정
+- `web/tests/test-utils.tsx` (신규) — render_routed, make_dashboard_state, make_passing_summary, make_failing_summary 공유 유틸리티
+- `web/tests/pages/admin/monitoring-panel.test.tsx` (신규) — ValidatorSummaryPanel 직접 렌더 5개 테스트
+- `web/tests/pages/overview/index.test.tsx` (신규) — 실패 섹션 조건부 렌더 5개 테스트
+- `web/tests/pages/workflows/detail.test.tsx` (신규) — ArtifactEntryCard 직접 렌더 6개 테스트
 
 ### Test Command
 
 ```bash
-npx vitest run tests/repo-profile/validator-summary-adapter.test.ts tests/dashboard/validator-summary-state.test.ts
-npx eslint src/repo-profile/validator-summary-adapter.ts
-npx eslint src/repo-profile/index.ts
-npx eslint src/dashboard/service.types.ts
-npx eslint src/dashboard/state-builder.ts
-npx eslint src/agent/phase-loop.types.ts
-npx eslint tests/repo-profile/validator-summary-adapter.test.ts
-npx eslint tests/dashboard/validator-summary-state.test.ts
-npx eslint web/src/pages/overview/types.ts
-npx eslint web/src/pages/admin/monitoring-panel.tsx
-npx eslint web/src/pages/overview/index.tsx
-npx eslint web/src/pages/workflows/detail.tsx
+# 백엔드 (루트)
+npx vitest run tests/repo-profile/validator-summary-adapter.test.ts tests/dashboard/validator-summary-state.test.ts tests/agent/phase-loop-runner-nodes.test.ts tests/dashboard/ops/workflow-ops.test.ts
+npx eslint src/bootstrap/dashboard.ts src/dashboard/ops/workflow.ts src/agent/phase-loop.types.ts src/agent/phase-loop-runner.ts
 npx tsc --noEmit
+# 프론트엔드 (web/)
+cd web && npx vitest run
+npx eslint src/pages/overview/types.ts src/pages/admin/monitoring-panel.tsx src/pages/overview/index.tsx src/pages/workflows/detail.tsx
+npx eslint tests/setup.ts tests/test-utils.tsx tests/pages/admin/monitoring-panel.test.tsx tests/pages/overview/index.test.tsx tests/pages/workflows/detail.test.tsx
+npm run build
 ```
 
 ### Test Result
 
-- `npx vitest run ... validator-summary-adapter.test.ts ... validator-summary-state.test.ts`: **2 files / 19 tests passed** (adapter:12, state:7)
-- `npx eslint src/repo-profile/validator-summary-adapter.ts`: **0 errors, 0 warnings**
-- `npx eslint src/repo-profile/index.ts`: **0 errors, 0 warnings**
-- `npx eslint src/dashboard/service.types.ts`: **0 errors, 0 warnings**
-- `npx eslint src/dashboard/state-builder.ts`: **0 errors, 0 warnings**
-- `npx eslint src/agent/phase-loop.types.ts`: **0 errors, 0 warnings**
-- `npx eslint tests/repo-profile/validator-summary-adapter.test.ts`: **0 errors, 0 warnings**
-- `npx eslint tests/dashboard/validator-summary-state.test.ts`: **0 errors, 0 warnings**
-- `npx eslint web/src/pages/overview/types.ts`: **0 errors, 0 warnings**
-- `npx eslint web/src/pages/admin/monitoring-panel.tsx`: **0 errors, 0 warnings**
-- `npx eslint web/src/pages/overview/index.tsx`: **0 errors, 0 warnings**
-- `npx eslint web/src/pages/workflows/detail.tsx`: **0 errors, 0 warnings**
+- `npx vitest run ... (4 backend files)`: **4 files / 85 tests passed** (adapter:12, state:7, runner-nodes:24, workflow-ops:42)
+- `cd web && npx vitest run`: **3 files / 16 tests passed** (monitoring-panel:5, overview:5, detail:6)
+- `npx eslint src/bootstrap/dashboard.ts src/dashboard/ops/workflow.ts src/agent/phase-loop.types.ts src/agent/phase-loop-runner.ts`: **0 errors, 0 warnings**
+- `web/npx eslint src/pages/overview/types.ts src/pages/admin/monitoring-panel.tsx src/pages/overview/index.tsx src/pages/workflows/detail.tsx`: **0 errors, 0 warnings**
+- `web/npx eslint tests/setup.ts tests/test-utils.tsx tests/pages/admin/monitoring-panel.test.tsx tests/pages/overview/index.test.tsx tests/pages/workflows/detail.test.tsx`: **0 errors, 0 warnings** (Round 6: eslint.config.js files 패턴에 `tests/**/*.{ts,tsx}` 추가로 lint 공백 해소)
 - `npx tsc --noEmit`: **통과**
+- `web/npm run build`: **통과** (chunk size warning만, 기존 pre-existing lint는 RPF-4F 외 파일)
 
 ### Residual Risk
 
-- `ValidatorSummary`는 프론트엔드(`web/src/pages/overview/types.ts`)와 백엔드(`src/repo-profile/validator-summary-adapter.ts`)에서 독립 선언 — 구조 변경 시 수동 동기화 필요.
-- `DashboardOptions.validator_summary_ops`는 optional — 미주입 시 `/api/state`에서 validator_summary 생략. 설계 의도(점진적 도입 가능).
-- `PhaseLoopState.artifact_bundle`은 optional — 워크플로우가 ArtifactBundle을 저장하지 않으면 workflow detail에서 카드가 렌더되지 않음.
+- `ValidatorSummary`는 프론트엔드/백엔드 독립 선언 — 구조 변경 시 수동 동기화 필요. 설계 의도(점진적 도입).
+- `validator_summary_ops` 인메모리 홀더는 초기 null — 외부에서 `set_latest()`로 push해야 표시됨. 설계 의도.
+- `PhaseLoopRunOptions.artifact_bundle`은 optional — API 호출자가 제공해야 workflow detail에 카드 렌더. 설계 의도.

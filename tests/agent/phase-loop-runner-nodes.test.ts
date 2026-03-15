@@ -882,3 +882,104 @@ describe("run_phase_loop — L327 phase_idx < 0 (resume_state 불일치)", () =>
     expect(result.memory["skipped_phase"]).toBe("true");
   });
 });
+
+// ══════════════════════════════════════════════════════════
+// RPF-4F — artifact_bundle 주입 → state 저장 경로 검증
+// ══════════════════════════════════════════════════════════
+
+describe("run_phase_loop — artifact_bundle 주입 → upsert state 포함", () => {
+  it("artifact_bundle 옵션 제공 시 초기 state에 포함되어 store.upsert에 전달됨", async () => {
+    const store = make_store();
+    const subagents = make_subagents();
+
+    const bundle = {
+      repo_id: "test-repo",
+      created_at: "2026-01-01T00:00:00.000Z",
+      is_passing: true,
+      total_validators: 3,
+      passed_validators: 3,
+      failed_kinds: [] as string[],
+    };
+
+    await run_phase_loop({
+      workflow_id: "wf-bundle",
+      title: "Bundle WF",
+      objective: "test",
+      channel: "slack",
+      chat_id: "C1",
+      workspace: "/tmp/bundle",
+      phases: [],
+      nodes: [],
+      artifact_bundle: bundle,
+    }, {
+      subagents: subagents as any,
+      store: store as any,
+      logger: noop_logger,
+    });
+
+    // store.upsert 첫 호출 인수 = 초기 state
+    const saved_state = store.upsert.mock.calls[0][0];
+    expect(saved_state.artifact_bundle).toBeDefined();
+    expect(saved_state.artifact_bundle.repo_id).toBe("test-repo");
+    expect(saved_state.artifact_bundle.is_passing).toBe(true);
+    expect(saved_state.artifact_bundle.failed_kinds).toHaveLength(0);
+  });
+
+  it("artifact_bundle 미제공 시 초기 state에 artifact_bundle 없음", async () => {
+    const store = make_store();
+    const subagents = make_subagents();
+
+    await run_phase_loop({
+      workflow_id: "wf-no-bundle",
+      title: "No Bundle WF",
+      objective: "test",
+      channel: "slack",
+      chat_id: "C1",
+      workspace: "/tmp/no-bundle",
+      phases: [],
+      nodes: [],
+    }, {
+      subagents: subagents as any,
+      store: store as any,
+      logger: noop_logger,
+    });
+
+    const saved_state = store.upsert.mock.calls[0][0];
+    expect(saved_state.artifact_bundle).toBeUndefined();
+  });
+
+  it("is_passing=false + failed_kinds 있는 bundle → state에 정확히 기록됨", async () => {
+    const store = make_store();
+    const subagents = make_subagents();
+
+    const bundle = {
+      repo_id: "failing-repo",
+      created_at: "2026-01-01T00:00:00.000Z",
+      is_passing: false,
+      total_validators: 3,
+      passed_validators: 1,
+      failed_kinds: ["test", "typecheck"],
+    };
+
+    await run_phase_loop({
+      workflow_id: "wf-fail-bundle",
+      title: "Fail Bundle WF",
+      objective: "test",
+      channel: "slack",
+      chat_id: "C1",
+      workspace: "/tmp/fail-bundle",
+      phases: [],
+      nodes: [],
+      artifact_bundle: bundle,
+    }, {
+      subagents: subagents as any,
+      store: store as any,
+      logger: noop_logger,
+    });
+
+    const saved_state = store.upsert.mock.calls[0][0];
+    expect(saved_state.artifact_bundle.is_passing).toBe(false);
+    expect(saved_state.artifact_bundle.failed_kinds).toEqual(["test", "typecheck"]);
+    expect(saved_state.artifact_bundle.passed_validators).toBe(1);
+  });
+});
