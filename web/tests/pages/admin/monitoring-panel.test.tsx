@@ -208,3 +208,120 @@ describe("MonitoringPanel — risk_tier + eval_score 배지 (RPF-6)", () => {
     expect(screen.queryByText("overview.eval_score")).toBeNull();
   });
 });
+
+// ── FE-4: Request Class + Guardrail 패널 ──────────────────────────────────────
+
+describe("MonitoringPanel — Request Class 분포 (FE-4)", () => {
+  it("request_class_summary 없으면 패널 미렌더", () => {
+    mockUseStatus.mockReturnValue({
+      data: make_base_state(),
+      isLoading: false,
+      refetch: vi.fn(),
+    });
+    wrap(<MonitoringPanel />);
+    expect(screen.queryByTestId("request-class-panel")).toBeNull();
+  });
+
+  it("request_class_summary 있으면 분류별 배지 + 비율 렌더", () => {
+    mockUseStatus.mockReturnValue({
+      data: make_base_state({
+        request_class_summary: { builtin: 10, direct_tool: 5, agent: 3 },
+      }),
+      isLoading: false,
+      refetch: vi.fn(),
+    });
+    wrap(<MonitoringPanel />);
+    expect(screen.getByTestId("request-class-panel")).toBeInTheDocument();
+    expect(screen.getByText("builtin")).toBeInTheDocument();
+    expect(screen.getByText("direct_tool")).toBeInTheDocument();
+    expect(screen.getByText("agent")).toBeInTheDocument();
+    expect(screen.getByText("10")).toBeInTheDocument();
+    // builtin = 10/18 ≈ 56%
+    expect(screen.getByText("56%")).toBeInTheDocument();
+  });
+
+  it("request_class_summary가 빈 객체면 패널 미렌더", () => {
+    mockUseStatus.mockReturnValue({
+      data: make_base_state({ request_class_summary: {} }),
+      isLoading: false,
+      refetch: vi.fn(),
+    });
+    wrap(<MonitoringPanel />);
+    expect(screen.queryByTestId("request-class-panel")).toBeNull();
+  });
+
+  it("내림차순 정렬 — 가장 많은 분류가 먼저", () => {
+    mockUseStatus.mockReturnValue({
+      data: make_base_state({
+        request_class_summary: { agent: 1, builtin: 100 },
+      }),
+      isLoading: false,
+      refetch: vi.fn(),
+    });
+    wrap(<MonitoringPanel />);
+    const panel = screen.getByTestId("request-class-panel");
+    const badges = panel.querySelectorAll("[class*='badge']");
+    // 첫 번째 배지가 builtin이어야 함
+    expect(badges[0]?.textContent).toBe("builtin");
+  });
+});
+
+describe("MonitoringPanel — Guardrail 통계 (FE-4)", () => {
+  it("guardrail_stats 없으면 guardrail 섹션 미렌더", () => {
+    mockUseStatus.mockReturnValue({
+      data: make_base_state(),
+      isLoading: false,
+      refetch: vi.fn(),
+    });
+    wrap(<MonitoringPanel />);
+    expect(screen.queryByTestId("guardrail-stats")).toBeNull();
+  });
+
+  it("guardrail_stats.total=0이면 guardrail 섹션 미렌더", () => {
+    mockUseStatus.mockReturnValue({
+      data: make_base_state({ guardrail_stats: { blocked: 0, total: 0 } }),
+      isLoading: false,
+      refetch: vi.fn(),
+    });
+    wrap(<MonitoringPanel />);
+    expect(screen.queryByTestId("guardrail-stats")).toBeNull();
+  });
+
+  it("blocked=0 → 'overview.guardrail_clear' 배지 렌더", () => {
+    mockUseStatus.mockReturnValue({
+      data: make_base_state({ guardrail_stats: { blocked: 0, total: 50 } }),
+      isLoading: false,
+      refetch: vi.fn(),
+    });
+    wrap(<MonitoringPanel />);
+    expect(screen.getByTestId("guardrail-stats")).toBeInTheDocument();
+    expect(screen.getByText("overview.guardrail_clear")).toBeInTheDocument();
+    expect(screen.getByText("0/50")).toBeInTheDocument();
+  });
+
+  it("blocked>0 → 차단 횟수 배지 렌더", () => {
+    mockUseStatus.mockReturnValue({
+      data: make_base_state({ guardrail_stats: { blocked: 3, total: 20 } }),
+      isLoading: false,
+      refetch: vi.fn(),
+    });
+    wrap(<MonitoringPanel />);
+    expect(screen.getByText(/3.*overview\.guardrail_blocked/)).toBeInTheDocument();
+    expect(screen.getByText("3/20")).toBeInTheDocument();
+  });
+
+  it("request_class_summary + guardrail_stats 동시 렌더", () => {
+    mockUseStatus.mockReturnValue({
+      data: make_base_state({
+        request_class_summary: { builtin: 5 },
+        guardrail_stats: { blocked: 1, total: 10 },
+      }),
+      isLoading: false,
+      refetch: vi.fn(),
+    });
+    wrap(<MonitoringPanel />);
+    expect(screen.getByTestId("request-class-panel")).toBeInTheDocument();
+    expect(screen.getByTestId("guardrail-stats")).toBeInTheDocument();
+    expect(screen.getByText("builtin")).toBeInTheDocument();
+  });
+});

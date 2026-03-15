@@ -33,6 +33,8 @@ export interface AdminUserRecord {
   created_at: string;
   last_login_at: string | null;
   disabled_at: string | null;
+  /** FE-4: 활성 세션 수. */
+  session_count?: number;
 }
 
 export interface TeamRecord {

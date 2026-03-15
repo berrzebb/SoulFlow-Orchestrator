@@ -128,6 +128,12 @@ export function MonitoringPanel() {
         </section>
       </div>
 
+      {/* FE-4: Request Class + Guardrails */}
+      <RequestClassPanel
+        summary={s.request_class_summary}
+        guardrail_stats={s.guardrail_stats}
+      />
+
       {/* Processes */}
       <ProcessesSection
         active={active_processes}
@@ -260,6 +266,75 @@ export function MonitoringPanel() {
       )}
 
       <div className="overview__timestamp text-xs text-muted">{s.now || "-"}</div>
+    </div>
+  );
+}
+
+const REQUEST_CLASS_VARIANT: Record<string, "ok" | "info" | "warn" | undefined> = {
+  builtin: "ok",
+  direct_tool: "ok",
+  model_direct: "info",
+  workflow_compile: "info",
+  workflow_run: "info",
+  agent: "warn",
+};
+
+function RequestClassPanel({
+  summary,
+  guardrail_stats,
+}: {
+  summary?: Record<string, number>;
+  guardrail_stats?: { blocked: number; total: number };
+}) {
+  const t = useT();
+  const entries = summary ? Object.entries(summary).sort(([, a], [, b]) => b - a) : [];
+  const total = entries.reduce((sum, [, v]) => sum + v, 0);
+  const has_guardrails = guardrail_stats != null && guardrail_stats.total > 0;
+
+  if (entries.length === 0 && !has_guardrails) return null;
+
+  return (
+    <div className="panel-grid" data-testid="request-class-panel">
+      {entries.length > 0 && (
+        <section className="panel panel--flush">
+          <SectionHeader title={t("overview.request_class") || "Request Classification"} />
+          <div className="grid-stack">
+            {entries.map(([cls, count]) => (
+              <div key={cls} className="kv mt-0 mb-0">
+                <Badge status={cls} variant={REQUEST_CLASS_VARIANT[cls]} />
+                <span className="fw-600 text-sm">{count}</span>
+                <span className="text-xs text-muted">
+                  {total > 0 ? `${Math.round((count / total) * 100)}%` : ""}
+                </span>
+              </div>
+            ))}
+            <div className="text-xs text-muted">
+              {t("overview.request_total") || "Total"}: {total}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {guardrail_stats && guardrail_stats.total > 0 && (
+        <section className="panel panel--flush" data-testid="guardrail-stats">
+          <SectionHeader title={t("overview.guardrails") || "Guardrails"} />
+          <div className="grid-stack">
+            <div className="kv mt-0 mb-0">
+              <Badge
+                status={
+                  guardrail_stats.blocked === 0
+                    ? (t("overview.guardrail_clear") || "Clear")
+                    : `${guardrail_stats.blocked} ${t("overview.guardrail_blocked") || "blocked"}`
+                }
+                variant={guardrail_stats.blocked === 0 ? "ok" : "warn"}
+              />
+              <span className="text-xs text-muted">
+                {guardrail_stats.blocked}/{guardrail_stats.total}
+              </span>
+            </div>
+          </div>
+        </section>
+      )}
     </div>
   );
 }

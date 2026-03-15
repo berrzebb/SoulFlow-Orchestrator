@@ -456,6 +456,9 @@ function UsersPanel() {
                 {u.default_team_id && (
                   <Badge status={team_name(u.default_team_id)} variant="info" />
                 )}
+                {u.session_count != null && u.session_count > 0 && (
+                  <Badge status={`${u.session_count} sessions`} variant="ok" />
+                )}
                 {u.last_login_at && (
                   <span className="text-xs text-muted">최근 로그인: {new Date(u.last_login_at).toLocaleDateString()}</span>
                 )}

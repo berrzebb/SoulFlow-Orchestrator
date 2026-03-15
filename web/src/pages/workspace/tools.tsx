@@ -6,10 +6,15 @@ import { SearchInput } from "../../components/search-input";
 import { SectionHeader } from "../../components/section-header";
 import { WsSkeletonCol } from "./ws-shared";
 import { useT } from "../../i18n";
+import { time_ago } from "../../utils/format";
 
 interface ToolSchema {
   type: string;
   function: { name: string; description: string; parameters: Record<string, unknown> };
+  /** FE-5: 도구 호출 횟수. */
+  usage_count?: number;
+  /** FE-5: 마지막 사용 시각 (ISO). */
+  last_used_at?: string;
 }
 
 interface McpServer { name: string; connected: boolean; tools: string[]; error?: string }
@@ -37,8 +42,9 @@ function ToolIcon({ name, is_mcp }: { name: string; is_mcp: boolean }) {
   );
 }
 
-function ToolCard({ name, description, parameters, is_mcp, is_open, onToggle }: {
+function ToolCard({ name, description, parameters, is_mcp, is_open, onToggle, usage_count, last_used_at }: {
   name: string; description: string; parameters: Record<string, unknown>; is_mcp: boolean; is_open: boolean; onToggle: (name: string) => void;
+  usage_count?: number; last_used_at?: string;
 }) {
   const t = useT();
   const loc_desc = (!is_mcp && t(`tool.${name}.desc`) !== `tool.${name}.desc`) ? t(`tool.${name}.desc`) : description;
@@ -56,6 +62,12 @@ function ToolCard({ name, description, parameters, is_mcp, is_open, onToggle }: 
         <div className="tool-card__body">
           <div className="tool-card__name">{name}</div>
           {is_mcp && <div className="mt-1"><Badge status="mcp" variant="ok" /></div>}
+          {usage_count != null && usage_count > 0 && (
+            <span className="text-xs text-muted ml-1" data-testid="tool-usage">{usage_count} calls</span>
+          )}
+          {last_used_at && (
+            <span className="text-xs text-muted ml-1" data-testid="tool-last-used">{time_ago(last_used_at)}</span>
+          )}
         </div>
       </div>
       {loc_desc && <div className="tool-card__desc">{loc_desc}</div>}
@@ -117,6 +129,8 @@ function ToolGrid({ tools, is_mcp }: { tools: ToolSchema[]; is_mcp: boolean }) {
             is_mcp={is_mcp}
             is_open={expanded.has(fn.name)}
             onToggle={toggle}
+            usage_count={d.usage_count}
+            last_used_at={d.last_used_at}
           />
         );
       })}

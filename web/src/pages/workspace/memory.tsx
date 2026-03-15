@@ -18,7 +18,13 @@ interface MemoryContentResponse { content: string }
 
 interface Decision { id: string; canonical_key: string; value: unknown; priority: number }
 interface PromiseRecord { id: string; canonical_key: string; value: string; priority: number }
-interface WorkflowEvent { event_id: string; task_id: string; agent_id: string; phase: string; summary: string; at: string }
+interface WorkflowEvent {
+  event_id: string; task_id: string; agent_id: string; phase: string; summary: string; at: string;
+  /** FE-5: TR 검색 소스 (vector/fts5/hybrid). */
+  retrieval_source?: string;
+  /** FE-5: TR 콘텐츠 신규성 점수 (0~1). */
+  novelty_score?: number;
+}
 
 type MemoryView = "longterm" | { day: string } | "decisions" | "promises" | "events";
 
@@ -184,7 +190,7 @@ export function MemoryTab() {
               <EmptyState icon="📊" title={t("decisions.no_events")} />
             ) : (
               <DataTable>
-                <thead><tr><th>{t("decisions.phase")}</th><th>{t("decisions.task")}</th><th>{t("decisions.agent")}</th><th>{t("decisions.summary")}</th><th>{t("decisions.time")}</th></tr></thead>
+                <thead><tr><th>{t("decisions.phase")}</th><th>{t("decisions.task")}</th><th>{t("decisions.agent")}</th><th>{t("decisions.summary")}</th><th>Retrieval</th><th>{t("decisions.time")}</th></tr></thead>
                 <tbody>
                   {events.map((e) => (
                     <tr key={e.event_id}>
@@ -192,6 +198,16 @@ export function MemoryTab() {
                       <td className="text-xs">{e.task_id || "-"}</td>
                       <td className="text-xs">{e.agent_id || "-"}</td>
                       <td className="truncate td--wide">{e.summary || "-"}</td>
+                      <td className="text-xs">
+                        {e.retrieval_source && <Badge status={e.retrieval_source} variant="info" />}
+                        {e.novelty_score != null && (
+                          <span className={`ml-1 fw-600 ${e.novelty_score >= 0.7 ? "text-ok" : e.novelty_score >= 0.4 ? "text-warn" : "text-err"}`}
+                            title={`novelty ${Math.round(e.novelty_score * 100)}%`}>
+                            {Math.round(e.novelty_score * 100)}%
+                          </span>
+                        )}
+                        {!e.retrieval_source && e.novelty_score == null && "-"}
+                      </td>
                       <td className="text-xs text-muted" title={e.at}>{e.at ? time_ago(e.at) : "-"}</td>
                     </tr>
                   ))}

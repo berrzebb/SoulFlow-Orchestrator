@@ -16,11 +16,18 @@ export interface AgentInfo {
   status: string; last_message: string;
 }
 
+/** FE-4: request_class — GW가 분류한 실행 경로. guardrail_blocked — EG에 의한 차단 여부. */
+export type RequestClass = "builtin" | "direct_tool" | "model_direct" | "workflow_compile" | "workflow_run" | "agent";
+
 export interface ProcessInfo {
   run_id: string; alias: string; mode: string; status: string;
   provider?: string; executor_provider?: string;
   tool_calls_count: number; error?: string;
   started_at?: string; ended_at?: string;
+  /** FE-4: GW 분류 결과. */
+  request_class?: RequestClass;
+  /** FE-4: EG guardrail 차단 여부. */
+  guardrail_blocked?: boolean;
 }
 
 export interface TaskInfo {
@@ -36,7 +43,13 @@ export interface CronJob {
 
 export interface MessageInfo { sender_id: string; content: string; direction: string }
 export interface DecisionInfo { id: string; canonical_key: string; value: unknown; priority: number }
-export interface WorkflowEvent { event_id: string; phase: string; task_id: string; agent_id: string; summary: string }
+export interface WorkflowEvent {
+  event_id: string; phase: string; task_id: string; agent_id: string; summary: string;
+  /** FE-5: TR 검색 소스 (vector/fts5/hybrid). */
+  retrieval_source?: string;
+  /** FE-5: TR 콘텐츠 신규성 점수 (0~1). */
+  novelty_score?: number;
+}
 
 export interface AgentProvider {
   instance_id: string; provider_type: string; label: string;
@@ -81,6 +94,10 @@ export interface DashboardState {
   cd_score: { total: number } | null;
   agent_providers?: AgentProvider[];
   validator_summary?: ValidatorSummary;
+  /** FE-4: 요청 분류별 집계 (builtin/direct_tool/model_direct/workflow/agent). */
+  request_class_summary?: Record<string, number>;
+  /** FE-4: guardrail 통계 (차단/전체). */
+  guardrail_stats?: { blocked: number; total: number };
 }
 
 export const ACTIVE_TASK_STATUSES = new Set(["running", "waiting_approval", "waiting_user_input"]);

@@ -1,6 +1,6 @@
 # Claude 증거 제출
 
-> 마지막 업데이트: 2026-03-15 (FE-2 + FE-3 단독 감사 분리)
+> 마지막 업데이트: 2026-03-15 (FE-4 + FE-5 증거 제출)
 > GPT 감사 문서: `docs/feedback/gpt.md`
 
 ## 합의완료
@@ -47,71 +47,66 @@
 - `[합의완료]` RPF-6 — Feedback / Eval / Dashboard Integration
 - `[합의완료]` FE-0 + FE-1 — Page Access Policy Inventory + Visibility Contract
 - `[합의완료]` FE-2 + FE-3 — Chat/Session Surface + Workflow/Eval/Schema Surface
+- `[합의완료]` FE-4 + FE-5 — Admin/Security/Monitoring + Repository/Retrieval/Artifact Surface
 
-## [합의완료] FE-2 + FE-3 — Chat/Session Surface + Workflow/Eval/Schema Surface
+## [합의완료] FE-4 + FE-5 — Admin/Security/Monitoring + Repository/Retrieval/Artifact Surface
 
 > 마지막 업데이트: 2026-03-15
 
 ---
 
-### FE-2 + FE-3 — Chat/Session Surface + Workflow/Eval/Schema Surface
+### FE-4 + FE-5 — Admin/Security/Monitoring + Repository/Retrieval/Artifact Surface
 
 #### Claim
 
-**FE-2: Chat/Session Surface Integration**
+**FE-4: Admin/Security/Monitoring Surface**
 
-- `web/src/pages/workspace/sessions.tsx` — `user_id?` 필드 + `scoped_sessions` memo: auth 활성 + 비superadmin → `auth_user.sub`으로 클라이언트측 필터. superadmin은 "전체/내것" 토글 + 외부 세션에 `⚠` 표시
-- `web/src/layouts/root.tsx` — SSE freshness 감지: `last_event_at` ref + 5초 interval 체크 (30초 임계값). 모든 SSE 이벤트 핸들러에 `mark_event()` 호출. `sse_stale` 상태로 topbar에 `topbar__conn--stale` 클래스 표시
-- `web/src/pages/chat/chat-status-bar.tsx` — `requested_channel?` + `delivered_channel?` + `session_reuse?` 프롭 추가. 채널 미스매치 `⚡` 배지 + 세션 재사용 `↩` 칩. `BusyBar` 서브 컴포넌트로 분리
-- `web/src/hooks/use-ndjson-stream.ts` — `routing` NDJSON 이벤트 타입 + `RoutingInfo` 상태: 스트림 시작 시 초기화, `routing` 이벤트 수신 시 상태 업데이트
-- `web/src/pages/chat.tsx` — `init_def` lazy useState init + useEffect async-only 정리 (`react-hooks/set-state-in-effect` 해소)
+- `web/src/pages/overview/types.ts` — `ProcessInfo`에 `request_class?` (GW 분류 결과) + `guardrail_blocked?` (EG 차단 여부) 추가. `DashboardState`에 `request_class_summary?` (분류별 집계) + `guardrail_stats?` (차단/전체) 추가. `WorkflowEvent`에 `retrieval_source?` + `novelty_score?` 추가. `RequestClass` 타입 정의
+- `web/src/pages/admin/monitoring-panel.tsx` — `RequestClassPanel` 컴포넌트: request class 분류별 배지 + 비율(%) 내림차순 렌더, guardrail 통계 (blocked/total) 섹션. 빈 데이터면 패널 미렌더 (graceful degradation)
+- `web/src/pages/admin/index.tsx` — `UsersPanel`에 `session_count?` 배지 추가. 0이거나 없으면 미렌더
+- `web/src/hooks/use-auth.ts` — `AdminUserRecord`에 `session_count?` 필드 추가
 
-**FE-3: Workflow/Eval/Schema Surface Integration**
+**FE-5: Repository/Retrieval/Artifact Surface**
 
-- `web/src/pages/workflows/detail.tsx` — `PhaseAgentState`에 `retry_count?/eval_score?/schema_valid?` 추가, AgentCard에 점수/재시도/스키마 배지
-- `web/src/pages/prompting/run-result.tsx` — `RunResultValue`에 `eval_score?` 추가, 점수 칩
-- `web/src/pages/workflows/node-inspector.tsx` — `NodeExecutionState`에 `schema_valid?/schema_repaired?` 추가
-- `web/src/pages/workflows/inspector-output.tsx` — 스키마 배지 행 (✓/✗/↩)
+- `web/src/pages/workspace/memory.tsx` — `WorkflowEvent`에 `retrieval_source?` + `novelty_score?` 필드 추가. events 테이블에 Retrieval 컬럼: source 배지 + novelty 퍼센트 (색상: ≥0.7 ok / ≥0.4 warn / <0.4 err)
+- `web/src/pages/workspace/tools.tsx` — `ToolSchema`에 `usage_count?` + `last_used_at?` 추가. ToolCard에 호출 횟수 + 마지막 사용 시간 렌더. `time_ago` import 추가
 
 #### 변경 파일
 
 **수정:**
-- `web/src/hooks/use-ndjson-stream.ts`
-- `web/src/pages/chat.tsx`
-- `web/src/pages/workspace/sessions.tsx`
-- `web/src/layouts/root.tsx`
-- `web/src/pages/chat/chat-status-bar.tsx`
-- `web/src/pages/workflows/detail.tsx`
-- `web/src/pages/prompting/run-result.tsx`
-- `web/src/pages/workflows/node-inspector.tsx`
-- `web/src/pages/workflows/inspector-output.tsx`
+- `web/src/pages/overview/types.ts`
+- `web/src/pages/admin/monitoring-panel.tsx`
+- `web/src/pages/admin/index.tsx`
+- `web/src/hooks/use-auth.ts`
+- `web/src/pages/workspace/memory.tsx`
+- `web/src/pages/workspace/tools.tsx`
 
-**신규 테스트:**
-- `web/tests/pages/chat-status-bar.test.tsx` (8 tests)
-- `web/tests/layouts/root-sse-stale.test.tsx` (3 tests)
-- `web/tests/workspace/sessions-user-scope.test.tsx` (7 tests)
-- `web/tests/pages/workflows/detail-badges.test.tsx` (10 tests)
-- `web/tests/prompting/run-result-eval.test.tsx` (6 tests)
-- `web/tests/pages/workflows/inspector-schema-badge.test.tsx` (6 tests)
+**신규/확장 테스트:**
+- `web/tests/pages/admin/monitoring-panel.test.tsx` (기존 10 + 신규 8 = 18 tests)
+- `web/tests/pages/admin/admin-user-sessions.test.tsx` (3 tests)
+- `web/tests/workspace/memory-retrieval.test.tsx` (6 tests)
+- `web/tests/workspace/tools-usage.test.tsx` (7 tests)
 
 #### Test Command
 
 ```bash
-cd web && npx vitest run tests/pages/chat-status-bar.test.tsx tests/layouts/root-sse-stale.test.tsx tests/workspace/sessions-user-scope.test.tsx tests/pages/workflows/detail-badges.test.tsx tests/prompting/run-result-eval.test.tsx tests/pages/workflows/inspector-schema-badge.test.tsx
-npx eslint src/pages/chat.tsx src/hooks/use-ndjson-stream.ts src/pages/workspace/sessions.tsx src/layouts/root.tsx src/pages/chat/chat-status-bar.tsx src/pages/workflows/detail.tsx src/pages/prompting/run-result.tsx src/pages/workflows/node-inspector.tsx src/pages/workflows/inspector-output.tsx tests/pages/chat-status-bar.test.tsx tests/layouts/root-sse-stale.test.tsx --max-warnings=0
+cd web && npx vitest run tests/pages/admin/monitoring-panel.test.tsx tests/pages/admin/admin-user-sessions.test.tsx tests/workspace/memory-retrieval.test.tsx tests/workspace/tools-usage.test.tsx
+npx eslint src/pages/overview/types.ts src/pages/admin/monitoring-panel.tsx src/pages/admin/index.tsx src/hooks/use-auth.ts src/pages/workspace/memory.tsx src/pages/workspace/tools.tsx tests/pages/admin/monitoring-panel.test.tsx tests/pages/admin/admin-user-sessions.test.tsx tests/workspace/memory-retrieval.test.tsx tests/workspace/tools-usage.test.tsx --max-warnings=0
 npx tsc --noEmit
 ```
 
 #### Test Result
 
-- `npx vitest run ...`: **6 files / 40 tests passed**
-- `npx eslint ...`: **0 errors, 0 warnings** (chat.tsx 포함)
+- `npx vitest run ...`: **4 files / 34 tests passed** (기존 FE-2+FE-3 포함 시 10 files / 74 tests)
+- `npx eslint ...`: **0 errors, 0 warnings**
 - `npx tsc --noEmit`: **통과**
 
 #### Residual Risk
 
-- `sessions.tsx` 클라이언트 필터는 방어 레이어 — 실제 보안 경계는 백엔드 `/api/sessions` 쿼리 필터 (이미 team_id 스코프 적용됨)
-- `user_id`가 백엔드 응답에 없으면 필터 미작동 (백엔드 스코프에 위임) — 주석으로 명시
-- SSE stale 감지는 30초 임계값 하드코딩 — 네트워크 환경에 따라 오탐 가능하나 표시만 하고 재연결은 별도 로직
-- `routing` 이벤트는 백엔드가 스트림에 전송해야 동작 — 백엔드 미구현 시 배지/칩은 렌더되지 않음 (graceful degradation)
+- 모든 신규 필드는 optional (`?`) — 백엔드가 필드를 전송하지 않으면 UI에 해당 요소가 렌더되지 않음 (graceful degradation)
+- `request_class_summary`는 백엔드에서 집계하여 전송해야 동작 — 미구현 시 Request Classification 패널 미표시
+- `guardrail_stats`도 백엔드 집계 의존 — 미전송 시 guardrail 섹션 미표시
+- `retrieval_source`/`novelty_score`는 TR 트랙 백엔드가 workflow event에 포함해야 표시됨
+- `usage_count`/`last_used_at`는 tool registry가 사용량 추적 시 전송 — 미구현 시 호출 횟수 미표시
+- `admin/index.tsx`의 하드코딩 한글 문자열은 FE-4 범위 밖 (기존 상태 유지)
 
