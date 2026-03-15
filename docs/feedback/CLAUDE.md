@@ -1,6 +1,6 @@
 # Claude 증거 제출
 
-> 마지막 업데이트: 2026-03-15 12:18
+> 마지막 업데이트: 2026-03-15 13:06
 > GPT 감사 문서: `docs/feedback/gpt.md`
 
 ## 합의완료
@@ -45,60 +45,49 @@
 - `[합의완료]` RPF-4 + RPF-5 — ValidatorPack + ArtifactBundle
 - `[합의완료]` RPF-4F — Frontend Validation Surface
 - `[합의완료]` RPF-6 — Feedback / Eval / Dashboard Integration
+- `[합의완료]` FE-0 + FE-1 — Page Access Policy Inventory + Visibility Contract
 
-## [합의완료] RPF-6 — Feedback / Eval / Dashboard Integration
+## [합의완료] FE-0 + FE-1 — Page Access Policy Inventory + Visibility Contract
+
+### Round 2 수정 (GPT 계류 응답)
+
+- **test-gap [major] 해결**: `usePageAccess()` 훅 직접 테스트 10개 추가 — auth 로딩 경계(`data=undefined` → `auth_enabled=false`), auth 비활성/활성, team 역할(viewer/manager/owner), superadmin, public tier 전체 검증
+- **claim-drift [minor] 해결**: 테스트의 인라인 `ROUTER_PATHS` 복사본 제거 → `web/src/router-paths.ts` 단일 소스로 추출. `router.tsx`도 `PATHS` 상수에서 import하도록 변경 → 진짜 링크 강제
 
 ### Claim
 
-- `ArtifactBundle.risk_tier?: RiskTier` 추가 (`src/repo-profile/artifact-bundle.ts`) — 생성/역직렬화 시 전달. 잘못된 값은 `undefined`로 처리.
-- `ValidatorSummary.risk_tier?`, `ValidatorSummary.eval_score?` 추가 (`src/repo-profile/validator-summary-adapter.ts`) — `adapt_bundle_to_summary()`에서 bundle 값 전달.
-- `next_task_hint(summary)` 신규 — 실패/위험/eval 순 우선순위 힌트 문자열 반환. `src/repo-profile/index.ts` export.
-- `repo-profile` eval 번들 등록 (`src/evals/bundles.ts`) + eval cases (`tests/evals/cases/repo-profile.json`, 8 케이스).
-- 프론트엔드 `ValidatorSummary` 타입에 `risk_tier?`, `eval_score?` 추가 (`web/src/pages/overview/types.ts`).
-- `ValidatorSummaryPanel` risk tier 배지 + eval score 배지 조건부 렌더 (`web/src/pages/admin/monitoring-panel.tsx`).
-- i18n 7개 키 추가: `overview.risk_tier`, `overview.risk_tier_{low,medium,high,critical}`, `overview.eval_score` (en + ko).
-- **Round 2 추가**: `tests/evals/bundles.test.ts`에 `repo-profile` auto-registration 회귀 잠금 3개 테스트 추가 (등록 확인, 8-case 로드, smoke 포함).
-- **Round 2 추가**: `tests/repo-profile/validator-summary-adapter.test.ts`에 `next_task_hint()` 우선순위 중첩 케이스 2개 추가 (실패+critical+저eval → 실패 우선, critical+저eval → critical 우선).
+- `VisibilityTier` 6단계 타입 + `PagePolicy` 인터페이스 + `TEAM_ROLE_RANK` 서열 맵 — `web/src/pages/access-policy.ts`
+- `PAGE_POLICIES` 18개 항목 — `web/src/router-paths.ts`의 `ROUTER_PATHS`와 1:1 대응 (테스트로 양방향 잠금)
+- `tier_satisfied()` 순수 함수 + `usePageAccess()` 훅 — `web/src/hooks/use-page-access.ts`
+- `web/src/router-paths.ts` — `PATHS` 상수 + `ROUTER_PATHS` 배열: router.tsx와 테스트 공유 단일 소스
+- `web/src/router.tsx` — `PATHS` 상수에서 경로 import, `r()` 헬퍼로 leading `/` 제거
 
 ### 변경 파일
 
-- `src/repo-profile/artifact-bundle.ts` (수정) — `risk_tier?: RiskTier` 추가
-- `src/repo-profile/validator-summary-adapter.ts` (수정) — `risk_tier?`, `eval_score?`, `next_task_hint()` 추가
-- `src/repo-profile/index.ts` (수정) — `next_task_hint` export
-- `src/evals/bundles.ts` (수정) — `repo-profile` 번들 등록
-- `tests/evals/cases/repo-profile.json` (신규) — 8개 eval cases
-- `web/src/pages/overview/types.ts` (수정) — `risk_tier?`, `eval_score?` 추가
-- `web/src/pages/admin/monitoring-panel.tsx` (수정) — risk tier + eval score 배지
-- `src/i18n/locales/en.json` (수정) — 7개 키
-- `src/i18n/locales/ko.json` (수정) — 7개 키
-- `tests/repo-profile/artifact-bundle.test.ts` (수정) — risk_tier 4개 테스트 추가
-- `tests/repo-profile/validator-summary-adapter.test.ts` (수정) — risk_tier+eval_score+next_task_hint 10개 테스트 추가 (Round 2: 우선순위 중첩 2개 추가)
-- `web/tests/pages/admin/monitoring-panel.test.tsx` (수정) — risk_tier+eval_score 배지 4개 테스트 추가
-- `tests/evals/bundles.test.ts` (수정) — repo-profile auto-registration 회귀 잠금 3개 추가
+- `web/src/router-paths.ts` (신규) — PATHS 상수 + ROUTER_PATHS 배열 (단일 소스)
+- `web/src/router.tsx` (수정) — PATHS에서 import
+- `web/src/pages/access-policy.ts` (신규) — FE-0: 인벤토리 + 타입
+- `web/src/hooks/use-page-access.ts` (신규) — FE-1: `tier_satisfied()` + `usePageAccess()`
+- `web/tests/pages/access-policy.test.ts` (수정) — ROUTER_PATHS를 router-paths.ts에서 import
+- `web/tests/hooks/use-page-access.test.ts` (수정) — usePageAccess() 훅 직접 테스트 10개 추가
 
 ### Test Command
 
 ```bash
-# 백엔드 (루트)
-npx vitest run tests/repo-profile/validator-summary-adapter.test.ts tests/repo-profile/artifact-bundle.test.ts tests/evals/bundles.test.ts
-npx eslint tests/evals/bundles.test.ts tests/repo-profile/validator-summary-adapter.test.ts
+cd web && npx vitest run tests/pages/access-policy.test.ts tests/hooks/use-page-access.test.ts
+npx eslint src/router-paths.ts src/router.tsx src/pages/access-policy.ts src/hooks/use-page-access.ts tests/pages/access-policy.test.ts tests/hooks/use-page-access.test.ts
 npx tsc --noEmit
-# 프론트엔드 (web/)
-cd web && npx vitest run
-npm run build
 ```
 
 ### Test Result
 
-- `npx vitest run tests/repo-profile/validator-summary-adapter.test.ts tests/repo-profile/artifact-bundle.test.ts tests/evals/bundles.test.ts`: **3 files / 59 tests passed** (adapter:22, bundle:23, bundles:14)
-- `cd web && npx vitest run`: **3 files / 20 tests passed** (monitoring-panel:9, overview:5, detail:6)
-- `npx eslint tests/evals/bundles.test.ts tests/repo-profile/validator-summary-adapter.test.ts`: **0 errors, 0 warnings**
+- `npx vitest run ...`: **2 files / 48 tests passed** (access-policy:11, use-page-access:37)
+- `npx eslint ...`: **0 errors, 0 warnings**
 - `npx tsc --noEmit`: **통과**
-- `web/npm run build`: **통과** (chunk size warning만, pre-existing)
 
 ### Residual Risk
 
-- `risk_tier`는 번들 생성 시점에 외부에서 주입 — `DashboardOptions.validator_summary_ops`가 이미 완성된 `ValidatorSummary`를 공급하므로 `risk_tier` 계산은 호출자 책임. 설계 의도.
-- `repo-profile` eval 케이스는 LLM 분류 기반 — 실제 LLM 실행 없이는 score가 0이 될 수 있음. 회귀 잠금용 정의 목적.
-- `next_task_hint()`는 영어 힌트 반환 — i18n 적용 대상 아님 (내부 로직 레이어, 설계 의도).
+- `router-paths.ts` → `router.tsx` 링크는 컴파일 타임에 강제됨. `PAGE_POLICIES`와 `router-paths.ts` 동기화는 테스트로 양방향 잠김. 신규 라우트 추가 시 두 파일 모두 업데이트 필요.
+- `usePageAccess()`는 UI-level 제어용 — 실제 보안 경계는 백엔드 API 403. FE-2에서 `RequireRole` 래퍼 구현 예정.
+- auth 비활성 시 모든 tier 통과는 싱글유저 모드 지원 의도.
 

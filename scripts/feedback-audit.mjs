@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync, rmSync, statSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, mkdirSync, rmSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
@@ -132,7 +132,7 @@ function parseArgs(argv) {
   return args;
 }
 
-function readSavedSession(claudeMdMtime) {
+function readSavedSession() {
   if (!existsSync(sessionPath)) {
     return null;
   }
@@ -140,20 +140,18 @@ function readSavedSession(claudeMdMtime) {
   try {
     const stored = JSON.parse(readFileSync(sessionPath, "utf8"));
     if (!stored.id) return null;
-    if (stored.mtime !== claudeMdMtime) {
-      console.log("claude.md changed since last audit — starting fresh session.");
-      return null;
-    }
+    // mtime 체크 제거: CLAUDE.md 변경(새 증거 제출)이 세션을 파괴해서는 안 됨.
+    // 세션은 모든 항목이 [합의완료]가 될 때만 리셋 (deleteSavedSessionId 참조).
     return stored.id;
   } catch {
-    // 구형 plain-text 포맷 또는 파싱 실패 → 무효화
+    // 파싱 실패 → 무효화
     return null;
   }
 }
 
-function writeSavedSession(sessionId, claudeMdMtime) {
+function writeSavedSession(sessionId) {
   mkdirSync(resolve(repoRoot, ".claude"), { recursive: true });
-  writeFileSync(sessionPath, JSON.stringify({ id: sessionId, mtime: claudeMdMtime }) + "\n", "utf8");
+  writeFileSync(sessionPath, JSON.stringify({ id: sessionId }) + "\n", "utf8");
 }
 
 function deleteSavedSessionId() {
@@ -297,7 +295,7 @@ function resolveCodexBin() {
   return resolveBinary("codex", "CODEX_BIN");
 }
 
-function determineResumeTarget(args, claudeMdMtime) {
+function determineResumeTarget(args) {
   if (args.resume === false) {
     return null;
   }
@@ -306,7 +304,7 @@ function determineResumeTarget(args, claudeMdMtime) {
     return { type: "session", value: args.sessionId };
   }
 
-  const saved = readSavedSession(claudeMdMtime);
+  const saved = readSavedSession();
   if (saved) {
     return { type: "session", value: saved };
   }
@@ -446,7 +444,6 @@ function main() {
   }
 
   const claudeMd = readFileSync(claudePath, "utf8");
-  const { mtimeMs: claudeMdMtime } = statSync(claudePath);
 
   // B: eslint 범위 일관성 사전 체크
   const eslintWarnings = checkEslintCoverage(claudeMd);
@@ -480,7 +477,7 @@ function main() {
     return;
   }
 
-  const resumeTarget = determineResumeTarget(args, claudeMdMtime);
+  const resumeTarget = determineResumeTarget(args);
   if (resumeTarget?.type === "session") {
     console.log(`Resuming audit session: ${resumeTarget.value}`);
   } else if (resumeTarget?.type === "last") {
@@ -520,11 +517,11 @@ function main() {
       deleteSavedSessionId();
       console.log("No remaining [계류] items — session reset for next audit.");
     } else if (threadId) {
-      writeSavedSession(threadId, claudeMdMtime);
+      writeSavedSession(threadId);
       console.log(`Saved audit session: ${threadId}`);
     }
   } else if (threadId) {
-    writeSavedSession(threadId, claudeMdMtime);
+    writeSavedSession(threadId);
     console.log(`Saved audit session: ${threadId}`);
   }
 
