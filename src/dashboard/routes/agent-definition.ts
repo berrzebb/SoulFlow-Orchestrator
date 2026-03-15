@@ -78,7 +78,7 @@ export async function handle_agent_definition(ctx: RouteContext): Promise<boolea
     return true;
   }
 
-  // GET /api/agent-definitions/:id
+  // GET /api/agent-definitions/:id — FE-6a: scope 가시성 검사 추가
   const id_match = path.match(/^\/api\/agent-definitions\/([^/]+)$/);
   if (id_match && req.method === "GET") {
     const ops = ops_or_503(ctx);
@@ -86,6 +86,14 @@ export async function handle_agent_definition(ctx: RouteContext): Promise<boolea
     const id = decodeURIComponent(id_match[1]);
     const data = ops.get(id);
     if (!data) { json(res, 404, { error: "not_found" }); return true; }
+    const scope = build_scope_filter(ctx);
+    if (scope && (data as { scope_type?: string; scope_id?: string }).scope_type) {
+      const dt = data as { scope_type: string; scope_id: string };
+      if (!scope.some((s) => s.scope_type === dt.scope_type && s.scope_id === dt.scope_id)) {
+        json(res, 404, { error: "not_found" });
+        return true;
+      }
+    }
     json(res, 200, data);
     return true;
   }

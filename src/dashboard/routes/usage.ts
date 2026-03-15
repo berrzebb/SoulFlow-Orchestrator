@@ -1,4 +1,5 @@
 import type { RouteContext } from "../route-context.js";
+import { require_team_manager } from "../route-context.js";
 import { get_all_pricing } from "../../gateway/cost-table.js";
 
 export async function handle_usage(ctx: RouteContext): Promise<boolean> {
@@ -6,6 +7,9 @@ export async function handle_usage(ctx: RouteContext): Promise<boolean> {
   const usage = options.usage_ops;
 
   if (!url.pathname.startsWith("/api/usage")) return false;
+
+  // FE-6a: LLM 사용량/비용 데이터는 team_manager 이상만 접근
+  if (!require_team_manager(ctx)) return true;
 
   if (!usage) {
     json(res, 503, { error: "usage_tracking_unavailable" });

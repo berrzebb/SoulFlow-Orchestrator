@@ -1,5 +1,5 @@
 import type { RouteContext } from "../route-context.js";
-import { build_scope_filter, can_write_scope, require_superadmin_for_write } from "../route-context.js";
+import { build_scope_filter, can_write_scope, require_superadmin_for_write, require_team_manager } from "../route-context.js";
 import { error_message } from "../../utils/common.js";
 
 function agent_provider_ops_or_503(ctx: RouteContext) {
@@ -107,14 +107,20 @@ export async function handle_agent_provider(ctx: RouteContext): Promise<boolean>
     return true;
   }
 
-  // GET /api/agents/providers/:id
+  // GET /api/agents/providers/:id — FE-6a: scope 가시성 검사 추가
   const id_match = path.match(/^\/api\/agents\/providers\/([^/]+)$/);
   if (id_match && req.method === "GET") {
     const ops = agent_provider_ops_or_503(ctx);
     if (!ops) return true;
     const id = decodeURIComponent(id_match[1]);
     const info = await ops.get(id);
-    json(res, info ? 200 : 404, info ?? { error: "not_found" });
+    if (!info) { json(res, 404, { error: "not_found" }); return true; }
+    const scope = build_scope_filter(ctx);
+    if (scope && !scope.some((s) => s.scope_type === info.scope_type && s.scope_id === info.scope_id)) {
+      json(res, 404, { error: "not_found" });
+      return true;
+    }
+    json(res, 200, info);
     return true;
   }
 
@@ -154,8 +160,9 @@ export async function handle_agent_provider(ctx: RouteContext): Promise<boolean>
 
   // ── Connection 엔드포인트 (인프라 레벨 = superadmin only for writes) ──
 
-  // GET /api/agents/connections
+  // GET /api/agents/connections — FE-6a: 인프라 데이터, team_manager 이상만 접근
   if (path === "/api/agents/connections" && req.method === "GET") {
+    if (!require_team_manager(ctx)) return true;
     const ops = agent_provider_ops_or_503(ctx);
     if (!ops) return true;
     json(res, 200, await ops.list_connections());

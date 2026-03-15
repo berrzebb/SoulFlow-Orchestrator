@@ -185,18 +185,27 @@ export async function handle_kanban(ctx: RouteContext): Promise<boolean> {
     return true;
   }
 
-  // GET /api/kanban/cards/:id
+  // FE-6a: card 접근 전 parent board 소유권 검사 헬퍼
+  async function check_card_board_access(store: KanbanStoreLike, card_id: string): Promise<{ ok: true } | { ok: false; status: number }> {
+    const card = await store.get_card(card_id);
+    if (!card) return { ok: false, status: 404 };
+    return check_board_access(ctx, store, card.board_id);
+  }
+
+  // GET /api/kanban/cards/:id — FE-6a: board 소유권 검사 추가
   const card_match = path.match(/^\/api\/kanban\/cards\/([^/]+)$/);
   if (card_match && method === "GET") {
     const store = store_or_503(ctx);
     if (!store) return true;
     const card_id = decodeURIComponent(card_match[1]);
+    const access = await check_card_board_access(store, card_id);
+    if (!access.ok) { json(res, access.status, { error: access.status === 404 ? "not_found" : "forbidden" }); return true; }
     const card = await store.get_card(card_id);
     json(res, card ? 200 : 404, card ?? { error: "not_found" });
     return true;
   }
 
-  // PUT /api/kanban/cards/:id
+  // PUT /api/kanban/cards/:id — FE-6a: board 소유권 검사 추가
   if (card_match && method === "PUT") {
     const store = store_or_503(ctx);
     if (!store) return true;

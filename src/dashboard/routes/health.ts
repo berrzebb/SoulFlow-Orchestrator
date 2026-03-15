@@ -1,6 +1,7 @@
 import type { IncomingMessage } from "node:http";
 import { now_iso } from "../../utils/common.js";
 import type { RouteContext } from "../route-context.js";
+import { get_filter_team_id, require_team_manager } from "../route-context.js";
 
 const CLAUDE_CODE_NATIVE_TOOLS = [
   "Bash", "Read", "Write", "Edit", "Glob", "Grep",
@@ -27,8 +28,9 @@ export async function handle_health(ctx: RouteContext): Promise<boolean> {
     return true;
   }
 
-  // DLQ API
+  // DLQ API — FE-6a: 운영 데이터, team_manager 이상만 접근
   if (url.pathname === "/api/dlq" && req.method === "GET") {
+    if (!require_team_manager(ctx)) return true;
     const dlq = options.dlq;
     if (!dlq) { json(res, 503, { error: "dlq_unavailable" }); return true; }
     const limit = Math.max(1, Math.min(500, Number(url.searchParams.get("limit") || 50)));
@@ -36,8 +38,9 @@ export async function handle_health(ctx: RouteContext): Promise<boolean> {
     return true;
   }
 
-  // DLQ Replay: POST /api/dlq/replay — 지정 ID(또는 전체)를 dispatch를 통해 재발송
+  // DLQ Replay — FE-6a: team_manager 이상만 접근
   if (url.pathname === "/api/dlq/replay" && req.method === "POST") {
+    if (!require_team_manager(ctx)) return true;
     const dlq = options.dlq;
     const dispatch = options.dispatch;
     if (!dlq) { json(res, 503, { error: "dlq_unavailable" }); return true; }
@@ -86,7 +89,7 @@ export async function handle_health(ctx: RouteContext): Promise<boolean> {
     return true;
   }
 
-  // Workflow Events API
+  // Workflow Events API — FE-6a: team_id 스코핑 추가
   if (url.pathname === "/api/workflow/events" && req.method === "GET") {
     const limit = Math.max(1, Math.min(500, Number(url.searchParams.get("limit") || 100)));
     const offset = Math.max(0, Number(url.searchParams.get("offset") || 0));
@@ -99,6 +102,8 @@ export async function handle_health(ctx: RouteContext): Promise<boolean> {
     if (run_id_param) filter.run_id = run_id_param;
     const chat_id = url.searchParams.get("chat_id");
     if (chat_id) filter.chat_id = chat_id;
+    const team_id = get_filter_team_id(ctx);
+    if (team_id !== undefined) filter.team_id = team_id;
     json(res, 200, await options.events.list(filter));
     return true;
   }

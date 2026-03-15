@@ -2,7 +2,7 @@
 
 import type { RouteHandler } from "../route-context.js";
 import type { DashboardWorkflowOps } from "../service.js";
-import { set_no_cache } from "../route-context.js";
+import { set_no_cache, get_filter_team_id } from "../route-context.js";
 import { renderMermaid, renderMermaidAscii } from "@vercel/beautiful-mermaid";
 import { error_message } from "../../utils/common.js";
 import {
@@ -20,9 +20,13 @@ export const handle_workflow: RouteHandler = async (ctx) => {
 
   // ── Runs (실행 인스턴스) ──
 
-  // GET /api/workflow/runs — 목록
+  // GET /api/workflow/runs — 목록 (FE-6a: team_id 스코핑)
   if (path === "/api/workflow/runs" && method === "GET") {
-    const list = await ops.list();
+    const team_id = get_filter_team_id(ctx);
+    const all = await ops.list();
+    const list = team_id !== undefined
+      ? all.filter((r) => (r as { team_id?: string }).team_id === team_id)
+      : all;
     json(res, 200, list);
     return true;
   }
@@ -37,34 +41,48 @@ export const handle_workflow: RouteHandler = async (ctx) => {
     return true;
   }
 
-  // GET /api/workflow/runs/:id
+  // FE-6a: workflow run team ownership 검사 헬퍼
+  const wf_team_id = get_filter_team_id(ctx);
+  const check_wf_ownership = (wf: Record<string, unknown> | null) => {
+    if (!wf) return false;
+    if (wf_team_id === undefined) return true;
+    return (wf as { team_id?: string }).team_id === wf_team_id;
+  };
+
+  // GET /api/workflow/runs/:id (FE-6a: team ownership)
   const detail_match = path.match(/^\/api\/workflow\/runs\/([^/]+)$/);
   if (detail_match && method === "GET") {
     const workflow = await ops.get(detail_match[1]);
-    if (!workflow) { json(res, 404, { error: "not_found" }); return true; }
+    if (!workflow || !check_wf_ownership(workflow as unknown as Record<string, unknown>)) { json(res, 404, { error: "not_found" }); return true; }
     json(res, 200, workflow);
     return true;
   }
 
-  // DELETE /api/workflow/runs/:id
+  // DELETE /api/workflow/runs/:id (FE-6a: team ownership)
   if (detail_match && method === "DELETE") {
+    const workflow = await ops.get(detail_match[1]);
+    if (!workflow || !check_wf_ownership(workflow as unknown as Record<string, unknown>)) { json(res, 404, { error: "not_found" }); return true; }
     const ok = await ops.cancel(detail_match[1]);
     json(res, ok ? 200 : 404, { ok });
     return true;
   }
 
-  // POST /api/workflow/runs/:id/resume
+  // POST /api/workflow/runs/:id/resume (FE-6a: team ownership)
   const resume_match = path.match(/^\/api\/workflow\/runs\/([^/]+)\/resume$/);
   if (resume_match && method === "POST") {
+    const workflow = await ops.get(resume_match[1]);
+    if (!workflow || !check_wf_ownership(workflow as unknown as Record<string, unknown>)) { json(res, 404, { error: "not_found" }); return true; }
     const result = await ops.resume(resume_match[1]);
     json(res, result.ok ? 200 : 400, result);
     return true;
   }
 
-  // PATCH /api/workflow/runs/:id/settings — auto_approve, auto_resume 설정
+  // PATCH /api/workflow/runs/:id/settings (FE-6a: team ownership)
   const settings_match = path.match(/^\/api\/workflow\/runs\/([^/]+)\/settings$/);
   if (settings_match && method === "PATCH") {
     if (!ops.update_settings) { json(res, 501, { error: "not_supported" }); return true; }
+    const workflow = await ops.get(settings_match[1]);
+    if (!workflow || !check_wf_ownership(workflow as unknown as Record<string, unknown>)) { json(res, 404, { error: "not_found" }); return true; }
     const body = await read_body(req);
     if (!body) { json(res, 400, { error: "invalid_body" }); return true; }
     const result = await ops.update_settings(settings_match[1], {
@@ -75,9 +93,11 @@ export const handle_workflow: RouteHandler = async (ctx) => {
     return true;
   }
 
-  // GET /api/workflow/runs/:id/messages?phase_id=&agent_id=
+  // GET /api/workflow/runs/:id/messages (FE-6a: team ownership)
   const msg_match = path.match(/^\/api\/workflow\/runs\/([^/]+)\/messages$/);
   if (msg_match && method === "GET") {
+    const workflow = await ops.get(msg_match[1]);
+    if (!workflow || !check_wf_ownership(workflow as unknown as Record<string, unknown>)) { json(res, 404, { error: "not_found" }); return true; }
     const phase_id = url.searchParams.get("phase_id") || "";
     const agent_id = url.searchParams.get("agent_id") || "";
     if (!phase_id || !agent_id) { json(res, 400, { error: "phase_id_and_agent_id_required" }); return true; }
