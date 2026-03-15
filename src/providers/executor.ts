@@ -10,7 +10,8 @@ export type ProviderCapabilities = {
 
 export function parse_executor_preference(raw: string): ExecutorProvider {
   const normalized = String(raw || "").trim().toLowerCase();
-  if (normalized === "claude_code") return "claude_code";
+  if (normalized === "claude_code" || normalized === "claude_cli" || normalized === "claude_sdk") return "claude_code";
+  if (normalized === "codex_cli" || normalized === "codex_appserver") return "chatgpt";
   if (normalized === "openrouter") return "openrouter";
   if (normalized === "orchestrator_llm") return "orchestrator_llm";
   if (normalized === "gemini" || normalized === "gemini_cli") return "gemini";
