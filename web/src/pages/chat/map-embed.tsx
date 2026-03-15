@@ -99,6 +99,24 @@ export function MapBlock({ raw }: { raw: string }) {
   }, [raw]);
 
   if (!data) return null;
+
+  // Nominatim 실패 시 Google Maps iframe fallback — API 키 불필요, Google 자체 POI 검색 활용
+  if (error && data.location) {
+    const q = encodeURIComponent(data.location);
+    return (
+      <div className="map-embed">
+        <iframe
+          className="map-embed__canvas"
+          src={`https://maps.google.com/maps?q=${q}&output=embed&z=15`}
+          title={data.label ?? data.location}
+          loading="lazy"
+          referrerPolicy="no-referrer"
+          style={{ border: 0 }}
+        />
+      </div>
+    );
+  }
+
   if (error) return <p className="map-embed__error">{error}</p>;
 
   return (

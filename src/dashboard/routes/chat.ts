@@ -152,12 +152,19 @@ export async function handle_chat(ctx: RouteContext): Promise<boolean> {
       if (event.type === "done") res.end();
     });
 
+    // 도구 실행이 긴 작업(웹 탐색·검색 등)은 수 분이 걸릴 수 있음 — 절대 타임아웃은 10분으로 확장
     const timeout = setTimeout(() => {
       unsubscribe();
+      clearInterval(keepalive);
       if (!res.writableEnded) { res.write(JSON.stringify({ type: "error", error: "timeout" }) + "\n"); res.end(); }
-    }, 120_000);
+    }, 600_000);
 
-    req.on("close", () => { clearTimeout(timeout); unsubscribe(); });
+    // 30초마다 keepalive 이벤트 — 무음 구간에서 HTTP 연결 유지 + 프록시 idle timeout 방지
+    const keepalive = setInterval(() => {
+      if (!res.writableEnded) res.write(JSON.stringify({ type: "heartbeat" }) + "\n");
+    }, 30_000);
+
+    req.on("close", () => { clearTimeout(timeout); clearInterval(keepalive); unsubscribe(); });
 
     append_user_message(session, parsed);
     session_store?.append_message(session_store_key(session_id), { role: "user", content: parsed.text, timestamp: now_iso() }).catch(() => {});

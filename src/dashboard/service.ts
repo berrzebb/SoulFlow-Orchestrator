@@ -480,9 +480,10 @@ export class DashboardService implements ServiceLike {
     try {
       const entries = await store.list_by_prefix("web:", MAX_CHAT_SESSIONS);
       for (const entry of entries) {
-        // key 형식: "web:{team_id}:{user_id}:{chat_id}:{alias}:main"
+        // key 형식: "web:{team_id}:{user_id}:{chat_id}:{alias}:main" — 정확히 6파트 + thread="main"
+        // session-recorder 키는 5파트 (user_id 없음) 또는 6파트이나 thread≠"main" → 복원 대상에서 제외
         const parts = entry.key.split(":");
-        if (parts.length < 5) continue;
+        if (parts.length !== 6 || parts[5] !== "main") continue;
         const team_id = parts[1] ?? "";
         const user_id = parts[2] ?? "";
         const chat_id = parts[3];

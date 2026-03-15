@@ -320,7 +320,8 @@ export function get_config_defaults(): AppConfig {
         url: process.env.BUS_REDIS_URL || "redis://redis:6379",
         keyPrefix: "sf:bus:",
         blockMs: 5_000,
-        claimIdleMs: 30_000,
+        // 도구 실행이 긴 작업(웹 탐색 등)은 수 분이 걸릴 수 있음 — 스트림 타임아웃(600s)보다 크게 설정해 중복 claim 방지
+        claimIdleMs: 660_000,
         streamMaxlen: {
           inbound: 10_000,
           outbound: 10_000,

@@ -1,4 +1,4 @@
-/** NDJSON 스트리밍 훅 — Fetch ReadableStream 기반, 탭 숨김 시 버퍼링. */
+/** NDJSON 스트리밍 훅 — rAF 배치 플러시로 메인 스레드 블록 방지. */
 
 import { useState, useRef, useCallback, useEffect } from "react";
 
@@ -12,6 +12,7 @@ type NdjsonLine =
   | { type: "rate_limit"; status: string }
   | { type: "compact"; pre_tokens: number }
   | { type: "routing"; requested_channel?: string; delivered_channel?: string; session_reuse?: boolean }
+  | { type: "heartbeat" }
   | { type: "done" }
   | { type: "error"; error: string };
 
@@ -57,12 +58,33 @@ export function useNdjsonStream() {
   const tool_map_ref = useRef<Map<string, ToolCallEntry>>(new Map());
   const buffer_ref = useRef<string[]>([]);
   const abort_ref = useRef<AbortController | null>(null);
+  /** rAF 중복 스케줄 방지 플래그. */
+  const flush_scheduled_ref = useRef(false);
+  /** tool_map이 변경되어 setToolCalls가 필요한지 여부. */
+  const tool_dirty_ref = useRef(false);
 
+  /** 버퍼된 delta + dirty tool_calls를 한 번에 React 상태에 반영.
+   *  두 번 호출되어도 안전 — 빈 버퍼/false dirty는 noop. */
   const flush = useCallback(() => {
     const buffered = buffer_ref.current.splice(0);
-    if (buffered.length === 0) return;
-    setStream((prev) => prev ? { ...prev, content: prev.content + buffered.join("") } : null);
+    if (buffered.length > 0) {
+      setStream((prev) => prev ? { ...prev, content: prev.content + buffered.join("") } : null);
+    }
+    if (tool_dirty_ref.current) {
+      tool_dirty_ref.current = false;
+      setToolCalls([...tool_map_ref.current.values()]);
+    }
   }, []);
+
+  /** rAF 한 프레임(~16ms)당 최대 1회 flush — 토큰마다 리렌더 방지. */
+  const schedule_flush = useCallback(() => {
+    if (flush_scheduled_ref.current) return;
+    flush_scheduled_ref.current = true;
+    requestAnimationFrame(() => {
+      flush_scheduled_ref.current = false;
+      flush();
+    });
+  }, [flush]);
 
   // 탭이 다시 보이면 버퍼에 쌓인 delta를 한번에 반영
   useEffect(() => {
@@ -78,6 +100,8 @@ export function useNdjsonStream() {
     abort_ref.current = controller;
     buffer_ref.current = [];
     tool_map_ref.current.clear();
+    flush_scheduled_ref.current = false;
+    tool_dirty_ref.current = false;
     setStream({ chat_id, content: "", done: false });
     setToolCalls([]);
     setThinkingBlocks([]);
@@ -110,26 +134,24 @@ export function useNdjsonStream() {
           try {
             const msg = JSON.parse(trimmed) as NdjsonLine;
             if (msg.type === "delta") {
-              if (document.visibilityState === "hidden") {
-                buffer_ref.current.push(msg.content);
-              } else {
-                const buffered = buffer_ref.current.splice(0);
-                const appended = [...buffered, msg.content].join("");
-                setStream((prev) => prev ? { ...prev, content: prev.content + appended } : null);
-              }
+              buffer_ref.current.push(msg.content);
+              // 탭 숨김 시 버퍼만 쌓고, 보일 때는 rAF로 배치 플러시
+              if (document.visibilityState !== "hidden") schedule_flush();
             } else if (msg.type === "thinking") {
               setThinkingBlocks((prev) => [...prev, { tokens: msg.tokens, preview: msg.preview }]);
             } else if (msg.type === "tool_start") {
               const entry: ToolCallEntry = { id: msg.id, name: msg.name, params: msg.params, done: false };
               tool_map_ref.current.set(msg.id, entry);
-              setToolCalls([...tool_map_ref.current.values()]);
+              tool_dirty_ref.current = true;
+              schedule_flush();
             } else if (msg.type === "tool_result") {
               const prev_entry = tool_map_ref.current.get(msg.id);
               const updated: ToolCallEntry = prev_entry
                 ? { ...prev_entry, done: true, result: msg.result, is_error: msg.is_error }
                 : { id: msg.id, name: msg.name, done: true, result: msg.result, is_error: msg.is_error };
               tool_map_ref.current.set(msg.id, updated);
-              setToolCalls([...tool_map_ref.current.values()]);
+              tool_dirty_ref.current = true;
+              schedule_flush();
             } else if (msg.type === "rate_limit") {
               setRateLimitStatus(msg.status);
             } else if (msg.type === "usage") {
@@ -139,6 +161,7 @@ export function useNdjsonStream() {
             } else if (msg.type === "routing") {
               setRouting({ requested_channel: msg.requested_channel, delivered_channel: msg.delivered_channel, session_reuse: msg.session_reuse });
             } else if (msg.type === "done") {
+              // done 시 동기 플러시 — rAF 대기 없이 최종 상태 즉시 반영
               flush();
               setStream((prev) => prev ? { ...prev, done: true } : null);
             } else if (msg.type === "error") {
@@ -155,7 +178,7 @@ export function useNdjsonStream() {
       setStream(null);
       throw e;
     }
-  }, [flush]);
+  }, [flush, schedule_flush]);
 
   const cancel = useCallback(() => {
     abort_ref.current?.abort();

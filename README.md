@@ -18,7 +18,9 @@ Slack · Telegram · Discord · 웹 채팅의 메시지를 8개 역할 에이전
 
 ## 목차
 
-- [이게 뭔가요?](#이게-뭔가요)
+- [설계 철학](#설계-철학)
+- [두 가지 사용 경로](#두-가지-사용-경로)
+- [구성 요소](#구성-요소)
 - [아키텍처](#아키텍처)
 - [빠른 시작](#빠른-시작)
 - [대시보드](#대시보드)
@@ -26,27 +28,77 @@ Slack · Telegram · Discord · 웹 채팅의 메시지를 8개 역할 에이전
 - [사용 예시](#사용-예시)
 - [슬래시 커맨드](#슬래시-커맨드)
 - [디렉터리 구조](#디렉터리-구조)
-- [로드맵](#로드맵)
 - [트러블슈팅](#트러블슈팅)
 
-## 이게 뭔가요?
+## 설계 철학
 
-채팅 채널에서 메시지를 받아 전문 에이전트에게 분배하는 **오케스트레이션 런타임**입니다.
+모든 세션 · 메모리 · 워크플로우 이력 · 칸반 데이터는 **로컬 SQLite**에 저장됩니다.
+
+민감 업무는 Ollama(로컬)가 처리하고, 외부 정보가 필요할 때만 외부 LLM을 사용합니다. AES-256-GCM Vault가 인바운드 시점에 민감정보를 자동 sealing하고, 도구 실행 경로에서만 복호화를 허용합니다.
+
+9개 에이전트 백엔드는 CircuitBreaker가 자동 관리합니다 — 코드 수정 없이 프로바이더 교체, 완전 로컬(Ollama only) 운영 모두 가능합니다.
+
+## 두 가지 사용 경로
+
+SoulFlow는 두 가지 독립적인 경로로 사용할 수 있습니다.
+
+### 경로 A — 오케스트레이터 (채널 기반)
+
+Slack · Telegram · Discord · 웹 채팅 메시지를 수신해 **8개 역할 에이전트 팀**이 자율 처리합니다. 자연어로 워크플로우를 설명하면 AI가 DAG를 생성하고, HITL(사람 개입) 게이트에서 승인 후 실행합니다.
+
+```
+채널 메시지 → 분류 → 에이전트 팀 실행 → 스트리밍 응답
+                ↓
+           워크플로우 엔진 (141종 노드 · DAG)
+                ↓
+           188개 도구 팔레트 (결정론적) + 에이전트 (LLM)
+```
+
+### 경로 B — MCP 서버 브리지 (IDE 연동)
+
+**`mcp-soulflow.ts`** 를 Claude Code · Cursor 등 MCP 호환 AI 도구에 연결하면, IDE 안에서 SoulFlow의 프로젝트 관리 인프라를 직접 호출합니다. 오케스트레이터를 실행하지 않아도 됩니다.
+
+```jsonc
+// .claude/settings.local.json
+{
+  "mcpServers": {
+    "soulflow": {
+      "command": "npx",
+      "args": ["tsx", "mcp-soulflow.ts"]
+    }
+  }
+}
+```
+
+연결 후 사용 가능한 도구 (56개):
+
+| 카테고리 | 도구 예시 |
+|---------|---------|
+| **칸반** | `kanban_create_board` · `kanban_create_card` · `kanban_move_card` · `kanban_board_metrics` |
+| **워크플로우** | `workflow_list_templates` · `workflow_create_template` · `workflow_list_runs` |
+| **런타임 DB** | `runtime_query` · `session_history` · `cron_status` · `memory_search` |
+| **i18n** | `i18n_search` · `i18n_upsert` |
+| **프로젝트** | `project_tree` · `node_catalog` · `docs_search` · `project_list_agents` |
+| **레퍼런스** | `reference_search` · `reference_add` · `reference_sync` |
+
+## 구성 요소
 
 | 구성 요소 | 역할 | 핵심 특징 |
 |----------|------|----------|
+| **보안 Vault** | AES-256-GCM 민감정보 관리 | 인바운드 자동 sealing · 도구 경로 복호화만 허용 |
+| **에이전트 백엔드** | 9종 LLM 실행 엔진 | CircuitBreaker · HealthScorer · 자동 fallback · Ollama 로컬 지원 |
+| **워크플로우 엔진** | Phase Loop · DAG 실행 | 141종 노드 그래프 에디터 · 6개 카테고리 · HITL 인터랙션 노드 |
+| **도구 팔레트** | 188개 결정론적 도구 | 파일 · 웹 · DB · AI/ML · 인프라 · SoulFlow 런타임 전 카테고리 |
+| **역할 스킬** | 8개 역할 계층적 분담 | concierge → pm/pl → implementer/reviewer/validator/debugger · diagram · github · sandbox |
 | **채널 매니저** | Slack · Telegram · Discord 수신/응답 | 스트리밍 · 그룹핑 · 페르소나 톤 렌더링 |
 | **오케스트레이터** | 인바운드 → 에이전트 실행 | Agent Loop · Task Loop · Phase Loop 삼중 모드 |
-| **에이전트 백엔드** | Claude/Codex/Gemini × CLI/SDK 실행 | CircuitBreaker · HealthScorer · 자동 fallback |
-| **역할 스킬** | 8개 역할 계층적 분담 + 19종 빌트인 스킬 | concierge → pm/pl → implementer/reviewer/validator/debugger · diagram · github · sandbox 등 |
-| **보안 Vault** | AES-256-GCM 민감정보 관리 | 인바운드 자동 sealing · 도구 경로 복호화만 허용 |
-| **OAuth 연동** | 외부 서비스 인증 | GitHub · Google · Custom OAuth 2.0 |
-| **워크플로우 엔진** | Phase Loop · DAG 실행 | 141종 노드 그래프 에디터 · 6개 카테고리 · HITL 인터랙션 노드 |
-| **메시지 버스** | 내부 이벤트 라우팅 | 인메모리 (기본) · Redis Streams (다중 인스턴스) |
-| **도메인 서비스** | 임베딩 · 벡터 스토어 · 웹훅 · 칸반 · 모델 카탈로그 · 레퍼런스 스토어 | sqlite-vec KNN · 하이브리드 검색 · 칸반 자동화 규칙 |
+| **MCP 서버 브리지** | Claude Code · Cursor 등 AI 개발 도구 연동 | 56개 프로젝트 관리 도구 MCP 노출 |
+| **도메인 서비스** | 임베딩 · 벡터 스토어 · 웹훅 · 칸반 · 레퍼런스 스토어 | sqlite-vec KNN · 하이브리드 검색 · 칸반 자동화 규칙 |
 | **평가 파이프라인** | 에이전트 출력 품질 평가 | EvalCase · EvalRunner · judge · scorer · 프로바이더 비교 |
 | **대시보드** | 웹 기반 실시간 모니터링 | SSE 피드 · 에이전트/태스크/결정/프로바이더 관리 |
-| **MCP 통합** | 외부 도구 서버 연결 | stdio/SSE · 자동 CLI 주입 |
+| **MCP 클라이언트** | 외부 도구 서버 연결 | stdio/SSE · 자동 CLI 주입 |
+| **메시지 버스** | 내부 이벤트 라우팅 | 인메모리 (기본) · Redis Streams (다중 인스턴스) |
+| **OAuth 연동** | 외부 서비스 인증 | GitHub · Google · Custom OAuth 2.0 |
 | **크론** | 정기 작업 스케줄 | SQLite 기반 · 핫 리로드 |
 
 ### 에이전트 백엔드
@@ -291,6 +343,209 @@ cd SoulFlow-Orchestrator
 | Settings | `/settings` | 글로벌 런타임 설정 |
 
 → 상세: [대시보드 가이드](docs/ko/guide/dashboard.md)
+
+### 스크린샷
+
+<details open>
+<summary><strong>대시보드 개요</strong></summary>
+
+![Overview](docs/images/overview.png)
+![Workflows](docs/images/workflows.png)
+![Chat](docs/images/chat.png)
+
+</details>
+
+<details>
+<summary><strong>웹 채팅 — Concierge 에이전트</strong></summary>
+
+코드베이스를 직접 읽고, clarification-protocol로 구체적 응답을 보장하며, 리치 미디어(지도·테이블)를 채팅 안에 임베드합니다.
+
+**Concierge 분석 응답** — "사용자 알림 시스템 추가" 요청에 코드베이스 분석 → 4가지 결정 프레임워크 → MVP 범위 → Notification 데이터 모델
+
+![Chat Concierge Response](docs/images/chat-concierge-response.png)
+![Chat Concierge Analysis](docs/images/chat-concierge-analysis.png)
+
+**구현 로드맵** — 6단계 구현 순서 + "비즈니스 이벤트"/"알림 전송" 분리 원칙 + chase-gates 다음 액션 제안
+
+![Chat Concierge Implementation](docs/images/chat-concierge-implementation.png)
+
+**리치 미디어 렌더링** — Leaflet.js 인터랙티브 지도를 채팅 버블 안에 임베드
+
+![Chat Concierge Map](docs/images/chat-concierge-map.png)
+
+**도구 실행 결과** — 8개 도구 병렬 실행 → 맛집 4곳 추천 + 미쉐린·식신·테이블링 출처 URL
+
+![Chat Concierge Restaurant](docs/images/chat-concierge-restaurant.png)
+
+**지도 Fallback** — Nominatim 실패 시 Google Maps iframe 자동 전환 (에이전트 변경 없이 도구 레이어에서 graceful degradation)
+
+![Chat Map Iframe Fallback](docs/images/chat-map-iframe-fallback.png)
+
+</details>
+
+<details>
+<summary><strong>워크플로우 에디터</strong> — 141종 노드 · YAML/DAG/Seq 3뷰 동기화</summary>
+
+**자연어 → 멀티에이전트 플로우 자동 생성**
+
+![Workflow Editor Generated](docs/images/workflow-editor-generated.png)
+
+**YAML + DAG 동기화 뷰**
+
+![Workflow Editor YAML+DAG Split](docs/images/workflow-editor-yaml-dag-split.png)
+
+**DAG 전체 조감도** — Phase + IF 분기 + Merge + Filter 노드 체인
+
+![Workflow Editor DAG Full](docs/images/workflow-editor-dag-full.png)
+![Workflow Editor IF Branch](docs/images/workflow-editor-dag-if-branch.png)
+
+**노드 인스펙터** — Execution Mode · Failure Policy · Agent · Critic 통합 설정
+
+![Workflow Editor Node Inspector](docs/images/workflow-editor-node-inspector.png)
+![Workflow Editor Agent Roles](docs/images/workflow-editor-agent-roles.png)
+
+**정책 설정** — Failure Policy (Best Effort / Fail Fast / Quorum) · Critic Gate (Retry All / Retry Targeted / Escalate / Goto Phase)
+
+![Workflow Editor Failure Policy](docs/images/workflow-editor-failure-policy.png)
+![Workflow Editor Critic Config](docs/images/workflow-editor-critic-config.png)
+
+**트리거 · 도구** — Kanban Trigger (6개 OUTPUT 파라미터) · Tool/Skill 팔레트 (188개)
+
+![Workflow Editor Kanban Trigger](docs/images/workflow-editor-kanban-trigger.png)
+![Workflow Editor Tool Palette](docs/images/workflow-editor-tool-palette.png)
+
+</details>
+
+<details>
+<summary><strong>워크플로우 실행 · 패턴</strong></summary>
+
+**라이브 실행** — Phase별 에이전트 진행 상태 + 인라인 에이전트 채팅
+
+![Workflow Running Live](docs/images/workflow-running-live.png)
+![Workflow Agent Chat](docs/images/workflow-agent-chat.png)
+
+**Kanban × Workflow 연동** — `kanban_event` 트리거가 멀티에이전트 파이프라인 구동
+
+![Workflow Kanban Integration](docs/images/workflow-kanban-integration.png)
+![Workflow Kanban Node Inspector](docs/images/workflow-kanban-node-inspector.png)
+
+**spec-driven-dev (Phase Loop)** — Research → Spec → Kanban Planning → Implementation → Validation · Seq 뷰에서 Mermaid 다이어그램 자동 생성
+
+![Workflow Spec Driven Dev](docs/images/workflow-spec-driven-dev.png)
+![Workflow Seq Auto Gen](docs/images/workflow-seq-auto-gen.png)
+![Workflow Spec Driven Dev Full](docs/images/workflow-spec-driven-dev-full.png)
+
+**autonomous-dev-pipeline (Interactive Loop)** — Objective 하나로 전체 개발 사이클 자율 완결
+
+> PM/Spec Writer(**Interactive** · MAX ITERATIONS 20) → 요구사항 디깅 → 설계 문서
+> → PL 칸반 태스크 분해 → Implementer → Reviewer (Done/TODO) → Fixer → Validator
+
+![Workflow Autonomous Dev Pipeline](docs/images/workflow-autonomous-dev-pipeline.png)
+
+</details>
+
+<details>
+<summary><strong>Prompting Studio</strong> — Text · Image · Video · Agent · Gallery · Compare</summary>
+
+![Prompting](docs/images/prompting.png)
+
+**Compare** — 동일 프롬프트를 최대 6개 모델에 동시 실행 · 응답 품질 나란히 비교
+
+![Prompting Compare](docs/images/prompting-compare.png)
+
+**Agent Gallery** — 8종 빌트인 에이전트 · Use/Fork로 즉시 사용 또는 커스터마이징
+
+![Prompting Agent Gallery](docs/images/prompting-agent-gallery.png)
+
+**Agent Design** — 에이전트를 **구조화된 계약서**로 정의: SOUL(정체성) + HEART(행동) + SHARED PROTOCOLS + BOUNDARY("Do NOT use for Y") + AI GENERATE
+
+![Prompting Agent Design](docs/images/prompting-agent-design.png)
+
+</details>
+
+<details>
+<summary><strong>Kanban 3뷰</strong> — Board · List · WBS 동일 데이터소스 연동</summary>
+
+**Board 뷰** — 드래그앤드롭 + 자동화 규칙
+
+![Kanban](docs/images/kanban.png)
+![Kanban Rules](docs/images/kanban-rules.png)
+![Kanban Rule Editor](docs/images/kanban-rule-editor.png)
+
+**Kanban × Agent** — AI 에이전트가 팀원처럼 카드 분석·이동·코멘트
+
+![Kanban Agent Contributor](docs/images/kanban-agent-contributor.png)
+
+**List 뷰** — 카드 상세(SUBTASKS · 라벨 · 코멘트) 인라인 패널
+
+![Kanban List](docs/images/kanban-list.png)
+
+**WBS 뷰** — 작업분류체계 번호 · Progress 롤업
+
+> Board · List · WBS 3개 뷰 + 워크플로우 Kanban Trigger가 모두 같은 데이터소스 — 카드 상태 하나가 3개 뷰 + 워크플로우에 즉시 반영
+
+![WBS](docs/images/wbs.png)
+
+</details>
+
+<details>
+<summary><strong>Workspace · System · Admin</strong></summary>
+
+**Workspace** — 세션 · 스킬 · 도구 · 템플릿 · OAuth 10탭 관리
+
+![Workspace Sessions](docs/images/workspace-sessions.png)
+![Workspace Tools](docs/images/workspace-tools.png)
+![Workspace Templates](docs/images/workspace-templates.png)
+![Workspace OAuth](docs/images/workspace-oauth.png)
+![Workspace Skills](docs/images/workspace-skills.png)
+
+**Secrets · Channels · Providers · Settings**
+
+![Secrets](docs/images/secrets.png)
+![Channels](docs/images/channels.png)
+![Providers](docs/images/providers.png)
+![Providers Chat Models](docs/images/providers-chat-models.png)
+![Settings](docs/images/settings.png)
+
+**Admin Console** — 팀/사용자 관리 · 글로벌 모니터링
+
+![Admin Monitoring](docs/images/admin-monitoring.png)
+
+</details>
+
+## Kanban × Workflow 자율 실행 루프
+
+Kanban 보드 · 워크플로우 엔진 · 멀티에이전트가 단일 폐루프를 형성합니다.
+카드 상태 변경 하나가 3개 뷰에 즉시 반영되고, 동시에 에이전트 파이프라인의 트리거 이벤트가 됩니다.
+
+```mermaid
+sequenceDiagram
+    actor User as 사용자 / Slack
+    participant WF  as 워크플로우 엔진
+    participant P1  as Phase-1<br/>(pm · pl)
+    participant KB  as Kanban API
+    participant P2  as Phase-2<br/>(Critic · implementer<br/>reviewer · validator)
+
+    User->>WF: 메시지 전송 (channel_mess trigger)
+    WF->>P1: Phase-1 시작 — 저장소 입력 검증
+    P1->>KB: 칸반 보드 초기화 · 카드 생성 (TODO)
+    KB-->>WF: kanban_event (card_created)
+
+    WF->>P2: Phase-2 시작 — 작업 실행
+    P2->>KB: 카드 → In Progress 이동
+    KB-->>WF: kanban_event (card_moved)
+
+    loop 구현 → 리뷰 사이클
+        P2->>P2: implementer 구현 · reviewer 검토
+        P2->>KB: 서브태스크 생성 · 코멘트 추가
+        P2->>KB: 카드 → Review 이동
+        KB-->>WF: kanban_event (card_moved)
+        WF->>P2: Phase-2 재진입 — validator 검증
+    end
+
+    P2->>KB: 카드 → Done 이동
+    KB-->>User: 완료 알림 (채널 메시지)
+```
 
 ## OAuth 연동
 

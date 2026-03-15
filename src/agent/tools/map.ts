@@ -49,13 +49,23 @@ export class MapTool extends Tool {
     "Generates a map link and embedded map preview for a location. " +
     "Use when the user mentions a place, address, or asks for directions. " +
     "Supported providers: google (default), kakao, naver. " +
-    "Returns a clickable URL with an embedded interactive map.";
+    "Returns a clickable URL with an embedded interactive map. " +
+    "PREFERRED: pass lat/lon directly for reliable results — use web_search to find coordinates first. " +
+    "Nominatim geocoding is unreliable for Korean business names.";
   readonly parameters: JsonSchema = {
     type: "object",
     properties: {
       location: {
         type: "string",
         description: "Place name or address (e.g. '서울 강남구 역삼동', 'Eiffel Tower')",
+      },
+      lat: {
+        type: "number",
+        description: "Latitude. If provided with lon, skips geocoding for reliable placement.",
+      },
+      lon: {
+        type: "number",
+        description: "Longitude. If provided with lat, skips geocoding for reliable placement.",
       },
       provider: {
         type: "string",
@@ -81,9 +91,13 @@ export class MapTool extends Tool {
 
     const link_line = `[${label}](${url}) (${PROVIDER_LABELS[provider]})`;
 
-    // geocoding 성공 여부와 무관하게 코드블록 항상 포함
-    // — lat/lon 없으면 프론트엔드가 클라이언트 측 geocoding 수행
-    const coords = await geocode(location);
+    // lat/lon이 직접 전달되면 geocoding 건너뜀 — 가장 신뢰성 높은 경로
+    const direct_lat = typeof params.lat === "number" ? params.lat : null;
+    const direct_lon = typeof params.lon === "number" ? params.lon : null;
+    const coords = (direct_lat !== null && direct_lon !== null)
+      ? { lat: direct_lat, lon: direct_lon }
+      : await geocode(location);
+
     const map_data: Record<string, unknown> = { location, label, zoom: 15 };
     if (coords) {
       map_data.lat = coords.lat;

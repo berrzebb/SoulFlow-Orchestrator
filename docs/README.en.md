@@ -176,7 +176,35 @@ An **orchestration runtime** that receives messages from chat channels and dispa
 | **Domain Services** | Embedding · vector store · webhook · kanban | sqlite-vec KNN · hybrid search · kanban automation rules |
 | **Dashboard** | Web-based real-time monitoring | SSE feed · agent/task/decision/provider management |
 | **MCP Integration** | External tool server connections | stdio/SSE · auto CLI injection |
+| **MCP Server Bridge** | Connect AI dev tools (Claude Code · Cursor) | 56 project management tools exposed via MCP · kanban · workflows · runtime DB · i18n · references — all directly accessible |
 | **Cron** | Recurring task scheduling | SQLite-backed · hot reload |
+
+### MCP Server Bridge
+
+SoulFlow isn't just an orchestrator. Connect **`mcp-soulflow.ts`** to Claude Code, Cursor, or any MCP-compatible AI tool and get direct access to SoulFlow's entire project management infrastructure from inside your IDE.
+
+```jsonc
+// .claude/settings.local.json
+{
+  "mcpServers": {
+    "soulflow": {
+      "command": "npx",
+      "args": ["tsx", "mcp-soulflow.ts"]
+    }
+  }
+}
+```
+
+56 tools available after connecting:
+
+| Category | Example tools |
+|---------|---------|
+| **Kanban** | `kanban_create_board` · `kanban_create_card` · `kanban_move_card` · `kanban_board_metrics` |
+| **Workflows** | `workflow_list_templates` · `workflow_create_template` · `workflow_list_runs` |
+| **Runtime DB** | `runtime_query` · `session_history` · `cron_status` · `memory_search` |
+| **i18n** | `i18n_search` · `i18n_upsert` |
+| **Project** | `project_tree` · `node_catalog` · `docs_search` · `project_list_agents` |
+| **References** | `reference_search` · `reference_add` · `reference_sync` |
 
 ### Agent Backends
 
@@ -253,6 +281,209 @@ Open `http://localhost:4200` in your browser and complete the **Setup Wizard**.
 | Settings | `/settings` | Global runtime settings |
 
 → Details: [Dashboard Guide](en/guide/dashboard.md) · [Workflows Guide](en/guide/workflows.md)
+
+### Screenshots
+
+<details open>
+<summary><strong>Dashboard Overview</strong></summary>
+
+![Overview](images/overview.png)
+![Workflows](images/workflows.png)
+![Chat](images/chat.png)
+
+</details>
+
+<details>
+<summary><strong>Web Chat — Concierge Agent</strong></summary>
+
+Reads the actual codebase, ensures specific responses via clarification-protocol, and embeds rich media (maps, tables) directly in chat bubbles.
+
+**Analysis Response** — "Add user notification system" → codebase analysis → 4-decision framework → MVP scope → Notification data model
+
+![Chat Concierge Response](images/chat-concierge-response.png)
+![Chat Concierge Analysis](images/chat-concierge-analysis.png)
+
+**Implementation Roadmap** — 6-phase plan + "business event" / "notification delivery" separation + chase-gates next-action proposal
+
+![Chat Concierge Implementation](images/chat-concierge-implementation.png)
+
+**Rich Media Rendering** — Leaflet.js interactive map embedded inside chat bubble
+
+![Chat Concierge Map](images/chat-concierge-map.png)
+
+**Tool Results** — 8 parallel tool calls → 4 restaurant picks + Michelin Guide · Siksinhot · Tabling source URLs
+
+![Chat Concierge Restaurant](images/chat-concierge-restaurant.png)
+
+**Map Fallback** — Nominatim failure → automatic Google Maps iframe (graceful degradation at tool layer, zero agent changes)
+
+![Chat Map Iframe Fallback](images/chat-map-iframe-fallback.png)
+
+</details>
+
+<details>
+<summary><strong>Workflow Editor</strong> — 141 node types · YAML/DAG/Seq 3-view sync</summary>
+
+**Natural language → multi-agent flow auto-generation**
+
+![Workflow Editor Generated](images/workflow-editor-generated.png)
+
+**YAML + DAG synchronized view**
+
+![Workflow Editor YAML+DAG Split](images/workflow-editor-yaml-dag-split.png)
+
+**Full DAG overview** — Phase + IF branch + Merge + Filter node chain
+
+![Workflow Editor DAG Full](images/workflow-editor-dag-full.png)
+![Workflow Editor IF Branch](images/workflow-editor-dag-if-branch.png)
+
+**Node Inspector** — Execution Mode · Failure Policy · Agent · Critic in one panel
+
+![Workflow Editor Node Inspector](images/workflow-editor-node-inspector.png)
+![Workflow Editor Agent Roles](images/workflow-editor-agent-roles.png)
+
+**Policies** — Failure Policy (Best Effort / Fail Fast / Quorum) · Critic Gate (Retry All / Retry Targeted / Escalate / Goto Phase)
+
+![Workflow Editor Failure Policy](images/workflow-editor-failure-policy.png)
+![Workflow Editor Critic Config](images/workflow-editor-critic-config.png)
+
+**Triggers · Tools** — Kanban Trigger (6 OUTPUT params) · Tool/Skill palette (188)
+
+![Workflow Editor Kanban Trigger](images/workflow-editor-kanban-trigger.png)
+![Workflow Editor Tool Palette](images/workflow-editor-tool-palette.png)
+
+</details>
+
+<details>
+<summary><strong>Workflow Execution · Patterns</strong></summary>
+
+**Live Execution** — Per-phase agent progress + inline agent chat
+
+![Workflow Running Live](images/workflow-running-live.png)
+![Workflow Agent Chat](images/workflow-agent-chat.png)
+
+**Kanban × Workflow** — `kanban_event` triggers driving multi-agent pipeline
+
+![Workflow Kanban Integration](images/workflow-kanban-integration.png)
+![Workflow Kanban Node Inspector](images/workflow-kanban-node-inspector.png)
+
+**spec-driven-dev (Phase Loop)** — Research → Spec → Kanban Planning → Implementation → Validation · Mermaid diagram auto-generated in Seq view
+
+![Workflow Spec Driven Dev](images/workflow-spec-driven-dev.png)
+![Workflow Seq Auto Gen](images/workflow-seq-auto-gen.png)
+![Workflow Spec Driven Dev Full](images/workflow-spec-driven-dev-full.png)
+
+**autonomous-dev-pipeline (Interactive Loop)** — Single Objective drives fully autonomous dev cycle
+
+> PM/Spec Writer (**Interactive** · MAX ITERATIONS 20) → requirement digging → design doc
+> → PL Kanban breakdown → Implementer → Reviewer (Done/TODO) → Fixer → Validator
+
+![Workflow Autonomous Dev Pipeline](images/workflow-autonomous-dev-pipeline.png)
+
+</details>
+
+<details>
+<summary><strong>Prompting Studio</strong> — Text · Image · Video · Agent · Gallery · Compare</summary>
+
+![Prompting](images/prompting.png)
+
+**Compare** — Same prompt against up to 6 models simultaneously · side-by-side quality comparison
+
+![Prompting Compare](images/prompting-compare.png)
+
+**Agent Gallery** — 8 built-in agents · Use/Fork to customize instantly
+
+![Prompting Agent Gallery](images/prompting-agent-gallery.png)
+
+**Agent Design** — Agents as **structured contracts**: SOUL (identity) + HEART (behavior) + SHARED PROTOCOLS + BOUNDARY ("Do NOT use for Y") + AI GENERATE
+
+![Prompting Agent Design](images/prompting-agent-design.png)
+
+</details>
+
+<details>
+<summary><strong>Kanban 3-View</strong> — Board · List · WBS on same data source</summary>
+
+**Board View** — Drag-and-drop + automation rules
+
+![Kanban](images/kanban.png)
+![Kanban Rules](images/kanban-rules.png)
+![Kanban Rule Editor](images/kanban-rule-editor.png)
+
+**Kanban × Agent** — AI agents participate as team members: analyse, move, comment on cards
+
+![Kanban Agent Contributor](images/kanban-agent-contributor.png)
+
+**List View** — Inline card detail panel (SUBTASKS · labels · comments)
+
+![Kanban List](images/kanban-list.png)
+
+**WBS View** — WBS numbering · Progress rollup
+
+> Board · List · WBS (3 views) + Workflow Kanban Trigger share one data source — a single card state change reflects across all 3 views + workflow
+
+![WBS](images/wbs.png)
+
+</details>
+
+<details>
+<summary><strong>Workspace · System · Admin</strong></summary>
+
+**Workspace** — Sessions · Skills · Tools · Templates · OAuth (10 tabs)
+
+![Workspace Sessions](images/workspace-sessions.png)
+![Workspace Tools](images/workspace-tools.png)
+![Workspace Templates](images/workspace-templates.png)
+![Workspace OAuth](images/workspace-oauth.png)
+![Workspace Skills](images/workspace-skills.png)
+
+**Secrets · Channels · Providers · Settings**
+
+![Secrets](images/secrets.png)
+![Channels](images/channels.png)
+![Providers](images/providers.png)
+![Providers Chat Models](images/providers-chat-models.png)
+![Settings](images/settings.png)
+
+**Admin Console** — Team/user management · global monitoring
+
+![Admin Monitoring](images/admin-monitoring.png)
+
+</details>
+
+## Kanban × Workflow Autonomous Execution Loop
+
+Kanban board · workflow engine · multi-agent pipeline form a single closed loop.
+A single card state change instantly reflects across all 3 views and simultaneously fires an agent pipeline trigger event.
+
+```mermaid
+sequenceDiagram
+    actor User as User / Slack
+    participant WF  as Workflow Engine
+    participant P1  as Phase-1<br/>(pm · pl)
+    participant KB  as Kanban API
+    participant P2  as Phase-2<br/>(Critic · implementer<br/>reviewer · validator)
+
+    User->>WF: Send message (channel_mess trigger)
+    WF->>P1: Start Phase-1 — validate repo input
+    P1->>KB: Initialize board · create cards (TODO)
+    KB-->>WF: kanban_event (card_created)
+
+    WF->>P2: Start Phase-2 — execute tasks
+    P2->>KB: Move card → In Progress
+    KB-->>WF: kanban_event (card_moved)
+
+    loop Implement → Review cycle
+        P2->>P2: implementer builds · reviewer checks
+        P2->>KB: Create subtasks · add comments
+        P2->>KB: Move card → Review
+        KB-->>WF: kanban_event (card_moved)
+        WF->>P2: Re-enter Phase-2 — validator approves
+    end
+
+    P2->>KB: Move card → Done
+    KB-->>User: Completion notification (channel message)
+```
 
 ## OAuth Integration
 
