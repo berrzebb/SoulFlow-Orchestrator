@@ -15,21 +15,24 @@ import { useResourceCRUD } from "../../hooks/use-resource-crud";
 import { useToggleMutation } from "../../hooks/use-toggle-mutation";
 import type { ChannelInstance } from "../channels/types";
 import { MonitoringPanel } from "./monitoring-panel";
+import { useT } from "../../i18n";
 
 type AdminTab = "teams" | "users" | "providers" | "channels" | "monitoring";
 
-const TABS: { id: AdminTab; label: string }[] = [
-  { id: "teams", label: "팀 관리" },
-  { id: "users", label: "사용자 관리" },
-  { id: "providers", label: "전역 프로바이더" },
-  { id: "channels", label: "채널" },
-  { id: "monitoring", label: "모니터링" },
-];
+const TAB_IDS: AdminTab[] = ["teams", "users", "providers", "channels", "monitoring"];
+const TAB_KEYS: Record<AdminTab, string> = {
+  teams: "admin.tab.teams",
+  users: "admin.tab.users",
+  providers: "admin.tab.providers",
+  channels: "admin.tab.channels",
+  monitoring: "admin.tab.monitoring",
+};
 
 export default function AdminPage() {
   const navigate = useNavigate();
   const { data: auth_user, isLoading } = useAuthUser();
   const [tab, setTab] = useState<AdminTab>("teams");
+  const t = useT();
 
   useEffect(() => {
     if (isLoading) return;
@@ -48,18 +51,18 @@ export default function AdminPage() {
 
   return (
     <div className="page">
-      <SectionHeader title="관리자 콘솔" />
+      <SectionHeader title={t("admin.title")} />
 
       <div className="settings__filters" role="tablist" style={{ marginBottom: "16px" }}>
-        {TABS.map((t) => (
+        {TAB_IDS.map((id) => (
           <button
-            key={t.id}
+            key={id}
             role="tab"
-            aria-selected={tab === t.id}
-            className={`btn btn--sm ${tab === t.id ? "btn--primary" : ""}`}
-            onClick={() => setTab(t.id)}
+            aria-selected={tab === id}
+            className={`btn btn--sm ${tab === id ? "btn--primary" : ""}`}
+            onClick={() => setTab(id)}
           >
-            {t.label}
+            {t(TAB_KEYS[id])}
           </button>
         ))}
       </div>
@@ -76,6 +79,7 @@ export default function AdminPage() {
 // ── Teams Panel ───────────────────────────────────────────────────────────────
 
 function TeamsPanel() {
+  const t = useT();
   const qc = useQueryClient();
   const { toast } = useToast();
   const { data: teams = [], isLoading } = useAdminTeams();
@@ -87,46 +91,46 @@ function TeamsPanel() {
   const create = useMutation({
     mutationFn: () => api.post("/api/admin/teams", { id: form.id.trim(), name: form.name.trim() }),
     onSuccess: () => {
-      toast("팀 생성 완료", "ok");
+      toast(t("admin.teams.created"), "ok");
       setForm({ open: false, id: "", name: "" });
       void qc.invalidateQueries({ queryKey: ["admin-teams"] });
     },
     onError: (e: unknown) => {
       const msg = (e as { body?: { error?: string } })?.body?.error;
-      toast(msg === "id_must_be_lowercase_alphanumeric_hyphen" ? "ID는 소문자·숫자·하이픈만 허용" : "생성 실패", "err");
+      toast(msg === "id_must_be_lowercase_alphanumeric_hyphen" ? t("admin.teams.id_invalid") : t("admin.teams.create_failed"), "err");
     },
   });
 
   const update_team = useUpdateTeam();
   const delete_team = useDeleteTeam();
 
-  const start_rename = (t: { id: string; name: string }) => {
-    set_rename_target(t.id);
-    set_rename_draft(t.name);
+  const start_rename = (team: { id: string; name: string }) => {
+    set_rename_target(team.id);
+    set_rename_draft(team.name);
   };
 
   const commit_rename = (id: string) => {
     if (!rename_draft.trim()) return;
     update_team.mutate({ id, name: rename_draft.trim() }, {
-      onSuccess: () => { toast("팀 이름 변경 완료", "ok"); set_rename_target(null); },
-      onError: () => toast("이름 변경 실패", "err"),
+      onSuccess: () => { toast(t("admin.teams.renamed"), "ok"); set_rename_target(null); },
+      onError: () => toast(t("admin.teams.rename_failed"), "err"),
     });
   };
 
-  const do_delete = (t: { id: string; name: string }) => {
-    if (!confirm(`팀 '${t.name}'을 삭제하면 모든 멤버십과 팀 데이터가 삭제됩니다. 계속하시겠습니까?`)) return;
-    delete_team.mutate(t.id, {
-      onSuccess: () => toast("팀 삭제 완료", "ok"),
-      onError: () => toast("팀 삭제 실패", "err"),
+  const do_delete = (team: { id: string; name: string }) => {
+    if (!confirm(t("admin.teams.delete_confirm", { name: team.name }))) return;
+    delete_team.mutate(team.id, {
+      onSuccess: () => toast(t("admin.teams.deleted"), "ok"),
+      onError: () => toast(t("admin.teams.delete_failed"), "err"),
     });
   };
 
   return (
     <section className="panel mb-3">
       <div className="li-flex" style={{ justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
-        <h2 style={{ margin: 0 }}>팀 목록</h2>
+        <h2 style={{ margin: 0 }}>{t("admin.teams.title")}</h2>
         <button className="btn btn--sm btn--primary" onClick={() => setForm((f) => ({ ...f, open: !f.open }))}>
-          {form.open ? "취소" : "+ 팀 추가"}
+          {form.open ? t("common.cancel") : t("admin.teams.add")}
         </button>
       </div>
 
@@ -135,12 +139,12 @@ function TeamsPanel() {
           <div className="li-flex" style={{ gap: "8px", flexWrap: "wrap" }}>
             <input
               className="form-input" style={{ flex: "1 1 120px" }}
-              placeholder="ID (소문자·숫자·-)" value={form.id}
+              placeholder={t("admin.teams.id_placeholder")} value={form.id}
               onChange={(e) => setForm((f) => ({ ...f, id: e.target.value }))}
             />
             <input
               className="form-input" style={{ flex: "1 1 160px" }}
-              placeholder="팀 이름" value={form.name}
+              placeholder={t("admin.teams.name_placeholder")} value={form.name}
               onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
             />
             <button
@@ -148,7 +152,7 @@ function TeamsPanel() {
               disabled={!form.id || !form.name || create.isPending}
               onClick={() => create.mutate()}
             >
-              {create.isPending ? "생성 중..." : "생성"}
+              {create.isPending ? t("admin.teams.creating") : t("admin.teams.create")}
             </button>
           </div>
         </div>
@@ -158,54 +162,54 @@ function TeamsPanel() {
         <div className="skeleton skeleton--row" />
       ) : (
         <div className="users-list">
-          {teams.map((t) => (
-            <div key={t.id}>
+          {teams.map((team) => (
+            <div key={team.id}>
               <div className="users-list__item li-flex">
                 <div className="users-list__info" style={{ flex: 1 }}>
-                  {rename_target === t.id ? (
+                  {rename_target === team.id ? (
                     <div className="li-flex" style={{ gap: "6px" }}>
                       <input
                         className="form-input" style={{ flex: "1" }}
                         value={rename_draft}
                         onChange={(e) => set_rename_draft(e.target.value)}
                         onKeyDown={(e) => {
-                          if (e.key === "Enter") commit_rename(t.id);
+                          if (e.key === "Enter") commit_rename(team.id);
                           if (e.key === "Escape") set_rename_target(null);
                         }}
                         autoFocus
                       />
-                      <button className="btn btn--xs btn--ok" disabled={!rename_draft.trim() || update_team.isPending} onClick={() => commit_rename(t.id)}>저장</button>
-                      <button className="btn btn--xs" onClick={() => set_rename_target(null)}>취소</button>
+                      <button className="btn btn--xs btn--ok" disabled={!rename_draft.trim() || update_team.isPending} onClick={() => commit_rename(team.id)}>{t("common.save")}</button>
+                      <button className="btn btn--xs" onClick={() => set_rename_target(null)}>{t("common.cancel")}</button>
                     </div>
                   ) : (
                     <>
-                      <span className="users-list__name">{t.name}</span>
-                      <span className="text-xs text-muted">ID: {t.id}</span>
-                      <Badge status={`${t.member_count ?? 0}명`} variant="info" />
+                      <span className="users-list__name">{team.name}</span>
+                      <span className="text-xs text-muted">ID: {team.id}</span>
+                      <Badge status={t("admin.teams.members_fmt", { count: String(team.member_count ?? 0) })} variant="info" />
                     </>
                   )}
                 </div>
-                {rename_target !== t.id && (
+                {rename_target !== team.id && (
                   <div className="li-flex" style={{ gap: "6px" }}>
-                    <button className="btn btn--xs" onClick={() => setExpanded((prev) => prev === t.id ? null : t.id)}>
-                      {expanded === t.id ? "접기" : "멤버"}
+                    <button className="btn btn--xs" onClick={() => setExpanded((prev) => prev === team.id ? null : team.id)}>
+                      {expanded === team.id ? t("admin.teams.collapse") : t("admin.teams.expand_members")}
                     </button>
-                    <button className="btn btn--xs" onClick={() => start_rename(t)}>이름 변경</button>
+                    <button className="btn btn--xs" onClick={() => start_rename(team)}>{t("admin.teams.rename")}</button>
                     <button
                       className="btn btn--xs btn--danger"
                       disabled={delete_team.isPending}
-                      onClick={() => do_delete(t)}
+                      onClick={() => do_delete(team)}
                     >
-                      삭제
+                      {t("common.delete")}
                     </button>
                   </div>
                 )}
               </div>
-              {expanded === t.id && <TeamMembersList team_id={t.id} />}
+              {expanded === team.id && <TeamMembersList team_id={team.id} />}
             </div>
           ))}
           {teams.length === 0 && (
-            <p className="text-xs text-muted" style={{ padding: "8px 0" }}>팀이 없습니다.</p>
+            <p className="text-xs text-muted" style={{ padding: "8px 0" }}>{t("admin.teams.no_teams")}</p>
           )}
         </div>
       )}
@@ -214,9 +218,10 @@ function TeamsPanel() {
 }
 
 const ROLE_OPTIONS: TeamRole[] = ["owner", "manager", "member", "viewer"];
-const ROLE_LABELS: Record<TeamRole, string> = { owner: "오너", manager: "매니저", member: "멤버", viewer: "뷰어" };
+const ROLE_KEYS: Record<TeamRole, string> = { owner: "admin.role.owner", manager: "admin.role.manager", member: "admin.role.member", viewer: "admin.role.viewer" };
 
 function TeamMembersList({ team_id }: { team_id: string }) {
+  const t = useT();
   const { toast } = useToast();
   const { data: allUsers = [] } = useAdminUsers();
   const { data: members = [], isLoading } = useTeamMembers(team_id);
@@ -230,8 +235,8 @@ function TeamMembersList({ team_id }: { team_id: string }) {
 
   const submit_add = () => {
     add.mutate({ user_id: addForm.user_id, role: addForm.role }, {
-      onSuccess: () => { toast("멤버 추가 완료", "ok"); setAddForm({ open: false, user_id: "", role: "member" }); },
-      onError: () => toast("추가 실패", "err"),
+      onSuccess: () => { toast(t("admin.members.added"), "ok"); setAddForm({ open: false, user_id: "", role: "member" }); },
+      onError: () => toast(t("admin.members.add_failed"), "err"),
     });
   };
 
@@ -248,11 +253,11 @@ function TeamMembersList({ team_id }: { team_id: string }) {
             value={m.role}
             disabled={update_role.isPending}
             onChange={(e) => update_role.mutate({ user_id: m.user_id, role: e.target.value as TeamRole }, {
-              onSuccess: () => toast("역할 변경 완료", "ok"),
-              onError: () => toast("역할 변경 실패", "err"),
+              onSuccess: () => toast(t("admin.members.role_changed"), "ok"),
+              onError: () => toast(t("admin.members.role_change_failed"), "err"),
             })}
           >
-            {ROLE_OPTIONS.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+            {ROLE_OPTIONS.map((r) => <option key={r} value={r}>{t(ROLE_KEYS[r])}</option>)}
           </select>
           {m.system_role === "superadmin" && <Badge status="superadmin" variant="warn" />}
           <button
@@ -260,34 +265,34 @@ function TeamMembersList({ team_id }: { team_id: string }) {
             style={{ color: "var(--err)", borderColor: "color-mix(in srgb, var(--err) 30%, transparent)", marginLeft: "auto" }}
             disabled={remove.isPending}
             onClick={() => remove.mutate(m.user_id, {
-              onSuccess: () => toast("멤버 제거 완료", "ok"),
-              onError: () => toast("제거 실패", "err"),
+              onSuccess: () => toast(t("admin.members.removed"), "ok"),
+              onError: () => toast(t("admin.members.remove_failed"), "err"),
             })}
           >
-            제거
+            {t("admin.members.remove")}
           </button>
         </div>
       ))}
-      {members.length === 0 && <p className="text-xs text-muted">멤버 없음</p>}
+      {members.length === 0 && <p className="text-xs text-muted">{t("admin.members.no_members")}</p>}
 
       {addForm.open ? (
         <div className="li-flex" style={{ gap: "6px", marginTop: "6px", flexWrap: "wrap" }}>
           <select className="form-input" style={{ flex: "1 1 140px" }} value={addForm.user_id}
             onChange={(e) => setAddForm((f) => ({ ...f, user_id: e.target.value }))}>
-            <option value="">사용자 선택</option>
+            <option value="">{t("admin.members.select_user")}</option>
             {available.map((u) => <option key={u.id} value={u.id}>{u.username}</option>)}
           </select>
           <select className="form-input" style={{ flex: "0 0 auto" }} value={addForm.role}
             onChange={(e) => setAddForm((f) => ({ ...f, role: e.target.value as TeamRole }))}>
-            {ROLE_OPTIONS.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+            {ROLE_OPTIONS.map((r) => <option key={r} value={r}>{t(ROLE_KEYS[r])}</option>)}
           </select>
-          <button className="btn btn--xs btn--ok" disabled={!addForm.user_id || add.isPending} onClick={submit_add}>추가</button>
-          <button className="btn btn--xs" onClick={() => setAddForm((f) => ({ ...f, open: false }))}>취소</button>
+          <button className="btn btn--xs btn--ok" disabled={!addForm.user_id || add.isPending} onClick={submit_add}>{t("common.save")}</button>
+          <button className="btn btn--xs" onClick={() => setAddForm((f) => ({ ...f, open: false }))}>{t("common.cancel")}</button>
         </div>
       ) : (
         <button className="btn btn--xs" style={{ marginTop: "6px" }}
           onClick={() => setAddForm((f) => ({ ...f, open: true }))}>
-          + 멤버 추가
+          {t("admin.members.add_member")}
         </button>
       )}
     </div>
@@ -297,6 +302,7 @@ function TeamMembersList({ team_id }: { team_id: string }) {
 // ── Users Panel ───────────────────────────────────────────────────────────────
 
 function UsersPanel() {
+  const t = useT();
   const qc = useQueryClient();
   const { toast } = useToast();
   const { data: users = [], isLoading } = useAdminUsers();
@@ -315,52 +321,52 @@ function UsersPanel() {
       team_id: form.team_id || null,
     }),
     onSuccess: () => {
-      toast("사용자 생성 완료", "ok");
+      toast(t("admin.users.created"), "ok");
       setForm({ open: false, username: "", password: "", role: "user", team_id: "" });
       void qc.invalidateQueries({ queryKey: ["admin-users"] });
       void qc.invalidateQueries({ queryKey: ["admin-teams"] });
     },
     onError: (e: unknown) => {
       const msg = (e as { body?: { error?: string } })?.body?.error;
-      toast(msg === "username_taken" ? "이미 존재하는 아이디입니다." : "생성 실패", "err");
+      toast(msg === "username_taken" ? t("admin.users.username_taken") : t("admin.users.create_failed"), "err");
     },
   });
 
   const del = useMutation({
     mutationFn: (id: string) => api.del(`/api/admin/users/${id}`),
     onSuccess: () => {
-      toast("사용자 삭제 완료", "ok");
+      toast(t("admin.users.deleted"), "ok");
       void qc.invalidateQueries({ queryKey: ["admin-users"] });
       void qc.invalidateQueries({ queryKey: ["admin-teams"] });
     },
-    onError: () => toast("삭제 실패", "err"),
+    onError: () => toast(t("admin.users.delete_failed"), "err"),
   });
 
   const change_pw = useMutation({
     mutationFn: (id: string) => api.patch(`/api/admin/users/${id}/password`, { password: new_pw }),
-    onSuccess: () => { toast("비밀번호 변경 완료", "ok"); setPwTarget(null); setNewPw(""); },
-    onError: () => toast("비밀번호 변경 실패", "err"),
+    onSuccess: () => { toast(t("admin.users.pw_changed"), "ok"); setPwTarget(null); setNewPw(""); },
+    onError: () => toast(t("admin.users.pw_change_failed"), "err"),
   });
 
   const change_team = useMutation({
     mutationFn: (id: string) => api.patch(`/api/admin/users/${id}/team`, { team_id: new_team }),
     onSuccess: () => {
-      toast("팀 변경 완료", "ok");
+      toast(t("admin.users.team_changed"), "ok");
       setTmTarget(null); setNewTeam("");
       void qc.invalidateQueries({ queryKey: ["admin-users"] });
       void qc.invalidateQueries({ queryKey: ["admin-teams"] });
     },
-    onError: () => toast("팀 변경 실패", "err"),
+    onError: () => toast(t("admin.users.team_change_failed"), "err"),
   });
 
-  const team_name = (id: string | null) => teams.find((t) => t.id === id)?.name ?? id ?? "—";
+  const team_name = (id: string | null) => teams.find((tm) => tm.id === id)?.name ?? id ?? "—";
 
   return (
     <section className="panel mb-3">
       <div className="li-flex" style={{ justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
-        <h2 style={{ margin: 0 }}>사용자 목록</h2>
+        <h2 style={{ margin: 0 }}>{t("admin.users.title")}</h2>
         <button className="btn btn--sm btn--primary" onClick={() => setForm((f) => ({ ...f, open: !f.open }))}>
-          {form.open ? "취소" : "+ 추가"}
+          {form.open ? t("common.cancel") : t("admin.users.add")}
         </button>
       </div>
 
@@ -369,12 +375,12 @@ function UsersPanel() {
           <div className="li-flex" style={{ gap: "8px", flexWrap: "wrap" }}>
             <input
               className="form-input" style={{ flex: "1 1 120px" }}
-              placeholder="아이디" value={form.username}
+              placeholder={t("admin.users.username_placeholder")} value={form.username}
               onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))}
             />
             <input
               className="form-input" style={{ flex: "1 1 120px" }}
-              type="password" placeholder="비밀번호 (6자 이상)" value={form.password}
+              type="password" placeholder={t("admin.users.password_placeholder")} value={form.password}
               onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
             />
             <select
@@ -389,8 +395,8 @@ function UsersPanel() {
                 className="form-input" style={{ flex: "0 0 130px" }}
                 value={form.team_id} onChange={(e) => setForm((f) => ({ ...f, team_id: e.target.value }))}
               >
-                <option value="">팀 없음</option>
-                {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                <option value="">{t("admin.users.no_team")}</option>
+                {teams.map((tm) => <option key={tm.id} value={tm.id}>{tm.name}</option>)}
               </select>
             )}
             <button
@@ -398,7 +404,7 @@ function UsersPanel() {
               disabled={!form.username || form.password.length < 6 || create.isPending}
               onClick={() => create.mutate()}
             >
-              {create.isPending ? "생성 중..." : "생성"}
+              {create.isPending ? t("admin.teams.creating") : t("admin.teams.create")}
             </button>
           </div>
         </div>
@@ -407,18 +413,18 @@ function UsersPanel() {
       {pw_target && (
         <div className="panel panel--inset mb-2">
           <div className="li-flex" style={{ gap: "8px", alignItems: "center" }}>
-            <span className="text-xs text-muted">{pw_target.username} 비밀번호 변경</span>
+            <span className="text-xs text-muted">{t("admin.users.pw_change_label", { username: pw_target.username })}</span>
             <input
               className="form-input" style={{ flex: "1" }}
-              type="password" placeholder="새 비밀번호 (6자 이상)" value={new_pw}
+              type="password" placeholder={t("admin.users.new_pw_placeholder")} value={new_pw}
               onChange={(e) => setNewPw(e.target.value)}
             />
             <button
               className="btn btn--sm btn--ok"
               disabled={new_pw.length < 6 || change_pw.isPending}
               onClick={() => change_pw.mutate(pw_target.id)}
-            >변경</button>
-            <button className="btn btn--sm" onClick={() => { setPwTarget(null); setNewPw(""); }}>취소</button>
+            >{t("common.save")}</button>
+            <button className="btn btn--sm" onClick={() => { setPwTarget(null); setNewPw(""); }}>{t("common.cancel")}</button>
           </div>
         </div>
       )}
@@ -426,20 +432,20 @@ function UsersPanel() {
       {tm_target && (
         <div className="panel panel--inset mb-2">
           <div className="li-flex" style={{ gap: "8px", alignItems: "center" }}>
-            <span className="text-xs text-muted">{tm_target.username} 팀 변경</span>
+            <span className="text-xs text-muted">{t("admin.users.team_change_label", { username: tm_target.username })}</span>
             <select
               className="form-input" style={{ flex: "1" }}
               value={new_team} onChange={(e) => setNewTeam(e.target.value)}
             >
-              <option value="">팀 선택...</option>
-              {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+              <option value="">{t("admin.users.select_team")}</option>
+              {teams.map((tm) => <option key={tm.id} value={tm.id}>{tm.name}</option>)}
             </select>
             <button
               className="btn btn--sm btn--ok"
               disabled={!new_team || change_team.isPending}
               onClick={() => change_team.mutate(tm_target.id)}
-            >변경</button>
-            <button className="btn btn--sm" onClick={() => { setTmTarget(null); setNewTeam(""); }}>취소</button>
+            >{t("common.save")}</button>
+            <button className="btn btn--sm" onClick={() => { setTmTarget(null); setNewTeam(""); }}>{t("common.cancel")}</button>
           </div>
         </div>
       )}
@@ -460,24 +466,24 @@ function UsersPanel() {
                   <Badge status={`${u.session_count} sessions`} variant="ok" />
                 )}
                 {u.last_login_at && (
-                  <span className="text-xs text-muted">최근 로그인: {new Date(u.last_login_at).toLocaleDateString()}</span>
+                  <span className="text-xs text-muted">{t("admin.users.last_login")} {new Date(u.last_login_at).toLocaleDateString()}</span>
                 )}
               </div>
               <div className="li-flex" style={{ gap: "6px" }}>
                 {teams.length > 0 && (
                   <button className="btn btn--xs" onClick={() => { setTmTarget(u); setNewTeam(u.default_team_id ?? ""); }}>
-                    팀
+                    {t("admin.users.team_btn")}
                   </button>
                 )}
                 <button className="btn btn--xs" onClick={() => { setPwTarget(u); setNewPw(""); }}>
-                  비밀번호
+                  {t("admin.users.pw_btn")}
                 </button>
                 <button
                   className="btn btn--xs btn--danger"
                   disabled={del.isPending}
-                  onClick={() => { if (confirm(`'${u.username}' 삭제?`)) del.mutate(u.id); }}
+                  onClick={() => { if (confirm(t("admin.users.delete_confirm", { username: u.username }))) del.mutate(u.id); }}
                 >
-                  삭제
+                  {t("common.delete")}
                 </button>
               </div>
             </div>
@@ -491,14 +497,15 @@ function UsersPanel() {
 // ── Global Providers Panel ────────────────────────────────────────────────────
 
 function GlobalProvidersPanel() {
+  const t = useT();
   return (
     <section className="panel mb-3">
       <div style={{ marginBottom: "12px" }}>
-        <h2 style={{ margin: 0 }}>전역 프로바이더</h2>
-        <p className="text-xs text-muted" style={{ marginTop: "4px" }}>모든 팀에서 공유하는 AI 프로바이더 관리는 프로바이더 페이지에서 수행합니다.</p>
+        <h2 style={{ margin: 0 }}>{t("admin.providers.title")}</h2>
+        <p className="text-xs text-muted" style={{ marginTop: "4px" }}>{t("admin.providers.description")}</p>
       </div>
       <NavLink to="/providers" className="btn btn--sm btn--primary">
-        프로바이더 관리 →
+        {t("admin.providers.link")}
       </NavLink>
     </section>
   );
@@ -506,14 +513,15 @@ function GlobalProvidersPanel() {
 // ── Channels Panel ────────────────────────────────────────────────────────────
 
 function ChannelsPanel() {
+  const t = useT();
   const { toast } = useToast();
 
   const { items: instances, isLoading } = useResourceCRUD<ChannelInstance>({
     queryKey: ["channel-instances"],
     queryFn: () => api.get("/api/channels/instances"),
     deleteEndpoint: (id) => `/api/channels/instances/${encodeURIComponent(id)}`,
-    onDeleteSuccess: () => toast("채널 삭제 완료", "ok"),
-    onDeleteError: (err) => toast(`삭제 실패: ${err.message}`, "err"),
+    onDeleteSuccess: () => toast(t("admin.channels.deleted"), "ok"),
+    onDeleteError: (err) => toast(t("admin.channels.delete_failed_fmt", { error: err.message }), "err"),
     refetchInterval: 30_000,
     staleTime: 10_000,
   });
@@ -523,7 +531,7 @@ function ChannelsPanel() {
     getEndpoint: (id) => `/api/channels/instances/${encodeURIComponent(id)}`,
     idField: "instance_id",
     toggleField: "enabled",
-    getErrMsg: (err) => `저장 실패: ${err.message}`,
+    getErrMsg: (err) => t("admin.channels.save_failed_fmt", { error: err.message }),
   });
 
   const TYPE_LABELS: Record<string, string> = {
@@ -535,8 +543,8 @@ function ChannelsPanel() {
     <section className="panel mb-3">
       <div className="li-flex" style={{ justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
         <div>
-          <h2 style={{ margin: 0 }}>채널 인스턴스</h2>
-          <p className="text-xs text-muted" style={{ marginTop: "4px" }}>채널 상세 설정은 채널 페이지에서 관리</p>
+          <h2 style={{ margin: 0 }}>{t("admin.channels.title")}</h2>
+          <p className="text-xs text-muted" style={{ marginTop: "4px" }}>{t("admin.channels.description")}</p>
         </div>
       </div>
 
@@ -550,9 +558,9 @@ function ChannelsPanel() {
                 <span className="users-list__name">{ch.label || ch.instance_id}</span>
                 <Badge status={TYPE_LABELS[ch.provider] ?? ch.provider} variant="info" />
                 {ch.enabled ? (
-                  <Badge status="활성" variant="ok" />
+                  <Badge status={t("admin.channels.active")} variant="ok" />
                 ) : (
-                  <Badge status="비활성" variant="warn" />
+                  <Badge status={t("admin.channels.inactive")} variant="warn" />
                 )}
               </div>
               <div className="li-flex" style={{ gap: "6px" }}>
@@ -561,13 +569,13 @@ function ChannelsPanel() {
                   disabled={toggle_enabled.isPending}
                   onClick={() => toggle_enabled.mutate({ id: ch.instance_id, value: !ch.enabled })}
                 >
-                  {ch.enabled ? "비활성화" : "활성화"}
+                  {ch.enabled ? t("admin.channels.deactivate") : t("admin.channels.activate")}
                 </button>
               </div>
             </div>
           ))}
           {instances.length === 0 && (
-            <p className="text-xs text-muted" style={{ padding: "8px 0" }}>채널이 없습니다. 채널 페이지에서 추가하세요.</p>
+            <p className="text-xs text-muted" style={{ padding: "8px 0" }}>{t("admin.channels.no_channels")}</p>
           )}
         </div>
       )}

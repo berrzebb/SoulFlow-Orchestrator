@@ -29,6 +29,10 @@ vi.mock("@tanstack/react-query", () => ({
   useQueryClient: () => ({ invalidateQueries: vi.fn() }),
 }));
 
+vi.mock("@/i18n", () => ({
+  useT: () => (key: string, p?: Record<string, string>) =>
+    p ? `${key}:${JSON.stringify(p)}` : key,
+}));
 vi.mock("@/api/client", () => ({ api: { get: vi.fn(), post: vi.fn(), del: vi.fn(), patch: vi.fn() } }));
 vi.mock("@/components/toast", () => ({ useToast: () => ({ toast: vi.fn() }) }));
 vi.mock("@/hooks/use-resource-crud", () => ({ useResourceCRUD: () => ({ items: [], isLoading: false }) }));
@@ -58,7 +62,7 @@ describe("AdminPage UsersPanel — session_count 배지 (FE-4)", () => {
       isLoading: false,
     });
     wrap(<AdminPage />);
-    act(() => { screen.getByText("사용자 관리").click(); });
+    act(() => { screen.getByText("admin.tab.users").click(); });
     expect(screen.getByText("3 sessions")).toBeInTheDocument();
   });
 
@@ -70,7 +74,7 @@ describe("AdminPage UsersPanel — session_count 배지 (FE-4)", () => {
       isLoading: false,
     });
     wrap(<AdminPage />);
-    act(() => { screen.getByText("사용자 관리").click(); });
+    act(() => { screen.getByText("admin.tab.users").click(); });
     expect(screen.queryByText(/sessions/)).toBeNull();
   });
 
@@ -82,7 +86,7 @@ describe("AdminPage UsersPanel — session_count 배지 (FE-4)", () => {
       isLoading: false,
     });
     wrap(<AdminPage />);
-    act(() => { screen.getByText("사용자 관리").click(); });
+    act(() => { screen.getByText("admin.tab.users").click(); });
     expect(screen.queryByText(/sessions/)).toBeNull();
   });
 });
