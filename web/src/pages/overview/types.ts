@@ -49,6 +49,8 @@ export interface WorkflowEvent {
   retrieval_source?: string;
   /** FE-5: TR 콘텐츠 신규성 점수 (0~1). */
   novelty_score?: number;
+  /** FE-6: 이벤트 소유자 — 사용자별 격리 기준. */
+  user_id?: string;
 }
 
 export interface AgentProvider {
