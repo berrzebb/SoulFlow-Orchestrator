@@ -418,72 +418,70 @@ next/
 
 주요 기능의 아키텍처 설계 문서입니다. 각 문서에 목적·범위·타입 설계·영향 파일이 포함되어 있습니다.
 
-> 한국어 버전: [docs/ko/design/](docs/ko/design/)
-
 ### 에이전트 & 실행
 
 | 문서 | 설명 |
 |------|------|
-| [Phase Loop](docs/en/design/phase-loop.md) | 다중 에이전트 페이즈 워크플로우 + worktree 격리 |
-| [Interactive Loop](docs/en/design/interactive-loop.md) | 대화형 Phase 루프 |
-| [Loop Continuity + HITL](docs/en/design/loop-continuity-hitl.md) | 에이전트 루프 연속성 + Task HITL |
-| [Gateway / Direct Execution](docs/en/design/gateway-direct-execution.md) | 직접/모델/에이전트 경로 분류 및 라우팅 |
-| [Execution Guardrails](docs/en/design/execution-guardrails.md) | 세션 재사용 · 신선도 게이트 · 도구 예산 계약 |
-| [PTY Agent Backend](docs/en/design/pty-agent-backend.md) | 컨테이너 CLI 백엔드 + FailoverError |
-| [Execute Dispatcher](docs/en/design/execute-dispatcher.md) | 실행 디스패치 계층 |
-| [Orchestrator LLM](docs/en/design/orchestrator-llm.md) | 오케스트레이터 LLM 모델 관리 |
-| [Request Preflight](docs/en/design/request-preflight.md) | 요청 전처리 · 분류 · 가드 |
-| [Agent Definitions](docs/en/design/agent-definitions.md) | 에이전트 정의 구조 |
-| [Session State Injection](docs/en/design/session-state-injection.md) | 세션 협력자 외부 주입 · HITL 상태 공유 |
-| [Large-File Decomposition](docs/en/design/large-file-split.md) | 조립/실행 경계 분리 · 컴포지션 루트 설계 |
-| [Skill Matching & Completion Check](docs/en/design/skill-matching-completion-check.md) | FTS5 스킬 자동 매칭 · 완료 체크 · 프로젝트 문서 프로토콜 |
+| [Phase Loop](docs/ko/design/phase-loop.md) | 다중 에이전트 페이즈 워크플로우 + worktree 격리 |
+| [Interactive Loop](docs/ko/design/interactive-loop.md) | 대화형 Phase 루프 |
+| [Loop Continuity + HITL](docs/ko/design/loop-continuity-hitl.md) | 에이전트 루프 연속성 + Task HITL |
+| [Gateway / Direct Execution](docs/ko/design/gateway-direct-execution.md) | 직접/모델/에이전트 경로 분류 및 라우팅 |
+| [Execution Guardrails](docs/ko/design/execution-guardrails.md) | 세션 재사용 · 신선도 게이트 · 도구 예산 계약 |
+| [PTY Agent Backend](docs/ko/design/pty-agent-backend.md) | 컨테이너 CLI 백엔드 + FailoverError |
+| [Execute Dispatcher](docs/ko/design/execute-dispatcher.md) | 실행 디스패치 계층 |
+| [Orchestrator LLM](docs/ko/design/orchestrator-llm.md) | 오케스트레이터 LLM 모델 관리 |
+| [Request Preflight](docs/ko/design/request-preflight.md) | 요청 전처리 · 분류 · 가드 |
+| [Agent Definitions](docs/ko/design/agent-definitions.md) | 에이전트 정의 구조 |
+| [Session State Injection](docs/ko/design/session-state-injection.md) | 세션 협력자 외부 주입 · HITL 상태 공유 |
+| [Large-File Decomposition](docs/ko/design/large-file-split.md) | 조립/실행 경계 분리 · 컴포지션 루트 설계 |
+| [Skill Matching & Completion Check](docs/ko/design/skill-matching-completion-check.md) | FTS5 스킬 자동 매칭 · 완료 체크 · 프로젝트 문서 프로토콜 |
 
 ### 워크플로우 엔진
 
 | 문서 | 설명 |
 |------|------|
-| [Node Registry](docs/en/design/node-registry.md) | OCP 기반 노드 아키텍처 (141종) |
-| [Interaction Nodes](docs/en/design/interaction-nodes.md) | HITL · Approval · Form · Retry · Batch 노드 |
-| [Phase Workflow Runtime](docs/en/design/phase-workflow-extraction.md) | 페이즈 런타임 모듈 경계 · 의존성 번들 |
-| [Parallel Agent Reconciliation](docs/en/design/parallel-agent-reconciliation.md) | fan-out/fan-in · ReconcileNode · CriticGate |
-| [Workflow Tool](docs/en/design/workflow-tool.md) | 자연어 → 워크플로우 CRUD |
-| [Container Code Runner](docs/en/design/container-code-runner.md) | 다중 언어 컨테이너 샌드박스 |
-| [Workflow Builder](docs/en/design/workflow-builder-command-palette.md) | 커맨드 팔레트 + 노드 검색 |
+| [Node Registry](docs/ko/design/node-registry.md) | OCP 기반 노드 아키텍처 (141종) |
+| [Interaction Nodes](docs/ko/design/interaction-nodes.md) | HITL · Approval · Form · Retry · Batch 노드 |
+| [Phase Workflow Runtime](docs/ko/design/phase-workflow-extraction.md) | 페이즈 런타임 모듈 경계 · 의존성 번들 |
+| [Parallel Agent Reconciliation](docs/ko/design/parallel-agent-reconciliation.md) | fan-out/fan-in · ReconcileNode · CriticGate |
+| [Workflow Tool](docs/ko/design/workflow-tool.md) | 자연어 → 워크플로우 CRUD |
+| [Container Code Runner](docs/ko/design/container-code-runner.md) | 다중 언어 컨테이너 샌드박스 |
+| [Workflow Builder](docs/ko/design/workflow-builder-command-palette.md) | 커맨드 팔레트 + 노드 검색 |
 
 ### 보안 & 격리
 
 | 문서 | 설명 |
 |------|------|
-| [Security Hardening](docs/en/design/local-binding-security-hardening.md) | 로컬 바인딩 보안 · 파일시스템 격리 |
-| [Multi-Tenant](docs/en/design/multi-tenant.md) | 팀·사용자·워크스페이스 격리 설계 |
-| [Role Protocol Architecture](docs/en/design/role-protocol-architecture.md) | 역할 기반 프로토콜 정책 |
+| [Security Hardening](docs/ko/design/local-binding-security-hardening.md) | 로컬 바인딩 보안 · 파일시스템 격리 |
+| [Multi-Tenant](docs/ko/design/multi-tenant.md) | 팀·사용자·워크스페이스 격리 설계 |
+| [Role Protocol Architecture](docs/ko/design/role-protocol-architecture.md) | 역할 기반 프로토콜 정책 |
 
 ### 메모리 & 검색
 
 | 문서 | 설명 |
 |------|------|
-| [Hybrid Vector Search](docs/en/design/hybrid-vector-search.md) | FTS5/BM25 + 벡터 하이브리드 검색 |
-| [Vector Store (sqlite-vec)](docs/en/design/vector-store-sqlite-vec.md) | sqlite-vec KNN 임베딩 스토어 |
-| [Tool Selection FTS5](docs/en/design/tool-selection-fts5.md) | BM25 기반 도구 자동 선택 |
-| [RAG Reference Store](docs/en/design/rag-reference-store.md) | 레퍼런스 문서 검색 증강 |
-| [Memory Search](docs/en/design/memory-search-upgrade.md) | 청크 단위 검색 · 하이브리드 리트리벌 · 시간 감쇠 |
+| [Hybrid Vector Search](docs/ko/design/hybrid-vector-search.md) | FTS5/BM25 + 벡터 하이브리드 검색 |
+| [Vector Store (sqlite-vec)](docs/ko/design/vector-store-sqlite-vec.md) | sqlite-vec KNN 임베딩 스토어 |
+| [Tool Selection FTS5](docs/ko/design/tool-selection-fts5.md) | BM25 기반 도구 자동 선택 |
+| [RAG Reference Store](docs/ko/design/rag-reference-store.md) | 레퍼런스 문서 검색 증강 |
+| [Memory Search](docs/ko/design/memory-search-upgrade.md) | 청크 단위 검색 · 하이브리드 리트리벌 · 시간 감쇠 |
 
 ### 평가 & 품질
 
 | 문서 | 설명 |
 |------|------|
-| [Evaluation Pipeline](docs/en/design/evaluation-pipeline.md) | EvalCase · EvalRunner · Scorecard · 프로바이더 비교 |
+| [Evaluation Pipeline](docs/ko/design/evaluation-pipeline.md) | EvalCase · EvalRunner · Scorecard · 프로바이더 비교 |
 
 ### 서비스 & 채널
 
 | 문서 | 설명 |
 |------|------|
-| [Chat NDJSON Streaming](docs/en/design/chat-ndjson-streaming.md) | 스트리밍 응답 프로토콜 |
-| [Persona Message Renderer](docs/en/design/persona-message-renderer.md) | 페르소나 톤 렌더링 파이프라인 |
-| [Kanban Board](docs/en/design/kanban-board.md) | 칸반 보드 + 자동화 규칙 |
-| [i18n Protocol](docs/en/design/i18n-protocol.md) | 공유 i18n 프로토콜 + 자동화 도구 |
-| [Provider-Neutral Output Reduction](docs/en/design/provider-neutral-output-reduction.md) | 프로바이더 중립 출력 축소 |
-| [Multi-Environment Setup](docs/en/design/multi-environment-setup.md) | 프로파일 기반 환경 조립 · 컨테이너 우선 설정 |
+| [Chat NDJSON Streaming](docs/ko/design/chat-ndjson-streaming.md) | 스트리밍 응답 프로토콜 |
+| [Persona Message Renderer](docs/ko/design/persona-message-renderer.md) | 페르소나 톤 렌더링 파이프라인 |
+| [Kanban Board](docs/ko/design/kanban-board.md) | 칸반 보드 + 자동화 규칙 |
+| [i18n Protocol](docs/ko/design/i18n-protocol.md) | 공유 i18n 프로토콜 + 자동화 도구 |
+| [Provider-Neutral Output Reduction](docs/ko/design/provider-neutral-output-reduction.md) | 프로바이더 중립 출력 축소 |
+| [Multi-Environment Setup](docs/ko/design/multi-environment-setup.md) | 프로파일 기반 환경 조립 · 컨테이너 우선 설정 |
 
 ## 트러블슈팅
 
