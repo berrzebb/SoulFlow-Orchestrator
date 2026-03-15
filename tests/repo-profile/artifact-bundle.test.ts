@@ -184,3 +184,29 @@ describe("is_bundle_passing", () => {
     expect(is_bundle_passing(bundle)).toBe(false);
   });
 });
+
+// ── RPF-6: risk_tier ──────────────────────────────────────────────────────────
+
+describe("ArtifactBundle risk_tier (RPF-6)", () => {
+  it("risk_tier 주입 시 bundle에 포함됨", () => {
+    const bundle = create_artifact_bundle({ repo_id: "r", risk_tier: "high" });
+    expect(bundle.risk_tier).toBe("high");
+  });
+
+  it("risk_tier 미제공 시 undefined", () => {
+    const bundle = create_artifact_bundle({ repo_id: "r" });
+    expect(bundle.risk_tier).toBeUndefined();
+  });
+
+  it("직렬화/역직렬화 후 risk_tier 복원됨", () => {
+    const original = create_artifact_bundle({ repo_id: "r", risk_tier: "critical" });
+    const restored = deserialize_bundle(serialize_bundle(original));
+    expect(restored.risk_tier).toBe("critical");
+  });
+
+  it("잘못된 risk_tier 값은 역직렬화 시 undefined로 처리됨", () => {
+    const raw = { repo_id: "r", created_at: new Date().toISOString(), risk_tier: "extreme" };
+    const bundle = deserialize_bundle(raw);
+    expect(bundle.risk_tier).toBeUndefined();
+  });
+});

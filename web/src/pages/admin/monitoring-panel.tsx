@@ -306,6 +306,24 @@ function ValidatorSummaryPanel({ summary }: { summary: ValidatorSummary }) {
             ))}
           </ul>
         )}
+        {summary.risk_tier && (
+          <div className="kv mt-0 mb-0">
+            <Badge
+              status={t(`overview.risk_tier_${summary.risk_tier}`) || summary.risk_tier}
+              variant={summary.risk_tier === "low" ? "ok" : summary.risk_tier === "medium" ? "warn" : "err"}
+            />
+            <span className="text-xs text-muted">{t("overview.risk_tier") || "Risk Tier"}</span>
+          </div>
+        )}
+        {summary.eval_score !== undefined && (
+          <div className="kv mt-0 mb-0">
+            <Badge
+              status={`${Math.round(summary.eval_score * 100)}%`}
+              variant={summary.eval_score >= 0.8 ? "ok" : summary.eval_score >= 0.5 ? "warn" : "err"}
+            />
+            <span className="text-xs text-muted">{t("overview.eval_score") || "Eval Score"}</span>
+          </div>
+        )}
         {summary.artifact_bundle_id && (
           <div className="text-xs text-muted">
             Bundle: <code>{summary.artifact_bundle_id}</code>

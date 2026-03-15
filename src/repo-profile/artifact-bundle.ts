@@ -5,6 +5,7 @@
  */
 
 import type { RepoCapability } from "./repo-profile.js";
+import type { RiskTier } from "./risk-tier.js";
 
 export interface ValidatorRunResult {
   kind: RepoCapability;
@@ -40,6 +41,8 @@ export interface ArtifactBundle {
   readonly eval_summary?: EvalSummary;
   readonly residual_risks: readonly ResidualRisk[];
   readonly patch?: PatchMetadata;
+  /** RPF-6: 변경 표면의 최고 위험 등급. 번들 생성 시점에 RepoProfile로 계산 후 주입. */
+  readonly risk_tier?: RiskTier;
 }
 
 export type ArtifactBundleInput = {
@@ -51,6 +54,8 @@ export type ArtifactBundleInput = {
   eval_summary?: EvalSummary;
   residual_risks?: ResidualRisk[];
   patch?: PatchMetadata;
+  /** RPF-6: 변경 표면의 최고 위험 등급. */
+  risk_tier?: RiskTier;
 };
 
 /** ArtifactBundle을 생성. created_at 미제공 시 호출 시점의 ISO 8601으로 자동 설정. */
@@ -63,6 +68,7 @@ export function create_artifact_bundle(input: ArtifactBundleInput): ArtifactBund
     eval_summary: input.eval_summary,
     residual_risks: input.residual_risks ?? [],
     patch: input.patch,
+    risk_tier: input.risk_tier,
   };
 }
 
@@ -88,6 +94,12 @@ export function deserialize_bundle(raw: unknown): ArtifactBundle {
     throw new TypeError("ArtifactBundle.created_at is required and must be a string");
   }
 
+  const risk_tier_raw = obj["risk_tier"];
+  const risk_tier: RiskTier | undefined =
+    risk_tier_raw === "low" || risk_tier_raw === "medium" || risk_tier_raw === "high" || risk_tier_raw === "critical"
+      ? risk_tier_raw
+      : undefined;
+
   return {
     repo_id: obj["repo_id"],
     created_at: obj["created_at"],
@@ -102,6 +114,7 @@ export function deserialize_bundle(raw: unknown): ArtifactBundle {
       ? (obj["residual_risks"] as unknown[]).filter(is_residual_risk)
       : [],
     patch: is_patch_metadata(obj["patch"]) ? obj["patch"] : undefined,
+    risk_tier,
   };
 }
 

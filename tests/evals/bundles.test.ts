@@ -15,6 +15,31 @@ function make_bundle(name: string, overrides?: Partial<EvalBundle>): EvalBundle 
   };
 }
 
+// ── RPF-6: repo-profile 번들 auto-registration 회귀 잠금 ─────────────────────
+// clear_registry() 호출 전 모듈 초기 상태를 검증해야 하므로 최상단에 배치.
+
+describe("repo-profile bundle auto-registration (RPF-6)", () => {
+  it("repo-profile 번들이 레지스트리에 등록되어 있음", () => {
+    const bundle = get_bundle("repo-profile");
+    expect(bundle).toBeTruthy();
+    expect(bundle!.name).toBe("repo-profile");
+    expect(bundle!.smoke).toBe(true);
+    expect(bundle!.dataset_files).toContain("tests/evals/cases/repo-profile.json");
+  });
+
+  it("repo-profile 데이터셋 로드 → 8개 케이스", () => {
+    const bundle = get_bundle("repo-profile")!;
+    const datasets = load_bundle_datasets(bundle);
+    expect(datasets).toHaveLength(1);
+    expect(datasets[0].cases).toHaveLength(8);
+  });
+
+  it("repo-profile은 smoke 번들 목록에 포함됨", () => {
+    const smoke_names = get_smoke_bundles().map((b) => b.name);
+    expect(smoke_names).toContain("repo-profile");
+  });
+});
+
 describe("bundle registry", () => {
   beforeEach(() => {
     clear_registry();

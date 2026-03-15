@@ -128,3 +128,83 @@ describe("MonitoringPanel — ValidatorSummaryPanel 조건부 렌더", () => {
     expect(screen.queryByText("overview.validator_summary")).toBeNull();
   });
 });
+
+// ── RPF-6: risk_tier + eval_score 배지 ────────────────────────────────────────
+
+describe("MonitoringPanel — risk_tier + eval_score 배지 (RPF-6)", () => {
+  it("risk_tier=high → 위험 등급 레이블 렌더", () => {
+    mockUseStatus.mockReturnValue({
+      data: make_base_state({
+        validator_summary: {
+          repo_id: "r",
+          total_validators: 1,
+          passed_validators: 1,
+          failed_validators: [],
+          created_at: "2026-01-01T00:00:00.000Z",
+          risk_tier: "high",
+        },
+      }),
+      isLoading: false,
+      refetch: vi.fn(),
+    });
+    wrap(<MonitoringPanel />);
+    expect(screen.getByText("overview.risk_tier_high")).toBeInTheDocument();
+    expect(screen.getByText("overview.risk_tier")).toBeInTheDocument();
+  });
+
+  it("risk_tier 없으면 위험 등급 섹션 미렌더", () => {
+    mockUseStatus.mockReturnValue({
+      data: make_base_state({
+        validator_summary: {
+          repo_id: "r",
+          total_validators: 1,
+          passed_validators: 1,
+          failed_validators: [],
+          created_at: "2026-01-01T00:00:00.000Z",
+        },
+      }),
+      isLoading: false,
+      refetch: vi.fn(),
+    });
+    wrap(<MonitoringPanel />);
+    expect(screen.queryByText("overview.risk_tier")).toBeNull();
+  });
+
+  it("eval_score=0.9 → 90% 배지 렌더", () => {
+    mockUseStatus.mockReturnValue({
+      data: make_base_state({
+        validator_summary: {
+          repo_id: "r",
+          total_validators: 1,
+          passed_validators: 1,
+          failed_validators: [],
+          created_at: "2026-01-01T00:00:00.000Z",
+          eval_score: 0.9,
+        },
+      }),
+      isLoading: false,
+      refetch: vi.fn(),
+    });
+    wrap(<MonitoringPanel />);
+    expect(screen.getByText("90%")).toBeInTheDocument();
+    expect(screen.getByText("overview.eval_score")).toBeInTheDocument();
+  });
+
+  it("eval_score 없으면 eval score 섹션 미렌더", () => {
+    mockUseStatus.mockReturnValue({
+      data: make_base_state({
+        validator_summary: {
+          repo_id: "r",
+          total_validators: 1,
+          passed_validators: 1,
+          failed_validators: [],
+          created_at: "2026-01-01T00:00:00.000Z",
+        },
+      }),
+      isLoading: false,
+      refetch: vi.fn(),
+    });
+    wrap(<MonitoringPanel />);
+    expect(screen.queryByText("overview.eval_score")).toBeNull();
+  });
+});

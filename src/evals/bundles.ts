@@ -138,3 +138,11 @@ register_bundle({
   smoke: true,
   tags: ["smoke"],
 });
+
+register_bundle({
+  name: "repo-profile",
+  description: "RPF-6: validator/risk-tier/artifact-bundle 파이프라인 회귀 평가",
+  dataset_files: ["tests/evals/cases/repo-profile.json"],
+  smoke: true,
+  tags: ["smoke"],
+});

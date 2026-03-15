@@ -1,6 +1,6 @@
 # Claude 증거 제출
 
-> 마지막 업데이트: 2026-03-15 11:20 → 11:25 → 11:30 (Round 6: [합의완료])
+> 마지막 업데이트: 2026-03-15 12:18
 > GPT 감사 문서: `docs/feedback/gpt.md`
 
 ## 합의완료
@@ -44,73 +44,61 @@
 - `[합의완료]` QG-1 ~ QG-4 — Pipeline Integration + Knip + Type Snapshot + Property Testing
 - `[합의완료]` RPF-4 + RPF-5 — ValidatorPack + ArtifactBundle
 - `[합의완료]` RPF-4F — Frontend Validation Surface
+- `[합의완료]` RPF-6 — Feedback / Eval / Dashboard Integration
 
-## [합의완료] RPF-4F — Frontend Validation Surface
+## [합의완료] RPF-6 — Feedback / Eval / Dashboard Integration
 
 ### Claim
 
-- 어댑터: `src/repo-profile/validator-summary-adapter.ts` (신규) — `ValidatorSummary`. `adapt_bundle_to_summary(bundle)`, `validator_badge_variant(summary)`.
-- 백엔드 공급 포트: `src/dashboard/service.types.ts` — `DashboardOptions.validator_summary_ops?` 추가.
-- 상태 주입: `src/dashboard/state-builder.ts` — `validator_summary: options.validator_summary_ops?.get_latest() ?? undefined`.
-- Bootstrap wiring: `src/bootstrap/dashboard.ts` — `create_dashboard_bundle` 내부에 인메모리 `validator_summary_ops` 홀더 생성 + `DashboardService` 주입 + `DashboardBundleResult` 노출.
-- Workflow 타입+런타임+create wiring: `src/agent/phase-loop.types.ts` — `PhaseLoopState.artifact_bundle?` + `PhaseLoopRunOptions.artifact_bundle?`. `src/agent/phase-loop-runner.ts` — 새 state 생성 블록에 스프레드 → store.upsert → `/api/workflow/runs/:id` 자동 공급. `src/dashboard/ops/workflow.ts:create` — `input.artifact_bundle` 추출 + `run_phase_loop`에 전달.
-- 프론트엔드: `web/src/pages/overview/types.ts`, `web/src/pages/admin/monitoring-panel.tsx`, `web/src/pages/overview/index.tsx`, `web/src/pages/workflows/detail.tsx`.
-- i18n: `src/i18n/locales/en.json`, `src/i18n/locales/ko.json`.
+- `ArtifactBundle.risk_tier?: RiskTier` 추가 (`src/repo-profile/artifact-bundle.ts`) — 생성/역직렬화 시 전달. 잘못된 값은 `undefined`로 처리.
+- `ValidatorSummary.risk_tier?`, `ValidatorSummary.eval_score?` 추가 (`src/repo-profile/validator-summary-adapter.ts`) — `adapt_bundle_to_summary()`에서 bundle 값 전달.
+- `next_task_hint(summary)` 신규 — 실패/위험/eval 순 우선순위 힌트 문자열 반환. `src/repo-profile/index.ts` export.
+- `repo-profile` eval 번들 등록 (`src/evals/bundles.ts`) + eval cases (`tests/evals/cases/repo-profile.json`, 8 케이스).
+- 프론트엔드 `ValidatorSummary` 타입에 `risk_tier?`, `eval_score?` 추가 (`web/src/pages/overview/types.ts`).
+- `ValidatorSummaryPanel` risk tier 배지 + eval score 배지 조건부 렌더 (`web/src/pages/admin/monitoring-panel.tsx`).
+- i18n 7개 키 추가: `overview.risk_tier`, `overview.risk_tier_{low,medium,high,critical}`, `overview.eval_score` (en + ko).
+- **Round 2 추가**: `tests/evals/bundles.test.ts`에 `repo-profile` auto-registration 회귀 잠금 3개 테스트 추가 (등록 확인, 8-case 로드, smoke 포함).
+- **Round 2 추가**: `tests/repo-profile/validator-summary-adapter.test.ts`에 `next_task_hint()` 우선순위 중첩 케이스 2개 추가 (실패+critical+저eval → 실패 우선, critical+저eval → critical 우선).
 
 ### 변경 파일
 
-- `src/repo-profile/validator-summary-adapter.ts` (신규)
-- `src/repo-profile/index.ts` (수정)
-- `src/dashboard/service.types.ts` (수정)
-- `src/dashboard/state-builder.ts` (수정)
-- `src/bootstrap/dashboard.ts` (수정) — validator_summary_ops 인메모리 홀더 + DashboardService 주입 + Result 노출
-- `src/dashboard/ops/workflow.ts` (수정) — create에서 artifact_bundle 추출 + run_phase_loop 전달
-- `src/agent/phase-loop.types.ts` (수정) — PhaseLoopState.artifact_bundle? + PhaseLoopRunOptions.artifact_bundle?
-- `src/agent/phase-loop-runner.ts` (수정) — artifact_bundle 스프레드 추가
-- `web/src/pages/overview/types.ts` (수정)
-- `web/src/pages/admin/monitoring-panel.tsx` (수정)
-- `web/src/pages/overview/index.tsx` (수정)
-- `web/src/pages/workflows/detail.tsx` (수정) — ArtifactBundleEntry export 추가
-- `src/i18n/locales/en.json` (수정)
-- `src/i18n/locales/ko.json` (수정)
-- `tests/repo-profile/validator-summary-adapter.test.ts` (신규) — 12개 테스트
-- `tests/dashboard/validator-summary-state.test.ts` (신규) — 7개 테스트
-- `tests/agent/phase-loop-runner-nodes.test.ts` (수정) — artifact_bundle 주입 3개 테스트 추가
-- `tests/dashboard/ops/workflow-ops.test.ts` (수정) — create artifact_bundle 전달 2개 테스트 추가
-- `web/eslint.config.js` (수정) — files 패턴에 `tests/**/*.{ts,tsx}` 추가, web 테스트 파일 lint 공백 해소
-- `web/vitest.config.ts` (신규) — happy-dom 환경 React 테스트 설정
-- `web/tests/setup.ts` (신규) — @testing-library/jest-dom 설정
-- `web/tests/test-utils.tsx` (신규) — render_routed, make_dashboard_state, make_passing_summary, make_failing_summary 공유 유틸리티
-- `web/tests/pages/admin/monitoring-panel.test.tsx` (신규) — ValidatorSummaryPanel 직접 렌더 5개 테스트
-- `web/tests/pages/overview/index.test.tsx` (신규) — 실패 섹션 조건부 렌더 5개 테스트
-- `web/tests/pages/workflows/detail.test.tsx` (신규) — ArtifactEntryCard 직접 렌더 6개 테스트
+- `src/repo-profile/artifact-bundle.ts` (수정) — `risk_tier?: RiskTier` 추가
+- `src/repo-profile/validator-summary-adapter.ts` (수정) — `risk_tier?`, `eval_score?`, `next_task_hint()` 추가
+- `src/repo-profile/index.ts` (수정) — `next_task_hint` export
+- `src/evals/bundles.ts` (수정) — `repo-profile` 번들 등록
+- `tests/evals/cases/repo-profile.json` (신규) — 8개 eval cases
+- `web/src/pages/overview/types.ts` (수정) — `risk_tier?`, `eval_score?` 추가
+- `web/src/pages/admin/monitoring-panel.tsx` (수정) — risk tier + eval score 배지
+- `src/i18n/locales/en.json` (수정) — 7개 키
+- `src/i18n/locales/ko.json` (수정) — 7개 키
+- `tests/repo-profile/artifact-bundle.test.ts` (수정) — risk_tier 4개 테스트 추가
+- `tests/repo-profile/validator-summary-adapter.test.ts` (수정) — risk_tier+eval_score+next_task_hint 10개 테스트 추가 (Round 2: 우선순위 중첩 2개 추가)
+- `web/tests/pages/admin/monitoring-panel.test.tsx` (수정) — risk_tier+eval_score 배지 4개 테스트 추가
+- `tests/evals/bundles.test.ts` (수정) — repo-profile auto-registration 회귀 잠금 3개 추가
 
 ### Test Command
 
 ```bash
 # 백엔드 (루트)
-npx vitest run tests/repo-profile/validator-summary-adapter.test.ts tests/dashboard/validator-summary-state.test.ts tests/agent/phase-loop-runner-nodes.test.ts tests/dashboard/ops/workflow-ops.test.ts
-npx eslint src/bootstrap/dashboard.ts src/dashboard/ops/workflow.ts src/agent/phase-loop.types.ts src/agent/phase-loop-runner.ts
+npx vitest run tests/repo-profile/validator-summary-adapter.test.ts tests/repo-profile/artifact-bundle.test.ts tests/evals/bundles.test.ts
+npx eslint tests/evals/bundles.test.ts tests/repo-profile/validator-summary-adapter.test.ts
 npx tsc --noEmit
 # 프론트엔드 (web/)
 cd web && npx vitest run
-npx eslint src/pages/overview/types.ts src/pages/admin/monitoring-panel.tsx src/pages/overview/index.tsx src/pages/workflows/detail.tsx
-npx eslint tests/setup.ts tests/test-utils.tsx tests/pages/admin/monitoring-panel.test.tsx tests/pages/overview/index.test.tsx tests/pages/workflows/detail.test.tsx
 npm run build
 ```
 
 ### Test Result
 
-- `npx vitest run ... (4 backend files)`: **4 files / 85 tests passed** (adapter:12, state:7, runner-nodes:24, workflow-ops:42)
-- `cd web && npx vitest run`: **3 files / 16 tests passed** (monitoring-panel:5, overview:5, detail:6)
-- `npx eslint src/bootstrap/dashboard.ts src/dashboard/ops/workflow.ts src/agent/phase-loop.types.ts src/agent/phase-loop-runner.ts`: **0 errors, 0 warnings**
-- `web/npx eslint src/pages/overview/types.ts src/pages/admin/monitoring-panel.tsx src/pages/overview/index.tsx src/pages/workflows/detail.tsx`: **0 errors, 0 warnings**
-- `web/npx eslint tests/setup.ts tests/test-utils.tsx tests/pages/admin/monitoring-panel.test.tsx tests/pages/overview/index.test.tsx tests/pages/workflows/detail.test.tsx`: **0 errors, 0 warnings** (Round 6: eslint.config.js files 패턴에 `tests/**/*.{ts,tsx}` 추가로 lint 공백 해소)
+- `npx vitest run tests/repo-profile/validator-summary-adapter.test.ts tests/repo-profile/artifact-bundle.test.ts tests/evals/bundles.test.ts`: **3 files / 59 tests passed** (adapter:22, bundle:23, bundles:14)
+- `cd web && npx vitest run`: **3 files / 20 tests passed** (monitoring-panel:9, overview:5, detail:6)
+- `npx eslint tests/evals/bundles.test.ts tests/repo-profile/validator-summary-adapter.test.ts`: **0 errors, 0 warnings**
 - `npx tsc --noEmit`: **통과**
-- `web/npm run build`: **통과** (chunk size warning만, 기존 pre-existing lint는 RPF-4F 외 파일)
+- `web/npm run build`: **통과** (chunk size warning만, pre-existing)
 
 ### Residual Risk
 
-- `ValidatorSummary`는 프론트엔드/백엔드 독립 선언 — 구조 변경 시 수동 동기화 필요. 설계 의도(점진적 도입).
-- `validator_summary_ops` 인메모리 홀더는 초기 null — 외부에서 `set_latest()`로 push해야 표시됨. 설계 의도.
-- `PhaseLoopRunOptions.artifact_bundle`은 optional — API 호출자가 제공해야 workflow detail에 카드 렌더. 설계 의도.
+- `risk_tier`는 번들 생성 시점에 외부에서 주입 — `DashboardOptions.validator_summary_ops`가 이미 완성된 `ValidatorSummary`를 공급하므로 `risk_tier` 계산은 호출자 책임. 설계 의도.
+- `repo-profile` eval 케이스는 LLM 분류 기반 — 실제 LLM 실행 없이는 score가 0이 될 수 있음. 회귀 잠금용 정의 목적.
+- `next_task_hint()`는 영어 힌트 반환 — i18n 적용 대상 아님 (내부 로직 레이어, 설계 의도).
+

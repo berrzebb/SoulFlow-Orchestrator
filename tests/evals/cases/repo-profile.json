@@ -1,0 +1,62 @@
+{
+  "name": "repo-profile",
+  "description": "RPF-6: validator/risk-tier/artifact-bundle 파이프라인 회귀 평가 — 위험 등급 분류, validator 결과 해석, 다음 작업 힌트",
+  "cases": [
+    {
+      "id": "rp-risk-low-docs",
+      "input": "{\"changed_files\": [\"docs/README.md\", \"docs/design/overview.md\"], \"context\": \"classify risk tier\"}",
+      "expected": "low",
+      "tags": ["smoke"],
+      "metadata": {"desc": "docs/**만 변경 → low risk"}
+    },
+    {
+      "id": "rp-risk-high-auth",
+      "input": "{\"changed_files\": [\"src/auth/middleware.ts\", \"src/auth/jwt.ts\"], \"context\": \"classify risk tier\"}",
+      "expected": "high",
+      "tags": ["smoke"],
+      "metadata": {"desc": "auth 경로 변경 → high risk"}
+    },
+    {
+      "id": "rp-risk-medium-src",
+      "input": "{\"changed_files\": [\"src/utils/format.ts\", \"src/utils/common.ts\"], \"context\": \"classify risk tier\"}",
+      "expected": "medium",
+      "tags": ["smoke"],
+      "metadata": {"desc": "일반 src 변경 → medium risk"}
+    },
+    {
+      "id": "rp-validator-all-passed",
+      "input": "{\"total_validators\": 3, \"passed_validators\": 3, \"failed_validators\": [], \"context\": \"next task hint\"}",
+      "expected": "ready to proceed",
+      "tags": ["smoke"],
+      "metadata": {"desc": "모든 validator 통과 → 진행 가능 힌트"}
+    },
+    {
+      "id": "rp-validator-lint-failed",
+      "input": "{\"total_validators\": 3, \"passed_validators\": 2, \"failed_validators\": [{\"kind\": \"lint\", \"command\": \"eslint src/\"}], \"context\": \"next task hint\"}",
+      "expected": "Fix 1 failing",
+      "tags": ["smoke"],
+      "metadata": {"desc": "lint 실패 → fix 힌트 포함"}
+    },
+    {
+      "id": "rp-eval-score-low",
+      "input": "{\"eval_score\": 0.6, \"failed_validators\": [], \"context\": \"next task hint\"}",
+      "expected": "Improve eval score",
+      "tags": ["smoke"],
+      "metadata": {"desc": "eval score 0.6 → 개선 힌트"}
+    },
+    {
+      "id": "rp-bundle-serialize-shape",
+      "input": "{\"repo_id\": \"test-repo\", \"changed_files\": [\"src/a.ts\"], \"validator_results\": [{\"kind\": \"lint\", \"command\": \"eslint\", \"passed\": true}], \"context\": \"serialize and describe bundle\"}",
+      "expected": "repo_id",
+      "tags": ["smoke"],
+      "metadata": {"desc": "ArtifactBundle 직렬화 시 repo_id 포함"}
+    },
+    {
+      "id": "rp-risk-tier-critical-protected",
+      "input": "{\"changed_files\": [\"src/security/secret-vault.ts\"], \"context\": \"classify risk tier for security module\"}",
+      "expected": "critical",
+      "tags": ["smoke"],
+      "metadata": {"desc": "security 경로 변경 → critical risk"}
+    }
+  ]
+}

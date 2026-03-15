@@ -57,6 +57,10 @@ export interface ValidatorSummary {
   failed_validators: FailedValidatorEntry[];
   artifact_bundle_id?: string;
   created_at: string;
+  /** RPF-6: 변경 표면의 최고 위험 등급. */
+  risk_tier?: string;
+  /** RPF-6: eval 통과율 (0~1). */
+  eval_score?: number;
 }
 
 export interface DashboardState {
