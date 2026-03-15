@@ -14,7 +14,7 @@
 
 Slack · Telegram · Discord 메시지를 **헤드리스 에이전트**로 처리하는 비동기 오케스트레이션 런타임.
 
-9개 에이전트 백엔드(Claude/Codex/Gemini × CLI/SDK + OpenAI 호환 + OpenRouter + Ollama + 컨테이너), 8개 역할 기반 스킬 시스템, CircuitBreaker 기반 프로바이더 복원력, AES-256-GCM 보안 Vault, OAuth 2.0 연동, 141종 노드 워크플로우 그래프 에디터, 에이전트 기반 WorkflowTool CRUD, React + Vite 웹 대시보드(i18n, 마크다운 렌더링)를 내장한 올인원 솔루션입니다.
+9개 에이전트 백엔드(Claude/Codex/Gemini × CLI/SDK + OpenAI 호환 + OpenRouter + Ollama + 컨테이너), 8개 역할 기반 스킬 시스템, CircuitBreaker 기반 프로바이더 복원력, AES-256-GCM 보안 Vault, OAuth 2.0 연동, 141종 노드 워크플로우 그래프 에디터, **Prompting Studio**(텍스트/이미지/동영상 생성 · 에이전트 설계 · Gallery · A/B 비교), HITL 승인 게이트, React + Vite 웹 대시보드(i18n, 마크다운 렌더링)를 내장한 올인원 솔루션입니다.
 
 ## 목차
 
@@ -445,4 +445,6 @@ next/
 
 ## 라이선스
 
-MIT
+[GNU Affero General Public License v3.0](../LICENSE) (AGPL-3.0-only)
+
+Copyright (C) 2026 Hyun Park
