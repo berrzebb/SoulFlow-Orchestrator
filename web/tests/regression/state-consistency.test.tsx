@@ -1,15 +1,32 @@
 /**
- * FE-6b: State Consistency 회귀 — 타입 수준 + 런타임 수준 직접 검증.
- *
- * 검증 축:
- * 1. overview/types.ts와 memory.tsx의 WorkflowEvent 필드 타입 레벨 호환
- * 2. RequestClass 유효값이 monitoring-panel의 variant 맵과 일치
- * 3. state-builder가 user_id를 포함하여 응답 — 직접 호출 검증
+ * FE-6b: State Consistency 회귀 — 타입 수준 + MonitoringPanel 직접 렌더 검증.
  */
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
+import { render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import type { WorkflowEvent as OverviewWorkflowEvent, RequestClass, DashboardState } from "@/pages/overview/types";
 
-// ── 타입 수준 일치 검증 (컴파일 통과 = drift 없음) ──────────────────────────
+// ── 모킹 ──────────────────────────────────────────────────────────────────────
+
+const mockUseStatus = vi.fn();
+vi.mock("@/api/hooks", () => ({ useStatus: (...args: unknown[]) => mockUseStatus(...args) }));
+vi.mock("@/i18n", () => ({ useT: () => (key: string) => key }));
+vi.mock("@tanstack/react-query", () => ({
+  useQuery: vi.fn(() => ({ data: undefined, isLoading: false })),
+  QueryClient: vi.fn(),
+  QueryClientProvider: ({ children }: { children: React.ReactNode }) => children,
+}));
+vi.mock("@/utils/constants", () => ({ PROVIDER_COLORS: {} }));
+vi.mock("@/utils/format", () => ({ fmt_time: (v: unknown) => String(v) }));
+vi.mock("@/pages/overview/helpers", () => ({
+  MetricBar: () => null, StatusDot: () => null, fmt_uptime: () => "0s", fmt_kbps: () => "0 KB/s",
+}));
+vi.mock("@/pages/overview/processes-section", () => ({ ProcessesSection: () => null }));
+vi.mock("@/components/skeleton-grid", () => ({ SkeletonGrid: () => null }));
+
+import { MonitoringPanel } from "@/pages/admin/monitoring-panel";
+
+// ── 타입 수준 일치 검증 ────────────────────────────────────────────────────
 
 describe("State Consistency — 타입 수준 drift 방지 (FE-6b)", () => {
   it("OverviewWorkflowEvent에 user_id 필드가 할당 가능하다", () => {
@@ -47,20 +64,44 @@ describe("State Consistency — 타입 수준 drift 방지 (FE-6b)", () => {
   });
 });
 
-// ── 런타임 수준 — monitoring-panel REQUEST_CLASS_VARIANT 키 일치 ─────────────
+// ── MonitoringPanel 직접 렌더 — request class 배지 variant 검증 ──────────────
 
-describe("State Consistency — RequestClass ↔ monitoring 배지 렌더 일치 (FE-6b)", () => {
-  it("monitoring-panel.test.tsx에서 request class 배지 렌더가 검증된다 (cross-reference)", async () => {
-    // REQUEST_CLASS_VARIANT는 monitoring-panel.tsx 내부 상수라 직접 import 불가.
-    // monitoring-panel.test.tsx가 request_class_summary 렌더를 직접 검증하므로 cross-reference.
-    const { readFileSync } = await import("node:fs");
-    const test_src = readFileSync("tests/pages/admin/monitoring-panel.test.tsx", "utf8");
-    expect(test_src).toContain("request-class-panel");
-    expect(test_src).toContain("builtin");
-    expect(test_src).toContain("agent");
+describe("State Consistency — MonitoringPanel request class 배지 직접 렌더 (FE-6b)", () => {
+  it("request_class_summary가 있으면 배지가 올바른 텍스트로 렌더된다", () => {
+    mockUseStatus.mockReturnValue({
+      data: {
+        now: "2026-01-01T00:00:00.000Z",
+        queue: { inbound: 0, outbound: 0 },
+        channels: { enabled: [], health: [], active_runs: 0 },
+        processes: { active: [], recent: [] },
+        cron: { jobs: [] },
+        agent_providers: [],
+        request_class_summary: { builtin: 10, agent: 3 },
+      },
+      isLoading: false,
+      refetch: vi.fn(),
+    });
+    render(<MemoryRouter><MonitoringPanel /></MemoryRouter>);
+    expect(screen.getByTestId("request-class-panel")).toBeInTheDocument();
+    expect(screen.getByText("builtin")).toBeInTheDocument();
+    expect(screen.getByText("agent")).toBeInTheDocument();
+  });
+
+  it("guardrail_stats blocked=0이면 clear 배지가 렌더된다", () => {
+    mockUseStatus.mockReturnValue({
+      data: {
+        now: "2026-01-01T00:00:00.000Z",
+        queue: { inbound: 0, outbound: 0 },
+        channels: { enabled: [], health: [], active_runs: 0 },
+        processes: { active: [], recent: [] },
+        cron: { jobs: [] },
+        agent_providers: [],
+        guardrail_stats: { blocked: 0, total: 50 },
+      },
+      isLoading: false,
+      refetch: vi.fn(),
+    });
+    render(<MemoryRouter><MonitoringPanel /></MemoryRouter>);
+    expect(screen.getByText("overview.guardrail_clear")).toBeInTheDocument();
   });
 });
-
-// ── state-builder user_id passthrough는 루트 tests/dashboard/state-builder.test.ts에서 직접 검증됨 ──
-// (web 테스트에서 루트 src 직접 import 불가 — vite 경계)
-// tests/dashboard/state-builder.test.ts:L310 "workflow_events에 user_id가 포함된다 (FE-6)"
