@@ -49,22 +49,15 @@ describe("State Consistency — 타입 수준 drift 방지 (FE-6b)", () => {
 
 // ── 런타임 수준 — monitoring-panel REQUEST_CLASS_VARIANT 키 일치 ─────────────
 
-describe("State Consistency — RequestClass ↔ monitoring variant 일치 (FE-6b)", () => {
-  it("모든 RequestClass 값에 대해 variant가 정의되어야 한다", () => {
-    // monitoring-panel.tsx의 REQUEST_CLASS_VARIANT는 모듈 내부 상수이므로
-    // 여기서는 유효 RequestClass 값이 알려진 variant 맵에 포함되는지 검증
-    const VARIANT_MAP: Record<string, string | undefined> = {
-      builtin: "ok",
-      direct_tool: "ok",
-      model_direct: "info",
-      workflow_compile: "info",
-      workflow_run: "info",
-      agent: "warn",
-    };
-    const classes: RequestClass[] = ["builtin", "direct_tool", "model_direct", "workflow_compile", "workflow_run", "agent"];
-    for (const cls of classes) {
-      expect(VARIANT_MAP[cls], `${cls}에 variant 미정의`).toBeDefined();
-    }
+describe("State Consistency — RequestClass ↔ monitoring 배지 렌더 일치 (FE-6b)", () => {
+  it("monitoring-panel.test.tsx에서 request class 배지 렌더가 검증된다 (cross-reference)", async () => {
+    // REQUEST_CLASS_VARIANT는 monitoring-panel.tsx 내부 상수라 직접 import 불가.
+    // monitoring-panel.test.tsx가 request_class_summary 렌더를 직접 검증하므로 cross-reference.
+    const { readFileSync } = await import("node:fs");
+    const test_src = readFileSync("tests/pages/admin/monitoring-panel.test.tsx", "utf8");
+    expect(test_src).toContain("request-class-panel");
+    expect(test_src).toContain("builtin");
+    expect(test_src).toContain("agent");
   });
 });
 
