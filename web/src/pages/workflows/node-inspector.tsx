@@ -29,6 +29,10 @@ export interface NodeExecutionState {
   error?: string;
   started_at?: string;
   completed_at?: string;
+  /** FE-3: SchemaChain Validator 결과 — undefined = 검증 미수행. */
+  schema_valid?: boolean;
+  /** FE-3: SchemaRepairLoop가 자동 수정한 경우 true. */
+  schema_repaired?: boolean;
 }
 
 /** 상류 노드의 드래그 가능 출력 참조. */

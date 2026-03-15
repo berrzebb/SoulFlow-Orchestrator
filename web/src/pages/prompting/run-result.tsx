@@ -9,6 +9,8 @@ export type RunResultValue = {
   model: string;
   provider_id: string;
   error?: string;
+  /** FE-3: 평가 루브릭 점수 0–1 (F1+F2 Acceptance Rubric 결과). */
+  eval_score?: number;
 };
 
 export function RunResult({ value, loading }: { value: RunResultValue | null; loading?: boolean }) {
@@ -47,7 +49,7 @@ export function RunResult({ value, loading }: { value: RunResultValue | null; lo
     );
   }
 
-  const { content, finish_reason, latency_ms, usage, model, provider_id } = value;
+  const { content, finish_reason, latency_ms, usage, model, provider_id, eval_score } = value;
   const cost_usd = usage.cost_usd;
 
   const handle_copy = () => {
@@ -65,6 +67,15 @@ export function RunResult({ value, loading }: { value: RunResultValue | null; lo
         {usage.total_tokens != null && <span className="ps-chip">{usage.total_tokens} tok</span>}
         {cost_usd != null && cost_usd > 0 && <span className="ps-chip">${cost_usd.toFixed(4)}</span>}
         {finish_reason !== "stop" && <span className="ps-chip ps-chip--warn">{finish_reason}</span>}
+        {/* FE-3: 평가 루브릭 점수 배지 */}
+        {eval_score != null && (
+          <span
+            className={`ps-chip ps-chip--score${eval_score >= 0.8 ? " ps-chip--score-ok" : eval_score >= 0.5 ? " ps-chip--score-warn" : " ps-chip--score-err"}`}
+            title={`Eval score: ${(eval_score * 100).toFixed(0)}%`}
+          >
+            {(eval_score * 100).toFixed(0)}%
+          </span>
+        )}
         <button
           className="ps-result__copy"
           onClick={handle_copy}

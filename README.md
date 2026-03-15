@@ -38,12 +38,13 @@ Slack · Telegram · Discord · 웹 채팅의 메시지를 8개 역할 에이전
 | **채널 매니저** | Slack · Telegram · Discord 수신/응답 | 스트리밍 · 그룹핑 · 페르소나 톤 렌더링 |
 | **오케스트레이터** | 인바운드 → 에이전트 실행 | Agent Loop · Task Loop · Phase Loop 삼중 모드 |
 | **에이전트 백엔드** | Claude/Codex/Gemini × CLI/SDK 실행 | CircuitBreaker · HealthScorer · 자동 fallback |
-| **역할 스킬** | 8개 역할 계층적 분담 | concierge → pm/pl → implementer/reviewer/validator/debugger |
+| **역할 스킬** | 8개 역할 계층적 분담 + 19종 빌트인 스킬 | concierge → pm/pl → implementer/reviewer/validator/debugger · diagram · github · sandbox 등 |
 | **보안 Vault** | AES-256-GCM 민감정보 관리 | 인바운드 자동 sealing · 도구 경로 복호화만 허용 |
 | **OAuth 연동** | 외부 서비스 인증 | GitHub · Google · Custom OAuth 2.0 |
 | **워크플로우 엔진** | Phase Loop · DAG 실행 | 141종 노드 그래프 에디터 · 6개 카테고리 · HITL 인터랙션 노드 |
 | **메시지 버스** | 내부 이벤트 라우팅 | 인메모리 (기본) · Redis Streams (다중 인스턴스) |
-| **도메인 서비스** | 임베딩 · 벡터 스토어 · 웹훅 · 칸반 | sqlite-vec KNN · 하이브리드 검색 · 칸반 자동화 규칙 |
+| **도메인 서비스** | 임베딩 · 벡터 스토어 · 웹훅 · 칸반 · 모델 카탈로그 · 레퍼런스 스토어 | sqlite-vec KNN · 하이브리드 검색 · 칸반 자동화 규칙 |
+| **평가 파이프라인** | 에이전트 출력 품질 평가 | EvalCase · EvalRunner · judge · scorer · 프로바이더 비교 |
 | **대시보드** | 웹 기반 실시간 모니터링 | SSE 피드 · 에이전트/태스크/결정/프로바이더 관리 |
 | **MCP 통합** | 외부 도구 서버 연결 | stdio/SSE · 자동 CLI 주입 |
 | **크론** | 정기 작업 스케줄 | SQLite 기반 · 핫 리로드 |
@@ -76,7 +77,7 @@ concierge (사용자 대면)
 
 ### 도구 & 스킬 동적 선택
 
-158개 도구 전체 전송 시 ~25,000 토큰 소비. **ToolIndex FTS5**가 한/영 키워드 확장 + BM25 랭킹으로 요청별 최적 도구 20~35개를 자동 선택합니다. (Core 13개 항상 포함)
+174개 도구 전체 전송 시 ~25,000 토큰 소비. **ToolIndex FTS5**가 한/영 키워드 확장 + BM25 랭킹으로 요청별 최적 도구 20~35개를 자동 선택합니다. (Core 13개 항상 포함)
 
 ## 아키텍처
 
@@ -132,12 +133,13 @@ flowchart TD
         INTERACT[인터랙션 · HITL · 승인 · 폼]
     end
 
-    subgraph Skills["역할 스킬 (8)"]
+    subgraph Skills["역할 스킬 (8역할 + 19빌트인)"]
         direction TB
         BT[concierge]
         PM[pm · pl]
         IMPL[implementer · reviewer]
         DBG[debugger · validator]
+        BSKILL[diagram · github · sandbox · ...]
     end
 
     subgraph Services["도메인 서비스"]
@@ -145,6 +147,12 @@ flowchart TD
         EMBED[Embed · VectorStore · sqlite-vec]
         WEBHOOK[Webhook · Task · Kanban]
         CATALOG[ModelCatalog · ReferenceStore]
+    end
+
+    subgraph Evals["평가 파이프라인"]
+        direction LR
+        ERUN[EvalRunner · bundles]
+        EJUDGE[judge · scorer · Scorecard]
     end
 
     subgraph Observability["관찰성"]
@@ -160,7 +168,9 @@ flowchart TD
     Pipeline --> GW
     GW --> Backends
     GW --> Workflows
+    GW --> Evals
     Workflows --> Backends
+    Evals --> Backends
     INTERACT -.->|ASK_USER · 승인| Channels
     CTR --> PTY
     Backends --> Skills
@@ -277,6 +287,7 @@ cd SoulFlow-Orchestrator
 | Workflows | `/workflows` | Phase Loop 워크플로우 관리 · 141종 노드 그래프 에디터 · 에이전트 채팅 |
 | Kanban | `/kanban` | 드래그앤드롭 칸반 보드 · 자동화 규칙 |
 | WBS | `/wbs` | 칸반 카드 계층 트리 뷰 (parent_id 기반) |
+| Admin | `/admin` | 관리자 콘솔 · 팀/사용자 관리 · 채널 인스턴스 현황 |
 | Settings | `/settings` | 글로벌 런타임 설정 |
 
 → 상세: [대시보드 가이드](docs/ko/guide/dashboard.md)
@@ -367,7 +378,7 @@ next/
   docker/                 ← docker-compose 파일 (prod, dev, instance 오버라이드)
   src/
     agent/
-      backends/     ← SDK/AppServer/OpenAI 백엔드 어댑터 (7개)
+      backends/     ← SDK/AppServer/OpenAI 백엔드 어댑터
       nodes/        ← 141종 워크플로우 노드 핸들러 (OCP 플러그인 아키텍처)
       pty/          ← PTY 기반 CLI 통합 (ContainerPool, AgentBus, NDJSON 와이어)
       tools/        ← 에이전트 도구 구현 (oauth_fetch, workflow, ask-user 등)
@@ -381,6 +392,7 @@ next/
       routes/       ← 라우트 핸들러
     decision/       ← 결정사항 서비스
     evals/          ← 평가 파이프라인 (EvalRunner, EvalCase, judges, scorers, bundles)
+    evals/          ← 평가 파이프라인 (EvalCase · EvalRunner · judge · scorer · bundles)
     events/         ← 워크플로우 이벤트 서비스
     heartbeat/      ← 하트비트 서비스
     i18n/           ← 공유 i18n 프로토콜 + JSON 로케일

@@ -48,6 +48,12 @@ interface PhaseAgentState {
   result?: string;
   error?: string;
   messages: PhaseMessage[];
+  /** FE-3: 재시도 횟수 (SchemaRepairLoop / RetryNode). */
+  retry_count?: number;
+  /** FE-3: 평가 점수 0–1 (EvaluationPipeline rubric). */
+  eval_score?: number;
+  /** FE-3: 스키마 검증 통과 여부 (SchemaChain Validator). */
+  schema_valid?: boolean;
 }
 
 interface PhaseCriticState {
@@ -69,6 +75,8 @@ interface PhaseState {
   loop_iteration?: number;
   loop_results?: string[];
   pending_user_input?: boolean;
+  /** FE-3: 병렬 재조정에서 발견된 충돌 수 (PAR 트랙 ReconcileNode). */
+  reconcile_conflicts?: number;
 }
 
 interface PhaseDefinitionBrief {
@@ -322,6 +330,13 @@ function PhaseCard({ phase, index, isCurrent, maxIterations, workflowId, onChat 
           {phase.pending_user_input && (
             <Badge status={t("workflows.awaiting_input")} variant="warn" />
           )}
+          {/* FE-3: 병렬 재조정 충돌 배지 */}
+          {(phase.reconcile_conflicts ?? 0) > 0 && (
+            <Badge
+              status={t("workflows.reconcile_conflicts", { n: String(phase.reconcile_conflicts) })}
+              variant="warn"
+            />
+          )}
           {collapsed && (
             <span className="text-xs text-muted">
               {phase.agents.length} agents
@@ -416,6 +431,34 @@ function AgentCard({ agent, onChat }: {
       </div>
       <div className="stat-card__value stat-card__value--md">{agent.label}</div>
       <div className="stat-card__label">{agent.role}{agent.model ? ` · ${agent.model}` : ""}</div>
+      {/* FE-3: 평가 점수 + 재시도 횟수 + 스키마 검증 배지 */}
+      {(agent.eval_score != null || (agent.retry_count ?? 0) > 0 || agent.schema_valid != null) && (
+        <div className="stat-card__badges">
+          {agent.eval_score != null && (
+            <span
+              className={`wf-agent__score wf-agent__score--${agent.eval_score >= 0.8 ? "ok" : agent.eval_score >= 0.5 ? "warn" : "err"}`}
+              title={t("workflows.eval_score_hint")}
+            >
+              {Math.round(agent.eval_score * 100)}%
+            </span>
+          )}
+          {(agent.retry_count ?? 0) > 0 && (
+            <span className="wf-agent__retry" title={t("workflows.retry_count_hint")}>
+              ↩{agent.retry_count}
+            </span>
+          )}
+          {agent.schema_valid === false && (
+            <span className="wf-agent__schema-err" title={t("workflows.schema_invalid_hint")}>
+              ⚠ {t("workflows.schema_invalid")}
+            </span>
+          )}
+          {agent.schema_valid === true && (
+            <span className="wf-agent__schema-ok" title={t("workflows.schema_valid_hint")}>
+              ✓ {t("workflows.schema_valid")}
+            </span>
+          )}
+        </div>
+      )}
       {agent.result && (
         <div className="stat-card__extra wf-agent__result">
           {agent.result.length > 120 ? agent.result.slice(0, 120) + "…" : agent.result}

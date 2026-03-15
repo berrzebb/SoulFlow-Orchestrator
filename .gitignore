@@ -43,5 +43,5 @@ Thumbs.db
 *.swp
 .claude/ralph-loop.local.md
 
-docs/**/design/**
+docs/**/design/improved/**
 docs/**/references/**

@@ -126,6 +126,26 @@ export function NodeOutputView({ state, schema, node_id }: { state?: NodeExecuti
           {state!.completed_at && <span>{t("workflows.ended_at")}: {format_time(state!.completed_at)}</span>}
         </div>
       )}
+      {/* FE-3: 스키마 검증 + 자동 수정 배지 */}
+      {(state!.schema_valid != null || state!.schema_repaired) && (
+        <div className="schema-badge-row">
+          {state!.schema_valid === true && (
+            <span className="schema-badge schema-badge--ok" title={t("workflows.schema_valid_hint")}>
+              ✓ {t("workflows.schema_valid")}
+            </span>
+          )}
+          {state!.schema_valid === false && (
+            <span className="schema-badge schema-badge--err" title={t("workflows.schema_invalid_hint")}>
+              ✗ {t("workflows.schema_invalid")}
+            </span>
+          )}
+          {state!.schema_repaired && (
+            <span className="schema-badge schema-badge--warn" title={t("workflows.schema_repaired_hint")}>
+              ↩ {t("workflows.schema_repaired")}
+            </span>
+          )}
+        </div>
+      )}
 
       <div className="output-view-modes" role="tablist">
         <button className={`output-view-mode${viewMode === "tree" ? " active" : ""}`} role="tab" aria-selected={viewMode === "tree"} onClick={() => setViewMode("tree")}>{t("workflows.tree_view")}</button>

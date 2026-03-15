@@ -11,6 +11,7 @@ type NdjsonLine =
   | { type: "usage"; input: number; output: number; cache_read?: number; cache_creation?: number; cost_usd?: number | null }
   | { type: "rate_limit"; status: string }
   | { type: "compact"; pre_tokens: number }
+  | { type: "routing"; requested_channel?: string; delivered_channel?: string; session_reuse?: boolean }
   | { type: "done" }
   | { type: "error"; error: string };
 
@@ -38,6 +39,13 @@ export type UsageEntry = {
   cost_usd?: number | null;
 };
 
+/** 백엔드가 메시지 처리 시작 시 전송하는 라우팅 결정 정보. */
+export type RoutingInfo = {
+  requested_channel?: string | null;
+  delivered_channel?: string | null;
+  session_reuse?: boolean;
+};
+
 export function useNdjsonStream() {
   const [stream, setStream] = useState<NdjsonStream | null>(null);
   const [tool_calls, setToolCalls] = useState<ToolCallEntry[]>([]);
@@ -45,6 +53,7 @@ export function useNdjsonStream() {
   const [rate_limit_status, setRateLimitStatus] = useState<string | null>(null);
   const [usage, setUsage] = useState<UsageEntry | null>(null);
   const [compacted, setCompacted] = useState(false);
+  const [routing, setRouting] = useState<RoutingInfo | null>(null);
   const tool_map_ref = useRef<Map<string, ToolCallEntry>>(new Map());
   const buffer_ref = useRef<string[]>([]);
   const abort_ref = useRef<AbortController | null>(null);
@@ -75,6 +84,7 @@ export function useNdjsonStream() {
     setRateLimitStatus(null);
     setUsage(null);
     setCompacted(false);
+    setRouting(null);
 
     try {
       const response = await fetch(
@@ -126,6 +136,8 @@ export function useNdjsonStream() {
               setUsage({ input: msg.input, output: msg.output, cache_read: msg.cache_read, cache_creation: msg.cache_creation, cost_usd: msg.cost_usd });
             } else if (msg.type === "compact") {
               setCompacted(true);
+            } else if (msg.type === "routing") {
+              setRouting({ requested_channel: msg.requested_channel, delivered_channel: msg.delivered_channel, session_reuse: msg.session_reuse });
             } else if (msg.type === "done") {
               flush();
               setStream((prev) => prev ? { ...prev, done: true } : null);
@@ -150,5 +162,5 @@ export function useNdjsonStream() {
     setStream(null);
   }, []);
 
-  return { stream, tool_calls, thinking_blocks, rate_limit_status, usage, compacted, start, cancel };
+  return { stream, tool_calls, thinking_blocks, rate_limit_status, usage, compacted, routing, start, cancel };
 }

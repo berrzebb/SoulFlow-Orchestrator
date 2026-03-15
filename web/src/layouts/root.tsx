@@ -66,9 +66,27 @@ export function RootLayout() {
       .catch(() => {});
   }, [location.pathname, navigate, auth_status, auth_user]);
 
+  // FE-2: SSE 신선도 감지 — 연결 중이지만 이벤트가 멈추면 "stale" 표시
+  const last_event_at = useRef<number>(0);
+  const [sse_stale, set_sse_stale] = useState(false);
+  const SSE_STALE_MS = 30_000;
+
+  // 인터벌에서만 setState — 동기 호출 없음. connection 변경 시 effect 재실행으로 즉시 재평가.
+  useEffect(() => {
+    const id = setInterval(() => {
+      const is_stale = connection === "connected"
+        && last_event_at.current > 0
+        && Date.now() - last_event_at.current > SSE_STALE_MS;
+      set_sse_stale(is_stale);
+    }, 5_000);
+    return () => clearInterval(id);
+  }, [connection]);
+
   useEffect(() => {
     let msg_timer: ReturnType<typeof setTimeout> | null = null;
+    const mark_event = () => { last_event_at.current = Date.now(); set_sse_stale(false); };
     const debounced_message = () => {
+      mark_event();
       if (msg_timer) clearTimeout(msg_timer);
       msg_timer = setTimeout(() => {
         void qc.invalidateQueries({ queryKey: ["state"] });
@@ -77,12 +95,13 @@ export function RootLayout() {
       }, 300);
     };
     const sse = create_sse("/api/events", {
-      ready: () => set_connection("connected"),
-      reload: () => void qc.invalidateQueries(),
-      process: () => void qc.invalidateQueries({ queryKey: ["state"] }),
-      cron: () => void qc.invalidateQueries({ queryKey: ["state"] }),
+      ready: () => { mark_event(); set_connection("connected"); },
+      reload: () => { mark_event(); void qc.invalidateQueries(); },
+      process: () => { mark_event(); void qc.invalidateQueries({ queryKey: ["state"] }); },
+      cron: () => { mark_event(); void qc.invalidateQueries({ queryKey: ["state"] }); },
       message: debounced_message,
       web_stream: (data: unknown) => {
+        mark_event();
         const d = data as { chat_id?: string; content?: string; done?: boolean };
         if (d.done) {
           const prev = useDashboardStore.getState().web_stream;
@@ -93,23 +112,26 @@ export function RootLayout() {
         if (d.chat_id) set_web_stream({ chat_id: d.chat_id, content: d.content ?? "" });
       },
       web_message: (data: unknown) => {
+        mark_event();
         const d = data as { chat_id?: string };
         if (d.chat_id) void qc.invalidateQueries({ queryKey: ["chat-session", d.chat_id] });
       },
       mirror_message: (data: unknown) => {
+        mark_event();
         const d = data as { session_key?: string; direction?: string; sender_id?: string; content?: string; at?: string };
         if (d.session_key) set_mirror_event({ session_key: d.session_key, direction: d.direction ?? "", sender_id: d.sender_id ?? "", content: d.content ?? "", at: d.at ?? "" });
       },
       canvas: (data: unknown) => {
+        mark_event();
         const d = data as { chat_id?: string; spec?: { canvas_id: string; title?: string; components: unknown[] } };
         if (d.chat_id && d.spec) {
           const { push_canvas } = useDashboardStore.getState();
           push_canvas(d.chat_id, d.spec as import("../../../src/dashboard/canvas.types").CanvasSpec);
         }
       },
-      task: () => void qc.invalidateQueries({ queryKey: ["state"] }),
-      agent: () => void qc.invalidateQueries({ queryKey: ["state"] }),
-      progress: () => void qc.invalidateQueries({ queryKey: ["state"] }),
+      task: () => { mark_event(); void qc.invalidateQueries({ queryKey: ["state"] }); },
+      agent: () => { mark_event(); void qc.invalidateQueries({ queryKey: ["state"] }); },
+      progress: () => { mark_event(); void qc.invalidateQueries({ queryKey: ["state"] }); },
     });
     set_connection("reconnecting");
     return () => { if (msg_timer) clearTimeout(msg_timer); sse.close(); set_connection("disconnected"); };
@@ -194,8 +216,11 @@ export function RootLayout() {
                 </button>
               </>
             )}
-            <span className={`topbar__conn topbar__conn--${connection}`}>
-              {t(`conn.${connection}`)}
+            <span
+              className={`topbar__conn topbar__conn--${sse_stale ? "stale" : connection}`}
+              title={sse_stale ? t("conn.stale_hint") : undefined}
+            >
+              {sse_stale ? t("conn.stale") : t(`conn.${connection}`)}
             </span>
           </div>
         </header>

@@ -29,6 +29,8 @@ export default function ChatPage() {
   const qc = useQueryClient();
   const { toast } = useToast();
   const location = useLocation();
+  /** 에이전트 갤러리 "Use" 진입 시 location.state에서 1회 읽음 — lazy init용 */
+  const init_def = (location.state as { agent_definition?: AgentDefinition } | null)?.agent_definition ?? null;
   const [activeId, setActiveId] = useState<string | null>(null);
   const [mirrorKey, setMirrorKey] = useState<string | null>(null);
   const [input, setInput] = useState("");
@@ -44,11 +46,11 @@ export default function ChatPage() {
   /** React 배칭으로 sending state가 즉시 반영되지 않으므로 ref로 동기 중복 방지 */
   const stream_inflight = useRef(false);
   /** 에이전트 갤러리에서 "Use"로 진입 시 설정되는 에이전트 정의, 또는 인채팅 선택 */
-  const [activeDefinition, setActiveDefinition] = useState<AgentDefinition | null>(null);
+  const [activeDefinition, setActiveDefinition] = useState<AgentDefinition | null>(init_def);
   /** 에이전트 시스템 프롬프트 오버라이드 — soul+heart 기본값, 사용자 편집 가능 */
-  const [systemPromptOverride, setSystemPromptOverride] = useState("");
-  const [selectedProvider, setSelectedProvider] = useState("");
-  const [selectedModel, setSelectedModel] = useState("");
+  const [systemPromptOverride, setSystemPromptOverride] = useState(() => init_def ? compose_agent_prompt(init_def) : "");
+  const [selectedProvider, setSelectedProvider] = useState(init_def?.preferred_providers[0] ?? "");
+  const [selectedModel, setSelectedModel] = useState(init_def?.model ?? "");
   const messagesRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   /** 전송 시점의 메시지 수 스냅샷 — 렌더 타임 waiting_response 리셋 오판 방지 */
@@ -58,7 +60,7 @@ export default function ChatPage() {
   const mirror_event = useDashboardStore((s) => s.mirror_event);
   const canvas_specs = useDashboardStore((s) => s.canvas_specs);
   const dismiss_canvas = useDashboardStore((s) => s.dismiss_canvas);
-  const { stream: ndjson_stream, tool_calls: ndjson_tool_calls, thinking_blocks: ndjson_thinking, start: start_stream, cancel: cancel_stream } = useNdjsonStream();
+  const { stream: ndjson_stream, tool_calls: ndjson_tool_calls, thinking_blocks: ndjson_thinking, routing: ndjson_routing, start: start_stream, cancel: cancel_stream } = useNdjsonStream();
 
   const is_mirror = !!mirrorKey;
 
@@ -147,17 +149,12 @@ export default function ChatPage() {
     void qc.invalidateQueries({ queryKey: ["chat-sessions"] });
   }, t("chat.session_created"), t("chat.create_failed"));
 
-  // 에이전트 갤러리 "Use" 버튼으로 진입 시 — 자동 세션 생성 + provider/model/prompt 적용
+  // 에이전트 갤러리 "Use" 버튼으로 진입 시 — 자동 세션 생성 (상태 초기화는 lazy useState로 처리)
   useEffect(() => {
-    const def = (location.state as { agent_definition?: AgentDefinition } | null)?.agent_definition;
-    if (!def) return;
-    setActiveDefinition(def);
-    setSystemPromptOverride(compose_agent_prompt(def));
-    if (def.preferred_providers[0]) setSelectedProvider(def.preferred_providers[0]);
-    if (def.model) setSelectedModel(def.model);
+    if (!init_def) return;
     void (async () => {
       const res = await api.post<{ id: string }>("/api/chat/sessions");
-      await api.patch(`/api/chat/sessions/${encodeURIComponent(res.id)}`, { name: `${def.icon} ${def.name}` });
+      await api.patch(`/api/chat/sessions/${encodeURIComponent(res.id)}`, { name: `${init_def.icon} ${init_def.name}` });
       setActiveId(res.id);
       void qc.invalidateQueries({ queryKey: ["chat-sessions"] });
     })();
@@ -377,6 +374,9 @@ export default function ChatPage() {
               is_busy={is_busy}
               is_streaming={is_streaming}
               active_session_id={is_mirror ? mirrorKey : activeId}
+              requested_channel={ndjson_routing?.requested_channel}
+              delivered_channel={ndjson_routing?.delivered_channel}
+              session_reuse={ndjson_routing?.session_reuse}
               onStop={cancel_active}
             />
             {!is_mirror && (
