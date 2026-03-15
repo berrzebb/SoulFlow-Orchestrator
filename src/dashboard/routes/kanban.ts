@@ -210,6 +210,8 @@ export async function handle_kanban(ctx: RouteContext): Promise<boolean> {
     const store = store_or_503(ctx);
     if (!store) return true;
     const card_id = decodeURIComponent(card_match[1]);
+    const put_access = await check_card_board_access(store, card_id);
+    if (!put_access.ok) { json(res, put_access.status, { error: put_access.status === 404 ? "not_found" : "forbidden" }); return true; }
     const body = await read_body(req);
     if (!body) { json(res, 400, { error: "body required" }); return true; }
 
@@ -248,11 +250,13 @@ export async function handle_kanban(ctx: RouteContext): Promise<boolean> {
     return true;
   }
 
-  // DELETE /api/kanban/cards/:id
+  // DELETE /api/kanban/cards/:id — FE-6a: board 소유권 검사 추가
   if (card_match && method === "DELETE") {
     const store = store_or_503(ctx);
     if (!store) return true;
     const card_id = decodeURIComponent(card_match[1]);
+    const del_access = await check_card_board_access(store, card_id);
+    if (!del_access.ok) { json(res, del_access.status, { error: del_access.status === 404 ? "not_found" : "forbidden" }); return true; }
     const ok = await store.delete_card(card_id);
     json(res, ok ? 200 : 404, ok ? { ok: true } : { error: "not_found" });
     return true;

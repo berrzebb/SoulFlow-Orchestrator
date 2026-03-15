@@ -1,6 +1,6 @@
 import { set_locale, get_locale, parse_locale } from "../../i18n/index.js";
 import type { RouteContext } from "../route-context.js";
-import { require_superadmin_for_write } from "../route-context.js";
+import { require_superadmin_for_write, build_scope_filter } from "../route-context.js";
 
 export async function handle_config(ctx: RouteContext): Promise<boolean> {
   if (!require_superadmin_for_write(ctx)) return true;
@@ -41,12 +41,13 @@ export async function handle_config(ctx: RouteContext): Promise<boolean> {
     return true;
   }
 
-  // GET /api/config/provider-instances?purpose=chat|embedding — 등록된 프로바이더 인스턴스 목록
+  // GET /api/config/provider-instances?purpose=chat|embedding — FE-6a: scope 필터 적용
   if (path === "/api/config/provider-instances" && req.method === "GET") {
     const provider_ops = options.agent_provider_ops;
     if (!provider_ops) { json(res, 503, { error: "agent_provider_ops_unavailable" }); return true; }
     const purpose = url.searchParams.get("purpose") || "chat";
-    const all = await provider_ops.list();
+    const scope = build_scope_filter(ctx);
+    const all = await provider_ops.list(scope);
     const filtered = all.filter((p) => p.model_purpose === purpose && p.enabled);
     json(res, 200, filtered.map((p) => ({
       instance_id: p.instance_id,
@@ -59,11 +60,12 @@ export async function handle_config(ctx: RouteContext): Promise<boolean> {
     return true;
   }
 
-  // 하위 호환: /api/config/embed-instances → provider-instances?purpose=embedding 리다이렉트
+  // 하위 호환: /api/config/embed-instances — FE-6a: scope 필터 적용
   if (path === "/api/config/embed-instances" && req.method === "GET") {
     const provider_ops = options.agent_provider_ops;
     if (!provider_ops) { json(res, 503, { error: "agent_provider_ops_unavailable" }); return true; }
-    const all = await provider_ops.list();
+    const scope = build_scope_filter(ctx);
+    const all = await provider_ops.list(scope);
     const embed = all.filter((p) => p.model_purpose === "embedding" && p.enabled);
     json(res, 200, embed.map((p) => ({
       instance_id: p.instance_id,

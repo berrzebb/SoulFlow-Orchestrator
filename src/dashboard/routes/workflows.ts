@@ -106,8 +106,10 @@ export const handle_workflow: RouteHandler = async (ctx) => {
     return true;
   }
 
-  // POST /api/workflow/runs/:id/messages
+  // POST /api/workflow/runs/:id/messages (FE-6a: team ownership)
   if (msg_match && method === "POST") {
+    const workflow = await ops.get(msg_match[1]);
+    if (!workflow || !check_wf_ownership(workflow as unknown as Record<string, unknown>)) { json(res, 404, { error: "not_found" }); return true; }
     const body = await read_body(req);
     if (!body) { json(res, 400, { error: "invalid_body" }); return true; }
     const result = await ops.send_message(
