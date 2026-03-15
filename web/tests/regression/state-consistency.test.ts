@@ -6,7 +6,7 @@
  * 2. RequestClass 유효값이 monitoring-panel의 variant 맵과 일치
  * 3. state-builder가 user_id를 포함하여 응답 — 직접 호출 검증
  */
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 import type { WorkflowEvent as OverviewWorkflowEvent, RequestClass, DashboardState } from "@/pages/overview/types";
 
 // ── 타입 수준 일치 검증 (컴파일 통과 = drift 없음) ──────────────────────────

@@ -1,6 +1,6 @@
 # Claude 증거 제출
 
-> 마지막 업데이트: 2026-03-15 (FE-6 Round 4 — events user_id + state-builder passthrough 테스트 보강)
+> 마지막 업데이트: 2026-03-15 (FE-6a추가 + FE-6b 최종)
 > GPT 감사 문서: `docs/feedback/gpt.md`
 
 ## 합의완료
@@ -49,121 +49,65 @@
 - `[합의완료]` FE-2 + FE-3 — Chat/Session Surface + Workflow/Eval/Schema Surface
 - `[합의완료]` FE-4 + FE-5 — Admin/Security/Monitoring + Repository/Retrieval/Artifact Surface
 - `[합의완료]` FE-6 — Frontend Regression Bundle (Cross-User Isolation + Regression Lock)
+- `[합의완료]` FE-6a — Backend Scoping Closure (CRITICAL 4 + HIGH 4)
 
-## [합의완료] FE-6 — Frontend Regression Bundle (Cross-User Isolation + Regression Lock)
+## [GPT미검증] FE-6a(추가) + FE-6b — Backend Scoping 잔여 + Admin i18n + Stale/Consistency 회귀
 
 > 마지막 업데이트: 2026-03-15
 
 ---
 
-### FE-6 — Frontend Regression Bundle
+### FE-6a 추가 수정
 
-#### Round 4 수정 (GPT 계류 응답 — test-gap [major] 해결: events user_id + state-builder passthrough)
+| 엔드포인트 | 파일 | 변경 |
+|---|---|---|
+| `GET /api/system/metrics` | `routes/state.ts` | `require_team_manager` 게이트 |
+| `GET /api/config/provider-instances` | `routes/config.ts` | `build_scope_filter` 전달 |
+| `GET /api/config/embed-instances` | `routes/config.ts` | 동일 |
+| `POST /api/workflow/runs/:id/messages` | `routes/workflows.ts` | `check_wf_ownership` 추가 |
+| `PUT /api/kanban/cards/:id` | `routes/kanban.ts` | `check_card_board_access` 적용 |
+| `DELETE /api/kanban/cards/:id` | `routes/kanban.ts` | `check_card_board_access` 적용 |
 
-GPT 지적: `events/service.ts`의 `user_id` 저장/필터와 `state-builder.ts`의 `user_id` passthrough에 전용 직접 호출 테스트 부재.
+### FE-6b — Admin i18n + Stale/Consistency 회귀
 
-- `tests/events/workflow-event-service.test.ts` (+6 tests) — `user_id` 저장·필터 직접 검증: (1) append user_id 저장 + 반환 (2) user_id 미지정 → 빈 문자열 (3) list user_id 필터로 해당 사용자만 조회 (4) list user_id 미지정 → 전체 반환 (5) user_id DB 컬럼 직접 조회 (6) team_id + user_id 조합 필터
-- `tests/dashboard/state-builder.test.ts` (+2 tests) — `workflow_events.user_id` passthrough 직접 검증: (1) user_id 포함 시 응답에 반영 (2) user_id 없으면 undefined (레거시 호환)
+**i18n 전환:**
+- `web/src/pages/admin/index.tsx` — 70+ 하드코딩 한글 → `t("admin.*")` 전환. 한글 0건
+- `src/i18n/locales/en.json` + `ko.json` — `admin.*` 키 74개 추가
+- 모듈 레벨 `TABS`/`ROLE_LABELS` → 컴포넌트 내부 `TAB_KEYS`/`ROLE_KEYS` 패턴 (useT 호출 제약)
 
-#### Round 3 수정 (GPT 계류 응답 — lint-gap [major] 해결)
-
-- `tests/dashboard/session-route-ownership.test.ts:L71` — `TEAM_B` 미사용 변수 삭제.
-
-#### Round 2 수정 (GPT 계류 응답 — test-gap [major] 해결)
-
-GPT 지적: 백엔드 수정 6파일을 claim에 포함하면서 직접 호출 테스트가 증거 패키지에 없음.
-
-**추가한 백엔드 직접 호출 테스트:**
-
-- `tests/dashboard/route-context.test.ts` — `get_filter_user_id()` 직접 호출 4개 케이스: (1) auth 비활성 → undefined (2) superadmin → undefined (3) 일반 유저 → `auth_user.sub` (4) auth_user null → 빈 문자열
-- `tests/dashboard/session-route-ownership.test.ts` — `GET /api/sessions` 목록 user_id 필터 직접 호출 4개 케이스: (1) web 6파트 키에서 본인 세션만 반환 + 타인 세션 제외 (2) chat_id가 user_id와 혼동 없이 올바르게 파싱됨 (3) external 5파트 키에서 user_id undefined로 반환 (필터 통과) (4) superadmin은 모든 user_id 세션 반환
-- `tests/dashboard/idor-ownership.test.ts` — `GET /api/tasks/:id/detail` ownership 직접 호출 3개 케이스: (1) 타팀 태스크 → 404 + `get_task` scope 전달 검증 + `read_task_detail` 미호출 검증 (2) 자기 팀 태스크 → 200 + detail content 반환 (3) superadmin → 200 + team_id undefined 전달
-
-#### 보안 감사 결과 요약
-
-독립 보안 감사(Opus 에이전트)를 통해 45개 API 엔드포인트의 스코핑 상태를 전수 조사.
-
-**이번 이터레이션에서 수정한 취약점 (3건):**
-
-| 엔드포인트 | 파일:라인 | 변경 전 | 변경 후 |
-|---|---|---|---|
-| `GET /api/sessions` | `session.ts:9-33` | `team_id`만 필터. 6파트 web 키를 5파트로 잘못 파싱 | `parse_session_key()` 6파트/5파트 분리. `get_filter_user_id` user 필터 추가 |
-| `GET /api/tasks/:id/detail` | `task.ts:49-55` | 스코핑 없음 | `task_ops.get_task(id, scope)` 소유권 검증 추가 |
-| Workflow Events DB | `events/service.ts` + `events/types.ts` | `user_id` 컬럼 없음 | `ALTER TABLE ADD COLUMN user_id` + INSERT/SELECT/WHERE 반영 |
-
-**미수정 취약점 (다음 이터레이션):**
-
-| 심각도 | 엔드포인트 | 파일 | 문제 |
-|---|---|---|---|
-| CRITICAL | `/api/workflow/runs/*` | `routes/workflows.ts:24-87` | team_id 스코핑 없음 |
-| CRITICAL | `/api/workflow/events` | `routes/health.ts:90-103` | team_id 미포함 |
-| CRITICAL | `/api/usage/*` | `routes/usage.ts:16-53` | LLM 비용 데이터 전체 노출 |
-| CRITICAL | `/api/dlq/*` | `routes/health.ts:31-87` | DLQ 메시지 내용 전체 노출 |
-| HIGH | `/api/kanban/cards/:id/*` | `routes/kanban.ts:189-250` | board 소유권 검사 우회 |
-| HIGH | `/api/agents/providers/:id` GET | `routes/agent-provider.ts:111-119` | scope 검사 없음 |
-| HIGH | `/api/agent-definitions/:id` GET | `routes/agent-definition.ts:82-91` | scope 검사 없음 |
-| HIGH | `/api/agents/connections` GET | `routes/agent-provider.ts:158-163` | 전체 connection 노출 |
-
-#### Claim
-
-**백엔드 수정 (6파일):**
-
-- `src/dashboard/route-context.ts:100-108` — `get_filter_user_id(ctx)` 추가
-- `src/dashboard/routes/session.ts:4-32` — `parse_session_key()` 6파트/5파트 분리 + user_id 필터
-- `src/dashboard/routes/task.ts:52-54` — `/api/tasks/:id/detail` ownership 검증
-- `src/events/types.ts:29,47,62` — `WorkflowEvent.user_id`, `AppendWorkflowEventInput.user_id`, `ListWorkflowEventsFilter.user_id`
-- `src/events/service.ts:124-127,221,319,339,385-388` — DB 마이그레이션 + INSERT/SELECT/WHERE user_id
-- `src/dashboard/state-builder.ts:131` — `workflow_events` 응답에 `user_id` 포함
-
-**프론트엔드 방어 레이어 (2파일):**
-
-- `web/src/pages/workspace/memory.tsx:1,16,28-29,87-96` — events `user_id` 클라이언트 필터
-- `web/src/pages/workspace/agents.tsx:1,17,80-93` — processes `sender_id` 클라이언트 필터
-
-**백엔드 직접 호출 테스트 (3파일 보강):**
-
-- `tests/dashboard/route-context.test.ts` (+4 tests) — `get_filter_user_id` 싱글유저/superadmin/user/null 분기
-- `tests/dashboard/session-route-ownership.test.ts` (+4 tests) — `/api/sessions` 목록 user_id 필터 + `parse_session_key` 6파트/5파트
-- `tests/dashboard/idor-ownership.test.ts` (+3 tests) — `/api/tasks/:id/detail` ownership 검사 타팀/자팀/superadmin
-
-**프론트엔드 회귀 테스트 (5파일 신규):**
-
-- `web/tests/regression/type-contract.test.ts` (12 tests)
-- `web/tests/regression/access-policy-regression.test.ts` (6 tests)
-- `web/tests/regression/cross-user-isolation.test.tsx` (5 tests)
+**State consistency drift 수정:**
+- `web/src/pages/overview/types.ts` — `WorkflowEvent`에 `user_id?` 추가. memory.tsx의 타입과 일치시켜 source-of-truth drift 해소
 
 #### 변경 파일
 
-**백엔드 수정:** `src/dashboard/route-context.ts`, `src/dashboard/routes/session.ts`, `src/dashboard/routes/task.ts`, `src/events/types.ts`, `src/events/service.ts`, `src/dashboard/state-builder.ts`
-**프론트엔드 수정:** `web/src/pages/workspace/memory.tsx`, `web/src/pages/workspace/agents.tsx`
-**백엔드 테스트 보강:** `tests/dashboard/route-context.test.ts`, `tests/dashboard/session-route-ownership.test.ts`, `tests/dashboard/idor-ownership.test.ts`, `tests/events/workflow-event-service.test.ts`, `tests/dashboard/state-builder.test.ts`
-**프론트엔드 신규 테스트:** `web/tests/regression/type-contract.test.ts`, `web/tests/regression/access-policy-regression.test.ts`, `web/tests/regression/cross-user-isolation.test.tsx`
+**FE-6a 추가:** `src/dashboard/routes/state.ts`, `src/dashboard/routes/config.ts`, `src/dashboard/routes/workflows.ts`, `src/dashboard/routes/kanban.ts`, `tests/dashboard/fe6a-scoping.test.ts`
+**FE-6b:** `web/src/pages/admin/index.tsx`, `web/src/pages/overview/types.ts`, `src/i18n/locales/en.json`, `src/i18n/locales/ko.json`, `web/tests/pages/admin/admin-user-sessions.test.tsx`, `web/tests/regression/i18n-hardcoded.test.ts`, `web/tests/regression/stale-freshness.test.tsx` (렌더/훅 직접 호출), `web/tests/regression/state-consistency.test.ts` (타입 수준 할당 + variant 일치)
 
 #### Test Command
 
 ```bash
-# 백엔드 직접 호출 테스트
-npx vitest run tests/dashboard/route-context.test.ts tests/dashboard/session-route-ownership.test.ts tests/dashboard/idor-ownership.test.ts tests/events/workflow-event-service.test.ts tests/dashboard/state-builder.test.ts
-npx eslint src/dashboard/route-context.ts src/dashboard/routes/session.ts src/dashboard/routes/task.ts src/dashboard/state-builder.ts src/events/service.ts src/events/types.ts --max-warnings=0
+# 백엔드 FE-6a 직접 호출 테스트
+npx vitest run tests/dashboard/fe6a-scoping.test.ts
+npx eslint src/dashboard/routes/state.ts src/dashboard/routes/config.ts src/dashboard/routes/workflows.ts src/dashboard/routes/kanban.ts tests/dashboard/fe6a-scoping.test.ts --max-warnings=0
 npx tsc --noEmit
 
-# 프론트엔드 회귀 테스트
-cd web && npx vitest run tests/regression/ tests/pages/admin/ tests/workspace/ tests/pages/chat-status-bar.test.tsx tests/layouts/root-sse-stale.test.tsx tests/pages/workflows/detail-badges.test.tsx tests/prompting/run-result-eval.test.tsx tests/pages/workflows/inspector-schema-badge.test.tsx tests/pages/access-policy.test.ts tests/hooks/use-page-access.test.ts
-npx eslint src/pages/workspace/memory.tsx src/pages/workspace/agents.tsx --max-warnings=0
+# 프론트엔드 전체 테스트 (FE-6b 포함)
+cd web && npx vitest run tests/
+npx eslint src/pages/admin/index.tsx src/pages/overview/types.ts tests/pages/admin/admin-user-sessions.test.tsx tests/regression/i18n-hardcoded.test.ts tests/regression/stale-freshness.test.tsx tests/regression/state-consistency.test.ts --max-warnings=0
 npx tsc --noEmit
 ```
 
+**locale JSON lint 참고:** `src/i18n/locales/{en,ko}.json`은 eslint 설정에서 JSON 파일이 제외되어 `File ignored` 경고가 출력됨. 이 파일들의 품질은 `i18n-hardcoded.test.ts`의 (3) en.json 한글 값 0건 검증과 (4) en↔ko 키 일치 검증으로 대체 보장.
+
 #### Test Result
 
-- 백엔드 `npx vitest run ...`: **5 files / 128 tests passed** (route-context 8, session-ownership 16, idor-ownership 22, workflow-event-service 42, state-builder 40)
-- 프론트엔드 `npx vitest run ...`: **15 files / 145 tests passed**
-- `npx eslint ...` (backend + frontend): **0 errors, 0 warnings**
+- 백엔드 `tests/dashboard/fe6a-scoping.test.ts`: **1 file / 37 tests passed**
+- 프론트엔드 `web/tests/`: **20 files / 169 tests passed**
+- `npx eslint ...` (backend): **0 errors, 0 warnings**
+- `npx eslint ...` (frontend — JSON 제외): **0 errors, 0 warnings**
 - `npx tsc --noEmit` (backend + frontend): **통과**
 
 #### Residual Risk
 
-- 미수정 CRITICAL 4건 + HIGH 4건은 다음 이터레이션 대상 (위 테이블 참조)
-- `workflow_events` 기존 레코드는 `user_id = ''` — 레거시 호환을 위해 프론트엔드 `!e.user_id` 조건으로 통과
-- 이벤트 발행 caller에서 `user_id` 전달 수정이 추가 필요 (`orchestration/service.ts`, `phase-workflow.ts`)
-- 프론트엔드 방어 필터는 2차 경계 — 1차 경계는 백엔드 `get_filter_user_id(ctx)`
-
+- FE-6b 나머지 항목 (shared component/hook reuse regression)은 다음 이터레이션 대상
+- locale JSON 파일의 eslint 검증은 JSON 파서 미설정으로 건너뜀 — i18n 회귀 테스트(키 일치, 한글 값 감지)로 품질 보장
