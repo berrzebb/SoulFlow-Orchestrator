@@ -38,6 +38,8 @@ type DbEventRow = {
   detail_file: string | null;
   at: string;
   team_id: string;
+  /** FE-6: 이벤트 소유자. */
+  user_id: string;
 };
 
 export class WorkflowEventService {
@@ -117,6 +119,11 @@ export class WorkflowEventService {
       try {
         db.exec(`ALTER TABLE workflow_events ADD COLUMN team_id TEXT NOT NULL DEFAULT ''`);
         db.exec(`CREATE INDEX IF NOT EXISTS idx_workflow_events_team ON workflow_events(team_id, at DESC)`);
+      } catch { /* 이미 존재하면 무시 */ }
+      // FE-6 마이그레이션: user_id 컬럼 추가 (사용자별 이벤트 스코핑)
+      try {
+        db.exec(`ALTER TABLE workflow_events ADD COLUMN user_id TEXT NOT NULL DEFAULT ''`);
+        db.exec(`CREATE INDEX IF NOT EXISTS idx_workflow_events_user ON workflow_events(user_id, at DESC)`);
       } catch { /* 이미 존재하면 무시 */ }
       db.exec(`
         CREATE VIRTUAL TABLE IF NOT EXISTS workflow_events_fts USING fts5(
@@ -211,6 +218,7 @@ export class WorkflowEventService {
         detail_file: row.detail_file || null,
         at: String(row.at || ""),
         team_id: String(row.team_id || ""),
+        user_id: String(row.user_id || ""),
       };
     } catch {
       return null;
@@ -300,6 +308,7 @@ export class WorkflowEventService {
         detail_file: null,
         at,
         team_id,
+        user_id: normalize_text(input.user_id) || "",
       };
 
       const detail_file = await this.append_task_detail(event, String(input.detail || ""));
@@ -309,8 +318,8 @@ export class WorkflowEventService {
         db.prepare(`
           INSERT OR IGNORE INTO workflow_events (
             event_id, run_id, task_id, agent_id, phase, summary, payload_json,
-            provider, channel, chat_id, thread_id, source, detail_file, at, created_ms, team_id
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            provider, channel, chat_id, thread_id, source, detail_file, at, created_ms, team_id, user_id
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
           event.event_id,
           event.run_id,
@@ -328,6 +337,7 @@ export class WorkflowEventService {
           event.at,
           Date.now(),
           event.team_id,
+          event.user_id,
         );
         return true;
       });
@@ -371,8 +381,12 @@ export class WorkflowEventService {
       where.push("team_id = ?");
       params.push(String(filter.team_id));
     }
+    if (filter?.user_id !== undefined) {
+      where.push("user_id = ?");
+      params.push(String(filter.user_id));
+    }
     const sql = [
-      "SELECT event_id, run_id, task_id, agent_id, phase, summary, payload_json, provider, channel, chat_id, thread_id, source, detail_file, at, team_id",
+      "SELECT event_id, run_id, task_id, agent_id, phase, summary, payload_json, provider, channel, chat_id, thread_id, source, detail_file, at, team_id, user_id",
       "FROM workflow_events",
       where.length > 0 ? `WHERE ${where.join(" AND ")}` : "",
       "ORDER BY at DESC",

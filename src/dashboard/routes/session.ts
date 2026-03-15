@@ -1,5 +1,33 @@
 import type { RouteContext } from "../route-context.js";
-import { get_filter_team_id } from "../route-context.js";
+import { get_filter_team_id, get_filter_user_id } from "../route-context.js";
+
+/**
+ * FE-6: 세션 키 파싱. web 6파트와 external 5파트 모두 지원.
+ * web 신 형식:     web:{team_id}:{user_id}:{chat_id}:{alias}:{thread} (6파트)
+ * external 신 형식: {provider}:{team_id}:{chat_id}:{alias}:{thread}   (5파트)
+ */
+function parse_session_key(key: string) {
+  const parts = key.split(":");
+  const provider = parts[0] ?? "";
+  if (provider === "web" && parts.length >= 6) {
+    return {
+      provider,
+      team_id: parts[1] ?? "",
+      user_id: parts[2] ?? "",
+      chat_id: parts[3] ?? "",
+      alias: parts[4] ?? "",
+      thread: parts[5] ?? "main",
+    };
+  }
+  return {
+    provider,
+    team_id: parts[1] ?? "",
+    user_id: undefined as string | undefined,
+    chat_id: parts[2] ?? "",
+    alias: parts[3] ?? "",
+    thread: parts[4] ?? "main",
+  };
+}
 
 export async function handle_session(ctx: RouteContext): Promise<boolean> {
   const { req, url, res, json, session_store } = ctx;
@@ -13,22 +41,20 @@ export async function handle_session(ctx: RouteContext): Promise<boolean> {
     const prefix = provider_filter ? `${provider_filter}:` : "";
     const entries = await store.list_by_prefix(prefix, 200);
     const team_id = get_filter_team_id(ctx);
+    const user_id = get_filter_user_id(ctx);
     const list = entries
       .map((e) => {
-        const parts = e.key.split(":");
+        const parsed = parse_session_key(e.key);
         return {
           key: e.key,
-          provider: parts[0] ?? "",
-          team_id: parts[1] ?? "",
-          chat_id: parts[2] ?? "",
-          alias: parts[3] ?? "",
-          thread: parts[4] ?? "main",
+          ...parsed,
           created_at: e.created_at,
           updated_at: e.updated_at,
           message_count: e.message_count,
         };
       })
-      .filter((s) => team_id === undefined || s.team_id === team_id);
+      .filter((s) => team_id === undefined || s.team_id === team_id)
+      .filter((s) => user_id === undefined || !s.user_id || s.user_id === user_id);
     json(res, 200, list);
     return true;
   }

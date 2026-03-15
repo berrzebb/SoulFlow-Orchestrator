@@ -27,6 +27,8 @@ export type WorkflowEvent = {
   detail_file?: string | null;
   at: string;
   team_id: string;
+  /** FE-6: 이벤트 소유자. 사용자별 이벤트 스코핑 기준. */
+  user_id: string;
 };
 
 export type AppendWorkflowEventInput = {
@@ -45,6 +47,8 @@ export type AppendWorkflowEventInput = {
   detail?: string | null;
   at?: string;
   team_id?: string;
+  /** FE-6: 이벤트 소유자. */
+  user_id?: string;
 };
 
 export type AppendWorkflowEventResult = {
@@ -60,6 +64,8 @@ export type ListWorkflowEventsFilter = {
   chat_id?: string;
   source?: WorkflowEventSource;
   team_id?: string;
+  /** FE-6: 사용자별 이벤트 필터. */
+  user_id?: string;
   limit?: number;
   offset?: number;
 };

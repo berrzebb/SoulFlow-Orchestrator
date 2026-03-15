@@ -435,3 +435,65 @@ describe("WorkflowEventService — team_id 저장·필터", () => {
     expect(row?.team_id).toBe("team_db");
   });
 });
+
+// ══════════════════════════════════════════════════════════════
+// FE-6: user_id 저장·필터 — 사용자별 이벤트 격리 검증
+// ══════════════════════════════════════════════════════════════
+
+describe("WorkflowEventService — user_id 저장·필터 (FE-6)", () => {
+  let workspace_uid: string;
+  let svc: WorkflowEventService;
+
+  beforeEach(async () => {
+    workspace_uid = await mkdtemp(join(tmpdir(), "evt-uid-"));
+    svc = new WorkflowEventService(workspace_uid);
+  });
+
+  afterEach(async () => {
+    await rm(workspace_uid, { recursive: true, force: true }).catch(() => {});
+  });
+
+  it("append: user_id 저장 + 반환", async () => {
+    const { event } = await svc.append({ phase: "assign", summary: "유저 이벤트", user_id: "user-A" });
+    expect(event.user_id).toBe("user-A");
+  });
+
+  it("append: user_id 미지정 → 빈 문자열", async () => {
+    const { event } = await svc.append({ phase: "assign", summary: "무유저 이벤트" });
+    expect(event.user_id).toBe("");
+  });
+
+  it("list: user_id 필터로 해당 사용자만 조회", async () => {
+    await svc.append({ phase: "assign", summary: "a-event", user_id: "user-A" });
+    await svc.append({ phase: "assign", summary: "b-event", user_id: "user-B" });
+    await svc.append({ phase: "assign", summary: "a-event2", user_id: "user-A" });
+    const events = await svc.list({ user_id: "user-A" });
+    expect(events.length).toBe(2);
+    expect(events.every((e) => e.user_id === "user-A")).toBe(true);
+  });
+
+  it("list: user_id 미지정 → 전체 반환", async () => {
+    await svc.append({ phase: "assign", summary: "a", user_id: "user-A" });
+    await svc.append({ phase: "assign", summary: "b", user_id: "user-B" });
+    const events = await svc.list({});
+    expect(events.length).toBe(2);
+  });
+
+  it("user_id DB 컬럼에 저장됨 (직접 조회)", async () => {
+    await svc.append({ phase: "assign", summary: "db-check", event_id: "db-uid", user_id: "user-db" });
+    const sqlite_path = join(workspace_uid, "runtime", "events", "events.db");
+    const row = with_sqlite(sqlite_path, (db) =>
+      db.prepare("SELECT user_id FROM workflow_events WHERE event_id = ?").get("db-uid") as { user_id: string } | undefined,
+    );
+    expect(row?.user_id).toBe("user-db");
+  });
+
+  it("team_id + user_id 조합 필터", async () => {
+    await svc.append({ phase: "assign", summary: "t1-u1", team_id: "t1", user_id: "u1" });
+    await svc.append({ phase: "assign", summary: "t1-u2", team_id: "t1", user_id: "u2" });
+    await svc.append({ phase: "assign", summary: "t2-u1", team_id: "t2", user_id: "u1" });
+    const events = await svc.list({ team_id: "t1", user_id: "u1" });
+    expect(events.length).toBe(1);
+    expect(events[0].summary).toBe("t1-u1");
+  });
+});

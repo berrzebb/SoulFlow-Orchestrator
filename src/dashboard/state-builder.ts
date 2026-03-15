@@ -128,7 +128,7 @@ export async function build_dashboard_state(
     heartbeat, ops, agents, tasks, messages, processes, approvals, active_loops, cd_score, cron,
     decisions: decisions.map((d) => ({ id: d.id, canonical_key: d.canonical_key, value: d.value, priority: d.priority })),
     promises: promises.map((p) => ({ id: p.id, canonical_key: p.canonical_key, value: p.value, priority: p.priority, scope: p.scope, source: p.source })),
-    workflow_events: workflow_events.map((e) => ({ event_id: e.event_id, task_id: e.task_id, run_id: e.run_id, agent_id: e.agent_id, phase: e.phase, summary: e.summary, at: e.at })),
+    workflow_events: workflow_events.map((e) => ({ event_id: e.event_id, task_id: e.task_id, run_id: e.run_id, agent_id: e.agent_id, phase: e.phase, summary: e.summary, at: e.at, user_id: e.user_id })),
     agent_providers,
     observability: options.observability ? project_summary(options.observability) : null,
     validator_summary: options.validator_summary_ops?.get_latest() ?? undefined,

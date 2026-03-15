@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import { Badge } from "../../components/badge";
@@ -15,6 +15,7 @@ import { ChipBar } from "../../components/chip-bar";
 import { Collapsible } from "../../components/collapsible";
 import { useAsyncAction } from "../../hooks/use-async-action";
 import { useTableFilter } from "../../hooks/use-table-filter";
+import { useAuthStatus, useAuthUser } from "../../hooks/use-auth";
 
 interface Agent {
   id: string; label: string; role: string; model: string; status: string;
@@ -77,9 +78,24 @@ export function AgentsTab() {
   const { data: agents = [] } = useQuery<Agent[]>({ queryKey: ["agents"], queryFn: () => api.get("/api/agents"), refetchInterval: 15_000, staleTime: 5_000 });
   const { data: agent_loops = [] } = useQuery<AgentLoop[]>({ queryKey: ["loops"], queryFn: () => api.get("/api/loops"), refetchInterval: 15_000, staleTime: 5_000 });
   const { data: task_loops = [] } = useQuery<TaskLoop[]>({ queryKey: ["tasks"], queryFn: () => api.get("/api/tasks"), refetchInterval: 15_000, staleTime: 5_000 });
-  const { data: processes_data } = useQuery<{ active: ProcessEntry[]; recent: ProcessEntry[] }>(
+  const { data: raw_processes } = useQuery<{ active: ProcessEntry[]; recent: ProcessEntry[] }>(
     { queryKey: ["processes"], queryFn: () => api.get("/api/processes"), refetchInterval: 15_000, staleTime: 5_000 }
   );
+
+  const { data: auth_status } = useAuthStatus();
+  const { data: auth_user } = useAuthUser();
+  const auth_enabled = auth_status?.enabled ?? false;
+
+  // FE-6: 프로세스를 sender_id로 필터 (방어 레이어 — 백엔드 team_id 스코핑이 1차 경계)
+  const processes_data = useMemo(() => {
+    if (!raw_processes) return undefined;
+    if (!auth_enabled || !auth_user?.sub || auth_user.role === "superadmin") return raw_processes;
+    const filter_fn = (p: ProcessEntry) => !p.sender_id || p.sender_id === auth_user.sub;
+    return {
+      active: raw_processes.active.filter(filter_fn),
+      recent: raw_processes.recent.filter(filter_fn),
+    };
+  }, [raw_processes, auth_enabled, auth_user]);
 
   const [sendTarget, setSendTarget] = useState<string | null>(null);
   const [resumeTarget, setResumeTarget] = useState<string | null>(null);

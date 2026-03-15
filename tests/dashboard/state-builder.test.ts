@@ -305,6 +305,29 @@ describe("build_dashboard_state — decisions/promises/events", () => {
     expect((state.promises as any[])[0]).toMatchObject({ id: "p1" });
     expect((state.workflow_events as any[])[0]).toMatchObject({ event_id: "ev1" });
   });
+
+  // FE-6: workflow_events.user_id passthrough 검증
+  it("workflow_events에 user_id가 포함된다 (FE-6)", async () => {
+    const opts = make_full_options({
+      events: { list: vi.fn(async () => [
+        { event_id: "ev-uid", task_id: "t1", run_id: "r1", agent_id: "a1", phase: "done", summary: "ok", at: "2026-01-01", user_id: "user-42" },
+      ]) },
+    });
+    const state = await build_dashboard_state(opts, []);
+    const events = state.workflow_events as Array<{ event_id: string; user_id?: string }>;
+    expect(events[0].user_id).toBe("user-42");
+  });
+
+  it("workflow_events에 user_id 없으면 undefined (레거시 호환, FE-6)", async () => {
+    const opts = make_full_options({
+      events: { list: vi.fn(async () => [
+        { event_id: "ev-no-uid", task_id: "t1", run_id: "r1", agent_id: "a1", phase: "done", summary: "ok", at: "2026-01-01" },
+      ]) },
+    });
+    const state = await build_dashboard_state(opts, []);
+    const events = state.workflow_events as Array<{ event_id: string; user_id?: string }>;
+    expect(events[0].user_id).toBeUndefined();
+  });
 });
 
 describe("build_dashboard_state — approvals/loops/cron", () => {

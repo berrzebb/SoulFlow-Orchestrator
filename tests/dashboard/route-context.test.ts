@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { get_filter_team_id } from "@src/dashboard/route-context.ts";
+import { get_filter_team_id, get_filter_user_id } from "@src/dashboard/route-context.ts";
 
 function make_ctx(overrides: Record<string, unknown> = {}) {
   return {
@@ -40,5 +40,38 @@ describe("get_filter_team_id", () => {
       team_context: null,
     });
     expect(get_filter_team_id(ctx)).toBe("");
+  });
+});
+
+// ── FE-6: get_filter_user_id ─────────────────────────────────────────────────
+
+describe("get_filter_user_id (FE-6)", () => {
+  it("auth 비활성(싱글 유저 모드) → undefined (전체 조회)", () => {
+    const ctx = make_ctx({ auth_svc: null });
+    expect(get_filter_user_id(ctx)).toBeUndefined();
+  });
+
+  it("superadmin → undefined (전체 조회)", () => {
+    const ctx = make_ctx({
+      auth_svc: {},
+      auth_user: { role: "superadmin", sub: "admin1", tid: "t1" },
+    });
+    expect(get_filter_user_id(ctx)).toBeUndefined();
+  });
+
+  it("일반 유저 → auth_user.sub 반환", () => {
+    const ctx = make_ctx({
+      auth_svc: {},
+      auth_user: { role: "user", sub: "user-42", tid: "t1" },
+    });
+    expect(get_filter_user_id(ctx)).toBe("user-42");
+  });
+
+  it("auth_user가 null이면 빈 문자열 반환", () => {
+    const ctx = make_ctx({
+      auth_svc: {},
+      auth_user: null,
+    });
+    expect(get_filter_user_id(ctx)).toBe("");
   });
 });

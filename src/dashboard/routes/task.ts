@@ -45,10 +45,13 @@ export async function handle_task(ctx: RouteContext): Promise<boolean> {
     return true;
   }
 
-  // GET /api/tasks/:id/detail
+  // GET /api/tasks/:id/detail — FE-6: team_id 스코핑 추가
   const detail_match = path.match(/^\/api\/tasks\/([^/]+)\/detail$/);
   if (detail_match && req.method === "GET") {
     const task_id = decodeURIComponent(detail_match[1]);
+    // task 소유권 먼저 검증 — team_id 불일치 시 404
+    const task = await options.task_ops?.get_task(task_id, scope);
+    if (!task) { json(res, 404, { error: "not_found" }); return true; }
     const detail = await options.events.read_task_detail(task_id);
     json(res, 200, { task_id, content: detail });
     return true;

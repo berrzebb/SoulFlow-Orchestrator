@@ -68,7 +68,6 @@ function make_ctx(overrides: {
 }
 
 const TEAM_A: JwtPayload = { sub: "u1", usr: "user1", role: "user", tid: "team_a", wdir: "tenants/team_a/users/u1", iat: 0, exp: 0 };
-const TEAM_B: JwtPayload = { sub: "u2", usr: "user2", role: "user", tid: "team_b", wdir: "tenants/team_b/users/u2", iat: 0, exp: 0 };
 const SUPERADMIN: JwtPayload = { sub: "admin", usr: "admin", role: "superadmin", tid: "default", wdir: "tenants/default/users/admin", iat: 0, exp: 0 };
 
 const mock_session_store = {
@@ -159,6 +158,87 @@ describe("GET /api/sessions/:key — team ownership", () => {
     });
     await handle_session(ctx);
     expect(ctx._json.status).toBe(503);
+  });
+});
+
+// ══════════════════════════════════════════
+// FE-6: GET /api/sessions — user_id 필터 + parse_session_key
+// ══════════════════════════════════════════
+
+describe("GET /api/sessions — user_id 필터 (FE-6)", () => {
+  it("web 6파트 키: 본인 세션만 반환", async () => {
+    const store = {
+      ...mock_session_store,
+      list_by_prefix: vi.fn(async () => [
+        { key: "web:team_a:u1:chat1:bot:main", created_at: "2026-01-01", updated_at: "2026-01-01", message_count: 5 },
+        { key: "web:team_a:u2:chat2:bot:main", created_at: "2026-01-01", updated_at: "2026-01-01", message_count: 3 },
+      ]),
+    };
+    const ctx = make_ctx({
+      method: "GET", path: "/api/sessions",
+      auth_user: TEAM_A, team_role: "member",
+      session_store: store,
+    });
+    await handle_session(ctx);
+    expect(ctx._json.status).toBe(200);
+    const list = ctx._json.data as Array<{ user_id?: string }>;
+    expect(list).toHaveLength(1);
+    expect(list[0].user_id).toBe("u1");
+  });
+
+  it("web 6파트 키: chat_id가 올바르게 파싱됨 (user_id와 혼동 없음)", async () => {
+    const store = {
+      ...mock_session_store,
+      list_by_prefix: vi.fn(async () => [
+        { key: "web:team_a:u1:the-real-chat:alias:main", created_at: "2026-01-01", updated_at: "2026-01-01", message_count: 1 },
+      ]),
+    };
+    const ctx = make_ctx({
+      method: "GET", path: "/api/sessions",
+      auth_user: TEAM_A, team_role: "member",
+      session_store: store,
+    });
+    await handle_session(ctx);
+    const list = ctx._json.data as Array<{ chat_id: string; user_id?: string }>;
+    expect(list[0].chat_id).toBe("the-real-chat");
+    expect(list[0].user_id).toBe("u1");
+  });
+
+  it("external 5파트 키: user_id 없이 반환 (필터 통과)", async () => {
+    const store = {
+      ...mock_session_store,
+      list_by_prefix: vi.fn(async () => [
+        { key: "slack:team_a:C123:bot:main", created_at: "2026-01-01", updated_at: "2026-01-01", message_count: 2 },
+      ]),
+    };
+    const ctx = make_ctx({
+      method: "GET", path: "/api/sessions",
+      auth_user: TEAM_A, team_role: "member",
+      session_store: store,
+    });
+    await handle_session(ctx);
+    const list = ctx._json.data as Array<{ user_id?: string }>;
+    expect(list).toHaveLength(1);
+    expect(list[0].user_id).toBeUndefined();
+  });
+
+  it("superadmin: 모든 user_id의 세션 반환", async () => {
+    const store = {
+      ...mock_session_store,
+      list_by_prefix: vi.fn(async () => [
+        { key: "web:team_a:u1:c1:a:main", created_at: "2026-01-01", updated_at: "2026-01-01", message_count: 1 },
+        { key: "web:team_a:u2:c2:a:main", created_at: "2026-01-01", updated_at: "2026-01-01", message_count: 1 },
+        { key: "web:team_b:u3:c3:a:main", created_at: "2026-01-01", updated_at: "2026-01-01", message_count: 1 },
+      ]),
+    };
+    const ctx = make_ctx({
+      method: "GET", path: "/api/sessions",
+      auth_user: SUPERADMIN, team_role: "owner",
+      session_store: store,
+    });
+    await handle_session(ctx);
+    const list = ctx._json.data as Array<{ user_id?: string }>;
+    expect(list).toHaveLength(3);
   });
 });
 

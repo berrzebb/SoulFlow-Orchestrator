@@ -98,6 +98,16 @@ export function get_filter_team_id(ctx: RouteContext): string | undefined {
   return ctx.team_context?.team_id ?? "";
 }
 
+/**
+ * FE-6: 요청자의 user_id 반환. undefined = 전체 조회 (superadmin 또는 싱글 유저 모드).
+ * 사용자 소유 리소스(세션, 이벤트 등) 필터링 기준.
+ */
+export function get_filter_user_id(ctx: RouteContext): string | undefined {
+  if (!ctx.options.auth_svc) return undefined;
+  if (ctx.auth_user?.role === "superadmin") return undefined;
+  return ctx.auth_user?.sub ?? "";
+}
+
 export function require_superadmin(ctx: RouteContext): boolean {
   // auth 비활성 = 싱글 유저 모드 → 제한 없음
   if (!ctx.options.auth_svc) return true;

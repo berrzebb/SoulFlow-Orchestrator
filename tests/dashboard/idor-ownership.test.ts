@@ -340,4 +340,51 @@ describe("task.ts — IDOR ownership check", () => {
     expect(last(ctx).status).toBe(200);
     expect(cancel_spy).toHaveBeenCalledWith("t1", "cancelled_from_dashboard", { team_id: undefined });
   });
+
+  // FE-6: GET /api/tasks/:id/detail — ownership 검사 추가
+  it("GET /api/tasks/:id/detail → 타팀 태스크 404", async () => {
+    const get_task = vi.fn(async () => null);
+    const read_detail = vi.fn(async () => "detail content");
+    const ctx = make_ctx({
+      ...TEAM_A_USER,
+      method: "GET",
+      pathname: "/api/tasks/t1/detail",
+      task_ops: { cancel_task: vi.fn(), get_task, resume_task: vi.fn() },
+      events: { read_task_detail: read_detail },
+    });
+    await handle_task(ctx);
+    expect(last(ctx).status).toBe(404);
+    expect(get_task).toHaveBeenCalledWith("t1", { team_id: "team-alpha" });
+    expect(read_detail).not.toHaveBeenCalled();
+  });
+
+  it("GET /api/tasks/:id/detail → 자기 팀 태스크 200", async () => {
+    const get_task = vi.fn(async () => ({ taskId: "t1", status: "completed" }));
+    const read_detail = vi.fn(async () => "my detail");
+    const ctx = make_ctx({
+      ...TEAM_A_USER,
+      method: "GET",
+      pathname: "/api/tasks/t1/detail",
+      task_ops: { cancel_task: vi.fn(), get_task, resume_task: vi.fn() },
+      events: { read_task_detail: read_detail },
+    });
+    await handle_task(ctx);
+    expect(last(ctx).status).toBe(200);
+    expect((last(ctx).body as { content: string }).content).toBe("my detail");
+  });
+
+  it("GET /api/tasks/:id/detail → superadmin은 모든 팀 허용", async () => {
+    const get_task = vi.fn(async () => ({ taskId: "t1", status: "completed" }));
+    const read_detail = vi.fn(async () => "admin detail");
+    const ctx = make_ctx({
+      ...SUPERADMIN,
+      method: "GET",
+      pathname: "/api/tasks/t1/detail",
+      task_ops: { cancel_task: vi.fn(), get_task, resume_task: vi.fn() },
+      events: { read_task_detail: read_detail },
+    });
+    await handle_task(ctx);
+    expect(last(ctx).status).toBe(200);
+    expect(get_task).toHaveBeenCalledWith("t1", { team_id: undefined });
+  });
 });

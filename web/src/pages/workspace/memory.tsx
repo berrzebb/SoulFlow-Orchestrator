@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useState, useMemo, type ReactNode } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../api/client";
 import { Badge } from "../../components/badge";
@@ -12,6 +12,7 @@ import { time_ago } from "../../utils/format";
 import { SplitPane } from "./split-pane";
 import { DataTable } from "../../components/data-table";
 import { useAsyncAction } from "../../hooks/use-async-action";
+import { useAuthStatus, useAuthUser } from "../../hooks/use-auth";
 
 interface DailyListResponse { days: string[] }
 interface MemoryContentResponse { content: string }
@@ -24,6 +25,8 @@ interface WorkflowEvent {
   retrieval_source?: string;
   /** FE-5: TR 콘텐츠 신규성 점수 (0~1). */
   novelty_score?: number;
+  /** FE-6: 이벤트 소유자 — 백엔드 user-scoped 필터 기반, 프론트엔드 방어 레이어용. */
+  user_id?: string;
 }
 
 type MemoryView = "longterm" | { day: string } | "decisions" | "promises" | "events";
@@ -79,11 +82,22 @@ export function MemoryTab() {
     onError: () => toast(t("workspace.memory.save_failed"), "err"),
   });
 
+  const { data: auth_status } = useAuthStatus();
+  const { data: auth_user } = useAuthUser();
+  const auth_enabled = auth_status?.enabled ?? false;
+
   const today = new Date().toISOString().slice(0, 10);
   const days = daily_list?.days ?? [];
   const decisions = (state?.decisions ?? []) as Decision[];
   const promises = (state?.promises ?? []) as PromiseRecord[];
-  const events = (state?.workflow_events ?? []) as WorkflowEvent[];
+
+  // FE-6: 사용자 소유 이벤트만 표시 (방어 레이어 — 백엔드 스코핑이 1차 경계)
+  const events = useMemo(() => {
+    const all = (state?.workflow_events ?? []) as WorkflowEvent[];
+    if (!auth_enabled || !auth_user?.sub) return all;
+    if (auth_user.role === "superadmin") return all;
+    return all.filter((e) => !e.user_id || e.user_id === auth_user.sub);
+  }, [state?.workflow_events, auth_enabled, auth_user]);
 
   const view_day = typeof view === "object" ? (view as { day: string }).day : null;
 
