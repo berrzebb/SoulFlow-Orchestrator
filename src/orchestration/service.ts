@@ -294,9 +294,10 @@ export class OrchestrationService implements OrchestrationServiceLike {
   }
 
 /** 워크플로우 이벤트 기록. events 서비스가 없으면 무시. */
-  private log_event(input: AppendWorkflowEventInput, team_id?: string): void {
+  private log_event(input: AppendWorkflowEventInput, team_id?: string, user_id?: string): void {
     if (!this.events) return;
-    const patched = team_id && !input.team_id ? { ...input, team_id } : input;
+    let patched = team_id && !input.team_id ? { ...input, team_id } : input;
+    if (user_id && !patched.user_id) patched = { ...patched, user_id };
     this.events.append(patched).catch(() => { /* 이벤트 로깅 실패가 실행을 차단하면 안 됨 */ });
   }
 
@@ -324,7 +325,7 @@ export class OrchestrationService implements OrchestrationServiceLike {
       workspace: req?.workspace_override ?? this.deps.workspace,
       build_overlay: (mode: "once" | "agent") => this._build_overlay(mode),
       hooks_for: (stream: StreamBuffer, args: { req: OrchestrationRequest; runtime_policy: RuntimeExecutionPolicy }, backend_id: string, task_id?: string, tools_accumulator?: string[]) => this._hooks_for(stream, args, backend_id, task_id, tools_accumulator),
-      log_event: (input: AppendWorkflowEventInput) => this.log_event(input, req?.message?.metadata?.team_id as string | undefined),
+      log_event: (input: AppendWorkflowEventInput) => this.log_event(input, req?.message?.metadata?.team_id as string | undefined, req?.message?.sender_id),
       convert_agent_result: (result: AgentRunResult, mode: ExecutionMode, stream: StreamBuffer, req: OrchestrationRequest) => this._convert_agent_result(result, mode, stream, req),
       build_persona_followup: (heart: string) => this.build_persona_followup(heart),
       build_compaction_flush: (req?: OrchestrationRequest) => this.build_compaction_flush(req),
@@ -396,7 +397,7 @@ export class OrchestrationService implements OrchestrationServiceLike {
       process_tracker: this.process_tracker,
       guard: this.guard,
       tool_index: this.tool_index,
-      log_event: (e) => this.log_event(e, team_id),
+      log_event: (e) => this.log_event(e, team_id, req?.message?.sender_id),
       build_identity_reply: () => this._build_identity_reply(),
       build_system_prompt: (names, prov, chat, cats, alias) => this._build_system_prompt(names, prov, chat, cats, alias),
       generate_guard_summary: (text) => this._generate_guard_summary(text),

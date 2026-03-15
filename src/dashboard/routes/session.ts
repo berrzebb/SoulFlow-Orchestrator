@@ -59,21 +59,19 @@ export async function handle_session(ctx: RouteContext): Promise<boolean> {
     return true;
   }
 
-  // GET /api/sessions/:key — 세션 상세 조회 (team ownership 검사)
+  // GET /api/sessions/:key — 세션 상세 조회 (team + user ownership 검사)
   const key_match = path.match(/^\/api\/sessions\/([^/]+)$/);
   if (key_match && req.method === "GET") {
     const store = session_store;
     if (!store) { json(res, 503, { error: "session_store_unavailable" }); return true; }
     const key = decodeURIComponent(key_match[1]);
+    const parsed = parse_session_key(key);
     const team_id = get_filter_team_id(ctx);
-    if (team_id !== undefined) {
-      const key_parts = key.split(":");
-      // 목록 API와 동일: parts[1]을 team_id로 사용하여 ownership 검사
-      const key_team = key_parts[1] ?? "";
-      if (key_team !== team_id) { json(res, 404, { error: "not_found" }); return true; }
-    }
+    if (team_id !== undefined && parsed.team_id !== team_id) { json(res, 404, { error: "not_found" }); return true; }
+    // FE-6: user_id 검사 — web 세션은 user_id가 키에 내장됨
+    const user_id = get_filter_user_id(ctx);
+    if (user_id !== undefined && parsed.user_id && parsed.user_id !== user_id) { json(res, 404, { error: "not_found" }); return true; }
     const session = await store.get_or_create(key);
-    const parts = key.split(":");
     const messages = session.messages.map((m) => ({
       direction: (m.role === "assistant" ? "assistant" : "user") as "user" | "assistant",
       content: String(m.content || ""),
@@ -81,8 +79,9 @@ export async function handle_session(ctx: RouteContext): Promise<boolean> {
     }));
     json(res, 200, {
       key,
-      provider: parts[0] ?? "",
-      chat_id: parts[1] ?? "",
+      provider: parsed.provider,
+      chat_id: parsed.chat_id,
+      user_id: parsed.user_id,
       created_at: session.created_at,
       messages,
     });
